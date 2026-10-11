@@ -1,0 +1,310 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, it, beforeEach } from 'node:test';
+import assert from 'node:assert';
+import {
+  loadSavedFilters,
+  saveFilter,
+  deleteSavedFilter,
+  clearSavedFilters,
+  __internal,
+} from './saved-filters.js';
+import { Rule } from '@ifc-lite/rules';
+import type { Combinator, FilterRule } from '@ifc-lite/rules';
+
+/** Test-only shim for the old 3-arg `saveFilter` — this suite predates
+ *  `groups: FilterGroup[]` (#4904) and every call here is single-group. */
+function save(name: string, combinator: Combinator, rules: readonly FilterRule[]) {
+  return saveFilter(name, [{ rules: [...rules], combinator }]);
+}
+
+interface MemoryStorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+class MemoryStorage implements MemoryStorageLike {
+  private store = new Map<string, string>();
+  getItem(key: string): string | null { return this.store.get(key) ?? null; }
+  setItem(key: string, value: string): void { this.store.set(key, value); }
+  removeItem(key: string): void { this.store.delete(key); }
+}
+
+const g = globalThis as { localStorage?: unknown };
+
+describe('saved-filters', () => {
+  beforeEach(() => {
+    g.localStorage = new MemoryStorage();
+  });
+
+  it('returns an empty list when nothing is stored', () => {
+    assert.deepStrictEqual(loadSavedFilters(), []);
+  });
+
+  it('saves a preset and reads it back sorted by name', () => {
+    const bravo = save('Bravo', 'AND', [Rule.ifcType(['IfcWall'])]);
+    // An ordinary save actually reaches storage: `persisted` must be true here,
+    // not merely absent-of-false, or the flag could be hardcoded `false` and a
+    // check that only looks for `false` elsewhere would still pass. (#2089)
+    assert.strictEqual(bravo.persisted, true);
+    save('Alpha', 'OR', [Rule.name('contains', 'EXT')]);
+    const list = loadSavedFilters();
+    assert.deepStrictEqual(list.map((p) => p.name), ['Alpha', 'Bravo']);
+    assert.strictEqual(list[0].combinator, 'OR');
+    assert.strictEqual(list[1].combinator, 'AND');
+  });
+
+  it('overwrites an existing preset by case-insensitive name match', () => {
+    save('External Walls', 'AND', [Rule.ifcType(['IfcWall'])]);
+    save('external walls', 'OR', [Rule.ifcType(['IfcDoor'])]);
+    const list = loadSavedFilters();
+    assert.strictEqual(list.length, 1);
+    assert.strictEqual(list[0].combinator, 'OR');
+    assert.strictEqual(list[0].name, 'external walls');
+  });
+
+  it('drops empty / whitespace / over-length names', () => {
+    save('', 'AND', []);
+    save('   ', 'AND', []);
+    save('x'.repeat(__internal.MAX_NAME_LEN + 1), 'AND', []);
+    assert.deepStrictEqual(loadSavedFilters(), []);
+  });
+
+  it('takes a defensive copy of the rules array', () => {
+    const rules = [Rule.ifcType(['IfcWall'])];
+    save('Walls', 'AND', rules);
+    rules[0] = Rule.ifcType(['IfcDoor']);
+    const loaded = loadSavedFilters()[0];
+    // The mutation to the caller's array must not leak into storage.
+    const r = loaded.rules[0];
+    assert.strictEqual(r.kind, 'ifcType');
+    if (r.kind === 'ifcType') {
+      assert.deepStrictEqual(r.values, ['IfcWall']);
+    }
+  });
+
+  it('deleteSavedFilter removes the named preset', () => {
+    save('Walls', 'AND', [Rule.ifcType(['IfcWall'])]);
+    save('Doors', 'AND', [Rule.ifcType(['IfcDoor'])]);
+    deleteSavedFilter('walls');
+    const list = loadSavedFilters();
+    assert.deepStrictEqual(list.map((p) => p.name), ['Doors']);
+  });
+
+  it('deleteSavedFilter is a no-op for unknown names', () => {
+    save('Walls', 'AND', [Rule.ifcType(['IfcWall'])]);
+    deleteSavedFilter('Nope');
+    assert.strictEqual(loadSavedFilters().length, 1);
+  });
+
+  it('clearSavedFilters wipes the catalog', () => {
+    save('Walls', 'AND', [Rule.ifcType(['IfcWall'])]);
+    clearSavedFilters();
+    assert.deepStrictEqual(loadSavedFilters(), []);
+  });
+
+  // ── schema-version edge cases (#4987 review) ──────────────────────────
+
+  it('a v2 entry saves and reads back its real groups (round-trip)', () => {
+    saveFilter('Union', [
+      { rules: [Rule.ifcType(['IfcWall'])], combinator: 'AND' },
+      { rules: [Rule.ifcType(['IfcDoor'])], combinator: 'AND' },
+    ]);
+    const [preset] = loadSavedFilters();
+    assert.strictEqual(preset.groups.length, 2);
+    assert.deepStrictEqual(preset.groups[1].rules, [Rule.ifcType(['IfcDoor'])]);
+  });
+
+  it('a literal schemaVersion 1 reads as the legacy single-group shape (#4987 review)', () => {
+    (g.localStorage as MemoryStorage).setItem(
+      __internal.STORAGE_KEY,
+      JSON.stringify([{ name: 'Old export', schemaVersion: 1, combinator: 'OR', rules: [Rule.ifcType(['IfcWall'])] }]),
+    );
+    const [preset] = loadSavedFilters();
+    assert.ok(preset, 'the legacy preset is readable');
+    assert.strictEqual(preset.groups.length, 1);
+    assert.strictEqual(preset.groups[0].combinator, 'OR');
+    assert.deepStrictEqual(preset.groups[0].rules, [Rule.ifcType(['IfcWall'])]);
+  });
+
+  it('a STRING schemaVersion ("2") is unreadable, not silently read as an empty v1 preset', () => {
+    (g.localStorage as MemoryStorage).setItem(
+      __internal.STORAGE_KEY,
+      JSON.stringify([{ name: 'Bad version', schemaVersion: '2', combinator: 'AND', rules: [] }]),
+    );
+    // Must not appear at all — reading it as v1 would silently show an
+    // EMPTY filter under the preset's real name, which then looks saved
+    // and gets re-saved as an empty query the next time someone clicks it.
+    assert.deepStrictEqual(loadSavedFilters(), []);
+  });
+
+  it('an unrecognised FUTURE schemaVersion (3) is unreadable, not routed through the v2 groups parser', () => {
+    (g.localStorage as MemoryStorage).setItem(
+      __internal.STORAGE_KEY,
+      JSON.stringify([{ name: 'From the future', schemaVersion: 3, groups: [{ rules: [], combinator: 'AND' }] }]),
+    );
+    assert.deepStrictEqual(loadSavedFilters(), []);
+  });
+
+  it('an entry with an unreadable group blocks writes rather than being silently dropped on the next save', () => {
+    (g.localStorage as MemoryStorage).setItem(
+      __internal.STORAGE_KEY,
+      JSON.stringify([{ name: 'Corrupt v2', schemaVersion: 2, groups: [{ rules: [], combinator: 'XOR' }] }]),
+    );
+    assert.deepStrictEqual(loadSavedFilters(), []); // not shown...
+    const result = save('New preset', 'AND', [Rule.ifcType(['IfcSlab'])]);
+    // ...but the write that would have permanently erased it is refused,
+    // exactly like the existing whole-catalog-corruption protection (#2085).
+    assert.strictEqual(result.persisted, false);
+  });
+
+  it('drops malformed payloads in storage', () => {
+    (g.localStorage as MemoryStorage).setItem(__internal.STORAGE_KEY, '{not-json');
+    assert.deepStrictEqual(loadSavedFilters(), []);
+  });
+
+  it('rejects entries with unknown rule kinds while preserving valid ones', () => {
+    (g.localStorage as MemoryStorage).setItem(
+      __internal.STORAGE_KEY,
+      JSON.stringify([
+        { name: 'Mixed', combinator: 'AND', rules: [
+          { kind: 'ifcType', values: ['IfcWall'], op: 'in' },
+          { kind: 'unknown' },
+        ], updatedAt: 1 },
+      ]),
+    );
+    const list = loadSavedFilters();
+    assert.strictEqual(list.length, 1);
+    assert.strictEqual(list[0].rules.length, 1, 'invalid rule was filtered');
+    assert.strictEqual(list[0].rules[0].kind, 'ifcType');
+  });
+});
+
+/** Same as `MemoryStorage`, but the backing map is readable by the assertions. */
+class InspectableStorage implements MemoryStorageLike {
+  readonly store = new Map<string, string>();
+  getItem(key: string): string | null { return this.store.get(key) ?? null; }
+  setItem(key: string, value: string): void { this.store.set(key, value); }
+  removeItem(key: string): void { this.store.delete(key); }
+}
+
+/** Truncated JSON — the shape an externally mangled entry has. */
+const CORRUPT = '[{"name":"Ground floor walls","combinator":"AND","rules":[{"kind":"ifcTy';
+
+describe('saved-filters: an unreadable catalog is never deleted', () => {
+  let ls: InspectableStorage;
+  beforeEach(() => {
+    ls = new InspectableStorage();
+    g.localStorage = ls;
+    loadSavedFilters(); // clean read clears the module-level "unwritable" flag
+  });
+
+  const survives = () => [...ls.store.values()].includes(CORRUPT);
+
+  it('does not delete the stored catalog when it fails to parse', () => {
+    ls.setItem(__internal.STORAGE_KEY, CORRUPT);
+    assert.deepStrictEqual(loadSavedFilters(), []);
+    assert.ok(survives(), 'the unreadable catalog was deleted by the read');
+  });
+
+  it('does not delete the stored catalog when it parses to a non-array (#2089 review)', () => {
+    // Valid JSON, wrong shape — a future format wrapping the array in an
+    // object, or a hand-edited file. This is not a parse error, so it must go
+    // through the same preserve-and-quarantine path as the catch below, not
+    // fall through a silent `return []`.
+    const nonArray = '{"presets":[{"name":"Important"}]}';
+    ls.setItem(__internal.STORAGE_KEY, nonArray);
+    assert.deepStrictEqual(loadSavedFilters(), []);
+    assert.ok(
+      [...ls.store.values()].includes(nonArray),
+      'the non-array catalog was deleted by the read instead of being quarantined',
+    );
+    assert.ok(
+      [...ls.store.keys()].some((k) => k !== __internal.STORAGE_KEY && k.startsWith(`${__internal.STORAGE_KEY}:unreadable`)),
+      'no :unreadable backup was created for the non-array catalog',
+    );
+  });
+
+  it('does not overwrite a non-array catalog with the save that follows (#2089 review)', () => {
+    const nonArray = '{"presets":[{"name":"Important"}]}';
+    ls.setItem(__internal.STORAGE_KEY, nonArray);
+    loadSavedFilters();
+    save('New preset', 'AND', [Rule.ifcType(['IfcSlab'])]);
+    assert.ok(
+      [...ls.store.values()].includes(nonArray),
+      'the non-array catalog was destroyed by the save that followed the failed read',
+    );
+  });
+
+  it('does not overwrite the stored catalog with the save that follows', () => {
+    ls.setItem(__internal.STORAGE_KEY, CORRUPT);
+    loadSavedFilters();
+    save('New preset', 'AND', [Rule.ifcType(['IfcSlab'])]);
+    assert.ok(survives(), 'the unreadable catalog was destroyed by the save');
+  });
+
+  // ── Negative cases ─────────────────────────────────────────────────────────
+
+  it('keeps saving after an unreadable read — the toolbar stays usable', () => {
+    ls.setItem(__internal.STORAGE_KEY, CORRUPT);
+    loadSavedFilters();
+
+    save('New preset', 'AND', [Rule.ifcType(['IfcSlab'])]);
+    assert.deepStrictEqual(loadSavedFilters().map((p) => p.name), ['New preset']);
+
+    // A user-initiated delete still deletes.
+    deleteSavedFilter('New preset');
+    assert.deepStrictEqual(loadSavedFilters(), []);
+    assert.ok(survives(), 'the preserved copy should outlive an unrelated delete');
+  });
+
+  it('clearSavedFilters still wipes everything, preserved copy included', () => {
+    ls.setItem(__internal.STORAGE_KEY, CORRUPT);
+    loadSavedFilters();
+    save('New preset', 'AND', [Rule.ifcType(['IfcSlab'])]);
+    clearSavedFilters();
+    assert.deepStrictEqual(loadSavedFilters(), []);
+    assert.strictEqual(ls.store.size, 0, 'an explicit wipe leaves nothing behind');
+  });
+
+  it('treats an empty stored string as a read failure, not "no entry" (sibling of #2348)', () => {
+    // getItem returns '' when the key EXISTS but holds an empty string, and
+    // null when the key is genuinely ABSENT. `!raw` conflated the two, so an
+    // empty entry (the shape a truncated or interrupted write leaves behind)
+    // skipped JSON.parse entirely and was never quarantined -- the very next
+    // save silently overwrote it without ever recording that a corrupt entry
+    // was there.
+    ls.setItem(__internal.STORAGE_KEY, '');
+    assert.deepStrictEqual(loadSavedFilters(), []);
+    assert.ok(
+      [...ls.store.keys()].some((k) => k !== __internal.STORAGE_KEY && k.startsWith(`${__internal.STORAGE_KEY}:unreadable`)),
+      'no :unreadable backup was created for the empty stored entry',
+    );
+  });
+
+  it('refuses to write when the unreadable catalog could not even be backed up', () => {
+    // Quota is exhausted for the backup write specifically. `safeStorage`
+    // probes storage first, so rejecting every write here would make the test
+    // vacuous — it would pass because the module saw no storage at all.
+    const full = new (class extends InspectableStorage {
+      override setItem(key: string, value: string): void {
+        if (key.startsWith(`${__internal.STORAGE_KEY}:unreadable`)) {
+          throw new DOMException('quota', 'QuotaExceededError');
+        }
+        super.setItem(key, value);
+      }
+    })();
+    full.setItem(__internal.STORAGE_KEY, CORRUPT);
+    g.localStorage = full;
+
+    loadSavedFilters();
+    const result = save('New preset', 'AND', [Rule.ifcType(['IfcSlab'])]);
+    assert.strictEqual(full.getItem(__internal.STORAGE_KEY), CORRUPT);
+    // The write never reached storage: the caller must be told, not left to
+    // infer it from the returned catalog still looking populated. (#2089)
+    assert.strictEqual(result.persisted, false);
+  });
+});

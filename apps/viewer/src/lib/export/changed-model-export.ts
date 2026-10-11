@@ -1,0 +1,143 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Real per-model export implementations for the Export modified IFC… flow, plus the
+ * production `BuildArtifactsDeps` wiring. Kept out of `model-changes.ts` so that
+ * module (and its unit tests) stay free of the browser renderer and the store
+ * barrel — the pure `buildChangedArtifacts` takes these as injected deps.
+ *
+ * Both paths bake the model's pending edits (`applyMutations: true`,
+ * `includeGeometry: true`) so the output is a full, round-trippable model with
+ * changes applied — not a delta. The STEP path additionally splices any pending
+ * schedule, but ONLY when handed real schedule state (the caller passes `null`
+ * for every non-target model), which is the sole guard against injecting the
+ * single global schedule into every exported file.
+ */
+
+import { StepExporter, Ifc5Exporter } from '@ifc-lite/export';
+import { prepareAppearanceSerialization } from '../appearance/serialization.js';
+import { packagePortableIfcAsync } from './portable-ifc.js';
+import type { IfcDataStore } from '@ifc-lite/parser';
+import type { MutablePropertyView } from '@ifc-lite/mutations';
+import { spliceScheduleIntoExport } from '@/sdk/adapters/export-schedule-splice';
+import { ensureModelExportReady } from '@/services/desktop-export';
+import type {
+  BuildArtifactsDeps,
+  ChangesExportArtifact,
+  IfcxExportInvocation,
+  StepExportInvocation,
+} from './model-changes.js';
+
+/**
+ * Export one model to STEP with its property/quantity/attribute/georef edits
+ * applied, then splice the pending schedule when `invocation.scheduleState` is
+ * non-null. Mirrors the single-model STEP branch of `ExportDialog`.
+ */
+export async function exportChangedModelToStep(
+  modelId: string,
+  dataStore: IfcDataStore,
+  view: MutablePropertyView | undefined,
+  invocation: StepExportInvocation,
+): Promise<ChangesExportArtifact> {
+  const serialized = prepareAppearanceSerialization(modelId, dataStore, view);
+  const exporter = new StepExporter(dataStore, serialized.view);
+  const result = await exporter.exportAsync({
+    schema: invocation.schema,
+    includeGeometry: true,
+    applyMutations: true,
+    visibleOnly: false,
+    georefMutations: invocation.georefMutations,
+    description: invocation.description,
+    application: 'ifc-lite',
+  });
+
+  let content: string | Uint8Array = result.content;
+  if (invocation.scheduleState) {
+    content = spliceScheduleIntoExport({ content }, modelId, dataStore, invocation.scheduleState).content;
+  }
+
+  return packagePortableIfcAsync(modelId, content, serialized.resources);
+}
+
+/**
+ * Export one IFC5 model to IFCX with edits applied. Mirrors the (non
+ * changes-only) IFC5 branch of `ExportDialog`, including materializing
+ * GPU-instanced occurrences for the primary model. `withInstancedMeshes` is
+ * dynamically imported so this module can be pulled into a Node test context
+ * without loading the browser renderer.
+ */
+export async function exportChangedModelToIfcx(
+  modelId: string,
+  dataStore: IfcDataStore,
+  view: MutablePropertyView | undefined,
+  invocation: IfcxExportInvocation,
+): Promise<ChangesExportArtifact> {
+  const { withInstancedMeshes } = await import('../../utils/instancedExport.js');
+  // GPU instancing stopped being primary-only on 2026-08-06 (#2255) — scope by
+  // THIS model's `{ idOffset, maxExpressId }` bracket rather than an
+  // `idOffset === 0` gate, or a federation of N models would splice every
+  // other model's instanced entities into this one's export.
+  // `invocation.maxExpressId` is undefined only for the legacy slot, which is
+  // provably the sole model loaded (#2865/#2878 follow-up).
+  const exportGeometry = invocation.geometryResult
+    ? withInstancedMeshes(
+        invocation.geometryResult,
+        invocation.maxExpressId !== undefined
+          ? { modelId, idOffset: invocation.idOffset, maxExpressId: invocation.maxExpressId }
+          : null,
+      )
+    : invocation.geometryResult;
+
+  const exporter = new Ifc5Exporter(dataStore, exportGeometry, view, invocation.idOffset);
+  const result = exporter.export({
+    includeGeometry: true,
+    includeProperties: true,
+    applyMutations: true,
+    visibleOnly: false,
+    // A recipient's room model is keyed by room path; `buildChangedArtifacts`
+    // resolves the slot to drop so the file carries its own paths (#4444).
+    stripPathPrefix: invocation.stripPathPrefix,
+    // A round-trip "export my edits" should not silently drop properties that
+    // lack an official IFC5 schema, so keep full fidelity here. (The Export
+    // dialog exposes this as a user toggle that defaults to on; the one-click
+    // changes button deliberately favors completeness.)
+    onlyKnownProperties: false,
+    author: 'ifc-lite',
+  });
+
+  // An empty pset has no IFCX wire representation (#5201); the exporter
+  // counts it instead of dropping it silently, and the count travels with
+  // the artifact so the success toast can say so.
+  return { content: result.content, ext: 'ifcx', mime: 'application/json', skippedCount: result.stats.skippedCount };
+}
+
+/**
+ * Toast suffix for property sets an IFCX export left out because the format
+ * has no spelling for "this set exists with zero members" (#5201). Mirrors
+ * the layer-publish report (`publish.ts`, #2277): counted, never silent.
+ */
+export function unrepresentedPsetsNote(count: number): string {
+  if (count <= 0) return '';
+  return ` — ${count} empty property set${count === 1 ? '' : 's'} left out (IFCX cannot represent an empty set)`;
+}
+
+/**
+ * Toast suffix for official IFCX property keys (`bsi::ifc::prop::<Name>`) that
+ * two psets on one entity disagreed on while only the flat key was written,
+ * so one value is not in the file (#5376). Full-fidelity exports also write
+ * the pset-qualified key and lose nothing, so only lost values are counted.
+ */
+export function lostPropertyCollisionsNote(collisions: readonly { valueLost: boolean }[]): string {
+  const lost = collisions.filter((c) => c.valueLost).length;
+  if (lost === 0) return '';
+  return ` — ${lost} propert${lost === 1 ? 'y' : 'ies'} shared a name across property sets, and only one value was kept`;
+}
+
+/** Production dependency set for `buildChangedArtifacts`. */
+export const defaultBuildArtifactsDeps: BuildArtifactsDeps = {
+  resolveStepDataStore: ensureModelExportReady,
+  exportStep: exportChangedModelToStep,
+  exportIfcx: exportChangedModelToIfcx,
+};

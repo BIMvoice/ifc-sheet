@@ -1,0 +1,416 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Material totals panel — shown when a material is selected from the
+ * "Materials" hierarchy tab. Surfaces the material's own property sets
+ * (IfcMaterialProperties) plus quantities aggregated across every element that
+ * uses the material. Volumes/areas are apportioned by each element's material
+ * share (layer thickness / constituent fraction), so a layered wall's volume is
+ * split between its concrete and insulation rather than double-counted.
+ * NOTE: apportioning is per ASSOCIATION — an element carrying several
+ * IfcRelAssociatesMaterial (e.g. a layer set plus a fallback material)
+ * contributes its full volume under EACH association, so summing every
+ * material's total can exceed the model volume for such elements.
+ */
+
+import { useMemo } from 'react';
+import { Layers, Calculator, Boxes, Info } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useIfc } from '@/hooks/useIfc';
+import { useViewerStore } from '@/store';
+import { useEffectiveMaterialStores } from '@/hooks/useEffectiveMaterialStores';
+import {
+  buildMaterialUsageIndex,
+  getMaterialDisplay,
+  extractMaterialPropertiesForMaterialId,
+  extractQuantitiesOnDemand,
+  extractTypeQuantitiesOnDemand,
+  extractProjectUnits,
+  ProjectUnits,
+} from '@ifc-lite/parser';
+import { QuantityType, RelationshipType } from '@ifc-lite/data';
+import { resolveQuantityDisplay } from '@/lib/units/display';
+import { PropertySetCard } from './PropertySetCard';
+import type { PropertySet } from './encodingUtils';
+import { useTranslation } from '@/i18n';
+import { formatLocaleNumber } from '@/i18n/intlFormat';
+interface MaterialTotals {
+  /** Number of elements using this material (across all loaded models). */
+  elementCount: number;
+  /** Elements that contributed at least one volume quantity. */
+  elementsWithVolume: number;
+  volume: number;
+  hasVolume: boolean;
+  area: number;
+  hasArea: boolean;
+  weight: number;
+  hasWeight: boolean;
+  /** Element count per IFC class, sorted desc. */
+  byClass: Array<{ ifcClass: string; count: number }>;
+}
+
+/**
+ * Pick a quantity value by candidate names (case-insensitive), else by type:
+ * when nothing matches a candidate but the map (minus `deny`) is non-empty,
+ * fall back to the alphabetically-first remaining name. That fallback exists
+ * for vendor-specific quantity names (e.g. "PerimeterArea", "TopArea") that
+ * carry a real value of the right type but never match the IFC-standard
+ * candidate list — without it, such an element contributes nothing to the
+ * total and its row is dropped from the panel even though the quantity was
+ * there all along.
+ *
+ * The tiebreak is alphabetical rather than "whichever the map saw first":
+ * map insertion order mirrors the order qsets/quantities were encountered
+ * while scanning the element (itself downstream of on-demand-parse vs.
+ * type-fallback ordering, see the qsets selection above) — a happenstance of
+ * traversal, not a meaningful choice. Sorting by name at least makes the
+ * fallback reproducible independent of that traversal order.
+ *
+ * `deny` excludes names that are the right IFC *type* (e.g. `IfcQuantityArea`)
+ * but not the right *kind* of value — `CrossSectionArea` is a section
+ * property (profile area), not a surface extent, yet it type-checks as an
+ * area and sorts alphabetically before every real surface-area name a beam
+ * or column carries (`GrossSurfaceArea`, `NetSurfaceArea`, `OuterSurfaceArea`).
+ * A name-blind alphabetical fallback would silently select it and report a
+ * value up to two orders of magnitude too small. Skipping a denied name
+ * still degrades to "no value" rather than a wrong one when it is the only
+ * candidate present — the honest outcome PR #2777 traded away.
+ */
+function pickQuantity(
+  byName: Map<string, number>,
+  candidates: string[],
+  deny: ReadonlySet<string> = EMPTY_DENY,
+): number | undefined {
+  for (const c of candidates) {
+    const v = byName.get(c);
+    if (v !== undefined) return v;
+  }
+  const fallbackNames = [...byName.keys()].filter((n) => !deny.has(n)).sort();
+  if (fallbackNames.length === 0) return undefined;
+  return byName.get(fallbackNames[0]);
+}
+
+const EMPTY_DENY: ReadonlySet<string> = new Set();
+
+const VOLUME_CANDIDATES = ['netvolume', 'grossvolume', 'volume'];
+// Most-specific first: the true extents (net/gross *surface* area) are tried
+// before the generic "area" name, so a beam/column/member carrying a
+// standard `NetSurfaceArea`/`OuterSurfaceArea` quantity resolves BY NAME and
+// never reaches the by-type fallback at all (louistrue, PR #2777 review 2).
+const AREA_CANDIDATES = [
+  'netarea',
+  'grossarea',
+  'netsidearea',
+  'grosssidearea',
+  'netfloorarea',
+  'grossfloorarea',
+  'netsurfacearea',
+  'grosssurfacearea',
+  'outersurfacearea',
+  'area',
+];
+// `CrossSectionArea` (IfcBeam/IfcColumn/IfcMember/IfcFooting/IfcPile/duct
+// and pipe segments' Qto_*BaseQuantities) is an `IfcQuantityArea` but a
+// section/profile property, not an extent — the by-type fallback must never
+// select it. See `pickQuantity`'s docstring.
+const AREA_TYPE_FALLBACK_DENY: ReadonlySet<string> = new Set(['crosssectionarea']);
+const WEIGHT_CANDIDATES = ['netweight', 'grossweight', 'weight'];
+
+/**
+ * Build per-name quantity maps from an element's (or its type's) qsets and
+ * pick one value of each quantity kind — the single place all three call
+ * sites (volume/area/weight) share, so the "match a candidate name, else by
+ * type" rule from `pickQuantity`'s docstring is applied identically to all
+ * three instead of three copies that can silently drift apart (as they did:
+ * only the volume call site implemented the fallback).
+ */
+export function aggregateQuantitiesFromQsets(
+  qsets: ReadonlyArray<{ quantities: ReadonlyArray<{ name: string; type: number; value: number }> }>,
+): { volume?: number; area?: number; weight?: number } {
+  const volByName = new Map<string, number>();
+  const areaByName = new Map<string, number>();
+  const weightByName = new Map<string, number>();
+  for (const qset of qsets) {
+    for (const q of qset.quantities) {
+      const key = q.name.toLowerCase();
+      if (q.type === QuantityType.Volume) volByName.set(key, q.value);
+      else if (q.type === QuantityType.Area) areaByName.set(key, q.value);
+      else if (q.type === QuantityType.Weight) weightByName.set(key, q.value);
+    }
+  }
+  return {
+    volume: pickQuantity(volByName, VOLUME_CANDIDATES),
+    area: pickQuantity(areaByName, AREA_CANDIDATES, AREA_TYPE_FALLBACK_DENY),
+    weight: pickQuantity(weightByName, WEIGHT_CANDIDATES),
+  };
+}
+
+/** Format an aggregated quantity with magnitude-appropriate precision. */
+export function formatMaterialNumber(locale: string, value: number): string {
+  if (value === 0) return '0';
+  if (Math.abs(value) >= 1000) return formatLocaleNumber(locale, value, { maximumFractionDigits: 0 });
+  if (Math.abs(value) >= 1) return formatLocaleNumber(locale, value, { maximumFractionDigits: 2 });
+  return formatLocaleNumber(locale, value, { maximumFractionDigits: 4 });
+}
+/** Render an aggregated total with its resolved unit (issue #1573 follow-up):
+ *  the display-unit override when set, else the file's declared/SI-default
+ *  unit — same resolution as the property/quantity cards below, just with
+ *  `formatNumber`'s magnitude-adaptive precision instead of `formatConverted`
+ *  so large totals stay readable. NOTE: the totals loop sums raw quantity
+ *  values across `allStores` (materials of the same name are merged across the
+ *  federation), but the unit label + any override conversion here use only the
+ *  SELECTED store's declared units. For a single-store model that is exact; a
+ *  federation whose stores declare different volume/area/mass units mixes raw
+ *  values before this label is applied — a pre-existing concern (the block was
+ *  previously hardcoded m³/m²/kg) that this label does not attempt to fix. */
+function formatTotal(
+  locale: string,
+  value: number,
+  quantityType: number,
+  projectUnits: ProjectUnits,
+  overrides: Record<string, string>,
+): string {
+  const disp = resolveQuantityDisplay(value, quantityType, projectUnits, overrides);
+  const shown = disp.converted ?? value;
+  const formatted = formatMaterialNumber(locale, shown);
+  return disp.unit ? `${formatted} ${disp.unit}` : formatted;
+}
+export function MaterialTotalsPanel({ materialId, modelId }: { materialId: number; modelId: string }) {
+  const { t, locale, revision } = useTranslation();
+  const { ifcDataStore, models } = useIfc();
+  const { stores: effectiveStores, ready: materialsReady } = useEffectiveMaterialStores(
+    models, ifcDataStore, true,
+  );
+  // Display-unit converter overrides (issue #1573 proposal 2).
+  const unitDisplayOverrides = useViewerStore((s) => s.unitDisplayOverrides);
+
+  // The store the selected material lives in, plus every loaded store (so the
+  // totals merge same-named materials across a federation).
+  const { selectedStore, allStores } = useMemo(() => {
+    const stores = [...effectiveStores.values()];
+    const sel = effectiveStores.get(modelId) ?? effectiveStores.get('legacy');
+    return { selectedStore: sel, allStores: stores };
+  }, [effectiveStores, modelId]);
+
+  const display = useMemo(() => {
+    if (!selectedStore) return { name: t('properties.materialTotals.fallbackName', { id: materialId }), type: 'IfcMaterial' };
+    return getMaterialDisplay(selectedStore, materialId);
+  }, [selectedStore, materialId, t, locale, revision]);
+
+  // The material's own property sets (Pset_Material*).
+  const psetGroups = useMemo(() => {
+    if (!selectedStore) return [];
+    return extractMaterialPropertiesForMaterialId(selectedStore, materialId);
+  }, [selectedStore, materialId]);
+
+  // The file's declared units, for rendering unit suffixes on material
+  // property values (issue #1573).
+  const projectUnits = useMemo(() => {
+    if (!selectedStore?.source?.length || !selectedStore?.entityIndex) return ProjectUnits.empty();
+    return extractProjectUnits(selectedStore.source, selectedStore.entityIndex);
+  }, [selectedStore]);
+
+  // Aggregate quantities across all elements using a material of this name.
+  const totals = useMemo<MaterialTotals>(() => {
+    const result: MaterialTotals = {
+      elementCount: 0,
+      elementsWithVolume: 0,
+      volume: 0,
+      hasVolume: false,
+      area: 0,
+      hasArea: false,
+      weight: 0,
+      hasWeight: false,
+      byClass: [],
+    };
+    const classCounts = new Map<string, number>();
+    const targetName = display.name;
+
+    for (const store of allStores) {
+      const usageIndex = buildMaterialUsageIndex(store);
+      // Forward map of entity -> quantity-set ids (when on-demand parsing is
+      // active). Used to skip the per-element extractor allocation for elements
+      // that carry no quantities — the common case in large models, so a
+      // material used by thousands of elements only pays the parse cost for the
+      // subset that actually has Qto data.
+      const qMap = store.onDemandQuantityMap;
+      // Type-level Qto fallback cache (#1745 pattern): when an occurrence has
+      // no quantity sets of its own, its type may carry them (HasPropertySets
+      // or IFC4 rel-defined). Resolved once per TYPE, not per occurrence, so a
+      // 500-door type pays a single extraction.
+      const typeQsetCache = new Map<number, ReadonlyArray<{ name: string; quantities: ReadonlyArray<{ name: string; type: number; value: number }> }>>();
+      const typeQsetsFor = (entityId: number) => {
+        if (!store.relationships) return [];
+        const typeIds = store.relationships.getRelated(entityId, RelationshipType.DefinesByType, 'inverse');
+        if (typeIds.length === 0) return [];
+        const typeId = typeIds[0];
+        let qsets = typeQsetCache.get(typeId);
+        if (!qsets) {
+          qsets = extractTypeQuantitiesOnDemand(store, entityId)?.quantities ?? [];
+          typeQsetCache.set(typeId, qsets);
+        }
+        return qsets;
+      };
+      for (const usage of usageIndex.values()) {
+        if (usage.name !== targetName) continue;
+        for (const { entityId, weight } of usage.entries) {
+          result.elementCount += 1;
+
+          // @raw-entity-enumeration-ok effectiveStores holds a reparsed STEP snapshot with pending edits baked in.
+          const ifcClass = store.entityIndex.byId.get(entityId)?.type || usage.ifcClass;
+          classCounts.set(ifcClass, (classCounts.get(ifcClass) ?? 0) + 1);
+
+          // Occurrence quantities win; fall back to the type's (#1755 sweep).
+          // "Win" requires at least one actual quantity — a named-but-empty
+          // occurrence qset must not mask populated type-level quantities.
+          const qsets = (qMap && !qMap.get(entityId)?.length)
+            ? typeQsetsFor(entityId)
+            : (() => {
+                const own = extractQuantitiesOnDemand(store, entityId);
+                return own.some((qset) => qset.quantities.length > 0) ? own : typeQsetsFor(entityId);
+              })();
+          if (qsets.length === 0) continue;
+          const { volume: vol, area, weight: wt } = aggregateQuantitiesFromQsets(qsets);
+
+          if (vol !== undefined) {
+            result.volume += vol * weight;
+            result.hasVolume = true;
+            result.elementsWithVolume += 1;
+          }
+
+          if (area !== undefined) {
+            result.area += area * weight;
+            result.hasArea = true;
+          }
+
+          if (wt !== undefined) {
+            result.weight += wt * weight;
+            result.hasWeight = true;
+          }
+        }
+      }
+    }
+
+    result.byClass = [...classCounts.entries()]
+      .map(([ifcClass, count]) => ({ ifcClass, count }))
+      .sort((a, b) => b.count - a.count);
+    return result;
+  }, [allStores, display.name]);
+  const psetCount = psetGroups.reduce((sum, g) => sum + g.psets.length, 0);
+
+  if (!materialsReady) {
+    return <output aria-busy="true">{t('sources.sourceEntityList.loading')}</output>;
+  }
+
+  return (
+    <div className="h-full flex flex-col border-l-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black">
+      {/* Header */}
+      <div className="p-4 border-b-2 border-zinc-200 dark:border-zinc-800 bg-amber-50/40 dark:bg-amber-950/20 space-y-2">
+        <div className="flex items-start gap-3">
+          <div className="p-2 border-2 border-amber-200 dark:border-amber-800 bg-white dark:bg-zinc-950 shrink-0">
+            <Layers className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0 pt-0.5">
+            <h3 className="font-bold text-sm truncate uppercase tracking-tight text-zinc-900 dark:text-zinc-100 min-w-0">
+              {display.name}
+            </h3>
+            <p className="text-xs font-mono text-amber-600/80 dark:text-amber-400/80">{display.type}</p>
+          </div>
+        </div>
+      </div>
+
+      <ScrollArea className="flex-1 bg-white dark:bg-black">
+        <div className="p-3 space-y-3 w-full overflow-hidden">
+          {/* Totals */}
+          <div className="border-2 border-amber-200 dark:border-amber-800 bg-amber-50/20 dark:bg-amber-950/20">
+            <div className="flex items-center gap-2 px-2.5 py-2 border-b-2 border-amber-200 dark:border-amber-800">
+              <Calculator className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="font-bold text-xs text-amber-700 dark:text-amber-400 uppercase tracking-wide">{t('properties.materialTotals.totalsHeading')}</span>
+            </div>
+            <div className="divide-y divide-amber-100 dark:divide-amber-900/30">
+              <TotalRow label={t('properties.materialTotals.elements')} value={formatLocaleNumber(locale, totals.elementCount)} />
+              {totals.hasVolume && (
+                <TotalRow label={t('properties.materialTotals.volume')} value={formatTotal(locale, totals.volume, QuantityType.Volume, projectUnits, unitDisplayOverrides)} />
+              )}
+              {totals.hasArea && (
+                <TotalRow label={t('properties.materialTotals.area')} value={formatTotal(locale, totals.area, QuantityType.Area, projectUnits, unitDisplayOverrides)} />
+              )}
+              {totals.hasWeight && (
+                <TotalRow label={t('properties.materialTotals.weight')} value={formatTotal(locale, totals.weight, QuantityType.Weight, projectUnits, unitDisplayOverrides)} />
+              )}
+            </div>
+            {totals.elementCount > 0 && !totals.hasVolume && (
+              <div className="flex items-start gap-1.5 px-2.5 py-2 text-2xs text-zinc-500 dark:text-zinc-400 border-t border-amber-100 dark:border-amber-900/30">
+                <Info className="h-3 w-3 shrink-0 mt-px" />
+                <span>{t('properties.materialTotals.noVolumeQuantities')}</span>
+              </div>
+            )}
+            {totals.hasVolume && totals.elementsWithVolume < totals.elementCount && (
+              <div className="flex items-start gap-1.5 px-2.5 py-2 text-2xs text-zinc-500 dark:text-zinc-400 border-t border-amber-100 dark:border-amber-900/30">
+                <Info className="h-3 w-3 shrink-0 mt-px" />
+                <span>
+                  {t('properties.materialTotals.partialVolumeNote', { counted: formatLocaleNumber(locale, totals.elementsWithVolume), total: formatLocaleNumber(locale, totals.elementCount) })}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Breakdown by class */}
+          {totals.byClass.length > 0 && (
+            <div className="border border-zinc-200 dark:border-zinc-800">
+              <div className="flex items-center gap-2 px-2.5 py-2 border-b border-zinc-200 dark:border-zinc-800">
+                <Boxes className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+                <span className="font-bold text-xs text-zinc-600 dark:text-zinc-300 uppercase tracking-wide">{t('properties.materialTotals.byClassHeading')}</span>
+              </div>
+              <div className="divide-y divide-zinc-100 dark:divide-zinc-900">
+                {totals.byClass.map((c) => (
+                  <div key={c.ifcClass} className="flex items-center justify-between px-2.5 py-1.5 text-xs">
+                    <span className="font-mono text-zinc-600 dark:text-zinc-400 truncate">{c.ifcClass}</span>
+                    <span className="font-mono text-zinc-900 dark:text-zinc-100">{formatLocaleNumber(locale, c.count)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Material property sets */}
+          {psetCount > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 px-1 pt-1 pb-0.5 text-2xs text-amber-600/70 dark:text-amber-400/60 uppercase tracking-wider font-semibold">
+                <Layers className="h-3 w-3 shrink-0" />
+                <span className="truncate">{t('properties.materialTotals.materialPropertiesHeading')}</span>
+              </div>
+              {psetGroups.map((group) =>
+                group.psets.map((pset, index) => {
+                  const psetView: PropertySet = {
+                    name: pset.name,
+                    properties: pset.properties.map((p) => ({ name: p.name, value: p.value, isMutated: false, dataType: p.dataType })),
+                  };
+                  return <PropertySetCard key={`${group.materialId}-${pset.name}-${index}`} pset={psetView} projectUnits={projectUnits} unitDisplayOverrides={unitDisplayOverrides} />;
+                }),
+              )}
+            </div>
+          )}
+
+          {psetCount === 0 && totals.elementCount === 0 && (
+            <p className="text-sm text-zinc-500 dark:text-zinc-500 text-center py-8 font-mono">
+              {t('properties.materialTotals.noData')}
+            </p>
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+/** A single label/value row in the material totals card. */
+function TotalRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between px-2.5 py-2 text-xs">
+      <span className="text-zinc-500 dark:text-zinc-400 font-medium">{label}</span>
+      <span className="font-mono font-semibold text-amber-700 dark:text-amber-300 tabular-nums">{value}</span>
+    </div>
+  );
+}

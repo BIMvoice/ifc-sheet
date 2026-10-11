@@ -1,0 +1,179 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, it, expect } from 'vitest';
+import { discoverClasses, discoverDataSources } from './discovery.js';
+import type { LensDataProvider } from './types.js';
+
+function createMockProvider(overrides: Partial<LensDataProvider> = {}): LensDataProvider {
+  return {
+    getEntityCount: () => 3,
+    forEachEntity: (cb) => {
+      cb(1, 'model-1');
+      cb(2, 'model-1');
+      cb(3, 'model-1');
+    },
+    getEntityType: (id) => {
+      if (id === 1) return 'IfcWall';
+      if (id === 2) return 'IfcSlab';
+      if (id === 3) return 'IfcWall';
+      return undefined;
+    },
+    getPropertyValue: () => undefined,
+    getPropertySets: (id) => {
+      if (id === 1) return [
+        { name: 'Pset_WallCommon', properties: [{ name: 'IsExternal', value: true }, { name: 'FireRating', value: '30' }] },
+      ];
+      if (id === 2) return [
+        { name: 'Pset_SlabCommon', properties: [{ name: 'IsExternal', value: false }] },
+      ];
+      return [];
+    },
+    ...overrides,
+  };
+}
+
+describe('discoverClasses', () => {
+  it('discovers IFC classes from all entities (instant)', () => {
+    const provider = createMockProvider();
+    const classes = discoverClasses(provider);
+    expect(classes).toEqual(['IfcSlab', 'IfcWall']);
+  });
+
+  it('returns empty array for empty model', () => {
+    const provider = createMockProvider({
+      forEachEntity: () => {},
+    });
+    expect(discoverClasses(provider)).toEqual([]);
+  });
+
+  it('deduplicates classes across entities', () => {
+    const provider = createMockProvider({
+      forEachEntity: (cb) => {
+        cb(1, 'm'); cb(3, 'm'); // Both IfcWall
+      },
+    });
+    const classes = discoverClasses(provider);
+    expect(classes).toEqual(['IfcWall']);
+  });
+});
+
+describe('discoverDataSources', () => {
+  it('discovers property sets when requested', () => {
+    const provider = createMockProvider();
+    const result = discoverDataSources(provider, { properties: true });
+    expect(result.propertySets?.get('Pset_WallCommon')).toEqual(['FireRating', 'IsExternal']);
+    expect(result.propertySets?.get('Pset_SlabCommon')).toEqual(['IsExternal']);
+    expect(result.quantitySets).toBeUndefined();
+    expect(result.materials).toBeUndefined();
+  });
+
+  it('discovers quantity sets when requested', () => {
+    const provider = createMockProvider({
+      getQuantitySets: (id) => {
+        if (id === 1) return [{ name: 'Qto_WallBaseQuantities', quantities: [{ name: 'Length' }, { name: 'Height' }] }];
+        return [];
+      },
+    });
+    const result = discoverDataSources(provider, { quantities: true });
+    expect(result.quantitySets?.get('Qto_WallBaseQuantities')).toEqual(['Height', 'Length']);
+    expect(result.propertySets).toBeUndefined();
+  });
+
+  it('discovers classifications when requested', () => {
+    const provider = createMockProvider({
+      getClassifications: (id) => {
+        if (id === 1) return [{ system: 'Uniclass', identification: 'Pr_60' }];
+        return [];
+      },
+    });
+    const result = discoverDataSources(provider, { classifications: true });
+    expect(result.classificationSystems).toEqual(['Uniclass']);
+  });
+
+  it('discovers materials when requested', () => {
+    const provider = createMockProvider({
+      getMaterialName: (id) => {
+        if (id === 1) return 'Concrete';
+        if (id === 2) return 'Steel';
+        return undefined;
+      },
+    });
+    const result = discoverDataSources(provider, { materials: true });
+    expect(result.materials).toEqual(['Concrete', 'Steel']);
+  });
+
+  it('prefers getMaterialNames() (individual materials) over getMaterialName() (layer-set name) when both are present (#1366)', () => {
+    const provider = createMockProvider({
+      // Layer-set / family-type name — should be ignored when the richer API is available.
+      getMaterialName: (id) => {
+        if (id === 1) return 'Wall Type A';
+        if (id === 2) return 'Wall Type A';
+        return undefined;
+      },
+      // Individual constituent/layer materials — should win.
+      getMaterialNames: (id) => {
+        if (id === 1) return ['Gypsum', 'Insulation'];
+        if (id === 2) return ['Concrete'];
+        return [];
+      },
+    });
+    const result = discoverDataSources(provider, { materials: true });
+    expect(result.materials).toEqual(['Concrete', 'Gypsum', 'Insulation']);
+    expect(result.materials).not.toContain('Wall Type A');
+  });
+
+  // The 30-per-type sampling cap is the whole reason discoverDataSources is
+  // affordable on a large model, and nothing pinned it: neither the exact
+  // boundary nor the fact that the budget is PER TYPE rather than store-wide.
+  it('samples at most 30 entities per type, and budgets each type separately', () => {
+    // 31 walls (ids 1..31) each carrying a uniquely-named pset, then 3 slabs
+    // (ids 101..103). If the cap were store-wide the slabs would never be
+    // reached; if the boundary were off by one, wall 31 would leak in.
+    const walls = Array.from({ length: 31 }, (_, i) => i + 1);
+    const slabs = [101, 102, 103];
+    const provider = createMockProvider({
+      getEntityCount: () => walls.length + slabs.length,
+      forEachEntity: (cb) => {
+        for (const id of walls) cb(id, 'm1');
+        for (const id of slabs) cb(id, 'm1');
+      },
+      getEntityType: (id) => (id >= 101 ? 'IfcSlab' : 'IfcWall'),
+      getPropertySets: (id) =>
+        id >= 101
+          ? [{ name: `Pset_Slab_${id}`, properties: [{ name: 'IsExternal', value: false }] }]
+          : [{ name: `Pset_Wall_${id}`, properties: [{ name: 'IsExternal', value: true }] }],
+    });
+
+    const names = new Set(discoverDataSources(provider, { properties: true }).propertySets!.keys());
+
+    // Positive controls: sampling genuinely ran, right up to the boundary.
+    expect(names.has('Pset_Wall_1')).toBe(true);
+    expect(names.has('Pset_Wall_30')).toBe(true);
+    // The 31st wall is over budget.
+    expect(names.has('Pset_Wall_31')).toBe(false);
+    // Counter-example to a store-wide budget: the slabs come after 31 walls
+    // and must still be sampled, all three of them.
+    expect(names.has('Pset_Slab_101')).toBe(true);
+    expect(names.has('Pset_Slab_102')).toBe(true);
+    expect(names.has('Pset_Slab_103')).toBe(true);
+    expect(names.size).toBe(33);
+  });
+
+  it('returns empty result when no categories requested', () => {
+    const provider = createMockProvider();
+    const result = discoverDataSources(provider, {});
+    expect(Object.keys(result)).toHaveLength(0);
+  });
+
+  it('discovers multiple categories at once', () => {
+    const provider = createMockProvider({
+      getMaterialName: (id) => id === 1 ? 'Concrete' : undefined,
+    });
+    const result = discoverDataSources(provider, { properties: true, materials: true });
+    expect(result.propertySets?.has('Pset_WallCommon')).toBe(true);
+    expect(result.materials).toEqual(['Concrete']);
+    expect(result.quantitySets).toBeUndefined();
+  });
+});

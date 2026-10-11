@@ -1,0 +1,343 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/** Types for the Lists feature - configurable property tables from IFC data */
+import type { ListModelTagScope } from './model-tag-scope.js';
+import type { DiscoveredColumns } from './result-types.js';
+import type { IfcTypeEnum, PropertySet, QuantitySet } from '@ifc-lite/data';
+import type { FilterGroup, ListConditionOperator, ListConditionSource } from '@ifc-lite/rules';
+
+// ============================================================================
+// Data Provider Interface
+// ============================================================================
+
+/**
+ * Abstract interface for accessing IFC data during list execution.
+ *
+ * Consumers implement this to bridge their data source (e.g., IfcDataStore,
+ * server model, or custom store) to the list engine.
+ *
+ * @example
+ * ```typescript
+ * const provider: ListDataProvider = {
+ *   getEntitiesByType: (type) => myStore.entities.getByType(type),
+ *   getEntityName: (id) => myStore.entities.getName(id),
+ *   getEntityGlobalId: (id) => myStore.entities.getGlobalId(id),
+ *   getEntityDescription: (id) => myStore.entities.getDescription(id),
+ *   getEntityObjectType: (id) => myStore.entities.getObjectType(id),
+ *   getEntityTypeName: (id) => myStore.entities.getTypeName(id),
+ *   getPropertySets: (id) => myStore.properties.getForEntity(id),
+ *   getQuantitySets: (id) => myStore.quantities.getForEntity(id),
+ * };
+ * ```
+ */
+export interface ListDataProvider {
+  /** Get all entity IDs matching the given IFC type */
+  getEntitiesByType(type: IfcTypeEnum): number[];
+
+  /** Get entity name (IfcRoot.Name) by express ID */
+  getEntityName(expressId: number): string;
+  /** Get entity GlobalId by express ID */
+  getEntityGlobalId(expressId: number): string;
+  /** Get entity description by express ID */
+  getEntityDescription(expressId: number): string;
+  /** Get entity object type / predefined type by express ID */
+  getEntityObjectType(expressId: number): string;
+  /** Get entity tag (IfcElement.Tag) by express ID */
+  getEntityTag(expressId: number): string;
+  /** Get IFC type name (e.g., "IfcWall") by express ID */
+  getEntityTypeName(expressId: number): string;
+  /** Name of the element's IfcTypeProduct (e.g. "WT-Standard" on an
+   *  IfcWallType), resolved via IfcRelDefinesByType — the `Type` attribute
+   *  column (issue #1754). Distinct from `getEntityTypeName` (the IFC class)
+   *  and `getEntityObjectType` (the instance's own ObjectType attribute).
+   *  Optional: providers built before this return no Type name. '' when the
+   *  element has no type. */
+  getEntityDefiningTypeName?(expressId: number): string;
+
+  /** Get all property sets for an entity (handles on-demand extraction) */
+  getPropertySets(expressId: number): PropertySet[];
+  /** Get all quantity sets for an entity (handles on-demand extraction) */
+  getQuantitySets(expressId: number): QuantitySet[];
+
+  /**
+   * Property sets inherited from the element's IfcTypeProduct (via
+   * IfcRelDefinesByType), for the automatic Type-property fallback (issue
+   * #1745): when a `property` column/condition finds nothing on the instance,
+   * the engine consults these so a value defined once on the type (e.g.
+   * Pset_WallCommon.FireRating on IfcWallType) still resolves on every
+   * instance row. Optional — providers built before this existed simply have
+   * no fallback (behaviour unchanged). Returns [] when the element has no type.
+   */
+  getTypePropertySets?(expressId: number): PropertySet[];
+  /** Quantity sets inherited from the element's IfcTypeProduct — the quantity
+   *  counterpart of {@link getTypePropertySets} (e.g. type-level
+   *  Qto_WallBaseQuantities). Same optional Type fallback semantics. */
+  getTypeQuantitySets?(expressId: number): QuantitySet[];
+
+  // ── Optional accessors (added for richer list targeting / columns) ──
+  // Implementers built before these existed keep working: the engine
+  // degrades gracefully when a method is absent (no-class lists resolve
+  // to no rows; material/classification/storey conditions never match).
+
+  /**
+   * All entity express IDs in the model. Used to target a list at every
+   * element regardless of IFC class (when `entityTypes` is empty).
+   */
+  getAllEntityIds?(): number[];
+  /** Material name(s) for the element — top-level material plus any
+   *  layer / constituent / profile / list-member names. */
+  getMaterialNames?(expressId: number): string[];
+  /** Classification references associated with the element. */
+  getClassifications?(expressId: number): ListClassificationRef[];
+  /** Building-storey name the element belongs to, or '' when unplaced. */
+  getStoreyName?(expressId: number): string;
+  /** The element's `IfcRelAggregates` parents (whole of which it is a part), for `inherit: 'aggregation'` (#5433). */
+  getAggregateParents?(expressId: number): number[];
+  /** Name of the element's IMMEDIATE spatial container — the direct
+   *  IfcRelContainedInSpatialStructure parent (a storey, or for infrastructure
+   *  the IfcBridgePart / IfcRoadPart / IfcSpatialZone it sits in). Falls back to
+   *  the container's IFC class when the container is unnamed, '' when the element
+   *  is uncontained. Used by the `spatial` column at `Container` level (Bonsai's
+   *  "container"). */
+  getContainerName?(expressId: number): string;
+  /** IfcBuilding name containing the element, or '' when unplaced. Used by the
+   *  `spatial` column at `Building` level. */
+  getBuildingName?(expressId: number): string;
+  /** IfcSite name containing the element, or '' when unplaced. Used by the
+   *  `spatial` column at `Site` level. */
+  getSiteName?(expressId: number): string;
+  /** IfcProject.Name for this model — constant for every element the provider
+   *  serves (one IfcProject per file). Used by the `spatial` column at
+   *  `Project` level. '' when the model has no named project. */
+  getProjectName?(): string;
+  /** Source model / file display name — constant for every element the
+   *  provider serves. Used by the `model` column to identify which federated
+   *  file a row comes from. '' when unknown (e.g. single-model legacy path). */
+  getModelName?(): string;
+  /** IFC `PredefinedType` enum token (e.g. "FLOOR", "FLOORING"), or '' when
+   *  the element has none. Used by the `PredefinedType` attribute column. */
+  getEntityPredefinedType?(expressId: number): string;
+  /**
+   * Discover EVERY property set / property and quantity set / quantity in
+   * the model — complete and independent of entity-type selection — so the
+   * column picker can offer all data even with no type chosen. Optional:
+   * when absent, callers fall back to the type-sampled `discoverColumns()`.
+   */
+  discoverAllColumns?(): DiscoveredColumns;
+
+  /**
+   * Location-zone assignment (issue #1810) for `zoneSetId` — a viewer-side
+   * classification computed from 3D boxes the user draws, not from IFC pset
+   * data. `null` when no assignment has been computed yet (e.g. no zones
+   * defined) or `zoneSetId` doesn't resolve. `touchedZoneNames` lists every
+   * zone the element's bounds overlap, in the same order the assignment
+   * engine found them — non-empty only when `straddles` is true. Optional:
+   * providers built before zones existed simply have no `zone` column data.
+   */
+  getZoneAssignment?(expressId: number, zoneSetId: string): {
+    zoneName: string | null;
+    straddles: boolean;
+    touchedZoneNames: string[];
+  } | null;
+  /** Every zone set currently defined, for the column/condition picker to
+   *  offer by name while storing the durable id. */
+  getZoneSetNames?(): Array<{ id: string; name: string }>;
+  /**
+   * How much VOLUME of this element sits in each zone of `zoneSetId` (issue
+   * #2508) — the answer to "I cannot get clean quantities per zone without
+   * Excel" for the elements that cross a boundary.
+   *
+   * `null` when no apportionment has been computed for that set (it is an
+   * explicit, on-demand action, never part of load), when the element does not
+   * straddle, or when its mesh is not a proven closed solid so no volume may be
+   * stated for it at all.
+   *
+   * `value` is in the SAME unit the model declares for volumes, so the shared
+   * per-column unit resolver treats it exactly like a declared `NetVolume`
+   * rather than needing a second conversion path. `homeValue` is the share in
+   * the element's home zone, which is the single number a numeric column can
+   * carry; `shares` is the full breakdown for the text one.
+   */
+  getZoneVolumeShares?(expressId: number, zoneSetId: string): {
+    homeValue: number | null;
+    shares: Array<{ zoneName: string; value: number }>;
+  } | null;
+  getWorldPosition?(expressId: number): { x: number; y: number; z: number } | null; // World Coordinate, PROJECT-space not map/WGS84 (#3671)
+}
+
+/** A classification reference exposed to the list engine (code + name). */
+export interface ListClassificationRef {
+  system?: string;
+  code?: string;
+  name?: string;
+}
+
+// ============================================================================
+// List Definition (persisted config)
+// ============================================================================
+
+export interface ListDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  updatedAt: number;
+
+  /** Which entity types to include */
+  entityTypes: IfcTypeEnum[];
+
+  /**
+   * Optional explicit element scope — a snapshot of express IDs per model
+   * (e.g. from a search/filter result), keyed by modelId. When present, the
+   * list targets exactly these elements per model and `entityTypes` is
+   * ignored; filter groups still apply on top. Keyed by model so federated
+   * snapshots don't over-select when local express IDs collide across files.
+   */
+  expressIdsByModel?: Record<string, number[]>;
+
+  /** Optional MODEL scope by model tag (#4215, `model-tag-scope.ts`); absent = every model. */
+  modelTagScope?: ListModelTagScope;
+
+  /** Canonical Rules filters for migrated and newly-authored lists. */
+  groups: FilterGroup[];
+
+  /** Flat predicates for provider-only `executeList` callers (the SDK). Saved
+   *  lists carry every predicate in `groups` instead (`listCondition`, #6190). */
+  legacyConditions?: PropertyCondition[];
+
+  /** Saved filters migration could not read (malformed, unknown operator or
+   *  source, a rule this build does not know). Kept visible; a list with any
+   *  cannot run until they are removed. */
+  unreadableConditions?: UnreadableListCondition[];
+
+  /** Columns to display */
+  columns: ColumnDefinition[];
+
+  /** Current sort state */
+  sortBy?: { columnId: string; direction: 'asc' | 'desc' };
+
+  /** Optional grouping + summation for the summary view */
+  grouping?: ListGrouping;
+}
+
+export interface ListGrouping {
+  /** Column id to group rows by (e.g. a Type / Material / Storey column). */
+  columnId: string;
+  /**
+   * Multi-criteria grouping (issue #1790): ordered column ids to group by,
+   * outermost first (e.g. Building, then Storey). When present and non-empty
+   * this takes precedence over `columnId`; `columnId` is kept in sync with the
+   * first entry for consumers built before multi-level grouping existed.
+   */
+  columnIds?: string[];
+  /** Column ids whose numeric values are summed per group and overall. */
+  sumColumnIds: string[];
+  /**
+   * Result presentation for a grouped list (issue #1790 round 2 — the
+   * reporter's follow-up: Count as a first-class column, and a pivot/schedule
+   * layout like Bonsai's, not a nested tree):
+   * - `nested` (default) — the existing collapsible tree: one header per
+   *   (sub)group with a count badge next to the label, per-element rows
+   *   underneath.
+   * - `schedule` — a pivot/schedule table: ONE row per group-value tuple (a
+   *   leaf group combination), the grouping columns repeated as leading
+   *   columns, followed by a first-class `Count` column and any configured
+   *   sums. No per-element detail rows.
+   * Optional so lists persisted before this existed keep their prior (nested)
+   * behaviour — `undefined` is treated as `nested`.
+   */
+  view?: 'nested' | 'schedule';
+}
+
+// ============================================================================
+// Source Set Filtering
+// ============================================================================
+
+export interface PropertyCondition {
+  /**
+   * Where the compared value comes from:
+   * - `attribute` — a built-in attribute (Name, Class, Description, …)
+   * - `property` / `quantity` — a pset / qto value (uses `psetName`)
+   * - `material` — any of the element's material names (multi-valued)
+   * - `classification` — any classification code or name (multi-valued)
+   * - `spatial` — a spatial-container name; `propertyName` selects the level
+   *   (`Container`, `Storey` (default), `Building`, `Site`, or `Project`)
+   * - `model` — the source model / file name (federation identity)
+   * - `zone` — a location-zone assignment (issue #1810); `psetName` holds the
+   *   zone-SET id, `propertyName` selects `Zone` (default, the zone name —
+   *   or the straddled zones joined when the element crosses a boundary) or
+   *   `Straddles` (boolean); `geometry` is the World Coordinate (#3671) — `propertyName` selects axis `X` (default) | `Y` | `Z`
+   */
+  source: ListConditionSource;
+  /** Property set name (for property/quantity sources); the zone-SET id for `zone`. */
+  psetName?: string;
+  /** Attribute / property / quantity name, the spatial level for `spatial`
+   *  (`Container` | `Storey` | `Building` | `Site` | `Project`), or the zone
+   *  display mode for `zone` (`Zone` (default) | `Straddles`). Ignored for
+   *  material/classification/model. */
+  propertyName: string;
+  operator: ConditionOperator;
+  value: string | number | boolean;
+  /** property/quantity only: `'aggregation'` takes the nearest aggregate parent's value when the element has none (#5433). Type values are always read. */
+  inherit?: 'type' | 'aggregation';
+}
+
+/** One vocabulary with the Rules `listCondition` adapter (#6190), which carries these predicates in groups. */
+export type ConditionOperator = ListConditionOperator;
+
+export type UnreadableListCondition =
+  | { condition: PropertyCondition; reason: 'unsupported-source' | 'unsupported-attribute' | 'name-pattern' | 'inherit' | 'operator' | 'invalid-value' | 'mixed-groups' }
+  | { condition: unknown; reason: 'invalid-condition' };
+
+// ============================================================================
+// Column Definitions
+// ============================================================================
+
+export interface ColumnDefinition {
+  id: string;
+  /**
+   * Where the column value comes from. `material` / `classification` are
+   * multi-valued (joined with ", "); `spatial` is a spatial-container name at
+   * the level named by `propertyName` (`Container` | `Storey` (default) |
+   * `Building` | `Site` | `Project`); `model`/`zone`/`geometry` — see
+   * `PropertyCondition.source` for the exact `psetName`/`propertyName`
+   * contract, shared verbatim between conditions and columns.
+   */
+  source: 'attribute' | 'property' | 'quantity' | 'material' | 'classification' | 'spatial' | 'model' | 'zone' | 'geometry';
+  /** For property: pset name. For quantity: qset name. For zone: the zone-SET id. */
+  psetName?: string;
+  /** Attribute / property / quantity name, the spatial level for `spatial`
+   *  (`Container` | `Storey` | `Building` | `Site` | `Project`), or the zone
+   *  display mode for `zone` (`Zone` (default) | `Straddles`). Ignored for
+   *  material/classification/model. */
+  propertyName: string;
+  /** Display label override */
+  label?: string;
+  /**
+   * `QuantityType` this column resolved to (from `@ifc-lite/data`), when
+   * `source: 'quantity'`. Populated by `executeList` from the first matched
+   * entity's quantity (issue #1573), so display-unit conversion downstream
+   * (the viewer's list/schedule export) knows what unit-KIND a raw numeric
+   * cell is in. Not part of the persisted `ListDefinition` authoring schema —
+   * it's an execution-time annotation the engine derives fresh every run.
+   */
+  quantityType?: number;
+  /**
+   * Raw IFC measure value type (e.g. "IFCVOLUMETRICFLOWRATEMEASURE"), when
+   * `source: 'property'` and the matched property carries one. Same
+   * execution-time-only role as `quantityType`, for measure properties
+   * (issue #1573).
+   */
+  dataType?: string;
+}
+
+// ============================================================================
+// List Execution Results
+// ============================================================================
+
+export type { ListResult, ListGroup, ListSummary, ListScheduleRow, ListRow, CellValue, DiscoveredColumns } from './result-types.js';
+
+/* Result row and schedule shapes live in result-types.ts so the persisted
+ * definition and provider contracts remain below the module-size limit. */

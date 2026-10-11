@@ -1,0 +1,57 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import type { TranslationValue } from '../types';
+
+export const clashGroupsEn = {
+  'clashGroups.expand': 'Expand {name}',
+  'clashGroups.collapse': 'Collapse {name}',
+  'clashGroups.focus': 'Focus every object in this group',
+  'clashGroups.addToGroup': 'Add selected clashes to this group',
+  'clashGroups.createBcf': 'Create one BCF topic from this group',
+  'clashGroups.rename': 'Rename this group',
+  'clashGroups.ungroup': 'Ungroup these clashes',
+  'clashGroups.select': 'Select clash {first} and {second}',
+  'clashGroups.selectForGrouping': 'Select this clash for manual grouping',
+  'clashGroups.removeMember': 'Remove this clash from the group',
+  'clashGroups.createTitle': 'Group selected clashes',
+  'clashGroups.renameTitle': 'Rename clash group',
+  'clashGroups.addToGroupTitle': 'Add clashes to group',
+  'clashGroups.createDescription': {
+    one: '{count} selected clash will appear as one expandable coordination issue.',
+    other: '{count} selected clashes will appear as one expandable coordination issue.',
+  },
+  'clashGroups.renameDescription': 'The group membership is unchanged.',
+  'clashGroups.addToGroupDescription': {
+    one: '{count} selected clash will be added to {name}.',
+    other: '{count} selected clashes will be added to {name}.',
+  },
+  'clashGroups.alreadyGroupedError': 'Remove already-grouped clashes from their current group before adding them elsewhere.',
+  'clashGroups.name': 'Group name',
+  'clashGroups.cancel': 'Cancel',
+  'clashGroups.create': 'Create group',
+  'clashGroups.add': 'Add',
+  'clashGroups.saveName': 'Save name',
+  'clashGroups.view.pairs': 'Pairs',
+  'clashGroups.view.issues': 'Issues',
+  'clashGroups.view.groups': 'Groups',
+  'clashGroups.viewTitle': 'Issues group nearby pairs within {distance}m; Groups are chosen and named by you',
+  'clashGroups.issuePairs': '{issues} · {pairs}',
+  'clashGroups.groupPairs': '{groups} · {pairs}',
+  'clashGroups.clashSummary': '{clashes}',
+  'clashGroups.clashSummaryShown': '{clashes} · {shown} shown',
+  'clashGroups.clashSummaryIssues': '{clashes} · {issues}',
+  'clashGroups.clashSummaryShownIssues': '{clashes} · {shown} shown · {issues}',
+  'clashGroups.issueCount': { one: '{count} issue', other: '{count} issues' },
+  'clashGroups.groupCount': { one: '{count} group', other: '{count} groups' },
+  'clashGroups.pairCount': { one: '{count} pair', other: '{count} pairs' },
+  'clashGroups.clashCount': { one: '{count} clash', other: '{count} clashes' },
+  'clashGroups.severity.critical': 'Critical',
+  'clashGroups.severity.major': 'Major',
+  'clashGroups.severity.minor': 'Minor',
+  'clashGroups.severity.info': 'Info',
+  'clashGroups.workspace': 'Grouping workspace',
+  'clashGroups.defaultWorkspace': 'Manual clash groups',
+  'clashGroups.storageNotReady': 'Grouping storage is not ready or the membership partition is invalid. Keep this draft and retry after recovery.',
+} satisfies Record<string, TranslationValue>;

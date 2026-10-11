@@ -1,0 +1,773 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * IDS Validator - Main validation engine
+ */
+
+import type {
+  IDSDocument,
+  IDSSpecification,
+  IDSRequirement,
+  IDSValidationReport,
+  IDSSpecificationResult,
+  IDSEntityResult,
+  IDSRequirementResult,
+  IDSValidationSummary,
+  ValidationModelInfo,
+  IDSCardinalityResult,
+  IFCDataAccessor,
+  ValidatorOptions,
+  ValidationProgress,
+  TranslationService,
+  PartOfRelation,
+  SpecificationResult,
+} from '../types.js';
+import { checkFacet, facetPasses, filterByFacet } from '../facets/index.js';
+import { ApplicabilityPropertyIndex } from './property-index.js';
+import { UnsafeRegexPatternError } from '@ifc-lite/regex-guard';
+import { formatFailureReason, formatRequirementDescription } from './format-failure-reason.js';
+import { boundedPassRate } from './pass-rate.js';
+import { BoundedCache } from '../bounded-cache.js';
+export { formatFailureReason } from './format-failure-reason.js';
+
+/** Memoize a single-argument accessor lookup keyed by express ID. */
+function memoById<T>(fn: (expressId: number) => T): (expressId: number) => T {
+  const cache = new Map<number, T>();
+  return (expressId: number): T => {
+    if (cache.has(expressId)) return cache.get(expressId) as T;
+    const value = fn(expressId);
+    cache.set(expressId, value);
+    return value;
+  };
+}
+
+/** Memoize a two-argument accessor lookup keyed by express ID + name. */
+function memoByIdAndKey<T>(
+  fn: (expressId: number, key: string) => T
+): (expressId: number, key: string) => T {
+  const cache = new BoundedCache<string, T>();
+  return (expressId: number, key: string): T => {
+    const cacheKey = `${expressId}\u0000${key}`;
+    if (cache.has(cacheKey)) return cache.get(cacheKey) as T;
+    const value = fn(expressId, key);
+    cache.set(cacheKey, value);
+    return value;
+  };
+}
+
+/**
+ * Wrap an accessor so per-entity lookups are computed once for one validation
+ * run. Compound entity/name lookup caches are bounded (#4057); evicted
+ * compound lookups are recomputed. Per-entity caches remain proportional to
+ * the model population so repeated specification scans do not re-parse it.
+ *
+ * The validator re-checks the same entities once per specification, and
+ * real-world IDS documents carry hundreds of specifications over the
+ * same entity population. Most accessor implementations re-extract
+ * property sets from the raw source buffer on every call, which made
+ * validation O(specifications × entities × source-parses) — tens of
+ * minutes of CPU for documents that validate in seconds once cached.
+ */
+export function createCachedAccessor(accessor: IFCDataAccessor): IFCDataAccessor {
+  let allEntityIds: number[] | undefined;
+  const entitiesByType = new Map<string, number[]>();
+
+  const cached: IFCDataAccessor = {
+    getEntityType: memoById((id) => accessor.getEntityType(id)),
+    getEntityName: memoById((id) => accessor.getEntityName(id)),
+    getGlobalId: memoById((id) => accessor.getGlobalId(id)),
+    getDescription: memoById((id) => accessor.getDescription(id)),
+    getObjectType: memoById((id) => accessor.getObjectType(id)),
+    getPropertySets: memoById((id) => accessor.getPropertySets(id)),
+    getClassifications: memoById((id) => accessor.getClassifications(id)),
+    getMaterials: memoById((id) => accessor.getMaterials(id)),
+    getAttribute: memoByIdAndKey((id, name) => accessor.getAttribute(id, name)),
+    getParent: memoByIdAndKey((id, rel) =>
+      accessor.getParent(id, rel as PartOfRelation)
+    ) as IFCDataAccessor['getParent'],
+    getPropertyValue: (id, psetName, propName) =>
+      accessor.getPropertyValue(id, psetName, propName),
+    getEntitiesByType(typeName: string): number[] {
+      let ids = entitiesByType.get(typeName);
+      if (!ids) {
+        ids = accessor.getEntitiesByType(typeName);
+        entitiesByType.set(typeName, ids);
+      }
+      return ids;
+    },
+    getAllEntityIds(): number[] {
+      if (!allEntityIds) allEntityIds = accessor.getAllEntityIds();
+      return allEntityIds;
+    },
+  };
+
+  // Optional methods: only surface them when the underlying accessor
+  // does — facet checkers feature-detect these.
+  if (accessor.getPredefinedTypeRaw) {
+    cached.getPredefinedTypeRaw = memoById((id) =>
+      accessor.getPredefinedTypeRaw!(id)
+    );
+  }
+  if (accessor.getAttributeNames) {
+    cached.getAttributeNames = memoById((id) => accessor.getAttributeNames!(id));
+  }
+  if (accessor.getAttributeXsdTypes) {
+    cached.getAttributeXsdTypes = memoByIdAndKey((id, attr) =>
+      accessor.getAttributeXsdTypes!(id, attr)
+    ) as IFCDataAccessor['getAttributeXsdTypes'];
+  }
+  if (accessor.getAncestors) {
+    cached.getAncestors = memoByIdAndKey((id, rel) =>
+      accessor.getAncestors!(id, rel as PartOfRelation)
+    ) as IFCDataAccessor['getAncestors'];
+  }
+  if (accessor.getSchemaVersion) {
+    // Model-wide, not per-entity — compute once and hand back the
+    // same value forever for this accessor's lifetime.
+    const schemaVersion = accessor.getSchemaVersion();
+    cached.getSchemaVersion = () => schemaVersion;
+  }
+  if (accessor.getTypeEntityType) {
+    cached.getTypeEntityType = memoById((id) => accessor.getTypeEntityType!(id));
+  }
+
+  return cached;
+}
+
+/**
+ * Per-run cache for requirement descriptions. A requirement's checked
+ * description is entity-independent, yet it used to be re-formatted for
+ * every entity result — for enumeration constraints that meant building
+ * the same multi-KB string thousands of times.
+ */
+type DescriptionCache = Map<IDSRequirement, string>;
+
+const nowMs = (): number =>
+  typeof globalThis.performance?.now === 'function'
+    ? globalThis.performance.now()
+    : Date.now();
+
+/**
+ * Yield control back to the event loop (browser + Node).
+ *
+ * Deliberately NOT `scheduler.yield()`: its continuation runs at
+ * elevated priority, ahead of the host's already-queued normal tasks —
+ * including React's render work — so a CPU-bound loop yielding through
+ * it still starves the UI (canvas rAF kept painting while the progress
+ * panel never committed). A MessageChannel hop is a normal-priority
+ * task: everything queued before it, renders included, runs first.
+ */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      // Close both ports — an open MessagePort holds a libuv handle in
+      // Node and would keep the process alive after completion.
+      channel.port1.close();
+      channel.port2.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
+}
+
+/**
+ * Time-budgeted yielder. Validation is pure CPU work whose awaits all
+ * resolve through microtasks, so without real event-loop yields a
+ * browser host cannot paint a single frame for the whole run — the
+ * progress UI stays frozen no matter how often onProgress fires.
+ */
+function createYielder(budgetMs: number): () => Promise<void> | undefined {
+  let lastYield = nowMs();
+  return () => {
+    if (nowMs() - lastYield < budgetMs) return undefined;
+    return yieldToEventLoop().then(() => {
+      lastYield = nowMs();
+    });
+  };
+}
+
+type MaybeYield = ReturnType<typeof createYielder>;
+
+/**
+ * Validate an IFC model against an IDS document
+ */
+export async function validateIDS(
+  document: IDSDocument,
+  accessor: IFCDataAccessor,
+  modelInfo: ValidationModelInfo,
+  options: ValidatorOptions = {}
+): Promise<IDSValidationReport> {
+  const { onProgress } = options;
+
+  const cachedAccessor = createCachedAccessor(accessor);
+  const descriptionCache: DescriptionCache = new Map();
+  const maybeYield = createYielder(options.yieldEveryMs ?? 40);
+  const propertyIndex = new ApplicabilityPropertyIndex(cachedAccessor, document);
+
+  const specificationResults: IDSSpecificationResult[] = [];
+  const totalSpecs = document.specifications.length;
+
+  for (let i = 0; i < totalSpecs; i++) {
+    const spec = document.specifications[i];
+
+    // Report progress
+    if (onProgress) {
+      onProgress({
+        phase: 'filtering',
+        specificationIndex: i,
+        totalSpecifications: totalSpecs,
+        entitiesProcessed: 0,
+        totalEntities: 0,
+        percentage: Math.floor((i / totalSpecs) * 100),
+      });
+    }
+
+    // Let the host paint between specifications even when individual
+    // specs are fast.
+    await maybeYield();
+
+    let result: IDSSpecificationResult;
+    try {
+      result = await validateSpecification(
+        spec,
+        cachedAccessor,
+        modelInfo,
+        options,
+        descriptionCache,
+        maybeYield,
+        propertyIndex,
+        (progress) => {
+          if (onProgress) {
+            onProgress({
+              ...progress,
+              specificationIndex: i,
+              totalSpecifications: totalSpecs,
+              percentage: Math.floor(
+                ((i + progress.entitiesProcessed / Math.max(progress.totalEntities, 1)) /
+                  totalSpecs) *
+                  100
+              ),
+            });
+          }
+        }
+      );
+    } catch (err) {
+      // An `xs:pattern` facet's pattern was rejected by the ReDoS guard
+      // (`@ifc-lite/regex-guard`): surface as a FAILED specification with
+      // the reason, never as a silent pass — see issue #4259.
+      if (!(err instanceof UnsafeRegexPatternError)) throw err;
+      result = unsafePatternResult(spec, err);
+    }
+
+    specificationResults.push(result);
+  }
+
+  // Report completion
+  if (onProgress) {
+    onProgress({
+      phase: 'complete',
+      specificationIndex: totalSpecs,
+      totalSpecifications: totalSpecs,
+      entitiesProcessed: 0,
+      totalEntities: 0,
+      percentage: 100,
+    });
+  }
+
+  const summary = calculateSummary(specificationResults);
+
+  return {
+    source: { kind: 'ids', document },
+    modelInfo: [modelInfo],
+    timestamp: new Date(),
+    summary,
+    specificationResults,
+  };
+}
+
+/** Build the failed-specification result for a rejected `xs:pattern`. */
+function unsafePatternResult(
+  spec: IDSSpecification,
+  err: UnsafeRegexPatternError
+): IDSSpecificationResult {
+  return {
+    specification: spec,
+    status: 'fail',
+    applicableCount: 0,
+    passedCount: 0,
+    failedCount: 0,
+    passRate: 0,
+    entityResults: [],
+    error: `Specification could not be evaluated: ${err.message}`,
+  };
+}
+
+/**
+ * Validate a single specification against the model
+ */
+async function validateSpecification(
+  spec: IDSSpecification,
+  accessor: IFCDataAccessor,
+  modelInfo: ValidationModelInfo,
+  options: ValidatorOptions,
+  descriptionCache: DescriptionCache,
+  maybeYield: MaybeYield,
+  propertyIndex: ApplicabilityPropertyIndex,
+  onProgress?: (progress: Omit<ValidationProgress, 'specificationIndex' | 'totalSpecifications' | 'percentage'>) => void
+): Promise<IDSSpecificationResult> {
+  const { translator, maxEntities, includePassingEntities = true } = options;
+  const modelId = modelInfo.modelId;
+
+  // Phase 1: Find applicable entities
+  const applicableIds = await findApplicableEntities(spec, accessor, maybeYield, propertyIndex, onProgress);
+
+  // Apply max entities limit if specified
+  const idsToCheck = maxEntities
+    ? applicableIds.slice(0, maxEntities)
+    : applicableIds;
+
+  // Phase 2: Check requirements for each applicable entity
+  const entityResults: IDSEntityResult[] = [];
+  const totalEntities = idsToCheck.length;
+
+  for (let i = 0; i < totalEntities; i++) {
+    const expressId = idsToCheck[i];
+
+    // Report progress periodically
+    if (onProgress && i % 100 === 0) {
+      onProgress({
+        phase: 'validating',
+        entitiesProcessed: i,
+        totalEntities,
+      });
+    }
+    if ((i & 31) === 0) await maybeYield();
+
+    const entityResult = validateEntityRequirements(
+      spec,
+      expressId,
+      modelId,
+      accessor,
+      descriptionCache,
+      translator
+    );
+
+    // Include result based on options
+    if (includePassingEntities || !entityResult.passed) {
+      entityResults.push(entityResult);
+    }
+  }
+
+  // Calculate pass/fail counts
+  let passedCount = 0;
+  let failedCount = 0;
+
+  for (const result of entityResults) {
+    if (result.passed) {
+      passedCount++;
+    } else {
+      failedCount++;
+    }
+  }
+
+  // If we filtered out passing entities, adjust the passed count
+  if (!includePassingEntities) {
+    passedCount = totalEntities - failedCount;
+  }
+
+  // Check cardinality
+  const cardinalityResult = checkCardinality(spec, applicableIds.length);
+
+  // Determine overall status
+  let status: 'pass' | 'fail' | 'not_applicable' = 'pass';
+  if (applicableIds.length === 0) {
+    // No applicable entities - check if that's allowed by cardinality
+    if (cardinalityResult?.passed === false) {
+      status = 'fail';
+    } else if (cardinalityResult?.passed === true) {
+      // Cardinality explicitly satisfied (e.g., prohibited spec with 0 matches)
+      status = 'pass';
+    } else {
+      status = 'not_applicable';
+    }
+  } else if (failedCount > 0 || cardinalityResult?.passed === false) {
+    status = 'fail';
+  }
+
+  let passRate =
+    totalEntities > 0
+      ? boundedPassRate(passedCount, totalEntities)
+      : status === 'fail'
+        ? 0
+        : 100;
+
+  // `passRate` above is derived from `passedCount`/`totalEntities` alone,
+  // same as `status`'s `failedCount` branch — but `status` also fails on
+  // `cardinalityResult`, which `passRate` never sees (#5212). A spec whose
+  // matched entities ALL individually satisfy their requirements while the
+  // *set* is too large/small (e.g. `maxOccurs: 2` with 3 matches, no
+  // per-entity failures) computed `passedCount === totalEntities`, so the
+  // formula above lands on 100 even though `status` is `'fail'`. Clamp
+  // only that disagreement: a spec with genuine per-entity failures already
+  // reports a `passRate < 100` from the formula above and is left alone.
+  if (status === 'fail' && passRate === 100) {
+    passRate = 0;
+  }
+
+  return {
+    specification: spec,
+    status,
+    applicableCount: applicableIds.length,
+    passedCount,
+    failedCount,
+    passRate,
+    entityResults,
+    cardinalityResult,
+  };
+}
+
+/**
+ * Find entities that match the applicability criteria
+ */
+async function findApplicableEntities(
+  spec: IDSSpecification,
+  accessor: IFCDataAccessor,
+  maybeYield: MaybeYield,
+  propertyIndex: ApplicabilityPropertyIndex,
+  onProgress?: (progress: Omit<ValidationProgress, 'specificationIndex' | 'totalSpecifications' | 'percentage'>) => void
+): Promise<number[]> {
+  const applicabilityFacets = spec.applicability.facets;
+
+  if (applicabilityFacets.length === 0) {
+    // No applicability - applies to all entities
+    return accessor.getAllEntityIds();
+  }
+
+  // Use first entity facet for broadphase filtering
+  let candidateIds: number[] | undefined;
+  for (const facet of applicabilityFacets) {
+    const filtered = filterByFacet(facet, accessor);
+    if (filtered !== undefined) {
+      candidateIds = filtered;
+      break;
+    }
+  }
+
+  // If no broadphase filter, check all entities
+  if (candidateIds === undefined) {
+    candidateIds = accessor.getAllEntityIds();
+  }
+
+  // Index-assisted narrowing: property facets with literal pset/name
+  // collapse to inverted-index lookups (built once per run). The result
+  // is a candidate SUPERSET — the confirmation loop below remains the
+  // source of truth, so index conservatism can never change verdicts.
+  for (const facet of applicabilityFacets) {
+    if (facet.type !== 'property') continue;
+    // Building the index over a spec's candidates is the slowest phase of
+    // a large run (cold property extraction) — surface its progress so
+    // the host UI advances during it instead of sitting frozen.
+    const narrowed = await propertyIndex.narrow(
+      facet,
+      candidateIds,
+      maybeYield,
+      onProgress
+        ? (processed, total) =>
+            onProgress({ phase: 'filtering', entitiesProcessed: processed, totalEntities: total })
+        : undefined
+    );
+    if (narrowed !== undefined) candidateIds = narrowed;
+  }
+
+  // Filter candidates by all applicability facets. With property-only
+  // applicability the candidate set is the whole model, so this scan is
+  // where large runs spend most of their time — report progress and
+  // yield so the host UI stays responsive.
+  const applicableIds: number[] = [];
+  const totalCandidates = candidateIds.length;
+
+  for (let i = 0; i < totalCandidates; i++) {
+    const expressId = candidateIds[i];
+
+    if (onProgress && totalCandidates > 8192 && (i & 8191) === 0) {
+      onProgress({
+        phase: 'filtering',
+        entitiesProcessed: i,
+        totalEntities: totalCandidates,
+      });
+    }
+    if ((i & 255) === 0) await maybeYield();
+
+    let matches = true;
+
+    for (const facet of applicabilityFacets) {
+      // Boolean-only check: this loop runs per candidate entity per
+      // specification and only ever needs the verdict — the failure
+      // diagnostics the full checker builds for every miss used to
+      // dominate whole-run CPU.
+      if (!facetPasses(facet, expressId, accessor)) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) {
+      applicableIds.push(expressId);
+    }
+  }
+
+  return applicableIds;
+}
+
+/**
+ * Validate requirements for a single entity
+ */
+function validateEntityRequirements(
+  spec: IDSSpecification,
+  expressId: number,
+  modelId: string,
+  accessor: IFCDataAccessor,
+  descriptionCache: DescriptionCache,
+  translator?: TranslationService
+): IDSEntityResult {
+  const requirementResults: IDSRequirementResult[] = [];
+  let allPassed = true;
+
+  for (const requirement of spec.requirements) {
+    const result = checkRequirement(requirement, expressId, accessor, descriptionCache, translator);
+    requirementResults.push(result);
+
+    if (result.status === 'fail') {
+      allPassed = false;
+    }
+  }
+
+  return {
+    expressId,
+    modelId,
+    entityType: accessor.getEntityType(expressId) || 'Unknown',
+    entityName: accessor.getEntityName(expressId),
+    globalId: accessor.getGlobalId(expressId),
+    passed: allPassed,
+    requirementResults,
+  };
+}
+
+/** Failures meaning "could not be verified", never a prohibition's pass. */
+const UNVERIFIABLE_FAILURES: ReadonlySet<string> = new Set(['CLASSIFICATION_UNRESOLVED', 'MATERIAL_UNRESOLVED', 'PROPERTY_DATATYPE_UNKNOWN']);
+
+/**
+ * Check a single requirement against an entity
+ */
+function checkRequirement(
+  requirement: IDSRequirement,
+  expressId: number,
+  accessor: IFCDataAccessor,
+  descriptionCache: DescriptionCache,
+  translator?: TranslationService
+): IDSRequirementResult {
+  const facetResult = checkFacet(requirement.facet, expressId, accessor);
+
+  // What cannot be verified fails even a prohibition, keeping its reason (#3996, #5224, #5227).
+  let status: 'pass' | 'fail' | 'not_applicable';
+  let failureReason: string | undefined;
+  const unverifiable = UNVERIFIABLE_FAILURES.has(facetResult.failure?.type ?? '');
+  switch (unverifiable ? 'required' : requirement.optionality) {
+    case 'required':
+      status = facetResult.passed ? 'pass' : 'fail';
+      if (!facetResult.passed) {
+        failureReason = translator
+          ? translator.describeFailure({
+              requirement: { ...requirement, label: '' },
+              status: 'fail',
+              facetType: requirement.facet.type,
+              checkedDescription: '',
+              actualValue: facetResult.actualValue,
+              expectedValue: facetResult.expectedValue,
+              failure: facetResult.failure,
+            })
+          : formatFailureReason(facetResult);
+      }
+      break;
+
+    case 'optional':
+      // Per IDS spec: `optional` means "if present, must satisfy".
+      // - Pass when the facet matches.
+      // - Pass when the facet is wholly absent (the missing-attribute /
+      //   missing-property failure types).
+      // - **Fail** when the facet is present but its value/datatype is
+      //   wrong — `optional` does not give a free pass to bad data.
+      if (facetResult.passed) {
+        status = 'pass';
+      } else {
+        const missingFailures = new Set([
+          'ATTRIBUTE_MISSING',
+          'PROPERTY_MISSING', 'PROPERTY_EMPTY', // absent value (#6117)
+          'PSET_MISSING',
+          'CLASSIFICATION_MISSING',
+          'MATERIAL_MISSING',
+          'PARTOF_RELATION_MISSING',
+          // The nested predefinedType sub-constraint on an entity /
+          // partOf facet is itself an "attribute" of the target entity —
+          // when it's wholly unset (no PredefinedType, no fallback
+          // ObjectType/parent predefinedType at all) that's the same
+          // "wholly absent" shape as ATTRIBUTE_MISSING, not "bad data".
+          'PREDEFINED_TYPE_MISSING',
+          'PARTOF_PREDEFINED_TYPE_MISSING',
+        ]);
+        if (
+          facetResult.failure?.type &&
+          missingFailures.has(facetResult.failure.type)
+        ) {
+          status = 'pass';
+        } else {
+          status = 'fail';
+          failureReason = translator
+            ? translator.describeFailure({
+                requirement: { ...requirement, label: '' },
+                status: 'fail',
+                facetType: requirement.facet.type,
+                checkedDescription: '',
+                actualValue: facetResult.actualValue,
+                expectedValue: facetResult.expectedValue,
+                failure: facetResult.failure,
+              })
+            : formatFailureReason(facetResult);
+        }
+      }
+      break;
+
+    case 'prohibited':
+      status = facetResult.passed ? 'fail' : 'pass'; // Inverse logic
+      if (status === 'fail') {
+        failureReason = translator
+          ? translator.t('failures.prohibited', {
+              field: facetResult.actualValue || 'value',
+            })
+          : `Prohibited: found ${facetResult.actualValue}`;
+      }
+      break;
+
+    default:
+      status = facetResult.passed ? 'pass' : 'fail';
+  }
+
+  // Generate checked description. It is entity-independent, so format
+  // it once per requirement per run — not once per entity result.
+  let checkedDescription = descriptionCache.get(requirement);
+  if (checkedDescription === undefined) {
+    checkedDescription = translator
+      ? translator.describeRequirement(requirement)
+      : formatRequirementDescription(requirement);
+    descriptionCache.set(requirement, checkedDescription);
+  }
+
+  return {
+    // `IDSRequirement` has no `label` of its own (#5138 §5) — the
+    // generalised `RequirementResult.requirement: RequirementSummary`
+    // needs one, so it is derived here from the description already
+    // computed for this requirement rather than fabricated.
+    requirement: { ...requirement, label: checkedDescription },
+    status,
+    facetType: requirement.facet.type,
+    checkedDescription,
+    failureReason,
+    actualValue: facetResult.actualValue,
+    expectedValue: facetResult.expectedValue,
+    failure: facetResult.failure,
+  };
+}
+
+/**
+ * Check cardinality constraints
+ */
+function checkCardinality(
+  spec: IDSSpecification,
+  applicableCount: number
+): IDSCardinalityResult | undefined {
+  if (spec.minOccurs === undefined && spec.maxOccurs === undefined) {
+    return undefined;
+  }
+
+  // The XML parser canonicalises the IDS 1.0 default — an
+  // `<applicability>` without explicit `minOccurs` becomes `1`
+  // (REQUIRED) — so we don't have to fall back here. The `?? 0`
+  // covers exotic specs that omit applicability entirely but still
+  // declare `maxOccurs`.
+  const minExpected = spec.minOccurs ?? 0;
+  const maxExpected = spec.maxOccurs;
+
+  let passed = true;
+  const messages: string[] = [];
+
+  if (applicableCount < minExpected) {
+    passed = false;
+    messages.push(`Expected at least ${minExpected}, found ${applicableCount}`);
+  }
+
+  if (maxExpected !== 'unbounded' && maxExpected !== undefined) {
+    if (applicableCount > maxExpected) {
+      passed = false;
+      messages.push(`Expected at most ${maxExpected}, found ${applicableCount}`);
+    }
+  }
+
+  return {
+    passed,
+    actualCount: applicableCount,
+    minExpected: spec.minOccurs,
+    maxExpected: spec.maxOccurs,
+    message: messages.length > 0 ? messages.join('; ') : 'Cardinality satisfied',
+  };
+}
+
+/** Exported (#5138 PR 3): the rule engine is a second `SpecificationResult[]`
+ *  producer needing the identical summary algorithm. */
+export function calculateSummary(
+  specificationResults: readonly SpecificationResult[]
+): IDSValidationSummary {
+  let totalSpecifications = specificationResults.length;
+  let passedSpecifications = 0;
+  let failedSpecifications = 0;
+  let totalEntitiesChecked = 0;
+  let totalEntitiesPassed = 0;
+  let totalEntitiesFailed = 0;
+
+  for (const result of specificationResults) {
+    if (result.status === 'pass') {
+      passedSpecifications++;
+    } else if (result.status === 'fail') {
+      failedSpecifications++;
+    }
+
+    totalEntitiesChecked += result.applicableCount;
+    totalEntitiesPassed += result.passedCount;
+    totalEntitiesFailed += result.failedCount;
+  }
+
+  let overallPassRate = boundedPassRate(totalEntitiesPassed, totalEntitiesChecked);
+
+  // Same disagreement as the per-spec `passRate` (#5212), one level up: a
+  // cardinality-failed spec whose matched entities all individually pass
+  // contributes fully to `totalEntitiesPassed` and nothing to
+  // `totalEntitiesFailed`, so the aggregate can land on 100 while
+  // `failedSpecifications > 0` in the same summary object. Clamp only that
+  // disagreement — a summary where some entity failures are already
+  // counted keeps its real (already-under-100) aggregate rate.
+  if (failedSpecifications > 0 && overallPassRate === 100) {
+    overallPassRate = 0;
+  }
+
+  return {
+    totalSpecifications,
+    passedSpecifications,
+    failedSpecifications,
+    totalEntitiesChecked,
+    totalEntitiesPassed,
+    totalEntitiesFailed,
+    overallPassRate,
+  };
+}

@@ -1,0 +1,617 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, it, expect } from 'vitest';
+import { readBCF } from '@ifc-lite/bcf';
+import type {
+  AABB,
+  Clash,
+  ClashElementRef,
+  ClashGroup,
+  ClashResult,
+  ClashReviewStatus,
+  ClashSeverity,
+  ClashStatus,
+} from './types.js';
+import { createBCFFromClashResult, mapBcfToClashes } from './bcf-bridge.js';
+import { groupClashes } from './grouping.js';
+import { uuidFromSeed } from './deterministic-uuid.js';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function ref(key: string, tag: string, name?: string): ClashElementRef {
+  return { key, ref: key.length, model: 'm', tag, name };
+}
+
+function bounds(min: [number, number, number], max: [number, number, number]): AABB {
+  return { min, max };
+}
+
+function clash(
+  id: string,
+  a: ClashElementRef,
+  b: ClashElementRef,
+  status: ClashStatus,
+  severity: ClashSeverity,
+  rule: string,
+): Clash {
+  return {
+    id,
+    a,
+    b,
+    rule,
+    status,
+    distance: status === 'hard' ? -0.01 : 0.02,
+    point: [1, 2, 3],
+    bounds: bounds([0, 0, 0], [1, 1, 1]),
+    severity,
+  };
+}
+
+function makeGroup(
+  id: string,
+  severity: ClashSeverity,
+  members: Clash[],
+  discipline?: string,
+  storey?: string,
+): ClashGroup {
+  return {
+    id,
+    title: `Group ${id}`,
+    members,
+    bounds: bounds([0, 0, 0], [4, 3, 2]),
+    representativePoint: [2, 1.5, 1],
+    severity,
+    discipline,
+    storey,
+  };
+}
+
+function makeFixture(): { result: ClashResult; groups: ClashGroup[] } {
+  const c1 = clash(
+    'clash-1',
+    ref('GUID_A1', 'IfcPipeSegment', 'Pipe-1'),
+    ref('GUID_B1', 'IfcBeam', 'Beam-1'),
+    'hard',
+    'critical',
+    'MEPxSTR',
+  );
+  const c2 = clash(
+    'clash-2',
+    ref('GUID_A1', 'IfcPipeSegment', 'Pipe-1'),
+    ref('GUID_B2', 'IfcColumn'),
+    'hard',
+    'critical',
+    'MEPxSTR',
+  );
+  const c3 = clash(
+    'clash-3',
+    ref('GUID_C1', 'IfcDuctSegment'),
+    ref('GUID_D1', 'IfcWall'),
+    'clearance',
+    'major',
+    'HVACxARCH',
+  );
+  const c4 = clash(
+    'clash-4',
+    ref('GUID_E1', 'IfcCableSegment'),
+    ref('GUID_F1', 'IfcPipeSegment'),
+    'clearance',
+    'minor',
+    'ELECxMEP',
+  );
+
+  const g1 = makeGroup('group-critical', 'critical', [c1, c2], 'MEP', 'Level 1');
+  const g2 = makeGroup('group-major', 'major', [c3], 'HVAC', 'Level 2');
+  const g3 = makeGroup('group-minor', 'minor', [c4], 'ELEC');
+
+  const clashes = [c1, c2, c3, c4];
+  const result: ClashResult = {
+    clashes,
+    summary: {
+      total: clashes.length,
+      byRule: { MEPxSTR: 2, HVACxARCH: 1, ELECxMEP: 1 },
+      byTypePair: {},
+      bySeverity: { critical: 2, major: 1, minor: 1, info: 0 },
+    },
+    rulesRun: [],
+    settings: { tolerance: 0.002, excludeVoidsAndHosts: true },
+  };
+
+  return { result, groups: [g1, g2, g3] };
+}
+
+describe('createBCFFromClashResult', () => {
+  it('creates one topic per group with deterministic guids', async () => {
+    const { result, groups } = makeFixture();
+    const project = await createBCFFromClashResult(result, groups, { author: 'tester' });
+
+    expect(project.version).toBe('2.1');
+    expect(project.topics.size).toBe(groups.length);
+
+    for (const group of groups) {
+      const expectedGuid = uuidFromSeed(group.id);
+      expect(project.topics.has(expectedGuid)).toBe(true);
+      const topic = project.topics.get(expectedGuid);
+      expect(topic).toBeDefined();
+      expect(topic?.guid).toBe(expectedGuid);
+      expect(topic?.guid).toMatch(UUID_RE);
+    }
+  });
+
+  it('sorts critical groups first and maps severity to priority', async () => {
+    const { result, groups } = makeFixture();
+    const project = await createBCFFromClashResult(result, groups, { author: 'tester' });
+
+    const critical = project.topics.get(uuidFromSeed('group-critical'));
+    const major = project.topics.get(uuidFromSeed('group-major'));
+    const minor = project.topics.get(uuidFromSeed('group-minor'));
+
+    expect(critical?.priority).toBe('High');
+    expect(major?.priority).toBe('Normal');
+    expect(minor?.priority).toBe('Low');
+
+    // Discipline + 'Clash' labels.
+    expect(critical?.labels).toEqual(['MEP', 'Clash']);
+    // Minor group carries its discipline plus 'Clash'.
+    expect(minor?.labels).toEqual(['ELEC', 'Clash']);
+  });
+
+  /**
+   * Kills the mutation `a.members.length - b.members.length` (comparator
+   * operands swapped) in `sortGroups`. Every other ordering test in this
+   * file mixes different severities, so the more-populous group is also
+   * always the more-severe one and the severity comparison alone decides
+   * the order — the member-count tie-break's sign is never exercised. This
+   * fixture holds severity constant ('major' for both) so `maxTopics: 1`
+   * can only keep the right group if the count tie-break sorts descending.
+   */
+  it('breaks a severity tie by member count desc when capping topics', async () => {
+    const { result } = makeFixture();
+    const small = clash(
+      'tie-small',
+      ref('GUID_S1', 'IfcWall'),
+      ref('GUID_S2', 'IfcSlab'),
+      'hard',
+      'major',
+      'tie-rule',
+    );
+    const bigA = clash(
+      'tie-big-1',
+      ref('GUID_T1', 'IfcWall'),
+      ref('GUID_T2', 'IfcSlab'),
+      'hard',
+      'major',
+      'tie-rule',
+    );
+    const bigB = clash(
+      'tie-big-2',
+      ref('GUID_T1', 'IfcWall'),
+      ref('GUID_T3', 'IfcSlab'),
+      'hard',
+      'major',
+      'tie-rule',
+    );
+    const groupSmall = makeGroup('group-tie-small', 'major', [small]);
+    const groupBig = makeGroup('group-tie-big', 'major', [bigA, bigB]);
+
+    const project = await createBCFFromClashResult(result, [groupSmall, groupBig], {
+      author: 'tester',
+      maxTopics: 1,
+    });
+
+    // Only the larger, 2-member group survives the cap.
+    expect(project.topics.has(uuidFromSeed('group-tie-big'))).toBe(true);
+    expect(project.topics.has(uuidFromSeed('group-tie-small'))).toBe(false);
+  });
+
+  it('omits a missing discipline from the labels', async () => {
+    const { result } = makeFixture();
+    const lone = clash(
+      'clash-lone',
+      ref('GUID_X1', 'IfcSlab'),
+      ref('GUID_Y1', 'IfcDuctSegment'),
+      'hard',
+      'info',
+      'rule',
+    );
+    const noDiscipline = makeGroup('group-no-discipline', 'info', [lone]);
+    const project = await createBCFFromClashResult(result, [noDiscipline], { author: 'tester' });
+    const topic = project.topics.get(uuidFromSeed('group-no-discipline'));
+    // No discipline -> just 'Clash'.
+    expect(topic?.labels).toEqual(['Clash']);
+  });
+
+  it('embeds an uncapped clash-ids line plus a capped member table', async () => {
+    const { result, groups } = makeFixture();
+    const project = await createBCFFromClashResult(result, groups, {
+      author: 'tester',
+      maxMembersPerTopic: 1,
+    });
+
+    const critical = project.topics.get(uuidFromSeed('group-critical'));
+    expect(critical?.description).toContain('clash-ids: clash-1,clash-2');
+    // Member table is capped at 1 -> "and 1 more".
+    expect(critical?.description).toContain('and 1 more');
+  });
+
+  it('produces identical guids on repeated calls (determinism)', async () => {
+    const { result, groups } = makeFixture();
+    const a = await createBCFFromClashResult(result, groups, { author: 'tester' });
+    const b = await createBCFFromClashResult(result, groups, { author: 'tester' });
+    expect([...a.topics.keys()].sort()).toEqual([...b.topics.keys()].sort());
+  });
+
+  it('attaches a framing viewpoint with selection and coloring', async () => {
+    const { result, groups } = makeFixture();
+    const project = await createBCFFromClashResult(result, groups, { author: 'tester' });
+    const critical = project.topics.get(uuidFromSeed('group-critical'));
+    expect(critical?.viewpoints.length).toBe(1);
+    const vp = critical?.viewpoints[0];
+    expect(vp?.components?.selection?.length).toBeGreaterThan(0);
+    expect(vp?.components?.coloring?.length).toBe(2);
+    expect(vp?.perspectiveCamera).toBeDefined();
+
+    // Camera must actually frame this group's bounds ([0,0,0]-[4,3,2], center
+    // [2, 1.5, 1]), not some other point (e.g. the origin). Expected numbers
+    // are computed independently here from the documented formula (radius =
+    // 0.5*diagonal, standoff = radius*distanceFactor, direction =
+    // normalize([1, 0.7, 1])) and the viewer(Y-up)->BCF(Z-up) axis mapping
+    // (bcf.x=viewer.x, bcf.y=-viewer.z, bcf.z=viewer.y) documented in
+    // packages/bcf/src/viewpoint.ts, rather than by calling the production
+    // helper, so a bug in that helper can't hide from this assertion.
+    const cam = vp?.perspectiveCamera;
+    expect(cam?.cameraViewPoint.x).toBeCloseTo(6.265886914190135, 6);
+    expect(cam?.cameraViewPoint.y).toBeCloseTo(-5.265886914190135, 6);
+    expect(cam?.cameraViewPoint.z).toBeCloseTo(4.486120839933094, 6);
+    // Direction must point from the camera towards the group's center
+    // ([2, -1, 1.5] in BCF coords), not e.g. towards the origin.
+    const towardCenter = {
+      x: 2 - cam!.cameraViewPoint.x,
+      y: -1 - cam!.cameraViewPoint.y,
+      z: 1.5 - cam!.cameraViewPoint.z,
+    };
+    const towardCenterLen = Math.sqrt(
+      towardCenter.x ** 2 + towardCenter.y ** 2 + towardCenter.z ** 2,
+    );
+    expect(cam?.cameraDirection.x).toBeCloseTo(towardCenter.x / towardCenterLen, 6);
+    expect(cam?.cameraDirection.y).toBeCloseTo(towardCenter.y / towardCenterLen, 6);
+    expect(cam?.cameraDirection.z).toBeCloseTo(towardCenter.z / towardCenterLen, 6);
+
+    // Coloring must map each color to the correct side: red (FFFF3333) to the
+    // 'a' members, orange (FFFFA500) to the 'b' members. group-critical has
+    // c1 = (GUID_A1, GUID_B1) and c2 = (GUID_A1, GUID_B2), so 'a' is the
+    // single guid GUID_A1 and 'b' is {GUID_B1, GUID_B2}. A test that only
+    // checks `coloring.length === 2` cannot see the two colors' guid lists
+    // swapped.
+    const coloring = vp?.components?.coloring ?? [];
+    const red = coloring.find((c) => c.color === 'FFFF3333');
+    const orange = coloring.find((c) => c.color === 'FFFFA500');
+    expect(red?.components.map((c) => c.ifcGuid)).toEqual(['GUID_A1']);
+    expect(orange?.components.map((c) => c.ifcGuid).sort()).toEqual(['GUID_B1', 'GUID_B2']);
+  });
+
+  it('writes the framing camera in world coordinates when given the render-frame offset (#4806)', async () => {
+    // Clash bounds come from origin-shifted meshes. A georeferenced model
+    // (the #4806 report sat near X 41266 / Y 308208 / Z 123) must still get
+    // a camera that looks at the group's WORLD centre, or BIMcollab / usBIM
+    // put the camera kilometres from the building.
+    const { result, groups } = makeFixture();
+    const worldOffset = { x: 41266, y: 308208, z: 123 };
+    const project = await createBCFFromClashResult(result, groups, { author: 'tester', worldOffset });
+    const cam = project.topics.get(uuidFromSeed('group-critical'))?.viewpoints[0]?.perspectiveCamera;
+    expect(cam).toBeDefined();
+    // Local centre [2, 1.5, 1] (Y-up) is BCF [2, -1, 1.5]; plus the offset.
+    const worldCentre = { x: 2 + worldOffset.x, y: -1 + worldOffset.y, z: 1.5 + worldOffset.z };
+    expect(cam!.cameraViewPoint.x).toBeCloseTo(6.265886914190135 + worldOffset.x, 6);
+    expect(cam!.cameraViewPoint.y).toBeCloseTo(-5.265886914190135 + worldOffset.y, 6);
+    expect(cam!.cameraViewPoint.z).toBeCloseTo(4.486120839933094 + worldOffset.z, 6);
+    // The camera ray passes through the world centre: the point at the
+    // camera-to-centre distance along CameraDirection IS that centre.
+    const d = Math.hypot(
+      worldCentre.x - cam!.cameraViewPoint.x,
+      worldCentre.y - cam!.cameraViewPoint.y,
+      worldCentre.z - cam!.cameraViewPoint.z,
+    );
+    expect(d).toBeLessThan(20);
+    expect(cam!.cameraViewPoint.x + cam!.cameraDirection.x * d).toBeCloseTo(worldCentre.x, 6);
+    expect(cam!.cameraViewPoint.y + cam!.cameraDirection.y * d).toBeCloseTo(worldCentre.y, 6);
+    expect(cam!.cameraViewPoint.z + cam!.cameraDirection.z * d).toBeCloseTo(worldCentre.z, 6);
+  });
+
+  it('invokes the snapshot provider per group', async () => {
+    const { result, groups } = makeFixture();
+    const seen: string[] = [];
+    const snapshotProvider = async (g: ClashGroup): Promise<Uint8Array> => {
+      seen.push(g.id);
+      return new Uint8Array([1, 2, 3, 4]);
+    };
+    const project = await createBCFFromClashResult(result, groups, {
+      author: 'tester',
+      snapshotProvider,
+    });
+    expect(seen.sort()).toEqual(['group-critical', 'group-major', 'group-minor']);
+    const critical = project.topics.get(uuidFromSeed('group-critical'));
+    expect(critical?.viewpoints[0]?.snapshotData).toBeInstanceOf(Uint8Array);
+  });
+
+  it('caps topics at maxTopics and adds a transparency overflow topic', async () => {
+    const { result, groups } = makeFixture();
+    const maxTopics = 2;
+    const project = await createBCFFromClashResult(result, groups, {
+      author: 'tester',
+      maxTopics,
+    });
+
+    // 2 exported + 1 overflow marker.
+    expect(project.topics.size).toBe(maxTopics + 1);
+
+    const overflow = [...project.topics.values()].find((t) =>
+      t.title.includes('more clash groups not exported'),
+    );
+    expect(overflow).toBeDefined();
+    expect(overflow?.title).toContain('1 more clash groups not exported');
+    expect(overflow?.description).toContain('exceeded the maxTopics cap of 2');
+
+    // The two exported topics are the two most severe groups.
+    expect(project.topics.has(uuidFromSeed('group-critical'))).toBe(true);
+    expect(project.topics.has(uuidFromSeed('group-major'))).toBe(true);
+    expect(project.topics.has(uuidFromSeed('group-minor'))).toBe(false);
+  });
+});
+
+describe('createBCFFromClashResult review status (#1468)', () => {
+  it('falls back to the flat status when no reviewStatusOf is given', async () => {
+    const { result, groups } = makeFixture();
+    const project = await createBCFFromClashResult(result, groups, {
+      author: 'tester',
+      status: 'In Progress',
+    });
+    const critical = project.topics.get(uuidFromSeed('group-critical'));
+    expect(critical?.topicStatus).toBe('In Progress');
+    // Without a resolver the review breakdown line is omitted entirely.
+    expect(critical?.description).not.toContain('By review:');
+  });
+
+  it('sets topic status from the least-resolved member (open wins)', async () => {
+    const { result, groups } = makeFixture();
+    // group-critical has clash-1 + clash-2. Mark one resolved, leave one open ->
+    // the topic must stay Open (a single open member blocks closure).
+    const reviewStatusOf = (c: Clash): ClashReviewStatus =>
+      c.id === 'clash-1' ? 'resolved' : c.id === 'clash-2' ? 'open' : 'accepted';
+    const project = await createBCFFromClashResult(result, groups, {
+      author: 'tester',
+      status: 'In Progress', // must be overridden per-topic by the resolver
+      reviewStatusOf,
+    });
+    const critical = project.topics.get(uuidFromSeed('group-critical'));
+    expect(critical?.topicStatus).toBe('Open');
+    // The finer split is preserved in the description even though TopicStatus is coarse.
+    expect(critical?.description).toContain('By review:');
+    expect(critical?.description).toContain('open: 1');
+    expect(critical?.description).toContain('resolved: 1');
+  });
+
+  it('closes a topic whose every member is resolved or accepted', async () => {
+    const { result, groups } = makeFixture();
+    // group-major (clash-3) resolved, group-minor (clash-4) accepted -> both Closed.
+    const reviewStatusOf = (c: Clash): ClashReviewStatus =>
+      c.id === 'clash-3' ? 'resolved' : 'accepted';
+    const project = await createBCFFromClashResult(result, groups, { author: 'tester', reviewStatusOf });
+    expect(project.topics.get(uuidFromSeed('group-major'))?.topicStatus).toBe('Closed');
+    expect(project.topics.get(uuidFromSeed('group-minor'))?.topicStatus).toBe('Closed');
+  });
+});
+
+describe('mapBcfToClashes', () => {
+  it('recovers every clash id -> status from an in-memory project', async () => {
+    const { result, groups } = makeFixture();
+    const project = await createBCFFromClashResult(result, groups, {
+      author: 'tester',
+      status: 'In Progress',
+    });
+    const map = mapBcfToClashes(project);
+
+    expect(map.size).toBe(4);
+    // Each clash belongs to exactly one group here, so one topic entry apiece.
+    expect(map.get('clash-1')?.length).toBe(1);
+    expect(map.get('clash-1')?.[0]?.status).toBe('In Progress');
+    expect(map.get('clash-1')?.[0]?.topicGuid).toBe(uuidFromSeed('group-critical'));
+    expect(map.get('clash-2')?.[0]?.topicGuid).toBe(uuidFromSeed('group-critical'));
+    expect(map.get('clash-3')?.[0]?.topicGuid).toBe(uuidFromSeed('group-major'));
+    expect(map.get('clash-4')?.[0]?.topicGuid).toBe(uuidFromSeed('group-minor'));
+  });
+
+  it('accumulates one entry per topic for element-mode groups (no overwrite)', async () => {
+    // Two elements (GUID_A and GUID_B) clash only with each other, plus each
+    // also clashes with a third element. Element-mode grouping emits one group
+    // per participating element, so the shared clash lands in two topics.
+    const shared = clash(
+      'clash-shared',
+      ref('GUID_A', 'IfcPipeSegment', 'Pipe-A'),
+      ref('GUID_B', 'IfcBeam', 'Beam-B'),
+      'hard',
+      'critical',
+      'MEPxSTR',
+    );
+    const onlyA = clash(
+      'clash-only-a',
+      ref('GUID_A', 'IfcPipeSegment', 'Pipe-A'),
+      ref('GUID_C', 'IfcColumn'),
+      'hard',
+      'critical',
+      'MEPxSTR',
+    );
+    const onlyB = clash(
+      'clash-only-b',
+      ref('GUID_B', 'IfcBeam', 'Beam-B'),
+      ref('GUID_D', 'IfcWall'),
+      'hard',
+      'critical',
+      'MEPxSTR',
+    );
+
+    const clashes = [shared, onlyA, onlyB];
+    const result: ClashResult = {
+      clashes,
+      summary: {
+        total: clashes.length,
+        byRule: { MEPxSTR: clashes.length },
+        byTypePair: {},
+        bySeverity: { critical: clashes.length, major: 0, minor: 0, info: 0 },
+      },
+      rulesRun: [],
+      settings: { tolerance: 0.002, excludeVoidsAndHosts: true },
+    };
+
+    const groups = groupClashes(result, { by: 'element' });
+    const project = await createBCFFromClashResult(result, groups, {
+      author: 'tester',
+      status: 'Open',
+    });
+
+    const { writeBCF } = await import('@ifc-lite/bcf');
+    const blob = await writeBCF(project);
+    const buffer = await blob.arrayBuffer();
+    const reloaded = await readBCF(buffer);
+
+    const map = mapBcfToClashes(reloaded);
+
+    // The shared clash participates in both element groups (A and B), so the
+    // old overwrite would have dropped one. It must map to two distinct topics.
+    const sharedEntries = map.get('clash-shared');
+    expect(sharedEntries?.length).toBe(2);
+    const guids = sharedEntries?.map((e) => e.topicGuid) ?? [];
+    // Two distinct topics, not the same one twice.
+    expect(new Set(guids).size).toBe(2);
+    // Both topics are real exported groups (the element groups for A and B).
+    const groupGuids = new Set(groups.map((g) => uuidFromSeed(g.id)));
+    for (const guid of guids) {
+      expect(groupGuids.has(guid)).toBe(true);
+    }
+    for (const entry of sharedEntries ?? []) {
+      expect(entry.status).toBe('Open');
+    }
+
+    // Every clash joins two distinct element groups (each pairs two elements),
+    // so each clash id accumulates two topic entries — none silently lost.
+    for (const id of ['clash-shared', 'clash-only-a', 'clash-only-b']) {
+      const entries = map.get(id);
+      expect(entries?.length).toBe(2);
+      expect(new Set(entries?.map((e) => e.topicGuid)).size).toBe(2);
+    }
+  });
+});
+
+describe('BCF round-trip', () => {
+  it('writes a Blob, reads it back, and recovers every clash id', async () => {
+    const { result, groups } = makeFixture();
+    const { writeBCF } = await import('@ifc-lite/bcf');
+    const project = await createBCFFromClashResult(result, groups, {
+      author: 'tester',
+      status: 'Open',
+    });
+
+    const blob = await writeBCF(project);
+    expect(blob).toBeInstanceOf(Blob);
+
+    const buffer = await blob.arrayBuffer();
+    const reloaded = await readBCF(buffer);
+
+    const map = mapBcfToClashes(reloaded);
+    expect(map.size).toBe(4);
+    for (const id of ['clash-1', 'clash-2', 'clash-3', 'clash-4']) {
+      expect(map.has(id)).toBe(true);
+      // Rule-mode fixture groups don't overlap: one topic entry per clash.
+      expect(map.get(id)?.length).toBe(1);
+      expect(map.get(id)?.[0]?.status).toBe('Open');
+    }
+
+    // Topic guids survive the round-trip and remain the deterministic ones.
+    expect(map.get('clash-1')?.[0]?.topicGuid).toBe(uuidFromSeed('group-critical'));
+    expect(map.get('clash-3')?.[0]?.topicGuid).toBe(uuidFromSeed('group-major'));
+  });
+
+  // The "Export to BCF" dialog path: a clash has no section, so the written
+  // viewpoints must carry no <ClippingPlanes> for BIMcollab / usBIM to apply (#4806).
+  it('writes clash viewpoints without clipping planes', async () => {
+    const { result, groups } = makeFixture();
+    const { writeBCF } = await import('@ifc-lite/bcf');
+    const project = await createBCFFromClashResult(result, groups, { author: 'tester', worldOffset: { x: 41266.679, y: 308208.972, z: 125.95 } });
+    const reloaded = await readBCF(await (await writeBCF(project)).arrayBuffer());
+    const viewpoints = [...reloaded.topics.values()].flatMap((t) => t.viewpoints);
+    expect(viewpoints.length).toBe(groups.length);
+    for (const vp of viewpoints) {
+      expect(vp.perspectiveCamera).toBeDefined();
+      expect(vp.clippingPlanes ?? []).toEqual([]);
+    }
+  });
+
+  // Federation provenance (#1591): a cross-model clash topic must record one
+  // <Header> source file per distinct model it spans, surviving write -> read.
+  it('records header source files for every model a clash group spans', async () => {
+    // `model` is an opaque model id (viewer uses UUIDs); modelNameOf resolves
+    // it to the display file name for the Header.
+    const a: ClashElementRef = { key: 'GUID_A', ref: 1, model: 'm-arch', tag: 'IfcWall' };
+    const b: ClashElementRef = { key: 'GUID_B', ref: 2, model: 'm-struct', tag: 'IfcBeam' };
+    const modelNameOf = (id: string) =>
+      ({ 'm-arch': 'architecture.ifc', 'm-struct': 'structure.ifc' })[id] ?? id;
+    const c = clash('cross-model-1', a, b, 'hard', 'critical', 'ARCxSTR');
+    const group = makeGroup('cross-model', 'critical', [c]);
+    const result: ClashResult = {
+      clashes: [c],
+      summary: {
+        total: 1,
+        byRule: { ARCxSTR: 1 },
+        byTypePair: {},
+        bySeverity: { critical: 1, major: 0, minor: 0, info: 0 },
+      },
+      rulesRun: [],
+      settings: { tolerance: 0.002, excludeVoidsAndHosts: true },
+    };
+
+    const project = await createBCFFromClashResult(result, [group], { author: 'tester', modelNameOf });
+    const topic = project.topics.get(uuidFromSeed('cross-model'));
+    expect(topic?.header).toBeDefined();
+    // Filenames are the RESOLVED names, not the raw model ids.
+    expect(topic?.header?.map((h) => h.filename).sort()).toEqual([
+      'architecture.ifc',
+      'structure.ifc',
+    ]);
+
+    // The header must survive a real write -> read round-trip.
+    const { writeBCF } = await import('@ifc-lite/bcf');
+    const blob = await writeBCF(project);
+    const readBack = await readBCF(await blob.arrayBuffer());
+    const readTopic = readBack.topics.get(uuidFromSeed('cross-model'));
+    expect(readTopic?.header?.map((h) => h.filename).sort()).toEqual([
+      'architecture.ifc',
+      'structure.ifc',
+    ]);
+  });
+});
+
+describe('uuidFromSeed', () => {
+  it('is deterministic and RFC-4122-shaped', () => {
+    const a = uuidFromSeed('group-critical');
+    const b = uuidFromSeed('group-critical');
+    expect(a).toBe(b);
+    expect(a).toMatch(UUID_RE);
+  });
+
+  it('forces the version nibble to 4 and a valid variant nibble', () => {
+    for (const seed of ['a', 'b', 'group-1', 'group-2', '', 'x'.repeat(200)]) {
+      const uuid = uuidFromSeed(seed);
+      expect(uuid).toMatch(UUID_RE);
+      expect(uuid[14]).toBe('4');
+      expect('89ab').toContain(uuid[19]);
+    }
+  });
+
+  it('diffuses similar seeds into different uuids', () => {
+    const u1 = uuidFromSeed('group-1');
+    const u2 = uuidFromSeed('group-2');
+    expect(u1).not.toBe(u2);
+  });
+});

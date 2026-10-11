@@ -1,0 +1,671 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createClashEngine } from '../engine.js';
+import { TsKernel } from './ts-kernel.js';
+import { makeExclusionSet, qualifiedKey } from '../exclude.js';
+import { fromPositions } from '../math/aabb.js';
+import { classifyRuleCoverage, ruleHadNoMatch } from '../analysis.js';
+import { disciplineMatrixRules } from '../disciplines.js';
+import { NonFiniteToleranceError } from './orchestrator.js';
+import type { ClashElement, ClashRule, Vec3 } from '../types.js';
+
+/** Axis-aligned cube as a triangle mesh (12 triangles). */
+function makeBox(center: Vec3, size: number): { positions: Float32Array; indices: Uint32Array } {
+  const h = size / 2;
+  const [cx, cy, cz] = center;
+  const v: number[] = [
+    cx - h, cy - h, cz - h,
+    cx + h, cy - h, cz - h,
+    cx + h, cy + h, cz - h,
+    cx - h, cy + h, cz - h,
+    cx - h, cy - h, cz + h,
+    cx + h, cy - h, cz + h,
+    cx + h, cy + h, cz + h,
+    cx - h, cy + h, cz + h,
+  ];
+  const indices = new Uint32Array([
+    0, 1, 2, 0, 2, 3,
+    4, 6, 5, 4, 7, 6,
+    0, 4, 5, 0, 5, 1,
+    1, 5, 6, 1, 6, 2,
+    2, 6, 7, 2, 7, 3,
+    3, 7, 4, 3, 4, 0,
+  ]);
+  return { positions: new Float32Array(v), indices };
+}
+
+let nextRef = 1;
+function boxElement(key: string, tag: string, center: Vec3, size = 1): ClashElement {
+  const { positions, indices } = makeBox(center, size);
+  return {
+    key,
+    ref: nextRef++,
+    model: 'm',
+    tag,
+    bounds: fromPositions(positions),
+    positions,
+    indices,
+  };
+}
+
+/** Box corners in the canonical order, given a centre and per-axis half-extents. */
+function boxCorners(cx: number, cy: number, cz: number, hx: number, hy: number, hz: number): Vec3[] {
+  return [
+    [cx - hx, cy - hy, cz - hz],
+    [cx + hx, cy - hy, cz - hz],
+    [cx + hx, cy + hy, cz - hz],
+    [cx - hx, cy + hy, cz - hz],
+    [cx - hx, cy - hy, cz + hz],
+    [cx + hx, cy - hy, cz + hz],
+    [cx + hx, cy + hy, cz + hz],
+    [cx - hx, cy + hy, cz + hz],
+  ];
+}
+
+const BOX_INDICES = new Uint32Array([
+  0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1,
+  1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0,
+]);
+
+/** Box element with independent per-axis half-extents (for crossing bars). */
+function boxElementHxyz(key: string, tag: string, center: Vec3, half: Vec3): ClashElement {
+  const corners = boxCorners(center[0], center[1], center[2], half[0], half[1], half[2]);
+  const positions = new Float32Array(corners.flat());
+  return { key, ref: nextRef++, model: 'm', tag, bounds: fromPositions(positions), positions, indices: BOX_INDICES };
+}
+
+const PRISM_INDICES = new Uint32Array([
+  0, 1, 2, 3, 4, 5, 0, 1, 4, 0, 4, 3, 1, 2, 5, 1, 5, 4, 2, 0, 3, 2, 3, 5,
+]);
+
+const L_PRISM_INDICES = new Uint32Array([
+  // bottom cap (fan from 0), top cap (fan from 6)
+  0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 5, 4,
+  6, 7, 8, 6, 8, 9, 6, 9, 10, 6, 10, 11,
+  // sides (one quad per footprint edge)
+  0, 1, 7, 0, 7, 6, 1, 2, 8, 1, 8, 7, 2, 3, 9, 2, 9, 8,
+  3, 4, 10, 3, 10, 9, 4, 5, 11, 4, 11, 10, 5, 0, 6, 5, 6, 11,
+]);
+
+/**
+ * Closed, CONCAVE L-shaped prism: footprint (0,0)-(2,0)-(2,1)-(1,1)-(1,2)-(0,2)
+ * extruded z=0..1. The square [1,2]x[1,2] is a notch: inside the AABB but
+ * OUTSIDE the solid, so a small box sitting in the notch is AABB-contained
+ * while only its faces cross the notch wall at x=1.
+ */
+function lPrismElement(key: string, tag: string): ClashElement {
+  const positions = new Float32Array([
+    // bottom (z=0): 0..5
+    0, 0, 0, 2, 0, 0, 2, 1, 0, 1, 1, 0, 1, 2, 0, 0, 2, 0,
+    // top (z=1): 6..11
+    0, 0, 1, 2, 0, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 0, 2, 1,
+  ]);
+  return { key, ref: nextRef++, model: 'm', tag, bounds: fromPositions(positions), positions, indices: L_PRISM_INDICES };
+}
+
+/** Closed triangular prism: `footprint` (XY) extruded between z0 and z1. */
+function triPrismElement(
+  key: string,
+  tag: string,
+  footprint: [Vec3, Vec3, Vec3] | [[number, number], [number, number], [number, number]],
+  z0: number,
+  z1: number,
+): ClashElement {
+  const [p0, p1, p2] = footprint as [[number, number], [number, number], [number, number]];
+  const v = [
+    p0[0], p0[1], z0, p1[0], p1[1], z0, p2[0], p2[1], z0,
+    p0[0], p0[1], z1, p1[0], p1[1], z1, p2[0], p2[1], z1,
+  ];
+  const positions = new Float32Array(v);
+  return { key, ref: nextRef++, model: 'm', tag, bounds: fromPositions(positions), positions, indices: PRISM_INDICES };
+}
+
+/**
+ * `n` unit boxes stacked almost on top of each other, tags alternating, so
+ * every A x B pair survives the broad phase and the run is dominated by
+ * narrow-phase triangle work — long enough to be interrupted part-way.
+ */
+function overlappingBoxes(n: number): ClashElement[] {
+  const elements: ClashElement[] = [];
+  for (let i = 0; i < n; i += 1) {
+    elements.push(boxElement(`k${i}`, i % 2 === 0 ? 'IfcWall' : 'IfcDuct', [i * 0.001, 0, 0]));
+  }
+  return elements;
+}
+
+const engine = createClashEngine({ backend: 'ts' });
+const hard = (over: Partial<ClashRule> = {}): ClashRule => ({
+  id: 'r',
+  name: 'rule',
+  a: 'IfcWall',
+  b: 'IfcDuct',
+  mode: 'hard',
+  ...over,
+});
+
+describe('TsClashEngine', () => {
+  it('detects a hard clash between overlapping elements', async () => {
+    const elements = [
+      boxElement('A', 'IfcWall', [0, 0, 0]),
+      boxElement('B', 'IfcDuct', [0.5, 0, 0]),
+    ];
+    const result = await engine.run(elements, [hard()]);
+    expect(result.summary.total).toBe(1);
+    expect(result.clashes[0].status).toBe('hard');
+    expect(result.clashes[0].distance).toBeLessThan(0);
+    expect(result.summary.byRule.r).toBe(1);
+    // The coplanar/flush overlap must report the real (non-degenerate) overlap
+    // region so it renders as a visible penetration box (#1402), not a zero-size
+    // box. Overlap of the two unit cubes offset 0.5 in x is 0.5 x 1 x 1.
+    const b = result.clashes[0].bounds;
+    expect(b.max[0] - b.min[0]).toBeGreaterThan(0.4);
+    expect(b.max[0] - b.min[0]).toBeLessThan(0.6);
+    expect(b.max[1] - b.min[1]).toBeGreaterThan(0.5);
+    expect(b.max[2] - b.min[2]).toBeGreaterThan(0.5);
+  });
+
+  it('reports no clash for separated elements in hard mode', async () => {
+    const elements = [
+      boxElement('A', 'IfcWall', [0, 0, 0]),
+      boxElement('B', 'IfcDuct', [2, 0, 0]),
+    ];
+    const result = await engine.run(elements, [hard()]);
+    expect(result.summary.total).toBe(0);
+  });
+
+  it('finds a clearance violation within the gap, not outside it', async () => {
+    const elements = [
+      boxElement('A', 'IfcWall', [0, 0, 0]),
+      boxElement('B', 'IfcDuct', [2, 0, 0]), // 1.0 m face-to-face gap
+    ];
+    const tooTight = await engine.run(elements, [hard({ mode: 'clearance', clearance: 0.5 })]);
+    expect(tooTight.summary.total).toBe(0);
+
+    const wide = await engine.run(elements, [hard({ mode: 'clearance', clearance: 1.5 })]);
+    expect(wide.summary.total).toBe(1);
+    expect(wide.clashes[0].status).toBe('clearance');
+    expect(wide.clashes[0].distance).toBeCloseTo(1.0, 3);
+  });
+
+  it('suppresses touching elements unless reportTouch is set', async () => {
+    const elements = [
+      boxElement('A', 'IfcWall', [0, 0, 0]),
+      boxElement('B', 'IfcDuct', [1, 0, 0]), // faces meet at x = 0.5
+    ];
+    const suppressed = await engine.run(elements, [hard()]);
+    expect(suppressed.summary.total).toBe(0);
+
+    const reported = await engine.run(elements, [hard({ reportTouch: true })]);
+    expect(reported.summary.total).toBe(1);
+    expect(reported.clashes[0].status).toBe('touch');
+  });
+
+  it('honors the exclusion set', async () => {
+    const elements = [
+      boxElement('A', 'IfcWall', [0, 0, 0]),
+      boxElement('B', 'IfcDuct', [0.5, 0, 0]),
+    ];
+    const exclusions = makeExclusionSet([[qualifiedKey('m', 'A'), qualifiedKey('m', 'B')]]);
+    const result = await engine.run(elements, [hard()], { exclusions });
+    expect(result.summary.total).toBe(0);
+  });
+
+  it('runs a self-clash within one selection', async () => {
+    const elements = [
+      boxElement('A', 'IfcBeam', [0, 0, 0]),
+      boxElement('B', 'IfcBeam', [0.5, 0, 0]), // overlaps A
+      boxElement('C', 'IfcBeam', [10, 0, 0]), // far away
+    ];
+    const result = await engine.run(elements, [
+      { id: 'self', name: 'beam self-clash', a: 'IfcBeam', mode: 'hard' },
+    ]);
+    expect(result.summary.total).toBe(1);
+  });
+
+  it('infers severity from the discipline matrix when not given', async () => {
+    const elements = [
+      boxElement('A', 'IfcDuctSegment', [0, 0, 0]),
+      boxElement('B', 'IfcBeam', [0.5, 0, 0]),
+    ];
+    const result = await engine.run(elements, [
+      { id: 'hvac-str', name: 'HVAC vs STR', a: 'IfcDuct*', b: 'IfcBeam', mode: 'hard' },
+    ]);
+    expect(result.summary.total).toBe(1);
+    expect(result.clashes[0].severity).toBe('critical');
+  });
+
+  it('reports rule coverage so an all-empty discipline matrix is distinguishable from a real clean run (#2536)', async () => {
+    // Reproduces the reported defect at engine scale: an infrastructure-shaped
+    // model (structural elements only, no MEP/HVAC/electrical/fire anywhere)
+    // run through the full built-in CLASH_RULE_PRESETS matrix. Every preset's
+    // selectorA is MEP-shaped, so it matches nothing here — the matrix reports
+    // 0 clashes, and previously that was indistinguishable from "checked and
+    // found nothing".
+    const infraElements = [
+      boxElement('A', 'IfcBeam', [0, 0, 0]),
+      boxElement('B', 'IfcColumn', [0.5, 0, 0]), // overlaps A — a real clash exists,
+      boxElement('C', 'IfcSlab', [10, 0, 0]),    // just not one any preset's rule.a covers.
+    ];
+    const rules = disciplineMatrixRules('hard');
+    const result = await engine.run(infraElements, rules);
+
+    expect(result.summary.total).toBe(0); // the reported symptom: zero clashes
+    expect(result.ruleCoverage).toHaveLength(rules.length);
+    expect(classifyRuleCoverage(result)).toBe('no-match'); // the fix: distinguishable as "never ran"
+    for (const c of result.ruleCoverage!) {
+      expect(ruleHadNoMatch(c)).toBe(true);
+    }
+
+    // Control: the same matrix against a model that DOES contain MEP elements
+    // is unaffected — it still reports the real clash and coverage reads clean.
+    const mepElements = [
+      boxElement('P', 'IfcPipeSegment', [0, 0, 0]),
+      boxElement('S', 'IfcBeam', [0.4, 0, 0]),
+    ];
+    const mepResult = await engine.run(mepElements, rules);
+    // IfcPipeSegment matches both the MEPxSTR and FIRExSTR presets, so this
+    // legitimately reports on more than one rule — the point is only that it's
+    // non-zero and the coverage reads as having actually run.
+    expect(mepResult.summary.total).toBeGreaterThan(0);
+    expect(classifyRuleCoverage(mepResult)).not.toBe('no-match');
+  });
+
+  it('produces deterministic, stable clash ids and ordering', async () => {
+    const build = () => [
+      boxElement('B', 'IfcDuct', [0.5, 0, 0]),
+      boxElement('A', 'IfcWall', [0, 0, 0]),
+    ];
+    const first = await engine.run(build(), [hard()]);
+    const second = await engine.run(build(), [hard()]);
+    expect(first.clashes[0].id).toBe(second.clashes[0].id);
+  });
+
+  it('throws when the abort signal is already aborted', async () => {
+    const elements = [
+      boxElement('A', 'IfcWall', [0, 0, 0]),
+      boxElement('B', 'IfcDuct', [0.5, 0, 0]),
+    ];
+    const controller = new AbortController();
+    controller.abort();
+    await expect(engine.run(elements, [hard()], { signal: controller.signal })).rejects.toThrow();
+  });
+
+});
+
+/**
+ * #4244: a non-finite `tolerance` used to sail through `settings.tolerance ??
+ * DEFAULT_CLASH_SETTINGS.tolerance` (`??` substitutes only on `null`/
+ * `undefined`, never `NaN`), poison `Math.max(tolerance, clearance ?? 0)`
+ * (`NaN` on any operand), poison the broad-phase AABB inflation, and make the
+ * BVH broad phase yield zero candidate pairs — silently, with
+ * `classifyRuleCoverage()` still reading `'clean'` because `matchedA`/
+ * `matchedB` are selector-match counts taken before any geometry ran. A
+ * caller reading "0 clashes" + `'clean'` off that result would see a false
+ * all-clear over a deep, unmissable hard clash it never actually examined.
+ */
+describe('TsClashEngine: non-finite tolerance (#4244)', () => {
+  // Small box wholly inside a large box — a deep, unmissable hard clash, so
+  // any run that reports 0 clashes for this fixture examined nothing.
+  const contained = () => [
+    boxElement('big', 'IfcWall', [0, 0, 0], 4),
+    boxElement('small', 'IfcDuct', [0, 0, 0], 1),
+  ];
+
+  it('the fixture is a real, detectable hard clash under the default tolerance (repro control)', async () => {
+    const result = await engine.run(contained(), [hard()]);
+    expect(result.summary.total).toBe(1);
+    expect(result.clashes[0].status).toBe('hard');
+  });
+
+  it('rejects a NaN run-level tolerance instead of reporting a false clean', async () => {
+    await expect(
+      engine.run(contained(), [hard()], { tolerance: Number('not-a-number') }),
+    ).rejects.toThrow(NonFiniteToleranceError);
+  });
+
+  it('rejects an Infinity run-level tolerance', async () => {
+    await expect(engine.run(contained(), [hard()], { tolerance: Infinity })).rejects.toThrow(
+      NonFiniteToleranceError,
+    );
+  });
+
+  it('rejects a NaN per-rule tolerance even when the run-level tolerance is fine', async () => {
+    await expect(
+      engine.run(contained(), [hard({ tolerance: Number('not-a-number') })]),
+    ).rejects.toThrow(NonFiniteToleranceError);
+  });
+
+  it('still clamps a very negative run-level tolerance to the clearance (unaffected by the finiteness check)', async () => {
+    // Pre-existing, correct behaviour: Math.max(tolerance, clearance ?? 0)
+    // clamps a negative tolerance up to at least the clearance (or 0) — same
+    // fixture and expectation as the plain "finds a clearance violation"
+    // test above, just with a deeply negative tolerance instead of the
+    // omitted default, to prove the clamp (not the default) is doing the
+    // work. This must keep working exactly as before — only non-finite
+    // values are newly rejected.
+    const elements = [
+      boxElement('A', 'IfcWall', [0, 0, 0]),
+      boxElement('B', 'IfcDuct', [2, 0, 0]), // 1.0 m face-to-face gap
+    ];
+    const result = await engine.run(elements, [hard({ mode: 'clearance', clearance: 1.5 })], {
+      tolerance: -100,
+    });
+    expect(result.summary.total).toBe(1);
+    expect(result.clashes[0].status).toBe('clearance');
+    expect(result.clashes[0].distance).toBeCloseTo(1.0, 3);
+  });
+
+  it('a genuine clean run (real geometry, real tolerance, no clashes) still classifies as clean', async () => {
+    const elements = [
+      boxElement('A', 'IfcWall', [0, 0, 0]),
+      boxElement('B', 'IfcDuct', [2, 0, 0]), // well outside the default tolerance
+    ];
+    const result = await engine.run(elements, [hard()]);
+    expect(result.summary.total).toBe(0);
+    expect(classifyRuleCoverage(result)).toBe('clean');
+    // The rule's selectors matched non-trivially on both sides, and the
+    // broad phase DID examine a candidate pair (the two AABBs are within the
+    // BVH's own bounds even though they don't clash) — a genuine clean run,
+    // not the zero-examined false clean this issue is about.
+    expect(result.ruleCoverage![0].matchedA).toBe(1);
+    expect(result.ruleCoverage![0].matchedB).toBe(1);
+  });
+
+  it('surfaces candidatesExamined on the coverage entry for a real run', async () => {
+    const result = await engine.run(contained(), [hard()]);
+    expect(result.ruleCoverage![0].candidatesExamined).toBe(1);
+  });
+});
+
+/**
+ * Cancellation, driven at the kernel so the assertions are deterministic.
+ *
+ * Every canceller a caller can realistically wire up fires from the event loop:
+ * a run deadline (this is how the script sandbox cancels), a cancel button, a
+ * host teardown. The narrow phase used to yield only when an `onProgress`
+ * callback was supplied, so without one the loop never returned to the event
+ * loop, a timer never ran, and `signal` amounted to "refuse to start" rather
+ * than "cancel" — measured, a 200 ms timer against a 426 ms run aborted nothing
+ * at all.
+ *
+ * A zero yield interval is what makes these tests deterministic rather than a
+ * race against the host's clock: the loop reaches the event loop on a fixed
+ * *pair* cadence (every 256) instead of a time-based one, so the outcome does
+ * not depend on how fast the machine is. Everything else — the checkpoints, the
+ * checks, the rejection — is the shipping code path; `TsClashEngine.run` is the
+ * same call with the default interval.
+ */
+describe('TsKernel cancellation (#2419)', () => {
+  // 24 walls x 24 ducts = 576 candidate pairs: checkpoints at 0, 256 and 512,
+  // so a run spans several yields however fast it executes.
+  const elements = overlappingBoxes(48);
+
+  /**
+   * #2948: only the two tests below that actually run all 576 pairs to
+   * completion pay this — the narrow-phase triangle work itself is trivial
+   * (12-triangle boxes), the cost is the three REAL `setTimeout(resolve, 0)`
+   * yields to the event loop at each checkpoint (`yieldMs: 0` in `detect`
+   * below means "yield at every checkpoint"). A real yield is the point:
+   * these tests exist to prove `signal.aborted` is observed from an actual
+   * event-loop turn, so a fake timer would test nothing. Measured on a green
+   * CI run: 3332ms and 2747ms — both dominated by macrotask scheduling under
+   * load, which is far noisier than CPU-bound work (this file's other tests
+   * finish in low single-digit ms). Sized with wide margin over that CI
+   * ceiling rather than "CI value + 50%", since the mechanism (OS/Node timer
+   * scheduling under contention) can vary by more than a fixed percentage.
+   * 30_000 by convention (#2905, `AB22_TIMEOUT_MS`), not a per-test
+   * derivation.
+   */
+  const YIELD_HEAVY_TIMEOUT_MS = 30_000;
+  const evens = elements.map((_, i) => i).filter((i) => i % 2 === 0);
+  const odds = elements.map((_, i) => i).filter((i) => i % 2 === 1);
+
+  const detect = (
+    signal: AbortSignal,
+    maxPairs = Infinity,
+    onProgress?: (done: number, total: number) => void,
+  ) => new TsKernel(0).detectRule(elements, evens, odds, hard(), 0, maxPairs, signal, onProgress);
+
+  /**
+   * Assert the contract a caller actually discriminates on, not a proxy for it.
+   * A test named "rejects with an abort error" that only matches message text
+   * passes for a plain `Error` carrying the right words, and every consumer of
+   * this engine branches on `err.name === 'AbortError'`.
+   */
+  async function expectAbortError(run: Promise<unknown>): Promise<void> {
+    const err = await run.then(() => undefined, (reason: unknown) => reason);
+    expect(err, 'expected the run to reject, but it completed').toBeInstanceOf(DOMException);
+    expect((err as DOMException).name).toBe('AbortError');
+    expect((err as DOMException).message).toMatch(/aborted/i);
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('observes an abort raised by a timer mid-run, with no onProgress callback', async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => { controller.abort(); }, 0);
+    try {
+      await expectAbortError(detect(controller.signal));
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  it('yields at every checkpoint under a zero interval, even on a clock that never advances', async () => {
+    // `yieldMs: 0` means "yield at every checkpoint" — the whole reason the
+    // interval is injectable. A strict `>` comparison silently means the
+    // opposite whenever the clock does not advance between two checkpoints,
+    // which is the ordinary case under a coarse `performance.now()` (browsers
+    // clamp it, some to whole milliseconds). Freezing the clock makes that the
+    // case here always: with `>=` the run reaches the event loop and the timer
+    // below cancels it; with `>` it never yields and runs to completion.
+    vi.spyOn(performance, 'now').mockReturnValue(1_000);
+    const controller = new AbortController();
+    const timer = setTimeout(() => { controller.abort(); }, 0);
+    try {
+      await expectAbortError(detect(controller.signal));
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  it('does not finish a run whose abort lands during the yield itself', async () => {
+    // `onProgress` fires immediately before the yield, so aborting from it puts
+    // the abort inside the yield window — past the pre-yield check. Aimed at
+    // the LAST checkpoint (512 of 576) on purpose: there is no later checkpoint
+    // to catch it, so the recheck on the way back from the await is the only
+    // thing that can stop this run. Without it, the run quietly completes.
+    const controller = new AbortController();
+    await expectAbortError(
+      detect(controller.signal, Infinity, (done) => { if (done === 512) controller.abort(); }),
+    );
+    // 3332ms of the measured pair above: this runs the clash engine to an
+    // abort point (#2948).
+  }, YIELD_HEAVY_TIMEOUT_MS);
+
+  it('lets a cancellation beat the maxCandidatePairs cap', async () => {
+    // The cap bites on the first iteration (`maxPairs` 0), and the periodic
+    // check used to sit after that exit — so the run returned a truncated
+    // result without ever yielding, and the abort armed below never landed.
+    const controller = new AbortController();
+    const timer = setTimeout(() => { controller.abort(); }, 0);
+    try {
+      await expectAbortError(detect(controller.signal, 0));
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  it('completes normally when nothing aborts it', async () => {
+    // The control: the same eager-yield path with a signal that never fires
+    // must still produce the full result, so the tests above fail for the
+    // cancellation and not for the yielding.
+    const controller = new AbortController();
+    const detection = await detect(controller.signal);
+    expect(detection.candidatesProcessed).toBe(576);
+    expect(detection.records.length).toBeGreaterThan(0);
+    expect(controller.signal.aborted).toBe(false);
+    // 2747ms of the measured pair above: this runs the clash engine to
+    // completion (#2948).
+  }, YIELD_HEAVY_TIMEOUT_MS);
+});
+
+describe('TsClashEngine: false-positive + bounds regressions (#1362 / #1402)', () => {
+  const wallDuct = (over: Partial<ClashRule> = {}): ClashRule => ({
+    id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct', mode: 'hard', ...over,
+  });
+
+  it('does not report a hard clash for skewed members that only share a face (Bug A)', async () => {
+    // Two wedges meeting flush at a slanted face: their axis-aligned bounds overlap
+    // fully, but the solids share NO volume. The old AABB-penetration proxy fired a
+    // false hard clash here.
+    const elements = [
+      triPrismElement('A', 'IfcWall', [[0, 0], [2, 0], [0, 2]], 0, 1),
+      triPrismElement('B', 'IfcDuct', [[2, 0], [0, 2], [5, 5]], 0, 1),
+    ];
+    const result = await engine.run(elements, [wallDuct()]);
+    expect(result.summary.total).toBe(0);
+  });
+
+  it('still reports a hard clash when members genuinely interpenetrate (Bug A recall)', async () => {
+    // Same wedge A, but a box that straddles the slanted face -> real shared volume.
+    const elements = [
+      triPrismElement('A', 'IfcWall', [[0, 0], [2, 0], [0, 2]], 0, 1),
+      boxElementHxyz('B', 'IfcDuct', [1, 1, 0.5], [0.5, 0.5, 0.5]),
+    ];
+    const result = await engine.run(elements, [wallDuct()]);
+    expect(result.summary.total).toBe(1);
+    expect(result.clashes[0].status).toBe('hard');
+  });
+
+  it('still reports a hard clash for unequal-length aligned members that overlap (Bug A recall #1455)', async () => {
+    // A long bar x[-5,5] and a short bar x[4.9,5.9] sharing y/z extents overlap by
+    // 0.1 m. The vertex-centroid midpoint (~x=2.7) lies outside the short bar, so a
+    // single centroid probe would drop this real clash; the overlap-centre probe
+    // keeps it.
+    const a = boxElementHxyz('A', 'IfcWall', [0, 0, 0], [5, 0.5, 0.5]);
+    const b = boxElementHxyz('B', 'IfcDuct', [5.4, 0, 0], [0.5, 0.5, 0.5]);
+    const result = await engine.run([a, b], [wallDuct()]);
+    expect(result.summary.total).toBe(1);
+    expect(result.clashes[0].status).toBe('hard');
+  });
+
+  it('reports a tight contact box for a genuine crossing, not the element overlap (Bug B)', async () => {
+    // Perpendicular bars: A runs along X, B along Y, crossing near the origin.
+    const a = boxElementHxyz('A', 'IfcWall', [0, 0, 0], [5, 0.5, 0.5]);
+    const b = boxElementHxyz('B', 'IfcDuct', [0, 0, 0], [0.5, 5, 0.5]);
+    const result = await engine.run([a, b], [wallDuct()]);
+    expect(result.summary.total).toBe(1);
+    const { bounds } = result.clashes[0];
+    // Tight along the long bar: A spans x[-5,5] (10 m), but the contact is only the
+    // local crossing (~B's 1 m width), so the box must NOT span A's full length.
+    expect(bounds.max[0] - bounds.min[0]).toBeLessThan(2.0);
+    // And it must stay within the element-OVERLAP AABB on every axis, not just
+    // element A: A is the long X bar, so an A-only check would still pass if the
+    // box expanded across A's whole 10 m X span. The overlap is x[-0.5,0.5] (B's
+    // width) on X, y[-0.5,0.5] (A's width) on Y, z[-0.5,0.5] on Z.
+    for (let i = 0; i < 3; i += 1) {
+      const overlapMin = Math.max(a.bounds.min[i], b.bounds.min[i]);
+      const overlapMax = Math.min(a.bounds.max[i], b.bounds.max[i]);
+      expect(bounds.min[i]).toBeGreaterThanOrEqual(overlapMin - 1e-6);
+      expect(bounds.max[i]).toBeLessThanOrEqual(overlapMax + 1e-6);
+    }
+  });
+});
+
+describe('TsClashEngine: contained-pair penetration depth, non-box fallback (#1866)', () => {
+  // #1866 was originally fixed by `maxPenetrationInto` — a nearest-crossing-
+  // vertex probe held (PR #2536) for being a sampling artifact that converges
+  // to 0 under retessellation instead of to the true depth (see `obb.ts`,
+  // `obb.test.ts`). Its replacement, the box-box SAT depth, cannot certify a
+  // concave L-prism (it is not a box), so BOTH fixtures below now report the
+  // pre-#1866 AABB estimate — honestly labelled `'estimate'`, not silently
+  // mislabelled `'mesh'` the way the old probe was. Extending exact
+  // measurement to non-box shapes is future work (PR #2536 hold comment,
+  // "landing conditions").
+  it('falls back to the labelled AABB estimate for a contained crossing pair', async () => {
+    // Box in the L's notch, AABB-contained in the L's AABB, dipping past the
+    // notch wall at x=1 into the solid.
+    const wall = lPrismElement('A', 'IfcWall');
+    const duct = boxElementHxyz('B', 'IfcDuct', [1.2, 1.4, 0.5], [0.25, 0.2, 0.2]);
+    const result = await engine.run([wall, duct], [hard()]);
+    expect(result.summary.total).toBe(1);
+    const clash = result.clashes[0];
+    expect(clash.status).toBe('hard');
+    expect(clash.distanceKind).toBe('estimate');
+    // The AABB estimate here is the duct's own y/z cross-section (0.4), not
+    // the true ~0.05 m mesh penetration a box-exact metric can't see for a
+    // non-box element.
+    expect(-clash.distance).toBeCloseTo(0.4, 6);
+  });
+
+  /** The notch box crossing the notch wall (x = 1) by `depth`, f32-rounded. */
+  function notchDuct(depth: number): ClashElement {
+    const xMin = 1 - depth;
+    return boxElementHxyz('B', 'IfcDuct', [(xMin + 1.45) / 2, 1.4, 0.5], [(1.45 - xMin) / 2, 0.2, 0.2]);
+  }
+
+  it('falls back to the same AABB estimate at the #1866 corpus depth', async () => {
+    // Same layout, the box crossing the notch wall by 7.39e-6 m — the true
+    // worst depth of a designed face contact in the #1866 corpus, several
+    // times the pair's f32 noise along X. A box-exact metric would need a
+    // box; the L-prism isn't one, so the reported depth is the SAME AABB
+    // cross-section estimate as the case above, not the true
+    // micrometre-scale depth — the known residual of narrowing the metric to
+    // boxes only.
+    const result = await engine.run([lPrismElement('A', 'IfcWall'), notchDuct(7.39e-6)], [hard()]);
+    expect(result.summary.total).toBe(1);
+    const clash = result.clashes[0];
+    expect(clash.status).toBe('hard');
+    expect(clash.distanceKind).toBe('estimate');
+    expect(-clash.distance).toBeCloseTo(0.4, 6);
+  });
+
+  it('reports a ~1 um crossing of the notch wall as a touch: within the X noise (#5405)', async () => {
+    // Until #5405 this 1e-6 m crossing was pinned as `hard` at the 0.4 m
+    // estimate. Along X it is within the pair's f32 noise — position
+    // max(1, 2) * 2^-22 plus size (2 + 0.45) * 2^-22 = 1.06e-6 — so the
+    // crossing-vertex evidence gates it to `touch`, like every other
+    // noise-scale contact.
+    const wall = lPrismElement('A', 'IfcWall');
+    const duct = notchDuct(1e-6);
+    expect(1 - duct.bounds.min[0], 'fixture premise: the crossing is within the X floor').toBeLessThan(
+      (2 + 2 + 0.45) / 4_194_304,
+    );
+    expect((await engine.run([wall, duct], [hard()])).summary.total).toBe(0);
+    const withTouch = await engine.run([wall, duct], [{ ...hard(), reportTouch: true }]);
+    expect(withTouch.clashes.map((c) => c.status)).toEqual(['touch']);
+  });
+});
+
+describe('TsClashEngine: penetrating-pair depth is mesh-level, not AABB min-axis', () => {
+  it('reports how far a bar is buried in a block, not the bar thickness', async () => {
+    // Block A: the cube [-1,1]^3. Bar B: x in [0.5, 3], y and z in [-0.1, 0.1];
+    // it enters through A's x = 1 face and stops 0.5 short of A's centre.
+    //
+    // True penetration depth = 0.5: the bar's buried end cap sits at x = 0.5,
+    // and the nearest point of A's surface to that cap is A's x = 1 face,
+    // 0.5 away (the y/z faces are 0.9 away).
+    //
+    // The AABB min-axis overlap for this pair is 0.2 — the bar's own
+    // cross-section thickness (X overlap 0.5, Y overlap 0.2, Z overlap 0.2) —
+    // which is a dimension of the bar, not a depth. Neither AABB contains the
+    // other (the bar runs out to x = 3), so this is an ordinary penetrating
+    // pair, not the contained case of #1866.
+    const block = boxElementHxyz('A', 'IfcWall', [0, 0, 0], [1, 1, 1]);
+    const bar = boxElementHxyz('B', 'IfcDuct', [1.75, 0, 0], [1.25, 0.1, 0.1]);
+    expect(bar.bounds.min[0]).toBeCloseTo(0.5, 12);
+    expect(bar.bounds.max[0]).toBeCloseTo(3, 12);
+
+    const result = await engine.run([block, bar], [hard()]);
+    expect(result.summary.total).toBe(1);
+    const clash = result.clashes[0];
+    expect(clash.status).toBe('hard');
+    expect(-clash.distance).toBeCloseTo(0.5, 9);
+  });
+});

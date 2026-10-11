@@ -1,0 +1,542 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Route-level tests for the optimized-Parquet endpoint's cache
+//! (`parse_parquet_optimized`, `POST /api/v1/parse/parquet/optimized`),
+//! added with issue #3889: the route had no cache key of its own, so every
+//! request re-parsed the file while the flat route beside it replayed.
+//!
+//! The proof that a repeat request does NOT parse is a sentinel: after a real
+//! request warms the cache, the stored body is overwritten with bytes no parse
+//! could ever produce. A second identical request that answers with those bytes
+//! read them off disk; one that parses answers with real Parquet instead.
+
+use super::cache_keys::{
+    data_model_cache_key, parquet_cache_key, parquet_metadata_cache_key,
+    parquet_optimized_cache_key, parquet_optimized_metadata_cache_key, request_cache_key,
+    symbolic_cache_key,
+};
+use super::worker_thread_tests::{
+    assert_off_the_worker, record_event_threads, threads_that_logged, SYMBOLIC_CACHED,
+};
+use super::ParseQuery;
+use crate::config::Config;
+use crate::services::cache::DiskCache;
+use crate::services::{OpeningFilterMode, ParquetLayout};
+use crate::{build_router, AppState};
+use axum::body::{to_bytes, Body};
+use axum::http::{header, Request, StatusCode};
+use ifc_lite_processing::TessellationQuality;
+use std::sync::Arc;
+use tower::ServiceExt;
+
+const BOUNDARY: &str = "ifclite-3889-optimized-boundary";
+
+/// Bytes no optimized-Parquet serialization could ever emit (a real payload
+/// starts with the Parquet magic `PAR1`), so seeing them in a response is
+/// unambiguous evidence the response came from the cache.
+const SENTINEL_BODY: &[u8] = b"SENTINEL-OPTIMIZED-BODY-NOT-PARQUET";
+
+/// A minimal but real IFC file: the fall-through parse must actually succeed,
+/// so a failed assertion below is about the cache gate, not a parse error.
+const MINIMAL_IFC: &str = r#"ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('issue-3889 optimized cache fixture'),'2;1');
+FILE_NAME('opt.ifc','2026-09-04T00:00:00',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0$ScRe4drECQ4DMSqUjd6d',$,'P',$,$,$,$,$,$);
+#10=IFCWALL('Wall00000000000000001',$,'W1',$,$,$,$,$,$);
+ENDSEC;
+END-ISO-10303-21;
+"#;
+
+fn multipart_body(content: &[u8]) -> (String, Vec<u8>) {
+    let mut body = Vec::new();
+    body.extend_from_slice(
+        format!(
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"t.ifc\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(content);
+    body.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={BOUNDARY}"), body)
+}
+
+async fn test_state(label: &str) -> AppState {
+    let dir = std::env::temp_dir().join(format!(
+        "ifc-lite-server-3889-optimized-{}-{}",
+        std::process::id(),
+        label
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let cache = Arc::new(DiskCache::new(dir.to_str().unwrap()).await);
+    AppState {
+        cache,
+        config: Arc::new(Config::from_env()),
+        admission: Arc::new(crate::admission::Admission::new(
+            crate::admission::AdmissionCfg {
+                max_concurrent_parses: 4,
+                mem_budget_bytes: 0,
+                queue_depth: 8,
+                queue_timeout: std::time::Duration::from_millis(100),
+                shed_pct: 85,
+            },
+        )),
+        data_model_in_flight: Arc::new(crate::in_flight::InFlightKeys::default()),
+    }
+}
+
+/// Issue an optimized-Parquet request against `state` and return
+/// `(status, X-IFC-Metadata, body)`.
+async fn post_optimized(state: &AppState, content: &[u8]) -> (StatusCode, String, Vec<u8>) {
+    post_to(state, "/api/v1/parse/parquet/optimized", content).await
+}
+
+async fn post_to(state: &AppState, uri: &str, content: &[u8]) -> (StatusCode, String, Vec<u8>) {
+    let (content_type, body) = multipart_body(content);
+    let request = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(header::CONTENT_TYPE, content_type)
+        .body(Body::from(body))
+        .unwrap();
+    let response = build_router(state.clone()).oneshot(request).await.unwrap();
+    let status = response.status();
+    let metadata = response
+        .headers()
+        .get("X-IFC-Metadata")
+        .map(|v| v.to_str().unwrap().to_string())
+        .unwrap_or_default();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    (status, metadata, body.to_vec())
+}
+
+/// GET `uri` through the full router and return its status code.
+async fn get_status(state: &AppState, uri: &str) -> StatusCode {
+    let request = Request::builder()
+        .method("GET")
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap();
+    build_router(state.clone()).oneshot(request).await.unwrap().status()
+}
+
+/// The headline behaviour from #3889: a second identical request must be a
+/// disk read, not a parse.
+///
+/// The first request warms the cache; its body is then replaced with bytes no
+/// parse can produce. If the second request re-parsed (the pre-fix behaviour,
+/// where the route had no key at all) it would answer with real Parquet and
+/// this fails.
+#[tokio::test]
+async fn a_second_identical_optimized_request_replays_without_parsing() {
+    let state = test_state("replays").await;
+    let content = MINIMAL_IFC.as_bytes();
+    let cache_key = request_cache_key(content, &ParseQuery::default(), TessellationQuality::default());
+
+    let (status, first_metadata, first_body) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!first_body.is_empty(), "the live parse must return a payload");
+
+    // The write is synchronous, so the entries are there the moment the first
+    // response is in hand -- no sleep, no polling.
+    let body_key = parquet_optimized_cache_key(&cache_key);
+    let stored = state
+        .cache
+        .get_bytes(&body_key)
+        .await
+        .unwrap()
+        .expect("the optimized body must be cached after the first request");
+    assert_eq!(stored, first_body, "the cached body must be what was served");
+
+    state
+        .cache
+        .set_bytes(&body_key, SENTINEL_BODY)
+        .await
+        .expect("overwrite the cached body with a sentinel");
+
+    let (status, second_metadata, second_body) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        second_body, SENTINEL_BODY,
+        "the second request re-parsed instead of replaying the cached body"
+    );
+    // The replay reports the header the live parse wrote, optimization_stats
+    // included, with the one field that describes THIS response rather than
+    // the parse flipped: it came from cache (#5542). Before that fix the
+    // header was replayed verbatim, `from_cache: false` on a hit.
+    let first: serde_json::Value = serde_json::from_str(&first_metadata).unwrap();
+    let second: serde_json::Value = serde_json::from_str(&second_metadata).unwrap();
+    assert_eq!(first["stats"]["from_cache"], false, "the live parse is not from cache");
+    assert_eq!(second["stats"]["from_cache"], true, "a replay must report from_cache: true");
+    let mut expected = first;
+    expected["stats"]["from_cache"] = serde_json::Value::Bool(true);
+    assert_eq!(
+        second, expected,
+        "a replay must otherwise report the same metadata header (optimization_stats included)"
+    );
+}
+
+/// A hit on the flat route must NOT make the optimized route think it is
+/// cached. The two emit different payloads (quantized vertices, deduplicated
+/// shapes), so serving one where the other is expected is a decode error at
+/// best and a wrong model at worst.
+#[tokio::test]
+async fn a_cached_flat_response_does_not_satisfy_the_optimized_route() {
+    let state = test_state("flat-does-not-satisfy-optimized").await;
+    let content = MINIMAL_IFC.as_bytes();
+    let cache_key = request_cache_key(content, &ParseQuery::default(), TessellationQuality::default());
+
+    // Everything the FLAT route's cache hit needs, and nothing else. Built
+    // from the shared key helpers, so a flat-suffix bump moves this fixture
+    // with the route instead of leaving it seeding a dead key.
+    let hash = DiskCache::generate_key(content);
+    let flat_key = parquet_cache_key(
+        &hash,
+        OpeningFilterMode::Default,
+        TessellationQuality::default(),
+        ParquetLayout::Flat,
+    );
+    let flat_metadata_key = parquet_metadata_cache_key(
+        &hash,
+        OpeningFilterMode::Default,
+        TessellationQuality::default(),
+    );
+    for (key, value) in [
+        (flat_key, b"FLAT-GEOMETRY".as_slice()),
+        (flat_metadata_key, b"{}".as_slice()),
+        (data_model_cache_key(&cache_key, crate::services::DataModelEntities::All), b"FLAT-DATA-MODEL".as_slice()),
+        (symbolic_cache_key(&cache_key), b"{}".as_slice()),
+    ] {
+        state.cache.set_bytes(&key, value).await.expect("seed flat entry");
+    }
+
+    // Anti-vacuity: the flat entries really are a hit for the flat route.
+    let (status, _, flat_body) = post_to(&state, "/api/v1/parse/parquet", content).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        flat_body, b"FLAT-GEOMETRY",
+        "fixture is wrong: the flat route did not treat its seeded entries as a hit"
+    );
+
+    let (status, metadata, body) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_ne!(
+        body, b"FLAT-GEOMETRY",
+        "the optimized route served the flat route's cached body"
+    );
+    assert!(
+        metadata.contains("optimization_stats"),
+        "the optimized route must have parsed and emitted its own header, got: {metadata}"
+    );
+}
+
+/// And the reverse: a cached optimized response must not be served by the flat
+/// route, whose clients decode a different format.
+#[tokio::test]
+async fn a_cached_optimized_response_does_not_satisfy_the_flat_route() {
+    let state = test_state("optimized-does-not-satisfy-flat").await;
+    let content = MINIMAL_IFC.as_bytes();
+    let cache_key = request_cache_key(content, &ParseQuery::default(), TessellationQuality::default());
+
+    for (key, value) in [
+        (parquet_optimized_cache_key(&cache_key), SENTINEL_BODY),
+        (
+            parquet_optimized_metadata_cache_key(&cache_key),
+            b"{}".as_slice(),
+        ),
+        (symbolic_cache_key(&cache_key), b"{}".as_slice()),
+        // #5129: the optimized route now gates its replay on a current data
+        // model too (the #3869 rule), so a hit fixture must seed one.
+        (data_model_cache_key(&cache_key, crate::services::DataModelEntities::All), b"{}".as_slice()),
+    ] {
+        state
+            .cache
+            .set_bytes(&key, value)
+            .await
+            .expect("seed optimized entry");
+    }
+
+    // Anti-vacuity: those entries really are a hit for the optimized route.
+    let (status, _, optimized_body) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        optimized_body, SENTINEL_BODY,
+        "fixture is wrong: the optimized route did not treat its seeded entries as a hit"
+    );
+
+    let (status, _, body) = post_to(&state, "/api/v1/parse/parquet", content).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_ne!(
+        body, SENTINEL_BODY,
+        "the flat route served the optimized route's cached body"
+    );
+}
+
+/// The optimized parse is what writes the symbolic sidecar, so a body entry
+/// that outlived its sidecar must re-parse rather than replay. Otherwise the
+/// client's `GET /api/v1/parse/symbolic/{cache_key}` polls a key nobody ever
+/// writes -- the shape of #3869, one route over.
+#[tokio::test]
+async fn an_optimized_hit_with_no_symbolic_sidecar_re_parses_and_writes_one() {
+    let state = test_state("missing-symbolic").await;
+    let content = MINIMAL_IFC.as_bytes();
+    let cache_key = request_cache_key(content, &ParseQuery::default(), TessellationQuality::default());
+    let symbolic_key = symbolic_cache_key(&cache_key);
+
+    state
+        .cache
+        .set_bytes(&parquet_optimized_cache_key(&cache_key), SENTINEL_BODY)
+        .await
+        .expect("seed optimized body");
+    state
+        .cache
+        .set_bytes(
+            &parquet_optimized_metadata_cache_key(&cache_key),
+            b"{\"stale\":true}",
+        )
+        .await
+        .expect("seed optimized metadata");
+
+    // Anti-vacuity: the sidecar really is absent before the request.
+    assert!(
+        state.cache.get_bytes(&symbolic_key).await.unwrap().is_none(),
+        "fixture must start with no symbolic sidecar"
+    );
+
+    let (status, _, body) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_ne!(
+        body, SENTINEL_BODY,
+        "a body with no symbolic sidecar must re-parse, not replay"
+    );
+    assert!(
+        state.cache.get_bytes(&symbolic_key).await.unwrap().is_some(),
+        "the re-parse must write the symbolic sidecar"
+    );
+}
+
+/// A body cached with no metadata beside it is a miss, not a 500 and not a
+/// response with an empty header: the client reads `cache_key`,
+/// `vertex_multiplier` and `optimization_stats` out of that header and cannot
+/// decode the payload without them.
+#[tokio::test]
+async fn an_optimized_body_with_no_metadata_re_parses() {
+    let state = test_state("body-without-metadata").await;
+    let content = MINIMAL_IFC.as_bytes();
+    let cache_key = request_cache_key(content, &ParseQuery::default(), TessellationQuality::default());
+
+    state
+        .cache
+        .set_bytes(&parquet_optimized_cache_key(&cache_key), SENTINEL_BODY)
+        .await
+        .expect("seed optimized body");
+    state
+        .cache
+        .set_bytes(&symbolic_cache_key(&cache_key), b"{}")
+        .await
+        .expect("seed symbolic sidecar");
+
+    let (status, metadata, body) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_ne!(body, SENTINEL_BODY, "a body with no metadata must re-parse");
+    assert!(
+        metadata.contains("vertex_multiplier"),
+        "the re-parse must emit a full metadata header, got: {metadata}"
+    );
+}
+
+/// A response cached before #4653 has its header under
+/// `-parquet-optimized-metadata-v1`, with no georeference factor fields, so a
+/// replay would hand the client every factor as 1. It must re-parse (#4675).
+/// That the same seed under the current keys IS a hit is shown by
+/// `a_cached_optimized_response_does_not_satisfy_the_flat_route`.
+#[tokio::test]
+async fn issue_4675_a_pre_4653_optimized_entry_re_parses() {
+    let state = test_state("4675-pre-4653-optimized").await;
+    let content = MINIMAL_IFC.as_bytes();
+    let cache_key = request_cache_key(content, &ParseQuery::default(), TessellationQuality::default());
+
+    for (key, value) in [
+        (parquet_optimized_cache_key(&cache_key), SENTINEL_BODY),
+        (format!("{cache_key}-parquet-optimized-metadata-v1"), b"{}".as_slice()),
+        (symbolic_cache_key(&cache_key), b"{}".as_slice()),
+    ] {
+        state.cache.set_bytes(&key, value).await.expect("seed pre-#4653 entry");
+    }
+
+    let (status, metadata, body) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_ne!(body, SENTINEL_BODY, "a pre-#4653 optimized entry must not replay");
+    assert!(
+        metadata.contains("vertex_multiplier"),
+        "the re-parse must emit a full metadata header, got: {metadata}"
+    );
+}
+
+/// Different files must not share an optimized entry: the second request's
+/// content differs, so it parses rather than replaying the first one's body.
+#[tokio::test]
+async fn a_different_file_does_not_hit_the_first_files_optimized_entry() {
+    let state = test_state("different-file").await;
+    let first = MINIMAL_IFC.as_bytes();
+    let second = MINIMAL_IFC.replace("'W1'", "'W2'");
+
+    let (status, _, _) = post_optimized(&state, first).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let first_key =
+        request_cache_key(first, &ParseQuery::default(), TessellationQuality::default());
+    state
+        .cache
+        .set_bytes(&parquet_optimized_cache_key(&first_key), SENTINEL_BODY)
+        .await
+        .expect("mark the first file's entry");
+
+    let (status, _, body) = post_optimized(&state, second.as_bytes()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_ne!(
+        body, SENTINEL_BODY,
+        "a different file read the first file's cached body"
+    );
+}
+
+// ---------------------------------------------------------------------
+// The route produces a data model too (issue #5129).
+// ---------------------------------------------------------------------
+
+/// The headline behaviour from #5129: before this, `/parse/parquet/optimized`
+/// never wrote a data model at all, so `GET /parse/data-model/{cache_key}`
+/// polled 202 forever after an optimized-only parse -- nothing was ever going
+/// to write that key. The data model must be written BEFORE the response
+/// (mirroring `parse_parquet`), so it is already there the instant a client
+/// receives the geometry and immediately asks for it.
+#[tokio::test]
+async fn optimized_parse_writes_data_model_before_responding() {
+    let state = test_state("writes-data-model").await;
+    let content = MINIMAL_IFC.as_bytes();
+    let cache_key = request_cache_key(content, &ParseQuery::default(), TessellationQuality::default());
+
+    let (status, metadata, _) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // No sleep, no polling: the write happens inside the handler, before it
+    // returns, so it must already be on disk once the response is in hand.
+    let dm_response = get_status(&state, &format!("/api/v1/parse/data-model/{cache_key}")).await;
+    assert_eq!(
+        dm_response,
+        StatusCode::OK,
+        "the data model must be readable immediately after the optimized parse responds"
+    );
+
+    let metadata: serde_json::Value = serde_json::from_str(&metadata).unwrap();
+    let entity_count = metadata["data_model_stats"]["entity_count"]
+        .as_u64()
+        .expect("optimized response header must carry data_model_stats.entity_count");
+    assert!(
+        entity_count > 0,
+        "the fixture declares real entities (IfcProject, IfcWall); got entity_count={entity_count}"
+    );
+}
+
+/// The #3869 rule applied to this route (#5129): a hit warmed before this
+/// route wrote data models (or one whose data-model entry has since been
+/// retired) must re-parse rather than replay, or nothing ever writes a
+/// current data model and `get_data_model` polls a key nobody writes.
+#[tokio::test]
+async fn optimized_replay_requires_current_data_model() {
+    let state = test_state("replay-requires-data-model").await;
+    let content = MINIMAL_IFC.as_bytes();
+    let cache_key = request_cache_key(content, &ParseQuery::default(), TessellationQuality::default());
+
+    let (status, _, _) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Overwrite the body with a sentinel: if the second request is a replay,
+    // it must be the deleted-data-model check that forces a re-parse here,
+    // not a body-cache miss standing in for it.
+    let body_key = parquet_optimized_cache_key(&cache_key);
+    state
+        .cache
+        .set_bytes(&body_key, SENTINEL_BODY)
+        .await
+        .expect("overwrite the cached body with a sentinel");
+
+    // Simulate a deployment that warmed this cache entry before #5129: delete
+    // the data-model key the first (real) parse just wrote.
+    let dm_key = data_model_cache_key(&cache_key, crate::services::DataModelEntities::All);
+    state
+        .cache
+        .remove(&dm_key)
+        .await
+        .expect("remove the data-model entry");
+    assert!(
+        state.cache.get_bytes(&dm_key).await.unwrap().is_none(),
+        "fixture must start with no data model cached"
+    );
+
+    let (status, _, second_body) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_ne!(
+        second_body, SENTINEL_BODY,
+        "a body entry with no current data model must re-parse, not replay"
+    );
+    assert!(
+        state.cache.get_bytes(&dm_key).await.unwrap().is_some(),
+        "the re-parse must write a fresh data model"
+    );
+}
+
+// ---------------------------------------------------------------------
+// The serialization runs off the async runtime.
+// ---------------------------------------------------------------------
+
+/// The message the route logs right after serialising, with the payload
+/// size the serialization produced, so the event cannot precede the work.
+const SERIALIZATION_DONE: &str = "Optimized Parquet serialization complete";
+
+/// The optimized serialization (mesh dedup, quantization, five Parquet
+/// encodes over the whole model) runs on the blocking pool, not on the async
+/// worker that resumes the handler. It used to serialise the whole model
+/// after the `spawn_blocking` returned: with `max_concurrent_parses` defaulting to
+/// `num_cpus`, which is also Tokio's worker count, that many requests
+/// serialising at once left no worker to poll any other connection, the
+/// liveness probe included.
+///
+/// How this observes it: see `worker_thread_tests`. The route logs
+/// [`SERIALIZATION_DONE`] with the size of the payload it just produced. The
+/// fixture is unique to this test so its `cache_key` is, and a concurrent
+/// test's request cannot stand in for this one.
+///
+/// Regression for #4634 (serialization) and #4696 (symbolic sidecar).
+#[tokio::test]
+async fn the_optimized_serialization_runs_off_the_async_worker() {
+    record_event_threads();
+    let state = test_state("serialize-off-runtime").await;
+    let content = MINIMAL_IFC.replace("'W1'", "'W-off-runtime'");
+    let content = content.as_bytes();
+    let cache_key = request_cache_key(content, &ParseQuery::default(), TessellationQuality::default());
+
+    let (status, _, _) = post_optimized(&state, content).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let threads = threads_that_logged(SERIALIZATION_DONE, &cache_key);
+    assert_eq!(
+        threads.len(),
+        1,
+        "the route must log {SERIALIZATION_DONE:?} exactly once for this request, got {threads:?}"
+    );
+    assert_off_the_worker(&threads, "the optimized serialization");
+
+    // The symbolic sidecar is written before the response, and its JSON
+    // encode is the same whole-stream work (#4696).
+    let symbolic = threads_that_logged(SYMBOLIC_CACHED, &symbolic_cache_key(&cache_key));
+    assert_off_the_worker(&symbolic, "the symbolic sidecar encode");
+}
+
+#[path = "parquet_optimized_hash_only_tests.rs"]
+mod hash_only;

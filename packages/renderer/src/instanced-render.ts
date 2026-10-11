@@ -1,0 +1,335 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * GPU-instancing render prep — CPU side.
+ *
+ * Turns a decoded IFNS shard (one per geometry batch — see
+ * `processGeometryBatchInstanced` / `decodeInstancedShard`) into render-ready
+ * templates: each unique geometry is uploaded ONCE as a vertex/index buffer, and
+ * its occurrences become a per-instance buffer (`stepMode: 'instance'`) of
+ * transform + entityId + colour, drawn with `drawIndexed(indexCount,
+ * instanceCount)`.
+ *
+ * FRAME: the shard is in the producer-native IFC Z-up frame (templates carry a
+ * local origin; per-instance transforms are native `rel_k`). The renderer draws
+ * WebGL Y-up world space. We fold the SAME constant Z-up→Y-up swap that
+ * `MeshDataJs::new` bakes into the flat path into each per-instance matrix:
+ *
+ *     instMat = SWAP · rel_k · T(origin_t)
+ *
+ * applied to the template's LOCAL vertex `p_t` (stored relative to `origin_t`),
+ * so `instMat · p_t = swap(rel_k · (origin_t + p_t)) = swap(origin_k + p_k)` —
+ * exactly the world coordinate the flat path produces for occurrence k. Because
+ * the swap is linear and the native-frame recomposition is already verified in
+ * Rust (`verify_recomposition`), this lands instanced + flat geometry in one
+ * frame. (See instanced-render.test.ts for the GPU-free proof.)
+ *
+ * PRECISION: the GPU record remains an f32 matrix, but the decoded template
+ * origin is f64. The record carries no anchor: `canonicalAnchors` (f64, one
+ * xyz per occurrence) is the source of truth, and each template's separate
+ * delta stream (`instanced-rte.ts`, vertex slot 2) receives the f64
+ * drawable-minus-camera split per camera change. This keeps colour, picking,
+ * shadows and the selection mask in one precision contract without GPU world
+ * subtraction, and keeps the per-frame upload to one write per template (#6393).
+ */
+
+import { MathUtils } from './math.js';
+import { OPAQUE_ALPHA_CUTOFF } from './overlay-routing.js';
+import type { Mat4 } from './types.js';
+import type { DecodedInstancedShard, DecodedInstance } from '@ifc-lite/geometry';
+
+/**
+ * Constant IFC Z-up → WebGL Y-up swap `(x, y, z) → (x, z, -y)`, column-major
+ * (MathUtils / WGSL convention). Identical to the swap `MeshDataJs::new` applies
+ * to the flat path, so instanced geometry shares the flat frame exactly.
+ */
+export const SWAP_ZUP_TO_YUP: Mat4 = {
+  // column c, row r at index c*4+r:
+  //   out.x = x, out.y = z, out.z = -y
+  m: new Float32Array([
+    1, 0, 0, 0, // col0 → (x, 0, 0)
+    0, 0, -1, 0, // col1 → (0, 0, -y)
+    0, 1, 0, 0, // col2 → (0, z, 0)
+    0, 0, 0, 1, // col3 (translation)
+  ]),
+};
+
+/**
+ * Bytes per instance in the GPU instance buffer:
+ *   [0..63]  mat4 (16 f32, column-major)
+ *   [64..67] entityId (u32)
+ *   [68..83] rgba (4 f32)
+ *   [84..87] flags (u32 — bit 0 = selected; bit 1 = hidden)
+ *
+ * Static between edits: the camera-relative anchor lives in a separate
+ * per-template stream (`instanced-rte.ts`), not in this record (#6393).
+ */
+export const INSTANCE_STRIDE_BYTES = 88;
+
+/** Byte offset of the rgba colour within an instance record (patched by lens/IDS overlays). */
+export const INSTANCE_COLOR_OFFSET = 68;
+/** Byte offset of the flags u32 within an instance record (patched by selection/visibility). */
+export const INSTANCE_FLAGS_OFFSET = 84;
+/** flags bit 0 — this occurrence is selected (blue highlight in the shader). */
+export const INSTANCE_FLAG_SELECTED = 1;
+/** flags bit 1 — this occurrence is hidden (hide/isolate); the shader discards it
+ *  in both the render and pick passes so it neither draws nor is pickable. */
+export const INSTANCE_FLAG_HIDDEN = 2;
+/** #5984: flags bit 2 / 3 — this occurrence authors a metallic / roughness,
+ *  quantized to unorm8 in bits 16-23 / 24-31 of the same lane. The IFNS shard
+ *  carries the finish per occurrence (trailing field 2), but every instanced
+ *  draw shares ONE uniform material row, so the finish has to ride the
+ *  instance record; the flags lane already reaches the fragment stage flat,
+ *  so no stride, vertex layout or picker/shadow pipeline changes. */
+export const INSTANCE_FLAG_METALLIC = 4;
+export const INSTANCE_FLAG_ROUGHNESS = 8;
+/** Every flags bit the finish owns; a selection/visibility rewrite keeps them. */
+export const INSTANCE_FINISH_FLAGS_MASK = 0xffff000c;
+
+/** Pack an occurrence's authored finish into its flags lane (see above). An
+ *  unauthored field sets no bit, so the shader keeps the renderer default. */
+export function packInstanceFinish(metallic?: number, roughness?: number): number {
+  const unorm8 = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
+  let bits = 0;
+  if (metallic !== undefined && Number.isFinite(metallic)) bits |= INSTANCE_FLAG_METALLIC | (unorm8(metallic) << 16);
+  if (roughness !== undefined && Number.isFinite(roughness)) bits |= INSTANCE_FLAG_ROUGHNESS | (unorm8(roughness) << 24);
+  return bits >>> 0;
+}
+
+/** Transpose a row-major mat4 (the IFNS / `DecodedInstance.transform` convention)
+ *  into a column-major `Mat4` (MathUtils / WGSL convention). */
+function rowMajorToColMajor(rm: Float32Array): Mat4 {
+  const m = new Float32Array(16);
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      m[c * 4 + r] = rm[r * 4 + c];
+    }
+  }
+  return { m };
+}
+
+/**
+ * Compose the per-occurrence render matrix `SWAP · rel_k · T(origin)` that maps a
+ * template's LOCAL vertex (relative to `origin`, native IFC frame) into WebGL
+ * Y-up world space. Returns a column-major 16-float array; the renderer feeds its
+ * four columns as vec4 vertex attributes (@location 3..6) and the shader computes
+ * `worldPos = instMat * vec4(position, 1.0)`.
+ */
+export function composeInstanceMatrix(
+  transformRowMajor: Float32Array,
+  origin: readonly [number, number, number],
+): Float32Array {
+  const relK = rowMajorToColMajor(transformRowMajor);
+  const t = MathUtils.identity();
+  t.m[12] = origin[0];
+  t.m[13] = origin[1];
+  t.m[14] = origin[2];
+  // SWAP · (rel_k · T(origin))
+  const instMat = MathUtils.multiply(SWAP_ZUP_TO_YUP, MathUtils.multiply(relK, t));
+  return instMat.m;
+}
+
+/**
+ * Canonical f64 world anchor for one occurrence's template origin. The IFNS
+ * transform coefficients are f32 by format, but evaluating them against the
+ * template's f64 origin before narrowing preserves the source residual that a
+ * composed f32 translation loses at national-grid offsets. Result is renderer
+ * Y-up, matching `composeInstanceMatrix` and every CPU consumer.
+ */
+export function composeInstanceAnchor(
+  transformRowMajor: Float32Array,
+  origin: readonly [number, number, number],
+): [number, number, number] {
+  const x = transformRowMajor[0] * origin[0] + transformRowMajor[1] * origin[1]
+    + transformRowMajor[2] * origin[2] + transformRowMajor[3];
+  const y = transformRowMajor[4] * origin[0] + transformRowMajor[5] * origin[1]
+    + transformRowMajor[6] * origin[2] + transformRowMajor[7];
+  const z = transformRowMajor[8] * origin[0] + transformRowMajor[9] * origin[1]
+    + transformRowMajor[10] * origin[2] + transformRowMajor[11];
+  return [x, z, -y];
+}
+
+/** A unique template + the interleaved per-instance buffer for its occurrences. */
+export interface InstancedRenderTemplate {
+  /** Index of this template within its source shard (diagnostic only). */
+  templateIndex: number;
+  /** Template geometry, LOCAL to `origin`, native IFC frame (uploaded once). */
+  positions: Float32Array;
+  normals: Float32Array;
+  indices: Uint32Array;
+  /** Template local origin (f64), folded into each instance matrix. */
+  origin: [number, number, number];
+  /** Interleaved instance data: per occurrence mat4(64B) + entityId(4B) + rgba(16B) + flags(4B). */
+  instanceBuffer: ArrayBuffer;
+  /** Number of occurrences (the `instanceCount` for drawIndexed). */
+  instanceCount: number;
+  /** Per-occurrence express ids, in buffer order (occurrence i is at byte i*stride).
+   *  Lets the Scene build an express_id → occurrence map for per-instance
+   *  selection-flag + colour-override patching. */
+  entityIds: Uint32Array;
+  /** Per-occurrence originating `IfcRepresentationItem` id (#2985), same buffer
+   *  order as {@link entityIds}; `0` for an occurrence whose producer named no
+   *  item. UNDEFINED — not a zero-filled array — when the shard's stride says no
+   *  occurrence carries one (a v1 shard, or a model with no representation items
+   *  to name), so the common case allocates nothing per template. CPU-SIDE ONLY:
+   *  deliberately absent from the GPU per-instance buffer, whose 88-byte layout
+   *  is shading data and is packed identically by the pipeline, shadow pass, and
+   *  picker. This is host-query data: it answers "which entity produced this
+   *  piece", never "how is it drawn". */
+  itemIds?: Uint32Array;
+  /** f64 Y-up occurrence source anchors, xyz per instance-buffer record.
+   * The per-template RTE delta stream is derived from this sidecar. */
+  canonicalAnchors: Float64Array;
+  /** Matrix translations paired with canonicalAnchors so interactive placement
+   * preserves the authoritative f64 source anchor. */
+  canonicalMatrixTranslations: Float32Array;
+}
+
+/**
+ * Write one occurrence's interleaved record (mat4 column-major + entityId + rgba)
+ * into `dv` at `byteOffset`. Little-endian to match the GPU buffer + the IFNS
+ * decoder. Exposed for the unit test.
+ */
+export function writeInstanceRecord(
+  dv: DataView,
+  byteOffset: number,
+  instanceMatrix: Float32Array,
+  entityId: number,
+  color: readonly [number, number, number, number],
+  flags = 0,
+): void {
+  for (let j = 0; j < 16; j++) {
+    dv.setFloat32(byteOffset + j * 4, instanceMatrix[j], true);
+  }
+  dv.setUint32(byteOffset + 64, entityId >>> 0, true);
+  for (let j = 0; j < 4; j++) {
+    dv.setFloat32(byteOffset + INSTANCE_COLOR_OFFSET + j * 4, color[j], true);
+  }
+  dv.setUint32(byteOffset + INSTANCE_FLAGS_OFFSET, flags >>> 0, true);
+}
+
+/**
+ * Turn a decoded IFNS shard into render-ready templates. Each template's
+ * occurrences are grouped and their `SWAP · rel_k · T(origin)` matrices +
+ * entityId + colour packed into one interleaved instance buffer. Templates with
+ * zero occurrences are skipped (encode always emits ≥1, but be defensive).
+ *
+ * TRANSPARENT instances (colour alpha < OPAQUE_ALPHA_CUTOFF — glass, IfcSpace,
+ * openings) are EXCLUDED: the instanced pipeline is the opaque clone (no alpha
+ * blend, depth-write on), so drawing glass here renders it opaque. They render
+ * correctly via the flat transparent pipeline instead — which the emit-both
+ * path still produces, and which alone carries the glass material (#5386). Uses
+ * the SAME 0.99 cutoff as the flat opaque/transparent split (overlay-routing.ts).
+ */
+export function prepareInstancedRender(shard: DecodedInstancedShard): InstancedRenderTemplate[] {
+  const byTemplate: DecodedInstance[][] = shard.templates.map(() => []);
+  for (const inst of shard.instances) {
+    // Glass/transparent → flat transparent pipeline, not the opaque instanced one.
+    if (inst.color[3] < OPAQUE_ALPHA_CUTOFF) continue;
+    const bucket = byTemplate[inst.templateIndex];
+    // Defensive: a corrupt templateIndex would otherwise throw; drop it loudly-safe.
+    if (bucket) bucket.push(inst);
+  }
+
+  const out: InstancedRenderTemplate[] = [];
+  for (let t = 0; t < shard.templates.length; t++) {
+    const tmpl = shard.templates[t];
+    const insts = byTemplate[t];
+    if (!insts || insts.length === 0) continue;
+
+    const buffer = new ArrayBuffer(insts.length * INSTANCE_STRIDE_BYTES);
+    const dv = new DataView(buffer);
+    const entityIds = new Uint32Array(insts.length);
+    const canonicalAnchors = new Float64Array(insts.length * 3);
+    const canonicalMatrixTranslations = new Float32Array(insts.length * 3);
+    // The shard's stride already answered "does anything here name an item"
+    // (the encoder derives it from the data), so a model with none pays no
+    // per-template allocation and no zero-fill for a column that would be all
+    // zeros — these live for the model's lifetime, one per template per shard.
+    const itemIds = shard.carriesItemIds ? new Uint32Array(insts.length) : undefined;
+    for (let i = 0; i < insts.length; i++) {
+      const inst = insts[i];
+      const mat = composeInstanceMatrix(inst.transform, tmpl.origin);
+      const anchor = composeInstanceAnchor(inst.transform, tmpl.origin);
+      // Every occurrence starts unselected; the flags carry only its finish (#5984).
+      const flags = packInstanceFinish(inst.metallic, inst.roughness);
+      writeInstanceRecord(dv, i * INSTANCE_STRIDE_BYTES, mat, inst.entityId, inst.color, flags);
+      entityIds[i] = inst.entityId >>> 0;
+      canonicalAnchors.set(anchor, i * 3);
+      canonicalMatrixTranslations.set([mat[12], mat[13], mat[14]], i * 3);
+      if (itemIds) itemIds[i] = (inst.itemId ?? 0) >>> 0;
+    }
+
+    out.push({
+      templateIndex: t,
+      positions: tmpl.positions,
+      normals: tmpl.normals,
+      indices: tmpl.indices,
+      origin: tmpl.origin,
+      instanceBuffer: buffer,
+      instanceCount: insts.length,
+      entityIds,
+      itemIds,
+      canonicalAnchors,
+      canonicalMatrixTranslations,
+    });
+  }
+  return out;
+}
+
+/** Per-template cull metadata (structurally satisfied by InstancedTemplateGPU). */
+export interface InstancedCullMeta {
+  /** Union of the occurrences' world AABBs; null = uncullable. */
+  bounds: { min: [number, number, number]; max: [number, number, number] } | null;
+  /** Largest single-occurrence bounding-sphere radius. Infinity marks a
+   *  POISONED template (a non-finite occurrence box was seen): it is never
+   *  culled and later finite occurrences must not resurrect its bounds. */
+  maxOccRadius: number;
+}
+
+/** One occurrence's world AABB, as produced by the shard-upload transform. */
+export interface OccurrenceWorldBox {
+  minX: number; minY: number; minZ: number;
+  maxX: number; maxY: number; maxZ: number;
+}
+
+/**
+ * Fold one occurrence's world AABB into a template's cull metadata: grow the
+ * union bounds and the max occurrence bounding-sphere radius.
+ *
+ * A non-finite box (NaN/Infinity occurrence matrix) POISONS the template —
+ * bounds are wiped and maxOccRadius pinned to Infinity so the render loop
+ * fails OPEN (culling on poisoned metadata would hide real geometry), and the
+ * poison is sticky against later finite occurrences.
+ */
+export function foldOccurrenceWorldBox(meta: InstancedCullMeta, w: OccurrenceWorldBox): void {
+  if (meta.maxOccRadius === Infinity) return; // sticky poison
+  const dx = w.maxX - w.minX, dy = w.maxY - w.minY, dz = w.maxZ - w.minZ;
+  const occRadius = 0.5 * Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (
+    !Number.isFinite(occRadius) ||
+    !Number.isFinite(w.minX + w.minY + w.minZ) ||
+    !Number.isFinite(w.maxX + w.maxY + w.maxZ)
+  ) {
+    meta.bounds = null;
+    meta.maxOccRadius = Infinity;
+    return;
+  }
+  if (occRadius > meta.maxOccRadius) meta.maxOccRadius = occRadius;
+  const tb = meta.bounds;
+  if (!tb) {
+    meta.bounds = {
+      min: [w.minX, w.minY, w.minZ],
+      max: [w.maxX, w.maxY, w.maxZ],
+    };
+  } else {
+    if (w.minX < tb.min[0]) tb.min[0] = w.minX;
+    if (w.minY < tb.min[1]) tb.min[1] = w.minY;
+    if (w.minZ < tb.min[2]) tb.min[2] = w.minZ;
+    if (w.maxX > tb.max[0]) tb.max[0] = w.maxX;
+    if (w.maxY > tb.max[1]) tb.max[1] = w.maxY;
+    if (w.maxZ > tb.max[2]) tb.max[2] = w.maxZ;
+  }
+}

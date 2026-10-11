@@ -1,0 +1,1965 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * playground-dispatcher.ts — client-side execution surface for the MCP
+ * tool catalogue.
+ *
+ * The web playground talks to Anthropic with the same tool definitions the
+ * stdio MCP server advertises. When Claude emits a `tool_use` block we run
+ * it through `dispatch()` here, which:
+ *
+ *   1. Resolves the tool name to an SDK call against the loaded model's
+ *      `BimContext` (built on top of `HeadlessLikeBackend`, the same
+ *      backend the Node MCP server uses — so behaviour matches).
+ *   2. Catches `ToolExecutionError`s and converts them to MCP-shaped
+ *      `tool_result` payloads with `is_error: true` + a stable error code.
+ *   3. Emits a structured payload that is small enough to round-trip back
+ *      into Claude’s context without blowing the message budget.
+ *
+ * Coverage: read + mutate + BCF + IDS + export are all wired. Disk I/O
+ * (model_save, export_*) stages a Blob in `playgroundFiles` that the user
+ * downloads on click — never auto-triggered. The handful of tools that
+ * genuinely don't fit a browser (model_load federated, export_glb /
+ * export_ifcx / export_pdf_report) return a friendly
+ * UNSUPPORTED_OPERATION so the agent can route the user to the stdio MCP
+ * for those.
+ */
+
+import { IfcParser, type IfcDataStore, extractLengthUnitScale, extractProjectUnits } from '@ifc-lite/parser';
+import { QuantityType } from '@ifc-lite/data';
+import { formatQuantityUnit } from '@/lib/units/display';
+import { lensMaterialNames } from '@ifc-lite/rules';
+import {
+  BsddNamespace,
+  createBimContext,
+  type BimContext,
+  type EntityRef,
+} from '@ifc-lite/sdk';
+import {
+  HeadlessLikeBackend,
+  ToolErrorCode,
+  ToolExecutionError,
+  firstNonBlank,
+} from '@ifc-lite/mcp/browser';
+import {
+  addCommentToTopic,
+  addTopicToProject,
+  addViewpointToTopic,
+  createBCFComment,
+  createBCFProject,
+  createBCFTopic,
+  updateTopicStatus,
+  writeBCF,
+  type BCFProject,
+  type BCFTopic,
+} from '@ifc-lite/bcf';
+import { parseIDS, validateIDS, type IDSDocument, type IFCDataAccessor } from '@ifc-lite/ids';
+import { createDataAccessor as createIdsDataAccessor } from '@/hooks/ids/idsDataAccessor';
+import { GeometryProcessor, type CoordinateInfo, type MeshData } from '@ifc-lite/geometry';
+import { renderFrameWorldOffset } from '@ifc-lite/geometry/world-frame';
+import type { UseTranslationResult } from '@/i18n/useTranslation';
+import type { TranslationKey } from '@/i18n';
+import {
+  createClashEngine,
+  disciplineMatrixRules,
+  groupClashes,
+  type Clash,
+  type ClashMode,
+  type ClashResult,
+  type ClashRule,
+  type GroupOptions,
+} from '@ifc-lite/clash';
+import { elementsFromStep } from '@ifc-lite/clash/step';
+import { createBCFFromClashResult } from '@ifc-lite/clash/bcf';
+import { CATALOG } from './data';
+import type { ViewerController, ColorTuple } from './playground-viewer-types';
+import {
+  createAnthropicToolDefinitions,
+  type AnthropicToolDef,
+} from './playground-tool-definitions';
+export type { AnthropicInputSchema, AnthropicToolDef } from './playground-tool-definitions';
+// Value import, but a deliberately cheap one: `three-webgl-support` pulls in
+// neither three.js nor React (see its header), so reading the latched verdict
+// costs the dispatcher nothing at import time.
+import { getThreeWebglVerdict } from './three-webgl-support';
+import { playgroundFiles } from './playground-files';
+import { playgroundUploads } from './playground-uploads';
+import { sanitizeFilename } from '../../lib/export/download';
+import { playgroundCostTools } from './playground-cost';
+import { effectiveEntities, effectiveEntityCount, effectiveGlobalIdLookup, effectiveTypeCounts } from './playground-effective';
+import { playgroundContainmentChain, playgroundSpatialHierarchy } from './playground-spatial';
+import { playgroundGeometrySource } from './playground-geometry-source';
+
+// ── loaded-model handle ────────────────────────────────────────────────────
+
+export interface LoadedPlaygroundModel {
+  id: string;
+  name: string;
+  fileSize: number;
+  /** Raw bytes — kept around so the geometry processor can re-parse on
+   *  demand. `store.source` would work too but only for stores parsed by
+   *  this exact path; keeping our own copy is cheaper than hunting it. */
+  bytes: Uint8Array;
+  store: IfcDataStore;
+  bim: BimContext;
+  backend: HeadlessLikeBackend;
+}
+
+/** Parse an IFC ArrayBuffer in the browser using the same path the
+ * stdio CLI uses (just `IfcParser.parseColumnar`). */
+export async function parsePlaygroundModel(
+  buffer: ArrayBuffer,
+  filename: string,
+): Promise<LoadedPlaygroundModel> {
+  // Snapshot the buffer up-front. parseColumnar may keep references into
+  // it but the geometry processor wants a fresh, owning Uint8Array.
+  const bytes = new Uint8Array(buffer.slice(0));
+  const parser = new IfcParser();
+  const store = await parser.parseColumnar(buffer);
+  store.fileSize = buffer.byteLength;
+  const id = filename.replace(/\.ifc$/i, '').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase() || 'model';
+  const backend = new HeadlessLikeBackend(store, filename, id);
+  const bim = createBimContext({ backend });
+  return { id, name: filename, fileSize: buffer.byteLength, bytes, store, bim, backend };
+}
+
+// ── tool execution ────────────────────────────────────────────────────────
+
+/**
+ * Outcome of dispatching a single tool call. Mirrors the relevant fields
+ * of an MCP `CallToolResult` so the chat view can render success and
+ * failure with the same components.
+ *
+ * When a tool produces a downloadable artifact (bcf_export, model_save,
+ * export_ifc / csv / json, ids_validate) it sets `download` so the chat
+ * panel can surface an inline "Get .bcf" / "Save IFC" button under the
+ * tool call card. The actual file lives in `playgroundFiles` (also
+ * mirrored in the sidebar Downloads panel); `download.fileId` is the
+ * handle the chat uses to trigger the click.
+ *
+ * Strict rule: download is OPT-IN per click. Tools NEVER auto-trigger.
+ */
+export interface ToolDispatchResult {
+  text: string;
+  /** Re-resolved by the transcript renderer after a live locale switch. */
+  textKey?: TranslationKey;
+  structured: unknown;
+  isError: boolean;
+  errorCode?: string;
+  hint?: string;
+  hintKey?: TranslationKey;
+  download?: {
+    fileId: string;
+    filename: string;
+    mimeType: string;
+    size: number;
+    /** Short label for the download button, e.g. "Get .bcf", "Save IFC". */
+    label: string;
+  };
+}
+
+/** Optional context surfaces the dispatcher can use beyond the model. */
+export interface DispatchContext {
+  /** Refresh local model summaries after a successful entity mutation. */
+  onModelChanged?: () => void;
+  /** Inline 3D viewer controller. When absent, viewer_* tools fail with
+   *  UNSUPPORTED_OPERATION and ask the user to open the viewer panel. */
+  viewer?: ViewerController | null;
+  /** Open the inline viewer panel if it's collapsed. The viewer_open tool
+   *  forwards here so the agent can request it. */
+  openViewerPanel?: () => void;
+  /** Optional federated models (model_id → model). When omitted only the
+   *  primary `model` argument to dispatch() is reachable; diff tools that
+   *  need two models use `model_id` to look the second one up. */
+  registry?: Map<string, LoadedPlaygroundModel>;
+  /** Resolve user-visible tool results in the viewer's active locale. */
+  translate?: UseTranslationResult['t'];
+}
+
+// ── BCF session state ─────────────────────────────────────────────────────
+// One BCF project per playground tab — bcf_topic_create accumulates topics,
+// bcf_export bundles the lot. Lives at module scope so tools can mutate it
+// across calls without threading it through every dispatch invocation.
+let bcfProject: BCFProject | null = null;
+function getBcfProject(): BCFProject {
+  if (!bcfProject) bcfProject = createBCFProject({ name: 'ifc-lite-playground', version: '2.1' });
+  return bcfProject;
+}
+
+/**
+ * Auto-stage a fresh `.bcfzip` blob in playgroundFiles after every BCF
+ * mutation. This way the chat shows a `Get .bcfzip` button on EVERY BCF
+ * call — the user doesn't have to wait for the agent to remember to
+ * call bcf_export. We re-use the same fileId across calls so the
+ * sidebar Downloads panel shows ONE always-current entry instead of
+ * a long history of stale bundles.
+ *
+ * Returns the download metadata to splice into a tool result, or null
+ * when the project has no topics yet (nothing to download).
+ */
+let stagedBcfFileId: string | null = null;
+async function autoStageBcfDownload(): Promise<NonNullable<ToolDispatchResult['download']> | null> {
+  const project = getBcfProject();
+  if (project.topics.size === 0) return null;
+  const blob = await writeBCF(project);
+  // Drop the previous staged copy so the panel only ever shows the latest.
+  if (stagedBcfFileId) playgroundFiles.remove(stagedBcfFileId);
+  const filename = coerceFilename(undefined, 'bcfzip', 'topics');
+  const file = playgroundFiles.add({
+    filename,
+    mimeType: 'application/zip',
+    size: blob.size,
+    blob,
+    source: 'bcf (auto-staged)',
+    description: `${project.topics.size} topic(s) · auto-updates as you edit`,
+  });
+  stagedBcfFileId = file.id;
+  // Exempt the always-current BCF bundle from store eviction so its tracked
+  // id can never be orphaned by later export/ids/model_save additions.
+  playgroundFiles.pin(file.id);
+  return {
+    fileId: file.id,
+    filename,
+    mimeType: 'application/zip',
+    size: blob.size,
+    label: 'Get .bcfzip',
+  };
+}
+
+/**
+ * Read-only tool implementations the v1 playground supports. Each entry
+ * returns a (text, structured) pair the chat panel can render directly.
+ * Anything not in this map → UNSUPPORTED_OPERATION.
+ */
+type ToolImplResult = {
+  text: string;
+  textKey?: TranslationKey;
+  structured: unknown;
+  download?: ToolDispatchResult['download'];
+};
+type ToolImpl = (model: LoadedPlaygroundModel, args: Record<string, unknown>, ctx: DispatchContext) => Promise<ToolImplResult>;
+
+/**
+ * The single agent-facing answer for a device that refuses WebGL (#2412).
+ *
+ * `isLoaded()` is false in two very different situations — geometry is still
+ * processing, or the canvas never mounted at all — and every viewer answer
+ * used to describe only the first. On a GPU-less device that produced a loop
+ * with no exit: `viewer_open` said "call viewer_status in a moment",
+ * `viewer_status` said "mounted but no geometry yet", and every other viewer
+ * tool said "call viewer_open first".
+ *
+ * So this text is deliberately terminal: no "shortly", no "try again", no
+ * reload hint. The verdict behind `webglUnavailable` is latched for the
+ * session (`lib/webgl-capability.ts`) and the refusal is a property of the
+ * device, so any retry wording would just relocate the loop.
+ */
+const NO_WEBGL_MESSAGE =
+  'This device cannot provide a WebGL context, so the inline 3D viewer never mounts. '
+  + 'Every viewer_* tool is unavailable for the rest of this session. '
+  + 'Parsing, queries, validation, BCF and export are unaffected.';
+
+const NO_WEBGL_HINT = 'Answer with the non-viewer tools; no 3D tool can succeed on this device.';
+
+function noWebglMessage(ctx: DispatchContext): string {
+  return ctx.translate?.('mcp.playgroundDispatcher.webglUnavailable') ?? NO_WEBGL_MESSAGE;
+}
+
+function noWebglHint(ctx: DispatchContext): string {
+  return ctx.translate?.('mcp.playgroundDispatcher.webglUnavailableHint') ?? NO_WEBGL_HINT;
+}
+
+/**
+ * Has three.js given up on WebGL for this session?
+ *
+ * Two sources, because neither alone covers the loop:
+ *
+ *   - the session latch (`getThreeWebglVerdict`) answers even when no viewer
+ *     is attached. That case is not hypothetical and is the second live
+ *     instance of this defect: `McpPlayground` unmounts `PlaygroundViewer`
+ *     whenever the panel collapses, which nulls the controller ref. Without
+ *     the latch, collapsing the panel after a failed mount would put every
+ *     viewer tool back on "Call viewer_open first" — the same loop, one user
+ *     click later. The latch is module-scope and never re-probes, so it
+ *     survives that remount by design.
+ *   - the mounted controller's `webglUnavailable`, which is the component's
+ *     own truth and what `viewer_status` reports in its structured payload.
+ *
+ * A `null` verdict with no viewer is deliberately NOT this state: it means
+ * nothing has tried yet, and `viewer_open` legitimately still has work to do.
+ * Nothing here probes; a probe would burn one of the page's ~16 context slots
+ * and, worse, latch the verdict before `useThreeScene` ever runs — which is
+ * exactly what suppresses that hook's once-per-session report to error
+ * tracking (`startThreeScene` omits `error` when the latch already knew). The
+ * dispatcher reads the verdict; it never manufactures one.
+ */
+function isWebglUnavailable(ctx: DispatchContext): boolean {
+  const latched = getThreeWebglVerdict();
+  if (latched && !latched.supported) return true;
+  return ctx.viewer?.status().webglUnavailable === true;
+}
+
+function requireViewer(ctx: DispatchContext): ViewerController {
+  if (isWebglUnavailable(ctx)) {
+    throw new ToolExecutionError({
+      code: ToolErrorCode.UNSUPPORTED_OPERATION,
+      message: noWebglMessage(ctx),
+      details: { webglUnavailable: true },
+      hint: noWebglHint(ctx),
+    });
+  }
+  if (!ctx.viewer || !ctx.viewer.isLoaded()) {
+    throw new ToolExecutionError({
+      code: ToolErrorCode.UNSUPPORTED_OPERATION,
+      message: 'Viewer is not open. Call viewer_open first to mount the inline 3D panel.',
+      hint: 'Click the "show 3D viewer" button or have the agent call viewer_open.',
+    });
+  }
+  return ctx.viewer;
+}
+
+function parseColorArg(input: unknown): ColorTuple {
+  // Accept hex strings, named colors, or [r,g,b] / [r,g,b,a] arrays in 0-1.
+  if (Array.isArray(input)) {
+    const arr = input.map(Number);
+    if (arr.length === 3) return [arr[0], arr[1], arr[2], 1];
+    if (arr.length === 4) return [arr[0], arr[1], arr[2], arr[3]];
+  }
+  if (typeof input === 'string') {
+    const hex = input.startsWith('#') ? input.slice(1) : input;
+    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+      return [parseInt(hex.slice(0, 2), 16) / 255, parseInt(hex.slice(2, 4), 16) / 255, parseInt(hex.slice(4, 6), 16) / 255, 1];
+    }
+    const named: Record<string, ColorTuple> = {
+      red: [1, 0.2, 0.2, 1], orange: [1, 0.6, 0.1, 1], yellow: [1, 0.9, 0.1, 1],
+      green: [0.2, 0.8, 0.2, 1], blue: [0.2, 0.4, 1, 1], purple: [0.6, 0.2, 0.8, 1],
+      pink: [1, 0.4, 0.8, 1], teal: [0.45, 0.85, 0.79, 1], gray: [0.5, 0.5, 0.5, 1],
+      white: [1, 1, 1, 1], black: [0, 0, 0, 1],
+      chartreuse: [0.84, 1.0, 0.25, 1], magenta: [1.0, 0.36, 0.86, 1],
+    };
+    if (named[input.toLowerCase()]) return named[input.toLowerCase()];
+  }
+  // Default chartreuse
+  return [0.84, 1.0, 0.25, 1];
+}
+
+function formatColorTuple(c: ColorTuple): string {
+  const r = Math.round(c[0] * 255).toString(16).padStart(2, '0');
+  const g = Math.round(c[1] * 255).toString(16).padStart(2, '0');
+  const b = Math.round(c[2] * 255).toString(16).padStart(2, '0');
+  return `#${r}${g}${b}`;
+}
+
+/**
+ * Browser-safe bSDD client routed through this site's `/api/bsdd/*` proxy.
+ * The default BsddNamespace hits `api.bsdd.buildingsmart.org` directly,
+ * which fails CORS in browsers. Vite (dev) and Vercel (prod) both rewrite
+ * `/api/bsdd/*` to that host already, so we share the SDK's namespace
+ * implementation but swap the base URL.
+ */
+const PROXIED_BSDD = new BsddNamespace({ apiBase: '/api/bsdd' });
+
+// ── Clash detection (in-browser meshing → TS clash engine) ─────────────────
+// Mirrors `packages/mcp/src/tools/clash.ts`: the whole model is meshed once
+// (headless WASM pipeline, same as the inline viewer) and cached by model id,
+// then the representation-agnostic clash engine runs against TYPE selectors.
+
+/** Cap on clashes returned in a tool result. The dropped count is reported. */
+const CLASH_DISPLAY_CAP = 50;
+
+/**
+ * Runaway guardrail for the TS clash engine: the whole-run candidate-pair
+ * budget (broad-phase AABB-overlap survivors across every rule). The engine
+ * yields between chunks so it never hard-freezes the tab, but an agent can
+ * fire `clash_check` (all-vs-all) on an arbitrarily large uploaded model
+ * unattended — this ceiling bounds the narrow-phase work and is reported via
+ * `result.truncated` (never silent). Generous on purpose: real building models
+ * stay well under it, so totals match the viewer's (unbounded) ClashPanel; only
+ * pathological models get bounded.
+ */
+const CLASH_MAX_CANDIDATE_PAIRS = 5_000_000;
+
+/** Max distinct models whose meshes we keep cached at once (LRU). The playground
+ *  is effectively single-model, so a small bound is plenty and stops a long
+ *  session of re-uploads from pinning every model's meshes in memory. */
+const CLASH_MESH_CACHE_MAX = 3;
+
+/**
+ * Module-level mesh cache so repeated clash calls on the same model don't
+ * re-run the (expensive) headless tessellation. Keyed by `id:fileSize`, NOT id
+ * alone: the playground reuses a filename-slug id, so an edited re-upload would
+ * otherwise hit a stale mesh — folding in the byte length forces a re-mesh when
+ * the bytes change. Bounded to CLASH_MESH_CACHE_MAX entries with LRU eviction.
+ * The frame travels with the meshes: clash bounds are in the mesher's shifted
+ * frame, and BCF export needs it to write world coordinates (#4879).
+ */
+interface ClashMeshes {
+  meshes: MeshData[];
+  coordinateInfo: CoordinateInfo | undefined;
+  store: IfcDataStore;
+}
+const clashMeshCache = new Map<string, ClashMeshes>();
+
+function meshCacheKey(m: LoadedPlaygroundModel): string {
+  return `${m.id}:${m.fileSize}`;
+}
+
+/** LRU get: a hit refreshes recency so the active model survives eviction. */
+function getCachedMeshes(key: string): ClashMeshes | undefined {
+  const hit = clashMeshCache.get(key);
+  if (hit) {
+    clashMeshCache.delete(key);
+    clashMeshCache.set(key, hit);
+  }
+  return hit;
+}
+
+/** LRU set: insert then evict the least-recently-used entries past the bound. */
+function setCachedMeshes(key: string, meshed: ClashMeshes): void {
+  clashMeshCache.set(key, meshed);
+  while (clashMeshCache.size > CLASH_MESH_CACHE_MAX) {
+    const oldest = clashMeshCache.keys().next().value;
+    if (oldest === undefined) break;
+    clashMeshCache.delete(oldest);
+  }
+}
+
+/** Mesh the whole model once (in-browser, same path as PlaygroundViewer) and
+ *  cache it. Throws UNSUPPORTED_OPERATION when the model carries no drawable
+ *  geometry — clash needs tessellated solids, not quantity sets. */
+async function meshForClash(m: LoadedPlaygroundModel): Promise<ClashMeshes> {
+  const key = meshCacheKey(m);
+  const pending = m.backend.getMutationView()?.hasPendingChanges() ?? false;
+  const cached = pending ? undefined : getCachedMeshes(key);
+  if (cached) return cached;
+
+  // Construction can't throw synchronously here (no wasm work happens until
+  // init()), so once we're past this line `processor` is a real object the
+  // finally below must dispose — on every exit, including the throw for
+  // empty meshes below.
+  const processor = new GeometryProcessor({ preferNative: false });
+  try {
+    await processor.init();
+    const source = await playgroundGeometrySource(m);
+    // @raw-entity-enumeration-ok the mesher takes the index parsed from source.bytes, which already includes pending edits.
+    const result = await processor.process(
+      source.bytes,
+      source.store.entityIndex.byId as unknown as Map<number, unknown>,
+    );
+    const meshes = result.meshes ?? [];
+    if (meshes.length === 0) {
+      throw new ToolExecutionError({
+        code: ToolErrorCode.UNSUPPORTED_OPERATION,
+        message: 'No mesh geometry could be produced for this model; clash detection needs tessellated solids.',
+        hint: 'Confirm the model carries explicit geometry (not schema/quantity-only data).',
+      });
+    }
+    const meshed = { meshes, coordinateInfo: result.coordinateInfo, store: source.store };
+    if (!source.materialized) setCachedMeshes(key, meshed);
+    return meshed;
+  } finally {
+    // `result.meshes` is already copied out into plain JS MeshData — nothing
+    // downstream (the mesh cache, the clash engine) holds onto the WASM
+    // handle, so freeing it here is safe on every path above, including the
+    // throw.
+    processor.dispose();
+  }
+}
+
+/**
+ * The most recent clash result, so `clash_bcf_export` can turn the last run into
+ * a rich BCF without re-clashing (mirrors the viewer, where the ClashPanel holds
+ * the result the export dialog reads). Keyed by the SAME `id:fileSize` identity
+ * as the mesh cache — keying by `m.id` alone would serve a stale result after an
+ * edited re-upload (same filename slug) even though the meshes re-compute.
+ */
+const lastClashResult = new Map<string, { result: ClashResult; coordinateInfo: CoordinateInfo | undefined }>();
+
+/** Run a rule set against a model's meshes, returning (and caching) the result. */
+async function runClashRules(m: LoadedPlaygroundModel, rules: ClashRule[]): Promise<ClashResult> {
+  const { meshes, coordinateInfo, store } = await meshForClash(m);
+  const { elements, exclusions } = elementsFromStep({ store, meshes, modelId: m.id });
+  const engine = createClashEngine({ backend: 'ts' });
+  const result = await engine.run(elements, rules, { exclusions, maxCandidatePairs: CLASH_MAX_CANDIDATE_PAIRS });
+  lastClashResult.set(meshCacheKey(m), { result, coordinateInfo });
+  return result;
+}
+
+/** When the candidate-pair guardrail bit, say so in the human-readable text so
+ *  totals are never silently a lower bound. Empty string when the run was
+ *  complete. */
+function clashCapNote(result: ClashResult): string {
+  if (!result.truncated) return '';
+  return ` Note: the ${CLASH_MAX_CANDIDATE_PAIRS.toLocaleString()}-candidate-pair guardrail was hit`
+    + ` (${result.truncated.droppedPairs.toLocaleString()} pairs not evaluated) — totals are a lower bound.`;
+}
+
+/**
+ * Top clashes by signed distance (deepest penetration / smallest gap first),
+ * capped for display. Sort by RAW distance ascending, not |distance|: hard
+ * clashes carry a negative penetration depth, so most-negative-first surfaces
+ * the DEEPEST penetrations (the worst, most actionable rows) instead of
+ * burying them past the cap; clearance gaps are positive, so the same order
+ * surfaces the tightest gaps first.
+ */
+/** Exported for direct unit testing (see playground-dispatcher.test.ts distanceKind coverage). */
+export function topClashRows(clashes: Clash[], cap: number): {
+  rows: Record<string, unknown>[];
+  truncated: { shown: number; dropped: number; total: number } | null;
+} {
+  const sorted = [...clashes].sort((x, y) => x.distance - y.distance);
+  const shown = sorted.slice(0, cap);
+  const rows = shown.map((c) => ({
+    id: c.id,
+    rule: c.rule,
+    status: c.status,
+    severity: c.severity,
+    distance: c.distance,
+    // See Clash.distanceKind: absent or 'estimate' means `distance` is a box
+    // dimension read off the AABBs, not a mesh measurement.
+    distanceKind: c.distanceKind,
+    point: c.point,
+    a: { key: c.a.key, ref: c.a.ref, tag: c.a.tag, name: c.a.name },
+    b: { key: c.b.key, ref: c.b.ref, tag: c.b.tag, name: c.b.name },
+  }));
+  const truncated = sorted.length > cap
+    ? { shown: shown.length, dropped: sorted.length - shown.length, total: sorted.length }
+    : null;
+  return { rows, truncated };
+}
+const IMPLS: Record<string, ToolImpl> = { ...playgroundCostTools,
+  // ── Discovery ───────────────────────────────────────────────────────────
+  async model_info(m) {
+    const typeCounts = effectiveTypeCounts(m);
+    const count = [...typeCounts.values()].reduce((total, n) => total + n, 0);
+    const top = [...typeCounts]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([type, count]) => ({ type, count }));
+    const summary = `Model '${m.name}' (${m.store.schemaVersion}): ${count.toLocaleString()} entities, ${formatBytes(m.fileSize)}`;
+    return {
+      text: summary,
+      structured: {
+        id: m.id,
+        name: m.name,
+        schema: m.store.schemaVersion,
+        entityCount: count,
+        fileSize: m.fileSize,
+        typeCountsTop20: top,
+      },
+    };
+  },
+
+  async model_list(m) {
+    const count = effectiveEntityCount(m);
+    return {
+      text: `1 model loaded: ${m.name} (${count.toLocaleString()} entities).`,
+      structured: { models: [{ id: m.id, name: m.name, entityCount: count, schema: m.store.schemaVersion }] },
+    };
+  },
+
+  async schema_describe(_m, args) {
+    const type = String(args.type ?? '');
+    if (!type) {
+      throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: '`type` is required.' });
+    }
+    return {
+      text: `Schema description for ${type} is best read from /mcp#schema_describe — the full reflection table requires the @ifc-lite/data introspection map (server-side only in v1).`,
+      structured: { type, note: 'In-browser schema reflection is in v0.3.' },
+    };
+  },
+
+  // ── Query ───────────────────────────────────────────────────────────────
+  async query_entities(m, args) {
+    const type = args.type as string | undefined;
+    const limit = Math.min(Number(args.limit ?? 50), 200);
+    const offset = Number(args.offset ?? 0);
+    let q = m.bim.query();
+    if (type) q = q.byType(type);
+    const all = q.toArray();
+    const page = all.slice(offset, offset + limit);
+    const head = `Found ${all.length.toLocaleString()} matching entit${all.length === 1 ? 'y' : 'ies'}${page.length < all.length ? ` (showing ${page.length})` : ''}.`;
+    const lines = page.slice(0, 25).map((e) => {
+      const name = e.name ? ` '${e.name}'` : '';
+      const gid = e.globalId ? ` GlobalId=${e.globalId}` : '';
+      return `  • ${e.type ?? '?'} #${e.ref.expressId}${name}${gid}`;
+    });
+    return {
+      text: [head, ...lines].join('\n'),
+      structured: {
+        count: all.length,
+        truncated: page.length < all.length,
+        entities: page.map((e) => ({
+          expressId: e.ref.expressId,
+          modelId: e.ref.modelId,
+          globalId: e.globalId,
+          name: e.name,
+          type: e.type,
+          description: e.description,
+          objectType: e.objectType,
+        })),
+      },
+    };
+  },
+
+  async count_entities(m, args) {
+    const groupBy = (args.group_by as string | undefined) ?? 'type';
+    const typeFilter = args.type as string | undefined; // narrows the universe first, like the Node MCP server
+    const universe = () => (typeFilter ? m.bim.query().byType(typeFilter) : m.bim.query()).toArray();
+    const counts = new Map<string, number>();
+    if (groupBy === 'type') {
+      // BIM products only (#3765): `entityIndex.byType` is every raw STEP record.
+      for (const e of universe()) {
+        const key = e.type || '(unknown)';
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    } else if (groupBy === 'storey') {
+      for (const e of universe()) {
+        const storey = m.bim.storey(e.ref);
+        const key = firstNonBlank(storey?.name) ?? '(no storey)';
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    } else if (groupBy === 'material') {
+      for (const e of universe()) {
+        const mat = m.bim.materials(e.ref);
+        const key = lensMaterialNames(mat)[0] ?? '(no material)';
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+    const groups = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, count]) => ({ key, count }));
+    return {
+      text: `Counted ${groups.length} group(s) by ${groupBy}.\n${groups.slice(0, 25).map((g) => `  • ${g.key} — ${g.count}`).join('\n')}`,
+      structured: { groupBy, groups },
+    };
+  },
+
+  async get_entity(m, args) {
+    const ref = resolveRef(m, args);
+    const data = m.bim.entity(ref);
+    if (!data) {
+      throw new ToolExecutionError({
+        code: ToolErrorCode.ENTITY_NOT_FOUND,
+        message: `No entity at ${refStr(ref)} in this model.`,
+      });
+    }
+    return {
+      text: `${data.type} '${firstNonBlank(data.name) ?? '(unnamed)'}' (#${data.ref.expressId})`,
+      structured: data,
+    };
+  },
+
+  async get_entities_bulk(m, args) {
+    const gids = (args.global_ids as string[] | undefined) ?? [];
+    const out: unknown[] = [];
+    for (const gid of gids.slice(0, 200)) {
+      try {
+        const ref = resolveRef(m, { global_id: gid });
+        out.push(m.bim.entity(ref));
+      } catch {
+        out.push(null);
+      }
+    }
+    return { text: `Resolved ${out.filter(Boolean).length}/${gids.length} entities.`, structured: { entities: out } };
+  },
+
+  async spatial_hierarchy(m) {
+    const hierarchy = playgroundSpatialHierarchy(m);
+    return {
+      text: `Spatial hierarchy for '${m.name}'${hierarchy.truncated ? ' (truncated)' : ''}.`,
+      structured: hierarchy,
+    };
+  },
+
+  async containment_chain(m, args) {
+    const ref = resolveRef(m, args);
+    const chain = playgroundContainmentChain(m, ref);
+    return { text: `${chain.path.length}-step containment path${chain.truncated ? ' (truncated)' : ''}.`, structured: chain };
+  },
+
+  async relationships(m, args) {
+    const ref = resolveRef(m, args);
+    const data = m.bim.relationships(ref);
+    return { text: `Relationships`, structured: data };
+  },
+
+  async properties_unique(m, args) {
+    const type = String(args.type ?? '');
+    const psetName = String(args.pset ?? '');
+    const propName = String(args.property ?? '');
+    if (!type || !psetName || !propName) {
+      throw new ToolExecutionError({
+        code: ToolErrorCode.INVALID_INPUT,
+        message: 'type, pset and property are all required.',
+      });
+    }
+    const counts = new Map<string, number>();
+    let total = 0;
+    for (const e of m.bim.query().byType(type).toArray()) {
+      const v = m.bim.property(e.ref, psetName, propName);
+      const key = v == null ? '(missing)' : String(v);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+      total++;
+    }
+    const values = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([value, count]) => ({ value, count }));
+    const head = `${values.length} unique value(s) for ${type}.${psetName}.${propName} across ${total} entit${total === 1 ? 'y' : 'ies'}:`;
+    return { text: [head, ...values.slice(0, 30).map((v) => `  • ${v.value} — ${v.count}`)].join('\n'), structured: { values, total } };
+  },
+
+  async materials_list(m) {
+    const counts = new Map<string, number>();
+    for (const e of m.bim.query().toArray()) {
+      const mat = m.bim.materials(e.ref);
+      if (!mat) continue;
+      const key = lensMaterialNames(mat)[0] ?? '(unnamed)';
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const list = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
+    return {
+      text: `${list.length} distinct material(s) in use:\n${list.slice(0, 30).map((m) => `  • ${m.name} — ${m.count}`).join('\n')}`,
+      structured: { materials: list },
+    };
+  },
+
+  async classifications_list(m) {
+    const counts = new Map<string, number>();
+    for (const e of m.bim.query().toArray()) {
+      for (const c of m.bim.classifications(e.ref)) {
+        const key = `${c.system ?? '?'}:${c.identification ?? c.name ?? '?'}`;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+    const list = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count }));
+    return {
+      text: `${list.length} distinct classification reference(s):\n${list.slice(0, 30).map((c) => `  • ${c.key} — ${c.count}`).join('\n')}`,
+      structured: { classifications: list },
+    };
+  },
+
+  async georeferencing(m) {
+    const counts = [...effectiveEntities(m, ['IFCMAPCONVERSION'])];
+    return {
+      text: counts.length === 0 ? 'Model has no IfcMapConversion (no georeferencing).' : `${counts.length} IfcMapConversion entity (georeferenced).`,
+      structured: { hasGeoreference: counts.length > 0 },
+    };
+  },
+
+  async units(m) {
+    const scale = m.store.source && m.store.entityIndex
+      ? extractLengthUnitScale(m.store.source, m.store.entityIndex)
+      : 1.0;
+    return {
+      text: `Length unit scale: ${scale} (lengths × ${scale} → metres). Schema: ${m.store.schemaVersion}.`,
+      structured: { lengthUnitScale: scale, schema: m.store.schemaVersion },
+    };
+  },
+
+  // ── Geometry (read from quantity sets) ──────────────────────────────────
+  async geometry_bbox(m, args) {
+    const ref = resolveRef(m, args);
+    const qsets = m.bim.quantities(ref);
+    return { text: 'Bounding-box derived from quantity sets when available; full WASM geometry is v0.2.', structured: { quantitySets: qsets } };
+  },
+  async geometry_volume(m, args) {
+    const ref = resolveRef(m, args);
+    const qsets = m.bim.quantities(ref);
+    let vol: number | null = null;
+    for (const q of qsets) for (const x of q.quantities) if (/Volume/i.test(x.name) && typeof x.value === 'number') { vol = x.value; break; }
+    // Label with the file's declared VOLUMEUNIT (issue #1573) rather than
+    // assuming m³ — the quantity value is stored in whatever unit the
+    // project declares.
+    const unit = m.store.source.length > 0
+      ? formatQuantityUnit(QuantityType.Volume, extractProjectUnits(m.store.source, m.store.entityIndex))
+      : 'm³';
+    return { text: vol == null ? 'No Volume quantity present.' : `Volume = ${vol.toFixed(3)} ${unit}.`, structured: { volume: vol, unit } };
+  },
+  async geometry_area(m, args) {
+    const ref = resolveRef(m, args);
+    const qsets = m.bim.quantities(ref);
+    let area: number | null = null;
+    for (const q of qsets) for (const x of q.quantities) if (/Area/i.test(x.name) && typeof x.value === 'number') { area = x.value; break; }
+    const unit = m.store.source.length > 0
+      ? formatQuantityUnit(QuantityType.Area, extractProjectUnits(m.store.source, m.store.entityIndex))
+      : 'm²';
+    return { text: area == null ? 'No Area quantity present.' : `Area = ${area.toFixed(3)} ${unit}.`, structured: { area, unit } };
+  },
+
+  // ── Clash detection ───────────────────────────────────────────────────────
+  async clash_check(m, args) {
+    const a = (args.a as string | undefined) ?? '*';
+    const b = args.b as string | undefined;
+    const mode = (args.mode as ClashMode | undefined) ?? 'hard';
+    const tolerance = args.tolerance as number | undefined;
+    const clearance = args.clearance as number | undefined;
+    // No `b` => self-clash within A (every element vs every other in the
+    // group); with the default a="*" that is "all clashes in the model".
+    const label = b ? `${a} vs ${b}` : a === '*' ? 'all elements (self-clash)' : `${a} (self-clash)`;
+
+    const rule: ClashRule = {
+      id: 'clash_check',
+      name: label,
+      a,
+      ...(b != null ? { b } : {}),
+      mode,
+      ...(tolerance != null ? { tolerance } : {}),
+      ...(clearance != null ? { clearance } : {}),
+    };
+
+    const result = await runClashRules(m, [rule]);
+    const { rows, truncated } = topClashRows(result.clashes, CLASH_DISPLAY_CAP);
+    const capNote = truncated
+      ? ` Showing top ${truncated.shown} by penetration depth; ${truncated.dropped} more not shown.`
+      : '';
+    return {
+      text: `Found ${result.summary.total} clash(es) for ${label} (mode=${mode}).${capNote}${clashCapNote(result)}`,
+      structured: {
+        summary: result.summary,
+        settings: { a, b: b ?? null, mode, tolerance: tolerance ?? null, clearance: clearance ?? null },
+        engineSettings: result.settings,
+        truncated: result.truncated ?? null,
+        clashes: rows,
+        clashesTruncated: truncated,
+      },
+    };
+  },
+  async clash_matrix(m, args) {
+    const mode = (args.mode as ClashMode | undefined) ?? 'hard';
+    const clearance = args.clearance as number | undefined;
+    const rules = disciplineMatrixRules(mode, clearance);
+
+    const result = await runClashRules(m, rules);
+    const { rows, truncated } = topClashRows(result.clashes, CLASH_DISPLAY_CAP);
+    const capNote = truncated
+      ? ` Sampling top ${truncated.shown} by penetration depth; ${truncated.dropped} more not shown.`
+      : '';
+    return {
+      text: `Discipline matrix (mode=${mode}, ${rules.length} rules): ${result.summary.total} clash(es).${capNote}${clashCapNote(result)}`,
+      structured: {
+        mode,
+        ruleCount: rules.length,
+        byRule: result.summary.byRule,
+        bySeverity: result.summary.bySeverity,
+        byTypePair: result.summary.byTypePair,
+        summary: result.summary,
+        engineSettings: result.settings,
+        truncated: result.truncated ?? null,
+        sampleClashes: rows,
+        sampleTruncated: truncated,
+      },
+    };
+  },
+  async clash_bcf_export(m, args) {
+    const groupBy = (args.group_by as GroupOptions['by'] | undefined) ?? 'cluster';
+    const epsilon = args.cluster_epsilon as number | undefined;
+    const status = args.status as string | undefined;
+    const maxTopics = args.max_topics as number | undefined;
+
+    // Reuse the last clash run for this model; if there is none, run a default
+    // all-vs-all hard self-clash so the tool works standalone (and caches it).
+    const result = lastClashResult.get(meshCacheKey(m))?.result
+      ?? await runClashRules(m, [{ id: 'clash_check', name: 'all elements (self-clash)', a: '*', mode: 'hard' }]);
+    // The frame of the run above, recorded next to its result.
+    const coordinateInfo = lastClashResult.get(meshCacheKey(m))?.coordinateInfo;
+    if (result.summary.total === 0) {
+      return {
+        text: 'No clashes to export — the last clash run found 0. Run clash_check first (omit a and b for every element vs every other).',
+        structured: { topics: 0, clashes: 0 },
+      };
+    }
+
+    // One BCF topic per clash group, each carrying a framed viewpoint (camera +
+    // the clashing elements as components) and severity/status/distance
+    // metadata — the same bridge the viewer's clash→BCF export uses. Snapshots
+    // are omitted: the inline ViewerController can't render frames headlessly,
+    // and BCF viewpoints are valid without an embedded image.
+    const groups = groupClashes(result, { by: groupBy, ...(epsilon != null ? { epsilon } : {}) });
+    const project = await createBCFFromClashResult(result, groups, {
+      author: 'clash@ifc-lite',
+      projectName: 'Clash report',
+      // Resolve the (single) model id to its file name for the BCF Header (#1591).
+      modelNameOf: (id) => (id === m.id ? m.name : id),
+      // Clash bounds are in the mesher's shifted frame; BCF is world (#4879).
+      worldOffset: renderFrameWorldOffset(coordinateInfo),
+      ...(status ? { status } : {}),
+      ...(maxTopics != null ? { maxTopics } : {}),
+    });
+
+    const filename = coerceFilename(args.file_path as string | undefined, 'bcfzip', 'clashes');
+    const blob = await writeBCF(project);
+    const file = playgroundFiles.add({
+      filename,
+      mimeType: 'application/zip',
+      size: blob.size,
+      blob,
+      source: 'clash_bcf_export',
+      description: `${project.topics.size} clash topic(s), grouped by ${groupBy}`,
+    });
+    return {
+      text: `Bundled ${filename}: ${project.topics.size} BCF topic(s) from ${result.summary.total} clash(es), grouped by ${groupBy}`
+        + ` — each with a framed viewpoint + clashing components + severity/distance metadata. (Snapshots omitted: the inline viewer can't capture frames headlessly.)`,
+      structured: {
+        fileId: file.id,
+        filename,
+        bytes: blob.size,
+        topics: project.topics.size,
+        groupBy,
+        clashes: result.summary.total,
+      },
+      download: { fileId: file.id, filename, mimeType: 'application/zip', size: blob.size, label: 'Get .bcfzip' },
+    };
+  },
+
+  // ── Validation ──────────────────────────────────────────────────────────
+  async model_audit(m) {
+    let issues = 0;
+    const products = m.bim.query().toArray();
+    let missingGid = 0, missingName = 0;
+    for (const e of products) {
+      if (!e.globalId) missingGid++;
+      if (!e.name) missingName++;
+    }
+    issues = missingGid + (missingName > products.length / 2 ? 1 : 0);
+    const score = Math.max(0, 100 - issues * 5);
+    return {
+      text: `Audit score: ${score}/100${issues > 0 ? ` (${issues} issue${issues === 1 ? '' : 's'}).` : '. Clean.'}`,
+      structured: { overall: score, issues: { missingGlobalIds: missingGid, missingNamesRatio: missingName / Math.max(1, products.length) } },
+    };
+  },
+
+  // ── bSDD (network — proxied through /api/bsdd to dodge CORS) ───────────
+  async bsdd_search(_m, args) {
+    const query = String(args.query ?? '').trim();
+    if (!query) throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: '`query` is required.' });
+    try {
+      const results = await PROXIED_BSDD.search(query);
+      const head = `bSDD search '${query}' — ${results.length} result(s)${results.length > 25 ? ', showing first 25' : ''}:`;
+      const lines = results.slice(0, 25).map((r) => `• ${r.code || r.name} — ${r.name ?? ''}\n  ${r.uri}`);
+      return { text: [head, ...lines].join('\n'), structured: { query, count: results.length, results: results.slice(0, 25) } };
+    } catch (err) {
+      throw rethrowBsdd(err, 'search');
+    }
+  },
+  async bsdd_class(_m, args) {
+    const ifcType = String(args.ifc_type ?? '');
+    if (!ifcType) throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: '`ifc_type` is required.' });
+    try {
+      const info = await PROXIED_BSDD.fetchClassInfo(ifcType);
+      if (!info) throw new ToolExecutionError({ code: ToolErrorCode.ENTITY_NOT_FOUND, message: `bSDD has no class for '${ifcType}'.` });
+      const psetGroups = new Map<string, string[]>();
+      for (const p of info.classProperties) {
+        const k = p.propertySet ?? '(no Pset)';
+        const list = psetGroups.get(k) ?? [];
+        list.push(`${p.name}${p.dataType ? ` (${p.dataType})` : ''}`);
+        psetGroups.set(k, list);
+      }
+      const head = `bSDD class ${info.code} — ${info.classProperties.length} properties across ${psetGroups.size} Psets:`;
+      const lines: string[] = [head];
+      for (const [pset, props] of psetGroups) {
+        lines.push(`• ${pset} (${props.length}):`);
+        for (const p of props.slice(0, 10)) lines.push(`    - ${p}`);
+        if (props.length > 10) lines.push(`    - … +${props.length - 10} more`);
+      }
+      return { text: lines.join('\n'), structured: info as unknown as Record<string, unknown> };
+    } catch (err) {
+      throw rethrowBsdd(err, 'class lookup');
+    }
+  },
+  // ── Mutation (queues edits on the in-memory store, persists via model_save) ─
+  async entity_set_property(m, args) {
+    const ref = resolveRef(m, args);
+    const pset = String(args.pset ?? '');
+    const name = String(args.name ?? '');
+    if (!pset || !name) throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'pset and name are required.' });
+    m.bim.mutate.setProperty(ref, pset, name, args.value as string | number | boolean);
+    return { text: `Queued ${pset}.${name} = ${JSON.stringify(args.value)} on #${ref.expressId}.`, structured: { expressId: ref.expressId, pset, name, value: args.value } };
+  },
+  async entity_delete_property(m, args) {
+    const ref = resolveRef(m, args);
+    const pset = String(args.pset ?? '');
+    const name = String(args.name ?? '');
+    if (!pset || !name) throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'pset and name are required.' });
+    m.bim.mutate.deleteProperty(ref, pset, name);
+    return { text: `Queued delete ${pset}.${name} on #${ref.expressId}.`, structured: { expressId: ref.expressId, pset, name } };
+  },
+  async entity_set_attribute(m, args) {
+    const ref = resolveRef(m, args);
+    const attribute = String(args.attribute ?? '');
+    const value = args.value;
+    if (!attribute) throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'attribute is required.' });
+    m.bim.mutate.setAttribute(ref, attribute, String(value));
+    return { text: `Queued ${attribute} = ${JSON.stringify(value)} on #${ref.expressId}.`, structured: { expressId: ref.expressId, attribute, value } };
+  },
+  async entity_create(m, args) {
+    const type = String(args.type ?? '');
+    if (!type) throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'type is required.' });
+    // Use HeadlessLikeBackend's editor — it's the same path the stdio MCP
+    // takes for entity_create.
+    const editor = m.backend.ensureEditor();
+    const attrs = (args.attributes as unknown[] | undefined) ?? [];
+    const ref = editor.addEntity(type, attrs as Parameters<typeof editor.addEntity>[1]);
+    return { text: `Created ${type} as #${ref.expressId}.`, structured: { expressId: ref.expressId, type } };
+  },
+  async entity_delete(m, args) {
+    const ref = resolveRef(m, args);
+    // The mutate namespace doesn't expose a delete on its public surface, so
+    // go through the backend's editor, like `entity_create` above and the
+    // stdio MCP `entity_delete`. `ensureEditor` creates the mutation overlay
+    // on first use; reading `getMutationView()` instead answered "Mutation
+    // view unavailable." when a delete was the session's first edit (#5681).
+    const ok = m.backend.ensureEditor().removeEntity(ref.expressId);
+    return { text: ok ? `Deleted #${ref.expressId}.` : `#${ref.expressId} was not in the store.`, structured: { expressId: ref.expressId, deleted: ok } };
+  },
+  async mutation_diff(m) {
+    const view = m.backend.getMutationView();
+    const hist = view?.getMutations() ?? [];
+    return { text: `${hist.length} pending mutation(s).`, structured: { count: hist.length, mutations: hist } };
+  },
+  async mutation_undo(m, args) {
+    const n = Math.max(1, Number(args.n ?? 1));
+    let undone = 0;
+    for (let i = 0; i < n; i++) {
+      if (m.bim.mutate.undo(m.id)) undone++;
+      else break;
+    }
+    return { text: `Undone ${undone} mutation(s).`, structured: { undone } };
+  },
+  async model_save(m, args) {
+    // "Save" in the playground = stage a downloadable .ifc Blob. The user
+    // explicitly clicks the download button later — never auto-triggered.
+    // Filename is always .ifc — the agent sometimes invents .ids / .bcf
+    // extensions based on prior context; we ignore them.
+    const filename = coerceFilename(args.file_path as string | undefined, 'ifc', m.id);
+    const schema = (args.schema as 'IFC2X3' | 'IFC4' | 'IFC4X3' | undefined) ?? (m.store.schemaVersion as 'IFC2X3' | 'IFC4' | 'IFC4X3');
+    const content = m.bim.export.ifc(undefined, { schema }); // no ref list: whole model (#4738)
+    const text = typeof content === 'string' ? content : new TextDecoder().decode(content);
+    const blob = new Blob([text], { type: 'application/x-step' });
+    const file = playgroundFiles.add({
+      filename, mimeType: 'application/x-step', size: blob.size, blob,
+      source: 'model_save', description: `Saved model with pending mutations · ${schema}`,
+    });
+    return {
+      text: `Saved ${filename} (${formatBytes(blob.size)}, ${schema}).`,
+      structured: { fileId: file.id, filename, bytes: blob.size, schema },
+      download: { fileId: file.id, filename, mimeType: 'application/x-step', size: blob.size, label: 'Save IFC' },
+    };
+  },
+
+  // ── BCF (in-session project; bcf_export stages a .bcfzip download) ─────
+  // NOTE: BCF tool text outputs print the FULL guid every time. Truncating
+  // (`guid.slice(0,8)…`) breaks the agent loop — the agent only sees the
+  // text content, so a follow-up bcf_viewpoint_create / bcf_topic_update
+  // call has nothing to anchor on. Always include the complete guid.
+  async bcf_topic_list(_m, args) {
+    const project = getBcfProject();
+    const filter = typeof args.status === 'string' ? args.status : undefined;
+    const topics: BCFTopic[] = Array.from(project.topics.values()).filter((t) => !filter || t.topicStatus === filter);
+    return {
+      text: `${topics.length} topic(s).${topics.length === 0 ? '' : '\n' + topics.map((t) => `• ${t.guid} · ${t.topicStatus} · ${t.title}`).join('\n')}`,
+      structured: { count: topics.length, topics: topics.map((t) => ({ guid: t.guid, title: t.title, status: t.topicStatus, type: t.topicType, priority: t.priority, comments: t.comments.length })) },
+    };
+  },
+  async bcf_topic_create(_m, args) {
+    const title = String(args.title ?? '').trim();
+    if (!title) throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'title is required.' });
+    const project = getBcfProject();
+    const topic = createBCFTopic({
+      title,
+      description: typeof args.description === 'string' ? args.description : undefined,
+      author: typeof args.author === 'string' ? args.author : 'ifc-lite-playground',
+      topicType: typeof args.type === 'string' ? args.type : 'Issue',
+      topicStatus: typeof args.status === 'string' ? args.status : 'Open',
+      priority: typeof args.priority === 'string' ? args.priority : undefined,
+      assignedTo: typeof args.assigned_to === 'string' ? args.assigned_to : undefined,
+      labels: Array.isArray(args.labels) ? (args.labels as string[]) : undefined,
+    });
+    addTopicToProject(project, topic);
+    const download = await autoStageBcfDownload();
+    return {
+      text: `Created topic '${topic.title}' · guid=${topic.guid}`,
+      structured: { guid: topic.guid, title: topic.title },
+      ...(download ? { download } : {}),
+    };
+  },
+  async bcf_topic_update(_m, args) {
+    const project = getBcfProject();
+    const guid = String(args.guid ?? '');
+    const topic = project.topics.get(guid);
+    if (!topic) throw new ToolExecutionError({ code: ToolErrorCode.ENTITY_NOT_FOUND, message: `Topic ${guid} not found.` });
+    const author = typeof args.modified_by === 'string' ? args.modified_by : 'ifc-lite-playground';
+    if (typeof args.status === 'string') updateTopicStatus(topic, args.status, author);
+    if (typeof args.priority === 'string') topic.priority = args.priority;
+    if (typeof args.comment === 'string') {
+      addCommentToTopic(topic, createBCFComment({ author, comment: args.comment }));
+    }
+    const download = await autoStageBcfDownload();
+    return {
+      text: `Topic ${guid} updated.`,
+      structured: { guid, status: topic.topicStatus },
+      ...(download ? { download } : {}),
+    };
+  },
+  async bcf_topic_close(_m, args) {
+    const project = getBcfProject();
+    const guid = String(args.guid ?? '');
+    const topic = project.topics.get(guid);
+    if (!topic) throw new ToolExecutionError({ code: ToolErrorCode.ENTITY_NOT_FOUND, message: `Topic ${guid} not found.` });
+    updateTopicStatus(topic, 'Closed', typeof args.modified_by === 'string' ? args.modified_by : 'ifc-lite-playground');
+    const download = await autoStageBcfDownload();
+    return {
+      text: `Closed ${guid}.`,
+      structured: { guid },
+      ...(download ? { download } : {}),
+    };
+  },
+  async bcf_viewpoint_create(_m, args) {
+    const project = getBcfProject();
+    const guid = String(args.guid ?? '');
+    const topic = project.topics.get(guid);
+    if (!topic) throw new ToolExecutionError({ code: ToolErrorCode.ENTITY_NOT_FOUND, message: `Topic ${guid} not found.` });
+    const selection = (args.selection_global_ids as string[] | undefined) ?? [];
+    const viewpoint = {
+      guid: cryptoRandomUuid(),
+      components: { selection: selection.map((g) => ({ ifcGuid: g, OriginatingSystem: 'ifc-lite-playground' })) },
+    };
+    addViewpointToTopic(topic, viewpoint as unknown as Parameters<typeof addViewpointToTopic>[1]);
+    const download = await autoStageBcfDownload();
+    return {
+      text: `Viewpoint added (${selection.length} entity selection).`,
+      structured: { viewpointGuid: viewpoint.guid, selection: selection.length },
+      ...(download ? { download } : {}),
+    };
+  },
+  async bcf_export(_m, args) {
+    const project = getBcfProject();
+    const filename = coerceFilename(args.file_path as string | undefined, 'bcfzip', 'topics');
+    const blob = await writeBCF(project);
+    const file = playgroundFiles.add({
+      filename, mimeType: 'application/zip', size: blob.size, blob,
+      source: 'bcf_export', description: `${project.topics.size} topic(s)`,
+    });
+    return {
+      text: `Bundled ${filename} (${formatBytes(blob.size)}, ${project.topics.size} topic(s)).`,
+      structured: { fileId: file.id, filename, bytes: blob.size, topics: project.topics.size },
+      download: { fileId: file.id, filename, mimeType: 'application/zip', size: blob.size, label: 'Get .bcfzip' },
+    };
+  },
+
+  // ── IDS (parses + validates against the loaded model) ─────────────────
+  async ids_validate(m, args) {
+    const xml = resolveIdsXml(args);
+    if (!xml) throw new ToolExecutionError({
+      code: ToolErrorCode.INVALID_INPUT,
+      message: 'Provide IDS via `ids_path` (filename of an attached upload) or `ids_xml` (raw XML). Tell the user to drag a .ids file onto the chat input if they haven\'t attached one yet.',
+    });
+    let doc: IDSDocument;
+    try {
+      doc = parseIDS(xml);
+    } catch (err) {
+      throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: err instanceof Error ? err.message : String(err) });
+    }
+    const accessor = makeIdsAccessor(m);
+    const report = await validateIDS(doc, accessor, {
+      modelId: m.id,
+      schemaVersion: m.store.schemaVersion,
+      entityCount: effectiveEntityCount(m),
+    });
+    const head = `IDS '${doc.info?.title ?? 'untitled'}' · ${report.summary.passedSpecifications}/${report.summary.totalSpecifications} specs passed (${report.summary.overallPassRate.toFixed(0)}%).`;
+    const lines = report.specificationResults.map((s) => {
+      const ok = s.status === 'pass';
+      const skipped = s.status === 'not_applicable';
+      const tag = skipped ? '·' : ok ? '✓' : '✗';
+      return `${tag} ${s.specification.name ?? '(unnamed)'} — ${s.passedCount} pass / ${s.failedCount} fail · ${s.passRate.toFixed(0)}%`;
+    });
+    // Stage a downloadable JSON report so the user can save / share it.
+    const reportBlob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const reportSlug = (doc.info?.title ?? 'spec').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase();
+    const reportFilename = coerceFilename(undefined, 'json', `ids-report-${reportSlug}`);
+    const reportFile = playgroundFiles.add({
+      filename: reportFilename, mimeType: 'application/json', size: reportBlob.size, blob: reportBlob,
+      source: 'ids_validate',
+      description: `${report.summary.passedSpecifications}/${report.summary.totalSpecifications} specs passed`,
+    });
+    return {
+      text: [head, ...lines].join('\n'),
+      structured: report as unknown as Record<string, unknown>,
+      download: { fileId: reportFile.id, filename: reportFilename, mimeType: 'application/json', size: reportBlob.size, label: 'Get IDS report' },
+    };
+  },
+  async ids_explain(_m, args) {
+    const xml = resolveIdsXml(args);
+    if (!xml) throw new ToolExecutionError({
+      code: ToolErrorCode.INVALID_INPUT,
+      message: 'Provide IDS via `ids_path` (filename of an attached upload) or `ids_xml` (raw XML).',
+    });
+    let doc: IDSDocument;
+    try {
+      doc = parseIDS(xml);
+    } catch (err) {
+      throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: err instanceof Error ? err.message : String(err) });
+    }
+    const head = `IDS '${doc.info?.title ?? 'untitled'}' · ${doc.specifications.length} specification(s).`;
+    const lines = doc.specifications.map((s, i) => `${i + 1}. ${s.name ?? '(unnamed)'} — applies to ${s.applicability.facets.length} facet(s); requires ${s.requirements.length} clause(s).`);
+    return { text: [head, ...lines].join('\n'), structured: doc as unknown as Record<string, unknown> };
+  },
+
+  // ── Export (CSV / JSON / IFC — staged for download) ───────────────────
+  async export_ifc(m, args) {
+    const filename = coerceFilename(args.file_path as string | undefined, 'ifc', m.id);
+    const schema = (args.schema as 'IFC2X3' | 'IFC4' | 'IFC4X3' | undefined) ?? (m.store.schemaVersion as 'IFC2X3' | 'IFC4' | 'IFC4X3');
+    // No `global_ids` omits the ref list; a matched-nothing allowlist stays EMPTY, which `export.ifc` refuses rather than widening to the whole model (#4738). The refusal is repeated below only to answer with the stdio tool's error code and wording.
+    const wanted = Array.isArray(args.global_ids) ? new Set(args.global_ids as string[]) : undefined;
+    const refs = wanted ? m.bim.query().toArray().filter((e) => wanted.has(e.globalId)).map((e) => e.ref) : undefined;
+    if (refs?.length === 0) throw new ToolExecutionError({ code: ToolErrorCode.ENTITY_NOT_FOUND, message: `No entity matches any of the ${wanted?.size ?? 0} requested global_ids, so there is nothing to export. Refusing to write the whole model instead.` });
+    const exported = refs?.length ?? m.store.entityCount;
+    const content = m.bim.export.ifc(refs, { schema });
+    const text = typeof content === 'string' ? content : new TextDecoder().decode(content);
+    const blob = new Blob([text], { type: 'application/x-step' });
+    const file = playgroundFiles.add({
+      filename, mimeType: 'application/x-step', size: blob.size, blob,
+      source: 'export_ifc', description: `${exported} entit${exported === 1 ? 'y' : 'ies'}`,
+    });
+    return {
+      text: `Wrote ${filename} (${formatBytes(blob.size)}).`,
+      structured: { fileId: file.id, filename, bytes: blob.size },
+      download: { fileId: file.id, filename, mimeType: 'application/x-step', size: blob.size, label: 'Save IFC' },
+    };
+  },
+  async export_csv(m, args) {
+    const cols = (args.columns as string[] | undefined) ?? ['GlobalId', 'Type', 'Name'];
+    const sep = (args.separator as string | undefined) ?? ',';
+    const filterType = args.type as string | undefined;
+    const refs = (filterType ? m.bim.query().byType(filterType).toArray() : m.bim.query().toArray()).map((e) => e.ref);
+    const csv = m.bim.export.csv(refs, { columns: cols, separator: sep });
+    const filename = coerceFilename(args.file_path as string | undefined, 'csv', filterType ?? 'entities');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const file = playgroundFiles.add({
+      filename, mimeType: 'text/csv', size: blob.size, blob,
+      source: 'export_csv', description: `${refs.length} row(s) · ${cols.join(', ')}`,
+    });
+    return {
+      text: `Wrote ${filename} (${refs.length} rows, ${formatBytes(blob.size)}).`,
+      structured: { fileId: file.id, filename, rows: refs.length, bytes: blob.size },
+      download: { fileId: file.id, filename, mimeType: 'text/csv', size: blob.size, label: 'Get .csv' },
+    };
+  },
+  async export_json(m, args) {
+    const cols = (args.columns as string[] | undefined) ?? ['GlobalId', 'Type', 'Name'];
+    const filterType = args.type as string | undefined;
+    const refs = (filterType ? m.bim.query().byType(filterType).toArray() : m.bim.query().toArray()).map((e) => e.ref);
+    const rows = m.bim.export.json(refs, cols);
+    const filename = coerceFilename(args.file_path as string | undefined, 'json', filterType ?? 'entities');
+    const text = JSON.stringify(rows, null, 2);
+    const blob = new Blob([text], { type: 'application/json' });
+    const file = playgroundFiles.add({
+      filename, mimeType: 'application/json', size: blob.size, blob,
+      source: 'export_json', description: `${rows.length} row(s) · ${cols.join(', ')}`,
+    });
+    return {
+      text: `Wrote ${filename} (${rows.length} rows, ${formatBytes(blob.size)}).`,
+      structured: { fileId: file.id, filename, rows: rows.length, bytes: blob.size },
+      download: { fileId: file.id, filename, mimeType: 'application/json', size: blob.size, label: 'Get .json' },
+    };
+  },
+
+  // ── Diff (needs two loaded models — uses ctx.registry) ────────────────
+  async model_diff(m, args, ctx) {
+    if (args.by_content === true) {
+      // The stdio/HTTP server runs the @ifc-lite/diff engine here (#1891). The
+      // playground's dispatcher is a separate browser reimplementation that
+      // does not, and silently ignoring the flag would hand the agent a
+      // GlobalId set intersection labelled as a content diff.
+      throw new ToolExecutionError({
+        code: ToolErrorCode.UNSUPPORTED_OPERATION,
+        message: 'by_content is not available in the browser playground; the type/GlobalId diff is.',
+        hint: 'Run the MCP server locally (npx @ifc-lite/mcp) for content-keyed matching.',
+      });
+    }
+    const { left, right } = resolveDiffModels(m, args, ctx);
+    const types1 = new Map<string, number>();
+    const types2 = new Map<string, number>();
+    for (const [type, count] of effectiveTypeCounts(left)) types1.set(type, count);
+    for (const [type, count] of effectiveTypeCounts(right)) types2.set(type, count);
+    const diffs: Array<{ type: string; left: number; right: number; delta: number }> = [];
+    for (const t of new Set([...types1.keys(), ...types2.keys()])) {
+      const a = types1.get(t) ?? 0;
+      const b = types2.get(t) ?? 0;
+      if (a !== b) diffs.push({ type: t, left: a, right: b, delta: b - a });
+    }
+    diffs.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    const head = `Diff ${left.id} → ${right.id}: ${diffs.length} type-count change(s).`;
+    return { text: [head, ...diffs.slice(0, 25).map((d) => `  • ${d.type}: ${d.left} → ${d.right} (${d.delta > 0 ? '+' : ''}${d.delta})`)].join('\n'), structured: { typeDiffs: diffs } };
+  },
+  async quantity_diff(m, args, ctx) {
+    const { left, right } = resolveDiffModels(m, args, ctx);
+    const type = (args.type as string | undefined) ?? 'IfcWall';
+    const qName = (args.quantity as string | undefined) ?? 'Volume';
+    function sumFor(model: LoadedPlaygroundModel): number {
+      let total = 0;
+      for (const e of model.bim.query().byType(type).toArray()) {
+        const v = model.bim.quantity(e.ref, '', qName);
+        if (typeof v === 'number') total += v;
+      }
+      return total;
+    }
+    const a = sumFor(left);
+    const b = sumFor(right);
+    return { text: `${type}.${qName}: ${a.toFixed(2)} → ${b.toFixed(2)} (${(b - a).toFixed(2)})`, structured: { type, quantity: qName, left: a, right: b, delta: b - a } };
+  },
+
+  // ── Viewer (drives the inline Three.js panel) ──────────────────────────
+  async viewer_ask(_m, args, ctx) {
+    // Asking the user for permission to open a panel that cannot exist spends
+    // a turn and then lands on viewer_open's refusal anyway.
+    if (isWebglUnavailable(ctx)) {
+      return { text: noWebglMessage(ctx), textKey: 'mcp.playgroundDispatcher.webglUnavailable', structured: { suggestedTool: null, webglUnavailable: true } };
+    }
+    const reason = String(args.reason ?? '');
+    return {
+      text: `Ask the user: "I'd like to open the inline 3D viewer${reason ? ` to ${reason}` : ''}. May I?" If they agree, call viewer_open.`,
+      structured: { suggestedTool: 'viewer_open', reason },
+    };
+  },
+
+  async viewer_open(_m, _args, ctx) {
+    // Checked before the panel is poked. Opening it again on a device that has
+    // already refused a context just re-renders the same fallback, and the
+    // optimistic "geometry is processing" text below is what sent the agent
+    // round the loop in the first place.
+    if (isWebglUnavailable(ctx)) {
+      return { text: noWebglMessage(ctx), textKey: 'mcp.playgroundDispatcher.webglUnavailable', structured: { open: false, pending: false, webglUnavailable: true } };
+    }
+    if (ctx.openViewerPanel) ctx.openViewerPanel();
+    if (ctx.viewer && ctx.viewer.isLoaded()) {
+      const status = ctx.viewer.status();
+      return {
+        text: `Inline viewer ready (${status.meshCount} entities rendered). Pick interactions sync back via viewer_get_selection.`,
+        structured: { open: true, meshCount: status.meshCount, inline: true },
+      };
+    }
+    return {
+      text: 'Asked to open the inline viewer. Geometry is processing — call viewer_status in a moment to confirm it’s ready.',
+      structured: { open: true, pending: true },
+    };
+  },
+
+  async viewer_close(_m, _args, ctx) {
+    // The panel-collapse in this v1 isn't agent-controllable (the user owns
+    // chrome). We surface a friendly status instead of pretending we
+    // dismantled the canvas.
+    //
+    // Deliberately NOT given the #2412 treatment, unlike every other viewer
+    // tool. Three facts decide it: this answer is a constant (it reads no
+    // viewer state at all), it never claims success (`closed: false`), and it
+    // routes the agent to the USER rather than to another viewer tool — so it
+    // cannot be an arm of the loop. And the action it describes still works on
+    // a GPU-less device: `ViewerPanel` renders its toggle button OUTSIDE the
+    // `open &&` branch, so the chevron is there with or without a context, and
+    // collapsing a panel that is showing the degraded fallback is a real thing
+    // the user may want. Answering "this device cannot do WebGL" to a request
+    // about hiding a panel would be the one place where the terminal message
+    // refused something that is still available.
+    void ctx;
+    return { text: 'Inline viewer panel is user-controlled in the playground; toggle it from the chevron above the 3D viewer panel.', structured: { closed: false, note: 'user-toggle' } };
+  },
+
+  async viewer_status(_m, _args, ctx) {
+    const s = ctx.viewer?.status() ?? null;
+    // The third arm of the #2412 loop, and the one `viewer_open` sends the
+    // agent to: "mounted but no geometry yet" is literally true but reads as
+    // "wait", and here the wait never ends.
+    //
+    // Ahead of the null check, not after it, because "No viewer attached." is
+    // the answer a COLLAPSED panel gives — and once the panel has collapsed the
+    // session latch is the only thing left that remembers why re-opening it
+    // cannot help. One check covers both, since `isWebglUnavailable` already
+    // reads the controller flag; a second branch on `s.webglUnavailable` below
+    // would be unreachable, which a mutation run confirmed.
+    if (isWebglUnavailable(ctx)) {
+      return { text: noWebglMessage(ctx), textKey: 'mcp.playgroundDispatcher.webglUnavailable', structured: s ?? { open: false, loaded: false, webglUnavailable: true } };
+    }
+    if (!s) return { text: 'No viewer attached.', structured: { open: false } };
+    return {
+      text: s.loaded ? `Viewer open · ${s.meshCount} meshes · ${s.selection.length} picked.` : 'Viewer panel mounted but no geometry yet.',
+      structured: s,
+    };
+  },
+
+  async viewer_colorize(_m, args, ctx) {
+    const v = requireViewer(ctx);
+    const color = parseColorArg(args.color);
+    const out = v.colorize({
+      globalIds: args.global_ids as string[] | undefined,
+      expressIds: args.express_ids as number[] | undefined,
+      type: args.type as string | undefined,
+      color,
+    });
+    return { text: `Painted ${out.count} entit${out.count === 1 ? 'y' : 'ies'} ${formatColorTuple(color)}.`, structured: { count: out.count, color } };
+  },
+
+  async viewer_isolate(_m, args, ctx) {
+    const v = requireViewer(ctx);
+    const out = v.isolate({
+      globalIds: args.global_ids as string[] | undefined,
+      expressIds: args.express_ids as number[] | undefined,
+      type: args.type as string | undefined,
+    });
+    return { text: `Isolated ${out.count} entit${out.count === 1 ? 'y' : 'ies'}; everything else hidden.`, structured: { count: out.count } };
+  },
+
+  async viewer_hide(_m, args, ctx) {
+    const v = requireViewer(ctx);
+    const out = v.hide({
+      globalIds: args.global_ids as string[] | undefined,
+      expressIds: args.express_ids as number[] | undefined,
+      type: args.type as string | undefined,
+    });
+    return { text: `Hid ${out.count} entit${out.count === 1 ? 'y' : 'ies'}.`, structured: { count: out.count } };
+  },
+
+  async viewer_show(_m, args, ctx) {
+    const v = requireViewer(ctx);
+    const out = v.show({
+      globalIds: args.global_ids as string[] | undefined,
+      expressIds: args.express_ids as number[] | undefined,
+      type: args.type as string | undefined,
+    });
+    return { text: `Showed ${out.count} entit${out.count === 1 ? 'y' : 'ies'}.`, structured: { count: out.count } };
+  },
+
+  async viewer_reset(_m, _args, ctx) {
+    const v = requireViewer(ctx);
+    v.reset();
+    return { text: 'Reset: visibility, colours, and section restored to defaults.', structured: { reset: true } };
+  },
+
+  async viewer_fly_to(_m, args, ctx) {
+    const v = requireViewer(ctx);
+    const out = v.flyTo({
+      globalIds: args.global_ids as string[] | undefined,
+      expressIds: args.express_ids as number[] | undefined,
+    });
+    if (out.count === 0) {
+      throw new ToolExecutionError({ code: ToolErrorCode.ENTITY_NOT_FOUND, message: 'No matching entities to frame.' });
+    }
+    return { text: `Flying camera to ${out.count} entit${out.count === 1 ? 'y' : 'ies'}.`, structured: { count: out.count } };
+  },
+
+  async viewer_set_section(_m, args, ctx) {
+    const v = requireViewer(ctx);
+    const axis = String(args.axis ?? '').toLowerCase();
+    if (axis !== 'x' && axis !== 'y' && axis !== 'z') throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'axis must be "x", "y", or "z".' });
+    const position = Number(args.position ?? 0);
+    if (!Number.isFinite(position)) throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'position must be a number.' });
+    const flipped = args.flipped === true;
+    const enabled = args.enabled !== false;
+    v.setSection({ axis: axis as 'x' | 'y' | 'z', position, flipped, enabled });
+    const suffix = `${flipped ? ' (flipped)' : ''}${enabled ? '' : ' (disabled)'}`;
+    return { text: `Section ${axis} = ${position.toFixed(2)}${suffix}.`, structured: { axis, position, flipped, enabled } };
+  },
+
+  async viewer_clear_section(_m, _args, ctx) {
+    const v = requireViewer(ctx);
+    v.clearSection();
+    return { text: 'Section cleared.', structured: { cleared: true } };
+  },
+
+  async viewer_color_by_storey(_m, _args, ctx) {
+    const v = requireViewer(ctx);
+    const out = v.colorByStorey();
+    return { text: `Coloured by storey — ${out.groups} group${out.groups === 1 ? '' : 's'}.`, structured: out };
+  },
+
+  async viewer_color_by_property(m, args, ctx) {
+    const v = requireViewer(ctx);
+    const type = String(args.type ?? '');
+    const psetName = String(args.pset ?? '');
+    const propName = String(args.property ?? '');
+    if (!type || !psetName || !propName) {
+      throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'type, pset, and property are required.' });
+    }
+    const out = v.colorByProperty({
+      type,
+      pset: psetName,
+      property: propName,
+      missingColor: parseColorArg(args.missing_color ?? 'gray'),
+      sample: (expressId) => {
+        const ref: EntityRef = { modelId: m.id, expressId };
+        return m.bim.property(ref, psetName, propName);
+      },
+    });
+    // Spell the noun out: the count is entities, not submeshes (#2455), and a
+    // bare number in a histogram invites the agent to guess which (#2452).
+    const lines = out.legend.map((l) => `  • ${l.value} — ${l.count} entit${l.count === 1 ? 'y' : 'ies'}`);
+    return { text: `Coloured ${type} by ${psetName}.${propName} — ${out.legend.length} bucket(s):\n${lines.join('\n')}`, structured: out };
+  },
+
+  async viewer_get_selection(m, args, ctx) {
+    const v = requireViewer(ctx);
+    const sel = v.getSelection();
+    if (sel.length === 0) return { text: 'No selection in viewer.', structured: { selection: [] } };
+    const include = new Set((args.include as string[] | undefined) ?? ['attributes']);
+    const enriched = sel.map((s) => {
+      const ref: EntityRef = { modelId: m.id, expressId: s.expressId };
+      const data = m.bim.entity(ref);
+      const out: Record<string, unknown> = { ...s, entity: data };
+      if (include.has('attributes') && data) out.attributes = m.bim.attributes(ref);
+      if (include.has('properties') && data) out.properties = m.bim.properties(ref);
+      if (include.has('quantities') && data) out.quantities = m.bim.quantities(ref);
+      if (include.has('classifications') && data) out.classifications = m.bim.classifications(ref);
+      if (include.has('materials') && data) out.materials = m.bim.materials(ref);
+      return out;
+    });
+    const head = `${sel.length} entit${sel.length === 1 ? 'y' : 'ies'} selected:`;
+    const lines = enriched.map((e) => {
+      const data = e.entity as { type?: string; name?: string; globalId?: string } | null;
+      return `• ${data?.type ?? '?'} #${(e as { expressId: number }).expressId}${data?.name ? ` '${data.name}'` : ''}${data?.globalId ? ` GlobalId=${data.globalId}` : ''}`;
+    });
+    return { text: [head, ...lines].join('\n'), structured: { selection: enriched } };
+  },
+
+  async viewer_describe_selection(m, _args, ctx) {
+    const v = requireViewer(ctx);
+    const sel = v.getSelection();
+    if (sel.length === 0) return { text: 'Nothing selected — click an entity in the viewer first.', structured: { selection: [] } };
+    const enriched = sel.map((s) => {
+      const ref: EntityRef = { modelId: m.id, expressId: s.expressId };
+      return {
+        ...s,
+        entity: m.bim.entity(ref),
+        attributes: m.bim.attributes(ref),
+        properties: m.bim.properties(ref),
+        quantities: m.bim.quantities(ref),
+        classifications: m.bim.classifications(ref),
+        materials: m.bim.materials(ref),
+      };
+    });
+    const head = `${enriched.length} selected (full detail):`;
+    const lines: string[] = [head];
+    for (const e of enriched) {
+      const data = e.entity as { type?: string; name?: string; globalId?: string } | null;
+      lines.push(`• ${data?.type ?? '?'} #${e.expressId} '${firstNonBlank(data?.name) ?? '(unnamed)'}'`);
+      if (data?.globalId) lines.push(`  GlobalId: ${data.globalId}`);
+      if (e.properties && e.properties.length > 0) {
+        const psets = e.properties.map((p) => `${p.name} (${p.properties.length})`);
+        lines.push(`  Property sets: ${psets.join(', ')}`);
+      }
+      if (e.materials) {
+        const mat = e.materials as { name?: string; layers?: Array<{ materialName?: string; name?: string }> };
+        if (mat.layers?.length) lines.push(`  Materials: ${mat.layers.map((l) => l.materialName ?? l.name).join(', ')}`);
+        else if (mat.name) lines.push(`  Material: ${mat.name}`);
+      }
+    }
+    return { text: lines.join('\n'), structured: { selection: enriched } };
+  },
+
+  async bsdd_property_sets(_m, args) {
+    const ifcType = String(args.ifc_type ?? '');
+    if (!ifcType) throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: '`ifc_type` is required.' });
+    try {
+      const psets = await PROXIED_BSDD.getPropertySets(ifcType);
+      const groups = Array.from(psets.entries()).map(([name, props]) => ({ name, properties: props }));
+      const head = `bSDD property sets for ${ifcType} — ${groups.length} Pset(s):`;
+      const lines = [head, ...groups.map((g) => `• ${g.name} (${g.properties.length} properties)`)];
+      return { text: lines.join('\n'), structured: { ifcType, propertySets: groups } };
+    } catch (err) {
+      throw rethrowBsdd(err, 'property-set lookup');
+    }
+  },
+
+  async bsdd_match(m, args) {
+    // Find related bSDD classes for an entity by IFC type. Mirrors the
+    // stdio MCP path: pull the entity's IFC type, then ask bSDD for related
+    // dictionary classes.
+    let expressId: number | null = null;
+    if (typeof args.express_id === 'number') expressId = args.express_id;
+    else if (typeof args.global_id === 'string') {
+      const ref = resolveRef(m, args);
+      expressId = ref.expressId;
+    }
+    if (expressId == null) {
+      throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'Provide express_id or global_id.' });
+    }
+    const ifcType = m.store.entities.getTypeName(expressId) ?? 'Unknown';
+    try {
+      const candidates = await PROXIED_BSDD.searchRelatedClasses(ifcType);
+      const head = `bSDD candidates for ${ifcType} (#${expressId}) — ${candidates.length} match(es):`;
+      const lines = [head, ...candidates.slice(0, 10).map((c) => `• ${c.code} — ${c.name} (${c.dictionaryUri})`)];
+      if (candidates.length > 10) lines.push(`  … +${candidates.length - 10} more`);
+      return { text: lines.join('\n'), structured: { ifcType, expressId, candidates } };
+    } catch (err) {
+      throw rethrowBsdd(err, 'related-class search');
+    }
+  },
+
+  // ── Discovery (extras) ─────────────────────────────────────────────────
+  async model_unload(m, args) {
+    // The playground v1 design is single-model. We accept the call and
+    // report it, but do NOT actually drop the model — the parent owns the
+    // load lifecycle (sample picker / drop zone). Surface that contract
+    // honestly instead of silently no-oping.
+    const target = String(args.model_id ?? m.id);
+    if (target === m.id) {
+      return {
+        text: `model_unload is a no-op in the web playground — close the tab or pick another sample to drop the model. (Targeted '${target}'.)`,
+        structured: { modelId: target, unloaded: false, reason: 'browser-singleton' },
+      };
+    }
+    return {
+      text: `Model '${target}' isn't loaded in this session.`,
+      structured: { modelId: target, unloaded: false, reason: 'not-loaded' },
+    };
+  },
+
+  async model_load(_m, args) {
+    // Federated load isn't wired in v1 — only the active sample is loaded.
+    // Throw so the agent sees an error result and routes the user to the
+    // sample picker / dropzone (or the stdio MCP).
+    const path = String(args.file_path ?? '');
+    throw new ToolExecutionError({
+      code: ToolErrorCode.UNSUPPORTED_OPERATION,
+      message: `model_load isn't supported in the web playground (single-model session). To load '${path || 'another file'}', the user picks it from the sample list or drops it on the dropzone. The stdio MCP supports federated load.`,
+    });
+  },
+
+  // ── Mutation (composer) ────────────────────────────────────────────────
+  async mutation_batch(m, args, ctx) {
+    // Apply N ops in order. We just dispatch each op back through the
+    // existing IMPLS so behaviour exactly matches calling them one by one
+    // — no separate codepath to drift from. Failure stops the batch and
+    // reports per-step results so the agent can decide whether to undo.
+    const ops = args.operations as Array<{ tool: string; args?: Record<string, unknown> }> | undefined;
+    if (!Array.isArray(ops) || ops.length === 0) {
+      throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: '`operations: [{tool, args}, …]` is required.' });
+    }
+    const results: Array<{ tool: string; ok: boolean; text: string; errorCode?: string }> = [];
+    for (const op of ops) {
+      const impl = IMPLS[op.tool];
+      if (!impl) {
+        results.push({ tool: op.tool, ok: false, text: `Unknown tool: ${op.tool}`, errorCode: ToolErrorCode.INVALID_INPUT });
+        break;
+      }
+      try {
+        const out = await impl(m, op.args ?? {}, ctx);
+        results.push({ tool: op.tool, ok: true, text: out.text });
+      } catch (err) {
+        const code = err instanceof ToolExecutionError ? err.code : ToolErrorCode.INTERNAL_ERROR;
+        results.push({ tool: op.tool, ok: false, text: err instanceof Error ? err.message : String(err), errorCode: code });
+        break;
+      }
+    }
+    const passed = results.filter((r) => r.ok).length;
+    const head = passed === ops.length
+      ? `Batch ok · ${passed}/${ops.length} ops applied.`
+      : `Batch stopped · ${passed}/${ops.length} ops applied; the rest were skipped.`;
+    const lines = [head, ...results.map((r, i) => `  ${i + 1}. ${r.ok ? 'ok' : 'fail'} — ${r.tool}: ${r.text}`)];
+    return { text: lines.join('\n'), structured: { results, passed, total: ops.length } };
+  },
+
+  // ── Viewer (extras) ────────────────────────────────────────────────────
+  async viewer_wait_for_selection(_m, args, ctx) {
+    // Block until the user clicks something in the viewer (or timeout).
+    // The viewer already exposes `setOnSelectionChange`; we register a
+    // one-shot listener and resolve when it fires with a non-empty
+    // selection, falling back to the timeout payload otherwise.
+    const v = requireViewer(ctx);
+    const timeoutMs = Math.max(500, Math.min(Number(args.timeout_ms ?? 60_000), 5 * 60_000));
+    const t0 = Date.now();
+    const initial = v.getSelection();
+    if (initial.length > 0) {
+      // Already something selected — return immediately so the agent doesn't pointlessly stall.
+      return {
+        text: `Already selected ${initial.length} entit${initial.length === 1 ? 'y' : 'ies'}.`,
+        structured: { selection: initial, waitedMs: 0, timedOut: false },
+      };
+    }
+    // Use the multi-subscriber API so we don't replace whichever handler
+    // the panel registered (which would silently kill live selection
+    // updates everywhere else after the first wait_for_selection call).
+    const hits: import('./playground-viewer-types').SelectionHit[] = await new Promise((resolve) => {
+      let unsubscribe: (() => void) | null = null;
+      const timer = window.setTimeout(() => {
+        unsubscribe?.();
+        resolve([]);
+      }, timeoutMs);
+      unsubscribe = v.subscribeSelection((sel) => {
+        if (sel.length === 0) return; // ignore deselects
+        window.clearTimeout(timer);
+        unsubscribe?.();
+        resolve(sel);
+      });
+    });
+    const waitedMs = Date.now() - t0;
+    if (hits.length === 0) {
+      return {
+        text: `Timed out after ${Math.round(waitedMs / 1000)}s with no selection.`,
+        structured: { selection: [], waitedMs, timedOut: true },
+      };
+    }
+    return {
+      text: `User selected ${hits.length} entit${hits.length === 1 ? 'y' : 'ies'} (waited ${Math.round(waitedMs / 1000)}s).`,
+      structured: { selection: hits, waitedMs, timedOut: false },
+    };
+  },
+};
+
+// ── helpers ────────────────────────────────────────────────────────────────
+
+function resolveRef(m: LoadedPlaygroundModel, args: Record<string, unknown>): EntityRef {
+  if (typeof args.express_id === 'number') {
+    return { modelId: m.id, expressId: args.express_id };
+  }
+  if (typeof args.global_id === 'string') {
+    const id = effectiveGlobalIdLookup(m, args.global_id);
+    if (id !== undefined) return { modelId: m.id, expressId: id };
+    throw new ToolExecutionError({
+      code: ToolErrorCode.ENTITY_NOT_FOUND,
+      message: `No entity with GlobalId '${args.global_id}' in this model.`,
+    });
+  }
+  throw new ToolExecutionError({
+    code: ToolErrorCode.INVALID_INPUT,
+    message: 'Provide either global_id or express_id.',
+  });
+}
+
+function refStr(ref: EntityRef): string {
+  return `#${ref.expressId} (model=${ref.modelId})`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return bytes + ' B';
+}
+
+/**
+ * Pull IDS XML from whichever knob the agent reached for. The MCP wire
+ * surface uses `ids_path` (a filename); we look it up in the user's
+ * attached uploads via `playgroundUploads`. The agent may also pass
+ * `ids_xml` as raw XML (for v0.1 compat with the Node MCP that reads
+ * disk). Returns trimmed XML or null when neither knob worked.
+ */
+function resolveIdsXml(args: Record<string, unknown>): string | null {
+  // Path-based — preferred when the user attached a .ids file. Tolerate
+  // a few variant arg names the agent invents.
+  const path = String(args.ids_path ?? args.path ?? args.file_path ?? '').trim();
+  if (path) {
+    const upload = playgroundUploads.resolve(path);
+    if (upload) return upload.text.trim();
+    // The agent might have referenced an old / non-existent file. Surface
+    // that distinct from "no IDS at all" so it can ask the user to drop
+    // the file rather than re-paste raw XML.
+    throw new ToolExecutionError({
+      code: ToolErrorCode.ENTITY_NOT_FOUND,
+      message: `No attached file matches '${path}'. Tell the user to drag the .ids onto the chat input, then retry.`,
+    });
+  }
+  // Direct XML — works without an upload.
+  const xml = String(args.ids_xml ?? args.ids ?? '').trim();
+  if (xml) return xml;
+  return null;
+}
+
+/**
+ * Strip whatever extension the agent supplied (or any odd path components)
+ * and force the canonical one for the artifact this tool actually produces.
+ *
+ * The agent loves to invent filenames like `wall_fire_rating.ids` when the
+ * user asks "save the wall fire ratings" — but `model_save` writes IFC,
+ * `bcf_export` writes BCFZIP, `ids_validate` writes a JSON report. Trusting
+ * the agent's extension means the user clicks Save IFC and gets a `.ids`
+ * file the OS won't recognise. Always enforce.
+ *
+ *   coerceFilename('wall_fire_rating.ids', 'ifc')   → 'wall_fire_rating.ifc'
+ *   coerceFilename('/tmp/foo.bar/baz.csv', 'json')  → 'baz.json'
+ *   coerceFilename(undefined, 'bcfzip', 'topics')   → 'topics.bcfzip'
+ */
+function coerceFilename(
+  raw: string | undefined,
+  ext: 'ifc' | 'bcfzip' | 'csv' | 'json',
+  fallbackBase: string,
+): string {
+  // Lift the basename out of any path the agent supplied.
+  let base = (typeof raw === 'string' ? raw.split(/[\\/]/).pop() ?? '' : '').trim();
+  if (!base) base = fallbackBase;
+  // Drop any extension already on it (incl. multi-dot like .bcf.zip).
+  base = base.replace(/\.(ifc|ifczip|bcfzip|bcf|zip|csv|json|tsv|xml|ids|gltf|glb|ifcx|pdf)$/i, '');
+  base = sanitizeFilename(base, { fallback: fallbackBase }); // shared OS-safe sanitiser
+  return `${base}.${ext}`;
+}
+
+/** Resolve (left, right) diff models from the dispatch context. The agent
+ *  passes `a` / `b` model_ids; we look them up in the registry, falling
+ *  back to the primary model for one side if the agent only provided the
+ *  other id (rare, but lets the chat work with a single loaded model). */
+function resolveDiffModels(
+  primary: LoadedPlaygroundModel,
+  args: Record<string, unknown>,
+  ctx: DispatchContext,
+): { left: LoadedPlaygroundModel; right: LoadedPlaygroundModel } {
+  const aId = String(args.a ?? '');
+  const bId = String(args.b ?? '');
+  if (!aId || !bId) {
+    throw new ToolExecutionError({
+      code: ToolErrorCode.INVALID_INPUT,
+      message: 'Both `a` and `b` model_ids are required. Load a second model first.',
+    });
+  }
+  const left = aId === primary.id ? primary : ctx.registry?.get(aId);
+  const right = bId === primary.id ? primary : ctx.registry?.get(bId);
+  if (!left || !right) {
+    throw new ToolExecutionError({
+      code: ToolErrorCode.MODEL_NOT_FOUND,
+      message: `Both models must be loaded; missing: ${[!left && aId, !right && bId].filter(Boolean).join(', ')}`,
+    });
+  }
+  return { left, right };
+}
+
+/**
+ * The IDS validator's data accessor: the shared `@ifc-lite/ids/bridge` one,
+ * over this model's store and pending mutation overlay, exactly as the
+ * viewer's IDS panel, the CLI and the stdio MCP build it. A hand-built copy
+ * here drifted: it invented property dataTypes from the JS value kind
+ * (#5304) and reimplemented material flattening (see the materials test).
+ */
+function makeIdsAccessor(m: LoadedPlaygroundModel): IFCDataAccessor {
+  return createIdsDataAccessor(m.store, m.id, m.backend.getMutationView());
+}
+
+/** Tiny RFC4122-ish v4 UUID. Browsers ship crypto.randomUUID but TypeScript
+ *  lib.dom doesn't always type it; fall back to a Math.random implementation
+ *  for ancient browsers. */
+function cryptoRandomUuid(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+interface BsddHttpErrorLike {
+  name: string;
+  status: number;
+  retryAfterSeconds?: number;
+  url: string;
+  statusText: string;
+}
+function rethrowBsdd(err: unknown, label: string): ToolExecutionError {
+  if (err && typeof err === 'object' && (err as { name?: string }).name === 'BsddHttpError') {
+    const e = err as BsddHttpErrorLike;
+    if (e.status === 429) {
+      return new ToolExecutionError({
+        code: ToolErrorCode.RATE_LIMITED,
+        message: `bSDD rate-limited the ${label} request (HTTP 429).`,
+        details: { url: e.url, status: e.status, retryAfterSeconds: e.retryAfterSeconds },
+        hint: e.retryAfterSeconds != null ? `Retry after ${e.retryAfterSeconds}s.` : 'Avoid back-to-back bSDD calls.',
+      });
+    }
+    return new ToolExecutionError({
+      code: ToolErrorCode.EXTERNAL_SERVICE_FAILED,
+      message: `bSDD ${label} failed: HTTP ${e.status} ${e.statusText}.`,
+      details: { url: e.url, status: e.status },
+    });
+  }
+  if (err instanceof ToolExecutionError) return err;
+  return new ToolExecutionError({
+    code: ToolErrorCode.INTERNAL_ERROR,
+    message: err instanceof Error ? err.message : String(err),
+  });
+}
+
+// ── public API ─────────────────────────────────────────────────────────────
+
+/** All tool names the playground knows how to execute (for the chat tools[] list). */
+export function supportedToolNames(): string[] {
+  return Object.keys(IMPLS);
+}
+
+/** Build the `tools` array Anthropic expects, derived from CATALOG +
+ *  supportedToolNames(). Always returns the literal-typed shape Anthropic's
+ *  SDK demands (input_schema.type === 'object'). */
+export function anthropicToolDefinitions(): AnthropicToolDef[] {
+  return createAnthropicToolDefinitions(supportedToolNames());
+}
+
+/**
+ * Run a single tool call against the loaded model. Mirrors the wire-format
+ * shape of an MCP tools/call result so the chat panel renderer doesn’t have
+ * to know the dispatcher is local.
+ *
+ * The optional `ctx` carries the live viewer controller; tools that touch
+ * the inline 3D panel (viewer_*) require it. When a non-viewer tool is
+ * called the context is harmlessly ignored.
+ */
+const MODEL_MUTATION_TOOLS = new Set([
+  'entity_set_property',
+  'entity_delete_property',
+  'entity_set_attribute',
+  'entity_create',
+  'entity_delete',
+  'mutation_undo',
+  'mutation_batch',
+]);
+
+export async function dispatch(
+  model: LoadedPlaygroundModel,
+  toolName: string,
+  args: Record<string, unknown>,
+  ctx: DispatchContext = {},
+): Promise<ToolDispatchResult> {
+  const tool = CATALOG.tools.find((t) => t.name === toolName);
+  if (!tool) {
+    return {
+      text: `Unknown tool: ${toolName}`,
+      structured: null,
+      isError: true,
+      errorCode: ToolErrorCode.INVALID_INPUT,
+    };
+  }
+  // The v2 surface includes mutate, BCF, IDS, export, diff. Anything with
+  // an entry in IMPLS is wired client-side; the catalogue still includes
+  // a few v0.2 / v0.5 entries (export_glb, export_ifcx, export_pdf_report)
+  // that aren't implemented yet — those fall through to the
+  // UNSUPPORTED_OPERATION branch below.
+  const impl = IMPLS[toolName];
+  if (!impl) {
+    return {
+      text: `${toolName} isn’t implemented in the web playground yet. (See the catalogue for the full surface — the stdio MCP supports it.)`,
+      structured: { code: ToolErrorCode.UNSUPPORTED_OPERATION },
+      isError: true,
+      errorCode: ToolErrorCode.UNSUPPORTED_OPERATION,
+    };
+  }
+  try {
+    const out = await impl(model, args, ctx);
+    if (MODEL_MUTATION_TOOLS.has(toolName)) {
+      lastClashResult.delete(meshCacheKey(model));
+      ctx.onModelChanged?.();
+    }
+    return { text: out.text, textKey: out.textKey, structured: out.structured, isError: false, download: out.download };
+  } catch (err) {
+    if (err instanceof ToolExecutionError) {
+      const webglUnavailable = err.details?.webglUnavailable === true;
+      return {
+        text: err.message,
+        textKey: webglUnavailable ? 'mcp.playgroundDispatcher.webglUnavailable' : undefined,
+        structured: err.details ?? null,
+        isError: true,
+        errorCode: err.code,
+        hint: err.hint,
+        hintKey: webglUnavailable ? 'mcp.playgroundDispatcher.webglUnavailableHint' : undefined,
+      };
+    }
+    return {
+      text: err instanceof Error ? err.message : String(err),
+      structured: null,
+      isError: true,
+      errorCode: ToolErrorCode.INTERNAL_ERROR,
+    };
+  }
+}

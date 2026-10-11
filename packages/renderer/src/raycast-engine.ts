@@ -1,0 +1,458 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * RaycastEngine - raycasting, BVH management and snap detection, composed into `Renderer`.
+ * Textured enumeration is optional for existing custom SceneContents adapters.
+ */
+
+import { Camera } from './camera.js';
+import { isEntityVisible } from './entity-visibility.js';
+import type { SceneContents } from './scene-contents.js';
+import { Raycaster, type Intersection, type Ray } from './raycaster.js';
+import { SnapDetector, SnapType, type SnapTarget, type SnapOptions, type EdgeLockInput, type MagneticSnapResult } from './snap-detector.js';
+import { BVH } from './bvh.js';
+import type { MeshData } from '@ifc-lite/geometry';
+import type { PickClipState, PickOptions } from './types.js';
+import { pointClipped } from './scene-raycaster.js';
+import type { SourceSnapCurve } from './source-curve-snap.js';
+import { querySourceCurves } from './raycast-source-curve-query.js';
+import {
+    queryPointClouds,
+    releasedEdgeLock,
+    pointCloudSnapEnabled,
+    pointCloudWinsOverMeshSnap,
+    pointCloudWinsOverSourceSnap,
+    type PointCloudRayProvider,
+    type PointCloudSnapCamera,
+} from './raycast-point-cloud-query.js';
+export type { PointCloudRaySource, PointCloudRayProvider } from './raycast-point-cloud-query.js';
+/** Raycast-only capability; does not widen Renderer.getScene()'s public surface. */
+type RaycastScene = SceneContents & {
+    getTexturedMeshes?(): readonly Pick<MeshData, 'expressId' | 'modelIndex'>[];
+};
+
+export class RaycastEngine {
+    private camera: Camera;
+    private scene: RaycastScene;
+    private canvas: HTMLCanvasElement;
+    private raycaster: Raycaster;
+    private snapDetector: SnapDetector;
+    private bvh: BVH;
+    private pointCloudProvider: PointCloudRayProvider | null = null;
+    private sourceSnapCurves: readonly SourceSnapCurve[] = [];
+
+    // BVH cache
+    private bvhCache: {
+        meshCount: number;
+        /** Exact ordered objects used to build the BVH. Geometry pieces with
+         *  equal ids and buffer lengths can still occupy different bounds. */
+        meshData: MeshData[];
+        isBuilt: boolean;
+    } | null = null;
+
+    // Performance constants
+    private readonly BVH_THRESHOLD = 100;
+
+    constructor(camera: Camera, scene: RaycastScene, canvas: HTMLCanvasElement) {
+        this.camera = camera;
+        this.scene = scene;
+        this.canvas = canvas;
+        this.raycaster = new Raycaster();
+        this.snapDetector = new SnapDetector();
+        this.bvh = new BVH();
+    }
+
+    /** Slab ray-AABB test, used to cull instanced occurrences before materializing
+     *  their (lazy) triangles. */
+    private rayHitsBounds(ray: Ray, b: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } }): boolean {
+        const o = [ray.origin.x, ray.origin.y, ray.origin.z];
+        const d = [ray.direction.x, ray.direction.y, ray.direction.z];
+        const mn = [b.min.x, b.min.y, b.min.z];
+        const mx = [b.max.x, b.max.y, b.max.z];
+        let tmin = -Infinity, tmax = Infinity;
+        for (let i = 0; i < 3; i++) {
+            if (Math.abs(d[i]) < 1e-12) {
+                if (o[i] < mn[i] || o[i] > mx[i]) return false;
+            } else {
+                const inv = 1 / d[i];
+                let t1 = (mn[i] - o[i]) * inv;
+                let t2 = (mx[i] - o[i]) * inv;
+                if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+                if (t1 > tmin) tmin = t1;
+                if (t2 < tmax) tmax = t2;
+                if (tmin > tmax) return false;
+            }
+        }
+        return tmax >= Math.max(tmin, 0);
+    }
+
+    private collectVisibleMeshData(options?: PickOptions, ray?: Ray): MeshData[] {
+        const allMeshData: MeshData[] = [];
+        const meshes = this.scene.getMeshes();
+        const batchedMeshes = this.scene.getBatchedMeshes();
+        const queriedOwners = new Set<string>();
+        const seenPieces = new Set<MeshData>();
+        const seenInstancedKeys = new Set<string>();
+
+        const pushVisiblePieces = (expressId: number, modelIndex?: number) => {
+            // One owner/model query returns every resident fragment. Deduplicate
+            // the query, then retain each distinct MeshData object; geometry
+            // signatures can collide for equal-sized fragments sharing a vertex.
+            const ownerKey = `${expressId}:${modelIndex ?? 'any'}`;
+            if (queriedOwners.has(ownerKey)) return;
+            queriedOwners.add(ownerKey);
+            const pieces = this.scene.getMeshDataPieces(expressId, modelIndex);
+            if (!pieces) return;
+
+            for (const piece of pieces) {
+                // Apply visibility filtering
+                if (!isEntityVisible(piece.expressId, options?.hiddenIds, options?.isolatedIds)) continue;
+
+                if (seenPieces.has(piece)) continue;
+                seenPieces.add(piece);
+                allMeshData.push(piece);
+            }
+        };
+
+        // All flat drawable passes share retained geometry, visibility and model scoping.
+        for (const mesh of meshes) pushVisiblePieces(mesh.expressId, mesh.modelIndex);
+        for (const mesh of this.scene.getTexturedMeshes?.() ?? []) {
+            pushVisiblePieces(mesh.expressId, mesh.modelIndex);
+        }
+
+        // Collect mesh data from batched meshes. Batches group by colour, NOT
+        // by model (see Scene.bucketBaseKey / BatchedMesh.modelIndices), so
+        // two federated models sharing an expressId AND colour can be
+        // co-batched. Scope each entry to ITS OWN modelIndex (parallel array,
+        // same index = same source piece) rather than calling
+        // getMeshDataPieces(expressId) unscoped, which would return every
+        // model's pieces for that id — including ones with no entry in this
+        // batch or scene at all.
+        for (const batch of batchedMeshes) {
+            for (let i = 0; i < batch.expressIds.length; i++) {
+                pushVisiblePieces(batch.expressIds[i], batch.modelIndices?.[i]);
+            }
+        }
+
+        // GPU-instanced occurrences live only in the shard, not meshDataMap. Materialize
+        // their per-occurrence triangles ON DEMAND so measure-snap / section-face-pick
+        // work over them — but only for occurrences whose world AABB the ray actually
+        // hits, so we never expand the whole instanced population per ray. When no ray
+        // is supplied (defensive) we skip instanced rather than expand everything.
+        if (ray) {
+            for (const eid of this.scene.getInstancedEntityIds()) {
+                if (!isEntityVisible(eid, options?.hiddenIds, options?.isolatedIds)) continue;
+                const bounds = this.scene.getInstancedEntityBounds(eid);
+                if (!bounds || !this.rayHitsBounds(ray, bounds)) continue;
+                const pieces = this.scene.getInstancedMeshDataPieces(eid);
+                if (!pieces) continue;
+                // Key by piece INDEX, not buffer sizes: an entity can have several
+                // sub-pieces with identical position/index lengths, which a
+                // size-based key would collide → the later piece dropped → raycast
+                // / snap silently misses part of the instance. (#1238 review)
+                for (let p = 0; p < pieces.length; p++) {
+                    const piece = pieces[p];
+                    const key = `${piece.expressId}:inst:${p}`;
+                    if (seenInstancedKeys.has(key)) continue;
+                    seenInstancedKeys.add(key);
+                    allMeshData.push(piece);
+                }
+            }
+        }
+
+        return allMeshData;
+    }
+
+    /**
+     * Filter meshes using BVH acceleration structure if beneficial.
+     * Rebuilds BVH if the mesh count has changed.
+     */
+    private filterWithBVH(allMeshData: MeshData[], ray: Ray): MeshData[] {
+        if (allMeshData.length <= this.BVH_THRESHOLD) {
+            return allMeshData;
+        }
+
+        // Instanced pieces are materialized per-ray and resident fragments can
+        // be replaced or reordered while keeping the same ids and buffer sizes.
+        // Reuse is safe only for the exact ordered objects the BVH indexed.
+        const needsRebuild =
+            !this.bvhCache ||
+            !this.bvhCache.isBuilt ||
+            this.bvhCache.meshCount !== allMeshData.length ||
+            this.bvhCache.meshData.some((mesh, index) => mesh !== allMeshData[index]);
+
+        if (needsRebuild) {
+            // Build BVH only when needed
+            this.bvh.build(allMeshData);
+            this.bvhCache = {
+                meshCount: allMeshData.length,
+                meshData: allMeshData,
+                isBuilt: true,
+            };
+        }
+
+        // Use BVH to filter meshes
+        const meshIndices = this.bvh.getMeshesForRay(ray, allMeshData);
+        return meshIndices.map(i => allMeshData[i]);
+    }
+
+    /**
+     * The canvas's CSS-pixel size, the space the caller's x/y are in. Rays,
+     * snap radii and point-snap tolerances are all authored in CSS pixels, so
+     * everything here stays in that space rather than the drawing buffer's
+     * device pixels (#5383). Null if the canvas rect has zero dimensions.
+     */
+    private cssViewport(): { width: number; height: number } | null {
+        const rect = this.canvas.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) {
+            return null;
+        }
+        return { width: rect.width, height: rect.height };
+    }
+
+    /**
+     * Raycast into the scene to get precise 3D intersection point
+     * This is more accurate than pick() as it returns the exact surface point
+     *
+     * Note: x, y are CSS pixel coordinates relative to the canvas element.
+     * The ray is built in that same CSS space (see cssViewport).
+     */
+    raycastScene(
+        x: number,
+        y: number,
+        options?: PickOptions & { snapOptions?: Partial<SnapOptions> },
+        clip?: PickClipState | null,
+    ): { intersection: Intersection; snap?: SnapTarget } | null {
+        try {
+            const viewport = this.cssViewport();
+            if (!viewport) return null;
+
+            // Create ray from screen coordinates
+            const ray = this.camera.unprojectToRay(x, y, viewport.width, viewport.height);
+
+            // Get all mesh data from scene
+            const allMeshData = this.collectVisibleMeshData(options, ray);
+
+            if (allMeshData.length === 0) {
+                return null;
+            }
+
+            // Use BVH for performance if we have many meshes
+            const meshesToTest = this.filterWithBVH(allMeshData, ray);
+
+            // Perform raycasting
+            const intersection = this.raycaster.raycast(ray, meshesToTest,
+                hit => !pointClipped(clip, hit.point.x, hit.point.y, hit.point.z));
+
+            if (!intersection) {
+                return null;
+            }
+
+            // Detect snap targets if requested
+            // Pass meshes near the ray to detect edges even when partially occluded
+            let snapTarget: SnapTarget | undefined;
+            if (options?.snapOptions) {
+                const cameraPos = this.camera.getPosition();
+                const cameraFov = this.camera.getFOV();
+
+                // Pass meshes that are near the ray (from BVH or all meshes if BVH not used)
+                // This allows detecting edges even when they're behind other objects
+                snapTarget = this.snapDetector.detectSnapTarget(
+                    ray,
+                    meshesToTest, // Pass all meshes near the ray
+                    intersection,
+                    { position: cameraPos, fov: cameraFov },
+                    viewport.height,
+                    options.snapOptions, target => !pointClipped(clip, target.position.x, target.position.y, target.position.z),
+                ) || undefined;
+            }
+
+            return {
+                intersection,
+                snap: snapTarget,
+            };
+        } catch (error) {
+            console.error('Raycast error:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Raycast with magnetic edge snapping behavior
+     * This provides the "stick and slide along edges" experience
+     *
+     * Note: x, y are CSS pixel coordinates relative to the canvas element.
+     * The ray is built in that same CSS space (see cssViewport).
+     */
+    raycastSceneMagnetic(
+        x: number,
+        y: number,
+        currentEdgeLock: EdgeLockInput,
+        options?: PickOptions & { snapOptions?: Partial<SnapOptions> },
+        clip?: PickClipState | null,
+    ): MagneticSnapResult & { intersection: Intersection | null } {
+        try {
+            const viewport = this.cssViewport();
+            if (!viewport) {
+                return {
+                    intersection: null,
+                    snapTarget: null,
+                    edgeLock: {
+                        edge: null,
+                        meshExpressId: null,
+                        edgeT: 0,
+                        shouldLock: false,
+                        shouldRelease: true,
+                        isCorner: false,
+                        cornerValence: 0,
+                    },
+                };
+            }
+
+            // Create ray from screen coordinates
+            const ray = this.camera.unprojectToRay(x, y, viewport.width, viewport.height);
+
+            // Get all mesh data from scene. Unlike before #1860, an empty
+            // scene no longer short-circuits here — a point-cloud-only
+            // model (no IFC mesh loaded at all) must still fall through
+            // to the point-cloud query below instead of returning a hard
+            // miss.
+            const allMeshData = this.collectVisibleMeshData(options, ray);
+
+            const cameraPos = this.camera.getPosition();
+            const cameraFov = this.camera.getFOV();
+
+            let intersection: Intersection | null = null;
+            let magneticResult: MagneticSnapResult = { snapTarget: null, edgeLock: releasedEdgeLock() };
+
+            if (allMeshData.length > 0) {
+                // Use BVH for performance if we have many meshes
+                const meshesToTest = this.filterWithBVH(allMeshData, ray);
+
+                // Perform raycasting
+                // Magnetic mesh snapping predates source curves and keeps its
+                // existing clip policy; only the opt-in source query below is clipped.
+                intersection = this.raycaster.raycast(ray, meshesToTest);
+
+                // Use magnetic snap detection
+                magneticResult = this.snapDetector.detectMagneticSnap(
+                    ray,
+                    meshesToTest,
+                    intersection,
+                    { position: cameraPos, fov: cameraFov },
+                    viewport.height,
+                    currentEdgeLock,
+                    options?.snapOptions || {}
+                );
+            }
+
+            const source = querySourceCurves(this.sourceSnapCurves, magneticResult.snapTarget,
+                this.camera, ray, x, y, viewport, options, clip);
+            if (source) magneticResult = { snapTarget: source, edgeLock: releasedEdgeLock() };
+
+            // Point-cloud snapping (#1860): search up to whatever the mesh
+            // path already found (or the whole scene, if there was no mesh
+            // hit at all) — a real mesh surface in front of a scan point
+            // should still win the pick. Gated on the caller's snap config
+            // so the measure tool's snap toggle disables scan-point
+            // magnetism exactly like mesh vertex/edge magnetism.
+            const snapCamera: PointCloudSnapCamera = {
+                fov: cameraFov,
+                canvasHeightPx: viewport.height,
+                orthoHalfHeight: this.camera.getProjectionMode() === 'orthographic' ? this.camera.getOrthoSize() : null,
+            };
+            const maxPointDistance = intersection ? intersection.distance : Infinity;
+            const pointHit = pointCloudSnapEnabled(options?.snapOptions)
+                ? queryPointClouds(this.pointCloudProvider, ray, snapCamera, maxPointDistance, options)
+                : null;
+            if (pointHit) {
+                // A point-cloud hit only OVERRIDES an existing mesh snap
+                // target (vertex/edge/face/...) when it's meaningfully in
+                // front of the mesh surface, not just scan noise a few mm
+                // nearer along the ray — otherwise a scan overlapping its
+                // as-designed model would non-deterministically steal
+                // intended vertex/corner snaps on most measurements over
+                // scanned-over geometry (#1860 review finding 2). When the
+                // mesh path found no snap target at all (bare face hit, or
+                // no mesh hit), the point snap wins as before.
+                const sourceTarget = magneticResult.snapTarget?.metadata?.sourceCurve ? magneticResult.snapTarget : null;
+                const wins = sourceTarget
+                    ? pointCloudWinsOverSourceSnap(pointHit, sourceTarget, ray, snapCamera)
+                    : pointCloudWinsOverMeshSnap({
+                        pointHit,
+                        meshSnapTarget: magneticResult.snapTarget,
+                        meshIntersectionDistance: intersection ? intersection.distance : null,
+                        camera: snapCamera,
+                    });
+                if (wins) {
+                    magneticResult = {
+                        snapTarget: {
+                            type: SnapType.POINT_CLOUD,
+                            position: pointHit.position,
+                            expressId: pointHit.expressId,
+                            confidence: 1,
+                        },
+                        edgeLock: releasedEdgeLock(),
+                    };
+                }
+            }
+
+            return {
+                intersection,
+                ...magneticResult,
+            };
+        } catch (error) {
+            console.error('Magnetic raycast error:', error);
+            return {
+                intersection: null,
+                snapTarget: null,
+                edgeLock: {
+                    edge: null,
+                    meshExpressId: null,
+                    edgeT: 0,
+                    shouldLock: false,
+                    shouldRelease: true,
+                    isCorner: false,
+                    cornerValence: 0,
+                },
+            };
+        }
+    }
+
+    /**
+     * Invalidate BVH cache (call when geometry changes)
+     */
+    invalidateBVHCache(): void {
+        this.bvhCache = null;
+    }
+
+    /** Get the raycaster for advanced usage. */
+    getRaycaster(): Raycaster {
+        return this.raycaster;
+    }
+
+    /** Get the snap detector for advanced usage. */
+    getSnapDetector(): SnapDetector {
+        return this.snapDetector;
+    }
+
+    /**
+     * Renderer wires this once point clouds are initialised so the
+     * measure tool can snap to scan points (#1860). Pass null to disable.
+     */
+    setPointCloudProvider(provider: PointCloudRayProvider | null): void {
+        this.pointCloudProvider = provider;
+    }
+
+    /** Replace the selected, visible authored curves available to magnetic picking. */
+    setSourceSnapCurves(curves: readonly SourceSnapCurve[]): void { this.sourceSnapCurves = [...curves]; }
+    /**
+     * Clear all caches (call when geometry changes)
+     */
+    clearCaches(): void {
+        this.invalidateBVHCache();
+        this.snapDetector.clearCache();
+    }
+}

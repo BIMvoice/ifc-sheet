@@ -1,0 +1,220 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Colour overlay + row focus (#2867) for a `ValidationReport`, generalised
+ * over its source (#5138 plan §5/§6: split out of `useIDS.ts` so the same
+ * behaviour renders an IDS report and a rule-set report alike). Paired with
+ * `useValidationIsolation.ts` (set-level isolate actions) and
+ * `useValidationExports.ts` (JSON/HTML/BCF) by the orchestrating
+ * `useValidationResults.ts`.
+ *
+ * Moved verbatim from `useIDS.ts`'s "Color Actions" / "Row Focus (#2867)"
+ * sections — behaviour unchanged, only the report type widened from
+ * `IDSValidationReport` to `ValidationReport`.
+ */
+
+import { useCallback, useEffect, useRef } from 'react';
+import { useViewerStore } from '@/store';
+import type { ValidationReport } from '@ifc-lite/ids';
+import { installIdsFocusVisibility } from '../ids-focus-visibility';
+import {
+  IDS_FOCUS_COLOR,
+  buildValidationColorUpdates,
+  type ColorTuple,
+} from '../ids/idsColorSystem';
+import { releaseOwnedIdsFocusVisibility } from '@/lib/ids/visibility-ownership';
+import { idsColorsOnScreen, paintIdsColors } from '@/lib/ids/color-ownership';
+import { resolvePresentationIds } from '@/lib/presentation/resolvePresentationIds';
+import type { IDSFocusMode, IDSDisplayOptions } from '@/store/slices/idsSlice';
+import { useToViewerGlobalId } from './toViewerGlobalId';
+
+export interface ValidationColorFocusApi {
+  buildColors: (specId?: string, bothHighlights?: boolean) => Map<number, ColorTuple>;
+  /** Paint a validation overlay through the one owned write (`paintIdsColors`). */
+  paintColors: (colors: Map<number, ColorTuple>) => void;
+  /** Whether the report colours are what is on screen (drives the toggle). */
+  colorsShown: boolean;
+  /** Show the report colours (#6373: the toggle's "on"). */
+  applyColors: () => void;
+  setSpecColors: (specId: string) => void;
+  restoreReportColors: () => void;
+  /** Restore the model's original colours; the report stays (#6373: the toggle's "off"). */
+  clearColors: () => void;
+  toggleColors: () => void;
+  releaseFocusVisibility: () => void;
+  focusEntity: (modelId: string, expressId: number, mode?: IDSFocusMode, zoomToEntity?: boolean) => void;
+  clearEntitySelection: () => void;
+  setFocusMode: (mode: IDSFocusMode) => void;
+}
+
+export interface UseValidationColorFocusParams {
+  report: ValidationReport | null;
+  displayOptions: IDSDisplayOptions;
+  defaultFailedColor: [number, number, number, number];
+  defaultPassedColor: [number, number, number, number];
+  focusMode: IDSFocusMode;
+  isolationScope: 'ids' | 'spec';
+  activeSpecificationId: string | null;
+  autoApplyColors: boolean;
+}
+
+export function useValidationColorFocus(params: UseValidationColorFocusParams): ValidationColorFocusApi {
+  const { report, displayOptions, defaultFailedColor, defaultPassedColor, focusMode, isolationScope, activeSpecificationId, autoApplyColors } = params;
+
+  const models = useViewerStore((s) => s.models);
+  const colorsShown = useViewerStore(idsColorsOnScreen);
+  const setIdsColorsShown = useViewerStore((s) => s.setIdsColorsShown);
+  const setSelectedEntityId = useViewerStore((s) => s.setSelectedEntityId);
+  const setSelectedEntity = useViewerStore((s) => s.setSelectedEntity);
+  const setIdsActiveEntity = useViewerStore((s) => s.setIdsActiveEntity);
+  const setIdsFocusMode = useViewerStore((s) => s.setIdsFocusMode);
+  const setIdsIsolateMode = useViewerStore((s) => s.setIdsIsolateMode);
+  const cameraCallbacks = useViewerStore((s) => s.cameraCallbacks);
+
+  const toViewerGlobalId = useToViewerGlobalId();
+
+  // Every report paint below goes through here, so each one claims the
+  // channel and a later report clear can hand it back (#6373).
+  const paintColors = useCallback((colors: Map<number, ColorTuple>) => {
+    paintIdsColors(useViewerStore.getState, colors);
+  }, []);
+
+  // Read at call time, not closed over: the toggle and a row click can land in
+  // the same tick, and two hook instances (ValidationPanel + IDSPanel) share it.
+  const buildColors = useCallback(
+    (specId?: string, bothHighlights = false): Map<number, ColorTuple> => {
+      if (!report || !useViewerStore.getState().idsColorsShown) return new Map<number, ColorTuple>();
+      const opts = bothHighlights
+        ? { ...displayOptions, highlightFailed: true, highlightPassed: true }
+        : displayOptions;
+      return buildValidationColorUpdates(
+        report, models, opts, defaultFailedColor, defaultPassedColor,
+        specId ? { specId } : undefined,
+      );
+    },
+    [report, models, displayOptions, defaultFailedColor, defaultPassedColor],
+  );
+
+  const applyColors = useCallback(() => {
+    setIdsColorsShown(true);
+    paintColors(buildColors());
+  }, [setIdsColorsShown, buildColors, paintColors]);
+
+  const setSpecColors = useCallback((specId: string) => {
+    paintColors(buildColors(specId, true));
+  }, [buildColors, paintColors]);
+
+  const restoreReportColors = useCallback(() => {
+    if (!report) return;
+    paintColors(buildColors());
+  }, [report, buildColors, paintColors]);
+
+  const clearColors = useCallback(() => {
+    setIdsColorsShown(false);
+    paintColors(new Map());
+  }, [setIdsColorsShown, paintColors]);
+
+  const toggleColors = useCallback(() => {
+    if (idsColorsOnScreen(useViewerStore.getState())) clearColors();
+    else applyColors();
+  }, [clearColors, applyColors]);
+
+  const installFocusIsolation = useCallback((ids: Set<number>): void => {
+    const state = useViewerStore.getState();
+    const installed = new Set(resolvePresentationIds(state.cameraCallbacks.resolveHighlightIds, [...ids]));
+    installIdsFocusVisibility('isolate', installed);
+  }, []);
+
+  const installFocusGhost = useCallback((ids: Set<number>): void => {
+    const state = useViewerStore.getState();
+    const installed = new Set(resolvePresentationIds(state.cameraCallbacks.resolveHighlightIds, [...ids]));
+    installIdsFocusVisibility('ghost', installed);
+  }, []);
+
+  const releaseFocusVisibility = useCallback((): void => {
+    releaseOwnedIdsFocusVisibility(useViewerStore.getState());
+  }, []);
+
+  const paintFocus = useCallback((focusedGlobalId: number | null): void => {
+    if (!report) return;
+    const colors = isolationScope === 'spec' && activeSpecificationId
+      ? buildColors(activeSpecificationId, true)
+      : buildColors();
+    if (focusedGlobalId != null) colors.set(focusedGlobalId, IDS_FOCUS_COLOR);
+    paintColors(colors);
+  }, [report, isolationScope, activeSpecificationId, buildColors, paintColors]);
+
+  const applyFocusMode = useCallback((globalId: number, mode: IDSFocusMode): void => {
+    if (mode === 'highlight') {
+      releaseFocusVisibility();
+      return;
+    }
+    if (mode === 'isolate') installFocusIsolation(new Set([globalId]));
+    else installFocusGhost(new Set([globalId]));
+    setIdsIsolateMode(null);
+  }, [releaseFocusVisibility, installFocusIsolation, installFocusGhost, setIdsIsolateMode]);
+
+  const focusEntity = useCallback((
+    modelId: string,
+    expressId: number,
+    mode: IDSFocusMode = focusMode,
+    zoomToEntity = true,
+  ) => {
+    setIdsActiveEntity({ modelId, expressId });
+
+    const isLegacyMode = modelId === '__legacy__' || modelId === 'legacy' || models.size === 0;
+    if (isLegacyMode) {
+      setSelectedEntityId(expressId);
+      setSelectedEntity({ modelId: 'legacy', expressId });
+    } else {
+      const federatedId = toViewerGlobalId(modelId, expressId);
+      if (federatedId == null) return;
+      setSelectedEntityId(federatedId);
+      setSelectedEntity({ modelId, expressId });
+    }
+
+    const globalId = toViewerGlobalId(modelId, expressId);
+    if (globalId != null) {
+      applyFocusMode(globalId, mode);
+      paintFocus(globalId);
+    }
+
+    if (zoomToEntity && cameraCallbacks.frameSelection) {
+      setTimeout(() => { cameraCallbacks.frameSelection?.(); }, 50);
+    }
+  }, [
+    focusMode, setIdsActiveEntity, setSelectedEntityId, setSelectedEntity, models,
+    cameraCallbacks, toViewerGlobalId, applyFocusMode, paintFocus,
+  ]);
+
+  const setFocusMode = useCallback((mode: IDSFocusMode) => {
+    setIdsFocusMode(mode);
+    const active = useViewerStore.getState().idsActiveEntityId;
+    if (active) focusEntity(active.modelId, active.expressId, mode, false);
+  }, [setIdsFocusMode, focusEntity]);
+
+  const clearEntitySelection = useCallback(() => {
+    setIdsActiveEntity(null);
+    setSelectedEntityId(null);
+    setSelectedEntity(null);
+    releaseFocusVisibility();
+    paintFocus(null);
+  }, [setIdsActiveEntity, setSelectedEntityId, setSelectedEntity, releaseFocusVisibility, paintFocus]);
+
+  // Paints on a landing report AND on every mount with one already loaded
+  // (panel reopened, IDS <-> Information validation host switch). A landing
+  // report turns the colours on in the slice; a mount must not, or reopening
+  // the panel would undo the user's "Restore original colors" (#6373).
+  const restoreReportColorsRef = useRef(restoreReportColors);
+  restoreReportColorsRef.current = restoreReportColors;
+  useEffect(() => {
+    if (autoApplyColors && report && useViewerStore.getState().idsColorsShown) restoreReportColorsRef.current();
+  }, [autoApplyColors, report]);
+
+  return {
+    buildColors, paintColors, colorsShown, applyColors, setSpecColors, restoreReportColors, clearColors, toggleColors,
+    releaseFocusVisibility, focusEntity, clearEntitySelection, setFocusMode,
+  };
+}

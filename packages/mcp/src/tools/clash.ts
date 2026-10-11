@@ -1,0 +1,273 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Clash detection tools (spec section 7.3).
+ *
+ * These wire the headless geometry pipeline (@ifc-lite/geometry) to the
+ * representation-agnostic clash engine (@ifc-lite/clash). The whole model is
+ * meshed once and cached by model id; the engine's rule SELECTORS (TYPE-based,
+ * e.g. `IfcDuct*|IfcPipe*`) pick the element groups for each run.
+ *
+ *   - clash_check   one ad-hoc rule: A vs B, a self-clash within A, or — with no
+ *                   selectors at all — ALL clashes in the model (every element
+ *                   vs every other, no discipline matrix needed).
+ *   - clash_matrix  the standard discipline matrix (MEP x STR, HVAC x ARCH, ...).
+ *
+ * Clash lists are always capped for display; the cap and the dropped count are
+ * stated explicitly so output never silently truncates.
+ */
+
+import { readFile } from 'node:fs/promises';
+import { GeometryProcessor, type MeshData } from '@ifc-lite/geometry';
+import {
+  createClashEngine,
+  disciplineMatrixRules,
+  sortClashes,
+  type Clash,
+  type ClashMode,
+  type ClashResult,
+  type ClashRule,
+} from '@ifc-lite/clash';
+import { elementsFromStep } from '@ifc-lite/clash/step';
+import type { Tool } from './types.js';
+import { okResult, resolveModel } from './util.js';
+import { ToolErrorCode, ToolExecutionError } from '../errors.js';
+import type { LoadedModel, ToolContext } from '../context.js';
+
+/** Cap on clashes returned in a tool result. The dropped count is reported. */
+const CLASH_DISPLAY_CAP = 50;
+
+/**
+ * Module-level mesh cache keyed by the LoadedModel INSTANCE (not its id), so
+ * repeated clash calls on the same model skip the expensive headless
+ * tessellation. A WeakMap is deliberate: (1) it avoids the cross-session id
+ * collision bug — every HTTP session has its own registry, so two sessions
+ * loading distinct files that derive the same `id` ('model.ifc' -> 'model')
+ * never alias each other's meshes; (2) entries are GC'd once a session's
+ * registry drops the model (e.g. model_unload), so a long-lived server doesn't
+ * leak tessellated geometry forever.
+ */
+const meshCache = new WeakMap<LoadedModel, MeshData[]>();
+
+/** Mesh the whole model once (headless, no DOM) and cache by model instance. */
+async function meshModel(m: LoadedModel, ctx: ToolContext): Promise<MeshData[]> {
+  const cached = meshCache.get(m);
+  if (cached) return cached;
+
+  return withIfcBytes(m, async (bytes) => {
+    ctx.progress.report(0.1, 'Tessellating model geometry', 1);
+    const gp = new GeometryProcessor();
+    try {
+      await gp.init();
+      if (ctx.signal.aborted) {
+        throw new ToolExecutionError({ code: ToolErrorCode.INTERNAL_ERROR, message: 'Clash run cancelled before meshing.' });
+      }
+      const result = await gp.process(bytes);
+      const meshes = result.meshes;
+      if (meshes.length === 0) {
+        throw new ToolExecutionError({
+          code: ToolErrorCode.UNSUPPORTED_OPERATION,
+          message: 'No mesh geometry could be produced for this model; clash detection needs tessellated solids.',
+          hint: 'Confirm the model carries explicit geometry (not quantity-only data).',
+        });
+      }
+      meshCache.set(m, meshes);
+      return meshes;
+    } finally {
+      gp.dispose();
+    }
+  });
+}
+
+/**
+ * Run `fn` over the model's raw IFC bytes: prefer the in-memory source, fall
+ * back to disk.
+ *
+ * Scoped rather than returning the buffer (#2183): the wasm mesher is a genuine
+ * whole-file consumer, so the source really is materialised — but only for the
+ * duration of the call, so nothing but the meshes survives it.
+ */
+async function withIfcBytes<T>(m: LoadedModel, fn: (bytes: Uint8Array) => Promise<T>): Promise<T> {
+  if (m.store.source.byteLength > 0) return m.store.source.withMaterializedAsync(fn);
+  if (m.filePath) return fn(await readFile(m.filePath));
+  throw new ToolExecutionError({
+    code: ToolErrorCode.UNSUPPORTED_OPERATION,
+    message: 'Model has no in-memory source bytes and no file path to re-read for meshing.',
+  });
+}
+
+/** Run a rule set against a model, returning the engine result. */
+async function runRules(m: LoadedModel, rules: ClashRule[], ctx: ToolContext): Promise<ClashResult> {
+  const meshes = await meshModel(m, ctx);
+  const { elements, exclusions } = elementsFromStep({ store: m.store, meshes, modelId: m.id });
+  const engine = createClashEngine({ backend: 'ts' });
+  return engine.run(elements, rules, {
+    exclusions,
+    signal: ctx.signal,
+    onProgress: (p) => {
+      const ratio = p.total > 0 ? p.done / p.total : 0;
+      ctx.progress.report(0.2 + ratio * 0.8, `Clash ${p.phase}: ${p.rule} (${p.done}/${p.total})`, 1);
+    },
+  });
+}
+
+/** Project a `Clash` down to a compact, JSON-friendly display row. */
+/** Exported for direct unit testing (see clash.test.ts distanceKind coverage). */
+export function displayClash(c: Clash): Record<string, unknown> {
+  return {
+    id: c.id,
+    rule: c.rule,
+    status: c.status,
+    severity: c.severity,
+    distance: c.distance,
+    // Provenance of `distance` (see Clash.distanceKind): a hard-clash distance
+    // labelled 'estimate' is a box dimension read off the AABBs, not a mesh
+    // measurement — an agent consuming this must not report it as a precise
+    // interpenetration depth.
+    distanceKind: c.distanceKind,
+    point: c.point,
+    a: { key: c.a.key, ref: c.a.ref, tag: c.a.tag, name: c.a.name },
+    b: { key: c.b.key, ref: c.b.ref, tag: c.b.tag, name: c.b.name },
+  };
+}
+
+/**
+ * Top clashes by signed distance (deepest penetration / smallest gap first),
+ * capped for display. Returns the rows plus an explicit `truncated` note when
+ * capped.
+ *
+ * The ordering itself lives in `@ifc-lite/clash`'s `sortClashes(..., 'distance')`
+ * — the same helper the viewer's clash panel and the CLI summary use, so a
+ * "top N" list means the same N rows through every surface. It sorts by RAW
+ * distance ascending, not |distance|: hard clashes carry a negative penetration
+ * depth, so most-negative-first surfaces the DEEPEST penetrations (the worst,
+ * most actionable rows) instead of burying them past the cap; clearance/touch
+ * gaps are positive, so the same order surfaces the tightest gaps first. (An
+ * |distance| sort inverted the hard-mode order — issue caught in review.) It
+ * also breaks ties on the stable clash id, which this local copy did not, so
+ * equal-distance rows no longer reshuffle between runs.
+ */
+function topClashes(clashes: Clash[], cap: number): {
+  rows: Record<string, unknown>[];
+  truncated: { shown: number; dropped: number; total: number } | null;
+} {
+  const sorted = sortClashes(clashes, 'distance');
+  const shown = sorted.slice(0, cap);
+  const rows = shown.map(displayClash);
+  if (sorted.length > cap) {
+    return { rows, truncated: { shown: shown.length, dropped: sorted.length - shown.length, total: sorted.length } };
+  }
+  return { rows, truncated: null };
+}
+
+const clashCheck: Tool = {
+  name: 'clash_check',
+  description:
+    'Clash detection on a single model. Omit BOTH a and b to detect ALL clashes inside the model '
+    + '(every element vs every other — no discipline matrix needed). Give only a TYPE selector for a to '
+    + 'self-clash within a group (a="IfcDuct*"), or both a and b for a pairwise check (a="IfcDuct*", b="IfcWall*"). '
+    + 'Meshes the model headlessly and returns a summary plus the top clashes by distance ascending, so deepest penetration first in hard mode and tightest gap first in clearance mode.',
+  scope: 'read',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      model_id: { type: 'string' },
+      a: { type: 'string', description: 'Type selector for set A. Defaults to "*" (all elements). e.g. "IfcDuct*|IfcPipe*", "!IfcSpace".' },
+      b: { type: 'string', description: 'Type selector for set B. OMIT for a self-clash within A (every element vs every other in the group).' },
+      mode: { type: 'string', enum: ['hard', 'clearance'], default: 'hard' },
+      tolerance: { type: 'number', description: 'Touching band (m). Defaults to the engine tolerance.' },
+      clearance: { type: 'number', description: 'Required gap (m) for mode="clearance".' },
+    },
+    additionalProperties: false,
+  },
+  async handler(input, ctx) {
+    const m = resolveModel(ctx, input.model_id as string | undefined);
+    const a = (input.a as string | undefined) ?? '*';
+    const b = input.b as string | undefined;
+    const mode = (input.mode as ClashMode | undefined) ?? 'hard';
+    const tolerance = input.tolerance as number | undefined;
+    const clearance = input.clearance as number | undefined;
+    // No `b` => self-clash within A (every element vs every other in the group);
+    // with the default a="*" that is "all clashes in the model".
+    const label = b ? `${a} vs ${b}` : a === '*' ? 'all elements (self-clash)' : `${a} (self-clash)`;
+
+    const rule: ClashRule = {
+      id: 'clash_check',
+      name: label,
+      a,
+      ...(b != null ? { b } : {}),
+      mode,
+      ...(tolerance != null ? { tolerance } : {}),
+      ...(clearance != null ? { clearance } : {}),
+    };
+
+    const result = await runRules(m, [rule], ctx);
+    const { rows, truncated } = topClashes(result.clashes, CLASH_DISPLAY_CAP);
+
+    const settings = { a, b: b ?? null, mode, tolerance: tolerance ?? null, clearance: clearance ?? null };
+    const capNote = truncated
+      ? ` Showing top ${truncated.shown} by distance; ${truncated.dropped} more not shown.`
+      : '';
+    return okResult(
+      `Found ${result.summary.total} clash(es) for ${label} (mode=${mode}).${capNote}`,
+      {
+        summary: result.summary,
+        settings,
+        engineSettings: result.settings,
+        truncated: result.truncated ?? null,
+        clashes: rows,
+        clashesTruncated: truncated,
+      },
+    );
+  },
+};
+
+const clashMatrix: Tool = {
+  name: 'clash_matrix',
+  description:
+    'Run the standard discipline clash matrix (MEP x STR, HVAC x ARCH, ...) over the whole model. '
+    + 'Returns per-rule and per-severity breakdowns over EVERY clash, plus a sample of clashes '
+    + 'selected and capped by distance ascending -- so the breakdowns are complete and the sample is not.',
+  scope: 'read',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      model_id: { type: 'string' },
+      mode: { type: 'string', enum: ['hard', 'clearance'], default: 'hard' },
+      clearance: { type: 'number', description: 'Required gap (m) applied to every matrix rule when mode="clearance". Without it a clearance matrix reports nothing.' },
+    },
+    additionalProperties: false,
+  },
+  async handler(input, ctx) {
+    const m = resolveModel(ctx, input.model_id as string | undefined);
+    const mode = (input.mode as ClashMode | undefined) ?? 'hard';
+    const clearance = input.clearance as number | undefined;
+    const rules = disciplineMatrixRules(mode, clearance);
+
+    const result = await runRules(m, rules, ctx);
+    const { rows, truncated } = topClashes(result.clashes, CLASH_DISPLAY_CAP);
+
+    const capNote = truncated
+      ? ` Sampling top ${truncated.shown} by distance; ${truncated.dropped} more not shown.`
+      : '';
+    return okResult(
+      `Discipline matrix (mode=${mode}, ${rules.length} rules): ${result.summary.total} clash(es).${capNote}`,
+      {
+        mode,
+        ruleCount: rules.length,
+        byRule: result.summary.byRule,
+        bySeverity: result.summary.bySeverity,
+        byTypePair: result.summary.byTypePair,
+        summary: result.summary,
+        engineSettings: result.settings,
+        truncated: result.truncated ?? null,
+        sampleClashes: rows,
+        sampleTruncated: truncated,
+      },
+    );
+  },
+};
+
+export const clashTools: Tool[] = [clashCheck, clashMatrix];

@@ -1,0 +1,348 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The source-iteration phase of `StepExporter.export()` (#2475 step 2d): the
+ * pass that writes one line per record the SOURCE file already holds, plus the
+ * shared-atom retention that has to run before it decides what to skip.
+ *
+ * This phase reads more of the export's shared state than any other — 16 of
+ * {@link ExportPass}'s members — and it consumes what three earlier phases
+ * wrote: `modifiedAttributes` and `inPlaceNominees.georeferencing` from the
+ * georeferencing phase (`step-georeferencing.ts`), and `rewrittenEntityIds` /
+ * `skipPropertySetIds` / `allowedEntityIds` from the collection and setup
+ * phases. It writes `pass.entities`, which `assembleStepBytes` turns into
+ * bytes at the end of `export()`, and `pass.modifications`, which `settle()`
+ * reads. Nothing pulls the other way, which is why it moves last.
+ *
+ * What is injected rather than moved, and why: the
+ * `applySourceLineMutations` pipeline (and its `applyAttributeMutations` /
+ * `applyPositionalMutations` — free functions in `step-attribute-
+ * mutations.ts`, with the two per-slot serialize helpers they share with the
+ * overlay-created path in `step-attribute-serializers.ts` — #2475's
+ * "remaining private helpers" step, split further by #3184) is shared
+ * verbatim with the type-object `HasPropertySets` rewrite in
+ * `step-property-sets.ts` and with `step-overlay-entities.ts`, so it belongs
+ * to no single phase; `isGeometryEntity` is likewise read by the setup
+ * closure and by that module. `applyOverlayEntityOverrides` is NOT a
+ * dependency of this phase at all — it is reached only from
+ * `step-overlay-entities.ts` — and is injected there instead, though it too
+ * now lives in its own file, `step-overlay-attribute-overrides.ts`.
+ *
+ * Unlike `step-georeferencing.ts` this phase needs no `allocateExpressId`
+ * callback: it never allocates an id, it only rewrites lines that already have
+ * one.
+ *
+ * No test file travelled with this module, and that is a measured result, not
+ * an omission. Disabling the loop at its call site kills 106 tests across 22
+ * files — but that is the count of tests that need SOME source-backed line to
+ * exist for their assertion to mean anything, not the count of tests of this
+ * phase's logic (8 of them are in `step-georeferencing.test.ts`, a phase
+ * already extracted). Mutating each of the phase's 27 individual sites instead
+ * puts every narrow kill set in a file whose name already points at the code:
+ * `shared-atom` for the retention pass, `source-ref-bounds` for the unreadable
+ * ref guard, `includegeometry-header-count` for the geometry skip,
+ * `visible-only-dangling-refs` for the relationship-ref filter,
+ * `rewritten-type-line-attributes` for the rewritten-entity skip,
+ * `overlay-effective-model` for the effective-type classification and
+ * `delta-modification-count` for the two ledger writes. Every test file in this
+ * package lives in one flat directory, so those names need no move — and unlike
+ * step 2b/2c, `step-exporter.test.ts` holds no test that dies to a NARROW site
+ * here, only ones that die because the file would otherwise be empty.
+ */
+
+import type { IfcDataStore } from '@ifc-lite/parser';
+import { filterHiddenRefsFromRelationshipLine } from './reference-collector.js';
+import { narrowNonRelPositionalRefLists } from './nonrel-positional-ref-narrowing.js';
+import { STYLE_RESCUE_TYPES } from './style-closure.js';
+import { NONREL_REF_LIST_TYPES } from './nonrel-ref-list-types.js';
+import { styleEntityWithheldWarning } from './step-export-types.js';
+import { applySourceLineMutationsReported } from './step-attribute-mutations.js';
+import { convertStepLine, type IfcSchemaVersion } from './schema-converter.js';
+import { nominateDeliveredInPlaceEdits } from './in-place-nomination.js';
+import { decodeRange } from './source-ref-bounds.js';
+import type { PropertySetContext } from './step-property-set-readers.js';
+import { retainSharedAtoms } from './step-shared-atom-retention.js';
+import { detachRelatedObjects } from './step-pset-copy-on-write.js';
+import type { ExportPass, SourceLineMutations, StepExportOptions } from './step-exporter.js';
+import { IFC_ENTITY_NAMES } from '@ifc-lite/data';
+
+/**
+ * The exporter state this phase cannot read off the {@link ExportPass}.
+ *
+ * `propertySetContext` is a thunk rather than a value because
+ * {@link retainSharedAtoms} returns before it needs one when nothing is being
+ * skipped, and because the exporter rebuilds that context per call — hoisting
+ * a built one here would change when it is constructed, not merely where it is
+ * named.
+ */
+export interface SourceIterationContext {
+  readonly dataStore: IfcDataStore;
+  /** `step-attribute-mutations.ts`'s `applySourceLineMutations`: the ONE
+   *  pipeline this pass and the type-object rewrite share, so it belongs to
+   *  neither and is injected. */
+  readonly applySourceLineMutations: (
+    expressId: number,
+    entityText: string,
+    recordType: string,
+    attributeMutations: Map<string, string> | undefined,
+    sourceSchema: IfcSchemaVersion,
+    overlayActive: boolean,
+    onRejected?: (attrName: string, value: string) => void,
+  ) => SourceLineMutations;
+  /** `isGeometryEntity` (`step-geometry-types.ts`), also read by the setup closure and by
+   *  the overlay-created-entities block. */
+  readonly isGeometryEntity: (type: string) => boolean;
+  /** `StepExporter.propertySetContext`, for the byte readers
+   *  {@link retainSharedAtoms} reaches through `getPropertyIdsInSet`. */
+  readonly propertySetContext: () => PropertySetContext;
+  /** The `relationshipWithheldWarning` message builder (`step-exporter.ts`):
+   *  a pure string formatter with no pass dependency, but a second reader —
+   *  the still-inline overlay-created-entities / type-rewrite block — so it
+   *  is injected here rather than duplicated or moved. */
+  readonly relationshipWithheldWarning: (expressId: number, type: string) => string;
+}
+
+/**
+ * Write every source-backed record this export keeps, into `pass.entities`.
+ *
+ * Mutates the pass in place and returns nothing: three later readers take its
+ * output at a distance — the assembly step reads `pass.entities`, `settle()`
+ * reads `pass.modifications`, and the header count reads both.
+ *
+ * `mayNameOmittedRefs` is passed rather than read off the pass because it is
+ * deliberately not a pass member: it folds in `hiddenProductIds`, which the
+ * visible-only closure walk only assigns after the pass is constructed, so
+ * hoisting it would change what it computes rather than where it is named. The
+ * overlay-created-entities block reads the same local. `isOmittedFromOutput`
+ * is passed alongside it for the same reason — it closes over `pass` but is
+ * built once by the caller (`step-exporter.ts`), not re-derived here.
+ */
+export function writeSourceEntityLines(
+  pass: ExportPass,
+  options: StepExportOptions,
+  mayNameOmittedRefs: boolean,
+  isOmittedFromOutput: (id: number) => boolean,
+  ctx: SourceIterationContext,
+): void {
+  // A modified pset is replaced wholesale, which skips ALL of its member atoms.
+  // But IFC exporters deduplicate identical Pset_*Common atoms (e.g. one
+  // IsExternal IfcPropertySingleValue shared by dozens of psets), so skipping a
+  // shared atom would orphan every OTHER pset that still references it, leaving
+  // dangling refs and an invalid file. Keep any atom a surviving container needs.
+  if (pass.skipPropertySetIds.size > 0) {
+    retainSharedAtoms(pass.skipPropertySetIds, pass.allowedEntityIds, pass.effective, ctx.propertySetContext());
+  }
+
+  // Export original entities from source buffer, SKIPPING modified property sets
+  if (!options.deltaOnly && ctx.dataStore.source) {
+    const source = ctx.dataStore.source;
+
+    // Extract existing entities from source. The effective index has already
+    // dropped everything the overlay tombstoned, so there is no separate
+    // deleted check to forget here.
+    for (const [expressId, entityRef] of pass.effective) {
+      // Skip overlay-only entities — emitted by the overlay-created-entities
+      // block back in `export()`.
+      // A ref this source cannot address is skipped by the same test rather
+      // than decoded: `decodeUtf8` clamps such a range and the empty string
+      // it returns used to be pushed into the file as a blank line, leaving
+      // every generated record that names the host dangling (#2491).
+      if (!pass.isReadableSourceRef(entityRef)) {
+        continue;
+      }
+
+      // Skip entities outside the visible closure
+      if (pass.allowedEntityIds !== null && !pass.allowedEntityIds.has(expressId)) {
+        continue;
+      }
+
+      // Skip property sets/relationships that are being replaced
+      if (pass.skipPropertySetIds.has(expressId) || pass.skipRelationshipIds.has(expressId)) {
+        continue;
+      }
+
+      // Skip type entities whose HasPropertySets attribute will be rewritten
+      if (pass.rewrittenEntityIds.has(expressId)) {
+        continue;
+      }
+
+      // Skip geometry if not included. Classified via `isGeometryExcluded`
+      // (which reads the EFFECTIVE type, `effective.effectiveType`) rather
+      // than `entityRef.type` directly: a retype can move a record across
+      // the geometry boundary in either direction, and this check has to
+      // agree with `hasEmittableHostBytes`/`willBeEmitted`'s use of the
+      // same predicate — otherwise a wall retyped to `IfcCartesianPoint`
+      // still ships its (rewritten) geometry line under
+      // `includeGeometry: false`, the exact "predicate must agree" failure
+      // this file already guards for the non-retyped case (#2414).
+      if (pass.isGeometryExcluded(expressId, entityRef.type)) {
+        continue;
+      }
+
+      // Get original entity text — decodeRange handles SAB-backed
+      // sources (Firefox/Chrome reject `TextDecoder.decode()` on a
+      // SharedArrayBuffer-backed view; the parser deliberately keeps
+      // `source` zero-copy SAB-backed for worker sharing).
+      const entityText = decodeRange(
+        source,
+        entityRef.byteOffset,
+        entityRef.byteOffset + entityRef.byteLength
+      );
+      // Retype, named attribute edits and positional edits, in that order.
+      // Shared verbatim with the type-object `HasPropertySets` rewrite in
+      // `step-property-sets.ts`, which writes the line this pass would
+      // otherwise have written — hence injected rather than moved here.
+      // Through `applySourceLineMutationsReported` rather than the injected
+      // pipeline directly, so this pass and the type-object rewrite cannot end
+      // up reporting different halves of the same refusal.
+      //
+      // Into a per-entity buffer, NOT straight into `pass.warnings`: both
+      // reports the pipeline makes are about the line this iteration is about
+      // to write, and the `IFCREL*` and style-rescue branches below can still
+      // `continue` — withholding that line entirely and pushing their own
+      // warning for it. Reported here, the unreadable-record warning would name
+      // an entity whose edits were dropped beside a warning saying that entity
+      // has no line in the export at all: two warnings for one outcome, and the
+      // reader has to guess which one is about the record they asked for. So the
+      // buffer is flushed once the withholding branches have had their say and
+      // this line is going out.
+      //
+      // The flush point is the LAST branch that can withhold, not the last thing
+      // that can change the line: `convertStepLine` below still runs on the text
+      // this produces. That is deliberate, and it is why the warning itself no
+      // longer describes what was written — see
+      // `unreadableRecordEditsDroppedWarning` (#4213).
+      const mutationWarnings: string[] = [];
+      const mutated = applySourceLineMutationsReported(
+        ctx.applySourceLineMutations,
+        mutationWarnings,
+        expressId,
+        entityText,
+        entityRef.type,
+        pass.modifiedAttributes.get(expressId),
+        pass.sourceSchema,
+        pass.overlayActive,
+      );
+      let nextEntityText = mutated.text;
+      // A shared IfcRelDefinesByProperties loses the elements that got their
+      // own copy of its set this export; the rest keep the original (#5794).
+      const narrowed = detachRelatedObjects(pass, expressId, nextEntityText);
+      if (narrowed === null) continue;
+      nextEntityText = narrowed;
+
+      // A hidden PRODUCT's own line is already out of the export via
+      // `allowedEntityIds`, and a TOMBSTONED entity's via `effective` — this
+      // is the relationship that NAMED either one. `IFCREL*` is an
+      // unconditional root (see `getVisibleEntityIds`), so its bytes reach
+      // here unfiltered even when one of the ids they name was just
+      // excluded; left alone that ships a `#N` with no `#N=` line, whether
+      // the exclusion came from `visibleOnly` or from a plain deletion
+      // (#2398). Checked before the nomination below: a relationship this
+      // withholds must not also be counted as a delivered modification.
+      //
+      // Classified by the EFFECTIVE type (`effective.effectiveType`), not
+      // the source's authored type: a retype can move a record across
+      // the `IFCREL*` boundary in either direction (`applySourceLineMutations`
+      // already rewrote `nextEntityText` to the new class), and this check
+      // has to agree with what actually got written, the same way
+      // `getVisibleEntityIds` already does for the visibility walk itself.
+      const effectiveRelType = pass.effective.effectiveType(expressId, entityRef.type).toUpperCase();
+      // UPPERCASE is load-bearing for the `startsWith('IFCREL')` and
+      // `STYLE_RESCUE_TYPES` matching below, but a warning is read by a person,
+      // so it gets the canonical IFC EXPRESS spelling (#5533).
+      const displayRelType = IFC_ENTITY_NAMES[effectiveRelType] ?? effectiveRelType;
+      if (mayNameOmittedRefs && effectiveRelType.startsWith('IFCREL')) {
+        const filtered = filterHiddenRefsFromRelationshipLine(nextEntityText, isOmittedFromOutput);
+        if (filtered === null) {
+          pass.warnings.push(ctx.relationshipWithheldWarning(expressId, displayRelType));
+          continue;
+        }
+        nextEntityText = filtered;
+      } else if (mayNameOmittedRefs && STYLE_RESCUE_TYPES.has(effectiveRelType)) {
+        // A rescued IFCSTYLEDITEM/IFCSTYLEDREPRESENTATION/
+        // IFCPRESENTATIONLAYERASSIGNMENT/IFCPRESENTATIONLAYERWITHSTYLE
+        // (`style-closure.ts`) can legitimately name BOTH a kept item and one
+        // this export omits — e.g. a layer assignment shared by a visible and
+        // a hidden product's geometry, rescued because the visible one is in
+        // the closure. Unlike `IFCREL*`, these lines are otherwise never
+        // touched (`step-omission-predicates.ts` documents that as a general
+        // gap for non-relationship lines), so left alone this would ship the
+        // exact #2398 dangling-`#N` shape on a line the rescue itself just
+        // introduced into the closure. Same filter, same withhold-vs-narrow
+        // rule, applied to this line for the same reason. `pass.sourceSchema`
+        // is passed (unlike the `IFCREL*` branch above) so a narrowed list is
+        // held to its OWN declared lower bound — `IfcTextureMap.Vertices` is
+        // `LIST [3:?]`, and narrowing it without that check produced a
+        // 2-vertex list, a different invalid file than the dangling ref it
+        // replaced (#5262).
+        const filtered = filterHiddenRefsFromRelationshipLine(nextEntityText, isOmittedFromOutput, pass.sourceSchema);
+        if (filtered === null) {
+          pass.warnings.push(styleEntityWithheldWarning(expressId, displayRelType));
+          continue;
+        }
+        nextEntityText = filtered;
+      } else if (mayNameOmittedRefs && NONREL_REF_LIST_TYPES.has(effectiveRelType)) {
+        // `IfcCostItem.CostValues`, `IfcPropertySet.HasProperties`,
+        // `IfcElementQuantity.Quantities`, … (`nonrel-ref-list-types.ts`,
+        // derived from the schema registries — #5181): direct LIST/SET
+        // attributes on a non-relationship class that name other entities, outside both
+        // branches above. A session deletion of a listed member reaches this
+        // line exactly as it reaches an `IFCREL*` line's list attributes.
+        //
+        // NOT the same function as the two branches above: these classes also
+        // carry bare, single-valued positional refs inherited from `IfcRoot`
+        // (`OwnerHistory`) or their own attributes (`IfcAppliedValue
+        // .UnitBasis`), and `filterHiddenRefsFromRelationshipLine`'s bare-ref
+        // rule withholds the WHOLE line for those — correct for an `IFCREL*`
+        // association, wrong here: it would delete the cost item itself over
+        // an unrelated deleted OwnerHistory and dangle every OTHER entity
+        // that names it, a regression against the untouched line
+        // `upstream/main` ships today. `narrowNonRelPositionalRefLists`
+        // (`nonrel-positional-ref-narrowing.ts`) is the narrow sibling that only ever
+        // narrows a list — never withholds — for exactly this reason; see its
+        // doc for the full argument, including why an emptied list becomes
+        // `$` (optional attribute), or is left untouched (mandatory attribute
+        // — e.g. `HasQuantities`), rather than withholding the record. It
+        // needs `effectiveRelType` and `pass.sourceSchema` to answer that: the
+        // optional/mandatory distinction is schema- and version-dependent
+        // (`IfcCostItem` does not even declare these attributes in IFC2X3).
+        nextEntityText = narrowNonRelPositionalRefLists(
+          nextEntityText,
+          isOmittedFromOutput,
+          effectiveRelType,
+          pass.sourceSchema,
+        );
+      }
+
+      // Past every branch that can withhold this line, so the pipeline's own
+      // reports are now true statements about a record this pass is writing.
+      pass.warnings.push(...mutationWarnings);
+
+      // A retype or a positional edit that CHANGED the line is what makes
+      // this entity count; a named attribute edit was already nominated by
+      // the collection pass. Both flags report effect, so retyping an entity
+      // to the class it already is — or writing a slot the token it already
+      // holds — no longer claims a modification over a line the export left
+      // byte-identical. This pass is full-export-only (`deltaOnly` skips it
+      // wholesale), so nomination IS emission here and the kinds only have to
+      // be right for the entity count — which is per entity, hence unchanged.
+      if (mutated.retyped || mutated.positional) pass.modifiedEntities.add(expressId);
+      if (mutated.retyped) pass.modifications.nominate(expressId, 'retype');
+      if (mutated.positional) pass.modifications.nominate(expressId, 'positional');
+      // The named-attribute kinds join them here rather than at their
+      // collection sites, for the same reason and on the same signal (#2483).
+      // This pass is full-export-only, so there is nothing to gate.
+      nominateDeliveredInPlaceEdits(pass.modifications, expressId, mutated, pass.inPlaceNominees);
+
+      // Apply schema conversion if exporting to a different schema version
+      if (pass.converting) {
+        const converted = convertStepLine(nextEntityText, pass.sourceSchema, pass.schema, options.guidRandom, pass.slotFill, pass.withheldRefIds, pass.ifc4Slots, pass.enums);
+        if (converted !== null) pass.entities.push(converted);
+      } else {
+        pass.entities.push(nextEntityText);
+      }
+    }
+  }
+}

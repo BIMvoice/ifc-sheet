@@ -1,0 +1,388 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Canonical resolution of a file's declared units for **display**.
+//!
+//! Where [`crate::units`] resolves only the LENGTH and PLANEANGLE *scale
+//! factors* needed to normalise geometry, this module resolves the file's whole
+//! `IfcUnitAssignment` into a per-unit-type table of display symbols + SI scale
+//! factors, covering `IfcSIUnit` (with prefixes), `IfcDerivedUnit` (composed,
+//! e.g. `m\u{00B3}/s`), `IfcConversionBasedUnit` (\u{00B0}, ft, ...) and
+//! `IfcMonetaryUnit`. It also maps a property's IFC measure value type (e.g.
+//! `IfcVolumetricFlowRateMeasure`) onto the unit it is shown in.
+//!
+//! This is the source of truth for unit *display*; the viewer mirrors it in
+//! `packages/parser/src/project-units.ts`, pinned by the shared parity vectors
+//! in `rust/core/tests/fixtures/unit_symbol_vectors.json`.
+
+pub mod measure;
+pub mod symbols;
+
+use std::collections::BTreeMap;
+
+use crate::decoder::EntityDecoder;
+pub use measure::{measure_unit, MeasureUnit};
+use symbols::{compose_derived, conversion_unit_symbol, si_unit_symbol_and_scale};
+
+/// A resolved display unit: the symbol to render plus the factor that converts a
+/// value expressed in this unit to its canonical SI base (`mm` -> `1e-3`,
+/// `m\u{00B3}/h` -> `1/3600`, `\u{00B0}` -> `0.01745...`). `si_scale` is `1.0`
+/// for units already at the SI base and for monetary units.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedUnit {
+    pub symbol: String,
+    pub si_scale: f64,
+}
+
+impl ResolvedUnit {
+    fn new(symbol: impl Into<String>, si_scale: f64) -> Self {
+        Self { symbol: symbol.into(), si_scale }
+    }
+}
+
+/// The set of units a file declares in its `IfcUnitAssignment`, keyed by
+/// unit-type token (`"LENGTHUNIT"`, `"VOLUMETRICFLOWRATEUNIT"`, ...). Only the
+/// unit-types the file actually declares are present; anything else falls back
+/// to the IFC-canonical SI default in [`ProjectUnits::unit_for_measure`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProjectUnits {
+    /// `None` for a declared unit whose scale could not be resolved (#4690):
+    /// it shows no unit rather than the SI default, which would mislabel it.
+    by_type: BTreeMap<String, Option<ResolvedUnit>>,
+    monetary: Option<ResolvedUnit>,
+}
+
+impl ProjectUnits {
+    /// Resolve the full unit assignment reachable from `project_id`. Never
+    /// fails: an absent / malformed assignment yields an empty table (all
+    /// measures then fall back to their SI default symbols).
+    pub fn resolve(decoder: &mut EntityDecoder, project_id: u32) -> Self {
+        let mut units = ProjectUnits::default();
+        let Ok(project) = decoder.decode_by_id(project_id) else {
+            return units;
+        };
+        if project.ifc_type.as_str() != "IFCPROJECT" {
+            return units;
+        }
+        // IFCPROJECT attribute 8 = UnitsInContext (IFCUNITASSIGNMENT).
+        let Some(units_ref) = project.get(8).and_then(|a| a.as_entity_ref()) else {
+            return units;
+        };
+        let Ok(assignment) = decoder.decode_by_id(units_ref) else {
+            return units;
+        };
+        if assignment.ifc_type.as_str() != "IFCUNITASSIGNMENT" {
+            return units;
+        }
+        // IFCUNITASSIGNMENT.Units (attribute 0) is a list of unit refs. Collect
+        // the ids first so we release the borrow on `assignment` before the
+        // decoder is borrowed mutably again inside the resolve loop.
+        let refs: Vec<u32> = match assignment.get(0).and_then(|a| a.as_list()) {
+            Some(list) => list.iter().filter_map(|a| a.as_entity_ref()).collect(),
+            None => return units,
+        };
+        for unit_ref in refs {
+            if let Some((unit_type, resolved, monetary)) = resolve_declared_unit(decoder, unit_ref) {
+                if monetary {
+                    units.monetary = resolved;
+                } else if let Some(t) = unit_type {
+                    // First declaration of a unit-type wins (IFC allows only one
+                    // per type anyway); don't let a later duplicate clobber it.
+                    units.by_type.entry(t).or_insert(resolved);
+                }
+            }
+        }
+        units
+    }
+
+    /// The display unit for a property/quantity whose IFC measure value type is
+    /// `measure_type` (e.g. `"IfcVolumetricFlowRateMeasure"`). Prefers the
+    /// file's declared unit for the measure's unit-type and otherwise falls back
+    /// to the IFC-canonical SI default. Returns `None` for dimensionless
+    /// measures (ratios, counts) and non-measure value types (labels, ...).
+    pub fn unit_for_measure(&self, measure_type: &str) -> Option<ResolvedUnit> {
+        match measure_unit(measure_type)? {
+            MeasureUnit::Typed { unit_type, default_symbol } => match self.by_type.get(unit_type) {
+                Some(declared) => declared.clone(),
+                None => Some(ResolvedUnit::new(default_symbol, 1.0)),
+            },
+            MeasureUnit::Monetary => self.monetary.clone(),
+            MeasureUnit::Dimensionless => None,
+        }
+    }
+
+    /// The resolved unit the file declares for a raw unit-type token, if any.
+    /// A declared unit whose scale could not be resolved is `None` here too.
+    pub fn resolved_for_unit_type(&self, unit_type: &str) -> Option<&ResolvedUnit> {
+        self.by_type.get(unit_type)?.as_ref()
+    }
+
+    /// The resolved monetary (currency) unit, if the file declares one.
+    pub fn monetary(&self) -> Option<&ResolvedUnit> {
+        self.monetary.as_ref()
+    }
+
+    /// Number of declared unit-types (excluding monetary). Test/telemetry aid.
+    pub fn declared_len(&self) -> usize {
+        self.by_type.len()
+    }
+}
+
+/// Resolve a single unit entity (referenced from a `IfcUnitAssignment`, or from
+/// a per-property / per-quantity `Unit` override). Returns
+/// `(unit_type_token, resolved, is_monetary)`.
+///
+/// Exposed so the per-property `IfcPropertySingleValue.Unit` and per-quantity
+/// `IfcPhysicalSimpleQuantity.Unit` overrides can be resolved against the same
+/// canonical logic.
+pub fn resolve_unit_by_ref(
+    decoder: &mut EntityDecoder,
+    unit_ref: u32,
+) -> Option<(Option<String>, ResolvedUnit, bool)> {
+    let (unit_type, resolved, monetary) = resolve_declared_unit(decoder, unit_ref)?;
+    Some((unit_type, resolved?, monetary))
+}
+
+/// `(unit_type_token, resolved, is_monetary)` where `resolved` is `None` for a
+/// unit whose type is readable but whose scale is not (#4690).
+type DeclaredUnit = (Option<String>, Option<ResolvedUnit>, bool);
+
+/// [`resolve_unit_by_ref`], keeping a declared unit whose scale is unresolved.
+fn resolve_declared_unit(decoder: &mut EntityDecoder, unit_ref: u32) -> Option<DeclaredUnit> {
+    let mut walk = UnitWalk::default();
+    let out = resolve_unit_by_ref_walk(decoder, unit_ref, &mut walk);
+    // A budget trip stops the walk part-way through some element list, so
+    // whatever was composed depends on where it stopped. Refuse the unit
+    // rather than hand back a symbol that is missing the elements it never
+    // reached.
+    if walk.was_refused() {
+        return None;
+    }
+    out
+}
+
+/// Max depth for the IFCDERIVEDUNIT -> element -> unit recursion. Real derived
+/// units nest ~2 levels; a malformed file can form a reference cycle (an
+/// IFCDERIVEDUNIT whose element's Unit points back to it), so cap the recursion
+/// to keep it from overflowing the stack, which is an uncatchable abort.
+///
+/// The cap bounds one path's LENGTH only. A cycle is refused by
+/// [`UnitWalk::path`] and a fan-out by [`UnitWalk::decodes`]; see AGENTS.md
+/// "Bounding walks over file-supplied references". With the cap alone, a
+/// cycle whose derived unit lists `k` elements costs `O(k^16)`: seconds at
+/// k=3 from a file of a few hundred bytes.
+const MAX_UNIT_RESOLVE_DEPTH: usize = 16;
+
+/// Entity decodes one `resolve_unit_by_ref` call may spend before giving up.
+/// A real derived unit (`m³/s`, `W/(m·K)`) decodes under ten entities; the
+/// walk over `IfcDerivedUnit -> IfcDerivedUnitElement -> Unit` is a tree, so
+/// an ACYCLIC file that fans out `k` ways per level (which the path set cannot
+/// see) still costs `k^depth` without this.
+///
+/// Not a memo: a unit's resolution is a pure function of its id, but its
+/// SYMBOL is the concatenation of its elements' symbols, so a fan-out that a
+/// memo made cheap to walk would still compose an output exponential in the
+/// depth (`4^12` copies of `m` from twelve small records). Bounding decodes
+/// bounds the elements composed, and with them the output.
+const MAX_UNIT_RESOLVE_DECODES: u32 = 256;
+
+/// Bookkeeping for one top-level unit resolution.
+#[derive(Default)]
+struct UnitWalk {
+    /// Unit entity ids on the CURRENT chain, innermost last; pushed on entry,
+    /// popped on exit, so its length is the recursion depth and a repeat is a
+    /// cycle.
+    path: Vec<u32>,
+    /// Entity decodes spent so far; past [`MAX_UNIT_RESOLVE_DECODES`] the walk
+    /// refuses the rest, and the top level refuses the whole unit rather than
+    /// hand back a symbol missing the elements it never reached.
+    decodes: u32,
+    /// A cycle, depth trip, or decode-budget trip invalidates the whole
+    /// authored unit. Returning the sound siblings would fabricate a
+    /// truncated symbol and SI scale.
+    refused: bool,
+}
+
+impl UnitWalk {
+    /// Charge one entity decode; `false` once the budget is spent.
+    fn charge(&mut self) -> bool {
+        self.decodes += 1;
+        if self.decodes > MAX_UNIT_RESOLVE_DECODES {
+            self.refused = true;
+            return false;
+        }
+        true
+    }
+
+    fn was_refused(&self) -> bool {
+        self.refused
+    }
+}
+
+fn resolve_unit_by_ref_walk(
+    decoder: &mut EntityDecoder,
+    unit_ref: u32,
+    walk: &mut UnitWalk,
+) -> Option<DeclaredUnit> {
+    if walk.path.len() >= MAX_UNIT_RESOLVE_DEPTH || walk.path.contains(&unit_ref) {
+        walk.refused = true;
+        return None;
+    }
+    if !walk.charge() {
+        return None;
+    }
+    walk.path.push(unit_ref);
+    let out = resolve_unit_entity(decoder, unit_ref, walk);
+    walk.path.pop();
+    out
+}
+
+fn resolve_unit_entity(
+    decoder: &mut EntityDecoder,
+    unit_ref: u32,
+    walk: &mut UnitWalk,
+) -> Option<DeclaredUnit> {
+    let entity = decoder.decode_by_id(unit_ref).ok()?;
+    match entity.ifc_type.as_str() {
+        "IFCSIUNIT" => {
+            // [1]=UnitType, [2]=Prefix, [3]=Name
+            let unit_type = entity.get(1).and_then(|a| a.as_enum()).map(str_token);
+            let name = entity.get(3).and_then(|a| a.as_enum())?;
+            let prefix = entity
+                .get(2)
+                .filter(|a| !a.is_null())
+                .and_then(|a| a.as_enum());
+            let (symbol, scale) = si_unit_symbol_and_scale(name, prefix)?;
+            Some((unit_type, Some(ResolvedUnit::new(symbol, scale)), false))
+        }
+        "IFCCONVERSIONBASEDUNIT" => {
+            // [1]=UnitType, [2]=Name, [3]=ConversionFactor (IFCMEASUREWITHUNIT)
+            let unit_type = entity.get(1).and_then(|a| a.as_enum()).map(str_token);
+            let name = entity.get(2).and_then(|a| a.as_string()).unwrap_or("");
+            // A factor the file does not resolve falls back to the name's known
+            // factor, from the linear table the geometry length scale reads, so
+            // only for a LENGTHUNIT; anything else is left unresolved rather
+            // than guessed at 1.0 (#4690).
+            let scale = entity
+                .get_ref(3)
+                .and_then(|r| conversion_factor_scale(decoder, r, walk))
+                .or_else(|| match unit_type.as_deref() {
+                    Some("LENGTHUNIT") => crate::unit_labels::get_conversion_based_unit_factor(name),
+                    _ => None,
+                });
+            let resolved = scale.map(|scale| ResolvedUnit::new(conversion_unit_symbol(name), scale));
+            Some((unit_type, resolved, false))
+        }
+        "IFCDERIVEDUNIT" => {
+            // [0]=Elements (list of IFCDERIVEDUNITELEMENT), [1]=UnitType
+            let unit_type = entity.get(1).and_then(|a| a.as_enum()).map(str_token);
+            let elem_refs: Vec<u32> = entity
+                .get(0)
+                .and_then(|a| a.as_list())
+                .map(|l| l.iter().filter_map(|a| a.as_entity_ref()).collect())
+                .unwrap_or_default();
+            let mut parts: Vec<(String, i32)> = Vec::new();
+            let mut scale = 1.0f64;
+            for er in elem_refs {
+                if let Some((sym, unit_scale, exponent)) =
+                    resolve_derived_element(decoder, er, walk)
+                {
+                    scale *= unit_scale.powi(exponent);
+                    parts.push((sym, exponent));
+                }
+            }
+            let symbol = compose_derived(&parts);
+            if symbol.is_empty() {
+                return None;
+            }
+            Some((unit_type, Some(ResolvedUnit::new(symbol, scale)), false))
+        }
+        "IFCMONETARYUNIT" => {
+            // [0]=Currency (IfcLabel string in IFC4+, IfcCurrencyEnum in IFC2x3).
+            let currency = entity
+                .get(0)
+                .and_then(|a| a.as_string().or_else(|| a.as_enum()))
+                .unwrap_or("");
+            Some((None, Some(ResolvedUnit::new(currency_symbol(currency), 1.0)), true))
+        }
+        _ => None,
+    }
+}
+
+/// Resolve one `IFCDERIVEDUNITELEMENT` into `(base_symbol, unit_si_scale, exponent)`.
+fn resolve_derived_element(
+    decoder: &mut EntityDecoder,
+    elem_ref: u32,
+    walk: &mut UnitWalk,
+) -> Option<(String, f64, i32)> {
+    if !walk.charge() {
+        return None;
+    }
+    let elem = decoder.decode_by_id(elem_ref).ok()?;
+    if elem.ifc_type.as_str() != "IFCDERIVEDUNITELEMENT" {
+        return None;
+    }
+    // [0]=Unit (IfcNamedUnit), [1]=Exponent
+    let unit_ref = elem.get_ref(0)?;
+    // The file's exponent is an `i64`; saturate into `i32` rather than
+    // truncate, so an out-of-range value cannot wrap to an unrelated small
+    // exponent (or, at exactly 2^31, to `i32::MIN`).
+    let exponent = elem
+        .get(1)
+        .and_then(|a| a.as_int())
+        .unwrap_or(1)
+        .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32;
+    let resolved = resolve_unit_by_ref_walk(decoder, unit_ref, walk)?.1?;
+    Some((resolved.symbol, resolved.si_scale, exponent))
+}
+
+/// The SI scale of an `IFCCONVERSIONBASEDUNIT.ConversionFactor`
+/// (`IFCMEASUREWITHUNIT`): the value component expressed in its `UnitComponent`,
+/// which per `IfcMeasureWithUnit` is any `IfcUnit` — a (possibly prefixed)
+/// `IfcSIUnit`, an `IfcDerivedUnit`, or *another* `IfcConversionBasedUnit`
+/// (a real-world chain, e.g. YARD defined as 3 FOOT where FOOT is itself
+/// conversion-based). Resolving through the shared dispatcher folds in every
+/// case uniformly instead of silently treating a non-SI component as scale 1.0.
+fn conversion_factor_scale(
+    decoder: &mut EntityDecoder,
+    measure_ref: u32,
+    walk: &mut UnitWalk,
+) -> Option<f64> {
+    if !walk.charge() {
+        return None;
+    }
+    let measure = decoder.decode_by_id(measure_ref).ok()?;
+    if measure.ifc_type.as_str() != "IFCMEASUREWITHUNIT" {
+        return None;
+    }
+    // [0]=ValueComponent, [1]=UnitComponent
+    let value = measure.get(0).and_then(|a| a.as_float())?;
+    if !(value.is_finite() && value > 0.0) {
+        return None;
+    }
+    // An unresolved UnitComponent leaves the factor unknown, not SI (#4690).
+    let component = resolve_unit_by_ref_walk(decoder, measure.get_ref(1)?, walk)?.1?;
+    Some(value * component.si_scale)
+}
+
+/// Normalise a STEP enum token (`.LENGTHUNIT.`) to a bare uppercase token.
+fn str_token(s: &str) -> String {
+    s.trim().trim_matches('.').to_ascii_uppercase()
+}
+
+/// Friendly currency symbol for a common ISO-4217 code; falls back to the code.
+fn currency_symbol(code: &str) -> String {
+    let c = code.trim().trim_matches('\'').trim_matches('.').trim();
+    match c.to_ascii_uppercase().as_str() {
+        "EUR" => "\u{20AC}".to_string(),
+        "USD" => "$".to_string(),
+        "GBP" => "\u{00A3}".to_string(),
+        "JPY" | "CNY" | "RMB" => "\u{00A5}".to_string(),
+        "" => "".to_string(),
+        _ => c.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests;

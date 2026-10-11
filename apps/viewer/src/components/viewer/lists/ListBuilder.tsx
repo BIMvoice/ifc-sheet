@@ -1,0 +1,989 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * ListBuilder — configure a list: scope (entity types + filters), the
+ * columns to show, and optional grouping / totals.
+ *
+ * UI is organised as labelled sections with a consistent header treatment.
+ * The most-used columns (attributes + Material / Classification / Storey)
+ * are surfaced as a flat chip grid; property/quantity sets — which can be
+ * numerous — stay in collapsible groups below.
+ */
+
+import React, { useCallback, useMemo, useState } from 'react';
+import { Play, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Save, Check, GripVertical, Pencil } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ComboInput } from '@/components/ui/combo-input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+import { IfcTypeEnum } from '@ifc-lite/data';
+import type { FilterRule } from '@ifc-lite/rules';
+import type { IfcDataStore } from '@ifc-lite/parser';
+import type {
+  ListDataProvider,
+  ListDefinition,
+  ListModelTagScope,
+  ColumnDefinition,
+  DiscoveredColumns,
+  UnreadableListCondition,
+} from '@ifc-lite/lists';
+import { discoverColumns, ENTITY_ATTRIBUTES, groupingColumnIds } from '@ifc-lite/lists';
+
+/** The `zone` column mode that carries mesh volume. */
+const ZONE_MODE_VOLUME_LABEL = 'Volume (mesh)';
+import { useViewerStore } from '@/store';
+import type { ZoneSet } from '@/lib/zones';
+import { collectScopeTypes } from '@/lib/lists/scope-types';
+import { rebuildGrouping } from './list-table-utils';
+import { Section, Chip } from './ListBuilder.parts';
+import { ListModelTagScopeEditor } from './ListModelTagScopeEditor';
+import { FilterGroupEditor, type FilterGroupEditorState } from '../FilterGroupEditor';
+import { UnreadableListFilters } from './ListBuilder.unreadableFilters';
+import { ListValueOptionsContext, groupsNeedListValues, useListValueOptions } from './use-list-value-options';
+import { RULE_KIND_LABEL } from '../filter-rule-labels';
+
+/** Every rule kind, including the List-value rule only a list can evaluate (#6190). */
+const LIST_FILTER_KINDS = new Set(Object.keys(RULE_KIND_LABEL) as FilterRule['kind'][]);
+import { formatLocaleCount } from './formatLocaleCount';
+import { PatternHint } from './PatternHint';
+import {
+  isEditableColumn,
+  draftFromColumn,
+  columnFromDraft,
+  columnDefKey,
+  draftDefKey,
+  updateColumnInPlace,
+  type ColumnDraft,
+} from '@/lib/lists/column-edit';
+import { previewSetPattern } from './pattern-preview';
+import { useTranslation } from '@/i18n/useTranslation';
+import { storesWithMutationViews } from './list-builder-discovery';
+
+/** Column descriptor shared by the quick-add grid. */
+interface CommonColumn {
+  id: string;
+  source: ColumnDefinition['source'];
+  /** Zone-SET id for `source: 'zone'` columns; unused otherwise. */
+  psetName?: string;
+  propertyName: string;
+  label: string;
+}
+
+/**
+ * The first-class columns: built-in attributes plus the spatial / semantic
+ * columns. Surfaced as a flat grid so Material / Classification / Container /
+ * Storey / Site / Building / Project / Model are as reachable as Name / Class —
+ * not buried in a collapsed group. Container is the element's IMMEDIATE spatial
+ * container (Bonsai's "container"): the direct IfcRelContainedInSpatialStructure
+ * parent, at whatever level — the storey, or for bridges/roads the
+ * IfcBridgePart / IfcRoadPart / IfcSpatialZone it sits in. Site / Building /
+ * Project / Model identify which federated file (and where in its spatial tree)
+ * each row comes from, so a list over several models can be grouped and sorted
+ * by source (issue #1591).
+ */
+const COMMON_COLUMNS: CommonColumn[] = [
+  ...ENTITY_ATTRIBUTES.map((a): CommonColumn => ({
+    id: `attr-${a.toLowerCase()}`,
+    source: 'attribute',
+    propertyName: a,
+    label: a,
+  })),
+  { id: 'col-material', source: 'material', propertyName: 'Material', label: 'Material' },
+  { id: 'col-classification', source: 'classification', propertyName: 'Classification', label: 'Classification' },
+  { id: 'col-container', source: 'spatial', propertyName: 'Container', label: 'Container' },
+  { id: 'col-storey', source: 'spatial', propertyName: 'Storey', label: 'Storey' },
+  { id: 'col-building', source: 'spatial', propertyName: 'Building', label: 'Building' },
+  { id: 'col-site', source: 'spatial', propertyName: 'Site', label: 'Site' },
+  { id: 'col-project', source: 'spatial', propertyName: 'Project', label: 'Project' },
+  { id: 'col-model', source: 'model', propertyName: 'Model', label: 'Model' },
+  ...(['X', 'Y', 'Z'] as const).map((axis): CommonColumn => ({ id: `col-world-${axis.toLowerCase()}`, source: 'geometry', propertyName: axis, label: `World ${axis}` })),
+];
+
+/** Union the per-provider complete-discovery results into one column set. */
+function mergeDiscovered(parts: DiscoveredColumns[]): DiscoveredColumns {
+  const properties = new Map<string, Set<string>>();
+  const quantities = new Map<string, Set<string>>();
+  const merge = (target: Map<string, Set<string>>, src: Map<string, string[]>) => {
+    for (const [k, arr] of src) {
+      let b = target.get(k);
+      if (!b) { b = new Set(); target.set(k, b); }
+      for (const v of arr) b.add(v);
+    }
+  };
+  for (const d of parts) { merge(properties, d.properties); merge(quantities, d.quantities); }
+  const toSorted = (m: Map<string, Set<string>>) => {
+    const out = new Map<string, string[]>();
+    for (const [k, s] of m) out.set(k, Array.from(s).sort());
+    return out;
+  };
+  return { attributes: [...ENTITY_ATTRIBUTES], properties: toSorted(properties), quantities: toSorted(quantities) };
+}
+
+interface ListBuilderProps {
+  providers: ListDataProvider[];
+  /** Backing stores for value discovery (condition value suggestions). */
+  stores: IfcDataStore[];
+  /** Model IDs aligned with stores; keeps duplicate-store federation isolated. */
+  modelIds?: readonly string[];
+  initial: ListDefinition | null;
+  onSave: (definition: ListDefinition) => void;
+  onCancel: () => void;
+  onExecute: (definition: ListDefinition) => void;
+}
+
+export function ListBuilder({ providers, stores, modelIds, initial, onSave, onCancel, onExecute }: ListBuilderProps) {
+  const { t, locale } = useTranslation(); const [name, setName] = useState(initial?.name ?? '');
+  const models = useViewerStore((s) => s.models);
+  const mutationViews = useViewerStore((s) => s.mutationViews);
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const storeViews = useMemo(
+    () => storesWithMutationViews(stores, models, mutationViews, modelIds),
+    [stores, models, mutationViews, mutationVersion, modelIds],
+  );
+  const [description, setDescription] = useState(initial?.description ?? '');
+  const [selectedTypes, setSelectedTypes] = useState<Set<IfcTypeEnum>>(
+    new Set(initial?.entityTypes ?? [])
+  );
+  const [columns, setColumns] = useState<ColumnDefinition[]>(initial?.columns ?? []);
+  const [filterState, setFilterState] = useState<FilterGroupEditorState>(() => ({
+    groups: initial?.groups?.length ? initial.groups
+      : [{ rules: [], combinator: 'AND' }],
+    activeGroup: 0,
+  }));
+  const [unreadableConditions, setUnreadableConditions] = useState<UnreadableListCondition[]>(
+    initial?.unreadableConditions ?? [],
+  );
+  // Which federated models the list runs over, by model tag (#4215).
+  const [modelTagScope, setModelTagScope] = useState<ListModelTagScope | undefined>(initial?.modelTagScope);
+  // Location zones remain available for quick-add columns.
+  const zoneSets = useViewerStore((s) => s.zoneSets);
+  const filterModels = useMemo(() => [...models.values()].map(({ id, name, sourceFingerprint }) => ({ id, name, sourceFingerprint })), [models]);
+  // Ordered group-by columns, outermost first (multi-criteria grouping #1790).
+  const [groupByColumnIds, setGroupByColumnIds] = useState<string[]>(
+    () => groupingColumnIds(initial?.grouping)
+  );
+  const [sumColumnIds, setSumColumnIds] = useState<Set<string>>(
+    new Set(initial?.grouping?.sumColumnIds ?? [])
+  );
+
+  // Scope classes offered as chips: every element class actually present in
+  // the loaded model(s), with instance counts. Derived from the models rather
+  // than a curated allowlist, so a present class the curator never listed —
+  // e.g. IfcDuctSegment / IfcPipeSegment — is still selectable (#1662).
+  const scopeTypes = useMemo(() => collectScopeTypes(storeViews), [storeViews]);
+  const typeCounts = useMemo(() => {
+    const counts = new Map<IfcTypeEnum, number>();
+    for (const { type, count } of scopeTypes) counts.set(type, count);
+    return counts;
+  }, [scopeTypes]);
+
+  // Available columns. Prefer COMPLETE, type-independent discovery (every
+  // property set / quantity set in the model) so all properties/quantities
+  // are addable even with no entity type selected. Fall back to the
+  // type-sampled discovery for providers that can't enumerate completely.
+  const discovered = useMemo<DiscoveredColumns>(() => {
+    const complete = providers.filter((p) => typeof p.discoverAllColumns === 'function');
+    if (providers.length > 0 && complete.length === providers.length) {
+      return mergeDiscovered(complete.map((p) => p.discoverAllColumns!()));
+    }
+    return discoverColumns(providers, Array.from(selectedTypes));
+  }, [providers, selectedTypes]);
+  const valueOptions = useListValueOptions(groupsNeedListValues(filterState.groups), stores, storeViews, providers, mutationVersion);
+  const listValueOptions = useMemo(() => ({ ...valueOptions, discovered, zoneSets }), [valueOptions, discovered, zoneSets]);
+
+  const toggleType = useCallback((type: IfcTypeEnum) => {
+    setSelectedTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }, []);
+
+  const addColumn = useCallback((col: ColumnDefinition) => {
+    setColumns(prev => (prev.some(c => c.id === col.id) ? prev : [...prev, col]));
+  }, []);
+
+  const removeColumn = useCallback((id: string) => {
+    setColumns(prev => prev.filter(c => c.id !== id));
+    // Keep grouping consistent when its column is removed.
+    setGroupByColumnIds(prev => (prev.includes(id) ? prev.filter(g => g !== id) : prev));
+    setSumColumnIds(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  // Edit a column's definition IN PLACE — same array position, same id, so the
+  // column order and the results table's per-id width / index-based sort survive
+  // (issue #1591 follow-up). The list is re-run from the existing Run action.
+  const updateColumn = useCallback((id: string, next: ColumnDefinition) => {
+    setColumns(prev => updateColumnInPlace(prev, id, next));
+  }, []);
+
+  const toggleColumn = useCallback((col: ColumnDefinition) => {
+    // Delegate to add/removeColumn so the removal path shares removeColumn's
+    // grouping + sum cleanup — otherwise toggling off a grouped/summed column
+    // would strand a stale level in the config until buildDefinition prunes it.
+    if (columns.some(c => c.id === col.id)) removeColumn(col.id);
+    else addColumn(col);
+  }, [columns, addColumn, removeColumn]);
+
+  // Would `draft` duplicate an EXISTING column's definition? Keyed by content
+  // (source + set + property), not by column id, so the guard still fires after
+  // an in-place edit drifted a column's definition away from its (stable) id.
+  // `excludeId` skips the slot being edited, so re-saving a column unchanged
+  // isn't flagged as a self-duplicate.
+  const isDuplicateColumn = useCallback(
+    (draft: ColumnDraft, excludeId?: string): boolean => {
+      const key = draftDefKey(draft);
+      return columns.some((c) => c.id !== excludeId && columnDefKey(c) === key);
+    },
+    [columns],
+  );
+
+  const moveColumn = useCallback((idx: number, direction: -1 | 1) => {
+    setColumns(prev => {
+      const target = idx + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  }, []);
+
+  const toggleSumColumn = useCallback((id: string) => {
+    setSumColumnIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  // Set / clear one grouping level. An empty id removes the level; setting the
+  // slot one past the end appends a new level (multi-criteria grouping #1790).
+  const setGroupLevel = useCallback((level: number, id: string) => {
+    setGroupByColumnIds(prev => {
+      const next = [...prev];
+      if (id === '') {
+        if (level < next.length) next.splice(level, 1);
+      } else if (level < next.length) {
+        next[level] = id;
+      } else {
+        next.push(id);
+      }
+      // Safety de-dup (the selects already hide ids used at other levels).
+      return next.filter((v, i) => next.indexOf(v) === i);
+    });
+  }, []);
+
+  const buildDefinition = useCallback((): ListDefinition => {
+    const validGroupIds = groupByColumnIds.filter(id => columns.some(c => c.id === id));
+    const sumCols = columns.filter(c => sumColumnIds.has(c.id)).map(c => c.id);
+    // Keep grouping when there's a valid group column OR any sum column — sums
+    // alone still produce grand totals, and may have been set from the table.
+    // The Builder form has no `view` control of its own (that toggle lives on
+    // the results table, issue #1790 round 2) — `rebuildGrouping` spreads
+    // `initial?.grouping` first, so `view` (and any future field) survives
+    // instead of being silently reset when other settings are edited here.
+    const grouping = rebuildGrouping(initial?.grouping, validGroupIds, sumCols);
+    return {
+      id: initial?.id ?? crypto.randomUUID(),
+      name: name || 'Untitled List',
+      description: description || undefined,
+      createdAt: initial?.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+      entityTypes: Array.from(selectedTypes),
+      // Preserve a filter-snapshot scope (set at creation; not edited here).
+      expressIdsByModel: initial?.expressIdsByModel,
+      modelTagScope,
+      groups: filterState.groups,
+      unreadableConditions,
+      columns,
+      grouping,
+    };
+  }, [initial, name, description, selectedTypes, modelTagScope, filterState.groups, unreadableConditions, columns, groupByColumnIds, sumColumnIds]);
+
+  const handleSave = useCallback(() => onSave(buildDefinition()), [buildDefinition, onSave]);
+  const handleRun = useCallback(() => onExecute(buildDefinition()), [buildDefinition, onExecute]);
+
+  const selectedColumnIds = useMemo(() => new Set(columns.map(c => c.id)), [columns]);
+  const totalSelectedEntities = useMemo(() => {
+    let count = 0;
+    for (const type of selectedTypes) count += typeCounts.get(type) ?? 0;
+    return count;
+  }, [selectedTypes, typeCounts]);
+
+  // A snapshot list (from "Create list" in the search filter) is frozen to an
+  // explicit element set; the entity-type scope doesn't apply.
+  const snapshotCount = initial?.expressIdsByModel
+    ? Object.values(initial.expressIdsByModel).reduce((n, ids) => n + ids.length, 0)
+    : 0;
+  const isSnapshot = snapshotCount > 0;
+
+  const canRun = columns.length > 0;
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <ScrollArea className="flex-1">
+        <div className="px-3 py-3 space-y-5">
+          {/* Identity */}
+          <div className="space-y-2">
+            <Input aria-label={t('lists.builder.nameInputLabel')}
+              placeholder={t('lists.builder.namePlaceholder')}
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="h-9 text-sm font-medium"
+            />
+            <Input aria-label={t('lists.builder.descriptionInputLabel')}
+              placeholder={t('lists.builder.descriptionPlaceholder')}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              className="h-7 text-xs"
+            />
+          </div>
+
+          {/* Scope: entity types — or a frozen filter snapshot */}
+          <Section
+            label={t('lists.builder.sectionScope')}
+            hint={isSnapshot
+              ? t('lists.builder.scopeSnapshotHint', { count: snapshotCount, countDisplay: formatLocaleCount(snapshotCount, locale) })
+              : selectedTypes.size > 0
+                ? t('lists.builder.scopeSelectedElementsHint', { count: totalSelectedEntities, countDisplay: formatLocaleCount(totalSelectedEntities, locale) })
+                : t('lists.builder.scopeAllElementsHint')}
+          >
+            {isSnapshot ? (
+              <p className="rounded-md border border-primary/30 bg-primary/5 px-2.5 py-2 text-2xs leading-relaxed text-muted-foreground">
+                <strong className="font-medium text-foreground">{t('lists.builder.filterSnapshotLabel')}</strong>{' '}
+                {t('lists.builder.filterSnapshotHint', { count: snapshotCount, countDisplay: formatLocaleCount(snapshotCount, locale) })}
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-1.5">
+                  {scopeTypes.map(({ type, label, count }) => (
+                    <Chip
+                      key={type}
+                      selected={selectedTypes.has(type)}
+                      onClick={() => toggleType(type)}
+                      trailing={formatLocaleCount(count, locale)}
+                    >
+                      {label}
+                    </Chip>
+                  ))}
+                </div>
+                {selectedTypes.size === 0 && (
+                  <p className="mt-2 text-2xs leading-relaxed text-muted-foreground">
+                    {t('lists.builder.noTypeSelected')}
+                  </p>
+                )}
+              </>
+            )}
+            <ListModelTagScopeEditor value={modelTagScope} onChange={setModelTagScope} />
+          </Section>
+
+          {/* Filters */}
+          <Section label={t('lists.builder.sectionFilters')} hint={filterState.groups.some((group) => group.rules.length > 0) || unreadableConditions.length > 0
+            ? formatLocaleCount(filterState.groups.reduce((count, group) => count + group.rules.length, unreadableConditions.length), locale)
+            : undefined}>
+            <ListValueOptionsContext.Provider value={listValueOptions}>
+              <FilterGroupEditor groups={filterState.groups} activeGroup={filterState.activeGroup}
+                onChange={setFilterState} allowedKinds={LIST_FILTER_KINDS} models={filterModels} />
+            </ListValueOptionsContext.Provider>
+            <UnreadableListFilters rows={unreadableConditions} onChange={setUnreadableConditions} />
+          </Section>
+
+          {/* Columns */}
+          <Section label={t('lists.builder.sectionColumns')} hint={columns.length > 0 ? formatLocaleCount(columns.length, locale) : undefined}>
+            {columns.length > 0 && (
+              <SelectedColumns
+                columns={columns}
+                discovered={discovered}
+                onMove={moveColumn}
+                onRemove={removeColumn}
+                onUpdate={updateColumn}
+                isDuplicate={isDuplicateColumn}
+              />
+            )}
+            <ColumnPicker
+              discovered={discovered}
+              zoneSets={zoneSets}
+              selectedIds={selectedColumnIds}
+              onAdd={addColumn}
+              onToggle={toggleColumn}
+              isDuplicate={isDuplicateColumn}
+            />
+          </Section>
+
+          {/* Grouping & totals */}
+          {columns.length > 0 && (
+            <Section label={t('lists.builder.sectionGroupingTotals')}>
+              <GroupingBody
+                columns={columns}
+                groupByColumnIds={groupByColumnIds}
+                sumColumnIds={sumColumnIds}
+                onGroupLevelChange={setGroupLevel}
+                onToggleSum={toggleSumColumn}
+              />
+            </Section>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Bottom actions */}
+      <div className="flex items-center gap-2 px-3 py-2.5 border-t bg-muted/30">
+        <Button size="sm" onClick={handleRun} disabled={!canRun} className="h-8 gap-1.5 text-xs font-medium">
+          <Play className="h-3.5 w-3.5" /> {t('lists.builder.run')}
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleSave} disabled={!canRun} className="h-8 gap-1.5 text-xs">
+          <Save className="h-3.5 w-3.5" /> {t('lists.builder.save')}
+        </Button>
+        <div className="flex-1" />
+        <Button variant="ghost" size="sm" onClick={onCancel} className="h-8 text-xs">
+          {t('lists.builder.cancel')}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Selected columns (ordered, reorderable)
+// ============================================================================
+
+function SelectedColumns({
+  columns,
+  discovered,
+  onMove,
+  onRemove,
+  onUpdate,
+  isDuplicate,
+}: {
+  columns: ColumnDefinition[];
+  discovered: DiscoveredColumns;
+  onMove: (idx: number, dir: -1 | 1) => void;
+  onRemove: (id: string) => void;
+  onUpdate: (id: string, next: ColumnDefinition) => void;
+  isDuplicate: (draft: ColumnDraft, excludeId?: string) => boolean;
+}) {
+  // Which column's inline editor is open (one at a time). Cleared when the
+  // edited column is removed or after a save.
+  const { t } = useTranslation(); const [editingId, setEditingId] = useState<string | null>(null);
+
+  return (
+    <div className="mb-3 space-y-1">
+      {columns.map((col, idx) => {
+        const editing = editingId === col.id;
+        const editable = isEditableColumn(col);
+        return (
+          <div key={col.id} className="space-y-1">
+            <div className="group flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-2 py-1 text-xs">
+              <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+              <span className="w-4 shrink-0 text-right tabular-nums text-muted-foreground">{idx + 1}</span>
+              <span className="flex-1 truncate font-medium">
+                {col.label ?? col.propertyName}
+                {col.psetName && <span className="ml-1 font-normal text-muted-foreground">· {col.psetName}</span>}
+              </span>
+              <ColSourceTag col={col} />
+              {editable && (
+                <button
+                  onClick={() => setEditingId(editing ? null : col.id)}
+                  aria-label={editing ? t('lists.builder.closeEditorAriaLabel') : t('lists.builder.editColumnAriaLabel')}
+                  aria-pressed={editing}
+                  className={cn(
+                    'shrink-0 hover:text-foreground',
+                    editing ? 'text-primary' : 'text-muted-foreground',
+                  )}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <button
+                onClick={() => onMove(idx, -1)}
+                disabled={idx === 0}
+                aria-label={t('lists.builder.moveUpAriaLabel')}
+                className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-25"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => onMove(idx, 1)}
+                disabled={idx === columns.length - 1}
+                aria-label={t('lists.builder.moveDownAriaLabel')}
+                className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-25"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => { if (editing) setEditingId(null); onRemove(col.id); }}
+                aria-label={t('lists.builder.removeColumnAriaLabel')}
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {editing && editable && (
+              <ColumnEditorPanel
+                mode="edit"
+                discovered={discovered}
+                initial={draftFromColumn(col)}
+                isDuplicate={(draft) => isDuplicate(draft, col.id)}
+                onSubmit={(draft) => { onUpdate(col.id, columnFromDraft(draft, col.id, col)); setEditingId(null); }}
+                onClose={() => setEditingId(null)}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const SOURCE_TAG: Record<ColumnDefinition['source'], string> = {
+  attribute: 'attr',
+  property: 'pset',
+  quantity: 'qty',
+  material: 'mat',
+  classification: 'cls',
+  spatial: 'storey',
+  model: 'model',
+  zone: 'zone',
+  geometry: 'world',
+};
+
+/** `spatial`/`zone` tags reflect level/mode; everything else uses the flat per-source tag. */
+function colSourceTag(col: ColumnDefinition): string {
+  if (col.source === 'spatial') return (col.propertyName || 'Storey').toLowerCase();
+  if (col.source === 'zone') return (col.propertyName || 'Zone').toLowerCase();
+  return SOURCE_TAG[col.source];
+}
+
+function ColSourceTag({ col }: { col: ColumnDefinition }) {
+  return (
+    <span className="shrink-0 rounded bg-muted px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      {colSourceTag(col)}
+    </span>
+  );
+}
+
+// ============================================================================
+// Column Picker — flat "common" grid + collapsible pset/qto groups
+// ============================================================================
+
+interface ColumnPickerProps {
+  discovered: DiscoveredColumns;
+  /** Every currently-defined zone set (issue #1810) — one quick-add chip per
+   *  set, so "Zone: Sections" is as reachable as Material / Storey. */
+  zoneSets: ZoneSet[];
+  selectedIds: Set<string>;
+  onAdd: (col: ColumnDefinition) => void;
+  onToggle: (col: ColumnDefinition) => void;
+  isDuplicate: (draft: ColumnDraft, excludeId?: string) => boolean;
+}
+
+function ColumnPicker({ discovered, zoneSets, selectedIds, onAdd, onToggle, isDuplicate }: ColumnPickerProps) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleSection = (id: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const psetEntries = useMemo(
+    () => Array.from(discovered.properties.entries()).sort(([a], [b]) => a.localeCompare(b)),
+    [discovered.properties],
+  );
+  const qtoEntries = useMemo(
+    () => Array.from(discovered.quantities.entries()).sort(([a], [b]) => a.localeCompare(b)),
+    [discovered.quantities],
+  );
+
+  // One quick-add column per zone set (issue #1810), appended after the
+  // static first-class columns since zone sets are user-defined + dynamic.
+  const zoneColumns = useMemo<CommonColumn[]>(
+    () => zoneSets.flatMap((zs) => [
+      {
+        id: `col-zone-${zs.id}`,
+        source: 'zone' as const,
+        psetName: zs.id,
+        propertyName: 'Zone',
+        label: `Zone: ${zs.name}`,
+      },
+      // The per-zone quantity #1810 actually asked for (#2508). The BASIS is in
+      // the mode name, so it survives into the column tag and the header rather
+      // than living in a tooltip: a zone volume off a net wall and one off a
+      // gross wall are not comparable numbers.
+      {
+        id: `col-zonevol-${zs.id}`,
+        source: 'zone' as const,
+        psetName: zs.id,
+        propertyName: ZONE_MODE_VOLUME_LABEL,
+        label: `Zone volume: ${zs.name}`,
+      },
+    ]),
+    [zoneSets],
+  );
+
+  return (
+    <div className="space-y-2">
+      {/* Quick-add grid of the first-class columns */}
+      <div className="flex flex-wrap gap-1.5">
+        {[...COMMON_COLUMNS, ...zoneColumns].map(({ id, source, psetName, propertyName, label }) => {
+          const selected = selectedIds.has(id);
+          return (
+            <Chip
+              key={id}
+              selected={selected}
+              onClick={() => onToggle({ id, source, psetName, propertyName, label })}
+            >
+              {selected && <Check className="h-3 w-3" />}
+              {label}
+            </Chip>
+          );
+        })}
+      </div>
+
+      {(psetEntries.length > 0 || qtoEntries.length > 0) && (
+        <div className="rounded-md border border-border/60">
+          {psetEntries.map(([psetName, propNames]) => (
+            <PickerGroup
+              key={`pset-${psetName}`}
+              title={psetName}
+              badge="Pset"
+              expanded={expanded.has(`pset-${psetName}`)}
+              onToggle={() => toggleSection(`pset-${psetName}`)}
+            >
+              {propNames.map(propName => {
+                const id = `prop-${psetName}-${propName}`.toLowerCase().replace(/\s+/g, '-');
+                return (
+                  <PickerItem
+                    key={id}
+                    label={propName}
+                    selected={selectedIds.has(id)}
+                    onAdd={() => onAdd({ id, source: 'property', psetName, propertyName: propName, label: propName })}
+                  />
+                );
+              })}
+            </PickerGroup>
+          ))}
+          {qtoEntries.map(([qsetName, quantNames]) => (
+            <PickerGroup
+              key={`qset-${qsetName}`}
+              title={qsetName}
+              badge="Qty"
+              expanded={expanded.has(`qset-${qsetName}`)}
+              onToggle={() => toggleSection(`qset-${qsetName}`)}
+            >
+              {quantNames.map(quantName => {
+                const id = `quant-${qsetName}-${quantName}`.toLowerCase().replace(/\s+/g, '-');
+                return (
+                  <PickerItem
+                    key={id}
+                    label={quantName}
+                    selected={selectedIds.has(id)}
+                    onAdd={() => onAdd({ id, source: 'quantity', psetName: qsetName, propertyName: quantName, label: quantName })}
+                  />
+                );
+              })}
+            </PickerGroup>
+          ))}
+        </div>
+      )}
+
+      {/* Custom / pattern column: type a set + property name directly, with
+          `/regex/` support so one column pulls a value across matching sets
+          (issue #1591 follow-up). Progressive disclosure keeps the picker
+          uncluttered until a power user reaches for it. */}
+      <CustomColumnEntry discovered={discovered} onAdd={onAdd} isDuplicate={isDuplicate} />
+    </div>
+  );
+}
+
+// ============================================================================
+// Custom / pattern column entry — free-text set + property, regex-aware
+// ============================================================================
+
+function CustomColumnEntry({
+  discovered,
+  onAdd,
+  isDuplicate,
+}: {
+  discovered: DiscoveredColumns;
+  onAdd: (col: ColumnDefinition) => void;
+  isDuplicate: (draft: ColumnDraft, excludeId?: string) => boolean;
+}) {
+  const { t } = useTranslation(); const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1.5 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground"
+      >
+        <Plus className="h-3.5 w-3.5" /> {t('lists.builder.customColumn')}
+        <span className="ml-auto font-mono text-2xs opacity-70">{t('lists.builder.customColumnHint')}</span>
+      </button>
+    );
+  }
+
+  return (
+    <ColumnEditorPanel
+      mode="add"
+      discovered={discovered}
+      initial={{ source: 'property', setName: '', propName: '' }}
+      isDuplicate={(draft) => isDuplicate(draft)}
+      onSubmit={(draft) =>
+        onAdd({
+          id: customColumnId(draft),
+          source: draft.source,
+          psetName: draft.setName,
+          propertyName: draft.propName,
+          label: draft.propName,
+        })
+      }
+      onClose={() => setOpen(false)}
+    />
+  );
+}
+
+/**
+ * Id for a custom / pattern column. Slugified like the discovered-column ids
+ * (collapse whitespace) but case-PRESERVING: regex patterns are case-sensitive,
+ * so `/A/` and `/a/` are distinct sets and must not collapse to one id.
+ */
+function customColumnId(draft: ColumnDraft): string {
+  return `custom-${draft.source}-${draft.setName}-${draft.propName}`.replace(/\s+/g, '-');
+}
+
+/**
+ * The shared property/quantity column editor — the same UI for ADDING a custom
+ * column and for EDITING an existing one in place (issue #1591 follow-up), so
+ * the two never drift. `mode` only changes the primary action (Add keeps the
+ * panel open to add several in a row and clears just the property; Save applies
+ * and lets the parent close). Set + property names accept Bonsai-style
+ * `/regex/`, with the same live match preview and invalid-pattern guard.
+ */
+function ColumnEditorPanel({
+  mode,
+  discovered,
+  initial,
+  onSubmit,
+  onClose,
+  isDuplicate,
+}: {
+  mode: 'add' | 'edit';
+  discovered: DiscoveredColumns;
+  initial: ColumnDraft;
+  onSubmit: (draft: ColumnDraft) => void;
+  onClose: () => void;
+  isDuplicate?: (draft: ColumnDraft) => boolean;
+}) {
+  const { t } = useTranslation();
+  const [source, setSource] = useState<'property' | 'quantity'>(initial.source);
+  const [setName, setSetName] = useState(initial.setName);
+  const [propName, setPropName] = useState(initial.propName);
+
+  const setOptions = useMemo<string[]>(
+    () => Array.from((source === 'quantity' ? discovered.quantities : discovered.properties).keys()).sort(),
+    [discovered, source],
+  );
+  // Suggest property names only when the typed set is an exact discovered set
+  // (a `/regex/` set has no single property list to offer).
+  const propOptions = useMemo<string[]>(
+    () => [...((source === 'quantity' ? discovered.quantities : discovered.properties).get(setName.trim()) ?? [])],
+    [discovered, source, setName],
+  );
+
+  const set = setName.trim();
+  const prop = propName.trim();
+  // Live preview: which discovered sets a `/regex/` set field matches, so a
+  // power user sees "matches 2 sets: ..." before saving, and a malformed pattern
+  // is flagged rather than silently kept as a dead literal (issue #1591).
+  const preview = useMemo(() => previewSetPattern(set, setOptions), [set, setOptions]);
+  const draft: ColumnDraft = { source, setName: set, propName: prop };
+  const duplicate = isDuplicate?.(draft) ?? false;
+  const canSubmit = set.length > 0 && prop.length > 0 && !preview.isInvalid && !duplicate;
+
+  const submit = () => {
+    if (!canSubmit) return;
+    onSubmit(draft);
+    // Adding keeps the set + source so several properties from the same
+    // (pattern) set can be added in a row; editing is a one-shot apply.
+    if (mode === 'add') setPropName('');
+  };
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 bg-card p-2.5">
+      <div className="flex items-center gap-1.5">
+        <Chip selected={source === 'property'} onClick={() => setSource('property')}>{t('lists.builder.property')}</Chip>
+        <Chip selected={source === 'quantity'} onClick={() => setSource('quantity')}>{t('lists.builder.quantity')}</Chip>
+        {preview.isPattern && (
+          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-primary">
+            {t('lists.builder.regexBadge')}
+          </span>
+        )}
+        <button
+          onClick={onClose}
+          aria-label={mode === 'add' ? t('lists.builder.closeCustomColumnAriaLabel') : t('lists.builder.closeEditorAriaLabel')}
+          className="ml-auto shrink-0 text-muted-foreground hover:text-foreground"
+        >
+          <ChevronUp className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <ComboInput aria-label={t(source === 'quantity' ? 'lists.builder.quantitySetInputLabel' : 'lists.builder.propertySetInputLabel')}
+          value={setName}
+          options={setOptions}
+          placeholder={source === 'quantity' ? t('lists.builder.quantitySetPlaceholder') : t('lists.builder.propertySetPlaceholder')}
+          className="h-7 min-w-0 flex-1 text-xs"
+          onChange={setSetName}
+        />
+        <ComboInput aria-label={t(source === 'quantity' ? 'lists.builder.quantityNameInputLabel' : 'lists.builder.propertyNameInputLabel')}
+          value={propName}
+          options={propOptions}
+          placeholder={source === 'quantity' ? t('lists.builder.quantityNamePlaceholder') : t('lists.builder.propertyNamePlaceholder')}
+          className="h-7 min-w-0 flex-1 text-xs"
+          onChange={setPropName}
+        />
+        <Button
+          size="sm"
+          onClick={submit}
+          disabled={!canSubmit}
+          aria-label={mode === 'add' ? t('lists.builder.addCustomColumnAriaLabel') : t('lists.builder.saveColumnAriaLabel')}
+          className="h-7 shrink-0 px-2"
+        >
+          {mode === 'add' ? <Plus className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+      <PatternHint preview={preview} />
+    </div>
+  );
+}
+
+function PickerGroup({
+  title,
+  badge,
+  expanded,
+  onToggle,
+  children,
+}: {
+  title: string;
+  badge: string;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-b border-border/50 last:border-b-0">
+      <button
+        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-xs hover:bg-muted/50"
+        onClick={onToggle}
+      >
+        {expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+        <span className="truncate font-medium">{title}</span>
+        <span className="ml-auto rounded bg-muted px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          {badge}
+        </span>
+      </button>
+      {expanded && <div className="px-1 pb-1">{children}</div>}
+    </div>
+  );
+}
+
+function PickerItem({
+  label,
+  selected,
+  onAdd,
+}: {
+  label: string;
+  selected: boolean;
+  onAdd: () => void;
+}) {
+  const { t } = useTranslation(); return (
+    <button
+      className={cn(
+        'flex w-full items-center gap-1.5 rounded px-2 py-1 text-xs',
+        selected ? 'cursor-default text-muted-foreground' : 'cursor-pointer hover:bg-muted/60',
+      )}
+      onClick={onAdd}
+      disabled={selected}
+    >
+      {selected ? <Check className="h-3 w-3 text-primary" /> : <Plus className="h-3 w-3" />}
+      <span className="truncate">{label}</span>
+      {selected && <span className="ml-auto text-2xs">{t('lists.builder.added')}</span>}
+    </button>
+  );
+}
+
+// ============================================================================
+// Grouping & totals
+// ============================================================================
+
+function GroupingBody({
+  columns,
+  groupByColumnIds,
+  sumColumnIds,
+  onGroupLevelChange,
+  onToggleSum,
+}: {
+  columns: ColumnDefinition[];
+  /** Ordered group-by columns, outermost first (multi-criteria grouping #1790). */
+  groupByColumnIds: string[];
+  sumColumnIds: Set<string>;
+  onGroupLevelChange: (level: number, id: string) => void;
+  onToggleSum: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  // One select per active level, plus a trailing empty slot to add the next
+  // level (as long as ungrouped columns remain).
+  const levelSlots = groupByColumnIds.length < columns.length
+    ? [...groupByColumnIds, '']
+    : groupByColumnIds;
+  return (
+    <div className="space-y-3 rounded-md border border-border/60 bg-card p-2.5">
+      <div className="space-y-1.5">
+        {levelSlots.map((id, level) => (
+          <label key={level} className="flex items-center gap-2 text-xs">
+            <span className="w-16 shrink-0 text-muted-foreground">{level === 0 ? t('lists.builder.groupByLabel') : t('lists.builder.thenByLabel')}</span>
+            <select
+              value={id}
+              onChange={(e) => onGroupLevelChange(level, e.target.value)}
+              className="h-7 flex-1 rounded-md border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">{level === 0 ? t('lists.builder.noneFlatList') : t('lists.builder.none')}</option>
+              {columns
+                .filter((c) => c.id === id || !groupByColumnIds.includes(c.id))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>{c.label ?? c.propertyName}</option>
+                ))}
+            </select>
+          </label>
+        ))}
+        {groupByColumnIds.length > 0 && (
+          <div className="text-2xs text-muted-foreground">
+            {t('lists.builder.groupCountHint')}
+          </div>
+        )}
+      </div>
+      <div>
+        <div className="mb-1 text-2xs text-muted-foreground">
+          {t('lists.builder.totalsHint')}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {columns.map((c) => (
+            <Chip key={c.id} selected={sumColumnIds.has(c.id)} onClick={() => onToggleSum(c.id)}>
+              <span className="font-mono">{t('lists.builder.sumIcon')}</span> {c.label ?? c.propertyName}
+            </Chip>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

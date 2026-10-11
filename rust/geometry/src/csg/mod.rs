@@ -1,0 +1,543 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! CSG (Constructive Solid Geometry) Operations
+//!
+//! Fast triangle clipping and boolean operations.
+
+use crate::diagnostics::{BoolFailure, BoolFailureReason, BoolOp};
+use crate::error::Result;
+use crate::mesh::Mesh;
+use nalgebra::{Point3, Vector3};
+use smallvec::SmallVec;
+use std::cell::RefCell;
+
+mod consolidate;
+mod degenerate_check;
+mod group_cut;
+mod normals;
+mod plane_eps;
+mod topology_diagnostic;
+mod union;
+
+pub use group_cut::{GroupCut, GroupReject};
+pub use normals::calculate_normals;
+pub(crate) use consolidate::tri_is_needle;
+
+/// Type alias for small triangle collections (typically 1-2 triangles from clipping)
+pub type TriangleVec = SmallVec<[Triangle; 4]>;
+
+/// Plane definition for clipping
+#[derive(Debug, Clone, Copy)]
+pub struct Plane {
+    /// Point on the plane
+    pub point: Point3<f64>,
+    /// Normal vector (must be normalized)
+    pub normal: Vector3<f64>,
+}
+
+impl Plane {
+    /// Create a new plane
+    pub fn new(point: Point3<f64>, normal: Vector3<f64>) -> Self {
+        Self {
+            point,
+            normal: normal.normalize(),
+        }
+    }
+
+    /// Calculate signed distance from point to plane
+    /// Positive = in front, Negative = behind
+    pub fn signed_distance(&self, point: &Point3<f64>) -> f64 {
+        (point - self.point).dot(&self.normal)
+    }
+}
+
+/// Triangle clipping result
+#[derive(Debug, Clone)]
+pub enum ClipResult {
+    /// Triangle is completely in front (keep it)
+    AllFront(Triangle),
+    /// Triangle is completely behind (discard it)
+    AllBehind,
+    /// Triangle intersects plane - returns new triangles (uses SmallVec to avoid heap allocation)
+    Split(TriangleVec),
+}
+
+/// Triangle definition
+#[derive(Debug, Clone)]
+pub struct Triangle {
+    pub v0: Point3<f64>,
+    pub v1: Point3<f64>,
+    pub v2: Point3<f64>,
+}
+
+impl Triangle {
+    /// Create a new triangle
+    #[inline]
+    pub fn new(v0: Point3<f64>, v1: Point3<f64>, v2: Point3<f64>) -> Self {
+        Self { v0, v1, v2 }
+    }
+
+    /// Calculate triangle normal.
+    ///
+    /// **Degenerate triangles get `+Z`, never NaN.** A zero-area (collapsed or
+    /// exactly collinear) triangle has a zero-length cross product, and the
+    /// plain `normalize()` this used to call is `v / |v|` — i.e. `0.0 / 0.0`,
+    /// which is NaN in every component. Those NaNs were written verbatim into
+    /// `Mesh::normals` by `add_triangle_to_mesh` (the only production caller of
+    /// this method, via `ClippingProcessor::clip_mesh`), and they SURVIVED the
+    /// mesh-hygiene pass: `clean_degenerate` / `drop_thin_triangles` rewrites
+    /// only `indices`, so the degenerate triangle's vertices stay in
+    /// `positions` / `normals` as ORPHANS carrying NaN. Six of duplex.ifc's
+    /// material-layer wall slices shipped 81 NaN normal components that way,
+    /// which the `@ifc-lite/provenance` node-hash domain check rightly rejects
+    /// (every NaN bit pattern collapses to one quiet NaN when serialized, so
+    /// accepting them would give distinct payloads the same hash).
+    ///
+    /// `+Z` is this crate's established convention for an undefined normal —
+    /// the same fallback `csg::normals::calculate_normals` and
+    /// `mesh::weld_impl`'s average-normals path already use — so a consumer
+    /// that meets one meets them all. It is stated in the KERNEL's own Z-up
+    /// frame, like every other normal this crate writes, so a viewer that
+    /// converts to Y-up reads it back as `+Y`; that is the conversion doing its
+    /// job, not a second convention. The value is arbitrary but must be a FIXED
+    /// unit vector: a zero normal would just re-create the division by zero in
+    /// any shader or exporter that re-normalizes.
+    ///
+    /// Non-degenerate triangles are unaffected, bit-for-bit: `try_normalize(0.0)`
+    /// returns `Some(v.unscale(|v|))` for every `|v| > 0`, which is exactly what
+    /// `normalize()` computed. The extra `is_finite` check covers the
+    /// astronomically-unlikely underflow case where `|v|` rounds to zero from
+    /// non-zero components (division would yield ±Inf, also out of domain).
+    #[inline]
+    pub fn normal(&self) -> Vector3<f64> {
+        match self.cross_product().try_normalize(0.0) {
+            Some(n) if n.x.is_finite() && n.y.is_finite() && n.z.is_finite() => n,
+            _ => Vector3::new(0.0, 0.0, 1.0),
+        }
+    }
+
+    /// Calculate the cross product of edges, which is twice the area vector.
+    ///
+    /// Returns a `Vector3<f64>` perpendicular to the triangle plane.
+    /// For degenerate/collinear triangles, returns the zero vector.
+    /// Use `is_degenerate()` or `try_normalize()` on the result if you need
+    /// to detect and handle degenerate cases.
+    #[inline]
+    pub fn cross_product(&self) -> Vector3<f64> {
+        let edge1 = self.v1 - self.v0;
+        let edge2 = self.v2 - self.v0;
+        edge1.cross(&edge2)
+    }
+
+    /// Calculate triangle area (half the magnitude of the cross product).
+    #[inline]
+    pub fn area(&self) -> f64 {
+        self.cross_product().norm() * 0.5
+    }
+
+    /// Check if triangle is degenerate (zero area, collinear vertices).
+    ///
+    /// Uses `try_normalize` on the cross product with the specified epsilon.
+    /// Returns `true` if the cross product cannot be normalized (i.e., degenerate).
+    #[inline]
+    pub fn is_degenerate(&self, epsilon: f64) -> bool {
+        self.cross_product().try_normalize(epsilon).is_none()
+    }
+}
+
+/// One recorded invocation of a CSG kernel op (perf-census diagnostics).
+/// `op`: 0=subtract 1=union 2=intersection
+/// 3=clip. `a_tris`/`b_tris` are the operand triangle counts — the arrangement
+/// cost driver — so the census measures the *real* heavy-path workload reaching
+/// the kernel (analytic AABB box clips never get here).
+#[derive(Clone, Copy, Debug)]
+pub struct CsgOpRecord {
+    pub op: u8,
+    pub a_tris: u32,
+    pub b_tris: u32,
+}
+
+// Global (Mutex) so it captures ops on rayon worker threads, not just the caller.
+static CSG_CENSUS: std::sync::Mutex<Vec<CsgOpRecord>> = std::sync::Mutex::new(Vec::new());
+
+/// Clear the CSG op census (call before a measured run).
+pub fn reset_csg_census() {
+    if let Ok(mut g) = CSG_CENSUS.lock() {
+        g.clear();
+    }
+}
+
+/// Drain the CSG op census (call after a measured run).
+pub fn take_csg_census() -> Vec<CsgOpRecord> {
+    CSG_CENSUS
+        .lock()
+        .map(|mut g| std::mem::take(&mut *g))
+        .unwrap_or_default()
+}
+
+#[inline]
+fn record_csg_op(op: u8, a_tris: usize, b_tris: usize) {
+    #[cfg(feature = "opening-perf-trace")]
+    crate::opening_perf_trace::record(|c| {
+        let index = usize::from(op).min(3);
+        c.csg_operations[index] = c.csg_operations[index].saturating_add(1);
+        c.csg_operand_triangles[index] = c.csg_operand_triangles[index]
+            .saturating_add(a_tris as u64).saturating_add(b_tris as u64);
+    });
+    if let Ok(mut g) = CSG_CENSUS.lock() {
+        g.push(CsgOpRecord {
+            op,
+            a_tris: a_tris as u32,
+            b_tris: b_tris as u32,
+        });
+    }
+}
+
+/// CSG Clipping Processor
+pub struct ClippingProcessor {
+    /// Floor for [`Self::clip_mesh`]'s projected classification epsilon (and
+    /// the whole tolerance [`Self::clip_triangle`] still uses). Raw `f64`,
+    /// never rescaled by `unit_scale`, so its unit is the caller's: file units
+    /// on the `processors/boolean` path, METRES on `router/layers`. See
+    /// [`plane_eps`] for the frames, the sizing and the KNOWN LIMITATION.
+    pub epsilon: f64,
+    /// Metres per caller unit, used only by the physical ring-width noise gate.
+    length_unit_scale: f64,
+    /// Boolean / CSG failures recorded since the last `take_failures()`.
+    /// Interior-mutable so the existing `&self` API stays unchanged.
+    failures: RefCell<Vec<BoolFailure>>,
+}
+
+impl ClippingProcessor {
+    /// Create a new clipping processor
+    pub fn new() -> Self {
+        Self {
+            epsilon: 1e-6,
+            length_unit_scale: 1.0,
+            failures: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// Drain and return the failures recorded by this processor since its
+    /// creation (or the last `take_failures` call). The processor's internal
+    /// log is cleared.
+    pub fn take_failures(&self) -> Vec<BoolFailure> {
+        std::mem::take(&mut *self.failures.borrow_mut())
+    }
+
+    /// Number of failures currently buffered (without draining).
+    pub fn failure_count(&self) -> usize {
+        self.failures.borrow().len()
+    }
+
+    /// Whether any failure recorded since index `since` (a prior
+    /// [`failure_count`](Self::failure_count)) was an `OperandTooLarge`
+    /// rejection. HISTORICAL: only the deleted BSP polygon cap ever
+    /// emitted this from the boolean ops — the exact kernel has no operand
+    /// cap, so this is now always `false` on the boolean path. Kept because
+    /// the void router still keys its AABB-fallback decision on it
+    /// (issue #635 / #947), which is conservative and correct either way.
+    pub(crate) fn has_operand_too_large_since(&self, since: usize) -> bool {
+        let failures = self.failures.borrow();
+        let since = since.min(failures.len());
+        failures[since..]
+            .iter()
+            .any(|f| matches!(f.reason, BoolFailureReason::OperandTooLarge { .. }))
+    }
+
+    /// Internal: append a failure record. Public-crate so the boolean
+    /// processor in `processors/boolean.rs` can record fallbacks that
+    /// happen above the kernel layer.
+    pub(crate) fn record_failure(&self, op: BoolOp, reason: BoolFailureReason) {
+        #[cfg(feature = "opening-perf-trace")]
+        crate::opening_perf_trace::record(|c| {
+            let index = match &reason {
+                BoolFailureReason::KernelError(_) => 0,
+                BoolFailureReason::KernelOutputInvalid => 1,
+                BoolFailureReason::OperandTooLarge { .. } => 2,
+                _ => 3,
+            };
+            c.csg_failures[index] = c.csg_failures[index].saturating_add(1);
+        });
+        self.failures.borrow_mut().push(BoolFailure::new(op, reason));
+    }
+
+    /// Clip a triangle against a plane
+    /// Returns triangles that are in front of the plane
+    pub fn clip_triangle(&self, triangle: &Triangle, plane: &Plane) -> ClipResult {
+        plane_eps::clip_triangle_with_epsilon(triangle, plane, self.epsilon)
+    }
+
+    /// Check if two meshes' bounding boxes overlap
+    fn bounds_overlap(host_mesh: &Mesh, opening_mesh: &Mesh) -> bool {
+        let (host_min, host_max) = host_mesh.bounds();
+        let (open_min, open_max) = opening_mesh.bounds();
+
+        // Issue #977: this runs on the *un-inflated* cutter, before
+        // `manifold_kernel::difference` inflates it. A recess whose cut face is
+        // exactly flush with a host face touches the host's AABB right at the
+        // boundary; strict `<`/`>` would classify it as non-overlapping and drop
+        // the cut before inflation ever runs. Use inclusive `<=`/`>=` with a small
+        // *relative* epsilon (scaled to the operands, so it is unit-robust across
+        // mm/m models) to keep flush cutters in play without admitting genuinely
+        // disjoint operands.
+        let span = (host_max.x - host_min.x)
+            .max(host_max.y - host_min.y)
+            .max(host_max.z - host_min.z)
+            .max(open_max.x - open_min.x)
+            .max(open_max.y - open_min.y)
+            .max(open_max.z - open_min.z);
+        let eps = span * 1e-6;
+
+        let overlap_x = open_min.x - eps <= host_max.x && open_max.x + eps >= host_min.x;
+        let overlap_y = open_min.y - eps <= host_max.y && open_max.y + eps >= host_min.y;
+        let overlap_z = open_min.z - eps <= host_max.z && open_max.z + eps >= host_min.z;
+
+        overlap_x && overlap_y && overlap_z
+    }
+
+    /// Subtract opening mesh from host mesh using CSG boolean operations
+    /// on the pure-Rust exact mesh-arrangement kernel.
+    ///
+    /// Returns the same [`GroupCut`] as [`Self::subtract_mesh_many`], a group
+    /// of one. It used to return the host un-cut on every bail, the shape of
+    /// a real cut, and callers guessed which one happened from the triangle
+    /// count and a 0.1 % volume test that read a small real cut as no cut
+    /// (#4692). A rejection leaves the host untouched. A cutter the kernel
+    /// classifies as not reaching the host solid still produces the
+    /// consolidated arrangement output, as it always did; it comes back as
+    /// [`GroupCut::Retessellated`], not as a cut, unless the arrangement did
+    /// not conform and the output has the host's triangle count, which comes
+    /// back as `Rejected(Nonconforming)` (#5362).
+    ///
+    /// Unlike the group path, the single cutter records a [`BoolFailure`]
+    /// (drainable via [`Self::take_failures`]) for an empty cutter
+    /// (`EmptyOperand`), a missed bounds overlap (`NoBoundsOverlap`) and a
+    /// budget trip (`OperandTooLarge`), as well as for `InvalidOutput` and
+    /// `GateRejected`. `EmptyHost` records nothing. `Cut` and `Retessellated`
+    /// pass the same validation and gates. The accept
+    /// path also runs `record_topology_tear` (#3440 step 1): diagnostic only,
+    /// never gates, in every build. `topology_gate_reject` (#3440 step 2) runs
+    /// the same closure predicate but, ONLY when the crate is built with the
+    /// `csg_topology_gate` feature (off by default; no downstream crate turns
+    /// it on), rejects a torn result the same way `KernelOutputInvalid` does.
+    pub fn subtract_mesh(&self, host_mesh: &Mesh, opening_mesh: &Mesh) -> GroupCut {
+        #[cfg(feature = "opening-perf-trace")]
+        crate::opening_perf_trace::record(|c| c.single_subtract_calls = c.single_subtract_calls.saturating_add(1));
+        record_csg_op(0, host_mesh.triangle_count(), opening_mesh.triangle_count());
+        if host_mesh.is_empty() {
+            return GroupCut::Rejected(GroupReject::EmptyHost);
+        }
+        if opening_mesh.is_empty() {
+            self.record_failure(BoolOp::Difference, BoolFailureReason::EmptyOperand);
+            return GroupCut::Rejected(GroupReject::NoOverlap);
+        }
+        if !Self::bounds_overlap(host_mesh, opening_mesh) {
+            self.record_failure(BoolOp::Difference, BoolFailureReason::NoBoundsOverlap);
+            return GroupCut::Rejected(GroupReject::NoOverlap);
+        }
+
+        // Pure-Rust exact mesh-arrangement kernel, with consolidate_coplanar
+        // merging per-face fragments to match Manifold's clean output.
+        //
+        // NB: the kernel output itself is the watertightness bar — the
+        // crack-family fix lives upstream (`promote_cutter_verts_onto_host_faces`'s
+        // exact-plane lift). `consolidate_coplanar` can still re-open a closed
+        // cut along a µm-offset plane pair (each bucket earcuts independently,
+        // breaking the shared boundary chain); a closure-preserving guard here
+        // was tried and REJECTED — on FZK-Haus gable walls the raw kernel
+        // output carries >50:1 needle fragments that consolidation legitimately
+        // merges (the pinned `csg_quality_regression` spike bar). A
+        // seam-preserving consolidation is the remaining follow-up.
+        crate::kernel::budget::begin();
+        let (raw, changed, conforming) =
+            crate::kernel::mesh_bridge::subtract_with_change(host_mesh, opening_mesh);
+        // Deterministic escalation guardrail (#1109): if the exact predicate
+        // cascade escalated past the per-boolean budget, the cut bailed mid-
+        // arrangement. Discard the partial result (its `changed` bit too) and
+        // reject, so the void router's #635 AABB box-cut fallback fires. The
+        // trip point is a pure function of the snapped operands, so server
+        // (native) and client (wasm) degrade the SAME element identically.
+        if crate::kernel::budget::tripped() {
+            self.record_failure(
+                BoolOp::Difference,
+                BoolFailureReason::OperandTooLarge {
+                    polys_a: host_mesh.triangle_count(),
+                    polys_b: opening_mesh.triangle_count(),
+                },
+            );
+            return GroupCut::Rejected(GroupReject::BudgetTripped);
+        }
+        let result = self.consolidate(raw);
+        if !result.is_empty() && !self.validate_mesh(&result) {
+            self.record_failure(BoolOp::Difference, BoolFailureReason::KernelOutputInvalid);
+            return GroupCut::Rejected(GroupReject::InvalidOutput);
+        }
+        if self.accept_gates_reject(BoolOp::Difference, &result) {
+            return GroupCut::Rejected(GroupReject::GateRejected);
+        }
+        self.record_topology_tear(BoolOp::Difference, &result);
+        if changed {
+            #[cfg(feature = "opening-perf-trace")]
+            crate::opening_perf_trace::record(|c| c.single_changed_results = c.single_changed_results.saturating_add(1));
+            GroupCut::Cut(result)
+        } else if !conforming && result.triangle_count() == host_mesh.triangle_count() {
+            // A non-conforming "no change" is not proof the cutter misses the
+            // host (straddling sub-triangles can be misclassified), so it is
+            // not reported as a `Retessellated` miss, which callers read as
+            // disjoint (#5362). A same-count re-tessellation would be
+            // discarded anyway (`mesh_to_keep`), so this only keeps the #635
+            // fallback armed for it, as before #5362.
+            GroupCut::Rejected(GroupReject::Nonconforming)
+        } else {
+            #[cfg(feature = "opening-perf-trace")]
+            crate::opening_perf_trace::record(|c| {
+                c.single_retessellated_results = c.single_retessellated_results.saturating_add(1);
+                c.single_retessellated_input_triangles = c.single_retessellated_input_triangles.saturating_add(host_mesh.triangle_count() as u64);
+                c.single_retessellated_output_triangles = c.single_retessellated_output_triangles.saturating_add(result.triangle_count() as u64);
+            });
+            GroupCut::Retessellated(result)
+        }
+    }
+
+    /// Intersect two meshes using CSG boolean operations on the pure-Rust
+    /// exact kernel.
+    ///
+    /// Returns the intersection of two meshes (the volume where both
+    /// overlap).
+    pub fn intersection_mesh(&self, mesh_a: &Mesh, mesh_b: &Mesh) -> Result<Mesh> {
+        record_csg_op(2, mesh_a.triangle_count(), mesh_b.triangle_count());
+        if mesh_a.is_empty() || mesh_b.is_empty() {
+            return Ok(Mesh::new());
+        }
+
+        // Pure-Rust exact kernel. An empty result is legitimate
+        // (disjoint operands → empty intersection).
+        let result = self.consolidate(crate::kernel::mesh_bridge::intersection(mesh_a, mesh_b));
+        if !result.is_empty() && !self.validate_mesh(&result) {
+            self.record_failure(BoolOp::Intersection, BoolFailureReason::KernelOutputInvalid);
+            return Ok(Mesh::new());
+        }
+        if self.accept_gates_reject(BoolOp::Intersection, &result) {
+            return Ok(Mesh::new());
+        }
+        Ok(result).inspect(|m| self.record_topology_tear(BoolOp::Intersection, m))
+    }
+
+    /// Validate mesh for common issues
+    fn validate_mesh(&self, mesh: &Mesh) -> bool {
+        // Check for NaN/Inf in positions
+        if mesh.positions.iter().any(|v| !v.is_finite()) {
+            return false;
+        }
+        // Check for NaN/Inf in normals
+        if mesh.normals.iter().any(|v| !v.is_finite()) {
+            return false;
+        }
+        // Check for valid triangle indices
+        let vertex_count = mesh.vertex_count();
+        for idx in &mesh.indices {
+            if *idx as usize >= vertex_count {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Clip an entire mesh against a plane.
+    ///
+    /// The classification epsilon is per-axis f32 rounding noise projected
+    /// onto `plane`'s own normal and floored at [`Self::epsilon`]; see
+    /// [`plane_eps`] for why it must scale with coordinate magnitude, why the
+    /// magnitude is tracked per axis rather than maxed over all three, and why
+    /// `near_band_from_extent` is deliberately not reused.
+    pub fn clip_mesh(&self, mesh: &Mesh, plane: &Plane) -> Result<Mesh> {
+        record_csg_op(3, mesh.triangle_count(), 0);
+        let mut result = Mesh::new();
+
+        let eps = plane_eps::PlaneEps::new(mesh, self.epsilon).for_normal(&plane.normal);
+
+        // Process each triangle
+        let vert_count = mesh.positions.len() / 3;
+        for i in (0..mesh.indices.len()).step_by(3) {
+            if i + 2 >= mesh.indices.len() {
+                break;
+            }
+            let i0 = mesh.indices[i] as usize;
+            let i1 = mesh.indices[i + 1] as usize;
+            let i2 = mesh.indices[i + 2] as usize;
+
+            // Bounds check vertex indices
+            if i0 >= vert_count || i1 >= vert_count || i2 >= vert_count {
+                continue;
+            }
+
+            // Get triangle vertices
+            let v0 = Point3::new(
+                mesh.positions[i0 * 3] as f64,
+                mesh.positions[i0 * 3 + 1] as f64,
+                mesh.positions[i0 * 3 + 2] as f64,
+            );
+            let v1 = Point3::new(
+                mesh.positions[i1 * 3] as f64,
+                mesh.positions[i1 * 3 + 1] as f64,
+                mesh.positions[i1 * 3 + 2] as f64,
+            );
+            let v2 = Point3::new(
+                mesh.positions[i2 * 3] as f64,
+                mesh.positions[i2 * 3 + 1] as f64,
+                mesh.positions[i2 * 3 + 2] as f64,
+            );
+
+            let triangle = Triangle::new(v0, v1, v2);
+
+            // Clip triangle
+            match plane_eps::clip_triangle_with_epsilon(&triangle, plane, eps) {
+                ClipResult::AllFront(tri) => {
+                    // Keep original triangle
+                    add_triangle_to_mesh(&mut result, &tri);
+                }
+                ClipResult::AllBehind => {
+                    // Discard triangle
+                }
+                ClipResult::Split(triangles) => {
+                    // Add clipped triangles
+                    for tri in triangles {
+                        add_triangle_to_mesh(&mut result, &tri);
+                    }
+                }
+            }
+        }
+
+        Ok(result)
+    }
+}
+
+impl Default for ClippingProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Add a triangle to a mesh
+fn add_triangle_to_mesh(mesh: &mut Mesh, triangle: &Triangle) {
+    let base_idx = mesh.vertex_count() as u32;
+
+    // Calculate normal
+    let normal = triangle.normal();
+
+    // Add vertices
+    mesh.add_vertex(triangle.v0, normal);
+    mesh.add_vertex(triangle.v1, normal);
+    mesh.add_vertex(triangle.v2, normal);
+
+    // Add triangle
+    mesh.add_triangle(base_idx, base_idx + 1, base_idx + 2);
+}
+
+#[cfg(test)]
+#[path = "csg_tests.rs"]
+mod csg_tests;

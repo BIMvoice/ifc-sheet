@@ -1,0 +1,63 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+[package]
+name = "ifc-lite-processing"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared IFC processing pipeline and types used by server and FFI"
+keywords = ["ifc", "bim", "geometry", "pipeline", "aec"]
+categories = ["parsing", "algorithms"]
+readme = "../../README.md"
+
+[features]
+# Fixed-size work counters for the diagnostic example, never enabled by default.
+opening-perf-trace = ["ifc-lite-geometry/opening-perf-trace"]
+# Measurement-only: enable the geometry crate's CSG corpus capture so the
+# `csg_scaling_bench` example can replay real void-cut jobs. See
+# rust/processing/examples/csg_scaling_bench.rs.
+csg-capture = ["ifc-lite-geometry/csg_capture"]
+# Structured diagnostics in the geometry crate: routes its production
+# warn/debug messages through `tracing` (this crate already depends on
+# tracing unconditionally, so the flag only affects ifc-lite-geometry).
+# Enabled by the native server; default OFF keeps wasm/default builds
+# byte-identical.
+observability = ["ifc-lite-geometry/observability"]
+# Measurement-only: one never-inlined marker call per ProcessingStats timer
+# edge, so `scripts/perf/instructions.sh` can split callgrind instruction
+# counts by phase (#6958). Default OFF compiles the markers to nothing.
+phase-markers = []
+
+[[example]]
+name = "csg_scaling_bench"
+required-features = ["csg-capture"]
+
+[dependencies]
+ifc-lite-core = { version = "20.3.0", path = "../core" }
+# CSG runs on the pure-Rust exact kernel inside ifc-lite-geometry on every
+# target (the Manifold C++ kernel was removed in the kernel consolidation —
+# see docs/architecture/geometry-pipeline.md).
+ifc-lite-geometry = { version = "20.3.0", path = "../geometry", default-features = false }
+rayon = "1.10"
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+memchr = "2.8"
+png = "0.18"
+rustc-hash = "2.1"
+tracing = "0.1"
+sha2 = "0.10"
+nalgebra = { version = "0.35", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+# `test_support::recv_or_diagnose` only - the shared worker watchdog, so the
+# deadlock regression here diagnoses a worker panic the same way the geometry
+# suites do instead of carrying its own copy of the two-arm match. Already a
+# normal dependency of this crate; the feature is test-only.
+ifc-lite-geometry = { version = "20.3.0", path = "../geometry", default-features = false, features = ["test-support"] }
+
+[lints]
+workspace = true

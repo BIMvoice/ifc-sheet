@@ -1,0 +1,54 @@
+# @ifc-lite/bcf-api
+
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies [[`f64353f`](https://github.com/LTplus-AG/ifc-lite/commit/f64353f10fb643a664a9f3f485ef009b1d2622f8)]:
+  - @ifc-lite/bcf@5.0.0
+
+## 0.2.3
+
+### Patch Changes
+
+- [#5438](https://github.com/LTplus-AG/ifc-lite/pull/5438) [`3edd57d`](https://github.com/LTplus-AG/ifc-lite/commit/3edd57d9bf0b4fddb28da3401bc5cf0189756729) Thanks [@louistrue](https://github.com/louistrue)! - Refactor: `BcfApiClient` now extends the new `@ifc-lite/opencde-foundation`'s `FoundationApiClient`, and BCF's OAuth2 token exchange, dynamic client registration, base-URL normalization/retry, and error types are that package's implementation, reached here under their historical BCF names (`normalizeBcfBaseUrl`, `registerBcfClient`, `BcfApiError`, `BcfAuthenticationError`, ...). `BcfApiError` and `BcfAuthenticationError` are thin subclasses of the Foundation errors, so a directly constructed BCF error is named as before too. No change to `@ifc-lite/bcf-api`'s public API or behaviour. Errors still report `name` as `BcfApiError` / `BcfAuthenticationError`, and `BcfApiVersion` and `getVersions(): Promise<BcfApiVersion[]>` keep their `{ version_id, detailed_version? }` shape. The OAuth2 functions are thin wrappers over the Foundation ones.
+- Updated dependencies [[`77f5e16`](https://github.com/LTplus-AG/ifc-lite/commit/77f5e16e939aac5d28301c56a29c04472aa90792), [`610c3a1`](https://github.com/LTplus-AG/ifc-lite/commit/610c3a1d60c76850c2d2cc839e176f97ec0e2ca6), [`becc9dc`](https://github.com/LTplus-AG/ifc-lite/commit/becc9dc4bd33267dbe8522f788fb8936dd349b70), [`3edd57d`](https://github.com/LTplus-AG/ifc-lite/commit/3edd57d9bf0b4fddb28da3401bc5cf0189756729)]:
+  - @ifc-lite/bcf@4.2.0
+  - @ifc-lite/opencde-foundation@0.2.0
+
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [[`9a271dc`](https://github.com/LTplus-AG/ifc-lite/commit/9a271dcb19dff2f9bca72fc3505ce5a71b3e800b)]:
+  - @ifc-lite/bcf@4.0.0
+
+## 0.2.1
+
+### Patch Changes
+
+- [#4097](https://github.com/LTplus-AG/ifc-lite/pull/4097) [`f48b803`](https://github.com/LTplus-AG/ifc-lite/commit/f48b803ee82824710b315cb768f8b02b658fa101) Thanks [@BIMvoice](https://github.com/BIMvoice)! - Finish renaming the BCF "issues" language to "topics" across the app, docs, and package-facing text. Per the BCF-XML specification, `Topic` is the container element and `Issue` is only one `TopicType` value among several (Request, Comment, Error, Warning, Info); the previous patch fixed the BCF panel's own title, heading, empty-state copy, and topic-title placeholder, and left the rest of the product inconsistent.
+  
+  Remaining app-visible surfaces now fixed: the Analyze ribbon's "BCF issues" toggle button (a fourth site, alongside the command palette, main toolbar, and workspace-panel controls fixed previously), the compare panel's "Create BCF issue" affordance and "Issue for" header, the auto-created BCF project's default name (`<model>_Issues` → `<model>_Topics`, matching the BCF panel's own default), the landing-page hero animation's "Issue" step label, the MCP playground's BCF category blurb and example export path, and BCF-related copy across three in-app tours (`bcf`, `compare`, `clash`) — tour titles/descriptions plus five step titles/bodies.
+  
+  Docs updated to match: `docs/index.md`, `README.md`, `docs/guide/quickstart.md`, `docs/guide/bcf.md`, `docs/api/typescript.md`, and the CLI guide/reference's `bcf` examples (`--out topic.bcf`, `bcf list topics.bcf`), which also renamed the example filenames for consistency — they are illustrative only; the CLI has no default BCF filename.
+  
+  Also reworded now-inconsistent internal comments and JSDoc in the touched files, `@ifc-lite/bcf`'s package README and `createTopic` doc comment, `@ifc-lite/bcf-api`'s README, `@ifc-lite/sdk`'s `bim.bcf` namespace docs, `@ifc-lite/mcp`'s `bcf` tool docblock and fire-rating prompt template, and `@ifc-lite/sandbox`'s clash-to-BCF tool description — all comment/doc-only, no behavior change beyond the CLI's `bcf create` usage-message example (`--title "Issue"` → `--title "Missing door"`, matching the `--help` listing).
+  
+  Left deliberately unchanged: `bcfHelpers.tsx`'s `TOPIC_TYPES` list and every other real `TopicType` spec value (including the MCP `bcf` tool's `type` default and the sandbox playground's `topicType` default, both `'Issue'`), `ClashPanel`'s unrelated clash-detection "issues", GitHub issue-number references, and `registry.ts`'s `id: 'bcf'` panel key.
+- Updated dependencies [[`8eb1c25`](https://github.com/LTplus-AG/ifc-lite/commit/8eb1c258fafc73bd9c83c7af95ba2feebf00fb34), [`49edb1e`](https://github.com/LTplus-AG/ifc-lite/commit/49edb1e62451fe48f799652b2ef95d0c980298d1), [`ad193bd`](https://github.com/LTplus-AG/ifc-lite/commit/ad193bd23fc97b2e7167d740c447ca87680c7c07), [`f48b803`](https://github.com/LTplus-AG/ifc-lite/commit/f48b803ee82824710b315cb768f8b02b658fa101), [`c6e4713`](https://github.com/LTplus-AG/ifc-lite/commit/c6e471329c1685e52277a8927da06c452756a4fd)]:
+  - @ifc-lite/bcf@3.0.1
+
+## 0.2.0
+
+### Minor Changes
+
+- [#3288](https://github.com/LTplus-AG/ifc-lite/pull/3288) [`9ce6dd2`](https://github.com/LTplus-AG/ifc-lite/commit/9ce6dd2f2a21183423099edcf71675a625613b16) Thanks [@jonatanjacobsson](https://github.com/jonatanjacobsson)! - New package: REST client for buildingSMART BCF API (OpenCDE) servers. Typed BCF API 2.1 endpoints (projects, extensions, topics with OData paging, comments, viewpoints, components, snapshots), OAuth2 password, refresh, and client-credentials grants against the server's discovered token endpoint, and `fetchProjectAsBCF` to pull a whole server project into the `@ifc-lite/bcf` in-memory model with per-item warning degradation.
+
+- [#3906](https://github.com/LTplus-AG/ifc-lite/pull/3906) [`cf1b6b5`](https://github.com/LTplus-AG/ifc-lite/commit/cf1b6b5fa39f46af4a45b0d80fa635a9254e02c3) Thanks [@louistrue](https://github.com/louistrue)! - BCF server sign-in now finds the API when you enter the bare space or instance URL. BIMcollab Nexus (and Solibri's BCF connector) ask for `https://myspace.bimcollab.com`, but the API is served under `/bcf`, so discovery hit `/2.1/auth` and the connect dialog failed with "BCF request failed (HTTP 404)". An address with no path of its own now falls back to `/bcf`, and a failed request names the URL it was made to. `normalizeBcfBaseUrl` also drops a query or fragment now, so a URL copied out of the browser address bar works. New `discoverBcfService` and `resolveBcfServiceBaseUrl` exports replace hand-rolled `normalizeBcfBaseUrl` + `getAuthInfo` pairs.
+
+### Patch Changes
+
+- [#3855](https://github.com/LTplus-AG/ifc-lite/pull/3855) [`182215a`](https://github.com/LTplus-AG/ifc-lite/commit/182215a835c4beac6a776bcb4eb1d019cab9063e) Thanks [@louistrue](https://github.com/louistrue)! - Corrected the code samples on each package's npm landing page: the README fences are now typechecked against the package's real exports, so the snippets import what they call, declare the values they read, and no longer show removed options or renamed methods. Patch-bumping every package whose README changed so the corrections actually reach npmjs.com.
+- Updated dependencies [[`142b84c`](https://github.com/LTplus-AG/ifc-lite/commit/142b84c41036b749e7b64418a882424b9c386edb), [`142b84c`](https://github.com/LTplus-AG/ifc-lite/commit/142b84c41036b749e7b64418a882424b9c386edb), [`3284390`](https://github.com/LTplus-AG/ifc-lite/commit/328439014322dafaecb1bc930cd66ce5192c3c74), [`bbcb476`](https://github.com/LTplus-AG/ifc-lite/commit/bbcb476209a96b3c8a97f11751f4540cdaf41919), [`bbcb476`](https://github.com/LTplus-AG/ifc-lite/commit/bbcb476209a96b3c8a97f11751f4540cdaf41919), [`bbcb476`](https://github.com/LTplus-AG/ifc-lite/commit/bbcb476209a96b3c8a97f11751f4540cdaf41919), [`1d51937`](https://github.com/LTplus-AG/ifc-lite/commit/1d519376392e405645166761cc537bfbed9083cf), [`18e4de8`](https://github.com/LTplus-AG/ifc-lite/commit/18e4de865884d3126f478a9081cf56178fefcd00), [`80398a9`](https://github.com/LTplus-AG/ifc-lite/commit/80398a944093e3607944c70803b82d64fc372cba), [`9e45546`](https://github.com/LTplus-AG/ifc-lite/commit/9e455460f81f4bd463ef65116cbd89000e5539f7), [`06f81fe`](https://github.com/LTplus-AG/ifc-lite/commit/06f81fe10ba35a5b8edc7848017017f1f4d045ea), [`3e117c2`](https://github.com/LTplus-AG/ifc-lite/commit/3e117c249e792362ee5ec7eb722cf400ee18940a), [`2329b20`](https://github.com/LTplus-AG/ifc-lite/commit/2329b20506160171da97af7d4dd0cd76ab85f13f), [`182215a`](https://github.com/LTplus-AG/ifc-lite/commit/182215a835c4beac6a776bcb4eb1d019cab9063e)]:
+  - @ifc-lite/bcf@3.0.0

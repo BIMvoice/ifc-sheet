@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>IFClite Viewer</title>
+  <script>
+    // Apply theme before first paint to prevent flash of wrong theme.
+    // Priority: localStorage override > system preference > dark fallback.
+    (function() {
+      var saved = localStorage.getItem('ifc-lite-theme');
+      var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      if (theme === 'dark') document.documentElement.classList.add('dark');
+      if (theme === 'colorful') document.documentElement.classList.add('colorful');
+    })();
+  </script>
+
+  <script>
+    // Boot self-heal for a retired Vercel skew pin (issues #1457 and #4649).
+    //
+    // BACKGROUND. The site can run behind Vercel Skew Protection, which routes
+    // same-origin requests to the deployment named by a `__vdpl` cookie. The old
+    // implementation set a SameSite=Strict cookie in this inline script. On a
+    // cross-site navigation the current HTML could arrive without that cookie,
+    // while the preload scanner raced ahead and fetched its assets with the old
+    // pin. Every /assets/* request then went to the wrong deployment and 404'd.
+    //
+    // Root middleware now sets a SameSite=Lax pin in the DOCUMENT RESPONSE
+    // HEADERS. Headers are processed before the response body and preload
+    // scanner, so the document and all content-hashed assets agree. Keep this
+    // INLINE self-heal as a bounded backstop: if retention has removed a pinned
+    // deployment, expire the readable pin before reloading onto current.
+    (function () {
+      var KEY = 'ifc-lite:boot-reload';
+      var COUNT_COOKIE = 'ifc-lite-boot-reload';
+      var MAX = 2;            // at most 2 automatic reloads, then give up
+      var BACKSTOP_MS = 30000; // silent-hang backstop (entry JS is multi-MB)
+      var ERROR_DEBOUNCE_MS = 800;
+      var healed = false;
+      // The watchdog answers one question only: did this document ever mount?
+      // React may later empty #root while a user reload/navigation tears the
+      // document down, or while a heavy model load yields between commits. Once
+      // mounted, that transient empty state must never be mistaken for a boot
+      // failure or the recovery reload will discard an in-flight file open.
+      var mountedOnce = false;
+
+      function warn(msg) { if (typeof console !== 'undefined') console.warn('[boot-self-heal] ' + msg); }
+
+      // Registrable-ish parent domain (last two labels) so we can also clear a
+      // pin that an earlier build set with a Domain attribute — a host-only
+      // deletion would not remove it. Best-effort; '' on a single-label host.
+      function parentDomain() {
+        var parts = (location.hostname || '').split('.');
+        return parts.length >= 2 ? parts.slice(-2).join('.') : '';
+      }
+
+      // Expire a Vercel skew pin in every scope it might have been set. This is
+      // called only by the bounded failure recovery: clearing a healthy pin on
+      // every load would disable Skew Protection before lazy assets can use it.
+      function clearPin() {
+        try {
+          document.cookie = '__vdpl=; path=/; Max-Age=0; SameSite=Lax';
+          document.cookie = '__vdpl=; path=/; Max-Age=0; SameSite=Strict; Secure';
+          // This build's asset-scoped pin (#4886), which outranks the one above
+          // for its own assets: /assets/<deploymentId>/, read off the entry script.
+          var entry = document.querySelector('script[type="module"][src*="/assets/dpl_"]');
+          var scoped = entry && /\/assets\/dpl_[A-Za-z0-9]+\//.exec(entry.getAttribute('src') || '');
+          if (scoped) document.cookie = '__vdpl=; path=' + scoped[0] + '; Max-Age=0; SameSite=Lax; Secure';
+          var pd = parentDomain();
+          if (pd) document.cookie = '__vdpl=; path=/; domain=.' + pd + '; Max-Age=0; SameSite=Lax; Secure';
+        } catch (e) { warn('could not clear __vdpl pin: ' + e); }
+      }
+
+      // Reload-attempt counter. Prefer sessionStorage (auto-clears on tab close);
+      // fall back to a short-lived cookie when storage is blocked (private mode /
+      // sandboxed frame / strict tracking-prevention — the likely reason
+      // Edge/Brave never recovered) so we STILL bound retries AND still recover,
+      // instead of giving up and leaving a blank page.
+      function attempts() {
+        try {
+          var v = sessionStorage.getItem(KEY);
+          if (v != null) return Number(v) || 0;
+        } catch (e) { warn('sessionStorage unreadable: ' + e); }
+        var m = document.cookie.match(/(?:^|;\s*)ifc-lite-boot-reload=(\d+)/);
+        return m ? (Number(m[1]) || 0) : 0;
+      }
+      // Persist n in both stores; returns false only when NEITHER took, so a
+      // caller can refuse to reload rather than loop forever.
+      function recordAttempts(n) {
+        var ok = false;
+        try {
+          sessionStorage.setItem(KEY, String(n));
+          ok = (Number(sessionStorage.getItem(KEY)) || 0) === n;
+        } catch (e) { warn('sessionStorage unwritable: ' + e); }
+        try {
+          // 120s: long enough to survive a reload, short enough that a later
+          // genuine deploy in the same tab can self-heal again.
+          document.cookie = COUNT_COOKIE + '=' + n + '; path=/; Max-Age=120; SameSite=Lax';
+          ok = true;
+        } catch (e) { warn('could not persist reload count: ' + e); }
+        return ok;
+      }
+      function mounted() {
+        var r = document.getElementById('root');
+        return !!(r && r.childElementCount > 0);
+      }
+      function observeMount() {
+        if (!mounted()) return false;
+        mountedOnce = true;
+        recordAttempts(0);
+        return true;
+      }
+      function heal(reason) {
+        if (healed) return;
+        // A successful mount is monotonic for this document. Do not inspect a
+        // later teardown-shaped DOM and turn an ordinary reload into a second,
+        // destructive boot-recovery reload (#5124).
+        if (mountedOnce || observeMount()) return;
+        var n = attempts();
+        if (n >= MAX) return;                       // avoid reload loops on a real outage
+        // A stale __vdpl pin is the most likely cause of an entry/asset 404, so
+        // drop it BEFORE every reload (not just the second) — the reload then
+        // falls back to the current live deployment and its matching assets.
+        clearPin();
+        // Record the attempt BEFORE reloading and confirm it stuck; if it didn't,
+        // bail rather than risk reloading forever.
+        if (!recordAttempts(n + 1)) { warn('retry count did not persist; skipping auto-reload to avoid a loop (' + reason + ')'); return; }
+        healed = true;
+        warn('app failed to boot (' + reason + '); reloading to recover');
+        location.reload();
+      }
+
+      // (a) Fast path: a content-hashed entry/preload module failed to load.
+      // Capture phase — resource load errors on script/link elements don't bubble.
+      window.addEventListener('error', function (e) {
+        var t = e && e.target;
+        if (!t || !t.tagName) return;
+        var url = t.src || t.href || '';
+        var isModuleAsset =
+          (t.tagName === 'SCRIPT' && /\/assets\/.*\.m?js(\?|$)/.test(url)) ||
+          (t.tagName === 'LINK' && t.rel === 'modulepreload');
+        if (isModuleAsset) setTimeout(function () { heal('module-load-error'); }, ERROR_DEBOUNCE_MS);
+      }, true);
+
+      // (b) Backstop: app never mounted (e.g. a block that fired no error event).
+      window.addEventListener('load', function () {
+        setTimeout(function () { heal('mount-timeout'); }, BACKSTOP_MS);
+      });
+
+      // Clear the guard once the app mounts, so a later deploy in the same
+      // session can self-heal again (and a recovered reload resets the counter).
+      function watchMount() {
+        if (observeMount()) return;
+        var root = document.getElementById('root');
+        if (!root || typeof MutationObserver === 'undefined') return;
+        var mo = new MutationObserver(function () {
+          if (observeMount()) mo.disconnect();
+        });
+        mo.observe(root, { childList: true });
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', watchMount);
+      } else {
+        watchMount();
+      }
+    })();
+  </script>
+
+  <!-- Legacy ICO favicon (for older browsers) -->
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+  
+  <!-- Modern SVG favicon (for modern browsers) -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  
+  <!-- PNG favicons for various sizes and contexts -->
+  <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512x512-cropped.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192-cropped.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96-cropped.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64x64-cropped.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48-cropped.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32-cropped.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16-cropped.png">
+  
+  <!-- Apple Touch Icon (iOS) -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  
+  <!-- Android Chrome icons -->
+  <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192-cropped.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512x512-cropped.png">
+  
+  <!-- Web App Manifest (PWA support) -->
+  <link rel="manifest" href="/manifest.json">
+  
+  <!-- Material Symbols font for IFC class icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap">
+
+  <!-- Theme colors -->
+  <meta name="theme-color" content="#7aa2f7">
+  <meta name="msapplication-TileColor" content="#1a1b26">
+  <meta name="msapplication-TileImage" content="/favicon-192x192-cropped.png">
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

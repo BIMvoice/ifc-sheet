@@ -1,0 +1,199 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+import { PLACEMENT_IDENTITY_PREFIX } from '@/lib/model-placement/source-identity';
+
+/**
+ * Which persisted-cache tier a model of a given byte length qualifies for.
+ *   - `none`: too small to bother caching (parses fast), or too big for any
+ *     tier, or the mesh-only tier is disabled (kill switch) and the file is >150MB.
+ *   - `source`: the classic tier — persist tables + geometry AND the source
+ *     buffer, so lazy property/quantity accessors + re-export read the source
+ *     directly from IndexedDB.
+ *   - `mesh-only`: the source-decoupled tier. Persist tables + geometry +
+ *     instanced shards WITHOUT the source (too big for IndexedDB at 150-400MB);
+ *     on re-open the freshly read file buffer hydrates the accessors. The
+ *     spread-sampled cache key (see `@ifc-lite/cache`'s `source-fingerprint.ts`) only KEYS the
+ *     lookup; the hit is VALIDATED by the mtime guard plus the load's
+ *     full-content identity ({@link decideCacheHit}), so repeat opens still
+ *     have no main-thread stall.
+ *
+ * The ONLY difference between the two caching tiers is `persistSource` (and the
+ * size band that selects them) — the save/load code is otherwise shared, so
+ * {@link planCacheWrite} derives both in one place.
+ */
+export type CacheTier = 'none' | 'source' | 'mesh-only';
+
+export interface CacheTierOptions {
+  /** Is the mesh-only tier enabled? Default on; the kill switch is `?meshCache=0`. */
+  meshOnlyEnabled: boolean;
+  /** Below this, don't cache — small files parse fast (`CACHE_SIZE_THRESHOLD`). */
+  minSize: number;
+  /** Up to and including this, use the source-persisting tier (`CACHE_MAX_SOURCE_SIZE`). */
+  maxSourceSize: number;
+  /** Up to and including this, use the mesh-only tier (`CACHE_MESH_ONLY_MAX_SIZE`). */
+  maxMeshOnlySize: number;
+}
+
+/** The write decision for a model: its tier and whether to persist the source. */
+export interface CachePlan {
+  tier: CacheTier;
+  /** `true` unless the tier is `none` — whether to cache this model at all. */
+  shouldCache: boolean;
+  /** `true` only for the `source` tier — whether the raw source is persisted. */
+  persistSource: boolean;
+}
+
+/**
+ * Classify the cache tier for a primary model by its source byte length.
+ *
+ * Thresholds are injected (not imported) so this stays a pure, node-testable
+ * function: `ifcConfig` — where the real constants live — reads `import.meta.env`
+ * at module load and can't be imported under the Node test runner (same reason
+ * `acquireFileBuffer` injects `STREAM_SAB_THRESHOLD`). The loader passes the real
+ * `CACHE_*` constants; tests pass representative values.
+ *
+ * The mesh-only tier only fires for files strictly larger than the source tier's
+ * ceiling AND only when enabled, so the classic <=150MB path is byte-for-byte
+ * unchanged whether the mesh-only tier is on or off.
+ */
+export function classifyCacheTier(byteLength: number, opts: CacheTierOptions): CacheTier {
+  if (byteLength < opts.minSize) return 'none';
+  if (byteLength <= opts.maxSourceSize) return 'source';
+  if (opts.meshOnlyEnabled && byteLength <= opts.maxMeshOnlySize) return 'mesh-only';
+  return 'none';
+}
+
+/**
+ * Single home for the tier decision AND the `persistSource` derivation, so the
+ * loader never re-derives `persistSource` from the tier name and the two tiers
+ * can't drift. `source` persists the source; `mesh-only` does not; `none`
+ * doesn't cache.
+ */
+export function planCacheWrite(byteLength: number, opts: CacheTierOptions): CachePlan {
+  const tier = classifyCacheTier(byteLength, opts);
+  return {
+    tier,
+    shouldCache: tier !== 'none',
+    persistSource: tier === 'source',
+  };
+}
+
+/**
+ * Whether a MESH-ONLY cache hit may be served, given the file's modified-time
+ * guard and whether a full-file validation hash is available.
+ *
+ * The mesh-only tier hydrates cached geometry against the FRESH source buffer,
+ * so a source that changed since the entry was written would form a silent
+ * chimera (old geometry + new properties). The spread-sampled cache key can't
+ * catch a byte-length-preserving in-place edit that lands between its sample
+ * windows (a GUID/coordinate patch), so this gate is the real validation:
+ *   - both mtimes known and DIFFERENT  → `miss` (a real on-disk edit; reparse);
+ *   - mtime cannot confirm AND no full hash to revalidate → `miss` (never serve
+ *     unvalidated);
+ *   - otherwise → `serve` (mtime confirms it, or the caller can background-
+ *     revalidate the full hash and reload on mismatch).
+ *
+ * `lastModified` of `0`/`undefined` counts as "unknown" (some `File`s lack it).
+ * The classic source-persisting tier does NOT use this — it serves the cached
+ * source alongside the cached geometry, so a hit is always self-consistent.
+ */
+export function decideMeshOnlyCacheHit(opts: {
+  storedMtime?: number;
+  freshMtime?: number;
+  hasFullHash: boolean;
+}): 'serve' | 'miss' {
+  const { storedMtime, freshMtime, hasFullHash } = opts;
+  const mtimeKnown = !!storedMtime && !!freshMtime;
+  if (mtimeKnown && storedMtime !== freshMtime) return 'miss';
+  if (!mtimeKnown && !hasFullHash) return 'miss';
+  return 'serve';
+}
+
+/**
+ * Whether a SOURCE-PERSISTING cache hit may be served, given the file's
+ * modified-time guard (#4269).
+ *
+ * The spread-sampled cache key only KEYS the lookup — it cannot see a
+ * byte-length-preserving in-place edit between its sample windows (a GUID
+ * regeneration at its fixed 22-char width, a same-width coordinate patch), so
+ * without this gate the tier serves the OLD geometry/properties/source for an
+ * edited file with no error. The rule is deliberately SOFTER than
+ * {@link decideMeshOnlyCacheHit}:
+ *   - both mtimes known and DIFFERENT → `miss` (a real on-disk edit; reparse);
+ *   - otherwise → `serve`.
+ * Serving on an unknown mtime is safe HERE because this tier serves cached
+ * geometry + cached source together — the worst case is stale-but-consistent
+ * (today's behavior for every hit), never the mesh-only tier's chimera — and a
+ * `miss` on unknown would mass-invalidate every entry written before the mtime
+ * field existed. The mtime-PRESERVED edit is closed by the same background
+ * full-hash revalidation the mesh-only tier uses (purge + auto-reload on
+ * mismatch), once the entry carries a `fullSourceHash`.
+ */
+export function decideSourceTierCacheHit(opts: {
+  storedMtime?: number;
+  freshMtime?: number;
+}): 'serve' | 'miss' {
+  const { storedMtime, freshMtime } = opts;
+  const mtimeKnown = !!storedMtime && !!freshMtime;
+  if (mtimeKnown && storedMtime !== freshMtime) return 'miss';
+  return 'serve';
+}
+
+/**
+ * Whether a looked-up entry may be served, and the stored hash a served hit is
+ * background-revalidated against (#4269). The mtime rules are
+ * {@link decideMeshOnlyCacheHit} (source-decoupled) and
+ * {@link decideSourceTierCacheHit}. Since #7022 the stored hash is the load's
+ * placement identity, the one full-source pass a load makes; a hash without
+ * that prefix was written by an older viewer as a bare whole-file SHA-256 that
+ * the load no longer computes. Such an entry is a `miss`: serving it would
+ * either skip revalidation or "fail" it against a different construction, and
+ * the reparse rewrites it in the current form.
+ */
+export function decideCacheHit(opts: {
+  sourceDecoupled: boolean;
+  storedMtime?: number;
+  freshMtime?: number;
+  fullSourceHash?: string;
+}): { serve: boolean; revalidateAgainst?: string } {
+  const { sourceDecoupled, storedMtime, freshMtime, fullSourceHash } = opts;
+  if (fullSourceHash && !fullSourceHash.startsWith(PLACEMENT_IDENTITY_PREFIX)) return { serve: false };
+  const decision = sourceDecoupled
+    ? decideMeshOnlyCacheHit({ storedMtime, freshMtime, hasFullHash: !!fullSourceHash })
+    : decideSourceTierCacheHit({ storedMtime, freshMtime });
+  return decision === 'serve' ? { serve: true, revalidateAgainst: fullSourceHash } : { serve: false };
+}
+
+/**
+ * What the loader should do after `loadFromCache` resolves.
+ *
+ * `loadFromCache` returns the SAME `{ success: false }` for two very different
+ * situations — an ordinary cache miss (corrupt/absent entry: reparse) and a
+ * SUPERSEDED load (a newer file already owns the active model slot: stop). A
+ * caller that only branches on `success` therefore treats supersession as a
+ * miss and proceeds to a full server/WASM reparse of the OLD file while the
+ * newer load is painting — the same active-slot race the staleness guards
+ * inside `loadFromCache` exist to close, just moved one step later and made far
+ * more expensive. So the staleness re-check belongs at the call site too, and
+ * this function is where the three outcomes are named:
+ *   - `stale`: superseded — return immediately, write nothing, reparse nothing;
+ *   - `serve`: a good hit — finalize the model from the cache;
+ *   - `miss`: no usable entry — fall through to the server/WASM path as before.
+ *
+ * Staleness DOMINATES success: a load that succeeded but was superseded while
+ * it resolved must not finalize either, or the finalize writes the old file's
+ * store into the new model's slot.
+ *
+ * Pure and injected (not reading `loadSessionRef` itself) for the same reason
+ * as the helpers above: it stays node-testable without importing the loader.
+ */
+export function decideCacheLoadOutcome(opts: {
+  /** Did `loadFromCache` report a successful hit? */
+  loadSucceeded: boolean;
+  /** Has a newer load taken the active model slot in the meantime? */
+  isStale: boolean;
+}): 'serve' | 'stale' | 'miss' {
+  if (opts.isStale) return 'stale';
+  return opts.loadSucceeded ? 'serve' : 'miss';
+}

@@ -1,0 +1,280 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Draw a composed report (`compose.ts`) into a PDF (#3944): vector charts
+ * through ECharts' SVG renderer and svg2pdf, 3D snapshots as PNG, bucket
+ * tables through jspdf-autotable, running header + page numbers.
+ *
+ * Every outside dependency is a seam (`ReportPdfSeams`) with a browser
+ * default, the way `view-pdf` does it, so the sequence — page breaks, what
+ * is drawn where, that a failed snapshot does not abort the report — runs
+ * under node:test against a recording document.
+ */
+import { tableHeaderStyle, type TableHeaderStyle } from '../../table-header-style';
+import { truncateToWidth } from '../../document/compose-text.js';
+import { drawChartSourceMessage } from './render-source-message.js';
+import { renderChartSvg, type Aggregation, type ChartTheme, DEFAULT_THEME } from '@ifc-lite/charts';
+import { composeReport, REPORT_MARGIN, type ComposeReportInput, type ReportChartBlock, type ReportLayout } from './compose.js';
+import type { SnapshotCapture } from './snapshots.js';
+
+/** The subset of jsPDF the generator drives; a test records the calls. */
+export interface ReportDoc {
+  addPage: (format: 'a4' | 'a3', orientation: 'portrait' | 'landscape') => void;
+  setFont: (family: string, style: 'normal' | 'bold') => void;
+  setFontSize: (size: number) => void;
+  setTextColor: (grayOrRgb: number | string) => void;
+  text: (text: string, x: number, y: number) => void;
+  /** Paint a solid RGB rectangle directly, without DOM/SVG conversion (#6492). */
+  fillRect: (x: number, y: number, w: number, h: number, color: string) => void;
+  /** Width of `text` in the current font and size, in points; a document wraps with it. */
+  textWidth?: (text: string) => number;
+  addImage: (bytes: Uint8Array, format: 'PNG' | 'JPEG', x: number, y: number, w: number, h: number) => void;
+  /** Draw an SVG string into the box (svg2pdf); a raster fallback is the caller's business. */
+  svg: (svg: string, x: number, y: number, w: number, h: number) => Promise<void>;
+  table: (args: ReportTableArgs) => void;
+  pageCount: () => number;
+  output: () => Blob;
+}
+
+/** A row of a document table block (#5142): data, group header, grand total, or the "… n more" line. */
+export type ReportTableRowRole = 'row' | 'group' | 'total' | 'more';
+
+export interface ReportTableArgs {
+  startY: number;
+  margin: { left: number; right: number };
+  head: string[][];
+  body: string[][];
+  /** Fixed column widths + alignment (#5142); replaces the bucket table's hard-coded right-aligned 2nd/3rd column. */
+  columns?: Array<{ width: number; align: 'left' | 'right' }>;
+  /** Parallel to `body`; a row with no entry is a data row. */
+  rowRoles?: ReportTableRowRole[];
+  headerStyle?: TableHeaderStyle;
+  /** Size factor of a scaled document block (#6548): font size, cell padding, row height and rules grow with it. Absent is 1. */
+  scale?: number;
+}
+
+export interface ReportPdfSeams {
+  createDoc: (format: 'a4' | 'a3', orientation: 'portrait' | 'landscape') => Promise<ReportDoc>;
+  renderSvg: (aggregation: Aggregation, width: number, height: number, theme: ChartTheme, fontSize?: number) => string;
+  /** `null` when no renderer is available; snapshots are then skipped. */
+  capture: SnapshotCapture | null;
+  theme: ChartTheme;
+  now: () => Date;
+}
+
+export interface ReportPdfInput extends Omit<ComposeReportInput, 'generatedAt'> {
+  /** Ids of the elements of each chart's largest bucket, for the snapshot. */
+  snapshotIds: (chartId: string) => readonly number[];
+}
+
+export interface ReportPdfResult {
+  blob: Blob;
+  pages: number;
+  charts: number;
+  snapshots: number;
+  /** Charts whose snapshot could not be captured; the report says so in its place. */
+  snapshotFailures: string[];
+}
+
+/**
+ * The report prints on white with a font jsPDF ships, whatever the app's
+ * theme: the screen theme's font stack carries quoted family names
+ * (`"Segoe UI"`) that break the chart SVG as XML, and its dark tokens
+ * would print light-on-white.
+ */
+export const REPORT_THEME: ChartTheme = { ...DEFAULT_THEME, fontFamily: 'Helvetica, Arial, sans-serif' };
+
+/**
+ * jspdf-autotable's minimum row for `fontSize 8` (8 × jsPDF's 1.15 line factor = 9.2) plus
+ * `cellPadding 2` top and bottom, with the document in points. The seam pins `minCellHeight` to
+ * it, so a composer that counts rows with it (`compose-table.ts`, #5142) agrees with what is drawn.
+ */
+export const AUTOTABLE_ROW_HEIGHT = 13.2;
+
+/** The browser seams: real jsPDF + autotable + svg2pdf, lazily imported. */
+export async function browserReportSeams(capture: SnapshotCapture | null, theme: ChartTheme = REPORT_THEME): Promise<ReportPdfSeams> {
+  return {
+    createDoc: async (format, orientation) => {
+      const { jsPDF } = await import('jspdf');
+      const autoTable = (await import('jspdf-autotable')).default;
+      await import('svg2pdf.js');
+      const doc = new jsPDF({ orientation, unit: 'pt', format });
+      const parser = new DOMParser();
+      return {
+        addPage: (f, o) => { doc.addPage(f, o); },
+        setFont: (family, style) => { doc.setFont(family, style); },
+        setFontSize: (size) => { doc.setFontSize(size); },
+        setTextColor: (grayOrRgb) => {
+          if (typeof grayOrRgb === 'string') doc.setTextColor(grayOrRgb);
+          else doc.setTextColor(grayOrRgb);
+        },
+        text: (t, x, y) => { doc.text(t, x, y); },
+        fillRect: (x, y, w, h, color) => { doc.setFillColor(color); doc.rect(x, y, w, h, 'F'); },
+        textWidth: (t) => doc.getTextWidth(t),
+        addImage: (bytes, format, x, y, w, h) => { doc.addImage(bytes, format, x, y, w, h); },
+        svg: async (svg, x, y, w, h) => {
+          const parsed = parser.parseFromString(svg, 'image/svg+xml');
+          const error = parsed.querySelector('parsererror');
+          if (error) throw new Error(`Chart SVG did not parse: ${error.textContent ?? ''}`);
+          // svg2pdf measures text and resolves styles through the live DOM,
+          // so the element is attached (off-screen) for the duration.
+          const host = document.createElement('div');
+          host.style.cssText = 'position:absolute;left:-10000px;top:0;width:0;height:0;overflow:hidden';
+          const el = document.adoptNode(parsed.documentElement);
+          host.appendChild(el);
+          document.body.appendChild(host);
+          try {
+            await doc.svg(el, { x, y, width: w, height: h });
+          } finally {
+            host.remove();
+          }
+        },
+        table: ({ startY, margin, head, body, columns, rowRoles, headerStyle, scale = 1 }) => {
+          const palette = headerStyle ?? tableHeaderStyle();
+          const columnStyles: Record<number, { halign?: 'left' | 'right'; cellWidth?: number }> = columns
+            ? Object.fromEntries(columns.map((c, i) => [i, { halign: c.align, cellWidth: c.width }]))
+            : { 1: { halign: 'right' }, 2: { halign: 'right' } };
+          autoTable(doc, {
+            startY, margin: { ...margin, top: REPORT_MARGIN, bottom: REPORT_MARGIN }, head, body,
+            // `pageBreak: 'avoid'` is the belt to `AUTOTABLE_ROW_HEIGHT`: the document composer only
+            // ever hands over a chunk that fits.
+            styles: { fontSize: 8 * scale, cellPadding: 2 * scale, minCellHeight: AUTOTABLE_ROW_HEIGHT * scale, overflow: 'ellipsize', lineColor: [226, 232, 240], lineWidth: 0.5 * scale },
+            headStyles: { fillColor: palette.backgroundColor, textColor: palette.textColor, fontStyle: 'bold' },
+            columnStyles,
+            pageBreak: columns ? 'avoid' : 'auto',
+            didParseCell: rowRoles
+              ? (data) => {
+                  if (data.section !== 'body') return;
+                  const role = rowRoles[data.row.index];
+                  if (role === 'group' || role === 'total') {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [241, 245, 249];
+                  } else if (role === 'more') {
+                    data.cell.styles.fontStyle = 'italic';
+                    data.cell.styles.textColor = [150, 150, 150];
+                  }
+                }
+              : undefined,
+          });
+        },
+        pageCount: () => doc.getNumberOfPages(),
+        output: () => doc.output('blob'),
+      };
+    },
+    // `print: true` (#4940): the printed SVG has no interactive scroll, so a
+    // pie's legend switches to a wrapped plain layout instead of clipping.
+    renderSvg: (aggregation, width, height, t, fontSize) => renderChartSvg({ aggregation, width, height, fontSize, theme: t, showTitle: false, print: true }),
+    capture,
+    theme,
+    now: () => new Date(),
+  };
+}
+
+function drawHeaderFooter(doc: ReportDoc, layout: ReportLayout, pageIndex: number): void {
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(150);
+  doc.text(layout.header, REPORT_MARGIN, REPORT_MARGIN - 8);
+  doc.text(layout.footer, REPORT_MARGIN, layout.size.h - REPORT_MARGIN + 12);
+  doc.text(`Page ${pageIndex + 1} / ${layout.pages.length}`, layout.size.w - REPORT_MARGIN - 60, layout.size.h - REPORT_MARGIN + 12);
+  doc.setTextColor(0);
+}
+
+async function drawChartBlock(doc: ReportDoc, block: ReportChartBlock, aggregation: Aggregation | null, seams: ReportPdfSeams, snapshotIds: readonly number[], result: ReportPdfResult): Promise<void> {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(0);
+  doc.text(block.title, block.chart.x, block.chart.y - 6);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(130);
+  const subtitleX = block.chart.x + Math.min(block.chart.w - 80, block.title.length * 6 + 12);
+  const measure = (text: string, size: number) => doc.textWidth?.(text) ?? text.length * size * 0.52;
+  const subtitle = block.message && (!aggregation || aggregation.categories.length === 0) ? '' : block.message ? truncateToWidth(block.subtitle, block.chart.x + block.chart.w - subtitleX, 8, false, measure) : block.subtitle;
+  if (subtitle) doc.text(subtitle, subtitleX, block.chart.y - 6);
+  doc.setTextColor(0);
+
+  if (aggregation && aggregation.categories.length > 0) {
+    await doc.svg(seams.renderSvg(aggregation, block.chart.w, block.chart.h, seams.theme), block.chart.x, block.chart.y, block.chart.w, block.chart.h);
+    result.charts += 1;
+  } else {
+    doc.setTextColor(130);
+    // `null` is a distinct claim from an `Aggregation` with zero categories
+    // (#5218): `aggregate()` never returns null, only throws or returns a
+    // full result, so `null` here can only be ChartCard's own catch — the
+    // chart is broken, not merely empty of data. Same split as the
+    // subtitle above (`compose.ts`), worded for the chart body.
+    const message = block.message ?? (aggregation === null ? 'This chart could not be aggregated — edit it and re-export.' : 'No data for this chart.');
+    if (block.message) {
+      drawChartSourceMessage(doc, message, block.chart, 8);
+    } else doc.text(message, block.chart.x, block.chart.y + 14);
+    doc.setTextColor(0);
+  }
+
+  if (block.snapshot) {
+    let png: Uint8Array | undefined;
+    try {
+      png = await seams.capture?.(snapshotIds);
+    } catch (err) {
+      console.warn(`[Charts] snapshot failed for "${block.title}"`, err);
+    }
+    if (png) {
+      doc.addImage(png, 'PNG', block.snapshot.x, block.snapshot.y, block.snapshot.w, block.snapshot.h);
+      result.snapshots += 1;
+    } else {
+      result.snapshotFailures.push(block.title);
+      doc.setTextColor(130);
+      doc.text('3D snapshot unavailable.', block.snapshot.x, block.snapshot.y + 14);
+      doc.setTextColor(0);
+    }
+  }
+
+  if (block.table.rows.length > 0) {
+    doc.table({
+      startY: block.table.y,
+      margin: { left: block.table.x, right: REPORT_MARGIN },
+      head: [block.table.head.filter((h, i) => i < 2 || h.length > 0)],
+      body: block.table.rows.map((r) => (block.table.head[2].length > 0 ? r : [r[0], r[1]])),
+    });
+  }
+}
+
+export async function generateReportPdf(input: ReportPdfInput, seams: ReportPdfSeams): Promise<ReportPdfResult> {
+  const generatedAt = seams.now().toLocaleString();
+  const layout = composeReport({ ...input, generatedAt });
+  const format = input.page.size === 'A3' ? 'a3' : 'a4';
+  const doc = await seams.createDoc(format, input.page.orientation);
+  const aggregations = new Map(input.charts.map((c) => [c.id, c.aggregation]));
+  const result: ReportPdfResult = { blob: new Blob(), pages: 0, charts: 0, snapshots: 0, snapshotFailures: [] };
+
+  for (const page of layout.pages) {
+    if (page.index > 0) doc.addPage(format, input.page.orientation);
+    drawHeaderFooter(doc, layout, page.index);
+    for (const block of page.blocks) {
+      if (block.kind === 'title') {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(18);
+        doc.setTextColor(0);
+        doc.text(block.title, REPORT_MARGIN, block.y + 20);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        block.fields.forEach(([label, value], i) => {
+          const col = i % 2;
+          const row = Math.floor(i / 2);
+          doc.setTextColor(130);
+          doc.text(`${label}:`, REPORT_MARGIN + col * (layout.size.w / 2 - REPORT_MARGIN), block.y + 40 + row * 14);
+          doc.setTextColor(0);
+          doc.text(value, REPORT_MARGIN + col * (layout.size.w / 2 - REPORT_MARGIN) + 70, block.y + 40 + row * 14);
+        });
+      } else {
+        await drawChartBlock(doc, block, aggregations.get(block.chartId) ?? null, seams, input.snapshotIds(block.chartId), result);
+      }
+    }
+  }
+
+  result.pages = doc.pageCount();
+  result.blob = doc.output();
+  return result;
+}

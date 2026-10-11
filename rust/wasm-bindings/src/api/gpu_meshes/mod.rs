@@ -1,0 +1,25 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! GPU mesh parsing methods for IFC-Lite API
+//!
+//! Includes synchronous and async mesh parsing, instanced geometry,
+//! and GPU-ready geometry generation.
+
+mod affinity_chunks;
+mod batch;
+mod partitioned_batch;
+mod batch_from_source;
+mod batch_partition;
+mod instancing;
+pub(crate) mod prepass;
+mod prepass_discovery;
+mod prepass_owned_columns;
+mod prepass_sharded;
+mod source_fingerprint;
+mod style_finishes;
+mod prepass_from_source;
+mod void_index;
+mod prepass_affinity;
+mod source_fingerprint_prepass;

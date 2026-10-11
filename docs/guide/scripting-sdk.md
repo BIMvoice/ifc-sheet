@@ -1,0 +1,263 @@
+# Scripting SDK
+
+The `@ifc-lite/sdk` package is the scriptable BIM API behind `ifc-lite eval`, `ifc-lite run`, the viewer's script console, and the extension system. Everything hangs off a single `bim` object: query entities, read properties and quantities, walk the spatial tree, edit properties, run clashes, and export, all through one typed surface.
+
+## The `bim` API surface
+
+The `bim` object (a `BimContext`) groups its capabilities into namespaces, plus a set of top-level helpers for the common query paths. The main namespaces:
+
+| Namespace | Purpose |
+|-----------|---------|
+| `bim.model` | Loaded-model management (list, active model) |
+| `bim.query()` | Start a fluent entity query chain |
+| `bim.viewer` | Colorize, isolate, hide/show, section, fly-to (drives a running viewer) |
+| `bim.mutate` | Property and attribute edits |
+| `bim.store` | Document-level edits (add/remove entities, positional attributes) |
+| `bim.lens` | Lens visualization presets |
+| `bim.create` | Create IFC elements from scratch |
+| `bim.export` | Export to CSV, JSON, IFC/STEP, HBJSON, DFJSON |
+| `bim.clash` | Run clash rules and the discipline matrix |
+| `bim.cost` | Read and evaluate IFC 5D cost schedules, items, values, and quantities |
+| `bim.structural` | Read-only access to IFC structural analysis data (analysis models, members, connections, activities, load/result groups) |
+| `bim.ids` | IDS validation |
+| `bim.bcf` | BCF topics, comments, viewpoints |
+| `bim.files`, `bim.schedule`, `bim.spatial`, `bim.spaces`, `bim.drawing`, `bim.list`, `bim.bsdd`, `bim.events`, `bim.sandbox` | Supporting namespaces (file access, scheduling, spatial ops, space program, 2D drawings, entity tables, bSDD lookups, events, sandboxed sub-scripts) |
+
+On top of the namespaces, `BimContext` exposes direct helpers for the hot paths, so you rarely reach into internals: `bim.query()`, `bim.entity(ref)`, `bim.properties(ref)`, `bim.quantities(ref)`, `bim.materials(ref)`, `bim.classifications(ref)`, `bim.storeys()`, `bim.contains(ref)`, `bim.containedIn(ref)`, `bim.storey(ref)`, `bim.path(ref)`, and more.
+
+```js
+// Fluent query
+const externalWalls = bim.query()
+  .byType('IfcWall')
+  .where('Pset_WallCommon', 'IsExternal', '=', true)
+  .toArray();
+
+// Direct helpers
+const storeys = bim.storeys();
+for (const s of storeys) {
+  console.log(`${s.name}: ${bim.contains(s.ref).length} elements`);
+}
+```
+
+## Explicit property declarations
+
+The SDK's `bim.mutate.setProperty(ref, psetName, propName, value, dataType?)` accepts an optional IFC `IfcValue` defined type. Use the EXPRESS name, for example `IfcThermalTransmittanceMeasure` or `IfcLabel`. The shared schema registry validates membership, scalar value compatibility, declared numeric domains, and string width before writing. Invalid or unknown declarations throw; an integer JavaScript value can still declare a real-valued IFC measure.
+
+```js
+const wall = bim.query().byType('IfcWall').toArray()[0];
+if (wall) {
+  bim.mutate.setProperty(wall.ref, 'Pset_WallCommon', 'ThermalTransmittance', 1, 'IfcThermalTransmittanceMeasure');
+}
+```
+
+The declaration survives the effective property overlay, collaboration mirror/peer application, and IFC export/reimport. Without `dataType`, the existing string/boolean/integer/real inference remains unchanged. This optional argument belongs to the direct SDK and CLI `eval`/`run` API; the sandbox script bridge retains its existing four-argument contract.
+
+## Running scripts from the CLI
+
+### `eval` — one-liners
+
+`ifc-lite eval` evaluates a single JavaScript expression with `bim` in scope:
+
+```bash
+# Count walls
+ifc-lite eval model.ifc "bim.query().byType('IfcWall').count()"
+
+# List storey names
+ifc-lite eval model.ifc "bim.storeys().map(s => s.name)"
+
+# Per-entity evaluation: --type binds `ref` and `entity` to each match
+ifc-lite eval model.ifc "bim.quantity(ref, 'GrossSideArea')" --type IfcWall --limit 3
+```
+
+With `--type`, the expression runs once per matching entity with `ref` (the entity reference) and `entity` in scope; without it, the expression runs once with `bim`. Add `--json` for machine-readable output.
+
+### `run` — script files
+
+`ifc-lite run` executes a `.js` file with `bim` and `console` available:
+
+```bash
+ifc-lite run analysis.js model.ifc
+
+# Stream bim.viewer.* calls to a running `ifc-lite view` instance
+ifc-lite run paint.js model.ifc --viewer 3456
+```
+
+```js title="analysis.js"
+const walls = bim.query().byType('IfcWall').toArray();
+console.log(`Found ${walls.length} walls`);
+
+for (const wall of walls) {
+  const psets = bim.properties(wall.ref);
+  const common = psets.find(p => p.name === 'Pset_WallCommon');
+  const isExternal = common?.properties.find(p => p.name === 'IsExternal');
+  console.log(`  ${wall.name}: external=${isExternal?.value ?? 'unknown'}`);
+}
+```
+
+!!! warning "`eval` and `run` are not sandboxed"
+    The CLI `eval` and `run` commands execute your code directly in the Node
+    host (via `new Function`), with full access to the machine. They are meant
+    for **your own** scripts and trusted LLM-generated snippets on your own
+    files. To run **untrusted** code, use the sandbox below. Pointing `--viewer`
+    at a running viewer streams `bim.viewer.*` calls to it in real time.
+
+## Discovering the API for LLM tooling
+
+`ifc-lite schema` dumps the scriptable API as JSON so an LLM (or you) can discover methods before writing code:
+
+```bash
+ifc-lite schema              # full schema with params and return types
+ifc-lite schema --compact    # names and descriptions only
+```
+
+`ifc-lite schema` documents the `bim` object `eval`/`run` actually hand your script — a root `bim` namespace of top-level methods, plus the scriptable namespaces `model`, `query`, `viewer`, `mutate`, `store`, `lens`, `create`, `files`, `schedule`, `cost`, `clash`, and `export` — and includes each method's parameter names, return type, and LLM semantic hints (`useWhen`, task tags). There `query` is the chain reached via `bim.query()` (`.byType(...).toArray()`), not a namespace of standalone lookups. That differs from the sandbox's own bridge schema shown below, where `bim.query.byType(...)` runs and returns data in one call — the sandbox and `eval`/`run` hand scripts different `bim` shapes, so pick the one matching where the script will run. Running `ifc-lite schema` first is the recommended way to author correct `eval`/`run` code. See [Using with LLM Terminals](cli.md#using-with-llm-terminals) for the wider agent workflow.
+
+### IFC 5D cost data
+
+`bim.cost` reads the canonical cost graph from the loaded IFC source snapshot.
+References are model-qualified and evaluated amounts remain decimal strings:
+
+The example below uses the canonical fixture at
+`tests/models/cost/buildingsmart-cost-composition.ifc` (fetch it with
+`pnpm fixtures`), which contains the `External wall total` item.
+
+```js
+const graph = bim.cost.data();
+const total = graph.CostItems.find(item => item.Name === 'External wall total');
+const result = bim.cost.evaluateItem(total.ref, { Precision: 34 });
+console.log(result.Amount, result.Currency, result.Diagnostics);
+```
+
+`CostValues`, `CostQuantities`, relationships, and diagnostic references all
+use `{ modelId, expressId }`. Generic mutation overlays are not folded into
+this read model; replacing or reloading the IFC source refreshes it.
+
+## The sandbox
+
+`@ifc-lite/sandbox` runs scripts in an isolated **QuickJS-in-WASM** interpreter, the mechanism the viewer and the [extension system](extensions.md) use to run untrusted code safely. Each sandbox gets a fresh QuickJS context; the `bim` API is rebuilt inside it, gated by permissions; and TypeScript is transpiled to JavaScript before execution.
+
+```ts
+import { Sandbox } from '@ifc-lite/sandbox';
+
+const sandbox = new Sandbox(bim, {
+  permissions: { query: true, mutate: false }, // read-only by default
+  limits: { memoryBytes: 64 * 1024 * 1024, timeoutMs: 30_000 },
+});
+await sandbox.init();
+const result = await sandbox.eval(`bim.query.create().byType('IfcWall').count()`);
+console.log(result.value, result.logs, result.durationMs);
+```
+
+Or reach it through the SDK as `bim.sandbox.eval(script, config)`, which returns the same `ScriptResult` (`value`, captured `logs`, `durationMs`).
+
+**When `eval()` throws.** It rejects with a `ScriptError` (carrying `message`, `logs` and `durationMs`) for a throw in the script's main body, for a CPU timeout, and — since the fix in #2078 — for a script whose entry point is `async` and whose returned promise **rejects** after its first `await`. That last case previously *resolved*: the main body had succeeded, so the rejection came back as ordinary data in `result.value` (`{ type: 'rejected', error: … }`) and a failed script looked like a clean pass. If you upgrade across that change and were relying on `eval()` resolving, you will start seeing the error propagate.
+
+One case is still **not** reported: a rejection in a promise the script never hands back — `run(); 'started'` rather than `return run()`. There is no handle to inspect, and quickjs-emscripten exposes no host rejection tracker, so nothing observes it.
+
+**When `dispose()` throws.** The same unawaited shape has a second failure mode: if that detached job exhausts the memory limit, it leaves objects orphaned on QuickJS's GC list and upstream `JS_FreeRuntime` asserts, so teardown comes back as an emscripten abort — a `SandboxAbortError` from `dispose()` ([#1922](https://github.com/LTplus-AG/ifc-lite/issues/1922)). The `eval()` that caused it resolved normally, so **teardown is the only place that run's failure is observable**: settle a run's outcome *after* disposing it, not before, or you will report a clean result for a script that died.
+
+The abort poisons the whole WASM module, not just the one sandbox. The package retires it and builds the next sandbox on a fresh instance — a few milliseconds, no page reload, and nothing to do for the common case where a sandbox is created per run.
+
+A host that keeps **one sandbox alive across many runs** — an extension runtime, a REPL — does have something to do. Its sandbox may be sitting on a module that some *other* sandbox's abort retired. It still executes scripts, but emscripten's abort latch is per module and has already fired on it, so its own teardown can no longer report a failure and it will silently leak. `Sandbox.moduleRetired` is that signal; the contract is to discard, not to reuse:
+
+```ts
+import { createSandbox, type Sandbox, type SandboxConfig } from '@ifc-lite/sandbox';
+
+async function ensureLiveSandbox(sandbox: Sandbox, config: SandboxConfig): Promise<Sandbox> {
+  if (!sandbox.moduleRetired) return sandbox;
+  sandbox.dispose();
+  return createSandbox(bim, config); // fresh module, no page reload
+}
+```
+
+Check it while the sandbox is live: `dispose()` releases the module reference, after which `moduleRetired` reads `false`. The process-wide `isSandboxRuntimeAborted()` is a diagnostic — latched for the process lifetime — not a health check; a `true` does not mean scripting is dead.
+
+**Permissions** gate which namespaces the script can touch (`model`, `query`, `viewer`, `mutate`, `store`, `lens`, `export`, `files`). The defaults are read-only: `mutate` and `store` are off, everything else on. **Limits** cap resources, defaulting to 64 MB heap, a 30-second timeout, and a 512 KB stack. A namespace whose permission is disabled is simply not built on the sandboxed `bim` handle, so a script cannot call what it was not granted.
+
+### Sandboxed vs. direct
+
+| Path | Runtime | Isolation |
+|------|---------|-----------|
+| `ifc-lite eval` / `ifc-lite run` | Node host, `new Function` | None, full host access |
+| `bim.sandbox.eval` / `@ifc-lite/sandbox` | QuickJS-in-WASM | Permissions + memory/CPU/stack limits |
+| [Extensions](extensions.md) | QuickJS-in-WASM | Capability-gated bundle sandbox |
+
+Use the direct path for your own scripts; use the sandbox when the code comes from somewhere you do not fully trust.
+
+## Embedding programmatically
+
+Create a `BimContext` yourself with `createBimContext`. It needs either a local `backend` (viewer-embedded) or a `transport` (connected to a running viewer):
+
+```ts
+import { createBimContext } from '@ifc-lite/sdk';
+
+// Local mode: drive an in-process backend
+const bim = createBimContext({ backend: myLocalBackend });
+const wallCount = bim.query().byType('IfcWall').count();
+
+// Remote mode: talk to a running viewer over a transport
+const remote = createBimContext({ transport: myBroadcastTransport });
+remote.viewer.colorize(refs, '#ff0000');
+```
+
+In remote mode `bim.viewer.*` calls are forwarded to the connected viewer, which is exactly how `ifc-lite run script.js model.ifc --viewer <port>` works under the hood. For the full type surface, see the [`@ifc-lite/sdk` README](https://github.com/LTplus-AG/ifc-lite/tree/main/packages/sdk) and the [TypeScript API reference](../api/typescript.md).
+
+### Exporting the whole model vs. a subset
+
+`bim.export.ifc(refs, options)` reads its first argument as an isolation filter,
+and the *absence* of that argument is what asks for the whole model:
+
+```ts
+bim.export.ifc();                                   // no filter: the whole model
+bim.export.ifc(bim.query().byType('IfcWall').refs()); // only the walls (plus their reference closure)
+```
+
+An **empty array is not the same as no argument**. It means a filter that
+matched nothing, and it is refused:
+
+```ts
+const refs = bim.query().byType('IfcNonExistentType').refs(); // []
+bim.export.ifc(refs); // throws: the isolation filter matched nothing
+```
+
+An empty array used to mean "no filter", so a query that matched nothing
+silently exported every entity in the model and reported success. The release
+that changed this is the `@ifc-lite/sdk` major carrying issue #4738 in its
+changelog; before it, the refusal above did not happen. A call that used the
+empty array to mean the whole model, `bim.export.ifc([], options)`, becomes
+`bim.export.ifc(undefined, options)`.
+
+The same distinction holds in a sandboxed script (`bim.export.ifc()` with no
+arguments) and behind the CLI's `--format ifc`, which refuses a zero-match
+`--type`/`--where`/`--storey`/`--limit` rather than exporting everything.
+
+### Textured IFC exports in the web viewer
+
+The viewer's `bim.export.ifc(refs, options)` returns IFCZIP `Uint8Array` bytes
+when retained texture images accompany the exported model or subset. Its existing
+return type remains `string | Uint8Array`; do not decode archive bytes as STEP
+text. Supplying an `.ifc` download filename automatically changes it to
+`.ifczip` with ZIP MIME type. Untextured exports retain their ordinary STEP
+content. This packaging belongs to the web viewer adapter; other SDK backends
+provide their own resource packaging.
+
+### Canonical structural profiles
+
+Sandbox `bim.store.addColumn`, `addBeam` and `addMember` accept the same
+parameterized `Profile` union as the typed SDK. A supplied `Profile` replaces
+the rectangular Width/Depth or Width/Height inputs; column Height and element
+placement remain required. Profile dimensions keep their IFC names and use
+metres. The shared builder validates the actual profile before committing.
+Ordinary creation through the viewer SDK records the complete authored graph,
+so one Undo removes auxiliary placement, profile and containment records too.
+
+### Align loaded elements
+
+`await bim.store.alignElements(modelId, reference, targets, mode)` aligns current
+native mesh edges or centres in one storey workplane. Modes are `left`, `centre`,
+`right`, `top`, `middle` and `bottom`. It derives bounds from fresh owning-model
+geometry and records one atomic Undo batch. A selected host governs its placement dependants, which move once, and
+joined neighbours follow. Stale geometry, unavailable native geometry, unsafe
+shared placements, incompatible hosted/joined shifts, or a reference that would
+move with a target refuse without partial IFC writes. Supply the owning model
+ID when federated; lengths are IFC storey-local metres.

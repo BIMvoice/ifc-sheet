@@ -1,0 +1,204 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Shared response types for the IFC processing API.
+
+use super::mesh::MeshData;
+use crate::georeferencing::Georeferencing;
+use crate::mesh_frame::MeshCoordinateSpace;
+use crate::symbolic::SymbolicData;
+use serde::{Deserialize, Serialize};
+
+/// Full parse response with all meshes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParseResponse {
+    /// Cache key for this result (SHA256 of file content).
+    pub cache_key: String,
+    /// All meshes extracted from the IFC file.
+    pub meshes: Vec<MeshData>,
+    /// Declares the coordinate space used by serialized mesh vertices (see
+    /// [`MeshCoordinateSpace`] for the three tiers and their wire spelling).
+    /// `None` only on responses written before the tag existed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mesh_coordinate_space: Option<MeshCoordinateSpace>,
+    /// IfcSite ObjectPlacement as a column-major 4x4 matrix (16 f64 values, in meters).
+    /// Used by clients to relocate geometry between global and site-local coordinate systems.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub site_transform: Option<Vec<f64>>,
+    /// IfcBuilding ObjectPlacement as a column-major 4x4 matrix (16 f64 values, in meters).
+    /// Used by clients to relocate geometry between global and building-local coordinate systems.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub building_transform: Option<Vec<f64>>,
+    /// Model metadata.
+    pub metadata: ModelMetadata,
+    /// Processing statistics.
+    pub stats: ProcessingStats,
+    /// 2D symbol data extracted from `IfcAnnotation` and `IfcGrid`
+    /// entities. Always emitted (potentially empty); see issue #843 for
+    /// the parity rationale with the browser-side parser.
+    #[serde(default, skip_serializing_if = "SymbolicData::is_empty")]
+    pub symbolic_data: SymbolicData,
+}
+
+/// Model metadata extracted from the IFC file.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ModelMetadata {
+    /// IFC schema version (e.g., "IFC2X3", "IFC4", "IFC4X3").
+    pub schema_version: String,
+    /// Total number of entities in the file.
+    pub entity_count: usize,
+    /// Number of geometry-bearing entities.
+    pub geometry_entity_count: usize,
+    /// Coordinate system information.
+    pub coordinate_info: CoordinateInfo,
+    /// Length unit scale to convert model length values to metres (e.g. `0.001`
+    /// for millimetres). `None` when not yet computed; consumers treat it as
+    /// `1.0`. Brings the server to parity with the browser parser's
+    /// `extractLengthUnitScale` (issue #900).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub length_unit_scale: Option<f64>,
+    /// Georeferencing (`IfcMapConversion` + `IfcProjectedCRS`). `None` when the
+    /// model carries no map-conversion data. Mirrors the browser parser's
+    /// `extractGeoreferencing` (issue #900).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub georeferencing: Option<Georeferencing>,
+}
+
+/// Coordinate system information.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CoordinateInfo {
+    /// Origin shift applied to coordinates (for RTC rendering).
+    pub origin_shift: [f64; 3],
+    /// Whether the model is geo-referenced.
+    pub is_geo_referenced: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuickMetadataEntitySummary {
+    pub express_id: u32,
+    pub type_name: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub global_id: Option<String>,
+    pub kind: String,
+    pub has_children: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub element_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub elevation: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuickMetadataSpatialNode {
+    #[serde(flatten)]
+    pub summary: QuickMetadataEntitySummary,
+    pub children: Vec<QuickMetadataSpatialNode>,
+    pub elements: Vec<QuickMetadataEntitySummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuickMetadataBootstrap {
+    pub schema_version: String,
+    pub entity_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spatial_tree: Option<QuickMetadataSpatialNode>,
+    /// Child edges the tree walk skipped, in the order it met them (#4662).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pruned_aggregate_edges: Vec<QuickMetadataPrunedEdge>,
+}
+
+/// A spatial child edge left out of [`QuickMetadataBootstrap::spatial_tree`].
+/// Each node is placed where the depth-first walk from the root first reaches
+/// it; every later `IfcRelAggregates` edge to it is recorded here, as is every
+/// child edge the walk would follow out of a node at the depth limit. A spatial
+/// element an `IfcRelContainedInSpatialStructure` promotes to a child is not an
+/// aggregate edge: skipping it because the node is already placed, or because
+/// the node is settled (see [`QuickMetadataPrunedEdgeKind::DepthLimit`]), is not
+/// recorded (#4689).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuickMetadataPrunedEdge {
+    /// Express id of the node whose child list names the edge.
+    pub parent_express_id: u32,
+    /// Express id of the child the edge names.
+    pub child_express_id: u32,
+    pub kind: QuickMetadataPrunedEdgeKind,
+}
+
+/// Why a [`QuickMetadataPrunedEdge`] was left out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum QuickMetadataPrunedEdgeKind {
+    /// The parent that placed the child names it again.
+    SiblingRepeat,
+    /// A different parent names a child already placed elsewhere.
+    SecondParent,
+    /// A node names itself or one of its own ancestors.
+    BackEdge,
+    /// The parent sits at the tree's depth limit, so its subtree is cut there
+    /// (#4689). The child still appears if the walk reaches it by another
+    /// edge it follows. A containment of a settled node is not followed, even
+    /// when the limit cuts the path that settles it: settled means aggregated
+    /// and reached from the root through aggregates and containments of nodes
+    /// no aggregate names.
+    DepthLimit,
+}
+
+/// Processing statistics.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ProcessingStats {
+    /// Total number of meshes generated.
+    pub total_meshes: usize,
+    /// Total number of vertices.
+    pub total_vertices: usize,
+    /// Total number of triangles.
+    pub total_triangles: usize,
+    /// Time spent parsing entities (ms).
+    pub parse_time_ms: u64,
+    /// Time spent scanning entities and building initial job lists (ms).
+    pub entity_scan_time_ms: u64,
+    /// Time spent resolving lookups, styles, and optional metadata (ms).
+    pub lookup_time_ms: u64,
+    /// Time spent in geometry preprocessing before the extraction loop begins (ms).
+    pub preprocess_time_ms: u64,
+    /// Time spent processing geometry (ms).
+    pub geometry_time_ms: u64,
+    /// Total processing time (ms).
+    pub total_time_ms: u64,
+    /// Whether result was from cache.
+    pub from_cache: bool,
+    /// Total CSG boolean failures recorded during geometry extraction
+    /// (mirrors the browser console diagnostics — see `BoolFailureReason`).
+    #[serde(default)]
+    pub total_csg_failures: u64,
+    /// Number of distinct products with at least one CSG failure.
+    #[serde(default)]
+    pub products_with_failures: u64,
+    /// Triangles removed by the f32-collapse degenerate-triangle backstop
+    /// across the whole pass (see `element::build_mesh_data`). Non-zero means
+    /// the backstop engaged for this model.
+    #[serde(default)]
+    pub degenerate_triangles_dropped: u64,
+    /// CartesianPoints served from the per-worker point cache while meshing
+    /// faceted breps (`EntityDecoder::get_polyloop_coords_cached`). Non-zero
+    /// means the cross-element cache hoist memoized a shared point list rather
+    /// than re-parsing it per part.
+    #[serde(default)]
+    pub point_cache_hits: u64,
+    /// CartesianPoints parsed for the first time (point-cache misses) across the
+    /// faceted-brep pass. `hits / (hits + misses)` is the memoization rate.
+    #[serde(default)]
+    pub point_cache_misses: u64,
+    /// Wall time (ms) attributed to faceted-brep part meshing. Populated only in
+    /// `observability` native builds (`Instant` traps on wasm32); 0 otherwise.
+    #[serde(default)]
+    pub faceted_brep_time_ms: u64,
+    /// Full CSG / opening diagnostics (opening classification, per-reason failure
+    /// breakdown, per-host detail, silent rectangular no-ops, rect_fast engagement)
+    /// aggregated across the native geometry pass — the same `GeometryDiagnostics`
+    /// contract the WASM batch path surfaces, so a consumer sees one shape on both.
+    /// `None` when nothing diagnostic-worthy happened (no openings, no failures).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry_diagnostics: Option<ifc_lite_geometry::GeometryDiagnostics>,
+}

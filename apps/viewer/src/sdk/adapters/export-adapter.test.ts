@@ -1,0 +1,943 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import test from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { resolveVisibilityFilterSets, injectScheduleIntoStep, createExportAdapter } from './export-adapter.js';
+import { LEGACY_MODEL_ID } from './model-compat.js';
+import { LEGACY_MUTATION_MODEL_ID } from './mutation-view.js';
+import type { StoreApi } from './types.js';
+import type { ScheduleExtraction, IfcDataStore } from '@ifc-lite/parser';
+import { asSourceBytes } from '@ifc-lite/parser';
+import { createBimContext } from '@ifc-lite/sdk';
+import { LocalBackend } from '../local-backend.js';
+import { MutablePropertyView } from '@ifc-lite/mutations';
+import { useViewerStore } from '../../store/index.js';
+
+test('resolveVisibilityFilterSets honors legacy single-model hidden and isolated state (routed through resolveExportVisibility, #4333 follow-up)', () => {
+  useViewerStore.getState().resetViewerState();
+  useViewerStore.setState({
+    models: new Map(),
+    hiddenEntities: new Set([11, 12]),
+    isolatedEntities: new Set([21, 22]),
+    classFilter: null,
+  });
+
+  const result = resolveVisibilityFilterSets(
+    useViewerStore.getState(),
+    LEGACY_MODEL_ID,
+    new Set([1, 2, 3]),
+    3,
+    (expressId) => [1, 2, 3].includes(expressId),
+  );
+
+  assert.equal(result.visibleOnly, false);
+  assert.deepEqual([...result.hiddenEntityIds].sort(), [11, 12]);
+  assert.deepEqual(result.isolatedEntityIds ? [...result.isolatedEntityIds].sort() : null, [21, 22]);
+});
+
+// ─── injectScheduleIntoStep ─────────────────────────────────────────────
+
+const STUB_STORE: IfcDataStore = {
+  entities: {
+    getExpressIdByGlobalId: (gid: string) => {
+      const map: Record<string, number> = { 'wall-A': 11, 'wall-B': 12 };
+      return map[gid] ?? -1;
+    },
+  } as unknown as IfcDataStore['entities'],
+} as unknown as IfcDataStore;
+
+const SAMPLE_STEP = `ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('test'),'2;1');
+FILE_NAME('','',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('proj-gid',$,'P',$,$,$,$,(#2),#3);
+#10=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);
+#11=IFCWALL('wall-A-gid',#10,'A',$,$,$,$,$,$);
+#12=IFCWALL('wall-B-gid',#10,'B',$,$,$,$,$,$);
+ENDSEC;
+END-ISO-10303-21;
+`;
+
+function makeGeneratedSchedule(): ScheduleExtraction {
+  return {
+    hasSchedule: true, workCalendars: [],
+    workSchedules: [{
+      expressId: 0, globalId: 'sched-gid', kind: 'WorkSchedule',
+      name: 'Generated', startTime: '2024-05-01T08:00:00',
+      finishTime: '2024-05-30T17:00:00', predefinedType: 'PLANNED',
+      taskGlobalIds: ['task-1'],
+    }],
+    tasks: [{
+      expressId: 0, globalId: 'task-1', name: 'Install walls',
+      isMilestone: false, predefinedType: 'INSTALLATION',
+      childGlobalIds: [],
+      productExpressIds: [0, 0],
+      productGlobalIds: ['wall-A', 'wall-B'],
+      controllingScheduleGlobalIds: ['sched-gid'],
+      taskTime: {
+        scheduleStart: '2024-05-01T08:00:00',
+        scheduleFinish: '2024-05-06T17:00:00',
+        scheduleDuration: 'P5D',
+      },
+    }],
+    sequences: [],
+  };
+}
+
+test('injectScheduleIntoStep is a no-op when scheduleData is null', () => {
+  const out = injectScheduleIntoStep(SAMPLE_STEP, null, STUB_STORE);
+  assert.equal(out, SAMPLE_STEP);
+});
+
+test('injectScheduleIntoStep is a no-op when every task has a positive expressId (parsed schedule already in STEP)', () => {
+  const parsed: ScheduleExtraction = {
+    hasSchedule: true, workCalendars: [], workSchedules: [], sequences: [],
+    tasks: [{
+      expressId: 999, globalId: 'task-x', name: 'Already in file',
+      isMilestone: false, childGlobalIds: [],
+      productExpressIds: [], productGlobalIds: [],
+      controllingScheduleGlobalIds: [],
+    }],
+  };
+  const out = injectScheduleIntoStep(SAMPLE_STEP, parsed, STUB_STORE);
+  assert.equal(out, SAMPLE_STEP);
+});
+
+test('injectScheduleIntoStep splices generated schedule entities before the DATA section ENDSEC', () => {
+  const out = injectScheduleIntoStep(SAMPLE_STEP, makeGeneratedSchedule(), STUB_STORE);
+  // The new entities must appear in the file.
+  assert.match(out, /=IFCWORKSCHEDULE\(/);
+  assert.match(out, /=IFCTASK\(/);
+  assert.match(out, /=IFCTASKTIME\(/);
+  assert.match(out, /=IFCRELASSIGNSTOCONTROL\(/);
+  assert.match(out, /=IFCRELASSIGNSTOPROCESS\(/);
+  // Trailer must still be intact and well-formed.
+  assert.ok(out.endsWith('END-ISO-10303-21;\n'));
+  // Splice location must be strictly INSIDE the DATA section, not just
+  // before `END-ISO-10303-21;` — entities outside the DATA block are
+  // invalid STEP placement.
+  const dataStartIdx = out.indexOf('DATA;');
+  const dataEndIdx = out.indexOf('ENDSEC;', dataStartIdx);
+  const wsIdx = out.indexOf('=IFCWORKSCHEDULE(');
+  assert.ok(dataStartIdx >= 0, 'DATA; section header present');
+  assert.ok(dataEndIdx > dataStartIdx, 'DATA ENDSEC comes after DATA;');
+  assert.ok(wsIdx > dataStartIdx && wsIdx < dataEndIdx,
+    `IfcWorkSchedule splice (${wsIdx}) must land inside DATA..ENDSEC (${dataStartIdx}..${dataEndIdx})`);
+});
+
+test('injectScheduleIntoStep partitions mixed schedules — only generated tasks are emitted', () => {
+  const mixed: ScheduleExtraction = {
+    hasSchedule: true, workCalendars: [],
+    workSchedules: [{
+      expressId: 0, globalId: 'gen-sched', kind: 'WorkSchedule',
+      name: 'Gen', startTime: '2024-05-01T08:00:00',
+      taskGlobalIds: ['gen-task'],
+    }],
+    tasks: [
+      {
+        // Parsed — must NOT be re-emitted (already in source STEP).
+        expressId: 99, globalId: 'parsed-task', name: 'Already-in-file',
+        isMilestone: false, childGlobalIds: [],
+        productExpressIds: [], productGlobalIds: [],
+        controllingScheduleGlobalIds: [],
+      },
+      {
+        // Generated — must be emitted.
+        expressId: 0, globalId: 'gen-task', name: 'Fresh',
+        isMilestone: false, childGlobalIds: [],
+        productExpressIds: [0], productGlobalIds: ['wall-A'],
+        controllingScheduleGlobalIds: ['gen-sched'],
+        taskTime: { scheduleStart: '2024-05-01T08:00:00', scheduleFinish: '2024-05-05T17:00:00' },
+      },
+    ],
+    sequences: [],
+  };
+  const out = injectScheduleIntoStep(SAMPLE_STEP, mixed, STUB_STORE);
+  // The generated task should be emitted…
+  assert.match(out, /IFCTASK\('[^']+',[^)]*'Fresh'/);
+  // …but the parsed task name must not appear a second time.
+  assert.ok(!/Already-in-file/.test(out), 'parsed task is not re-emitted');
+});
+
+test('injectScheduleIntoStep allocates IDs above the existing maximum', () => {
+  const out = injectScheduleIntoStep(SAMPLE_STEP, makeGeneratedSchedule(), STUB_STORE);
+  // Existing max in SAMPLE_STEP is 12; first new entity must be #13 or higher.
+  const firstNewId = out.match(/(?<=\n)#(\d+)=IFCWORKSCHEDULE\(/);
+  assert.ok(firstNewId);
+  assert.ok(parseInt(firstNewId![1], 10) > 12);
+});
+
+test('injectScheduleIntoStep references the existing IfcOwnerHistory', () => {
+  const out = injectScheduleIntoStep(SAMPLE_STEP, makeGeneratedSchedule(), STUB_STORE);
+  // Entities should reference #10 (the stub IfcOwnerHistory) for ownership.
+  const ws = out.split('\n').find(l => l.includes('=IFCWORKSCHEDULE('));
+  assert.ok(ws);
+  assert.match(ws!, /=IFCWORKSCHEDULE\('[^']+',#10/);
+});
+
+test('injectScheduleIntoStep resolves product GlobalIds via the data store', () => {
+  const out = injectScheduleIntoStep(SAMPLE_STEP, makeGeneratedSchedule(), STUB_STORE);
+  const proc = out.split('\n').find(l => l.includes('=IFCRELASSIGNSTOPROCESS('));
+  assert.ok(proc);
+  // wall-A → 11, wall-B → 12 per STUB_STORE's resolver.
+  assert.match(proc!, /\(#11,#12\)/);
+});
+
+// ─── rewrite mode (P1: schedule-as-unit export) ───────────────────────
+
+/**
+ * STEP fixture with an existing parsed schedule block — exercises the
+ * rewrite path that strips all schedule entities and re-emits fresh.
+ */
+const SAMPLE_STEP_WITH_SCHEDULE = `ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('test'),'2;1');
+FILE_NAME('','',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('proj-gid',$,'P',$,$,$,$,(#2),#3);
+#10=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);
+#11=IFCWALL('wall-A-gid',#10,'A',$,$,$,$,$,$);
+#12=IFCWALL('wall-B-gid',#10,'B',$,$,$,$,$,$);
+#20=IFCWORKSCHEDULE('orig-sched-gid',#10,'Original',$,$,$,$,$,$,$,$,$,$,$,.PLANNED.);
+#21=IFCTASKTIME($,$,$,.WORKTIME.,'P3D','2024-01-01T08:00:00','2024-01-04T08:00:00',$,$,$,$,$,$,$,$,$,$,$,$,$);
+#22=IFCTASK('orig-task-gid',#10,'Original task',$,$,$,$,$,$,.F.,$,#21,.CONSTRUCTION.);
+#23=IFCRELASSIGNSTOCONTROL('rel-ctl',#10,$,$,(#22),$,#20);
+#24=IFCRELASSIGNSTOPROCESS('rel-proc',#10,$,$,(#11,#12),$,#22);
+ENDSEC;
+END-ISO-10303-21;
+`;
+
+test('injectScheduleIntoStep rewrite mode strips the original schedule block', () => {
+  // No in-memory schedule + edited flag → user deleted every task.
+  const out = injectScheduleIntoStep(
+    SAMPLE_STEP_WITH_SCHEDULE,
+    null,
+    STUB_STORE,
+    { scheduleIsEdited: true },
+  );
+  assert.ok(!out.includes('IFCWORKSCHEDULE'), 'original workschedule removed');
+  assert.ok(!out.includes('IFCTASK('), 'original task removed');
+  assert.ok(!out.includes('IFCTASKTIME'), 'original task time removed');
+  assert.ok(!out.includes('IFCRELASSIGNSTOCONTROL'), 'rel-assigns-to-control removed');
+  assert.ok(!out.includes('IFCRELASSIGNSTOPROCESS'), 'rel-assigns-to-process removed');
+  // Non-schedule entities must remain intact.
+  assert.ok(out.includes('IFCWALL'), 'walls preserved');
+  assert.ok(out.includes('IFCOWNERHISTORY'), 'owner history preserved');
+  assert.ok(out.includes('IFCPROJECT'), 'project preserved');
+});
+
+test('injectScheduleIntoStep rewrite mode replaces the original schedule with the edited one', () => {
+  const edited: ScheduleExtraction = {
+    hasSchedule: true, workCalendars: [],
+    workSchedules: [{
+      expressId: 20, globalId: 'orig-sched-gid', kind: 'WorkSchedule',
+      name: 'Renamed schedule',
+      startTime: '2024-05-01T08:00:00',
+      finishTime: '2024-05-10T17:00:00',
+      predefinedType: 'PLANNED',
+      taskGlobalIds: ['orig-task-gid'],
+    }],
+    tasks: [{
+      expressId: 22, globalId: 'orig-task-gid', name: 'Renamed task',
+      isMilestone: false, predefinedType: 'CONSTRUCTION',
+      childGlobalIds: [],
+      productExpressIds: [11],
+      productGlobalIds: ['wall-A'],
+      controllingScheduleGlobalIds: ['orig-sched-gid'],
+      taskTime: {
+        scheduleStart: '2024-05-01T08:00:00',
+        scheduleFinish: '2024-05-05T17:00:00',
+        scheduleDuration: 'P5D',
+      },
+    }],
+    sequences: [],
+  };
+  const out = injectScheduleIntoStep(
+    SAMPLE_STEP_WITH_SCHEDULE,
+    edited,
+    STUB_STORE,
+    { scheduleIsEdited: true },
+  );
+
+  // Old names/timestamps gone.
+  assert.ok(!out.includes("'Original'"), 'original schedule name stripped');
+  assert.ok(!out.includes("'Original task'"), 'original task name stripped');
+  assert.ok(!out.includes('P3D'), 'original duration stripped');
+  assert.ok(!out.includes('2024-01-01T08:00:00'), 'original date stripped');
+
+  // New names/timestamps present.
+  assert.ok(out.includes("'Renamed schedule'"), 'new schedule name present');
+  assert.ok(out.includes("'Renamed task'"), 'new task name present');
+  assert.ok(out.includes('P5D'), 'new duration present');
+  assert.ok(out.includes('2024-05-01T08:00:00'), 'new start date present');
+
+  // Globalids must be preserved (same identity).
+  assert.ok(out.includes("'orig-sched-gid'"), 'work-schedule globalId preserved');
+  assert.ok(out.includes("'orig-task-gid'"), 'task globalId preserved');
+
+  // No duplicate emission.
+  const workScheduleCount = (out.match(/=IFCWORKSCHEDULE\(/g) ?? []).length;
+  const taskCount = (out.match(/=IFCTASK\(/g) ?? []).length;
+  assert.equal(workScheduleCount, 1, 'exactly one work schedule in output');
+  assert.equal(taskCount, 1, 'exactly one task in output');
+});
+
+test('injectScheduleIntoStep rewrite mode leaves non-schedule entities byte-identical', () => {
+  // Input has project, owner history, two walls, plus a schedule block.
+  // After rewrite with empty schedule, the non-schedule lines should be
+  // intact (aside from re-ordering they don't do).
+  const out = injectScheduleIntoStep(
+    SAMPLE_STEP_WITH_SCHEDULE,
+    null,
+    STUB_STORE,
+    { scheduleIsEdited: true },
+  );
+  // Each non-schedule line from the input must appear in the output.
+  for (const line of [
+    "#1=IFCPROJECT('proj-gid',$,'P',$,$,$,$,(#2),#3);",
+    '#10=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);',
+    "#11=IFCWALL('wall-A-gid',#10,'A',$,$,$,$,$,$);",
+    "#12=IFCWALL('wall-B-gid',#10,'B',$,$,$,$,$,$);",
+  ]) {
+    assert.ok(out.includes(line), `preserved line: ${line}`);
+  }
+});
+
+test('injectScheduleIntoStep without scheduleIsEdited preserves append-only legacy behaviour', () => {
+  // Mixed schedule (one parsed, one generated) without the edit flag →
+  // only the generated tail is emitted, original parsed task stays intact.
+  const mixed: ScheduleExtraction = {
+    hasSchedule: true, workCalendars: [],
+    workSchedules: [],
+    tasks: [
+      {
+        expressId: 99, globalId: 'parsed', name: 'Parsed task', isMilestone: false,
+        childGlobalIds: [], productExpressIds: [], productGlobalIds: [],
+        controllingScheduleGlobalIds: [],
+      },
+      {
+        expressId: 0, globalId: 'fresh', name: 'Fresh', isMilestone: false,
+        childGlobalIds: [], productExpressIds: [0], productGlobalIds: ['wall-A'],
+        controllingScheduleGlobalIds: [],
+        taskTime: { scheduleStart: '2024-05-01T08:00:00', scheduleFinish: '2024-05-05T17:00:00' },
+      },
+    ],
+    sequences: [],
+  };
+  // Legacy (no options): only generated should splice in, parsed name
+  // must not re-appear.
+  const legacy = injectScheduleIntoStep(SAMPLE_STEP_WITH_SCHEDULE, mixed, STUB_STORE);
+  assert.match(legacy, /'Fresh'/);
+  // The original schedule block stays untouched because we're in append mode.
+  assert.ok(legacy.includes("'Original'"), 'original schedule block preserved in append mode');
+});
+
+// ─── edge cases flagged in the retrospective ────────────────────────
+
+test('stripScheduleEntities preserves IFCTASK as substring inside non-task strings', () => {
+  // Defensive: an IFC file could (unusually) contain a string attribute
+  // whose text literally spells "IFCTASK" or "IFCWORKSCHEDULE". The
+  // line-regex is anchored to leading whitespace + `#N=TYPE` so it
+  // shouldn't match substrings, but let's verify.
+  const stepWithTrickyString = `ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('test'),'2;1');
+FILE_NAME('','',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('proj',$,'P',$,$,$,$,(#2),#3);
+#10=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);
+#11=IFCWALL('wall-A',#10,'Description mentions IFCTASK for context',$,$,$,$,$,$);
+#20=IFCWORKSCHEDULE('real-ws',#10,'Real',$,$,$,$,$,$,$,$,$,$,.PLANNED.);
+#22=IFCTASK('real-task',#10,'Real task',$,$,$,$,$,$,.F.,$,$,.CONSTRUCTION.);
+ENDSEC;
+END-ISO-10303-21;
+`;
+  const out = injectScheduleIntoStep(stepWithTrickyString, null, STUB_STORE, {
+    scheduleIsEdited: true,
+  });
+  // Real schedule entities stripped…
+  assert.ok(!out.includes("'real-ws'"), 'real workschedule stripped');
+  assert.ok(!out.includes("'real-task'"), 'real task stripped');
+  // …but the wall with "IFCTASK" in its description must survive.
+  assert.ok(
+    out.includes('Description mentions IFCTASK for context'),
+    'wall with IFCTASK substring in string attribute preserved',
+  );
+});
+
+test('stripScheduleEntities handles \\r\\n line endings', () => {
+  // Some STEP writers emit CRLF; node tests typically run with LF.
+  // Verify the splitter treats \r\n correctly — each line ends up with
+  // its trailing \r, gets the same regex treatment, and rejoins.
+  const crlf = [
+    'ISO-10303-21;',
+    'HEADER;',
+    "FILE_DESCRIPTION(('test'),'2;1');",
+    "FILE_NAME('','',(''),(''),'','','');",
+    "FILE_SCHEMA(('IFC4'));",
+    'ENDSEC;',
+    'DATA;',
+    "#1=IFCPROJECT('proj',$,'P',$,$,$,$,(#2),#3);",
+    "#10=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);",
+    "#11=IFCWALL('wall-A',#10,'A',$,$,$,$,$,$);",
+    "#20=IFCWORKSCHEDULE('ws',#10,'WS',$,$,$,$,$,$,$,$,$,$,.PLANNED.);",
+    'ENDSEC;',
+    'END-ISO-10303-21;',
+    '',
+  ].join('\r\n');
+  const out = injectScheduleIntoStep(crlf, null, STUB_STORE, { scheduleIsEdited: true });
+  assert.ok(!out.includes('IFCWORKSCHEDULE'), 'CRLF workschedule stripped');
+  assert.ok(out.includes('IFCWALL'), 'CRLF non-schedule line preserved');
+  // \r\n preservation not strictly required; as long as each kept line
+  // survives with its content, we pass.
+});
+
+test('stripScheduleEntities handles multi-line STEP entities', () => {
+  // Valid STEP allows entities to span multiple lines (whitespace is
+  // tolerated anywhere outside string literals). The old line-by-line
+  // regex would have stripped only the first line of a multi-line
+  // IFCTASK, leaving its attribute-list continuation as orphan garbage.
+  // The statement-level tokenizer handles this correctly.
+  const multiLine = [
+    'ISO-10303-21;',
+    'HEADER;',
+    "FILE_DESCRIPTION(('test'),'2;1');",
+    "FILE_NAME('','',(''),(''),'','','');",
+    "FILE_SCHEMA(('IFC4'));",
+    'ENDSEC;',
+    'DATA;',
+    "#1=IFCPROJECT('proj',$,'P',$,$,$,$,(#2),#3);",
+    "#10=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);",
+    "#11=IFCWALL('wall-A',#10,'A',$,$,$,$,$,$);",
+    // Split the IFCTASK across 3 lines. Valid STEP.
+    "#20=IFCTASK(",
+    "  'multi-task',#10,'Multi-line task',",
+    "  $,$,$,$,$,$,.F.,$,$,.CONSTRUCTION.);",
+    // Multi-line workschedule too.
+    "#30=IFCWORKSCHEDULE('ws-multi',",
+    "  #10,'WS multi',$,$,$,$,$,$,$,$,$,$,.PLANNED.);",
+    'ENDSEC;',
+    'END-ISO-10303-21;',
+    '',
+  ].join('\n');
+  const out = injectScheduleIntoStep(multiLine, null, STUB_STORE, { scheduleIsEdited: true });
+  // Every schedule artifact must be gone — no orphan attribute lines
+  // left behind.
+  assert.ok(!out.includes("'multi-task'"), 'multi-line task stripped');
+  assert.ok(!out.includes("'ws-multi'"), 'multi-line workschedule stripped');
+  assert.ok(!out.includes('Multi-line task'), 'orphan attribute line not left behind');
+  assert.ok(!out.includes('WS multi'), 'orphan workschedule continuation not left behind');
+  // Non-schedule entities stay.
+  assert.ok(out.includes("'wall-A'"), 'wall survives multi-line strip');
+  assert.ok(out.includes('IFCPROJECT'), 'project survives multi-line strip');
+});
+
+test("stripScheduleEntities respects ';' inside string literals", () => {
+  // A string attribute that literally contains `;` must not confuse
+  // the statement tokenizer — STEP terminates statements with `;`
+  // outside string literals only.
+  const trickySemicolon = [
+    'ISO-10303-21;',
+    'HEADER;',
+    "FILE_DESCRIPTION(('test'),'2;1');",
+    "FILE_NAME('','',(''),(''),'','','');",
+    "FILE_SCHEMA(('IFC4'));",
+    'ENDSEC;',
+    'DATA;',
+    "#1=IFCPROJECT('proj',$,'P',$,$,$,$,(#2),#3);",
+    "#10=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);",
+    // IFC string-escape: `''` means a single quote. `;` inside a
+    // string literal is NOT a statement terminator.
+    "#11=IFCWALL('w;all','B','A;B;C',$,$,$,$,$,$);",
+    "#20=IFCWORKSCHEDULE('ws',#10,'note;with;semis',$,$,$,$,$,$,$,$,$,$,.PLANNED.);",
+    'ENDSEC;',
+    'END-ISO-10303-21;',
+    '',
+  ].join('\n');
+  const out = injectScheduleIntoStep(trickySemicolon, null, STUB_STORE, { scheduleIsEdited: true });
+  assert.ok(!out.includes("'ws'"), 'workschedule stripped despite semicolons in string');
+  assert.ok(out.includes("'w;all'"), 'wall with semicolon in name preserved');
+  assert.ok(out.includes('A;B;C'), 'wall attribute with semicolons preserved');
+});
+
+test('stripScheduleEntities preserves non-schedule children in mixed IfcRelNests', () => {
+  const mixedNest = SAMPLE_STEP.replace(
+    'ENDSEC;\nEND-ISO-10303-21;',
+    [
+      "#20=IFCWORKSCHEDULE('ws',#10,'WS',$,$,$,$,$,$,$,$,$,$,.PLANNED.);",
+      "#21=IFCTASK('task',#10,'Task',$,$,$,$,$,$,.F.,$,$,.CONSTRUCTION.);",
+      "#30=IFCRELNESTS('mixed',#10,$,$,#11,(#21,#12));",
+      "#31=IFCRELNESTS('schedule-parent',#10,$,$,#20,(#11,#12));",
+      'ENDSEC;',
+      'END-ISO-10303-21;',
+    ].join('\n'),
+  );
+  const out = injectScheduleIntoStep(mixedNest, null, STUB_STORE, { scheduleIsEdited: true });
+
+  assert.ok(out.includes("#30=IFCRELNESTS('mixed',#10,$,$,#11,(#12));"));
+  assert.ok(!out.includes("'schedule-parent'"));
+  assert.ok(out.includes("#12=IFCWALL('wall-B-gid'"));
+});
+
+// ─── createExportAdapter().csv() — CWE-1236 formula-injection defense ──
+
+/**
+ * Build a minimal legacy-single-model StoreApi whose entities resolve
+ * `Name` to whatever the caller wants, so the CSV escaping path in
+ * `escapeCsv()` (private to export-adapter.ts) can be exercised through
+ * the real `csv()` method rather than reimplemented in the test.
+ */
+function makeCsvFixtureStore(names: Record<number, string>): StoreApi {
+  const dataStore = {
+    entities: {
+      getGlobalId: (id: number) => `gid-${id}`,
+      getName: (id: number) => names[id] ?? '',
+      getDescription: () => '',
+      getObjectType: () => '',
+      getTypeName: () => 'IfcWall',
+    },
+    getProperties: () => [],
+    getQuantities: () => [],
+    // Description/ObjectType are empty ('') for every fixture entity, which
+    // is falsy — EntityNode falls back to on-demand extraction from the raw
+    // entity in that case, so getEntity() must exist (returning nothing is
+    // fine: extractRootAttributesFromEntity then yields blank strings).
+    getEntity: () => undefined,
+  } as unknown as IfcDataStore;
+
+  const state = { models: new Map(), ifcDataStore: dataStore };
+  return {
+    getState: () => state as never,
+    subscribe: () => () => {},
+  };
+}
+
+function csvCellsFor(names: Record<number, string>): string[] {
+  const adapter = createExportAdapter(makeCsvFixtureStore(names));
+  const refs = Object.keys(names).map((id) => ({ modelId: LEGACY_MODEL_ID, expressId: Number(id) }));
+  const out = adapter.csv(refs, { columns: ['Name'] }) as string;
+  const lines = out.split('\n');
+  assert.equal(lines[0], 'Name', 'header row is the requested column');
+  // One data line per ref, in ref order.
+  return lines.slice(1);
+}
+
+test('export.csv escapeCsv prefixes a leading = with an apostrophe (CWE-1236)', () => {
+  const [cell] = csvCellsFor({ 1: '=SUM(A1:A9)' });
+  assert.equal(cell, "'=SUM(A1:A9)");
+});
+
+test('export.csv escapeCsv prefixes leading +, -, @ with an apostrophe (CWE-1236)', () => {
+  const [plus, minus, at] = csvCellsFor({ 1: '+1+1', 2: '-2+3', 3: '@SUM(1+1)' });
+  assert.equal(plus, "'+1+1");
+  assert.equal(minus, "'-2+3");
+  assert.equal(at, "'@SUM(1+1)");
+});
+
+test('export.csv escapeCsv prefixes a leading TAB with an apostrophe and leaves it unquoted', () => {
+  const [cell] = csvCellsFor({ 1: '\tstartsWithTab' });
+  // No separator/quote/newline present besides the leading tab itself, so
+  // the apostrophe defense fires without also triggering CSV quoting.
+  assert.equal(cell, "'\tstartsWithTab");
+});
+
+test('export.csv escapeCsv prefixes a leading CR and also quotes it (CR triggers both defenses)', () => {
+  const [cell] = csvCellsFor({ 1: '\rstartsWithCR' });
+  // The apostrophe defuses the formula; the CR itself still forces
+  // RFC4180 quoting because it's a raw control character in the cell.
+  assert.equal(cell, '"\'\rstartsWithCR"');
+});
+
+// The adapter used to keep its own copy of the guard, one that anchored the
+// trigger characters at offset 0, while the SDK's `ExportNamespace` had the
+// hardened one
+// that looks PAST leading invisibles (#1944) -- so the same name exported
+// guarded through `bim.export.csv()` and unguarded through this adapter, and
+// deleting this copy's guard outright left the whole file green. Both now call
+// `escapeCsvCell` from `@ifc-lite/export` -- the one canonical TS escaper,
+// reached via `export-adapter.ts:114`. This pins that it is reached.
+test('export.csv guards a trigger hidden behind an invisible character (#1944)', () => {
+  for (const prefix of ['\u{FEFF}', '\u{200B}', '\u{200E}', '\u{00A0}', '\u{2028}']) {
+    const [cell] = csvCellsFor({ 1: `${prefix}=HYPERLINK("http://evil")` });
+    assert.equal(
+      cell.replace(/^"/, '').startsWith("'"),
+      true,
+      `prefix U+${prefix.codePointAt(0)!.toString(16).toUpperCase()} must still be guarded, got ${JSON.stringify(cell)}`,
+    );
+  }
+});
+
+test('export.csv escapeCsv leaves a benign value unprefixed and unquoted', () => {
+  const [cell] = csvCellsFor({ 1: 'NormalValue' });
+  assert.equal(cell, 'NormalValue');
+});
+
+test('export.csv escapeCsv quotes a value containing the separator', () => {
+  const [cell] = csvCellsFor({ 1: 'Contains, comma' });
+  assert.equal(cell, '"Contains, comma"');
+});
+
+test('export.csv escapeCsv quotes and doubles embedded double-quotes', () => {
+  const [cell] = csvCellsFor({ 1: 'Has "quotes" inside' });
+  assert.equal(cell, '"Has ""quotes"" inside"');
+});
+
+test('export.csv escapeCsv quotes a value containing a newline', () => {
+  // The escaped cell itself carries a raw '\n', so it can't be recovered
+  // by splitting the whole CSV output on '\n' (that's exactly what RFC4180
+  // quoting protects against) — assert on the full output string instead.
+  const adapter = createExportAdapter(makeCsvFixtureStore({ 1: 'Line1\nLine2' }));
+  const out = adapter.csv([{ modelId: LEGACY_MODEL_ID, expressId: 1 }], { columns: ['Name'] }) as string;
+  assert.equal(out, 'Name\n"Line1\nLine2"');
+});
+
+// ─── sdk.export.ifc() must honor the Class-tab filter (#4328 follow-up) ──
+//
+// #4333 fixed the dialog paths (ExportDialog/GLBExportDialog) by routing
+// them through `resolveExportVisibility`, the single resolver that combines
+// hidden/isolated state with `classFilter` (Class tab), `selectedStoreys`,
+// and `typeVisibility`. This adapter's own `resolveVisibilityFilterSets`
+// was left untouched — it only ever read the hidden/isolated sets and
+// never `classFilter` at all, so `sdk.export.ifc(refs, { visibleOnly: true })` still reproduced
+// the original #4328 bug for the scripting/extension surface: filter the
+// Class tab to `IfcWallStandardCase` and the whole model still comes out.
+
+type MockEntityRef = {
+  expressId: number;
+  type: string;
+  byteOffset: number;
+  byteLength: number;
+  lineNumber: number;
+};
+
+/** Same synthetic-store shape `exportVisibility.classfilter-e2e.test.ts` uses. */
+function buildParsedStore(entries: Array<[number, string, string]>): IfcDataStore {
+  const encoder = new TextEncoder();
+  const parts: Uint8Array[] = [];
+  const byId = new Map<number, MockEntityRef>();
+  const byType = new Map<string, number[]>();
+  let offset = 0;
+
+  for (const [id, type, text] of entries) {
+    const encoded = encoder.encode(text);
+    const upper = type.toUpperCase();
+    byId.set(id, { expressId: id, type: upper, byteOffset: offset, byteLength: encoded.byteLength, lineNumber: 0 });
+    if (!byType.has(upper)) byType.set(upper, []);
+    byType.get(upper)!.push(id);
+    parts.push(encoded);
+    offset += encoded.byteLength;
+  }
+
+  const source = new Uint8Array(offset);
+  let position = 0;
+  for (const part of parts) {
+    source.set(part, position);
+    position += part.byteLength;
+  }
+
+  return {
+    fileSize: offset,
+    schemaVersion: 'IFC4',
+    entityCount: entries.length,
+    parseTime: 0,
+    source: asSourceBytes(source),
+    entityIndex: { byId, byType },
+  } as unknown as IfcDataStore;
+}
+
+const PROJECT = "#1=IFCPROJECT('0proj0000000000000000',$,'P',$,$,$,$,$,$);\n";
+const STOREY = "#2=IFCBUILDINGSTOREY('0stor0000000000000000',$,'S',$,$,$,$,$,$,0.);\n";
+const WALL = "#3=IFCWALLSTANDARDCASE('0wall0000000000000000',$,'Wall',$,$,$,$,$);\n";
+const DOOR = "#4=IFCDOOR('0door0000000000000000',$,'Door',$,$,$,$,$,$,$,$);\n";
+
+/** `adapter.ifc()` returns `string | Uint8Array` depending on caller
+ *  option — decode to a plain string for content assertions either way. */
+function decodeIfcOutput(out: string | Uint8Array): string {
+  return typeof out === 'string' ? out : new TextDecoder().decode(out);
+}
+
+function buildFourEntityStore(): IfcDataStore {
+  return buildParsedStore([
+    [1, 'IFCPROJECT', PROJECT],
+    [2, 'IFCBUILDINGSTOREY', STOREY],
+    [3, 'IFCWALLSTANDARDCASE', WALL],
+    [4, 'IFCDOOR', DOOR],
+  ]);
+}
+
+describe('sdk.export.ifc() must honor classFilter when refs cover the whole model (#4328)', () => {
+  beforeEach(() => {
+    useViewerStore.getState().resetViewerState();
+  });
+
+  it('classFilter=IfcWallStandardCase + visibleOnly + all-model refs -> only the wall (plus structural scaffolding) is exported', () => {
+    const dataStore = buildFourEntityStore();
+    useViewerStore.setState({
+      models: new Map(),
+      ifcDataStore: dataStore,
+      hiddenEntities: new Set(),
+      isolatedEntities: null,
+      classFilter: { ids: new Set([3]), label: 'IfcWallStandardCase' },
+    });
+
+    const adapter = createExportAdapter(useViewerStore as unknown as StoreApi);
+    const allRefs = [1, 2, 3, 4].map((expressId) => ({ modelId: LEGACY_MODEL_ID, expressId }));
+    const out = decodeIfcOutput(adapter.ifc(allRefs, { visibleOnly: true }));
+
+    assert.ok(out.includes('IFCPROJECT'), 'IfcProject must survive visibleOnly (structural scaffolding)');
+    assert.ok(out.includes('IFCBUILDINGSTOREY'), 'IfcBuildingStorey must survive visibleOnly (structural scaffolding)');
+    assert.ok(out.includes('IFCWALLSTANDARDCASE'), 'the class-filtered wall must be exported');
+    assert.ok(!out.includes('IFCDOOR'), '#4328: the door excluded by the class filter must NOT be exported');
+  });
+
+  it('no filter active + visibleOnly + all-model refs -> full export, unchanged (both directions)', () => {
+    const dataStore = buildFourEntityStore();
+    useViewerStore.setState({
+      models: new Map(),
+      ifcDataStore: dataStore,
+      hiddenEntities: new Set(),
+      isolatedEntities: null,
+      classFilter: null,
+    });
+
+    const adapter = createExportAdapter(useViewerStore as unknown as StoreApi);
+    const allRefs = [1, 2, 3, 4].map((expressId) => ({ modelId: LEGACY_MODEL_ID, expressId }));
+    const out = decodeIfcOutput(adapter.ifc(allRefs, { visibleOnly: true }));
+
+    assert.ok(out.includes('IFCPROJECT'));
+    assert.ok(out.includes('IFCBUILDINGSTOREY'));
+    assert.ok(out.includes('IFCWALLSTANDARDCASE'), 'no filter must not drop the wall');
+    assert.ok(out.includes('IFCDOOR'), 'no filter must not drop the door either');
+  });
+
+  it('explicit refs (a subset) win over an active classFilter — selection-limiting is unaffected', () => {
+    const dataStore = buildFourEntityStore();
+    useViewerStore.setState({
+      models: new Map(),
+      ifcDataStore: dataStore,
+      hiddenEntities: new Set(),
+      isolatedEntities: null,
+      // Class filter says "only walls" — but the caller explicitly asked
+      // for the door (id 4). An explicit selection must not be narrowed
+      // (or broadened) by a filter the caller never mentioned.
+      classFilter: { ids: new Set([3]), label: 'IfcWallStandardCase' },
+    });
+
+    const adapter = createExportAdapter(useViewerStore as unknown as StoreApi);
+    // Explicit subset: just the door. entityCount is 4, so this is < 4 and
+    // hits the "shouldLimitToSelection" branch — untouched by this fix.
+    const doorRef = [{ modelId: LEGACY_MODEL_ID, expressId: 4 }];
+    const out = decodeIfcOutput(adapter.ifc(doorRef, {}));
+
+    assert.ok(out.includes('IFCDOOR'), 'explicitly-requested door must be exported despite the class filter');
+  });
+});
+
+describe('sdk.export.ifc() classifies refs against the edited model (#5249)', () => {
+  beforeEach(() => useViewerStore.getState().resetViewerState());
+
+  it('applies class visibility when refs cover a created entity and omit a deleted source entity', () => {
+    const dataStore = buildFourEntityStore();
+    const view = new MutablePropertyView(null, LEGACY_MODEL_ID);
+    view.setExpressIdWatermark(4);
+    view.deleteEntity(4);
+    const created = view.createEntity('IfcDoor', ['0newdoor0000000000000', null, 'New door']);
+    useViewerStore.setState({
+      models: new Map(), ifcDataStore: dataStore,
+      mutationViews: new Map([[LEGACY_MUTATION_MODEL_ID, view]]),
+      hiddenEntities: new Set(), isolatedEntities: null,
+      classFilter: { ids: new Set([3]), label: 'IfcWallStandardCase' },
+    });
+
+    const refs = [1, 2, 3, created.expressId].map(expressId => ({ modelId: LEGACY_MODEL_ID, expressId }));
+    const out = decodeIfcOutput(createExportAdapter(useViewerStore as unknown as StoreApi).ifc(refs, { visibleOnly: true }));
+    assert.ok(out.includes('IFCWALLSTANDARDCASE'));
+    assert.ok(!out.includes('0newdoor0000000000000'), 'created door must obey the class filter for full-model refs');
+  });
+
+  it('isolates source-only refs when a created entity makes them a partial selection', () => {
+    const dataStore = buildFourEntityStore();
+    const view = new MutablePropertyView(null, LEGACY_MODEL_ID);
+    view.setExpressIdWatermark(4);
+    view.createEntity('IfcDoor', ['0newdoor0000000000001', null, 'New door']);
+    useViewerStore.setState({
+      models: new Map(), ifcDataStore: dataStore,
+      mutationViews: new Map([[LEGACY_MUTATION_MODEL_ID, view]]),
+      hiddenEntities: new Set(), isolatedEntities: null, classFilter: null,
+    });
+
+    const refs = [1, 2, 3, 4].map(expressId => ({ modelId: LEGACY_MODEL_ID, expressId }));
+    const out = decodeIfcOutput(createExportAdapter(useViewerStore as unknown as StoreApi).ifc(refs, {}));
+    assert.ok(out.includes('IFCDOOR'), 'selected source door still exports');
+    assert.ok(!out.includes('0newdoor0000000000001'), 'unselected created door must not be exported');
+  });
+});
+
+// ─── resolveVisibilityFilterSets: "full model" is coverage, not cardinality
+// ───────────────────────────────────────────────────────────────────────
+//
+// The bare `selectedExpressIds.size < entityCount` check that predates this
+// PR classifies ANY refs set that isn't smaller than the model as "full
+// model" — including one made entirely of ids that don't exist in the
+// model, which satisfies "not smaller" while covering none of the model.
+// That silently routed into `resolveExportVisibility()` and dumped the
+// whole model regardless of what the caller named (reproduced live:
+// nonexistent ids against a 4-entity model produced a full export).
+// Membership (`hasEntity`) is now required alongside cardinality before a
+// refs set counts as "full model".
+
+describe('resolveVisibilityFilterSets: full-model classification requires membership, not just cardinality', () => {
+  it('refs == entityCount but none of the ids exist -> isolates (not full model)', () => {
+    const hasEntity = (id: number) => [1, 2, 3, 4].includes(id);
+    const result = resolveVisibilityFilterSets(
+      useViewerStore.getState(),
+      LEGACY_MODEL_ID,
+      new Set([901, 902, 903, 904]), // 4 bogus ids, entityCount is 4
+      4,
+      hasEntity,
+    );
+    assert.equal(result.visibleOnly, true, 'must NOT be classified as full model');
+    assert.deepEqual([...(result.isolatedEntityIds ?? [])].sort(), [901, 902, 903, 904]);
+  });
+
+  it('refs == entityCount, mixed real + nonexistent ids -> isolates to exactly the named refs', () => {
+    const hasEntity = (id: number) => [1, 2, 3, 4].includes(id);
+    const result = resolveVisibilityFilterSets(
+      useViewerStore.getState(),
+      LEGACY_MODEL_ID,
+      new Set([1, 2, 3, 999]), // 3 real + 1 bogus, entityCount is 4
+      4,
+      hasEntity,
+    );
+    assert.equal(result.visibleOnly, true, 'a set with even one non-member id is not a full-model cover');
+    assert.deepEqual([...(result.isolatedEntityIds ?? [])].sort(), [1, 2, 3, 999]);
+  });
+
+  it('refs.size > entityCount (bogus ids) -> isolates (the predating `size < entityCount` check fell through to "full" here too — also fixed)', () => {
+    const hasEntity = (id: number) => [1, 2, 3, 4].includes(id);
+    const result = resolveVisibilityFilterSets(
+      useViewerStore.getState(),
+      LEGACY_MODEL_ID,
+      new Set([901, 902, 903, 904, 905]),
+      4,
+      hasEntity,
+    );
+    assert.equal(result.visibleOnly, true);
+    assert.deepEqual([...(result.isolatedEntityIds ?? [])].sort(), [901, 902, 903, 904, 905]);
+  });
+
+  it('refs a true subset of real ids -> isolates to exactly those refs', () => {
+    const hasEntity = (id: number) => [1, 2, 3, 4].includes(id);
+    const result = resolveVisibilityFilterSets(
+      useViewerStore.getState(),
+      LEGACY_MODEL_ID,
+      new Set([3]),
+      4,
+      hasEntity,
+    );
+    assert.equal(result.visibleOnly, true);
+    assert.deepEqual([...(result.isolatedEntityIds ?? [])], [3]);
+  });
+
+  it('refs exactly the real full set -> routes through resolveExportVisibility (genuine full model)', () => {
+    useViewerStore.getState().resetViewerState();
+    useViewerStore.setState({
+      models: new Map(),
+      hiddenEntities: new Set([2]),
+      isolatedEntities: null,
+      classFilter: null,
+    });
+    const hasEntity = (id: number) => [1, 2, 3, 4].includes(id);
+    const result = resolveVisibilityFilterSets(
+      useViewerStore.getState(),
+      LEGACY_MODEL_ID,
+      new Set([1, 2, 3, 4]),
+      4,
+      hasEntity,
+    );
+    assert.equal(result.visibleOnly, false, 'a verified full-model cover must route through resolveExportVisibility');
+    assert.deepEqual([...result.hiddenEntityIds].sort(), [2]);
+  });
+
+  it('sdk.export.ifc(): nonexistent ids sized to entityCount must NOT dump the full model (#4333 defect)', () => {
+    const dataStore = buildFourEntityStore();
+    useViewerStore.getState().resetViewerState();
+    useViewerStore.setState({
+      models: new Map(),
+      ifcDataStore: dataStore,
+      hiddenEntities: new Set(),
+      isolatedEntities: null,
+      classFilter: null,
+    });
+
+    const adapter = createExportAdapter(useViewerStore as unknown as StoreApi);
+    const bogusRefs = [901, 902, 903, 904].map((expressId) => ({ modelId: LEGACY_MODEL_ID, expressId }));
+    const out = decodeIfcOutput(adapter.ifc(bogusRefs, { visibleOnly: true }));
+
+    assert.ok(!out.includes('IFCDOOR'), 'door must not appear: it was never named and refs do not cover the model');
+    assert.ok(!out.includes('IFCWALLSTANDARDCASE'), 'wall must not appear: it was never named and refs do not cover the model');
+  });
+});
+
+/**
+ * #4738: `bim.export.ifc()` with no ref list means "no isolation filter", the
+ * whole model. The namespace refuses an EMPTY list (a filter that matched
+ * nothing) and this adapter refuses one too, so "absent" has to arrive here as
+ * something other than `[]` or the viewer is the one backend where the
+ * documented whole-model call always throws.
+ *
+ * Driven through `createBimContext` rather than the adapter alone, because the
+ * defect lives in the handover: the namespace is what turns an omitted
+ * argument into whatever the adapter sees.
+ */
+describe('sdk.export.ifc() with no ref list exports the whole model (#4738)', () => {
+  beforeEach(() => {
+    useViewerStore.getState().resetViewerState();
+  });
+
+  /** The shipping assembly: the real namespace over the real viewer backend. */
+  function bimOverViewer() {
+    return createBimContext({ backend: new LocalBackend(useViewerStore as unknown as StoreApi) });
+  }
+
+  it('omitting the argument exports every entity of the active model', () => {
+    const dataStore = buildFourEntityStore();
+    useViewerStore.setState({
+      models: new Map(),
+      ifcDataStore: dataStore,
+      hiddenEntities: new Set(),
+      isolatedEntities: null,
+      classFilter: null,
+    });
+
+    // RED before the fix: threw "export.ifc: expected at least one entity
+    // reference", because the namespace handed the adapter `[]`.
+    const out = decodeIfcOutput(bimOverViewer().export.ifc());
+
+    assert.ok(out.includes('IFCWALLSTANDARDCASE'), 'no filter must export the wall');
+    assert.ok(out.includes('IFCDOOR'), 'no filter must export the door too');
+    assert.ok(out.includes('IFCPROJECT'));
+  });
+
+  it('an empty ref list is still refused, so the distinction is real', () => {
+    useViewerStore.setState({
+      models: new Map(),
+      ifcDataStore: buildFourEntityStore(),
+      hiddenEntities: new Set(),
+      isolatedEntities: null,
+      classFilter: null,
+    });
+
+    assert.throws(() => bimOverViewer().export.ifc([]), /matched nothing/);
+  });
+});

@@ -1,0 +1,108 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Saved documents (#4594, #6679), stored individually in IndexedDB,
+ * validated on the way in, and the `.ifclite-document.json` file a document
+ * is shared as — the template you re-open on the next revision of the model.
+ */
+import type { ContentDefinition } from '../storage/content-migration.js';
+import { readContentEntries } from '../storage/content-reader.js';
+import { rebindCommittedDocument } from '../storage/content-backup-references.js';
+import { trackExportCompleted } from '@/lib/analytics';
+import { downloadFile, sanitizeFilename } from '../export/download.js';
+import { migrateDocumentSpec, validateDocumentSpec, type DocumentBlock, type DocumentSpec } from './types.js';
+
+const DOCUMENTS_STORAGE_KEY = 'ifc-lite-documents';
+export const documentContent: ContentDefinition<DocumentSpec> = {
+  kind: 'document', legacyKey: DOCUMENTS_STORAGE_KEY,
+  mergeCommitted: rebindCommittedDocument,
+  decode: value => {
+    // Existing valid blocks retain their references during cosmetic edits. Re-migrating
+    // them would rerun embedded IFC lists on every keystroke (#6679).
+    if (validateDocumentSpec(value).length === 0) return value as DocumentSpec;
+    const migrated = migrateDocumentSpec(value);
+    return validateDocumentSpec(migrated).length === 0 ? migrated as DocumentSpec : null;
+  },
+};
+export function loadDocuments(): Promise<DocumentSpec[]> {
+  return readContentEntries(documentContent);
+}
+
+/** The file a document is shared as. */
+export const DOCUMENT_FILE_SUFFIX = '.ifclite-document.json';
+
+export function exportDocument(document: DocumentSpec): void {
+  downloadFile(JSON.stringify(document, null, 2), `${sanitizeFilename(document.name, { fallback: 'document' })}${DOCUMENT_FILE_SUFFIX}`, 'application/json');
+  trackExportCompleted({ format: 'json', surface: 'document' });
+}
+
+export const freshDocumentId = (): string => `document-${crypto.randomUUID()}`;
+export const freshBlockId = (): string => `block-${crypto.randomUUID()}`;
+/** The id of the list copy a table block embeds (#5142) — never a library list's id. */
+export const freshListCopyId = (): string => `document-list-${crypto.randomUUID()}`;
+
+/** An independent block copy (#6689): authored content and source bindings survive; owned ids do not. */
+export function copyDocumentBlock(block: DocumentBlock): DocumentBlock {
+  const copy = structuredClone(block);
+  copy.id = freshBlockId();
+  if (copy.kind === 'chart') copy.chart.id = freshBlockId();
+  if (copy.kind === 'table' && copy.source.kind === 'list') copy.source.list.id = freshListCopyId();
+  return copy;
+}
+
+/**
+ * Parse a document file: validated, and re-identified so the imported copy
+ * never collides with the document it was exported from. Bindings are kept
+ * as written — that is the point of a template.
+ */
+export function parseDocumentFile(text: string): DocumentSpec {
+  const parsed = migrateDocumentSpec(JSON.parse(text));
+  const errors = validateDocumentSpec(parsed);
+  if (errors.length > 0) {
+    throw new Error(`Not a document file: ${errors.slice(0, 3).map((e) => `${e.path || '/'} ${e.message}`).join('; ')}`);
+  }
+  const spec = parsed as DocumentSpec;
+  return {
+    ...spec,
+    id: freshDocumentId(),
+    // Import and in-page duplication share the same owned-id and independence contract.
+    blocks: spec.blocks.map(copyDocumentBlock),
+  };
+}
+
+export function importDocument(file: File): Promise<DocumentSpec> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        resolve(parseDocumentFile(reader.result as string));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error('Failed to parse the document file'));
+      }
+    };
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+    reader.readAsText(file);
+  });
+}
+
+/** Read an image file into the data URL an image block stores (PNG/JPEG only, capped so a file stays shareable). */
+export const IMAGE_MAX_BYTES = 1_000_000;
+
+export function readImageFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
+      reject(new Error('Only PNG and JPEG images can be placed in a document'));
+      return;
+    }
+    if (file.size > IMAGE_MAX_BYTES) {
+      reject(new Error(`Image is ${(file.size / 1_000_000).toFixed(1)} MB; the limit is 1 MB so the document file stays shareable`));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}

@@ -1,0 +1,395 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * ifc-lite validate <file.ifc> [--json]
+ *
+ * Perform structural validation checks on an IFC file:
+ * - Schema version detection
+ * - Required entity presence (IfcProject, IfcSite, IfcBuilding)
+ * - Spatial structure completeness
+ * - Orphan entity detection
+ * - GlobalId uniqueness
+ * - Reference integrity (#N references that point at no entity)
+ */
+
+import { loadIfcFile } from '../loader.js';
+import { hasFlag, fatal, printJson } from '../output.js';
+import { EntityNode } from '@ifc-lite/query';
+import { expandTypes, getInheritanceChainAcrossSchemas, asSourceBytes, type IfcDataStore, type EntityRef, type IfcSourceBytes } from '@ifc-lite/parser';
+import { resolvedTypeName } from '@ifc-lite/data';
+
+export interface ValidationIssue {
+  severity: 'error' | 'warning' | 'info';
+  rule: string;
+  message: string;
+  /** Referencing entity's expressId (set by per-reference rules like reference-integrity). */
+  entityId?: number;
+  /** Zero-based top-level attribute slot of the offending value within the referencing entity. */
+  attributeIndex?: number;
+  /** The referenced expressId that does not exist in the file. */
+  target?: number;
+}
+
+/** One `#N` reference whose target expressId does not exist in the file. */
+interface DanglingReference {
+  /** expressId of the entity containing the reference. */
+  entityId: number;
+  /** STEP type name of the referencing entity (UPPERCASE, as scanned). */
+  entityType: string;
+  /** Zero-based top-level attribute slot the reference sits in (nested refs report their containing slot). */
+  attributeIndex: number;
+  /** The missing expressId being referenced. */
+  target: number;
+}
+
+/**
+ * The building-element types the `named-elements` and `quantity-completeness`
+ * rules scan, as base types only.
+ *
+ * Which base types appear here is a **policy** choice and deliberately narrow:
+ * neither rule claims to cover every `IfcProduct`, and widening either list is
+ * a decision about what the report should say, not a bug fix. The two lists are
+ * not identical — `IfcRailing` is scanned for a missing Name but not for a
+ * missing quantity set — and that asymmetry is preserved here unchanged.
+ *
+ * What is *not* a policy choice is whether a listed type's own concrete
+ * subtypes are scanned. `entityIndex.byType` is keyed by the raw STEP type
+ * name, so an `IfcWallStandardCase` sits in its own bucket; a rule that says it
+ * looks at walls and reads only `IFCWALL` walks straight past it. That is why
+ * the scanned lists below are `expandTypes(...)` of these bases rather than
+ * hand-written: the quantity list used to spell six subtypes out by hand and
+ * had drifted four short (`IfcWallElementedCase`, `IfcSlabElementedCase`,
+ * `IfcMemberStandardCase`, `IfcPlateStandardCase`), and the naming list spelled
+ * out none of the ten at all. `expandTypes` is the same expansion every
+ * `byType()` backend uses, so these rules and a `byType('IfcWall')` query
+ * cannot disagree about what counts as a wall.
+ * Which is why they are computed PER STORE, not once at module load:
+ * `expandTypes` reads the model's own `schemaVersion`, and a list frozen at the
+ * IFC4 answer counts records on an IFC2X3 or IFC4X3 file that `byType` does not.
+ */
+export const NAMED_ELEMENT_BASE_TYPES: readonly string[] = ['IFCWALL', 'IFCSLAB', 'IFCCOLUMN', 'IFCBEAM',
+  'IFCDOOR', 'IFCWINDOW', 'IFCSTAIR', 'IFCROOF', 'IFCSPACE', 'IFCRAILING', 'IFCMEMBER', 'IFCPLATE', 'IFCFOOTING'];
+
+/** @see NAMED_ELEMENT_BASE_TYPES */
+export const QUANTIFIABLE_BASE_TYPES: readonly string[] = ['IFCWALL', 'IFCSLAB', 'IFCCOLUMN', 'IFCBEAM',
+  'IFCDOOR', 'IFCWINDOW', 'IFCSTAIR', 'IFCROOF', 'IFCSPACE', 'IFCMEMBER', 'IFCPLATE', 'IFCFOOTING'];
+
+/** `NAMED_ELEMENT_BASE_TYPES` plus every subtype this store's schema declares under one. */
+export const namedElementTypes = (schemaVersion: string | undefined): readonly string[] =>
+  expandTypes([...NAMED_ELEMENT_BASE_TYPES], schemaVersion);
+
+/** `QUANTIFIABLE_BASE_TYPES` plus every subtype this store's schema declares under one. */
+export const quantifiableTypes = (schemaVersion: string | undefined): readonly string[] =>
+  expandTypes([...QUANTIFIABLE_BASE_TYPES], schemaVersion);
+
+/** Cap on individually-reported dangling references; the remainder is rolled into one summary issue. */
+const DANGLING_REF_ISSUE_CAP = 50;
+
+const CH_QUOTE = 0x27; // '
+const CH_LPAREN = 0x28; // (
+const CH_RPAREN = 0x29; // )
+const CH_COMMA = 0x2c; // ,
+const CH_HASH = 0x23; // #
+const CH_SLASH = 0x2f; // /
+const CH_STAR = 0x2a; // *
+
+/**
+ * Scan one entity record's source bytes for `#N` attribute references and
+ * report the ones whose target expressId is not indexed. Operates directly on
+ * the raw bytes the parser already indexed (`store.entityIndex.byId` spans),
+ * so it is a single pass over each record with no string allocation. Quote
+ * tracking (including STEP's doubled-quote escape) keeps `#N` sequences inside
+ * string literals from being read as references; embedded STEP comments are
+ * skipped.
+ */
+function scanEntityForDanglingRefs(
+  src: Uint8Array | IfcSourceBytes,
+  ref: EntityRef,
+  exists: (id: number) => boolean,
+  out: DanglingReference[],
+): void {
+  // Narrow to this record before scanning. `slice` is a `subarray` on a
+  // contiguous source, so the byte walk below is unchanged and zero-copy.
+  const record = asSourceBytes(src).slice(ref.byteOffset, ref.byteOffset + ref.byteLength);
+  scanRecordForDanglingRefs(record, ref, exists, out);
+}
+
+/** The byte walk itself, over one already-narrowed entity record. */
+function scanRecordForDanglingRefs(
+  source: Uint8Array,
+  ref: EntityRef,
+  exists: (id: number) => boolean,
+  out: DanglingReference[],
+): void {
+  const end = source.length;
+  // References only occur inside the attribute list; skip the "#id = TYPE" prefix.
+  let i = 0;
+  while (i < end && source[i] !== CH_LPAREN) i++;
+  if (i >= end) return; // malformed record, nothing to scan
+
+  let depth = 1; // we are inside the outermost '(' now
+  let attrIndex = 0;
+  i++;
+
+  while (i < end) {
+    const c = source[i];
+    if (c === CH_QUOTE) {
+      // String literal: skip to the closing quote, honouring '' escapes.
+      i++;
+      while (i < end) {
+        if (source[i] === CH_QUOTE) {
+          if (i + 1 < end && source[i + 1] === CH_QUOTE) {
+            i += 2; // escaped quote, still inside the string
+            continue;
+          }
+          break; // closing quote
+        }
+        i++;
+      }
+    } else if (c === CH_SLASH && i + 1 < end && source[i + 1] === CH_STAR) {
+      // STEP comment inside a record (rare but legal): skip to closing marker.
+      i += 2;
+      while (i + 1 < end && !(source[i] === CH_STAR && source[i + 1] === CH_SLASH)) i++;
+      i++; // lands on '/', loop increment moves past it
+    } else if (c === CH_LPAREN) {
+      depth++;
+    } else if (c === CH_RPAREN) {
+      depth--;
+      if (depth === 0) return; // end of attribute list
+    } else if (c === CH_COMMA && depth === 1) {
+      attrIndex++;
+    } else if (c === CH_HASH) {
+      let id = 0;
+      let digits = 0;
+      let j = i + 1;
+      while (j < end) {
+        const d = source[j] - 0x30;
+        if (d < 0 || d > 9) break;
+        id = id * 10 + d;
+        digits++;
+        j++;
+      }
+      if (digits > 0) {
+        if (!exists(id)) {
+          out.push({ entityId: ref.expressId, entityType: ref.type, attributeIndex: attrIndex, target: id });
+        }
+        i = j - 1; // loop increment moves past the last digit
+      }
+    }
+    i++;
+  }
+}
+
+/** Check source `#N` references against the parsed and deferred file indexes
+ * (rule `reference-integrity`), scanning records in both indexes. */
+export function collectDanglingReferences(store: IfcDataStore): DanglingReference[] {
+  const source = store.source;
+  // @raw-entity-enumeration-ok reference-integrity checks the source bytes against their parsed source index
+  const byId = store.entityIndex.byId;
+  const deferred = store.deferredEntityIndex;
+  if (!source || source.byteLength === 0 || !byId) return [];
+
+  const exists = (id: number): boolean => byId.has(id) || deferred?.has(id) === true;
+
+  const out: DanglingReference[] = [];
+  for (const ref of byId.values()) {
+    scanEntityForDanglingRefs(source, ref, exists, out);
+  }
+  if (deferred) {
+    for (const ref of deferred.values()) {
+      if (byId.has(ref.expressId)) continue; // already scanned above
+      scanEntityForDanglingRefs(source, ref, exists, out);
+    }
+  }
+  return out;
+}
+
+/** Shared structural checks for a parsed store: required entities, storeys,
+ * GlobalId uniqueness, naming, schema, quantities and reference integrity.
+ * {@link validateCommand}, tests and harnesses all use these rules. */
+export function computeValidationIssues(store: IfcDataStore): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  // 1. Check required spatial entities
+  const requiredTypes = ['IFCPROJECT', 'IFCSITE', 'IFCBUILDING'];
+  for (const reqType of requiredTypes) {
+    // @raw-entity-enumeration-ok CLI validation reads a freshly loaded file without a mutation view
+    const ids = store.entityIndex.byType.get(reqType) ?? [];
+    if (ids.length === 0) {
+      issues.push({ severity: 'error', rule: 'required-entity', message: `Missing required entity: ${reqType}` });
+    } else if (ids.length > 1 && reqType === 'IFCPROJECT') {
+      issues.push({ severity: 'error', rule: 'single-project', message: `Multiple IfcProject entities found (${ids.length})` });
+    }
+  }
+
+  // 2. Check storeys
+  // @raw-entity-enumeration-ok structural validation reports the parsed file snapshot
+  const storeyIds = store.entityIndex.byType.get('IFCBUILDINGSTOREY') ?? [];
+  if (storeyIds.length === 0) {
+    issues.push({ severity: 'warning', rule: 'has-storeys', message: 'No IfcBuildingStorey entities found' });
+  }
+
+  // 3. Check GlobalId uniqueness (only for entity types that inherit from IfcRoot)
+  //
+  // The chain has to come from **every bundled schema** (IFC2X3 + IFC4 +
+  // IFC4X3), not from the parser's IFC4_ADD2_TC1 codegen pin (#2003).
+  // `getInheritanceChainForEntity` answers an empty chain for any class the pin
+  // does not carry, which made this rule quietly skip 39 IFC2X3 `IfcRoot`
+  // classes (`IfcScheduleTimeControl`, `IfcSpaceProgram`, `IfcServiceLife`,
+  // `IfcMove`, `IfcOrderAction`, `IfcTimeSeriesSchedule`, …), 80 IFC4X3 ones
+  // and 4 post-ADD2 IFC4 ones. Skipping is not neutral here: it reports "no
+  // duplicate GlobalIds" for a file it never looked at, and the user gets a
+  // pass they did not earn.
+  //
+  // The membership test is `includes`, so it is indifferent to which end of the
+  // chain the leaf sits at — and it has to be, because the two functions
+  // disagree: the pinned one is root→leaf and the cross-schema one leaf→root,
+  // so 717 of the 776 pinned classes get a different `chain[0]`. Anything
+  // positional here would invert silently; match `diff-scope.ts` and search by
+  // name instead. `packages/parser/test/inheritance-chain-equivalence.test.ts`
+  // holds the measurement: over all 776, zero verdict and zero leaf-name
+  // differences, so no IFC4 file changes behaviour.
+  //
+  // Non-`IfcRoot` types stay out for the reason they always did: the parser
+  // fills slot 0 of a resource entity's record with its **Name**, so comparing
+  // `IfcMaterial` or `IfcSurfaceStyle` here would report two same-named
+  // materials as a duplicate GlobalId.
+  const globalIds = new Map<string, number[]>();
+  // @raw-entity-enumeration-ok GlobalId uniqueness is checked on the parsed file being validated
+  for (const [typeName, ids] of store.entityIndex.byType) {
+    const chain = getInheritanceChainAcrossSchemas(typeName);
+    if (!chain.includes('IfcRoot')) continue;
+    for (const id of ids) {
+      const node = new EntityNode(store, id);
+      const gid = node.globalId;
+      if (gid) {
+        const existing = globalIds.get(gid);
+        if (existing) {
+          existing.push(id);
+        } else {
+          globalIds.set(gid, [id]);
+        }
+      }
+    }
+  }
+  const duplicateGlobalIds = [...globalIds.entries()].filter(([, ids]) => ids.length > 1);
+  if (duplicateGlobalIds.length > 0) {
+    issues.push({
+      severity: 'error',
+      rule: 'unique-globalid',
+      message: `${duplicateGlobalIds.length} duplicate GlobalId(s) found`,
+    });
+  }
+
+  // 4. Check for unnamed elements
+  let unnamedCount = 0;
+  for (const pt of namedElementTypes(store.schemaVersion)) {
+    // @raw-entity-enumeration-ok naming validation scans the parsed file with no overlay
+    const ids = store.entityIndex.byType.get(pt) ?? [];
+    for (const id of ids) {
+      const node = new EntityNode(store, id);
+      if (!node.name || node.name === '' || node.name === '$') unnamedCount++;
+    }
+  }
+  if (unnamedCount > 0) {
+    issues.push({ severity: 'info', rule: 'named-elements', message: `${unnamedCount} building elements have no Name` });
+  }
+
+  // 5. Schema version
+  if (!store.schemaVersion) {
+    issues.push({ severity: 'warning', rule: 'schema-version', message: 'Could not determine IFC schema version' });
+  }
+
+  // 6. Quantity completeness — check if product entities have quantity sets
+  let withQuantities = 0;
+  let withoutQuantities = 0;
+  for (const qt of quantifiableTypes(store.schemaVersion)) {
+    // @raw-entity-enumeration-ok quantity completeness scans the parsed source file
+    const ids = store.entityIndex.byType.get(qt) ?? [];
+    for (const id of ids) {
+      const node = new EntityNode(store, id);
+      const qsets = node.quantities();
+      if (qsets.length > 0) {
+        withQuantities++;
+      } else {
+        withoutQuantities++;
+      }
+    }
+  }
+  const totalQuantifiable = withQuantities + withoutQuantities;
+  if (totalQuantifiable > 0 && withoutQuantities > 0) {
+    const pct = Math.round((withoutQuantities / totalQuantifiable) * 100);
+    issues.push({
+      severity: pct > 50 ? 'warning' : 'info',
+      rule: 'quantity-completeness',
+      message: `${withoutQuantities}/${totalQuantifiable} building elements (${pct}%) have no quantity sets — quantity-based analysis may be incomplete`,
+    });
+  }
+
+  // 7. Reference integrity: every #N attribute reference must resolve to an
+  // entity that exists in the file. A dangling reference is structurally
+  // broken data (consumers following it get nothing, or worse, garbage), so
+  // it reports as an error like unique-globalid does.
+  const dangling = collectDanglingReferences(store);
+  for (const d of dangling.slice(0, DANGLING_REF_ISSUE_CAP)) {
+    // Display names render in IFC PascalCase (IfcWall, not IFCWALL); the
+    // collector carries the raw STEP token, so resolve through the table.
+    const typeName = resolvedTypeName(store.entities, d.entityId) ?? d.entityType;
+    issues.push({
+      severity: 'error',
+      rule: 'reference-integrity',
+      message: `#${d.entityId} ${typeName} attribute ${d.attributeIndex} references missing entity #${d.target}`,
+      entityId: d.entityId,
+      attributeIndex: d.attributeIndex,
+      target: d.target,
+    });
+  }
+  if (dangling.length > DANGLING_REF_ISSUE_CAP) {
+    issues.push({
+      severity: 'error',
+      rule: 'reference-integrity',
+      message: `${dangling.length - DANGLING_REF_ISSUE_CAP} more dangling reference(s) not listed (${dangling.length} total)`,
+    });
+  }
+
+  return issues;
+}
+
+export async function validateCommand(args: string[]): Promise<void> {
+  const filePath = args.find(a => !a.startsWith('-'));
+  if (!filePath) fatal('Usage: ifc-lite validate <file.ifc> [--json]');
+
+  const jsonOutput = hasFlag(args, '--json');
+
+  const store = await loadIfcFile(filePath);
+  const issues = computeValidationIssues(store);
+
+  const summary = {
+    file: filePath,
+    schema: store.schemaVersion,
+    entityCount: store.entityCount,
+    valid: issues.filter(i => i.severity === 'error').length === 0,
+    errors: issues.filter(i => i.severity === 'error').length,
+    warnings: issues.filter(i => i.severity === 'warning').length,
+    info: issues.filter(i => i.severity === 'info').length,
+    issues,
+  };
+
+  if (jsonOutput) {
+    printJson(summary);
+  } else {
+    const status = summary.valid ? 'VALID' : 'INVALID';
+    process.stdout.write(`\n  ${status}: ${filePath}\n`);
+    process.stdout.write(`  Schema: ${store.schemaVersion ?? 'unknown'}\n`);
+    process.stdout.write(`  Entities: ${store.entityCount}\n\n`);
+    for (const issue of issues) {
+      const icon = issue.severity === 'error' ? 'ERR' : issue.severity === 'warning' ? 'WRN' : 'INF';
+      process.stdout.write(`  [${icon}] ${issue.rule}: ${issue.message}\n`);
+    }
+    process.stdout.write(`\n  ${summary.errors} error(s), ${summary.warnings} warning(s), ${summary.info} info\n\n`);
+  }
+
+  if (!summary.valid) process.exitCode = 1;
+}

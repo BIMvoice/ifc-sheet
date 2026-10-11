@@ -1,0 +1,2150 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, it, mock } from 'node:test';
+import assert from 'node:assert';
+import { Renderer } from './index.js';
+import { Picker } from './picker.js';
+import type { MeshData } from '@ifc-lite/geometry';
+import type { RenderOptions, BatchedMesh, Mesh } from './types.js';
+import type { Scene } from './scene.js';
+import type { RenderPipeline } from './pipeline.js';
+import { DEFAULT_GHOST_ALPHA } from './overlay-routing.js';
+import { rteRelativePositionF32 } from './relative-to-eye.js';
+import { MESH_UNIFORM_OFFSET } from './mesh-rte-uniforms.js';
+
+async function requireColorTable() {
+    const module = await import('./entity-color-table.js').catch(() => null);
+    assert.ok(module, 'the renderer provides the entity colour table');
+    return module;
+}
+
+/**
+ * Drives the REAL render() loop against a stub GPU so the frame-lifecycle
+ * fixes are exercised end to end without a browser: error-scope push/pop
+ * balance on every exit path, destroy() idempotency, content-based
+ * visibility epochs reaching the batched draw path, partial-cache
+ * drop/rebuild on hide/isolate toggling, hydrated-mesh disposal across
+ * selections and federated models, and the pick path's device-liveness
+ * guard. The stub records buffer creates/destroys, draw calls and
+ * `mapAsync` readbacks; everything else (Scene, Camera, batching, caches,
+ * Picker, PickingManager) is real.
+ */
+
+// WebGPU enum globals used by Scene buffer creation (not defined in node).
+(globalThis as Record<string, unknown>).GPUBufferUsage = {
+    MAP_READ: 1, MAP_WRITE: 2, COPY_SRC: 4, COPY_DST: 8, INDEX: 16,
+    VERTEX: 32, UNIFORM: 64, STORAGE: 128, INDIRECT: 256, QUERY_RESOLVE: 512,
+};
+(globalThis as Record<string, unknown>).GPUTextureUsage = {
+    COPY_SRC: 1, COPY_DST: 2, TEXTURE_BINDING: 4, STORAGE_BINDING: 8, RENDER_ATTACHMENT: 16,
+};
+// Used by the SkyPass bind-group layout (GPUShaderStage.FRAGMENT).
+(globalThis as Record<string, unknown>).GPUShaderStage = {
+    VERTEX: 1, FRAGMENT: 2, COMPUTE: 4,
+};
+
+/**
+ * Verbatim Chromium/Dawn wording when a pending (or newly issued) buffer map
+ * is completed by wire-client shutdown — i.e. the GPU device behind it is
+ * destroyed or lost. This is the exact string reported in #1901.
+ */
+const MAP_ASYNC_ABORT =
+    "Failed to execute 'mapAsync' on 'GPUBuffer': A valid external Instance reference no longer exists.";
+
+interface FakeBuffer {
+    size: number;
+    destroyed: number;
+    getMappedRange(): ArrayBuffer;
+    mapAsync(mode: number): Promise<void>;
+    unmap(): void;
+    destroy(): void;
+}
+
+interface Harness {
+    renderer: Renderer;
+    stats: {
+        push: number;
+        pop: number;
+        /** vertex buffer bound at slot 0 when each drawIndexed fired */
+        draws: unknown[];
+        createdBuffers: FakeBuffer[];
+        /** how many times a readback buffer was actually mapped */
+        mapAsync: number;
+        /** every `queue.writeBuffer` payload, copied at call time */
+        writes: { buffer: unknown; floats: Float32Array }[];
+        /**
+         * Ordered log of `setPipeline` / `setBindGroup` / `drawIndexed` calls on
+         * the render pass, so a test can assert command ORDER (e.g. that the
+         * lighting environment is rebound at group(1) after the sky pass).
+         */
+        commands: { op: string; index?: number; pipeline?: unknown }[];
+        /** label of every `beginRenderPass` in call order (so a test can assert
+         *  the sun shadow depth pass IS or is NOT encoded). */
+        passes: string[];
+        /** number of GPU textures allocated after the harness is constructed */
+        createdTextures: number;
+        /** label and size of every texture allocated, in call order */
+        textures: { label: string; width: number; height: number }[];
+        /** label of every texture whose `destroy()` fired (shadow depth-texture
+         *  release on toggle-off). */
+        destroyedTextures: string[];
+        /** every buffer handed to `RenderPipeline.setEntityColorTableBuffer` (#6076) */
+        boundColorTables: unknown[];
+    };
+    knobs: {
+        /** 'texture' = getCurrentTexture succeeds; 'null' = returns null */
+        textureMode: 'texture' | 'null';
+        /** make command encoding throw (mid-encode device fault) */
+        encodeThrows: boolean;
+        /** make queue.submit() throw after the color readback has been encoded */
+        submitThrows: boolean;
+        /** make popErrorScope() reject (device lost while scope pending) */
+        popRejects: boolean;
+        /**
+         * The GPU device behind the stub is gone (destroyed by us, or lost to a
+         * driver reset / GPU-process crash). Set automatically by
+         * `device.destroy()`; set by hand to model an involuntary loss, where
+         * the device object stays wired up but every map rejects.
+         */
+        gpuDead: boolean;
+        /**
+         * Park every `mapAsync` instead of resolving it, so a test can land a
+         * teardown *while a readback is in flight* — the window no entry guard
+         * can close. `settlePendingMaps()` decides how each parked map ends.
+         */
+        deferMaps: boolean;
+    };
+    render(options?: RenderOptions): void;
+    /** flush the popErrorScope() promise chains */
+    settle(): Promise<void>;
+    /** number of `mapAsync` calls currently parked (deferMaps) */
+    pendingMaps(): number;
+    /** complete every parked map: resolve it, or reject it with `reason` */
+    settlePendingMaps(reason?: unknown): void;
+}
+
+const OPAQUE_PIPELINE = { label: 'opaque' };
+const TRANSPARENT_PIPELINE = { label: 'transparent' };
+const GHOST_PIPELINE = { label: 'ghost' };
+
+function makeHarness(): Harness {
+    const stats: Harness['stats'] = { push: 0, pop: 0, draws: [], createdBuffers: [], mapAsync: 0, writes: [], commands: [], passes: [], createdTextures: 0, textures: [], destroyedTextures: [], boundColorTables: [] };
+    const knobs: Harness['knobs'] = {
+        textureMode: 'texture', encodeThrows: false, submitThrows: false, popRejects: false, gpuDead: false,
+        deferMaps: false,
+    };
+    const parkedMaps: { resolve: () => void; reject: (e: unknown) => void }[] = [];
+
+    const makeBuffer = (desc: { size: number }): FakeBuffer => {
+        const buf: FakeBuffer & { _ab: ArrayBuffer } = {
+            size: desc.size,
+            destroyed: 0,
+            _ab: new ArrayBuffer(desc.size),
+            getMappedRange() { return this._ab; },
+            mapAsync() {
+                stats.mapAsync++;
+                // Same failure mode as the browser: a map issued against a dead
+                // device rejects rather than resolving.
+                if (knobs.gpuDead) {
+                    return Promise.reject(new DOMException(MAP_ASYNC_ABORT, 'AbortError'));
+                }
+                if (knobs.deferMaps) {
+                    return new Promise<void>((resolve, reject) => { parkedMaps.push({ resolve, reject }); });
+                }
+                return Promise.resolve();
+            },
+            unmap() { /* no-op */ },
+            destroy() { this.destroyed++; },
+        };
+        stats.createdBuffers.push(buf);
+        return buf;
+    };
+
+    let boundVertexBuffer: unknown = null;
+    const pass = new Proxy({} as Record<string | symbol, unknown>, {
+        get(_t, prop) {
+            if (prop === 'setVertexBuffer') {
+                return (slot: number, buf: unknown) => { if (slot === 0) boundVertexBuffer = buf; };
+            }
+            if (prop === 'setPipeline') {
+                return (pipeline: unknown) => { stats.commands.push({ op: 'setPipeline', pipeline }); };
+            }
+            if (prop === 'setBindGroup') {
+                return (index: number) => { stats.commands.push({ op: 'setBindGroup', index }); };
+            }
+            if (prop === 'drawIndexed') {
+                return () => {
+                    stats.commands.push({ op: 'drawIndexed' });
+                    stats.draws.push(boundVertexBuffer);
+                };
+            }
+            // The sky pass issues a NON-indexed draw (pass.draw(3)); record it
+            // so a test can pin the env rebind to AFTER the sky draw, not merely
+            // after the sky pipeline was set (the boundary Greptile/CodeRabbit
+            // flagged on #2669).
+            if (prop === 'draw') {
+                return () => { stats.commands.push({ op: 'draw' }); };
+            }
+            return () => undefined;
+        },
+    });
+
+    const encoder = new Proxy({} as Record<string | symbol, unknown>, {
+        get(_t, prop) {
+            if (prop === 'beginRenderPass') {
+                return (desc?: { label?: string }) => {
+                    stats.passes.push(desc?.label ?? '');
+                    if (knobs.encodeThrows) throw new Error('boom mid-encode');
+                    return pass;
+                };
+            }
+            if (prop === 'finish') return () => ({});
+            return () => undefined;
+        },
+    });
+
+    const queue = {
+        // Copied eagerly: the renderer reuses one scratch array for every
+        // per-mesh uniform, so holding the reference would read back only the
+        // LAST value written in the frame.
+        writeBuffer(buffer: unknown, _offset: number, data: ArrayBufferView | ArrayBuffer) {
+            const floats = ArrayBuffer.isView(data)
+                ? new Float32Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength))
+                : new Float32Array(data.slice(0));
+            stats.writes.push({ buffer, floats });
+        },
+        writeTexture() { /* no-op */ },
+        copyExternalImageToTexture() { /* no-op */ },
+        submit() { if (knobs.submitThrows) throw new Error('boom on submit'); },
+        onSubmittedWorkDone() { return Promise.resolve(); },
+    };
+    const fakeGpuDevice = new Proxy({} as Record<string | symbol, unknown>, {
+        get(_t, prop) {
+            switch (prop) {
+                case 'limits': return { maxTextureDimension2D: 8192, maxBufferSize: 256 * 1024 * 1024 };
+                case 'queue': return queue;
+                case 'pushErrorScope': return () => { stats.push++; };
+                case 'popErrorScope': return () => {
+                    stats.pop++;
+                    return knobs.popRejects
+                        ? Promise.reject(new Error('Instance dropped in popErrorScope'))
+                        : Promise.resolve(null);
+                };
+                case 'createCommandEncoder': return () => encoder;
+                case 'createBuffer': return (desc: { size: number }) => makeBuffer(desc);
+                case 'createBindGroup': return () => ({});
+                case 'createTexture': return (desc: { label?: string; size: { width: number; height: number } }) => {
+                    stats.createdTextures++;
+                    stats.textures.push({ label: desc.label ?? '', width: desc.size.width, height: desc.size.height });
+                    return {
+                        width: desc.size.width,
+                        height: desc.size.height,
+                        createView: () => ({}),
+                        destroy() { stats.destroyedTextures.push(desc.label ?? ''); },
+                    };
+                };
+                // Picker builds real pipelines in its constructor and binds
+                // through the auto layout, so both arms must return objects.
+                case 'createShaderModule': return () => ({});
+                case 'createRenderPipeline': return () => ({ getBindGroupLayout: () => ({}) });
+                // Destroying a device also completes every map still pending
+                // against it — with an AbortError, exactly as Chromium does.
+                case 'destroy': return () => {
+                    knobs.gpuDead = true;
+                    for (const m of parkedMaps.splice(0)) {
+                        m.reject(new DOMException(MAP_ASYNC_ABORT, 'AbortError'));
+                    }
+                };
+                default: return () => undefined;
+            }
+        },
+    });
+
+    const fakeContext = {
+        configure() { /* no-op */ },
+        getCurrentTexture() {
+            return knobs.textureMode === 'texture' ? { createView: () => ({}) } : null;
+        },
+    };
+
+    const canvas = {
+        width: 256,
+        height: 256,
+        getBoundingClientRect: () => ({ width: 256, height: 256 }),
+    } as unknown as HTMLCanvasElement;
+
+    const renderer = new Renderer(canvas);
+    // Wire the stub GPU into the real WebGPUDevice wrapper (init() needs a
+    // browser); keep lastWidth/lastHeight in sync so no reconfigure fires.
+    const wdev = renderer['device'] as unknown as Record<string, unknown>;
+    wdev['device'] = fakeGpuDevice;
+    wdev['context'] = fakeContext;
+    wdev['canvas'] = canvas;
+    wdev['contextConfigured'] = true;
+    wdev['lastWidth'] = 256;
+    wdev['lastHeight'] = 256;
+    // Permissive pipeline stub: draw-state getters return inert objects,
+    // sizing predicates return stable values, everything else no-ops.
+    (renderer as unknown as Record<string, unknown>)['pipeline'] = new Proxy(
+        {} as Record<string | symbol, unknown>,
+        {
+            get(_t, prop) {
+                switch (prop) {
+                    case 'needsResize': return () => false;
+                    case 'getSampleCount': return () => 1;
+                    case 'getMultisampleTextureView': return () => null;
+                    case 'getUniformBufferSize': return () => 336;
+                    case 'getQuantizedPipelineVariant': return () => null;
+                    // Stable identities so a test can tell which pipeline drew what.
+                    case 'getPipeline': return () => OPAQUE_PIPELINE;
+                    case 'getTransparentPipeline': return () => TRANSPARENT_PIPELINE;
+                    case 'getGhostPipeline': return () => GHOST_PIPELINE;
+                    case 'setEntityColorTableBuffer': return (buffer: unknown) => { stats.boundColorTables.push(buffer); };
+                    default: return () => ({});
+                }
+            },
+        },
+    );
+
+    return {
+        renderer,
+        stats,
+        knobs,
+        render(options: RenderOptions = {}) {
+            // Post passes need real GPU textures — keep them off in the stub.
+            renderer.render({ visualEnhancement: { enabled: false }, ...options });
+        },
+        async settle() {
+            // Two microtask turns flush the then/catch chains on popErrorScope.
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        },
+        pendingMaps() { return parkedMaps.length; },
+        settlePendingMaps(reason?: unknown) {
+            for (const m of parkedMaps.splice(0)) {
+                if (reason === undefined) m.resolve(); else m.reject(reason);
+            }
+        },
+    };
+}
+
+/**
+ * The concrete `Scene`, not the narrowed `SceneContents` that `getScene()`
+ * publishes. These render-path tests reach for internals (`partialBatchCache`,
+ * `addMeshData`, `getTexturedMeshes`) that are deliberately absent from the
+ * published surface, the same way they already reach `renderer['device']` and
+ * `renderer['pipeline']`.
+ */
+function sceneOf(h: Harness): Scene {
+    return h.renderer['scene'];
+}
+
+function triangle(expressId: number, color: [number, number, number, number], modelIndex?: number): MeshData {
+    return {
+        expressId,
+        modelIndex,
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+        normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+        color,
+    } as MeshData;
+}
+
+const GREY: [number, number, number, number] = [0.5, 0.5, 0.5, 1];
+const RED: [number, number, number, number] = [0.8, 0.1, 0.1, 1];
+
+/** Build two real colour batches: grey {1, 2} and red {3}. */
+function seedBatches(h: Harness): { grey: BatchedMesh; red: BatchedMesh } {
+    const scene = sceneOf(h);
+    const device = h.renderer['device'].getDevice();
+    const pipeline = h.renderer['pipeline'] as never;
+    scene.appendToBatches([triangle(1, GREY), triangle(2, GREY), triangle(3, RED)], device, pipeline, false);
+    const batches = scene.getBatchedMeshes();
+    assert.strictEqual(batches.length, 2, 'expected one grey and one red batch');
+    // Strip bounds so the default camera cannot frustum-cull the fixtures.
+    for (const b of batches) b.bounds = undefined;
+    const grey = batches.find((b) => b.expressIds.includes(1))!;
+    const red = batches.find((b) => b.expressIds.includes(3))!;
+    return { grey, red };
+}
+
+describe('render() error-scope balance', () => {
+    it('pops the scope on a null-current-texture frame', async () => {
+        const h = makeHarness();
+        h.knobs.textureMode = 'null';
+        h.render();
+        await h.settle();
+        assert.strictEqual(h.stats.push, 1);
+        assert.strictEqual(h.stats.pop, 1);
+    });
+
+    it('pops the scope when encoding throws mid-frame, and keeps counts balanced across mixed frames', async () => {
+        const h = makeHarness();
+        h.knobs.encodeThrows = true;
+        h.render();
+        await h.settle();
+        assert.strictEqual(h.stats.push, 1);
+        assert.strictEqual(h.stats.pop, 1);
+        assert.strictEqual(h.renderer.getDiagnostics().errors, 1);
+
+        // A throwing frame, a null-texture frame, and normal frames — every
+        // pushed scope must be popped exactly once, incl. past the capture
+        // window (first 5 renders) where neither is called.
+        h.knobs.encodeThrows = false;
+        h.knobs.textureMode = 'null';
+        h.render();
+        h.knobs.textureMode = 'texture';
+        for (let i = 0; i < 6; i++) h.render();
+        await h.settle();
+        assert.strictEqual(h.stats.push, h.stats.pop);
+        assert.ok(h.stats.push < 8, 'capture window must stop pushing after the first renders');
+    });
+
+    it('logs (not swallows) a popErrorScope rejection and invalidates the context', async () => {
+        const h = makeHarness();
+        h.knobs.popRejects = true;
+        const warn = mock.method(console, 'warn', () => undefined);
+        try {
+            h.render();
+            await h.settle();
+            const logged = warn.mock.calls.some((c) =>
+                String(c.arguments[0]).includes('popErrorScope rejected'));
+            assert.ok(logged, 'rejection must be logged, not silently caught');
+        } finally {
+            warn.mock.restore();
+        }
+        // The wrapper marks the context for reconfiguration on loss evidence.
+        assert.strictEqual(h.renderer['device']['contextConfigured'], false);
+    });
+
+    it('logs the rejection from the null-texture bail-out path too', async () => {
+        const h = makeHarness();
+        h.knobs.popRejects = true;
+        h.knobs.textureMode = 'null';
+        const warn = mock.method(console, 'warn', () => undefined);
+        try {
+            h.render();
+            await h.settle();
+            const logged = warn.mock.calls.some((c) =>
+                String(c.arguments[0]).includes('popErrorScope rejected'));
+            assert.ok(logged);
+        } finally {
+            warn.mock.restore();
+        }
+    });
+});
+
+describe('captureColorFrame() lifecycle (#5051 strict GPU evidence)', () => {
+    it('coalesces concurrent callers into one bounded next-frame readback', async () => {
+        const h = makeHarness();
+        const first = h.renderer.captureColorFrame();
+        const second = h.renderer.captureColorFrame();
+        assert.strictEqual(first, second, 'only one in-flight color capture may allocate GPU readback memory');
+        const texturesBefore = h.stats.createdTextures;
+
+        h.renderer.consumeRenderRequest();
+        h.render();
+        const frame = await first;
+
+        assert.ok(frame, 'the submitted production frame resolves its color copy');
+        assert.deepStrictEqual([frame.width, frame.height], [256, 256]);
+        assert.strictEqual(h.stats.mapAsync, 1, 'exactly one color buffer is mapped');
+        assert.strictEqual(h.stats.createdTextures, texturesBefore, 'capture reuses the canvas texture at every viewport size');
+        assert.strictEqual(h.renderer.peekRenderRequest(), false, 'capture reuses the presented frame without scheduling another');
+    });
+
+    it('retries a transient context skip but bounds unavailable-frame polling', async () => {
+        const h = makeHarness();
+        h.knobs.textureMode = 'null';
+        const pending = h.renderer.captureColorFrame();
+
+        h.renderer.consumeRenderRequest();
+        h.render();
+        assert.strictEqual(h.renderer.peekRenderRequest(), true, 'one unavailable canvas texture requests another frame');
+
+        h.knobs.textureMode = 'texture';
+        h.renderer.consumeRenderRequest();
+        h.render();
+        assert.ok(await pending, 'the next submitted production frame resolves actual color bytes');
+
+        const unavailable = makeHarness();
+        unavailable.knobs.textureMode = 'null';
+        const bounded = unavailable.renderer.captureColorFrame();
+        for (let attempt = 0; attempt <= 3; attempt++) {
+            unavailable.renderer.consumeRenderRequest();
+            unavailable.render();
+        }
+        assert.strictEqual(await bounded, null, 'three transient retries never create a perpetual requestAnimationFrame loop');
+        assert.strictEqual(unavailable.renderer.peekRenderRequest(), false, 'the bounded capture releases its final dirty request');
+    });
+
+    it('settles a pending color capture on teardown, device loss, or a contained encode failure', async () => {
+        const destroyed = makeHarness();
+        const pendingDestroy = destroyed.renderer.captureColorFrame();
+        destroyed.renderer.destroy();
+        assert.strictEqual(await pendingDestroy, null, 'destroy cannot leave an E2E capture promise suspended');
+
+        const lost = makeHarness();
+        const pendingLoss = lost.renderer.captureColorFrame();
+        const lossWarn = mock.method(console, 'warn', () => undefined);
+        try {
+            lost.renderer['handleDeviceLost']({ message: 'driver reset', reason: 'unknown' });
+        } finally {
+            lossWarn.mock.restore();
+        }
+        assert.strictEqual(await pendingLoss, null, 'device loss cannot leave an E2E capture promise suspended');
+
+        const inFlight = makeHarness();
+        inFlight.knobs.deferMaps = true;
+        const pendingInFlightLoss = inFlight.renderer.captureColorFrame();
+        inFlight.renderer.consumeRenderRequest();
+        inFlight.render();
+        assert.strictEqual(inFlight.pendingMaps(), 1, 'the loss lands while the submitted color readback is mapped');
+        const warn = mock.method(console, 'warn', () => undefined);
+        try {
+            inFlight.renderer['handleDeviceLost']({ message: 'driver reset', reason: 'unknown' });
+            assert.strictEqual(await pendingInFlightLoss, null, 'device loss settles an already-submitted capture without another frame');
+        } finally {
+            warn.mock.restore();
+            inFlight.settlePendingMaps();
+            await inFlight.settle();
+        }
+        const failed = makeHarness();
+        failed.knobs.encodeThrows = true;
+        const pendingFailure = failed.renderer.captureColorFrame();
+        failed.render();
+        assert.strictEqual(await pendingFailure, null, 'a contained render failure cannot publish partial color evidence');
+
+        const submitFailure = makeHarness();
+        const beforeReadback = submitFailure.stats.createdBuffers.length;
+        submitFailure.knobs.submitThrows = true;
+        const pendingSubmitFailure = submitFailure.renderer.captureColorFrame();
+        submitFailure.render();
+        assert.strictEqual(await pendingSubmitFailure, null, 'a failed submit cannot publish partial color evidence');
+        assert.strictEqual(
+            submitFailure.stats.createdBuffers.at(-1)!.destroyed,
+            1,
+            'the current frame readback buffer is freed when queue.submit() throws',
+        );
+        assert.strictEqual(submitFailure.stats.createdBuffers.length, beforeReadback + 1, 'the assertion observes the color readback, not setup buffers');
+    });
+
+    it('settles an unencoded capture when re-initialization tears down the active GPU stack', async () => {
+        const h = makeHarness();
+        const pending = h.renderer.captureColorFrame();
+        h.renderer['device'].init = async () => { throw new Error('replacement init failed'); };
+
+        await assert.rejects(h.renderer.init(), /replacement init failed/);
+        assert.strictEqual(await pending, null, 'a failed replacement cannot strand a capture owned by the old stack');
+    });
+});
+
+describe('destroy() lifecycle', () => {
+    it('is idempotent and render() after destroy() is a silent skip', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.render();
+        assert.doesNotThrow(() => h.renderer.destroy());
+        assert.doesNotThrow(() => h.renderer.destroy());
+        const skipsBefore = h.renderer.getDiagnostics().skips;
+        assert.doesNotThrow(() => h.render());
+        assert.strictEqual(h.renderer.getDiagnostics().skips, skipsBefore + 1);
+        assert.strictEqual(h.renderer.getDiagnostics().errors, 0);
+    });
+
+    it('destroy() frees batch buffers exactly once', () => {
+        const h = makeHarness();
+        const { grey, red } = seedBatches(h);
+        h.renderer.destroy();
+        h.renderer.destroy();
+        assert.strictEqual((grey.vertexBuffer as unknown as FakeBuffer).destroyed, 1);
+        assert.strictEqual((red.vertexBuffer as unknown as FakeBuffer).destroyed, 1);
+    });
+});
+
+describe('lighting environment bind ordering', () => {
+    // Regression: switching the WebGPU "Environment" preset away from Default
+    // enables the procedural sky, whose pipeline has an incompatible layout
+    // (its own group(0), no group(1)). Drawing the sky invalidates the
+    // per-frame lighting group(1) binding on conformant WebGPU
+    // implementations; the flat batch loop re-sets only group(0) per batch, so
+    // when the env was bound BEFORE the sky pass every non-Default preset drew
+    // no geometry ("the model disappears when I change the environment") on
+    // strict drivers. The env must be (re)bound at group(1) AFTER the sky pass
+    // and BEFORE the first geometry draw.
+    it('rebinds the environment at group(1) after the sky draw, before geometry', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.stats.commands.length = 0;
+        h.render({ environment: { skyEnabled: true, sunDirection: [0.45, 0.83, 0.33] } });
+
+        const cmds = h.stats.commands;
+        const firstPipeline = cmds.findIndex((c) => c.op === 'setPipeline');
+        // The sky pass's own non-indexed draw — the real boundary the env
+        // rebind must clear. Anchoring on this (not just on a setPipeline)
+        // is what rejects a rebind issued before the sky actually drew.
+        const skyDraw = cmds.findIndex((c) => c.op === 'draw');
+        const firstGeometryDraw = cmds.findIndex((c) => c.op === 'drawIndexed');
+        assert.ok(firstPipeline >= 0, 'the sky pass must set a pipeline');
+        assert.ok(skyDraw > firstPipeline, 'the sky must draw after its pipeline is set');
+        assert.ok(firstGeometryDraw > skyDraw, 'geometry must draw after the sky');
+        const envBind = cmds.findIndex(
+            (c, i) => c.op === 'setBindGroup' && c.index === 1 && i > skyDraw && i < firstGeometryDraw,
+        );
+        assert.ok(envBind >= 0, 'group(1) must be re-bound after the sky draw and before geometry');
+    });
+
+    it('binds the environment at group(1) before geometry with the sky off (Default preset)', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.stats.commands.length = 0;
+        h.render();
+
+        const cmds = h.stats.commands;
+        const firstDraw = cmds.findIndex((c) => c.op === 'drawIndexed');
+        assert.ok(firstDraw >= 0, 'geometry must draw');
+        const envBind = cmds.findIndex(
+            (c, i) => c.op === 'setBindGroup' && c.index === 1 && i < firstDraw,
+        );
+        assert.ok(envBind >= 0, 'group(1) must be bound before the first geometry draw');
+    });
+});
+
+describe('visibility epoch drives the batched draw path', () => {
+    it('sees an IN-PLACE mutation of the hiddenIds Set (regression: reference-compare epoch)', () => {
+        const h = makeHarness();
+        const { grey, red } = seedBatches(h);
+
+        const hidden = new Set<number>();
+        h.render({ hiddenIds: hidden });
+        assert.ok(h.stats.draws.includes(grey.vertexBuffer), 'grey batch draws while nothing is hidden');
+        assert.ok(h.stats.draws.includes(red.vertexBuffer));
+
+        // Mutate the SAME Set in place: id 1 hides, grey batch {1,2} becomes
+        // partially visible and must be replaced by a sub-batch clone.
+        hidden.add(1);
+        h.stats.draws.length = 0;
+        h.render({ hiddenIds: hidden });
+        assert.ok(!h.stats.draws.includes(grey.vertexBuffer),
+            'partially hidden batch must not draw from its own buffers');
+        assert.ok(h.stats.draws.includes(red.vertexBuffer), 'red batch is unaffected');
+        const scene = sceneOf(h);
+        assert.strictEqual(scene['partialBatchCache'].size, 1, 'a partial sub-batch was built');
+
+        // Mutate in place again: id 2 hides too, the grey batch is now fully
+        // hidden — the batched path must notice (no grey geometry at all).
+        hidden.add(2);
+        h.stats.draws.length = 0;
+        h.render({ hiddenIds: hidden });
+        const greyIshDraws = h.stats.draws.filter((d) => d !== red.vertexBuffer);
+        assert.strictEqual(greyIshDraws.length, 0, 'fully hidden batch (and its sub-batch) must not draw');
+    });
+
+    it('does NOT rebuild caches for a fresh Set with identical content', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.render({ hiddenIds: new Set([1]) });
+        const version = h.renderer['_visibilityVersion'];
+        const buffersAfterFirst = h.stats.createdBuffers.length;
+
+        h.render({ hiddenIds: new Set([1]) });
+        assert.strictEqual(h.renderer['_visibilityVersion'], version, 'same content, new reference: no epoch bump');
+        assert.strictEqual(h.stats.createdBuffers.length, buffersAfterFirst, 'no partial sub-batch rebuild');
+    });
+
+    it('treats empty hidden set, undefined, and null isolation as the same no-filter state', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.render({});
+        const version = h.renderer['_visibilityVersion'];
+        h.render({ hiddenIds: new Set() });
+        h.render({ hiddenIds: undefined, isolatedIds: null });
+        h.render({ isolatedIds: undefined });
+        assert.strictEqual(h.renderer['_visibilityVersion'], version);
+    });
+
+    it('rapid hide -> show-all -> same set -> different set: partial caches drop and rebuild, buffers destroyed exactly once', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        const scene = sceneOf(h);
+
+        h.render({ hiddenIds: new Set([1]) });
+        assert.strictEqual(scene['partialBatchCache'].size, 1);
+        const firstClone = [...scene['partialBatchCache'].values()][0] as BatchedMesh;
+        const firstVb = firstClone.vertexBuffer as unknown as FakeBuffer;
+
+        // Show all: the return-to-fully-visible transition must free the clone.
+        h.render({});
+        assert.strictEqual(scene['partialBatchCache'].size, 0, 'partial caches dropped on show-all');
+        assert.strictEqual(firstVb.destroyed, 1);
+
+        // Hide the SAME set again: a fresh clone is built (old one stays freed).
+        h.render({ hiddenIds: new Set([1]) });
+        assert.strictEqual(scene['partialBatchCache'].size, 1);
+        const secondClone = [...scene['partialBatchCache'].values()][0] as BatchedMesh;
+        assert.notStrictEqual(secondClone, firstClone, 'dropped clone must not be resurrected');
+        assert.strictEqual(firstVb.destroyed, 1, 'no double-destroy of the dropped clone');
+
+        // Different set while filtering holds: in-place invalidation replaces
+        // the clone and frees the previous one exactly once.
+        h.render({ hiddenIds: new Set([2]) });
+        assert.strictEqual((secondClone.vertexBuffer as unknown as FakeBuffer).destroyed, 1);
+        assert.strictEqual(scene['partialBatchCache'].size, 1);
+
+        // Back to show-all: everything freed exactly once, nothing twice.
+        h.render({});
+        assert.strictEqual(scene['partialBatchCache'].size, 0);
+        assert.strictEqual(firstVb.destroyed, 1);
+        assert.strictEqual((secondClone.vertexBuffer as unknown as FakeBuffer).destroyed, 1);
+        for (const buf of h.stats.createdBuffers) {
+            assert.ok(buf.destroyed <= 1, 'a VRAM-tracked buffer was destroyed more than once');
+        }
+    });
+});
+
+describe('hydrated selection meshes across renders', () => {
+    // #2985. Renderer.createMeshFromData is the only place a MeshData becomes an
+    // individual GPU Mesh, and it is what the GPU pick pass indexes into — so a
+    // representation item dropped HERE cannot be reported by any pick, however
+    // correct picker.ts is. Tested through the real render() + real Scene
+    // because the method needs a device; the rest of the pick contract lives in
+    // pick-item-id.test.ts.
+    it('hydration carries the source geometryItemId onto the individual mesh', () => {
+        const ITEM = 4638; // deliberately unlike the expressId below
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        const withItem = { ...triangle(7, GREY), geometryItemId: ITEM } as MeshData;
+        scene.appendToBatches([withItem, triangle(8, RED)], device, h.renderer['pipeline'] as never, false);
+        for (const b of scene.getBatchedMeshes()) b.bounds = undefined;
+
+        h.render({ selectedId: 7 });
+        const hydrated = scene.getMeshes().filter((m) => m.hydrated && m.expressId === 7);
+        assert.strictEqual(hydrated.length, 1, 'selecting the entity hydrates its mesh');
+        assert.strictEqual(hydrated[0].geometryItemId, ITEM);
+
+        // And a piece with no item identity leaves the key readable as absent
+        // rather than as a plausible id.
+        h.render({ selectedId: 8 });
+        const plain = scene.getMeshes().filter((m) => m.hydrated && m.expressId === 8);
+        assert.strictEqual(plain.length, 1);
+        assert.strictEqual(plain[0].geometryItemId, undefined);
+    });
+
+    // A colour-merged piece's item id belongs to no single entity in it, so
+    // hydration must withhold it exactly as the CPU raycaster does — one click
+    // must not answer two ways either side of the pick-mesh budget (#2985).
+    //
+    // Called DIRECTLY, not through a render: both in-tree callers reach this
+    // method via Scene.getMeshDataPieces, which splits a merged piece per
+    // entity and — as a side effect of rebuilding the literal, not by any
+    // stated rule — carries neither entityIds nor geometryItemId forward. This
+    // method is public, so it owns the rule rather than inheriting that
+    // accident, and a raw merged MeshData is what tests the rule.
+    it('createMeshFromData withholds a colour-merged batch id, matching the CPU raycast', () => {
+        const ITEM = 4638;
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const merged = {
+            ...triangle(9, GREY),
+            geometryItemId: ITEM,
+            entityIds: new Uint32Array([9, 10, 10]),
+        } as MeshData;
+        h.renderer.createMeshFromData(merged);
+
+        const made = scene.getMeshes().filter((m) => m.expressId === 9);
+        assert.strictEqual(made.length, 1, 'the mesh was created');
+        assert.strictEqual(made[0].geometryItemId, undefined);
+
+        // Positive control: the same call on an UNMERGED piece does report it,
+        // so the assertion above is the merge rule and not a dead field.
+        h.renderer.createMeshFromData({ ...triangle(11, GREY), geometryItemId: ITEM } as MeshData);
+        const plainItem = scene.getMeshes().filter((m) => m.expressId === 11);
+        assert.strictEqual(plainItem.length, 1);
+        assert.strictEqual(plainItem[0].geometryItemId, ITEM);
+    });
+
+    it('selection thrash: earlier selections are disposed, the current one is kept', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        const scene = sceneOf(h);
+
+        const hydratedFor = (id: number) =>
+            scene.getMeshes().filter((m) => m.hydrated && m.expressId === id);
+
+        h.render({ selectedId: 1 });
+        assert.strictEqual(hydratedFor(1).length, 1, 'selected entity hydrates an individual mesh');
+        const mesh1 = hydratedFor(1)[0];
+
+        h.render({ selectedId: 2 });
+        assert.strictEqual(hydratedFor(1).length, 0, 'previous selection is disposed');
+        assert.strictEqual((mesh1.vertexBuffer as unknown as FakeBuffer).destroyed, 1);
+        assert.strictEqual(hydratedFor(2).length, 1);
+        const mesh2 = hydratedFor(2)[0];
+
+        h.render({ selectedId: 3 });
+        assert.strictEqual((mesh2.vertexBuffer as unknown as FakeBuffer).destroyed, 1);
+        assert.strictEqual(hydratedFor(3).length, 1);
+
+        h.render({});
+        assert.strictEqual(scene.getMeshes().filter((m) => m.hydrated).length, 0, 'deselect frees everything');
+        for (const buf of h.stats.createdBuffers) {
+            assert.ok(buf.destroyed <= 1, 'hydrated mesh buffer double-destroyed');
+        }
+    });
+
+    it('same express id in two federated models: switching models disposes the other model\'s mesh', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        const scene = sceneOf(h);
+        // Two models share express id 42 (federation reuses local ids).
+        scene.addMeshData(triangle(42, GREY, 0));
+        scene.addMeshData(triangle(42, RED, 1));
+
+        h.render({ selectedId: 42, selectedModelIndex: 0 });
+        const model0 = scene.getMeshes().filter((m) => m.hydrated && m.expressId === 42);
+        assert.strictEqual(model0.length, 1);
+        assert.strictEqual(model0[0].modelIndex, 0);
+
+        // Same express id, different model — the model-0 mesh must be freed
+        // (an id-only snapshot would keep it resident and drawing).
+        h.render({ selectedId: 42, selectedModelIndex: 1 });
+        const hydrated = scene.getMeshes().filter((m) => m.hydrated && m.expressId === 42);
+        assert.strictEqual(hydrated.length, 1, 'exactly one model\'s mesh stays hydrated');
+        assert.strictEqual(hydrated[0].modelIndex, 1);
+        assert.strictEqual((model0[0].vertexBuffer as unknown as FakeBuffer).destroyed, 1);
+
+        h.render({});
+        assert.strictEqual(scene.getMeshes().filter((m) => m.hydrated).length, 0);
+    });
+
+    // #4382, a follow-up on #2985: RenderOptions.selectedItemId narrows the
+    // whole-product highlight to one representation item. End-to-end through
+    // the real render() loop (unlike scene-level tests, this also proves
+    // index.ts's own selectedMeshes/hydration filtering, not just Scene's).
+    it('RenderOptions.selectedItemId hydrates and highlights only the matching representation item', () => {
+        const ITEM_A = 301;
+        const ITEM_B = 302;
+        const h = makeHarness();
+        seedBatches(h);
+        const scene = sceneOf(h);
+        scene.addMeshData({ ...triangle(50, GREY), geometryItemId: ITEM_A } as MeshData);
+        scene.addMeshData({ ...triangle(50, GREY), geometryItemId: ITEM_B } as MeshData);
+
+        h.render({ selectedId: 50, selectedItemId: ITEM_A });
+        let hydrated = scene.getMeshes().filter((m) => m.hydrated && m.expressId === 50);
+        assert.strictEqual(hydrated.length, 1, 'only the item-A piece hydrates');
+        assert.strictEqual(hydrated[0].geometryItemId, ITEM_A);
+        const itemAMesh = hydrated[0];
+
+        // Switching the item within the SAME still-selected product replaces
+        // the highlight cleanly: item A's piece is disposed (not left
+        // resident alongside item B's).
+        h.render({ selectedId: 50, selectedItemId: ITEM_B });
+        hydrated = scene.getMeshes().filter((m) => m.hydrated && m.expressId === 50);
+        assert.strictEqual(hydrated.length, 1, 'item A is disposed, only item B hydrates');
+        assert.strictEqual(hydrated[0].geometryItemId, ITEM_B);
+        assert.strictEqual((itemAMesh.vertexBuffer as unknown as FakeBuffer).destroyed, 1);
+
+        // Dropping selectedItemId (whole product again) is the ordinary path
+        // and must be unaffected: both pieces hydrate.
+        h.render({ selectedId: 50 });
+        hydrated = scene.getMeshes().filter((m) => m.hydrated && m.expressId === 50);
+        assert.strictEqual(hydrated.length, 2, 'whole-product selection hydrates every piece');
+    });
+});
+
+describe('drawables outside the RTE eye envelope (#6128)', () => {
+    /**
+     * One mesh at the camera and one 3,000 km away (a stray element, or a
+     * second model on another grid). The far one cannot be represented in the
+     * camera's RTE frame; both passes must skip it rather than throw.
+     */
+    function seedNearAndFar(h: Harness): { near: Mesh; far: Mesh } {
+        h.renderer.createMeshFromData(triangle(21, GREY));
+        h.renderer.createMeshFromData({ ...triangle(22, RED), origin: [3_000_000, 0, 0] } as MeshData);
+        const meshes = sceneOf(h).getMeshes();
+        return {
+            near: meshes.find((m) => m.expressId === 21)!,
+            far: meshes.find((m) => m.expressId === 22)!,
+        };
+    }
+
+    it('pick() resolves instead of throwing a camera-relative envelope RangeError', async () => {
+        const h = makeHarness();
+        seedNearAndFar(h);
+        const picker = new Picker(h.renderer['device'], 256, 256);
+        (h.renderer as unknown as Record<string, unknown>)['picker'] = picker;
+        h.renderer['pickingManager'].setPicker(picker);
+
+        assert.strictEqual(await h.renderer.pick(10, 10), null);
+        assert.strictEqual(h.stats.mapAsync, 2, 'the pick pass ran to its readback');
+        assert.deepStrictEqual(await h.renderer.pickRect(0, 0, 8, 8), new Set());
+    });
+
+    it('the colour frame draws the near mesh, skips the far one, and does not degrade', () => {
+        const h = makeHarness();
+        const { near, far } = seedNearAndFar(h);
+        h.render();
+        assert.strictEqual(h.renderer['frameContainedThrow'], false, 'the frame completed');
+        assert.ok(h.stats.draws.includes(near.vertexBuffer), 'the near mesh is drawn');
+        assert.ok(!h.stats.draws.includes(far.vertexBuffer), 'the far mesh is skipped');
+    });
+});
+
+/**
+ * Regression for #1901: an unhandled `AbortError` from `mapAsync` on every
+ * click after the GPU device went away.
+ *
+ * `render()` has always early-returned on a destroyed/lost device; the pick
+ * path did not. A pick is a full GPU round trip ending in a `mapAsync`
+ * readback, so once the device is gone that readback rejects — and the DOM
+ * click/contextmenu handlers that reach here are `async` listeners whose
+ * promise nobody awaits, so the rejection escapes unhandled. Not a one-shot
+ * teardown race: the picker stays dead, so it fired once per click (three
+ * aborts 0.8 s apart in one production session).
+ *
+ * Every assertion below is on `stats.mapAsync`, not just on the returned
+ * value: the fix must short-circuit BEFORE the GPU call. A try/catch around
+ * the readback would still report a non-zero count and fail these.
+ */
+describe('pick path survives a dead GPU device (#1901)', () => {
+    /** Wire a REAL Picker into the renderer (init() needs a browser). */
+    function installPicker(h: Harness): Picker {
+        const picker = new Picker(h.renderer['device'], 256, 256);
+        (h.renderer as unknown as Record<string, unknown>)['picker'] = picker;
+        h.renderer['pickingManager'].setPicker(picker);
+        return picker;
+    }
+
+    /** Model an involuntary loss (driver reset / GPU-process crash). */
+    function loseDevice(h: Harness): void {
+        h.knobs.gpuDead = true;
+        h.renderer['handleDeviceLost']({ message: 'device lost', reason: 'unknown' });
+    }
+
+    it('positive control: a healthy pick really does reach the mapAsync readback', async () => {
+        const h = makeHarness();
+        installPicker(h);
+        // Resolves null because the stub reads back a zeroed sample (no hit);
+        // the readback COUNT is what proves the pass ran, not the value.
+        assert.strictEqual(await h.renderer.pick(10, 10), null);
+        assert.strictEqual(h.stats.mapAsync, 2, 'pick() maps the colour + depth readbacks');
+
+        h.stats.mapAsync = 0;
+        assert.deepStrictEqual(await h.renderer.pickRect(0, 0, 8, 8), new Set());
+        assert.strictEqual(h.stats.mapAsync, 1, 'pickRect() maps the rect readback');
+    });
+
+    it('pick() after destroy() resolves null instead of rejecting with AbortError', async () => {
+        const h = makeHarness();
+        installPicker(h);
+        h.renderer.destroy();
+
+        h.stats.mapAsync = 0;
+        assert.strictEqual(await h.renderer.pick(10, 10), null);
+        assert.strictEqual(h.stats.mapAsync, 0, 'guard must fire before the GPU readback');
+    });
+
+    it('pick() after an involuntary device loss resolves null instead of rejecting', async () => {
+        const h = makeHarness();
+        installPicker(h);
+        // The production shape: renderer still mounted, canvas frozen, user
+        // keeps clicking. Every click used to mint an unhandled rejection.
+        loseDevice(h);
+
+        h.stats.mapAsync = 0;
+        for (let i = 0; i < 3; i++) {
+            assert.strictEqual(await h.renderer.pick(10, 10), null);
+        }
+        assert.strictEqual(h.stats.mapAsync, 0, 'no click may reach the GPU readback');
+    });
+
+    it('pickRect() resolves an empty set after destroy() and after device loss', async () => {
+        const destroyed = makeHarness();
+        installPicker(destroyed);
+        destroyed.renderer.destroy();
+        destroyed.stats.mapAsync = 0;
+        assert.deepStrictEqual(await destroyed.renderer.pickRect(0, 0, 8, 8), new Set());
+        assert.strictEqual(destroyed.stats.mapAsync, 0);
+
+        const lost = makeHarness();
+        installPicker(lost);
+        loseDevice(lost);
+        lost.stats.mapAsync = 0;
+        assert.deepStrictEqual(await lost.renderer.pickRect(0, 0, 8, 8), new Set());
+        assert.strictEqual(lost.stats.mapAsync, 0);
+    });
+
+    it('Picker itself is inert after destroy() (it is a public export, usable standalone)', async () => {
+        const h = makeHarness();
+        const picker = installPicker(h);
+        const viewProj = new Float32Array(16);
+        picker.destroy();
+        h.knobs.gpuDead = true;
+
+        h.stats.mapAsync = 0;
+        assert.strictEqual(await picker.pick(10, 10, 256, 256, [], viewProj), null);
+        assert.deepStrictEqual(await picker.pickRect(0, 0, 8, 8, 256, 256, [], viewProj), new Set());
+        assert.strictEqual(h.stats.mapAsync, 0);
+    });
+
+    it('destroy() clears the picker the PickingManager holds, not just the renderer\'s', () => {
+        const h = makeHarness();
+        installPicker(h);
+        h.renderer.destroy();
+        assert.strictEqual(h.renderer['pickingManager']['picker'], null,
+            'a dangling manager reference keeps driving destroyed GPU resources');
+    });
+});
+
+/**
+ * Second half of #1901: the window the entry guards CANNOT close.
+ *
+ * A pick that was perfectly legal when it started is still aborted if the
+ * device dies between `queue.submit()` and the `mapAsync` settling — the
+ * canvas unmounts, the model reloads (`Renderer.destroy()` ends in
+ * `device.destroy()`), or the driver resets. Same `AbortError`, same async
+ * stack (the awaiting `pick` frames are preserved), same unhandled rejection,
+ * because the DOM listeners that reach here are `async` functions nobody
+ * awaits.
+ *
+ * These tests deliberately let the readback RUN (`stats.mapAsync > 0`) — that
+ * is the whole point, the guard already fired for everything it can see.
+ */
+describe('pick path survives the device dying mid-readback (#1901)', () => {
+    function installPicker(h: Harness): Picker {
+        const picker = new Picker(h.renderer['device'], 256, 256);
+        (h.renderer as unknown as Record<string, unknown>)['picker'] = picker;
+        h.renderer['pickingManager'].setPicker(picker);
+        return picker;
+    }
+
+    /**
+     * Run the pick up to the point where it is parked on `mapAsync`. Boxed in
+     * an object because `await` unwraps a promise-of-a-promise — returning the
+     * in-flight promise directly would await the very thing we want to keep
+     * parked.
+     */
+    async function park(h: Harness, start: () => Promise<unknown>): Promise<{ inflight: Promise<unknown> }> {
+        h.knobs.deferMaps = true;
+        const inflight = start();
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+        assert.ok(h.pendingMaps() > 0, 'pick should be parked on the mapAsync readback');
+        return { inflight };
+    }
+
+    it('pick() parked on mapAsync when destroy() lands resolves null, not AbortError', async () => {
+        const h = makeHarness();
+        installPicker(h);
+        const { inflight } = await park(h, () => h.renderer.pick(10, 10));
+        h.renderer.destroy();
+        assert.strictEqual(await inflight, null);
+        assert.ok(h.stats.mapAsync > 0, 'the readback really was in flight');
+    });
+
+    it('pickRect() parked on mapAsync when destroy() lands resolves empty, not AbortError', async () => {
+        const h = makeHarness();
+        installPicker(h);
+        const { inflight } = await park(h, () => h.renderer.pickRect(0, 0, 8, 8));
+        h.renderer.destroy();
+        assert.deepStrictEqual(await inflight, new Set());
+    });
+
+    it('an involuntary loss mid-readback degrades the same way', async () => {
+        const h = makeHarness();
+        installPicker(h);
+        const { inflight } = await park(h, () => h.renderer.pick(10, 10));
+        h.knobs.gpuDead = true;
+        h.renderer['handleDeviceLost']({ message: 'device lost', reason: 'unknown' });
+        h.settlePendingMaps(new DOMException(MAP_ASYNC_ABORT, 'AbortError'));
+        assert.strictEqual(await inflight, null);
+    });
+
+    it('overlapping picks are all released, not just the newest', async () => {
+        const h = makeHarness();
+        installPicker(h);
+        h.knobs.deferMaps = true;
+        const first = h.renderer.pick(10, 10);
+        for (let i = 0; i < 3; i++) await Promise.resolve();
+        const second = h.renderer.pick(20, 20);
+        for (let i = 0; i < 3; i++) await Promise.resolve();
+        // Without this the case can pass vacuously: if the picks need more
+        // microtask turns to reach mapAsync than we spun, destroy() lands
+        // before submit and both settle via the ENTRY guard, never exercising
+        // the overlapping-in-flight release this case exists to cover.
+        // Two picks x (colour + depth) = 4 parked readbacks.
+        assert.strictEqual(h.pendingMaps(), 4, 'both picks must be parked on their readbacks');
+        h.renderer.destroy();
+        const settled = await Promise.allSettled([first, second]);
+        assert.deepStrictEqual(settled.map((s) => s.status), ['fulfilled', 'fulfilled']);
+    });
+
+    it('a REAL readback fault still propagates — the catch is not a blanket swallow', async () => {
+        const h = makeHarness();
+        installPicker(h);
+        const { inflight } = await park(h, () => h.renderer.pick(10, 10));
+        // Validation failures reject with OperationError, never AbortError.
+        h.settlePendingMaps(new DOMException('Buffer is already mapped', 'OperationError'));
+        await assert.rejects(inflight, /already mapped/);
+
+        const rect = makeHarness();
+        installPicker(rect);
+        const rectInflight = await park(rect, () => rect.renderer.pickRect(0, 0, 8, 8));
+        rect.settlePendingMaps(new DOMException('Buffer is already mapped', 'OperationError'));
+        await assert.rejects(rectInflight.inflight, /already mapped/);
+    });
+
+    it('a REAL readback fault still frees the readback buffers on its way out', async () => {
+        // #1901: the abort path released the readbacks but the rethrow path did
+        // not, so every real fault leaked its GPU allocation for the life of the
+        // device. Promise.all rejects the moment ONE map fails, so the other
+        // buffer can be mapped and live at that point — both must be freed.
+        const h = makeHarness();
+        installPicker(h);
+        const before = h.stats.createdBuffers.length;
+        const { inflight } = await park(h, () => h.renderer.pick(10, 10));
+        h.settlePendingMaps(new DOMException('Buffer is already mapped', 'OperationError'));
+        await assert.rejects(inflight, /already mapped/);
+
+        const readbacks = h.stats.createdBuffers.slice(before);
+        assert.strictEqual(readbacks.length, 2, 'pick() allocates the colour + depth readbacks');
+        for (const buf of readbacks) {
+            assert.ok(buf.destroyed > 0, 'a readback buffer survived the rethrow — leaked');
+        }
+    });
+});
+
+/**
+ * The other half of #2985's GPU route: `Picker.pick` is where a decoded texel
+ * becomes the `PickResult` a host sees, and every other test of that mapping
+ * stubs `picker.pick` and calls `resolvePickSample` directly. One
+ * unconditional call, so the exposure is far smaller than `Scene.raycast`'s —
+ * but the harness already runs a REAL `Picker` against the stub GPU, so
+ * closing it costs one test rather than a browser lane.
+ *
+ * The readback is seeded by hand: the stub's pick target is zero-filled, which
+ * decodes as "no hit" and returns before the mapping runs at all. Writing
+ * (index + 1) into the parked colour readback is what the pick pass would have
+ * written for a hit on mesh 0.
+ */
+describe('Picker.pick maps a real readback onto the picked item (#2985)', () => {
+    it('carries the hit mesh\'s geometryItemId out onto the PickResult', async () => {
+        const ITEM = 4638;
+        const h = makeHarness();
+        const picker = new Picker(h.renderer['device'], 256, 256);
+        const mesh = {
+            expressId: 7,
+            modelIndex: 2,
+            geometryItemId: ITEM,
+            vertexBuffer: {},
+            indexBuffer: {},
+            indexCount: 3,
+        } as unknown as Mesh;
+
+        const before = h.stats.createdBuffers.length;
+        h.knobs.deferMaps = true;
+        const inflight = picker.pick(4, 4, 256, 256, [mesh], new Float32Array(16));
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+        assert.ok(h.pendingMaps() > 0, 'the pick must be parked on its readbacks');
+
+        // The colour readback is the pick's only 256-byte buffer (the depth one
+        // is a full image); `pick` reads texel 0 of it as a u32.
+        const colour = h.stats.createdBuffers.slice(before).filter((b) => b.size === 256);
+        assert.strictEqual(colour.length, 1, 'expected exactly one colour readback');
+        new Uint32Array(colour[0].getMappedRange())[0] = 1; // mesh 0, written as index + 1
+
+        h.settlePendingMaps();
+        const result = await inflight;
+        assert.strictEqual(result?.expressId, 7);
+        assert.strictEqual(result?.modelIndex, 2);
+        assert.strictEqual(result?.geometryItemId, ITEM, 'the pick collapsed to the product');
+    });
+
+    it('leaves the key absent for a mesh with no item identity', async () => {
+        const h = makeHarness();
+        const picker = new Picker(h.renderer['device'], 256, 256);
+        const mesh = {
+            expressId: 7, modelIndex: 2, vertexBuffer: {}, indexBuffer: {}, indexCount: 3,
+        } as unknown as Mesh;
+
+        const before = h.stats.createdBuffers.length;
+        h.knobs.deferMaps = true;
+        const inflight = picker.pick(4, 4, 256, 256, [mesh], new Float32Array(16));
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+        const colour = h.stats.createdBuffers.slice(before).filter((b) => b.size === 256);
+        new Uint32Array(colour[0].getMappedRange())[0] = 1;
+
+        h.settlePendingMaps();
+        const result = await inflight;
+        assert.ok(result && !('geometryItemId' in result), 'expected the key to be absent');
+    });
+});
+
+/**
+ * #1973 — the textured sub-pass must carry each mesh's per-element `origin` as
+ * its model translation. It used to hoist `tpl[28..30] = 0` out of the loop,
+ * which was right only for the orphan type-geometry path (absolute positions,
+ * `origin == 0`) and drew every textured occurrence offset by `-origin`.
+ *
+ * The scene-side bookkeeping is covered in `scene-textured-origin.test.ts`;
+ * this asserts the value that actually reaches the GPU.
+ */
+function texturedTriangle(expressId: number, origin?: [number, number, number]): MeshData {
+    return {
+        expressId,
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+        normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+        color: [1, 1, 1, 1],
+        uvs: new Float32Array([0, 0, 1, 0, 0, 1]),
+        texture: { width: 1, height: 1, rgba: new Uint8Array([255, 255, 255, 255]), repeatS: false, repeatT: false },
+        ...(origin ? { origin } : {}),
+    };
+}
+
+/** The model-matrix translation column of the uniform written for `tm`. */
+function translationFor(h: Harness, uniformBuffer: unknown): number[] | null {
+    for (let i = h.stats.writes.length - 1; i >= 0; i--) {
+        const w = h.stats.writes[i];
+        if (w.buffer === uniformBuffer && w.floats.length > 30) {
+            return [w.floats[28], w.floats[29], w.floats[30]];
+        }
+    }
+    return null;
+}
+
+/** RTE drawable delta lanes appended after the legacy + quantized uniform ABI. */
+function rteDeltaFor(h: Harness, uniformBuffer: unknown): Float32Array | null {
+    for (let i = h.stats.writes.length - 1; i >= 0; i--) {
+        const w = h.stats.writes[i];
+        if (w.buffer === uniformBuffer && w.floats.length >= 84) {
+            return w.floats.slice(76, 84);
+        }
+    }
+    return null;
+}
+
+describe('textured sub-pass carries the per-element origin (#1973)', () => {
+    const ORIGIN: [number, number, number] = [12.5, 10.5, -3.25];
+
+    function seedTextured(h: Harness, meshes: MeshData[]) {
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        const pipeline = h.renderer['pipeline'] as never;
+        scene.appendToBatches(meshes, device, pipeline, false);
+        return scene.getTexturedMeshes();
+    }
+
+    it('writes the mesh origin into the model translation', () => {
+        const h = makeHarness();
+        const textured = seedTextured(h, [texturedTriangle(1, ORIGIN)]);
+        assert.strictEqual(textured.length, 1);
+
+        h.stats.writes.length = 0;
+        h.render();
+
+        assert.deepStrictEqual(translationFor(h, textured[0].uniformBuffer), ORIGIN);
+    });
+
+    it('writes zero for a mesh whose positions are already absolute', () => {
+        // The #961 orphan type-geometry path: `transform_mesh_local` leaves
+        // positions in world space and sets no origin.
+        const h = makeHarness();
+        const textured = seedTextured(h, [texturedTriangle(1)]);
+
+        h.stats.writes.length = 0;
+        h.render();
+
+        assert.deepStrictEqual(translationFor(h, textured[0].uniformBuffer), [0, 0, 0]);
+    });
+
+    it('gives each textured mesh its OWN origin, not the last one written', () => {
+        // The bug class this replaces was a single hoisted write shared by every
+        // mesh in the pass, so per-mesh divergence is the property that matters.
+        const h = makeHarness();
+        const other: [number, number, number] = [-4, 0.5, 88];
+        const textured = seedTextured(h, [texturedTriangle(1, ORIGIN), texturedTriangle(2, other)]);
+        assert.strictEqual(textured.length, 2);
+
+        h.stats.writes.length = 0;
+        h.render();
+
+        assert.deepStrictEqual(translationFor(h, textured[0].uniformBuffer), ORIGIN);
+        assert.deepStrictEqual(translationFor(h, textured[1].uniformBuffer), other);
+    });
+
+    it('keeps a centimetre residual at a 5,000 km textured origin (#5049)', () => {
+        const h = makeHarness();
+        const origin: [number, number, number] = [5_000_000.015625, 0, 0];
+        const textured = seedTextured(h, [texturedTriangle(1, origin)]);
+        h.renderer['camera'].setPosition(5_000_000, 0, 10);
+        h.renderer['camera'].setTarget(5_000_000, 0, 0);
+
+        h.stats.writes.length = 0;
+        h.render();
+
+        const packed = rteDeltaFor(h, textured[0].uniformBuffer);
+        assert.ok(packed, 'textured draw must upload RTE high/low origin lanes');
+        assert.equal(rteRelativePositionF32([0, 0, 0], packed)[0], 0.015625);
+    });
+});
+
+describe('batched RTE draw uniforms (#5049)', () => {
+    it('uses one high/low camera-relative origin for flat and quantized batches', () => {
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        scene.appendToBatches([triangle(1, [0.4, 0.5, 0.6, 1])], device, h.renderer['pipeline'] as never, false);
+        const batch = scene.getBatchedMeshes()[0];
+        batch.origin = [5_000_000.015625, 0, 0];
+        batch.bounds = undefined;
+        batch.quantized = { min: [1, 2, 3], step: 0.001 };
+        h.renderer['camera'].setPosition(5_000_000, 0, 10);
+        h.renderer['camera'].setTarget(5_000_000, 0, 0);
+
+        h.stats.writes.length = 0;
+        h.render();
+
+        const packed = rteDeltaFor(h, batch.uniformBuffer);
+        assert.ok(packed, 'flat batch must receive the appended RTE lanes');
+        assert.equal(rteRelativePositionF32([0, 0, 0], packed)[0], 0.015625);
+        let write: { buffer: unknown; floats: Float32Array } | undefined;
+        for (const candidate of h.stats.writes) {
+            if (candidate.buffer === batch.uniformBuffer) write = candidate;
+        }
+        assert.ok(write, 'batch draw must upload its uniform block');
+        assert.equal(new Uint32Array(write.floats.buffer)[44] & 0x10000, 0x10000);
+        assert.deepStrictEqual(Array.from(write.floats.slice(56, 60)), [1, 2, 3, Math.fround(0.001)]);
+    });
+});
+
+describe('individual mesh RTE fallback (#5049)', () => {
+    it('keeps a 5,000-km centimetre origin through the no-batch opaque draw', () => {
+        const h = makeHarness();
+        const origin: [number, number, number] = [5_000_000.015625, 0, 0];
+        h.renderer['createMeshFromData']({ ...triangle(91, GREY), origin });
+        const mesh = sceneOf(h).getMeshes()[0];
+        h.renderer['camera'].setPosition(5_000_000, 0, 10);
+        h.renderer['camera'].setTarget(5_000_000, 0, 0);
+
+        h.stats.writes.length = 0;
+        h.render();
+
+        const packed = rteDeltaFor(h, mesh.uniformBuffer);
+        assert.ok(packed, 'no-batch mesh must write RTE drawable lanes');
+        assert.equal(rteRelativePositionF32([0, 0, 0], packed)[0], 0.015625);
+        const write = h.stats.writes.find(candidate => candidate.buffer === mesh.uniformBuffer)!;
+        assert.equal(new Uint32Array(write.floats.buffer)[44] & 0x10000, 0x10000, 'shader selects RTE projection');
+    });
+});
+
+describe('X-Ray fades the entity, not its colour batch (#4129)', () => {
+    /**
+     * The alpha (uniform float 35) of the LAST write aimed at `uniformBuffer`,
+     * compared against the f32 the GPU actually receives.
+     */
+    function assertAlpha(h: Harness, uniformBuffer: unknown, expected: number, message?: string): void {
+        let actual: number | null = null;
+        for (let i = h.stats.writes.length - 1; i >= 0 && actual === null; i--) {
+            const w = h.stats.writes[i];
+            if (w.buffer === uniformBuffer && w.floats.length > 35) actual = w.floats[35];
+        }
+        assert.strictEqual(actual, Math.fround(expected), message ?? `expected alpha ${expected}`);
+    }
+
+    /** The cached sub-batch whose id set is exactly `ids`. */
+    function subBatchFor(h: Harness, ids: number[]): BatchedMesh {
+        const found = [...sceneOf(h)['partialBatchCache'].values()].filter(
+            (b) => b.expressIds.length === ids.length && ids.every((id) => b.expressIds.includes(id)),
+        );
+        assert.strictEqual(found.length, 1, `expected exactly one sub-batch for {${ids}}`);
+        return found[0];
+    }
+
+    it('draws the named entity faded and its batchmate solid, in one frame', () => {
+        const h = makeHarness();
+        const { grey, red } = seedBatches(h);
+
+        // The reported case: one id in the caller's X-Ray set, and the grey
+        // batch holds a second, unrelated entity at the same colour.
+        h.render({ transparencyOverrides: new Map([[1, 0.18]]) });
+
+        assert.ok(!h.stats.draws.includes(grey.vertexBuffer),
+            'the mixed batch must not draw whole — that is what faded the batchmate');
+        const faded = subBatchFor(h, [1]);
+        const solid = subBatchFor(h, [2]);
+        assert.ok(h.stats.draws.includes(faded.vertexBuffer), 'the X-Rayed entity draws');
+        assert.ok(h.stats.draws.includes(solid.vertexBuffer), 'so does the entity nobody asked to fade');
+        assertAlpha(h, faded.uniformBuffer, 0.18);
+        assertAlpha(h, solid.uniformBuffer, 1, 'batchmate keeps the batch colour alpha');
+        assert.ok(h.stats.draws.includes(red.vertexBuffer), 'an untouched batch still draws whole');
+    });
+
+    it('leaves a batch alone when every entity in it is X-Rayed alike', () => {
+        const h = makeHarness();
+        const { grey } = seedBatches(h);
+
+        h.render({ transparencyOverrides: new Map([[1, 0.18], [2, 0.18]]) });
+
+        assert.strictEqual(sceneOf(h)['partialBatchCache'].size, 0, 'no sub-batch worth building');
+        assert.ok(h.stats.draws.includes(grey.vertexBuffer));
+        assertAlpha(h, grey.uniformBuffer, 0.18);
+    });
+
+    it('keeps a ghost-excepted entity solid without co-selecting it', () => {
+        const h = makeHarness();
+        const { grey } = seedBatches(h);
+
+        h.render({ ghostExceptIds: new Set([2]) });
+
+        assert.ok(!h.stats.draws.includes(grey.vertexBuffer));
+        assertAlpha(h, subBatchFor(h, [1]).uniformBuffer, DEFAULT_GHOST_ALPHA);
+        assertAlpha(h, subBatchFor(h, [2]).uniformBuffer, 1);
+    });
+
+    it('draws context ghosts with the ghost pipeline, and an X-Ray override with the transparent one', () => {
+        const h = makeHarness();
+        const { red } = seedBatches(h);
+        const pipelineOfDraw = (vertexBuffer: GPUBuffer): unknown => {
+            let pipeline: unknown = null;
+            let draw = 0;
+            for (const c of h.stats.commands) {
+                if (c.op === 'setPipeline') pipeline = c.pipeline;
+                if (c.op === 'drawIndexed' && h.stats.draws[draw++] === vertexBuffer) return pipeline;
+            }
+            return undefined;
+        };
+
+        h.render({ ghostExceptIds: new Set([2]) });
+        assert.strictEqual(pipelineOfDraw(subBatchFor(h, [1]).vertexBuffer), GHOST_PIPELINE, 'the ghosted batchmate');
+        assert.strictEqual(pipelineOfDraw(red.vertexBuffer), GHOST_PIPELINE, 'a wholly ghosted batch');
+        assert.strictEqual(pipelineOfDraw(subBatchFor(h, [2]).vertexBuffer), OPAQUE_PIPELINE, 'the excepted entity');
+
+        h.stats.commands.length = 0;
+        h.stats.draws.length = 0;
+        h.render({ transparencyOverrides: new Map([[1, 0.18]]) });
+        assert.strictEqual(pipelineOfDraw(subBatchFor(h, [1]).vertexBuffer), TRANSPARENT_PIPELINE, 'an override keeps full shading');
+    });
+
+    it('re-splits when the X-Ray set changes and frees the clones when it clears', () => {
+        const h = makeHarness();
+        const { grey } = seedBatches(h);
+        const scene = sceneOf(h);
+
+        h.render({ transparencyOverrides: new Map([[1, 0.18]]) });
+        const firstFaded = subBatchFor(h, [1]);
+        const firstVb = firstFaded.vertexBuffer as unknown as FakeBuffer;
+
+        // Same content, fresh Map: the epoch must NOT bump, so no rebuild.
+        const buffersAfterFirst = h.stats.createdBuffers.length;
+        h.render({ transparencyOverrides: new Map([[1, 0.18]]) });
+        assert.strictEqual(h.stats.createdBuffers.length, buffersAfterFirst, 'identical content rebuilt the split');
+        assert.strictEqual(subBatchFor(h, [1]), firstFaded);
+
+        // Move the X-Ray to the other entity: both slots re-key by content.
+        h.stats.draws.length = 0;
+        h.render({ transparencyOverrides: new Map([[2, 0.18]]) });
+        assertAlpha(h, subBatchFor(h, [2]).uniformBuffer, 0.18);
+        assertAlpha(h, subBatchFor(h, [1]).uniformBuffer, 1);
+        assert.strictEqual(firstVb.destroyed, 1, 'the superseded clone is freed exactly once');
+
+        // X-Ray off: the batch draws whole again and the clones are released.
+        h.stats.draws.length = 0;
+        h.render({});
+        assert.strictEqual(scene['partialBatchCache'].size, 0, 'X-Ray clones leaked past the last X-Ray frame');
+        assert.ok(h.stats.draws.includes(grey.vertexBuffer));
+        assertAlpha(h, grey.uniformBuffer, 1);
+        for (const buf of h.stats.createdBuffers) {
+            assert.ok(buf.destroyed <= 1, 'a VRAM-tracked buffer was destroyed more than once');
+        }
+    });
+
+    it('splits only the VISIBLE subset when hide/isolate is also active', () => {
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        const pipeline = h.renderer['pipeline'] as never;
+        scene.appendToBatches([triangle(1, GREY), triangle(2, GREY), triangle(3, GREY)], device, pipeline, false);
+        for (const b of scene.getBatchedMeshes()) b.bounds = undefined;
+
+        h.render({ hiddenIds: new Set([3]), transparencyOverrides: new Map([[1, 0.18]]) });
+
+        assertAlpha(h, subBatchFor(h, [1]).uniformBuffer, 0.18);
+        assertAlpha(h, subBatchFor(h, [2]).uniformBuffer, 1);
+        assert.strictEqual(scene['partialBatchCache'].size, 2, 'the hidden id must not reach either sub-batch');
+    });
+
+    it('draws every faded sub-batch after every solid one, so no ghost is painted over', () => {
+        // A ghost writes no depth, so an opaque draw that lands after it covers
+        // it completely. With two split batches in one frame the naive order
+        // (per parent) interleaves them; the pass has to be split by routing.
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        const pipeline = h.renderer['pipeline'] as never;
+        scene.appendToBatches(
+            [triangle(1, GREY), triangle(2, GREY), triangle(3, RED), triangle(4, RED)],
+            device, pipeline, false,
+        );
+        for (const b of scene.getBatchedMeshes()) b.bounds = undefined;
+
+        h.render({ transparencyOverrides: new Map([[1, 0.18], [3, 0.18]]) });
+
+        // "No solid draw lands after any ghost" = max(every solid index) <
+        // min(every faded index). The solid side therefore has to measure its
+        // LAST draw: with indexOf, a solid buffer recorded twice (early and
+        // late) would report the early index and the assertion would pass while
+        // a late opaque draw erased the ghost — failing open.
+        const first = (ids: number[]) => h.stats.draws.indexOf(subBatchFor(h, ids).vertexBuffer);
+        const last = (ids: number[]) => h.stats.draws.lastIndexOf(subBatchFor(h, ids).vertexBuffer);
+        const lastSolid = Math.max(last([2]), last([4]));
+        const firstFaded = Math.min(first([1]), first([3]));
+        assert.ok(firstFaded >= 0 && lastSolid >= 0, 'every sub-batch drew');
+        assert.ok(lastSolid < firstFaded, 'a solid sub-batch drew after a ghost and would erase it');
+    });
+
+    it('resolves X-Ray once per X-Ray edit, not once per frame', () => {
+        // The resolution walks every id of every batch, which an orbit would
+        // otherwise repeat each frame for an X-Ray that has not changed.
+        const h = makeHarness();
+        const { grey } = seedBatches(h);
+
+        h.render({ ghostExceptIds: new Set([2]) });
+        const first = h.renderer['_xrayAlpha'];
+        assert.ok(first !== null);
+
+        h.render({ ghostExceptIds: new Set([2]) });
+        assert.strictEqual(h.renderer['_xrayAlpha'], first, 'identical content resolved X-Ray again');
+
+        h.render({ ghostExceptIds: new Set([1]) });
+        assert.notStrictEqual(h.renderer['_xrayAlpha'], first, 'a changed X-Ray kept the old resolution');
+        assert.ok(!h.stats.draws.includes(grey.vertexBuffer));
+        assertAlpha(h, subBatchFor(h, [2]).uniformBuffer, DEFAULT_GHOST_ALPHA);
+        assertAlpha(h, subBatchFor(h, [1]).uniformBuffer, 1);
+    });
+
+    it('holds the X-Ray it resolved when the caller later mutates a set it has replaced', () => {
+        // The tracker compares the set passed THIS frame with its own copy, so
+        // the resolution it keeps must not read a set the caller still owns.
+        // A batch already resolved keeps its answer, so the stale read shows on
+        // the next batch the resolution meets: here, one rebuilt by new geometry.
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        const pipeline = h.renderer['pipeline'] as never;
+        scene.appendToBatches([triangle(1, GREY), triangle(2, GREY)], device, pipeline, false);
+        for (const b of scene.getBatchedMeshes()) b.bounds = undefined;
+        const ghostA = new Set([2]);
+        const selectedA = new Set<number>();
+
+        h.render({ ghostExceptIds: ghostA, selectedIds: selectedA });
+        h.render({ ghostExceptIds: new Set([2]), selectedIds: new Set<number>() });
+        ghostA.clear();
+        selectedA.add(1);
+        scene.appendToBatches([triangle(3, GREY)], device, pipeline, false);
+        for (const b of scene.getBatchedMeshes()) b.bounds = undefined;
+        h.render({ ghostExceptIds: new Set([2]), selectedIds: new Set<number>() });
+
+        assertAlpha(h, subBatchFor(h, [1, 3]).uniformBuffer, DEFAULT_GHOST_ALPHA);
+        assertAlpha(h, subBatchFor(h, [2]).uniformBuffer, 1);
+    });
+
+    it('re-splits when SELECTION changes, since selection exempts an entity from fading', () => {
+        // Selection is an input to the split (a selected entity is exempt), so it
+        // has to reach the sub-batch cache epoch. It did not: the epoch fast path
+        // returns a cached clone without ever looking at the id set it was asked
+        // for, so the slots kept their old membership. User-visible as: X-Ray an
+        // element, select it, deselect it — and it stays solid.
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        const pipeline = h.renderer['pipeline'] as never;
+        scene.appendToBatches(
+            [triangle(1, GREY), triangle(2, GREY), triangle(3, GREY)], device, pipeline, false,
+        );
+        for (const b of scene.getBatchedMeshes()) b.bounds = undefined;
+        const overrides = () => new Map([[1, 0.18], [2, 0.18]]);
+
+        // Entity 1 selected → exempt → it belongs to the SOLID group.
+        h.render({ transparencyOverrides: overrides(), selectedIds: new Set([1]) });
+        assertAlpha(h, subBatchFor(h, [2]).uniformBuffer, 0.18);
+        assertAlpha(h, subBatchFor(h, [1, 3]).uniformBuffer, 1);
+
+        // Deselect: entity 1 is X-Rayed again and must rejoin the faded group.
+        h.render({ transparencyOverrides: overrides() });
+        assertAlpha(h, subBatchFor(h, [1, 2]).uniformBuffer, 0.18);
+        assertAlpha(h, subBatchFor(h, [3]).uniformBuffer, 1);
+    });
+
+    it('frees the sub-batch slots of a batch that stops splitting while X-Ray stays on', () => {
+        // The clones live outside the GPU residency budget, and the wholesale
+        // drop only fires once hide/isolate AND X-Ray are all off — so a batch
+        // that stops needing a split mid-session used to pin its slots for the
+        // rest of that session.
+        const h = makeHarness();
+        const { grey } = seedBatches(h);
+        const scene = sceneOf(h);
+
+        h.render({ transparencyOverrides: new Map([[1, 0.18]]) });
+        const faded = subBatchFor(h, [1]);
+        const solid = subBatchFor(h, [2]);
+        assert.strictEqual(scene['partialBatchCache'].size, 2);
+
+        // Move the X-Ray onto the OTHER batch: grey is uniform again and draws
+        // whole, so neither of its slots can ever be revisited.
+        h.render({ transparencyOverrides: new Map([[3, 0.18]]) });
+
+        assert.ok(h.stats.draws.includes(grey.vertexBuffer), 'the un-split batch draws whole again');
+        assert.strictEqual((faded.vertexBuffer as unknown as FakeBuffer).destroyed, 1, 'orphaned slot leaked');
+        assert.strictEqual((solid.vertexBuffer as unknown as FakeBuffer).destroyed, 1, 'orphaned slot leaked');
+        assert.ok(
+            ![...scene['partialBatchCache'].values()].some((b) => b === faded || b === solid),
+            'a retired clone must not stay reachable in the cache',
+        );
+    });
+
+    it('frees a batch\'s sub-batch clones when the batch itself is rebuilt', () => {
+        // Every other path that destroys a parent batch clears the partial cache
+        // (residency eviction drops that batch's slots; finalize/release/clear
+        // drop all of them). A bucket rebuild did not, and a rebuilt batch gets a
+        // NEW id — which is baked into its slot keys — so the old slots became
+        // unreachable with their GPU buffers still alive. Reachable whenever more
+        // geometry lands in a bucket while hide/isolate is on: a federated model
+        // add, or a late chunk of the same one.
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        const pipeline = h.renderer['pipeline'] as never;
+        scene.appendToBatches([triangle(1, GREY), triangle(2, GREY)], device, pipeline, false);
+        for (const b of scene.getBatchedMeshes()) b.bounds = undefined;
+
+        h.render({ hiddenIds: new Set([2]) });
+        assert.strictEqual(scene['partialBatchCache'].size, 1, 'setup: a clone exists for the visible subset');
+        const clone = [...scene['partialBatchCache'].values()][0] as BatchedMesh;
+        const cloneVb = clone.vertexBuffer as unknown as FakeBuffer;
+
+        // More geometry into the SAME bucket → the parent batch is rebuilt.
+        scene.appendToBatches([triangle(3, GREY)], device, pipeline, false);
+
+        assert.strictEqual(cloneVb.destroyed, 1, 'the rebuilt parent left its sub-batch clone pinned');
+        assert.ok(
+            ![...scene['partialBatchCache'].values()].some((b) => b === clone),
+            'a freed clone must not stay reachable in the cache',
+        );
+    });
+
+    it('falls back to the whole batch when its geometry cannot be partitioned', () => {
+        // A colour-merged piece carries many entities in ONE MeshData tagged per
+        // vertex, so it cannot be handed to one subset without handing it to the
+        // other too. The documented degradation is the pre-#4129 fade, never
+        // missing or double-drawn geometry.
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        const pipeline = h.renderer['pipeline'] as never;
+        const merged = triangle(1, GREY) as MeshData & { entityIds: Uint32Array };
+        merged.entityIds = new Uint32Array([1, 1, 1]);
+        scene.appendToBatches([merged, triangle(2, GREY)], device, pipeline, false);
+        const batch = scene.getBatchedMeshes()[0];
+        batch.bounds = undefined;
+        assert.strictEqual(scene.canPartitionBatch(batch), false);
+
+        h.render({ transparencyOverrides: new Map([[1, 0.18]]) });
+
+        assert.strictEqual(scene['partialBatchCache'].size, 0);
+        assert.ok(h.stats.draws.includes(batch.vertexBuffer), 'geometry must not go missing');
+        assertAlpha(h, batch.uniformBuffer, 0.18, 'batch-wide minimum, as documented');
+    });
+});
+
+const UNIT_BOUNDS = { min: { x: -1, y: -1, z: -1 }, max: { x: 1, y: 1, z: 1 } };
+
+// The sun shadow depth pre-pass is opt-in (RenderOptions.sunShadows). These
+// drive the REAL render() loop and read the encoded pass labels, so "no shadow
+// pass was encoded" is actually observed rather than assumed — the gap the
+// #2670 review flagged (the label lived only in shadow-pass.ts, in no test).
+describe('sun shadow pass (#2670 review)', () => {
+    it('encodes no shadow-depth-pass on the default off path', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.renderer.setModelBounds(UNIT_BOUNDS);
+        h.render(); // sunShadows absent → off
+        assert.ok(
+            !h.stats.passes.includes('shadow-depth-pass'),
+            'the zero-cost off path must not encode the depth pre-pass',
+        );
+        assert.strictEqual(h.renderer['shadowPass'], null, 'no ShadowPass constructed while off');
+    });
+
+    it('encodes exactly one shadow-depth-pass when enabled', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.renderer.setModelBounds(UNIT_BOUNDS);
+        h.render({ sunShadows: { enabled: true } });
+        assert.strictEqual(
+            h.stats.passes.filter((l) => l === 'shadow-depth-pass').length,
+            1,
+            'enabling shadows must encode the depth pre-pass exactly once',
+        );
+    });
+
+    it('frees the depth texture and stops encoding the pass on toggle-off', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.renderer.setModelBounds(UNIT_BOUNDS);
+        h.render({ sunShadows: { enabled: true } });
+        const freedBefore = h.stats.destroyedTextures.filter((l) => l === 'shadow-depth').length;
+
+        h.stats.passes.length = 0;
+        h.render({ sunShadows: { enabled: false } });
+
+        assert.ok(
+            !h.stats.passes.includes('shadow-depth-pass'),
+            'the toggle-off frame must not encode the depth pass',
+        );
+        assert.strictEqual(
+            h.stats.destroyedTextures.filter((l) => l === 'shadow-depth').length,
+            freedBefore + 1,
+            'toggle-off must release the depth texture, not hold it for the session',
+        );
+        assert.strictEqual(
+            h.renderer['shadowPass'],
+            null,
+            'ShadowPass is nulled so a later re-enable reconstructs it lazily',
+        );
+    });
+});
+
+describe('rendered clipping query for exact correspondence picking (#4381)', () => {
+    it('reports actual section, terrain and box clipping and clears on an unclipped frame', async () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.render();
+        assert.equal(h.renderer.hasActiveClipping(), false);
+        h.render({ sectionPlane: { enabled: true, axis: 'down', position: 50 } });
+        assert.equal(h.renderer.hasActiveClipping(), true);
+        h.render({ sectionPlane: { enabled: false, axis: 'down', position: 50 } });
+        assert.equal(h.renderer.hasActiveClipping(), false);
+        h.render({ terrainClipY: 0 });
+        assert.equal(h.renderer.hasActiveClipping(), true, 'zero is an active terrain elevation');
+        const clipBox = { enabled: true, min: [0,0,0] as [number,number,number], max: [1,1,1] as [number,number,number] };
+        h.render({ clipBox });
+        clipBox.enabled = false;
+        assert.equal(h.renderer.hasActiveClipping(), true, 'query describes the rendered snapshot, not mutated options');
+        h.render({ clipBox });
+        assert.equal(h.renderer.hasActiveClipping(), false);
+        await h.settle();
+        h.renderer.destroy();
+    });
+});
+
+// Ambient occlusion (#5384) is `visualEnhancement.contactShading`. These drive
+// the real render() loop and read the encoded pass labels and the textures the
+// frame allocates, so "AO ran at half resolution" is observed, not assumed.
+describe('ambient occlusion post pass (#5384)', () => {
+    const AO_PASSES = ['ao', 'ao-blur-h', 'ao-blur-v', 'ao-composite'];
+    const aoFrame = (quality: 'off' | 'low' | 'high'): RenderOptions => ({
+        visualEnhancement: {
+            enabled: true,
+            contactShading: { quality, intensity: 0.8, radius: 1 },
+            separationLines: { enabled: false },
+        },
+    });
+    const aoTargets = (h: Harness) => h.stats.textures.filter((t) => t.label === 'ao-target' || t.label === 'ao-scratch');
+
+    it('encodes AO, a separable blur and the composite after the scene pass', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.render(aoFrame('low'));
+        const firstAo = h.stats.passes.indexOf('ao');
+        assert.ok(firstAo > 0, `expected the AO passes after the scene pass, got ${JSON.stringify(h.stats.passes)}`);
+        assert.deepStrictEqual(h.stats.passes.slice(firstAo, firstAo + 4), AO_PASSES);
+    });
+
+    it('works at half resolution on low and full resolution on high', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.render(aoFrame('low'));
+        assert.deepStrictEqual(
+            aoTargets(h).map((t) => [t.width, t.height]),
+            [[128, 128], [128, 128]],
+            'the 256 px canvas gets 128 px AO and blur targets',
+        );
+        h.stats.textures.length = 0;
+        h.render(aoFrame('high'));
+        assert.deepStrictEqual(aoTargets(h).map((t) => [t.width, t.height]), [[256, 256], [256, 256]]);
+        assert.ok(h.stats.destroyedTextures.includes('ao-target'), 'the half-resolution target is released on the switch');
+    });
+
+    it('allocates nothing while off and releases its targets when switched off', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.render(aoFrame('off'));
+        assert.ok(!h.stats.passes.includes('ao'), 'no AO pass while off');
+        assert.deepStrictEqual(aoTargets(h), [], 'no AO targets while off');
+
+        h.render(aoFrame('low'));
+        assert.ok(h.stats.passes.includes('ao'));
+        h.stats.passes.length = 0;
+        h.render(aoFrame('off'));
+        assert.ok(!h.stats.passes.includes('ao'), 'the toggle-off frame must not encode AO');
+        assert.deepStrictEqual(
+            h.stats.destroyedTextures.filter((l) => l === 'ao-target' || l === 'ao-scratch').sort(),
+            ['ao-scratch', 'ao-target'],
+            'toggle-off must release the screen-sized targets, not hold them for the session',
+        );
+    });
+
+    it('keeps its targets across frames of the same size and quality', () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.render(aoFrame('low'));
+        h.render(aoFrame('low'));
+        assert.strictEqual(aoTargets(h).length, 2, 'targets are created once, not per frame');
+        assert.strictEqual(h.stats.passes.filter((l) => l === 'ao-composite').length, 2);
+    });
+
+    it('releases its targets when the renderer is destroyed', async () => {
+        const h = makeHarness();
+        seedBatches(h);
+        h.render(aoFrame('low'));
+        await h.settle();
+        h.renderer.destroy();
+        assert.deepStrictEqual(
+            h.stats.destroyedTextures.filter((l) => l === 'ao-target' || l === 'ao-scratch').sort(),
+            ['ao-scratch', 'ao-target'],
+        );
+    });
+});
+
+/**
+ * #5623 review — the textured draw path called `packMeshMaterial(tpl)` with
+ * neither the authored alpha nor `tm.material`, so every textured mesh
+ * silently got the opaque-dielectric default no matter what it was authored
+ * as. Fixed to `packMeshMaterial(tpl, tm.color[3], tm.material)`, matching
+ * the flat/batched call sites. Asserted at the level that actually caught the
+ * bug: the material row of the uniform buffer the real render() loop writes
+ * for a textured draw, not the source text of the call site.
+ */
+describe('the textured draw path passes authored alpha and material to packMeshMaterial (#5623 review)', () => {
+    function seedTextured(h: Harness, meshes: MeshData[]) {
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        const pipeline = h.renderer['pipeline'] as never;
+        scene.appendToBatches(meshes, device, pipeline, false);
+        return scene.getTexturedMeshes();
+    }
+
+    /** The material row (metallic, roughness, transmission flag) of the uniform written for `tm`. */
+    function materialRowFor(h: Harness, uniformBuffer: unknown): number[] | null {
+        const at = MESH_UNIFORM_OFFSET.metallicRoughness;
+        for (let i = h.stats.writes.length - 1; i >= 0; i--) {
+            const w = h.stats.writes[i];
+            if (w.buffer === uniformBuffer && w.floats.length > at + 3) {
+                return [w.floats[at], w.floats[at + 1], w.floats[at + 2]];
+            }
+        }
+        return null;
+    }
+
+    it('gives an opaque textured mesh the default dielectric', () => {
+        const h = makeHarness();
+        const textured = seedTextured(h, [texturedTriangle(1)]);
+
+        h.stats.writes.length = 0;
+        h.render();
+
+        const row = materialRowFor(h, textured[0].uniformBuffer);
+        assert.ok(row, 'expected the textured draw to write the material row');
+        assert.equal(row![1], Math.fround(0.9), 'roughness: default dielectric');
+        assert.equal(row![2], 0, 'transmission flag: not glass');
+    });
+
+    it('gives a textured mesh with an authored translucent tint the glass roughness and transmission flag, not the opaque default', () => {
+        const h = makeHarness();
+        const mesh = texturedTriangle(1);
+        mesh.color = [1, 1, 1, 0.4]; // translucent authored tint
+        const textured = seedTextured(h, [mesh]);
+        assert.strictEqual(textured.length, 1);
+
+        h.stats.writes.length = 0;
+        h.render();
+
+        const row = materialRowFor(h, textured[0].uniformBuffer);
+        assert.ok(row, 'expected the textured draw to write the material row');
+        // Before the fix this was 0.9 / 0 (the opaque default), because
+        // packMeshMaterial(tpl) never saw the authored alpha at all.
+        assert.equal(row![1], Math.fround(0.05), 'roughness: expected GLASS_ROUGHNESS from the authored alpha');
+        assert.equal(row![2], 1, 'transmission flag: expected glass from the authored alpha');
+    });
+
+    it('reads a material attached to the textured mesh, once one is set, the same way the flat/batched paths read mesh.material', () => {
+        // Nothing wires this from MeshData yet (#5582: IFC-authored specular is
+        // not extracted). This proves the DRAW PATH reads `tm.material` at
+        // all — the exact argument the #5623 review found silently dropped —
+        // independent of who eventually populates it.
+        const h = makeHarness();
+        const textured = seedTextured(h, [texturedTriangle(1)]);
+        (textured[0] as { material?: unknown }).material = { baseColor: [1, 1, 1, 1], metallic: 0.8, roughness: 0.2 };
+
+        h.stats.writes.length = 0;
+        h.render();
+
+        const row = materialRowFor(h, textured[0].uniformBuffer);
+        assert.ok(row, 'expected the textured draw to write the material row');
+        assert.equal(row![0], Math.fround(0.8), 'metallic override reaches the uniform');
+        assert.equal(row![1], Math.fround(0.2), 'roughness override reaches the uniform');
+    });
+});
+
+describe('colour overrides shade from the entity colour table, not overlay copies (#6076)', () => {
+    const BLUE: [number, number, number, number] = [0.125, 0.25, 0.875, 1]; // f32-exact: the table stores f32
+    const GREEN: [number, number, number, number] = [0.125, 0.875, 0.25, 1];
+
+    /** overrideParams (x = anchor, y = mode bits) of the LAST uniform write into `buffer`. */
+    function overrideLanes(h: Harness, buffer: GPUBuffer | undefined): number[] | null {
+        const write = h.stats.writes.filter((w) => w.buffer === buffer).at(-1);
+        if (!write) return null;
+        return [...new Uint32Array(write.floats.buffer, MESH_UNIFORM_OFFSET.overrideParams * 4, 4)];
+    }
+
+    /** The pipeline bound when the draw that used `vertexBuffer` fired. */
+    function pipelineOfDraw(h: Harness, vertexBuffer: GPUBuffer): unknown {
+        let pipeline: unknown = null;
+        let draw = 0;
+        for (const c of h.stats.commands) {
+            if (c.op === 'setPipeline') pipeline = c.pipeline;
+            if (c.op === 'drawIndexed' && h.stats.draws[draw++] === vertexBuffer) return pipeline;
+        }
+        return undefined;
+    }
+
+    function setOverrides(h: Harness, overrides: Map<number, [number, number, number, number]>): void {
+        sceneOf(h).setColorOverrides(overrides, h.renderer['device'].getDevice(), h.renderer['pipeline']!);
+    }
+
+    it('allocates and uploads nothing but the table, and adds no draw calls', async () => {
+        const { OVERRIDE_PARAM_PAINT, OVERRIDE_PARAM_EMPHASIZE } = await requireColorTable();
+        const h = makeHarness();
+        const { grey, red } = seedBatches(h);
+        h.render();
+        const baseline = h.renderer.getFrameStats()?.drawCalls;
+        assert.ok(baseline !== undefined && baseline > 0, 'sanity: the batches drew');
+
+        const createdBefore = h.stats.createdBuffers.length;
+        h.stats.writes.length = 0;
+        setOverrides(h, new Map([[1, BLUE], [3, BLUE]]));
+        const created = h.stats.createdBuffers.slice(createdBefore);
+        assert.equal(created.length, 1, 'no overlay vertex/index/uniform buffers');
+        assert.equal(h.stats.writes.length, 1, 'one upload');
+
+        h.stats.writes.length = 0;
+        h.stats.commands.length = 0;
+        h.stats.draws.length = 0;
+        h.render();
+        assert.equal(h.renderer.getFrameStats()?.drawCalls, baseline, 'the same draw calls as without overrides');
+        const table = sceneOf(h).getEntityColorTable().getBuffer();
+        assert.equal(created[0], table, 'the one allocation is the colour table');
+        assert.equal(h.stats.boundColorTables.at(-1), table, 'the frame binds the scene table at group(1)');
+        assert.deepEqual(overrideLanes(h, red.uniformBuffer), [3, OVERRIDE_PARAM_PAINT, 0, 0], 'red batch paints from its anchor');
+        assert.deepEqual(overrideLanes(h, grey.uniformBuffer), [1, OVERRIDE_PARAM_PAINT, 0, 0], 'grey batch paints from its anchor');
+
+        h.render({ emphasizeOverrides: true });
+        assert.deepEqual(overrideLanes(h, red.uniformBuffer), [3, OVERRIDE_PARAM_PAINT | OVERRIDE_PARAM_EMPHASIZE, 0, 0], 'emphasizeOverrides reaches the draw');
+    });
+
+    it('holds the colour at the entity slot, and clearing empties the table without touching a batch', async () => {
+        const { lookupEntityColor } = await requireColorTable();
+        const h = makeHarness();
+        const { grey } = seedBatches(h);
+        setOverrides(h, new Map([[2, GREEN]]));
+        const image = sceneOf(h).getEntityColorTable().getImage();
+        assert.deepEqual(lookupEntityColor(image, 2), GREEN);
+        assert.equal(lookupEntityColor(image, 1), null);
+        assert.equal(lookupEntityColor(image, 3), null);
+
+        const createdBefore = h.stats.createdBuffers.length;
+        h.stats.writes.length = 0;
+        sceneOf(h).clearColorOverrides();
+        assert.equal(h.stats.createdBuffers.length, createdBefore, 'clearing allocates nothing');
+        const table = sceneOf(h).getEntityColorTable().getBuffer();
+        assert.deepEqual(h.stats.writes.map((w) => w.buffer), [table], 'clearing rewrites only the table');
+        assert.deepEqual([...new Uint32Array(h.stats.writes[0].floats.buffer)], [0, 0, 0, 0], 'header reset: count 0');
+        assert.equal(lookupEntityColor(sceneOf(h).getEntityColorTable().getImage(), 2), null);
+
+        h.stats.writes.length = 0;
+        h.render();
+        assert.deepEqual(overrideLanes(h, grey.uniformBuffer), [0, 0, 0, 0], 'nothing to paint after clearing');
+    });
+
+    it('keeps colour overrides available after CPU geometry is released (#6148 review)', async () => {
+        const { lookupEntityColor, OVERRIDE_PARAM_PAINT } = await requireColorTable();
+        const h = makeHarness();
+        const { grey } = seedBatches(h);
+        const scene = sceneOf(h);
+        scene.releaseGeometryData();
+        assert.equal(scene.isGeometryDataReleased(), true);
+
+        setOverrides(h, new Map([[2, GREEN]]));
+        assert.deepEqual(lookupEntityColor(scene.getEntityColorTable().getImage(), 2), GREEN);
+        h.render();
+        assert.deepEqual(overrideLanes(h, grey.uniformBuffer), [1, OVERRIDE_PARAM_PAINT, 0, 0]);
+    });
+
+    it('paints a mesh that streams in AFTER the override without another setColorOverrides call', async () => {
+        const { lookupEntityColor, OVERRIDE_PARAM_PAINT } = await requireColorTable();
+        const h = makeHarness();
+        seedBatches(h);
+        setOverrides(h, new Map([[9, GREEN]]));
+        const createdAfterOverride = h.stats.createdBuffers.length;
+        const scene = sceneOf(h);
+        scene.appendToBatches([triangle(9, [0.3, 0.3, 0.3, 1])], h.renderer['device'].getDevice(), h.renderer['pipeline']!, false);
+        const late = scene.getBatchedMeshes().find((b) => b.expressIds.includes(9));
+        assert.ok(late, 'sanity: the late mesh is batched');
+        late.bounds = undefined;
+        const table: unknown = scene.getEntityColorTable().getBuffer();
+        assert.ok(
+            h.stats.createdBuffers.slice(createdAfterOverride).every((b) => b !== table),
+            'the table is not rebuilt for the late mesh',
+        );
+
+        h.stats.writes.length = 0;
+        h.render();
+        assert.deepEqual(overrideLanes(h, late.uniformBuffer), [9, OVERRIDE_PARAM_PAINT, 0, 0]);
+        assert.deepEqual(lookupEntityColor(scene.getEntityColorTable().getImage(), 9), GREEN);
+    });
+
+    it('paints entities of one bucket whose ids span 2^24, and still promotes them (#6076 review)', async () => {
+        const { ENTITY_LANE_ID_SPAN, OVERRIDE_PARAM_PAINT, lookupEntityColor, resolveLaneEntityId } = await requireColorTable();
+        // Same model, colour and cell: before page-keyed buckets these two
+        // shared one batch whose ids span more than 2^24, the anchor was
+        // refused, and both drew unpainted — while routing still promoted them.
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const low = 10;
+        const high = 10 + ENTITY_LANE_ID_SPAN + 100;
+        const glass: [number, number, number, number] = [0.6, 0.8, 0.9, 0.4];
+        scene.appendToBatches([triangle(low, glass), triangle(high, glass)], h.renderer['device'].getDevice(), h.renderer['pipeline']!, false);
+        const batches = scene.getBatchedMeshes();
+        for (const b of batches) b.bounds = undefined;
+        setOverrides(h, new Map([[low, [1, 0, 0, 1]], [high, [1, 0, 0, 1]]]));
+        h.render();
+        for (const id of [low, high]) {
+            const batch = batches.find((b) => b.expressIds.includes(id));
+            assert.ok(batch, `batch for ${id}`);
+            assert.deepEqual(overrideLanes(h, batch.uniformBuffer), [Math.min(...batch.expressIds), OVERRIDE_PARAM_PAINT, 0, 0], `${id} paints`);
+            assert.equal(resolveLaneEntityId(Math.min(...batch.expressIds), id & 0xFFFFFF), id, `${id} resolves to itself`);
+            assert.deepEqual(lookupEntityColor(scene.getEntityColorTable().getImage(), id), [1, 0, 0, 1]);
+            assert.equal(pipelineOfDraw(h, batch.vertexBuffer), OPAQUE_PIPELINE, `${id} is promoted to opaque`);
+        }
+    });
+
+    for (const [label, finalize] of [
+        ['finalizeStreaming', (s: Scene, d: GPUDevice, p: RenderPipeline) => { s.finalizeStreaming(d, p); }],
+        ['finalizeStreamingAsync', (s: Scene, d: GPUDevice, p: RenderPipeline) => s.finalizeStreamingAsync(d, p)],
+    ] as const) {
+        it(`paints the batch ${label} installs after a mid-stream override, with no re-apply`, async () => {
+            const { OVERRIDE_PARAM_PAINT } = await requireColorTable();
+            const h = makeHarness();
+            const scene = sceneOf(h);
+            const device = h.renderer['device'].getDevice();
+            const pipeline = h.renderer['pipeline']!;
+            scene.appendToBatches([triangle(11, GREY), triangle(12, GREY)], device, pipeline, true);
+            setOverrides(h, new Map([[12, GREEN]]));
+            const table = scene.getEntityColorTable().getBuffer();
+            await finalize(scene, device, pipeline);
+            const finalBatch = scene.getBatchedMeshes().find((b) => b.expressIds.includes(12));
+            assert.ok(finalBatch, 'finalized batch holds entity 12');
+            finalBatch.bounds = undefined;
+            assert.equal(scene.getEntityColorTable().getBuffer(), table, 'finalize does not touch the table');
+            h.stats.writes.length = 0;
+            h.render();
+            assert.deepEqual(overrideLanes(h, finalBatch.uniformBuffer), [11, OVERRIDE_PARAM_PAINT, 0, 0]);
+        });
+    }
+
+    it('keeps the opaque promotion of a transparent entity with an override at alpha >= 0.2, and paints only there', async () => {
+        const { OVERRIDE_PARAM_PAINT } = await requireColorTable();
+        const h = makeHarness();
+        const scene = sceneOf(h);
+        const glass: [number, number, number, number] = [0.6, 0.8, 0.9, 0.4];
+        scene.appendToBatches([triangle(4, glass), triangle(5, [0.2, 0.7, 0.3, 0.4])], h.renderer['device'].getDevice(), h.renderer['pipeline']!, false);
+        const batches = scene.getBatchedMeshes();
+        for (const b of batches) b.bounds = undefined;
+        const promoted = batches.find((b) => b.expressIds.includes(4));
+        const ghost = batches.find((b) => b.expressIds.includes(5));
+        assert.ok(promoted && ghost && promoted !== ghost, 'sanity: two colour batches');
+
+        // 0.5 is a deliberate colour: promoted to the opaque pipeline and painted.
+        // 0.15 is ghost-tier: stays transparent, and a transparent draw never paints.
+        setOverrides(h, new Map([[4, [1, 0, 0, 0.5]], [5, [1, 0, 0, 0.15]]]));
+        h.render();
+        assert.equal(pipelineOfDraw(h, promoted.vertexBuffer), OPAQUE_PIPELINE, 'alpha >= 0.2 override promotes to opaque');
+        assert.deepEqual(overrideLanes(h, promoted.uniformBuffer), [4, OVERRIDE_PARAM_PAINT, 0, 0]);
+        assert.equal(pipelineOfDraw(h, ghost.vertexBuffer), TRANSPARENT_PIPELINE, 'ghost-tier override stays transparent');
+        assert.deepEqual(overrideLanes(h, ghost.uniformBuffer), [0, 0, 0, 0], 'a transparent draw is not painted');
+    });
+});
+
+/**
+ * #5746: the derivative edge darkening in `main.wgsl.ts` read flags.z (enabled)
+ * and flags.w (intensity x 1000) off every mesh uniform. It is gone, the edge
+ * pass (#5385) is the one edge source, and the two lanes stay in the struct
+ * only for layout. `edgeContrast` is still accepted, so a caller passing it
+ * must not put anything back into those lanes on any draw path.
+ */
+describe('mesh uniforms leave the freed edge lanes zero (#5746)', () => {
+    const FLAGS = MESH_UNIFORM_OFFSET.flags;
+
+    /** flags as u32 for every write that landed on one of `buffers`. */
+    function flagsWrittenTo(h: Harness, buffers: Set<unknown>): Uint32Array[] {
+        return h.stats.writes
+            .filter((w) => buffers.has(w.buffer) && w.floats.length >= FLAGS + 4)
+            .map((w) => new Uint32Array(w.floats.buffer, w.floats.byteOffset + FLAGS * 4, 4));
+    }
+
+    it('batched, selected-individual and textured draws write 0 to flags.z and flags.w with edgeContrast on', () => {
+        const h = makeHarness();
+        const { grey, red } = seedBatches(h);
+        const scene = sceneOf(h);
+        const device = h.renderer['device'].getDevice();
+        scene.appendToBatches([texturedTriangle(9)], device, h.renderer['pipeline'] as never, false);
+        const textured = scene.getTexturedMeshes();
+        assert.strictEqual(textured.length, 1);
+
+        h.stats.writes.length = 0;
+        // Post passes stay off (the stub GPU has no textures for them); the
+        // mesh uniforms are what the old edge block read.
+        h.render({
+            selectedId: 1,
+            visualEnhancement: {
+                enabled: true,
+                edgeContrast: { enabled: true, intensity: 3 },
+                contactShading: { quality: 'off' },
+                separationLines: { enabled: false },
+            },
+        });
+
+        const selected = scene.getMeshes().filter((m) => m.hydrated && m.expressId === 1);
+        assert.strictEqual(selected.length, 1, 'selection hydrates an individual mesh');
+        const buffers = new Set<unknown>([
+            grey.uniformBuffer, red.uniformBuffer, textured[0].uniformBuffer, selected[0].uniformBuffer,
+        ]);
+        const flags = flagsWrittenTo(h, buffers);
+        assert.ok(flags.length >= 4, `expected a uniform write per draw, got ${flags.length}`);
+        // Positive control: the lanes are read at the right offset, because
+        // the selected mesh's flags.x carries its selection bit.
+        assert.ok(
+            flagsWrittenTo(h, new Set([selected[0].uniformBuffer])).some((f) => (f[0] & 1) === 1),
+            'selected mesh uniform carries flags.x bit 0',
+        );
+        for (const f of flags) {
+            assert.strictEqual(f[2], 0, 'flags.z (was edgeEnabled) must stay 0');
+            assert.strictEqual(f[3], 0, 'flags.w (was edgeIntensityMilli) must stay 0');
+        }
+    });
+});

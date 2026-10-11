@@ -1,0 +1,70 @@
+{
+  "name": "@ifc-lite/server-bin",
+  "version": "2.0.0",
+  "description": "Pre-built IFC-Lite server binary - run without Docker or Rust",
+  "type": "module",
+  "bin": {
+    "ifc-lite-server": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm exec tsc",
+    "typecheck": "node ../../scripts/typecheck-tests.mjs",
+    "dev": "pnpm exec tsc --watch",
+    "test": "vitest run",
+    "start": "node dist/cli.js",
+    "postinstall": "node -e \"import('./dist/postinstall.js').catch(() => {})\" || true"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "tar": "^7.5.20"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "license": "MPL-2.0",
+  "author": "Louis True",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LTplus-AG/ifc-lite.git",
+    "directory": "packages/server-bin"
+  },
+  "homepage": "https://ifclite.dev/docs/",
+  "bugs": "https://github.com/LTplus-AG/ifc-lite/issues",
+  "keywords": [
+    "ifc",
+    "bim",
+    "server",
+    "binary",
+    "cli",
+    "aec"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,52 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/// <reference types="vite/client" />
+/// <reference types="unplugin-icons/types/react" />
+
+interface ImportMetaEnv {
+  /** 'docs' builds the documentation-only edition (`src/edition.ts`); anything else, the full app. */
+  readonly VITE_EDITION?: string;
+  /** Same-origin cookie-backed Dropbox and Microsoft cloud sign-in. */
+  readonly VITE_CLOUD_HOSTED?: string;
+  readonly VITE_AUTODESK_CLIENT_ID?: string;
+  readonly VITE_AUTODESK_HOSTED?: string;
+  /** Server URL for IFC processing (also used by superset integration) */
+  readonly VITE_IFC_SERVER_URL?: string;
+  /** Alternative server URL env var */
+  readonly VITE_SERVER_URL?: string;
+  /** Set to 'true' to route IFC loading through server instead of client-side WASM */
+  readonly VITE_USE_SERVER?: string;
+  /** Comma-separated free-tier model IDs */
+  readonly VITE_LLM_FREE_MODELS?: string;
+  /** Comma-separated model IDs that support image inputs */
+  readonly VITE_LLM_IMAGE_MODELS?: string;
+  /** Comma-separated model IDs that support file attachment context */
+  readonly VITE_LLM_FILE_ATTACHMENT_MODELS?: string;
+  /** Build-time default Cesium ion access token */
+  readonly VITE_CESIUM_ION_TOKEN?: string;
+  /** PostHog project API key — analytics are disabled when unset */
+  readonly VITE_POSTHOG_KEY?: string;
+  /** PostHog ingestion host — analytics are disabled when unset */
+  readonly VITE_POSTHOG_HOST?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+// Build-time constants injected by Vite define
+declare const __APP_VERSION__: string;
+declare const __BUILD_SHA__: string;
+declare const __BUILD_DATE__: string;
+declare const __RELEASE_HISTORY__: Array<{
+  name: string;
+  releases: Array<{
+    version: string;
+    highlights: Array<{ type: 'feature' | 'fix' | 'perf'; text: string }>;
+  }>;
+}>;
+declare const __PACKAGE_VERSIONS__: Array<{ name: string; version: string }>;
+/** True in a docs-edition build (`src/edition.ts`); code under `!__DOCS_BUILD__` is left out of its bundle. */
+declare const __DOCS_BUILD__: boolean;

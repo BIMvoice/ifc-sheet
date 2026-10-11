@@ -1,0 +1,376 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, it, expect } from 'vitest';
+import { isValidIfcGuid } from '@ifc-lite/encoding';
+import {
+  convertEntityType,
+  convertStepLine,
+  needsConversion,
+  describeConversion,
+  type IfcSchemaVersion,
+} from './schema-converter.js';
+
+describe('schema-converter', () => {
+  // ─── convertEntityType ──────────────────────────────────────────────────
+
+  describe('convertEntityType', () => {
+    it('returns same type when source and target schemas are identical', () => {
+      expect(convertEntityType('IFCWALL', 'IFC4', 'IFC4')).toBe('IFCWALL');
+      expect(convertEntityType('IFCDOOR', 'IFC2X3', 'IFC2X3')).toBe('IFCDOOR');
+    });
+
+    it('passes through types that exist in all schemas unchanged', () => {
+      expect(convertEntityType('IFCWALL', 'IFC4', 'IFC4X3')).toBe('IFCWALL');
+      expect(convertEntityType('IFCSLAB', 'IFC4', 'IFC2X3')).toBe('IFCSLAB');
+      expect(convertEntityType('IFCBEAM', 'IFC2X3', 'IFC4')).toBe('IFCBEAM');
+      expect(convertEntityType('IFCPROJECT', 'IFC4', 'IFC5')).toBe('IFCPROJECT');
+    });
+
+    it('converts IFC2X3-only types to IFC4 equivalents', () => {
+      expect(convertEntityType('IFCELECTRICDISTRIBUTIONPOINT', 'IFC2X3', 'IFC4')).toBe('IFCELECTRICDISTRIBUTIONBOARD');
+      expect(convertEntityType('IFCGASTERMINALTYPE', 'IFC2X3', 'IFC4')).toBe('IFCBURNERTYPE');
+    });
+
+    it('converts IFC4-only types to IFC2X3 fallbacks', () => {
+      expect(convertEntityType('IFCCHIMNEY', 'IFC4', 'IFC2X3')).toBe('IFCBUILDINGELEMENTPROXY');
+      expect(convertEntityType('IFCSHADINGDEVICE', 'IFC4', 'IFC2X3')).toBe('IFCBUILDINGELEMENTPROXY');
+      expect(convertEntityType('IFCDEEPFOUNDATION', 'IFC4', 'IFC2X3')).toBe('IFCFOOTING');
+    });
+
+    it('converts IFC4X3 facility types to IFC4 equivalents', () => {
+      expect(convertEntityType('IFCBRIDGE', 'IFC4X3', 'IFC4')).toBe('IFCBUILDING');
+      expect(convertEntityType('IFCBRIDGEPART', 'IFC4X3', 'IFC4')).toBe('IFCBUILDINGSTOREY');
+      expect(convertEntityType('IFCROAD', 'IFC4X3', 'IFC4')).toBe('IFCBUILDING');
+      expect(convertEntityType('IFCRAILWAY', 'IFC4X3', 'IFC4')).toBe('IFCBUILDING');
+      expect(convertEntityType('IFCMARINEFACILITY', 'IFC4X3', 'IFC4')).toBe('IFCBUILDING');
+    });
+
+    it('converts IFC4X3 facility types to IFC2X3 (multi-step)', () => {
+      expect(convertEntityType('IFCBRIDGE', 'IFC4X3', 'IFC2X3')).toBe('IFCBUILDING');
+      expect(convertEntityType('IFCBRIDGEPART', 'IFC4X3', 'IFC2X3')).toBe('IFCBUILDINGSTOREY');
+      expect(convertEntityType('IFCPAVEMENT', 'IFC4X3', 'IFC2X3')).toBe('IFCSLAB');
+    });
+
+    it('treats IFC5 as aligned with IFC4X3 for entity names', () => {
+      expect(convertEntityType('IFCWALL', 'IFC5', 'IFC4X3')).toBe('IFCWALL');
+      expect(convertEntityType('IFCWALL', 'IFC4X3', 'IFC5')).toBe('IFCWALL');
+    });
+
+    it('converts IFC5 to IFC4 through IFC4X3 path', () => {
+      expect(convertEntityType('IFCBRIDGE', 'IFC5', 'IFC4')).toBe('IFCBUILDING');
+      expect(convertEntityType('IFCRAILWAY', 'IFC5', 'IFC4')).toBe('IFCBUILDING');
+    });
+
+    it('converts IFC4 to IFC5 through IFC4X3 path', () => {
+      // IFC4 types are generally valid in IFC5 (IFC4X3-aligned)
+      expect(convertEntityType('IFCWALL', 'IFC4', 'IFC5')).toBe('IFCWALL');
+    });
+
+    it('converts IFC5 to IFC2X3 (multi-step)', () => {
+      expect(convertEntityType('IFCBRIDGE', 'IFC5', 'IFC2X3')).toBe('IFCBUILDING');
+      expect(convertEntityType('IFCPAVEMENT', 'IFC5', 'IFC2X3')).toBe('IFCSLAB');
+    });
+  });
+
+  // ─── convertStepLine ────────────────────────────────────────────────────
+
+  describe('convertStepLine', () => {
+    it('returns line unchanged when schemas are the same', () => {
+      const line = "#1=IFCWALL('guid',$,'Wall',$,$,$,$,$,.NOTDEFINED.);";
+      expect(convertStepLine(line, 'IFC4', 'IFC4')).toBe(line);
+    });
+
+    it('converts entity type name in STEP line', () => {
+      const line = "#10=IFCBRIDGE('guid',$,'Bridge 1',$,$,$,$,$);";
+      const result = convertStepLine(line, 'IFC4X3', 'IFC4');
+      expect(result).toBe("#10=IFCBUILDING('guid',$,'Bridge 1',$,$,$,$,$);");
+    });
+
+    it('trims trailing attributes when converting to IFC2X3', () => {
+      // IFC4 IfcWall has 9 attrs, IFC2X3 has 8 (no PredefinedType)
+      const line = "#5=IFCWALL('guid',$,'Wall 1',$,$,$,$,'tag',.STANDARD.);";
+      const result = convertStepLine(line, 'IFC4', 'IFC2X3');
+      // Should not contain PredefinedType (.STANDARD.)
+      expect(result).not.toContain('.STANDARD.');
+      // Should still have 8 attrs
+      expect(result).toContain('IFCWALL(');
+    });
+
+    it('replaces skipped entities with IFCPROXY placeholder to prevent dangling references', () => {
+      const line = "#99=IFCALIGNMENTCANT('guid',$,$,$,$,$,$,$);";
+      const result = convertStepLine(line, 'IFC4X3', 'IFC4');
+      expect(result).toContain('#99=IFCPROXY(');
+      expect(result).toContain('IFCALIGNMENTCANT');
+      expect(result).toContain('.NOTDEFINED.');
+      // The placeholder GlobalId must be spec-valid (128-bit, first char 0-3),
+      // not a synthetic marker that fails isValidIfcGuid in downstream tools.
+      const guid = result?.match(/IFCPROXY\('([^']{22})'/)?.[1];
+      expect(guid).toBeDefined();
+      expect(isValidIfcGuid(guid as string)).toBe(true);
+    });
+
+    it('preserves alignment entities when converting IFC4X3 → IFC5', () => {
+      const line = "#99=IFCALIGNMENTCANT('guid',$,'Cant1',$,$,$,$,$);";
+      const result = convertStepLine(line, 'IFC4X3', 'IFC5');
+      // Should preserve the original entity, not proxy it
+      expect(result).toContain('IFCALIGNMENTCANT(');
+      expect(result).not.toContain('IFCPROXY');
+    });
+
+    it('preserves alignment entities when converting IFC4X3 → IFC4X3', () => {
+      const line = "#50=IFCALIGNMENTHORIZONTAL('guid',$,'HAlign',$,$,$,$,$);";
+      expect(convertStepLine(line, 'IFC4X3', 'IFC4X3')).toBe(line);
+    });
+
+    it('replaces alignment entities with proxy when converting to IFC2X3', () => {
+      const line = "#99=IFCALIGNMENTVERTICAL('guid',$,$,$,$,$,$,$);";
+      const result = convertStepLine(line, 'IFC4X3', 'IFC2X3');
+      expect(result).toContain('#99=IFCPROXY(');
+    });
+
+    it('passes through non-entity lines unchanged', () => {
+      expect(convertStepLine('/* comment */', 'IFC4', 'IFC2X3')).toBe('/* comment */');
+      expect(convertStepLine('', 'IFC4', 'IFC2X3')).toBe('');
+    });
+
+    it('refuses malformed slots before any type rename or proxy replacement (#4200)', () => {
+      expect(() => convertStepLine(
+        '#10=IFCBRIDGE(\'g\',"01,23",$);',
+        'IFC4X3',
+        'IFC4',
+      )).toThrow(/refused an invalid STEP argument list/);
+      expect(() => convertStepLine(
+        '#99=IFCALIGNMENTCANT(\'g\',"01,23",$);',
+        'IFC4X3',
+        'IFC4',
+      )).toThrow(/refused an invalid STEP argument list/);
+    });
+
+    it('handles complex STEP attribute values correctly', () => {
+      // Attributes with nested parentheses and strings
+      const line = "#10=IFCWALL('2O2Fr$t4X7Zf8NOew3FLOH',$,'Basic Wall:Interior - 79mm Partition (1-hr):128475',$,'Basic Wall:Interior - 79mm Partition (1-hr)',$,#8,#9,.STANDARD.);";
+      const result = convertStepLine(line, 'IFC4', 'IFC2X3');
+      // Entity type stays IFCWALL
+      expect(result).toContain('IFCWALL(');
+      // Last attribute (.STANDARD.) should be trimmed for IFC2X3 (8 attrs max)
+      expect(result).not.toContain('.STANDARD.');
+    });
+
+    it('converts IFC4X3-specific types and preserves attributes', () => {
+      const line = "#20=IFCPAVEMENT('guid',$,'Sidewalk',$,$,$,$,'tag');";
+      const result = convertStepLine(line, 'IFC4X3', 'IFC4');
+      expect(result).toContain('IFCSLAB(');
+      expect(result).toContain("'Sidewalk'");
+    });
+
+    it('handles IFC5 target schema', () => {
+      const line = "#1=IFCWALL('guid',$,'Wall',$,$,$,$,$,.NOTDEFINED.);";
+      const result = convertStepLine(line, 'IFC4', 'IFC5');
+      expect(result).toContain('IFCWALL(');
+    });
+
+    it('handles strings with escaped single quotes', () => {
+      const line = "#10=IFCWALL('guid',$,'Wall''s Name',$,$,$,$,'tag',.STANDARD.);";
+      const result = convertStepLine(line, 'IFC4', 'IFC2X3');
+      // Preserved escaped quote
+      expect(result).toContain("'Wall''s Name'");
+    });
+
+    // ─── upconversion attribute padding (issue #1416) ──────────────────────
+
+    it('pads PredefinedType when upconverting IFC2X3 → IFC4 (IfcOpeningElement 8→9)', () => {
+      const line = "#5=IFCOPENINGELEMENT('guid',$,$,$,'Opening',#6,#7,$);"; // 8 attrs
+      const result = convertStepLine(line, 'IFC2X3', 'IFC4');
+      expect(result).toBe("#5=IFCOPENINGELEMENT('guid',$,$,$,'Opening',#6,#7,$,$);"); // 9
+    });
+
+    it('pads IfcWall 8→9 on IFC2X3 → IFC4', () => {
+      const line = "#10=IFCWALL('guid',$,'W',$,$,#1,#2,'tag');"; // 8 attrs
+      const result = convertStepLine(line, 'IFC2X3', 'IFC4');
+      expect(result).toBe("#10=IFCWALL('guid',$,'W',$,$,#1,#2,'tag',$);"); // +PredefinedType
+    });
+
+    it('pads multiple added attributes (IfcMaterial 1→3)', () => {
+      const result = convertStepLine("#3=IFCMATERIAL('Steel');", 'IFC2X3', 'IFC4');
+      expect(result).toBe("#3=IFCMATERIAL('Steel',$,$);"); // +Description,+Category
+    });
+
+    it('tolerates whitespace after = (Tekla-style formatting)', () => {
+      const line = "#34498= IFCOPENINGELEMENT('guid',$,$,$,'Opening',#6,#7,$);";
+      const result = convertStepLine(line, 'IFC2X3', 'IFC4');
+      // Reassembled without the stray space, and padded to 9 attrs.
+      expect(result).toBe("#34498=IFCOPENINGELEMENT('guid',$,$,$,'Opening',#6,#7,$,$);");
+    });
+
+    it('does not pad when the attribute count already matches (IfcSlab 9=9)', () => {
+      const line = "#11=IFCSLAB('guid',$,'S',$,$,#1,#2,'tag',.FLOOR.);"; // 9 attrs
+      expect(convertStepLine(line, 'IFC2X3', 'IFC4')).toBe(line);
+    });
+
+    it('does NOT pad entities whose attrs were reordered, not appended (IfcMaterialProperties)', () => {
+      // IFC2X3 [Material] vs IFC4 [Name, Description, Properties, Material] — NOT a
+      // prefix, so trailing `$` would shove the Material ref into the Name slot.
+      const line = '#5=IFCMATERIALPROPERTIES(#6);';
+      expect(convertStepLine(line, 'IFC2X3', 'IFC4')).toBe(line); // left untouched
+    });
+
+    it('does NOT pad a reordered IfcApproval (7→9, fully reordered)', () => {
+      const line = "#5=IFCAPPROVAL('desc','2020-01-01',$,$,$,'Name','Id');"; // 7 attrs
+      expect(convertStepLine(line, 'IFC2X3', 'IFC4')).toBe(line);
+    });
+  });
+
+  // ─── needsConversion ────────────────────────────────────────────────────
+
+  describe('needsConversion', () => {
+    it('returns false for same schema', () => {
+      expect(needsConversion('IFC4', 'IFC4')).toBe(false);
+      expect(needsConversion('IFC2X3', 'IFC2X3')).toBe(false);
+      expect(needsConversion('IFC5', 'IFC5')).toBe(false);
+    });
+
+    it('returns true for different schemas', () => {
+      expect(needsConversion('IFC4', 'IFC2X3')).toBe(true);
+      expect(needsConversion('IFC2X3', 'IFC4')).toBe(true);
+      expect(needsConversion('IFC4', 'IFC5')).toBe(true);
+      expect(needsConversion('IFC4X3', 'IFC4')).toBe(true);
+    });
+  });
+
+  // ─── describeConversion ─────────────────────────────────────────────────
+
+  describe('describeConversion', () => {
+    it('returns no conversion message for same schema', () => {
+      expect(describeConversion('IFC4', 'IFC4')).toBe('No conversion needed');
+    });
+
+    it('warns about IFC2X3 attribute trimming', () => {
+      const desc = describeConversion('IFC4', 'IFC2X3');
+      expect(desc).toContain('IFC2X3');
+      expect(desc).toContain('trimmed');
+    });
+
+    it('warns about IFC5 alpha status', () => {
+      const desc = describeConversion('IFC4', 'IFC5');
+      expect(desc).toContain('alpha');
+    });
+
+    it('warns about facility type mapping', () => {
+      const desc = describeConversion('IFC4X3', 'IFC4');
+      expect(desc).toContain('facility types');
+    });
+  });
+
+  // ─── Round-trip stability ───────────────────────────────────────────────
+
+  describe('round-trip', () => {
+    it('preserves common types through IFC4 → IFC4X3 → IFC4', () => {
+      const types = ['IFCWALL', 'IFCSLAB', 'IFCBEAM', 'IFCCOLUMN', 'IFCPROJECT'];
+      for (const type of types) {
+        const intermediate = convertEntityType(type, 'IFC4', 'IFC4X3');
+        const roundTripped = convertEntityType(intermediate, 'IFC4X3', 'IFC4');
+        expect(roundTripped).toBe(type);
+      }
+    });
+
+    it('preserves common types through IFC4 → IFC5 → IFC4', () => {
+      const types = ['IFCWALL', 'IFCDOOR', 'IFCWINDOW', 'IFCSITE', 'IFCBUILDING'];
+      for (const type of types) {
+        const intermediate = convertEntityType(type, 'IFC4', 'IFC5');
+        const roundTripped = convertEntityType(intermediate, 'IFC5', 'IFC4');
+        expect(roundTripped).toBe(type);
+      }
+    });
+  });
+
+  // ─── IFCPROXY GlobalId determinism (#2733) ──────────────────────────────
+
+  describe('IFCPROXY placeholders get a deterministic GlobalId', () => {
+    // IFC4X3-only alignment classes have no IFC4 representation, so they are
+    // replaced wholesale by a placeholder. Each one used to be minted a FRESH
+    // GlobalId on every export, so exporting an unchanged model twice never
+    // produced the same bytes.
+    const seg = "#42=IFCALIGNMENTSEGMENT('2K5H1$Zs9CQuKQFQKQFQKQ',#1,'A',$,$,#7,#9,$);";
+
+    it('is byte-identical across repeated conversions of the same input', () => {
+      const a = convertStepLine(seg, 'IFC4X3', 'IFC4');
+      const b = convertStepLine(seg, 'IFC4X3', 'IFC4');
+      expect(a).toBe(b);
+      expect(a).toContain('IFCPROXY');
+      expect(a).toContain("'IFCALIGNMENTSEGMENT'");
+    });
+
+    it('mints a well-formed IFC GlobalId', () => {
+      const guid = /IFCPROXY\('([^']*)'/.exec(convertStepLine(seg, 'IFC4X3', 'IFC4')!)?.[1] ?? '';
+      expect(isValidIfcGuid(guid), `malformed GlobalId: ${guid}`).toBe(true);
+    });
+
+    it('gives DIFFERENT ids to two federated occurrences of the same entity', () => {
+      // The reason the obvious fix (copy the source GlobalId onto the proxy) is
+      // wrong: two models can legitimately carry the same alignment GlobalId,
+      // and a shared proxy id would unify them into one. The merged exporter
+      // offsets each model's express ids, so the lines differ by prefix.
+      const m1 = "#42=IFCALIGNMENTSEGMENT('2K5H1$Zs9CQuKQFQKQFQKQ',#1,'A',$,$,#7,#9,$);";
+      const m2 = "#99=IFCALIGNMENTSEGMENT('2K5H1$Zs9CQuKQFQKQFQKQ',#1,'A',$,$,#7,#9,$);";
+      const g1 = /IFCPROXY\('([^']*)'/.exec(convertStepLine(m1, 'IFC4X3', 'IFC4')!)?.[1];
+      const g2 = /IFCPROXY\('([^']*)'/.exec(convertStepLine(m2, 'IFC4X3', 'IFC4')!)?.[1];
+      expect(g1).toBeTruthy();
+      expect(g2, 'two federated occurrences collapsed onto one GlobalId').not.toBe(g1);
+    });
+
+    it('distinguishes entities that differ only in their attributes', () => {
+      const other = "#42=IFCALIGNMENTSEGMENT('3xJ2mQ8vT1AuVwXyZ0BcDe',#1,'B',$,$,#7,#9,$);";
+      const g1 = /IFCPROXY\('([^']*)'/.exec(convertStepLine(seg, 'IFC4X3', 'IFC4')!)?.[1];
+      const g2 = /IFCPROXY\('([^']*)'/.exec(convertStepLine(other, 'IFC4X3', 'IFC4')!)?.[1];
+      expect(g2).not.toBe(g1);
+    });
+
+    it('still honours a caller-supplied seeded RandomSource', () => {
+      // An export that already pins its randomness keeps its behaviour, so this
+      // change cannot alter output for callers that opted into determinism.
+      const seeded = () => {
+        let n = 0;
+        return () => ((n = (n * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+      };
+      const a = convertStepLine(seg, 'IFC4X3', 'IFC4', seeded());
+      const b = convertStepLine(seg, 'IFC4X3', 'IFC4', seeded());
+      expect(a).toBe(b);
+      const bare = convertStepLine(seg, 'IFC4X3', 'IFC4');
+      expect(a, 'seeded source was ignored').not.toBe(bare);
+    });
+
+    it('placeholder_guid_diverges_from_the_rust_mint_pinned_not_fixed', () => {
+      // PINS the schema-downgrade proxy-GlobalId divergence between the two
+      // exporters (#3015) AS divergence -- it does not fix it. Which side
+      // wins is a maintainer decision, not something a test should resolve
+      // unilaterally.
+      //
+      // This side derives the id from `deterministicGlobalId` of the WHOLE
+      // source line (`ifcproxy:{prefix}{entityType}({attrs})`). The Rust
+      // twin (`rust/export/src/schema_convert.rs::placeholder_guid`) derives
+      // it purely from the express id -- a different algorithm entirely, not
+      // just a different seed to the same one. Verified by actually running
+      // both on the byte-identical input line below;
+      // `schema_convert::tests::placeholder_guid_diverges_from_the_typescript_mint_pinned_not_fixed`
+      // pins the Rust side of the same pair.
+      //
+      // If this test ever starts failing because the values converged, that
+      // is good news -- update the doc here (and the Rust twin) to say so,
+      // don't just delete the assertion.
+      const guid = /IFCPROXY\('([^']*)'/.exec(convertStepLine(seg, 'IFC4X3', 'IFC4')!)?.[1];
+      expect(
+        guid,
+        "TS's minted value for this input line changed -- update this pin (and check whether \
+it now agrees with the Rust twin, in which case update both docs to say so)",
+      ).toBe('3m5OyAyREn46dEymqijDwc');
+      expect(
+        guid,
+        'this is the Rust side\'s minted value for express id 42 on the byte-identical input \
+line -- if TS now matches it, the divergence has been resolved; update both tests\' docs \
+instead of silently dropping this assertion',
+      ).not.toBe('00000000000000000G000g');
+    });
+  });
+});

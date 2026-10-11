@@ -1,0 +1,324 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, expect, it } from 'vitest';
+import { StepTokenizer } from './tokenizer.js';
+import {
+  KEYWORD_CASE_CASE,
+  LEGAL_BODIES,
+  LINE_NUMBER_CASE,
+  NEXT_DECLARATION_CASE,
+  PHANTOM_NEIGHBOUR_CASE,
+  QUADRATIC_RECORDS,
+  QUADRATIC_SHAPES,
+  QUADRATIC_WELL_FORMED,
+  SWALLOW_CASES,
+  UNBALANCED_CASE,
+  UNRESUMABLE_BODIES,
+  quadraticBudgetMs,
+  type ScanDriver,
+} from './step-record-boundary.vectors.js';
+
+/** Wall-clock milliseconds to fully drain `scan` over `text`, and how many records it found. */
+function timeScan(text: string, scan: (buf: Uint8Array) => Iterable<unknown>): { ms: number; found: number } {
+  const buf = new TextEncoder().encode(text);
+  const started = performance.now();
+  let found = 0;
+  for (const _ of scan(buf)) found++;
+  return { ms: performance.now() - started, found };
+}
+
+describe('StepTokenizer.scanEntitiesFast', () => {
+  it('finds entities and reports correct expressId/type/line', () => {
+    const text = [
+      "#1=IFCPROJECT('0000000000000000000001',$,'P',$,$,$,$,$,$);",
+      "#2=IFCWALL('0000000000000000000002',$,$,$,$,$,$,$,$);",
+    ].join('\n');
+    const buffer = new TextEncoder().encode(text);
+    const tokenizer = new StepTokenizer(buffer);
+    const refs = Array.from(tokenizer.scanEntitiesFast());
+    expect(refs).toHaveLength(2);
+    expect(refs[0]).toMatchObject({ expressId: 1, type: 'IFCPROJECT', line: 1 });
+    expect(refs[1]).toMatchObject({ expressId: 2, type: 'IFCWALL', line: 2 });
+  });
+
+  it('does not alias two distinct type names that share a 31-multiplicative hash (type-name cache collision guard)', () => {
+    // 'I0OAAA' and 'I10AAA' are two distinct, valid IFC-style type names of
+    // the same length that collide under the tokenizer's rolling hash
+    // (typeHash = typeLen; typeHash = (typeHash*31+byte)|0 per byte, cache
+    // key `${typeLen}:${typeHash}`), found by brute-force search over the
+    // exact algorithm. Without the byte-for-byte cache verification in
+    // scanEntitiesFast, the second entity's type would be silently misread
+    // as the first entity's cached string once the first name populates the
+    // cache under the shared key.
+    const first = 'I0OAAA';
+    const second = 'I10AAA';
+    expect(first).toHaveLength(second.length);
+    expect(first).not.toBe(second);
+
+    const text = [
+      `#1=${first}($);`,
+      `#2=${second}($);`,
+    ].join('\n');
+    const buffer = new TextEncoder().encode(text);
+    const tokenizer = new StepTokenizer(buffer);
+    const refs = Array.from(tokenizer.scanEntitiesFast());
+    expect(refs).toHaveLength(2);
+    expect(refs[0].type).toBe(first);
+    expect(refs[1].type).toBe(second);
+  });
+
+  it('reports an unterminated string literal instead of silently ending the scan', () => {
+    // #1's Name opens a quote and never closes it. Before this fix, the
+    // "skip to the next ';'" loop just ran off the end of the buffer with
+    // `inString` still true, `#2` was never found, and the scan reported
+    // success with 1 entity — nothing distinguished that from a file that
+    // legitimately has only one entity. `malformedRecordCount` is the
+    // caller's only way to tell the two apart.
+    const text = [
+      "#1=IFCWALL('0000000000000000000001',$,'Wall unterminated,$,$,$,$,$,$);",
+      "#2=IFCWALL('0000000000000000000002',$,'Wall2',$,$,$,$,$,$);",
+    ].join('\n');
+    const buffer = new TextEncoder().encode(text);
+    const tokenizer = new StepTokenizer(buffer);
+    const refs = Array.from(tokenizer.scanEntitiesFast());
+    expect(refs.map((r) => r.expressId)).toEqual([]);
+    expect(tokenizer.malformedRecordCount).toBe(1);
+  });
+
+  it('does not report malformedRecordCount for a well-formed file', () => {
+    const text = [
+      "#1=IFCWALL('0000000000000000000001',$,'Wall1',$,$,$,$,$,$);",
+      "#2=IFCWALL('0000000000000000000002',$,'Wall2',$,$,$,$,$,$);",
+    ].join('\n');
+    const buffer = new TextEncoder().encode(text);
+    const tokenizer = new StepTokenizer(buffer);
+    const refs = Array.from(tokenizer.scanEntitiesFast());
+    expect(refs).toHaveLength(2);
+    expect(tokenizer.malformedRecordCount).toBe(0);
+  });
+
+  it('reports malformedRecordCount for an unterminated comment inside a record, not just an unterminated string', () => {
+    // Before this fix, the `end < 0` (unterminated `/* ... */`) branch inside
+    // the "skip to semicolon" loop `return`ed straight out of the generator,
+    // skipping the `if (!foundTerminator) this.malformedRecords++` check
+    // below the loop -- so the scan still stopped silently (0 entities, 0
+    // reported) for this shape, even though the sibling unterminated-string
+    // shape right above it was fixed in the same PR. The Web Worker copy of
+    // this loop (scan-worker-source.ts) never had the bug: it does
+    // `pos = len; break;` instead of an early `return`, so it already fell
+    // through to the count -- see scan-worker-source.malformed-record.test.ts
+    // for the identical fixture passing there even before this fix.
+    const text = [
+      "#1=IFCWALL('0000000000000000000001', /* never closes $,$,$,$,$,$,$);",
+      "#2=IFCWALL('0000000000000000000002',$,'Wall2',$,$,$,$,$,$);",
+    ].join('\n');
+    const buffer = new TextEncoder().encode(text);
+    const tokenizer = new StepTokenizer(buffer);
+    const refs = Array.from(tokenizer.scanEntitiesFast());
+    expect(refs.map((r) => r.expressId)).toEqual([]);
+    expect(tokenizer.malformedRecordCount).toBe(1);
+  });
+
+  it('reports malformedRecordCount for an unterminated comment before the record body opens', () => {
+    // `#1 /* was #7 */ =` is valid -- a comment is allowed wherever
+    // whitespace is, per skipTrivia's callers above. But if that comment
+    // never closes, `#1` has neither an '=' nor a body to scan, and the
+    // scanner's own resync point (skip-to-';') is never reached. Before this
+    // fix, `skipTrivia`'s `t.stop` branches (there are three: before '=',
+    // before the type name, before '(') `return`ed uncounted, so this shape
+    // silently ended the scan with malformedRecordCount still 0 -- the same
+    // defect class the record-body branches above were fixed for, just one
+    // step earlier in the same entity.
+    const text = "#1 /* never closes\n#2=IFCWALL('0000000000000000000002',$,'Wall2',$,$,$,$,$,$);";
+    const buffer = new TextEncoder().encode(text);
+    const tokenizer = new StepTokenizer(buffer);
+    const refs = Array.from(tokenizer.scanEntitiesFast());
+    expect(refs.map((r) => r.expressId)).toEqual([]);
+    expect(tokenizer.malformedRecordCount).toBe(1);
+  });
+
+  it('does not read a stale malformedRecordCount from a scanEntitiesFast run when scanEntities runs next on the same instance', () => {
+    // Missing the terminating ';' but balanced on '(' / ')': scanEntitiesFast
+    // requires a semicolon (see the "declaration cut off" tests above) and
+    // reports malformedRecordCount 1 for this input; scanEntities (the
+    // balanced-parenthesis path in scan-entities-balanced.ts) only needs the
+    // matching ')' and accepts this one cleanly. One StepTokenizer instance
+    // running both, in that order, is exactly the "fast scan = 1, then
+    // balanced scan still reads 1" bug report: before this fix, scanEntities
+    // neither reset nor recomputed malformedRecords, so the stale 1 from the
+    // fast scan leaked into the balanced scan's result even though nothing
+    // about the balanced scan itself was malformed.
+    const text = '#1=IFCWALL($,$,$)';
+    const tokenizer = new StepTokenizer(new TextEncoder().encode(text));
+
+    Array.from(tokenizer.scanEntitiesFast());
+    expect(tokenizer.malformedRecordCount).toBe(1);
+
+    const refs = Array.from(tokenizer.scanEntities());
+    expect(refs.map((r) => r.expressId)).toEqual([1]);
+    expect(tokenizer.malformedRecordCount).toBe(0);
+  });
+});
+
+describe('StepTokenizer.scanEntities (balanced-parenthesis path)', () => {
+  it('does not report malformedRecordCount when the LAST record is refused for an oversized express id (round 3)', () => {
+    // #4294967297 is refused (#3395) after the '=' check passes, so
+    // BalancedEntityScan resumes right past the '=' and walks
+    // "IFCWALL(#1,#2);..." byte by byte. The '#1' and '#2' reference tokens
+    // inside that abandoned record's own argument list each look like a
+    // fresh declaration start, with buffer still left after the mismatch
+    // that ends each one. Before this fix, declOpen stayed armed on that
+    // non-EOF mismatch with nothing later to clear it, so a file whose scan
+    // ran cleanly to the end still reported 1.
+    const text =
+      "#1=IFCPROJECT('0000000000000000000001',$,'P',$,$,$,$,$,$);\n" +
+      '#4294967297=IFCWALL(#1,#2);\n';
+    const tokenizer = new StepTokenizer(new TextEncoder().encode(text));
+
+    const refs = Array.from(tokenizer.scanEntities());
+
+    expect(tokenizer.oversizedIdCount).toBe(1);
+    expect(tokenizer.malformedRecordCount).toBe(0);
+    expect(refs.map((r) => r.expressId)).toEqual([1]);
+  });
+
+  it('control: a declaration genuinely cut off at EOF still reports malformedRecordCount 1', () => {
+    const text = "#1=IFCPROJECT('0000000000000000000001',$,'P',$,$,$,$,$,$);\n#2=IFCWA";
+    const tokenizer = new StepTokenizer(new TextEncoder().encode(text));
+
+    const refs = Array.from(tokenizer.scanEntities());
+
+    expect(tokenizer.malformedRecordCount).toBe(1);
+    expect(refs.map((r) => r.expressId)).toEqual([1]);
+  });
+
+  // This scan closes a record on the ')' balancing its '(' and yields the
+  // span WITHOUT the ';', so the shared vectors' spans do not apply verbatim;
+  // ids are what the two scans must agree on.
+  const scanIds = (text: string) => {
+    const tokenizer = new StepTokenizer(new TextEncoder().encode(text));
+    const ids = Array.from(tokenizer.scanEntities()).map((r) => r.expressId);
+    return { ids, malformed: tokenizer.malformedRecordCount };
+  };
+
+  it('stops, and reports, instead of balancing across the next declaration (#4573)', () => {
+    // Pre-fix: [1, 3] with malformed 0, #1's span running through #2's ')'
+    // -- a mis-spanned record and a swallowed one, and nothing reported. The
+    // balance walk now stops at #2's '=' and this scan, which does not
+    // re-hunt (see scan-entities-balanced.ts), stops there and says so.
+    expect(scanIds(NEXT_DECLARATION_CASE.text)).toEqual({ ids: [], malformed: 1 });
+  });
+
+  it('never falsely refuses a legal record at the "=" bound', () => {
+    // findEntityLength runs on EVERY record of this scan, so an '=' inside a
+    // literal or comment being read as a declaration would drop real records.
+    for (const body of LEGAL_BODIES) {
+      expect(scanIds(`#1=${body}\n#2=IFCDOOR($);\n`), body).toEqual({ ids: [1, 2], malformed: 0 });
+    }
+  });
+});
+
+
+describe('StepTokenizer.scanEntitiesFast: record-boundary guards (#4179)', () => {
+  const scan: ScanDriver = (text) => (() => {
+    const tokenizer = new StepTokenizer(new TextEncoder().encode(text));
+    const spans = Array.from(tokenizer.scanEntitiesFast()).map(
+      (r) => [r.expressId, text.slice(r.offset, r.offset + r.length)] as const,
+    );
+    return { spans, malformed: tokenizer.malformedRecordCount };
+  })();
+
+  it.each(SWALLOW_CASES.map((c) => [c[0], c[1], c[2]] as const))(
+    '%s',
+    (_label, text, expected) => {
+      const { spans, malformed } = scan(text);
+      expect(spans).toEqual(expected);
+      expect(malformed).toBe(1);
+    },
+  );
+
+  it('reports the line numbers the worker copy must match', () => {
+    const tokenizer = new StepTokenizer(new TextEncoder().encode(LINE_NUMBER_CASE.text));
+    expect(Array.from(tokenizer.scanEntitiesFast()).map((r) => r.line))
+      .toEqual([...LINE_NUMBER_CASE.lines]);
+  });
+
+  it('drops ONE record, not the tail, when a record has no closing ")"', () => {
+    const { spans, malformed } = scan(UNBALANCED_CASE.text);
+    expect(spans).toEqual(UNBALANCED_CASE.spans);
+    expect(malformed).toBe(1);
+  });
+
+  it('stops instead of resuming when there is no balancing ")" to resume at', () => {
+    // Recovery is bounded by the SAME "no resume point" rule the #3695 cluster
+    // set: the balance walks strings and comments whole, so an unterminated one
+    // leaves no ')' and the scan still stops there.
+    for (const body of UNRESUMABLE_BODIES) {
+      const { spans, malformed } = scan(`#1=IFCA(1);\n#2=${body}\n#3=IFCC(3);\n`);
+      expect(spans, body).toEqual([[1, '#1=IFCA(1);']]);
+      expect(malformed, body).toBe(1);
+    }
+  });
+
+  it('never falsely refuses a legal record', () => {
+    for (const body of LEGAL_BODIES) {
+      const text = `#1=${body}\n#2=IFCDOOR($);\n`;
+      const { spans, malformed } = scan(text);
+      expect(spans, body).toEqual([[1, `#1=${body}`], [2, '#2=IFCDOOR($);']]);
+      expect(malformed, body).toBe(0);
+    }
+  });
+
+  it('does not resume past the next declaration when a record balances only there (#4573)', () => {
+    const { spans, malformed } = scan(NEXT_DECLARATION_CASE.text);
+    expect(spans).toEqual(NEXT_DECLARATION_CASE.spans);
+    expect(malformed).toBe(1);
+  });
+
+  it('does not mint a phantom neighbour from a stray "=" in a refused body (#4573)', () => {
+    const { spans, malformed } = scan(PHANTOM_NEIGHBOUR_CASE.text);
+    expect(spans.map(([id]) => id)).toEqual(PHANTOM_NEIGHBOUR_CASE.ids);
+    expect(malformed).toBe(1);
+  });
+
+  // The budget is a RATIO against the well-formed twin of the same record
+  // count, so it holds in any build mode on any machine; the unfixed walk is
+  // ~20x over it at this size (see QUADRATIC_SHAPES). Vitest cannot interrupt
+  // a synchronous scan, so an overrun fails by finishing late, not by
+  // timing out: the explicit timeout below only keeps the runner from
+  // reporting a misleading "timed out" before the real assertion runs.
+  describe.each(QUADRATIC_SHAPES)(
+    'a file of refused records %s does not rescan the remainder per record (#4573)',
+    (_label, body, tail) => {
+      it('scans within 20x the well-formed twin', () => {
+        const fast = (buf: Uint8Array) => new StepTokenizer(buf).scanEntitiesFast();
+        const baseline = timeScan(QUADRATIC_WELL_FORMED.repeat(QUADRATIC_RECORDS), fast);
+        expect(baseline.found).toBe(QUADRATIC_RECORDS);
+        const budget = quadraticBudgetMs(baseline.ms);
+
+        const malformed = timeScan(body.repeat(QUADRATIC_RECORDS) + tail, fast);
+        expect(malformed.found, 'every record is malformed').toBe(0);
+        expect(
+          malformed.ms,
+          `${QUADRATIC_RECORDS} refused records took ${malformed.ms.toFixed(0)}ms against a ` +
+            `${budget.toFixed(0)}ms budget (20x the ${baseline.ms.toFixed(1)}ms well-formed twin): ` +
+            'recovery is walking the remainder per record again',
+        ).toBeLessThan(budget);
+      }, 120_000);
+    },
+  );
+});
+
+describe('StepTokenizer: entity keyword case (#4713)', () => {
+  it.each([
+    ['scanEntitiesFast', (t: StepTokenizer) => t.scanEntitiesFast()],
+    ['scanEntities', (t: StepTokenizer) => t.scanEntities()],
+  ] as const)('%s finds every record and names its type in upper case', (_label, scan) => {
+    const tokenizer = new StepTokenizer(new TextEncoder().encode(KEYWORD_CASE_CASE.text));
+    const records = Array.from(scan(tokenizer), (r) => [r.expressId, r.type] as const);
+    expect(records).toEqual(KEYWORD_CASE_CASE.records);
+    expect(tokenizer.malformedRecordCount).toBe(0);
+  });
+});

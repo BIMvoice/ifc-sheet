@@ -1,0 +1,638 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Coordinate Handler - handles large coordinate systems by shifting to origin
+ * 
+ * AEC models often use real-world coordinates (UTM, survey coordinates) with
+ * values like X: 500,000m, Y: 5,000,000m. This causes float precision issues.
+ * 
+ * Solution: Shift model to local origin (centroid) while preserving original
+ * coordinates for export/queries.
+ */
+
+import type { MeshData } from './types.js';
+import type { AABB, CoordinateInfo, Vec3 } from './coordinate-types.js';
+import { resolveWasmMetadataFrame, type RtcFrame } from './rtc-frame.js';
+import { inferWasmRtcApplied } from './coordinate-rtc-policy.js';
+export type { AABB, CoordinateInfo, Vec3 } from './coordinate-types.js';
+
+/**
+ * The "normal coordinate" ceiling, in metres: 10 km, a generous campus/site.
+ *
+ * Two separate rules are keyed off it, and they must stay the same number:
+ * `CoordinateHandler` uses it as the validation threshold once WASM RTC has
+ * already shifted the model, and the viewer uses it as a per-vertex corruption
+ * filter when computing bounds to fit the camera to (a vertex further than this
+ * from its local origin is unshifted or garbage, and would blow the fit box out
+ * so the model renders as a speck).
+ *
+ * Exported because the viewer used to carry three unlinked copies of the
+ * literal (`localParsingUtils`, `viewportUtils`, `useGeometryStreaming`), two of
+ * them documented as "matches CoordinateHandler's NORMAL_COORD_THRESHOLD" with
+ * nothing enforcing it. Raising all three to 250 km left the entire viewer suite
+ * (5751 tests) green, so the agreement was prose only. Import this rather than
+ * writing `10000` again.
+ *
+ * Until #4611 the class below read a private `THRESHOLD = 10000` instead, and
+ * the viewer's map-absolute radius held a third copy. Both now read this one.
+ */
+export const NORMAL_COORD_THRESHOLD_M = 10000;
+
+export class CoordinateHandler {
+    private originShift: Vec3 = { x: 0, y: 0, z: 0 };
+    // Maximum reasonable coordinate - 10,000 km covers any georeferenced building on Earth
+    // Values beyond this are garbage/corrupted data (safety net)
+    private readonly MAX_REASONABLE_COORD = 1e7;
+
+    // For incremental processing
+    private accumulatedBounds: AABB | null = null;
+    private shiftCalculated: boolean = false;
+
+    // Count of batches where the fast-path result failed `isBoundsPoisoned`
+    // and `calculateBounds` fell back to the filtered slow path (#5210).
+    // Recovery is silent by design — the corrupted vertex is filtered out,
+    // not reported to the caller — so this is the only signal that the
+    // mesher emitted a qualifying vertex at all. Surfaced on `CoordinateInfo`
+    // via `getCurrentCoordinateInfo`/`getFinalCoordinateInfo`.
+    private boundsRecoveryFallbackCount: number = 0;
+
+    // Authoritative pre-pass state. Undefined is reserved for native producers
+    // that cannot report their coordinate frame and therefore need inference.
+    private wasmRtcApplied: boolean | undefined = undefined;
+    // Sampling is a separate bounds policy: a validated near-origin WASM model
+    // can use it even when the pre-pass authoritatively applied no RTC shift.
+    private fastBoundsEligible: boolean = false;
+    // Active threshold used by both bounds validation and position cleanup.
+    private activeThreshold: number = 1e7;
+
+    // World→render metadata supplied by the WASM pre-pass (issue #945). These
+    // are reported on CoordinateInfo so external viewers can map externally-
+    // resolved geometry (grids, survey points) into the render frame.
+    //
+    // `wasmRtcOffset` is the RTC offset (IFC Z-up, metres) the WASM mesh path
+    // actually subtracted — `null` when no shift was applied (model within
+    // Rust `LARGE_COORD_THRESHOLD_METERS`, 1km since #4934). Mirrors the value
+    // the viewer captures from the `rtcOffset` streaming event, but populated
+    // here without viewer-side patching. `lengthUnitScale` is the file-units→metres factor.
+    private appliedWasmRtcOffset: Vec3 | null = null;
+    private wasmRtcFrame: RtcFrame | undefined = undefined;
+    private lengthUnitScale: number | undefined = undefined;
+
+    /**
+     * Check if a coordinate value is reasonable (not corrupted garbage)
+     */
+    private isReasonableValue(value: number): boolean {
+        return Number.isFinite(value) && Math.abs(value) < this.MAX_REASONABLE_COORD;
+    }
+
+    /**
+     * #5210: the fast path samples without the per-vertex filter, so its
+     * per-batch result is checked once instead. A bound outside
+     * MAX_REASONABLE_COORD (or non-finite) means a sampled vertex was garbage;
+     * only a batch empty on EVERY axis is clean (a one-axis NaN is not empty).
+     */
+    private isBoundsPoisoned(b: AABB): boolean {
+        if (b.min.x > b.max.x && b.min.y > b.max.y && b.min.z > b.max.z) return false;
+        return ![b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z]
+            .every((v) => this.isReasonableValue(v));
+    }
+
+    /**
+     * Calculate bounding box from all meshes (filtering out corrupted values)
+     * @param meshes - Meshes to calculate bounds from
+     * @param maxCoord - Optional max coordinate threshold (default: MAX_REASONABLE_COORD).
+     *   NOTE: Not applied on the established sampling path (see below).
+     */
+    calculateBounds(meshes: MeshData[], maxCoord?: number): AABB {
+        // PERF: Once the initial frame/bounds decision validates a producer,
+        // sample instead of filtering every vertex (~380M Number.isFinite +
+        // Math.abs calls avoided across 63.5M vertices). The sampled result is
+        // checked once per batch (#5210): a poisoned batch is recomputed through
+        // the filtered path and counted, so one garbage vertex costs one batch
+        // instead of poisoning the accumulator for the rest of the load. The
+        // recompute filters at MAX_REASONABLE_COORD, the criterion that tripped
+        // it, so it drops only the garbage and keeps what the fast path keeps.
+        if (this.fastBoundsEligible && this.shiftCalculated) {
+            const sampled = this.calculateBoundsFast(meshes);
+            if (!this.isBoundsPoisoned(sampled)) return sampled;
+            this.boundsRecoveryFallbackCount++;
+            maxCoord = this.MAX_REASONABLE_COORD;
+        }
+
+        const bounds: AABB = {
+            min: { x: Infinity, y: Infinity, z: Infinity },
+            max: { x: -Infinity, y: -Infinity, z: -Infinity },
+        };
+
+        const threshold = maxCoord ?? this.MAX_REASONABLE_COORD;
+        let validVertexCount = 0;
+        let corruptedVertexCount = 0;
+
+        for (const mesh of meshes) {
+            const positions = mesh.positions;
+            // world = origin + position (per-element local frame); without folding
+            // the origin, bounds collapse to each element's local frame near 0.
+            const o = mesh.origin;
+            const ox = o ? o[0] : 0, oy = o ? o[1] : 0, oz = o ? o[2] : 0;
+            for (let i = 0; i < positions.length; i += 3) {
+                const x = positions[i] + ox;
+                const y = positions[i + 1] + oy;
+                const z = positions[i + 2] + oz;
+
+                // Only include values within threshold (filter out outliers/garbage)
+                const coordsFinite = Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z);
+                const withinThreshold = coordsFinite &&
+                    Math.abs(x) < threshold && Math.abs(y) < threshold && Math.abs(z) < threshold;
+
+                if (withinThreshold) {
+                    bounds.min.x = Math.min(bounds.min.x, x);
+                    bounds.min.y = Math.min(bounds.min.y, y);
+                    bounds.min.z = Math.min(bounds.min.z, z);
+                    bounds.max.x = Math.max(bounds.max.x, x);
+                    bounds.max.y = Math.max(bounds.max.y, y);
+                    bounds.max.z = Math.max(bounds.max.z, z);
+                    validVertexCount++;
+                } else {
+                    corruptedVertexCount++;
+                }
+            }
+        }
+
+        if (corruptedVertexCount > 0) {
+            // Corrupted vertices filtered during bounds calculation
+        }
+
+        return bounds;
+    }
+
+    /**
+     * Fast bounds calculation using vertex sampling.
+     * Used after the initial coordinate-frame decision validates sampling.
+     * Samples first and last vertex of each mesh instead of scanning all vertices.
+     * For 208K meshes this is ~416K vertex checks vs 63.5M = ~150x faster.
+     * Accuracy is excellent because meshes are localized objects.
+     */
+    private calculateBoundsFast(meshes: MeshData[]): AABB {
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+        for (const mesh of meshes) {
+            const positions = mesh.positions;
+            const len = positions.length;
+            if (len < 3) continue;
+            // world = origin + position (per-element local frame); without the
+            // origin every element's sampled verts sit near 0 → bounds collapse.
+            const o = mesh.origin;
+            const ox = o ? o[0] : 0, oy = o ? o[1] : 0, oz = o ? o[2] : 0;
+
+            // Sample first vertex
+            const x0 = positions[0] + ox;
+            const y0 = positions[1] + oy;
+            const z0 = positions[2] + oz;
+            if (x0 < minX) minX = x0;
+            if (y0 < minY) minY = y0;
+            if (z0 < minZ) minZ = z0;
+            if (x0 > maxX) maxX = x0;
+            if (y0 > maxY) maxY = y0;
+            if (z0 > maxZ) maxZ = z0;
+
+            // Sample last vertex (if different from first)
+            if (len >= 6) {
+                const x1 = positions[len - 3] + ox;
+                const y1 = positions[len - 2] + oy;
+                const z1 = positions[len - 1] + oz;
+                if (x1 < minX) minX = x1;
+                if (y1 < minY) minY = y1;
+                if (z1 < minZ) minZ = z1;
+                if (x1 > maxX) maxX = x1;
+                if (y1 > maxY) maxY = y1;
+                if (z1 > maxZ) maxZ = z1;
+            }
+        }
+
+        return {
+            min: { x: minX, y: minY, z: minZ },
+            max: { x: maxX, y: maxY, z: maxZ },
+        };
+    }
+
+    /**
+     * Check if coordinate shift is needed
+     */
+    needsShift(bounds: AABB): boolean {
+        const maxCoord = Math.max(
+            Math.abs(bounds.min.x), Math.abs(bounds.max.x),
+            Math.abs(bounds.min.y), Math.abs(bounds.max.y),
+            Math.abs(bounds.min.z), Math.abs(bounds.max.z)
+        );
+
+        return maxCoord > NORMAL_COORD_THRESHOLD_M;
+    }
+
+    /**
+     * Calculate centroid (center point) from bounds
+     */
+    calculateCentroid(bounds: AABB): Vec3 {
+        return {
+            x: (bounds.min.x + bounds.max.x) / 2,
+            y: (bounds.min.y + bounds.max.y) / 2,
+            z: (bounds.min.z + bounds.max.z) / 2,
+        };
+    }
+
+    /**
+     * Shift positions in-place by subtracting origin shift
+     * Corrupted values are set to 0 (center of shifted coordinate system)
+     * @param positions - Position array to modify
+     * @param shift - Origin shift to subtract
+     * @param threshold - Optional threshold for valid coordinates (defaults to MAX_REASONABLE_COORD)
+     */
+    shiftPositions(positions: Float32Array, shift: Vec3, threshold?: number): void {
+        const maxCoord = threshold ?? this.MAX_REASONABLE_COORD;
+        for (let i = 0; i < positions.length; i += 3) {
+            const x = positions[i];
+            const y = positions[i + 1];
+            const z = positions[i + 2];
+
+            // For corrupted/outlier values, set to center (0) in shifted space
+            const coordsValid = Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) &&
+                Math.abs(x) < maxCoord && Math.abs(y) < maxCoord && Math.abs(z) < maxCoord;
+
+            if (coordsValid) {
+                positions[i] = x - shift.x;
+                positions[i + 1] = y - shift.y;
+                positions[i + 2] = z - shift.z;
+            } else {
+                // Corrupted/outlier vertex - set to origin to avoid visual artifacts
+                positions[i] = 0;
+                positions[i + 1] = 0;
+                positions[i + 2] = 0;
+            }
+        }
+    }
+
+    /**
+     * Shift bounds by subtracting origin shift
+     */
+    shiftBounds(bounds: AABB, shift: Vec3): AABB {
+        return {
+            min: {
+                x: bounds.min.x - shift.x,
+                y: bounds.min.y - shift.y,
+                z: bounds.min.z - shift.z,
+            },
+            max: {
+                x: bounds.max.x - shift.x,
+                y: bounds.max.y - shift.y,
+                z: bounds.max.z - shift.z,
+            },
+        };
+    }
+
+    /**
+     * Process meshes: detect large coordinates and shift if needed
+     */
+    processMeshes(meshes: MeshData[]): CoordinateInfo {
+        const emptyResult: CoordinateInfo = {
+            originShift: { x: 0, y: 0, z: 0 },
+            originalBounds: {
+                min: { x: 0, y: 0, z: 0 },
+                max: { x: 0, y: 0, z: 0 },
+            },
+            shiftedBounds: {
+                min: { x: 0, y: 0, z: 0 },
+                max: { x: 0, y: 0, z: 0 },
+            },
+            hasLargeCoordinates: false,
+            boundsRecoveryFallbackCount: this.boundsRecoveryFallbackCount,
+            ...this.wasmMetadataProps(),
+        };
+
+        if (meshes.length === 0) {
+            return emptyResult;
+        }
+
+        // Calculate original bounds (filtering corrupted values)
+        const originalBounds = this.calculateBounds(meshes);
+
+        // Check if we got valid bounds
+        const hasValidBounds =
+            originalBounds.min.x !== Infinity && originalBounds.max.x !== -Infinity;
+
+        if (!hasValidBounds) {
+            console.warn('[CoordinateHandler] No valid coordinates found in geometry');
+            return emptyResult;
+        }
+
+        // Check if shift is needed (>10km from origin)
+        const needsShift = this.needsShift(originalBounds);
+
+        if (!needsShift) {
+            // No shift needed - just clean up corrupted values in-place
+            // Still shift by 0 to clean up corrupted vertices
+            const zeroShift = { x: 0, y: 0, z: 0 };
+            for (const mesh of meshes) {
+                this.shiftPositions(mesh.positions, zeroShift);
+            }
+            return {
+                originShift: zeroShift,
+                originalBounds,
+                shiftedBounds: originalBounds,
+                hasLargeCoordinates: false,
+                boundsRecoveryFallbackCount: this.boundsRecoveryFallbackCount,
+                ...this.wasmMetadataProps(),
+            };
+        }
+
+        // Calculate centroid as origin shift
+        const centroid = this.calculateCentroid(originalBounds);
+        this.originShift = centroid;
+
+        // Shift all mesh positions
+        for (const mesh of meshes) {
+            this.shiftPositions(mesh.positions, centroid);
+        }
+
+        // Calculate shifted bounds
+        const shiftedBounds = this.shiftBounds(originalBounds, centroid);
+
+
+        return {
+            originShift: centroid,
+            originalBounds,
+            shiftedBounds,
+            hasLargeCoordinates: true,
+            boundsRecoveryFallbackCount: this.boundsRecoveryFallbackCount,
+            ...this.wasmMetadataProps(),
+        };
+    }
+
+    /**
+     * World→render metadata for a returned {@link CoordinateInfo}: the
+     * length-unit scale and the RTC offset the WASM mesh path actually
+     * subtracted (see {@link setWasmMetadata}). `wasmRtcOffset` is attached
+     * only when a shift was actually applied, so `wasmRtcOffset !== undefined`
+     * keeps meaning "geometry re-based" for downstream federation / cache /
+     * georeference consumers. The batch `processMeshes` path used to DROP
+     * this metadata (only the incremental path attached it), so every sync
+     * `process()` consumer read the re-based bounds as if they were absolute
+     * — losing the site offset that georeferencing math needs (#2526).
+     */
+    private wasmMetadataProps(): Pick<CoordinateInfo, 'wasmRtcOffset' | 'wasmRtcFrame' | 'lengthUnitScale'> {
+        return {
+            ...(this.appliedWasmRtcOffset ? { wasmRtcOffset: { ...this.appliedWasmRtcOffset } } : {}),
+            ...(this.wasmRtcFrame ? { wasmRtcFrame: { ...this.wasmRtcFrame } } : {}),
+            ...(this.lengthUnitScale !== undefined ? { lengthUnitScale: this.lengthUnitScale } : {}),
+        };
+    }
+
+    /**
+     * Convert local (shifted) coordinates back to world coordinates
+     */
+    toWorldCoordinates(localPos: Vec3): Vec3 {
+        return {
+            x: localPos.x + this.originShift.x,
+            y: localPos.y + this.originShift.y,
+            z: localPos.z + this.originShift.z,
+        };
+    }
+
+    /**
+     * Convert world coordinates to local (shifted) coordinates
+     */
+    toLocalCoordinates(worldPos: Vec3): Vec3 {
+        return {
+            x: worldPos.x - this.originShift.x,
+            y: worldPos.y - this.originShift.y,
+            z: worldPos.z - this.originShift.z,
+        };
+    }
+
+    /**
+     * Get current origin shift
+     */
+    getOriginShift(): Vec3 {
+        return { ...this.originShift };
+    }
+
+    /**
+     * Process a batch using authoritative WASM metadata when available.
+     *
+     * Native buffer streaming and adaptive native processing have no pre-pass
+     * decision and retain the legacy first-vertex vote. WASM callers set their
+     * authoritative frame first through `setWasmMetadata`.
+     */
+    processMeshesIncremental(batch: MeshData[]): void {
+        // Applied WASM RTC uses the stricter post-RTC validation threshold.
+        // Known-not-applied and unknown native coordinates start broad.
+        this.activeThreshold = this.wasmRtcApplied === true
+            ? NORMAL_COORD_THRESHOLD_M
+            : this.MAX_REASONABLE_COORD;
+        const batchBounds = this.calculateBounds(batch, this.activeThreshold);
+
+        if (this.accumulatedBounds === null) {
+            this.accumulatedBounds = batchBounds;
+        } else {
+            // Expand accumulated bounds
+            this.accumulatedBounds.min.x = Math.min(this.accumulatedBounds.min.x, batchBounds.min.x);
+            this.accumulatedBounds.min.y = Math.min(this.accumulatedBounds.min.y, batchBounds.min.y);
+            this.accumulatedBounds.min.z = Math.min(this.accumulatedBounds.min.z, batchBounds.min.z);
+            this.accumulatedBounds.max.x = Math.max(this.accumulatedBounds.max.x, batchBounds.max.x);
+            this.accumulatedBounds.max.y = Math.max(this.accumulatedBounds.max.y, batchBounds.max.y);
+            this.accumulatedBounds.max.z = Math.max(this.accumulatedBounds.max.z, batchBounds.max.z);
+        }
+
+        // Calculate shift on first batch if needed
+        if (!this.shiftCalculated && this.accumulatedBounds) {
+            const hasValidBounds =
+                this.accumulatedBounds.min.x !== Infinity &&
+                this.accumulatedBounds.max.x !== -Infinity;
+
+            if (hasValidBounds) {
+                const size = {
+                    x: this.accumulatedBounds.max.x - this.accumulatedBounds.min.x,
+                    y: this.accumulatedBounds.max.y - this.accumulatedBounds.min.y,
+                    z: this.accumulatedBounds.max.z - this.accumulatedBounds.min.z,
+                };
+                const maxSize = Math.max(size.x, size.y, size.z);
+                const centroid = this.calculateCentroid(this.accumulatedBounds);
+                const distanceFromOrigin = Math.sqrt(
+                    centroid.x ** 2 + centroid.y ** 2 + centroid.z ** 2
+                );
+                const requiresShift =
+                    distanceFromOrigin > NORMAL_COORD_THRESHOLD_M || maxSize > NORMAL_COORD_THRESHOLD_M;
+                const boundsWithinNormalThreshold = [
+                    ...Object.values(this.accumulatedBounds.min), ...Object.values(this.accumulatedBounds.max),
+                ].every((value) => Math.abs(value) < NORMAL_COORD_THRESHOLD_M);
+
+                const wasmRtcApplied = this.wasmRtcApplied
+                    ?? inferWasmRtcApplied(batch, NORMAL_COORD_THRESHOLD_M);
+
+                if (wasmRtcApplied) {
+                    // Recalculate bounds excluding outliers (use stricter threshold)
+                    this.accumulatedBounds = this.calculateBounds(batch, NORMAL_COORD_THRESHOLD_M);
+                    this.activeThreshold = NORMAL_COORD_THRESHOLD_M;
+                }
+
+                // Check if shift is needed (>10km from origin) AND WASM didn't already apply RTC
+                if (requiresShift && !wasmRtcApplied) {
+                    this.originShift = centroid;
+                }
+
+                // Keep the established WASM fast path independent of whether
+                // RTC was actually needed. Unknown native producers retain the
+                // legacy inference behavior; shifted data remains fully checked.
+                this.fastBoundsEligible = wasmRtcApplied ||
+                    (this.wasmRtcApplied === false && !requiresShift && boundsWithinNormalThreshold &&
+                        this.originShift.x === 0 && this.originShift.y === 0 && this.originShift.z === 0);
+                this.shiftCalculated = true;
+            }
+        }
+
+        // Apply shift to this batch (only if we determined shift is needed AND WASM didn't already apply)
+        // Use the same threshold for vertex cleanup as was used for bounds calculation
+        if (this.originShift.x !== 0 || this.originShift.y !== 0 || this.originShift.z !== 0) {
+            for (const mesh of batch) {
+                this.shiftPositions(mesh.positions, this.originShift, this.activeThreshold);
+            }
+        }
+    }
+
+    /**
+     * Fast incremental path for trusted native batches.
+     *
+     * Desktop native streaming already emits site-local coordinates, so the JS
+     * layer does not need to re-run RTC detection, outlier filtering, or
+     * position shifting for every vertex. We only need lightweight bounds
+     * accumulation so the viewport can fit the camera while streaming.
+     */
+    processTrustedMeshesIncremental(batch: MeshData[]): void {
+        const batchBounds = this.calculateBoundsFast(batch);
+        const hasValidBounds =
+            batchBounds.min.x !== Infinity &&
+            batchBounds.max.x !== -Infinity;
+
+        if (!hasValidBounds) {
+            return;
+        }
+
+        if (this.accumulatedBounds === null) {
+            this.accumulatedBounds = batchBounds;
+        } else {
+            this.accumulatedBounds.min.x = Math.min(this.accumulatedBounds.min.x, batchBounds.min.x);
+            this.accumulatedBounds.min.y = Math.min(this.accumulatedBounds.min.y, batchBounds.min.y);
+            this.accumulatedBounds.min.z = Math.min(this.accumulatedBounds.min.z, batchBounds.min.z);
+            this.accumulatedBounds.max.x = Math.max(this.accumulatedBounds.max.x, batchBounds.max.x);
+            this.accumulatedBounds.max.y = Math.max(this.accumulatedBounds.max.y, batchBounds.max.y);
+            this.accumulatedBounds.max.z = Math.max(this.accumulatedBounds.max.z, batchBounds.max.z);
+        }
+
+        this.originShift = { x: 0, y: 0, z: 0 };
+        this.fastBoundsEligible = true;
+        this.shiftCalculated = true;
+        this.activeThreshold = NORMAL_COORD_THRESHOLD_M;
+    }
+
+    /**
+     * Get current coordinate info (for incremental updates)
+     */
+    getCurrentCoordinateInfo(): CoordinateInfo | null {
+        if (!this.accumulatedBounds) {
+            return null;
+        }
+
+        const hasValidBounds =
+            this.accumulatedBounds.min.x !== Infinity &&
+            this.accumulatedBounds.max.x !== -Infinity;
+
+        if (!hasValidBounds) {
+            return null;
+        }
+
+        const shiftedBounds = this.shiftBounds(this.accumulatedBounds, this.originShift);
+        const hasLargeCoordinates =
+            this.originShift.x !== 0 ||
+            this.originShift.y !== 0 ||
+            this.originShift.z !== 0;
+
+        return {
+            originShift: { ...this.originShift },
+            originalBounds: { ...this.accumulatedBounds },
+            shiftedBounds,
+            hasLargeCoordinates,
+            boundsRecoveryFallbackCount: this.boundsRecoveryFallbackCount,
+            ...this.wasmMetadataProps(),
+        };
+    }
+
+    /**
+     * Get final coordinate info after incremental processing
+     */
+    getFinalCoordinateInfo(): CoordinateInfo {
+        const current = this.getCurrentCoordinateInfo();
+        if (current) {
+            return current;
+        }
+
+        // Fallback to zero bounds if no valid bounds found
+        return {
+            originShift: { x: 0, y: 0, z: 0 },
+            originalBounds: {
+                min: { x: 0, y: 0, z: 0 },
+                max: { x: 0, y: 0, z: 0 },
+            },
+            shiftedBounds: {
+                min: { x: 0, y: 0, z: 0 },
+                max: { x: 0, y: 0, z: 0 },
+            },
+            hasLargeCoordinates: false,
+            boundsRecoveryFallbackCount: this.boundsRecoveryFallbackCount,
+            ...this.wasmMetadataProps(),
+        };
+    }
+
+    /**
+     * Record the world→render metadata the WASM pre-pass resolved for this
+     * model (issue #945): the length-unit scale and the RTC offset the mesh
+     * path actually subtracted. Pass `rtcOffset: null` when no shift was
+     * applied. Surfaced on the returned {@link CoordinateInfo} so external
+     * viewers can map externally-resolved geometry into the render frame.
+     * Exact provenance is strict. For compatibility, a legacy two-argument
+     * call with a non-finite offset remains non-throwing but publishes no
+     * `wasmRtcFrame`.
+     */
+    setWasmMetadata(
+        lengthUnitScale: number | undefined,
+        rtcOffset: Vec3 | null,
+        exactFrame?: RtcFrame,
+    ): void {
+        const frame = resolveWasmMetadataFrame(rtcOffset, exactFrame);
+        this.lengthUnitScale = lengthUnitScale;
+        this.appliedWasmRtcOffset = rtcOffset ? { ...rtcOffset } : null;
+        this.wasmRtcApplied = rtcOffset !== null;
+        // Calling this setter explicitly asserts WASM provenance. Legacy
+        // two-argument callers therefore get the deterministic frame implied
+        // by a finite applied offset. Preserve the old non-throwing contract
+        // for non-finite legacy input, but do not invent provenance for it.
+        // Native/unknown paths never call the setter.
+        this.wasmRtcFrame = frame;
+    }
+
+    /**
+     * Reset incremental state (for new file)
+     */
+    reset(): void {
+        this.accumulatedBounds = null;
+        this.shiftCalculated = false;
+        this.originShift = { x: 0, y: 0, z: 0 };
+        this.wasmRtcApplied = undefined;
+        this.fastBoundsEligible = false;
+        this.activeThreshold = this.MAX_REASONABLE_COORD;
+        this.appliedWasmRtcOffset = null;
+        this.wasmRtcFrame = undefined;
+        this.lengthUnitScale = undefined;
+        this.boundsRecoveryFallbackCount = 0;
+    }
+}

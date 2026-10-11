@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+#
+# Vercel `installCommand` entry point.
+#
+# After PR #657 we stopped committing the WASM bundle to git — see
+# .gitignore and packages/wasm/pkg/. Vercel must therefore bootstrap a
+# Rust toolchain + wasm-pack before pnpm install so that `turbo build`
+# can call `scripts/build-wasm.sh` and produce the bundles from source
+# every deploy. The previous "commit-the-binary" model silently shipped
+# stale bundles whenever a maintainer forgot to rebuild locally
+# (issue #654).
+#
+# The script is idempotent: rustup and wasm-pack are no-ops if Vercel's
+# build cache already restored them between deploys. Cold installs add
+# ~30-60 s; warm cache adds essentially nothing.
+set -euo pipefail
+
+# ── Prebuilt-WASM fast path (see scripts/README-vercel-cost.md §3c) ───────────
+#
+# The from-source bootstrap below re-clones emsdk and re-downloads ~270 MB of
+# wasm-binaries + the Rust toolchain on every deploy (the /vercel/cache copy
+# doesn't reliably persist). On the ~2/3 of deploys that don't touch Rust we
+# can skip ALL of that and use the already-published @ifc-lite/wasm from npm.
+#
+# CORRECTNESS GUARD — we only take this path when git proves the WASM source
+# (rust/** + Cargo manifests + toolchain pin + build script) is byte-identical
+# to the `@ifc-lite/wasm@<version>` release tag that produced the published
+# binary. Any uncertainty — version unreadable, tag unreachable in Vercel's
+# shallow clone, npm 404, fetch failure — falls through to the full from-source
+# build below (today's behaviour). This path can never ship a stale WASM bundle.
+WASM_VERSION="$(node -p "require('./packages/wasm/package.json').version" 2>/dev/null || true)"
+WASM_TAG="@ifc-lite/wasm@${WASM_VERSION}"
+# Conservative superset: any Rust workspace change invalidates the fast path,
+# even one that doesn't reach the wasm-bindings crate. Correctness over savings.
+WASM_SRC_PATHS=(rust Cargo.lock Cargo.toml rust-toolchain.toml scripts/build-wasm.sh)
+# Vercel's build checkout has NO usable `origin` remote (confirmed: `git fetch
+# origin` → "'origin' does not appear to be a git repository"). Fetch the tag
+# straight from the public GitHub URL instead — anonymous read needs no auth.
+WASM_REPO_URL="https://github.com/${VERCEL_GIT_REPO_OWNER:-LTplus-AG}/${VERCEL_GIT_REPO_SLUG:-ifc-lite}.git"
+
+if [ -n "${WASM_VERSION:-}" ] && command -v git >/dev/null 2>&1; then
+  _tag_present() { git rev-parse -q --verify "refs/tags/${WASM_TAG}^{commit}" >/dev/null 2>&1; }
+  if ! _tag_present; then
+    # Vercel clones shallow without tags — fetch just this one release tag so
+    # we can diff against it. Surfaced (not silenced) so a blocked fetch is
+    # visible in the build log rather than masquerading as "source changed".
+    echo "ℹ️  Fetching release tag ${WASM_TAG} from ${WASM_REPO_URL} (shallow)…"
+    git fetch --depth=1 "${WASM_REPO_URL}" "+refs/tags/${WASM_TAG}:refs/tags/${WASM_TAG}" 2>&1 \
+      | sed 's/^/     git-fetch: /' || true
+  fi
+  # Every pathspec must actually MATCH something at the tag before its "no diff"
+  # answer can be trusted (#3200). `git diff --quiet` exits 0 both for "nothing
+  # changed" and for "your pathspec matched nothing at either end", so a typo'd
+  # entry silently covers nothing AND moves the answer toward "reuse the
+  # prebuilt bundle". The list is kept in lock-step with
+  # scripts/ci-wasm-prebuilt-eligible.sh BY HAND, which is exactly where such a
+  # typo comes from — and THIS copy is the production half: a stale bundle here
+  # ships to a Vercel build, where the CI twin only costs runner minutes.
+  # EITHER end, matching the twin. A path DELETED since the tag still matches at
+  # the tag, and one ADDED since still matches at HEAD; only a name that exists
+  # at neither is a typo. Checking the tag alone (as this did) refuses on every
+  # newly added source path -- safe direction, wrong predicate, and it silently
+  # diverged from ci-wasm-prebuilt-eligible.sh, which the comment above claims
+  # it is kept in lock-step with. Two twins implementing one guard differently
+  # is how the next person syncing them has to rediscover which was meant.
+  _pathspecs_all_match() {
+    for _p in "${WASM_SRC_PATHS[@]}"; do
+      _at_tag="$(git ls-tree -r --name-only "refs/tags/${WASM_TAG}" -- "${_p}" 2>/dev/null | head -1 || true)"
+      _at_head="$(git ls-tree -r --name-only HEAD -- "${_p}" 2>/dev/null | head -1 || true)"
+      if [ -z "${_at_tag}" ] && [ -z "${_at_head}" ]; then
+        echo "🛠  WASM_SRC_PATHS entry '${_p}' matches no file at ${WASM_TAG} or at HEAD —"
+        echo "   it can only ever compare nothing, so a no-diff answer would under-report."
+        echo "   Building from source, and fix the list (lock-step with ci-wasm-prebuilt-eligible.sh)."
+        return 1
+      fi
+    done
+    return 0
+  }
+
+  # Evaluated BEFORE the branch so the refusal is not followed by the `else`
+  # arm's "Rust sources changed" line plus an empty changed-file list, which is
+  # what happened when this was inlined into the `elif`: the correct message was
+  # contradicted by a wrong one on the only path that matters.
+  _pathspecs_ok=1
+  _tag_present && { _pathspecs_all_match || _pathspecs_ok=0; }
+
+  if ! _tag_present; then
+    echo "🛠  Release tag ${WASM_TAG} not reachable in this clone — building WASM from source."
+  elif [ "${_pathspecs_ok}" = "0" ]; then
+    : # already explained by _pathspecs_all_match; fall through to from-source
+  elif git diff --quiet "refs/tags/${WASM_TAG}" HEAD -- "${WASM_SRC_PATHS[@]}"; then
+    echo "🅰  WASM source identical to ${WASM_TAG} — using prebuilt npm bundle,"
+    echo "   skipping Rust toolchain + emsdk bootstrap + from-source compile."
+    if node scripts/fetch-prebuilt-wasm.mjs; then
+      echo "📦 Running pnpm install --frozen-lockfile..."
+      pnpm install --frozen-lockfile
+      exit 0
+    fi
+    echo "⚠️  Prebuilt WASM fetch failed — falling back to from-source build."
+  else
+    echo "🛠  Rust sources changed since ${WASM_TAG} — building WASM from source."
+    git diff --name-only "refs/tags/${WASM_TAG}" HEAD -- "${WASM_SRC_PATHS[@]}" \
+      | sed 's/^/     changed: /' | head -20 || true
+  fi
+fi
+# ── From-source build (Rust changed, or no matching/reachable release tag) ────
+
+if ! command -v rustup >/dev/null 2>&1; then
+  echo "📦 Installing rustup (minimal profile, no default toolchain)..."
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain none --profile minimal
+fi
+
+# rustup installs to ~/.cargo/bin by default. Add to PATH unconditionally
+# — `command -v rustup` may succeed because the binary survived a cache
+# restore, while `~/.cargo/env` (the helper sourcing file) did not. We
+# saw exactly that on Vercel's iad1 runner in the first deploy of this
+# branch. Sourcing the env file is best-effort and skipped when absent.
+export PATH="$HOME/.cargo/bin:$PATH"
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+
+# rust-toolchain.toml at the repo root pins the channel + targets +
+# components we need. `rustup show` is unreliable on Vercel's rustup
+# build — it downloads components but doesn't fully register the
+# toolchain, so `rustup run <channel>` from a later phase reports
+# "toolchain not installed" even though `rustup show` claimed it was
+# active (observed in fix/issue-654-catia-header-hash deploy logs on
+# iad1: "installed toolchains: 1.92.0" listed by rustup show, but
+# `rustup run nightly-2025-11-15` fails seconds later).
+#
+# Be explicit: parse the channel and call `rustup toolchain install`
+# directly, which always produces a fully-registered installation.
+CHANNEL=$(awk -F'"' '/^channel/ { print $2 }' rust-toolchain.toml)
+if [ -z "$CHANNEL" ]; then
+  echo "❌ Could not parse 'channel' from rust-toolchain.toml" >&2
+  exit 1
+fi
+echo "📦 Installing Rust toolchain ${CHANNEL} with wasm32-unknown-unknown..."
+rustup toolchain install "$CHANNEL" \
+  --component rust-src \
+  --target wasm32-unknown-unknown \
+  --profile minimal
+
+# Sanity check: any subsequent `rustup run "$CHANNEL"` must succeed.
+# If this fails the build is doomed — fail loud here instead of in
+# turbo's noisy output 30 lines later.
+rustup run "$CHANNEL" rustc --version
+
+if ! command -v wasm-pack >/dev/null 2>&1; then
+  echo "📦 Installing wasm-pack (pre-built binary)..."
+  # Use the upstream installer — pulls the latest pre-built binary in a
+  # few seconds. `cargo install wasm-pack` would compile from source and
+  # add ~3 min to the cold build.
+  curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+fi
+
+echo "📦 Running pnpm install --frozen-lockfile..."
+pnpm install --frozen-lockfile

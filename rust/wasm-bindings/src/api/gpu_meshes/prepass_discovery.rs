@@ -1,0 +1,175 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Columns-driven pre-pass discovery (stage 2 of the sharded pre-pass):
+//! reproduces the serial scan loop's job/span collection from the shard
+//! class columns, so the pre-pass never byte-scans the file.
+
+/// Everything the pre-pass scan loop discovers, filled from the shard class
+/// columns instead of a byte scan (stage 2 of the sharded pre-pass). The
+/// class byte was computed at shard-scan time from the SAME predicates the
+/// serial loop matches on, so filling these from the columns reproduces the
+/// serial discovery byte-for-byte — without re-walking the file.
+pub(super) struct ColumnsDiscovery {
+    pub buffered_jobs: Vec<(u32, usize, usize, ifc_lite_core::IfcType)>,
+    pub total_jobs: u32,
+    pub project_id: Option<u32>,
+    pub site_position: Option<(u32, usize, usize)>,
+    pub prepass_spans: ifc_lite_processing::prepass::PrepassSpans,
+    pub mapped_item_spans: Vec<(u32, usize, usize)>,
+    pub type_candidate_spans: Vec<(u32, usize, usize, ifc_lite_core::IfcType)>,
+    pub has_layer_set: bool,
+}
+
+/// Parse the raw STEP keyword at a record start (`#id=KEYWORD(...`). Only
+/// called for the few records that need it (geometry jobs + type candidates),
+/// never for the 19M-entity bulk. A span outside `content` (columns stitched
+/// against a different buffer) yields `""`, like a record with no keyword.
+fn keyword_at(content: &[u8], start: usize, end: usize) -> &str {
+    let span = content.get(start..end.min(content.len())).unwrap_or_default();
+    let eq = span.iter().position(|&b| b == b'=').map(|p| p + 1).unwrap_or(0);
+    let kw_end = span[eq..]
+        .iter()
+        .position(|&b| b == b'(')
+        .map(|p| eq + p)
+        .unwrap_or(span.len());
+    std::str::from_utf8(&span[eq..kw_end]).unwrap_or("").trim()
+}
+
+/// Is the raw keyword `kw` in the caller's load-time skip set? The set holds
+/// uppercase names, so an uppercase `kw` (every mainstream exporter) is one
+/// hash lookup; only a keyword the file wrote in another case falls to the
+/// folded linear scan. The set is empty in the common case.
+pub(super) fn is_disabled(disabled_types: &rustc_hash::FxHashSet<String>, kw: &str) -> bool {
+    if disabled_types.is_empty() {
+        return false;
+    }
+    if disabled_types.contains(kw) {
+        return true;
+    }
+    kw.bytes().any(|b| b.is_ascii_lowercase())
+        && disabled_types.iter().any(|d| ifc_lite_core::keyword_eq(kw, d))
+}
+
+/// Walk the stitched (file-ordered) class columns and reproduce the serial
+/// pre-pass scan's discovery. `disabled_types` (rare) forces a keyword parse
+/// per flagged geometry record; the empty default never touches the bytes.
+pub(super) fn discover_from_columns(
+    content: &[u8],
+    ids: &[u32],
+    starts: &[u32],
+    lengths: &[u32],
+    classes: &[u8],
+    disabled_types: &rustc_hash::FxHashSet<String>,
+) -> ColumnsDiscovery {
+    use ifc_lite_processing as p;
+    let mut d = ColumnsDiscovery {
+        buffered_jobs: Vec::new(),
+        total_jobs: 0,
+        project_id: None,
+        site_position: None,
+        prepass_spans: p::prepass::PrepassSpans::default(),
+        mapped_item_spans: Vec::new(),
+        type_candidate_spans: Vec::new(),
+        has_layer_set: false,
+    };
+    // Zipped, so a short column ends the walk rather than trapping the worker.
+    for (((&id, &start), &length), &class) in ids.iter().zip(starts).zip(lengths).zip(classes) {
+        if class == p::PREPASS_CLASS_NONE {
+            continue;
+        }
+        let start = start as usize;
+        // Saturating: `+` wraps on wasm32 release builds (no overflow checks).
+        let end = start.saturating_add(length as usize);
+        match class & p::PREPASS_CLASS_CODE_MASK {
+            c if c == p::PREPASS_CLASS_PROJECT => {
+                if d.project_id.is_none() {
+                    d.project_id = Some(id);
+                }
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_SITE => {
+                if d.site_position.is_none() {
+                    d.site_position = Some((id, start, end));
+                }
+                d.buffered_jobs.push((id, start, end, ifc_lite_core::IfcType::IfcSite));
+                d.total_jobs += 1;
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_STYLED_ITEM => {
+                d.prepass_spans.styled_items.push((id, start, end));
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_INDEXED_COLOUR_MAP => {
+                d.prepass_spans.indexed_colour_maps.push((id, start, end));
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_MATERIAL_DEF_REPR => {
+                d.prepass_spans.material_def_reprs.push((id, start, end));
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_REL_ASSOCIATES_MATERIAL => {
+                d.prepass_spans.rel_associates_material.push((id, start, end));
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_REL_VOIDS => {
+                d.prepass_spans.void_rels.push((id, start, end));
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_REL_FILLS => {
+                d.prepass_spans.fills_rels.push((id, start, end));
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_REL_AGGREGATES => {
+                d.prepass_spans.aggregate_rels.push((id, start, end));
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_MATERIAL_LAYER_SET => {
+                d.has_layer_set = true;
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_MAPPED_ITEM => {
+                d.mapped_item_spans.push((id, start, end));
+                continue;
+            }
+            c if c == p::PREPASS_CLASS_REL_DEFINES_BY_TYPE => {
+                // Feeds both the instantiated-type-id build and the shared
+                // resolver's material type-fallback (an occurrence with no
+                // material of its own inherits its type's
+                // IfcRelAssociatesMaterial).
+                d.prepass_spans.defines_by_type.push((id, start, end));
+                continue;
+            }
+            _ => {}
+        }
+        // Flag bits (the serial `_` arm): type candidate and/or geometry job.
+        if class & p::PREPASS_CLASS_FLAG_TYPE_CANDIDATE != 0 {
+            let kw = keyword_at(content, start, end);
+            // The same predicate `classify_type_name` used to SET this flag, so
+            // the label can never disagree with the gate that admitted it.
+            if let Some(ty) = ifc_lite_core::type_product_ifc_type(kw) {
+                d.type_candidate_spans.push((id, start, end, ty));
+            }
+        }
+        if class & p::PREPASS_CLASS_FLAG_GEOMETRY_JOB != 0 {
+            let kw = keyword_at(content, start, end);
+            if !is_disabled(disabled_types, kw) {
+                // Schema-resolved, for the same reason as the type-candidate
+                // branch: `classify_type_name` and this label must both use the
+                // generated schema universe. Exact variants are retained, while
+                // the bounded exporter aliases remain owned unknown keywords
+                // (#3179, #4203).
+                d.buffered_jobs
+                    .push((id, start, end, ifc_lite_core::ifc_type_from_keyword(kw)));
+                d.total_jobs += 1;
+            }
+        }
+    }
+    d
+}
+
+
+#[cfg(test)]
+#[path = "prepass_discovery_tests.rs"]
+mod tests;

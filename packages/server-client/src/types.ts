@@ -1,0 +1,585 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import type { Georeferencing } from './georeferencing.js';
+export type { Georeferencing } from './georeferencing.js';
+import type { MeshCoordinateSpace } from './mesh-coordinate-space.js';
+export { MESH_COORDINATE_SPACES, asMeshCoordinateSpace, withNarrowedCoordinateSpace, type MeshCoordinateSpace } from './mesh-coordinate-space.js';
+
+/**
+ * Configuration options for the IFC server client.
+ */
+export interface ServerConfig {
+  /** Base URL of the IFC-Lite server (e.g., 'https://ifc-lite.railway.app') */
+  baseUrl: string;
+  /** Request timeout in milliseconds (default: 300000 = 5 minutes) */
+  timeout?: number;
+  /**
+   * Bearer token sent as `Authorization: Bearer <token>` on every request.
+   * Required when the server sets `IFC_SERVER_API_TOKEN` (its parse/cache
+   * routes then reject unauthenticated calls); previously no TS client
+   * could authenticate at all (alignment audit).
+   */
+  token?: string;
+}
+
+/**
+ * Individual mesh data with geometry and metadata.
+ */
+export interface MeshData {
+  /** Express ID of the IFC element */
+  express_id: number;
+  /** IFC type name (e.g., "IfcWall") */
+  ifc_type: string;
+  /**
+   * Vertex positions as flat array (x, y, z triplets), in **Y-up metres**.
+   * Every server transport (JSON, parquet, optimized parquet) emits the same
+   * Y-up frame — the server converts from IFC Z-up once, in one place. See
+   * `origin`: the world position of vertex i is `origin + positions[3i..3i+3]`.
+   */
+  positions: Float32Array;
+  /** Vertex normals as flat array (x, y, z triplets) */
+  normals: Float32Array;
+  /** Triangle indices */
+  indices: Uint32Array;
+  /** RGBA color [r, g, b, a] in 0-1 range */
+  color: [number, number, number, number];
+  /** IfcGloballyUniqueId of the source element, when extracted. */
+  global_id?: string;
+  /** Element Name attribute, when extracted. */
+  name?: string;
+  /** Presentation layer assignment, when extracted. */
+  presentation_layer?: string;
+  /** Resolved material name for this (sub-)mesh, when known. */
+  material_name?: string;
+  /**
+   * The `IfcRepresentationItem` this (sub-)mesh was tessellated from — ALWAYS a
+   * representation item, never a material. Before #3199 the server sent an
+   * `IfcMaterial` id here for material-layered walls, so a consumer following it
+   * to source landed on the wrong entity. Absent where the identity is genuinely
+   * merged away (single-mesh fallback, cached `IfcMappedItem`, instanced).
+   *
+   * Never `0`: `#0` is not a STEP instance name. The same filter applies to
+   * `material_id` below.
+   */
+  geometry_item_id?: number;
+  /**
+   * The `IfcMaterial` whose layer this (sub-)mesh slices — ALWAYS a material,
+   * never a representation item. DISJOINT from `geometry_item_id`: the server
+   * never sends both. Never `0` either, and here that is load-bearing rather
+   * than trivially true: an unreferenced layer (an air gap) decodes to
+   * `material_id 0` in the mesher, and is sent as ABSENT rather than as
+   * `IfcMaterial #0`, which is not an entity anyone can navigate to (#3199).
+   */
+  material_id?: number;
+  /**
+   * IFC-authored metallic factor in `[0, 1]` (#5984), from the
+   * `IfcSurfaceStyleRendering` the mesh's colour came from. Absent when the
+   * file authored no metal evidence; the renderer then keeps its default.
+   */
+  metallic?: number;
+  /**
+   * IFC-authored roughness in `[0, 1]` (#5984), same source as `metallic`.
+   * Absent when unauthored. `0` is a real value (mirror-smooth glass), so test
+   * it with `!== undefined`, never for truthiness.
+   */
+  roughness?: number;
+  /** Space/zone properties attached to the element, when extracted. */
+  properties?: Record<string, string>;
+  /**
+   * Per-mesh local-frame origin in Y-up metres: world vertex = `origin +
+   * position` (issue #1841). Mirrors the canonical `@ifc-lite/geometry`
+   * `MeshData.origin`. Absent (⇒ `[0,0,0]`) means `positions` are already
+   * absolute world coords — the world-baked default. The renderer applies it as
+   * a per-batch translation, so building/georef-scale placement never collapses
+   * to the world origin and repeated (instanced) elements place correctly.
+   */
+  origin?: [number, number, number];
+  /**
+   * Geometry provenance for the viewer's Model/Types switch (issue #1841),
+   * mirroring the canonical `MeshData.geometryClass`: 0 = occurrence,
+   * 1 = orphan type-product map, 2 = instanced type-library template (must NOT
+   * be drawn in the normal view — doing so duplicates geometry). Absent ⇒ 0.
+   */
+  geometry_class?: number;
+}
+
+/**
+ * Model metadata extracted from the IFC file.
+ */
+export interface ModelMetadata {
+  /** IFC schema version (e.g., "IFC2X3", "IFC4", "IFC4X3") */
+  schema_version: string;
+  /** Total number of entities in the file */
+  entity_count: number;
+  /** Number of geometry-bearing entities */
+  geometry_entity_count: number;
+  /** Coordinate system information */
+  coordinate_info: CoordinateInfo;
+  /**
+   * Length unit scale to convert model length values to metres (e.g. `0.001`
+   * for millimetres). Absent on older servers — treat as `1`.
+   */
+  length_unit_scale?: number;
+  /**
+   * Georeferencing (`IfcMapConversion` + `IfcProjectedCRS`). Absent when the
+   * model carries no map-conversion data.
+   */
+  georeferencing?: Georeferencing;
+}
+
+/**
+ * Coordinate system information.
+ */
+export interface CoordinateInfo {
+  /** Origin shift applied to coordinates (for RTC rendering) */
+  origin_shift: [number, number, number];
+  /** Whether the model is geo-referenced */
+  is_geo_referenced: boolean;
+}
+
+/**
+ * Processing statistics.
+ */
+export interface ProcessingStats {
+  /** Total number of meshes generated */
+  total_meshes: number;
+  /** Total number of vertices */
+  total_vertices: number;
+  /** Total number of triangles */
+  total_triangles: number;
+  /** Time spent parsing entities (ms) */
+  parse_time_ms: number;
+  /** Time spent scanning entities and building job lists (ms). */
+  entity_scan_time_ms?: number;
+  /** Time spent resolving lookups, styles, and optional metadata (ms). */
+  lookup_time_ms?: number;
+  /** Time spent in geometry preprocessing before extraction (ms). */
+  preprocess_time_ms?: number;
+  /** Time spent processing geometry (ms) */
+  geometry_time_ms: number;
+  /** Total processing time (ms) */
+  total_time_ms: number;
+  /** Whether result was from cache */
+  from_cache: boolean;
+  /**
+   * Total CSG boolean failures recorded during geometry extraction (the
+   * server-side mirror of the browser console CSG diagnostics). Optional:
+   * absent on responses from servers predating this field.
+   */
+  total_csg_failures?: number;
+  /** Number of distinct products with at least one CSG failure. */
+  products_with_failures?: number;
+  /**
+   * Full CSG / opening diagnostics aggregated by the native geometry pass (the
+   * `GeometryDiagnostics` contract; fields are camelCase to match the Rust
+   * `rename_all`). Absent on responses from servers predating this field, or when
+   * nothing diagnostic-worthy happened.
+   */
+  geometry_diagnostics?: GeometryDiagnostics;
+}
+
+// The `GeometryDiagnostics` wire shape lives in `geometry-diagnostics-types.ts`
+// and is re-exported here, so this module's public surface is unchanged (#3857).
+// `export *` re-exports without binding locally, so the name this file still
+// REFERENCES above is imported too.
+import type { GeometryDiagnostics } from './geometry-diagnostics-types.js';
+export * from './geometry-diagnostics-types.js';
+
+// ============================================
+// 2D Symbol Data (IfcAnnotation + IfcGrid)
+// ============================================
+//
+// UNRESOLVED SCALARS. `world_y` and `hatch_angle_secondary` arrive as `null`
+// when the server could not resolve them — the Rust model spells that
+// `f32::NAN` and `serde_json` writes a non-finite float as JSON `null`.
+//
+// `null` is NOT `0`. `world_y: 0` is a real elevation at datum; `world_y:
+// null` means the placement chain never produced one. Branch on `x === null`
+// (or `typeof x === 'number'`) — do not coerce, because `Number(null)` is `0`
+// and would silently invent a datum-level elevation. Anything that buckets or
+// sorts by elevation must exclude the `null`s rather than treat them as zero.
+
+// The symbolic (2D drawing) wire shapes live in `symbolic-types.ts` and are
+// re-exported here, so this module's public surface is unchanged (#3199).
+// `export *` re-exports without binding locally, so the names this file still
+// REFERENCES are imported too.
+import type { SymbolicData } from './symbolic-types.js';
+export * from './symbolic-types.js';
+
+/**
+ * Full parse response with all meshes.
+ */
+export interface ParseResponse {
+  /** Cache key for this result (SHA256 of file content) */
+  cache_key: string;
+  /** All meshes extracted from the IFC file */
+  meshes: MeshData[];
+  /**
+   * Coordinate space of serialized mesh vertices. Absent on older servers,
+   * and on a server that sent a value outside the three tiers (see
+   * [`MeshCoordinateSpace`]): the client refuses to pass an unrecognised tag
+   * off as one of them.
+   */
+  mesh_coordinate_space?: MeshCoordinateSpace;
+  /** IfcSite ObjectPlacement as a column-major 4×4 matrix (metres). */
+  site_transform?: number[];
+  /** IfcBuilding ObjectPlacement as a column-major 4×4 matrix (metres). */
+  building_transform?: number[];
+  /** Model metadata */
+  metadata: ModelMetadata;
+  /** Processing statistics */
+  stats: ProcessingStats;
+  /**
+   * 2D symbol data (`IfcAnnotation` + `IfcGrid`). Omitted when the model has
+   * no 2D symbols.
+   */
+  symbolic_data?: SymbolicData;
+}
+
+/** Metadata-only response (no geometry). */
+export interface MetadataResponse {
+  /** Total number of entities */
+  entity_count: number;
+  /** Number of geometry-bearing entities */
+  geometry_count: number;
+  /** IFC schema version */
+  schema_version: string;
+  /** File size in bytes */
+  file_size: number;
+  /** Records refused for a `u32`-overflowing name (#3395). Absent on older servers: "not scanned for", never "clean". */
+  oversized_id_count?: number;
+  /** The scan stopped at a record with no `;` (#3695), so `entity_count` is partial. Absent on older servers, as above. */
+  malformed_record_found?: boolean;
+}
+
+/** Health check response. */
+export interface HealthResponse {
+  /** Server status */
+  status: string;
+  /** Server version */
+  version: string;
+  /** Service name */
+  service: string;
+}
+
+/**
+ * The body of every error response from the server, on every route and
+ * status. The client decodes it into an `IfcServerError`.
+ */
+export interface ErrorResponse {
+  /** Human-readable message. */
+  error: string;
+  /** Stable identifier to branch on (`NOT_FOUND`, `BAD_REQUEST`, `OVERLOADED`, ...). */
+  code: string;
+}
+
+/**
+ * Server-Sent Event types for streaming responses.
+ */
+export type StreamEvent =
+  | StreamStartEvent
+  | StreamProgressEvent
+  | StreamBatchEvent
+  | StreamCompleteEvent
+  | StreamErrorEvent;
+
+/**
+ * Initial event with estimated totals.
+ */
+export interface StreamStartEvent {
+  type: 'start';
+  /** Estimated number of geometry entities */
+  total_estimate: number;
+}
+
+/**
+ * Progress update event.
+ */
+export interface StreamProgressEvent {
+  type: 'progress';
+  /** Number of entities processed */
+  processed: number;
+  /** Total entities to process */
+  total: number;
+  /** Current entity type being processed */
+  current_type: string;
+}
+
+/**
+ * Batch of processed meshes.
+ */
+export interface StreamBatchEvent {
+  type: 'batch';
+  /** Meshes in this batch */
+  meshes: MeshData[];
+  /** Batch sequence number */
+  batch_number: number;
+}
+
+/**
+ * Processing complete event.
+ */
+export interface StreamCompleteEvent {
+  type: 'complete';
+  /** Final processing statistics */
+  stats: ProcessingStats;
+  /** Model metadata */
+  metadata: ModelMetadata;
+  /** Cache key for the result */
+  cache_key: string;
+  /**
+   * 2D symbol data (`IfcAnnotation` + `IfcGrid`). Omitted when the model has
+   * no 2D symbols.
+   */
+  symbolic_data?: SymbolicData;
+}
+
+/**
+ * Error event.
+ */
+export interface StreamErrorEvent {
+  type: 'error';
+  /** Error message */
+  message: string;
+}
+
+/**
+ * Metadata header from Parquet response (sent via X-IFC-Metadata header).
+ */
+export interface ParquetMetadataHeader {
+  /** Cache key for this result (SHA256 of file content) */
+  cache_key: string;
+  /** Model metadata */
+  metadata: ModelMetadata;
+  /** Processing statistics */
+  stats: ProcessingStats;
+  /** Declares the coordinate space used by serialized mesh vertices; absent
+   *  when the server did not say, or said something outside the three tiers. */
+  mesh_coordinate_space?: MeshCoordinateSpace;
+  /** IfcSite ObjectPlacement as a column-major 4x4 matrix (in meters). */
+  site_transform?: number[];
+  /** IfcBuilding ObjectPlacement as a column-major 4x4 matrix (in meters). */
+  building_transform?: number[];
+  /** Data model statistics (if included) */
+  data_model_stats?: {
+    entity_count: number;
+    property_set_count: number;
+    relationship_count: number;
+    spatial_node_count: number;
+  };
+}
+
+/**
+ * Parquet parse response with decoded geometry.
+ */
+export interface ParquetParseResponse {
+  /** Cache key for this result (SHA256 of file content) */
+  cache_key: string;
+  /** All meshes extracted from the IFC file */
+  meshes: MeshData[];
+  /** Declares the coordinate space used by serialized mesh vertices; absent
+   *  when the server did not say, or said something outside the three tiers. */
+  mesh_coordinate_space?: MeshCoordinateSpace;
+  /** IfcSite ObjectPlacement as a column-major 4x4 matrix (in meters). */
+  site_transform?: number[];
+  /** IfcBuilding ObjectPlacement as a column-major 4x4 matrix (in meters). */
+  building_transform?: number[];
+  /** Model metadata */
+  metadata: ModelMetadata;
+  /** Processing statistics */
+  stats: ProcessingStats;
+  /** Additional stats for Parquet transfer */
+  parquet_stats: {
+    /** Size of Parquet payload in bytes */
+    payload_size: number;
+    /** Time spent decoding Parquet (ms) */
+    decode_time_ms: number;
+  };
+  /** Data model binary (Parquet format) - optional */
+  data_model?: ArrayBuffer;
+}
+
+/**
+ * Optimization statistics from the server.
+ */
+export interface OptimizationStats {
+  /** Number of input meshes before deduplication */
+  input_meshes: number;
+  /** Number of unique meshes after deduplication */
+  unique_meshes: number;
+  /** Number of unique materials */
+  unique_materials: number;
+  /** Mesh reuse ratio (higher = more instancing benefit) */
+  mesh_reuse_ratio: number;
+  /** Whether normals are included in the response */
+  has_normals: boolean;
+}
+
+/**
+ * Metadata header from optimized Parquet response.
+ */
+export interface OptimizedParquetMetadataHeader {
+  /** Cache key for this result */
+  cache_key: string;
+  /** Model metadata */
+  metadata: ModelMetadata;
+  /** Processing statistics */
+  stats: ProcessingStats;
+  /** Declares the coordinate space used by serialized mesh vertices; absent
+   *  when the server did not say, or said something outside the three tiers. */
+  mesh_coordinate_space?: MeshCoordinateSpace;
+  /** IfcSite ObjectPlacement as a column-major 4x4 matrix (in meters). */
+  site_transform?: number[];
+  /** IfcBuilding ObjectPlacement as a column-major 4x4 matrix (in meters). */
+  building_transform?: number[];
+  /** Optimization statistics */
+  optimization_stats: OptimizationStats;
+  /** Vertex multiplier for dequantization (default: 10000 = 0.1mm precision) */
+  vertex_multiplier: number;
+}
+
+/**
+ * Optimized Parquet parse response with ara3d BOS-compatible format.
+ */
+export interface OptimizedParquetParseResponse {
+  /** Cache key for this result */
+  cache_key: string;
+  /** All meshes extracted from the IFC file */
+  meshes: MeshData[];
+  /** Declares the coordinate space used by serialized mesh vertices; absent
+   *  when the server did not say, or said something outside the three tiers. */
+  mesh_coordinate_space?: MeshCoordinateSpace;
+  /** IfcSite ObjectPlacement as a column-major 4x4 matrix (in meters). */
+  site_transform?: number[];
+  /** IfcBuilding ObjectPlacement as a column-major 4x4 matrix (in meters). */
+  building_transform?: number[];
+  /** Model metadata */
+  metadata: ModelMetadata;
+  /** Processing statistics */
+  stats: ProcessingStats;
+  /** Optimization statistics */
+  optimization_stats: OptimizationStats;
+  /** Transfer/decode stats */
+  parquet_stats: {
+    /** Size of Parquet payload in bytes */
+    payload_size: number;
+    /** Time spent decoding Parquet (ms) */
+    decode_time_ms: number;
+  };
+}
+
+// ============================================
+// Streaming Parquet Types
+// ============================================
+
+/**
+ * SSE event types for Parquet streaming responses.
+ */
+export type ParquetStreamEvent =
+  | ParquetStreamStartEvent
+  | ParquetStreamProgressEvent
+  | ParquetStreamBatchEvent
+  | ParquetStreamCompleteEvent
+  | ParquetStreamErrorEvent;
+
+/**
+ * Initial streaming event with estimated totals.
+ */
+export interface ParquetStreamStartEvent {
+  type: 'start';
+  /** Estimated number of geometry entities */
+  total_estimate: number;
+  /** Cache key for this file (use for data model fetch) */
+  cache_key: string;
+}
+
+/**
+ * Progress update event.
+ */
+export interface ParquetStreamProgressEvent {
+  type: 'progress';
+  /** Number of entities processed */
+  processed: number;
+  /** Total entities to process */
+  total: number;
+}
+
+/**
+ * Batch of geometry data as Parquet.
+ */
+export interface ParquetStreamBatchEvent {
+  type: 'batch';
+  /** Base64-encoded Parquet data */
+  data: string;
+  /** Number of meshes in this batch */
+  mesh_count: number;
+  /** Batch sequence number (1-indexed) */
+  batch_number: number;
+  /**
+   * Cross-batch streams only (`stream_shapes=cross-batch`, #5407): where this
+   * batch's vertex rows start in the whole stream. Its mesh rows may point
+   * below it, at a shape an earlier batch carried. Absent on a batch that
+   * decodes on its own.
+   */
+  vertex_base?: number;
+  /** Companion of `vertex_base`, in indices (three per triangle). */
+  index_base?: number;
+}
+
+/**
+ * Processing complete event.
+ */
+export interface ParquetStreamCompleteEvent {
+  type: 'complete';
+  /** Final processing statistics */
+  stats: ProcessingStats;
+  /** Model metadata */
+  metadata: ModelMetadata;
+  /**
+   * 2D symbol data (`IfcAnnotation` + `IfcGrid`). Omitted when the model has
+   * no 2D symbols.
+   */
+  symbolic_data?: SymbolicData;
+}
+
+/**
+ * Error event.
+ */
+export interface ParquetStreamErrorEvent {
+  type: 'error';
+  /** Error message */
+  message: string;
+}
+
+/**
+ * Decoded geometry batch from streaming.
+ */
+export interface ParquetBatch {
+  /** Meshes in this batch */
+  meshes: MeshData[];
+  /** Batch sequence number */
+  batch_number: number;
+  /** Decode time in ms */
+  decode_time_ms: number;
+}
+
+/**
+ * Complete streaming result.
+ */
+export interface ParquetStreamResult {
+  /** Cache key for data model fetch */
+  cache_key: string;
+  /** Total meshes received */
+  total_meshes: number;
+  /** Processing statistics */
+  stats: ProcessingStats;
+  /** Model metadata */
+  metadata: ModelMetadata;
+  /**
+   * 2D symbol data (`IfcAnnotation` + `IfcGrid`) from the stream's `complete`
+   * event. Omitted when the model has no 2D symbols.
+   */
+  symbolic_data?: SymbolicData;
+}

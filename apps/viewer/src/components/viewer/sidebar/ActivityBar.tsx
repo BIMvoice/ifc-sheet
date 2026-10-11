@@ -1,0 +1,351 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The unified sidebar's activity bar (#1208).
+ *
+ * A registry-driven vertical icon rail on the viewport's right edge — the
+ * evolution of the #1200 panel switcher. Icons follow the user's custom order
+ * (`sidebarOrder`) and visible set (`sidebarHiddenIds`), show task-group labels,
+ * highlight the active docked panel, and flag floating / popped
+ * panels with a dot. The footer toggles customize mode, collapse, and a
+ * layout menu. In customize mode every icon becomes drag-reorderable and
+ * gains an eye toggle inline.
+ */
+
+import { useMemo, useState } from 'react';
+import {
+  SlidersHorizontal,
+  PanelRightClose,
+  PanelRightOpen,
+  EllipsisVertical,
+  RotateCcw,
+  Eye,
+  SquareArrowOutUpRight,
+  MonitorUp,
+} from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import { useViewerStore } from '@/store';
+import { resetLayout } from '@/store/layoutReset';
+import { useTranslation } from '@/i18n';
+import { usePanelControls } from '@/hooks/usePanelControls';
+import { WORKSPACE_PANELS, getPanelDef, panelGroupDefinition, type PanelGroup, type WorkspacePanelId } from '@/lib/panels/registry';
+import { useRailPanelIds } from '@/hooks/useRailPanelIds';
+import { pendingCompositionMutations } from '@/lib/layers/pending';
+import { activityAnchor, tourAnchor } from '@/lib/tours/anchors';
+import { CustomizeSidebar } from './CustomizeSidebar';
+
+/** Alt+N shortcut KEY per panel, by registry index (frozen since #1200): 1-9,
+ *  then 0. Only the first ten registry entries get a shortcut; later
+ *  additions (e.g. Hierarchy, #1267) have none, so the map is limited to the
+ *  first ten. The label itself ('Alt+{key}') is composed at render time. */
+const ALT_KEY = new Map<WorkspacePanelId, string>(
+  WORKSPACE_PANELS.slice(0, 10).map((p, i) => [p.id, i < 9 ? String(i + 1) : '0']),
+);
+
+export function ActivityBar() {
+  const { t } = useTranslation();
+  const order = useViewerStore((s) => s.sidebarOrder);
+  const hiddenIds = useViewerStore((s) => s.sidebarHiddenIds);
+  const mode = useViewerStore((s) => s.sidebarMode);
+  const customizing = useViewerStore((s) => s.sidebarCustomizing);
+  const setSidebarMode = useViewerStore((s) => s.setSidebarMode);
+  const setSidebarCustomizing = useViewerStore((s) => s.setSidebarCustomizing);
+  const setPanelShownInSidebar = useViewerStore((s) => s.setPanelShownInSidebar);
+  const reorder = useViewerStore((s) => s.reorderSidebarPanel);
+
+  const { isOpen, panelLocation, toggle, openInHome, floatPanel, popOutPanel, activePanel } = usePanelControls();
+
+  // Draft-awareness badge on the Layers icon (#1717 exposure): unpublished
+  // composition edits are the moment the feature becomes relevant — surface
+  // the count where the user already looks, like the Room peers badge.
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const hasStack = useViewerStore((s) => s.layerStack.length > 0);
+  const pendingLayerEdits = useMemo(() => {
+    void mutationVersion;
+    return hasStack ? pendingCompositionMutations().length : 0;
+  }, [mutationVersion, hasStack]);
+
+  const [dragId, setDragId] = useState<WorkspacePanelId | null>(null);
+  const [overId, setOverId] = useState<WorkspacePanelId | null>(null);
+
+  // One rail list for the activity bar and the mobile Panels sheet (#5853).
+  const visibleIds = useRailPanelIds();
+
+  const onIconClick = (id: WorkspacePanelId) => {
+    const region = getPanelDef(id)?.region;
+    // The left nav panel (Hierarchy, #1267) lives in its own slot, so just
+    // toggle it; it never affects the right-pane sidebar mode.
+    if (region === 'left') {
+      toggle(id);
+      return;
+    }
+    // Bottom-region panels (Script / Schedule / Lists) open in the bottom strip
+    // — their own region — without touching the right-pane sidebar mode.
+    if (region === 'bottom') {
+      toggle(id);
+      return;
+    }
+    if (mode === 'collapsed') {
+      // Collapsed icons open + expand the right pane; they never toggle off.
+      setSidebarMode('expanded');
+      openInHome(id);
+      return;
+    }
+    toggle(id);
+  };
+
+  let prevGroup: PanelGroup | null = null;
+
+  return (
+    <div data-activity-bar className="relative flex flex-col items-center w-16 shrink-0 h-full border-l border-border bg-background">
+      {/* Panels */}
+      <div className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden py-1.5 flex flex-col items-center gap-0.5">
+        {visibleIds.map((id) => {
+          const def = getPanelDef(id);
+          if (!def) return null;
+          const title = t(def.titleKey);
+          const Icon = def.Icon;
+          const loc = panelLocation(id);
+          const active = loc === 'docked';
+          const open = isOpen(id);
+          const showGroupLabel = def.group !== prevGroup;
+          prevGroup = def.group;
+
+          // Accessible name: the Radix tooltip is NOT the button's name, and
+          // tooltips don't fire on touch / for many SR users, so set it
+          // explicitly. In customize mode the action is "hide" (only shown
+          // panels render here now, #1263).
+          const ariaLabel = customizing
+            ? t('shellChrome.activityBar.iconAriaLabelHide', { title })
+            : loc === 'floating'
+              ? t('shellChrome.activityBar.iconAriaLabelFloating', { title })
+              : loc === 'popped'
+                ? t('shellChrome.activityBar.iconAriaLabelPopped', { title })
+                : title;
+
+          return (
+            <div key={id} className="contents">
+              {showGroupLabel && (
+                <h3
+                  data-panel-group={def.group}
+                  title={t(panelGroupDefinition(def.group).descriptionKey)}
+                  className="w-full border-t border-border/70 px-0.5 pt-1.5 pb-0.5 text-center text-2xs font-medium leading-tight text-muted-foreground"
+                >
+                  {t(panelGroupDefinition(def.group).labelKey)}
+                </h3>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    {...tourAnchor(activityAnchor(id))}
+                    aria-label={ariaLabel}
+                    aria-pressed={active}
+                    draggable={customizing && id !== 'properties'}
+                    onDragStart={() => customizing && setDragId(id)}
+                    onDragEnd={() => {
+                      setDragId(null);
+                      setOverId(null);
+                    }}
+                    onDragOver={(e) => {
+                      // Only an icon reorder claims the drag; a file is the window's (#5845).
+                      if (!customizing || !dragId) return;
+                      e.preventDefault();
+                      if (overId !== id) setOverId(id);
+                    }}
+                    onDrop={() => {
+                      if (customizing && dragId && dragId !== id) reorder(dragId, order.indexOf(id));
+                      setDragId(null);
+                      setOverId(null);
+                    }}
+                    onClick={() => (customizing ? setPanelShownInSidebar(id, false) : onIconClick(id))}
+                    className={cn(
+                      // `shrink-0`: this sits in a `flex flex-col` rail with more
+                      // icons than fit some viewports (`overflow-y-auto` on the
+                      // rail). Without it the default flex-shrink squeezed every
+                      // icon's height well under its own `h-9`, down to ~16px in
+                      // a full rail (#5826) — flexbox shrinks fixed-size items to
+                      // fit the cross axis before overflow ever gets a say.
+                      'relative h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-md transition-colors',
+                      active
+                        ? 'bg-primary/15 text-primary'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      customizing && 'cursor-grab active:cursor-grabbing',
+                      dragId === id && 'opacity-40',
+                      overId === id && dragId && dragId !== id && 'ring-1 ring-primary/60',
+                    )}
+                  >
+                    {/* Active accent bar (VS Code idiom) */}
+                    {active && !customizing && (
+                      <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-primary" aria-hidden />
+                    )}
+                    <Icon className="h-4 w-4" />
+                    {/* Unpublished-edits badge on the Layers icon. */}
+                    {!customizing && id === 'layers' && pendingLayerEdits > 0 && (
+                      <span
+                        className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-1 text-2xs font-medium text-white ring-1 ring-background"
+                        aria-hidden
+                      >
+                        {pendingLayerEdits > 99 ? '99+' : pendingLayerEdits}
+                      </span>
+                    )}
+                    {/* Detached indicator dot — floating (primary) vs popped out (emerald). */}
+                    {!customizing && open && loc !== 'docked' && (
+                      <span
+                        className={cn(
+                          'absolute -right-0 -top-0 h-1.5 w-1.5 rounded-full ring-1 ring-background',
+                          loc === 'popped' ? 'bg-emerald-500' : 'bg-primary',
+                        )}
+                        aria-hidden
+                      />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  {title}
+                  <span className="text-muted-foreground">
+                    {customizing ? (
+                      ` · ${t('shellChrome.activityBar.clickToHideHint')}`
+                    ) : (
+                      <>
+                        {ALT_KEY.get(id)
+                          ? ` · ${t('shellChrome.activityBar.altShortcutHint', { key: ALT_KEY.get(id)! })}`
+                          : ''}
+                        {loc === 'floating'
+                          ? ` · ${t('shellChrome.activityBar.floatingHint')}`
+                          : loc === 'popped'
+                            ? ` · ${t('shellChrome.activityBar.poppedHint')}`
+                            : ''}
+                      </>
+                    )}
+                  </span>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer controls */}
+      <div className="w-full shrink-0 border-t border-border py-1.5 flex flex-col items-center gap-0.5">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-sidebar-customize-toggle
+              aria-label={t(customizing ? 'shellChrome.shared.doneCustomizing' : 'shellChrome.shared.customizeSidebar')}
+              aria-pressed={customizing}
+              onClick={() => setSidebarCustomizing(!customizing)}
+              className={cn(
+                'h-9 w-9 inline-flex items-center justify-center rounded-md transition-colors',
+                customizing ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            {t(customizing ? 'shellChrome.shared.doneCustomizing' : 'shellChrome.shared.customizeSidebar')}
+          </TooltipContent>
+        </Tooltip>
+
+        <FooterButton
+          label={t(mode === 'collapsed' ? 'shellChrome.activityBar.expandSidebar' : 'shellChrome.shared.collapseToIcons')}
+          onClick={() => setSidebarMode(mode === 'collapsed' ? 'expanded' : 'collapsed')}
+        >
+          {mode === 'collapsed' ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+        </FooterButton>
+
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t('shellChrome.activityBar.sidebarOptions')}
+                  className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <EllipsisVertical className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="left">{t('shellChrome.activityBar.sidebarOptions')}</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent side="left" align="end" className="w-52">
+            <DropdownMenuItem onSelect={() => setSidebarCustomizing(true)} className="gap-2">
+              <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+              {t('shellChrome.activityBar.customizePanelsMenuItem')}
+            </DropdownMenuItem>
+            {hiddenIds.length > 0 && (
+              <DropdownMenuItem
+                onSelect={() => hiddenIds.forEach((id) => setPanelShownInSidebar(id, true))}
+                className="gap-2"
+              >
+                <Eye className="h-4 w-4 text-muted-foreground" />
+                {t('shellChrome.activityBar.showAllPanels', { count: hiddenIds.length })}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onSelect={() => resetLayout()} className="gap-2">
+              <RotateCcw className="h-4 w-4 text-muted-foreground" />
+              {t('shellChrome.activityBar.resetLayoutMenuItem')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {/* Keyboard-accessible detach (the grip drag is mouse-only). */}
+            <DropdownMenuItem onSelect={() => floatPanel(activePanel)} className="gap-2">
+              <SquareArrowOutUpRight className="h-4 w-4 text-muted-foreground" />
+              {t('shellChrome.activityBar.floatCurrentPanel')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => popOutPanel(activePanel)} className="gap-2">
+              <MonitorUp className="h-4 w-4 text-muted-foreground" />
+              {t('shellChrome.activityBar.popOutToAnotherScreen')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {customizing && <CustomizeSidebar onClose={() => setSidebarCustomizing(false)} />}
+    </div>
+  );
+}
+
+function FooterButton({
+  label,
+  active,
+  onClick,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          aria-pressed={active}
+          onClick={onClick}
+          className={cn(
+            'h-9 w-9 inline-flex items-center justify-center rounded-md transition-colors',
+            active ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          )}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="left">{label}</TooltipContent>
+    </Tooltip>
+  );
+}

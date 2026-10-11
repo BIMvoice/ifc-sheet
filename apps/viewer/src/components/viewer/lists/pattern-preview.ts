@@ -1,0 +1,81 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Live preview for the custom / pattern column entry (issue #1591 follow-up).
+ *
+ * The set-name field accepts a Bonsai-style `/regex/` pattern that pulls one
+ * value across every matching property / quantity set. Before the column is
+ * added, this resolves the pattern against the set names already discovered in
+ * the loaded models so the builder can show "matches N sets: A, B", turning a
+ * blind regex into an immediate confirmation. It reuses the SAME
+ * `compileNameMatcher` the engine uses, so the preview and the executed column
+ * can never disagree.
+ */
+
+import { compileNameMatcher, isNamePattern } from '@ifc-lite/lists';
+
+/** Shape of a slash literal `/body/` or `/body/flags` (valid OR malformed body). */
+const LOOKS_LIKE_PATTERN = /^\/.+\/[a-z]*$/;
+
+export interface SetPatternPreview {
+  /** The field is a valid `/regex/` slash literal. */
+  isPattern: boolean;
+  /** The field looks like a slash literal but the regex does not compile. The
+   *  engine then falls back to an exact-literal match, which almost never hits a
+   *  real set, so the builder disables Add and warns. */
+  isInvalid: boolean;
+  /** Discovered set names the pattern matches (only populated when `isPattern`). */
+  matches: string[];
+}
+
+/**
+ * Classify the set-name field and, for a valid pattern, list the discovered set
+ * names it matches. A plain (non-slash) name is neither a pattern nor invalid:
+ * it stays an exact match and needs no preview.
+ */
+export function previewSetPattern(setField: string, setNames: Iterable<string>): SetPatternPreview {
+  const set = setField.trim();
+  if (set.length === 0) return { isPattern: false, isInvalid: false, matches: [] };
+
+  if (!isNamePattern(set)) {
+    // A slash-shaped string that failed to compile is flagged so the UI can
+    // warn; a plain name is just an exact match.
+    return { isPattern: false, isInvalid: LOOKS_LIKE_PATTERN.test(set), matches: [] };
+  }
+
+  // `compileNameMatcher` throws (rather than falling back to a literal
+  // match) for a pattern with a catastrophic-backtracking shape or over the
+  // length cap — see its own docs. This runs on every keystroke via the
+  // caller's `useMemo`, with no surrounding try/catch, so an uncaught throw
+  // here would crash the column builder while the user is still typing.
+  // Route it into the same `isInvalid` signal a malformed literal already
+  // uses, instead of letting it escape.
+  let match: ReturnType<typeof compileNameMatcher>;
+  try {
+    match = compileNameMatcher(set);
+  } catch {
+    return { isPattern: false, isInvalid: true, matches: [] };
+  }
+  const matches: string[] = [];
+  for (const name of setNames) {
+    if (match(name)) matches.push(name);
+  }
+  return { isPattern: true, isInvalid: false, matches };
+}
+
+/** Locale-neutral facts used to render the translated pattern-match hint. */
+export interface MatchHintFacts {
+  count: number;
+  shown: string[];
+  extra: number;
+}
+
+export function matchHintFacts(matches: string[], cap = 3): MatchHintFacts {
+  return {
+    count: matches.length,
+    shown: matches.slice(0, cap),
+    extra: Math.max(0, matches.length - cap),
+  };
+}

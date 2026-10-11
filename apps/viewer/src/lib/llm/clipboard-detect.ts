@@ -1,0 +1,115 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Clipboard sniffing for the BYOK key modal.
+ *
+ * After the user clicks our "Open Console" button, they create a key on the
+ * provider's site, copy it, and return to this tab. If transient activation
+ * (or clipboard-read permission) is still valid, we can detect the key and
+ * offer one-click insertion instead of forcing a manual paste.
+ *
+ * Reads are best-effort and silently no-op on:
+ *   - missing Clipboard API (older Safari, insecure context, sandboxed iframe)
+ *   - permission denied (Firefox without explicit user grant)
+ *   - read failure for any other reason
+ *
+ * We never throw on these — the modal just falls back to its manual paste UX.
+ */
+
+export type BYOKProvider = 'anthropic' | 'openai';
+
+/**
+ * Provider-specific shape checks. Tight enough to avoid false positives on
+ * random clipboard contents. These are recognition heuristics, not credential
+ * validation: the provider decides whether a key is valid and authorized.
+ *
+ *   Anthropic console keys: `sk-ant-` + ≥20 chars of [A-Za-z0-9_-]
+ *   OpenAI keys:            `sk-`, `sk-proj-`, `sk-svcacct-`, `sk-admin-` + ≥20 chars
+ *
+ * The OpenAI pattern uses a negative lookahead for `ant-` so an Anthropic key
+ * doesn't accidentally satisfy the OpenAI tab — they both start with `sk-`.
+ */
+const PROVIDER_PATTERNS: Record<BYOKProvider, RegExp> = {
+  // The console documents sk-ant-, not a fixed API-key version or length.
+  // Identity-linked keys must not be rejected just because api03 changed.
+  anthropic: /^sk-ant-[A-Za-z0-9_-]{20,}$/,
+  openai: /^sk-(?!ant-)(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}$/,
+};
+
+/**
+ * Try to read a candidate provider key from the system clipboard.
+ *
+ * Returns the trimmed key string if the clipboard contents match the provider
+ * pattern. Returns `null` for everything else (no match, permission denied,
+ * Clipboard API unavailable, etc.) — callers should treat `null` as "fall back
+ * to manual paste".
+ */
+export async function readClipboardKey(provider: BYOKProvider): Promise<string | null> {
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
+    return null;
+  }
+  try {
+    const text = await navigator.clipboard.readText();
+    const trimmed = text.trim();
+    if (PROVIDER_PATTERNS[provider].test(trimmed)) {
+      return trimmed;
+    }
+    return null;
+  } catch (err) {
+    // Permission denied / insecure context / no transient activation — these
+    // are expected on Firefox and Safari without an explicit user grant, and
+    // the manual-paste fallback still works. Log at debug level for diagnostic
+    // but never escalate to the UI.
+    console.debug('[byok] clipboard read failed', err);
+    return null;
+  }
+}
+
+/**
+ * Recognised provider prefixes, longest-first so `sk-proj-` etc. win over the
+ * bare `sk-` they all start with. Anchored at the start of the string.
+ *
+ * Deliberately NOT `lastIndexOf('-')` on the whole key: the secret alphabet
+ * ([A-Za-z0-9_-], see `PROVIDER_PATTERNS`) permits a dash anywhere in the
+ * body, and `lastIndexOf` would find the RIGHTMOST dash in the string —
+ * which, the moment a secret's random tail contains one, is a dash inside
+ * the secret, not the provider prefix. That mis-measured "prefix" then gets
+ * displayed in plaintext, leaking part of the key. This must match a KNOWN
+ * prefix and nothing else.
+ */
+const KEY_PREFIX_PATTERNS: readonly RegExp[] = [
+  /^sk-ant-api03-/,
+  /^sk-ant-/,
+  /^sk-proj-/,
+  /^sk-svcacct-/,
+  /^sk-admin-/,
+  /^sk-/,
+];
+
+/**
+ * Render-safe key mask. Preserves the provider prefix so the user can confirm
+ * the right key is detected, hides the secret middle, shows the last 4 chars
+ * for disambiguation.
+ *
+ *   sk-ant-api03-abcdef…XYZA
+ *   sk-proj-••••XYZA
+ *   sk-••••XYZA
+ */
+export function maskKey(key: string): string {
+  if (key.length < 12) return '••••';
+  const prefixMatch = KEY_PREFIX_PATTERNS.map((pattern) => pattern.exec(key)?.[0]).find(
+    (match) => match !== undefined,
+  );
+  const prefixEnd = prefixMatch !== undefined ? prefixMatch.length : 0;
+  return `${key.slice(0, prefixEnd)}••••${key.slice(-4)}`;
+}
+
+/**
+ * Light shape check shared with `readClipboardKey` so callers can validate
+ * manual paste contents the same way before saving.
+ */
+export function looksLikeProviderKey(provider: BYOKProvider, value: string): boolean {
+  return PROVIDER_PATTERNS[provider].test(value.trim());
+}

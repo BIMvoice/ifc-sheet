@@ -1,0 +1,394 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Browser-side wrapper around `parser.worker.ts`.
+ *
+ * Lifecycle:
+ *   1. Caller allocates a SharedArrayBuffer for the IFC bytes (so that the
+ *      same memory can also be handed to the geometry workers without a
+ *      copy).
+ *   2. Caller constructs a `WorkerParser` and calls `parseColumnar(sab, …)`.
+ *   3. The worker emits `progress`, `diagnostic`, optional `partial-store`,
+ *      then `complete` (or `error`). This wrapper resolves the returned
+ *      Promise after receiving `complete` and hydrating the result. The
+ *      completed worker is terminated before receiver reconstruction.
+ *
+ * On `partial-store` the wrapper invokes `options.onSpatialReady` so the
+ * viewer can render the spatial-hierarchy panel before the full parse
+ * completes (matches the in-process callback behavior).
+ */
+
+import type { IfcDataStore } from './columnar-parser.js';
+import type { ParseOptions } from './index.js';
+import { WorkerIndexReceiver, type WorkerStorePayload } from './worker-index-publication.js';
+import type { ParserMemorySnapshot } from './data-store-transport.js';
+import { contiguousSourceBytes, type IfcSourceBytes } from './source-bytes.js';
+import type {
+  ParserWorkerInputMessage,
+  ParserWorkerOutputMessage,
+} from './parser.worker.js';
+import { restashWasmPanicLocation } from './wasm-panic-forward.js';
+import { makeAbortError } from './abort-error.js';
+import { NOOP_LOAD_TRACE, accountWorkerMessages, enableWorkerTrace, isTraceSpansMessage, type LoadTrace } from '@ifc-lite/load-trace';
+
+export interface WorkerParserOptions extends ParseOptions {
+  /** Fresh per-request 16-byte prepass fingerprint cell; never awaited. */
+  sourceFingerprint?: SharedArrayBuffer;
+  /** Override the worker URL. Default: bundler-resolved `parser.worker.ts`. */
+  workerUrl?: URL | string;
+  /** Optional callback receiving the per-parse memory snapshot at completion. */
+  onMemorySnapshot?: (snapshot: ParserMemorySnapshot) => void;
+  /**
+   * Tell the worker to wait for `setEntityIndex` before running its WASM
+   * scan. Enable when the streaming geometry pre-pass will hand over the
+   * entity index — saves a duplicate 6–10 s scan on huge files.
+   */
+  waitForEntityIndex?: boolean;
+  /**
+   * Cancel this parse. If already aborted when `parseColumnar` is called, the
+   * returned promise rejects immediately without spawning a worker. If
+   * aborted while the parse is in flight, only THIS request's worker is
+   * terminated and the promise rejects with `signal.reason`: a custom
+   * `abort(reason)` is passed through as-is, the default is an `AbortError`.
+   */
+  signal?: AbortSignal;
+  /**
+   * The caller's load trace (#6979). Records `parser.worker` (spawn to settle)
+   * with the worker's own phase spans merged under it, plus the main-thread
+   * `parser.hydrate` / `parser.hydratePartial`. Absent or disabled: no-op.
+   */
+  trace?: LoadTrace;
+}
+
+export class WorkerParser {
+  private worker: Worker | null = null;
+  private requestCounter = 0;
+  private readonly workerUrl: URL | string | null;
+  /**
+   * One canceller per in-flight `parseColumnar` request. Each call spawns its
+   * OWN worker, so overlapping parses on one instance are possible: a
+   * request's `signal` cancels only that request (via its own closure), while
+   * `terminate()` cancels every entry, so the documented cancel path always
+   * settles each promise instead of leaving it pending forever (#4896).
+   * A request adds itself on spawn and removes itself in `settle()`.
+   */
+  private readonly activeCancels = new Set<(reason?: unknown) => void>();
+  /**
+   * Queued entity-index payload. If `setEntityIndex` is called before the
+   * worker is spawned (rare — happens only if the caller races a parser
+   * worker race condition), buffer it and flush on first parse.
+   */
+  private queuedEntityIndex: {
+    ids: Uint32Array;
+    starts: Uint32Array;
+    lengths: Uint32Array;
+    oversizedIdCount?: number;
+    malformedRecordCount?: number;
+  } | null = null;
+
+  /**
+   * Returns true when this runtime can run the parser worker:
+   * `Worker` constructor available, `SharedArrayBuffer` available, and
+   * cross-origin-isolated. Callers should check this before allocating
+   * a SAB and falling through to the in-process parser when it returns
+   * false. The parser itself is SAB-decode-safe (see `utf8-decode.ts`),
+   * so no `TextDecoder` probe is needed here.
+   */
+  static isSupported(): boolean {
+    if (typeof Worker === 'undefined') return false;
+    if (typeof SharedArrayBuffer === 'undefined') return false;
+    const coi = (globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated;
+    return coi !== false;
+  }
+
+  constructor(options: { workerUrl?: URL | string } = {}) {
+    // null = use the default inline URL inside parseColumnar(). Vite's
+    // static analyzer only rewrites worker URLs when `new URL(...)` and
+    // `new Worker(...)` are inlined together — keeping the URL unresolved
+    // here lets us inline the construction below.
+    this.workerUrl = options.workerUrl ?? null;
+  }
+
+  /**
+   * Parse a SharedArrayBuffer-backed IFC payload in a Web Worker.
+   *
+   * The buffer is shared by reference — the caller may keep a `Uint8Array`
+   * view of the same SAB on the main thread (e.g. for the geometry worker
+   * pre-pass). The worker neither transfers nor mutates the buffer.
+   */
+  parseColumnar(source: SharedArrayBuffer, options: WorkerParserOptions = {}): Promise<IfcDataStore> {
+    if (options.signal?.aborted) {
+      return Promise.reject(options.signal.reason ?? makeAbortError('Parse aborted before start'));
+    }
+    const trace = options.trace ?? NOOP_LOAD_TRACE;
+    return new Promise((resolve, reject) => {
+      const id = `parse_${Date.now()}_${++this.requestCounter}`;
+      const parseSpan = trace.begin('parser.worker');
+      let onSignalAbort: (() => void) | null = null;
+      let worker: Worker;
+      try {
+        // Inlining `new URL(..., import.meta.url)` inside `new Worker(...)`
+        // is what makes Vite emit the worker as a separate `.js` chunk.
+        // Caller-supplied URLs are honored as-is.
+        worker = this.workerUrl !== null
+          ? new Worker(this.workerUrl, { type: 'module' })
+          : new Worker(new URL('./parser.worker.ts', import.meta.url), { type: 'module' });
+      } catch (err) {
+        reject(new Error(`Failed to spawn parser worker: ${err instanceof Error ? err.message : String(err)}`));
+        return;
+      }
+      // `this.worker` is only the `setEntityIndex` target: the most recently
+      // spawned worker. Every path below clears it only while it still points
+      // at THIS request's worker, so settling one request never detaches another.
+      this.worker = accountWorkerMessages(worker, 'parser'); // #6957 message counters (no-op unless traced)
+
+      // Reject + terminate THIS request on demand, invoked by terminate() and by
+      // this request's own 'abort' listener. Removed from `activeCancels` in
+      // settle(), and the `settled` guard makes a stray late call a no-op.
+      let settled = false;
+      const cancel = (reason?: unknown) => {
+        if (settled) return;
+        settle(() => {
+          if (this.worker === worker) this.worker = null;
+          worker.terminate();
+        });
+        reject(reason ?? makeAbortError());
+      };
+      this.activeCancels.add(cancel);
+
+      // ONE accessor, shared by the partial store and the final one. Both
+      // alias the same SAB, so this is not merely tidy: `contentKey` is
+      // memoised per accessor instance, and the viewer's overlay hooks read it
+      // off whichever store is active. Building an accessor per `fromTransport`
+      // call would hash the whole file once for the partial store and again for
+      // the final one -- two full walks of a 342 MB source on the main thread,
+      // on exactly the models #2183 is about. The previous code got one hash by
+      // memoising on the shared Uint8Array; sharing the accessor is the same
+      // guarantee without the side table.
+      let sourceBytes: IfcSourceBytes | undefined;
+      const indexReceiver = new WorkerIndexReceiver();
+      const hydrate = (payload: WorkerStorePayload) => {
+        // #3983: the worker hashes the source before the first UI publication.
+        // Retain one accessor across partial/full stores and compression swaps.
+        sourceBytes ??= contiguousSourceBytes(new Uint8Array(source), payload.sourceContentKey ?? undefined);
+        return indexReceiver.hydrate(payload, sourceBytes);
+      };
+
+      const settle = (cleanup: () => void) => {
+        settled = true;
+        trace.end(parseSpan);
+        indexReceiver.clear();
+        worker.onmessage = null;
+        worker.onerror = null;
+        worker.onmessageerror = null;
+        if (onSignalAbort && options.signal) options.signal.removeEventListener('abort', onSignalAbort);
+        this.activeCancels.delete(cancel);
+        cleanup();
+      };
+
+      if (options.signal) {
+        const signal = options.signal;
+        onSignalAbort = () => cancel(signal.reason);
+        options.signal.addEventListener('abort', onSignalAbort, { once: true });
+      }
+
+      worker.onmessage = (event: MessageEvent<ParserWorkerOutputMessage>) => {
+        const raw: unknown = event.data;
+        if (isTraceSpansMessage(raw)) { trace.merge(raw.payload, parseSpan); return; }
+        const msg = event.data;
+        if (!msg || msg.id !== id) return;
+
+        switch (msg.type) {
+          case 'progress':
+            options.onProgress?.(msg.progress);
+            return;
+
+          case 'diagnostic':
+            options.onDiagnostic?.(msg.message);
+            return;
+
+          case 'partial-store': {
+            try {
+              indexReceiver.capturePartial(msg.payload);
+              if (!options.onSpatialReady) return;
+              const partial = trace.span('parser.hydratePartial', () => hydrate(msg.payload));
+              options.onSpatialReady(partial);
+            } catch (err) {
+              // Don't fail the whole parse on partial deserialization
+              // — log and continue to the full result.
+              console.warn('[WorkerParser] partial-store hydrate failed:', err);
+            }
+            return;
+          }
+
+          case 'complete': {
+            try {
+              // #3985: the received message owns its transferred columns. Stop
+              // the completed sender before allocating receiver collections;
+              // retain indexReceiver's partial seed until hydration completes.
+              worker.terminate();
+              if (this.worker === worker) this.worker = null;
+              const dataStore = trace.span('parser.hydrate', () => hydrate(msg.payload));
+              options.onMemorySnapshot?.(msg.memory);
+              settle(() => {});
+              resolve(dataStore);
+            } catch (err) {
+              settle(() => {
+                if (this.worker === worker) this.worker = null;
+              });
+              reject(new Error(`complete hydrate failed: ${err instanceof Error ? err.message : String(err)}`));
+            }
+            return;
+          }
+
+          case 'error':
+            // #2527 follow-up: re-plant the worker realm's panic-location
+            // stash (if this error was a wasm trap) on THIS realm's global,
+            // before the rejection below propagates, so
+            // `attachWasmPanicLocation` in analytics-scrub.ts sees it
+            // exactly as it would a main-thread trap.
+            restashWasmPanicLocation(globalThis, msg.wasmPanicLocation, msg.wasmPanicAt, msg.message);
+            settle(() => {
+              worker.terminate();
+              if (this.worker === worker) this.worker = null;
+            });
+            reject(new Error(msg.message));
+            return;
+        }
+      };
+
+      worker.onerror = (err) => {
+        settle(() => {
+          worker.terminate();
+          if (this.worker === worker) this.worker = null;
+        });
+        reject(new Error(`Parser worker error: ${err.message || 'unknown failure'}`));
+      };
+
+      worker.onmessageerror = () => {
+        settle(() => {
+          worker.terminate();
+          if (this.worker === worker) this.worker = null;
+        });
+        reject(new Error('Parser worker structured-clone error (likely corrupted message)'));
+      };
+
+      // Flush any entity index that was queued before parse started. The
+      // worker buffers it server-side and applies it when the parse path
+      // reaches the scan step.
+      if (this.queuedEntityIndex) {
+        const queued = this.queuedEntityIndex;
+        this.queuedEntityIndex = null;
+        try {
+          worker.postMessage({
+            type: 'set-entity-index',
+            ids: queued.ids,
+            starts: queued.starts,
+            lengths: queued.lengths,
+            oversizedIdCount: queued.oversizedIdCount,
+            malformedRecordCount: queued.malformedRecordCount,
+          });
+        } catch (err) {
+          console.warn('[WorkerParser] queued setEntityIndex failed:', err);
+        }
+      }
+
+      enableWorkerTrace(worker, trace, 'parser');
+      const input: ParserWorkerInputMessage = {
+        type: 'parse',
+        sourceFingerprint: options.sourceFingerprint,
+        indexTransport: 'packed-index-v1',
+        id,
+        source,
+        yieldIntervalMs: options.yieldIntervalMs,
+        deferPropertyAtomIndex: options.deferPropertyAtomIndex,
+        waitForEntityIndex: options.waitForEntityIndex,
+      };
+      try {
+        worker.postMessage(input);
+      } catch (err) {
+        // postMessage can itself throw (e.g. a DataCloneError from structured
+        // clone). It's called after the worker is spawned, assigned to
+        // `this.worker`, and its handlers attached, so without this catch the
+        // Promise executor's synchronous throw auto-rejects the returned
+        // promise while nothing ever calls settle() — the worker thread is
+        // left running (and `this.worker` left pointing at it) forever.
+        settle(() => {
+          worker.terminate();
+          if (this.worker === worker) this.worker = null;
+        });
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
+  }
+
+  /**
+   * Hand the worker a pre-built entity index (typically from the streaming
+   * geometry pre-pass). May be called before or after `parseColumnar` —
+   * if before, the payload is queued and posted as soon as the worker is
+   * spawned. The parser worker uses the index to skip its WASM scan.
+   *
+   * `oversizedIdCount` is how many records the pre-pass refused for an express
+   * id above the u32 bound (#3395). Pass it: the columns cannot carry a record
+   * that was refused, so a caller that drops the number leaves the parse
+   * reporting a clean load that is short by exactly that many entities.
+   *
+   * `malformedRecordCount` is the same handoff for the pre-pass stopping early
+   * at a record whose string or comment never closed (#3790). Pass it too: a
+   * stop costs the whole tail of the file, not one record, and the columns
+   * carry no trace of where it happened.
+   */
+  setEntityIndex(
+    ids: Uint32Array,
+    starts: Uint32Array,
+    lengths: Uint32Array,
+    oversizedIdCount?: number,
+    malformedRecordCount?: number,
+  ): void {
+    if (!this.worker) {
+      this.queuedEntityIndex = { ids, starts, lengths, oversizedIdCount, malformedRecordCount };
+      return;
+    }
+    try {
+      this.worker.postMessage({
+        type: 'set-entity-index',
+        ids,
+        starts,
+        lengths,
+        oversizedIdCount,
+        malformedRecordCount,
+      });
+    } catch (err) {
+      console.warn('[WorkerParser] setEntityIndex postMessage failed:', err);
+    }
+  }
+
+  /**
+   * Terminate the worker if running. Safe to call repeatedly.
+   *
+   * #4896: an in-flight `parseColumnar` promise only ever settled on
+   * `complete`/`error`/`onerror`/`onmessageerror` — none of which fire once
+   * the worker is killed, so the documented "call terminate() to cancel"
+   * path hung the caller's `await` forever. `terminate()` now rejects EVERY
+   * in-flight request with an `AbortError` and tears down each one's worker,
+   * so cancellation is distinguishable from both a successful parse and a
+   * parse failure. To cancel just one of several overlapping parses, abort
+   * that request's `signal` instead.
+   */
+  terminate(): void {
+    // Snapshot: each cancel removes itself from the set while we iterate.
+    for (const cancel of [...this.activeCancels]) cancel();
+    if (this.worker) {
+      // No in-flight promise to settle (e.g. called after a request already
+      // resolved/rejected but before a new one started) — just drop the
+      // worker's handlers and kill it.
+      this.worker.onmessage = null;
+      this.worker.onerror = null;
+      this.worker.onmessageerror = null;
+      this.worker.terminate();
+      this.worker = null;
+    }
+  }
+}

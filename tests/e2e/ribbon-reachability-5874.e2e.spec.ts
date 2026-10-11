@@ -1,0 +1,118 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/** #5874: every desktop command remains reachable after retiring the classic bar. */
+import { expect, test } from '@playwright/test';
+
+test.use({ viewport: { width: 1280, height: 900 } });
+
+const TAB_BUTTON_COUNTS = [
+  ['File', 19], // includes the Cesium ion upload command (#6587)
+  ['Home', 7],
+  ['View', 20],
+  ['Elements', 17], // includes the selected mesh hover outline (#5748)
+  ['Analyze', 18], // 17 commands including Linked records (#6643) plus the panel-browser content trigger (#5873)
+  ['Author', 8], // includes Change sets (#6232 D4); every create kind is a Model workspace command, not a button (#6232 B1)
+] as const;
+
+test('authored IFC keeps all 88 ribbon commands and panel browser reachable at 1280px (#5874, #5778)', async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('ifclite.extensions.privacy-disclosure.v2', 'e2e acknowledged');
+  });
+  await page.goto('/?model=/samples/building-architecture.ifc');
+  await page.waitForFunction(() => {
+    const store = (globalThis as typeof globalThis & {
+      __ifc_lite_viewer_store__?: { getState(): {
+        models: Map<string, { ifcDataStore?: unknown }>;
+        loading: boolean;
+        geometryStreamingActive: boolean;
+      } };
+    }).__ifc_lite_viewer_store__;
+    const state = store?.getState();
+    return state?.models.size === 1 && !state.loading && !state.geometryStreamingActive &&
+      [...state.models.values()].every((model) => model.ifcDataStore);
+  }, undefined, { timeout: 180_000 });
+
+  const visited: Record<string, string[]> = {};
+  for (const [tabName, expectedCount] of TAB_BUTTON_COUNTS) {
+    await page.getByRole('tab', { name: tabName, exact: true }).click();
+    const band = page.getByRole('tabpanel', { name: tabName, exact: true });
+    await expect(band).toBeVisible();
+    const buttons = band.locator('button');
+    await expect(buttons).toHaveCount(expectedCount);
+    const names: string[] = [];
+
+    for (let index = 0; index < expectedCount; index++) {
+      const button = buttons.nth(index);
+      await button.scrollIntoViewIfNeeded();
+      await expect(button).toHaveAccessibleName(/\S/);
+      const name = (await button.getAttribute('aria-label')) ?? (await button.textContent())?.trim() ?? '';
+      names.push(name);
+
+      const bounds = await button.boundingBox();
+      const bandBounds = await band.boundingBox();
+      expect(bounds, `${tabName} control ${index} has a layout box`).not.toBeNull();
+      expect(bandBounds, `${tabName} ribbon band has a layout box`).not.toBeNull();
+      expect(bounds!.x, `${tabName}: ${name} starts inside the scrollable band`).toBeGreaterThanOrEqual(bandBounds!.x - 1);
+      expect(bounds!.x + bounds!.width, `${tabName}: ${name} ends inside the scrollable band`)
+        .toBeLessThanOrEqual(bandBounds!.x + bandBounds!.width + 1);
+
+      // Trial click checks real pointer actionability without running export,
+      // edit, or another state-changing command. Dismiss the previous hover
+      // tooltip first so it cannot intercept the next adjacent button.
+      if (await button.isEnabled()) {
+        await page.mouse.move(5, 5);
+        await page.keyboard.press('Escape');
+        await button.click({ trial: true, timeout: 5_000 });
+      }
+    }
+    visited[tabName] = names;
+    await testInfo.attach(`${tabName.toLowerCase()}-ribbon-last-command.png`, {
+      body: await band.screenshot(),
+      contentType: 'image/png',
+    });
+    const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(pageWidth, `${tabName} must not force a page-wide horizontal scrollbar`).toBeLessThanOrEqual(1281);
+  }
+
+  const browserCount = visited.Analyze.filter((name) => name === 'Browse panels').length;
+  expect(visited.View, 'View includes the selected-source centreline command (#5778)').toContain('Centreline');
+  expect(browserCount, 'Analyze has one panel-browser content trigger').toBe(1);
+  expect(Object.values(visited).reduce((total, names) => total + names.length, 0) - browserCount).toBe(88);
+  // #6643: the new command is unique and opens the actual linked-records panel.
+  expect(visited.Analyze.filter((name) => name === 'Linked records')).toHaveLength(1);
+  await page.getByRole('tab', { name: 'Analyze', exact: true }).click();
+  await page.getByRole('tabpanel', { name: 'Analyze', exact: true })
+    .getByRole('button', { name: 'Linked records', exact: true }).click();
+  const linkedRecords = page.getByRole('region', { name: 'Linked records', exact: true });
+  await expect(linkedRecords).toBeVisible();
+  await expect(linkedRecords.getByRole('button', { name: 'Use example records', exact: true })).toBeVisible();
+  await testInfo.attach('linked-records-panel.png', {
+    body: await linkedRecords.screenshot(),
+    contentType: 'image/png',
+  });
+  // #6587: the added command is unique, reachable, and dispatches to the real
+  // selected-model upload dialog. Opening it never creates a remote asset.
+  const ionCommandName = 'Upload edited IFC to your Cesium ion account';
+  expect(visited.File.filter((name) => name === ionCommandName)).toHaveLength(1);
+  await page.getByRole('tab', { name: 'File', exact: true }).click();
+  await page.getByRole('tabpanel', { name: 'File', exact: true })
+    .getByRole('button', { name: ionCommandName, exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Upload to Cesium ion', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('combobox')).toContainText('building-architecture.ifc');
+  await expect(dialog.getByLabel('Cesium ion token (assets:write)', { exact: true })).toHaveAttribute('type', 'password');
+  await expect(dialog.getByRole('button', { name: 'Upload', exact: true })).toBeDisabled();
+  await testInfo.attach('cesium-ion-upload-dialog.png', {
+    body: await dialog.screenshot(),
+    contentType: 'image/png',
+  });
+  // The footer Close and top-right close icon share the same accessible name.
+  await dialog.getByRole('button', { name: 'Close', exact: true }).first().click();
+  await expect(dialog).not.toBeVisible();
+  await testInfo.attach('reachable-ribbon-commands.json', {
+    body: JSON.stringify(visited, null, 2),
+    contentType: 'application/json',
+  });
+});

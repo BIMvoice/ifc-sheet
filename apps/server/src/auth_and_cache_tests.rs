@@ -1,0 +1,302 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Integration tests for the optional bearer-token auth layer
+//! (`middleware::auth::require_bearer_token`) and the `GET /api/v1/cache/:key`
+//! route (`routes::cache::get_cached`).
+//!
+//! Neither had any test coverage before this file: `require_bearer_token`
+//! gates every parse/cache/metrics route and was exercised by zero request in
+//! the suite (allow or deny direction), and `get_cached` was likewise never
+//! driven through the router in either the hit or the miss case.
+
+use crate::config::Config;
+use crate::services::cache::DiskCache;
+use crate::types::ParseResponse;
+use crate::{build_router, AppState};
+use axum::body::{to_bytes, Body};
+use axum::http::{header, Request, StatusCode};
+use serde_json::Value;
+use std::sync::Arc;
+
+/// Build an `AppState` backed by a fresh temp cache directory unique to
+/// `label`, mirroring `parity_tests::test_state`.
+async fn test_state(label: &str) -> AppState {
+    let dir = std::env::temp_dir().join(format!(
+        "ifc-lite-server-test-auth-cache-{}-{}",
+        std::process::id(),
+        label
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let cache = Arc::new(DiskCache::new(dir.to_str().unwrap()).await);
+    AppState {
+        cache,
+        config: Arc::new(Config::from_env()),
+        admission: Arc::new(crate::admission::Admission::new(
+            crate::admission::AdmissionCfg {
+                max_concurrent_parses: 8,
+                mem_budget_bytes: 0,
+                queue_depth: 16,
+                queue_timeout: std::time::Duration::from_millis(100),
+                shed_pct: 85,
+            },
+        )),
+        data_model_in_flight: Arc::new(crate::in_flight::InFlightKeys::default()),
+    }
+}
+
+/// `method` `uri` with an optional `Authorization: Bearer <token>` header.
+async fn request_with_token(
+    state: &AppState,
+    method: &str,
+    uri: &str,
+    token: Option<&str>,
+) -> axum::response::Response {
+    let mut builder = Request::builder().method(method).uri(uri);
+    if let Some(t) = token {
+        builder = builder.header(header::AUTHORIZATION, format!("Bearer {t}"));
+    }
+    let request = builder.body(Body::empty()).unwrap();
+    use tower::ServiceExt;
+    build_router(state.clone()).oneshot(request).await.unwrap()
+}
+
+/// GET `uri` with an optional `Authorization: Bearer <token>` header.
+async fn get_with_token(
+    state: &AppState,
+    uri: &str,
+    token: Option<&str>,
+) -> axum::response::Response {
+    request_with_token(state, "GET", uri, token).await
+}
+
+/// Every route registered inside the bearer-token layer in `build_router`,
+/// as (method, path). Hand-maintained and deliberately exhaustive: the older
+/// tests below assert auth at ONE path, so a route added outside the layer,
+/// the whole failure mode the layer exists to prevent, would fail nothing.
+/// Extend this when `build_router` gains a protected route. Nothing here can
+/// notice a route that was added to the router and not to this list; the
+/// list is the reviewer's checklist, not a derivation.
+const PROTECTED_ROUTES: &[(&str, &str)] = &[
+    ("POST", "/api/v1/parse"),
+    ("POST", "/api/v1/parse/stream"),
+    ("POST", "/api/v1/parse/parquet-stream"),
+    ("POST", "/api/v1/parse/metadata"),
+    ("POST", "/api/v1/parse/parquet"),
+    ("POST", "/api/v1/parse/parquet/optimized"),
+    ("GET", "/api/v1/parse/data-model/some-key"),
+    ("GET", "/api/v1/parse/symbolic/some-key"),
+    ("GET", "/api/v1/cache/some-key"),
+    ("DELETE", "/api/v1/cache/some-key"),
+    ("GET", "/api/v1/cache/check/some-hash"),
+    ("GET", "/api/v1/cache/geometry/some-hash"),
+    ("GET", "/api/v1/metrics"),
+];
+
+/// `GET /api/v1/cache/{key}` for a well-formed request `cache_key` nothing
+/// was ever cached under. Well-formed so the route answers `404` from the
+/// lookup, not `400` from `resolve_request_cache_key` (#5750).
+const MISSING_CACHE_KEY_PATH: &str =
+    "/api/v1/cache/0000000000000000000000000000000000000000000000000000000000000000-default";
+
+/// A minimal but structurally complete `ParseResponse`, built from the
+/// `Default` impls of its fields (all of which derive `Default` except
+/// `cache_key`, which is required).
+fn minimal_parse_response(cache_key: &str) -> ParseResponse {
+    ParseResponse {
+        cache_key: cache_key.to_string(),
+        meshes: Vec::new(),
+        mesh_coordinate_space: None,
+        site_transform: None,
+        building_transform: None,
+        metadata: Default::default(),
+        stats: Default::default(),
+        symbolic_data: Default::default(),
+    }
+}
+
+// ---------------------------------------------------------------------
+// Auth: default (unconfigured) is a pass-through.
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn auth_disabled_by_default_lets_protected_route_through_without_a_header() {
+    let state = test_state("auth-off").await;
+    assert!(
+        state.config.api_token.is_none(),
+        "test assumes IFC_SERVER_API_TOKEN/API_TOKEN are unset in the test environment"
+    );
+    // No Authorization header at all. If auth were somehow on, this would be
+    // 401; with it off, the request reaches `get_cached`, which 404s because
+    // the key was never cached - the diagnostic proof the layer let it through.
+    let response = get_with_token(&state, MISSING_CACHE_KEY_PATH, None).await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+// ---------------------------------------------------------------------
+// Auth: configured token enforces the deny direction.
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn auth_rejects_missing_header_when_token_configured() {
+    let mut state = test_state("auth-missing-header").await;
+    let mut config = (*state.config).clone();
+    config.api_token = Some("s3cr3t".to_string());
+    state.config = Arc::new(config);
+
+    let response = get_with_token(&state, MISSING_CACHE_KEY_PATH, None).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn auth_rejects_wrong_token_when_token_configured() {
+    let mut state = test_state("auth-wrong-token").await;
+    let mut config = (*state.config).clone();
+    config.api_token = Some("s3cr3t".to_string());
+    state.config = Arc::new(config);
+
+    let response = get_with_token(&state, MISSING_CACHE_KEY_PATH, Some("nope")).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// A token that shares the configured token's length but differs only in the
+/// last byte. This specifically exercises the byte-by-byte fold in
+/// `constant_time_eq` rather than the length short-circuit.
+#[tokio::test]
+async fn auth_rejects_same_length_token_differing_in_last_byte() {
+    let mut state = test_state("auth-same-length-wrong").await;
+    let mut config = (*state.config).clone();
+    config.api_token = Some("s3cr3t".to_string());
+    state.config = Arc::new(config);
+
+    let response = get_with_token(&state, MISSING_CACHE_KEY_PATH, Some("s3cr3x")).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+// ---------------------------------------------------------------------
+// Auth: configured token enforces the allow direction too.
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn auth_accepts_correct_token_when_token_configured() {
+    let mut state = test_state("auth-correct-token").await;
+    let mut config = (*state.config).clone();
+    config.api_token = Some("s3cr3t".to_string());
+    state.config = Arc::new(config);
+
+    // The request must reach `get_cached` (404, not 401) to prove the
+    // matching-token path actually runs `next.run(request)`.
+    let response = get_with_token(&state, MISSING_CACHE_KEY_PATH, Some("s3cr3t")).await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+// ---------------------------------------------------------------------
+// Auth: every protected route, not just one.
+// ---------------------------------------------------------------------
+
+/// With a token configured, every protected route is a 401 without the
+/// header and something OTHER than 401 with it. A typo in `PROTECTED_ROUTES`
+/// fails rather than passes: `Router::layer` does not wrap the fallback, so
+/// an unregistered path is a 404 without the token too, never the 401 the
+/// first half demands. (Several handlers legitimately 404 WITH the token -
+/// a cache miss, metrics while disabled - so the second half asserts only
+/// that the layer let the request through.)
+/// Regression for #4582.
+#[tokio::test]
+async fn every_protected_route_is_behind_the_bearer_layer() {
+    let mut state = test_state("auth-every-route").await;
+    let mut config = (*state.config).clone();
+    config.api_token = Some("s3cr3t".to_string());
+    state.config = Arc::new(config);
+
+    for (method, path) in PROTECTED_ROUTES {
+        let denied = request_with_token(&state, method, path, None).await;
+        assert_eq!(
+            denied.status(),
+            StatusCode::UNAUTHORIZED,
+            "{method} {path} answered without a bearer token"
+        );
+        let allowed = request_with_token(&state, method, path, Some("s3cr3t")).await;
+        assert_ne!(
+            allowed.status(),
+            StatusCode::UNAUTHORIZED,
+            "{method} {path} refused the configured token"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------
+// Auth: the open routes stay open even when a token is configured.
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn auth_leaves_health_route_open_even_when_token_configured() {
+    let mut state = test_state("auth-health-open").await;
+    let mut config = (*state.config).clone();
+    config.api_token = Some("s3cr3t".to_string());
+    state.config = Arc::new(config);
+
+    let response = get_with_token(&state, "/api/v1/health", None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+// ---------------------------------------------------------------------
+// GET /api/v1/cache/:key
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn get_cached_returns_404_for_a_key_never_written() {
+    let state = test_state("cache-miss").await;
+    let response = get_with_token(&state, MISSING_CACHE_KEY_PATH, None).await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn get_cached_returns_the_stored_response_and_sets_from_cache() {
+    let state = test_state("cache-hit").await;
+    let key = "1111111111111111111111111111111111111111111111111111111111111111-default";
+    let mut stored = minimal_parse_response(key);
+    // Stored with from_cache = false, as a freshly-processed response would be,
+    // under the key the JSON parse route writes for this `cache_key` (#5542).
+    stored.stats.from_cache = false;
+    let response_key = crate::routes::parse::cache_keys::json_response_cache_key(key);
+    state.cache.set(&response_key, &stored).await.expect("seed the cache");
+
+    let response = get_with_token(&state, &format!("/api/v1/cache/{key}"), None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["cache_key"], key);
+    // The handler must flip `from_cache` to true on a hit, regardless of the
+    // stored value - this is the one piece of behaviour `get_cached` adds
+    // beyond a plain cache lookup.
+    assert_eq!(json["stats"]["from_cache"], true);
+}
+
+#[test]
+fn issue_4459_legacy_cached_response_decodes_without_duplicate_symbolic_keys() {
+    let old = minimal_parse_response("legacy-symbolic-cache");
+    let bytes = serde_json::to_vec(&old).unwrap();
+    let parsed: crate::types::SymbolicParseResponse = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(parsed.cache_key, "legacy-symbolic-cache");
+    assert!(parsed.symbolic_data.is_empty());
+    assert_eq!(serde_json::to_value(&parsed).unwrap(), serde_json::to_value(&old).unwrap());
+}
+
+#[test]
+fn issue_4459_server_extension_has_one_symbolic_key_and_reads_old_nonempty_cache() {
+    let mut old = minimal_parse_response("nonempty-symbolic-cache");
+    old.symbolic_data.circles.push(ifc_lite_processing::SymbolicCircle::full(
+        42, "IfcAnnotation".into(), 1.0, 2.0, 3.0, f32::NAN, "Annotation".into()));
+    let before: serde_json::Value = serde_json::from_slice(&serde_json::to_vec(&old).unwrap()).unwrap();
+    let cached: crate::types::SymbolicParseResponse = serde_json::from_value(before.clone()).unwrap();
+    assert_eq!(cached.symbolic_data.data().circles.len(), 1);
+    assert!(cached.symbolic_data.data().circles[0].world_y.is_nan());
+    let enriched = old.symbolic_data.clone().into();
+    let response = crate::types::SymbolicParseResponse::new(old, enriched);
+    let wire = serde_json::to_string(&response).unwrap();
+    assert_eq!(wire.matches("\"symbolic_data\":").count(), 1);
+    assert_eq!(serde_json::from_str::<serde_json::Value>(&wire).unwrap(), before);
+}

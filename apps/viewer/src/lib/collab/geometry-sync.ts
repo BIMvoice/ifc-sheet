@@ -1,0 +1,359 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Geometry hydration via content-addressed mesh blobs (plan §4.2 — option b).
+ *
+ * Owner: encode each tessellated `MeshData`, store it as a blob (the blob hash
+ * is the geomId — identical meshes dedupe), and attach a `GeometryRef` to the
+ * owning GUID entity in the Y.Doc. Recipient: walk entities' `GeometryRef`s,
+ * fetch the blobs, and decode back to `MeshData[]` for the renderer.
+ *
+ * The collab runtime + blob store are injected so this pulls no collab code
+ * eagerly. Re-tessellation (the lighter parametric path, plan §4.2 option a)
+ * is a follow-up; mesh blobs are the universal fallback that works for any
+ * model including imported meshes.
+ *
+ * Design note — why blobs, not inline IFCX geometry: even though the rest of
+ * the model is reconstructed as IFCX, tessellated geometry stays out-of-band as
+ * content-addressed blobs referenced from the doc. This is the USD/IFCX
+ * external-reference (payload) pattern, and it keeps the CRDT doc + IFCX
+ * snapshot small and bounded (inlining `usd::usdgeom::mesh` into the JSON would
+ * bloat both — see the SAB/IFCX memory). The doc holds only the blob hash.
+ */
+
+import type { CoordinateInfo, GeometryResult, MeshData } from '@ifc-lite/geometry';
+import type { BlobStore, CollabSession } from '@ifc-lite/collab';
+import { encodeMesh } from './mesh-codec';
+import { texturedMeshDecoder, textureUploader } from './room-texture';
+import {
+  DEFAULT_UPLOAD_MAX_FAILURES,
+  DEFAULT_UPLOAD_RETRIES,
+  DEFAULT_UPLOAD_RETRY_DELAYS_MS,
+  putBlobWithRetry,
+  uploadCountOption,
+} from './blob-upload';
+import type { SeedGeometryOptions, SeedGeometryReport } from './geometry-seed-types';
+
+export type { SeedGeometryOptions, SeedGeometryReport } from './geometry-seed-types';
+
+/** The collab doc + geometry helpers this module needs (injected). */
+export interface CollabGeomApi {
+  createGeometry(
+    doc: CollabSession['doc'],
+    geomId: string,
+    opts: { type: 'mesh'; source: string; blobHash?: string; params?: Record<string, unknown> },
+  ): unknown;
+  /** Whether an entity exists at `path` (addGeometryRef throws otherwise). */
+  hasEntity(doc: CollabSession['doc'], path: string): boolean;
+  /** Append a geomId to an entity's geometry refs (entities can own several meshes). */
+  addGeometryRef(doc: CollabSession['doc'], path: string, geomId: string): void;
+  /** Replace an entity's geometry refs outright (used by resize — swaps the mesh). */
+  setGeometryRef(doc: CollabSession['doc'], path: string, ref: { geomIds: string[] }): void;
+  getGeometryRef(doc: CollabSession['doc'], path: string): { geomIds: string[] } | undefined;
+  getGeometry(doc: CollabSession['doc'], geomId: string): { get(key: string): unknown } | undefined;
+  iterEntities(doc: CollabSession['doc']): IterableIterator<[string, unknown]>;
+}
+
+/**
+ * Seed tessellated meshes into the room as blobs + per-entity `GeometryRef`s.
+ * `pathFor` maps a mesh's `expressId` to its GUID entity path (skipped when it
+ * returns null). A single entity can own several meshes (multi-material /
+ * multiple representation items), so refs are *appended* per path rather than
+ * overwritten. Returns a `SeedGeometryReport`: never throws on a failed
+ * upload, because "the room got no geometry" is a fact the caller has to be
+ * able to act on rather than a rejection it can swallow.
+ */
+export async function seedGeometryToRoom(
+  api: CollabGeomApi,
+  session: CollabSession,
+  blobStore: BlobStore,
+  meshes: readonly MeshData[],
+  pathFor: (expressId: number) => string | null,
+  opts: SeedGeometryOptions = {},
+): Promise<SeedGeometryReport> {
+  // 1. Resolve the seedable meshes up front (valid geometry + entity path + the
+  //    owning entity already in the doc), before any network I/O.
+  interface SeedJob {
+    mesh: MeshData;
+    path: string;
+  }
+  const jobs: SeedJob[] = [];
+  let skippedNoPath = 0;
+  let skippedEmpty = 0;
+  let skippedNoEntity = 0;
+  // One transaction for the whole resolve: `pathFor` writes to the doc per
+  // entity (the owner stamps each entity's placement baseline), and unbatched
+  // that is one websocket frame per entity. A burst of hundreds trips the
+  // relay's per-connection write budget, the relay drops frames, and Yjs
+  // holds every later frame from this client pending behind the gap — two
+  // copies of one file lost the second copy's geometry that way (#4444).
+  session.transact(() => {
+    for (const mesh of meshes) {
+      // A mesh whose CPU data was released (bounded-geometry mode) carries no
+      // triangles. Skip it so we don't seed an empty blob that renders nothing.
+      // On a large model this can skip EVERY mesh while the owner's own viewport
+      // still renders from its GPU copy, so the caller has to be told (see the
+      // report's `skipped.empty`), not just the console.
+      if (mesh.positions.length === 0 || mesh.indices.length === 0) {
+        skippedEmpty++;
+        continue;
+      }
+      const path = pathFor(mesh.expressId);
+      if (!path) {
+        skippedNoPath++;
+        continue;
+      }
+      // The owning entity must already be in the doc (the structure seed creates
+      // it). Skip rather than let addGeometryRef throw and abort the whole seed:
+      // a non-zero count here means structure seeding missed some products.
+      if (!api.hasEntity(session.doc, path)) {
+        skippedNoEntity++;
+        continue;
+      }
+      jobs.push({ mesh, path });
+    }
+  });
+
+  // 2. Upload blobs with bounded concurrency. This was one-at-a-time, which took
+  //    *minutes* for a large model (thousands of serial network PUTs) and was the
+  //    main reason recipients saw geometry trickle in. Content-addressed, so
+  //    identical meshes dedupe server-side. Collect (path, hash) for step 3.
+  //
+  //    Failures are isolated per blob. They used to reject the enclosing
+  //    Promise.all, which meant one bad upload discarded the doc refs for every
+  //    blob that HAD landed: the room ended up with zero geometry instead of
+  //    "all but one". `maxFailures` then stops a store that is refusing
+  //    everything, so the caller hears about it in seconds rather than after
+  //    every mesh has been tried.
+  // Guarded like the other numeric options: `Math.min(NaN, n)` is NaN, and
+  // `Array.from({length: NaN})` builds ZERO workers, so a NaN concurrency
+  // uploads nothing at all rather than uploading slowly.
+  const concurrency = Math.max(
+    1,
+    Math.min(uploadCountOption(opts.concurrency, 16) || 16, jobs.length || 1),
+  );
+  const retries = uploadCountOption(opts.retries, DEFAULT_UPLOAD_RETRIES);
+  const retryDelaysMs = opts.retryDelaysMs ?? DEFAULT_UPLOAD_RETRY_DELAYS_MS;
+  const maxFailures = Math.max(1, uploadCountOption(opts.maxFailures, DEFAULT_UPLOAD_MAX_FAILURES));
+  const refs: { path: string; hash: string; textureHash?: string }[] = [];
+  const uploadTexture = textureUploader(blobStore, retries, retryDelaysMs);
+  let nextJob = 0;
+  let uploaded = 0;
+  let failed = 0;
+  let abandoned = false;
+  let firstError: unknown;
+  const worker = async (): Promise<void> => {
+    while (nextJob < jobs.length) {
+      if (failed >= maxFailures) {
+        abandoned = true;
+        return;
+      }
+      const job = jobs[nextJob++];
+      try {
+        const texture = await uploadTexture(job.mesh);
+        const meta = await putBlobWithRetry(blobStore, encodeMesh(job.mesh, texture), retries, retryDelaysMs);
+        refs.push({ path: job.path, hash: meta.hash, textureHash: texture?.hash });
+        uploaded++;
+        if (opts.onProgress && uploaded % 50 === 0) opts.onProgress(uploaded, jobs.length);
+      } catch (err) {
+        failed++;
+        if (firstError === undefined) firstError = err;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+  // 3. Record geometry + refs in the doc, for the blobs that landed: local Yjs
+  //    ops (fast), batched into a single transaction so peers receive one
+  //    update instead of thousands.
+  session.transact(() => {
+    for (const { hash, textureHash } of refs) {
+      api.createGeometry(session.doc, hash, {
+        type: 'mesh', source: 'mesh-blob', blobHash: hash,
+        ...(textureHash ? { params: { textureBlobHash: textureHash } } : {}),
+      });
+    }
+    if (opts.replace) {
+      // Group hashes per path, then replace each entity's refs in one write.
+      const byPath = new Map<string, string[]>();
+      for (const { path, hash } of refs) {
+        const list = byPath.get(path) ?? [];
+        list.push(hash);
+        byPath.set(path, list);
+      }
+      for (const [path, geomIds] of byPath) api.setGeometryRef(session.doc, path, { geomIds });
+    } else {
+      for (const { path, hash } of refs) api.addGeometryRef(session.doc, path, hash);
+    }
+  });
+  opts.onProgress?.(refs.length, jobs.length);
+
+  const report: SeedGeometryReport = {
+    offered: meshes.length,
+    attempted: jobs.length,
+    seeded: refs.length,
+    failed,
+    skipped: { noPath: skippedNoPath, noEntity: skippedNoEntity, empty: skippedEmpty },
+    abandoned,
+    error: firstError,
+  };
+  if (skippedNoPath > 0 || skippedEmpty > 0 || skippedNoEntity > 0 || failed > 0) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[collab] seedGeometryToRoom: seeded ${report.seeded}/${meshes.length} meshes, ` +
+        `${failed} upload(s) failed${abandoned ? ' (stopped early: the blob store is refusing uploads)' : ''}, ` +
+        `${skippedNoPath} skipped (no entity path), ` +
+        `${skippedNoEntity} skipped (entity not seeded in doc), ` +
+        `${skippedEmpty} skipped (empty/memory-released geometry).`,
+      firstError ?? '',
+    );
+  }
+  return report;
+}
+
+/**
+ * Reconstruct `MeshData[]` from the room's geometry blobs, keyed by entity. A
+ * recipient that joined a seed-into-room link has no source file, so it walks
+ * every entity's `GeometryRef`s, fetches the referenced blobs, and decodes
+ * them back to meshes. Walking by entity path (rather than the geometry store)
+ * lets us re-key each mesh's `expressId` into the recipient's own id space via
+ * `pathToId` — the recipient reconstructs its `IfcDataStore` from the same
+ * IFCX snapshot, so `pathToId.get(path)` is the entity's reconstructed
+ * expressId, which makes 3D selection resolve to the right inspector entry.
+ * Without `pathToId` (e.g. tests), the blob's embedded expressId is kept.
+ * Missing blobs are skipped (the seed may still be syncing).
+ *
+ * Blobs are fetched with bounded concurrency (not one-at-a-time, which left a
+ * large model blank for a minute+) and decoded meshes are memoised by geomId in
+ * `opts.cache` so a later re-hydrate (e.g. after a peer edit) only fetches the
+ * *new* blobs. `opts.onProgress` fires with the growing mesh list so the caller
+ * can render incrementally instead of waiting for every blob.
+ */
+export interface HydrateOptions {
+  /** Max blobs fetched in parallel. Default 12. */
+  concurrency?: number;
+  /** Decoded-mesh cache keyed by geomId, persisted across re-hydrates. */
+  cache?: Map<string, MeshData>;
+  /** Called once if any geometry or image blob could not be hydrated. */
+  onFailure?: (message: string) => void;
+  /** Called as meshes accumulate (throttled by batch), for incremental render. */
+  onProgress?: (meshesSoFar: readonly MeshData[]) => void;
+}
+
+export async function hydrateGeometryFromRoom(
+  api: CollabGeomApi,
+  session: CollabSession,
+  blobStore: BlobStore,
+  pathToId?: Map<string, number>,
+  opts: HydrateOptions = {},
+): Promise<MeshData[]> {
+  // 1. Collect all (blobHash, expressId, geomId) jobs up front.
+  interface Job {
+    geomId: string;
+    blobHash: string;
+    expressId: number | undefined;
+  }
+  const jobs: Job[] = [];
+  for (const [path] of api.iterEntities(session.doc)) {
+    const ref = api.getGeometryRef(session.doc, path);
+    if (!ref) continue;
+    const expressId = pathToId?.get(path);
+    for (const geomId of ref.geomIds) {
+      const node = api.getGeometry(session.doc, geomId);
+      const blobHash = node?.get('blobHash');
+      if (typeof blobHash !== 'string') continue;
+      jobs.push({ geomId, blobHash, expressId });
+    }
+  }
+
+  // 2. Fetch + decode with bounded concurrency; serve cache hits without refetch.
+  const cache = opts.cache;
+  const decode = texturedMeshDecoder(blobStore);
+  const out: MeshData[] = [];
+  let nextJob = 0;
+  let sinceProgress = 0;
+  let failures = 0;
+  const concurrency = Math.max(1, Math.min(opts.concurrency ?? 12, jobs.length || 1));
+
+  const worker = async (): Promise<void> => {
+    while (nextJob < jobs.length) {
+      const job = jobs[nextJob++];
+      let base = cache?.get(job.geomId);
+      if (!base) {
+        // Isolate per-blob failures: a missing/corrupt/half-synced blob must not
+        // abort the whole hydrate (which would lose every other mesh).
+        try {
+          const bytes = await blobStore.get(job.blobHash);
+          if (!bytes) throw new Error('geometry blob is unavailable');
+          base = await decode(bytes);
+          cache?.set(job.geomId, base);
+        } catch (err) {
+          failures++;
+          // eslint-disable-next-line no-console
+          console.warn(`[collab] skipping geometry blob ${job.blobHash} (fetch/decode failed):`, err);
+          continue;
+        }
+      }
+      // Copy mutable positions/normals: renderer moves must not mutate another
+      // entity's shared content-addressed cache entry. Indices/UVs are immutable.
+      const mesh: MeshData =
+        job.expressId !== undefined
+          ? { ...base, expressId: job.expressId, positions: base.positions.slice(), normals: base.normals?.slice() }
+          : { ...base, positions: base.positions.slice(), normals: base.normals?.slice() };
+      out.push(mesh);
+      if (opts.onProgress && ++sinceProgress >= 50) {
+        sinceProgress = 0;
+        opts.onProgress(out);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  if (failures) opts.onFailure?.(`${failures} shared surface(s) could not load their geometry or textures. Reconnect to retry.`);
+  if (opts.onProgress) opts.onProgress(out);
+  return out;
+}
+
+/**
+ * Wrap hydrated meshes into a `GeometryResult` the renderer accepts. Meshes
+ * arrive already in the owner's shifted coordinate space; we compute bounds +
+ * totals for camera framing. Vertices may be in a per-element local frame
+ * (`MeshData.origin`, world = origin + position, #1114), so the origin is
+ * folded into the bounds.
+ *
+ * A slot may carry the owner's immutable coordinate frame (#6499). Preserve
+ * its world/RTC offsets through progressive and final geometry hydration.
+ * Older rooms without that metadata keep their established zero frame.
+ */
+export function buildGeometryResultFromMeshes(meshes: MeshData[], frame?: CoordinateInfo): GeometryResult {
+  let totalTriangles = 0;
+  let totalVertices = 0;
+  const min = { x: Infinity, y: Infinity, z: Infinity };
+  const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+  for (const m of meshes) {
+    totalTriangles += m.indices.length / 3;
+    totalVertices += m.positions.length / 3;
+    const [ox, oy, oz] = m.origin ?? [0, 0, 0];
+    for (let i = 0; i + 2 < m.positions.length; i += 3) {
+      const x = ox + m.positions[i], y = oy + m.positions[i + 1], z = oz + m.positions[i + 2];
+      if (x < min.x) min.x = x; if (y < min.y) min.y = y; if (z < min.z) min.z = z;
+      if (x > max.x) max.x = x; if (y > max.y) max.y = y; if (z > max.z) max.z = z;
+    }
+  }
+  const bounds = meshes.length
+    ? { min, max }
+    : { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
+  const zero = { x: 0, y: 0, z: 0 };
+  return {
+    meshes,
+    totalTriangles,
+    totalVertices,
+    coordinateInfo: frame ? { ...frame, shiftedBounds: bounds } : {
+      originShift: zero,
+      originalBounds: bounds,
+      shiftedBounds: bounds,
+      hasLargeCoordinates: false,
+    },
+  };
+}

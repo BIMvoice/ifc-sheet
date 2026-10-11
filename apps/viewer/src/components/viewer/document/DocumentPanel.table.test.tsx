@@ -1,0 +1,550 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The table block (#5142) end to end in the Document panel over a parsed
+ * model: "Add block › Table" seeds a copy of a list, the preview runs it
+ * and shows its rows, the export waits for a running list and then prints
+ * the table through the seam, and a stale run can never outlive the model
+ * it was computed from.
+ */
+import '@/test/setup-dom.js';
+import { documentPreviewReady } from '@/test/document-preview';
+import '@/test/content-fixture.js';
+import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { act, useState } from 'react';
+import { IfcParser, type IfcDataStore } from '@ifc-lite/parser';
+import { DEFAULT_THEME, renderChartSvg } from '@ifc-lite/charts';
+import { IfcTypeEnum } from '@ifc-lite/data';
+import { MutablePropertyView } from '@ifc-lite/mutations';
+import type { ListDefinition } from '@ifc-lite/lists';
+import { useViewerStore } from '@/store/index.js';
+import type { FederatedModel } from '@/store/types.js';
+import { jsPDF } from 'jspdf';
+import { fixtureModel } from '@/test/store-fixture.js';
+import { render, click, cleanup, waitFor, type as typeInput } from '@/test/render.js';
+import type { DocumentPdfSeams } from '@/lib/document/generate-document-pdf.js';
+import { browserReportSeams, type ReportTableArgs } from '@/lib/export/report/generate-report-pdf.js';
+import { DOCUMENT_VERSION, type DocumentSpec, type ListTableSource, type TableBlock } from '@/lib/document/types.js';
+import type { TableState } from '@/lib/document/resolve-table.js';
+import { loadDocuments, parseDocumentFile } from '@/lib/document/persistence';
+import { renderTemplate } from '@/lib/document/bindings.js';
+import { DocumentPanel } from './DocumentPanel.js';
+import { TableBlockEditor } from './TableBlockEditor.js';
+import { useDocumentTables } from './useDocumentTables.js';
+import { useDocumentData } from './useDocumentData.js';
+import { Toaster } from '@/components/ui/toast.js';
+import { newChartSpec } from '@/lib/charts/presets.js';
+
+const MINI_IFC = `ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('t','',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0Project0000000000000a',$,'Tower',$,$,$,$,$,$);
+#2=IFCSITE('0Site000000000000000002',$,'Site',$,$,$,$,$,.ELEMENT.,$,$,$,$,$);
+#3=IFCBUILDING('0Building00000000000003',$,'Building',$,$,$,$,$,.ELEMENT.,$,$,$);
+#5=IFCBUILDINGSTOREY('0Storey00000000000005',$,'Level 1',$,$,$,$,$,.ELEMENT.,0.);
+#11=IFCRELAGGREGATES('0Agg000000000000000011',$,$,$,#1,(#2));
+#12=IFCRELAGGREGATES('0Agg000000000000000012',$,$,$,#2,(#3));
+#13=IFCRELAGGREGATES('0Agg000000000000000013',$,$,$,#3,(#5));
+#20=IFCCARTESIANPOINT((0.,0.,0.));
+#21=IFCDIRECTION((0.,0.,1.));
+#22=IFCDIRECTION((1.,0.,0.));
+#23=IFCAXIS2PLACEMENT3D(#20,#21,#22);
+#24=IFCLOCALPLACEMENT($,#23);
+#25=IFCRECTANGLEPROFILEDEF(.AREA.,$,#23,1.,1.);
+#26=IFCEXTRUDEDAREASOLID(#25,#23,#21,1.);
+#27=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#26));
+#28=IFCPRODUCTDEFINITIONSHAPE($,$,(#27));
+#41=IFCWALL('0Wall00000000000000041',$,'Wall A',$,$,#24,#28,$,$);
+#42=IFCWALL('0Wall00000000000000042',$,'Wall B',$,$,#24,#28,$,$);
+#44=IFCDOOR('0Door00000000000000044',$,'Door A',$,$,#24,#28,$,$,$,$,$);
+#90=IFCRELCONTAINEDINSPATIALSTRUCTURE('0Rel000000000000000090',$,$,$,(#41,#42,#44),#5);
+ENDSEC;
+END-ISO-10303-21;
+`;
+
+async function parsedModel(): Promise<FederatedModel> {
+  const bytes = new TextEncoder().encode(MINI_IFC);
+  const store: IfcDataStore = await new IfcParser().parseColumnar(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  return { ...fixtureModel('m1', { idOffset: 1_000_000 }), name: 'tower.ifc', ifcDataStore: store, maxExpressId: 91 };
+}
+
+async function flushEffects(): Promise<void> {
+  for (let i = 0; i < 4; i++) await act(async () => { await Promise.resolve(); });
+}
+async function settle(): Promise<void> {
+  await flushEffects();
+  await documentPreviewReady();
+}
+
+// The hook runs one list per animation frame; frames are captured here and fired on demand, so a
+// test can look at the page BEFORE a list has run and then let it run.
+const frames: FrameRequestCallback[] = [];
+const realRaf = globalThis.requestAnimationFrame;
+const realCancel = globalThis.cancelAnimationFrame;
+before(() => {
+  globalThis.requestAnimationFrame = (cb) => { frames.push(cb); return frames.length; };
+  globalThis.cancelAnimationFrame = () => {};
+});
+after(() => {
+  globalThis.requestAnimationFrame = realRaf;
+  globalThis.cancelAnimationFrame = realCancel;
+});
+
+/** Fire every captured frame (a run schedules the next list's frame as it finishes). */
+async function runLists(): Promise<void> {
+  for (let guard = 0; frames.length > 0 && guard < 20; guard++) {
+    const cb = frames.shift()!;
+    await act(async () => { cb(0); });
+  }
+  await flushEffects();
+}
+
+function openMenu(trigger: HTMLElement): void {
+  act(() => trigger.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, cancelable: true })));
+  act(() => trigger.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true })));
+}
+
+const wallList = (extra: Partial<ListDefinition> = {}): ListDefinition => ({
+  id: 'saved-walls', name: 'Walls by name', createdAt: 1, updatedAt: 1, entityTypes: [IfcTypeEnum.IfcWall], groups: [],
+  columns: [{ id: 'name', source: 'attribute', propertyName: 'Name' }, { id: 'storey', source: 'spatial', propertyName: 'Storey' }],
+  sortBy: { columnId: 'name', direction: 'desc' },
+  ...extra,
+});
+
+const tableDoc = (blocks: TableBlock[]): DocumentSpec => ({ version: DOCUMENT_VERSION, id: 'doc-t', name: 'Tables', page: { size: 'A4', orientation: 'portrait' }, blocks });
+const tableBlock = (id: string, list: ListDefinition, extra: Partial<TableBlock> = {}): TableBlock => ({ kind: 'table', id, source: { kind: 'list', list, fromListId: list.id }, ...extra });
+
+function recordingBrowserSeams(tables: ReportTableArgs[], outputs: Blob[]): () => Promise<DocumentPdfSeams> {
+  return async () => {
+    const browser = await browserReportSeams(null, DEFAULT_THEME);
+    return {
+      ...browser,
+      createDoc: async (format, orientation) => {
+        const pdfWindow = window as Window & { jspdf?: { jsPDF: typeof jsPDF } };
+        const priorJsPdf = pdfWindow.jspdf;
+        pdfWindow.jspdf = { jsPDF };
+        try {
+          const doc = await browser.createDoc(format, orientation);
+          return {
+            ...doc,
+            table: (args) => { tables.push(args); doc.table(args); },
+            output: () => { const output = doc.output(); outputs.push(output); return output; },
+          };
+        } finally {
+          pdfWindow.jspdf = priorJsPdf;
+        }
+      },
+      imageSize: async () => ({ w: 2, h: 1 }),
+    };
+  };
+}
+
+function recordingSeams(tables: ReportTableArgs[], texts: string[] = []): () => Promise<DocumentPdfSeams> {
+  return async () => ({
+    createDoc: async () => ({
+      addPage: () => {}, setFont: () => {}, setFontSize: () => {}, setTextColor: () => {}, fillRect: () => {},
+      text: (t) => { texts.push(t); },
+      addImage: () => {},
+      svg: async () => {},
+      table: (args) => { tables.push(args); },
+      pageCount: () => 1,
+      output: () => new Blob(['pdf']),
+    }),
+    renderSvg: (aggregation, w, h, theme) => renderChartSvg({ aggregation, width: w, height: h, theme, showTitle: false }),
+    capture: null,
+    theme: DEFAULT_THEME,
+    now: () => new Date(0),
+    imageSize: async () => ({ w: 2, h: 1 }),
+  });
+}
+
+describe('DocumentPanel table block (#5142)', () => {
+  beforeEach(async () => {
+    const model = await parsedModel();
+    useViewerStore.setState({
+      models: new Map([[model.id, model]]),
+      activeModelId: model.id,
+      documents: [],
+      activeDocumentId: null,
+      dashboards: [],
+      bcfProject: null,
+      selectedEntityIds: new Set(),
+      listDefinitions: [],
+      pendingListDraft: null,
+      listPanelVisible: false,
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('shows count-only native export warnings for real chart aggregation errors (#6612, #6620)', async () => {
+    const doc: DocumentSpec = { version: DOCUMENT_VERSION, id: 'broken-charts', name: 'Private report',
+      page: { size: 'A4', orientation: 'portrait' }, blocks: [1, 2].map((index) => ({
+        kind: 'chart', id: `broken-${index}`, snapshot: false,
+        chart: newChartSpec({ title: `Private chart ${index}`, dimension: `AbsentColumn${index}` }),
+      })) };
+    useViewerStore.setState({ documents: [doc], activeDocumentId: doc.id });
+    const texts: string[] = [];
+    const ui = render(<><DocumentPanel pdfSeams={recordingSeams([], texts)} /><Toaster /></>);
+    await settle();
+    assert.ok(ui.querySelector('[data-preview-block="broken-1"]')?.textContent?.includes('AbsentColumn1'),
+      'the native aggregator must reject the missing column before export');
+    const exportButton = ui.querySelector<HTMLButtonElement>('[data-document-export]');
+    assert.ok(exportButton);
+    click(exportButton);
+    await waitFor(() => /2 charts not printed/.test(ui.querySelector('[role="status"]')?.textContent ?? ''),
+      'native PDF completion must report both chart errors');
+    const notification = ui.querySelector('[role="status"]')?.textContent ?? '';
+    assert.ok(notification.includes('Document exported:'));
+    assert.ok(!notification.includes('Private') && !notification.includes('AbsentColumn'),
+      'toast diagnostics expose counts without document names, chart names or column names');
+    assert.ok(texts.some((text) => text.includes('AbsentColumn1')));
+    assert.ok(texts.some((text) => text.includes('AbsentColumn2')));
+  });
+
+  it('edits group order and header colours, persists them and prints parsed IFC tables (#6543)', async () => {
+    const list = wallList({ name: 'Products by class', entityTypes: [IfcTypeEnum.IfcWall, IfcTypeEnum.IfcDoor],
+      columns: [{ id: 'class', source: 'attribute', propertyName: 'Class' }, { id: 'name', source: 'attribute', propertyName: 'Name' }],
+      grouping: { columnId: 'class', sumColumnIds: [] } });
+    const doc = tableDoc([tableBlock('t1', list), tableBlock('t2', list)]);
+    useViewerStore.setState({ documents: [doc], activeDocumentId: doc.id, listDefinitions: [list] });
+    const tables: ReportTableArgs[] = [];
+    const pdfOutputs: Blob[] = [];
+    const ui = render(<DocumentPanel pdfSeams={recordingBrowserSeams(tables, pdfOutputs)} />);
+    await settle(); await runLists(); await documentPreviewReady();
+    const groupLabels = (id: string): string[] => [...ui.querySelectorAll(`[data-preview-block="${id}"] tr[data-role="group"]`)].map((r) => r.firstElementChild?.textContent ?? '');
+    assert.deepEqual(groupLabels('t1'), ['IfcWall  (2)', 'IfcDoor  (1)']);
+    assert.deepEqual(groupLabels('t2'), groupLabels('t1'));
+    const editor = ui.querySelector('[data-block-editor="t2"]'); assert.ok(editor);
+    const order = editor.querySelector<HTMLSelectElement>('select[aria-label="Group order"]'); assert.ok(order);
+    act(() => { order.value = 'label'; order.dispatchEvent(new window.Event('change', { bubbles: true })); });
+    const color = editor.querySelector<HTMLInputElement>('input[aria-label="Header background"]'); assert.ok(color);
+    typeInput(color, '#ffee88'); await settle();
+    assert.deepEqual(groupLabels('t1'), ['IfcWall  (2)', 'IfcDoor  (1)'], 'other block retains largest-first ordering');
+    assert.deepEqual(groupLabels('t2'), ['IfcDoor  (1)', 'IfcWall  (2)']);
+    assert.equal(frames.length, 0, 'cosmetic ordering and palette changes schedule no further IFC list run');
+    const header = ui.querySelector<HTMLElement>('[data-preview-block="t2"] th'); assert.ok(header);
+    assert.equal(header.style.backgroundColor, '#ffee88');
+    assert.equal(header.style.color, '#000000');
+    const headerTextColor = editor.querySelector<HTMLInputElement>('input[aria-label="Header text"]'); assert.ok(headerTextColor);
+    typeInput(headerTextColor, '#6b21a8'); await settle();
+    const authoredHeader = ui.querySelector<HTMLElement>('[data-preview-block="t2"] th'); assert.ok(authoredHeader);
+    assert.equal(authoredHeader.style.color, '#6b21a8', 'the recomposed current page renders the authored header ink');
+    const persisted = (await loadDocuments()).find((d) => d.id === doc.id); assert.ok(persisted);
+    const imported = parseDocumentFile(JSON.stringify(persisted));
+    const second = imported.blocks[1]; assert.ok(second?.kind === 'table');
+    // File import allocates fresh block ids; presentation and order survive the copy.
+    assert.equal(second.groupOrder, 'label'); assert.equal(second.headerBackground, '#ffee88'); assert.equal(second.headerTextColor, '#6b21a8');
+    click(ui.querySelector('[data-document-export]')!);
+    await waitFor(() => tables.length === 2 && pdfOutputs.length === 1, 'the native PDF renderer prints both styled tables and produces its PDF');
+    assert.equal(tables.length, 2);
+    assert.deepEqual(tables[0].body.filter((_, i) => tables[0].rowRoles?.[i] === 'group').map((r) => r[0]), groupLabels('t1'));
+    assert.deepEqual(tables[1].body.filter((_, i) => tables[1].rowRoles?.[i] === 'group').map((r) => r[0]), groupLabels('t2'));
+    assert.deepEqual(tables[1].headerStyle, { backgroundColor: '#ffee88', textColor: '#6b21a8' }, 'the generated PDF layout carries the authored text colour');
+    assert.equal(pdfOutputs.length, 1);
+    assert.equal(pdfOutputs[0]?.type, 'application/pdf');
+    assert.ok((pdfOutputs[0]?.size ?? 0) > 0, 'the configured table is included in a real generated PDF');
+    click(editor.querySelector('button[aria-label="Reset table header text color"]')!); await settle();
+    const resetInkHeader = ui.querySelector<HTMLElement>('[data-preview-block="t2"] th'); assert.ok(resetInkHeader);
+    assert.equal(resetInkHeader.style.backgroundColor, '#ffee88'); assert.equal(resetInkHeader.style.color, '#000000', 'reset returns to automatic contrast');
+    click(editor.querySelector('button[aria-label="Reset table header background"]')!); await settle();
+    const resetPaletteHeader = ui.querySelector<HTMLElement>('[data-preview-block="t2"] th'); assert.ok(resetPaletteHeader);
+    assert.equal(resetPaletteHeader.style.backgroundColor, '#334155'); assert.equal(resetPaletteHeader.style.color, '#ffffff');
+    const reset = (await loadDocuments()).find((d) => d.id === doc.id)?.blocks.find((b) => b.id === 't2');
+    assert.ok(reset?.kind === 'table'); assert.equal(reset.headerBackground, undefined); assert.equal(reset.headerTextColor, undefined);
+    assert.equal(reset.groupOrder, 'label', 'resetting the palette preserves group ordering');
+  });
+
+  it('"Add block › Table" seeds a preset copy without a selection snapshot, and the preview runs it against the model', async () => {
+    const ui = render(<DocumentPanel />);
+    await settle();
+    openMenu([...ui.querySelectorAll('button')].find((b) => b.title === 'Add a block to the page')!);
+    const item = [...document.body.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent?.includes('Table'))!;
+    assert.ok(item, 'the menu offers a table block');
+    click(item);
+    await settle();
+
+    const doc = useViewerStore.getState().documents[0];
+    const block = doc.blocks.find((b): b is TableBlock => b.kind === 'table');
+    assert.ok(block, 'a table block was added');
+    const source = block.source as ListTableSource;
+    assert.equal(source.list.name, 'Wall Schedule', 'the first preset, with no saved lists');
+    assert.equal(source.fromListId, 'preset-wall-schedule');
+    assert.equal('expressIdsByModel' in source.list, false);
+    assert.ok(ui.querySelector('[data-block-kind="table"] [data-table-block-editor]'));
+
+    // Before the frame fires the preview says the list is running, and Export waits for it.
+    assert.equal(ui.querySelector('[data-block-table] [data-table-message]')?.textContent, 'Running the list…');
+    const exportButton = ui.querySelector<HTMLButtonElement>('[data-document-export]')!;
+    assert.equal(exportButton.disabled, true);
+    assert.equal(exportButton.textContent?.includes('Running lists'), true);
+
+    await runLists(); await documentPreviewReady();
+    const rows = ui.querySelector('[data-block-table] table');
+    assert.ok(rows, 'the table rendered');
+    const head = [...rows.querySelectorAll('th')].map((th) => th.textContent);
+    assert.ok(head.includes('Name') && head.includes('FireRating'), head.join(','));
+    const names = [...rows.querySelectorAll('tbody tr[data-role="row"]')].map((tr) => tr.querySelector('td')?.textContent);
+    assert.deepEqual(names.sort(), ['Wall A', 'Wall B']);
+    assert.equal(exportButton.disabled, false);
+  });
+
+  it('a list the engine rejects shows its error in the block and does not keep Export disabled', async () => {
+    const bad = wallList({ columns: [{ id: 'c', source: 'property', psetName: 'Pset_WallCommon', propertyName: '/(a+)+$/' }] });
+    const doc = tableDoc([tableBlock('bad', bad)]);
+    useViewerStore.setState({ documents: [doc], activeDocumentId: doc.id });
+    const ui = render(<DocumentPanel />);
+    await settle();
+    const exportButton = ui.querySelector<HTMLButtonElement>('[data-document-export]')!;
+    assert.equal(exportButton.disabled, true, 'disabled while the list runs');
+    await runLists(); await documentPreviewReady();
+    const message = ui.querySelector('[data-block-table] [data-table-message]')?.textContent ?? '';
+    assert.ok(message.length > 0 && !message.startsWith('Running'), message);
+    assert.equal(exportButton.disabled, false, 'an error is a settled state; the PDF prints it in place');
+  });
+
+  it('prints the table through the seam with the list sorted as saved, and a caption; a second block over the same list shares the run', async () => {
+    useViewerStore.setState({ listDefinitions: [wallList()] });
+    const doc = tableDoc([tableBlock('t1', wallList(), { caption: 'All walls', maxRows: 1 }), tableBlock('t2', wallList(), { source: { kind: 'list', list: wallList({ id: 'copy-2' }), fromListId: 'saved-walls' } })]);
+    useViewerStore.setState({ documents: [doc], activeDocumentId: doc.id });
+    const tables: ReportTableArgs[] = [];
+    const texts: string[] = [];
+    const seams = recordingSeams(tables, texts);
+    const ui = render(<DocumentPanel pdfSeams={seams} />);
+    await settle();
+    await runLists(); await documentPreviewReady();
+    const previews = ui.querySelectorAll('[data-block-table] table');
+    assert.equal(previews.length, 2, 'both blocks rendered their rows');
+    // The saved-list origin resolves, so "Update from saved list" is offered.
+    assert.equal(ui.querySelectorAll('[data-table-update]').length, 2);
+
+    click(ui.querySelector('[data-document-export]')!);
+    await waitFor(() => tables.length === 2, 'the PDF seam prints both sorted table blocks');
+    assert.equal(tables.length, 2);
+    assert.deepEqual(tables[0].head, [['Name', 'Storey']]);
+    // sortBy name desc, maxRows 1: Wall B first, then "… 1 more row".
+    assert.deepEqual(tables[0].body.map((r) => r[0]), ['Wall B', '… 1 more row']);
+    assert.deepEqual(tables[0].rowRoles, ['row', 'more']);
+    assert.deepEqual(tables[1].body.map((r) => r[0]), ['Wall B', 'Wall A']);
+    assert.ok(texts.includes('All walls'), 'the caption printed');
+    assert.ok(texts.includes('Walls by name'), 'the list name is the default title');
+  });
+});
+
+/** Exposes the hook's states for a document to the DOM. */
+function TablesProbe({ document: doc }: { document: DocumentSpec }) {
+  const tables = useDocumentTables(doc);
+  return <div data-probe>{[...tables].map(([id, s]) => <span key={id} data-block={id} data-status={s.status}>{s.status === 'error' ? s.message : ''}</span>)}</div>;
+}
+
+function BindingProbe() {
+  const { bindings } = useDocumentData(null);
+  return <div data-binding>{renderTemplate('Walls {Count[IfcWall]}: {Element[0Wall00000000000000041].Name}', bindings).text}</div>;
+}
+
+describe('useDocumentData bindings (#5249)', () => {
+  afterEach(() => cleanup());
+
+  it('refreshes mounted document text on a mutation revision', async () => {
+    const model = await parsedModel();
+    const view = new MutablePropertyView(model.ifcDataStore!.properties, model.id);
+    useViewerStore.setState({ models: new Map([[model.id, model]]), activeModelId: model.id,
+      mutationViews: new Map([[model.id, view]]), mutationVersion: 0 });
+    const ui = render(<BindingProbe />);
+    assert.equal(ui.querySelector('[data-binding]')?.textContent, 'Walls 2: Wall A');
+    view.deleteEntity(42);
+    view.setAttribute(41, 'Name', 'Edited wall');
+    act(() => useViewerStore.setState({ mutationVersion: 1 }));
+    assert.equal(ui.querySelector('[data-binding]')?.textContent, 'Walls 1: Edited wall');
+  });
+});
+
+describe('useDocumentTables (#5142)', () => {
+  beforeEach(async () => {
+    const model = await parsedModel();
+    useViewerStore.setState({ models: new Map([[model.id, model]]), activeModelId: model.id, mutationVersion: 0 });
+  });
+  afterEach(() => cleanup());
+
+  const statusOf = (ui: HTMLElement, id: string): string | null => ui.querySelector(`[data-block="${id}"]`)?.getAttribute('data-status') ?? null;
+
+  it('resolves after a frame, and a mutation invalidates the result on the very next render — never a stale "ok"', async () => {
+    const doc = tableDoc([tableBlock('a', wallList())]);
+    const ui = render(<TablesProbe document={doc} />);
+    assert.equal(statusOf(ui, 'a'), 'resolving');
+    await runLists();
+    assert.equal(statusOf(ui, 'a'), 'ok');
+    act(() => useViewerStore.setState({ mutationVersion: 1 }));
+    assert.equal(statusOf(ui, 'a'), 'resolving', 'the old run is unreachable under the new data key');
+    await runLists();
+    assert.equal(statusOf(ui, 'a'), 'ok');
+  });
+
+  it('a list the engine rejects ends in "error" with its message; no loaded model is "no-model"', async () => {
+    const bad = wallList({ columns: [{ id: 'c', source: 'property', psetName: 'Pset_WallCommon', propertyName: '/(a+)+$/' }] });
+    const ui = render(<TablesProbe document={tableDoc([tableBlock('bad', bad)])} />);
+    await runLists();
+    assert.equal(statusOf(ui, 'bad'), 'error');
+    assert.ok((ui.querySelector('[data-block="bad"]')?.textContent ?? '').length > 0, 'the message travels with the state');
+    cleanup();
+
+    useViewerStore.setState({ models: new Map(), activeModelId: null, ifcDataStore: null });
+    const empty = render(<TablesProbe document={tableDoc([tableBlock('x', wallList())])} />);
+    assert.equal(statusOf(empty, 'x'), 'no-model');
+  });
+
+  it('two blocks over the same list content share one run; a block whose list differs gets its own', async () => {
+    const seen: TableState[] = [];
+    function Capture({ document: doc }: { document: DocumentSpec }) {
+      const tables = useDocumentTables(doc);
+      seen.length = 0;
+      seen.push(...tables.values());
+      return null;
+    }
+    const doc = tableDoc([tableBlock('a', wallList()), tableBlock('b', wallList({ id: 'other-id', name: 'Renamed' })), tableBlock('c', wallList({ sortBy: undefined }))]);
+    render(<Capture document={doc} />);
+    await runLists();
+    assert.deepEqual(seen.map((s) => s.status), ['ok', 'ok', 'ok']);
+    const models = seen.map((s) => (s.status === 'ok' ? s.model : null));
+    assert.equal(models[0], models[1], 'same content (id and name aside) → the same ExportModel object');
+    assert.notEqual(models[0], models[2], 'a different sort is a different run');
+  });
+});
+
+
+describe('useDocumentTables — what re-runs a list and what does not (review findings)', () => {
+  beforeEach(async () => {
+    const model = await parsedModel();
+    useViewerStore.setState({ models: new Map([[model.id, model]]), activeModelId: model.id, mutationVersion: 0 });
+  });
+  afterEach(() => cleanup());
+
+  const statusOf = (ui: HTMLElement, id: string): string | null => ui.querySelector(`[data-block="${id}"]`)?.getAttribute('data-status') ?? null;
+
+  it('a streamed geometry batch (new model objects, same data stores) keeps the result; a list with a world-coordinate column re-runs', async () => {
+    // A world-coordinate filter (#6190: a List value rule, formerly a provider-only row) re-runs too.
+    const geoFilter = wallList({ id: 'geo-filter-list', groups: [{ combinator: 'AND', rules: [
+      { kind: 'listCondition', source: 'geometry', propertyName: 'X', operator: 'gt', value: '-1000000' },
+    ] }] });
+    const doc = tableDoc([tableBlock('plain', wallList()), tableBlock('geo', wallList({ id: 'geo-list', columns: [{ id: 'x', source: 'geometry', propertyName: 'X' }] })),
+      tableBlock('geo-filter', geoFilter)]);
+    const ui = render(<TablesProbe document={doc} />);
+    await runLists();
+    assert.equal(statusOf(ui, 'plain'), 'ok');
+    assert.equal(statusOf(ui, 'geo'), 'ok');
+    assert.equal(statusOf(ui, 'geo-filter'), 'ok');
+    // What `appendGeometryBatch` does per batch: a new Map with a new model object over the SAME store.
+    act(() => {
+      const models = new Map(useViewerStore.getState().models);
+      for (const [id, m] of models) models.set(id, { ...m, geometryResult: { meshes: [], totalTriangles: 0, totalVertices: 0, coordinateInfo: m.geometryResult?.coordinateInfo } } as typeof m);
+      useViewerStore.setState({ models });
+    });
+    assert.equal(statusOf(ui, 'plain'), 'ok', 'a pset/attribute list must not re-run per geometry batch');
+    assert.equal(statusOf(ui, 'geo'), 'resolving', 'world coordinates move with the geometry, so that list re-runs');
+    assert.equal(statusOf(ui, 'geo-filter'), 'resolving', 'so does a list filtered on them');
+    assert.equal(frames.length > 0, true, 'a run is queued for the geometry list only');
+  });
+
+  it('editing a text block does not touch the tables; replacing the model store does', async () => {
+    const doc = tableDoc([tableBlock('a', wallList())]);
+    const ui = render(<TablesProbe document={doc} />);
+    await runLists();
+    assert.equal(statusOf(ui, 'a'), 'ok');
+    const frameCount = frames.length;
+    act(() => { /* the panel re-renders with a new document object on every keystroke */ });
+    cleanup();
+    const edited: DocumentSpec = { ...doc, blocks: [{ kind: 'text', id: 't', style: 'body', text: 'typed' }, ...doc.blocks] };
+    const ui2 = render(<TablesProbe document={edited} />);
+    await runLists();
+    assert.equal(statusOf(ui2, 'a'), 'ok');
+    cleanup();
+    const reloaded = await parsedModel();
+    act(() => { useViewerStore.setState({ models: new Map([[reloaded.id, reloaded]]) }); });
+    const ui3 = render(<TablesProbe document={edited} />);
+    assert.equal(statusOf(ui3, 'a'), 'resolving', 'a different data store is a different federation');
+    assert.ok(frames.length >= frameCount, 'and queues a run');
+  });
+});
+
+describe('TableBlockEditor — Edit in Lists and the saved-list back-pointer (review findings)', () => {
+  beforeEach(async () => {
+    const model = await parsedModel();
+    useViewerStore.setState({ models: new Map([[model.id, model]]), activeModelId: model.id, listDefinitions: [], pendingListDraft: null, listPanelVisible: false });
+  });
+  afterEach(() => cleanup());
+
+  function Harness({ initial }: { initial: TableBlock }) {
+    const [block, setBlock] = useState(initial);
+    return <div><span data-from={(block.source as ListTableSource).fromListId ?? ''} /><TableBlockEditor block={block} onChange={setBlock} /></div>;
+  }
+  const fromOf = (ui: HTMLElement): string => ui.querySelector('[data-from]')?.getAttribute('data-from') ?? '';
+
+  it('hands the SAVED list to the builder when it is newer than the copy, so a save cannot roll the library back', () => {
+    const saved = wallList({ updatedAt: 10, columns: [...wallList().columns, { id: 'extra', source: 'attribute', propertyName: 'Tag' }] });
+    useViewerStore.setState({ listDefinitions: [saved] });
+    const stale = wallList({ id: 'copy-1', updatedAt: 1 }); // taken before the extra column
+    const ui = render(<Harness initial={tableBlock('t', stale, { source: { kind: 'list', list: stale, fromListId: 'saved-walls' } })} />);
+    assert.ok(ui.querySelector('[data-table-update]')?.textContent?.includes('•'), 'the newer flag shows');
+    click(ui.querySelector('[data-table-edit-in-lists]')!);
+    const draft = useViewerStore.getState().pendingListDraft!;
+    assert.equal(draft.id, 'saved-walls');
+    assert.equal(draft.columns.length, 3, 'the draft is the saved list, not the stale copy');
+    assert.equal(useViewerStore.getState().listPanelVisible, true);
+  });
+
+  it('a copy of a preset edited in Lists becomes a new saved list the block points at only once it is saved; cancelling leaves the preset pointer', () => {
+    const preset = wallList({ id: 'preset-wall-schedule', updatedAt: 0 });
+    const ui = render(<Harness initial={tableBlock('t', wallList({ id: 'copy-2', updatedAt: 0 }), { source: { kind: 'list', list: wallList({ id: 'copy-2' }), fromListId: preset.id } })} />);
+    click(ui.querySelector('[data-table-edit-in-lists]')!);
+    const draft = useViewerStore.getState().pendingListDraft!;
+    assert.notEqual(draft.id, preset.id, 'a preset is never saved under its own id');
+    assert.equal(fromOf(ui), preset.id, 'not repointed before anything is saved');
+    // Cancel in the builder: the draft is consumed, nothing saved.
+    act(() => { useViewerStore.setState({ pendingListDraft: null }); });
+    assert.equal(fromOf(ui), preset.id);
+    // Save in the builder: the list appears in the library, and the block follows it.
+    act(() => { useViewerStore.getState().addListDefinition({ ...draft }); });
+    assert.equal(fromOf(ui), draft.id);
+  });
+});
+
+describe('TableBlockEditor — source-kind switch (#5138)', () => {
+  beforeEach(async () => {
+    const model = await parsedModel();
+    useViewerStore.setState({ models: new Map([[model.id, model]]), activeModelId: model.id, listDefinitions: [], idsValidationReport: null });
+  });
+  afterEach(() => cleanup());
+
+  function Harness({ initial }: { initial: TableBlock }) {
+    const [block, setBlock] = useState(initial);
+    return <TableBlockEditor block={block} onChange={setBlock} />;
+  }
+
+  it('switching between List and Validation results keeps title/caption, and each kind renders its own fields', () => {
+    const initial: TableBlock = { kind: 'table', id: 't', source: { kind: 'list', list: wallList(), fromListId: 'saved-walls' }, title: 'My table', caption: 'My caption' };
+    const ui = render(<Harness initial={initial} />);
+    assert.ok(ui.querySelector('[data-table-block-editor]'));
+    assert.equal(ui.querySelector<HTMLInputElement>('[aria-label="Table title"]')?.value, 'My table');
+    assert.equal(ui.querySelector<HTMLInputElement>('[aria-label="Table caption"]')?.value, 'My caption');
+    assert.ok(ui.querySelector('[data-table-update], [data-table-edit-in-lists]'), 'the list-specific controls render for a list source');
+    assert.equal(ui.querySelector('[data-table-columns]'), null, 'not the validation column toggles');
+
+    const sourceSelect = ui.querySelector<HTMLSelectElement>('[aria-label="Table source"]')!;
+    act(() => {
+      sourceSelect.value = 'validation';
+      sourceSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+
+    assert.equal(ui.querySelector<HTMLInputElement>('[aria-label="Table title"]')?.value, 'My table', 'title survives the source switch');
+    assert.equal(ui.querySelector<HTMLInputElement>('[aria-label="Table caption"]')?.value, 'My caption', 'caption survives the source switch');
+    assert.ok(ui.querySelector('[data-table-columns]'), 'the validation column toggles render for a validation source');
+    assert.equal(ui.querySelector('[data-table-edit-in-lists]'), null, 'not the list-specific controls');
+    assert.ok(ui.querySelector('select[aria-label="Which rows to show"]'));
+  });
+});

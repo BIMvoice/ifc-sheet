@@ -1,0 +1,277 @@
+#!/bin/bash
+set -e
+
+# Get script directory and root directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$ROOT_DIR"
+
+# Source cargo environment if available (adds cargo to PATH)
+if [ -f "$HOME/.cargo/env" ]; then
+  source "$HOME/.cargo/env"
+fi
+
+echo "🦀 Building IFC-Lite WASM..."
+
+# The wasm build rebuilds `std` from source (needed for the panic_abort-only
+# single-thread bundle, and for the atomics-enabled threaded bundle below).
+# This used to live in `.cargo/config.toml`'s `[unstable] build-std`, but that
+# table applies to every `cargo` invocation in the workspace, not just wasm
+# ones — including plain host builds with no `--target` at all — and collided
+# with `[profile.release] panic = "abort"` there (duplicate `core` lang item).
+# Scope it to this script only via the env var equivalent of
+# `unstable.build-std`, so host builds (`cargo test --release`, etc.) never
+# see it.
+export CARGO_UNSTABLE_BUILD_STD="std,panic_abort"
+
+# Build with wasm-pack
+echo "📦 Running wasm-pack..."
+
+# Find wasm-pack - check PATH first, then cargo bin directory.
+#
+# Soft-skip path (#654, #952). The wasm *runtime* (ifc-lite_bg.wasm /
+# ifc-lite.js) is NOT committed — it's gitignored and rebuilt from rust/** on
+# every Rust-capable host. The *type surface* (pkg/ifc-lite.d.ts) IS committed
+# so type-checking never needs Rust. Environments without a Rust toolchain —
+# e.g. a contributor who doesn't touch Rust, or a typecheck-only lane — should
+# rebuild from source when possible but soft-skip when not, so a missing
+# wasm-pack doesn't hard-fail `turbo build` / `turbo typecheck`. (CI's build
+# job and Vercel do install Rust and rebuild from source.)
+EXPECTED_DTS="packages/wasm/pkg/ifc-lite.d.ts"
+EXPECTED_WASM="packages/wasm/pkg/ifc-lite_bg.wasm"
+
+WASM_PACK="wasm-pack"
+if ! command -v wasm-pack &> /dev/null; then
+  CARGO_BIN="$HOME/.cargo/bin/wasm-pack"
+  # `-x` (executable) not `-f` (exists): a non-exec leftover at this path
+  # would otherwise pass the guard and then fail on invocation
+  # (CodeRabbit #657).
+  if [ -x "$CARGO_BIN" ]; then
+    WASM_PACK="$CARGO_BIN"
+    echo "   Using wasm-pack from cargo bin: $WASM_PACK"
+  else
+    # No wasm-pack. Don't hard-fail the turbo `^build` graph that `typecheck`
+    # depends on: succeed when a previously built runtime OR the committed type
+    # surface is already on disk. Type-checking works either way; running or
+    # bundling the app still needs the real runtime (the viewer's vite build
+    # demands the .js/.wasm), so this can't silently mask a missing runtime.
+    if [ -f "$EXPECTED_WASM" ]; then
+      echo "⚠️  wasm-pack not found — using the wasm runtime already on disk at $EXPECTED_WASM"
+      echo "   (To rebuild from Rust sources, install Rust + wasm-pack:"
+      echo "    https://rustwasm.github.io/wasm-pack/installer/)"
+      exit 0
+    fi
+    if [ -f "$EXPECTED_DTS" ]; then
+      echo "⚠️  wasm-pack not found — committed types at $EXPECTED_DTS are present,"
+      echo "   so type-checking works, but the wasm runtime is NOT built. The app"
+      echo "   won't run or bundle until you install Rust + wasm-pack and rebuild:"
+      echo "     https://rustwasm.github.io/wasm-pack/installer/"
+      exit 0
+    fi
+    echo "❌ Error: wasm-pack not found in PATH or ~/.cargo/bin/ and no pre-built artifact at $EXPECTED_WASM"
+    echo "   Install with: cargo install wasm-pack"
+    exit 1
+  fi
+fi
+
+# Check if debug_geometry feature should be enabled
+FEATURES=""
+if [ "${DEBUG_GEOMETRY:-}" = "1" ]; then
+  FEATURES="--features debug_geometry"
+  echo "🔍 Building with debug_geometry feature enabled"
+fi
+
+OUT_DIR="../../packages/wasm/pkg"
+echo "🟢 Building single-thread bundle → $OUT_DIR"
+
+# The same soft-skip the missing-wasm-pack branch above applies, for the
+# symmetric case: wasm-pack is INSTALLED but its build fails (it fetches a
+# wasm-bindgen binary at run time, so a network or toolchain hiccup takes it
+# down) while a usable runtime is already on disk -- which is exactly what
+# `pnpm build:wasm:fetch` puts there. Without this the documented escape hatch
+# for hosts that cannot compile Rust does not actually let `pnpm build`
+# succeed: `set -e` aborts and the whole turbo graph fails with nothing built,
+# even though `pkg/ifc-lite_bg.wasm` is sitting right there (#5543).
+#
+# NEVER on CI: a real build failure there must stay a failure, so the fallback
+# is gated on $CI being unset. Anything that ships an artifact -- the release
+# and docker workflows, Vercel -- sets it.
+if ! rustup run nightly-2025-11-15 "$WASM_PACK" build rust/wasm-bindings \
+  --target web \
+  --out-dir "$OUT_DIR" \
+  --out-name ifc-lite \
+  --release \
+  $FEATURES
+then
+  if [ -z "${CI:-}" ] && [ -f "$EXPECTED_WASM" ]; then
+    echo ""
+    echo "⚠️  wasm-pack build FAILED — falling back to the runtime already on disk at $EXPECTED_WASM"
+    echo "   That artifact is whatever was built or fetched previously, NOT this checkout's"
+    echo "   Rust sources, so a change under rust/ is not in it. Re-run once the build works,"
+    echo "   or re-fetch a matching prebuilt with: pnpm build:wasm:fetch"
+    exit 0
+  fi
+  echo ""
+  if [ -n "${CI:-}" ]; then
+    echo "❌ wasm-pack build failed. Not falling back to the on-disk runtime: this is CI,"
+    echo "   where a build failure must stay a failure rather than ship a stale artifact."
+  else
+    echo "❌ wasm-pack build failed and no usable runtime is on disk at $EXPECTED_WASM."
+    echo "   Fetch a prebuilt one with: pnpm build:wasm:fetch"
+  fi
+  exit 1
+fi
+
+# NOTE: wasm-opt is disabled. The bundle is single-threaded (SIMD128 only,
+# no atomics/shared-memory), and the Rust compiler's LLVM -O3 (release
+# profile) already provides sufficient optimization. wasm-opt also has a
+# history of miscompiling the wasm-bindgen closure/async machinery
+# (RuntimeError: unreachable in production), so it stays off.
+echo "ℹ️  wasm-opt disabled — using LLVM -O3 only"
+
+# Strip wasm-bindgen's internal trampoline indices from the committed type
+# surface (#952). The `__wasm_bindgen_func_elem_<N>` members of `InitOutput`
+# are internal closure indices that wasm-bindgen renumbers per platform for the
+# same source (e.g. 709 on linux CI vs 714 on macOS) — nothing outside
+# packages/wasm/pkg/ ever references them. Removing them makes pkg/ifc-lite.d.ts
+# platform-independent so the CI "types in sync" gate can do an exact diff. The
+# runtime .js still carries them; only the .d.ts type omits them.
+DTS_PATH="$(echo "$OUT_DIR" | sed 's|^../../||')/ifc-lite.d.ts"
+if [ -f "$DTS_PATH" ]; then
+  grep -v '__wasm_bindgen_func_elem_' "$DTS_PATH" > "$DTS_PATH.tmp" && mv "$DTS_PATH.tmp" "$DTS_PATH"
+  echo "🧹 stripped internal __wasm_bindgen_func_elem_* indices from $DTS_PATH"
+fi
+
+# Show bundle size
+echo ""
+echo "📊 Bundle size:"
+# OUT_DIR is relative to rust/wasm-bindings/ from wasm-pack's perspective;
+# resolve from repo root for the size check.
+SIZE_PATH="$(echo "$OUT_DIR" | sed 's|^../../||')/ifc-lite_bg.wasm"
+ls -lh "$SIZE_PATH" | awk '{print "   WASM: " $5}'
+
+WASM_SIZE=$(wc -c < "$SIZE_PATH")
+# Single-thread bundle budget: 1100 KB. This slim bundle is what every
+# consumer loads; keep it tight.
+TARGET_SIZE=$((1100 * 1024))
+TARGET_LABEL="1100 KB (single-thread)"
+
+if [ $WASM_SIZE -lt $TARGET_SIZE ]; then
+  echo "   ✅ Under $TARGET_LABEL target!"
+else
+  echo "   ⚠️  Over $TARGET_LABEL target ($(($WASM_SIZE / 1024))KB)"
+fi
+
+# --- Optional second bundle: threaded (atomics + shared memory) -------------
+# Off by default. Enable with `BUILD_THREADED=1 ./scripts/build-wasm.sh`.
+# This is a SEPARATE bundle selected at runtime via wasm-feature-detect +
+# crossOriginIsolated (Safari lacks credentialless threads → it loads the
+# single-thread bundle above). See docs/architecture/csg-threading-design.md.
+if [ "${BUILD_THREADED:-}" = "1" ]; then
+  THREADED_OUT="../../packages/wasm/pkg-threaded"
+  echo ""
+  echo "🧵 Building threaded bundle → $THREADED_OUT (atomics/shared-memory + wasm-bindgen-rayon)"
+
+  # The exact flag set validated on spike/path-b-respike (8fcaff96). RUSTFLAGS
+  # fully replaces .cargo/config.toml's target rustflags, so the base flags
+  # (max-memory, stack-size, simd128) are repeated here. build-std is set via
+  # the `CARGO_UNSTABLE_BUILD_STD` env var above (NOT `.cargo/config.toml`'s
+  # `[unstable]` table — that was deliberately moved out of this file; see the
+  # comment near the top of this script and in `.cargo/config.toml`) and
+  # rebuilds std WITH atomics for this threaded build.
+  # NOTE for whoever bumps rust-toolchain.toml: since wasm-bindgen 0.2.122, threaded
+  # builds on nightlies dated 2026-05-06 or later ALSO need
+  # `-C link-arg=--export=__heap_base`. The pinned nightly-2025-11-15 predates that,
+  # so it is deliberately absent here; add it with the nightly bump or the threaded
+  # bundle breaks at link time.
+  RUSTFLAGS="-C link-arg=--max-memory=4294967296 -C link-arg=-zstack-size=8388608 -C target-feature=+simd128,+atomics,+bulk-memory,+mutable-globals -C link-arg=--shared-memory -C link-arg=--import-memory -C link-arg=--export=__wasm_init_tls -C link-arg=--export=__tls_size -C link-arg=--export=__tls_align -C link-arg=--export=__tls_base" \
+  rustup run nightly-2025-11-15 "$WASM_PACK" build rust/wasm-bindings \
+    --target web \
+    --out-dir "$THREADED_OUT" \
+    --out-name ifc-lite \
+    --release \
+    -- --features threads
+
+  # Patch wasm-bindgen-rayon's worker bootstrap: it does `import('../../..')`
+  # (the package DIRECTORY), which only resolves under a bundler. Vite resolves
+  # it, but on a raw static server the helper worker dies silently and
+  # initThreadPool hangs forever. Point at the explicit module file so the
+  # bundle also works unbundled. (Harmless under Vite.)
+  THREADED_REL="$(echo "$THREADED_OUT" | sed 's|^../../||')"
+  WH="$(ls "$THREADED_REL"/snippets/wasm-bindgen-rayon-*/src/workerHelpers.js 2>/dev/null || true)"
+  if [ -n "$WH" ] && [ -f "$WH" ]; then
+    perl -0pi -e "s#await import\('\.\./\.\./\.\.'\)#await import('../../../ifc-lite.js')#" "$WH"
+    echo "🧵 patched wasm-bindgen-rayon directory import in $WH"
+  else
+    echo "⚠️  threaded build: workerHelpers.js not found to patch (check $THREADED_REL/snippets)"
+  fi
+
+  # Strip platform-variant trampoline indices from the threaded .d.ts too.
+  THREADED_DTS="$THREADED_REL/ifc-lite.d.ts"
+  if [ -f "$THREADED_DTS" ]; then
+    grep -v '__wasm_bindgen_func_elem_' "$THREADED_DTS" > "$THREADED_DTS.tmp" && mv "$THREADED_DTS.tmp" "$THREADED_DTS"
+  fi
+
+  # Verify it really imports shared memory (the litmus test).
+  THREADED_WASM="$THREADED_REL/ifc-lite_bg.wasm"
+  if command -v wasm-objdump >/dev/null 2>&1; then
+    if wasm-objdump -j Import -x "$THREADED_WASM" 2>/dev/null | grep -qi 'memory.*shared'; then
+      echo "🧵 ✅ threaded bundle imports shared memory"
+    else
+      echo "🧵 ❌ threaded bundle does NOT import shared memory — build flags wrong"
+      echo "   Refusing to ship a non-functional threaded bundle."
+      exit 1
+    fi
+  fi
+  ls -lh "$THREADED_WASM" | awk '{print "   Threaded WASM: " $5 " (no budget — not the default bundle)"}'
+fi
+
+# --- Optional third bundle: wide-arithmetic ---------------------------------
+# Off by default. Enable with `BUILD_WIDE=1 ./scripts/build-wasm.sh`.
+# Same single-thread bundle as `pkg`, plus the wasm wide-arithmetic proposal
+# (+wide-arithmetic), which maps the exact-CSG kernel's bnum 64x64->128 limb
+# products to i64.mul_wide / i64.add128 instead of __multi3 libcalls. Measured
+# ~1.7x on a real void cut (docs/architecture/wasm-wide-arithmetic.md). Selected
+# at runtime via a WebAssembly.validate() probe (packages/geometry/src/wasm-features.ts,
+# NOT yet created — see docs/architecture/wasm-wide-arithmetic.md delivery plan);
+# engines without the proposal load the `pkg` bundle and are unaffected.
+if [ "${BUILD_WIDE:-}" = "1" ]; then
+  WIDE_OUT="../../packages/wasm/pkg-wide"
+  echo ""
+  echo "🔢 Building wide-arithmetic bundle → $WIDE_OUT (+wide-arithmetic)"
+  # RUSTFLAGS fully replaces .cargo/config.toml's target rustflags, so repeat the
+  # base flags (max-memory, stack-size, simd128) and add +wide-arithmetic.
+  RUSTFLAGS="-C link-arg=--max-memory=4294967296 -C link-arg=-zstack-size=8388608 -C target-feature=+simd128,+wide-arithmetic" \
+  rustup run nightly-2025-11-15 "$WASM_PACK" build rust/wasm-bindings \
+    --target web \
+    --out-dir "$WIDE_OUT" \
+    --out-name ifc-lite \
+    --release \
+    -- $FEATURES
+
+  WIDE_REL="$(echo "$WIDE_OUT" | sed 's|^../../||')"
+  WIDE_DTS="$WIDE_REL/ifc-lite.d.ts"
+  if [ -f "$WIDE_DTS" ]; then
+    grep -v '__wasm_bindgen_func_elem_' "$WIDE_DTS" > "$WIDE_DTS.tmp" && mv "$WIDE_DTS.tmp" "$WIDE_DTS"
+  fi
+  # Litmus test: the bundle must actually contain wide-arithmetic ops.
+  # wasm-tools is REQUIRED for BUILD_WIDE=1 — without it we cannot verify the
+  # bundle isn't silently baseline wasm, so refuse to proceed rather than ship
+  # an unverified bundle.
+  if ! command -v wasm-tools >/dev/null 2>&1; then
+    echo "🔢 ❌ wasm-tools not found — required for BUILD_WIDE=1 to verify wide ops; refusing to ship an unverified bundle"
+    echo "      Install it with: cargo install wasm-tools"
+    exit 1
+  fi
+  if [ "$(wasm-tools print "$WIDE_REL/ifc-lite_bg.wasm" 2>/dev/null | grep -cE 'mul_wide|add128|sub128')" -gt 0 ]; then
+    echo "🔢 ✅ wide-arithmetic bundle emits wide ops"
+  else
+    echo "🔢 ❌ wide-arithmetic bundle has NO wide ops — flags wrong; refusing to ship"
+    exit 1
+  fi
+  ls -lh "$WIDE_REL/ifc-lite_bg.wasm" | awk '{print "   Wide WASM: " $5 " (no budget — not the default bundle)"}'
+fi
+
+echo ""
+echo "✨ Build complete!"

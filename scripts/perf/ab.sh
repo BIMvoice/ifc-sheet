@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+#
+# Interleaved base-vs-branch native perf A/B on the perf_probe phases.
+#
+# The single most common perf mistake in this repo is measuring a "win" that is
+# machine drift or a contaminated artifact (see scripts/perf/README.md, the
+# failure-mode ledger). This tool exists so an agent can produce a *trustworthy*
+# base-vs-branch delta with one command:
+#
+#   - It builds perf_probe from BOTH a base ref and the working tree.
+#   - It runs them INTERLEAVED, one round per iteration, so a machine that
+#     slows down mid-run drags BOTH sides equally instead of faking a delta.
+#     Within each round, which side runs FIRST is balanced and randomized
+#     across rounds (scripts/perf/ab-order.mjs) rather than always
+#     base-then-branch — a fixed order lets any penalty tied to position
+#     (not identity) survive interleaving and read as a confident delta on
+#     two byte-identical builds (#4221).
+#   - It reports per-phase median + spread and refuses a verdict when the base's
+#     OWN run-to-run spread is too wide (the machine is too noisy to trust).
+#   - It fingerprints mesh/vertex/triangle counts so a "faster" run that changed
+#     the output is flagged, not celebrated.
+#
+# Usage:
+#   scripts/perf/ab.sh tests/models/ara3d/AC20-FZK-Haus.ifc
+#   scripts/perf/ab.sh /abs/path/model.ifc --iters 7 --base origin/main
+#   scripts/perf/ab.sh a.ifc b.ifc --iters 5      # several fixtures
+#
+# Flags:
+#   --base <ref>   git ref to treat as "before" (default: merge-base with
+#                  origin/main, else HEAD~1). The working tree — INCLUDING
+#                  uncommitted changes — is "after".
+#   --iters <N>    interleaved rounds per side (default 5). Higher = less noise.
+#   --json <path>  also write the machine-readable report to <path>.
+#
+# Notes:
+#   - Fixture paths are resolved to ABSOLUTE and both binaries run from the repo
+#     root, so the base build (a throwaway worktree that lacks fetched fixtures)
+#     still reads the same on-disk file. Fetch fixtures first: `pnpm fixtures …`.
+#   - Uses the `profiling` cargo profile (release-grade opt + symbols), same as
+#     probe.sh, so the numbers are comparable to a flamegraph run.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+[ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+
+BASE_REF=""
+ITERS=5
+JSON_OUT=""
+FIXTURES=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base) BASE_REF="${2:?--base needs a ref}"; shift 2;;
+    --iters) ITERS="${2:?--iters needs a number}"; shift 2;;
+    --json) JSON_OUT="${2:?--json needs a path}"; shift 2;;
+    -h|--help) sed -n '2,40p' "$0"; exit 0;;
+    -*) echo "ab.sh: unknown flag $1" >&2; exit 2;;
+    *) FIXTURES+=("$1"); shift;;
+  esac
+done
+
+if [ "${#FIXTURES[@]}" -eq 0 ]; then
+  echo "ab.sh: pass at least one fixture path (see --help)" >&2
+  exit 2
+fi
+
+# --iters must be a positive integer: 0 runs produces no data (yet the reporter
+# would print a non-error verdict), and a decimal makes `seq` iterate an
+# unintended count.
+if ! [[ "$ITERS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ab.sh: --iters must be a positive integer (got '$ITERS')" >&2
+  exit 2
+fi
+
+# Resolve fixtures to absolute paths so the base worktree (no fetched fixtures)
+# still reads them. Fail early on a missing/typo'd path rather than after a build.
+ABS_FIXTURES=()
+for f in "${FIXTURES[@]}"; do
+  if [ -f "$f" ]; then
+    ABS_FIXTURES+=("$(cd "$(dirname "$f")" && pwd)/$(basename "$f")")
+  elif [ -f "$ROOT/$f" ]; then
+    ABS_FIXTURES+=("$ROOT/$f")
+  else
+    echo "ab.sh: fixture not found: $f (fetch it first, e.g. \`pnpm fixtures ${f#tests/models/}\`)" >&2
+    exit 2
+  fi
+done
+
+if [ -z "$BASE_REF" ]; then
+  BASE_REF="$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD~1)"
+fi
+BASE_SHA="$(git rev-parse --short "$BASE_REF")"
+# `+dirty` must reflect BOTH unstaged (worktree) and staged (index) edits — the
+# working tree is what actually gets built, so a staged-but-uncommitted change
+# still makes the "branch" side differ from HEAD.
+if git diff --quiet && git diff --cached --quiet; then
+  BRANCH_DESC="$(git rev-parse --short HEAD)"
+else
+  BRANCH_DESC="$(git rev-parse --short HEAD)+dirty"
+fi
+echo "ab.sh: base=$BASE_SHA ($BASE_REF)  branch=$BRANCH_DESC  iters=$ITERS" >&2
+
+# --- Build the branch (working-tree) probe --------------------------------
+echo "ab.sh: building branch perf_probe (working tree)…" >&2
+cargo build --profile profiling -p ifc-lite-processing --example perf_probe >&2
+BRANCH_BIN="$ROOT/target/profiling/examples/perf_probe"
+
+# --- Build the base probe in a throwaway worktree -------------------------
+# build-at-ref.sh gives it its own CARGO_TARGET_DIR so the base build never
+# clobbers the branch's target (which would silently make the two sides share
+# a binary — a classic false A/B), and copies the binary out of it.
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ifc-ab.XXXXXX")"
+cleanup() {
+  rm -rf "$TMP_ROOT" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+echo "ab.sh: building base perf_probe @ $BASE_SHA in a throwaway worktree…" >&2
+BASE_BIN="$TMP_ROOT/perf_probe-base"
+"$ROOT/scripts/perf/build-at-ref.sh" --ref "$BASE_REF" --out "$BASE_BIN" --worktree-root "$TMP_ROOT"
+
+if [ ! -x "$BASE_BIN" ] || [ ! -x "$BRANCH_BIN" ]; then
+  echo "ab.sh: a probe binary is missing — build failed above." >&2
+  exit 1
+fi
+
+# --- Interleaved runs -----------------------------------------------------
+# One --iters=1 probe run per side per round, alternating, so a machine that
+# slows down over the course of the whole run does not favour one side.
+#
+# Interleaving alone does not cancel a penalty tied to POSITION within a
+# round (thermal ramp, a cache state left by the preceding process, a
+# frequency step on the first process after idle) — whichever side always
+# runs first pays that every round, and it survives the median like a real
+# regression would (#4221). ab-order.mjs decides, per invocation, which side
+# runs first each round: balanced across rounds (as close to half base-first
+# / half branch-first as ITERS allows) and randomly assigned to specific
+# rounds, so a fixed positional penalty lands on both sides roughly equally
+# often and cancels out instead of accumulating on one.
+ORDER_FILE="$TMP_ROOT/order.txt"
+node "$ROOT/scripts/perf/ab-order.mjs" "$ITERS" > "$ORDER_FILE"
+# A vacuous run must fail loudly, not print a "within noise" verdict over zero
+# measurements (#4439: the order generator's CLI guard never fired on Windows).
+if [ "$(wc -l < "$ORDER_FILE")" -ne "$ITERS" ]; then
+  echo "ab.sh: ab-order.mjs produced $(wc -l < "$ORDER_FILE") round(s) for --iters $ITERS — refusing to report" >&2
+  exit 1
+fi
+RUNS_JSONL="$TMP_ROOT/runs.jsonl"
+: > "$RUNS_JSONL"
+i=0
+while IFS=' ' read -r first second; do
+  i=$((i + 1))
+  echo "ab.sh: round $i/$ITERS ($first first)" >&2
+  for side in "$first" "$second"; do
+    bin="$BASE_BIN"; [ "$side" = branch ] && bin="$BRANCH_BIN"
+    # Run from ROOT so relative fixture handling and on-disk fixtures resolve.
+    out="$("$bin" "${ABS_FIXTURES[@]}" --iters 1 --json 2>/dev/null)"
+    node -e '
+      const [side, out] = [process.argv[1], process.argv[2]];
+      for (const p of JSON.parse(out)) console.log(JSON.stringify({ side, ...p }));
+    ' "$side" "$out" >> "$RUNS_JSONL"
+  done
+done < "$ORDER_FILE"
+
+# --- Report ---------------------------------------------------------------
+REPORT_ARGS=("$RUNS_JSONL" "--base" "$BASE_SHA" "--branch" "$BRANCH_DESC")
+[ -n "$JSON_OUT" ] && REPORT_ARGS+=("--json" "$JSON_OUT")
+node "$ROOT/scripts/perf/ab-report.mjs" "${REPORT_ARGS[@]}"

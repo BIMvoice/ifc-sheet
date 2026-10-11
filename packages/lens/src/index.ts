@@ -1,0 +1,81 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * @ifc-lite/lens — Rule-based 3D filtering and colorization
+ *
+ * Framework-agnostic lens action engine for IFC models. Apply visual actions
+ * (colorize, hide, transparent) to shared FilterGroup selections.
+ *
+ * @example
+ * ```ts
+ * import { evaluateLens, BUILTIN_LENSES } from '@ifc-lite/lens';
+ * import type { LensDataProvider } from '@ifc-lite/lens';
+ *
+ * const provider: LensDataProvider = createMyProvider(myData);
+ * declare const selectedByRule: ReadonlyMap<string, ReadonlySet<number>>;
+ * const result = evaluateLens(BUILTIN_LENSES[0], provider, selectedByRule);
+ * // result.colorMap  — Map<globalId, RGBAColor>
+ * // result.hiddenIds — Set<globalId>
+ * // result.ruleCounts — Map<ruleId, count>
+ * ```
+ */
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export type {
+  LensDataProvider,
+  PropertySetInfo,
+  ClassificationInfo,
+  LensRule,
+  Lens,
+  AutoColorSpec,
+  AutoColorLegendEntry,
+  LensEvaluationResult,
+  RGBAColor,
+} from './types.js';
+
+export {
+  COMMON_IFC_CLASSES,
+  /** @deprecated Use COMMON_IFC_CLASSES instead */
+  COMMON_IFC_CLASSES as COMMON_IFC_TYPES,
+  LENS_PALETTE,
+  IFC_SUBTYPE_TO_BASE,
+  AUTO_COLOR_SOURCES,
+  ENTITY_ATTRIBUTE_NAMES,
+} from './types.js';
+
+// ============================================================================
+// Engine
+// ============================================================================
+
+export { evaluateLens, evaluateAutoColorLens } from './engine.js';
+export type { AutoColorEvaluationResult } from './engine.js';
+
+// ============================================================================
+// Colors
+// ============================================================================
+
+export {
+  GHOST_COLOR,
+  hexToRgba,
+  rgbaToHex,
+  isGhostColor,
+  uniqueColor,
+} from './colors.js';
+
+// ============================================================================
+// Presets
+// ============================================================================
+
+export { BUILTIN_LENSES } from './presets.js';
+
+// ============================================================================
+// Discovery
+// ============================================================================
+
+export { discoverClasses, discoverDataSources } from './discovery.js';
+export type { DiscoveredLensData } from './discovery.js';

@@ -1,0 +1,298 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * `WORKER_CODE` is a template-literal STRING (a Blob worker cannot import at
+ * runtime), so `tokenizer.test.ts` and `entity-scanner.malformed-record.test.ts`
+ * exercising `StepTokenizer`/`scanIfcEntities` never touch this copy of the
+ * scan loop at all — the browser's actual Web Worker load path. This test
+ * evaluates the template directly (mocking `self`) so the unterminated-string
+ * fix (tokenizer.ts's `scanEntitiesFast`) has a counterpart proving the third
+ * copy of the same loop was not missed, the way it was easy to miss during
+ * the #3675 rebase.
+ */
+
+import { describe, expect, it } from 'vitest';
+import { WORKER_CODE } from './scan-worker-source.js';
+import {
+  KEYWORD_CASE_CASE,
+  LEGAL_BODIES,
+  LINE_NUMBER_CASE,
+  NEXT_DECLARATION_CASE,
+  PHANTOM_NEIGHBOUR_CASE,
+  QUADRATIC_RECORDS,
+  QUADRATIC_SHAPES,
+  QUADRATIC_WELL_FORMED,
+  SWALLOW_CASES,
+  UNBALANCED_CASE,
+  UNRESUMABLE_BODIES,
+  quadraticBudgetMs,
+  type ScanDriver,
+} from './step-record-boundary.vectors.js';
+import { MAX_EXPRESS_ID } from './express-id.js';
+
+interface WorkerScanMessage {
+  ids: ArrayBuffer;
+  offsets: ArrayBuffer;
+  lengths: ArrayBuffer;
+  lines: ArrayBuffer;
+  count: number;
+  oversizedIds: number;
+  malformedRecords: number;
+  types: string[];
+}
+
+/** Runs `WORKER_CODE` against a mock `self`, the same way the Blob worker
+ *  runtime would, and returns what it posted back. */
+function runWorkerCode(text: string): WorkerScanMessage {
+  // Built from concatenated pieces, not a literal '${MAX_EXPRESS_ID}' string:
+  // that literal trips eslint(no-template-curly-in-string), which assumes a
+  // string containing "${...}" is a forgotten template literal. Here it is
+  // deliberately a plain-string needle for the unsubstituted placeholder that
+  // would remain in WORKER_CODE if scan-worker-source.ts's own template
+  // interpolation of MAX_EXPRESS_ID ever regressed into emitting the raw
+  // placeholder text instead of the numeric value.
+  const placeholder = '$' + '{MAX_EXPRESS_ID}';
+  const source = WORKER_CODE.replace(placeholder, String(MAX_EXPRESS_ID));
+  let result: WorkerScanMessage | undefined;
+  const self = {
+    onmessage: null as ((e: { data: ArrayBuffer }) => void) | null,
+    postMessage(data: WorkerScanMessage) {
+      result = data;
+    },
+  };
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval -- this
+  // template IS a worker script, evaluating it is the only way to exercise it.
+  new Function('self', `${source}\nreturn self;`)(self);
+  const buffer = new TextEncoder().encode(text);
+  self.onmessage!({ data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) });
+  if (!result) throw new Error('WORKER_CODE never posted a result');
+  return result;
+}
+
+describe('scan-worker-source WORKER_CODE: unterminated string literal', () => {
+  it('stops at the broken record and reports malformedRecords, like tokenizer.ts', () => {
+    const text = [
+      "#1=IFCPROJECT('0000000000000000000001',$,'P',$,$,$,$,$,$);",
+      // Opens a quote in the Name argument and never closes it.
+      "#2=IFCWALL('0000000000000000000002',$,'Wall2 unterminated,$,$,$,$,$,$);",
+      "#3=IFCWALL('0000000000000000000003',$,'Wall3',$,$,$,$,$,$);",
+    ].join('\n');
+
+    const result = runWorkerCode(text);
+    expect(result.count).toBe(1);
+    expect(result.malformedRecords).toBe(1);
+    expect(Array.from(new Uint32Array(result.ids))).toEqual([1]);
+  });
+
+  it('reports malformedRecords 0 for a well-formed file', () => {
+    const text = [
+      "#1=IFCPROJECT('0000000000000000000001',$,'P',$,$,$,$,$,$);",
+      "#2=IFCWALL('0000000000000000000002',$,'Wall2',$,$,$,$,$,$);",
+      "#3=IFCWALL('0000000000000000000003',$,'Wall3',$,$,$,$,$,$);",
+    ].join('\n');
+
+    const result = runWorkerCode(text);
+    expect(result.count).toBe(3);
+    expect(result.malformedRecords).toBe(0);
+  });
+
+  it('reports malformedRecords for an unterminated comment inside a record (already correct here; tokenizer.ts was not)', () => {
+    // WORKER_CODE's copy of this branch does `pos = len; break;`, which falls
+    // through to the count below the loop -- unlike tokenizer.ts's matching
+    // branch, which used to `return` early and skip it. This fixture already
+    // passed before the tokenizer.ts fix; kept as the cross-copy control that
+    // proves the two scan loops now agree, not just on the unterminated-
+    // string shape both had a test for already, but on this one too.
+    const text = [
+      "#1=IFCWALL('0000000000000000000001', /* never closes $,$,$,$,$,$,$);",
+      "#2=IFCWALL('0000000000000000000002',$,'Wall2',$,$,$,$,$,$);",
+    ].join('\n');
+
+    const result = runWorkerCode(text);
+    expect(result.count).toBe(0);
+    expect(result.malformedRecords).toBe(1);
+  });
+
+  it('reports malformedRecords for an unterminated comment before the record body opens', () => {
+    // The three `opensCommentAt` checks before '=', the type name, and '('
+    // each `break` out of the top-level scan loop directly on an
+    // unterminated comment -- not the record-body loop the previous test
+    // covers, so they never reached that loop's own `malformedRecords++`.
+    // Same fix as tokenizer.ts's matching skipTrivia branches.
+    const text = "#1 /* never closes\n#2=IFCWALL('0000000000000000000002',$,'Wall2',$,$,$,$,$,$);";
+
+    const result = runWorkerCode(text);
+    expect(result.count).toBe(0);
+    expect(result.malformedRecords).toBe(1);
+  });
+
+  it('reports malformedRecords for an unterminated quote in the HEADER section', () => {
+    // WORKER_CODE's own quote-consuming loop for non-entity text (its 0x27
+    // branch) used to have no stop signal at all: it just walked to `sp ===
+    // len` and carried on. This is the same "it's a file" shape as the
+    // entity-scanner-level test, moved to a bare quote for simplicity.
+    const text = "HEADER;\nFILE_NAME('it's a file',$);\n";
+
+    const result = runWorkerCode(text);
+    expect(result.count).toBe(0);
+    expect(result.malformedRecords).toBe(1);
+  });
+
+  it('reports malformedRecords for a stray unclosed comment between two DATA records', () => {
+    const text = "#1=IFCWALL($,$,$);\n/* never closes\n#2=IFCWALL($,$,$);\n";
+
+    const result = runWorkerCode(text);
+    expect(result.count).toBe(1);
+    expect(result.malformedRecords).toBe(1);
+  });
+
+  it.each([
+    ['#2 at EOF, before any =', '#2'],
+    ['#2= at EOF, before the type name', '#2='],
+    ['#2=IFCWA at EOF, mid type name, before (', '#2=IFCWA'],
+  ])('reports malformedRecords for a declaration cut off: %s', (_label, cutoff) => {
+    const text = `#1=IFCWALL($,$,$);\n${cutoff}`;
+
+    const result = runWorkerCode(text);
+    expect(result.count).toBe(1);
+    expect(result.malformedRecords).toBe(1);
+  });
+
+  it('does not report malformedRecords when the LAST record is refused for an oversized express id (round 3)', () => {
+    // #4294967297 is refused after the '=' check passes, so the scan resumes
+    // right past the '=' and walks "IFCWALL(#1,#2);..." byte by byte. The
+    // '#1' and '#2' reference tokens inside that abandoned record's own
+    // argument list each look like a fresh declaration start, with buffer
+    // still left after the mismatch that ends each one. Before this fix,
+    // declOpen stayed armed on that non-EOF mismatch with nothing later to
+    // clear it, so a file whose scan ran cleanly to the end still reported 1.
+    const text =
+      "#1=IFCPROJECT('0000000000000000000001',$,'P',$,$,$,$,$,$);\n" +
+      '#4294967297=IFCWALL(#1,#2);\n';
+
+    const result = runWorkerCode(text);
+    expect(result.oversizedIds).toBe(1);
+    expect(result.malformedRecords).toBe(0);
+    expect(result.count).toBe(1);
+  });
+
+  it('control: a declaration genuinely cut off at EOF still reports malformedRecords 1', () => {
+    const text = "#1=IFCPROJECT('0000000000000000000001',$,'P',$,$,$,$,$,$);\n#2=IFCWA";
+
+    const result = runWorkerCode(text);
+    expect(result.malformedRecords).toBe(1);
+    expect(result.count).toBe(1);
+  });
+});
+
+
+describe('scan-worker-source WORKER_CODE: record-boundary guards (#4179)', () => {
+  const scan: ScanDriver = (text) => (() => {
+    const result = runWorkerCode(text);
+    const ids = new Uint32Array(result.ids);
+    const offsets = new Uint32Array(result.offsets);
+    const lengths = new Uint32Array(result.lengths);
+    const spans: (readonly [number, string])[] = [];
+    for (let i = 0; i < result.count; i++) {
+      spans.push([ids[i], text.slice(offsets[i], offsets[i] + lengths[i])] as const);
+    }
+    return { spans, malformed: result.malformedRecords };
+  })();
+
+  it.each(SWALLOW_CASES.map((c) => [c[0], c[1], c[2]] as const))(
+    '%s',
+    (_label, text, expected) => {
+      const { spans, malformed } = scan(text);
+      expect(spans).toEqual(expected);
+      expect(malformed).toBe(1);
+    },
+  );
+
+  it('does not inflate line numbers when the cold check re-walks the record', () => {
+    // skipCommentAt advances the worker's line counter as a side effect, so
+    // balancing the record again to settle the ')' rule used to count the
+    // interior comment's newlines twice. tokenizer.ts is unaffected because
+    // its findEntityLength is pure, which makes it the oracle here.
+    const result = runWorkerCode(LINE_NUMBER_CASE.text);
+    expect(Array.from(new Uint32Array(result.lines)).slice(0, result.count))
+      .toEqual([...LINE_NUMBER_CASE.lines]);
+  });
+
+  it('drops ONE record, not the tail, when a record has no closing ")"', () => {
+    const { spans, malformed } = scan(UNBALANCED_CASE.text);
+    expect(spans).toEqual(UNBALANCED_CASE.spans);
+    expect(malformed).toBe(1);
+  });
+
+  it('stops instead of resuming when there is no balancing ")" to resume at', () => {
+    // Recovery is bounded by the SAME "no resume point" rule the #3695 cluster
+    // set: the balance walks strings and comments whole, so an unterminated one
+    // leaves no ')' and the scan still stops there.
+    for (const body of UNRESUMABLE_BODIES) {
+      const { spans, malformed } = scan(`#1=IFCA(1);\n#2=${body}\n#3=IFCC(3);\n`);
+      expect(spans, body).toEqual([[1, '#1=IFCA(1);']]);
+      expect(malformed, body).toBe(1);
+    }
+  });
+
+  it('never falsely refuses a legal record', () => {
+    for (const body of LEGAL_BODIES) {
+      const text = `#1=${body}\n#2=IFCDOOR($);\n`;
+      const { spans, malformed } = scan(text);
+      expect(spans, body).toEqual([[1, `#1=${body}`], [2, '#2=IFCDOOR($);']]);
+      expect(malformed, body).toBe(0);
+    }
+  });
+
+  it('does not resume past the next declaration when a record balances only there (#4573)', () => {
+    const { spans, malformed } = scan(NEXT_DECLARATION_CASE.text);
+    expect(spans).toEqual(NEXT_DECLARATION_CASE.spans);
+    expect(malformed).toBe(1);
+  });
+
+  it('does not mint a phantom neighbour from a stray "=" in a refused body (#4573)', () => {
+    const { spans, malformed } = scan(PHANTOM_NEIGHBOUR_CASE.text);
+    expect(spans.map(([id]) => id)).toEqual(PHANTOM_NEIGHBOUR_CASE.ids);
+    expect(malformed).toBe(1);
+  });
+
+  // Same shape as tokenizer.test.ts's: a ratio against the well-formed twin,
+  // because this copy of the loop is the one the browser's upload actually
+  // runs, and it carried the same quadratic walk.
+  describe.each(QUADRATIC_SHAPES)(
+    'a file of refused records %s does not rescan the remainder per record (#4573)',
+    (_label, body, tail) => {
+      it('scans within 20x the well-formed twin', () => {
+        const timeWorker = (text: string) => {
+          const started = performance.now();
+          const result = runWorkerCode(text);
+          return { ms: performance.now() - started, found: result.count };
+        };
+        const baseline = timeWorker(QUADRATIC_WELL_FORMED.repeat(QUADRATIC_RECORDS));
+        expect(baseline.found).toBe(QUADRATIC_RECORDS);
+        const budget = quadraticBudgetMs(baseline.ms);
+
+        const malformed = timeWorker(body.repeat(QUADRATIC_RECORDS) + tail);
+        expect(malformed.found, 'every record is malformed').toBe(0);
+        expect(
+          malformed.ms,
+          `${QUADRATIC_RECORDS} refused records took ${malformed.ms.toFixed(0)}ms against a ` +
+            `${budget.toFixed(0)}ms budget (20x the ${baseline.ms.toFixed(1)}ms well-formed twin): ` +
+            'recovery is walking the remainder per record again',
+        ).toBeLessThan(budget);
+      }, 120_000);
+    },
+  );
+});
+
+describe('scan-worker-source WORKER_CODE: entity keyword case (#4713)', () => {
+  it('finds every record and names its type in upper case, like tokenizer.ts', () => {
+    const result = runWorkerCode(KEYWORD_CASE_CASE.text);
+    const ids = new Uint32Array(result.ids);
+    const records = result.types.map((type, i) => [ids[i], type] as const);
+    expect(records).toEqual(KEYWORD_CASE_CASE.records);
+    expect(result.malformedRecords).toBe(0);
+  });
+});

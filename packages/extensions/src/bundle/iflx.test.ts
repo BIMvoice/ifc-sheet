@@ -1,0 +1,204 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { gzipSync } from 'fflate';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { packBundle, unpackBundle } from './iflx.js';
+import { loadBundleFromDirectory } from './loader-node.js';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const GOOD_BUNDLE_DIR = join(__dirname, '..', '..', 'test', 'fixtures', 'bundles', 'good');
+
+async function loadGood() {
+  const r = await loadBundleFromDirectory(GOOD_BUNDLE_DIR);
+  if (!r.ok) throw new Error('expected good bundle to load');
+  return r.value;
+}
+
+describe('packBundle / unpackBundle', () => {
+  it('round-trips a bundle', async () => {
+    const original = await loadGood();
+    const packed = packBundle(original);
+    expect(packed.length).toBeGreaterThan(0);
+    const unpacked = unpackBundle(packed);
+    expect(unpacked.ok).toBe(true);
+    if (unpacked.ok) {
+      expect(unpacked.value.manifest.id).toBe(original.manifest.id);
+      expect(unpacked.value.files.size).toBe(original.files.size);
+      for (const [path, file] of original.files) {
+        const other = unpacked.value.files.get(path);
+        expect(other?.bytes.byteLength).toBe(file.bytes.byteLength);
+      }
+    }
+  });
+
+  it('produces deterministic output for the same input', async () => {
+    // Byte-for-byte determinism IS a contract for .iflx: the packed bytes
+    // are content-addressed — InstalledExtensionRecord.bundleHash (and the
+    // flavor schema's per-extension bundleHash) is SHA-256 over the packed
+    // envelope and is verified fail-closed on every load (host/loader.ts).
+    // Re-packing the same bundle must reproduce the recorded hash.
+    const original = await loadGood();
+    const a = packBundle(original);
+    const b = packBundle(original);
+    expect(a.length).toBe(b.length);
+    expect(Buffer.from(a).toString('hex')).toBe(Buffer.from(b).toString('hex'));
+  });
+
+  it('zeroes the gzip MTIME header so packed bytes are time-independent', async () => {
+    // Bytes 4..8 of a gzip stream are the 4-byte MTIME field. Without
+    // { mtime: 0 } fflate stamps wall-clock seconds there, so identical
+    // content packed in different seconds hashes differently. Assert the
+    // invariant directly instead of relying on two packs landing in the
+    // same second.
+    const original = await loadGood();
+    const packed = packBundle(original);
+    expect(Array.from(packed.subarray(4, 8))).toEqual([0, 0, 0, 0]);
+  });
+
+  it('sets source kind to iflx after unpack', async () => {
+    const original = await loadGood();
+    const packed = packBundle(original);
+    const unpacked = unpackBundle(packed);
+    if (!unpacked.ok) throw new Error('expected ok');
+    expect(unpacked.value.source?.kind).toBe('iflx');
+  });
+});
+
+describe('unpackBundle — invalid inputs', () => {
+  it('rejects garbage bytes', () => {
+    const r = unpackBundle(new Uint8Array([1, 2, 3, 4, 5]));
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects gzip with non-JSON payload', () => {
+    const garbage = gzipSync(new TextEncoder().encode('not json'));
+    const r = unpackBundle(garbage);
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects envelope with wrong format', () => {
+    const env = gzipSync(
+      new TextEncoder().encode(JSON.stringify({ format: 'wrong', version: 1, files: {} })),
+    );
+    const r = unpackBundle(env);
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects envelope with no files', () => {
+    const env = gzipSync(
+      new TextEncoder().encode(JSON.stringify({ format: 'iflx', version: 1, files: {} })),
+    );
+    const r = unpackBundle(env);
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects envelope missing manifest.json', () => {
+    const env = gzipSync(
+      new TextEncoder().encode(JSON.stringify({
+        format: 'iflx',
+        version: 1,
+        files: { 'README.md': Buffer.from('hi').toString('base64') },
+      })),
+    );
+    const r = unpackBundle(env);
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects a bundle file path that escapes the bundle root via ".."', async () => {
+    // Mutation: `isSafeBundlePath` returning `true` unconditionally (i.e.
+    // deleting the whole check) survived the full suite untouched,
+    // including the neighbouring "control characters" test above — that
+    // test only passes today because its accompanying manifest.json is
+    // itself invalid ("{}"), so `unpackBundle` still rejects the bundle
+    // for an unrelated reason and never actually exercises the path
+    // check. Build the envelope around a manifest that DOES validate, so
+    // rejection can only come from the path-traversal check in
+    // `isSafeBundlePath`. Without it, a malicious bundle could smuggle a
+    // "../../etc/whatever" file key past validation and into any host
+    // adapter that later writes the file map to disk (see the comment on
+    // `isSafeBundlePath`).
+    const original = await loadGood();
+    const packed = packBundle(original);
+    const unpacked = unpackBundle(packed);
+    if (!unpacked.ok) throw new Error('expected good bundle to unpack');
+    const files: Record<string, string> = {};
+    for (const [path, file] of unpacked.value.files) {
+      files[path] = Buffer.from(file.bytes).toString('base64');
+    }
+    files['../escape.js'] = Buffer.from('evil').toString('base64');
+    const env = gzipSync(new TextEncoder().encode(JSON.stringify({
+      format: 'iflx',
+      version: 1,
+      files,
+    })));
+    const r = unpackBundle(env);
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects an absolute bundle file path', async () => {
+    const original = await loadGood();
+    const packed = packBundle(original);
+    const unpacked = unpackBundle(packed);
+    if (!unpacked.ok) throw new Error('expected good bundle to unpack');
+    const files: Record<string, string> = {};
+    for (const [path, file] of unpacked.value.files) {
+      files[path] = Buffer.from(file.bytes).toString('base64');
+    }
+    files['/etc/passwd'] = Buffer.from('evil').toString('base64');
+    const env = gzipSync(new TextEncoder().encode(JSON.stringify({
+      format: 'iflx',
+      version: 1,
+      files,
+    })));
+    const r = unpackBundle(env);
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects an absolute Windows path (drive-letter branch)', async () => {
+    // `isSafeBundlePath` rejects drive letters in a clause of its own,
+    // separate from the leading-slash check the test above covers. A bundle
+    // is a portable artefact: one built on any OS may be unpacked on Windows,
+    // so a `C:\` key must be refused regardless of where unpacking happens.
+    const original = await loadGood();
+    const packed = packBundle(original);
+    const unpacked = unpackBundle(packed);
+    if (!unpacked.ok) throw new Error('expected good bundle to unpack');
+    const files: Record<string, string> = {};
+    for (const [path, file] of unpacked.value.files) {
+      files[path] = Buffer.from(file.bytes).toString('base64');
+    }
+    files['C:\\Windows\\System32\\evil.dll'] = Buffer.from('evil').toString('base64');
+    const env = gzipSync(new TextEncoder().encode(JSON.stringify({
+      format: 'iflx',
+      version: 1,
+      files,
+    })));
+    const r = unpackBundle(env);
+    expect(r.ok).toBe(false);
+    // Assert the reason, not just the outcome: a bundle can also fail
+    // manifest validation, which would pass this test for the wrong reason.
+    if (!r.ok) expect(r.errors[0].code).toBe('invalid_format');
+  });
+
+  it('rejects a path containing control characters', () => {
+    // Defence-in-depth: control chars (incl. the old 0x1f/0x1e signing
+    // separators) must never appear in a bundle path.
+    const env = gzipSync(
+      new TextEncoder().encode(JSON.stringify({
+        format: 'iflx',
+        version: 1,
+        files: {
+          'manifest.json': Buffer.from('{}').toString('base64'),
+          // 0x1f unit separator embedded in the path segment.
+          ['src/a\u001fb.js']: Buffer.from('x').toString('base64'),
+        },
+      })),
+    );
+    const r = unpackBundle(env);
+    expect(r.ok).toBe(false);
+  });
+});

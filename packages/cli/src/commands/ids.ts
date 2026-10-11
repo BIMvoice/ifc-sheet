@@ -1,0 +1,127 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * ifc-lite ids <file.ifc> <rules.ids> [options]
+ *
+ * Validate an IFC file against IDS (Information Delivery Specification) rules.
+ */
+
+import { readFile } from 'node:fs/promises';
+import { createHeadlessContext } from '../loader.js';
+import { printJson, hasFlag, getFlag, fatal } from '../output.js';
+import { createDataAccessor } from '@ifc-lite/ids/bridge';
+
+interface ValidatorSummary {
+  totalSpecifications: number;
+  passedSpecifications: number;
+  failedSpecifications: number;
+  totalEntitiesChecked: number;
+  totalEntitiesPassed: number;
+  totalEntitiesFailed: number;
+  overallPassRate: number;
+}
+
+/** Flags that consume the following argument, so it is never mistaken for a
+ *  positional file path. `--locale de file.ifc rules.ids` would otherwise
+ *  have the naive `args.filter(a => !a.startsWith('-'))` idiom swallow `de`
+ *  as `ifcPath` (see diff.ts's `VALUE_FLAGS` / mcp.ts's `MCP_VALUE_FLAGS`
+ *  for the same fix applied elsewhere in this package). */
+const VALUE_FLAGS = new Set(['--locale']);
+
+function idsPositionals(args: string[]): string[] {
+  const positional: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith('-')) {
+      if (VALUE_FLAGS.has(arg)) i++;
+      continue;
+    }
+    positional.push(arg);
+  }
+  return positional;
+}
+
+export async function idsCommand(args: string[]): Promise<void> {
+  const positional = idsPositionals(args);
+  if (positional.length < 2) fatal('Usage: ifc-lite ids <file.ifc> <rules.ids> [--json]');
+
+  const [ifcPath, idsPath] = positional;
+  const jsonOutput = hasFlag(args, '--json');
+  const locale = (getFlag(args, '--locale') ?? 'en') as 'en' | 'de' | 'fr';
+
+  const { bim, store } = await createHeadlessContext(ifcPath);
+
+  // Read IDS file
+  const idsContent = await readFile(idsPath, 'utf-8');
+
+  // Parse and validate
+  const idsDoc = await bim.ids.parse(idsContent);
+
+  // The shared bridge accessor is the canonical IfcDataStore →
+  // IFCDataAccessor projection (same one the viewer and MCP server use).
+  const accessor = createDataAccessor(store);
+
+  const report = (await bim.ids.validate(idsDoc, {
+    accessor,
+    modelInfo: { schemaVersion: store.schemaVersion },
+    locale,
+    // For human-readable output only the failures matter; dropping
+    // passing entity results keeps the report bounded on large models.
+    includePassingEntities: jsonOutput,
+    onProgress: (p) => {
+      if (!jsonOutput && p.phase !== 'complete') {
+        const spec = Math.min(p.specificationIndex + 1, p.totalSpecifications);
+        process.stderr.write(`\r  Validating: spec ${spec}/${p.totalSpecifications} (${p.percentage}%)`);
+      }
+    },
+  })) as {
+    summary: ValidatorSummary;
+    specificationResults: Array<{ entityResults: Array<{ passed: boolean }> }>;
+  };
+
+  if (!jsonOutput) process.stderr.write('\n');
+
+  if (jsonOutput) {
+    // Keep the established machine-readable summary shape.
+    const summary = bim.ids.summarize(report);
+    // A ruleset declaring zero specifications evaluated nothing -- reporting
+    // that as a pass would hide an empty ruleset behind a green check (same
+    // rationale as the `error` status in delivery-checks.ts). Surface it as
+    // an explicit field, not only in prose, so a --json consumer can branch
+    // on it without parsing a message string.
+    const emptyRuleset = summary.totalSpecifications === 0;
+    printJson({ summary, report, ...(emptyRuleset ? { error: 'declares zero specifications' } : {}) });
+    // Mirror the human-readable path's exit-code contract: a CI pipeline
+    // driving this command with --json (the shape any script would pick)
+    // must see a non-zero exit on a genuine IDS failure. Without this the
+    // JSON path always exited 0 -- a validation failure printed to stdout
+    // but reported as success to the shell.
+    process.exitCode = emptyRuleset || summary.failedSpecifications > 0 ? 1 : 0;
+    return;
+  }
+
+  // The validator computes its summary from full per-spec counts, so it
+  // stays correct even though passing entity results are not retained.
+  const summary = report.summary;
+
+  process.stdout.write(`\n  IDS Validation Results\n`);
+  process.stdout.write(`  ─────────────────────\n`);
+  process.stdout.write(`  Specifications: ${summary.passedSpecifications}/${summary.totalSpecifications} passed\n`);
+  process.stdout.write(`  Entities:       ${summary.totalEntitiesPassed}/${summary.totalEntitiesChecked} passed\n`);
+  process.stdout.write(`  Failed:         ${summary.totalEntitiesFailed} entities in ${summary.failedSpecifications} specs\n`);
+
+  // Zero specifications means nothing was evaluated -- distinguish that
+  // from a genuine pass/fail so a caller does not have to guess which
+  // problem it is looking at (same guard as delivery-checks.ts).
+  if (summary.totalSpecifications === 0) {
+    process.stdout.write(`\n  Result: ERROR (declares zero specifications)\n\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const exitCode = summary.failedSpecifications > 0 ? 1 : 0;
+  process.stdout.write(`\n  Result: ${exitCode === 0 ? 'PASS' : 'FAIL'}\n\n`);
+  process.exitCode = exitCode;
+}

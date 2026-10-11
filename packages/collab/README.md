@@ -1,0 +1,111 @@
+# @ifc-lite/collab
+
+Real-time collaborative BIM via CRDT on IFCX. Built on [Yjs](https://github.com/yjs/yjs).
+
+> **Status: early (0.x).** Single- and multi-peer Y.Doc editing, IFCX
+> seed/snapshot round-trip, IndexedDB persistence, undo manager, websocket
+> provider, awareness/presence, conflict detection, per-user layer
+> extraction, branching, federation, and end-to-end encryption helpers. See
+> [Collaboration architecture](https://github.com/LTplus-AG/ifc-lite/blob/main/docs/architecture/collaboration.md)
+> for the roadmap.
+
+## Installation
+
+```bash
+npm install @ifc-lite/collab
+```
+
+## Why
+
+IFC4/IFC4X3 (STEP) is a flat, ID-keyed, monolithic format that was designed
+for export, not editing. IFCX (IFC5 JSON) is path-keyed and layer-composable
+— every peer becomes a layer author and the composition rules are the merge
+function. That makes it a natural fit for a CRDT.
+
+## Quick start
+
+```ts
+import { createCollabSession } from '@ifc-lite/collab';
+import { seedFromIfcx, snapshotToIfcx } from '@ifc-lite/collab/snapshot';
+
+// 1. Seed a Y.Doc from an existing .ifcx file.
+const buffer = await fetch('/model.ifcx').then((r) => r.arrayBuffer());
+const session = await createCollabSession({
+  roomId: 'project-abc/model.ifcx',
+  user: { id: 'louis', name: 'Louis Trümpler', color: '#5b8def' },
+  provider: 'indexeddb', // or 'websocket' for multi-peer (requires serverUrl)
+});
+seedFromIfcx(session.doc, buffer);
+
+// 2. Edit through entity helpers.
+import { setAttribute, createEntity } from '@ifc-lite/collab';
+session.transact(() => {
+  setAttribute(session.doc, 'wall-uuid', 'bsi::ifc::v5a::Pset_WallCommon::FireRating', 'EI60');
+});
+
+// 3. Awareness / presence.
+session.presence.setSelection(['wall-uuid']);
+session.presence.onUpdate((peers) => {
+  // render avatars / cursors / selection outlines
+});
+
+// 4. Snapshot back to .ifcx whenever you want.
+const ifcx = snapshotToIfcx(session.doc, { author: 'louis' });
+```
+
+## Public API
+
+<!-- Reason: signature listing, not runnable code - bare member paths and `→` arrows. -->
+<!-- docs-check: skip -->
+```ts
+createCollabSession(opts) → CollabSession
+session.doc            // Y.Doc
+session.presence       // Presence (awareness wrapper)
+session.whenSynced     // resolves once persistence / websocket sync completes
+session.seed(input)    // seed the Y.Doc from an .ifcx buffer or object
+session.transact(fn)   // wrapper around ydoc.transact with our origin
+session.undo()         // local-origin undo via Y.UndoManager
+session.redo()
+session.snapshot()     // → IfcxFile
+session.extractUserLayer(baseline)  // per-peer IFCX overlay layer
+session.onConflict(listener)
+session.dispose()
+```
+
+Plus low-level helpers under `@ifc-lite/collab`:
+
+- `createCollabDoc()` — produces a Y.Doc with the spec's three top-level maps.
+- `createEntity / deleteEntity / setAttribute / setChild / setPropertyValue`
+- `createRelationship / addTarget / removeTarget`
+- `setGeometryRef / setGeometryParam`
+- `seedFromIfcx / snapshotToIfcx / extractUserLayer`
+- `createIndexedDbProvider / createWebSocketProvider`
+- `createPresence` (awareness-backed presence)
+- `createUndoManager`
+- `createConflictDetector`
+
+## Conflict semantics
+
+See spec §9 for the full conflict policy. In short:
+
+| Conflict | Resolution |
+|---|---|
+| Concurrent attribute writes | Last-write-wins by Lamport clock |
+| Concurrent Pset property writes | LWW per property |
+| Hierarchy moves (e.g. wall → storey) | LWW on the containment relationship; loser is notified |
+| Concurrent geometry replace (mesh) | Both versions kept; conflict surfaced |
+| Type promotion (e.g. IfcWall → IfcCurtainWall) | Server-mediated lock required |
+| Concurrent delete + edit | Edit applies to tombstoned entity; user prompted to restore |
+
+The `createConflictDetector` helper observes Y.Doc updates and emits
+structured events that the viewer (or any UI) can render.
+
+## Docs
+
+See the [ifc-lite docs](https://ifclite.dev/docs/). Pair with
+[`@ifc-lite/collab-server`](https://www.npmjs.com/package/@ifc-lite/collab-server)
+for multi-peer websocket sync.
+
+## License
+
+MPL-2.0

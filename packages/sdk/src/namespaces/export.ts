@@ -1,0 +1,273 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * bim.export — Multi-format data export
+ *
+ * Wraps @ifc-lite/export for GLTF, CSV, STEP, and Parquet export.
+ * The export namespace works with EntityRef to determine which
+ * entities to include, and delegates to the appropriate exporter.
+ */
+
+import { escapeCsvCell } from '@ifc-lite/export';
+import { findPropertyInSets, findQuantityInSets } from '@ifc-lite/query';
+import type { BimBackend, EntityRef, EntityData, PropertySetData, QuantitySetData } from '../types.js';
+
+export interface ExportCsvOptions {
+  columns: string[];
+  filename?: string;
+  separator?: string;
+}
+
+export interface ExportStepOptions {
+  schema?: 'IFC2X3' | 'IFC4' | 'IFC4X3';
+  filename?: string;
+  includeMutations?: boolean;
+  visibleOnly?: boolean;
+}
+
+export interface ExportHbjsonOptions {
+  /** Honeybee model identifier / display name (defaults to the model name). */
+  name?: string;
+  /** When set, also trigger a download with this filename. */
+  filename?: string;
+}
+
+export interface ExportDfjsonOptions {
+  /** Dragonfly model identifier / display name (defaults to the model name). */
+  name?: string;
+  /** When set, also trigger a download with this filename. */
+  filename?: string;
+}
+
+/** bim.export — Data export in multiple formats */
+export class ExportNamespace {
+  constructor(private backend: BimBackend) {}
+
+  /**
+   * Export entities to CSV format.
+   * Columns can be entity attributes (name, type, globalId) or
+   * property paths (Pset_WallCommon.FireRating).
+   */
+  csv(refs: EntityRef[], options: ExportCsvOptions): string {
+    const rows: string[][] = [];
+
+    // Check if any columns need property/quantity lookups (Set.Value paths)
+    const hasDotColumns = options.columns.some(c => c.indexOf('.') > 0);
+
+    // Header row
+    rows.push(options.columns);
+
+    // Data rows
+    for (const ref of refs) {
+      const data = this.backend.query.entityData(ref);
+      if (!data) continue;
+
+      // Fetch properties/quantities once per entity (not per column)
+      let psets: PropertySetData[] | null = null;
+      let qsets: QuantitySetData[] | null = null;
+      if (hasDotColumns) {
+        psets = this.backend.query.properties(ref);
+        qsets = this.backend.query.quantities(ref);
+      }
+
+      const row: string[] = [];
+      for (const col of options.columns) {
+        // IFC PascalCase attribute names (per IFC EXPRESS schema) — also accept legacy camelCase
+        if (col === 'Name' || col === 'name') { row.push(data.name); continue; }
+        if (col === 'Type' || col === 'type') { row.push(data.type); continue; }
+        if (col === 'GlobalId' || col === 'globalId') { row.push(data.globalId); continue; }
+        if (col === 'Description' || col === 'description') { row.push(data.description); continue; }
+        if (col === 'ObjectType' || col === 'objectType') { row.push(data.objectType); continue; }
+
+        // Property/Quantity path: "SetName.ValueName"
+        const dotIdx = col.indexOf('.');
+        if (dotIdx > 0) {
+          const setName = col.slice(0, dotIdx);
+          const valueName = col.slice(dotIdx + 1);
+
+          // Try property sets first
+          if (psets) {
+            const prop = findPropertyInSets(psets, setName, valueName);
+            if (prop?.value != null) { row.push(String(prop.value)); continue; }
+          }
+
+          // Fall back to quantity sets
+          if (qsets) {
+            const qty = findQuantityInSets(qsets, setName, valueName);
+            if (qty?.value != null) { row.push(String(qty.value)); continue; }
+          }
+
+          row.push('');
+        } else {
+          row.push('');
+        }
+      }
+      rows.push(row);
+    }
+
+    const sep = options.separator ?? ',';
+    const csvString = rows.map(r => r.map(cell => this.escapeCsv(cell, sep)).join(sep)).join('\n');
+
+    // Trigger browser download if filename specified
+    if (options.filename) {
+      this.backend.export.download(csvString, options.filename, 'text/csv;charset=utf-8;');
+    }
+
+    return csvString;
+  }
+
+  /**
+   * Export entities as a JSON array of objects.
+   * Each object has the specified columns as keys.
+   */
+  json(refs: EntityRef[], columns: string[]): Record<string, unknown>[] {
+    const result: Record<string, unknown>[] = [];
+    const hasDotColumns = columns.some(c => c.indexOf('.') > 0);
+
+    for (const ref of refs) {
+      const data = this.backend.query.entityData(ref);
+      if (!data) continue;
+
+      // Fetch properties/quantities once per entity (not per column)
+      let psets: PropertySetData[] | null = null;
+      let qsets: QuantitySetData[] | null = null;
+      if (hasDotColumns) {
+        psets = this.backend.query.properties(ref);
+        qsets = this.backend.query.quantities(ref);
+      }
+
+      const row: Record<string, unknown> = {};
+      for (const col of columns) {
+        // IFC PascalCase attribute names (per IFC EXPRESS schema) — also accept legacy camelCase
+        if (col === 'Name' || col === 'name') { row[col] = data.name; continue; }
+        if (col === 'Type' || col === 'type') { row[col] = data.type; continue; }
+        if (col === 'GlobalId' || col === 'globalId') { row[col] = data.globalId; continue; }
+        if (col === 'Description' || col === 'description') { row[col] = data.description; continue; }
+        if (col === 'ObjectType' || col === 'objectType') { row[col] = data.objectType; continue; }
+
+        const dotIdx = col.indexOf('.');
+        if (dotIdx > 0) {
+          const setName = col.slice(0, dotIdx);
+          const valueName = col.slice(dotIdx + 1);
+          let resolved = false;
+
+          // Try property sets first
+          if (psets) {
+            const prop = findPropertyInSets(psets, setName, valueName);
+            if (prop?.value != null) { row[col] = prop.value; resolved = true; }
+          }
+
+          // Fall back to quantity sets
+          if (!resolved && qsets) {
+            const qty = findQuantityInSets(qsets, setName, valueName);
+            if (qty?.value != null) { row[col] = qty.value; resolved = true; }
+          }
+
+          if (!resolved) row[col] = null;
+        }
+      }
+      result.push(row);
+    }
+
+    return result;
+  }
+
+  /**
+   * Export entities to IFC STEP format.
+   * Supports IFC2X3, IFC4, and IFC4X3 (IFC 4.3) schemas.
+   *
+   * `refs` carries the same null-vs-empty distinction the wasm exporters got
+   * in #4364/#4386/#4659: OMIT it (or pass `undefined`/`null`) for "no
+   * isolation filter", i.e. the whole model, and pass an array for an ACTIVE
+   * filter. An active filter that matched nothing is REFUSED here rather than
+   * widened back into a whole-model export — the collapse that let a
+   * zero-match filter silently hand the caller the entire model (#4738).
+   *
+   * This is the one home for that rule: every surface (CLI, MCP, the browser
+   * playground, sandboxed scripts, the viewer) reaches a STEP export through
+   * this method, so no caller has to carry a zero-match guard for the export
+   * to fail closed (several keep one anyway, for a better message).
+   *
+   * The absence travels with the call rather than stopping here: a backend
+   * receives `undefined` for "no filter" and never an empty array, which is
+   * what `ExportBackendMethods.ifc`'s signature says and what lets a backend
+   * that cannot guess a model (`export-adapter.ts` in the viewer) answer the
+   * whole model instead of refusing.
+   */
+  ifc(refs?: EntityRef[] | null, options: ExportStepOptions = {}): string | Uint8Array {
+    if (refs?.length === 0) {
+      throw new Error(
+        'export.ifc: the entity list is empty, so an isolation filter matched nothing. '
+        + 'Refusing to export the whole model instead. Omit the argument to export the whole model.',
+      );
+    }
+    const content = this.backend.export.ifc(refs ?? undefined, options);
+    if (options.filename) {
+      this.backend.export.download(content, options.filename, 'application/x-step;charset=utf-8;');
+    }
+    return content;
+  }
+
+  /**
+   * Export the model as a Honeybee HBJSON energy/daylight model — `IfcSpace` volumes become
+   * watertight rooms, windows/doors become apertures/doors, railings become shades, material
+   * layer sets become opaque constructions, and shared interior walls are paired as `Surface`
+   * adjacencies. Loads directly in Honeybee / Ladybug Tools / Pollination.
+   *
+   * Requires a geometry-capable backend (the CLI and browser carry the wasm engine); the
+   * data-only SDK never meshes, so this throws on a backend that does not provide it.
+   */
+  async hbjson(options: ExportHbjsonOptions = {}): Promise<string> {
+    if (!this.backend.export.hbjson) {
+      throw new Error('HBJSON export requires a geometry-capable backend; the active backend does not provide it.');
+    }
+    const content = await this.backend.export.hbjson(options.name);
+    if (options.filename) {
+      this.backend.export.download(content, options.filename, 'application/json');
+    }
+    return content;
+  }
+
+  /**
+   * Export the model as a Dragonfly DFJSON energy model — each `IfcSpace` becomes an
+   * extruded `Room2D` (floor polygon + floor-to-ceiling height) grouped into stories. This
+   * is the simpler Ladybug Tools target for mostly-vertical-wall models. Loads via
+   * `dragonfly.model.Model.from_dfjson`.
+   *
+   * Requires a geometry-capable backend (the CLI and browser carry the wasm engine); the
+   * data-only SDK never meshes, so this throws on a backend that does not provide it.
+   */
+  async dfjson(options: ExportDfjsonOptions = {}): Promise<string> {
+    if (!this.backend.export.dfjson) {
+      throw new Error('DFJSON export requires a geometry-capable backend; the active backend does not provide it.');
+    }
+    const content = await this.backend.export.dfjson(options.name);
+    if (options.filename) {
+      this.backend.export.download(content, options.filename, 'application/json');
+    }
+    return content;
+  }
+
+  /**
+   * Trigger a browser file download with raw content.
+   */
+  download(content: string, filename: string, mimeType?: string): void {
+    this.backend.export.download(content, filename, mimeType ?? 'text/plain');
+  }
+
+  /**
+   * RFC 4180 quoting + the CWE-1236 formula-injection guard, delegated to
+   * `@ifc-lite/export`'s single escaper.
+   *
+   * This method used to carry the repo's reference copy of the guard (#1944).
+   * It was the best of nine, but still its own: its invisible class was
+   * `\p{Zs}`, which leaves U+2028 LINE SEPARATOR and U+2029 PARAGRAPH
+   * SEPARATOR usable as hiding places for a trigger. The shared escaper uses
+   * `\p{Z}`, covering `Zl`/`Zp` too.
+   */
+  private escapeCsv(value: string, sep: string): string {
+    return escapeCsvCell(value, { delimiter: sep });
+  }
+}

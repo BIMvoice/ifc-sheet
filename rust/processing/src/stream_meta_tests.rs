@@ -1,0 +1,377 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Host tests for [`super`] (the streaming pre-pass meta resolver). Split into
+//! its own `*_tests.rs` file so the production module stays small; every case
+//! drives the PUBLIC surface (`resolve_stream_meta` / `MetaMode` / `StreamMeta`
+//! / `MeshFrame`) with crafted inputs — no wasm needed.
+
+use super::*;
+use ifc_lite_core::{EntityDecoder, RtcVerdict};
+
+// A minimal IFC4 fragment: metric project, an origin-local wall, and an
+// IfcSite whose placement carries a large national-grid offset that only
+// resolves once the FULL index is available. `\n` line breaks keep the
+// spans byte-addressable for the scanner-free decoder path.
+//
+// The wall (#40) is placed at the LARGE world coordinate directly so the
+// job-sample detector can find the shift when — and only when — its
+// placement chain resolves.
+const IFC: &str = "\
+ISO-10303-21;
+HEADER;
+ENDSEC;
+DATA;
+#1=IFCPROJECT('p',$,'P',$,$,$,$,(#5),#8);
+#5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,#6,$);
+#6=IFCAXIS2PLACEMENT3D(#7,$,$);
+#7=IFCCARTESIANPOINT((0.,0.,0.));
+#8=IFCUNITASSIGNMENT((#9));
+#9=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#20=IFCSITE('site',$,$,$,$,#21,$,$,.ELEMENT.,$,$,$,$,$);
+#21=IFCLOCALPLACEMENT($,#22);
+#22=IFCAXIS2PLACEMENT3D(#23,$,$);
+#23=IFCCARTESIANPOINT((800000.,900000.,0.));
+#40=IFCWALL('wall',$,$,$,$,#41,#50,$,$);
+#41=IFCLOCALPLACEMENT($,#42);
+#42=IFCAXIS2PLACEMENT3D(#43,$,$);
+#43=IFCCARTESIANPOINT((800000.,900000.,0.));
+#50=IFCPRODUCTDEFINITIONSHAPE($,$,(#51));
+#51=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#52));
+#52=IFCEXTRUDEDAREASOLID(#53,#56,#60,1.0);
+#53=IFCRECTANGLEPROFILEDEF(.AREA.,$,#54,1.0,1.0);
+#54=IFCAXIS2PLACEMENT2D(#55,$);
+#55=IFCCARTESIANPOINT((0.,0.));
+#56=IFCAXIS2PLACEMENT3D(#57,$,$);
+#57=IFCCARTESIANPOINT((0.,0.,0.));
+#60=IFCDIRECTION((0.,0.,1.));
+ENDSEC;
+END-ISO-10303-21;
+";
+
+/// SmallFileSingle over the FULL index resolves the metric scale and the
+/// large IfcSite/wall offset in one detect pass.
+#[test]
+fn small_file_single_resolves_scale_and_offset() {
+    let content = IFC.as_bytes();
+    let full_index = ifc_lite_core::build_entity_index(content);
+    let mut decoder = EntityDecoder::with_index(content, full_index);
+
+    let meta = resolve_stream_meta(
+        MetaMode::SmallFileSingle,
+        content,
+        Some(1),
+        None,
+        &mut decoder,
+    );
+
+    assert_eq!(meta.length_unit_scale, 1.0, "metric project → scale 1");
+    assert!(meta.frame.needs_shift(), "800 km offset must trigger a shift");
+    assert!(
+        coord_is_large(meta.frame.rtc_offset()),
+        "resolved RTC must exceed the large-coordinate threshold, got {:?}",
+        meta.frame.rtc_offset()
+    );
+}
+
+/// StreamingPartial: when the partial index is missing the wall's
+/// placement chain (empty index → detect returns None), the 3-stage
+/// ladder rebuilds the FULL index and recovers the large offset instead of
+/// defaulting to no-shift.
+#[test]
+fn streaming_partial_full_index_fallback_recovers_offset() {
+    let content = IFC.as_bytes();
+    // A DELIBERATELY EMPTY partial index: the file-head scan hasn't reached
+    // the wall/site placement rows yet, so the partial decoder resolves no
+    // usable samples and the first detect pass returns None.
+    let partial_index = ifc_lite_core::EntityIndex::default();
+    let mut decoder = EntityDecoder::with_index(content, partial_index);
+
+    let meta = resolve_stream_meta(
+        MetaMode::StreamingPartial { scanned_through: content.len() },
+        content,
+        Some(1),
+        None, // IfcSite not scanned yet → gates the full-index re-detect on
+        &mut decoder,
+    );
+
+    assert!(
+        meta.frame.needs_shift(),
+        "3-stage fallback must recover the large offset from the full index, got {:?}",
+        meta.frame.rtc_offset()
+    );
+    assert!(coord_is_large(meta.frame.rtc_offset()));
+}
+
+/// StreamingPartial suppression: when the FIRST-pass detect SUCCEEDS on the
+/// partial index (a genuine origin-local resolution) and the IfcSite has
+/// been scanned, BOTH fallback arms are closed by that success — no
+/// full-index re-detect, no placement-bounds scan — so the offset is the
+/// partial pass's own no-shift, NOT the large centroid the fallback would
+/// have produced. (The prior version passed `site_position = None`, which
+/// forced the stage-2 gate open and so never exercised suppression.)
+#[test]
+fn streaming_partial_first_pass_success_suppresses_fallback() {
+    // Wall made origin-local; the IfcSite placement (#23) stays at the large
+    // national-grid coordinate, so `scan_placement_bounds` WOULD return a
+    // large offset if the placement-bounds fallback were (wrongly) reached.
+    let near = IFC.replace(
+        "#43=IFCCARTESIANPOINT((800000.,900000.,0.));",
+        "#43=IFCCARTESIANPOINT((1.,2.,0.));",
+    );
+    let content = near.as_bytes();
+    let full = ifc_lite_core::build_entity_index(content);
+
+    // A genuinely PARTIAL index: the wall's whole placement + representation
+    // chain, the project/units, and the IfcSite ENTITY — but NOT the site's
+    // forward-referenced placement (#21/#22/#23). The origin-local wall
+    // resolves (first pass SUCCEEDS) and the site is present, so both
+    // fallback arms are closed by the success itself, not by a None site.
+    let partial = || {
+        let mut p = ifc_lite_core::EntityIndex::default();
+        for id in [1u32, 8, 9, 20, 40, 41, 42, 43, 50, 51] {
+            if let Some(&s) = full.get(&id) {
+                p.insert(id, s);
+            }
+        }
+        p
+    };
+
+    // The first pass genuinely SUCCEEDS with a no-shift result, and the
+    // placement-bounds fallback WOULD differ (large) if it were reached.
+    let mut probe = EntityDecoder::with_index(content, partial());
+    assert_eq!(
+        GeometryRouter::with_scale(1.0).detect_rtc_anchor_for_file(content, &mut probe),
+        Some((0.0, 0.0, 0.0)),
+        "first pass must succeed on the partial index"
+    );
+    assert!(
+        matches!(
+            ifc_lite_core::scan_placement_bounds(content).rtc_offset(1.0),
+            Some(RtcVerdict::Large { .. })
+        ),
+        "placement-bounds fallback would shift (large) if taken"
+    );
+
+    let site = *full.get(&20).expect("site present");
+    let mut decoder = EntityDecoder::with_index(content, partial());
+    let meta = resolve_stream_meta(
+        MetaMode::StreamingPartial { scanned_through: content.len() },
+        content,
+        Some(1),
+        Some((20, site.0, site.1)),
+        &mut decoder,
+    );
+
+    assert!(!meta.frame.needs_shift(), "partial-pass success suppresses the shift");
+    assert_eq!(
+        meta.frame.rtc_offset(),
+        (0.0, 0.0, 0.0),
+        "offset comes from the partial pass, not the placement-bounds fallback"
+    );
+}
+
+// A MILLIMETRE model whose only geometry-job element (#40) carries NO
+// representation, so `sample_element_translation` abstains and BOTH detect
+// passes return None. The large world offset lives solely in the wall's
+// placement point (#43), which `scan_placement_bounds` reads in raw FILE
+// units — driving stage 3, the leg other tests only cover by suppression.
+// That is the only IfcAxis2Placement3D, so the bounds box == that point.
+const IFC_STAGE3: &str = "\
+ISO-10303-21;
+HEADER;
+ENDSEC;
+DATA;
+#1=IFCPROJECT('p',$,'P',$,$,$,$,$,#8);
+#8=IFCUNITASSIGNMENT((#9));
+#9=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#40=IFCWALL('wall',$,$,$,$,#41,$,$,$);
+#41=IFCLOCALPLACEMENT($,#42);
+#42=IFCAXIS2PLACEMENT3D(#43,$,$);
+#43=IFCCARTESIANPOINT((80000000.,90000000.,0.));
+ENDSEC;
+END-ISO-10303-21;
+";
+
+/// StreamingPartial stage 3: both detect passes abstain (no representation),
+/// so resolution falls through to `scan_placement_bounds`, which gates and
+/// answers in metres given the unit scale. Asserts the RTC offset equals
+/// the unit-scaled placement bounds exactly.
+#[test]
+fn streaming_partial_stage3_placement_bounds_fallback() {
+    let content = IFC_STAGE3.as_bytes();
+    let full_index = ifc_lite_core::build_entity_index(content);
+    let mut decoder = EntityDecoder::with_index(content, full_index);
+
+    let meta = resolve_stream_meta(
+        MetaMode::StreamingPartial { scanned_through: content.len() },
+        content,
+        Some(1),
+        None,
+        &mut decoder,
+    );
+
+    // Millimetre project → a non-trivial (≠ 1.0) scale, so stage 3's
+    // unit-scaling is actually exercised.
+    let scale = meta.length_unit_scale;
+    assert!((scale - 0.001).abs() < 1e-12, "expected mm scale, got {scale}");
+
+    // Reproduce exactly what stage 3 computes: raw placement bounds times scale.
+    let raw = ifc_lite_core::scan_placement_bounds(content)
+        .rtc_offset(1.0)
+        .expect("the fixture has placement points")
+        .offset();
+    assert_eq!(raw, (80_000_000.0, 90_000_000.0, 0.0), "raw mm bounds");
+    let expected = (raw.0 * scale, raw.1 * scale, raw.2 * scale);
+    assert_eq!(meta.frame.rtc_offset(), expected, "stage 3 unit-scales raw bounds");
+    assert_ne!(meta.frame.rtc_offset(), raw, "scaling changed the value");
+    assert!(meta.frame.needs_shift());
+}
+
+// A metric model whose only geometry job (#40) has NO representation, so both
+// detect passes abstain and the placement-bounds scan decides. The two
+// placement points put one bbox corner past the 1 km gate (1.5 km) while the
+// bbox centre (850 m) stays inside it, so the fallback answers with a
+// non-zero anchor that is not itself "large". The site placement is
+// identity.
+const IFC_SUB_THRESHOLD_ANCHOR: &str = "\
+ISO-10303-21;
+HEADER;
+ENDSEC;
+DATA;
+#1=IFCPROJECT('p',$,'P',$,$,$,$,$,#8);
+#8=IFCUNITASSIGNMENT((#9));
+#9=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#40=IFCWALL('wall',$,$,$,$,#41,$,$,$);
+#41=IFCLOCALPLACEMENT($,#42);
+#42=IFCAXIS2PLACEMENT3D(#43,$,$);
+#43=IFCCARTESIANPOINT((1500.,0.,0.));
+#44=IFCAXIS2PLACEMENT3D(#45,$,$);
+#45=IFCCARTESIANPOINT((200.,0.,0.));
+ENDSEC;
+END-ISO-10303-21;
+";
+
+/// #4611, #4643 (threshold lowered to 1 km by #4934): the browser resolver
+/// and the native pipeline choose the same frame for the same model, and
+/// that frame re-bases it. The bounds reach 1.5 km, so the model needs a
+/// shift; the anchor is the 850 m bbox centre. Main shifted it on native
+/// only (the browser gated the centre on the same threshold), and an
+/// intermediate version of this PR shifted it on neither, casting far
+/// coordinates straight to f32 (Codex P1 on #4643). Gating the anchor on its
+/// own magnitude again fails the native and the browser assertions.
+#[test]
+fn browser_and_native_pick_the_same_frame_for_a_sub_threshold_anchor() {
+    let content = IFC_SUB_THRESHOLD_ANCHOR.as_bytes();
+    let anchor = (850.0, 0.0, 0.0);
+    assert_eq!(
+        ifc_lite_core::scan_placement_bounds(content).rtc_offset(1.0),
+        Some(RtcVerdict::Large { anchor }),
+        "premise: the bounds are large and anchor on the in-threshold centre"
+    );
+    assert!(!coord_is_large(anchor), "premise: the anchor is inside 1 km");
+
+    let native = crate::process_geometry(IFC_SUB_THRESHOLD_ANCHOR);
+    assert_eq!(native.mesh_coordinate_space, crate::MeshCoordinateSpace::ModelRtc);
+    assert_eq!(native.metadata.coordinate_info.origin_shift, [850.0, 0.0, 0.0]);
+
+    for mode in [
+        MetaMode::SmallFileSingle,
+        MetaMode::StreamingPartial { scanned_through: content.len() },
+    ] {
+        let full_index = ifc_lite_core::build_entity_index(content);
+        let mut decoder = EntityDecoder::with_index(content, full_index);
+        let meta = resolve_stream_meta(mode, content, Some(1), None, &mut decoder);
+        assert_eq!(meta.frame, MeshFrame::ModelRtc { anchor }, "{mode:?}");
+        assert!(meta.frame.needs_shift(), "{mode:?}");
+        assert_eq!(meta.frame.coordinate_space(), native.mesh_coordinate_space, "{mode:?}");
+    }
+}
+
+/// The unscaled-fallback hazard in the MILLIMETRE direction (JUDGMENT
+/// item 1): `SmallFileSingle` runs one `detect_rtc_offset_for_file`,
+/// whose bounds arm used to hand back the RAW file-unit centroid. For a mm
+/// model 25 m wide whose only job carries no representation (so the job
+/// sampler abstains), that centroid is 25 000, which `coord_is_large` read
+/// as 25 km: `needs_shift` came back true and the router subtracted 25 km
+/// from every vertex of a model that sits 12.5 m from the origin.
+#[test]
+fn small_file_single_bounds_fallback_scales_millimetres_before_the_gate() {
+    // 25 m wide in millimetres: raw 25 000 > 1 000, scaled 25 < 1 000.
+    let mm = IFC_STAGE3.replace(
+        "#43=IFCCARTESIANPOINT((80000000.,90000000.,0.));",
+        "#43=IFCCARTESIANPOINT((25000.,25000.,0.));",
+    );
+    let content = mm.as_bytes();
+    let full_index = ifc_lite_core::build_entity_index(content);
+    let mut decoder = EntityDecoder::with_index(content, full_index);
+
+    // Premises: the job sampler abstains, and the raw centroid alone would
+    // pass the gate.
+    assert_eq!(
+        GeometryRouter::with_scale(0.001).detect_rtc_anchor_for_file(content, &mut decoder),
+        None,
+        "premise: no representation, so no job sample"
+    );
+    assert!(
+        coord_is_large(ifc_lite_core::scan_placement_bounds(content).centroid()),
+        "premise: the raw mm centroid reads as large"
+    );
+
+    let meta = resolve_stream_meta(
+        MetaMode::SmallFileSingle,
+        content,
+        Some(1),
+        None,
+        &mut decoder,
+    );
+
+    assert!((meta.length_unit_scale - 0.001).abs() < 1e-12, "mm project");
+    assert!(
+        !meta.frame.needs_shift(),
+        "a 25 m mm model must not be re-based, got offset {:?}",
+        meta.frame.rtc_offset()
+    );
+    assert_eq!(meta.frame.rtc_offset(), (0.0, 0.0, 0.0));
+}
+
+/// The other direction of the same gate: a KILOMETRE model 500 000 km out
+/// reads `500 < 1000` raw and was never re-based, while the identical
+/// geometry declared in metres was. The gate must see metres.
+#[test]
+fn small_file_single_bounds_fallback_rebases_a_kilometre_model() {
+    let km = IFC_STAGE3
+        .replace(
+            "#9=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);",
+            "#9=IFCSIUNIT(*,.LENGTHUNIT.,.KILO.,.METRE.);",
+        )
+        .replace(
+            "#43=IFCCARTESIANPOINT((80000000.,90000000.,0.));",
+            "#43=IFCCARTESIANPOINT((500.,500.,0.));",
+        );
+    let content = km.as_bytes();
+    let full_index = ifc_lite_core::build_entity_index(content);
+    let mut decoder = EntityDecoder::with_index(content, full_index);
+
+    assert!(
+        !coord_is_large(ifc_lite_core::scan_placement_bounds(content).centroid()),
+        "premise: the raw km centroid reads as small"
+    );
+
+    let meta = resolve_stream_meta(
+        MetaMode::SmallFileSingle,
+        content,
+        Some(1),
+        None,
+        &mut decoder,
+    );
+
+    assert!((meta.length_unit_scale - 1000.0).abs() < 1e-9, "km project");
+    assert!(meta.frame.needs_shift(), "500 000 km out must be re-based");
+    assert_eq!(
+        meta.frame.rtc_offset(),
+        (500_000.0, 500_000.0, 0.0),
+        "offset in metres"
+    );
+}

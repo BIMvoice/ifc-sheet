@@ -1,0 +1,106 @@
+# @ifc-lite/ifcx
+
+IFC5 (IFCX) parser for IFClite. Parses the JSON-based IFCX format with ECS composition, USD geometry, and federated layer support — and writes IFCX too. Compatible with the existing IFClite data pipeline so you can mix IFC4 STEP and IFC5 IFCX in the same scene.
+
+## Installation
+
+```bash
+npm install @ifc-lite/ifcx
+```
+
+## Parse an IFCX file
+
+```typescript
+import { parseIfcx } from '@ifc-lite/ifcx';
+
+const buffer = await fetch('model.ifcx').then(r => r.arrayBuffer());
+
+const result = await parseIfcx(buffer, {
+  onProgress: ({ phase, percent }) => console.log(`${phase}: ${percent}%`),
+});
+
+console.log(`${result.entityCount} entities, ${result.meshes.length} pre-tessellated meshes`);
+console.log(`Schema: ${result.schemaVersion}`); // 'IFC5'
+// result also carries properties, quantities, relationships, spatial
+// hierarchy, and decoded point clouds (result.pointClouds)
+
+// Same MeshData[] shape as @ifc-lite/parser — feed straight into renderer
+renderer.loadGeometry(result.meshes);
+```
+
+## Auto-detect format
+
+```typescript
+import { detectFormat, parseIfcx } from '@ifc-lite/ifcx';
+import { IfcParser } from '@ifc-lite/parser';
+
+const format = detectFormat(buffer);
+// 'ifcx' | 'ifc' | 'glb' | 'unknown'
+
+if (format === 'ifcx') {
+  await parseIfcx(buffer);
+} else if (format === 'ifc') {
+  await new IfcParser().parse(buffer);
+}
+```
+
+## Federated layers
+
+IFCX supports overlays — a base file with the geometry, plus one or more layers that add or override properties. The package merges them in priority order:
+
+```typescript
+import { parseFederatedIfcx } from '@ifc-lite/ifcx';
+
+const [baseBytes, psetOverlayBytes, scheduleOverlayBytes] = await Promise.all(
+  ['architecture.ifcx', 'fire-safety-overlay.ifcx', 'construction-schedule.ifcx'].map(
+    (name) => fetch(name).then((r) => r.arrayBuffer()),
+  ),
+);
+
+const result = await parseFederatedIfcx([
+  { buffer: baseBytes, name: 'architecture.ifcx' },
+  { buffer: psetOverlayBytes, name: 'fire-safety-overlay.ifcx' },
+  { buffer: scheduleOverlayBytes, name: 'construction-schedule.ifcx' },
+]);
+
+// Properties from later layers take precedence over earlier ones —
+// fire-safety FireRating values overwrite anything in the base.
+```
+
+## Write IFCX
+
+The low-level writer (`IfcxWriter` / `exportToIfcx`) lives in this package. For the full IFC-to-IFC5 conversion path (cross-schema, geometry as USD, mutations applied), use `Ifc5Exporter` from `@ifc-lite/export`:
+
+```typescript
+import { Ifc5Exporter } from '@ifc-lite/export';
+
+const exporter = new Ifc5Exporter(store, geometryResult);
+const ifcx = exporter.export({ includeGeometry: true });
+// ifcx.content → IFCX JSON string, save as .ifcx
+```
+
+For the low-level `IfcxWriter`, `spatialHierarchy` is a parsed snapshot. If a
+`mutationView` changes an `IfcRelAggregates`, `IfcRelNests`, or
+`IfcRelContainedInSpatialStructure` record, supply `effectiveSpatialEdges`
+containing the **complete** current spatial edge set (`sourceId`, `targetId`,
+`relationshipType`). The writer uses those edges to build `children` and raises
+an error if it detects such an edit without them. `applyMutations: false` uses
+the parsed hierarchy.
+
+## API
+
+See the [Parsing Guide](https://ifclite.dev/docs/guide/parsing/) and [API Reference](https://ifclite.dev/docs/api/typescript/#ifc-liteifcx).
+
+## License
+
+[MPL-2.0](../../LICENSE)
+
+Textured IFCX mesh roundtrips use the declared `ifclite::appearance::v1` /
+`ifclite::image::v1` extension. Standard USD geometry and IFC owner paths remain
+readable without the extension. `parseIfcx` returns per-fragment UVs and shared
+RGBA pixels, plus optional original PNG/JPEG bytes retained without decoding.
+The shared wire exports are consumed by `@ifc-lite/export`; see
+[texture portability](../../docs/guide/exporting.md#ifcx-texture-portability)
+for interoperability, allocation limits, and the native structural-only boundary.
+
+IFCX files may carry `ifclite::georeference::v1` on one model node. The parse result's optional `georeferencing` field preserves canonical `IfcProjectedCRS` (`Name`, metre `MapUnit`) and `IfcMapConversion` (`Eastings`, `Northings`, `OrthogonalHeight`, `XAxisAbscissa`, `XAxisOrdinate`, `Scale`) attributes. The viewer maps this into its existing federation alignment and map placement path. Invalid or conflicting placement records fail parsing. If an overlay fails composition or extraction, `addIfcxOverlay` removes the rejected layer so the previous stage remains usable.

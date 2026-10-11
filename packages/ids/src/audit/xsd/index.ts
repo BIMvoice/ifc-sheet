@@ -1,0 +1,338 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * XSD-level checks for an IDS document.
+ *
+ * Rather than ship a full XSD interpreter (or pull `libxml2-wasm` into a
+ * TypeScript package), we hard-code the rules from `ids.xsd` 1.0 — the
+ * schema is small, finite and slow-moving. Each check below corresponds to
+ * a constraint that's expressible in the XSD; the references in comments
+ * point at the relevant element/attribute definition.
+ */
+
+import type {
+  FacetType,
+  IDSConstraint,
+  IDSDocument,
+  IDSFacet,
+  IDSSpecification,
+  IFCVersion,
+} from '../../types.js';
+import type { IDSAuditIssue } from '../types.js';
+import { isValidLexicalForXsType } from '../coherence/index.js';
+
+// info/author's element declaration is an inline restriction of xs:string,
+// not the named ids:upperCaseName/ids:relations types — so it has no home in
+// the shared XS_VALUE_REGEX table and is checked directly here.
+const INFO_AUTHOR_PATTERN = /^[^@]+@[^.]+\..+$/;
+
+const ALLOWED_IFC_VERSIONS: ReadonlyArray<IFCVersion> = [
+  'IFC2X3',
+  'IFC4',
+  'IFC4X3_ADD2',
+  'IFC4X3',
+];
+
+const RECOGNISED_IFC_VERSION_TOKENS = new Set([
+  'IFC2X3',
+  'IFC4',
+  'IFC4X3',
+  'IFC4X3_ADD2',
+]);
+
+// Human-readable allowed-set text for enum-violation messages, derived from
+// the canonical token list so the message never drifts from what is accepted.
+const ALLOWED_IFC_VERSIONS_TEXT = [...RECOGNISED_IFC_VERSION_TOKENS].join(', ');
+
+function isRecognisedIfcVersionToken(t: string): boolean {
+  return RECOGNISED_IFC_VERSION_TOKENS.has(
+    t.toUpperCase().replace(/[^A-Z0-9_]/g, '')
+  );
+}
+
+// Facets that may appear inside an `<applicability>` block.
+const APPLICABILITY_FACETS = new Set<FacetType>([
+  'entity',
+  'attribute',
+  'classification',
+  'material',
+  'partOf',
+  'property',
+]);
+
+/**
+ * Recognised IDS XSD schema URLs. Upstream IDS-Audit-tool keeps the
+ * authoritative list in `SchemaProviders/`; we mirror it here. The
+ * audit raises Report 107 when `xsi:schemaLocation` points elsewhere.
+ */
+const RECOGNISED_IDS_SCHEMA_URLS: ReadonlyArray<string> = [
+  'http://standards.buildingsmart.org/IDS/1.0/ids.xsd',
+  'http://standards.buildingsmart.org/IDS/0.9.7/ids.xsd',
+  'http://standards.buildingsmart.org/IDS/0.9.6/ids.xsd',
+  'http://standards.buildingsmart.org/IDS/ids.xsd',
+];
+
+export function runXsdAudit(doc: IDSDocument): IDSAuditIssue[] {
+  const issues: IDSAuditIssue[] = [];
+  if (doc.schemaLocation) {
+    // schemaLocation is a whitespace-separated list of `namespace url`
+    // pairs; pull the URL paired with the IDS namespace.
+    const tokens = doc.schemaLocation.split(/\s+/).filter((t) => t.length > 0);
+    for (let i = 0; i + 1 < tokens.length; i += 2) {
+      const ns = tokens[i];
+      const url = tokens[i + 1];
+      if (ns === 'http://standards.buildingsmart.org/IDS') {
+        if (!RECOGNISED_IDS_SCHEMA_URLS.includes(url)) {
+          issues.push({
+            severity: 'error',
+            code: 'E_XSD_SCHEMA_LOCATION',
+            message: `xsi:schemaLocation references "${url}", not a recognised IDS XSD`,
+            path: 'schemaLocation',
+            detail: { url },
+          });
+        }
+      }
+    }
+  }
+  if (!doc.info.title || doc.info.title.trim() === '' || doc.info.title === 'Untitled IDS') {
+    // The XSD makes <title> mandatory and non-empty. Treat a missing or
+    // empty title as a warning rather than error — most authoring tools
+    // accept it, and consumers care more about specification content
+    // than the document-level title.
+    issues.push({
+      severity: 'warning',
+      code: 'E_XSD_REQUIRED_ATTR',
+      message: 'IDS document is missing a non-empty <info><title> element',
+      path: 'info.title',
+    });
+  }
+  if (doc.info.author && !INFO_AUTHOR_PATTERN.test(doc.info.author)) {
+    // info/author's inline restriction: pattern value="[^@]+@[^\.]+\..+".
+    issues.push({
+      severity: 'error',
+      code: 'E_XSD_PATTERN',
+      message: `info/author "${doc.info.author}" is not an e-mail address`,
+      path: 'info.author',
+      detail: { value: doc.info.author },
+    });
+  }
+  if (doc.info.date && !isValidLexicalForXsType(doc.info.date, 'xs:date')) {
+    // info/date is typed xs:date (CCYY-MM-DD, optional timezone).
+    issues.push({
+      severity: 'error',
+      code: 'E_XSD_PATTERN',
+      message: `info/date "${doc.info.date}" is not a valid xs:date`,
+      path: 'info.date',
+      detail: { value: doc.info.date },
+    });
+  }
+  if (doc.specifications.length === 0) {
+    // ids:specificationsType requires at least one <specification>
+    // (minOccurs="1").
+    issues.push({
+      severity: 'error',
+      code: 'E_XSD_STRUCTURE',
+      message: '<specifications> must contain at least one <specification>',
+      path: 'specifications',
+    });
+  }
+  doc.specifications.forEach((spec, i) => auditSpecification(spec, i, issues));
+  return issues;
+}
+
+function auditSpecification(
+  spec: IDSSpecification,
+  i: number,
+  issues: IDSAuditIssue[]
+): void {
+  const path = `specifications[${i}]`;
+  if (!spec.name || spec.name.trim() === '' || /^Specification \d+$/.test(spec.name)) {
+    issues.push({
+      severity: 'error',
+      code: 'E_XSD_REQUIRED_ATTR',
+      message: 'specification is missing a non-empty @name attribute',
+      path: `${path}.name`,
+    });
+  }
+  if (!spec.ifcVersions || spec.ifcVersions.length === 0) {
+    issues.push({
+      severity: 'error',
+      code: 'E_XSD_REQUIRED_ATTR',
+      message: 'specification is missing the @ifcVersion attribute',
+      path: `${path}.ifcVersion`,
+    });
+  } else {
+    for (const v of spec.ifcVersions) {
+      if (!ALLOWED_IFC_VERSIONS.includes(v)) {
+        issues.push({
+          severity: 'error',
+          code: 'E_XSD_ENUM',
+          message: `@ifcVersion "${v}" is not in {${ALLOWED_IFC_VERSIONS_TEXT}}`,
+          path: `${path}.ifcVersion`,
+          detail: { value: v },
+        });
+      }
+    }
+  }
+  // The parser silently drops tokens it can't normalise. Re-inspect the
+  // raw attribute string so authoring mistakes like
+  // `ifcVersion="IFC2X3 INVALIDIFCVERSION"` get flagged.
+  if (spec.ifcVersionRaw) {
+    const tokens = spec.ifcVersionRaw.split(/\s+/).filter((t) => t.length > 0);
+    for (const t of tokens) {
+      if (!isRecognisedIfcVersionToken(t)) {
+        issues.push({
+          severity: 'error',
+          code: 'E_XSD_ENUM',
+          message: `@ifcVersion token "${t}" is not in {${ALLOWED_IFC_VERSIONS_TEXT}}`,
+          path: `${path}.ifcVersion`,
+          detail: { value: t },
+        });
+      }
+    }
+  }
+  if (spec.applicability.facets.length === 0) {
+    issues.push({
+      severity: 'error',
+      code: 'E_XSD_STRUCTURE',
+      message: 'specification has an empty <applicability> — at least one facet is required',
+      path: `${path}.applicability`,
+    });
+  }
+  spec.applicability.facets.forEach((facet, fi) => {
+    auditFacet(facet, `${path}.applicability.facets[${fi}]`, issues);
+  });
+  if (spec.requirements.length === 0 && typeof spec.maxOccurs !== 'number') {
+    // The XSD allows zero requirements but conventional authoring tools
+    // surface this as a warning — a spec with no requirements does nothing.
+    //
+    // Exception: when the applicability declares an explicit numeric
+    // `maxOccurs`, the cardinality itself IS the assertion, so empty
+    // requirements are intentional and correct — not a no-op. The common
+    // case is a *prohibited* spec (`maxOccurs="0"`): it passes only when
+    // no entity matches the applicability, and the IDS spec forbids
+    // attaching requirements to it at all (a bounded `maxOccurs="N"` is a
+    // count assertion in the same vein). Flagging those is a false
+    // positive. (#1444)
+    issues.push({
+      severity: 'warning',
+      code: 'E_XSD_STRUCTURE',
+      message: 'specification has no <requirements>; matched entities will not be checked',
+      path: `${path}.requirements`,
+    });
+  }
+  spec.requirements.forEach((req, ri) => {
+    auditFacet(req.facet, `${path}.requirements[${ri}]`, issues);
+  });
+}
+
+function auditFacet(
+  facet: IDSFacet,
+  path: string,
+  issues: IDSAuditIssue[]
+): void {
+  if (!APPLICABILITY_FACETS.has(facet.type)) {
+    issues.push({
+      severity: 'error',
+      code: 'E_XSD_STRUCTURE',
+      message: `unknown facet type "${facet.type}"`,
+      path,
+      facetType: facet.type,
+    });
+    return;
+  }
+
+  switch (facet.type) {
+    case 'entity':
+      checkConstraintRequired(facet.name, `${path}.name`, 'entity.name', issues, facet.type);
+      break;
+    case 'attribute':
+      checkConstraintRequired(facet.name, `${path}.name`, 'attribute.name', issues, facet.type);
+      break;
+    case 'property':
+      checkConstraintRequired(
+        facet.propertySet,
+        `${path}.propertySet`,
+        'property.propertySet',
+        issues,
+        facet.type
+      );
+      checkConstraintRequired(
+        facet.baseName,
+        `${path}.baseName`,
+        'property.baseName',
+        issues,
+        facet.type
+      );
+      break;
+    case 'partOf':
+      // Relation/entity validity is per-version and lives in the IFC
+      // schema audit pass — leave it alone here.
+      break;
+    case 'classification':
+      // `ids:classificationType` sequence is `value (0..1), system (1..1)` —
+      // `<system>` is the only required child.
+      checkConstraintRequired(
+        facet.system,
+        `${path}.system`,
+        'classification.system',
+        issues,
+        facet.type
+      );
+      break;
+    case 'material':
+      // Allows all-optional fields per the XSD; no required attributes to
+      // check here.
+      break;
+  }
+
+  if (facet.type === 'property' && facet.dataType?.type === 'simpleValue') {
+    // `property/@dataType` is `ids:upperCaseName`, a restriction of
+    // `xs:normalizedString` with `<xs:pattern value="[A-Z]+"/>` — letters
+    // only, all upper-case. `findDataType` in the IFC-schema pass matches
+    // case-insensitively on purpose (it identifies *which* IFC type was
+    // meant, typo-tolerantly); this check is the separate XSD-conformance
+    // question of whether the literal attribute value is even well-formed.
+    const dt = facet.dataType.value ?? '';
+    if (dt !== '' && !/^[A-Z]+$/.test(dt)) {
+      issues.push({
+        severity: 'error',
+        code: 'E_XSD_PATTERN',
+        message: `dataType "${dt}" does not match ids:upperCaseName ([A-Z]+) — must be all upper-case letters`,
+        path: `${path}.dataType`,
+        facetType: facet.type,
+        detail: { value: dt },
+      });
+    }
+  }
+}
+
+function checkConstraintRequired(
+  c: IDSConstraint | undefined,
+  path: string,
+  field: string,
+  issues: IDSAuditIssue[],
+  facetType: FacetType
+): void {
+  if (!c) {
+    issues.push({
+      severity: 'error',
+      code: 'E_XSD_REQUIRED_ATTR',
+      message: `${field} is required`,
+      path,
+      facetType,
+    });
+    return;
+  }
+  if (c.type === 'simpleValue' && (!c.value || c.value.trim() === '')) {
+    issues.push({
+      severity: 'error',
+      code: 'E_XSD_REQUIRED_ATTR',
+      message: `${field} must have a non-empty value`,
+      path,
+      facetType,
+    });
+  }
+}

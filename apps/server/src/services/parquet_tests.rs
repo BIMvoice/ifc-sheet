@@ -1,0 +1,607 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Unit tests for `parquet.rs`, split into this ratchet-exempt sibling file
+//! to keep the production module under the module-size budget. As a child
+//! `#[cfg(test)] mod parquet_tests` it retains `use super::*` access to the
+//! parent module's private items, so the tests moved here verbatim.
+
+    use super::*;
+    use crate::services::parquet_schema::ABSENT_SOURCE_ID;
+
+    /// Backs the issue #5130 writer finding with a measurement instead of
+    /// theory: 1,000 distinct meshes (small triangle each), no repeats in
+    /// EITHER stage, so `SharedShapes` plans `Identity` and the only
+    /// difference from `Flat` is the nine identity `rot0..rot8` columns. If
+    /// THIS module's `writer_props` (the flat/shared-shapes writer's, not
+    /// `parquet_optimized.rs`'s differently-implemented same-named function)
+    /// ever regressed its dictionary encoding for `rot*` columns (e.g.
+    /// someone drops the `!name.starts_with("rot")` exemption), those nine
+    /// constant-valued columns would be written PLAIN and this ratchet would
+    /// fail loudly instead of silently shipping a bigger file.
+    ///
+    /// Reads column-chunk `compressed_size` straight from the Parquet footer
+    /// (`ColumnChunkMetaData`), not from the arrow schema, so page headers,
+    /// dictionary pages and statistics are all accounted for.
+    #[test]
+    fn identity_rot_columns_cost_under_10pct_on_1000_rows() {
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+        let meshes: Vec<MeshData> = (0..1000u32)
+            .map(|i| {
+                let x = i as f32;
+                MeshData::new(
+                    i + 1,
+                    "IfcWall".to_string(),
+                    vec![x, 0.0, 0.0, x + 0.5, 0.0, 0.0, x + 0.5, 0.5, 0.0],
+                    vec![0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+                    vec![0, 1, 2],
+                    [0.5, 0.5, 0.5, 1.0],
+                )
+                .with_origin([x as f64, 0.0, 0.0])
+            })
+            .collect();
+
+        let plan = ShapePlan::shared_shapes(&meshes, None);
+        assert!(
+            matches!(plan, ShapePlan::Identity),
+            "fixture must share nothing in either stage for this measurement to isolate the rot* cost"
+        );
+
+        let flat = serialize_combined_for_layout(&meshes, ParquetLayout::Flat, None).unwrap();
+        let shared = serialize_combined_for_layout(&meshes, ParquetLayout::SharedShapes, None).unwrap();
+        let total_delta_pct = 100.0 * (shared.len() as f64 / flat.len() as f64 - 1.0);
+        eprintln!(
+            "MEASURED #5130: flat_total={} shared_total={} delta={} ({total_delta_pct:.2}%)",
+            flat.len(),
+            shared.len(),
+            shared.len() as i64 - flat.len() as i64,
+        );
+
+        // Unwrap the outer `[geo_len][mesh_len][mesh]...` framing to reach the
+        // mesh table's own Parquet buffer, then read column-chunk sizes
+        // straight from the footer (not from the arrow schema).
+        let mesh_table_bytes = |blob: &Bytes| -> Bytes {
+            let mesh_len = u32::from_le_bytes(blob[4..8].try_into().unwrap()) as usize;
+            Bytes::copy_from_slice(&blob[8..8 + mesh_len])
+        };
+        let report_columns = |label: &str, blob: &Bytes| -> (usize, i64) {
+            let bytes = mesh_table_bytes(blob);
+            let total_len = bytes.len();
+            let builder = ParquetRecordBatchReaderBuilder::try_new(bytes).unwrap();
+            let mut per_column: std::collections::BTreeMap<String, i64> = std::collections::BTreeMap::new();
+            for rg in builder.metadata().row_groups() {
+                for col in rg.columns() {
+                    *per_column.entry(col.column_path().string()).or_insert(0) += col.compressed_size();
+                }
+            }
+            eprintln!("MEASURED #5130: {label} mesh_table_bytes={total_len}");
+            let mut rot_total = 0i64;
+            for (name, size) in &per_column {
+                eprintln!("MEASURED #5130:   {label} column {name} compressed_size={size}");
+                if name.starts_with("rot") {
+                    rot_total += size;
+                }
+            }
+            (total_len, rot_total)
+        };
+        report_columns("flat", &flat);
+        let (shared_mesh_table_len, rot_total) = report_columns("shared", &shared);
+        let rot_pct = 100.0 * rot_total as f64 / shared_mesh_table_len as f64;
+        eprintln!("MEASURED #5130: shared rot* columns total={rot_total} ({rot_pct:.2}% of mesh table)");
+
+        assert!(
+            rot_pct < 10.0,
+            "identity rot* columns must stay dictionary/RLE-cheap (<10% of the mesh table): \
+             got {rot_pct:.2}% ({rot_total} of {shared_mesh_table_len} bytes) — writer_props may \
+             have stopped dictionary-encoding rot* columns"
+        );
+        assert!(
+            total_delta_pct < 10.0,
+            "a no-share SharedShapes blob must stay within 10% of the Flat blob's size: \
+             got {total_delta_pct:.2}%"
+        );
+    }
+
+    #[test]
+    fn test_parquet_serialization() {
+        let meshes = vec![
+            MeshData::new(
+                1,
+                "IfcWall".to_string(),
+                vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+                vec![0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+                vec![0, 1, 2],
+                [0.8, 0.8, 0.8, 1.0],
+            ),
+            MeshData::new(
+                2,
+                "IfcSlab".to_string(),
+                vec![0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 2.0, 2.0, 0.0, 0.0, 2.0, 0.0],
+                vec![0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+                vec![0, 1, 2, 0, 2, 3],
+                [0.5, 0.5, 0.5, 1.0],
+            ),
+        ];
+
+        let result = serialize_to_parquet(&meshes);
+        assert!(result.is_ok());
+
+        let data = result.unwrap();
+        // Should be much smaller than JSON equivalent
+        // Note: Parquet has fixed overhead (~4KB headers), so small test data may appear larger
+        // Real-world compression is 15x+ on actual IFC geometry data
+        assert!(
+            data.len() < 10000,
+            "Expected compact output, got {} bytes",
+            data.len()
+        );
+    }
+
+    /// Decode one framed section blob back into its three tables.
+    fn read_sections(blob: &[u8]) -> Vec<Vec<RecordBatch>> {
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+        let mut out = Vec::new();
+        let mut off = 0usize;
+        for _ in 0..3 {
+            let len = u32::from_le_bytes(blob[off..off + 4].try_into().unwrap()) as usize;
+            off += 4;
+            let section = Bytes::copy_from_slice(&blob[off..off + len]);
+            off += len;
+            let reader = ParquetRecordBatchReaderBuilder::try_new(section)
+                .unwrap()
+                .build()
+                .unwrap();
+            out.push(reader.map(|b| b.unwrap()).collect::<Vec<_>>());
+        }
+        assert_eq!(off, blob.len(), "trailing bytes after the three sections");
+        out
+    }
+
+    /// Concatenate row groups per column into one comparable table.
+    fn concat_all(batches: &[RecordBatch]) -> RecordBatch {
+        let schema = batches[0].schema();
+        arrow::compute::concat_batches(&schema, batches).unwrap()
+    }
+
+    /// The incremental cache writer must produce a blob DECODE-equivalent to
+    /// the one-shot serializer for the same meshes: same schemas, same rows,
+    /// same GLOBAL vertex/index offsets - only the row-group layout differs.
+    #[test]
+    fn incremental_writer_matches_one_shot_serializer() {
+        let mesh = |id: u32, verts: usize| {
+            let mut positions = Vec::new();
+            for v in 0..verts {
+                positions.extend_from_slice(&[v as f32, id as f32, 0.5 * v as f32]);
+            }
+            let normals = vec![0.0; verts * 3];
+            let indices: Vec<u32> = (0..(verts as u32 / 3) * 3).collect();
+            MeshData::new(id, format!("IfcThing{id}"), positions, normals, indices, [0.1, 0.2, 0.3, 1.0])
+        };
+        let meshes: Vec<MeshData> = (1..=7).map(|i| mesh(i, 3 * i as usize)).collect();
+
+        let one_shot = serialize_to_parquet(&meshes).unwrap();
+
+        let mut writer = StreamingParquetCacheWriter::new(ParquetLayout::Flat).unwrap();
+        // Uneven batches on purpose: 2 + 4 + 1.
+        writer.append(&meshes[0..2]).unwrap();
+        writer.append(&meshes[2..6]).unwrap();
+        writer.append(&meshes[6..7]).unwrap();
+        assert_eq!(writer.mesh_count(), 7);
+        let incremental = writer.finish().unwrap();
+
+        let a = read_sections(&one_shot);
+        let b = read_sections(&incremental);
+        for (section_a, section_b) in a.iter().zip(b.iter()) {
+            let ta = concat_all(section_a);
+            let tb = concat_all(section_b);
+            assert_eq!(ta.schema(), tb.schema());
+            assert_eq!(ta.num_rows(), tb.num_rows());
+            assert_eq!(ta, tb, "decoded tables must be identical (incl. global offsets)");
+        }
+    }
+
+    /// `finish_combined()` must byte-equal the old two-copy path (wrap
+    /// `finish()`'s inner blob with `[geo_len][geo_bytes][dm_len=0]` in a
+    /// second Vec, as the parquet-stream route used to do inline) and the
+    /// result must parse back to the same tables as the one-shot serializer.
+    /// This is a copy-elimination, not a format change; a byte mismatch here
+    /// means the wire format drifted.
+    #[test]
+    fn finish_combined_matches_old_two_copy_wrapping() {
+        let mesh = |id: u32, verts: usize| {
+            let mut positions = Vec::new();
+            for v in 0..verts {
+                positions.extend_from_slice(&[v as f32, id as f32, 0.5 * v as f32]);
+            }
+            let normals = vec![0.0; verts * 3];
+            let indices: Vec<u32> = (0..(verts as u32 / 3) * 3).collect();
+            MeshData::new(id, format!("IfcThing{id}"), positions, normals, indices, [0.1, 0.2, 0.3, 1.0])
+        };
+        let meshes: Vec<MeshData> = (1..=5).map(|i| mesh(i, 3 * i as usize)).collect();
+
+        // Old path: finish() the inner geometry blob, then wrap it a second
+        // time exactly like the route used to (before finish_combined()).
+        let mut writer_old = StreamingParquetCacheWriter::new(ParquetLayout::Flat).unwrap();
+        writer_old.append(&meshes[0..2]).unwrap();
+        writer_old.append(&meshes[2..5]).unwrap();
+        let geometry_parquet = writer_old.finish().unwrap();
+        let mut old_combined = Vec::new();
+        old_combined.extend_from_slice(&(geometry_parquet.len() as u32).to_le_bytes());
+        old_combined.extend_from_slice(&geometry_parquet);
+        old_combined.extend_from_slice(&0u32.to_le_bytes());
+
+        // New path: finish_combined() builds the same outer framing in one pass.
+        let mut writer_new = StreamingParquetCacheWriter::new(ParquetLayout::Flat).unwrap();
+        writer_new.append(&meshes[0..2]).unwrap();
+        writer_new.append(&meshes[2..5]).unwrap();
+        let new_combined = writer_new.finish_combined().unwrap();
+
+        assert_eq!(
+            old_combined.as_slice(),
+            new_combined.as_ref(),
+            "finish_combined() must be byte-identical to the old two-copy wrapping"
+        );
+
+        // Round-trip: unwrap the outer framing and confirm the inner geometry
+        // blob decodes to the same tables as the one-shot serializer.
+        let geo_len = u32::from_le_bytes(new_combined[0..4].try_into().unwrap()) as usize;
+        let dm_len_offset = 4 + geo_len;
+        let dm_len =
+            u32::from_le_bytes(new_combined[dm_len_offset..dm_len_offset + 4].try_into().unwrap());
+        assert_eq!(dm_len, 0, "streamed cache fill never attaches a data model inline");
+        assert_eq!(new_combined.len(), 4 + geo_len + 4, "no trailing bytes after the outer frame");
+
+        let inner_geo = &new_combined[4..4 + geo_len];
+        let one_shot = serialize_to_parquet(&meshes).unwrap();
+        let a = read_sections(&one_shot);
+        let b = read_sections(inner_geo);
+        for (section_a, section_b) in a.iter().zip(b.iter()) {
+            let ta = concat_all(section_a);
+            let tb = concat_all(section_b);
+            assert_eq!(ta.schema(), tb.schema());
+            assert_eq!(ta, tb, "decoded tables must match the one-shot serializer");
+        }
+    }
+
+    /// Regression + contract test for issue #1841: the mesh table MUST carry
+    /// the per-mesh `origin` (Y-up, world = origin + position) and
+    /// `geometry_class`. Dropping either silently collapses origin-relative
+    /// geometry onto the world origin / renders instanced type templates as
+    /// duplicates. This pins that the columns exist, in the canonical frame.
+    #[test]
+    fn mesh_table_carries_origin_and_geometry_class() {
+        use arrow::array::{Float64Array, UInt8Array};
+
+        // A slab whose vertices are stored RELATIVE to a building-scale origin.
+        // origin is in IFC Z-up; the wire must emit it Z-up→Y-up swapped so it
+        // matches the swapped positions: [x, z, -y].
+        let ifc_origin = [1000.0_f64, 2000.0, 30.0];
+        let mesh = MeshData::new(
+            7,
+            "IfcSlab".to_string(),
+            vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+            vec![0, 1, 2],
+            [0.5, 0.5, 0.5, 1.0],
+        )
+        .with_origin(ifc_origin)
+        .with_geometry_class(2);
+
+        let blob = serialize_to_parquet(&[mesh]).unwrap();
+        let sections = read_sections(&blob);
+        let mesh_table = concat_all(&sections[0]);
+
+        let col = |name: &str| mesh_table.schema().index_of(name).expect(name);
+        let ox = mesh_table
+            .column(col("origin_x"))
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        let oy = mesh_table
+            .column(col("origin_y"))
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        let oz = mesh_table
+            .column(col("origin_z"))
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        let gc = mesh_table
+            .column(col("geometry_class"))
+            .as_any()
+            .downcast_ref::<UInt8Array>()
+            .unwrap();
+
+        // Z-up→Y-up: x stays, y = old z, z = -old y.
+        assert_eq!(ox.value(0), 1000.0);
+        assert_eq!(oy.value(0), 30.0);
+        assert_eq!(oz.value(0), -2000.0);
+        assert_eq!(gc.value(0), 2);
+    }
+
+    /// Both transports must end with the same per-mesh column block.
+    ///
+    /// Both now COMPOSE `shared_trailing_fields()`, so the columns cannot drift
+    /// apart by editing one literal -- that is structural, not tested. What
+    /// this guards is the composition itself: dropping the `.chain(...)` from
+    /// one schema still compiles and would silently shorten that transport.
+    ///
+    /// Worth having because the hand-kept version genuinely failed:
+    /// `benches/serialization.rs` is a third copy that has already drifted,
+    /// missing `origin_x/y/z` and `geometry_class`.
+    #[test]
+    fn both_mesh_schemas_end_with_the_same_shared_columns() {
+        use crate::services::parquet_schema::shared_trailing_fields;
+
+        let shared: Vec<String> = shared_trailing_fields()
+            .iter()
+            .map(|f| f.name().clone())
+            .collect();
+        // Anti-vacuity: an empty tail would make every assertion below pass.
+        assert!(shared.len() >= 6, "expected the full shared block, got {shared:?}");
+
+        let standard: Vec<String> = mesh_schema(true)
+            .fields()
+            .iter()
+            .map(|f| f.name().clone())
+            .collect();
+
+        // Reach the instance schema through a real serialization rather than
+        // re-declaring it -- a re-declaration would be another copy and would
+        // pass while the real one drifted.
+        let mesh = MeshData::new(
+            1,
+            "IfcWall".to_string(),
+            vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+            vec![0, 1, 2],
+            [0.5, 0.5, 0.5, 1.0],
+        );
+        use crate::services::parquet_optimized::serialize_to_parquet_optimized_with_stats;
+        let (blob, _) =
+            serialize_to_parquet_optimized_with_stats(&[mesh], false, None).expect("optimized serialize");
+        // The optimized blob has its OWN framing --
+        // [version:u8][flags:u8][5 x len:u32][instance_parquet]... -- not the
+        // section layout `read_sections` expects. Using the wrong reader here
+        // read a length of 175570950 out of a 6140-byte buffer, which looked
+        // like schema drift until I read the framing.
+        let instance_len = u32::from_le_bytes(blob[2..6].try_into().unwrap()) as usize;
+        let header = 2 + 5 * 4;
+        let instance_bytes = bytes::Bytes::copy_from_slice(&blob[header..header + instance_len]);
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+        let reader = ParquetRecordBatchReaderBuilder::try_new(instance_bytes)
+            .unwrap()
+            .build()
+            .unwrap();
+        let instance: Vec<String> = reader
+            .map(|b| b.unwrap())
+            .next()
+            .unwrap()
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| f.name().clone())
+            .collect();
+
+        let tail = |cols: &[String]| -> Vec<String> { cols[cols.len() - shared.len()..].to_vec() };
+        // BOTH schemas append the nine rotation columns AFTER the shared block
+        // (issue #3575 for `instance_schema()`, #3888 for `mesh_schema()` --
+        // see either doc comment for why they aren't folded into
+        // `shared_trailing_fields` itself), so strip those before comparing the
+        // shared tail. The optimized one omits them entirely on a v2-shaped
+        // payload, which this single non-instanced mesh produces, so strip by
+        // NAME rather than by count.
+        let without_rotation = |cols: &[String]| -> Vec<String> {
+            cols.iter().filter(|name| !name.starts_with("rot")).cloned().collect()
+        };
+        assert_eq!(
+            tail(&without_rotation(&standard)),
+            shared,
+            "mesh_schema() stopped composing shared_trailing_fields()"
+        );
+        // Anti-vacuity for the strip itself: the flat schema must actually
+        // CARRY the rotation tail (#3888). Without this the filter above would
+        // hide a mesh_schema() that had quietly dropped it.
+        assert_eq!(
+            standard.len() - without_rotation(&standard).len(),
+            9,
+            "mesh_schema() must carry rot0..rot8 (issue #3888): {standard:?}"
+        );
+        let instance_without_rotation = without_rotation(&instance);
+        assert_eq!(
+            tail(&instance_without_rotation),
+            shared,
+            "the optimized instance schema stopped composing shared_trailing_fields()"
+        );
+    }
+
+    /// The two source ids must reach the wire on the RIGHT columns, with the
+    /// absent marker where a mesh has neither (#3215).
+    ///
+    /// The writer had no Rust test at all, and the two ids were adjacent
+    /// `Option<u32>` slots in the metadata tuple this file already warns about
+    /// for `vertex_start`/`index_start`. Measured then: swapping them compiled
+    /// and left 202/202 green — every representation-item id written into the
+    /// material column and back, the wrong-entity drill target #3199 removed.
+    /// That tuple is a `MeshRow` struct now, but the RecordBatch arrays are
+    /// still positional against the schema, so this still earns its place.
+    ///
+    /// So the fixture puts a DIFFERENT id on each field and a third mesh with
+    /// neither: a swap moves both values and this fails on the first assert.
+    #[test]
+    fn mesh_table_carries_both_source_ids_on_the_right_columns() {
+        use arrow::array::UInt32Array;
+
+        let base = |eid: u32| {
+            MeshData::new(
+                eid,
+                "IfcWall".to_string(),
+                vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+                vec![0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+                vec![0, 1, 2],
+                [0.5, 0.5, 0.5, 1.0],
+            )
+        };
+        // Distinct values on the two fields, so a swap cannot pass.
+        let geo = base(10).with_style_metadata(None, Some(501), false);
+        let mat = base(11).with_style_metadata(None, Some(902), true);
+        let neither = base(12);
+
+        let blob = serialize_to_parquet(&[geo, mat, neither]).unwrap();
+        let sections = read_sections(&blob);
+        let mesh_table = concat_all(&sections[0]);
+        let col = |name: &str| mesh_table.schema().index_of(name).expect(name);
+        let gi = mesh_table
+            .column(col("geometry_item_id"))
+            .as_any()
+            .downcast_ref::<UInt32Array>()
+            .unwrap();
+        let mi = mesh_table
+            .column(col("material_id"))
+            .as_any()
+            .downcast_ref::<UInt32Array>()
+            .unwrap();
+
+        assert_eq!(gi.value(0), 501, "representation-item id on its own column");
+        assert_eq!(mi.value(0), ABSENT_SOURCE_ID, "and NOT on the material one");
+        assert_eq!(mi.value(1), 902, "material id on its own column");
+        assert_eq!(gi.value(1), ABSENT_SOURCE_ID, "and NOT on the geometry one");
+        assert_eq!(gi.value(2), ABSENT_SOURCE_ID);
+        assert_eq!(mi.value(2), ABSENT_SOURCE_ID);
+
+        // Non-nullable on purpose: a nullable column's values buffer is
+        // undefined at null rows and parquet-wasm 0.7.x leaks the neighbouring
+        // row's id into it. No nulls means nothing to leak.
+        assert_eq!(mesh_table.column(col("geometry_item_id")).null_count(), 0);
+        assert_eq!(mesh_table.column(col("material_id")).null_count(), 0);
+    }
+
+    /// Mesh-table offset/count columns must carry the ACTUAL per-mesh values,
+    /// not just decode as "some" table. `vertex_start`/`index_start` are both
+    /// `u32` and sit next to each other in `MeshRow` and in the positional
+    /// RecordBatch arrays — an easy accidental swap. (They were adjacent tuple
+    /// slots when this was written; #3215 made that a struct, which removes the
+    /// construction-site half of the hazard but not the batch-order half.) Uses meshes with DIFFERENT vertex counts and triangle
+    /// counts per mesh (4 verts/1 tri, then 3 verts/2 tris) so vertex_start and
+    /// index_start can never coincide by accident, unlike same-size fixtures
+    /// elsewhere in this file.
+    #[test]
+    fn mesh_table_offsets_and_counts_match_actual_mesh_sizes() {
+        use arrow::array::UInt32Array;
+
+        // Mesh 1: 4 vertices (a quad, but only using 3 indices to keep it simple
+        // — vertex_count != index_count on purpose), 1 triangle.
+        let mesh1 = MeshData::new(
+            10,
+            "IfcWall".to_string(),
+            vec![
+                0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+            ],
+            vec![
+                0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+            ],
+            vec![0, 1, 2],
+            [0.1, 0.2, 0.3, 1.0],
+        );
+        // Mesh 2: 3 vertices, 2 triangles (6 indices) — deliberately more
+        // indices than vertices so index_start/index_count can't be confused
+        // with vertex_start/vertex_count by magnitude alone.
+        let mesh2 = MeshData::new(
+            20,
+            "IfcSlab".to_string(),
+            vec![0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 2.0, 2.0, 0.0],
+            vec![0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+            vec![0, 1, 2, 0, 2, 1, 0, 1, 2, 0, 2, 1],
+            [0.4, 0.5, 0.6, 1.0],
+        );
+
+        let blob = serialize_to_parquet(&[mesh1, mesh2]).unwrap();
+        let sections = read_sections(&blob);
+        let mesh_table = concat_all(&sections[0]);
+
+        let col = |name: &str| mesh_table.schema().index_of(name).expect(name);
+        let get = |name: &str| {
+            mesh_table
+                .column(col(name))
+                .as_any()
+                .downcast_ref::<UInt32Array>()
+                .unwrap()
+                .clone()
+        };
+        let vertex_start = get("vertex_start");
+        let vertex_count = get("vertex_count");
+        let index_start = get("index_start");
+        let index_count = get("index_count");
+
+        assert_eq!(mesh_table.num_rows(), 2);
+        // Mesh 1 (row 0): 4 vertices at offset 0, 3 indices at offset 0.
+        assert_eq!(vertex_start.value(0), 0);
+        assert_eq!(vertex_count.value(0), 4);
+        assert_eq!(index_start.value(0), 0);
+        assert_eq!(index_count.value(0), 3);
+        // Mesh 2 (row 1): 3 vertices starting AFTER mesh 1's 4 (offset 4), 12
+        // indices starting AFTER mesh 1's 3 (offset 3). If vertex_start and
+        // index_start were swapped, row 1 would show vertex_start=3 instead of 4.
+        assert_eq!(vertex_start.value(1), 4);
+        assert_eq!(vertex_count.value(1), 3);
+        assert_eq!(index_start.value(1), 3);
+        assert_eq!(index_count.value(1), 12);
+    }
+
+    /// Regression test for #586: meshes with positions but no normals
+    /// (e.g. `advanced_brep.ifc`) used to panic with "index out of bounds"
+    /// inside the rayon worker, taking down the server process.
+    #[test]
+    fn test_serialize_mesh_without_normals() {
+        let meshes = vec![MeshData::new(
+            42,
+            "IfcAdvancedBrep".to_string(),
+            vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+            Vec::new(), // no normals — must not panic
+            vec![0, 1, 2],
+            [0.8, 0.8, 0.8, 1.0],
+        )];
+
+        let result = serialize_to_parquet(&meshes);
+        assert!(
+            result.is_ok(),
+            "serialize_to_parquet should not panic on empty normals: {:?}",
+            result.err()
+        );
+    }
+
+    /// `serialize_combined_for_layout`, the body `POST /api/v1/parse/parquet`
+    /// now returns, byte-equals what the route used to build by hand: the
+    /// layout's one-shot blob wrapped in `[geo_len][geo_bytes][dm_len=0]`.
+    /// The route's hand-rolled wrap cast the outer length with an unguarded
+    /// `as u32`; the combined writer guards it (`frame_combined_sections`), and
+    /// this pins that moving onto it changed no byte for either layout. The
+    /// fixture shares shapes, so the two layouts really produce different
+    /// bytes and a writer that ignored `layout` fails one of them.
+    /// Regression for #4634.
+    #[test]
+    fn the_combined_parquet_body_matches_the_old_route_wrapping_for_each_layout() {
+        let meshes = crate::services::parquet_test_fixtures::rotated_repeats();
+        let wrap = |inner: Bytes| {
+            let mut old = Vec::new();
+            old.extend_from_slice(&(inner.len() as u32).to_le_bytes());
+            old.extend_from_slice(&inner);
+            old.extend_from_slice(&0u32.to_le_bytes());
+            old
+        };
+        let flat = serialize_combined_for_layout(&meshes, ParquetLayout::Flat, None).unwrap();
+        let shared = serialize_combined_for_layout(&meshes, ParquetLayout::SharedShapes, None).unwrap();
+        // `assert!`, not `assert_eq!`: a mismatch would print two Parquet blobs.
+        assert!(
+            flat.as_ref() == wrap(serialize_to_parquet(&meshes).unwrap()).as_slice(),
+            "the Flat body drifted from the old route's bytes"
+        );
+        assert!(
+            shared.as_ref() == wrap(serialize_to_parquet_shared_shapes(&meshes).unwrap()).as_slice(),
+            "the SharedShapes body drifted from the old route's bytes"
+        );
+        assert!(flat != shared, "the fixture must tell the two layouts apart");
+    }

@@ -1,0 +1,205 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Anchored builder for IfcColumn — emits the full sub-graph (placement,
+ * profile, extruded solid, representation, product shape, column,
+ * IfcRelContainedInSpatialStructure) into a `StoreEditor`'s overlay.
+ *
+ * The column lands in the spatial structure of an existing parsed model
+ * (anchored to a storey + the model's owner history + its 'Body'
+ * representation context). This is the in-place equivalent of
+ * `IfcCreator.addIfcColumn()` and closes the merge-roundtrip gap from
+ * LTplus-AG/ifc-lite#592.
+ *
+ * Pure: no I/O, no parser access — operates entirely through the editor.
+ */
+
+import { generateIfcGuid } from '@ifc-lite/encoding';
+import type { StoreEditor } from '@ifc-lite/mutations';
+import { assertFinitePoint3 } from '../ifc-creator-math.js';
+import { toNativeLength, toNativePoint3, type SpatialAnchor } from './anchor.js';
+import { assertPositiveFinite, emitLocalPlacement, emitRectangleProfile, ownerHistoryRef, productGuid } from './_emit-helpers.js';
+import { assertProfileSectionAuthorable, emitProfileSection, type ProfileSection } from './profile.js';
+
+/** A column's RefDirection: horizontal and unit length (it must be orthogonal to Axis +Z). */
+function columnRefDirection(ref: [number, number, number] | undefined): [number, number, number] {
+  if (ref === undefined) return [1, 0, 0];
+  const [x, y, z] = ref;
+  const length = Math.hypot(x, y);
+  if (![x, y, z].every(Number.isFinite) || Math.abs(z) > 1e-9 || !(length > 1e-12)) {
+    throw new Error('addColumnToStore: RefDirection must be a finite, non-zero horizontal direction');
+  }
+  return [x / length, y / length, 0];
+}
+
+export interface ColumnInStoreParams {
+  /** Base centre of the column, in storey-local coordinates (metres). */
+  Position: [number, number, number];
+  /** Profile width along storey-local X (metres). */
+  Width: number;
+  /** Profile depth along storey-local Y (metres). */
+  Depth: number;
+  /** Extrusion height along +Z (metres). */
+  Height: number;
+  /**
+   * The placement's `RefDirection`: where the section's local X (Width)
+   * points, in storey-local coordinates. Must be horizontal; it is
+   * normalised. Default `[1, 0, 0]`. Written explicitly either way, with
+   * `Axis` `[0, 0, 1]`, so the column can be turned later (`rotateEntity`
+   * edits the RefDirection and refuses a placement without one).
+   */
+  RefDirection?: [number, number, number];
+  /** IfcRoot Name attribute (default `'Column'`). */
+  Name?: string;
+  Description?: string;
+  ObjectType?: string;
+  Tag?: string;
+  /** Explicit GlobalId (22-char IFC GUID); generated when omitted. */
+  GlobalId?: string;
+}
+
+/**
+ * A column with a parameterised cross-section (I, L, T, U, C, circle, hollow;
+ * see `ProfileSection`) in place of the `Width` x `Depth` rectangle, centred
+ * on `Position`; the profile's X runs along `RefDirection`.
+ */
+export interface ProfiledColumnInStoreParams extends Omit<ColumnInStoreParams, 'Width' | 'Depth'> {
+  Profile: ProfileSection;
+}
+
+/**
+ * Result of `addColumnToStore` — the new column's expressId plus a
+ * tap into the dependent entities for callers that want to e.g. apply
+ * a colour or further mutations to the geometry.
+ */
+export interface ColumnBuildResult {
+  columnId: number;
+  placementId: number;
+  profileId: number;
+  solidId: number;
+  shapeRepId: number;
+  productShapeId: number;
+  /** The IfcRelContainedInSpatialStructure linking the column to its storey. */
+  relContainedId: number;
+}
+
+/**
+ * Add an IfcColumn to a parsed model via the StoreEditor overlay. Returns
+ * the freshly-allocated expressIds for every entity that was emitted.
+ *
+ * The caller is responsible for resolving `anchor` from the parsed store
+ * (look up IfcOwnerHistory, the 'Body' representation context, and the
+ * target IfcBuildingStorey + its ObjectPlacement).
+ */
+export function addColumnToStore(
+  editor: StoreEditor,
+  anchor: SpatialAnchor,
+  params: ColumnInStoreParams | ProfiledColumnInStoreParams,
+): ColumnBuildResult {
+  const { ownerHistoryId, bodyContextId, storeyId, storeyPlacementId } = anchor;
+
+  assertFinitePoint3({ Position: params.Position }, 'addColumnToStore');
+  const section = params as { Width?: number; Depth?: number; Profile?: ProfileSection };
+  if (section.Profile !== undefined) {
+    if (section.Width !== undefined || section.Depth !== undefined) {
+      throw new Error('addColumnToStore: give either Width and Depth or a Profile, not both');
+    }
+    assertPositiveFinite([params.Height], 'addColumnToStore: Height must be a finite positive number');
+    assertProfileSectionAuthorable(anchor, section.Profile, 'addColumnToStore');
+  } else {
+    assertPositiveFinite(
+      [section.Width as number, section.Depth as number, params.Height],
+      'addColumnToStore: Width, Depth, and Height must be finite positive numbers',
+    );
+  }
+  const refDirection = columnRefDirection(params.RefDirection);
+
+  // Params are metres; convert dimensioned fields to the file's native
+  // length unit before emit (see SpatialAnchor.lengthUnitScale).
+  const position = toNativePoint3(anchor, params.Position);
+  const height = toNativeLength(anchor, params.Height);
+
+  // Local placement chain: IfcCartesianPoint → IfcAxis2Placement3D (explicit
+  // Axis + RefDirection) → IfcLocalPlacement (parent = storey placement).
+  const placementId = emitLocalPlacement(
+    editor,
+    storeyPlacementId,
+    position,
+    [0, 0, 1],
+    refDirection,
+  );
+
+  // Cross-section centred at the origin: the Width x Depth rectangle
+  // (IfcCartesianPoint(0,0) → IfcAxis2Placement2D → IfcRectangleProfileDef)
+  // or the parameterised profile.
+  const profileId = section.Profile !== undefined
+    ? emitProfileSection(editor, anchor, section.Profile, 'addColumnToStore')
+    : emitRectangleProfile(editor, toNativeLength(anchor, section.Width as number), toNativeLength(anchor, section.Depth as number));
+
+  // Extruded solid: another local origin point, axis placement, +Z direction,
+  // then IfcExtrudedAreaSolid(Profile, Position, ExtrudedDirection, Depth).
+  const solidOriginPt = editor.addEntity('IfcCartesianPoint', [[0, 0, 0]]).expressId;
+  const solidAxis = editor.addEntity('IfcAxis2Placement3D', [`#${solidOriginPt}`, null, null]).expressId;
+  const extrudeDirection = editor.addEntity('IfcDirection', [[0, 0, 1]]).expressId;
+  const solidId = editor.addEntity('IfcExtrudedAreaSolid', [
+    `#${profileId}`,
+    `#${solidAxis}`,
+    `#${extrudeDirection}`,
+    height,
+  ]).expressId;
+
+  // Shape representation in the Body context, then product shape.
+  const shapeRepId = editor.addEntity('IfcShapeRepresentation', [
+    `#${bodyContextId}`,
+    'Body',
+    'SweptSolid',
+    [`#${solidId}`],
+  ]).expressId;
+  const productShapeId = editor.addEntity('IfcProductDefinitionShape', [
+    null,
+    null,
+    [`#${shapeRepId}`],
+  ]).expressId;
+
+  // The column itself. `IfcColumn.PredefinedType` only exists from IFC4
+  // onward — IFC2X3 has no such attribute, so emitting `.COLUMN.` there
+  // would produce an invalid 9-arg entity record.
+  const columnAttrs: Array<unknown> = [
+    productGuid(params, anchor.guidRandom),
+    ownerHistoryRef(ownerHistoryId),
+    params.Name ?? 'Column',
+    params.Description ?? null,
+    params.ObjectType ?? null,
+    `#${placementId}`,
+    `#${productShapeId}`,
+    params.Tag ?? null,
+  ];
+  if ((anchor.schema ?? 'IFC4') !== 'IFC2X3') {
+    columnAttrs.push('.COLUMN.');
+  }
+  const columnId = editor.addEntity('IfcColumn', columnAttrs as Parameters<StoreEditor['addEntity']>[1]).expressId;
+
+  // Link column → storey via a fresh IfcRelContainedInSpatialStructure.
+  // Adding a parallel relationship is simpler than mutating the storey's
+  // existing one and produces an equivalent result on import.
+  const relContainedId = editor.addEntity('IfcRelContainedInSpatialStructure', [
+    generateIfcGuid(anchor.guidRandom),
+    ownerHistoryRef(ownerHistoryId),
+    null,
+    null,
+    [`#${columnId}`],
+    `#${storeyId}`,
+  ]).expressId;
+
+  return {
+    columnId,
+    placementId,
+    profileId,
+    solidId,
+    shapeRepId,
+    productShapeId,
+    relContainedId,
+  };
+}

@@ -1,0 +1,322 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Scan section layer (issue #1805) — wires the pure band-selection math in
+ * `scanSectionMath.ts` to the viewer store, so the Drawing panel can overlay
+ * the loaded point cloud(s) on the 2D section/plan view.
+ *
+ * Point positions live in two different places depending on how the cloud
+ * was ingested (see `scanSectionMath.ts`'s header for the coordinate story):
+ *   - Streamed LAS/LAZ/PLY/PCD/E57 (`pointCloudIngest.ts`): GPU-only: read
+ *     the bounded CPU reservoir sample `pointCloudScanCache.ts` retains,
+ *     keyed by the model's `pointCloudHandleId`.
+ *   - Inline IFCx point clouds: already fully in memory on
+ *     `geometryResult.pointClouds[].chunk` — used directly.
+ *
+ * Recomputing the band selection is a synchronous O(retained points) pass
+ * (see `selectScanBand`) — cheap per call (tens of ms at the multi-million
+ * point retention cap) but debounced here so dragging the section slider
+ * doesn't run it on every pointer-move tick.
+ */
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { GeometryResult, PointCloudAsset } from '@ifc-lite/geometry';
+import type { FederatedModel, SectionPlane } from '@/store/types';
+import { customPlaneCenter, useViewerStore } from '@/store';
+import { getPointCloudScanSample } from './ingest/pointCloudScanCache.js';
+import { getGlobalRenderer } from './useBCF';
+import { displayedTranslation } from '@/lib/model-placement/state';
+import { toRenderTranslation } from '@/lib/model-placement/translation';
+import type { ScanOutlineLayer } from '@/lib/scan-outline/scan-outline';
+import { createScanOutlineTracer, type ScanOutlineTracer } from '@/lib/scan-outline/scan-outline-tracer';
+import {
+  selectScanBand,
+  mergeScanBandSelections,
+  resolveScanSectionPosition,
+  DEFAULT_SCAN_RENDER_CAP,
+  type ScanBandSelection,
+  type ScanPointSample,
+  type ScanSectionPlane,
+} from './scanSectionMath.js';
+
+/** Debounce window for recomputing the band selection on rapid slider drags. */
+const RECOMPUTE_DEBOUNCE_MS = 120;
+
+export const SCAN_SECTION_AXIS_MAP: Record<'down' | 'front' | 'side', 'x' | 'y' | 'z'> = {
+  down: 'y',
+  front: 'z',
+  side: 'x',
+};
+
+export interface UseScanSectionLayerParams {
+  enabled: boolean;
+  sectionPlane: Pick<SectionPlane, 'axis' | 'position' | 'flipped' | 'custom'>;
+  coordinateInfo: GeometryResult['coordinateInfo'] | undefined;
+  /** Full slab thickness in metres. */
+  thickness: number;
+  /** 8-word LAS class-visibility mask; omit to show every class. */
+  classMask?: readonly number[];
+  models: ReadonlyMap<string, FederatedModel>;
+  /** Legacy (no-federation) point clouds — `geometryResult.pointClouds`. */
+  legacyPointClouds: readonly PointCloudAsset[] | undefined;
+  maxRendered?: number;
+  /** Vector outline (#6871): trace the undecimated slab when enabled. */
+  outline?: { enabled: boolean; maxGap: number };
+}
+
+export interface UseScanSectionLayerResult extends ScanBandSelection {
+  /** Traced rings of the slab, `null` while disabled, pending or failed. */
+  outline: ScanOutlineLayer | null;
+  /** The last trace failed (logged); distinct from "still tracing". */
+  outlineFailed: boolean;
+  /**
+   * True when at least one point-cloud source is currently loaded/visible —
+   * independent of `enabled`/`showScanSection`, so the panel can still say
+   * "a scan is loaded, just hidden" instead of "no point cloud loaded".
+   */
+  hasPointCloud: boolean;
+}
+
+const EMPTY_SELECTION: ScanBandSelection = {
+  points: [],
+  totalInBand: 0,
+  renderedCount: 0,
+  stride: 1,
+};
+
+/**
+ * Gather every currently-loaded point cloud, each paired with the GPU
+ * transform it is currently drawn through (#1804) so the 2D overlay can
+ * place raw cached points where the 3D view actually shows them. Inline
+ * assets are already in the viewer frame and receive their model placement.
+ */
+type ScanSource = ScanPointSample & { model?: Float32Array; modelOutputsRenderFrame?: boolean; revision?: number };
+
+function collectScanSources(
+  models: ReadonlyMap<string, FederatedModel>,
+  legacyPointClouds: readonly PointCloudAsset[] | undefined,
+): ScanSource[] {
+  const sources: ScanSource[] = [];
+
+  const pushInlineAsset = (asset: PointCloudAsset, modelId?: string) => {
+    const translation = modelId ? toRenderTranslation(displayedTranslation(useViewerStore.getState().modelPlacement, modelId)) : [0, 0, 0];
+    if (asset.chunk.pointCount > 0 && asset.chunk.positions.length > 0) {
+      sources.push({
+        positions: asset.chunk.positions,
+        colors: asset.chunk.colors,
+        classifications: asset.chunk.classifications,
+        count: asset.chunk.pointCount,
+        model: new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, ...translation, 1]),
+        modelOutputsRenderFrame: true,
+      });
+    }
+  };
+
+  if (models.size > 0) {
+    for (const [modelId, model] of models) {
+      if (!model.visible) continue;
+      if (typeof model.pointCloudHandleId === 'number') {
+        const cached = getPointCloudScanSample(model.pointCloudHandleId);
+        if (cached && cached.count > 0) {
+          sources.push({
+            positions: cached.positions,
+            colors: cached.colors ?? undefined,
+            classifications: cached.classifications ?? undefined,
+            count: cached.count,
+            // The reservoir rewrites these arrays in place; `seen` moves
+            // whenever it does, so the outline worker re-reads the points.
+            revision: cached.seen,
+            ...(() => {
+              const matrix = getGlobalRenderer()?.getPointCloudTransform({ id: model.pointCloudHandleId });
+              // Exact GPU world coordinates, even with alignment disabled.
+              // Subtracting the reference IFC RTC here would shift only 2D.
+              return { model: matrix, modelOutputsRenderFrame: true };
+            })(),
+          });
+        }
+      }
+      for (const asset of model.geometryResult?.pointClouds ?? []) {
+        pushInlineAsset(asset, modelId);
+      }
+    }
+  } else {
+    for (const asset of legacyPointClouds ?? []) {
+      pushInlineAsset(asset);
+    }
+  }
+
+  return sources;
+}
+
+function toScanSectionPlane(
+  sectionPlane: UseScanSectionLayerParams['sectionPlane'],
+  coordinateInfo: UseScanSectionLayerParams['coordinateInfo'],
+): ScanSectionPlane {
+  const axis = SCAN_SECTION_AXIS_MAP[sectionPlane.axis];
+  // The store's `position` is a 0-100 PERCENTAGE of model bounds, not
+  // metres — resolve it exactly the way `useDrawingGeneration` places the
+  // cut, or the band sits on a different plane than the drawn geometry.
+  const position = resolveScanSectionPosition(sectionPlane.position, axis, coordinateInfo);
+  if (!sectionPlane.custom) {
+    return { axis, position, flipped: sectionPlane.flipped };
+  }
+  const c = sectionPlane.custom;
+  const origin = customPlaneCenter(c);
+  return {
+    axis,
+    position,
+    flipped: sectionPlane.flipped,
+    custom: {
+      normal: c.normal,
+      distance: c.distance,
+      origin,
+      tangent: c.tangent,
+      bitangent: c.bitangent,
+    },
+  };
+}
+
+export function useScanSectionLayer(params: UseScanSectionLayerParams): UseScanSectionLayerResult {
+  const {
+    enabled, sectionPlane, coordinateInfo, thickness, classMask,
+    models, legacyPointClouds, maxRendered = DEFAULT_SCAN_RENDER_CAP,
+  } = params;
+  const outlineEnabled = enabled && params.outline?.enabled === true;
+  const outlineMaxGap = params.outline?.maxGap ?? 0;
+
+  const [selection, setSelection] = useState<ScanBandSelection>(EMPTY_SELECTION);
+  const [outline, setOutline] = useState<ScanOutlineLayer | null>(null);
+  const [outlineFailed, setOutlineFailed] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The off-main-thread tracer (latest-wins), alive while the outline is on.
+  const tracerRef = useRef<ScanOutlineTracer | null>(null);
+  // Bumped by every recompute: a trace result is applied only if nothing
+  // changed since it was started (the scan may have been removed meanwhile,
+  // which starts no newer trace to supersede it).
+  const generationRef = useRef(0);
+  // Which matrix each streamed asset is currently drawn through (#1804).
+  // Flipping the toggle must move the 2D overlay with the 3D view, so this
+  // is a real dependency of the recompute below, not a one-shot read.
+  const alignmentEnabled = useViewerStore((st) => st.pointCloudAlignmentEnabled);
+  const placementRevision = useViewerStore((st) => st.modelPlacement.revision);
+
+  // Fold every dependency the computation reads into one key so the
+  // debounce timer restarts exactly when something relevant changed —
+  // including custom-plane drags (position stays constant; normal/distance
+  // don't).
+  const customKey = sectionPlane.custom
+    ? `${sectionPlane.custom.normal.join(',')}|${sectionPlane.custom.distance}|${sectionPlane.custom.tangent.join(',')}|${sectionPlane.custom.bitangent.join(',')}`
+    : '';
+  // Includes the inline point-cloud count so a federated IFCx model whose
+  // `geometryResult.pointClouds` populates AFTER registration (same
+  // id/visible/handleId) still retriggers the recompute below.
+  const modelsKey = Array.from(models.entries())
+    .map(([id, m]) => `${id}:${m.visible ? 1 : 0}:${m.pointCloudHandleId ?? ''}:${m.geometryResult?.pointClouds?.length ?? 0}`)
+    .join('|');
+
+  // Cheap presence check (map lookups, no O(n) point scan) — independent of
+  // `enabled` so the UI can report "a scan is loaded, just hidden".
+  const hasPointCloud = useMemo(
+    () => collectScanSources(models, legacyPointClouds).length > 0,
+    // Keyed on `modelsKey` (a stable string), not `models` identity, since
+    // the Map reference can change without any visible-content change.
+    [modelsKey, legacyPointClouds, alignmentEnabled],
+  );
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    const generation = ++generationRef.current;
+
+    if (!enabled) {
+      setSelection(EMPTY_SELECTION);
+      setOutline(null);
+      return;
+    }
+    if (!outlineEnabled) {
+      setOutline(null);
+      setOutlineFailed(false);
+    }
+
+    timerRef.current = setTimeout(() => {
+      const sources = collectScanSources(models, legacyPointClouds);
+      if (sources.length === 0) {
+        setSelection(EMPTY_SELECTION);
+        setOutline(null);
+        return;
+      }
+      const plane = toScanSectionPlane(sectionPlane, coordinateInfo);
+      const selections = sources.map((sample) => selectScanBand({
+        sample, coordinateInfo, plane, thickness, classMask, maxRendered,
+        model: sample.model,
+        modelOutputsRenderFrame: sample.modelOutputsRenderFrame,
+      }));
+      // Re-apply the render cap to the MERGED result: each asset caps its
+      // own selection, but several dense scans would otherwise concatenate
+      // to sources × maxRendered points per canvas redraw.
+      const merged = mergeScanBandSelections(selections, maxRendered);
+      if (!outlineEnabled) {
+        setSelection(merged);
+        return;
+      }
+      // Band collection and the trace both run in the worker (#6871 review):
+      // at a few million retained points they cost ~0.3 s per change. The
+      // dots are committed with the rings, so the canvas (whose redraw of a
+      // dense band is itself ~0.2 s) repaints once per change, not twice.
+      tracerRef.current ??= createScanOutlineTracer();
+      void tracerRef.current
+        .trace({ sources, coordinateInfo, plane, thickness, classMask, maxGap: outlineMaxGap })
+        .then((result) => {
+          if (result.status === 'superseded' || generation !== generationRef.current) return;
+          if (result.status === 'failed') console.error('[scan outline] trace failed:', result.message);
+          setSelection(merged);
+          setOutline(result.status === 'done' ? result.layer : null);
+          setOutlineFailed(result.status === 'failed');
+        });
+    }, RECOMPUTE_DEBOUNCE_MS);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [
+    enabled,
+    sectionPlane.axis,
+    sectionPlane.position,
+    sectionPlane.flipped,
+    customKey,
+    coordinateInfo,
+    thickness,
+    classMask,
+    modelsKey,
+    legacyPointClouds,
+    maxRendered,
+    alignmentEnabled,
+    placementRevision,
+    outlineEnabled,
+    outlineMaxGap,
+  ]);
+
+  // The worker lives only while the outline is on (it holds a copy of the
+  // scan and its own wasm memory), and dies with the panel.
+  useEffect(() => {
+    if (outlineEnabled) return undefined;
+    tracerRef.current?.dispose();
+    tracerRef.current = null;
+    return undefined;
+  }, [outlineEnabled]);
+  useEffect(() => () => {
+    tracerRef.current?.dispose();
+    tracerRef.current = null;
+  }, []);
+
+  // Stable result identity: consumers put this object in dependency arrays
+  // (`useDrawingExport`'s SVG memos), so a fresh spread per render would
+  // re-create those callbacks on every unrelated parent render.
+  return useMemo(
+    () => ({ ...selection, hasPointCloud, outline, outlineFailed }),
+    [selection, hasPointCloud, outline, outlineFailed],
+  );
+}
+
+export default useScanSectionLayer;

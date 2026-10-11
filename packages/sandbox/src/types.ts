@@ -1,0 +1,120 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Types for @ifc-lite/sandbox
+ */
+
+import type { Capability } from '@ifc-lite/extensions';
+import type { FetchTransport } from './network-request.js';
+
+/** Permission configuration — controls which SDK APIs are accessible */
+export interface SandboxPermissions {
+  /** Allow bim.model.* (model loading/management) */
+  model?: boolean;
+  /** Allow bim.query.* (entity queries) */
+  query?: boolean;
+  /** Allow bim.viewer.* (renderer control, colors, visibility) */
+  viewer?: boolean;
+  /** Allow bim.mutate.* (property editing) */
+  mutate?: boolean;
+  /** Allow bim.store.* (document-level edits — addEntity / removeEntity / positional attrs) */
+  store?: boolean;
+  /** Allow bim.lens.* (lens definitions) */
+  lens?: boolean;
+  /** Allow bim.export.* (data export) */
+  export?: boolean;
+  /** Allow bim.files.* (uploaded file access) */
+  files?: boolean;
+  /**
+   * Allow bim.network.* (outbound fetch). Off by default — a script gets
+   * this only when the running graph holds at least one `network.fetch:*`
+   * grant; the per-call host allow-list check still runs against the real
+   * grant list regardless of this flag (see `network-request.ts`).
+   */
+  network?: boolean;
+}
+
+/** Resource limits for sandbox execution */
+export interface SandboxLimits {
+  /** Maximum heap memory in bytes (default: 64MB) */
+  memoryBytes?: number;
+  /** Maximum execution time in milliseconds (default: 30000) */
+  timeoutMs?: number;
+  /** Maximum stack size in bytes (default: 512KB) */
+  maxStackBytes?: number;
+}
+
+/** Configuration for creating a sandbox */
+export interface SandboxConfig {
+  /** Permission configuration */
+  permissions?: SandboxPermissions;
+  /** Resource limits */
+  limits?: SandboxLimits;
+  /**
+   * `network.fetch:<host>` grants the running graph holds. Consulted by
+   * `bim.network.fetch` on every call (not just once at sandbox creation)
+   * so the allow-list is always the real, current grant set — the
+   * `network` permission flag above only gates whether the namespace
+   * exists at all. `transport` replaces `fetch` for those requests (a host's
+   * own transport, or a test's); it changes how bytes move, never whether a
+   * request is allowed.
+   */
+  network?: { grants: readonly Capability[]; transport?: FetchTransport };
+}
+
+/** Result of script execution */
+export interface ScriptResult {
+  /** Return value (JSON-serializable) */
+  value: unknown;
+  /** Console output captured during execution */
+  logs: LogEntry[];
+  /** Execution time in milliseconds */
+  durationMs: number;
+}
+
+/**
+ * The console methods the sandbox installs on its `console` global.
+ *
+ * Single source for three things that have to agree: the functions
+ * `buildConsole` actually installs, the `level` a captured `LogEntry` can
+ * carry, and the ambient `console` declaration that
+ * `scripts/generate-bim-globals.mjs` emits into `bim-globals.d.ts`.
+ *
+ * The sandbox global scope has exactly two members — `bim` and this `console`
+ * — so the ambient declaration must be derived from this list rather than
+ * borrowed from TypeScript's `DOM` lib: that would compile a template calling
+ * `console.table`, `document` or `fetch`, none of which exist in QuickJS.
+ */
+export const SANDBOX_CONSOLE_LEVELS = ['log', 'warn', 'error', 'info'] as const;
+
+/** A method name on the sandbox `console`. */
+export type SandboxConsoleLevel = (typeof SANDBOX_CONSOLE_LEVELS)[number];
+
+/** A captured console log entry */
+export interface LogEntry {
+  level: SandboxConsoleLevel;
+  args: unknown[];
+  timestamp: number;
+}
+
+/** Default permissions — read-only access */
+export const DEFAULT_PERMISSIONS: Required<SandboxPermissions> = {
+  model: true,
+  query: true,
+  viewer: true,
+  mutate: false,    // Read-only by default
+  store: false,     // Read-only by default — gates document-level edits
+  lens: true,
+  export: true,
+  files: true,
+  network: false,   // Off by default — the caller must derive this from real grants
+};
+
+/** Default resource limits */
+export const DEFAULT_LIMITS: Required<SandboxLimits> = {
+  memoryBytes: 64 * 1024 * 1024,     // 64 MB
+  timeoutMs: 30_000,                   // 30 seconds
+  maxStackBytes: 512 * 1024,           // 512 KB
+};

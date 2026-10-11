@@ -1,0 +1,337 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Fast Direct Parsing Module
+//!
+//! Provides zero-allocation parsing for coordinate lists and index arrays.
+//! This bypasses the Token/AttributeValue pipeline for massive speedups
+//! on tessellation-heavy IFC files.
+//!
+//! Performance: 3-5x faster than standard path for IfcTriangulatedFaceSet
+
+#[path = "fast_parse_comments.rs"]
+mod comments;
+
+#[path = "fast_parse_coordinates.rs"]
+mod coordinates;
+
+pub use coordinates::{parse_coordinates_direct, parse_coordinates_direct_f64};
+
+/// Estimate number of floats in coordinate data
+///
+/// Shared with the split-out `coordinates` module.
+#[inline]
+fn estimate_float_count(bytes: &[u8]) -> usize {
+    // Rough estimate: ~8 bytes per float on average (including delimiters)
+    bytes.len() / 8
+}
+
+/// Estimate number of integers in index data
+#[inline]
+fn estimate_int_count(bytes: &[u8]) -> usize {
+    // Rough estimate: ~4 bytes per integer on average
+    bytes.len() / 4
+}
+
+/// Parse index list directly from raw bytes to `Vec<u32>`
+///
+/// This parses IFC face index data like:
+/// `((1,2,3),(2,1,4),...)`
+///
+/// Automatically converts from 1-based IFC indices to 0-based.
+///
+/// # Performance
+/// - Zero intermediate allocations
+/// - Uses inline integer parsing
+#[inline]
+pub fn parse_indices_direct(bytes: &[u8]) -> Vec<u32> {
+    if comments::may_contain_step_comment(bytes) {
+        return comments::parse_indices(bytes);
+    }
+    let mut result = Vec::with_capacity(estimate_int_count(bytes));
+    let mut pos = 0;
+    let len = bytes.len();
+    while pos < len {
+        while pos < len && !bytes[pos].is_ascii_digit() {
+            pos += 1;
+        }
+        if pos >= len {
+            break;
+        }
+        parse_index_value(bytes, &mut pos, &mut result);
+    }
+    result
+}
+
+/// Parse the digit run at `pos`; shared by the comment-free and aware scans.
+#[inline(always)]
+fn parse_index_value(bytes: &[u8], pos: &mut usize, result: &mut Vec<u32>) {
+    // Use checked arithmetic so a pathologically large index saturates to an
+    // obviously out-of-range value instead of wrapping to a valid-looking one.
+    let mut value: u32 = 0;
+    let mut overflowed = false;
+    while *pos < bytes.len() && bytes[*pos].is_ascii_digit() {
+        if !overflowed {
+            match value
+                .checked_mul(10)
+                .and_then(|v| v.checked_add((bytes[*pos] - b'0') as u32))
+            {
+                Some(v) => value = v,
+                None => overflowed = true,
+            }
+        }
+        *pos += 1;
+    }
+    if overflowed {
+        value = u32::MAX;
+    }
+    result.push(value.saturating_sub(1));
+}
+
+/// Parse a whole point-list record's `CoordList` (attribute 0), found by depth, not by the
+/// last `))`: an IFC4X3 `TagList` after it ends in `))` and its digits became phantom
+/// vertices (core review behind #4577, finding 6). `None` when attribute 0 is not a list
+/// or the list is refused as corrupt (#5266).
+#[inline]
+pub fn extract_coordinate_list_from_entity(bytes: &[u8]) -> Option<Vec<f32>> {
+    coordinates::try_parse_coordinates_direct(coordinate_list_span(bytes)?)
+}
+
+/// [`extract_coordinate_list_from_entity`] at f64 precision. A caller that
+/// rebases national-grid coordinates must subtract its offset from these
+/// values: narrowing first can merge vertices that differ by less than one
+/// f32 ULP (0.25 m at 2,600 km) before the offset is removed (#5698).
+#[inline]
+pub fn extract_coordinate_list_from_entity_f64(bytes: &[u8]) -> Option<Vec<f64>> {
+    coordinates::try_parse_coordinates_direct_f64(coordinate_list_span(bytes)?)
+}
+
+/// The bytes of attribute 0's balanced list, including its outer parentheses.
+fn coordinate_list_span(bytes: &[u8]) -> Option<&[u8]> {
+    let head = crate::parser::argument_list_start(bytes)?;
+    let open = crate::parser::skip_step_trivia(bytes, head)?;
+    if bytes.get(open) != Some(&b'(') {
+        return None;
+    }
+    let (mut i, mut depth) = (open + 1, 1usize);
+    loop {
+        i += memchr::memchr3(b'(', b')', b'/', &bytes[i..])?;
+        match bytes[i] {
+            b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                i = crate::parser::skip_step_comment(bytes, i)?;
+                continue;
+            }
+            b'(' => depth += 1,
+            b')' if depth == 1 => return Some(&bytes[open..=i]),
+            b')' => depth -= 1,
+            _ => {}
+        }
+        i += 1;
+    }
+}
+
+/// Parse face indices from IfcTriangulatedFaceSet entity
+///
+/// Finds the CoordIndex attribute (4th attribute, 0-indexed as 3)
+/// in an entity like:
+/// `#77=IFCTRIANGULATEDFACESET(#78,$,$,((1,2,3),(2,1,4),...),$);`
+#[inline]
+pub fn extract_face_indices_from_entity(bytes: &[u8]) -> Option<Vec<u32>> {
+    // Count commas to find the 4th attribute (CoordIndex)
+    // Format: IFCTRIANGULATEDFACESET(Coordinates,Normals,Closed,CoordIndex,PnIndex)
+    let mut paren_depth = 0;
+    let mut comma_count = 0;
+    let mut attr_start = None;
+    let mut attr_end = None;
+
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'(' => {
+                if paren_depth == 1 && comma_count == 3 && attr_start.is_none() {
+                    attr_start = Some(i);
+                }
+                paren_depth += 1;
+            }
+            b')' => {
+                paren_depth -= 1;
+                if paren_depth == 1
+                    && comma_count == 3
+                    && attr_start.is_some()
+                    && attr_end.is_none()
+                {
+                    attr_end = Some(i + 1);
+                }
+            }
+            b',' if paren_depth == 1 => {
+                if comma_count == 3 && attr_end.is_none() && attr_start.is_some() {
+                    attr_end = Some(i);
+                }
+                comma_count += 1;
+            }
+            _ => {}
+        }
+    }
+
+    let start = attr_start?;
+    let end = attr_end?;
+
+    if end <= start {
+        return None;
+    }
+
+    Some(parse_indices_direct(&bytes[start..end]))
+}
+
+/// Fast path checker - determines if entity type benefits from direct parsing
+#[inline]
+pub fn should_use_fast_path(type_name: &str) -> bool {
+    matches!(
+        type_name.to_uppercase().as_str(),
+        "IFCCARTESIANPOINTLIST3D"
+            | "IFCTRIANGULATEDFACESET"
+            | "IFCTRIANGULATEDIRREGULARNETWORK"
+            | "IFCPOLYGONALFACESET"
+            | "IFCINDEXEDPOLYGONALFACE"
+    )
+}
+
+/// Extract entity type name from raw bytes
+///
+/// From `#77=IFCTRIANGULATEDFACESET(...)` extracts `IFCTRIANGULATEDFACESET`
+///
+/// TRIMMED, because STEP permits whitespace around `=` and real exporters use
+/// it: buildingSMART's own `column-straight-rectangle-tessellation.ifc` writes
+/// `#71= IFCCOLUMN(` on all 26 of its entity lines. Until #3179 this returned
+/// `" IFCCOLUMN"` with the leading space for those files, which no lookup
+/// keyed on a type name can match — the function's own doc comment above
+/// promised otherwise. It had no production caller at the time, so nothing
+/// noticed; `legacy_aware_ifc_type_from_record` is the first, and it silently
+/// resolved every entity in such a file to `Unknown` until this was fixed.
+#[inline]
+pub fn extract_entity_type_name(bytes: &[u8]) -> Option<&str> {
+    // Find '=' position
+    let eq_pos = bytes.iter().position(|&b| b == b'=')?;
+    // Find '(' position after '='
+    let paren_pos = bytes[eq_pos..].iter().position(|&b| b == b'(')?;
+    let type_start = eq_pos + 1;
+    let type_end = eq_pos + paren_pos;
+
+    // No `type_end <= type_start` guard: `bytes[eq_pos]` is `=`, never `(`, so
+    // `paren_pos >= 1` and `type_end >= type_start` always. The one reachable
+    // equality is `#1=(`, which yields an empty slice that the `is_empty` below
+    // rejects. `an_unreadable_record_changes_nothing` covers that input.
+    let name = std::str::from_utf8(&bytes[type_start..type_end]).ok()?.trim();
+    (!name.is_empty()).then_some(name)
+}
+
+/// Extract the first entity reference from an entity's first attribute
+///
+/// From `#77=IFCTRIANGULATEDFACESET(#78,...)` extracts `78`
+#[inline]
+pub fn extract_first_entity_ref(bytes: &[u8]) -> Option<u32> {
+    // Find opening paren
+    let paren_pos = bytes.iter().position(|&b| b == b'(')?;
+    let content = &bytes[paren_pos + 1..];
+
+    // Find '#' which marks entity reference
+    let hash_pos = content.iter().position(|&b| b == b'#')?;
+    let id_start = hash_pos + 1;
+
+    // Find the end of the digit run, then parse it through the single
+    // checked accumulator shared with every other reference reader and the
+    // definition scanner (issue #3421) — an id above `u32::MAX` is refused
+    // (`None`) rather than wrapped onto a real low-numbered entity.
+    let mut i = id_start;
+    while i < content.len() && content[i].is_ascii_digit() {
+        i += 1;
+    }
+
+    if i > id_start {
+        crate::express_id::parse_express_id(&content[id_start..i])
+    } else {
+        None
+    }
+}
+
+/// Mesh data for fast path processing (avoiding full Mesh struct dependency)
+#[derive(Debug, Clone)]
+pub struct FastMeshData {
+    pub positions: Vec<f32>,
+    pub indices: Vec<u32>,
+}
+
+/// Process IfcTriangulatedFaceSet directly from raw bytes
+///
+/// This completely bypasses the Token/AttributeValue pipeline for
+/// maximum performance on tessellation geometry.
+///
+/// # Arguments
+/// * `faceset_bytes` - Raw bytes of the IfcTriangulatedFaceSet entity
+/// * `get_entity_bytes` - Function to retrieve raw bytes for a given entity ID
+///
+/// # Returns
+/// FastMeshData with positions and indices, or None if parsing fails
+#[inline]
+pub fn process_triangulated_faceset_direct<F>(
+    faceset_bytes: &[u8],
+    get_entity_bytes: F,
+) -> Option<FastMeshData>
+where
+    F: Fn(u32) -> Option<Vec<u8>>,
+{
+    // Extract coordinate entity reference from first attribute
+    let coord_entity_id = extract_first_entity_ref(faceset_bytes)?;
+
+    // Get raw bytes of coordinate list entity
+    let coord_bytes = get_entity_bytes(coord_entity_id)?;
+
+    let positions = extract_coordinate_list_from_entity(&coord_bytes)?;
+
+    // Extract and parse indices from attribute 3 (CoordIndex)
+    let indices = extract_face_indices_from_entity(faceset_bytes)?;
+
+    Some(FastMeshData { positions, indices })
+}
+
+/// Extract entity IDs from a list attribute without full parsing
+///
+/// From `(#1,#2,#3)` extracts `[1, 2, 3]`
+#[inline]
+pub fn extract_entity_refs_from_list(bytes: &[u8]) -> Vec<u32> {
+    let mut ids = Vec::with_capacity(16);
+    let mut i = 0;
+    let len = bytes.len();
+
+    while i < len {
+        // Find next '#'
+        while i < len && bytes[i] != b'#' {
+            i += 1;
+        }
+        if i >= len {
+            break;
+        }
+        i += 1; // Skip '#'
+
+        // Parse ID through the shared checked accumulator (issue #3421): an
+        // id above `u32::MAX` is refused (`None`, dropped from `ids`) rather
+        // than wrapped onto a real low-numbered entity.
+        let id_start = i;
+        while i < len && bytes[i].is_ascii_digit() {
+            i += 1;
+        }
+        if i > id_start {
+            if let Some(id) = crate::express_id::parse_express_id(&bytes[id_start..i]) {
+                if id > 0 {
+                    ids.push(id);
+                }
+            }
+        }
+    }
+
+    ids
+}
+
+#[cfg(test)]
+#[path = "fast_parse_tests.rs"]
+mod tests;

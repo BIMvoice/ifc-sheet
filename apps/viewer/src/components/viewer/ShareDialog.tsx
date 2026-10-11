@@ -1,0 +1,399 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Share dialog (M1 scaffolding, plan §2.1).
+ *
+ * Accountless, link-based sharing: pick an access level, mint a room token,
+ * copy the link. The role is baked into the token and enforced on the
+ * collab-server (plan §3). "Live now" reflects `session.presence`.
+ *
+ * Two independent effects (#4446): one creates the room (mints the admin
+ * token, starts the seeding join), the other mints the invite — and only once
+ * `collabSeedPhase` says the seed has settled. `startCollab` sets
+ * `collabRoomId` synchronously, long before the model is in the room, and a
+ * single effect keyed on it used to re-run for the new room and hand out a
+ * link to an empty one; whoever opened it reconstructed nothing.
+ *
+ * Consent (#5599): creating the room uploads the model, so it waits for an
+ * explicit "Create link" at every model count; links default to view-only.
+ * Scope (#4444): with several models loaded that step also asks what the
+ * room carries — the active model only, or every loaded model, each in its
+ * own room slot — since a room's scope is fixed by its seed. It defaults to
+ * every loaded model: the workspace on screen IS the federation, and a room
+ * that silently dropped all but one file was the defect. Re-opening the
+ * dialog on a live room shows what was shared.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Check, Copy, Link2, Users } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useViewerStore } from '@/store';
+import { toast } from '@/components/ui/toast';
+import { useTranslation, type TranslationKey } from '@/i18n';
+import type { CollabRole } from '@/store/slices/collabSlice';
+import { buildShareUrl, mintRoomId, mintRoomToken, parseRoleFromToken, releaseRoomClaim } from '@/lib/collab/share-link';
+import { describeSeedPhase, isCollabSeedInFlight } from '@/lib/collab/seed-phase';
+import { buildShareSeed, modelsInShareScope, prepareShareSeed, shareScopeIsChoice, type ShareScope } from '@/lib/collab/share-scope';
+import { ShareScopeField } from './ShareScopeField';
+
+interface ShareDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+const ROLE_OPTIONS: ReadonlyArray<{ role: CollabRole; labelKey: TranslationKey; hintKey: TranslationKey }> = [
+  { role: 'viewer', labelKey: 'shareDialog.role.viewer.label', hintKey: 'shareDialog.role.viewer.hint' },
+  { role: 'commenter', labelKey: 'shareDialog.role.commenter.label', hintKey: 'shareDialog.role.commenter.hint' },
+  { role: 'editor', labelKey: 'shareDialog.role.editor.label', hintKey: 'shareDialog.role.editor.hint' },
+];
+
+export function ShareDialog({ open, onOpenChange }: ShareDialogProps) {
+  const { t } = useTranslation();
+  const models = useViewerStore((s) => s.models);
+  const activeModelId = useViewerStore((s) => s.activeModelId);
+  const collabRoomId = useViewerStore((s) => s.collabRoomId);
+  const collabRoomModels = useViewerStore((s) => s.collabRoomModels);
+  const collabRole = useViewerStore((s) => s.collabRole);
+  const collabPeers = useViewerStore((s) => s.collabPeers);
+  const collabIdentity = useViewerStore((s) => s.collabIdentity);
+  const startCollab = useViewerStore((s) => s.startCollab);
+  // Set when the room did not get the model's geometry. A link to a room the
+  // viewer KNOWS is missing its geometry must not be presented as a plain
+  // success: the recipient would open it and see an empty scene.
+  const seedFailure = useViewerStore((s) => s.collabSeedFailure);
+  const seedPhase = useViewerStore((s) => s.collabSeedPhase);
+  const seedProgress = useViewerStore((s) => s.collabSeedProgress);
+
+  const [role, setRole] = useState<CollabRole>('viewer');
+  const [scope, setScope] = useState<ShareScope>('all');
+  // The room is created only on an explicit "Create link": creating it
+  // uploads the model (#5599), and its scope is fixed by the seed (#4444).
+  const [scopeConfirmed, setScopeConfirmed] = useState(false);
+  const [link, setLink] = useState<string>('');
+  // Room creation in flight (no room yet) / invite mint in flight.
+  const [creating, setCreating] = useState(false);
+  const [minting, setMinting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // One room-creation attempt per opening. A join whose session never comes up
+  // resets `collabRoomId` to null, which would otherwise re-trigger creation
+  // in a loop; the notice tells the user, and re-opening the dialog retries.
+  const roomAttemptRef = useRef<Promise<void> | null>(null);
+
+  /**
+   * Non-admins cannot mint role-scoped tokens (no escalation by design),
+   * and even an admin's mint can fail after a reload loses the bearer.
+   * Fall back to a link we already hold: the last one this tab minted,
+   * else the invite THIS tab joined with (its token rides the page URL) —
+   * forwarding it grants exactly the access we received, never more.
+   */
+  const fallbackShareLink = useCallback((roomId: string): { url: string; role: CollabRole | null } | null => {
+    const last = useViewerStore.getState().collabLastShareToken;
+    if (last) return { url: buildShareUrl(roomId, last), role: parseRoleFromToken(last) };
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlToken = params.get('t');
+      if (urlToken && params.get('room') === roomId) {
+        return { url: buildShareUrl(roomId, urlToken), role: parseRoleFromToken(urlToken) };
+      }
+    }
+    return null;
+  }, []);
+
+  const modelName = useMemo(() => {
+    if (activeModelId) {
+      const m = models.get(activeModelId);
+      if (m?.name) return m.name;
+    }
+    const first = models.values().next().value;
+    return first?.name ?? 'this model';
+  }, [models, activeModelId]);
+
+  const hasModel = models.size > 0;
+  // What "all loaded models" can put in a room: a GLB, a point cloud or a
+  // model still loading has no parsed store and is left out of the seed.
+  const seedableCount = useMemo(() => modelsInShareScope(models, activeModelId, 'all')
+    .filter((model) => model.ifcDataStore).length, [models, activeModelId]);
+  const isJoiner = Boolean(collabRoomId && collabRole && collabRole !== 'admin');
+  // The room exists but the model is still going in: no invite until it has.
+  const seedInFlight = Boolean(collabRoomId) && isCollabSeedInFlight(seedPhase);
+  // A joiner's loaded models ARE the room's; the scope question is the owner's.
+  const scopeIsChoice = shareScopeIsChoice(models) && !isJoiner;
+  // The room is not created until the owner has consented to the upload.
+  const awaitingConsent = !isJoiner && !collabRoomId && !scopeConfirmed;
+  // Once the room exists its contents are what the seed put there: show that
+  // count, not the radio's current value.
+  const sharedModelCount = collabRoomId ? collabRoomModels.size : scope === 'all' ? seedableCount : 1;
+  const title = scopeIsChoice && sharedModelCount > 1 ? t('shareDialog.titleMulti', { count: sharedModelCount }) : t('shareDialog.titleSingle', { model: modelName });
+
+  // 1. Ensure a room: the creator mints an admin token (first-touch) and joins
+  // with it, seeding the model, so it's authorized to mint role-scoped share
+  // links thereafter. Deliberately NOT re-run by `collabRoomId` flipping to
+  // the new room — the attempt ref carries this promise across re-renders.
+  useEffect(() => {
+    if (!open) {
+      roomAttemptRef.current = null;
+      setScopeConfirmed(false);
+      return;
+    }
+    if (!hasModel || collabRoomId || roomAttemptRef.current || awaitingConsent) return;
+    const roomId = mintRoomId();
+    setCreating(true);
+    setLink('');
+    setCopied(false);
+    setNotice(null);
+    roomAttemptRef.current = (async () => {
+      let adminToken: string | undefined;
+      try {
+        // Reject known-invalid metadata before claiming a room (#6565).
+        const preflight = useViewerStore.getState();
+        buildShareSeed(preflight.models, preflight.activeModelId, scope, preflight.georefMutations);
+        adminToken = await mintRoomToken({ roomId, role: 'admin' });
+        // Models can change during minting. Read fresh and always pass a seed,
+        // even empty, so startCollab retains the owner path (#4444).
+        const st = useViewerStore.getState();
+        const seed = await prepareShareSeed(st.models, st.mutationViews, st.activeModelId, scope, st.georefMutations);
+        await startCollab({
+          roomId,
+          role: 'admin',
+          token: adminToken,
+          seed,
+        });
+        // `startCollab` resolves without a live room when the session never
+        // came up (it logs why) or the user left mid-join (RoomPanel's Leave).
+        // Neither is a connection failure this dialog can tell apart, and the
+        // attempt ref blocks a retry until it is re-opened — so say exactly
+        // that instead of sitting on "Creating room…" forever.
+        if (useViewerStore.getState().collabRoomId !== roomId) {
+          setNotice(t('shareDialog.roomCreationFailed'));
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[collab] room creation failed:', err);
+        setNotice(t('shareDialog.linkCreationFailed'));
+      } finally {
+        // No live room after the mint: hand the claim back (#6581). The server keeps any room someone joined.
+        if (adminToken && useViewerStore.getState().collabRoomId !== roomId) void releaseRoomClaim(roomId, adminToken);
+        setCreating(false);
+      }
+    })();
+  }, [open, hasModel, collabRoomId, startCollab, awaitingConsent, scope]);
+
+  // 2. Mint the invite — re-minted when the dialog opens or the role changes,
+  // and only once the seed has settled (`seedInFlight` false). Until then the
+  // progress row below stands in for the link.
+  useEffect(() => {
+    if (!open || !hasModel || !collabRoomId) return;
+    setCopied(false);
+    // A joined non-admin can't mint: don't fire a doomed request, reuse the
+    // invite we hold and say so.
+    if (isJoiner) {
+      const fallback = fallbackShareLink(collabRoomId);
+      if (fallback) {
+        setLink(fallback.url);
+        if (fallback.role) setRole(fallback.role);
+        setNotice(t('shareDialog.joinedViaInvite'));
+      } else {
+        setLink('');
+        setNotice(t('shareDialog.onlyAdminCanCreate'));
+      }
+      return;
+    }
+    if (seedInFlight) return;
+    let cancelled = false;
+    setMinting(true);
+    setNotice(null);
+    (async () => {
+      const roomId = collabRoomId;
+      try {
+        // Server requires the owner's admin bearer once the room exists;
+        // ignored in local-only mode.
+        const adminBearer = useViewerStore.getState().collabSelfToken ?? undefined;
+        const token = await mintRoomToken({ roomId, role, bearer: adminBearer });
+        if (!cancelled) {
+          setLink(buildShareUrl(roomId, token));
+          useViewerStore.getState().setCollabLastShareToken(token);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[collab] share-link minting failed:', err);
+        // Never leave an empty Link box: reuse a link we already hold.
+        const fallback = fallbackShareLink(roomId);
+        if (!cancelled) {
+          if (fallback) {
+            setLink(fallback.url);
+            setNotice(t('shareDialog.mintFailedReusing'));
+          } else {
+            setLink('');
+            setNotice(t('shareDialog.linkCreationFailed'));
+          }
+        }
+      } finally {
+        if (!cancelled) setMinting(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, hasModel, collabRoomId, isJoiner, seedInFlight, role, fallbackShareLink]);
+
+  useEffect(() => {
+    if (open && seedFailure) toast.error(seedFailure);
+  }, [open, seedFailure]);
+
+  const handleCopy = useCallback(async () => {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error(t('shareDialog.copyFailed')); // the input stays selectable as a fallback (#5600)
+    }
+  }, [link, t]);
+
+  const waiting = awaitingConsent || (creating && !collabRoomId) || seedInFlight || minting;
+  const seedLabel = describeSeedPhase(seedPhase, seedProgress);
+  const linkFieldText = awaitingConsent
+    ? t(scopeIsChoice ? 'shareDialog.linkField.awaitingScope' : 'shareDialog.linkField.awaitingConsent')
+    : seedInFlight
+      ? t('shareDialog.linkField.seedInFlight')
+      : creating && !collabRoomId
+        ? t('shareDialog.linkField.creatingRoom')
+        : t('shareDialog.linkField.generating');
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Link2 className="size-4" />
+            {title}
+          </DialogTitle>
+          <DialogDescription>
+            {t('shareDialog.description')}
+          </DialogDescription>
+        </DialogHeader>
+
+        {!hasModel ? (
+          <p className="text-sm text-muted-foreground">
+            {t('shareDialog.loadModelFirst')}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {(scopeIsChoice || awaitingConsent) && (
+              <ShareScopeField
+                showScope={scopeIsChoice}
+                scope={scope}
+                onScopeChange={setScope}
+                editable={awaitingConsent}
+                onConfirm={() => setScopeConfirmed(true)}
+                loadedCount={models.size}
+                seedableCount={seedableCount}
+                activeModelName={modelName}
+                roomModelCount={collabRoomId ? sharedModelCount : null}
+              />
+            )}
+            <div className="flex flex-col gap-2">
+              <Label>{t('shareDialog.anyoneCanLabel')}</Label>
+              <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t('shareDialog.accessLevelAriaLabel')}>
+                {ROLE_OPTIONS.map((opt) => (
+                  <Button
+                    key={opt.role}
+                    type="button"
+                    // Button renders the custom access choice with its checked radio semantics.
+                    // eslint-disable-next-line jsx-a11y/prefer-tag-over-role
+                    role="radio"
+                    aria-checked={role === opt.role}
+                    variant={role === opt.role ? 'default' : 'outline'}
+                    size="sm"
+                    // Only the room admin mints role-scoped links; a joiner
+                    // forwards the invite they hold, so the role is fixed.
+                    disabled={isJoiner}
+                    onClick={() => setRole(opt.role)}
+                  >
+                    {t(opt.labelKey)}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">{t(ROLE_OPTIONS.find((o) => o.role === role)?.hintKey ?? 'shareDialog.role.viewer.hint')}</p>
+            </div>
+
+            <div className="flex items-end gap-2">
+              <div className="flex flex-1 flex-col gap-1">
+                <Label htmlFor="share-link">{t('shareDialog.linkLabel')}</Label>
+                <Input
+                  id="share-link"
+                  readOnly
+                  value={waiting ? linkFieldText : link}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              </div>
+              <Button type="button" onClick={handleCopy} disabled={waiting || !link} className="gap-1.5">
+                {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                {copied ? t('shareDialog.copied') : t('shareDialog.copy')}
+              </Button>
+            </div>
+            {seedInFlight && seedLabel && (
+              <output className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Spinner size="sm" className="shrink-0" />
+                <span>{seedLabel}</span>
+              </output>
+            )}
+            {notice && <p className="text-xs text-muted-foreground">{notice}</p>}
+            {seedFailure && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              >
+                <AlertTriangle className="mt-px size-3.5 shrink-0" />
+                <span>{seedFailure}</span>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="flex items-center gap-1.5">
+                <Users className="size-3.5" /> {t('shareDialog.liveNow')}
+              </Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <PeerChip color={collabIdentity.color} name={t('shareDialog.youSuffix', { name: collabIdentity.name })} />
+                {collabPeers
+                  // A peer's awareness state can arrive before its `user` is
+                  // populated (the identity patch flushes async). Skip those
+                  // half-initialized entries so a transient peer can't crash
+                  // the dialog with `peer.user.color` of undefined.
+                  .filter((peer) => peer?.user)
+                  .map((peer) => (
+                    <PeerChip
+                      key={peer.user.id}
+                      color={peer.user.color ?? '#888'}
+                      name={peer.user.name ?? t('shareDialog.guestName')}
+                    />
+                  ))}
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              {t('shareDialog.linkExpiryNotice', { role: t(ROLE_OPTIONS.find((o) => o.role === role)?.labelKey ?? 'shareDialog.role.viewer.label') })}
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PeerChip({ color, name }: { color: string; name: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs">
+      <span className="size-2 rounded-full" style={{ backgroundColor: color }} />
+      {name}
+    </span>
+  );
+}

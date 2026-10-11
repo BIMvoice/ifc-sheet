@@ -1,0 +1,370 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Mutation tools (spec §7.5).
+ *
+ * All mutations route through the headless backend's `MutablePropertyView`
+ * which already maintains an undo journal and overlays. We wire that
+ * up to a thin tool surface:
+ *
+ *   - entity_set_property / entity_delete_property — Pset edits
+ *   - entity_set_attribute                         — direct IFC attributes
+ *   - entity_create / entity_delete                — STEP-level entity ops
+ *   - mutation_batch                               — apply N ops in order
+ *   - mutation_undo                                — revert last N operations
+ *   - mutation_diff                                — pending changes summary
+ *
+ * The actual save lives in `tools/export.ts::export_ifc` (and the
+ * convenience `model_save` alias) so the user can preview a diff before
+ * writing the .ifc file.
+ *
+ * `mutation_batch` is NOT atomic and does not claim to be: it runs the
+ * operations in order and records each one's outcome in `results[]`. A failing
+ * operation is reported there and the ones before it stay queued; nothing is
+ * rolled back. Callers that need all-or-nothing have to check `results[]` and
+ * undo themselves.
+ */
+
+import { writeFile } from 'node:fs/promises';
+import type { Mutation } from '@ifc-lite/mutations';
+import type { Tool } from './types.js';
+import { entityTargetSchema } from './entity-target-schema.js';
+import { entityCreate } from './entity-create.js';
+import { findByGlobalId, okResult, resolveModel } from './util.js';
+import type { HeadlessLikeBackend } from '../headless-backend.js';
+import { ToolErrorCode, ToolExecutionError } from '../errors.js';
+import { resolveSafePath } from '../safe-path.js';
+import { validateInput } from '../validate.js';
+import { propertyValueTypeOf } from '@ifc-lite/sdk';
+import { undoPendingMutations } from './mutation-undo.js';
+import { hostedPlaceTools } from './hosted-place.js';
+import { joinWallsTool } from './wall-join.js';
+import { hostedEditTool } from './hosted-edit.js';
+import { copyElementsTools } from './copy-elements.js';
+import { physicalEditTool } from './physical-edit.js';
+import { roomCommandTool } from './room-command.js';
+import { designPlaceTools } from './design-place.js';
+
+interface MutationContext {
+  m: ReturnType<typeof resolveModel>;
+  backend: HeadlessLikeBackend;
+}
+
+function getBackend(m: ReturnType<typeof resolveModel>): HeadlessLikeBackend {
+  return m.backend;
+}
+
+function resolveExpressId(m: ReturnType<typeof resolveModel>, input: Record<string, unknown>): number {
+  if (typeof input.express_id === 'number') return input.express_id;
+  if (typeof input.global_id === 'string') {
+    const gid = input.global_id;
+    // Overlay-aware, so a `mutation_batch` can create an entity in one step and
+    // address it by GlobalId in the next (#2004).
+    const found = findByGlobalId(m, gid);
+    if (found !== null) return found;
+    throw new ToolExecutionError({ code: ToolErrorCode.ENTITY_NOT_FOUND, message: `GlobalId not found: ${gid}` });
+  }
+  throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'Provide global_id or express_id.' });
+}
+
+/**
+ * The same id, checked against the model before anything is written to it.
+ *
+ * The write tools below do not go through `bim.mutate.*`: they reach
+ * `backend.getMutationView()` directly, so the guard that refuses a phantom
+ * write on the SDK path did not cover them. `entity_set_property` with an
+ * express id nothing holds created the overlay entry, answered "Queued", and
+ * was then dropped by the exporter (which only visits entities the effective
+ * model holds) with no diagnostic anywhere in the round trip (#3764).
+ *
+ * `entity_create` (`./entity-create.ts`) is the one write tool not routed
+ * through this: it has no id to check yet.
+ */
+function resolveWritableExpressId(m: ReturnType<typeof resolveModel>, input: Record<string, unknown>): number {
+  const expressId = resolveExpressId(m, input);
+  const reason = m.backend.checkEntityRef({ modelId: m.id, expressId });
+  if (reason !== null) {
+    throw new ToolExecutionError({
+      code: ToolErrorCode.ENTITY_NOT_FOUND,
+      message: `Cannot write to #${expressId} in model '${m.id}': ${reason}`,
+      details: { expressId, modelId: m.id },
+    });
+  }
+  return expressId;
+}
+
+/** Shared with `bim.mutate.setProperty`, so the two paths cannot classify differently. */
+const detectValueType = propertyValueTypeOf;
+
+function applySetProperty(ctx: MutationContext, args: { expressId: number; pset: string; name: string; value: unknown }): Mutation {
+  const editor = ctx.backend.ensureEditor();
+  // Force the mutation view to be created via getMutationView; setProperty
+  // lives on the view itself, exposed via the editor's view reference.
+  const view = ctx.backend.getMutationView();
+  if (!view) throw new Error('Mutation view not available');
+  void editor;
+  const valueType = detectValueType(args.value);
+  return view.setProperty(args.expressId, args.pset, args.name, args.value as string | number | boolean, valueType);
+}
+
+const entitySetProperty: Tool = {
+  name: 'entity_set_property',
+  description: 'Set or create a property on an entity. Mutations are queued; call `export_ifc` to persist.',
+  scope: 'mutate',
+  inputSchema: entityTargetSchema({
+    pset: { type: 'string', description: 'Property set name, e.g. "Pset_WallCommon".' },
+    name: { type: 'string', description: 'Property name within the pset.' },
+    value: { description: 'Boolean / number / string value.' },
+  }, ['pset', 'name']),
+  handler(input, ctx) {
+    const m = resolveModel(ctx, input.model_id as string | undefined);
+    const backend = getBackend(m);
+    const expressId = resolveWritableExpressId(m, input);
+    const mutation = applySetProperty({ m, backend }, {
+      expressId,
+      pset: input.pset as string,
+      name: input.name as string,
+      value: input.value,
+    });
+    return okResult(`Queued: ${(input.pset as string)}.${(input.name as string)} on #${expressId}.`, {
+      mutation: { kind: 'property', expressId, pset: input.pset, name: input.name, value: input.value, mutationId: (mutation as { id?: string | number }).id },
+    });
+  },
+};
+
+const entityDeleteProperty: Tool = {
+  name: 'entity_delete_property',
+  description: 'Delete a property from a Pset. Queued — persist via `export_ifc`.',
+  scope: 'mutate',
+  inputSchema: entityTargetSchema({
+    pset: { type: 'string' },
+    name: { type: 'string' },
+  }, ['pset', 'name']),
+  handler(input, ctx) {
+    const m = resolveModel(ctx, input.model_id as string | undefined);
+    const backend = getBackend(m);
+    // Check BEFORE materialising the editor: `ensureEditor` creates the
+    // overlay, so checking second left an empty one behind on a refusal and
+    // `mutation_diff` then said "0 pending mutation(s)" where an untouched
+    // session says "No pending mutations."
+    const expressId = resolveWritableExpressId(m, input);
+    backend.ensureEditor();
+    const view = backend.getMutationView();
+    if (!view) throw new Error('Mutation view not available');
+    const result = view.deleteProperty(expressId, input.pset as string, input.name as string);
+    return okResult(
+      result ? 'Property delete queued.' : 'Property was not present; no-op.',
+      { changed: !!result, expressId, pset: input.pset, name: input.name },
+    );
+  },
+};
+
+const entitySetAttribute: Tool = {
+  name: 'entity_set_attribute',
+  description: 'Set a top-level IFC attribute (Name, Description, ObjectType, Tag).',
+  scope: 'mutate',
+  inputSchema: entityTargetSchema({
+    attribute: { type: 'string', enum: ['Name', 'Description', 'ObjectType', 'Tag'] },
+    value: { type: 'string' },
+  }, ['attribute', 'value']),
+  handler(input, ctx) {
+    const m = resolveModel(ctx, input.model_id as string | undefined);
+    const backend = getBackend(m);
+    // Checked before `ensureEditor` for the same reason as above: a refused
+    // write must leave the session as it found it.
+    const expressId = resolveWritableExpressId(m, input);
+    backend.ensureEditor();
+    const view = backend.getMutationView();
+    if (!view) throw new Error('Mutation view not available');
+    const attribute = input.attribute as string;
+    // Capture the value as it stood right before this write so the mutation
+    // record's `oldValue` is the true prior value — `mutation_undo` (and any
+    // other reader of `Mutation.oldValue`) restores from this field, and
+    // `setAttribute` does not derive it itself (unlike `setProperty`).
+    const before = m.bim.attributes({ modelId: m.id, expressId }).find((a) => a.name === attribute);
+    const oldValue = before !== undefined && before.value !== undefined && before.value !== null
+      ? String(before.value)
+      : undefined;
+    view.setAttribute(expressId, attribute, input.value as string, oldValue);
+    return okResult(`Set ${input.attribute} on #${expressId}.`, { expressId, attribute: input.attribute, value: input.value });
+  },
+};
+
+const entityDelete: Tool = {
+  name: 'entity_delete',
+  description: 'Delete an entity. Note: cascades are NOT applied automatically — caller must remove dependent relationships first.',
+  scope: 'mutate',
+  inputSchema: entityTargetSchema({}),
+  handler(input, ctx) {
+    const m = resolveModel(ctx, input.model_id as string | undefined);
+    const backend = getBackend(m);
+    // Checked like the write tools, and for the same reason: a delete of an id
+    // the model does not hold used to answer `okResult` with `deleted: false`,
+    // which `mutation_batch` counts as a succeeded step. "Batch 1/1 succeeded"
+    // for an operation that did nothing is the phantom write from the other
+    // end. `deleted: false` still stands for the one case that is genuinely a
+    // no-op rather than a mistake: an id this session already removed.
+    const expressId = resolveWritableExpressId(m, input);
+    const removed = backend.ensureEditor().removeEntity(expressId);
+    return okResult(removed ? 'Entity deleted.' : 'Entity not found / already gone.', { expressId, deleted: removed });
+  },
+};
+
+const mutationBatch: Tool = {
+  name: 'mutation_batch',
+  description: 'Apply N mutation operations in order. Each item names a sub-tool and its arguments. Returns per-step results in order. Not atomic: a failing operation is reported in results[] and does not roll back the ones before it.',
+  scope: 'mutate',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      model_id: { type: 'string' },
+      operations: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            tool: { type: 'string', enum: ['entity_set_property', 'entity_delete_property', 'entity_set_attribute', 'entity_create', 'entity_delete'] },
+            args: { type: 'object' },
+          },
+          required: ['tool', 'args'],
+        },
+      },
+    },
+    required: ['operations'],
+    additionalProperties: false,
+  },
+  async handler(input, ctx) {
+    const ops = input.operations as Array<{ tool: string; args: Record<string, unknown> }>;
+    const subtools: Record<string, Tool> = {
+      entity_set_property: entitySetProperty,
+      entity_delete_property: entityDeleteProperty,
+      entity_set_attribute: entitySetAttribute,
+      entity_create: entityCreate,
+      entity_delete: entityDelete,
+    };
+    const results: Array<{ tool: string; ok: boolean; result?: unknown; error?: string }> = [];
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      try {
+        const tool = subtools[op.tool];
+        if (!tool) {
+          results.push({ tool: op.tool, ok: false, error: `Unknown sub-tool ${op.tool}` });
+          continue;
+        }
+        // Pin model_id last so an op cannot silently retarget the batch model,
+        // then run the same input validation the server applies before dispatch.
+        const subArgs = { ...op.args, model_id: input.model_id as string | undefined };
+        const validation = validateInput(tool.inputSchema, subArgs);
+        if (!validation.valid) {
+          results.push({
+            tool: op.tool,
+            ok: false,
+            error: `INVALID_INPUT: ${validation.errors.map((e) => `${e.path}: ${e.message}`).join('; ')}`,
+          });
+          continue;
+        }
+        const out = await tool.handler(validation.value as Record<string, unknown>, ctx);
+        if (out.isError) results.push({ tool: op.tool, ok: false, error: (out.structuredContent?.message as string) ?? 'failed' });
+        else results.push({ tool: op.tool, ok: true, result: out.structuredContent });
+      } catch (err) {
+        results.push({ tool: op.tool, ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+      ctx.progress.report((i + 1) / ops.length, `Step ${i + 1}/${ops.length}`, ops.length);
+    }
+    const okCount = results.filter((r) => r.ok).length;
+    return okResult(`Batch ${okCount}/${results.length} succeeded.`, { results });
+  },
+};
+
+const mutationDiff: Tool = {
+  name: 'mutation_diff',
+  description: 'Inspect pending mutations vs the original parsed state.',
+  scope: 'read',
+  inputSchema: { type: 'object', properties: { model_id: { type: 'string' } }, additionalProperties: false },
+  handler(input, ctx) {
+    const m = resolveModel(ctx, input.model_id as string | undefined);
+    const backend = getBackend(m);
+    const view = backend.getMutationView();
+    if (!view) {
+      return okResult('No pending mutations.', { count: 0, mutations: [] });
+    }
+    // The view exposes a private mutationHistory array; we read it via a
+    // narrow cast rather than hacking the package API. Stable enough for
+    // diagnostics; if the shape changes we'll get a clean type error.
+    const history = (view as unknown as { mutationHistory?: Mutation[] }).mutationHistory ?? [];
+    return okResult(`${history.length} pending mutation(s).`, { count: history.length, mutations: history });
+  },
+};
+
+const mutationUndo: Tool = {
+  name: 'mutation_undo',
+  description: 'Revert the last N pending operations on this session. A hosted placement or wall join is one operation including its complete IFC graph; other mutations count individually.',
+  scope: 'mutate',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      model_id: { type: 'string' },
+      n: { type: 'integer', minimum: 1, default: 1 },
+    },
+    additionalProperties: false,
+  },
+  handler(input, ctx) {
+    const m = resolveModel(ctx, input.model_id as string | undefined);
+    const backend = getBackend(m);
+    const view = backend.getMutationView();
+    if (!view) return okResult('Nothing to undo.', { undone: 0 });
+    const n = (input.n as number | undefined) ?? 1;
+    const undone = undoPendingMutations(view, n);
+    return okResult(`Undone ${undone} mutation(s).`, { undone });
+  },
+};
+
+const modelSave: Tool = {
+  name: 'model_save',
+  description: 'Write the current model (with pending mutations) to disk. Convenience wrapper around export_ifc.',
+  scope: 'mutate',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      model_id: { type: 'string' },
+      file_path: { type: 'string', description: 'Output .ifc path.' },
+      schema: { type: 'string', enum: ['IFC2X3', 'IFC4', 'IFC4X3'] },
+    },
+    required: ['file_path'],
+    additionalProperties: false,
+  },
+  async handler(input, ctx) {
+    const m = resolveModel(ctx, input.model_id as string | undefined);
+    const filePath = await resolveSafePath(input.file_path, ctx, 'write');
+    const schema = (input.schema as string | undefined) ?? m.store.schemaVersion;
+    const content = m.bim.export.ifc(undefined, { schema: schema as 'IFC2X3' | 'IFC4' | 'IFC4X3' }); // no ref list: whole model (#4738)
+    const text = typeof content === 'string' ? content : new TextDecoder().decode(content);
+    await writeFile(filePath, text, 'utf-8');
+    return okResult(`Wrote ${text.length.toLocaleString()} bytes to ${filePath}.`, {
+      filePath,
+      bytes: text.length,
+      schema,
+    });
+  },
+};
+
+export const mutationTools: Tool[] = [
+  ...hostedPlaceTools,
+  ...designPlaceTools,
+  hostedEditTool,
+  ...copyElementsTools,
+  physicalEditTool,
+  roomCommandTool,
+  joinWallsTool,
+  entitySetProperty,
+  entityDeleteProperty,
+  entitySetAttribute,
+  entityCreate,
+  entityDelete,
+  mutationBatch,
+  mutationDiff,
+  mutationUndo,
+  modelSave,
+];

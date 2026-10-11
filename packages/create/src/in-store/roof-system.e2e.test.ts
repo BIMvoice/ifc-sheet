@@ -1,0 +1,221 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/** A roof system written into a real model, exported, re-parsed and meshed
+ * by the real WASM engine; then regenerated with other rules, keeping the
+ * GlobalIds of the parts that are still generated. */
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { beforeAll, describe, expect, it } from 'vitest';
+import type { IfcDataStore } from '@ifc-lite/parser';
+import type { IfcAPI } from '@ifc-lite/wasm';
+import { defaultRoofStructure } from './roof-structure.js';
+import type { RoofSystemSpec } from './roof-system-store.js';
+
+const WASM = fileURLToPath(new URL('../../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
+const GLUE = fileURLToPath(new URL('../../../wasm/pkg/ifc-lite.js', import.meta.url));
+let RuntimeIfcAPI: typeof IfcAPI;
+let IfcParser: typeof import('@ifc-lite/parser').IfcParser;
+let MutablePropertyView: typeof import('@ifc-lite/mutations').MutablePropertyView;
+let StoreEditor: typeof import('@ifc-lite/mutations').StoreEditor;
+let StepExporter: typeof import('@ifc-lite/export').StepExporter;
+let resolveSpatialAnchor: typeof import('./resolve-anchor.js').resolveSpatialAnchor;
+let roofs: typeof import('./roof-system-store.js');
+
+const parse = (bytes: Uint8Array) => new IfcParser().parseColumnar(
+  bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+  { disableWorkerScan: true },
+);
+
+function meshZ(bytes: Uint8Array, store: IfcDataStore, id: number): { min: number; max: number; meshes: number; colours: Set<string> } {
+  const api = new RuntimeIfcAPI();
+  try {
+    const ref = store.entityIndex.byId.get(id)!;
+    const pre = api.buildPrePassOnce(bytes);
+    const c = api.processGeometryBatch(bytes, new Uint32Array([id, ref.byteOffset, ref.byteOffset + ref.byteLength]), pre.unitScale, 0, 0, 0, false,
+      pre.voidKeys, pre.voidCounts, pre.voidValues, pre.styleIds, pre.styleColors);
+    let min = Infinity, max = -Infinity, meshes = 0;
+    const colours = new Set<string>();
+    try {
+      for (let i = 0; i < c.length; i++) {
+        const m = c.takeMesh(i);
+        if (!m) continue;
+        try {
+          meshes++;
+          colours.add(Array.from(m.color).map((c) => c.toFixed(3)).join(','));
+          for (let j = 1; j < m.positions.length; j += 3) { const z = m.origin[1] + m.positions[j]; min = Math.min(min, z); max = Math.max(max, z); }
+        } finally { m.free(); }
+      }
+    } finally { c.free(); }
+    return { min, max, meshes, colours };
+  } finally {
+    try { api.clearPrePassCache(); } finally { api.free(); }
+  }
+}
+
+const spec = (pitch: number): RoofSystemSpec => ({
+  name: 'Roof', outline: [[0, 0], [10, 0], [10, 6], [0, 6]], eaveHeight: 3,
+  rules: [{ kind: 'eave', pitch, overhang: 0.5 }, { kind: 'gable', pitch: 0, overhang: 0.3 }, { kind: 'eave', pitch, overhang: 0.5 }, { kind: 'gable', pitch: 0, overhang: 0.3 }],
+  covering: { thickness: 0.08, color: '#a0522d' }, structure: defaultRoofStructure(), timberColor: '#c8a070',
+});
+
+describe.skipIf(!existsSync(WASM) || !existsSync(GLUE))('roof system block, real WASM meshes', () => {
+  beforeAll(async () => {
+    const runtime = await import('@ifc-lite/wasm');
+    RuntimeIfcAPI = runtime.IfcAPI;
+    runtime.initSync({ module: readFileSync(WASM) });
+    ({ IfcParser } = await import('@ifc-lite/parser'));
+    ({ MutablePropertyView, StoreEditor } = await import('@ifc-lite/mutations'));
+    ({ StepExporter } = await import('@ifc-lite/export'));
+    ({ resolveSpatialAnchor } = await import('./resolve-anchor.js'));
+    roofs = await import('./roof-system-store.js');
+  }, 60_000);
+
+  it('writes an IfcRoof aggregating covering planes and members, meshed at the right heights, and regenerates in place', async () => {
+    const source = readFileSync(new URL('../../../../apps/viewer/public/samples/hello-wall.ifc', import.meta.url));
+    const store = await parse(source);
+    const view = new MutablePropertyView(null, 'm');
+    const editor = new StoreEditor(store, view);
+    const storeyId = [...(store.spatialHierarchy?.storeyElevations.keys() ?? [])][0];
+    const anchor = resolveSpatialAnchor(store, storeyId, view);
+    const made = roofs.addRoofSystemToStore(editor, anchor, spec(30));
+    expect(roofs.readRoofSystem(store, made.roofId, view)?.rules[0].pitch).toBe(30);
+    expect(roofs.roofSystemOf(store, made.parts[0], view)).toBe(made.roofId);
+
+    let bytes = new StepExporter(store, view).export({ schema: 'IFC4', applyMutations: true }).content;
+    let text = new TextDecoder().decode(bytes);
+    expect(text).toContain("IFCROOF('");
+    expect(text).toContain('.GABLE_ROOF.');
+    expect(text).toContain('IFCRELAGGREGATES(');
+    expect(text).toContain('.RAFTER.');
+    expect(text).toContain("'Pset_IfcLiteRoofSystem'");
+    let reparsed = await parse(bytes);
+    expect(roofs.readRoofSystem(reparsed, made.roofId)?.name).toBe('Roof');
+    const plane = made.parts[0];
+    const ridgeTop = 3 + 3 * Math.tan(Math.PI / 6);
+    const covering = meshZ(bytes, reparsed, plane);
+    expect(covering.meshes).toBeGreaterThan(0);
+    expect(covering.max).toBeCloseTo(ridgeTop, 2);
+    expect(covering.min).toBeCloseTo(3 - 0.5 * Math.tan(Math.PI / 6) - 0.08 / Math.cos(Math.PI / 6), 2);
+    const rafter = made.parts.find((id) => String(view.getNewEntity(id)?.attributes[7]).startsWith('rafter:'))!;
+    const r = meshZ(bytes, reparsed, rafter);
+    expect(r.meshes).toBeGreaterThan(0);
+    expect(r.max).toBeLessThan(ridgeTop);
+
+    // Steeper: same planes (same keys), rafters and purlins rebuilt, the ridge higher.
+    const planeGuid = view.getNewEntity(plane)!.attributes[0];
+    const again = roofs.regenerateRoofSystemInStore(store, editor, anchor, made.roofId, spec(45));
+    expect(again.parts).toContain(plane);
+    bytes = new StepExporter(store, view).export({ schema: 'IFC4', applyMutations: true }).content;
+    text = new TextDecoder().decode(bytes);
+    expect(text).toContain(`'${planeGuid}'`);
+    reparsed = await parse(bytes);
+    expect(roofs.readRoofSystem(reparsed, made.roofId)?.rules[0].pitch).toBe(45);
+    expect(meshZ(bytes, reparsed, plane).max).toBeCloseTo(3 + 3, 2);
+    // Fewer parts: no structure at all.
+    const bare = roofs.regenerateRoofSystemInStore(store, editor, anchor, made.roofId, { ...spec(45), structure: { ...defaultRoofStructure(), system: 'none' } });
+    expect(bare.parts).toHaveLength(2);
+    expect(bare.removed.length).toBeGreaterThan(10);
+    for (const id of bare.removed) expect(view.isDeleted(id) || !view.getNewEntity(id)).toBe(true);
+  });
+
+  it('keeps part overrides across regenerations: a deleted part, a plumb-cut and lengthened rafter that meshes, stale overrides dropped', async () => {
+    const source = readFileSync(new URL('../../../../apps/viewer/public/samples/hello-wall.ifc', import.meta.url));
+    const store = await parse(source);
+    const view = new MutablePropertyView(null, 'm');
+    const editor = new StoreEditor(store, view);
+    const storeyId = [...(store.spatialHierarchy?.storeyElevations.keys() ?? [])][0];
+    const anchor = resolveSpatialAnchor(store, storeyId, view);
+    const base = spec(30);
+    const made = roofs.addRoofSystemToStore(editor, anchor, base);
+    const tag = (id: number) => String(view.getNewEntity(id)?.attributes[7] ?? '');
+    const rafterKey = made.parts.map(tag).find((t) => t.startsWith('rafter:'))!;
+    const purlinKey = made.parts.map(tag).find((t) => t.startsWith('purlin:'))!;
+    const overrides = {
+      [rafterKey]: { startCut: 'plumb' as const, endCut: 'plumb' as const, extendStart: 0.4, color: '#ff0000' },
+      [purlinKey]: { deleted: true },
+      'rafter:99:99:0': { deleted: true },
+    };
+    const again = roofs.regenerateRoofSystemInStore(store, editor, anchor, made.roofId, { ...base, overrides });
+    expect(again.parts.map(tag)).not.toContain(purlinKey);
+    expect(again.removed.length).toBe(1);
+    // The stale override is gone, the others are stored.
+    expect(Object.keys(roofs.readRoofSystem(store, made.roofId, view)?.overrides ?? {}).sort()).toEqual([purlinKey, rafterKey].sort());
+    const rafterId = again.parts.find((id) => tag(id) === rafterKey)!;
+    const bytes = new StepExporter(store, view).export({ schema: 'IFC4', applyMutations: true }).content;
+    const reparsed = await parse(bytes);
+    const r = meshZ(bytes, reparsed, rafterId);
+    expect(r.meshes).toBeGreaterThan(0);
+    // Lengthened 0.4 m down the slope at its eave end: lower than the eave line minus the overhang.
+    expect(r.min).toBeLessThan(3 - 0.5 * Math.tan(Math.PI / 6) - 0.2);
+    // A steeper roof keeps the overrides (same keys).
+    roofs.regenerateRoofSystemInStore(store, editor, anchor, made.roofId, { ...roofs.readRoofSystem(store, made.roofId, view)!, rules: spec(40).rules });
+    expect(roofs.readRoofSystem(store, made.roofId, view)?.overrides?.[purlinKey]).toEqual({ deleted: true });
+  });
+
+  it('carries the covering build-up as a material layer set, rewritten on regeneration, and deletes the whole block', async () => {
+    const source = readFileSync(new URL('../../../../apps/viewer/public/samples/hello-wall.ifc', import.meta.url));
+    const store = await parse(source);
+    const view = new MutablePropertyView(null, 'm');
+    const editor = new StoreEditor(store, view);
+    const storeyId = [...(store.spatialHierarchy?.storeyElevations.keys() ?? [])][0];
+    const anchor = resolveSpatialAnchor(store, storeyId, view);
+    const layered = (tiles: number): RoofSystemSpec => ({
+      ...spec(30), covering: { thickness: 0, color: '#a0522d', layers: [{ name: 'Clay tiles', thickness: tiles }, { name: 'Underlay', thickness: 0.002 }] },
+    });
+    const made = roofs.addRoofSystemToStore(editor, anchor, layered(0.05));
+    const exported = () => new TextDecoder().decode(new StepExporter(store, view).export({ schema: 'IFC4', applyMutations: true }).content);
+    let text = exported();
+    expect(text).toContain("IFCMATERIAL('Clay tiles'");
+    expect(text).toContain("'Roof covering'"); // the set, named after the roof
+    const count = (re: RegExp) => text.match(re)?.length ?? 0;
+    // hello-wall has one layer set and three material associations of its own.
+    expect(count(/IFCMATERIALLAYERSET\(/g)).toBe(2);
+    expect(text).toContain("IFCMATERIAL('Timber'");
+    let bytes = new StepExporter(store, view).export({ schema: 'IFC4', applyMutations: true }).content;
+    let reparsed = await parse(bytes);
+    const covering = meshZ(bytes, reparsed, made.parts[0]);
+    expect(covering.min).toBeCloseTo(3 - 0.5 * Math.tan(Math.PI / 6) - 0.052 / Math.cos(Math.PI / 6), 2);
+
+    roofs.regenerateRoofSystemInStore(store, editor, anchor, made.roofId, layered(0.04));
+    text = exported();
+    expect(count(/IFCMATERIALLAYERSET\(/g)).toBe(2);
+    expect(count(/IFCMATERIAL\('Clay tiles'/g)).toBe(1);
+    expect(count(/IFCRELASSOCIATESMATERIAL\(/g)).toBe(3 + 2);
+
+    const removed = roofs.removeRoofSystemFromStore(store, editor, made.roofId);
+    expect(removed[0]).toBe(made.roofId);
+    text = exported();
+    expect(text).not.toContain('IFCROOF(');
+    expect(text).not.toContain("'Pset_IfcLiteRoofSystem'");
+    expect(count(/IFCMATERIALLAYERSET\(/g)).toBe(1);
+    expect(text).not.toContain("'Clay tiles'");
+    expect(text).not.toContain('.RAFTER.');
+    bytes = new StepExporter(store, view).export({ schema: 'IFC4', applyMutations: true }).content;
+    reparsed = await parse(bytes);
+    expect(roofs.readRoofSystem(reparsed, made.roofId)).toBeNull();
+  });
+  it('slices each covering plane into its layers, square to the slope, each in its material colour', async () => {
+    const source = readFileSync(new URL('../../../../apps/viewer/public/samples/hello-wall.ifc', import.meta.url));
+    const store = await parse(source);
+    const view = new MutablePropertyView(null, 'm');
+    const editor = new StoreEditor(store, view);
+    const storeyId = [...(store.spatialHierarchy?.storeyElevations.keys() ?? [])][0];
+    const anchor = resolveSpatialAnchor(store, storeyId, view);
+    const made = roofs.addRoofSystemToStore(editor, anchor, {
+      ...spec(30), covering: { thickness: 0, color: '#a0522d', layers: [{ name: 'Clay tiles', thickness: 0.05 }, { name: 'Insulation', thickness: 0.15 }] },
+    });
+    const bytes = new StepExporter(store, view).export({ schema: 'IFC4', applyMutations: true }).content;
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toContain('IFCMATERIALLAYERSETUSAGE(');
+    expect(text).toContain('.AXIS3.,.NEGATIVE.');
+    expect(text).toContain('IFCMATERIALDEFINITIONREPRESENTATION(');
+    const plane = meshZ(bytes, await parse(bytes), made.parts[0]);
+    // Two layers: two sub-meshes, two colours; the plane as a whole is where it was.
+    expect(plane.meshes).toBe(2);
+    expect(plane.colours.size).toBe(2);
+    const ridgeTop = 3 + 3 * Math.tan(Math.PI / 6);
+    expect(plane.max).toBeCloseTo(ridgeTop, 2);
+  });
+});

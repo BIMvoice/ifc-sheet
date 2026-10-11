@@ -1,0 +1,162 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Error types and handling for the server.
+
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde::Serialize;
+use thiserror::Error;
+
+/// API error types.
+#[derive(Debug, Error)]
+pub enum ApiError {
+    #[error("Bad request: {0}")]
+    BadRequest(String),
+
+    #[error("Missing file in request")]
+    MissingFile,
+
+    #[error("File too large: maximum size is {max_mb} MB")]
+    FileTooLarge { max_mb: usize },
+
+    #[error("Multipart error: {0}")]
+    Multipart(#[from] axum::extract::multipart::MultipartError),
+
+    #[error("Processing error: {0}")]
+    Processing(String),
+
+    #[error("Cache error: {0}")]
+    Cache(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Internal server error: {0}")]
+    Internal(String),
+
+    #[error("Join error")]
+    Join(#[from] tokio::task::JoinError),
+
+    #[error("Parquet serialization error: {0}")]
+    Parquet(String),
+
+    #[error("Server overloaded, retry after {retry_after_secs}s")]
+    Overloaded { retry_after_secs: u64 },
+}
+
+/// The `error` text of a `CACHE_ERROR` response. The underlying detail stays
+/// in the server log: cacache's error text names the index bucket or content
+/// file it failed on, which is the absolute `CACHE_DIR` layout.
+const CACHE_CLIENT_MESSAGE: &str = "Cache error: the server's cache store failed";
+
+/// The one error body every route answers with (#5750): `{"error", "code"}`,
+/// `error` a human-readable message and `code` a stable `SCREAMING_SNAKE`
+/// identifier a client can branch on. [`ApiError`] renders it for every
+/// handler failure, and `middleware::error_envelope` renders it for the
+/// responses no handler writes (extractor rejections, unknown routes, wrong
+/// methods, timeouts, panics), so a client decodes one shape for every
+/// non-2xx status. Documented in `docs/guide/server.md` ("Error envelope").
+#[derive(Debug, Serialize)]
+pub struct ErrorResponse {
+    pub error: String,
+    pub code: String,
+}
+
+/// Render the shared envelope. The one builder of an error body: `ApiError`
+/// goes through it, and so do the responses written outside a handler (the
+/// bearer layer's `401`, `middleware::error_envelope`).
+pub fn error_response(status: StatusCode, code: &str, error: impl Into<String>) -> Response {
+    let body = ErrorResponse {
+        error: error.into(),
+        code: code.to_owned(),
+    };
+    (status, Json(body)).into_response()
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        if let ApiError::FileTooLarge { max_mb } = &self {
+            tracing::warn!(max_mb, "Rejecting oversized upload");
+        }
+
+        let (status, code) = match &self {
+            ApiError::BadRequest(_) => (StatusCode::BAD_REQUEST, "BAD_REQUEST"),
+            ApiError::MissingFile => (StatusCode::BAD_REQUEST, "MISSING_FILE"),
+            ApiError::FileTooLarge { .. } => (StatusCode::PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE"),
+            ApiError::Multipart(_) => (StatusCode::BAD_REQUEST, "MULTIPART_ERROR"),
+            ApiError::Processing(_) => (StatusCode::INTERNAL_SERVER_ERROR, "PROCESSING_ERROR"),
+            ApiError::Cache(_) => (StatusCode::INTERNAL_SERVER_ERROR, "CACHE_ERROR"),
+            ApiError::NotFound(_) => (StatusCode::NOT_FOUND, "NOT_FOUND"),
+            ApiError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
+            ApiError::Join(_) => (StatusCode::INTERNAL_SERVER_ERROR, "TASK_ERROR"),
+            ApiError::Parquet(_) => (StatusCode::INTERNAL_SERVER_ERROR, "PARQUET_ERROR"),
+            ApiError::Overloaded { .. } => (StatusCode::SERVICE_UNAVAILABLE, "OVERLOADED"),
+        };
+
+        let retry_after = match &self {
+            ApiError::Overloaded { retry_after_secs } => Some(*retry_after_secs),
+            _ => None,
+        };
+
+        let error = match &self {
+            // Logged inside the request's trace span, never sent.
+            ApiError::Cache(_) => {
+                tracing::error!(error = %self, "Cache store failure");
+                CACHE_CLIENT_MESSAGE.to_string()
+            }
+            _ => self.to_string(),
+        };
+        let mut response = error_response(status, code, error);
+        if let Some(secs) = retry_after {
+            if let Ok(v) = axum::http::HeaderValue::from_str(&secs.to_string()) {
+                response.headers_mut().insert(axum::http::header::RETRY_AFTER, v);
+            }
+        }
+        response
+    }
+}
+
+impl From<ifc_lite_core::Error> for ApiError {
+    fn from(err: ifc_lite_core::Error) -> Self {
+        ApiError::Processing(err.to_string())
+    }
+}
+
+impl From<ifc_lite_geometry::Error> for ApiError {
+    fn from(err: ifc_lite_geometry::Error) -> Self {
+        ApiError::Processing(err.to_string())
+    }
+}
+
+impl From<cacache::Error> for ApiError {
+    fn from(err: cacache::Error) -> Self {
+        ApiError::Cache(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for ApiError {
+    fn from(err: serde_json::Error) -> Self {
+        ApiError::Internal(format!("JSON error: {}", err))
+    }
+}
+
+impl From<crate::services::ParquetError> for ApiError {
+    fn from(err: crate::services::ParquetError) -> Self {
+        ApiError::Parquet(err.to_string())
+    }
+}
+
+impl From<crate::services::parquet_data_model::DataModelParquetError> for ApiError {
+    fn from(err: crate::services::parquet_data_model::DataModelParquetError) -> Self {
+        ApiError::Parquet(err.to_string())
+    }
+}
+
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod error_tests;

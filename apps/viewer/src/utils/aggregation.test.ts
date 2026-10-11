@@ -1,0 +1,211 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import { RelationshipType } from '@ifc-lite/data';
+import {
+  collectAggregatedDescendants,
+  expandToGeometryBearingIds,
+  getAggregatedChildren,
+  hasAggregatedGeometry,
+  type AggregationModelAccess,
+  type AggregationRelationships,
+} from './aggregation';
+
+/** Minimal forward-only IfcRelAggregates graph from an adjacency map. */
+function makeRelationships(adjacency: Record<number, number[]>): AggregationRelationships {
+  return {
+    getRelated(entityId, relType, direction) {
+      if (relType !== RelationshipType.Aggregates || direction !== 'forward') return [];
+      return adjacency[entityId] ?? [];
+    },
+  };
+}
+
+describe('aggregation helpers', () => {
+  it('getAggregatedChildren returns direct children only', () => {
+    const rel = makeRelationships({ 1: [2, 3], 2: [4] });
+    assert.deepStrictEqual(getAggregatedChildren(rel, 1), [2, 3]);
+    assert.deepStrictEqual(getAggregatedChildren(rel, 2), [4]);
+    assert.deepStrictEqual(getAggregatedChildren(rel, 4), []);
+    assert.deepStrictEqual(getAggregatedChildren(undefined, 1), []);
+  });
+
+  it('collectAggregatedDescendants walks the whole subtree in pre-order, excluding the root', () => {
+    // 1 ─┬ 2 ─ 4
+    //    └ 3 ─┬ 5
+    //         └ 6
+    const rel = makeRelationships({ 1: [2, 3], 2: [4], 3: [5, 6] });
+    assert.deepStrictEqual(collectAggregatedDescendants(rel, 1), [2, 4, 3, 5, 6]);
+  });
+
+  it('flat assembly (stair → 13 parts) returns every part', () => {
+    const parts = [351, 561, 684, 757, 794, 821, 864, 879, 3111, 3140, 5276, 5302, 11299];
+    const rel = makeRelationships({ 1124: parts });
+    assert.deepStrictEqual(collectAggregatedDescendants(rel, 1124), parts);
+  });
+
+  it('terminates on a malformed aggregation cycle', () => {
+    // A aggregates B, B aggregates A — must not loop forever.
+    const rel = makeRelationships({ 1: [2], 2: [1] });
+    assert.deepStrictEqual(collectAggregatedDescendants(rel, 1), [2]);
+  });
+
+  it('returns nothing for a leaf or a missing relationship graph', () => {
+    const rel = makeRelationships({ 1: [2] });
+    assert.deepStrictEqual(collectAggregatedDescendants(rel, 2), []);
+    assert.deepStrictEqual(collectAggregatedDescendants(undefined, 1), []);
+  });
+});
+
+/** Legacy single-model space: globalId === expressId. */
+const identity = (expressId: number) => expressId;
+
+describe('hasAggregatedGeometry', () => {
+  it('admits a geometry-less assembly whose parts render', () => {
+    // 10 (assembly, no mesh) ─┬ 11 column (mesh)
+    //                         └ 12 footing (mesh)
+    const rel = makeRelationships({ 10: [11, 12] });
+    assert.strictEqual(hasAggregatedGeometry(rel, 10, identity, new Set([11, 12])), true);
+  });
+
+  it('finds geometry nested more than one level down', () => {
+    const rel = makeRelationships({ 10: [11], 11: [12] });
+    assert.strictEqual(hasAggregatedGeometry(rel, 10, identity, new Set([12])), true);
+  });
+
+  it('rejects a container with no geometry and no renderable parts', () => {
+    const rel = makeRelationships({ 10: [11] });
+    assert.strictEqual(hasAggregatedGeometry(rel, 10, identity, new Set([99])), false);
+    // Truly empty: no geometry, no parts at all.
+    assert.strictEqual(hasAggregatedGeometry(rel, 13, identity, new Set([99])), false);
+  });
+
+  it('accepts an entity that renders under its own id, graph or not', () => {
+    assert.strictEqual(hasAggregatedGeometry(undefined, 14, identity, new Set([14])), true);
+    assert.strictEqual(hasAggregatedGeometry(undefined, 14, identity, new Set([15])), false);
+  });
+
+  it('terminates on a malformed aggregation cycle', () => {
+    const rel = makeRelationships({ 10: [11], 11: [10] });
+    assert.strictEqual(hasAggregatedGeometry(rel, 10, identity, new Set([99])), false);
+  });
+
+  it('does not call getRelated at all for an entity that decomposes nothing', () => {
+    // The vast majority of a whole-model scan (property sets, relationship
+    // objects, ordinary non-decomposing elements) fails the own-geometry test
+    // and has zero aggregation children — that path must cost exactly the one
+    // children lookup, never a second `getRelated` for "grandchildren" of an
+    // empty children list, and it must not throw building a Set/stack it
+    // never needs.
+    let calls = 0;
+    const rel: AggregationRelationships = {
+      getRelated(entityId, relType, direction) {
+        if (relType !== RelationshipType.Aggregates || direction !== 'forward') return [];
+        calls++;
+        return [];
+      },
+    };
+    assert.strictEqual(hasAggregatedGeometry(rel, 42, identity, new Set([99])), false);
+    assert.strictEqual(calls, 1, 'exactly one getRelated call — for the (empty) children of the root');
+  });
+
+  it('memoises so a whole-model scan does not re-walk shared subtrees', () => {
+    let calls = 0;
+    const adjacency: Record<number, number[]> = { 10: [11, 12] };
+    const rel: AggregationRelationships = {
+      getRelated(entityId, relType, direction) {
+        if (relType !== RelationshipType.Aggregates || direction !== 'forward') return [];
+        calls++;
+        return adjacency[entityId] ?? [];
+      },
+    };
+    const cache = new Map<number, boolean>();
+    const geo = new Set([99]);
+    assert.strictEqual(hasAggregatedGeometry(rel, 10, identity, geo, cache), false);
+    const after = calls;
+    assert.ok(after > 0, 'the first call walks the graph');
+    assert.strictEqual(hasAggregatedGeometry(rel, 10, identity, geo, cache), false);
+    assert.strictEqual(calls, after, 'the repeat is served from the cache');
+  });
+});
+
+describe('expandToGeometryBearingIds', () => {
+  /** Two federated models, offsets 0 and 1000. Model A: assembly 10 → parts
+   *  11, 12 (both meshed). Model B: assembly 10 → part 11 (meshed). */
+  const access: AggregationModelAccess = {
+    resolve: (globalId) =>
+      globalId >= 1000
+        ? { modelId: 'B', expressId: globalId - 1000 }
+        : { modelId: 'A', expressId: globalId },
+    relationshipsFor: (modelId) =>
+      modelId === 'A'
+        ? makeRelationships({ 10: [11, 12], 20: [21, 22], 30: [31, 32] })
+        : modelId === 'B'
+          ? makeRelationships({ 10: [11] })
+          : undefined,
+    toGlobalId: (modelId, expressId) => (modelId === 'B' ? expressId + 1000 : expressId),
+  };
+  const meshed = new Set([11, 12, 14, 1011, 31]);
+  const hasGeometry = (id: number) => meshed.has(id);
+
+  it('expands a geometry-less assembly into its meshed parts', () => {
+    assert.deepStrictEqual(expandToGeometryBearingIds([10], hasGeometry, access), [11, 12]);
+  });
+
+  it('passes a meshed element through untouched, in order', () => {
+    assert.deepStrictEqual(expandToGeometryBearingIds([14, 11], hasGeometry, access), [14, 11]);
+  });
+
+  it('drops an entity with neither geometry nor meshed parts', () => {
+    assert.deepStrictEqual(expandToGeometryBearingIds([13], hasGeometry, access), []);
+    assert.deepStrictEqual(expandToGeometryBearingIds([13, 14], hasGeometry, access), [14]);
+  });
+
+  it('resolves each id inside its own model, never across the federation', () => {
+    // 1010 is model B's assembly; it must yield 1011, not model A's 11/12.
+    assert.deepStrictEqual(expandToGeometryBearingIds([1010], hasGeometry, access), [1011]);
+    assert.deepStrictEqual(expandToGeometryBearingIds([10, 1010], hasGeometry, access), [11, 12, 1011]);
+  });
+
+  it('dedups when an assembly and one of its parts are both selected', () => {
+    assert.deepStrictEqual(expandToGeometryBearingIds([11, 10], hasGeometry, access), [11, 12]);
+  });
+
+  // #3426, correcting #3382: `hasGeometry` is a point-in-time mesh/bounds
+  // check — during streaming, or behind a type-visibility filter, it says
+  // "no" for a part that legitimately has geometry and just hasn't rendered
+  // YET. Assembly 20's parts (21, 22) are neither in `meshed`.
+  it('falls back to ALL aggregated parts when none of them currently render (#3426)', () => {
+    assert.deepStrictEqual(expandToGeometryBearingIds([20], hasGeometry, access), [21, 22]);
+  });
+
+  it('the #3426 fallback still dedups and composes with an ordinary meshed id', () => {
+    assert.deepStrictEqual(
+      expandToGeometryBearingIds([20, 14], hasGeometry, access),
+      [21, 22, 14],
+    );
+  });
+
+  // Control: an entity with NO aggregated descendants at all (13) is still
+  // dropped — the #3426 fallback only helps an id that HAS parts to expand
+  // to; there is nothing here to expand id 13 into.
+  it('control: an entity with no aggregated descendants at all is still dropped', () => {
+    assert.deepStrictEqual(expandToGeometryBearingIds([13], hasGeometry, access), []);
+  });
+
+  // Always expand to ALL aggregated descendants, regardless of renderability
+  // (#3426, #3865). Point-in-time `hasGeometry` checks cannot predict which
+  // parts will arrive during streaming, so presentation channels (hide,
+  // isolate, colour) must persist the complete descendant set to ensure that
+  // parts streaming in later respect the action. Assembly 30 has two parts
+  // (31 meshed, 32 not) — both must be included in the expansion so that when
+  // 32 streams in later, it's already in the persisted set. Carrying an id
+  // with no mesh is free: it simply never matches a renderer's mesh whitelist.
+  it('expands to ALL aggregated parts, including unmeshed ones that may stream in later', () => {
+    assert.deepStrictEqual(expandToGeometryBearingIds([30], hasGeometry, access), [31, 32]);
+  });
+
+});

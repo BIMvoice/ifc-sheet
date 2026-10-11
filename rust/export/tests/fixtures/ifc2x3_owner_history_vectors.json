@@ -1,0 +1,58 @@
+{
+ "_comment": "Shared cross-language pin for the IFC2X3 OwnerHistory fill (#4686). Each case is a whole DATA section exported with schema IFC2X3 by both STEP exporters: rust/export/src/schema_convert_tests.rs (export_step_with_stats) and packages/export/src/schema-converter-owner-history.test.ts (StepExporter). `owner_history` maps an express id to the value its slot 1 (OwnerHistory) must hold in the output; `unfilled` is how many records the export had to leave with $ there. Only slot 1 is compared: the two converters differ elsewhere (proxy GlobalIds, resource-entity trims), and that is not what this pins.",
+ "cases": [
+  {
+   "why": "a $ OwnerHistory takes the FIRST owner history in the file; a record naming its own keeps it; a non-rooted record is not touched",
+   "schema": "IFC4",
+   "data": [
+    "#10=IFCWALL('2O2Fr$t4X7Zf8NOew3FLOH',$,'Wall',$,$,$,$,$,$);",
+    "#11=IFCSLAB('3O2Fr$t4X7Zf8NOew3FLOH',#6,'Slab',$,$,$,$,$,$);",
+    "#12=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);",
+    "#5=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);",
+    "#6=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);"
+   ],
+   "owner_history": { "10": "#5", "11": "#6", "12": "$" },
+   "unfilled": 0
+  },
+  {
+   "why": "no owner history in the file: nothing is invented, the slot stays $ and every rooted record left that way is counted",
+   "schema": "IFC4",
+   "data": [
+    "#10=IFCWALL('2O2Fr$t4X7Zf8NOew3FLOH',$,'Wall',$,$,$,$,$,$);",
+    "#11=IFCSLAB('3O2Fr$t4X7Zf8NOew3FLOH',$,'Slab',$,$,$,$,$,$);",
+    "#12=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);"
+   ],
+   "owner_history": { "10": "$", "11": "$", "12": "$" },
+   "unfilled": 2
+  },
+  {
+   "why": "the converter's own IFCPROXY placeholder is an IfcRoot record, so its OwnerHistory is filled too",
+   "schema": "IFC4X3",
+   "data": [
+    "#3=IFCALIGNMENTHORIZONTAL('2K5H1$Zs9CQuKQFQKQFQKQ',$,'A',$,$,$,$);",
+    "#7=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);"
+   ],
+   "owner_history": { "3": "#7" },
+   "unfilled": 0
+  },
+  {
+   "why": "an IFCPROXY placeholder with no owner history to point at keeps $ and is counted",
+   "schema": "IFC4X3",
+   "data": [
+    "#3=IFCALIGNMENTHORIZONTAL('2K5H1$Zs9CQuKQFQKQFQKQ',$,'A',$,$,$,$);"
+   ],
+   "owner_history": { "3": "$" },
+   "unfilled": 1
+  },
+  {
+   "why": "IfcDoorType becomes IfcDoorStyle through the by-name remap, not the positional trim, and is filled all the same",
+   "schema": "IFC4",
+   "data": [
+    "#1=IFCDOORTYPE('1abcdefghijklmnopqrstu',$,'D',$,$,$,$,$,$,.DOOR.,.SINGLE_SWING_LEFT.,$,$);",
+    "#9=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);"
+   ],
+   "owner_history": { "1": "#9" },
+   "unfilled": 0
+  }
+ ]
+}

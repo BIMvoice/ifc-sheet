@@ -1,0 +1,778 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Tests for @ifc-lite/cache
+ */
+
+import { describe, it, beforeEach, expect } from 'vitest';
+import {
+  StringTable,
+  EntityTableBuilder,
+  PropertyTableBuilder,
+  QuantityTableBuilder,
+  RelationshipGraphBuilder,
+  PropertyValueType,
+  QuantityType,
+  RelationshipType,
+  isSpatialStructureTypeName,
+  IfcTypeEnum,
+  IfcTypeEnumFromString,
+} from '@ifc-lite/data';
+import { BinaryCacheWriter, BinaryCacheReader, xxhash64, SchemaVersion, FORMAT_VERSION } from './index.js';
+import type { CacheDataStore } from './types.js';
+import type { MeshData, CoordinateInfo } from '@ifc-lite/geometry';
+
+describe('xxhash64', () => {
+  it('should hash empty buffer', () => {
+    const hash = xxhash64(new Uint8Array(0));
+    expect(typeof hash).toBe('bigint');
+  });
+
+  it('should produce consistent hashes', () => {
+    const data = new TextEncoder().encode('Hello, World!');
+    const hash1 = xxhash64(data);
+    const hash2 = xxhash64(data);
+    expect(hash1).toBe(hash2);
+  });
+
+  // All the tests above only ever compare xxhash64's output against
+  // itself (same call twice, or two short inputs), so any internally
+  // consistent but algorithmically wrong implementation still passes
+  // them -- e.g. swapping which 8-byte lane feeds the v2/v3 accumulator
+  // in the >=32-byte stripe loop produces a deterministic, input-sensitive,
+  // but *wrong* hash and none of the other cases here catch it. This
+  // pins a golden value from an independent xxHash64 (seed 0) implementation
+  // (xxhash-wasm) for a 55-byte input, so the >=32-byte code path is
+  // checked against the real algorithm, not just against itself.
+  it('matches the reference xxHash64 (seed 0) value for a >=32-byte input', () => {
+    const data = new TextEncoder().encode('The quick brown fox jumps over the lazy dog. 1234567890');
+    expect(data.length).toBeGreaterThanOrEqual(32);
+    const hash = xxhash64(data);
+    expect(hash.toString(16).padStart(16, '0')).toBe('d9cbd36f4605dc8f');
+  });
+
+  it('should produce different hashes for different data', () => {
+    const data1 = new TextEncoder().encode('Hello');
+    const data2 = new TextEncoder().encode('World');
+    const hash1 = xxhash64(data1);
+    const hash2 = xxhash64(data2);
+    expect(hash1).not.toBe(hash2);
+  });
+
+  // Reference vectors sourced from the cespare/xxhash Go implementation's test
+  // suite (xxhash_test.go, TestAll), which is cross-validated against the
+  // canonical C reference implementation (Cyan4973/xxHash):
+  // https://raw.githubusercontent.com/cespare/xxhash/master/xxhash_test.go
+  // These are NOT derived by running this package's own implementation --
+  // the reader's `sourceHash === xxhash64(sourceBuffer)` self-check can't
+  // catch an algorithmic error precisely because it recomputes with the same
+  // (possibly wrong) function, so the pinned values below must come from an
+  // independent source.
+  it('matches the published XXH64 reference vector for the empty input (seed 0)', () => {
+    const hash = xxhash64(new TextEncoder().encode(''));
+    expect(hash).toBe(0xef46db3751d8e999n);
+  });
+
+  it('matches the published XXH64 reference vector for "a" (seed 0)', () => {
+    const hash = xxhash64(new TextEncoder().encode('a'));
+    expect(hash).toBe(0xd24ec4f1a98c6e5bn);
+  });
+
+  it('matches the published XXH64 reference vector for a 63-byte input (seed 0), exercising the >=32-byte main loop', () => {
+    // Exactly 63 characters -- long enough to run the main 32-byte-block
+    // loop (where e.g. a rotate-constant mutation like rotl64(v4, 18) would
+    // otherwise go undetected) plus the trailing 8/4/1-byte remainder paths.
+    const s63 = 'Call me Ishmael. Some years ago--never mind how long precisely-';
+    expect(s63.length).toBe(63);
+    const hash = xxhash64(new TextEncoder().encode(s63));
+    expect(hash).toBe(0x02a2e85470d6fd96n);
+  });
+});
+
+describe('BinaryCacheWriter and BinaryCacheReader', () => {
+  let dataStore: CacheDataStore;
+  let sourceBuffer: ArrayBuffer;
+
+  beforeEach(() => {
+    // Create test data
+    const strings = new StringTable();
+
+    // Build entity table
+    const entityBuilder = new EntityTableBuilder(10, strings);
+    entityBuilder.add(1, 'IfcProject', 'guid-project', 'Test Project', '', '', false, false);
+    entityBuilder.add(2, 'IfcSite', 'guid-site', 'Test Site', '', '', false, false);
+    entityBuilder.add(3, 'IfcBuilding', 'guid-building', 'Test Building', '', '', false, false);
+    entityBuilder.add(4, 'IfcWall', 'guid-wall-1', 'Wall 1', '', '', true, false);
+    entityBuilder.add(5, 'IfcWall', 'guid-wall-2', 'Wall 2', '', '', true, false);
+    const entities = entityBuilder.build();
+
+    // Build property table
+    const propertyBuilder = new PropertyTableBuilder(strings);
+    propertyBuilder.add({
+      entityId: 4,
+      psetName: 'Pset_WallCommon',
+      psetGlobalId: 'pset-guid-1',
+      propName: 'IsExternal',
+      propType: PropertyValueType.Boolean,
+      value: true,
+    });
+    propertyBuilder.add({
+      entityId: 4,
+      psetName: 'Pset_WallCommon',
+      psetGlobalId: 'pset-guid-1',
+      propName: 'FireRating',
+      propType: PropertyValueType.Label,
+      value: 'REI60',
+    });
+    const properties = propertyBuilder.build();
+
+    // Build quantity table
+    const quantityBuilder = new QuantityTableBuilder(strings);
+    quantityBuilder.add({
+      entityId: 4,
+      qsetName: 'Qto_WallBaseQuantities',
+      quantityName: 'Length',
+      quantityType: QuantityType.Length,
+      value: 5.5,
+    });
+    quantityBuilder.add({
+      entityId: 4,
+      qsetName: 'Qto_WallBaseQuantities',
+      quantityName: 'GrossVolume',
+      quantityType: QuantityType.Volume,
+      value: 2.75,
+    });
+    const quantities = quantityBuilder.build();
+
+    // Build relationship graph
+    const relationshipBuilder = new RelationshipGraphBuilder();
+    relationshipBuilder.addEdge(3, 4, RelationshipType.ContainsElements, 100);
+    relationshipBuilder.addEdge(3, 5, RelationshipType.ContainsElements, 101);
+    const relationships = relationshipBuilder.build();
+
+    const source = new TextEncoder().encode([
+      'ISO-10303-21;',
+      'HEADER;',
+      'ENDSEC;',
+      'DATA;',
+      "#1=IFCPROJECT('guid-project');",
+      "#2=IFCSITE('guid-site');",
+      "#3=IFCBUILDING('guid-building');",
+      "#4=IFCWALL('guid-wall-1');",
+      "#5=IFCWALL('guid-wall-2');",
+      'ENDSEC;',
+      'END-ISO-10303-21;',
+    ].join('\n'));
+    sourceBuffer = source.buffer;
+    const entityRefs = new Map<number, { expressId: number; type: string; byteOffset: number; byteLength: number; lineNumber: number }>();
+    // Find the full `#<id>=` marker (not just the first `#` byte) so a `#`
+    // appearing inside a string value can't produce a wrong offset.
+    const findMarker = (needle: Uint8Array, from: number): number => {
+      outer: for (let i = from; i <= source.length - needle.length; i++) {
+        for (let j = 0; j < needle.length; j++) {
+          if (source[i + j] !== needle[j]) continue outer;
+        }
+        return i;
+      }
+      return -1;
+    };
+    for (const id of [1, 2, 3, 4, 5]) {
+      const marker = new TextEncoder().encode(`#${id}=`);
+      const byteOffset = findMarker(marker, id === 1 ? 0 : (entityRefs.get(id - 1)?.byteOffset ?? 0) + 1);
+      const lineEnd = source.indexOf(0x3b, byteOffset) + 1;
+      const type = id === 1 ? 'IFCPROJECT' : id === 2 ? 'IFCSITE' : id === 3 ? 'IFCBUILDING' : 'IFCWALL';
+      entityRefs.set(id, {
+        expressId: id,
+        type,
+        byteOffset,
+        byteLength: lineEnd - byteOffset,
+        lineNumber: 0,
+      });
+    }
+
+    dataStore = {
+      schema: SchemaVersion.IFC4,
+      entityCount: 5,
+      strings,
+      entities,
+      properties,
+      quantities,
+      relationships,
+      entityIndex: { byId: entityRefs },
+    };
+  });
+
+  it('should write and read cache without geometry', async () => {
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+
+    expect(cacheBuffer).toBeInstanceOf(ArrayBuffer);
+    expect(cacheBuffer.byteLength).toBeGreaterThan(0);
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    expect(result.dataStore.entityCount).toBe(5);
+    expect(result.dataStore.schema).toBe(SchemaVersion.IFC4);
+    expect(result.geometry).toBeUndefined();
+  });
+
+  it('should write and read cache with geometry', async () => {
+    const meshes: MeshData[] = [
+      {
+        expressId: 4,
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0]),
+        normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+        color: [0.8, 0.8, 0.8, 1.0],
+        // Instanced type-library shape (#957) — must survive the cache round
+        // trip or the viewer's Model/Types switch breaks on cache hits.
+        geometryClass: 2,
+      },
+    ];
+
+    const coordinateInfo: CoordinateInfo = {
+      originShift: { x: 0, y: 0, z: 0 },
+      originalBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } },
+      shiftedBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } },
+      hasLargeCoordinates: false,
+    };
+
+    const geometry = {
+      meshes,
+      totalVertices: 3,
+      totalTriangles: 1,
+      coordinateInfo,
+    };
+
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, geometry, sourceBuffer);
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    expect(result.geometry).toBeTruthy();
+    expect(result.geometry!.meshes.length).toBe(1);
+    expect(result.geometry!.meshes[0].expressId).toBe(4);
+    expect(result.geometry!.meshes[0].geometryClass).toBe(2);
+    expect(result.geometry!.totalVertices).toBe(3);
+    expect(result.geometry!.totalTriangles).toBe(1);
+  });
+
+  it('should preserve GPU-instancing shards through round-trip', async () => {
+    // Opaque repeated occurrences are partitioned into IFNS shards that are NOT in
+    // the flat meshes; without persisting them, a cache reload silently drops all
+    // instanced geometry. Round-trip the raw shard bytes byte-for-byte.
+    const shardA = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const shardB = new Uint8Array([255, 0, 128, 42]);
+    const geometry = {
+      meshes: [
+        {
+          expressId: 7,
+          positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0]),
+          normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+          indices: new Uint32Array([0, 1, 2]),
+          color: [0.5, 0.5, 0.5, 1.0] as [number, number, number, number],
+        },
+      ],
+      totalVertices: 3,
+      totalTriangles: 1,
+      coordinateInfo: {
+        originShift: { x: 0, y: 0, z: 0 },
+        originalBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } },
+        shiftedBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } },
+        hasLargeCoordinates: false,
+      } as CoordinateInfo,
+      instancedShards: [shardA.buffer.slice(0) as ArrayBuffer, shardB.buffer.slice(0) as ArrayBuffer],
+    };
+
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, geometry, sourceBuffer);
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    expect(result.geometry?.instancedShards).toBeTruthy();
+    expect(result.geometry!.instancedShards!.length).toBe(2);
+    expect(Array.from(new Uint8Array(result.geometry!.instancedShards![0]))).toEqual(Array.from(shardA));
+    expect(Array.from(new Uint8Array(result.geometry!.instancedShards![1]))).toEqual(Array.from(shardB));
+    // The flat meshes still round-trip alongside the shards.
+    expect(result.geometry!.meshes.length).toBe(1);
+  });
+
+  it('should omit the shard section when there are no instanced shards', async () => {
+    const geometry = {
+      meshes: [
+        {
+          expressId: 9,
+          positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0]),
+          normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+          indices: new Uint32Array([0, 1, 2]),
+          color: [0.5, 0.5, 0.5, 1.0] as [number, number, number, number],
+        },
+      ],
+      totalVertices: 3,
+      totalTriangles: 1,
+      coordinateInfo: {
+        originShift: { x: 0, y: 0, z: 0 },
+        originalBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } },
+        shiftedBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } },
+        hasLargeCoordinates: false,
+      } as CoordinateInfo,
+    };
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, geometry, sourceBuffer);
+    const result = await new BinaryCacheReader().read(cacheBuffer);
+    expect(result.geometry).toBeTruthy();
+    expect(result.geometry!.instancedShards).toBeUndefined();
+  });
+
+  it('should validate cache against source', async () => {
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+
+    const reader = new BinaryCacheReader();
+
+    // Valid source
+    expect(reader.validate(cacheBuffer, sourceBuffer)).toBe(true);
+
+    // Modified source
+    const modifiedSource = new TextEncoder().encode('MODIFIED IFC FILE').buffer;
+    expect(reader.validate(cacheBuffer, modifiedSource)).toBe(false);
+  });
+
+  it('should read header only', async () => {
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+
+    const reader = new BinaryCacheReader();
+    const header = reader.readHeader(cacheBuffer);
+
+    expect(header.version).toBe(FORMAT_VERSION);
+    expect(header.entityCount).toBe(5);
+    expect(header.schema).toBe(SchemaVersion.IFC4);
+    expect(header.sections.length).toBeGreaterThan(0);
+  });
+
+  it('default write embeds a real full-file xxhash64 and validate() works', async () => {
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+    const reader = new BinaryCacheReader();
+    const header = reader.readHeader(cacheBuffer);
+
+    expect(header.hasSourceHash).toBe(true);
+    expect(header.sourceHash).toBe(xxhash64(sourceBuffer));
+    expect(reader.validate(cacheBuffer, sourceBuffer)).toBe(true);
+  });
+
+  it('omitSourceHash skips the full-file hash and flags the header (SourceHashUnset)', async () => {
+    // The mesh-only tier omits the header hash so a 400MB source pays no
+    // full-file main-thread hash on write; it validates the source another way
+    // (mtime + an app-layer content hash). The header must self-describe this so
+    // a future reader.validate() / read({sourceBuffer}) can't silently fail-close.
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+      omitSourceHash: true,
+    });
+    const reader = new BinaryCacheReader();
+    const header = reader.readHeader(cacheBuffer);
+
+    expect(header.hasSourceHash).toBe(false);
+    expect(header.sourceHash).toBe(0n);
+    // validate() refuses (throws) rather than returning a misleading false.
+    expect(() => reader.validate(cacheBuffer, sourceBuffer)).toThrow(/SourceHashUnset/);
+    // read({sourceBuffer}) does NOT fail-close on an unset hash — it just reads.
+    await expect(reader.read(cacheBuffer, { sourceBuffer })).resolves.toBeTruthy();
+  });
+
+  it('mesh-only write (omitSourceHash, no persisted source) round-trips geometry byte-identical', async () => {
+    // Byte-identity of the restored geometry is what makes a mesh-only cache hit
+    // equal to a cold load. The write path is source-decoupled (the viewer does
+    // NOT persist the source for this tier), so exercise write→read with the hash
+    // omitted and assert the meshes come back bit-for-bit.
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0]);
+    const normals = new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]);
+    const indices = new Uint32Array([0, 1, 2]);
+    const geometry = {
+      meshes: [{ expressId: 4, positions, normals, indices, color: [0.2, 0.4, 0.6, 1] as [number, number, number, number] }],
+      totalVertices: 3,
+      totalTriangles: 1,
+      coordinateInfo: {
+        originShift: { x: 0, y: 0, z: 0 },
+        originalBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } },
+        shiftedBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } },
+        hasLargeCoordinates: false,
+      } as CoordinateInfo,
+    };
+
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, geometry, sourceBuffer, { omitSourceHash: true });
+    const result = await new BinaryCacheReader().read(cacheBuffer);
+
+    const mesh = result.geometry!.meshes[0];
+    expect(mesh.expressId).toBe(4);
+    expect(Array.from(mesh.positions)).toEqual(Array.from(positions));
+    expect(Array.from(mesh.normals)).toEqual(Array.from(normals));
+    expect(Array.from(mesh.indices)).toEqual(Array.from(indices));
+    expect(result.geometry!.totalVertices).toBe(3);
+    expect(result.geometry!.totalTriangles).toBe(1);
+  });
+
+  it('rejects a truncated / corrupt cache buffer (graceful-miss path)', async () => {
+    // loadFromCache catches this, deletes the entry, and falls back to a normal
+    // parse — a validated miss, not a crash.
+    const writer = new BinaryCacheWriter();
+    const full = await writer.write(dataStore, undefined, sourceBuffer, { includeGeometry: false });
+    const reader = new BinaryCacheReader();
+
+    // Truncated mid-section: header parses but a section read runs off the end.
+    const truncated = full.slice(0, Math.floor(full.byteLength / 2));
+    await expect(reader.read(truncated)).rejects.toThrow();
+
+    // Garbage magic bytes: header validation fails immediately.
+    const garbage = new Uint8Array(full.byteLength);
+    garbage.fill(0xcd);
+    await expect(reader.read(garbage.buffer)).rejects.toThrow();
+  });
+
+  it('should preserve entity data through round-trip', async () => {
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    // Check entities
+    const { entities, strings } = result.dataStore;
+    expect(entities.count).toBe(5);
+
+    // Check that we can retrieve entity names
+    expect(entities.getName(1)).toBe('Test Project');
+    expect(entities.getName(4)).toBe('Wall 1');
+    expect(entities.getTypeName(4)).toBe('IfcWall');
+  });
+
+  // Regression test for the cache-restored `EntityTable` (the one that ships
+  // to users through the persisted cache): `setTypeOverride` must canonicalise
+  // the caller's raw UPPERCASE token to PascalCase, matching
+  // `entityTableFromColumns` (packages/data/src/entity-table.ts), so a
+  // retyped entity is still recognised by consumers like
+  // `isSpatialStructureTypeName` after a cache round-trip.
+  it('canonicalises a type override to PascalCase across a cache round-trip', async () => {
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    const { entities } = result.dataStore;
+    entities.setTypeOverride(4, 'IFCBUILDINGSTOREY');
+
+    expect(entities.getTypeName(4)).toBe('IfcBuildingStorey');
+    expect(isSpatialStructureTypeName(entities.getTypeName(4))).toBe(true);
+  });
+
+  // Most concrete IFC product classes are absent from the hand-maintained
+  // `IfcTypeEnum` (101 of the 157 concrete `IfcProduct` subtypes in the
+  // generated IFC4 registry). The live parser table carries a `rawTypeName`
+  // string column so `getTypeName` can fall back to the real class for those;
+  // the cache writer/reader pair must carry the same column, or every such
+  // element comes back as 'Unknown' after a cache load.
+  //
+  // Both directions, over a NAMED list rather than a count: classes that are
+  // in the enum must keep working (negative control), and classes that are
+  // not must come back with their real name (the regression).
+  it('preserves the class name of every named IFC4 class through a cache round-trip', async () => {
+    // Every name here is a concrete entity of the generated IFC4 registry.
+    const IN_ENUM = ['IfcWall', 'IfcSpace', 'IfcBuildingStorey'] as const;
+    const NOT_IN_ENUM = [
+      'IfcPump',
+      'IfcValve',
+      'IfcAirTerminal',
+      'IfcSanitaryTerminal',
+      'IfcLightFixture',
+      'IfcSurfaceFeature',
+      'IfcBoiler',
+      'IfcStructuralCurveMember',
+    ] as const;
+
+    // Anti-vacuity, both halves: the split must really be a split, and each
+    // name must really sit on the side of `IfcTypeEnum` this test claims.
+    // If a class is ever added to the enum it moves lists, it is not dropped.
+    expect(IN_ENUM.length).toBeGreaterThan(0);
+    expect(NOT_IN_ENUM.length).toBeGreaterThan(0);
+    for (const n of IN_ENUM) expect([n, IfcTypeEnumFromString(n)]).not.toEqual([n, IfcTypeEnum.Unknown]);
+    for (const n of NOT_IN_ENUM) expect([n, IfcTypeEnumFromString(n)]).toEqual([n, IfcTypeEnum.Unknown]);
+
+    const all = [...IN_ENUM, ...NOT_IN_ENUM];
+    const builder = new EntityTableBuilder(all.length, dataStore.strings);
+    all.forEach((cls, i) => {
+      builder.add(i + 1, cls.toUpperCase(), `guid-${i + 1}`, `Entity ${i + 1}`, '', '', false, false);
+    });
+    const entities = builder.build();
+
+    // Anti-vacuity: the pre-cache table already answers correctly for every
+    // name, so a failure below is the cache losing it and nothing else.
+    const before = all.map((cls, i) => [cls, entities.getTypeName(i + 1)]);
+    expect(before).toEqual(all.map((cls) => [cls, cls]));
+
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(
+      { ...dataStore, entities, entityCount: entities.count },
+      undefined,
+      sourceBuffer,
+      { includeGeometry: false },
+    );
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    const after = all.map((cls, i) => [cls, result.dataStore.entities.getTypeName(i + 1)]);
+    expect(after).toEqual(all.map((cls) => [cls, cls]));
+  });
+
+  it('should preserve property data through round-trip', async () => {
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    const { properties } = result.dataStore;
+    const psets = properties.getForEntity(4);
+
+    expect(psets.length).toBe(1);
+    expect(psets[0].name).toBe('Pset_WallCommon');
+    expect(psets[0].properties.length).toBe(2);
+
+    // Check property values
+    const isExternal = properties.getPropertyValue(4, 'Pset_WallCommon', 'IsExternal');
+    expect(isExternal).toBe(true);
+
+    const fireRating = properties.getPropertyValue(4, 'Pset_WallCommon', 'FireRating');
+    expect(fireRating).toBe('REI60');
+  });
+
+  it('restored findByProperty matches booleans and strings (issue #577 follow-up)', async () => {
+    // The cache carried its own copy of the comparison helper, and that copy
+    // had no boolean branch: a restored `findByProperty('IsExternal', '=', true)`
+    // fell through to `return false` and answered `[]`, so a cached model
+    // silently filtered out every wall a freshly parsed model matched. It now
+    // shares `comparePropertyValues` with `@ifc-lite/data`.
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+    const reader = new BinaryCacheReader();
+    const { properties } = (await reader.read(cacheBuffer)).dataStore;
+
+    expect(properties.findByProperty('IsExternal', '=', true)).toEqual([4]);
+    expect(properties.findByProperty('IsExternal', '==', true)).toEqual([4]);
+    expect(properties.findByProperty('IsExternal', '!=', true)).toEqual([]);
+    expect(properties.findByProperty('IsExternal', '=', false)).toEqual([]);
+    // The string branch was never broken; it is here as the control that tells
+    // a boolean-only failure apart from a wholesale round-trip failure.
+    expect(properties.findByProperty('FireRating', '=', 'REI60')).toEqual([4]);
+    // Property-set scoping still applies.
+    expect(properties.findByProperty('IsExternal', '=', true, 'Pset_DoorCommon')).toEqual([]);
+  });
+
+  it('should preserve quantity data through round-trip', async () => {
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    const { quantities } = result.dataStore;
+    const qsets = quantities.getForEntity(4);
+
+    expect(qsets.length).toBe(1);
+    expect(qsets[0].name).toBe('Qto_WallBaseQuantities');
+
+    const length = quantities.getQuantityValue(4, 'Qto_WallBaseQuantities', 'Length');
+    expect(length).toBe(5.5);
+  });
+
+  it('restored quantity table answers findByQuantity off its name index', async () => {
+    // `EntityQuery.whereProperty('Qto_...', ...)` uses `findByQuantity` when the
+    // table offers it and otherwise resolves every candidate through
+    // `getForEntity`. Both answer the same, so this pins the method — not the
+    // strategy — across the round-trip.
+    //
+    // Scope: the `dataStore` here is built with `PropertyTableBuilder` /
+    // `QuantityTableBuilder`, i.e. an already-materialised store (the IFCX
+    // shape). Only such a cache restores onto the indexed path. A cache written
+    // from a STEP parse serialises the empty tables verbatim, so it restores
+    // with `count === 0` and `whereProperty` puts it on the per-candidate
+    // fallback regardless of this method surviving.
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+    const reader = new BinaryCacheReader();
+    const { quantities } = (await reader.read(cacheBuffer)).dataStore;
+
+    expect(quantities.findByQuantity).toBeTypeOf('function');
+    expect(quantities.findByQuantity!('Length', '>', 5)).toEqual([4]);
+    expect(quantities.findByQuantity!('Length', '>', 6)).toEqual([]);
+    expect(quantities.findByQuantity!('GrossVolume', '=', 2.75)).toEqual([4]);
+    // Quantity-set scoping: an unknown set name matches nothing.
+    expect(quantities.findByQuantity!('Length', '>', 5, 'Qto_WallBaseQuantities')).toEqual([4]);
+    expect(quantities.findByQuantity!('Length', '>', 5, 'Qto_SlabBaseQuantities')).toEqual([]);
+  });
+
+  it('should preserve relationship data through round-trip', async () => {
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    const { relationships } = result.dataStore;
+
+    // Check forward relationships
+    const contained = relationships.getRelated(3, RelationshipType.ContainsElements, 'forward');
+    expect(contained).toContain(4);
+    expect(contained).toContain(5);
+
+    // Check inverse relationships
+    const containers = relationships.getRelated(4, RelationshipType.ContainsElements, 'inverse');
+    expect(containers).toContain(3);
+  });
+
+  it('should preserve entity index byte offsets through round-trip', async () => {
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    expect(result.entityIndex).toBeDefined();
+    expect(Array.from(result.entityIndex!.ids)).toEqual([1, 2, 3, 4, 5]);
+    const wallIndex = Array.from(result.entityIndex!.ids).indexOf(4);
+    expect(result.entityIndex!.typeNames[result.entityIndex!.typeIndices[wallIndex]]).toBe('IFCWALL');
+    const wallText = new TextDecoder().decode(
+      new Uint8Array(sourceBuffer).subarray(
+        result.entityIndex!.byteOffsets[wallIndex],
+        result.entityIndex!.byteOffsets[wallIndex] + result.entityIndex!.byteLengths[wallIndex],
+      ),
+    );
+    expect(wallText).toBe("#4=IFCWALL('guid-wall-1');");
+  });
+
+  it('should preserve ifcType in geometry through round-trip', async () => {
+    const meshes: MeshData[] = [
+      {
+        expressId: 4,
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0]),
+        normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+        color: [0.8, 0.8, 0.8, 1.0],
+        ifcType: 'IfcWall',
+      },
+      {
+        expressId: 5,
+        positions: new Float32Array([0, 0, 0, 2, 0, 0, 2, 2, 0]),
+        normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+        color: [0.6, 0.6, 0.6, 1.0],
+        ifcType: 'IfcSlab',
+      },
+    ];
+
+    const coordinateInfo: CoordinateInfo = {
+      originShift: { x: 0, y: 0, z: 0 },
+      originalBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 2, y: 2, z: 0 } },
+      shiftedBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 2, y: 2, z: 0 } },
+      hasLargeCoordinates: false,
+    };
+
+    const geometry = {
+      meshes,
+      totalVertices: 6,
+      totalTriangles: 2,
+      coordinateInfo,
+    };
+
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, geometry, sourceBuffer);
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer);
+
+    expect(result.geometry).toBeTruthy();
+    expect(result.geometry!.meshes.length).toBe(2);
+    expect(result.geometry!.meshes[0].ifcType).toBe('IfcWall');
+    expect(result.geometry!.meshes[1].ifcType).toBe('IfcSlab');
+  });
+
+  it('never sets HasSpatial: no Spatial section is written or read', async () => {
+    // The writer used to flag HasSpatial whenever dataStore.spatialHierarchy was
+    // present, but no Spatial section is ever serialized (or read), so the flag
+    // only misled header consumers. It must stay unset even with a hierarchy on
+    // the store; the viewer rebuilds spatialHierarchy from relationships on load.
+    dataStore.spatialHierarchy = {} as NonNullable<CacheDataStore['spatialHierarchy']>;
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, undefined, sourceBuffer, {
+      includeGeometry: false,
+    });
+    const header = new BinaryCacheReader().readHeader(cacheBuffer);
+    expect(header.hasSpatialHierarchy).toBe(false);
+  });
+
+  it('should skip geometry when requested', async () => {
+    const meshes: MeshData[] = [
+      {
+        expressId: 4,
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0]),
+        normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+        color: [0.8, 0.8, 0.8, 1.0],
+      },
+    ];
+
+    const geometry = {
+      meshes,
+      totalVertices: 3,
+      totalTriangles: 1,
+      coordinateInfo: {
+        originShift: { x: 0, y: 0, z: 0 },
+        originalBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } },
+        shiftedBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } },
+        hasLargeCoordinates: false,
+      },
+    };
+
+    const writer = new BinaryCacheWriter();
+    const cacheBuffer = await writer.write(dataStore, geometry, sourceBuffer);
+
+    const reader = new BinaryCacheReader();
+    const result = await reader.read(cacheBuffer, { skipGeometry: true });
+
+    expect(result.geometry).toBeUndefined();
+    expect(result.dataStore.entities).toBeTruthy();
+  });
+});

@@ -1,0 +1,395 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * #4444 — the Share dialog makes the federation scope explicit. With
+ * several models the choice is shown, and whichever scope is picked is
+ * exactly what `startCollab` is asked to seed. #5599 — at ANY model count NO
+ * room is created (nothing is uploaded) until "Create link" is pressed, and
+ * the link defaults to view-only access.
+ *
+ * Drives the real dialog: the effect mints a (local, serverless) token and
+ * calls the store's `startCollab`, which is the one seam replaced here so the
+ * seed it receives can be read back without a collab runtime. The stand-in
+ * publishes `collabRoomId` synchronously like the real one, so the dialog
+ * sees the room exist the moment it asks for it.
+ */
+
+import '@/test/setup-dom.js';
+import { describe, it, beforeEach, afterEach, type TestContext } from 'node:test';
+import assert from 'node:assert/strict';
+import { act } from 'react';
+import { render, click, cleanup } from '@/test/render.js';
+import { createSyntheticDataStore } from '@ifc-lite/parser';
+import { useViewerStore } from '@/store/index.js';
+import type { FederatedModel } from '@/store/types.js';
+import type { StartCollabOptions } from '@/store/slices/collabSlice.js';
+import { ShareDialog } from './ShareDialog.js';
+import { buildGeometryResultFromMeshes } from '@/lib/collab/geometry-sync.js';
+import { prepareShareSeed } from '@/lib/collab/share-scope.js';
+
+function makeModel(id: string, name: string, idOffset: number, opts: { store?: boolean } = {}): FederatedModel {
+  return {
+    id,
+    name,
+    // `store: false` is a model with nothing to seed — a load still in flight
+    // (`useIfcLoader` upserts the record with a null store first), a GLB or a
+    // point cloud.
+    ifcDataStore:
+      opts.store === false
+        ? null
+        : createSyntheticDataStore({ schemaVersion: 'IFC4', fileSize: 3 }),
+    geometryResult: null,
+    visible: true,
+    collapsed: false,
+    schemaVersion: 'IFC4',
+    loadedAt: 1,
+    fileSize: 3,
+    idOffset,
+    maxExpressId: 10,
+  };
+}
+
+const starts: StartCollabOptions[] = [];
+const realStartCollab = useViewerStore.getState().startCollab;
+
+/** Let the dialog's async mint → startCollab chain settle. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+}
+
+function scopeRadios(): HTMLElement[] {
+  const group = document.querySelector('[role="radiogroup"][aria-label="Share scope"]');
+  return group ? Array.from(group.querySelectorAll<HTMLElement>('[role="radio"]')) : [];
+}
+function createLinkButton(): HTMLButtonElement | undefined {
+  return Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Create link');
+}
+function linkField(): HTMLInputElement {
+  const el = document.querySelector<HTMLInputElement>('#share-link');
+  assert.ok(el, 'the dialog rendered its link field');
+  return el;
+}
+
+beforeEach(() => {
+  starts.length = 0;
+  useViewerStore.setState({
+    collabRoomId: null,
+    collabRole: null,
+    collabRoomModels: new Map(),
+    collabLastShareToken: null,
+    collabSeedFailure: null,
+    startCollab: async (opts) => {
+      starts.push(opts);
+      // The real `startCollab` records the room and its slots before any
+      // await; the dialog's "room exists" branches key off exactly that.
+      useViewerStore.setState({
+        collabRoomId: opts.roomId,
+        collabRole: opts.role,
+        collabRoomModels: new Map(
+          (opts.seed?.models ?? []).map((m, index) => [m.modelId, { slotId: `m${index}`, pathPrefix: `/m${index}` }]),
+        ),
+      });
+    },
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.removeItem('ifc-lite:collab:server-url');
+  useViewerStore.setState({ startCollab: realStartCollab, models: new Map(), activeModelId: null });
+});
+
+describe('ShareDialog: explicit federation scope (#4444, #4620)', () => {
+  it('opens with invalid spatial metadata and reports failure only after consent (#6565)', async (t) => {
+    const invalid = makeModel('a', 'fixture.ifc', 0);
+    invalid.geometryResult = buildGeometryResultFromMeshes([], {
+      originShift: { x: 0, y: 0, z: 0 },
+      originalBounds: { min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } },
+      shiftedBounds: { min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } },
+      hasLargeCoordinates: false,
+    });
+    const models = new Map([['a', invalid], ['b', makeModel('b', 'valid.ifc', 1_000_000)]]);
+    useViewerStore.setState({ models, activeModelId: 'a', collabSeedPhase: 'none' });
+    // The action must still reject unsupported metadata; rendering its model
+    // count must not run that serialization or upload anything.
+    await assert.rejects(prepareShareSeed(models, new Map(), 'a', 'all'), /invalid or unsupported spatial metadata/);
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    await settle();
+    assert.match(document.body.textContent ?? '', /Share 2 models/);
+    assert.equal(starts.length, 0);
+    const create = createLinkButton();
+    assert.ok(create, 'the dialog survives and offers the consent action');
+    const logged = t.mock.method(console, 'error', () => {});
+    window.localStorage.setItem('ifc-lite:collab:server-url', 'wss://relay.example');
+    const tokenRequests = t.mock.method(globalThis, 'fetch', async () => Response.json({ token: 'fixture-token' }));
+    click(create);
+    await settle();
+    assert.equal(tokenRequests.mock.calls.length, 0, 'known-invalid metadata never claims a room at the token endpoint');
+    assert.equal(starts.length, 0, 'invalid metadata never reaches room creation');
+    assert.equal(useViewerStore.getState().collabRoomId, null);
+    assert.match(document.body.textContent ?? '', /Link creation failed/);
+    assert.equal(logged.mock.calls.length, 1, 'the action reports the rejection');
+    assert.match(String(logged.mock.calls[0].arguments[1]), /invalid or unsupported spatial metadata/);
+    assert.doesNotMatch(linkField().value, /^https?:/);
+  });
+
+  it('seeds the fresh scope after models change during the token request (#6565)', async (t) => {
+    const original = makeModel('a', 'original.ifc', 0);
+    useViewerStore.setState({ models: new Map([['a', original]]), activeModelId: 'a' });
+    window.localStorage.setItem('ifc-lite:collab:server-url', 'wss://relay.example');
+    let finishToken: (response: Response) => void = () => assert.fail('admin request has not started');
+    const tokenRequests = t.mock.method(globalThis, 'fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { role: string };
+      if (body.role !== 'admin') return Response.json({ token: 'fixture-invite' });
+      return new Promise<Response>((resolve) => { finishToken = resolve; });
+    });
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    const create = createLinkButton();
+    assert.ok(create);
+    click(create);
+    await settle();
+    assert.equal(tokenRequests.mock.calls.length, 1, 'the admin request is waiting on the relay');
+    assert.equal(starts.length, 0);
+    const added = makeModel('b', 'added.ifc', 1_000_000);
+    const active = makeModel('c', 'active.ifc', 2_000_000);
+    act(() => {
+      useViewerStore.setState({ models: new Map([['b', added], ['c', active]]), activeModelId: 'c' });
+    });
+    await act(async () => { finishToken(Response.json({ token: 'fixture-admin' })); });
+    await settle();
+    assert.equal(starts.length, 1);
+    assert.deepEqual(starts[0].seed?.models.map((model) => model.modelId), ['c', 'b'],
+      'removed models are excluded and new models use the current active-first scope');
+    assert.equal(starts[0].seed?.models[0].store, active.ifcDataStore);
+    assert.equal(starts[0].seed?.models[1].store, added.ifcDataStore);
+  });
+
+  /** Server-mode fetch stub: holds the admin mint until released, records every request. */
+  function relayStub(t: TestContext) {
+    window.localStorage.setItem('ifc-lite:collab:server-url', 'wss://relay.example');
+    const requests: Array<{ url: string; body: Record<string, unknown>; authorization: string | null }> = [];
+    let finishAdmin: () => void = () => assert.fail('admin request has not started');
+    t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requests.push({ url: String(input), body, authorization: new Headers(init?.headers).get('authorization') });
+      if (String(input).endsWith('/collab/release')) return Response.json({ released: true });
+      if (body.role !== 'admin') return Response.json({ token: 'fixture-invite' });
+      return new Promise<Response>((resolve) => { finishAdmin = () => resolve(Response.json({ token: 'fixture-admin' })); });
+    });
+    const releases = () => requests.filter((r) => r.url === 'https://relay.example/collab/release');
+    const adminRoom = () => requests.find((r) => r.body.role === 'admin')?.body.roomId;
+    return { releases, adminRoom, finishAdmin: () => finishAdmin() };
+  }
+
+  it('hands the room claim back when seed preparation fails after the token request (#6581)', async (t) => {
+    useViewerStore.setState({ models: new Map([['a', makeModel('a', 'valid.ifc', 0)]]), activeModelId: 'a' });
+    const relay = relayStub(t);
+    const logged = t.mock.method(console, 'error', () => {});
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    click(createLinkButton()!);
+    await settle();
+    // The metadata turns invalid while the token request is pending.
+    const invalid = makeModel('a', 'valid.ifc', 0);
+    invalid.geometryResult = buildGeometryResultFromMeshes([], {
+      originShift: { x: 0, y: 0, z: 0 },
+      originalBounds: { min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } },
+      shiftedBounds: { min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } },
+      hasLargeCoordinates: false,
+    });
+    act(() => { useViewerStore.setState({ models: new Map([['a', invalid]]) }); });
+    await act(async () => { relay.finishAdmin(); });
+    await settle();
+    assert.equal(starts.length, 0, 'the seed could not be prepared, so the room was never joined');
+    assert.match(String(logged.mock.calls[0]?.arguments[1]), /invalid or unsupported spatial metadata/);
+    const releases = relay.releases();
+    assert.equal(releases.length, 1, 'the claim is released exactly once');
+    assert.deepEqual(releases[0].body, { roomId: relay.adminRoom() }, 'for the room the admin token claimed');
+    assert.equal(releases[0].authorization, 'Bearer fixture-admin', 'with that admin token');
+  });
+
+  it('hands the room claim back when the session never comes up (#6581)', async (t) => {
+    useViewerStore.setState({
+      models: new Map([['a', makeModel('a', 'valid.ifc', 0)]]),
+      activeModelId: 'a',
+      // Resolves without a live room, as the real one does when the join fails.
+      startCollab: async (opts) => { starts.push(opts); },
+    });
+    const relay = relayStub(t);
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    click(createLinkButton()!);
+    await settle();
+    await act(async () => { relay.finishAdmin(); });
+    await settle();
+    assert.equal(starts.length, 1);
+    assert.equal(relay.releases().length, 1);
+    assert.equal(relay.releases()[0].body.roomId, starts[0].roomId);
+  });
+
+  it('keeps the claim of a room that came up (#6581)', async (t) => {
+    useViewerStore.setState({ models: new Map([['a', makeModel('a', 'valid.ifc', 0)]]), activeModelId: 'a' });
+    const relay = relayStub(t);
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    click(createLinkButton()!);
+    await settle();
+    await act(async () => { relay.finishAdmin(); });
+    await settle();
+    assert.equal(useViewerStore.getState().collabRoomId, starts[0]?.roomId, 'the room is live');
+    assert.equal(relay.releases().length, 0);
+  });
+
+  it('with one model, uploads nothing on open: no room until "Create link", which says it uploads (#5599)', async () => {
+    useViewerStore.setState({ models: new Map([['a', makeModel('a', 'tower.ifc', 0)]]), activeModelId: 'a' });
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    await settle();
+    assert.equal(scopeRadios().length, 0, 'no scope choice to make with one model');
+    assert.equal(starts.length, 0, 'opening the dialog must not create the room (upload the model)');
+    assert.equal(useViewerStore.getState().collabRoomId, null);
+    assert.match(document.body.textContent ?? '', /uploads .*to the collaboration server/, 'the upload is disclosed before consent');
+    assert.match(linkField().value, /Create the link/);
+    const create = createLinkButton();
+    assert.ok(create, 'the consent button is offered');
+    click(create);
+    await settle();
+    assert.equal(starts.length, 1, 'confirming creates the room once');
+    assert.deepEqual(starts[0].seed?.models.map((m) => m.modelId), ['a']);
+    assert.equal(createLinkButton(), undefined, 'the room exists: nothing left to confirm');
+  });
+
+  it('defaults the invite to view-only access (#5599)', async () => {
+    useViewerStore.setState({ models: new Map([['a', makeModel('a', 'tower.ifc', 0)]]), activeModelId: 'a' });
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    await settle();
+    const checked = document.querySelector('[role="radiogroup"][aria-label="Access level"] [aria-checked="true"]');
+    assert.equal(checked?.textContent?.trim(), 'View', 'least privilege by default');
+  });
+
+  it('an owner with nothing seedable still takes the OWNER path: an empty seed, never none', async () => {
+    // The Share button is enabled on `models.size > 0`, and a primary load
+    // upserts its record before the store exists. `startCollab` keys owner vs
+    // recipient on `seed` presence, so `undefined` here would send the admin
+    // down the recipient path: reconstruct their own empty room as a ghost
+    // 'Shared model' and count themselves a joiner of it.
+    useViewerStore.setState({
+      models: new Map([['a', makeModel('a', 'tower.ifc', 0, { store: false })]]),
+      activeModelId: 'a',
+    });
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    await settle();
+    const create = createLinkButton();
+    assert.ok(create);
+    click(create);
+    await settle();
+    assert.equal(starts.length, 1);
+    assert.notEqual(starts[0].seed, undefined, 'the owner always passes a seed');
+    assert.deepEqual(starts[0].seed, { models: [] });
+  });
+
+  it('"All loaded models" counts what can be shared, not what is loaded', async () => {
+    useViewerStore.setState({
+      models: new Map([
+        ['a', makeModel('a', 'AC20-FZK-Haus.ifc', 0)],
+        ['b', makeModel('b', 'site.glb', 1_000_000, { store: false })],
+        ['c', makeModel('c', 'AC20-FZK-Haus.ifc', 2_000_000)],
+      ]),
+      activeModelId: 'a',
+    });
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    await settle();
+    const radios = scopeRadios();
+    assert.equal(radios[1].textContent?.trim(), 'All 2 of 3 loaded models');
+    assert.match(document.body.textContent ?? '', /2 of 3 loaded models can be shared/);
+    assert.match(document.body.textContent ?? '', /Share 2 models/);
+    const create = createLinkButton();
+    assert.ok(create);
+    click(create);
+    await settle();
+    assert.deepEqual(starts[0].seed?.models.map((m) => m.modelId), ['a', 'c']);
+    assert.match(document.body.textContent ?? '', /This session carries 2 models/);
+  });
+
+  it('with two copies loaded, asks first: no room until "Create link", then shares both — active first', async () => {
+    useViewerStore.setState({
+      models: new Map([
+        ['a', makeModel('a', 'AC20-FZK-Haus.ifc', 0)],
+        ['b', makeModel('b', 'AC20-FZK-Haus.ifc', 1_000_000)],
+      ]),
+      activeModelId: 'b',
+    });
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    await settle();
+    const radios = scopeRadios();
+    assert.equal(radios.length, 2);
+    assert.equal(radios[1].textContent?.trim(), 'All 2 loaded models');
+    assert.equal(radios[1].getAttribute('aria-checked'), 'true', '"all loaded models" is the default');
+    for (const radio of radios) assert.equal((radio as HTMLButtonElement).disabled, false, 'the choice is live');
+    assert.match(document.body.textContent ?? '', /Share 2 models/);
+    assert.equal(starts.length, 0, 'the room is NOT created before the scope is confirmed');
+    assert.equal(useViewerStore.getState().collabRoomId, null);
+    assert.match(linkField().value, /Choose what to share/);
+
+    const create = createLinkButton();
+    assert.ok(create, 'the confirm button is offered');
+    click(create);
+    await settle();
+    assert.equal(starts.length, 1, 'confirming creates the room once');
+    const seed = starts[0].seed;
+    assert.ok(seed);
+    assert.deepEqual(seed.models.map((m) => m.modelId), ['b', 'a']);
+    // Each model is seeded from ITS OWN store, not the top-level active one.
+    assert.equal(seed.models[1].store, useViewerStore.getState().models.get('a')?.ifcDataStore);
+    assert.equal(seed.models[0].idOffset, 1_000_000);
+    // The room now exists: the scope is fixed and the dialog reports it.
+    for (const radio of scopeRadios()) assert.equal((radio as HTMLButtonElement).disabled, true);
+    assert.equal(createLinkButton(), undefined);
+    assert.match(document.body.textContent ?? '', /This session carries 2 models/);
+  });
+
+  it('"Active model only" narrows the seed to the active model', async () => {
+    useViewerStore.setState({
+      models: new Map([
+        ['a', makeModel('a', 'AC20-FZK-Haus.ifc', 0)],
+        ['b', makeModel('b', 'AC20-FZK-Haus.ifc', 1_000_000)],
+      ]),
+      activeModelId: 'b',
+    });
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    await settle();
+    click(scopeRadios()[0]);
+    await settle();
+    assert.equal(scopeRadios()[0].getAttribute('aria-checked'), 'true');
+    assert.match(document.body.textContent ?? '', /Only “AC20-FZK-Haus.ifc” is shared/);
+    assert.equal(starts.length, 0, 'picking a scope does not create the room by itself');
+    const create = createLinkButton();
+    assert.ok(create);
+    click(create);
+    await settle();
+    assert.equal(starts.length, 1);
+    assert.deepEqual(starts[0].seed?.models.map((m) => m.modelId), ['b']);
+    assert.match(document.body.textContent ?? '', /This session carries 1 model\./);
+  });
+
+  it('once the room exists the scope is fixed and the dialog reports what the room carries', async () => {
+    useViewerStore.setState({
+      models: new Map([
+        ['a', makeModel('a', 'AC20-FZK-Haus.ifc', 0)],
+        ['b', makeModel('b', 'AC20-FZK-Haus.ifc', 1_000_000)],
+      ]),
+      activeModelId: 'b',
+      collabRoomId: 'room-1',
+      collabRole: 'admin',
+      collabRoomModels: new Map([
+        ['b', { slotId: 'm0', pathPrefix: '/m0' }],
+        ['a', { slotId: 'm1', pathPrefix: '/m1' }],
+      ]),
+    });
+    render(<ShareDialog open onOpenChange={() => {}} />);
+    await settle();
+    for (const radio of scopeRadios()) assert.equal((radio as HTMLButtonElement).disabled, true);
+    assert.match(document.body.textContent ?? '', /This session carries 2 models/);
+    assert.equal(starts.length, 0, 'an existing room is never re-seeded from the dialog');
+  });
+});

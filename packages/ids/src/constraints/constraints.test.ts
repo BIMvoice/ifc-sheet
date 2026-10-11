@@ -1,0 +1,584 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { matchConstraint } from './index.js';
+import type {
+  IDSSimpleValue,
+  IDSPatternConstraint,
+  IDSEnumerationConstraint,
+  IDSBoundsConstraint,
+} from '../types.js';
+
+// ============================================================================
+// matchConstraint — Simple Values
+// ============================================================================
+
+describe('matchConstraint — simpleValue', () => {
+  const sv = (value: string): IDSSimpleValue => ({
+    type: 'simpleValue',
+    value,
+  });
+
+  it('matches exact string', () => {
+    expect(matchConstraint(sv('hello'), 'hello')).toBe(true);
+  });
+
+  it('rejects different string', () => {
+    expect(matchConstraint(sv('hello'), 'world')).toBe(false);
+  });
+
+  it('is case-sensitive by default', () => {
+    expect(matchConstraint(sv('IFCWALL'), 'IfcWall')).toBe(false);
+    expect(matchConstraint(sv('hello'), 'Hello')).toBe(false);
+  });
+
+  it('matches case-insensitively when option is set (IFC entity names)', () => {
+    const ci = { caseInsensitive: true };
+    expect(matchConstraint(sv('IFCWALL'), 'IfcWall', ci)).toBe(true);
+    expect(matchConstraint(sv('IfcWall'), 'IFCWALL', ci)).toBe(true);
+    expect(matchConstraint(sv('ifcwall'), 'IFCWALL', ci)).toBe(true);
+  });
+
+  it('matches numeric values with tolerance', () => {
+    expect(matchConstraint(sv('3.14'), 3.14)).toBe(true);
+    expect(matchConstraint(sv('3.14'), 3.1400005)).toBe(true); // within 1e-6
+    expect(matchConstraint(sv('3.14'), 3.15)).toBe(false);
+  });
+
+  it('matches numeric string against numeric string', () => {
+    expect(matchConstraint(sv('42'), '42')).toBe(true);
+    expect(matchConstraint(sv('42'), '42.0000005')).toBe(true); // within tolerance
+  });
+
+  it('scales the numeric tolerance with the magnitude of the IDS value', () => {
+    // Every other numeric fixture here has |value| <= 42 and a delta of 5e-7,
+    // so a FLAT 1e-6 passes all of them and the relative term
+    // `1e-6 * (1 + |castValue|)` in numericEpsilon is unexercised. At 1e6 the
+    // two differ by six orders of magnitude: relative gives ~1.0, flat gives
+    // 1e-6. This is the real case — a length in millimetres round-tripped
+    // through text loses more than 1e-6 absolute.
+    expect(matchConstraint(sv('1000000'), 1000000.5)).toBe(true);
+    // ...and the tolerance must stay a tolerance: still bounded, not open.
+    expect(matchConstraint(sv('1000000'), 1000002)).toBe(false);
+    // The scaling is relative, so a small value keeps a small window: 0.5 is
+    // nowhere near 1, even though 0.5 was accepted as slack at 1e6 above.
+    expect(matchConstraint(sv('1'), 1.5)).toBe(false);
+  });
+
+  it('matches boolean true (strict lowercase per IDS spec)', () => {
+    expect(matchConstraint(sv('true'), true)).toBe(true);
+    // Numeric `1` / `0` are NOT valid boolean literals per IDS 1.0.
+    expect(matchConstraint(sv('1'), true)).toBe(false);
+    expect(matchConstraint(sv('false'), true)).toBe(false);
+  });
+
+  it('matches boolean false (strict lowercase per IDS spec)', () => {
+    expect(matchConstraint(sv('false'), false)).toBe(true);
+    expect(matchConstraint(sv('0'), false)).toBe(false);
+    expect(matchConstraint(sv('true'), false)).toBe(false);
+  });
+
+  it('matches boolean string values (case-sensitive, lowercase only)', () => {
+    expect(matchConstraint(sv('true'), 'true')).toBe(true);
+    expect(matchConstraint(sv('false'), 'false')).toBe(true);
+    expect(matchConstraint(sv('true'), 'false')).toBe(false);
+    // Uppercase or mixed-case literals are malformed per IDS spec.
+    expect(matchConstraint(sv('TRUE'), 'true')).toBe(false);
+    expect(matchConstraint(sv('false'), 'FALSE')).toBe(false);
+  });
+
+  it('returns false for null/undefined', () => {
+    expect(matchConstraint(sv('anything'), null)).toBe(false);
+    expect(matchConstraint(sv('anything'), undefined)).toBe(false);
+  });
+
+  it('handles empty string', () => {
+    expect(matchConstraint(sv(''), '')).toBe(true);
+    expect(matchConstraint(sv(''), 'notempty')).toBe(false);
+  });
+});
+
+// ============================================================================
+// matchConstraint — Pattern
+// ============================================================================
+
+describe('matchConstraint — pattern', () => {
+  const pat = (pattern: string): IDSPatternConstraint => ({
+    type: 'pattern',
+    pattern,
+  });
+  const patB = (pattern: string, base: string): IDSPatternConstraint => ({
+    type: 'pattern',
+    pattern,
+    base,
+  });
+
+  it('matches simple regex', () => {
+    expect(matchConstraint(pat('Wall.*'), 'Wall_001')).toBe(true);
+    expect(matchConstraint(pat('Wall.*'), 'Slab_001')).toBe(false);
+  });
+
+  it('anchors the match to the full string', () => {
+    // Pattern should match entire string, not just a substring
+    expect(matchConstraint(pat('Wall'), 'Wall')).toBe(true);
+    expect(matchConstraint(pat('Wall'), 'BigWall')).toBe(false);
+    expect(matchConstraint(pat('Wall'), 'WallBig')).toBe(false);
+  });
+
+  it('is case-sensitive (per XSD/IDS spec)', () => {
+    expect(matchConstraint(pat('IFCWALL'), 'IfcWall')).toBe(false);
+    expect(matchConstraint(pat('ifcwall'), 'IFCWALL')).toBe(false);
+    expect(matchConstraint(pat('IFCWALL'), 'IFCWALL')).toBe(true);
+    expect(matchConstraint(pat('IfcWall'), 'IfcWall')).toBe(true);
+  });
+
+  it('converts XSD \\i to initial name char class (Unicode letters)', () => {
+    // \i matches [\p{L}_:]
+    expect(matchConstraint(pat('\\i.*'), 'abc')).toBe(true);
+    expect(matchConstraint(pat('\\i.*'), '_test')).toBe(true);
+    expect(matchConstraint(pat('\\i.*'), 'Ölaf')).toBe(true); // non-ASCII letter
+    expect(matchConstraint(pat('\\i.*'), '9abc')).toBe(false); // digit can't start
+  });
+
+  it('converts XSD \\c to name char class', () => {
+    // \c matches [\p{L}\p{Nd}_:.-…]
+    expect(matchConstraint(pat('\\c+'), 'a.b-c:1')).toBe(true);
+    expect(matchConstraint(pat('\\c+'), 'a b')).toBe(false); // space is not a name char
+  });
+
+  it('matches XSD \\p{...} unicode categories with full fidelity', () => {
+    // Regression: the old translator collapsed every \p{...} to `.`, so
+    // a letter class wrongly matched digits/punctuation. With the `u`
+    // flag the property escapes are honoured exactly.
+    expect(matchConstraint(pat('\\p{L}+'), 'hello')).toBe(true);
+    expect(matchConstraint(pat('\\p{L}+'), 'café')).toBe(true);
+    expect(matchConstraint(pat('\\p{L}+'), '123')).toBe(false);
+    expect(matchConstraint(pat('\\p{L}+'), 'ab12')).toBe(false);
+    expect(matchConstraint(pat('\\p{Nd}+'), '123')).toBe(true);
+    expect(matchConstraint(pat('\\p{Nd}+'), 'abc')).toBe(false);
+  });
+
+  it('treats XSD \\d / \\w as Unicode classes (not ASCII-only)', () => {
+    expect(matchConstraint(pat('\\d+'), '42')).toBe(true);
+    expect(matchConstraint(pat('\\d+'), '4.2')).toBe(false); // dot is not a digit
+    expect(matchConstraint(pat('\\w+'), 'abc123')).toBe(true);
+    expect(matchConstraint(pat('\\w+'), 'a b')).toBe(false); // space is not \w
+  });
+
+  it('handles multi-char escapes inside character classes', () => {
+    // [\w] / [\d] / [\i] must compile and match, not reject every value.
+    expect(matchConstraint(pat('[\\w]+'), 'abc123')).toBe(true);
+    expect(matchConstraint(pat('[\\w]+'), 'a b')).toBe(false);
+    expect(matchConstraint(pat('[\\d]+'), '42')).toBe(true);
+    expect(matchConstraint(pat('[\\d]+'), '4a')).toBe(false);
+    expect(matchConstraint(pat('[\\i][\\c]*'), 'Name_1')).toBe(true);
+  });
+
+  it('does not reject valid values for XSD block escapes JS cannot model', () => {
+    // `\p{IsBasicLatin}` has no JS equivalent; approximate permissively
+    // (as the legacy `.` did) rather than failing every value.
+    expect(matchConstraint(pat('\\p{IsBasicLatin}+'), 'A')).toBe(true);
+    expect(matchConstraint(pat('\\p{IsBasicLatin}+'), 'Hello')).toBe(true);
+  });
+
+  it('evaluates XSD character-class subtraction exactly instead of dropping the exclusion (#5183)', () => {
+    // `[a-z-[aeiou]]` is "lowercase, excluding vowels". Dropping the
+    // exclusion made a consonants-only pattern accept "aeiou".
+    const consonants = pat('[a-z-[aeiou]]+');
+    expect(matchConstraint(consonants, 'aeiou')).toBe(false);
+    expect(matchConstraint(consonants, 'xyz')).toBe(true);
+    expect(matchConstraint(consonants, 'xaz')).toBe(false);
+    // Nested: a-z minus (b-y minus c) = a, c, z.
+    const nested = pat('[a-z-[b-y-[c]]]+');
+    expect(matchConstraint(nested, 'acz')).toBe(true);
+    expect(matchConstraint(nested, 'b')).toBe(false);
+    // XSD escapes in either set, and the rest of the pattern around it.
+    expect(matchConstraint(pat('W-[\\w-[\\d]]{2}'), 'W-ab')).toBe(true);
+    expect(matchConstraint(pat('W-[\\w-[\\d]]{2}'), 'W-a1')).toBe(false);
+  });
+
+  it('refuses a subtraction it cannot delimit rather than guessing (#5183)', () => {
+    expect(() => matchConstraint(pat('[a-z-[aeiou]+'), 'xyz')).toThrow(
+      /XSD character-class subtraction is not supported in JS regex/
+    );
+    // Even behind an earlier approximated construct (review on #5286).
+    expect(() => matchConstraint(pat('\\p{IsBasicLatin}[a-z-[b]'), 'Ab')).toThrow(
+      /XSD character-class subtraction is not supported in JS regex/
+    );
+  });
+
+  it('anchors top-level alternation across the whole value', () => {
+    // `^a|b$` would match a left-anchored "a" or right-anchored "b";
+    // the matcher wraps the pattern so the alternation spans the value.
+    expect(matchConstraint(pat('foo|bar'), 'foo')).toBe(true);
+    expect(matchConstraint(pat('foo|bar'), 'bar')).toBe(true);
+    expect(matchConstraint(pat('foo|bar'), 'foobar')).toBe(false);
+    expect(matchConstraint(pat('foo|bar'), 'xbar')).toBe(false);
+  });
+
+  it('returns false for invalid regex', () => {
+    // Unbalanced brackets should not throw, just return false
+    expect(matchConstraint(pat('[invalid'), 'test')).toBe(false);
+  });
+
+  it('matches the textual form of a numeric value under a numeric base', () => {
+    // xs:pattern constrains the lexical space of its base type, so a
+    // numeric value is matched via its string form — same as the IDS
+    // reference (re.fullmatch(pattern, str(value))).
+    expect(matchConstraint(patB('[0-9]+\\.?[0-9]*', 'xs:double'), 3.14)).toBe(true);
+    expect(matchConstraint(pat('[0-9]+\\.?[0-9]*'), '3.14')).toBe(true);
+    // A textual form that doesn't match still fails.
+    expect(matchConstraint(pat('[0-9]+'), 'abc')).toBe(false);
+  });
+
+  it('treats "^.*$" on a decimal as "any value present" (regression #1097)', () => {
+    // <restriction base="xs:decimal"><pattern value="^.*$"/> is the IDS
+    // idiom for "the property must be present with any decimal value".
+    // It must accept numeric property values, not reject them outright.
+    expect(matchConstraint(patB('^.*$', 'xs:decimal'), 42.5)).toBe(true);
+    expect(matchConstraint(patB('^.*$', 'xs:decimal'), 0)).toBe(true);
+    expect(matchConstraint(patB('^.*$', 'xs:boolean'), true)).toBe(true);
+    expect(matchConstraint(patB('^.*$', 'xs:string'), 'anything')).toBe(true);
+  });
+
+  it('requires the runtime value type to match the restriction base', () => {
+    // A number under an xs:string base is a type mismatch — buildingSMART's
+    // corpus encodes this as `patterns_always_fail_on_any_number`.
+    expect(matchConstraint(patB('.*', 'xs:string'), 42)).toBe(false);
+    // A boolean under a numeric base is likewise a mismatch.
+    expect(matchConstraint(patB('^.*$', 'xs:decimal'), true)).toBe(false);
+    // A number under a numeric base is accepted (prefix-agnostic base).
+    expect(matchConstraint(patB('[0-9]+', 'xsd:integer'), 42)).toBe(true);
+    // No declared base: numeric/boolean actuals can't be type-checked, so
+    // they fail rather than producing a false pass.
+    expect(matchConstraint(pat('^.*$'), 42.5)).toBe(false);
+  });
+});
+
+// ============================================================================
+// matchConstraint — Enumeration
+// ============================================================================
+
+describe('matchConstraint — enumeration', () => {
+  const enumC = (values: string[]): IDSEnumerationConstraint => ({
+    type: 'enumeration',
+    values,
+  });
+
+  it('matches single value', () => {
+    expect(matchConstraint(enumC(['IFCWALL']), 'IFCWALL')).toBe(true);
+  });
+
+  it('matches one of multiple values', () => {
+    const c = enumC(['IFCWALL', 'IFCSLAB', 'IFCBEAM']);
+    expect(matchConstraint(c, 'IFCSLAB')).toBe(true);
+    expect(matchConstraint(c, 'IFCCOLUMN')).toBe(false);
+  });
+
+  it('is case-sensitive by default', () => {
+    expect(matchConstraint(enumC(['IFCWALL']), 'IfcWall')).toBe(false);
+    expect(matchConstraint(enumC(['IfcWall']), 'IFCWALL')).toBe(false);
+  });
+
+  it('matches case-insensitively when option is set', () => {
+    const ci = { caseInsensitive: true };
+    expect(matchConstraint(enumC(['IFCWALL']), 'IfcWall', ci)).toBe(true);
+    expect(matchConstraint(enumC(['IfcWall']), 'IFCWALL', ci)).toBe(true);
+  });
+
+  it('matches numeric values with tolerance', () => {
+    expect(matchConstraint(enumC(['3.14', '2.71']), 3.14)).toBe(true);
+    expect(matchConstraint(enumC(['3.14', '2.71']), 2.7100005)).toBe(true);
+    expect(matchConstraint(enumC(['3.14', '2.71']), 9.99)).toBe(false);
+  });
+
+  it('returns false when nothing matches', () => {
+    expect(matchConstraint(enumC(['A', 'B', 'C']), 'D')).toBe(false);
+  });
+
+});
+
+// ============================================================================
+// matchConstraint — Bounds
+// ============================================================================
+
+describe('matchConstraint — bounds', () => {
+  const bounds = (
+    opts: Partial<IDSBoundsConstraint>
+  ): IDSBoundsConstraint => ({
+    type: 'bounds',
+    ...opts,
+  });
+
+  it('minExclusive — fails at exact boundary', () => {
+    expect(matchConstraint(bounds({ minExclusive: 10 }), 10)).toBe(false);
+  });
+
+  it('minExclusive — passes above boundary', () => {
+    expect(matchConstraint(bounds({ minExclusive: 10 }), 10.001)).toBe(true);
+  });
+
+  it('maxExclusive — fails at exact boundary', () => {
+    expect(matchConstraint(bounds({ maxExclusive: 100 }), 100)).toBe(false);
+  });
+
+  it('maxExclusive — passes below boundary', () => {
+    expect(matchConstraint(bounds({ maxExclusive: 100 }), 99.999)).toBe(true);
+  });
+
+  it('combined minInclusive + maxInclusive range', () => {
+    const c = bounds({ minInclusive: 0, maxInclusive: 100 });
+    expect(matchConstraint(c, 0)).toBe(true);
+    expect(matchConstraint(c, 50)).toBe(true);
+    expect(matchConstraint(c, 100)).toBe(true);
+    expect(matchConstraint(c, -1)).toBe(false);
+    expect(matchConstraint(c, 101)).toBe(false);
+  });
+
+  it('combined minExclusive + maxExclusive range', () => {
+    const c = bounds({ minExclusive: 0, maxExclusive: 100 });
+    expect(matchConstraint(c, 0)).toBe(false);
+    expect(matchConstraint(c, 50)).toBe(true);
+    expect(matchConstraint(c, 100)).toBe(false);
+  });
+
+  it('returns false for non-numeric actual value', () => {
+    expect(matchConstraint(bounds({ minInclusive: 0 }), 'abc')).toBe(false);
+  });
+
+  it('parses string numbers', () => {
+    expect(matchConstraint(bounds({ minInclusive: 0, maxInclusive: 100 }), '50')).toBe(true);
+  });
+
+  it('uses strict comparison at boundaries (no implicit tolerance)', () => {
+    // Per upstream IfcOpenShell, bound checks compare strictly so a
+    // value just below `minInclusive` fails (mirrors fixture
+    // `tolerance/fail-comparison_tolerance_for_floating_point_range_greater_than_zero_inclusive`).
+    expect(matchConstraint(bounds({ minInclusive: 10 }), 10 - 0.5e-6)).toBe(false);
+    expect(matchConstraint(bounds({ minInclusive: 10 }), 10 - 2e-5)).toBe(false);
+    expect(matchConstraint(bounds({ minInclusive: 10 }), 10)).toBe(true);
+  });
+
+  it('no bounds specified accepts any number', () => {
+    expect(matchConstraint(bounds({}), 999)).toBe(true);
+    expect(matchConstraint(bounds({}), -999)).toBe(true);
+  });
+
+  // `unparseableFacets` is what `parseRestriction` attaches when a facet
+  // element was present in the source XML but its `@value` failed to
+  // parse (see `parser/xml-parser.test.ts` for the full XML-to-matcher
+  // round trip). At the matcher level, its mere presence must flip an
+  // otherwise-unbounded constraint from an unconditional pass to an
+  // unconditional fail — regardless of which other facets are set.
+  it('a non-empty unparseableFacets fails closed even with no other facets set', () => {
+    const c = bounds({ unparseableFacets: [{ facet: 'minInclusive', rawValue: 'abc' }] });
+    expect(matchConstraint(c, 999)).toBe(false);
+    expect(matchConstraint(c, -999)).toBe(false);
+    expect(matchConstraint(c, 0)).toBe(false);
+  });
+
+  it('a non-empty unparseableFacets fails closed even when other facets on the SAME constraint are well-formed', () => {
+    // e.g. `<xs:minInclusive value="60"/>` parsed fine but a sibling
+    // `<xs:maxInclusive value="not-a-number"/>` did not — the whole
+    // restriction is unverifiable, not "just the min half".
+    const c = bounds({
+      minInclusive: 0,
+      unparseableFacets: [{ facet: 'maxInclusive', rawValue: 'not-a-number' }],
+    });
+    expect(matchConstraint(c, 50)).toBe(false);
+  });
+
+  it('an empty unparseableFacets array behaves exactly like it being absent', () => {
+    const c = bounds({ minInclusive: 0, maxInclusive: 100, unparseableFacets: [] });
+    expect(matchConstraint(c, 50)).toBe(true);
+    expect(matchConstraint(c, -1)).toBe(false);
+  });
+});
+
+// ============================================================================
+// matchConstraint — bounds: totalDigits / fractionDigits
+//
+// Regression coverage: an `xs:restriction` carrying ONLY `totalDigits`
+// and/or `fractionDigits` (no min/max/enumeration/pattern) used to fall
+// through the parser to an empty `enumeration` constraint, which fails
+// EVERY value unconditionally — a spec-conforming value was reported
+// non-compliant (false FAIL on 100% of inputs).
+// ============================================================================
+
+describe('matchConstraint — bounds: fractionDigits / totalDigits', () => {
+  const bounds = (
+    opts: Partial<IDSBoundsConstraint>
+  ): IDSBoundsConstraint => ({
+    type: 'bounds',
+    ...opts,
+  });
+
+  it('fractionDigits — passes a value at or under the limit', () => {
+    const c = bounds({ fractionDigits: 2 });
+    expect(matchConstraint(c, '0.25')).toBe(true);
+    expect(matchConstraint(c, '0.2')).toBe(true);
+    expect(matchConstraint(c, '5')).toBe(true);
+  });
+
+  it('fractionDigits — fails a value with more fraction digits than the limit', () => {
+    expect(matchConstraint(bounds({ fractionDigits: 2 }), '0.256')).toBe(false);
+  });
+
+  it('fractionDigits — trailing zeros are not significant', () => {
+    // "1.4500" has 2 significant fraction digits (trailing zeros drop).
+    expect(matchConstraint(bounds({ fractionDigits: 2 }), '1.4500')).toBe(true);
+  });
+
+  it('totalDigits — passes a value at or under the limit', () => {
+    const c = bounds({ totalDigits: 4 });
+    expect(matchConstraint(c, '12.34')).toBe(true);
+    expect(matchConstraint(c, '0.0025')).toBe(true);
+  });
+
+  it('totalDigits — fails a value with more significant digits than the limit', () => {
+    expect(matchConstraint(bounds({ totalDigits: 4 }), '123.45')).toBe(false);
+  });
+
+  it('totalDigits — leading zeros in the integer part are not significant', () => {
+    expect(matchConstraint(bounds({ totalDigits: 2 }), '007')).toBe(true);
+  });
+
+  // XSD §4.3.11/§4.3.12: value = i × 10⁻ⁿ. `fractionDigits` is `n` (leading
+  // fraction zeros fix the magnitude, so they DO count); `totalDigits` is
+  // the digit count of `i` (leading zeros — integer part AND fraction,
+  // before the first non-zero digit — are absorbed into 10⁻ⁿ and do
+  // NOT count). The two facets disagree on a value like 0.0025: regression
+  // coverage for a totalDigits miscount that conflated the two rules.
+  it('totalDigits vs fractionDigits count leading fraction zeros differently', () => {
+    const cases: Array<[string, number, number]> = [
+      ['0.0025', 2, 4], // 0.0025 = 25 × 10⁻⁴: totalDigits 2, fractionDigits 4
+      ['0.250', 2, 2], // trailing fraction zero drops from both
+      ['100.5', 4, 1], // integer digits count fully toward totalDigits
+      ['1000', 4, 0], // trailing zeros in the INTEGER part stay significant
+      ['7', 1, 0],
+      ['0', 1, 0],
+    ];
+    for (const [value, expectedTotal, expectedFraction] of cases) {
+      // At the exact count, the facet passes; one below it, it fails.
+      expect(matchConstraint(bounds({ totalDigits: expectedTotal }), value)).toBe(true);
+      expect(matchConstraint(bounds({ totalDigits: expectedTotal - 1 }), value)).toBe(
+        false
+      );
+      expect(matchConstraint(bounds({ fractionDigits: expectedFraction }), value)).toBe(
+        true
+      );
+      if (expectedFraction > 0) {
+        expect(
+          matchConstraint(bounds({ fractionDigits: expectedFraction - 1 }), value)
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('totalDigits — 0.0025 against progressively tighter limits (regression: a prior miscount reported this value as having 4 total digits, not 2)', () => {
+    expect(matchConstraint(bounds({ totalDigits: 3 }), '0.0025')).toBe(true);
+    expect(matchConstraint(bounds({ totalDigits: 2 }), '0.0025')).toBe(true);
+    expect(matchConstraint(bounds({ totalDigits: 1 }), '0.0025')).toBe(false);
+  });
+
+  it('combined totalDigits + fractionDigits', () => {
+    const c = bounds({ totalDigits: 5, fractionDigits: 2 });
+    expect(matchConstraint(c, '123.45')).toBe(true);
+    expect(matchConstraint(c, '123.456')).toBe(false); // exceeds fractionDigits
+    expect(matchConstraint(c, '12345.6')).toBe(false); // exceeds totalDigits
+  });
+
+  it('rejects a non-numeric actual value', () => {
+    expect(matchConstraint(bounds({ fractionDigits: 2 }), 'abc')).toBe(false);
+  });
+
+  it('works against a number actual value, including scientific-notation magnitudes', () => {
+    expect(matchConstraint(bounds({ fractionDigits: 2 }), 0.25)).toBe(true);
+    expect(matchConstraint(bounds({ fractionDigits: 7 }), 1e-7)).toBe(true);
+    expect(matchConstraint(bounds({ fractionDigits: 6 }), 1e-7)).toBe(false);
+  });
+});
+
+// ============================================================================
+// matchConstraint — bounds (string-length facets: xs:length / xs:minLength /
+// xs:maxLength)
+// ============================================================================
+
+describe('matchConstraint — bounds (length facets)', () => {
+  const bounds = (
+    opts: Partial<IDSBoundsConstraint>
+  ): IDSBoundsConstraint => ({
+    type: 'bounds',
+    ...opts,
+  });
+
+  describe('length (exact)', () => {
+    const c = bounds({ length: 4 });
+
+    it('passes when the string length exactly matches', () => {
+      expect(matchConstraint(c, 'abcd')).toBe(true);
+    });
+
+    it('fails when the string is one character shorter', () => {
+      expect(matchConstraint(c, 'abc')).toBe(false);
+    });
+
+    it('fails when the string is one character longer', () => {
+      expect(matchConstraint(c, 'abcde')).toBe(false);
+    });
+  });
+
+  describe('minLength', () => {
+    const c = bounds({ minLength: 3 });
+
+    it('passes exactly at the boundary', () => {
+      expect(matchConstraint(c, 'abc')).toBe(true);
+    });
+
+    it('fails one character below the boundary', () => {
+      expect(matchConstraint(c, 'ab')).toBe(false);
+    });
+
+    it('passes above the boundary', () => {
+      expect(matchConstraint(c, 'abcd')).toBe(true);
+    });
+  });
+
+  describe('maxLength', () => {
+    const c = bounds({ maxLength: 5 });
+
+    it('passes exactly at the boundary', () => {
+      expect(matchConstraint(c, 'abcde')).toBe(true);
+    });
+
+    it('fails one character above the boundary', () => {
+      expect(matchConstraint(c, 'abcdef')).toBe(false);
+    });
+
+    it('passes below the boundary', () => {
+      expect(matchConstraint(c, 'abcd')).toBe(true);
+    });
+  });
+
+  it('minLength and maxLength combined form a range', () => {
+    const c = bounds({ minLength: 2, maxLength: 3 });
+    expect(matchConstraint(c, 'a')).toBe(false);
+    expect(matchConstraint(c, 'ab')).toBe(true);
+    expect(matchConstraint(c, 'abc')).toBe(true);
+    expect(matchConstraint(c, 'abcd')).toBe(false);
+  });
+
+  it('length is evaluated against the string form of a numeric value', () => {
+    // actualValue may arrive as a number (e.g. a numeric IFC attribute);
+    // the length facets still operate on its textual representation.
+    expect(matchConstraint(bounds({ length: 3 }), 123)).toBe(true);
+    expect(matchConstraint(bounds({ length: 3 }), 12)).toBe(false);
+  });
+});
+
+// ============================================================================
+// matchConstraint — unknown type
+// ============================================================================
+
+

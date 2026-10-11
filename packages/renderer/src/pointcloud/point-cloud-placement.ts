@@ -1,0 +1,101 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+import { transformAabb, type PointCloudNode } from './point-cloud-node.js';
+
+type Translation = readonly [number, number, number];
+interface Placement { baseline: Float64Array; translation: Translation }
+const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+/** Compose import alignment and manual placement through one writer. In particular
+ * toggling alignment must never erase a manual correction (#4226). */
+export class PointCloudPlacements {
+  private placements = new WeakMap<PointCloudNode, Placement>();
+
+  private entry(node: PointCloudNode): Placement {
+    let entry = this.placements.get(node);
+    if (!entry) {
+      entry = { baseline: new Float64Array(node.placement ?? node.model ?? IDENTITY), translation: [0, 0, 0] };
+      this.placements.set(node, entry);
+    }
+    return entry;
+  }
+
+  align(node: PointCloudNode, matrix: Float32Array | Float64Array | null): void {
+    if (matrix && (matrix.length !== 16 || !matrix.every(Number.isFinite))) {
+      throw new Error('Pointcloud placement needs a finite 4×4 matrix.');
+    }
+    const entry = this.entry(node);
+    const next = { ...entry, baseline: new Float64Array(matrix ?? IDENTITY) };
+    this.apply(node, next);
+    this.placements.set(node, next);
+  }
+
+  translate(node: PointCloudNode, translation: Translation): void {
+    if (translation.length !== 3 || !translation.every(Number.isFinite)) {
+      throw new Error('Pointcloud translation needs three finite coordinates.');
+    }
+    const entry = this.entry(node);
+    const next = { ...entry, translation: [...translation] as Translation };
+    this.apply(node, next);
+    this.placements.set(node, next);
+  }
+
+  validateTranslation(node: PointCloudNode, translation: Translation): void {
+    this.matrix({ ...this.entry(node), translation });
+  }
+
+  private apply(node: PointCloudNode, entry: Placement): void {
+    const matrix = this.matrix(entry);
+    // This is the sole canonical placement. CPU callers must never recover a
+    // source coordinate from `node.model`: at 5,000 km that f32 translation
+    // rounds a 2.5 cm residual away before snap/measurement sees it.
+    node.placement = matrix;
+    node.rteOrigin = [matrix[12], matrix[13], matrix[14]];
+    // The legacy CPU picker accepts an f32 matrix. Rendering consumes the
+    // exact `rteOrigin` above, so this narrowing cannot erase visible detail.
+    node.model = new Float32Array(matrix);
+  }
+
+  private matrix(entry: Placement): Float64Array {
+    // Preserve map-grid translations until the RTE render boundary. Narrowing
+    // this matrix here loses centimetres before the high/low split can help.
+    const matrix = new Float64Array(entry.baseline);
+    for (let axis = 0; axis < 3; axis++) {
+      // Sum in f64 FIRST. Narrowing the baseline at map magnitude would lose
+      // the millimetres before a coarse move can bring the cloud near zero.
+      matrix[12 + axis] = entry.baseline[12 + axis] + entry.translation[axis];
+    }
+    // The legacy picker still holds a Float32 matrix. Keep its established
+    // finite-range guard while preserving finite f64 residuals for RTE.
+    if (!matrix.every(Number.isFinite) || !new Float32Array(matrix).every(Number.isFinite)) {
+      throw new Error('Pointcloud placement exceeds the renderable coordinate range.');
+    }
+    return matrix;
+  }
+}
+
+/**
+ * A copy of the canonical float64 placement, for CPU callers that compose
+ * coordinates with it (#6894). `node.model` is the float32 GPU copy and rounds
+ * map-grid translations by centimetres, so it is never a fallback here.
+ */
+export function exactPlacement(node: PointCloudNode | undefined): Float64Array | undefined {
+  return node?.placement ? new Float64Array(node.placement) : undefined;
+}
+
+/** Shared world-space bounds for whole-scene fitting and model-specific framing. */
+export function unionPointCloudBounds(nodes: Iterable<PointCloudNode | undefined>) {
+  const min: [number, number, number] = [Infinity, Infinity, Infinity];
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  for (const node of nodes) {
+    if (!node || node.pointCount === 0) continue;
+    const bounds = transformAabb(node.bounds, node.placement ?? node.model);
+    if (![...bounds.min, ...bounds.max].every(Number.isFinite)) continue;
+    for (let axis = 0; axis < 3; axis++) {
+      min[axis] = Math.min(min[axis], bounds.min[axis]);
+      max[axis] = Math.max(max[axis], bounds.max[axis]);
+    }
+  }
+  return Number.isFinite(min[0]) ? { min, max } : null;
+}

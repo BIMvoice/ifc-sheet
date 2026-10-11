@@ -1,0 +1,70 @@
+{
+  "name": "@ifc-lite/collab-server",
+  "version": "0.8.1",
+  "description": "Reference websocket sync server for @ifc-lite/collab",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "ifc-lite-collab-server": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./room-manager": {
+      "import": "./dist/room-manager.js",
+      "types": "./dist/room-manager.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "pnpm exec tsc",
+    "typecheck": "node ../../scripts/typecheck-tests.mjs",
+    "dev": "pnpm exec tsc --watch",
+    "start": "node ./dist/bin.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ifc-lite/collab": "workspace:^",
+    "@ifc-lite/ifcx": "workspace:^",
+    "@ifc-lite/merge": "workspace:^",
+    "lib0": "^0.2.118",
+    "ws": "^8.21.3",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/ws": "^8.5.13",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2",
+    "y-websocket": "^3.1.0"
+  },
+  "license": "MPL-2.0",
+  "author": "Louis True",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LTplus-AG/ifc-lite.git",
+    "directory": "packages/collab-server"
+  },
+  "homepage": "https://ifclite.dev/docs/",
+  "bugs": "https://github.com/LTplus-AG/ifc-lite/issues",
+  "keywords": [
+    "ifc",
+    "ifcx",
+    "bim",
+    "collaboration",
+    "crdt",
+    "yjs",
+    "websocket"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

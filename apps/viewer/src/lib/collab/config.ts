@@ -1,0 +1,113 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Collaboration feature configuration (M1 scaffolding).
+ *
+ * Multiuser collab ships dark behind `collab.enabled` (see
+ * `docs/guide/collaboration.md`). The flag is read from the Vite build env,
+ * with a `localStorage` override so the feature can be flipped on per-browser
+ * during development without a rebuild.
+ *
+ *   VITE_COLLAB_ENABLED=true        — enable the Share button + collab UI
+ *   VITE_COLLAB_SERVER_URL=wss://…  — collab-server websocket endpoint
+ *
+ * When no server URL is configured the session falls back to a local-only
+ * IndexedDB provider, which is enough to exercise the UI and presence wiring
+ * in a single browser (multi-tab via BroadcastChannel) without a backend.
+ *
+ * Both values have a per-browser `localStorage` override (`ifc-lite:collab:
+ * enabled`, `ifc-lite:collab:server-url`) so a built viewer can be pointed at
+ * a local relay without a rebuild — the relay acceptances in
+ * `tests/e2e/collab-*.e2e.spec.ts` (#4444 federation scope, #4446 share seed)
+ * drive the ordinary `vite preview` build against a disposable signed relay
+ * this way. An empty override (`''`) means "no server, local-only", distinct
+ * from "unset". An applied URL override is logged once so a stale one (left by
+ * a test profile or set by hand) is visible when a session cannot connect.
+ */
+
+const LS_OVERRIDE_KEY = 'ifc-lite:collab:enabled';
+const LS_SERVER_URL_KEY = 'ifc-lite:collab:server-url';
+
+function readEnvFlag(): boolean {
+  // import.meta.env.* is statically replaced by Vite at build time.
+  const raw = import.meta.env.VITE_COLLAB_ENABLED;
+  return raw === 'true' || raw === '1';
+}
+
+function readLocalStorageOverride(): boolean | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const v = localStorage.getItem(LS_OVERRIDE_KEY);
+    if (v === 'true' || v === '1') return true;
+    if (v === 'false' || v === '0') return false;
+    return null;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[collab] failed to read enabled-override from localStorage:', err);
+    return null;
+  }
+}
+
+/** Whether the collaboration feature is enabled in this session. */
+export function isCollabEnabled(): boolean {
+  const override = readLocalStorageOverride();
+  if (override !== null) return override;
+  return readEnvFlag();
+}
+
+/** Persist a per-browser override for the collab flag (dev affordance). */
+export function setCollabEnabledOverride(enabled: boolean | null): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    if (enabled === null) localStorage.removeItem(LS_OVERRIDE_KEY);
+    else localStorage.setItem(LS_OVERRIDE_KEY, enabled ? 'true' : 'false');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[collab] failed to persist enabled-override to localStorage:', err);
+  }
+}
+
+/** Normalize a configured server URL; `null` when it is blank. */
+function normalizeServerUrl(raw: string): string | null {
+  // Tolerate copy-paste artifacts from dashboard/CLI env entry: surrounding
+  // whitespace, and a trailing slash that would otherwise yield `wss://host//room`
+  // once y-websocket appends the room path.
+  const url = raw.trim().replace(/\/+$/, '');
+  return url.length > 0 ? url : null;
+}
+
+/** Per-browser server-URL override, or `undefined` when none is set. */
+function readServerUrlOverride(): string | null | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
+  try {
+    const v = localStorage.getItem(LS_SERVER_URL_KEY);
+    return v === null ? undefined : normalizeServerUrl(v);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[collab] failed to read server-url override from localStorage:', err);
+    return undefined;
+  }
+}
+
+let serverUrlOverrideLogged = false;
+
+/** Configured collab-server websocket URL, or `null` for local-only mode. */
+export function collabServerUrl(): string | null {
+  const override = readServerUrlOverride();
+  if (override !== undefined) {
+    if (!serverUrlOverrideLogged) {
+      serverUrlOverrideLogged = true;
+      // eslint-disable-next-line no-console
+      console.info(
+        `[collab] server URL overridden via localStorage ${LS_SERVER_URL_KEY}:`,
+        override === null ? '(local-only)' : override,
+      );
+    }
+    return override;
+  }
+  const raw = import.meta.env.VITE_COLLAB_SERVER_URL;
+  if (typeof raw !== 'string') return null;
+  return normalizeServerUrl(raw);
+}

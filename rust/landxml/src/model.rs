@@ -1,0 +1,370 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, fmt};
+
+pub type LandXmlProperties = BTreeMap<String, String>;
+
+/// Stable, machine-readable reason for an ingestion refusal or invalid source.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum LandXmlDiagnosticCode {
+    InputTooLarge,
+    DtdForbidden,
+    EntityForbidden,
+    LimitExceeded,
+    Cancelled,
+    InvalidXml,
+    UnsupportedNamespace,
+    UnsupportedVersion,
+    InvalidSemantic,
+}
+
+impl LandXmlDiagnosticCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InputTooLarge => "LXML001",
+            Self::DtdForbidden => "LXML002",
+            Self::EntityForbidden => "LXML003",
+            Self::LimitExceeded => "LXML004",
+            Self::Cancelled => "LXML005",
+            Self::InvalidXml => "LXML006",
+            Self::UnsupportedNamespace => "LXML007",
+            Self::UnsupportedVersion => "LXML008",
+            Self::InvalidSemantic => "LXML009",
+        }
+    }
+}
+
+/// Parse failure with a stable code suitable for native/server/wasm mapping.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct LandXmlError {
+    pub code: LandXmlDiagnosticCode,
+    pub message: String,
+}
+
+impl LandXmlError {
+    pub fn new(code: LandXmlDiagnosticCode, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for LandXmlError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.code.as_str(), self.message)
+    }
+}
+
+impl std::error::Error for LandXmlError {}
+
+/// Capability selected from the root LandXML namespace and version attribute.
+///
+/// The namespace selects the element grammar. A declared version remains
+/// source provenance: known mismatches are accepted with a diagnostic rather
+/// than silently reclassifying the source.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LandXmlVersionCapability {
+    NotLandXml,
+    /// A 1.0 namespace without a known LandXML version declaration.
+    LandXml10Unsupported,
+    /// A 1.1 namespace without a known LandXML version declaration.
+    LandXml11Unsupported,
+    LandXml10Tin,
+    LandXml11Tin,
+    LandXml12Tin,
+    LandXml10VersionMismatch,
+    LandXml11VersionMismatch,
+    LandXml12VersionMismatch,
+    /// A 1.2 namespace without a known LandXML version declaration.
+    LandXml12Unsupported,
+}
+
+impl LandXmlVersionCapability {
+    pub const fn supports_tin_ingestion(self) -> bool {
+        matches!(
+            self,
+            Self::LandXml10Tin
+                | Self::LandXml11Tin
+                | Self::LandXml12Tin
+                | Self::LandXml10VersionMismatch
+                | Self::LandXml11VersionMismatch
+                | Self::LandXml12VersionMismatch
+        )
+    }
+
+    pub const fn schema(self) -> Option<&'static str> {
+        match self {
+            Self::LandXml10Tin | Self::LandXml10VersionMismatch => Some("LandXML-1.0"),
+            Self::LandXml11Tin | Self::LandXml11VersionMismatch => Some("LandXML-1.1"),
+            Self::LandXml12Tin | Self::LandXml12VersionMismatch => Some("LandXML-1.2"),
+            Self::NotLandXml
+            | Self::LandXml10Unsupported
+            | Self::LandXml11Unsupported
+            | Self::LandXml12Unsupported => None,
+        }
+    }
+
+    pub const fn has_compatibility_version_mismatch(self) -> bool {
+        matches!(
+            self,
+            Self::LandXml10VersionMismatch
+                | Self::LandXml11VersionMismatch
+                | Self::LandXml12VersionMismatch
+        )
+    }
+}
+
+/// Deterministic source identifier; it is not derived from any output mesh.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct LandXmlSourceId(pub String);
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct LandXmlPoint {
+    /// Stable semantic identity, never a renderer mesh or vertex index.
+    pub source_id: LandXmlSourceId,
+    pub id: String,
+    pub northing: f64,
+    pub easting: f64,
+    pub elevation: f64,
+}
+
+/// One canonical planar vertex used by generated constrained terrain.
+///
+/// The source records remain in [`LandXmlSurface::points`] (and their original
+/// overlay/source-data collections).  This mapping records which of those
+/// records collapsed to the one planar vertex used by generated faces without
+/// discarding a producer's duplicate identifiers.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct LandXmlCanonicalVertex {
+    pub id: String,
+    pub northing: f64,
+    pub easting: f64,
+    pub elevation: f64,
+    pub contributor_source_ids: Vec<LandXmlSourceId>,
+}
+
+/// Coordinates from `Surface/SourceData/DataPoints`, separate from face ids.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct LandXmlSourcePoint {
+    pub source_id: LandXmlSourceId,
+    pub ordinal: usize,
+    pub source_path: String,
+    pub coordinate_dimension: u8,
+    pub coordinates: Vec<f64>,
+}
+
+/// Source topology classification declared by a `Surface/Definition`.
+///
+/// It deliberately describes the source, rather than promising that an
+/// adapter can render it.  In particular, a GRID or volume surface is kept as
+/// source data and is never guessed into a TIN.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LandXmlSurfaceKind {
+    Tin,
+    Grid,
+    Volume,
+    Other,
+}
+
+/// Honest presentation state for one source surface.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LandXmlRenderState {
+    /// TIN source faces are available to a rendering adapter.
+    Rendered,
+    /// The source is retained but this crate has no topology adapter for it.
+    PreservedOnly,
+    /// The source declaration is known to be unsupported.
+    Unsupported,
+}
+
+/// Whether terrain faces came from the producer or the constrained adapter.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LandXmlTopologyOrigin {
+    AuthoredFaces,
+    ConstrainedTriangulation,
+    PreservedOnly,
+}
+
+/// Stable refusal category for optional constrained terrain adaptation.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LandXmlTerrainDiagnosticCode {
+    MissingOuterBoundary,
+    UnsupportedBoundarySemantics,
+    UnsupportedBreaklineSemantics,
+    MissingElevation,
+    ConflictingElevation,
+    IntersectingConstraints,
+    DegenerateConstraints,
+    WorkLimitExceeded,
+    Cancelled,
+}
+
+impl LandXmlTerrainDiagnosticCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::MissingOuterBoundary => "LXMLT001",
+            Self::UnsupportedBoundarySemantics => "LXMLT002",
+            Self::UnsupportedBreaklineSemantics => "LXMLT003",
+            Self::MissingElevation => "LXMLT004",
+            Self::ConflictingElevation => "LXMLT005",
+            Self::IntersectingConstraints => "LXMLT006",
+            Self::DegenerateConstraints => "LXMLT007",
+            Self::WorkLimitExceeded => "LXMLT008",
+            Self::Cancelled => "LXMLT009",
+        }
+    }
+}
+
+/// Source-preserving diagnostic; a refusal never turns into guessed terrain.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct LandXmlTerrainDiagnostic {
+    pub code: LandXmlTerrainDiagnosticCode,
+    pub message: String,
+}
+
+/// One preserved source line/ring (boundary, breakline, or contour).
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct LandXmlPolyline {
+    pub source_id: LandXmlSourceId,
+    /// One-based ordinal within its containing overlay category.
+    pub ordinal: usize,
+    pub name: Option<String>,
+    /// Producer-declared subtype (`bndType`, `brkType`, or contour type).
+    pub kind: Option<String>,
+    pub source_path: String,
+    pub properties: LandXmlProperties,
+    /// Two- or three-dimensional coordinates in authored axis order.
+    pub coordinate_dimension: u8,
+    pub points: Vec<Vec<f64>>,
+    /// Stable, ordered ids for vertices authored as coordinate lists. LandXML
+    /// PntList3D has no P reference to preserve, so these are source vertices,
+    /// not guessed terrain point references.
+    pub point_source_ids: Vec<LandXmlSourceId>,
+}
+
+/// A non-LandXML namespace root retained for diagnostics and later adapters.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct LandXmlExtension {
+    pub namespace: String,
+    pub local_name: String,
+    pub path: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct LandXmlSurface {
+    pub source_id: LandXmlSourceId,
+    /// One-based source order under `LandXML/Surfaces`.
+    pub ordinal: usize,
+    pub source_path: String,
+    pub properties: LandXmlProperties,
+    pub definition_properties: LandXmlProperties,
+    pub name: String,
+    pub kind: LandXmlSurfaceKind,
+    pub render_state: LandXmlRenderState,
+    pub topology_origin: LandXmlTopologyOrigin,
+    /// Set only when a faceless TIN was deliberately retained rather than
+    /// guessed into unconstrained terrain.
+    pub terrain_diagnostic: Option<LandXmlTerrainDiagnostic>,
+    pub points: Vec<LandXmlPoint>,
+    /// Canonical vertices used only when `topology_origin` is
+    /// `constrained_triangulation`; source point records are never replaced.
+    pub canonical_vertices: Vec<LandXmlCanonicalVertex>,
+    pub source_data_points: Vec<LandXmlSourcePoint>,
+    pub faces: Vec<[String; 3]>,
+    /// Mirrors `faces` by ordinal.  A face's identity remains stable when an
+    /// adapter splits, drops, or reorders meshes for precision.
+    pub face_source_ids: Vec<LandXmlSourceId>,
+    /// Visibility is source topology, aligned to `faces` and `face_source_ids`.
+    /// Hidden faces are preserved but never sent to the rendering adapter.
+    pub face_visibility: Vec<bool>,
+    pub hidden_face_count: usize,
+    pub boundaries: Vec<LandXmlPolyline>,
+    pub breaklines: Vec<LandXmlPolyline>,
+    pub contours: Vec<LandXmlPolyline>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct LandXmlUnits {
+    pub linear_unit: String,
+    pub elevation_unit: String,
+    pub linear_scale_to_meters: f64,
+    pub elevation_scale_to_meters: f64,
+    /// #5175: `true` when these units were never declared in the source and
+    /// were instead supplied by the caller as an explicit, audited
+    /// assumption (`LandXmlLimits::assumed_linear_unit`). `false` for every
+    /// unit record read from a source `<Units>` element. A consumer must be
+    /// able to tell the two apart without re-parsing; never collapse this
+    /// into a warning string or drop it on the way to a serialized surface.
+    pub assumed: bool,
+}
+
+/// Source-owned CRS declarations from LandXML 1.2's root CoordinateSystem.
+/// Kept as raw strings: only the viewer adapter may accept explicit EPSG IDs.
+///
+/// `#[non_exhaustive]` so a later CRS attribute is an additive change: the
+/// parser is the only constructor, and outside the crate this record is read,
+/// not built (Rust-only break #10, which added `epsg_code`).
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct LandXmlCoordinateSystem {
+    pub horizontal_datum: Option<String>,
+    pub vertical_datum: Option<String>,
+    /// LandXML 1.2's own attribute for the CRS's EPSG code (`epsgCode`). It is
+    /// how real producers declare the CRS: Civil 3D 2021/2022 and 3D-Win 6.6.4
+    /// all write it, and none of them writes an EPSG id into `horizontalDatum`
+    /// (#5942 follow-up). Raw, like the other two: never resolved here.
+    #[serde(default)]
+    pub epsg_code: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct LandXmlTinDocument {
+    pub format: String,
+    pub schema: String,
+    pub capabilities: LandXmlCapabilities,
+    pub version: String,
+    /// Missing only in a geometry-free source that has no unit declaration.
+    /// The document remains inspectable; consumers must refuse meter-based
+    /// operations until a later georeferencing adapter supplies units.
+    pub units: Option<LandXmlUnits>,
+    pub coordinate_system: Option<LandXmlCoordinateSystem>,
+    pub surfaces: Vec<LandXmlSurface>,
+    pub extensions: Vec<LandXmlExtension>,
+    pub warnings: Vec<String>,
+    /// Horizontal alignments are source records, separate from terrain TINs.
+    pub alignments: Vec<crate::LandXmlAlignment>,
+    /// Design and sampled profiles retain their distinct LandXML source kinds.
+    pub profiles: Vec<crate::LandXmlProfile>,
+    pub cross_sections: Vec<crate::LandXmlCrossSection>,
+    pub cross_section_surfaces: Vec<crate::LandXmlCrossSectionSurface>,
+    pub roadways: Vec<crate::LandXmlRoadway>,
+    pub capability_diagnostics: Vec<crate::LandXmlCapabilityDiagnostic>,
+    pub preserved_only_extensions: Vec<crate::LandXmlPreservedOnlyExtension>,
+    /// Pipe networks are retained in the same canonical source document as
+    /// terrain. Their absence means this LandXML source did not declare one.
+    pub pipe_networks: Option<crate::LandXmlPipeNetworkDocument>,
+}
+
+impl LandXmlTinDocument {
+    /// Split finalized terrain metadata into move-owned stream records.
+    pub(crate) fn into_stream_parts(self) -> crate::stream::metadata::TerrainStreamParts {
+        crate::stream::metadata::TerrainStreamParts::new(self)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct LandXmlCapabilities {
+    pub renderable_tin: bool,
+    pub preserved_only_surfaces: usize,
+    pub unknown_extensions: usize,
+}

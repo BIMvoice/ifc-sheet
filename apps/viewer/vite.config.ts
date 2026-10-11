@@ -1,0 +1,389 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { viewerAliases } from './vite-aliases';
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import Icons from 'unplugin-icons/vite';
+import { FileSystemIconLoader } from 'unplugin-icons/loaders';
+import { optimize } from 'svgo';
+import wasm from 'vite-plugin-wasm';
+import topLevelAwait from 'vite-plugin-top-level-await';
+import path from 'path';
+import fs from 'fs';
+import { cesiumStaticAssets } from './vite-plugins/cesium-assets';
+import { oauthCallbackRoutes } from './vite-plugins/oauth-callback';
+// Same allowlist the production relay uses, so dev and prod cannot disagree
+// about which Dalux node a request reaches (#2792).
+import { daluxRelayRoute } from './vite-plugins/dalux-relay';
+import { docsModuleSideEffects, editionBundle } from './vite-plugins/edition-bundle';
+import { deploymentAssetsDir } from '../../scripts/lib/deployment-assets-dir.mjs';
+
+// --- Build-time changelog parser ---
+interface ReleaseHighlight {
+  type: 'feature' | 'fix' | 'perf';
+  text: string;
+}
+
+interface PackageRelease {
+  version: string;
+  highlights: ReleaseHighlight[];
+}
+
+interface PackageChangelog {
+  name: string;
+  releases: PackageRelease[];
+}
+
+interface PackageVersion {
+  name: string;
+  version: string;
+}
+
+const SKIP_BOLD_LOWER = new Set([
+  'bug fixes', 'new features', 'performance improvements', 'technical details',
+  'renderer fixes', 'parser fixes', 'viewer integration', 'fixes', 'features',
+  'breaking', 'minor changes', 'patch changes', 'dependencies',
+]);
+function isInternalName(text: string): boolean {
+  // Skip PascalCase single-word class names like "PolygonalFaceSetProcessor"
+  return /^[A-Z][a-zA-Z]+$/.test(text) && !text.includes(' ');
+}
+function categorizeHighlight(text: string): 'feature' | 'fix' | 'perf' {
+  const lower = text.toLowerCase();
+  if (lower.startsWith('fixed ') || lower.startsWith('fix ')) return 'fix';
+  if (
+    lower.includes('performance') || lower.includes('optimiz') ||
+    lower.includes('zero-copy') || lower.includes('faster') ||
+    lower.includes('batch siz')
+  ) return 'perf';
+  return 'feature';
+}
+
+function extractBulletDescription(line: string): string | null {
+  let text = line.replace(/^-\s+/, '');
+
+  // Pattern: "HASH: ### Header" -> skip inline section headers
+  if (/^[a-f0-9]{7,}:\s*###/.test(text)) return null;
+
+  // Pattern: "HASH: feat/fix/perf: DESCRIPTION"
+  const hashPrefixed = text.match(/^[a-f0-9]{7,}:\s*(?:feat|fix|perf|refactor|chore):\s*(.+)$/i);
+  if (hashPrefixed) return hashPrefixed[1].trim();
+
+  // Pattern: "HASH: DESCRIPTION" (without conventional commit prefix)
+  const hashOnly = text.match(/^[a-f0-9]{7,}:\s*(.+)$/);
+  if (hashOnly) return hashOnly[1].trim();
+
+  // Pattern: "[#PR](url) [`hash`](url) Thanks @user! - DESCRIPTION"
+  const prPattern = text.match(/Thanks\s+\[@[^\]]+\]\([^)]+\)!\s*-\s*(.+)$/);
+  if (prPattern) return prPattern[1].trim();
+
+  return null;
+}
+
+function parseChangelogs(): PackageChangelog[] {
+  const packagesDir = path.resolve(__dirname, '../../packages');
+  let dirs: string[];
+  try {
+    dirs = fs.readdirSync(packagesDir);
+  } catch {
+    return [];
+  }
+
+  const MAX_HIGHLIGHTS_PER_VERSION = 12;
+  const result: PackageChangelog[] = [];
+
+  for (const dir of dirs) {
+    const changelogPath = path.join(packagesDir, dir, 'CHANGELOG.md');
+    if (!fs.existsSync(changelogPath)) continue;
+
+    const content = fs.readFileSync(changelogPath, 'utf-8');
+
+    // Read package name from package.json
+    let pkgName = dir;
+    try {
+      const pkgJson = JSON.parse(
+        fs.readFileSync(path.join(packagesDir, dir, 'package.json'), 'utf-8')
+      );
+      pkgName = pkgJson.name || dir;
+    } catch { /* use dir name as fallback */ }
+
+    const seenVersions = new Set<string>();
+    const releases: PackageRelease[] = [];
+
+    // Split into version blocks
+    const versionBlocks = content.split(/^## /m).slice(1);
+
+    for (const block of versionBlocks) {
+      const versionMatch = block.match(/^(\d+\.\d+\.\d+)/);
+      if (!versionMatch) continue;
+      const version = versionMatch[1];
+
+      // Skip duplicate version sections within same file
+      if (seenVersions.has(version)) continue;
+      seenVersions.add(version);
+
+      const highlights = new Map<string, ReleaseHighlight>();
+      const lines = block.split('\n');
+
+      // 1) Extract top-level bullet descriptions (lines starting with "- " at root indent)
+      for (const line of lines) {
+        if (!line.startsWith('- ')) continue;
+        if (line.startsWith('- Updated dependencies')) continue;
+
+        const desc = extractBulletDescription(line);
+        if (desc && desc.length >= 10) {
+          const key = desc.toLowerCase().substring(0, 60);
+          if (!highlights.has(key)) {
+            highlights.set(key, { type: categorizeHighlight(desc), text: desc });
+          }
+        }
+      }
+
+      // 2) Extract bold items as highlights (nested feature names)
+      const boldRegex = /\*\*([^*]+)\*\*/g;
+      let match;
+      while ((match = boldRegex.exec(block)) !== null) {
+        let text = match[1].trim();
+        if (text.endsWith(':')) text = text.slice(0, -1);
+        if (text.includes('@ifc-lite/')) continue;
+        if (SKIP_BOLD_LOWER.has(text.toLowerCase())) continue;
+        if (text.length < 10) continue;
+        if (isInternalName(text)) continue;
+
+        const key = text.toLowerCase().substring(0, 60);
+        if (!highlights.has(key)) {
+          highlights.set(key, { type: categorizeHighlight(text), text });
+        }
+      }
+
+      if (highlights.size > 0) {
+        releases.push({
+          version,
+          highlights: Array.from(highlights.values()).slice(0, MAX_HIGHLIGHTS_PER_VERSION),
+        });
+      }
+    }
+
+    if (releases.length > 0) {
+      result.push({ name: pkgName, releases });
+    }
+  }
+
+  return result.sort((a, b) => {
+    const aTotal = a.releases.reduce((s, r) => s + r.highlights.length, 0);
+    const bTotal = b.releases.reduce((s, r) => s + r.highlights.length, 0);
+    return bTotal - aTotal;
+  });
+}
+
+// Collect all package versions
+function collectPackageVersions(): PackageVersion[] {
+  const packagesDir = path.resolve(__dirname, '../../packages');
+  let dirs: string[];
+  try {
+    dirs = fs.readdirSync(packagesDir);
+  } catch {
+    return [];
+  }
+
+  const versions: PackageVersion[] = [];
+  for (const dir of dirs) {
+    const pkgPath = path.join(packagesDir, dir, 'package.json');
+    if (!fs.existsSync(pkgPath)) continue;
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      if (pkg.name && pkg.version) {
+        versions.push({ name: pkg.name, version: pkg.version });
+      }
+    } catch { /* skip unreadable packages */ }
+  }
+  return versions.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Read version from viewer package.json (primary app version) with root fallback
+const viewerPkg = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, './package.json'), 'utf-8')
+);
+const rootPkg = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8')
+);
+const appVersion = viewerPkg.version || rootPkg.version;
+// Git commit the bundle was built from, for attributing field perf/regressions
+// to a specific deploy. Vercel sets VERCEL_GIT_COMMIT_SHA, GitHub Actions sets
+// GITHUB_SHA; falls back to 'dev' for local builds.
+const buildSha = (process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'dev').slice(0, 12);
+
+export default defineConfig({
+  plugins: [
+    react(),
+    Icons({
+      compiler: 'jsx',
+      jsx: 'react',
+      customCollections: {
+        viewer: FileSystemIconLoader(path.resolve(__dirname, 'src/icons'), (svg) => {
+          const themedSvg = svg
+            .replaceAll(/#000000\b/gi, 'currentColor')
+            .replaceAll(/#0063b1\b|rgba\(\s*0\s*,\s*99\s*,\s*177\s*,\s*1\s*\)/gi, 'var(--viewer-icon-accent)');
+
+          return optimize(themedSvg, {
+            multipass: true,
+            plugins: [
+              'preset-default',
+              'removeDimensions',
+            ],
+          }).data;
+        }),
+      },
+    }),
+    wasm(),
+    topLevelAwait(),
+    cesiumStaticAssets(),
+    oauthCallbackRoutes(),
+    // Dalux's API sends no CORS headers, so it must go through a same-origin
+    // relay. Dev runs the SAME handler production does (#2792), rather than a
+    // second proxy config that can drift from it.
+    daluxRelayRoute(),
+    // The docs edition must not ship what it leaves out (modelling, infrastructure, analysis).
+    editionBundle('docs'),
+  ],
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __BUILD_SHA__: JSON.stringify(buildSha),
+    __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+    __RELEASE_HISTORY__: JSON.stringify(parseChangelogs()),
+    __PACKAGE_VERSIONS__: JSON.stringify(collectPackageVersions()),
+    CESIUM_BASE_URL: JSON.stringify('/cesium'),
+    // The app edition (`src/edition.ts`): 'docs' builds the documentation-only app.
+    // This repository builds the documentation edition only.
+    __EDITION__: JSON.stringify('docs'),
+    // A literal at each use, so `!__DOCS_BUILD__ && …` is dropped from the docs bundle at tree-shaking (`vite-plugins/edition-bundle.ts`).
+    __DOCS_BUILD__: JSON.stringify(true),
+  },
+  resolve: {
+    alias: viewerAliases,
+  },
+  server: {
+    port: 3000,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      // Allows third-party no-cors resources like Stripe.js while preserving
+      // cross-origin isolation in modern browsers.
+      'Cross-Origin-Embedder-Policy': 'credentialless',
+    },
+    fs: {
+      allow: ['../..'],
+    },
+    proxy: {
+      '/api/autodesk': { target: 'http://127.0.0.1:3002', changeOrigin: false },
+      '/api/chat': {
+        // Single API source of truth lives at repo-root `api/chat.ts`.
+        // For local dev, run `pnpm dev:api` from repo root.
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/api/bsdd': {
+        target: 'https://api.bsdd.buildingsmart.org',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/bsdd/, ''),
+      },
+    },
+  },
+  build: {
+    target: 'esnext',
+    assetsDir: deploymentAssetsDir(process.env.VERCEL_DEPLOYMENT_ID, process.env.VERCEL_SKEW_PROTECTION_ENABLED), // #4886
+    chunkSizeWarningLimit: 6000,
+    // Opt-in production source maps for PostHog error tracking: without them every
+    // captured stack frame is minified soup ("Could not find sourcemap for source url").
+    //
+    // Gated on VITE_SOURCEMAP rather than always-on for two reasons: rollup's
+    // map generation for this bundle costs real build time and memory, and the
+    // Vercel builder is already tight enough that the WASM link has OOM'd it
+    // before. scripts/vercel-build.sh turns this on only when a PostHog CLI key
+    // is present - i.e. only when the maps will actually be uploaded and then
+    // deleted from the output. Declared in turbo.json's build `env` so toggling
+    // it busts the task cache instead of restoring a map-less dist.
+    sourcemap: process.env.VITE_SOURCEMAP === '1',
+    rollupOptions: {
+      // @ifc-lite/geometry's NativeBridge does a dynamic `import('@tauri-apps/api/event')`
+      // (under isTauri(), never reached on web). Rollup still resolves it
+      // statically, so externalize it to prevent a build failure. ifc-lite no
+      // longer ships a desktop app; downstream desktop builders supply
+      // @tauri-apps in their own host layer.
+      external: ['@tauri-apps/api/event'],
+      // The docs edition: modules it leaves out are kept only for what is used from them (`vite-plugins/edition-bundle.ts`).
+      treeshake: { moduleSideEffects: docsModuleSideEffects },
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        // E2E-only, not linked from the app UI: reads the laz-perf wasm
+        // asset pipeline through the real build so
+        // tests/e2e/laz-wasm.e2e.spec.ts can assert it end to end (#2097).
+        lazProbe: path.resolve(__dirname, 'laz-probe.html'),
+      },
+      output: {
+        manualChunks(id) {
+          if (id.includes('/packages/sandbox/')) return 'sandbox';
+          if (id.includes('/packages/export/')) return 'exporters';
+          if (id.includes('/packages/server-client/')) return 'server-client';
+          if (id.includes('/packages/bcf-api/')) return 'bcf-api';
+          if (id.includes('/packages/bcf/')) return 'bcf';
+          if (id.includes('/packages/ids/')) return 'ids';
+          if (id.includes('/packages/lens/')) return 'lens';
+          if (id.includes('/packages/drawing-2d/')) return 'drawing-2d';
+          if (id.includes('/node_modules/jszip/')) return 'zip';
+          if (id.includes('/node_modules/apache-arrow/')) return 'arrow';
+          if (id.includes('/node_modules/parquet-wasm/')) return 'parquet';
+          if (id.includes('/node_modules/cesium/')) return 'cesium';
+          // ECharts (+ zrender) and the dashboard grid: reached only through the lazy Charts panel (#3944).
+          if (id.includes('/node_modules/echarts/') || id.includes('/node_modules/zrender/')) return 'echarts';
+          if (id.includes('/node_modules/react-grid-layout/')) return 'grid-layout';
+          // @radix-ui/@floating-ui run synchronous, top-level module-init
+          // code (e.g. react-tooltip's `createPopperScope()` at module
+          // scope). The default chunker otherwise merges them into whatever
+          // chunk also touches @/store, and the store transitively pulls in
+          // WASM modules that use real top-level await — vite-plugin-top-level-await
+          // then wraps that WHOLE merged chunk's body in a deferred
+          // `.then()`, so the synchronous radix init runs late. A sibling
+          // chunk that imports the same merged chunk but has no async taint
+          // of its own evaluates synchronously and calls into the
+          // not-yet-populated binding — "C is not a function" at module
+          // scope (issue #2243). Keep radix/floating-ui in their own chunk,
+          // clear of the store's async taint, so their module-init always
+          // finishes before anything can import from them.
+          if (id.includes('/node_modules/@radix-ui/') || id.includes('/node_modules/@floating-ui/')) return 'radix-ui';
+          // three.js + addons — only the /mcp landing imports them, keep
+          // the main viewer / pages off the hook.
+          if (id.includes('/node_modules/three/') || id.includes('/node_modules/.pnpm/three@')) return 'three';
+          return undefined;
+        },
+      },
+    },
+  },
+  optimizeDeps: {
+    exclude: [
+      '@duckdb/duckdb-wasm',
+      '@ifc-lite/wasm',
+      'parquet-wasm',
+      'quickjs-emscripten',
+      '@jitl/quickjs-wasmfile-release-asyncify',
+      'esbuild-wasm',
+      // maplibre-gl v6 resolves its worker as a SIBLING FILE of its own module:
+      //
+      //   new URL(`./maplibre-gl-worker.mjs`, import.meta.url)
+      //
+      // Pre-bundling rewrites that module into node_modules/.vite/deps/, where
+      // no such sibling exists, so the worker 404s. Nothing throws: the style,
+      // the sprite and the TileJSON are all fetched on the main thread, the
+      // canvas and the marker paint, and only the vector tiles (parsed in the
+      // worker) never arrive. The minimap renders as an empty background with
+      // an attribution line, which reads as "no data here" rather than a bug.
+      // v5 inlined its worker as a blob, so this could not happen before.
+      'maplibre-gl',
+    ],
+  },
+  worker: {
+    format: 'es',
+    plugins: () => [wasm(), topLevelAwait()],
+  },
+});

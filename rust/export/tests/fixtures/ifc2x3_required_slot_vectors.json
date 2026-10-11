@@ -1,0 +1,60 @@
+{
+ "_comment": "Shared cross-language pin for the IFC2X3 REQUIRED-SLOT fill (#4714), the sibling of ifc2x3_owner_history_vectors.json. Each case is a whole DATA section exported with schema IFC2X3 by both STEP exporters: rust/export/src/schema_convert_tests.rs (export_step_with_stats) and packages/export/src/schema-converter-required-slots.test.ts (StepExporter). `slots` maps an express id to the values named slot indexes must hold in the output; `unfilled` is how many required slots OTHER THAN OwnerHistory the whole export had to leave as $, summed over every record. Only the named slots are compared: the two converters differ elsewhere (proxy GlobalIds, resource-entity trims), and that is not what this pins. Every record here has the same attribute count in IFC4 and IFC2X3 (or is reconciled to the IFC2X3 count by the door remap), so both converters reach the same arity and the same slots.",
+ "cases": [
+  {
+   "why": "an enum whose IFC2X3 declaration has a NOTDEFINED member takes it, a BOOLEAN takes .F., and a slot with neither keeps $ and is counted",
+   "schema": "IFC4",
+   "data": [
+    "#10=IFCFOOTING('2O2Fr$t4X7Zf8NOew3FLOH',$,'F',$,$,$,$,$,$);",
+    "#11=IFCTABLEROW($,$);",
+    "#5=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);"
+   ],
+   "slots": {
+    "10": { "8": ".NOTDEFINED." },
+    "11": { "0": "$", "1": ".F." }
+   },
+   "unfilled": 3
+  },
+  {
+   "why": "IfcElementCompositionEnum has no NOTDEFINED member, so IfcBuildingStorey.CompositionType keeps $ and is counted rather than being guessed",
+   "schema": "IFC4",
+   "data": [
+    "#20=IFCBUILDINGSTOREY('2O2Fr$t4X7Zf8NOew3FLOH',$,'S',$,$,$,$,$,$,$);",
+    "#5=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);"
+   ],
+   "slots": { "20": { "8": "$" } },
+   "unfilled": 3
+  },
+  {
+   "why": "IfcProject.RepresentationContexts and UnitsInContext are entity references IFC2X3 requires; no reference is invented for them",
+   "schema": "IFC4",
+   "data": [
+    "#1=IFCPROJECT('0proj00000000000000000',$,'P',$,$,$,$,$,$);"
+   ],
+   "slots": { "1": { "7": "$", "8": "$" } },
+   "unfilled": 2
+  },
+  {
+   "why": "IfcOwnerHistory's OWN ChangeAction is mandatory in IFC2X3 and its enum has no NOTDEFINED member, so the record #4686 reuses can itself be short",
+   "schema": "IFC4",
+   "data": [
+    "#10=IFCWALL('2O2Fr$t4X7Zf8NOew3FLOH',$,'Wall',$,$,$,$,$,$);",
+    "#5=IFCOWNERHISTORY($,$,$,$,$,$,$,0);"
+   ],
+   "slots": { "5": { "0": "$", "1": "$", "3": "$" } },
+   "unfilled": 3
+  },
+  {
+   "why": "IfcDoorType becomes IfcDoorStyle through the by-name remap, whose target slots take their defaults from the same generated table",
+   "schema": "IFC4",
+   "data": [
+    "#1=IFCDOORTYPE('1abcdefghijklmnopqrstu',$,'D',$,$,$,$,$,$,.DOOR.,.SINGLE_SWING_LEFT.,$,$);",
+    "#9=IFCOWNERHISTORY($,$,$,.NOCHANGE.,$,$,$,0);"
+   ],
+   "slots": {
+    "1": { "8": ".SINGLE_SWING_LEFT.", "9": ".NOTDEFINED.", "10": ".F.", "11": ".F." }
+   },
+   "unfilled": 2
+  }
+ ]
+}

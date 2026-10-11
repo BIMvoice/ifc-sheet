@@ -1,0 +1,766 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Unit tests for [`super::EntityDecoder`]. Extracted from `decoder.rs` into
+//! this ratchet-exempt `*_tests.rs` sibling (child module, keeps `super::*`
+//! access) so the production module stays under its module-size budget.
+
+use super::*;
+use crate::IfcType;
+
+#[test]
+fn test_decode_entity() {
+    let content = r#"
+#1=IFCPROJECT('2vqT3bvqj9RBFjLlXpN8n9',$,$,$,$,$,$,$,$);
+#2=IFCWALL('3a4T3bvqj9RBFjLlXpN8n0',$,$,$,'Wall-001',$,#3,#4);
+#3=IFCLOCALPLACEMENT($,#4);
+#4=IFCAXIS2PLACEMENT3D(#5,$,$);
+#5=IFCCARTESIANPOINT((0.,0.,0.));
+"#;
+
+    let mut decoder = EntityDecoder::new(content);
+
+    // Find entity #2
+    let start = content.find("#2=").unwrap();
+    let end = content[start..].find(';').unwrap() + start + 1;
+
+    let entity = decoder.decode_at(start, end).unwrap();
+    assert_eq!(entity.id, 2);
+    assert_eq!(entity.ifc_type, IfcType::IfcWall);
+    assert_eq!(entity.attributes.len(), 8);
+    assert_eq!(entity.get_string(4), Some("Wall-001"));
+    assert_eq!(entity.get_ref(6), Some(3));
+    assert_eq!(entity.get_ref(7), Some(4));
+}
+
+#[test]
+fn test_decode_by_id() {
+    let content = r#"
+#1=IFCPROJECT('guid',$,$,$,$,$,$,$,$);
+#5=IFCWALL('guid2',$,$,$,'Wall-001',$,$,$);
+#10=IFCDOOR('guid3',$,$,$,'Door-001',$,$,$);
+"#;
+
+    let mut decoder = EntityDecoder::new(content);
+
+    let entity = decoder.decode_by_id(5).unwrap();
+    assert_eq!(entity.id, 5);
+    assert_eq!(entity.ifc_type, IfcType::IfcWall);
+    assert_eq!(entity.get_string(4), Some("Wall-001"));
+
+    // Should be cached now
+    assert_eq!(decoder.cache_size(), 1);
+    let cached = decoder.get_cached(5).unwrap();
+    assert_eq!(cached.id, 5);
+}
+
+#[test]
+fn test_build_entity_index_matches_scanner_header_semantics() {
+    let content = "ISO-10303-21;\nHEADER;\n\
+FILE_DESCRIPTION(('ViewDefinition [ReferenceView]'),'2;1');\n\
+FILE_NAME('26-IFC\\X2\\00B1\\X0\\2#.ifc','2026-04-29T18:21:27',$,$,'CATIA','CATIA',$);\n\
+FILE_SCHEMA(('IFC4'));\nENDSEC;\n\
+DATA;\n\
+#1=IFCPROJECT('guid',$,$,$,$,$,$,$,$);\n\
+#2=IFCWALL('guid2',$,$,$,'Wall; with semicolon',$,$,$);\n\
+ENDSEC;\nEND-ISO-10303-21;\n";
+
+    let index = build_entity_index(content);
+
+    assert_eq!(index.len(), 2);
+    assert!(!index.contains_key(&26));
+    let (start, end) = index.get(&2).copied().unwrap();
+    assert_eq!(
+        &content[start..end],
+        "#2=IFCWALL('guid2',$,$,$,'Wall; with semicolon',$,$,$);"
+    );
+}
+
+#[test]
+fn test_decode_by_id_handles_quoted_semicolon_from_shared_index() {
+    let content = "#1=IFCWALL('guid',$,$,$,'Wall; with semicolon',$,$,$);\n";
+    let mut decoder = EntityDecoder::new(content);
+
+    let wall = decoder.decode_by_id(1).unwrap();
+
+    assert_eq!(wall.id, 1);
+    assert_eq!(wall.ifc_type, IfcType::IfcWall);
+    assert_eq!(wall.get_string(4), Some("Wall; with semicolon"));
+}
+
+#[test]
+fn test_resolve_ref() {
+    let content = r#"
+#1=IFCPROJECT('guid',$,$,$,$,$,$,$,$);
+#2=IFCWALL('guid2',$,$,$,$,$,#1,$);
+"#;
+
+    let mut decoder = EntityDecoder::new(content);
+
+    let wall = decoder.decode_by_id(2).unwrap();
+    let placement_attr = wall.get(6).unwrap();
+
+    let referenced = decoder.resolve_ref(placement_attr).unwrap().unwrap();
+    assert_eq!(referenced.id, 1);
+    assert_eq!(referenced.ifc_type, IfcType::IfcProject);
+}
+
+#[test]
+fn test_resolve_ref_list() {
+    let content = r#"
+#1=IFCPROJECT('guid',$,$,$,$,$,$,$,$);
+#2=IFCWALL('guid1',$,$,$,$,$,$,$);
+#3=IFCDOOR('guid2',$,$,$,$,$,$,$);
+#4=IFCRELCONTAINEDINSPATIALSTRUCTURE('guid3',$,$,$,(#2,#3),$,#1);
+"#;
+
+    let mut decoder = EntityDecoder::new(content);
+
+    let rel = decoder.decode_by_id(4).unwrap();
+    let elements_attr = rel.get(4).unwrap();
+
+    let elements = decoder.resolve_ref_list(elements_attr).unwrap();
+    assert_eq!(elements.len(), 2);
+    assert_eq!(elements[0].id, 2);
+    assert_eq!(elements[0].ifc_type, IfcType::IfcWall);
+    assert_eq!(elements[1].id, 3);
+    assert_eq!(elements[1].ifc_type, IfcType::IfcDoor);
+}
+
+#[test]
+fn test_cache() {
+    let content = r#"
+#1=IFCPROJECT('guid',$,$,$,$,$,$,$,$);
+#2=IFCWALL('guid2',$,$,$,$,$,$,$);
+"#;
+
+    let mut decoder = EntityDecoder::new(content);
+
+    assert_eq!(decoder.cache_size(), 0);
+
+    decoder.decode_by_id(1).unwrap();
+    assert_eq!(decoder.cache_size(), 1);
+
+    decoder.decode_by_id(2).unwrap();
+    assert_eq!(decoder.cache_size(), 2);
+
+    // Decode same entity - should use cache
+    decoder.decode_by_id(1).unwrap();
+    assert_eq!(decoder.cache_size(), 2);
+
+    decoder.clear_cache();
+    assert_eq!(decoder.cache_size(), 0);
+}
+
+/// Two IfcPolyLoops that reference a SHARED set of CartesianPoints: extracting
+/// the second loop must be served entirely from the point cache the first loop
+/// populated, so `point_cache_stats().hits` is non-zero. This is the decoder-level
+/// proof of the memoization the per-worker hoist relies on; the coordinates
+/// returned are identical whether or not the cache was warm.
+#[test]
+fn polyloop_point_cache_memoizes_shared_points() {
+    // Both #20 and #21 share the same four CartesianPoints (#10..#13).
+    let content = "\
+#10=IFCCARTESIANPOINT((0.,0.,0.));
+#11=IFCCARTESIANPOINT((1.,0.,0.));
+#12=IFCCARTESIANPOINT((1.,1.,0.));
+#13=IFCCARTESIANPOINT((0.,1.,0.));
+#20=IFCPOLYLOOP((#10,#11,#12,#13));
+#21=IFCPOLYLOOP((#10,#11,#12,#13));
+";
+    let mut decoder = EntityDecoder::new(content);
+
+    let first = decoder.get_polyloop_coords_cached(20).expect("first loop resolves");
+    let (hits_after_first, misses_after_first) = decoder.point_cache_stats();
+    // First loop parses every point fresh: four misses, zero hits.
+    assert_eq!(hits_after_first, 0);
+    assert_eq!(misses_after_first, 4);
+
+    let second = decoder.get_polyloop_coords_cached(21).expect("second loop resolves");
+    let (hits, misses) = decoder.point_cache_stats();
+    // Second loop reuses the four cached points: four more hits, no new misses.
+    assert!(hits > 0, "expected point-cache hits across loops, got {hits}");
+    assert_eq!(hits, 4);
+    assert_eq!(misses, 4);
+
+    // Memoization changes speed, not results: identical coordinates both times.
+    assert_eq!(first, second);
+    assert_eq!(
+        first,
+        vec![(0., 0., 0.), (1., 0., 0.), (1., 1., 0.), (0., 1., 0.)]
+    );
+}
+
+/// `take_point_cache` / `set_point_cache` move the warm cache between decoders
+/// (the hoist primitive): a second decoder that adopts the first's cache serves
+/// the same shared loop entirely from cache hits, without re-parsing any point.
+#[test]
+fn point_cache_survives_take_and_set_across_decoders() {
+    let content = "\
+#10=IFCCARTESIANPOINT((0.,0.,0.));
+#11=IFCCARTESIANPOINT((1.,0.,0.));
+#12=IFCCARTESIANPOINT((1.,1.,0.));
+#20=IFCPOLYLOOP((#10,#11,#12));
+#21=IFCPOLYLOOP((#10,#11,#12));
+";
+    let mut warm = EntityDecoder::new(content);
+    let a = warm.get_polyloop_coords_cached(20).expect("warm loop resolves");
+    assert_eq!(warm.point_cache_stats(), (0, 3));
+
+    // Hand the warm cache to a FRESH decoder (its own counters start at 0).
+    let mut adopter = EntityDecoder::new(content);
+    adopter.set_point_cache(warm.take_point_cache());
+    let b = adopter.get_polyloop_coords_cached(21).expect("adopter loop resolves");
+    let (hits, misses) = adopter.point_cache_stats();
+    assert_eq!(hits, 3, "adopted cache should serve every point as a hit");
+    assert_eq!(misses, 0);
+    assert_eq!(a, b);
+
+    // The donor decoder gave its cache away.
+    assert!(warm.take_point_cache().is_empty());
+}
+
+/// Regression guard for the hoist's decode-error path (see
+/// `processor::jobs::WorkerCacheGuard`). When a worker's element hits a
+/// `decode_at` failure, its decoder must NOT lose the warm cache: `take_point_cache`
+/// after the failed decode still yields the accumulated entries, so the worker's
+/// NEXT element adopts them and serves its shared loop from cache hits. Before the
+/// RAII guard, the failing element early-returned and dropped the warm cache,
+/// cold-starting the rest of the worker's sub-range and silently defeating the hoist.
+#[test]
+fn point_cache_survives_a_failed_decode_between_elements() {
+    let content = "\
+#10=IFCCARTESIANPOINT((0.,0.,0.));
+#11=IFCCARTESIANPOINT((1.,0.,0.));
+#12=IFCCARTESIANPOINT((1.,1.,0.));
+#20=IFCPOLYLOOP((#10,#11,#12));
+#21=IFCPOLYLOOP((#10,#11,#12));
+";
+    // Element 1 warms the worker's cache.
+    let mut warm = EntityDecoder::new(content);
+    warm.get_polyloop_coords_cached(20).expect("warm loop resolves");
+    assert_eq!(warm.point_cache_stats(), (0, 3));
+    let carried = warm.take_point_cache();
+
+    // Element 2's decoder adopts the warm cache, then hits a decode FAILURE
+    // (out-of-range span -> Err, not a panic). This is the case the guard exists
+    // for: on Drop it takes the point cache back instead of losing it.
+    let mut failing = EntityDecoder::new(content);
+    failing.set_point_cache(carried);
+    assert!(
+        failing.decode_at(10_000, 10_010).is_err(),
+        "out-of-range decode should fail without clearing the cache"
+    );
+    let recovered = failing.take_point_cache();
+    assert_eq!(
+        recovered.len(),
+        3,
+        "a failed decode must not drop the worker's warm point cache"
+    );
+
+    // Element 3 in the same worker adopts the recovered cache: every shared point
+    // is a hit, none re-parsed - proving the failure did not cold-start the chunk.
+    let mut next = EntityDecoder::new(content);
+    next.set_point_cache(recovered);
+    next.get_polyloop_coords_cached(21).expect("next loop resolves");
+    let (hits, misses) = next.point_cache_stats();
+    assert!(
+        hits > 0,
+        "expected warm-cache hits after a failed decode, got {hits}"
+    );
+    assert_eq!((hits, misses), (3, 0));
+}
+
+/// The placement memo must survive a drain of the entity cache.
+///
+/// The two caches are worth very different amounts per byte: an entity-cache
+/// entry saves one re-decode of one entity, while a memo entry can save
+/// re-walking a chain thousands of elements share — a site or building
+/// transform is composed once and read by every product beneath it. A caller
+/// that drains on a size trigger while resolving placements (which is what makes
+/// the trigger fire) would otherwise trade the expensive cache away to bound the
+/// cheap one, and do it invisibly: output stays correct and the run gets slower
+/// the larger the file.
+#[test]
+fn clearing_the_entity_cache_keeps_the_placement_memo() {
+    let mut decoder = EntityDecoder::new("ISO-10303-21;\nDATA;\nENDSEC;\n");
+    let m = [1.0f64; 16];
+    decoder.cache_placement_transform(42, m);
+
+    decoder.clear_entity_cache();
+    assert_eq!(
+        decoder.get_placement_transform_cached(42),
+        Some(m),
+        "the memo is the cache with cross-element value; draining the entity \
+         cache must not take it"
+    );
+
+    // And the blunt one still means what it says.
+    decoder.clear_cache();
+    assert_eq!(
+        decoder.get_placement_transform_cached(42),
+        None,
+        "clear_cache is documented as clearing all caches and must keep doing so"
+    );
+}
+
+/// `length_unit_scale` must resolve an IMPERIAL length unit rather than
+/// silently reporting metres.
+///
+/// The accessor used to call `units::try_extract_length_unit_scale`, which
+/// returns `None` BY DESIGN for an `IFCCONVERSIONBASEDUNIT` length unit: it
+/// defers the deeper name + `IFCMEASUREWITHUNIT` walk to the full-index path,
+/// and its own doc tells the caller to retry "against a complete index before
+/// trusting a metres default". It exists for the streaming pre-pass and its
+/// PARTIAL index.
+///
+/// `length_unit_scale` is not that caller -- it scans the whole content with
+/// `EntityScanner`, and its callers hold a complete index. So `.unwrap_or(1.0)`
+/// collapsed that deliberate deferral into "metres" and read a foot-authored
+/// model as a metre one, putting every absolute tolerance derived from it out
+/// by 3.28x. It now calls the full `units::extract_length_unit_scale`, matching
+/// `plane_angle_to_radians` directly above it.
+#[test]
+fn length_unit_scale_resolves_an_imperial_conversion_based_unit() {
+    let content = r#"ISO-10303-21;
+DATA;
+#1=IFCPROJECT('guid',$,'Test',$,$,$,$,(#2),#3);
+#3=IFCUNITASSIGNMENT((#10));
+#5=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#9=IFCMEASUREWITHUNIT(IFCLENGTHMEASURE(0.3048),#5);
+#10=IFCCONVERSIONBASEDUNIT(#11,.LENGTHUNIT.,'FOOT',#9);
+#11=IFCDIMENSIONALEXPONENTS(1,0,0,0,0,0,0);
+ENDSEC;
+END-ISO-10303-21;
+"#;
+    let mut decoder = EntityDecoder::new(content);
+    let scale = decoder.length_unit_scale();
+    assert!(
+        (scale - 0.3048).abs() < 1e-9,
+        "foot-authored file must report the foot scale 0.3048, got {scale}"
+    );
+}
+
+/// Bounding control for the test above: an SI metre file must STILL report
+/// 1.0. Without this, "always return 0.3048" would satisfy the imperial test.
+#[test]
+fn length_unit_scale_still_reports_metres_for_an_si_metre_file() {
+    let content = r#"ISO-10303-21;
+DATA;
+#1=IFCPROJECT('guid',$,'Test',$,$,$,$,(#2),#3);
+#3=IFCUNITASSIGNMENT((#5));
+#5=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+ENDSEC;
+END-ISO-10303-21;
+"#;
+    let mut decoder = EntityDecoder::new(content);
+    let scale = decoder.length_unit_scale();
+    assert!(
+        (scale - 1.0).abs() < 1e-12,
+        "metre-authored file must still report 1.0, got {scale}"
+    );
+}
+
+// --- Issue #3421: the raw-byte REFERENCE readers, not just the definition
+// scanner, must refuse a `#<digits>` above `u32::MAX` rather than wrapping it
+// onto a real low-numbered entity. #3395 fixed only the definition side
+// (`EntityScanner`, see `parser::scanner_tests`); these pin the six decoder
+// sites and the fast_parse pair have their own tests in `fast_parse_tests.rs`.
+//
+// `4294967297` is the defect value: `% 2^32 == 1`, so an unfixed reader binds
+// it to a real `#1` rather than merely erroring. `4294967295` is `u32::MAX`
+// exactly and must still resolve — the bound is inclusive.
+
+/// One fixture exercised through BOTH the definition scanner and a reference
+/// reader: `#4294967295` is a real, independently defined entity, distinct
+/// from `#1`. If the reference readers ever grew a second, disagreeing copy
+/// of the bound, this would show up as `#1`'s coordinates being served twice
+/// (aliasing) or the boundary id's own coordinates going missing — not as a
+/// bare "does it error" check.
+#[test]
+fn definition_and_reference_readers_agree_at_the_express_id_boundary() {
+    let content = "\
+#1=IFCCARTESIANPOINT((1.,1.,1.));
+#4294967295=IFCCARTESIANPOINT((9.,9.,9.));
+#2=IFCPOLYLOOP((#1,#4294967295));
+#3=IFCPOLYLOOP((#1,#4294967297));
+";
+
+    // Definition side: the scanner must see #1 and #4294967295 as distinct
+    // entities, and #4294967297 is never a definition here at all.
+    let mut scanner = EntityScanner::new(content);
+    let mut defined_ids = Vec::new();
+    while let Some((id, _type_name, _start, _end)) = scanner.next_entity() {
+        defined_ids.push(id);
+    }
+    assert_eq!(defined_ids, vec![1, u32::MAX, 2, 3]);
+
+    // Reference side: get_polyloop_point_ids_fast reads the SAME
+    // `#4294967295` and `#4294967297` bytes out of the loops' attribute lists.
+    // The two halves of the boundary are read from SEPARATE loops, because a
+    // loop carrying the oversized ref is now refused whole (a shortened
+    // polygon is a different face) and so cannot also show what resolves.
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(
+        decoder.get_polyloop_point_ids_fast(2),
+        Some(vec![1, u32::MAX]),
+        "u32::MAX is inside the bound and must resolve as its own entity, \
+         matching the definition side"
+    );
+    assert_eq!(
+        decoder.get_polyloop_point_ids_fast(3),
+        None,
+        "#4294967297 must refuse the loop, not alias onto #1 (which would give \
+         Some(vec![1, 1]))"
+    );
+}
+
+/// Same boundary, through the cached point-lookup path
+/// (`get_polyloop_coords_cached`): the oversized ref must fail the whole
+/// polygon's `coords.len() == expected_count` check (missing point, same as
+/// any other unresolvable reference) rather than resolve via a wrapped alias.
+#[test]
+fn get_polyloop_coords_cached_rejects_oversized_ref() {
+    let content = "\
+#1=IFCCARTESIANPOINT((1.,0.,0.));
+#2=IFCCARTESIANPOINT((0.,1.,0.));
+#3=IFCPOLYLOOP((#1,#2,#4294967297));
+";
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(
+        decoder.get_polyloop_coords_cached(3),
+        None,
+        "an oversized ref must leave the polygon short of expected_count, not resolve via alias"
+    );
+}
+
+/// `get_polyloop_point_ids_fast` (issue #3421): pins refuse-not-alias and
+/// refuse-not-SHORTEN directly, independent of the combined test above.
+///
+/// This used to assert `Some(vec![2, u32::MAX])` — it blessed the drop. A
+/// dropped vertex is not a smaller error than an aliased one: the caller
+/// (`extract_loop_points_by_id` in `ifc-lite-geometry`, and the two
+/// `IfcPolyline` reads in `processors/surface.rs`) meshes whatever it is
+/// handed, so a three-corner face read out of a four-corner loop is rendered
+/// as if the file had said so. The guarded sibling
+/// `get_polyloop_coords_cached_into` has always refused this, and the two
+/// accessors read the SAME bytes.
+#[test]
+fn get_polyloop_point_ids_fast_refuses_a_loop_with_an_oversized_ref() {
+    let mut decoder =
+        EntityDecoder::new("#1=IFCPOLYLOOP((#2,#4294967297,#4294967295));\n");
+    assert_eq!(
+        decoder.get_polyloop_point_ids_fast(1),
+        None,
+        "one unresolvable ref of three refuses the whole loop, rather than \
+         handing back a 2-corner face"
+    );
+
+    // Two-way control: with every ref resolvable the loop still comes back,
+    // and `u32::MAX` is inside the bound rather than at its wrong side.
+    let mut decoder = EntityDecoder::new("#1=IFCPOLYLOOP((#2,#3,#4294967295));\n");
+    assert_eq!(
+        decoder.get_polyloop_point_ids_fast(1),
+        Some(vec![2, 3, u32::MAX])
+    );
+}
+
+/// `get_entity_ref_list_fast` (issue #3421): same contract as
+/// `get_polyloop_point_ids_fast`, different accessor and record shape.
+#[test]
+fn get_entity_ref_list_fast_drops_oversized_ref() {
+    let content = "#1=IFCCLOSEDSHELL((#2,#4294967297,#4294967295));\n";
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(
+        decoder.get_entity_ref_list_fast(1),
+        Some(vec![2, u32::MAX])
+    );
+}
+
+/// `get_first_entity_ref_fast` (issue #3421): an oversized first reference
+/// must refuse (`None`), not resolve to `#1`.
+#[test]
+fn get_first_entity_ref_fast_refuses_oversized_ref() {
+    let content = "#1=IFCMAPPEDITEM(#4294967297,$);\n";
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(decoder.get_first_entity_ref_fast(1), None);
+
+    // Control: the same accessor resolves an ordinary reference, and the
+    // inclusive boundary (u32::MAX) still resolves too.
+    let content = "#1=IFCMAPPEDITEM(#4294967295,$);\n";
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(decoder.get_first_entity_ref_fast(1), Some(u32::MAX));
+}
+
+/// `get_face_bound_fast` (issue #3421): an oversized loop reference must
+/// refuse the whole face bound (`None`), not resolve to a real, wrong loop.
+#[test]
+fn get_face_bound_fast_refuses_oversized_loop_ref() {
+    let content = "#1=IFCFACEBOUND(#4294967297,.T.);\n";
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(decoder.get_face_bound_fast(1), None);
+
+    // Control: the inclusive boundary still resolves, with the right id.
+    let content = "#1=IFCFACEBOUND(#4294967295,.T.);\n";
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(decoder.get_face_bound_fast(1), Some((u32::MAX, true, false)));
+}
+
+/// Issue #4497: `EntityScanner::next_entity` returns the STEP keyword as a
+/// raw, unnormalised slice, and `length_unit_scale`/`plane_angle_to_radians`
+/// compared it case-sensitively against `"IFCPROJECT"`. A file whose
+/// keywords are lowercase (a legal STEP file — case is not significant)
+/// silently defaulted to scale `1.0` instead of the declared `0.001`, a
+/// 1000x error feeding curve tessellation, appearance mapping and unit
+/// conversion.
+#[test]
+fn length_unit_scale_lowercase_keywords_repro() {
+    let content = r#"
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('t.ifc','2026-01-01T00:00:00',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=ifcproject('0001projectaaaaaaaaaaa',$,'P',$,$,$,$,$,#2);
+#2=ifcunitassignment((#3));
+#3=ifcsiunit(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+ENDSEC;
+END-ISO-10303-21;
+"#;
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(decoder.length_unit_scale(), 0.001);
+}
+
+/// Control: uppercase keywords (the pre-existing, always-worked case) must
+/// keep resolving exactly as before the #4497 fix.
+#[test]
+fn length_unit_scale_uppercase_keywords_unchanged() {
+    let content = r#"
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('t.ifc','2026-01-01T00:00:00',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0001projectaaaaaaaaaaa',$,'P',$,$,$,$,$,#2);
+#2=IFCUNITASSIGNMENT((#3));
+#3=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+ENDSEC;
+END-ISO-10303-21;
+"#;
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(decoder.length_unit_scale(), 0.001);
+}
+
+/// The realistic case per #4497: some exporters emit CamelCase keywords
+/// (`IfcProject`, not all-lower or all-upper).
+#[test]
+fn length_unit_scale_mixed_case_keywords() {
+    let content = r#"
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('t.ifc','2026-01-01T00:00:00',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IfcProject('0001projectaaaaaaaaaaa',$,'P',$,$,$,$,$,#2);
+#2=IfcUnitAssignment((#3));
+#3=IfcSiUnit(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+ENDSEC;
+END-ISO-10303-21;
+"#;
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(decoder.length_unit_scale(), 0.001);
+}
+
+/// `plane_angle_to_radians` has the same scanner-comparison bug — cover it
+/// separately rather than assuming the `length_unit_scale` fix carries over.
+/// DEGREE fixture per `units_tests::test_extract_plane_angle_degree`, with
+/// all keywords lowercased.
+#[test]
+fn plane_angle_to_radians_lowercase_keywords() {
+    let content = r#"ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Test'),'2;1');
+FILE_NAME('test.ifc','2024-01-01',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=ifcproject('guid',$,'Test',$,$,$,$,(#2),#3);
+#2=ifcgeometricrepresentationcontext($,'Model',3,1.E-5,#4,$);
+#3=ifcunitassignment((#5,#10));
+#4=ifcaxis2placement3d(#7,$,$);
+#5=ifcsiunit(*,.LENGTHUNIT.,$,.METRE.);
+#7=ifccartesianpoint((0.,0.,0.));
+#8=ifcsiunit(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#9=ifcmeasurewithunit(ifcratiomeasure(0.0174532925199433),#8);
+#10=ifcconversionbasedunit(#11,.PLANEANGLEUNIT.,'DEGREE',#9);
+#11=ifcdimensionalexponents(0,0,0,0,0,0,0);
+ENDSEC;
+END-ISO-10303-21;
+"#;
+    let mut decoder = EntityDecoder::new(content);
+    let scale = decoder.plane_angle_to_radians();
+    assert!(
+        (scale - 0.0174532925199433).abs() < 1e-9,
+        "expected 0.01745… for DEGREE, got {scale}"
+    );
+}
+
+/// Every hand-rolled whitespace skip in the raw-byte readers took only
+/// `' ' | '\n' | '\r'`, leaving out TAB, vertical tab and form feed, all three
+/// legal ISO 10303-21 separators and all three in `is_step_space`, the one
+/// predicate the scanner uses (its doc comment cites #3733: a form feed
+/// silently dropping an entity). The nom decoder read the same bytes fine.
+///
+/// Four of the eight sites had nothing past the skip that tolerated a stray
+/// byte, and the callers hide the refusal: `processors/helpers.rs` uses `?`,
+/// `brep/faceted.rs` uses `None => continue`, so the face is dropped with
+/// nothing said. Each is asserted on its own line so a single site reverting
+/// names itself:
+///   * `get_face_bound_fast`, before the loop ref: `(\t#4` refused the bound.
+///   * `get_face_bound_fast`, before the orientation: `,\t.F.)` fell through
+///     to the default and read as `true`, an inverted face.
+///   * `parse_next_float` (under `get_cartesian_point_fast`) and
+///     `parse_float_inline` (under `get_polyloop_coords_cached`):
+///     `fast_float2` does not skip leading whitespace, so `\t1.` refused the
+///     point.
+///
+/// The other four sites (the two list readers, `get_first_entity_ref_fast`,
+/// `get_polyloop_coords_cached_into`'s own loop) already stepped past an
+/// unknown byte one at a time, so they never refused; they share the
+/// predicate now so the set cannot drift apart again, and their lines here
+/// are the control, not a regression.
+#[test]
+fn fast_readers_accept_every_step_whitespace_byte_3733() {
+    for ws in ["\t", "\x0b", "\x0c", " "] {
+        let content = format!(
+            "#1=IFCCARTESIANPOINT(({ws}1.,{ws}2.,{ws}3.));\n\
+             #2=IFCCARTESIANPOINT(({ws}4.,{ws}5.,{ws}6.));\n\
+             #3=IFCCARTESIANPOINT(({ws}7.,{ws}8.,{ws}9.));\n\
+             #4=IFCPOLYLOOP(({ws}#1,{ws}#2,{ws}#3));\n\
+             #5=IFCFACEOUTERBOUND({ws}#4,{ws}.F.);\n"
+        );
+        let mut decoder = EntityDecoder::new(&content);
+        assert_eq!(decoder.get_face_bound_fast(5), Some((4, false, true)), "ws {ws:?}");
+        assert_eq!(decoder.get_cartesian_point_fast(1), Some((1., 2., 3.)), "ws {ws:?}");
+        assert_eq!(
+            decoder.get_polyloop_coords_cached(4),
+            Some(vec![(1., 2., 3.), (4., 5., 6.), (7., 8., 9.)]),
+            "ws {ws:?}"
+        );
+        // Control: never refused, now on the shared predicate.
+        assert_eq!(decoder.get_polyloop_point_ids_fast(4), Some(vec![1, 2, 3]), "ws {ws:?}");
+        assert_eq!(decoder.get_entity_ref_list_fast(4), Some(vec![1, 2, 3]), "ws {ws:?}");
+        assert_eq!(decoder.get_first_entity_ref_fast(5), Some(4), "ws {ws:?}");
+    }
+}
+
+/// #4697: an installed index span past the content is refused, not a panic.
+#[test]
+fn issue_4697_an_index_span_past_the_content_is_refused_not_a_panic() {
+    let content = "\
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCCARTESIANPOINT((1.,0.,0.));
+#3=IFCCARTESIANPOINT((1.,1.,0.));
+#4=IFCPOLYLOOP((#1,#2,#3));
+";
+    let spans = crate::build_entity_index(content);
+    let ids = [1u32, 2, 3, 4];
+    let starts: Vec<u32> = ids.iter().map(|id| spans[id].0 as u32).collect();
+    let mut lengths: Vec<u32> = ids.iter().map(|id| (spans[id].1 - spans[id].0) as u32).collect();
+    lengths[2] = 1000; // #3 runs past the end of the content
+    let index = crate::ColumnarEntityIndex::from_columns(&ids, &starts, &lengths).unwrap();
+    let mut decoder = EntityDecoder::with_arc_columnar_index(content, Arc::new(index));
+
+    let (s1, e1) = spans[&1];
+    assert_eq!(decoder.get_raw_bytes(1), Some(&content.as_bytes()[s1..e1]), "sanity: in-range span");
+    assert_eq!(decoder.get_raw_bytes(3), None);
+    assert_eq!(decoder.get_polyloop_coords_cached(3), None, "the loop's own span");
+    assert_eq!(decoder.get_polyloop_coords_cached(4), None, "a point's span");
+    let named = decoder.decode_by_id(3).unwrap_err().to_string();
+    assert!(named.contains("invalid byte span"), "{named}");
+}
+
+/// #5266: a dropped comma corrupts one STEP numeric literal into two, e.g.
+/// `1.52.3` for what was meant to be `1.52,3`. `fast_float2::parse_partial`
+/// happily parses the `1.52` prefix and reports it consumed, leaving `.3` to
+/// be read as the START of the next coordinate -- so every later component
+/// shifts by one position instead of the record being refused. The nom
+/// tokenizer's `float` combinator requires the whole token to match the STEP
+/// grammar, so `decode_by_id` already refuses the same input; this test pins
+/// that the raw-byte fast readers (`parse_next_float` under
+/// `get_cartesian_point_fast`, and its `fast_parse.rs` counterparts) must
+/// refuse it too instead of fabricating a shifted point.
+#[test]
+fn issue_5266_corrupted_literal_is_refused_not_split_into_two_coordinates() {
+    let content = "#1=IFCCARTESIANPOINT((1.52.3,4.0,5.0));\n";
+    let mut decoder = EntityDecoder::new(content);
+
+    // The full tokenizer already refuses a malformed record.
+    assert!(decoder.decode_by_id(1).is_err(), "the nom tokenizer should refuse the corrupted literal");
+
+    // The fast path must now agree, not fabricate `(1.52, 0.3, 4.0)`.
+    assert_eq!(
+        decoder.get_cartesian_point_fast(1),
+        None,
+        "the fast reader must refuse a corrupted literal instead of splitting it into two coordinates"
+    );
+}
+
+/// #5266, pinning the other raw-byte float reader independently:
+/// `get_polyloop_coords_cached` (`decoder/fast_buffers.rs`) reads each point
+/// through `parse_cartesian_point_inline`, which calls `parse_float_inline`
+/// -- a separate function from `parse_next_float` above, sharing the same
+/// missing-delimiter-check shape. A corrupted literal on the middle point of
+/// a loop must refuse that point instead of fabricating a shifted one.
+#[test]
+fn issue_5266_polyloop_cached_reader_also_refuses_a_corrupted_literal() {
+    let content = "\
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCCARTESIANPOINT((1.52.3,4.0,5.0));
+#3=IFCCARTESIANPOINT((1.,1.,0.));
+#4=IFCPOLYLOOP((#1,#2,#3));
+";
+    let mut decoder = EntityDecoder::new(content);
+    assert_eq!(
+        decoder.get_polyloop_coords_cached(4),
+        None,
+        "a corrupted literal on one loop point must refuse the whole loop, not fabricate a shifted point"
+    );
+}
+
+/// #5266 follow-up: the fast point reader agrees with the full tokenizer on
+/// every edge the first fix left open. `nan`/`inf` are not STEP literals, a
+/// corrupt LAST value must refuse the point rather than default z to 0, a
+/// legal comment after z must keep z, and only a genuine 2D point (list
+/// closes after y) defaults z.
+#[test]
+fn issue_5266_fast_point_reader_matches_the_tokenizer_on_every_edge() {
+    type Point = Option<(f64, f64, f64)>;
+    let cases: &[(&str, Point)] = &[
+        ("(NaN,1.,2.)", None),
+        ("(inf,1.,2.)", None),
+        ("(1.,2.,infinity)", None),
+        ("(1.,2.,3.x)", None),
+        ("(1.,2.,1.52.3)", None),
+        ("(1.,2.,)", None),
+        ("(1.,2.,3.,4.)", None),
+        ("(1.52 .3,4.,5.)", None),
+        ("(1.52/* c */.3,4.,5.)", None),
+        ("(1.,2.,3./* c */)", Some((1.0, 2.0, 3.0))),
+        ("( 1. /* a */ , 2. ,3. )", Some((1.0, 2.0, 3.0))),
+        ("(1.,2.)", Some((1.0, 2.0, 0.0))),
+        ("(+1.5,.5,-1.E2)", Some((1.5, 0.5, -100.0))),
+    ];
+    for &(coords, expected) in cases {
+        let content = format!("#1=IFCCARTESIANPOINT({coords});\n");
+        let mut decoder = EntityDecoder::new(&content);
+        assert_eq!(decoder.get_cartesian_point_fast(1), expected, "{coords}");
+    }
+}

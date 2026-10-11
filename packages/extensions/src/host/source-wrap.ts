@@ -1,0 +1,243 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Source wrapping for extension entry scripts.
+ *
+ * Convention for v1:
+ *
+ *   - An entry file is a plain JS source that defines a top-level
+ *     function (e.g. `activate`, `deactivate`, or a command handler).
+ *   - The function takes a `ctx` parameter.
+ *   - The function may be `async`; if it returns a Promise we do not
+ *     await it (fire-and-forget). Long-running work happens on command
+ *     / trigger fires, not at activation time.
+ *
+ * We do NOT support `export` statements at module level (QuickJS
+ * evalCode is non-module). The CLI scaffold writes plain function
+ * declarations; AI-authored extensions follow the same shape. Sources
+ * containing `export` are flagged at wrap time so the failure is
+ * visible.
+ *
+ * Wrap shape (output):
+ *
+ *   ;(() => {
+ *     const __ifclite_ctx__ = globalThis.__ifclite_ctx__;
+ *     const bim = __ifclite_ctx__.bim;
+ *     // <user source verbatim>
+ *     if (typeof <entryFnName> === 'function') {
+ *       return <entryFnName>(__ifclite_ctx__);
+ *     }
+ *   })()
+ *
+ * The `__ifclite_ctx__` global is installed by the runtime before
+ * eval. `bim` is also aliased as a local for ergonomic user code that
+ * already references it as a global (matching the existing sandbox
+ * convention).
+ *
+ * Spec: docs/architecture/ai-customization/01-extension-model.md §9.
+ */
+
+import * as acorn from 'acorn';
+import { MAX_AST_DEPTH, walkBounded } from '../ast/bounded-walk.js';
+import type { ValidationError, ValidationResult } from '../types.js';
+
+export interface SourceWrapOptions {
+  /** Name of the entry function to invoke (e.g. "activate"). */
+  entryFnName: string;
+  /** Optional source identifier for error reporting. */
+  filename?: string;
+  /**
+   * Optional sandbox-realm JS to run before the user source. The
+   * preamble executes inside the same IIFE as the user code, so any
+   * globalThis assignments persist for the read of `__ifclite_ctx__`
+   * on the next line. Used by the test runner to inject synthetic
+   * fixtures whose methods can't cross the realm boundary via
+   * `setGlobal`.
+   */
+  preamble?: string;
+}
+
+/**
+ * Wrap an entry script for sandbox execution. Returns the wrapped JS
+ * string or structured errors if the source contains unsupported
+ * constructs.
+ */
+export function wrapEntrySource(
+  source: string,
+  opts: SourceWrapOptions,
+): ValidationResult<string> {
+  if (typeof source !== 'string') {
+    return fail('', 'type_mismatch', 'Entry source must be a string.');
+  }
+  if (source.trim().length === 0) {
+    return fail('', 'invalid_value', 'Entry source is empty.');
+  }
+
+  // Validate identifier so we never interpolate user-supplied unsafe values.
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(opts.entryFnName)) {
+    return fail(
+      '',
+      'invalid_value',
+      `entryFnName "${opts.entryFnName}" is not a valid identifier.`,
+    );
+  }
+
+  // Parse to detect unsupported constructs.
+  let ast: acorn.Node;
+  try {
+    ast = acorn.parse(source, {
+      ecmaVersion: 'latest',
+      // We parse as a module so we can DETECT `export` and report it
+      // clearly, even though the runtime evaluates as a non-module.
+      sourceType: 'module',
+      allowAwaitOutsideFunction: false,
+      allowReturnOutsideFunction: false,
+    });
+  } catch (err) {
+    const e = err as Error & { loc?: { line: number; column: number } };
+    return fail(
+      `[${e.loc?.line ?? 0}:${e.loc?.column ?? 0}]`,
+      'invalid_format',
+      `Entry script does not parse: ${e.message}`,
+    );
+  }
+
+  const errors = checkBannedConstructs(ast);
+  if (errors.length > 0) return { ok: false, errors };
+
+  const wrapped = buildWrap(source, opts.entryFnName, opts.preamble);
+  return { ok: true, value: wrapped };
+}
+
+function buildWrap(userSource: string, entryFn: string, preamble?: string): string {
+  // Newlines between sections keep source-mapped line numbers usable
+  // when looking at error stacks — user source begins at a predictable
+  // offset.
+  //
+  // ctx resolution order:
+  //   1. `globalThis.__ifclite_ctx__` if a preamble or test runner set it.
+  //   2. Otherwise construct `{ bim: globalThis.bim }` from the bim
+  //      object the host's bridge installed. Production runs reach this
+  //      branch — the host can't ship the BimContext via setGlobal
+  //      because the wrapped SDK is full of cyclic Proxies that
+  //      JSON.stringify can't serialise. The bridge wires bim into the
+  //      sandbox-realm globalThis as a native QuickJS object; we
+  //      capture it here.
+  const preambleSection = preamble ? `${preamble}\n` : '';
+  return `;(() => {
+${preambleSection}const __ifclite_ctx__ = globalThis.__ifclite_ctx__
+  || (typeof globalThis.bim !== 'undefined' ? { bim: globalThis.bim } : undefined);
+if (!__ifclite_ctx__) {
+  throw new Error('Extension sandbox: no bim ctx available (host bridge missing).');
+}
+const bim = __ifclite_ctx__.bim;
+${userSource}
+if (typeof ${entryFn} === 'function') {
+  return ${entryFn}(__ifclite_ctx__);
+}
+})()`;
+}
+
+/**
+ * Walk the *entire* AST — including nested function bodies, arrow
+ * bodies, class methods, and blocks — looking for constructs we do
+ * not support in v1. Returns one ValidationError per offending node.
+ *
+ * Static `import`/`export` declarations are only legal at the top
+ * level of a module per the ECMAScript grammar, so acorn can never
+ * produce them elsewhere; they're included here via the same walk
+ * for a single code path rather than because nesting is possible.
+ * Dynamic `import(...)`, in contrast, is an expression and CAN appear
+ * anywhere an expression can — nested inside a function body, an
+ * arrow, a class method, etc. — which is exactly the gap this walk
+ * closes: the previous top-level-only scan missed it entirely.
+ *
+ * The traversal is `walkBounded` — the package's one AST walker. It
+ * keeps its own stack on the heap instead of recursing the way
+ * `acorn-walk` does: `wrapEntrySource` is declared to return a
+ * ValidationResult, and a recursive walk over a deeply nested script
+ * escapes that contract by throwing a RangeError out of the middle of
+ * it. Deeply nested input has to come back as a *reported* error, the
+ * same way acorn's own depth failure already does. Sharing the walker
+ * is what keeps this scan and `validateCode` from drifting apart on
+ * where "too deep" starts.
+ *
+ * The visitor switches on the type key `walkBounded` supplies, not on
+ * `node.type`: `acorn-walk` re-dispatches statements and expressions
+ * under synthetic keys, so a node reached that way is reported twice,
+ * once under each key, and switching on `node.type` would report every
+ * banned construct twice.
+ */
+function checkBannedConstructs(ast: acorn.Node): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  const { depthExceeded, unwalkableTypes } = walkBounded(ast, (_node, type) => {
+    switch (type) {
+      case 'ImportDeclaration':
+        errors.push({
+          path: '',
+          code: 'invalid_value',
+          message: '`import` statements are not supported in extension entry scripts.',
+          hint: 'Inline any helpers, or move them into a separate file referenced via entry.commands / entry.triggers.',
+        });
+        break;
+      case 'ExportNamedDeclaration':
+      case 'ExportDefaultDeclaration':
+      case 'ExportAllDeclaration':
+        errors.push(exportError());
+        break;
+      case 'ImportExpression':
+        errors.push({
+          path: '',
+          code: 'invalid_value',
+          message: 'Dynamic `import(...)` is not supported in extension entry scripts.',
+          hint: 'Inline any helpers, or move them into a separate file referenced via entry.commands / entry.triggers.',
+        });
+        break;
+    }
+  });
+
+  if (depthExceeded) {
+    errors.push({
+      path: '',
+      code: 'invalid_value',
+      message: `Entry script is nested more than ${MAX_AST_DEPTH} AST levels deep.`,
+      hint: 'Flatten the script — extract deeply nested blocks into separate helper functions.',
+    });
+    return errors;
+  }
+
+  // A subtree the walker could not descend was never scanned, so a
+  // clean result would mean "found no `import`" when it means "did not
+  // look". Refuse the script instead of wrapping it.
+  if (unwalkableTypes.length > 0) {
+    errors.push({
+      path: '',
+      code: 'invalid_value',
+      message: `Entry script contains AST node types the validator cannot traverse (${unwalkableTypes.join(', ')}); it was not fully checked.`,
+      hint: 'This usually means the parser is newer than the walker it is paired with — report it rather than working around it.',
+    });
+  }
+
+  return errors;
+}
+
+function exportError(): ValidationError {
+  return {
+    path: '',
+    code: 'invalid_value',
+    message: '`export` statements are not supported in extension entry scripts.',
+    hint: 'Define the entry function as a top-level declaration (e.g. `async function activate(ctx) {…}`) without `export`.',
+  };
+}
+
+function fail(
+  path: string,
+  code: import('../types.js').ValidationErrorCode,
+  message: string,
+  hint?: string,
+): ValidationResult<never> {
+  return { ok: false, errors: [{ path, code, message, hint }] };
+}

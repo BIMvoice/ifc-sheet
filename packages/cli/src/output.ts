@@ -1,0 +1,205 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Output formatting utilities for CLI commands.
+ */
+
+import { writeFile } from 'node:fs/promises';
+import { format } from 'node:util';
+import { logger } from './logger.js';
+
+export type OutputFormat = 'json' | 'table' | 'csv';
+
+let consoleRoutedToStderr = false;
+
+/**
+ * Route console diagnostics (`console.log`/`info`/`debug`) to stderr for the
+ * rest of the process, so stdout stays reserved for the command's payload
+ * (JSON or the human summary). `console.warn`/`error` already write to stderr
+ * in Node and are left untouched.
+ *
+ * Deliberately NOT scoped/restored: the wasm geometry module captures its
+ * print bindings at init time, so a restore-in-finally wrapper leaks
+ * diagnostics back onto stdout whenever the module prints through a binding
+ * taken before or outside the scope. Call this before the first
+ * GeometryProcessor init; commands print their own output via
+ * `process.stdout.write`/`printJson`, which this does not touch.
+ */
+export function routeConsoleDiagnosticsToStderr(): void {
+  if (consoleRoutedToStderr) return;
+  consoleRoutedToStderr = true;
+  const toStderr = (...parts: unknown[]) => {
+    process.stderr.write(`${format(...parts)}\n`);
+  };
+  console.log = toStderr;
+  console.info = toStderr;
+  console.debug = toStderr;
+}
+
+/**
+ * Write output to stdout or a file. Bytes are written verbatim (no string
+ * round-trip, so output is not capped by the V8 max-string ceiling).
+ */
+export async function writeOutput(content: string | Uint8Array, outPath?: string): Promise<void> {
+  if (outPath) {
+    await writeFile(outPath, content);
+    logger.info(`Written to ${outPath}`);
+  } else {
+    process.stdout.write(content);
+    // Convenience newline for human-readable string output only; byte output
+    // stays verbatim so `--format step > out.ifc` matches the exporter bytes.
+    if (typeof content === 'string' && !content.endsWith('\n')) process.stdout.write('\n');
+  }
+}
+
+/**
+ * Format data as a simple ASCII table.
+ */
+export function formatTable(headers: string[], rows: string[][]): string {
+  const widths = headers.map((h, i) => {
+    let max = h.length;
+    for (const row of rows) {
+      const cell = row[i] ?? '';
+      if (cell.length > max) max = cell.length;
+    }
+    return Math.min(max, 60);
+  });
+
+  const sep = widths.map(w => '─'.repeat(w + 2)).join('┼');
+  const formatRow = (cells: string[]) =>
+    cells.map((c, i) => ` ${(c ?? '').slice(0, widths[i]).padEnd(widths[i])} `).join('│');
+
+  const lines: string[] = [];
+  lines.push(formatRow(headers));
+  lines.push(sep);
+  for (const row of rows) {
+    lines.push(formatRow(row));
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Print JSON to stdout.
+ * Handles Map instances by converting them to plain objects.
+ */
+export function printJson(data: unknown): void {
+  process.stdout.write(JSON.stringify(data, (_key, value) => {
+    if (value instanceof Map) {
+      return Object.fromEntries(value);
+    }
+    return value;
+  }, 2) + '\n');
+}
+
+/**
+ * Print an error to stderr and exit.
+ */
+export function fatal(message: string): never {
+  process.stderr.write(`Error: ${message}\n`);
+  process.exit(1);
+}
+
+/**
+ * Parse a CLI flag value from argv.
+ */
+export function getFlag(args: string[], flag: string): string | undefined {
+  const idx = args.indexOf(flag);
+  if (idx === -1 || idx + 1 >= args.length) return undefined;
+  return args[idx + 1];
+}
+
+/**
+ * Collect all values for a repeated flag (e.g. --set A --set B → ['A', 'B']).
+ */
+export function getAllFlags(args: string[], flag: string): string[] {
+  const results: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === flag && i + 1 < args.length) {
+      results.push(args[i + 1]);
+      i++; // skip value
+    }
+  }
+  return results;
+}
+
+/**
+ * Check if a boolean flag is present.
+ */
+export function hasFlag(args: string[], flag: string): boolean {
+  return args.includes(flag);
+}
+
+/**
+ * Validate and parse a --viewer port string. Calls fatal() on invalid input.
+ */
+export function validateViewerPort(raw: string | undefined, flagName = '--viewer'): number | undefined {
+  if (raw === undefined) return undefined;
+  const port = parseInt(raw, 10);
+  if (isNaN(port) || port < 1 || port > 65535) {
+    fatal(`Invalid ${flagName} port: "${raw}" (must be 1–65535)`);
+  }
+  return port;
+}
+
+/**
+ * Parse a `--limit`-shaped flag into a non-negative integer. Calls fatal() on
+ * anything that isn't one (garbage, negative, fractional) instead of letting
+ * `parseInt` silently coerce it to `NaN` — `Array.prototype.slice(0, NaN)`
+ * quietly returns an empty array, which turns a typo'd limit into a
+ * zero-row/zero-entity result reported as success (#see export --limit).
+ */
+export function validateLimit(raw: string | undefined, flagName = '--limit'): number | undefined {
+  if (raw === undefined) return undefined;
+  // Reject blank/whitespace-only before Number(): Number('   ') is 0, so an
+  // untrimmed check would silently accept "  " as a deliberate --limit 0.
+  if (raw.trim() === '') {
+    fatal(`Invalid ${flagName}: "${raw}" (must be a non-negative integer)`);
+  }
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) {
+    fatal(`Invalid ${flagName}: "${raw}" (must be a non-negative integer)`);
+  }
+  return n;
+}
+
+/**
+ * A candidate string is absent for display/grouping purposes when it is
+ * undefined/null OR blank/whitespace-only (`IFCMATERIAL('',$,$)`,
+ * `IFCBUILDINGSTOREY('...','',...)`, or a whitespace-only source value — a
+ * real shape, see #3714). Chaining raw candidates with `??` only falls
+ * through on null/undefined, so a present-but-blank `Name` short-circuits
+ * the chain and is emitted verbatim (an empty-string JSON key, a blank
+ * label) where a placeholder belongs. Mirrors the shape introduced in
+ * `packages/mcp/src/material-naming.ts` for the same defect family.
+ */
+export function isBlank(value: string | undefined | null): boolean {
+  return value === undefined || value === null || value.trim() === '';
+}
+
+/** First candidate that is not blank per `isBlank`, or undefined if none. */
+export function firstNonBlank(...candidates: Array<string | undefined | null>): string | undefined {
+  for (const candidate of candidates) {
+    if (!isBlank(candidate)) return candidate ?? undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Get positional arguments (non-flag arguments).
+ */
+export function getPositionalArgs(args: string[]): string[] {
+  const result: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i].startsWith('-')) {
+      // Skip flag and its value
+      if (!args[i].startsWith('--no-') && i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        i++;
+      }
+      continue;
+    }
+    result.push(args[i]);
+  }
+  return result;
+}

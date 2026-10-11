@@ -1,0 +1,183 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * postMessage protocol shared between the main thread and decode-worker.
+ *
+ * Direction is encoded by message kind. Typed arrays are always carried
+ * in transferable buffers so we don't double-allocate.
+ */
+
+import type { DecodedPointChunk, PointCloudBBox, PointNormalState } from '../types.js';
+import type { PointSourceInfo } from './types.js';
+import type { CopcFileInfo } from '../copc/copc-info.js';
+import type { CopcHierarchyPage, CopcNodeEntry, CopcPageRef } from '../copc/copc-hierarchy.js';
+
+/** Where a COPC file's bytes come from; the worker builds the range source. */
+export type CopcSourceDescriptor =
+  | { kind: 'blob'; blob: Blob }
+  | { kind: 'http'; url: string; headers?: Record<string, string> };
+
+export type WorkerSourceFormat = 'las' | 'laz' | 'ply' | 'pcd' | 'e57' | 'pts' | 'xyz';
+
+/** main → worker */
+export type WorkerRequest =
+  | {
+      kind: 'open';
+      requestId: number;
+      format: WorkerSourceFormat;
+      blob: Blob;
+      label?: string;
+      stride: number;
+      /** See `decodeLasPoints`'s `originOffset` param (issue #1804); every
+       *  format decoder consumes it (E57/PLY/PCD/PTS/XYZ alongside LAS/LAZ). */
+      originOffset?: readonly [number, number, number];
+    }
+  | {
+      kind: 'next';
+      requestId: number;
+      sourceId: number;
+      maxPoints: number;
+    }
+  | {
+      kind: 'close';
+      sourceId: number;
+    }
+  | {
+      kind: 'abort';
+      sourceId: number;
+    }
+  | {
+      kind: 'copc-open';
+      requestId: number;
+      source: CopcSourceDescriptor;
+      originOffset?: readonly [number, number, number];
+      /** Hierarchy byte budget; the root page is refused before reading when larger. */
+      maxPageBytes: number;
+    }
+  | {
+      kind: 'copc-page';
+      requestId: number;
+      sourceId: number;
+      page: CopcPageRef;
+      /** The caller's remaining hierarchy byte budget, checked before reading. */
+      maxBytes: number;
+    }
+  | {
+      kind: 'copc-node';
+      requestId: number;
+      sourceId: number;
+      node: CopcNodeEntry;
+      stride: number;
+    }
+  | {
+      /** Abort one in-flight COPC page/node request (the camera moved on). */
+      kind: 'copc-cancel';
+      targetRequestId: number;
+    };
+
+/** worker → main */
+export type WorkerResponse =
+  | {
+      kind: 'opened';
+      requestId: number;
+      sourceId: number;
+      info: PointSourceInfo;
+    }
+  | {
+      kind: 'chunk';
+      requestId: number;
+      sourceId: number;
+      chunk: SerializedChunk | null;
+    }
+  | {
+      kind: 'copc-opened';
+      requestId: number;
+      sourceId: number;
+      file: CopcFileInfo;
+      rootPage: CopcHierarchyPage;
+    }
+  | {
+      kind: 'copc-page';
+      requestId: number;
+      page: CopcHierarchyPage;
+    }
+  | {
+      kind: 'error';
+      requestId: number;
+      message: string;
+    };
+
+/** Wire-friendly chunk: typed-array views replaced by their underlying buffers. */
+export interface SerializedChunk {
+  positions: ArrayBuffer;
+  colors?: ArrayBuffer;
+  normals?: ArrayBuffer;
+  normalState: PointNormalState;
+  classifications?: ArrayBuffer;
+  intensities?: ArrayBuffer;
+  pointCount: number;
+  bbox: PointCloudBBox;
+}
+
+function exactBuffer(view: ArrayBufferView): ArrayBuffer {
+  if (view.buffer instanceof ArrayBuffer && view.byteOffset === 0 && view.byteLength === view.buffer.byteLength) {
+    return view.buffer;
+  }
+  return new Uint8Array(view.buffer, view.byteOffset, view.byteLength).slice().buffer;
+}
+
+/** Convert a chunk into a transferable wire payload + transfer list. */
+export function chunkToWire(chunk: DecodedPointChunk): {
+  payload: SerializedChunk;
+  transfer: ArrayBuffer[];
+} {
+  // We construct every typed array in this package via `new Float32Array(N)` /
+  // friends, so `.buffer` is always a plain `ArrayBuffer`. The `as ArrayBuffer`
+  // cast is safe and required because TS widens the type to `ArrayBufferLike`
+  // (which formally includes `SharedArrayBuffer`).
+  const positions = exactBuffer(chunk.positions);
+  const transfer: ArrayBuffer[] = [positions];
+  const payload: SerializedChunk = {
+    positions,
+    pointCount: chunk.pointCount,
+    bbox: chunk.bbox,
+    normalState: chunk.normalState,
+  };
+  if (chunk.colors) {
+    const buf = exactBuffer(chunk.colors);
+    payload.colors = buf;
+    transfer.push(buf);
+  }
+  if (chunk.normals) {
+    const buf = exactBuffer(chunk.normals);
+    payload.normals = buf;
+    transfer.push(buf);
+  }
+  if (chunk.classifications) {
+    const buf = exactBuffer(chunk.classifications);
+    payload.classifications = buf;
+    transfer.push(buf);
+  }
+  if (chunk.intensities) {
+    const buf = exactBuffer(chunk.intensities);
+    payload.intensities = buf;
+    transfer.push(buf);
+  }
+  return { payload, transfer };
+}
+
+/** Inverse of `chunkToWire`. */
+export function chunkFromWire(payload: SerializedChunk): DecodedPointChunk {
+  return {
+    positions: new Float32Array(payload.positions),
+    colors: payload.colors ? new Float32Array(payload.colors) : undefined,
+    normals: payload.normals ? new Float32Array(payload.normals) : undefined,
+    normalState: payload.normalState,
+    classifications: payload.classifications ? new Uint8Array(payload.classifications) : undefined,
+    intensities: payload.intensities ? new Uint16Array(payload.intensities) : undefined,
+    pointCount: payload.pointCount,
+    bbox: payload.bbox,
+  };
+}

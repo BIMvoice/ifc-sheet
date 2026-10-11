@@ -1,0 +1,151 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * IDS validation worker.
+ *
+ * IDS validation is pure CPU work over the whole entity population — on
+ * the main thread it pins the UI (no progress paints, frame rate
+ * collapses) exactly like an unworkered parse would. Every other heavy
+ * stage in this viewer (STEP parse, geometry) already runs in a worker;
+ * this brings validation in line.
+ *
+ * The worker re-parses the IFC source bytes (~150ms for a 550k-entity
+ * model — negligible next to validation) into its own IfcDataStore so
+ * the main-thread store is never touched, then runs the shared
+ * `@ifc-lite/ids` validator with the canonical bridge accessor. The IDS
+ * XML is parsed on the main thread (workers have no DOMParser) and the
+ * plain IDSDocument is handed across; progress is streamed back as it
+ * happens.
+ */
+
+import { IfcParser, sourceBytesFromTransferable, type IfcSourceTransfer } from '@ifc-lite/parser';
+import {
+  validateIDS,
+  createTranslationService,
+  type IDSDocument,
+  type IDSValidationReport,
+  type ValidationProgress,
+} from '@ifc-lite/ids';
+import { createDataAccessor } from '@ifc-lite/ids/bridge';
+
+import {
+  overlayResolverFromSnapshot,
+  entityVisibilityFromSnapshot,
+  type PropertyOverlaySnapshot,
+  type EntityVisibilitySnapshot,
+} from '@/lib/ids/property-overlay-snapshot';
+
+export interface IdsWorkerRequest {
+  type: 'validate';
+  id: number;
+  /** Raw IFC/STEP bytes — a SharedArrayBuffer is shared zero-copy. */
+  source: IfcSourceTransfer;
+  /** IDS document already parsed on the main thread (no DOMParser here). */
+  document: IDSDocument;
+  schemaVersion: string;
+  modelId: string;
+  locale: 'en' | 'de' | 'fr';
+  includePassingEntities: boolean;
+  /**
+   * The model's pending, not-yet-exported property edits, as plain clonable
+   * data (#3946).
+   *
+   * The worker re-parses `source`, so it sees the model as it was written
+   * to disk. Before this field existed, a model with ANY pending edit was
+   * refused the worker entirely and validated on the main thread — a cost
+   * of O(entities x specifications) charged for a single corrected
+   * property, and charged again on every re-run until the edits were
+   * exported or cleared.
+   *
+   * Absent/empty means "no overlay", which is the byte-identical
+   * no-overlay path this worker always took.
+   */
+  propertyOverlay?: PropertyOverlaySnapshot;
+  /**
+   * The model's pending tombstones and surviving overlay-created entity
+   * ids, as plain clonable data (#5184). Same reasoning as
+   * `propertyOverlay` above: the worker re-parses `source`, which still
+   * has a since-deleted entity's bytes and lacks a since-created entity's,
+   * so `getAllEntityIds` needs this to answer the same question the
+   * main-thread accessor does. Absent/empty means "nothing to exclude or
+   * add", the byte-identical no-visibility-view path.
+   */
+  entityVisibility?: EntityVisibilitySnapshot;
+}
+
+export type IdsWorkerResponse =
+  | { type: 'progress'; id: number; progress: ValidationProgress }
+  | { type: 'complete'; id: number; report: IDSValidationReport }
+  | { type: 'error'; id: number; message: string };
+
+const post = (msg: IdsWorkerResponse) => {
+  (self as unknown as Worker).postMessage(msg);
+};
+
+self.onmessage = async (event: MessageEvent<IdsWorkerRequest>) => {
+  const req = event.data;
+  if (!req || req.type !== 'validate') return;
+
+  try {
+    const parser = new IfcParser();
+    // The worker owns this buffer; a SAB is shared by reference, a plain
+    // ArrayBuffer was copied by the caller, so parsing it here is safe.
+    // Rebuild HERE, on the worker's thread. A compressed source arrives as
+    // blocks and is inflated in this realm, whose memory goes away when the
+    // worker is terminated -- unlike the main thread's.
+    const view = sourceBytesFromTransferable(req.source).materialize();
+    // `.buffer` is only the right bytes when the view covers it exactly; a
+    // subarray would hand the parser its neighbours as well. The old client
+    // guaranteed offset 0 and full length by copying before it posted, and
+    // that guarantee has to be re-established here now that it does not.
+    const buffer = view.byteOffset === 0 && view.byteLength === view.buffer.byteLength
+      ? (view.buffer as ArrayBuffer)
+      : (view.slice().buffer as ArrayBuffer);
+    const store = await parser.parseColumnar(buffer);
+    store.schemaVersion =
+      (req.schemaVersion as typeof store.schemaVersion) || store.schemaVersion;
+
+    // The SAME resolver the main-thread fallback builds, from the SAME
+    // snapshot — see `@/lib/ids/property-overlay-snapshot` (#3946). The two
+    // realms therefore apply identical overrides on top of identical
+    // parsed bytes, which is what makes routing an edited model here
+    // equivalent to validating it on the main thread rather than merely
+    // similar.
+    const accessor = createDataAccessor(
+      store,
+      overlayResolverFromSnapshot(req.propertyOverlay),
+      entityVisibilityFromSnapshot(req.entityVisibility)
+    );
+    const translator = createTranslationService(req.locale);
+
+    const report = await validateIDS(
+      req.document,
+      accessor,
+      {
+        modelId: req.modelId,
+        schemaVersion: store.schemaVersion,
+        entityCount: store.entityCount ?? accessor.getAllEntityIds().length,
+      },
+      {
+        translator,
+        includePassingEntities: req.includePassingEntities,
+        // Yield periodically so progress postMessages flush to the main
+        // thread incrementally instead of arriving in one burst at the
+        // end. The worker has no UI, but cross-thread message delivery
+        // still benefits from real event-loop turns.
+        yieldEveryMs: 30,
+        onProgress: (progress) => post({ type: 'progress', id: req.id, progress }),
+      }
+    );
+
+    post({ type: 'complete', id: req.id, report });
+  } catch (err) {
+    post({
+      type: 'error',
+      id: req.id,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+};

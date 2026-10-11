@@ -1,0 +1,294 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Draft publishing from viewer edits (#1717 V2): pending `Mutation`s fold
+ * into component-granular ops (`changeSetToOps`), serialize as an IFCX
+ * delta document in the same wire dialect the MCP draft tools and the
+ * collab snapshot pipeline emit, then freeze into an immutable,
+ * content-addressed, provenance-stamped layer on the local store.
+ *
+ * Identity: for IFCX models the composition PATH is the stable entity
+ * identity (the node path is the GUID), so the resolver maps expressId →
+ * path via the composition's id bridge. Entities the bridge cannot
+ * resolve are reported, never guessed (04-identity.md).
+ */
+
+import {
+  computeLayerId,
+  computeStackHash,
+  createProvenanceManifest,
+  setProvenance,
+  ATTR,
+  IFCLITE_ATTR,
+  IFCX_VERSION,
+} from '@ifc-lite/ifcx';
+import type { IfcxFile, IfcxNode } from '@ifc-lite/ifcx';
+import { extractStackState } from '@ifc-lite/merge';
+import { changeSetToOps } from '@ifc-lite/mutations';
+import type { ChangeSet, ChangeSetOp, Mutation, PropertyValue } from '@ifc-lite/mutations';
+import type { BrowserLayerStore } from './browser-store';
+
+const V5A_PREFIX = 'bsi::ifc::v5a::';
+
+/**
+ * Canonical wire shape for property values (#1031): scalars wrap in the
+ * typed record the collab pipeline emits, so equivalent edits hash
+ * identically in the merge engine regardless of the writer.
+ */
+function typedPropertyRecord(value: PropertyValue): unknown {
+  if (typeof value === 'boolean') return { type: 'IfcBoolean', value };
+  if (typeof value === 'number') {
+    return { type: Number.isInteger(value) ? 'IfcInteger' : 'IfcReal', value };
+  }
+  if (typeof value === 'string') return { type: 'IfcLabel', value };
+  return value;
+}
+
+/** Wire attribute key + value for one member of a component. */
+function wireEntry(
+  componentKey: string,
+  member: string,
+  value: PropertyValue | null,
+): { key: string; value: unknown } | null {
+  if (componentKey.startsWith('pset:')) {
+    const set = componentKey.slice('pset:'.length);
+    return { key: `${V5A_PREFIX}${set}::${member}`, value: value === null ? null : typedPropertyRecord(value) };
+  }
+  if (componentKey.startsWith('qset:')) {
+    const set = componentKey.slice('qset:'.length);
+    // The quantities branch stores plain finite numbers (inflation
+    // unwraps typed records under Qto_* anyway).
+    const wire = typeof value === 'number' && Number.isFinite(value) ? value : value === null ? null : typedPropertyRecord(value);
+    return { key: `${V5A_PREFIX}${set}::${member}`, value: wire };
+  }
+  if (componentKey === 'attr:core') {
+    // Core attributes travel RAW: the IFCX entity/hierarchy extractors
+    // only honor e.g. `bsi::ifc::prop::Name` when the composed value is
+    // a plain string — a typed record would compose but never display.
+    return { key: `${ATTR.PROP_PREFIX}${member}`, value };
+  }
+  if (componentKey === 'attr:class' && member === 'code') {
+    // Retype (UPDATE_ENTITY_TYPE): a class opinion, code-only like the
+    // add-entity path.
+    return { key: ATTR.CLASS, value: value === null ? null : { code: value } };
+  }
+  return null;
+}
+
+/**
+ * Serialize component ops as IFCX node opinions. Whole-component
+ * tombstones null every member visible in the base state — composition
+ * is per-attribute LWW, so anything not explicitly nulled shines
+ * through.
+ */
+export function buildDeltaNodes(
+  ops: readonly ChangeSetOp[],
+  baseFiles: readonly IfcxFile[],
+  /**
+   * Optional sink for `set-component` ops that resolved to zero wire
+   * attributes (e.g. `values: {}` from an empty-pset creation) — the
+   * IFCX dialect has no way to represent "component exists, no
+   * members", so these ops leave no trace on `data`. Without this,
+   * `changeSetToOps`'s own #2277 fix (materializing an empty pset as
+   * `values: {}` rather than dropping the mutation) gets silently
+   * undone one layer downstream: the op survives the producer, then
+   * vanishes here with no diagnostic and no error, while the caller's
+   * `opCount` still counts it as published.
+   */
+  unrepresentedOps?: ChangeSetOp[],
+): IfcxNode[] {
+  const baseState = ops.some((op) => op.op === 'tombstone-component')
+    ? extractStackState(baseFiles)
+    : null;
+  const byPath = new Map<string, IfcxNode>();
+  const nodeFor = (path: string): IfcxNode => {
+    let node = byPath.get(path);
+    if (!node) {
+      node = { path };
+      byPath.set(path, node);
+    }
+    return node;
+  };
+
+  for (const op of ops) {
+    const node = nodeFor(op.entity);
+    switch (op.op) {
+      case 'set-component': {
+        let wrote = false;
+        for (const [member, value] of Object.entries(op.values)) {
+          const entry = wireEntry(op.componentKey, member, value);
+          if (entry) {
+            node.attributes = { ...node.attributes, [entry.key]: entry.value };
+            wrote = true;
+          }
+        }
+        if (!wrote) unrepresentedOps?.push(op);
+        break;
+      }
+      case 'tombstone-component': {
+        const baseEntity = baseState?.get(op.entity);
+        const members = baseEntity?.components.get(op.componentKey);
+        for (const key of Object.keys(members ?? {})) {
+          node.attributes = { ...node.attributes, [key]: null };
+        }
+        break;
+      }
+      case 'add-entity': {
+        node.attributes = {
+          ...node.attributes,
+          ...(op.ifcType ? { [ATTR.CLASS]: { code: op.ifcType } } : {}),
+        };
+        break;
+      }
+      case 'tombstone-entity': {
+        node.attributes = { ...node.attributes, [IFCLITE_ATTR.DELETED]: true };
+        break;
+      }
+    }
+  }
+
+  return [...byPath.values()]
+    .filter((node) => node.attributes !== undefined)
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+export interface PublishDraftInit {
+  store: BrowserLayerStore;
+  /** The composition the edits were made against, weakest first. */
+  stackFiles: readonly IfcxFile[];
+  /** Pending viewer mutations to freeze. */
+  mutations: readonly Mutation[];
+  /** expressId → composition path (the layer-stack bridge, inverted). */
+  pathOf: (expressId: number) => string | undefined;
+  intent: string;
+  authorPrincipal: string;
+  /** Local ref the published layer appends to. */
+  refName: string;
+  created?: string;
+  /**
+   * Author kind for the manifest (default `'human'`). A flow-graph publish is
+   * `'hybrid'` (03-provenance.md): the human who ran and published is the
+   * `principal`, the graph is the `tool`/`session`.
+   */
+  authorKind?: 'agent' | 'human' | 'hybrid';
+  /** Authoring tool, e.g. a flow graph's `flow:<graphId>` (03-provenance.md `author.tool`). */
+  authorTool?: string;
+  /** Groups the layers one task produced, e.g. a flow graph's id. */
+  authorSession?: string;
+}
+
+export interface PublishDraftResult {
+  layerId: string;
+  file: IfcxFile;
+  opCount: number;
+  /** expressIds with no resolvable identity — excluded from the layer. */
+  unresolved: number[];
+  /** Mutations with no component representation — excluded, never silent. */
+  skippedCount: number;
+}
+
+/** Freeze pending edits into a published layer on the local store. */
+export function publishViewerDraft(init: PublishDraftInit): PublishDraftResult {
+  const changeSet: ChangeSet = {
+    id: 'viewer-draft',
+    name: init.intent,
+    createdAt: Date.now(),
+    mutations: [...init.mutations],
+    applied: true,
+  };
+  const { ops, identityMap, unresolved, skipped } = changeSetToOps(changeSet, {
+    globalIdOf: (expressId) => init.pathOf(expressId),
+  });
+  const unrepresentedOps: ChangeSetOp[] = [];
+  const data = buildDeltaNodes(ops, init.stackFiles, unrepresentedOps);
+  if (data.length === 0) {
+    throw new Error('No publishable changes: every pending edit failed identity resolution or was empty.');
+  }
+
+  const manifest = createProvenanceManifest({
+    author: { kind: init.authorKind ?? 'human', principal: init.authorPrincipal, tool: init.authorTool, session: init.authorSession },
+    intent: init.intent,
+    base: { kind: 'stack', id: computeStackHash(init.stackFiles.map((f) => f.header.id)) },
+    identity_map: identityMap,
+    created: init.created,
+  });
+
+  const bare: IfcxFile = {
+    header: {
+      id: '',
+      ifcxVersion: IFCX_VERSION,
+      dataVersion: '1.0.0',
+      author: init.authorPrincipal,
+      timestamp: manifest.created,
+    },
+    imports: [],
+    schemas: {},
+    data,
+  };
+  const withManifest = setProvenance(bare, manifest);
+  const layerId = computeLayerId(withManifest);
+  const file: IfcxFile = { ...withManifest, header: { ...withManifest.header, id: layerId } };
+
+  init.store.storeLayer(file);
+  const existing = init.store.getRef(init.refName);
+  init.store.setRef(init.refName, { layers: [...(existing?.layers ?? []), layerId] });
+
+  // `unrepresentedOps` carries ops the wire dialect cannot express (e.g. an
+  // empty-pset creation, `values: {}`) — same "no layer representation"
+  // outcome as a `skipped` mutation, just discovered one layer later, so
+  // it folds into the same count rather than passing silently as part of
+  // `opCount`.
+  return { layerId, file, opCount: ops.length, unresolved, skippedCount: skipped.length + unrepresentedOps.length };
+}
+
+export interface CollabPublishInit {
+  store: BrowserLayerStore;
+  /** The live session's Y.Doc (opaque here; typed by @ifc-lite/collab). */
+  doc: unknown;
+  /** Full-state fork point (`session.captureDocState()` at join/last publish). */
+  baseline: Uint8Array;
+  stackFiles: IfcxFile[];
+  intent: string;
+  authorPrincipal: string;
+  /** True when peers contributed to the doc (author.kind becomes hybrid). */
+  hybrid: boolean;
+  refName: string;
+  created?: string;
+}
+
+export interface CollabPublishResult {
+  layerId: string;
+  file: IfcxFile;
+  opCount: number;
+}
+
+/**
+ * Freeze a live collab session's edits (everyone's, since `baseline`) into
+ * a published layer on the local store — the Y.Doc source counterpart to
+ * `publishViewerDraft`. Identity is shared by construction: collab docs
+ * address entities by GUID path, the same paths the composition uses.
+ * `@ifc-lite/collab` loads dynamically: in a live session it is already
+ * resident, and the Layers panel chunk must not pull in Yjs otherwise.
+ */
+export async function publishCollabDraft(init: CollabPublishInit): Promise<CollabPublishResult> {
+  const collab = await import('@ifc-lite/collab');
+  const published = collab.publishLayer(init.doc as Parameters<typeof collab.publishLayer>[0], {
+    intent: init.intent,
+    author: { kind: init.hybrid ? 'hybrid' : 'human', principal: init.authorPrincipal },
+    baseline: init.baseline,
+    base:
+      init.stackFiles.length > 0
+        ? { kind: 'stack', id: computeStackHash(init.stackFiles.map((f) => f.header.id)) }
+        : null,
+    ...(init.created !== undefined ? { created: init.created } : {}),
+  });
+  if (published.opCount === 0) {
+    throw new Error('No session edits since the last publish.');
+  }
+  init.store.storeLayer(published.file);
+  const existing = init.store.getRef(init.refName);
+  init.store.setRef(init.refName, { layers: [...(existing?.layers ?? []), published.layerId] });
+  return { layerId: published.layerId, file: published.file, opCount: published.opCount };
+}

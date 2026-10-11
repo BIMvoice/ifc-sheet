@@ -1,0 +1,374 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Columnar entity index — a compact, binary-searched alternative to the
+//! [`EntityIndex`](crate::EntityIndex) `FxHashMap<u32, (usize, usize)>`.
+//!
+//! # Why
+//!
+//! The streaming pre-pass hands every wasm worker (N geometry workers plus the
+//! prepass and parser workers) the same pre-scanned entity index as three
+//! parallel `u32` columns
+//! via `setEntityIndex`. Each worker used to materialize a private
+//! `FxHashMap<u32, (usize, usize)>` from those columns. hashbrown rounds the
+//! bucket count up to the next power of two, so for a 19.1 M-entity model it
+//! allocates `2^25` buckets × ~13 B ≈ **436 MB per worker**, rebuilt in every
+//! realm. Three sorted `Vec<u32>` columns for the same model are
+//! `3 × 19.1 M × 4 B ≈ 229 MB` — no power-of-two rounding, no per-bucket control
+//! byte, no `(usize, usize)` widening. The lookup becomes a `binary_search`
+//! (≈24 probes at 19 M rows) instead of an O(1) hash probe; see the PR for the
+//! measured wall-time delta on the full geometry pipeline.
+//!
+//! # `u32` offsets
+//!
+//! `starts`/`lengths` are `u32`, which is only sound while the source file is
+//! < 4 GiB. WASM ingestion (`setEntityIndex` and `cached_entity_index`) already
+//! lives in that linear address space and delivers `&[u32]` columns. The native
+//! processor also uses this representation for large sources with sparse ids,
+//! after checking their byte length fits `u32`; dense ids may use
+//! [`crate::DenseEntityIndex`]. Wider native sources keep the `usize`-carrying
+//! [`EntityIndex`](crate::EntityIndex) hashmap.
+//!
+//! # Duplicate express ids
+//!
+//! [`crate::build_entity_index`] inserts scanned spans into an `FxHashMap` in
+//! file order, so a repeated express id resolves to its **last** occurrence in
+//! the file (`HashMap::insert` overwrites). Express ids are unique per the STEP
+//! spec and duplicates essentially never occur, but this type replicates the
+//! last-in-file-order-wins behaviour deliberately (see `from_unsorted` and the
+//! `duplicate_id_last_wins` test) so a malformed file cannot diverge between the
+//! hashmap and columnar paths.
+
+use crate::decoder::EntityIndex;
+use crate::parser::EntityScanner;
+use std::sync::Arc;
+
+fn check_lengths(ids: usize, starts: usize, lengths: usize) -> Result<(), ColumnLengthMismatch> {
+    if starts == ids && lengths == ids {
+        Ok(())
+    } else {
+        Err(ColumnLengthMismatch { ids, starts, lengths })
+    }
+}
+
+/// Compact, sorted, binary-searched entity index. Columns are kept sorted by
+/// `ids` (strictly ascending, unique) so [`Self::lookup`] can `binary_search`.
+///
+/// Invariants (upheld by every constructor):
+/// - `ids.len() == starts.len() == lengths.len()`
+/// - `ids` is strictly ascending (hence unique)
+/// - `starts[i]` / `lengths[i]` are the byte offset / byte length of `ids[i]`,
+///   so `lookup` returns `(start, start + length)` to match the `(start, end)`
+///   tuple layout of [`EntityIndex`](crate::EntityIndex).
+pub struct ColumnarEntityIndex {
+    ids: Vec<u32>,
+    starts: Vec<u32>,
+    lengths: Vec<u32>,
+    // One source-scoped inverse lookup shared by native jobs and WASM batches.
+    pub(crate) styled_item_index: std::sync::OnceLock<crate::decoder::StyledItemIndexResult>,
+    pub(crate) grid_axis_index: Arc<crate::decoder::GridAxisIndex>,
+}
+
+/// The three columns handed to [`ColumnarEntityIndex::from_columns`] or
+/// [`ColumnarEntityIndex::from_owned_columns`] were not all the same length.
+/// A caller-facing error, not an empty index: an empty index is also what an
+/// empty file produces, so folding the two together hid a malformed payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ColumnLengthMismatch {
+    pub ids: usize,
+    pub starts: usize,
+    pub lengths: usize,
+}
+
+impl std::fmt::Display for ColumnLengthMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "entity index columns disagree in length: ids {}, starts {}, lengths {}",
+            self.ids, self.starts, self.lengths
+        )
+    }
+}
+
+impl std::error::Error for ColumnLengthMismatch {}
+
+impl ColumnarEntityIndex {
+    /// Build from the three delivered columns (`setEntityIndex` ingestion).
+    ///
+    /// Verifies the id column's ordering **once**, O(n): the pre-pass emits in
+    /// whatever order it iterates (its own `FxHashMap` iteration order is
+    /// arbitrary), so this cannot assume ascending. If the ids are already
+    /// strictly ascending the columns are used as-is (no sort); otherwise a
+    /// single stable argsort permutation is applied and duplicate ids are
+    /// collapsed last-in-input-order-wins.
+    ///
+    /// Columns of unequal length are a [`ColumnLengthMismatch`], checked before
+    /// any is read, so a malformed payload never panics a worker. Empty
+    /// columns are a valid, empty index.
+    pub fn from_columns(ids: &[u32], starts: &[u32], lengths: &[u32]) -> Result<Self, ColumnLengthMismatch> {
+        check_lengths(ids.len(), starts.len(), lengths.len())?;
+        Self::from_owned_columns(ids.to_vec(), starts.to_vec(), lengths.to_vec())
+    }
+
+    /// Consume binding-owned columns without another full allocation (#3989).
+    /// Validation and last-in-input-order duplicate precedence match `from_columns`.
+    pub fn from_owned_columns(ids: Vec<u32>, starts: Vec<u32>, lengths: Vec<u32>) -> Result<Self, ColumnLengthMismatch> {
+        check_lengths(ids.len(), starts.len(), lengths.len())?;
+        if is_strictly_ascending(&ids) {
+            return Ok(Self {
+                ids,
+                starts,
+                lengths,
+                styled_item_index: std::sync::OnceLock::new(),
+                grid_axis_index: Arc::default(),
+            });
+        }
+        Ok(Self::from_unsorted(ids, starts, lengths))
+    }
+
+    /// Build from an already-scanned [`EntityIndex`](crate::EntityIndex)
+    /// hashmap, CONSUMING it. On the wasm prepass path the map is ~436 MB at
+    /// 19.1 M entities and the conversion runs while the whole source file is
+    /// resident in the same <4 GiB heap; borrowing (`from_hashmap`) keeps the
+    /// map alive across the copy AND the sort, spiking ~970 MB of transients.
+    ///
+    /// Consuming drains into one interleaved `Vec<(id, start, len)>` (~229 MB)
+    /// then sorts in place (`sort_unstable`; map keys are unique, so no
+    /// stability/permutation buffer). Peak during the drain is map + rows
+    /// capacity (~665 MB) until the map drops at end-of-loop; after that the
+    /// sort is in-place and the final column split briefly overlaps rows +
+    /// outputs (~458 MB) before rows drop. Still far below the borrowing path,
+    /// and the steady-state index is ~229 MB.
+    pub fn from_hashmap_consuming(map: EntityIndex) -> Self {
+        let n = map.len();
+        // Reserve while the map is still alive: peak ≈ map + rows (~665 MB at
+        // 19.1 M). Draining without reserve would thrash reallocs for the same
+        // asymptotic peak once the vec fills.
+        let mut rows: Vec<(u32, u32, u32)> = Vec::with_capacity(n);
+        for (id, (start, end)) in map {
+            // Offsets must fit u32, as required by the module contract;
+            // see `from_hashmap`.
+            debug_assert!(end <= u32::MAX as usize, "entity offset exceeds the u32 column ceiling");
+            rows.push((id, start as u32, (end - start) as u32));
+        }
+        // `map` dropped with the loop; sort is in-place on `rows` alone.
+        rows.sort_unstable_by_key(|r| r.0);
+        let mut ids = Vec::with_capacity(rows.len());
+        let mut starts = Vec::with_capacity(rows.len());
+        let mut lengths = Vec::with_capacity(rows.len());
+        for (id, start, len) in rows {
+            ids.push(id);
+            starts.push(start);
+            lengths.push(len);
+        }
+        Self {
+            ids,
+            starts,
+            lengths,
+            styled_item_index: std::sync::OnceLock::new(),
+            grid_axis_index: Arc::default(),
+        }
+    }
+
+    /// Build from an already-scanned [`EntityIndex`](crate::EntityIndex)
+    /// hashmap. The map is unique by construction (last-in-file-order-wins was
+    /// applied by `HashMap::insert`), so this only sorts the entries. Prefer
+    /// [`Self::from_hashmap_consuming`] when the map is no longer needed - it
+    /// avoids holding map + copies concurrently (P1 review finding on #1689).
+    pub fn from_hashmap(map: &EntityIndex) -> Self {
+        let n = map.len();
+        let mut ids = Vec::with_capacity(n);
+        let mut starts = Vec::with_capacity(n);
+        let mut lengths = Vec::with_capacity(n);
+        for (&id, &(start, end)) in map.iter() {
+            // u32 offsets are sound only under the wasm32 <4GiB address space
+            // (module docs). Catch a future native caller in debug builds
+            // before a silent truncation decodes the wrong bytes.
+            debug_assert!(end <= u32::MAX as usize, "entity offset exceeds the u32 column ceiling");
+            ids.push(id);
+            starts.push(start as u32);
+            lengths.push((end - start) as u32);
+        }
+        // Entries are unique; `from_unsorted`'s dedup is a no-op but keeps one
+        // sort/build code path.
+        Self::from_unsorted(ids, starts, lengths)
+    }
+
+    /// Scan `content` and build the columns directly, replicating
+    /// [`crate::build_entity_index`]'s HEADER-skipping / quoted-string scan and
+    /// its last-in-file-order-wins duplicate handling — without ever
+    /// materializing the intermediate `FxHashMap`. Used by the wasm lazy
+    /// fallback when `setEntityIndex` was never called.
+    ///
+    /// Reports the scanner's #3395 refusals for the same reason
+    /// [`crate::build_entity_index`] does: this is a whole-file index build, so
+    /// a refused record is a record the model will not contain.
+    pub fn from_scan<T>(content: &T) -> Self
+    where
+        T: AsRef<[u8]> + ?Sized,
+    {
+        let content = content.as_ref();
+        let estimated = content.len() / 50;
+        let mut ids = Vec::with_capacity(estimated);
+        let mut starts = Vec::with_capacity(estimated);
+        let mut lengths = Vec::with_capacity(estimated);
+        let mut scanner = EntityScanner::new(content);
+        while let Some((id, _type_name, start, end)) = scanner.next_entity() {
+            debug_assert!(end <= u32::MAX as usize, "entity offset exceeds the u32 column ceiling");
+            ids.push(id);
+            starts.push(start as u32);
+            lengths.push((end - start) as u32);
+        }
+        crate::parser::report_scan_diagnostics(
+            scanner.skipped_oversized_ids(),
+            scanner.malformed_record_start().is_some(),
+        );
+        Self::from_unsorted(ids, starts, lengths)
+    }
+
+    /// Sort the (id, start, length) triples by id and collapse duplicate ids
+    /// keeping the one that appeared **last** in the input order (matching
+    /// `FxHashMap::insert`). The input `Vec`s are in original (file / delivery)
+    /// order.
+    fn from_unsorted(ids: Vec<u32>, starts: Vec<u32>, lengths: Vec<u32>) -> Self {
+        let n = ids.len();
+        // Argsort a permutation, ordering by (id, original_index). Ties break by
+        // original index ascending, so within an equal-id run the last element
+        // has the greatest original index == last-in-input-order.
+        let mut perm: Vec<u32> = (0..n as u32).collect();
+        perm.sort_unstable_by(|&a, &b| {
+            let ka = ids[a as usize];
+            let kb = ids[b as usize];
+            ka.cmp(&kb).then_with(|| a.cmp(&b))
+        });
+
+        let mut out_ids: Vec<u32> = Vec::with_capacity(n);
+        let mut out_starts: Vec<u32> = Vec::with_capacity(n);
+        let mut out_lengths: Vec<u32> = Vec::with_capacity(n);
+        for &p in &perm {
+            let p = p as usize;
+            let id = ids[p];
+            if out_ids.last() == Some(&id) {
+                // Duplicate id: overwrite the tail so the LAST occurrence wins.
+                let li = out_ids.len() - 1;
+                out_starts[li] = starts[p];
+                out_lengths[li] = lengths[p];
+            } else {
+                out_ids.push(id);
+                out_starts.push(starts[p]);
+                out_lengths.push(lengths[p]);
+            }
+        }
+        out_ids.shrink_to_fit();
+        out_starts.shrink_to_fit();
+        out_lengths.shrink_to_fit();
+        Self {
+            ids: out_ids,
+            starts: out_starts,
+            lengths: out_lengths,
+            styled_item_index: std::sync::OnceLock::new(),
+            grid_axis_index: Arc::default(),
+        }
+    }
+
+    /// Binary-search the byte span of `id`. Returns `(start, end)` where
+    /// `end = start + length`, exactly matching [`EntityIndex`](crate::EntityIndex)'s
+    /// tuple, or `None` if the id is absent.
+    #[inline]
+    pub fn lookup(&self, id: u32) -> Option<(usize, usize)> {
+        match self.ids.binary_search(&id) {
+            Ok(i) => {
+                let start = self.starts[i] as usize;
+                // A wasm32 overflow must not panic a build with overflow checks;
+                // the decoder refuses the span past the content either way (#4697).
+                Some((start, start.saturating_add(self.lengths[i] as usize)))
+            }
+            Err(_) => None,
+        }
+    }
+
+    /// Sorted, unique id column (for re-emitting the entity-index event).
+    #[inline]
+    pub fn ids(&self) -> &[u32] {
+        &self.ids
+    }
+
+    /// Byte-start column, parallel to [`Self::ids`].
+    #[inline]
+    pub fn starts(&self) -> &[u32] {
+        &self.starts
+    }
+
+    /// Byte-length column, parallel to [`Self::ids`].
+    #[inline]
+    pub fn lengths(&self) -> &[u32] {
+        &self.lengths
+    }
+
+    /// Number of indexed entities.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
+
+    /// Whether the index is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.ids.is_empty()
+    }
+}
+
+/// True iff `ids` is strictly ascending (which also proves uniqueness). O(n).
+#[inline]
+fn is_strictly_ascending(ids: &[u32]) -> bool {
+    ids.windows(2).all(|w| w[0] < w[1])
+}
+
+/// The index representation an [`EntityDecoder`](crate::EntityDecoder) holds:
+/// either the legacy `FxHashMap` (native / lazily-built paths) or the compact
+/// columnar index (wasm shared-index ingestion). A thin dispatch keeps the
+/// decoder hot path (`decode_by_id`) agnostic to which one is installed.
+pub(crate) enum EntityIndexStore {
+    Hash(Arc<EntityIndex>),
+    Columnar(Arc<ColumnarEntityIndex>),
+    Dense(Arc<crate::DenseEntityIndex>),
+}
+
+impl EntityIndexStore {
+    /// Resolve `id` to its `(start, end)` byte span.
+    #[inline]
+    pub(crate) fn lookup(&self, id: u32) -> Option<(usize, usize)> {
+        match self {
+            EntityIndexStore::Hash(m) => m.get(&id).copied(),
+            EntityIndexStore::Columnar(c) => c.lookup(id),
+            EntityIndexStore::Dense(d) => d.lookup(id),
+        }
+    }
+}
+
+impl<'a> crate::EntityDecoder<'a> {
+    /// Create a decoder backed by a shared columnar index (wasm shared-index
+    /// path). Mirrors [`EntityDecoder::with_arc_index`](crate::EntityDecoder::with_arc_index)
+    /// but installs the compact representation.
+    pub fn with_arc_columnar_index<T>(content: &'a T, index: Arc<ColumnarEntityIndex>) -> Self
+    where
+        T: AsRef<[u8]> + ?Sized,
+    {
+        let mut decoder = Self::new(content);
+        decoder.set_columnar_index(index);
+        decoder
+    }
+
+    /// Install a shared columnar index into an existing decoder. Like
+    /// [`EntityDecoder::set_entity_index`](crate::EntityDecoder::set_entity_index)
+    /// but for the compact representation; afterwards `build_index` no-ops.
+    pub fn set_columnar_index(&mut self, index: Arc<ColumnarEntityIndex>) {
+        self.set_grid_axis_index(index.grid_axis_index.clone());
+        self.entity_index = Some(EntityIndexStore::Columnar(index));
+    }
+}
+
+#[cfg(test)]
+#[path = "columnar_index_tests.rs"]
+mod columnar_index_tests;

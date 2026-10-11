@@ -1,0 +1,378 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Rotation-aware instancing, shared by both Parquet transports (issues #3575,
+//! #3888).
+//!
+//! The ONE place that groups occurrences by representation identity, verifies
+//! each occurrence's derived rigid placement against its own baked geometry,
+//! and converts a verified placement into the Y-up origin + rotation a table
+//! emits. Split out of `parquet_optimized.rs` when it was `/optimized`-only;
+//! a sibling of both writers since the flat route started sharing shapes, so
+//! the module neither transport owns is not named after either of them.
+
+use crate::types::MeshData;
+use ifc_lite_geometry::{collate_refs_in_basis, InstanceMeshRef, Matrix4};
+use rustc_hash::FxHashMap;
+use std::borrow::Borrow;
+use std::hash::{Hash, Hasher};
+
+/// Content-hash fallback used by BOTH writers: `collate_rotation_aware_placements`
+/// runs first, this catches what it did not place. Two meshes with bit-identical
+/// (origin-relative) positions, indices AND normals collapse onto one shape.
+///
+/// Normals are keyed because the flat layout emits the shared shape's normals
+/// for every occurrence; `/optimized` ships none, so the stricter key can only
+/// split a group whose normals differ, which the pipeline never produces
+/// (normals derive from positions/indices) — no `/optimized` behaviour change.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct MeshGeometryKey {
+    /// Hash of the quantized positions.
+    positions_hash: u64,
+    /// Hash of the indices.
+    indices_hash: u64,
+    /// Hash of the normals.
+    normals_hash: u64,
+}
+
+/// Compute a fast hash of a u32 slice.
+fn hash_u32_slice(data: &[u32]) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    let mut hasher = DefaultHasher::new();
+    for item in data {
+        item.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+/// Compute a fast hash of a f32 slice (using bit representation).
+fn hash_f32_slice(data: &[f32]) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    let mut hasher = DefaultHasher::new();
+    for item in data {
+        // Convert f32 to bits for hashing (handles NaN consistently)
+        item.to_bits().hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+/// Build the content-hash key for one mesh's (origin-relative) geometry.
+pub(crate) fn mesh_geometry_key(mesh: &MeshData) -> MeshGeometryKey {
+    MeshGeometryKey {
+        positions_hash: hash_f32_slice(&mesh.positions),
+        indices_hash: hash_u32_slice(&mesh.indices),
+        normals_hash: hash_f32_slice(&mesh.normals),
+    }
+}
+
+/// The frame this route's baked vertices are in, relative to the native frame
+/// `MeshData::instance` describes: `Rᵀ · T(-rtc)`, read straight off the
+/// `ProcessingResult` by `ifc_lite_processing::native_to_baked`.
+///
+/// Unlike the glTF exporter, this route CONSUMES the collator's emitted `rel`
+/// (see [`verify_and_derive_placement`]) rather than recomputing placement from
+/// `InstanceMeta`, so the basis is not optional decoration here: without it a
+/// `site_local` model's group fails the 1e-4 m residual check by `(I − Rᵀ)·d` —
+/// about 3.5 m for a 6 m sibling under a 34 degree site yaw — and silently
+/// falls back to content-hash dedup. Nothing breaks; the sharing just never
+/// happens (#4118).
+///
+/// Z-up: this route swaps to Y-up at emission time ([`rotation_zup_to_yup`]),
+/// not before collation, so no axis-swap factor belongs in this basis.
+pub(crate) fn baked_basis_zup(
+    mesh_coordinate_space: Option<ifc_lite_processing::MeshCoordinateSpace>,
+    site_transform: Option<&[f64]>,
+    origin_shift: [f64; 3],
+) -> Matrix4<f64> {
+    Matrix4::from_row_slice(&ifc_lite_processing::native_to_baked(
+        mesh_coordinate_space.unwrap_or(ifc_lite_processing::MeshCoordinateSpace::RawIfc),
+        site_transform,
+        origin_shift,
+    ))
+}
+
+/// Maximum reconstructed-vertex residual (metres) a rotation-aware instance
+/// placement may carry and still be trusted (issue #3575). Compared against
+/// the ORIGINAL f32/f64 positions, before quantization, so it is independent
+/// of `VERTEX_MULTIPLIER`.
+///
+/// On `/optimized` a residual under this bound is invisible on the wire, since
+/// 0.1mm is that route's quantization grain itself (`quantize_position` in
+/// `parquet_optimized.rs`). That argument does NOT carry to the flat route
+/// (#3888), which ships unquantized `Float32` metres and has no grain to hide
+/// behind: there, a residual just under tolerance is a real displacement of a
+/// repeated element, up to 0.1mm per vertex against the bit-exact geometry the
+/// route used to emit. Kept at one bound for both because 0.1mm is below any
+/// BIM tolerance the downstream consumers work to, but it is a bound, not an
+/// invisibility. A group whose residual exceeds this falls
+/// back to the pre-#3575 content-hash dedup (each occurrence keeps its own
+/// baked mesh) instead of shipping a placement nobody verified.
+const RECOMPOSITION_TOLERANCE_M: f64 = 1e-4;
+
+/// A verified rotation-aware placement for one occurrence: which unique mesh
+/// (identified by the index of its TEMPLATE occurrence in the input slice) it
+/// draws, and the origin/rotation (Z-up, pre-Y-up-swap) that places it there.
+pub(crate) struct RotatedPlacement {
+    pub(crate) template_mesh_index: usize,
+    pub(crate) origin_zup: [f64; 3],
+    /// Row-major 3x3, Z-up frame (converted to Y-up at emission time via
+    /// [`rotation_zup_to_yup`]).
+    pub(crate) rotation_zup: [f64; 9],
+}
+
+/// Row-major 3x3 apply: `R * p + t`.
+fn apply_r_t(r: &[[f64; 3]; 3], t: &[f64; 3], p: &[f64; 3]) -> [f64; 3] {
+    [
+        r[0][0] * p[0] + r[0][1] * p[1] + r[0][2] * p[2] + t[0],
+        r[1][0] * p[0] + r[1][1] * p[1] + r[1][2] * p[2] + t[1],
+        r[2][0] * p[0] + r[2][1] * p[1] + r[2][2] * p[2] + t[2],
+    ]
+}
+
+/// Given `rel` (row-major mat4, the `InstanceOccurrence::transform` that maps
+/// the TEMPLATE's baked world geometry onto this occurrence's baked world
+/// geometry — see `ifc_lite_geometry::instancing`), derive this occurrence's
+/// origin + rotation and verify them against the occurrence's OWN (ground
+/// truth) baked positions. Returns `(max_residual_m, origin_zup, rotation_zup)`;
+/// the caller must reject the placement when the residual exceeds
+/// [`RECOMPOSITION_TOLERANCE_M`] or is non-finite (mismatched vertex counts).
+fn verify_and_derive_placement(
+    template: &MeshData,
+    target: &MeshData,
+    rel: &[f64; 16],
+) -> (f64, [f64; 3], [f64; 9]) {
+    let r = [
+        [rel[0], rel[1], rel[2]],
+        [rel[4], rel[5], rel[6]],
+        [rel[8], rel[9], rel[10]],
+    ];
+    let t = [rel[3], rel[7], rel[11]];
+    let rotation_zup = [
+        r[0][0], r[0][1], r[0][2], r[1][0], r[1][1], r[1][2], r[2][0], r[2][1], r[2][2],
+    ];
+    // new_origin = R * template.origin + T: the template's own local-frame
+    // origin, carried through the same affine map applied to its vertices.
+    let origin_zup = apply_r_t(&r, &t, &template.origin);
+
+    let n = template.positions.len() / 3;
+    if target.positions.len() / 3 != n {
+        return (f64::INFINITY, origin_zup, rotation_zup);
+    }
+    let mut max_err = 0.0f64;
+    let mut identity_err = 0.0f64;
+    for v in 0..n {
+        let p = [
+            template.origin[0] + template.positions[v * 3] as f64,
+            template.origin[1] + template.positions[v * 3 + 1] as f64,
+            template.origin[2] + template.positions[v * 3 + 2] as f64,
+        ];
+        let world = apply_r_t(&r, &t, &p);
+        let g = [
+            target.origin[0] + target.positions[v * 3] as f64,
+            target.origin[1] + target.positions[v * 3 + 1] as f64,
+            target.origin[2] + target.positions[v * 3 + 2] as f64,
+        ];
+        let err =
+            ((world[0] - g[0]).powi(2) + (world[1] - g[1]).powi(2) + (world[2] - g[2]).powi(2))
+                .sqrt();
+        if err > max_err {
+            max_err = err;
+        }
+        // If the same verified placement is also representable by an exact
+        // identity rotation, prefer that canonical form. Conjugating a pure
+        // translation through a site basis can leave platform-dependent
+        // roundoff in the 3x3 block; comparing the f32 block to identity by
+        // exact bits then made the optimized route alternate between v2 and
+        // v3 across targets. This residual check is the safety condition: an
+        // actual small rotation is snapped only when omitting it stays within
+        // the route's existing recomposition tolerance.
+        let identity_world = [
+            origin_zup[0] + template.positions[v * 3] as f64,
+            origin_zup[1] + template.positions[v * 3 + 1] as f64,
+            origin_zup[2] + template.positions[v * 3 + 2] as f64,
+        ];
+        let err = ((identity_world[0] - g[0]).powi(2)
+            + (identity_world[1] - g[1]).powi(2)
+            + (identity_world[2] - g[2]).powi(2))
+        .sqrt();
+        if err > identity_err {
+            identity_err = err;
+        }
+    }
+    if identity_err <= RECOMPOSITION_TOLERANCE_M {
+        (
+            identity_err,
+            origin_zup,
+            [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+        )
+    } else {
+        (max_err, origin_zup, rotation_zup)
+    }
+}
+
+/// Z-up → Y-up basis change (see `services::axis::zup_to_yup`), as a rotation
+/// matrix: `P * v = (v.x, v.z, -v.y)`. Orthogonal, so `P^-1 == P^T`.
+const P_ZUP_TO_YUP: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]];
+const P_ZUP_TO_YUP_T: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]];
+
+fn mat3_mul(a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let mut out = [[0.0; 3]; 3];
+    for (i, out_row) in out.iter_mut().enumerate() {
+        for (j, out_cell) in out_row.iter_mut().enumerate() {
+            let mut s = 0.0;
+            for k in 0..3 {
+                s += a[i][k] * b[k][j];
+            }
+            *out_cell = s;
+        }
+    }
+    out
+}
+
+/// Conjugate a Z-up rotation into the Y-up wire frame: `P * R * P^T`. The swap
+/// is linear (`zup_to_yup`), so this is the same identity `mesh_to_yup_in_place`
+/// relies on for positions/origin, applied to a 3x3 instead of a 3-vector.
+pub(crate) fn rotation_zup_to_yup(rotation_zup: &[f64; 9]) -> [f32; 9] {
+    let r = [
+        [rotation_zup[0], rotation_zup[1], rotation_zup[2]],
+        [rotation_zup[3], rotation_zup[4], rotation_zup[5]],
+        [rotation_zup[6], rotation_zup[7], rotation_zup[8]],
+    ];
+    let m = mat3_mul(&mat3_mul(&P_ZUP_TO_YUP, &r), &P_ZUP_TO_YUP_T);
+    [
+        m[0][0] as f32,
+        m[0][1] as f32,
+        m[0][2] as f32,
+        m[1][0] as f32,
+        m[1][1] as f32,
+        m[1][2] as f32,
+        m[2][0] as f32,
+        m[2][1] as f32,
+        m[2][2] as f32,
+    ]
+}
+
+/// The optimized format's wire version, chosen by what the payload CONTAINS.
+///
+/// v2 is the pre-#3575 shape: an instance table without `rot0..rot8`, placed
+/// as `world = origin + template_position`. v3 adds the nine rotation columns
+/// and the placement becomes `world = origin + R * template_position`.
+///
+/// A response in which every instance came out identity IS a v2 payload in
+/// every observable respect, so it ships as one and an unchanged client keeps
+/// decoding every model it decoded before #3575. Only a payload that
+/// genuinely carries rotation declares 3, where a v2-only decoder fails loud
+/// on its version check (`Unsupported optimized Parquet version: 3`) instead
+/// of silently dropping the rotations and misplacing the geometry.
+///
+/// The argument is the rotation data actually emitted, NOT "the model has
+/// instance metadata" or "the feature is on": translation-only reuse runs the
+/// whole rotation-aware dedup and still produces identity everywhere.
+pub(crate) fn optimized_wire_version(has_rotation: bool) -> u8 {
+    if has_rotation {
+        3
+    } else {
+        2
+    }
+}
+
+pub(crate) const IDENTITY_ROTATION: [f32; 9] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+
+/// Group instanceable meshes by representation identity (`collate_refs`) and
+/// verify each occurrence's derived rigid placement against its own baked
+/// geometry (issue #3575). Returns a map from a mesh's index in `meshes` to
+/// the verified placement it should be emitted with; a mesh absent from the
+/// map falls back to the pre-#3575 content-hash dedup in `parquet_optimized.rs`.
+/// Verification is all-or-nothing per group: one occurrence over tolerance
+/// drops the ENTIRE representation group from the map, not just that
+/// occurrence, so a group never ships half-instanced.
+///
+/// Deliberately excludes the RIGID tier (`InstanceMeta::canonical_transform`
+/// set): those groups substitute a congruent-but-not-bit-identical template,
+/// so the per-vertex residual check above isn't meaningful the same way, and
+/// this endpoint has no way to signal "close enough, not exact" to a client
+/// decoding a lossless-looking mesh table. Only exact-bit groups (the
+/// `IfcMappedItem` / shared-`IfcRepresentationMap` case the issue reports)
+/// are deduplicated this way.
+///
+/// `baked_basis` is [`baked_basis_zup`] for the model these meshes came from,
+/// or `None` when the caller genuinely has no `ProcessingResult` to read it off
+/// (a per-batch streaming writer, a test over synthetic meshes) and the
+/// vertices are therefore native.
+///
+/// Generic over [`Borrow`] so the streaming route can put an earlier batch's
+/// retained templates in front of the current batch (#5407) as a slice of
+/// references, without cloning the batch to build one contiguous slice.
+pub(crate) fn collate_rotation_aware_placements<M: Borrow<MeshData>>(
+    meshes: &[M],
+    baked_basis: Option<&Matrix4<f64>>,
+) -> FxHashMap<usize, RotatedPlacement> {
+    let refs: Vec<InstanceMeshRef> = meshes
+        .iter()
+        .map(Borrow::borrow)
+        .map(|m: &MeshData| InstanceMeshRef {
+            positions: &m.positions,
+            normals: &m.normals,
+            indices: &m.indices,
+            origin: m.origin,
+            instance_meta: m.instance.as_ref(),
+            entity_id: m.express_id,
+            color: m.color,
+            item_id: None,
+        })
+        .collect();
+    // rtc = 0: `MeshData::instance` is populated per-element by the native
+    // pipeline, which already resolves to building-scale, non-georeferenced
+    // magnitude for every model this endpoint has been run against; the
+    // per-vertex residual check below is the real safety net regardless (a
+    // stale/large offset shows up as a residual over tolerance, not a
+    // silent misplacement), so an unhandled RTC rebase degrades to today's
+    // behaviour rather than shipping a wrong placement. The `baked_basis`
+    // carries the model's own `T(-rtc)` (and site rotation) instead, applied to
+    // the emitted `rel` as well as the check.
+    let collated = collate_refs_in_basis(&refs, 2, [0.0, 0.0, 0.0], baked_basis);
+
+    let mut placements: FxHashMap<usize, RotatedPlacement> = FxHashMap::default();
+    for tmpl in &collated.templates {
+        let is_rigid = tmpl.occurrences.iter().any(|o| {
+            meshes[o.mesh_index]
+                .borrow()
+                .instance
+                .as_ref()
+                .and_then(|m| m.canonical_transform)
+                .is_some()
+        });
+        if is_rigid {
+            continue;
+        }
+        let template = meshes[tmpl.template_index].borrow();
+        let mut group: Vec<(usize, [f64; 3], [f64; 9])> =
+            Vec::with_capacity(tmpl.occurrences.len());
+        let mut all_verified = true;
+        for occ in &tmpl.occurrences {
+            let target = meshes[occ.mesh_index].borrow();
+            let rel: [f64; 16] = occ.transform.map(|v| v as f64);
+            let (max_err, origin_zup, rotation_zup) =
+                verify_and_derive_placement(template, target, &rel);
+            if !(max_err <= RECOMPOSITION_TOLERANCE_M) {
+                all_verified = false;
+                break;
+            }
+            group.push((occ.mesh_index, origin_zup, rotation_zup));
+        }
+        if all_verified {
+            for (mesh_index, origin_zup, rotation_zup) in group {
+                placements.insert(
+                    mesh_index,
+                    RotatedPlacement {
+                        template_mesh_index: tmpl.template_index,
+                        origin_zup,
+                        rotation_zup,
+                    },
+                );
+            }
+        }
+    }
+    placements
+}

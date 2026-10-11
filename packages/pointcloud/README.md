@@ -1,0 +1,177 @@
+# @ifc-lite/pointcloud
+
+Renderer-agnostic point cloud decoders for ifc-lite. Phase 0 covers the three
+IFCx pointcloud schemas authored by buildingSMART:
+
+- `pcd::base64` — full PCD file (PCL format) embedded as base64. Supports
+  ASCII, binary, and LZF-compressed `binary_compressed` payloads.
+- `points::array` — inline JSON `{ positions: number[][], colors?: number[][] }`.
+- `points::base64` — `{ positions: base64-Float32, colors?: base64-Float32 }`.
+
+## Installation
+
+```bash
+npm install @ifc-lite/pointcloud
+```
+
+## Decode IFCX point attributes
+
+```ts
+import { decodeIfcxPointAttribute } from '@ifc-lite/pointcloud';
+
+// One IFCX node's attribute map, e.g. from a parsed .ifcx document
+declare const node: { attributes: ReadonlyMap<string, unknown> };
+
+const chunk = decodeIfcxPointAttribute(node.attributes);
+if (chunk) {
+  console.log(`${chunk.pointCount} points`, chunk.bbox);
+  // chunk.positions, chunk.colors are ready for GPU upload
+}
+```
+
+`DecodedPointChunk.normals` carries source-supplied oriented normals as
+row-aligned `nx, ny, nz` float triples when a decoder provides them. PLY
+supports complete `nx`/`ny`/`nz` properties in ASCII and binary files and
+preserves their values and vertex order exactly. Partial, duplicate, list-valued,
+non-finite, and zero normal declarations leave XYZ loadable but set
+`normalState: 'invalid'`; consumers decide whether valid normals are required
+for their operation.
+
+The canonical PLY streaming source scans headers and bounds in bounded byte
+windows, then decodes directly into host-sized, stride-filtered chunks. A
+memory-cap probe therefore does not allocate full-file point channels before
+downsampling. Streaming PLY headers are limited to 65,536 bytes and files that
+exceed that bound are refused with an explicit error.
+
+The renderer (`@ifc-lite/renderer`) uploads decoded chunks (wrapped as
+`PointCloudAsset` values) via `Renderer.setPointClouds()` /
+`Renderer.addPointClouds()`.
+
+## Streaming decode worker (zero Vite config)
+
+For streaming sources (`.las`, `.laz`, `.ply`, `.pcd`, `.e57`, `.pts`, `.xyz`)
+the decoder runs in a dedicated Web Worker so the main thread stays
+responsive. The worker is **inlined into the published package** as a
+`Blob`-URL — consumers don't need to set `worker.format: 'es'` or add the
+package to `optimizeDeps.exclude` in their Vite config.
+
+```ts
+import { createDecodeWorkerSource } from '@ifc-lite/pointcloud';
+
+const source = createDecodeWorkerSource({ format: 'las', blob: file });
+const info = await source.open();
+// drive source.next(maxPoints) → DecodedPointChunk until it returns null
+```
+
+PLY chunks retain complete scalar `nx`/`ny`/`nz` channels as raw, row-aligned
+`Float32Array` values. `normalState` explicitly distinguishes `supplied`,
+`absent`, and `invalid` declarations; consumers must not silently treat an
+invalid declaration as an un-oriented scan. Stride sampling and worker
+transfer keep each normal with the same position and colour row.
+
+Notes:
+
+- The inlined worker bundle is lazy-loaded — consumers that only call
+  `decodeIfcxPointAttribute` (the non-worker decoder) don't pay the bytes.
+- LAZ decoding (`format: 'laz'`) pulls in `laz-perf`'s wasm at runtime via
+  `new URL(..., import.meta.url)`, which doesn't resolve from inside a
+  `Blob`-URL worker. If you need LAZ from the published package, pass a
+  custom `spawn` callback that yields a worker capable of fetching the
+  wasm (see `DecodeWorkerOptions.spawn`).
+- Strict CSPs need `script-src 'self' blob:` to allow the `Blob`-URL
+  worker.
+
+## COPC: range-read octree point clouds
+
+A [COPC](https://copc.io) file is a LAZ 1.4 file organised as an octree, so a
+viewer can read only the nodes it needs, from a local `File` or over HTTP
+Range requests. `openCopcWorkerReader` opens one in the decode worker, loads
+the root hierarchy page, and decodes nodes on demand. Detection is by the
+`copc`/`info` VLR (`isCopcHeader` on the first `COPC_PROBE_BYTES` bytes), not
+by the `.copc.laz` file name.
+
+```ts
+import { openCopcWorkerReader } from '@ifc-lite/pointcloud';
+
+declare const file: File;
+const reader = await openCopcWorkerReader({ source: { kind: 'blob', blob: file } });
+const root = reader.hierarchy.nodes.get('0-0-0-0');
+if (root) {
+  const chunk = await reader.readNode(root, { stride: 1 });
+  console.log(`${chunk.pointCount} points in the root node`);
+}
+// Deeper hierarchy pages load on demand: reader.loadPage(ref) for any
+// ref in reader.hierarchy.pendingPages.
+reader.close();
+```
+
+For a remote file, pass `{ kind: 'http', url }`. The server must answer
+Range requests with `206 Partial Content`; a server that ignores `Range` is
+refused rather than downloading the whole file. When CORS hides
+`Content-Range`, the size comes from a `HEAD` request and each response is
+checked by its exact length. Hierarchy pages come from the file, so the
+page walk is iterative with a visited set and page, node and byte budgets;
+exceeding a budget is an error, never a silently truncated octree.
+
+## View-dependent level of detail
+
+`selectLod(root, camera, { pointBudget })` picks which octree nodes to show.
+It is pure (no renderer, no I/O) and works on any additive octree through the
+small `LodNode` interface; `createCopcLodTree` adapts a COPC hierarchy.
+
+- Nodes outside the view frustum are never selected.
+- The selected node with the largest projected screen span refines first,
+  while its span exceeds `pixelThreshold` (default 96 px) and the selection
+  stays within `maxNodes` (default `clamp(pointBudget / 128, 8, 1024)`).
+  Parents always precede their children.
+- The point budget is water-filled across the selection: each node gets an
+  equal share capped by its own point count, and every node carries a
+  `stride` hint whose decoded count never exceeds its share.
+- Nodes that should refine but whose hierarchy page is not loaded yet are
+  listed in `needsChildren`.
+
+`LodPacer` sizes a fast first pass to a time budget (default 200 ms) from a
+learned read rate, an asymmetric moving average that drops fast and rises
+slowly, with outlier clipping. `shouldReplacePass` swaps what is on screen
+only for something better: more points for the same view, or a complete
+pass for a newer view.
+
+```ts
+import { LodPacer, createCopcLodTree, selectLod, type CopcWorkerReader, type LodCamera } from '@ifc-lite/pointcloud';
+
+declare const reader: CopcWorkerReader;
+declare const camera: LodCamera;
+// Bounds in the decoded frame; move the camera into it (view-projection x placement).
+const tree = createCopcLodTree(reader.hierarchy, reader.file.info, reader.originOffset);
+const pacer = new LodPacer();
+const [firstPass] = pacer.passBudgets(10_000_000);
+if (tree.root) {
+  const selection = selectLod(tree.root, camera, { pointBudget: firstPass });
+  for (const node of selection.needsChildren) {
+    for (const ref of tree.pendingPagesUnder(node)) void reader.loadPage(ref);
+  }
+}
+```
+
+## API
+
+See the [docs site](https://ifclite.dev/docs/) for guides and the full API reference.
+
+## License
+
+[MPL-2.0](../../LICENSE)
+
+
+## Local origins for large-coordinate scans
+
+`streamPointCloud({ ..., autoOrigin: true })` chooses a nearby origin before
+emitting chunks when `originOffset` is absent. Header bounds choose the centre;
+formats without usable bounds probe one point and reopen the original bytes.
+The decoder subtracts that origin in float64 before writing float32 positions.
+`onOpen(info)` receives the chosen `info.originOffset` in native X/Y/Z source
+units, before the first `onChunk`. Compose that offset with your alignment and
+manual translation in double precision before sending a final matrix to the
+GPU. Explicit `originOffset` takes precedence; the default remains unchanged.
+Opening may perform an extra decode pass for formats without header bounds.
+A local origin preserves nearby detail but cannot repair a source whose
+coordinates were already quantized or an extremely large spatial extent.

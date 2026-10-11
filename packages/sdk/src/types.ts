@@ -1,0 +1,734 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Core types for @ifc-lite/sdk
+ *
+ * These types define the public API surface of the SDK.
+ * External tools (ifc-scripts, ifc-flow) depend on these types.
+ */
+
+import type { StructuralBackendMethods } from './structural-types.js';
+// Re-exported below via `export *`; imported by name because `BimBackend` uses it here.
+import type { ScheduleBackendMethods } from './schedule-types.js';
+import type { CostBackendMethods } from './cost-types.js';
+import type { SpacesBackendMethods, StyleBackendMethods } from './backend-extension-types.js';
+import type { CostStoreBackendMethods } from './store-cost-types.js';
+import type { StructuralStoreBackendMethods } from './store-structural-types.js';
+import type { ModellingStoreBackendMethods } from './store-modelling-types.js';
+import type {
+  BeamInStoreParams, ColumnInStoreParams, MemberInStoreParams,
+  ProfiledBeamInStoreParams, ProfiledColumnInStoreParams, ProfiledMemberInStoreParams,
+} from '@ifc-lite/create';
+
+// ============================================================================
+// Entity References
+// ============================================================================
+
+/** Reference to a specific entity within a federated model set */
+export interface EntityRef {
+  modelId: string;
+  expressId: number;
+}
+
+/** Serialized entity ref for transport (e.g., "arch:42") */
+export type EntityRefString = string;
+
+/** NOTE: `apps/viewer/src/store/types.ts` carries a second implementation of
+ *  `entityRefToString`/`stringToEntityRef` with a SENTINEL contract
+ *  (`{ modelId: '', expressId: -1 }`) and a FIRST-colon split. Deliberate,
+ *  not drift: the viewer decodes untrusted DOM/state strings on hot paths
+ *  and must not throw, whereas this is a published API where failing at the
+ *  corruption site is correct. Keep the two in step on *bugs*, not on
+ *  contract. */
+export function entityRefToString(ref: EntityRef): EntityRefString {
+  return `${ref.modelId}:${ref.expressId}`;
+}
+
+export function stringToEntityRef(s: EntityRefString): EntityRef {
+  // Split on the LAST colon: expressId is always purely numeric, so it
+  // never contains a colon itself, while modelId may (e.g. "proj:arch:5").
+  // Splitting on the first colon would misparse such modelIds.
+  const idx = s.lastIndexOf(':');
+  if (idx < 1) {
+    throw new Error(`Invalid EntityRefString: "${s}" — expected "modelId:expressId"`);
+  }
+  const idPart = s.slice(idx + 1);
+  // Reject empty/non-numeric expressId explicitly — Number('') is 0, which
+  // would otherwise silently decode a truncated ref like "arch:" to expressId 0.
+  if (!/^\d+$/.test(idPart)) {
+    throw new Error(`Invalid expressId in EntityRefString: "${s}"`);
+  }
+  const expressId = Number(idPart);
+  if (!Number.isFinite(expressId) || expressId < 0) {
+    throw new Error(`Invalid expressId in EntityRefString: "${s}"`);
+  }
+  return { modelId: s.slice(0, idx), expressId };
+}
+
+// ============================================================================
+// Model Types
+// ============================================================================
+
+export type SchemaVersion = 'IFC2X3' | 'IFC4' | 'IFC4X3' | 'IFC5';
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+  /** Alias for schemaVersion — convenient for scripts and eval expressions. */
+  schema: SchemaVersion;
+  schemaVersion: SchemaVersion;
+  entityCount: number;
+  fileSize: number;
+  loadedAt: number;
+}
+
+export interface FileAttachmentInfo {
+  name: string;
+  type: string;
+  size: number;
+  rowCount?: number;
+  columns?: string[];
+  hasTextContent: boolean;
+}
+
+// ============================================================================
+// Entity Data (serializable — crosses sandbox/transport boundary)
+// ============================================================================
+
+export interface EntityData {
+  ref: EntityRef;
+  globalId: string;
+  name: string;
+  type: string;
+  description: string;
+  objectType: string;
+}
+
+export interface PropertySetData {
+  name: string;
+  globalId?: string;
+  properties: PropertyData[];
+}
+
+export interface PropertyData {
+  name: string;
+  type: number;
+  value: string | number | boolean | null;
+}
+
+export interface QuantitySetData {
+  name: string;
+  quantities: QuantityData[];
+}
+
+export interface QuantityData {
+  name: string;
+  type: number;
+  value: number;
+}
+
+export interface EntityAttributeData {
+  name: string;
+  value: string | number | boolean;
+}
+
+export interface ClassificationData {
+  system?: string;
+  identification?: string;
+  name?: string;
+  location?: string;
+  description?: string;
+  path?: string[];
+  unresolved?: boolean; // classified, attributes unreadable — other fields `undefined` (#3948)
+}
+
+export interface MaterialLayerData {
+  materialName?: string;
+  thickness?: number;
+  isVentilated?: boolean;
+  name?: string;
+  category?: string;
+}
+
+export interface MaterialProfileData {
+  materialName?: string;
+  name?: string;
+  category?: string;
+}
+
+export interface MaterialConstituentData {
+  materialName?: string;
+  name?: string;
+  fraction?: number;
+  category?: string;
+}
+
+export interface MaterialData {
+  type: 'Material' | 'MaterialLayerSet' | 'MaterialProfileSet' | 'MaterialConstituentSet' | 'MaterialList';
+  name?: string;
+  description?: string;
+  category?: string;
+  layers?: MaterialLayerData[];
+  profiles?: MaterialProfileData[];
+  constituents?: MaterialConstituentData[];
+  materials?: Array<{ name: string; category?: string }>;
+}
+
+export interface TypePropertiesData {
+  typeName: string;
+  typeId: number;
+  properties: PropertySetData[];
+}
+
+export interface DocumentData {
+  name?: string;
+  description?: string;
+  location?: string;
+  identification?: string;
+  purpose?: string;
+  intendedUse?: string;
+  revision?: string;
+  confidentiality?: string;
+}
+
+/**
+ * The related **objects** of an entity's structural relationships — never the
+ * `IfcRel*` entities themselves:
+ *
+ * - `voids` — the `IfcOpeningElement`s that void this element
+ *   (`IfcRelVoidsElement`, host → opening).
+ * - `fills` — the `IfcOpeningElement` this element fills
+ *   (`IfcRelFillsElement`, filler → opening).
+ * - `groups` — the `IfcZone` / `IfcGroup` / `IfcSystem` it is assigned to.
+ * - `connections` — the elements it is joined to.
+ *
+ * The field names are deliberately not EXPRESS names, and #2422 resolved to
+ * keep them. IFC's own names for these traversals (`HasOpenings`, `FillsVoids`,
+ * `HasAssignments`, `ConnectedTo` / `ConnectedFrom`) are INVERSE attributes
+ * holding the `IfcRel*` entity, which is not what these arrays contain — so
+ * "use the exact EXPRESS name" has no name to offer here. Renaming `voids` to
+ * `openings` is not a fix either: `voids` **and** `fills` both hold
+ * `IfcOpeningElement`s, and only the voids/fills pair — buildingSMART's own
+ * vocabulary for the two directions — tells them apart. Pinned by
+ * `packages/parser/test/relationship-field-semantics-2422.test.ts`.
+ */
+export interface EntityRelationshipsData {
+  voids: Array<{ id: number; name?: string; type: string }>;
+  fills: Array<{ id: number; name?: string; type: string }>;
+  groups: Array<{ id: number; name?: string; type?: string }>;
+  connections: Array<{ id: number; name?: string; type: string }>;
+  /** Every graph edge touching the entity, preserving its exact IfcRel* class.
+   * Optional for third-party backends compiled against the pre-#4205 shape. */
+  relations?: Array<{
+    relationshipId: number;
+    relationshipType: string;
+    direction: 'forward' | 'inverse';
+    entity: { id: number; name?: string; type: string };
+  }>;
+}
+
+// ============================================================================
+// Query Types
+// ============================================================================
+
+export type ComparisonOp = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'contains' | 'exists' | 'matches'; // kept in step with FilterComparisonOp in @ifc-lite/query/filter-predicate.ts
+
+export interface QueryFilter {
+  psetName: string;
+  propName: string;
+  operator: ComparisonOp;
+  value?: string | number | boolean;
+}
+
+export interface QueryDescriptor {
+  modelId?: string;
+  types?: string[];
+  filters?: QueryFilter[];
+  limit?: number;
+  offset?: number;
+}
+
+// ============================================================================
+// Viewer Types
+// ============================================================================
+
+export type ProjectionMode = 'perspective' | 'orthographic';
+
+export interface CameraState {
+  mode: ProjectionMode;
+  position?: [number, number, number];
+  target?: [number, number, number];
+  up?: [number, number, number];
+}
+
+export interface SectionPlane {
+  axis: 'x' | 'y' | 'z';
+  position: number;
+  enabled: boolean;
+  flipped: boolean;
+}
+
+// ============================================================================
+// Spatial Types
+// ============================================================================
+
+export interface AABB {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
+export interface SpatialPlane {
+  normal: [number, number, number];
+  distance: number;
+}
+
+export interface SpatialFrustum {
+  planes: SpatialPlane[];
+}
+
+// ============================================================================
+// Lens Types (re-export core types for SDK consumers)
+// ============================================================================
+
+import type { Lens, LensRule, RGBAColor } from '@ifc-lite/lens';
+export type { Lens, LensRule, RGBAColor };
+
+// ============================================================================
+// Mutation Types
+// ============================================================================
+
+export interface MutationRecord {
+  entityRef: EntityRef;
+  psetName: string;
+  propName: string;
+  oldValue: string | number | boolean | null;
+  newValue: string | number | boolean | null;
+  timestamp: number;
+}
+
+// ============================================================================
+// Event Types
+// ============================================================================
+
+export type BimEventType =
+  | 'selection:changed'
+  | 'visibility:changed'
+  | 'model:loaded'
+  | 'model:removed'
+  | 'mutation:changed'
+  | 'lens:changed';
+
+export type BimEventData = {
+  'selection:changed': { refs: EntityRef[] };
+  'visibility:changed': Record<string, never>;
+  'model:loaded': { model: ModelInfo };
+  'model:removed': { modelId: string };
+  'mutation:changed': { modelId: string; count: number };
+  'lens:changed': { lensId: string | null };
+};
+
+export type BimEventHandler<T extends BimEventType> = (data: BimEventData[T]) => void;
+
+// ============================================================================
+// Transport Protocol
+// ============================================================================
+
+export interface SdkRequest {
+  id: string;
+  namespace: string;
+  method: string;
+  args: unknown[];
+}
+
+export interface SdkResponse {
+  id: string;
+  result?: unknown;
+  error?: { message: string; stack?: string };
+}
+
+export interface SdkEvent {
+  type: BimEventType;
+  data: unknown;
+}
+
+// ============================================================================
+// Backend Namespace Interfaces (typed method contracts per adapter)
+// ============================================================================
+
+export interface ModelBackendMethods {
+  list(): ModelInfo[];
+  activeId(): string | null;
+  loadIfc(content: string, filename: string): void;
+}
+
+export interface QueryBackendMethods {
+  entities(descriptor: QueryDescriptor): EntityData[];
+  /**
+   * Entities matching the host's active advanced filter, or `null` when no filter is
+   * active (distinguishes "no filter" from "filter with zero matches"). Host-specific.
+   */
+  entitiesMatchingActiveFilter(): EntityData[] | null;
+  entityData(ref: EntityRef): EntityData | null;
+  attributes(ref: EntityRef): EntityAttributeData[];
+  properties(ref: EntityRef): PropertySetData[];
+  quantities(ref: EntityRef): QuantitySetData[];
+  classifications(ref: EntityRef): ClassificationData[];
+  materials(ref: EntityRef): MaterialData | null;
+  typeProperties(ref: EntityRef): TypePropertiesData | null;
+  documents(ref: EntityRef): DocumentData[];
+  relationships(ref: EntityRef): EntityRelationshipsData;
+  related(ref: EntityRef, relType: string, direction: 'forward' | 'inverse'): EntityRef[];
+}
+
+export interface SelectionBackendMethods {
+  get(): EntityRef[];
+  set(refs: EntityRef[]): void;
+}
+
+export interface VisibilityBackendMethods {
+  hide(refs: EntityRef[]): void;
+  show(refs: EntityRef[]): void;
+  isolate(refs: EntityRef[]): void;
+  reset(): void;
+}
+export interface ViewerBackendMethods {
+  colorize(refs: EntityRef[], color: RGBAColor): void;
+  colorizeAll(batches: Array<{ refs: EntityRef[]; color: RGBAColor }>): void;
+  /** Omitted refs reset all overrides; an explicit empty list is a no-op. */
+  resetColors(refs?: EntityRef[]): void;
+  flyTo(refs: EntityRef[]): void;
+  setSection(section: SectionPlane | null): void;
+  getSection(): SectionPlane | null;
+  setCamera(state: Partial<CameraState>): void;
+  getCamera(): CameraState;
+  /**
+   * Translation from the frame `getCamera()`/`setCamera()` work in to the
+   * IFC world coordinates of the loaded model(s), `[x, y, z]` in IFC Z-up
+   * metres. A viewer shifts large-coordinate (georeferenced) models towards
+   * the origin before drawing them, so its camera is not in world
+   * coordinates; `bim.bcf.createViewpoint()` adds this offset and
+   * `bim.bcf.extractViewpointState()` subtracts it, so BCF viewpoints are in
+   * world coordinates as the BCF standard requires (#4879). Optional: a
+   * backend without a shifted frame omits it, which means no offset.
+   */
+  getRenderFrameOffset?(): [number, number, number];
+}
+
+export interface MutateBackendMethods {
+  setProperty(ref: EntityRef, psetName: string, propName: string, value: string | number | boolean, dataType?: string): void;
+  setAttribute(ref: EntityRef, attrName: string, value: string): void;
+  deleteProperty(ref: EntityRef, psetName: string, propName: string): void;
+  batchBegin(label: string): void;
+  batchEnd(label: string): void;
+  undo(modelId: string): boolean;
+  redo(modelId: string): boolean;
+}
+
+/**
+ * Document-level edits — adding, removing, and editing positional STEP
+ * arguments on entities in a parsed `IfcDataStore`. Complements the
+ * property/attribute-level edits exposed by `MutateBackendMethods`.
+ *
+ * Implementations route into a per-model `MutablePropertyView` overlay so
+ * the underlying store buffer is never mutated; changes materialise on
+ * the next `bim.export.ifc()`.
+ */
+/**
+ * The `IfcRoot` + `IfcElement` header every in-store element builder takes:
+ * naming, and the optional explicit `GlobalId` a re-runnable author (a flow
+ * graph) derives from a stable key so a re-run updates the element instead
+ * of duplicating it. A malformed GlobalId is refused by the builder.
+ */
+export interface AddElementCommonParams {
+  Name?: string;
+  Description?: string;
+  ObjectType?: string;
+  Tag?: string;
+  GlobalId?: string;
+}
+
+/** Rectangular column parameters retain their public interface and inherit
+ * the canonical geometry fields, including storey-local RefDirection. */
+export interface AddColumnInStoreParams extends AddElementCommonParams,
+  Pick<ColumnInStoreParams, 'Position' | 'Width' | 'Depth' | 'Height' | 'RefDirection'> {}
+
+export interface AddWallInStoreParams extends AddElementCommonParams {
+  Start: [number, number, number];
+  End: [number, number, number];
+  Thickness: number;
+  Height: number;
+}
+
+export type AddSlabInStoreParams = AddSlabRectangleParams | AddSlabPolygonParams;
+
+export interface AddSlabRectangleParams extends AddElementCommonParams {
+  Position: [number, number, number];
+  Width: number;
+  Depth: number;
+  Thickness: number;
+  /** `'rectangle'` (or omit) selects the IfcRectangleProfileDef path. */
+  Profile?: 'rectangle';
+}
+
+export interface AddSlabPolygonParams extends AddElementCommonParams {
+  /** `'polygon'` selects the IfcArbitraryClosedProfileDef path. */
+  Profile: 'polygon';
+  /** Closed outline as 2D storey-local points (≥3). Auto-closed at emit time. */
+  OuterCurve: Array<[number, number]>;
+  /** Local placement origin (metres). Defaults to `[0, 0, 0]`. */
+  Position?: [number, number, number];
+  Thickness: number;
+}
+
+export interface AddBeamInStoreParams extends AddElementCommonParams,
+  Pick<BeamInStoreParams, 'Start' | 'End' | 'Width' | 'Height'> {}
+
+export interface AddDoorInStoreParams extends AddElementCommonParams {
+  Position: [number, number, number];
+  Width: number;
+  Height: number;
+  FrameThickness?: number;
+  PredefinedType?: 'DOOR' | 'GATE' | 'TRAPDOOR' | 'USERDEFINED' | 'NOTDEFINED';
+  OperationType?: string;
+}
+
+export interface AddWindowInStoreParams extends AddElementCommonParams {
+  Position: [number, number, number];
+  Width: number;
+  Height: number;
+  FrameThickness?: number;
+  PredefinedType?: 'WINDOW' | 'SKYLIGHT' | 'LIGHTDOME' | 'USERDEFINED' | 'NOTDEFINED';
+  PartitioningType?: string;
+}
+
+export type AddSpaceInStoreParams = AddSpaceRectangleParams | AddSpacePolygonParams;
+
+export interface AddSpaceRectangleParams extends Omit<AddElementCommonParams, 'Tag'> {
+  Position: [number, number, number];
+  Width: number;
+  Depth: number;
+  Height: number;
+  Profile?: 'rectangle';
+  LongName?: string;
+}
+
+export interface AddSpacePolygonParams extends Omit<AddElementCommonParams, 'Tag'> {
+  Profile: 'polygon';
+  OuterCurve: Array<[number, number]>;
+  Position?: [number, number, number];
+  Height: number;
+  LongName?: string;
+}
+
+export type AddRoofInStoreParams = AddRoofRectangleParams | AddRoofPolygonParams;
+
+export interface AddRoofRectangleParams extends AddElementCommonParams {
+  Position: [number, number, number];
+  Width: number;
+  Depth: number;
+  Thickness: number;
+  Profile?: 'rectangle';
+}
+
+export interface AddRoofPolygonParams extends AddElementCommonParams {
+  Profile: 'polygon';
+  OuterCurve: Array<[number, number]>;
+  Position?: [number, number, number];
+  Thickness: number;
+}
+
+export type AddPlateInStoreParams = AddPlateRectangleParams | AddPlatePolygonParams;
+
+export interface AddPlateRectangleParams extends AddElementCommonParams {
+  Position: [number, number, number];
+  Width: number;
+  Depth: number;
+  Thickness: number;
+  Profile?: 'rectangle';
+  PredefinedType?: 'CURTAIN_PANEL' | 'SHEET' | 'USERDEFINED' | 'NOTDEFINED';
+}
+
+export interface AddPlatePolygonParams extends AddElementCommonParams {
+  Profile: 'polygon';
+  OuterCurve: Array<[number, number]>;
+  Position?: [number, number, number];
+  Thickness: number;
+  PredefinedType?: 'CURTAIN_PANEL' | 'SHEET' | 'USERDEFINED' | 'NOTDEFINED';
+}
+
+export interface AddMemberInStoreParams extends AddElementCommonParams,
+  Pick<MemberInStoreParams, 'Start' | 'End' | 'Width' | 'Height' | 'PredefinedType'> {}
+
+export interface StoreBackendMethods extends CostStoreBackendMethods, StructuralStoreBackendMethods, ModellingStoreBackendMethods {
+  addEntity(modelId: string, def: { type: string; attributes: unknown[] }): EntityRef;
+  removeEntity(ref: EntityRef): boolean;
+  setPositionalAttribute(ref: EntityRef, index: number, value: unknown): void;
+  /**
+   * High-level builders: drop an element into an existing parsed model,
+   * anchored to a target IfcBuildingStorey. Each emits the full STEP
+   * sub-graph (placement → profile → solid → representation +
+   * IfcRelContainedInSpatialStructure / IfcRelAggregates for spaces)
+   * into the overlay so the element appears alongside the existing
+   * model on export.
+   */
+  addColumn(modelId: string, storeyExpressId: number, params: AddColumnInStoreParams | ProfiledColumnInStoreParams): EntityRef;
+  addWall(modelId: string, storeyExpressId: number, params: AddWallInStoreParams): EntityRef;
+  addSlab(modelId: string, storeyExpressId: number, params: AddSlabInStoreParams): EntityRef;
+  addBeam(modelId: string, storeyExpressId: number, params: AddBeamInStoreParams | ProfiledBeamInStoreParams): EntityRef;
+  addDoor(modelId: string, storeyExpressId: number, params: AddDoorInStoreParams): EntityRef;
+  addWindow(modelId: string, storeyExpressId: number, params: AddWindowInStoreParams): EntityRef;
+  addSpace(modelId: string, storeyExpressId: number, params: AddSpaceInStoreParams): EntityRef;
+  addRoof(modelId: string, storeyExpressId: number, params: AddRoofInStoreParams): EntityRef;
+  addPlate(modelId: string, storeyExpressId: number, params: AddPlateInStoreParams): EntityRef;
+  addMember(modelId: string, storeyExpressId: number, params: AddMemberInStoreParams | ProfiledMemberInStoreParams): EntityRef;
+}
+
+export interface SpatialBackendMethods {
+  queryBounds(modelId: string, bounds: AABB): EntityRef[];
+  raycast(modelId: string, origin: [number, number, number], direction: [number, number, number]): EntityRef[];
+  queryFrustum(modelId: string, frustum: SpatialFrustum): EntityRef[];
+}
+
+export interface ExportBackendMethods {
+  csv(refs: unknown, options: unknown): string;
+  json(refs: unknown, columns: unknown): Record<string, unknown>[];
+  ifc(refs: EntityRef[] | undefined, options: unknown): string | Uint8Array; // `undefined` = no isolation filter (whole model); `[]` never arrives (#4738)
+  download(content: string | Uint8Array, filename: string, mimeType: string): void;
+  /**
+   * Export the model's `IfcSpace` volumes as a Honeybee HBJSON energy/daylight model.
+   * Optional — present only on geometry-capable backends (CLI / browser, which carry the
+   * wasm engine); the data-only SDK never meshes, so it delegates here.
+   */
+  hbjson?(name?: string): Promise<string>;
+  /**
+   * Export the model's `IfcSpace` volumes as a Dragonfly DFJSON energy model (extruded
+   * `Room2D` plates). Optional — present only on geometry-capable backends.
+   */
+  dfjson?(name?: string): Promise<string>;
+}
+
+export interface LensBackendMethods {
+  presets(): unknown[];
+  create(config: unknown): unknown;
+  activate(lensId: string): void;
+  deactivate(): void;
+  getActive(): string | null;
+}
+
+export interface FilesBackendMethods {
+  list(): FileAttachmentInfo[];
+  text(name: string): string | null;
+  csv(name: string): Record<string, string>[] | null;
+  csvColumns(name: string): string[];
+}
+
+// ============================================================================
+// Schedule (4D) — IFC task, sequence, and work schedule extraction
+//
+// Shapes mirror `@ifc-lite/parser`'s `ScheduleExtraction` struct so the SDK
+// layer stays serializable across the sandbox/transport boundary without
+// pulling the parser into consumer bundles.
+// ============================================================================
+export * from './schedule-types.js';
+
+// ============================================================================
+// Structural analysis — IfcStructuralAnalysisModel, IfcStructuralMember /
+// IfcStructuralConnection / IfcStructuralActivity subtypes, load groups and
+// result groups.
+//
+// Shapes mirror `@ifc-lite/parser`'s `StructuralExtraction` struct, for the
+// same reason as the schedule types above: the SDK layer stays serializable
+// across the sandbox/transport boundary without pulling the parser into
+// consumer bundles.
+// ============================================================================
+
+/** Why one `Values` slot of a load configuration carries no nested load. */
+export * from './structural-types.js';
+export * from './cost-types.js';
+export * from './backend-extension-types.js';
+
+// ============================================================================
+// Backend Interface (implemented by local store or remote proxy)
+// ============================================================================
+
+/**
+ * Abstraction over the viewer's internal state — SDK namespaces use this.
+ *
+ * Each namespace is a typed property with methods matching the adapter contract.
+ * SDK namespace classes call backend.query.entities(...) instead of dispatch().
+ *
+ * BimHost (wire protocol) uses dispatchToBackend() to route string-based
+ * SdkRequests to the typed namespace methods.
+ */
+export interface BimBackend {
+  readonly model: ModelBackendMethods;
+  readonly query: QueryBackendMethods;
+  readonly selection: SelectionBackendMethods;
+  readonly visibility: VisibilityBackendMethods;
+  readonly viewer: ViewerBackendMethods;
+  readonly mutate: MutateBackendMethods;
+  readonly store: StoreBackendMethods;
+  readonly spatial: SpatialBackendMethods;
+  readonly export: ExportBackendMethods;
+  readonly lens: LensBackendMethods;
+  readonly files: FilesBackendMethods;
+  readonly schedule: ScheduleBackendMethods;
+  /** IFC 5D cost reads, when the backend retains loaded source bytes. */
+  readonly cost?: CostBackendMethods;
+  /** Structural analysis reads, when supported by the backend. */
+  readonly structural?: StructuralBackendMethods;
+  /** Space derivation — present only on local backends with store access. */
+  readonly spaces?: SpacesBackendMethods;
+  /** Persistent colouring — present only on local backends with store access. */
+  readonly style?: StyleBackendMethods;
+
+  /** Subscribe to viewer events */
+  subscribe(event: BimEventType, handler: (data: unknown) => void): () => void;
+}
+
+/**
+ * Route a string-based SdkRequest to the appropriate typed method on a BimBackend.
+ * Used by BimHost for wire protocol compatibility.
+ *
+ * Security: namespace/method come straight off the wire. Use `Object.hasOwn`
+ * lookups so an attacker can't reach prototype members (`__proto__`,
+ * `constructor`, `toString`, …) or methods inherited from a host class.
+ */
+export function dispatchToBackend(backend: BimBackend, namespace: string, method: string, args: unknown[]): unknown {
+  const backendObj = backend as unknown as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(backendObj, namespace)) {
+    throw new Error(`Unknown namespace '${namespace}'`);
+  }
+  const ns = backendObj[namespace] as Record<string, unknown> | null | undefined;
+  if (!ns || typeof ns !== 'object') {
+    throw new Error(`Unknown namespace '${namespace}'`);
+  }
+  if (!Object.prototype.hasOwnProperty.call(ns, method)) {
+    throw new Error(`Unknown method '${namespace}.${method}'`);
+  }
+  const fn = ns[method];
+  if (typeof fn !== 'function') {
+    throw new Error(`Unknown method '${namespace}.${method}'`);
+  }
+  return (fn as (...a: unknown[]) => unknown).apply(ns, args);
+}
+
+// ============================================================================
+// SDK Context Options
+// ============================================================================
+
+export interface BimContextOptions {
+  /** Direct backend for local (embedded) mode */
+  backend?: BimBackend;
+
+  /** Transport for remote (connected) mode */
+  transport?: Transport;
+}
+
+export interface Transport {
+  send(request: SdkRequest): Promise<SdkResponse>;
+  subscribe(handler: (event: SdkEvent) => void): () => void;
+  close(): void;
+}

@@ -1,0 +1,1206 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+@import "tailwindcss";
+
+/* Override Tailwind v4's default media-query dark variant so all dark: utilities
+   respond to the .dark class on <html> instead of prefers-color-scheme.
+   Without this, toggling light mode while the OS is in dark mode leaves all
+   dark: Tailwind utilities active, creating a mixed dark/light UI. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOKYO NIGHT THEME - Dark Stormy Cyberpunk Vibes
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Tokyo Night Color Palette */
+:root {
+  /* Storm - Deep backgrounds */
+  --tokyo-storm: #1a1b26;
+  --tokyo-night: #16161e;
+  --tokyo-bg-dark: #13131a;
+  --tokyo-bg-highlight: #1f2335;
+  
+  /* Atmosphere */
+  --tokyo-terminal-black: #414868;
+  --tokyo-comment: #565f89;
+  --tokyo-dark3: #3b4261;
+  
+  /* Foreground */
+  --tokyo-fg: #a9b1d6;
+  --tokyo-fg-dark: #7982a9;
+  --tokyo-fg-gutter: #363b54;
+  
+  /* Neon accents */
+  --tokyo-blue: #7aa2f7;
+  --tokyo-cyan: #7dcfff;
+  --tokyo-magenta: #bb9af7;
+  --tokyo-purple: #9d7cd8;
+  --tokyo-orange: #ff9e64;
+  --tokyo-yellow: #e0af68;
+  --tokyo-green: #9ece6a;
+  --tokyo-teal: #73daca;
+  --tokyo-red: #f7768e;
+
+  /* Custom SVG icon accent: preserve the source blue in light mode. */
+  --viewer-icon-accent: #0063b1;
+  
+  /* Special */
+  --tokyo-git-add: #449dab;
+  --tokyo-git-change: #6183bb;
+  --tokyo-git-delete: #914c54;
+  
+  /* Hierarchy panel - Light mode */
+  --hierarchy-selected-bg: #e4e4e7;
+  --hierarchy-selected-text: #18181b;
+  --hierarchy-text: #52525b;
+  --hierarchy-hover-bg: #f4f4f5;
+}
+
+/* Tabs - Light mode */
+:root {
+  --tabs-bg: #f4f4f5;
+  --tabs-border: #e4e4e7;
+  --tab-text: #71717a;
+  --tab-active-bg: #ffffff;
+  --tab-active-text: #18181b;
+  /* Slightly-raised inactive tab (properties strip). Light mode lifts toward
+     white; dark mode overrides this to skip the lift (see below). */
+  --tab-inactive-bg: color-mix(in srgb, var(--tabs-bg) 82%, white 18%);
+}
+
+.dark {
+  /* Hierarchy panel - Dark mode */
+  --hierarchy-selected-bg: #1f2335;
+  --hierarchy-selected-text: #a9b1d6;
+  --hierarchy-text: #7982a9;
+  --hierarchy-hover-bg: rgba(31, 35, 53, 0.5);
+  
+  /* Tabs - Dark mode */
+  --tabs-bg: #1f2335;
+  --tabs-border: #3b4261;
+  /* #565f89 (tokyo comment) was only 2.51:1 on --tabs-bg — below WCAG AA.
+     #828bb8 keeps the Tokyo Night hue at 4.69:1 (issue #1107, item 1). */
+  --tab-text: #828bb8;
+  --tab-active-bg: #16161e;
+  --tab-active-text: #a9b1d6;
+  /* No white-lift on the inactive trigger in dark mode: even an 18% lift takes
+     the bg to ~#474b59 where --tab-text (#828bb8) drops to 2.6:1. Keep it flat
+     on --tabs-bg so the muted label stays at 4.69:1 AA; the active tab is still
+     distinct via its darker bg + accent border (issue #1107, item 1 review). */
+  --tab-inactive-bg: var(--tabs-bg);
+}
+
+/* Custom theme configuration */
+@theme {
+  /* Smallest viewer text step; replace sub-11px arbitrary utilities (#5821). */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 0.875rem;
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(240 10% 3.9%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(240 10% 3.9%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(240 10% 3.9%);
+  --color-primary: var(--tokyo-blue);
+  /* Tokyo blue is a light accent: dark ink clears AA where white measured
+     only 2.52:1 (#4792). */
+  --color-primary-foreground: var(--tokyo-night);
+  --color-secondary: hsl(240 4.8% 95.9%);
+  --color-secondary-foreground: hsl(240 5.9% 10%);
+  --color-muted: hsl(240 4.8% 95.9%);
+  /* Slightly darker than Tailwind zinc-500 so muted text also clears AA on
+     the light theme's raised `bg-muted` surface (#4792). */
+  --color-muted-foreground: hsl(240 3.8% 44%);
+  --color-accent: hsl(240 4.8% 95.9%);
+  --color-accent-foreground: hsl(240 5.9% 10%);
+  --color-destructive: var(--tokyo-red);
+  --color-destructive-foreground: hsl(0 0% 98%);
+  --color-border: hsl(240 5.9% 90%);
+  --color-input: hsl(240 5.9% 90%);
+  --color-ring: var(--tokyo-blue);
+
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VIEWPORT OVERLAY TOKENS (#5483, charter #5478)
+   The colours live in ONE place, `lib/viewport-ui/overlay-theme.ts`, and
+   `registerOverlayThemeSync` (a store subscription) writes them onto <html>
+   as `--overlay-*` on every theme change. These entries only lend them Tailwind names, so overlay code
+   writes `stroke-overlay-accent` / `bg-overlay-accent-soft` / `text-axis-x`
+   and follows the theme for free. `static` so the properties and the z scale
+   exist at runtime even before any utility consumes them: scripts read them
+   through getComputedStyle, and a var() that resolves to nothing is exactly
+   the invisible-measurement-line bug (#5479). */
+@theme static {
+  --color-overlay-accent: var(--overlay-accent);
+  --color-overlay-accent-soft: var(--overlay-accent-soft);
+  --color-overlay-ink: var(--overlay-ink);
+  --color-overlay-ink-muted: var(--overlay-ink-muted);
+  --color-overlay-halo: var(--overlay-halo);
+  --color-axis-x: var(--overlay-axis-x);
+  --color-axis-y: var(--overlay-axis-y);
+  --color-axis-z: var(--overlay-axis-z);
+  --color-status-danger: var(--overlay-status-danger);
+  --color-status-warn: var(--overlay-status-warn);
+  --color-status-ok: var(--overlay-status-ok);
+  --color-status-info: var(--overlay-status-info);
+  --color-clash-a: var(--overlay-clash-a);
+  --color-clash-b: var(--overlay-clash-b);
+  --color-clash-overlap: var(--overlay-clash-overlap);
+  --color-paper: var(--overlay-paper);
+  --color-paper-ink: var(--overlay-paper-ink);
+
+  /* Z scale for everything over the viewport. Use `z-(--z-hud)`; never a
+     literal. scene < hud < hud popover < floating panel < chrome < modal < toast. */
+  --z-scene: 10;
+  --z-hud: 20;
+  --z-hud-popover: 30;
+  --z-float: 40;
+  --z-chrome: 50;
+  --z-modal: 60;
+  --z-toast: 70;
+}
+
+/* Dark mode - Tokyo Night Storm */
+:root.dark,
+.dark {
+  --viewer-icon-accent: var(--tokyo-blue);
+  --color-background: var(--tokyo-storm) !important;
+  --color-foreground: var(--tokyo-fg) !important;
+  --color-card: var(--tokyo-night) !important;
+  --color-card-foreground: var(--tokyo-fg) !important;
+  --color-popover: var(--tokyo-night) !important;
+  --color-popover-foreground: var(--tokyo-fg) !important;
+  --color-primary: var(--tokyo-blue);
+  --color-primary-foreground: var(--tokyo-night);
+  --color-secondary: var(--tokyo-bg-highlight);
+  --color-secondary-foreground: var(--tokyo-fg);
+  --color-muted: var(--tokyo-bg-highlight);
+  /* --tokyo-comment (#565f89) is ~2.5-2.9:1 on the dark surfaces this maps
+     onto (storm/night/highlight) — below WCAG AA. #828bb8 holds the Tokyo
+     Night hue at >=4.69:1. Kept separate from --tokyo-comment so the latter
+     stays usable for decorative fills (issue #1107, item 1). */
+  --color-muted-foreground: #828bb8;
+  --color-accent: var(--tokyo-bg-highlight);
+  --color-accent-foreground: var(--tokyo-fg);
+  --color-destructive: var(--tokyo-red);
+  --color-destructive-foreground: var(--tokyo-fg);
+  --color-border: var(--tokyo-dark3);
+  --color-input: var(--tokyo-bg-highlight);
+  --color-ring: var(--tokyo-blue);
+}
+
+/* Base styles */
+/* Layered (#5485): an unlayered `* { border-color }` sits ABOVE every
+   Tailwind utility layer in cascade order, so it wins over `border-<color>`
+   utilities (e.g. `border-overlay-accent`) no matter their source order —
+   the utility's declaration loses even though it's more specific-looking in
+   the file. `@layer base` puts this at Tailwind's lowest layer, where a
+   `utilities`-layer class (every `border-*` utility) always wins regardless
+   of stylesheet order, matching plain CSS cascade-layer semantics. */
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Zinc 400 is only 2.4-2.7:1 on the light viewer's white/zinc panel
+   surfaces. It is used widely for enabled counts, labels, and descriptions,
+   so route that utility through the accessible semantic muted ink in light
+   mode. Dark and colorful provide their own explicit zinc overrides below. */
+@layer utilities {
+  :where(html:not(.dark):not(.colorful)) .text-zinc-400:where(:not(.cursor-not-allowed)) {
+    color: var(--color-muted-foreground);
+  }
+}
+
+/* A print preview is fixed white paper with fixed dark ink. Giving it a
+   purpose-built class keeps the dark/colorful `.bg-white` panel overrides
+   from turning the paper dark underneath neutral report text (#4792). */
+.document-preview-paper {
+  background-color: #fff;
+  color: #171717;
+}
+
+.document-preview-muted {
+  color: #525252;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOKYO NIGHT DARK MODE OVERRIDES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dark body,
+.dark #root {
+  background-color: var(--tokyo-storm) !important;
+}
+
+/* Panels and cards */
+.dark .bg-white,
+.dark .bg-card,
+.dark .bg-background {
+  background-color: var(--tokyo-night) !important;
+}
+
+.dark .bg-zinc-50,
+.dark .bg-zinc-100 {
+  background-color: var(--tokyo-bg-highlight) !important;
+}
+
+.dark .bg-zinc-900,
+.dark .bg-zinc-950,
+.dark .bg-black {
+  background-color: var(--tokyo-night) !important;
+}
+
+/* Borders */
+.dark .border-zinc-200,
+.dark .border-zinc-700,
+.dark .border-zinc-800 {
+  border-color: var(--tokyo-dark3) !important;
+}
+
+.dark .border-zinc-900,
+.dark .border-zinc-100 {
+  border-color: var(--tokyo-terminal-black) !important;
+}
+
+/* Text colors */
+.dark .text-zinc-900,
+.dark .text-zinc-100 {
+  color: var(--tokyo-fg) !important;
+}
+
+.dark .text-zinc-500,
+.dark .text-zinc-400,
+.dark .text-zinc-600 {
+  /* Route muted utility text through the accessible muted-foreground token
+     (#828bb8) instead of raw --tokyo-comment (#565f89, ~2.5:1, fails WCAG AA).
+     issue #1107, item 1. */
+  color: var(--color-muted-foreground) !important;
+}
+
+.dark .text-zinc-200,
+.dark .text-zinc-300 {
+  color: var(--tokyo-fg-dark) !important;
+}
+
+.dark .text-zinc-700,
+.dark .text-zinc-800 {
+  color: var(--tokyo-fg) !important;
+}
+
+/* Primary accent */
+.dark .bg-primary {
+  background-color: var(--tokyo-blue) !important;
+}
+
+.dark .text-primary {
+  color: var(--tokyo-blue) !important;
+}
+
+.dark .border-primary {
+  border-color: var(--tokyo-blue) !important;
+}
+
+/* Clean shadows */
+.dark .shadow-lg,
+.dark .shadow-xl {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Selection highlight */
+.dark ::selection {
+  background-color: var(--tokyo-bg-highlight);
+  color: var(--tokyo-cyan);
+}
+
+/* Scrollbar Tokyo Night style */
+.dark .scrollbar-thin {
+  scrollbar-color: var(--tokyo-terminal-black) var(--tokyo-night);
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: var(--tokyo-terminal-black);
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: var(--tokyo-comment);
+}
+
+/* Interactive elements */
+.dark .hover\:bg-primary:hover {
+  background-color: var(--tokyo-blue) !important;
+}
+
+/* Force dark backgrounds on data-state active tabs */
+.dark [data-state="active"] {
+  background-color: var(--tokyo-night) !important;
+  color: var(--tokyo-fg) !important;
+}
+
+/* Force dark hover backgrounds */
+.dark .hover\:bg-zinc-50:hover,
+.dark .hover\:bg-zinc-100:hover,
+.dark .hover\:bg-zinc-200:hover,
+.dark .hover\:bg-white:hover {
+  background-color: var(--tokyo-bg-highlight) !important;
+}
+
+/* Force dark selected/active backgrounds */
+.dark .data-\[state\=active\]\:bg-white[data-state="active"],
+.dark .data-\[state\=active\]\:bg-zinc-100[data-state="active"] {
+  background-color: var(--tokyo-night) !important;
+}
+
+/* Hierarchy panel hover */
+.hierarchy-item:not(.selected):hover {
+  background-color: var(--hierarchy-hover-bg) !important;
+}
+
+/* Panel container query for compact tabs */
+.panel-container {
+  container-type: inline-size;
+}
+
+/* By default show text, hide icons */
+.panel-compact-icon {
+  display: none;
+}
+.panel-compact-text {
+  display: inline;
+}
+
+/* When panel is narrow, show icons and hide text */
+@container (max-width: 200px) {
+  .panel-compact-icon {
+    display: inline;
+  }
+  .panel-compact-text {
+    display: none;
+  }
+}
+
+@container (max-width: 240px) {
+  .properties-tabs-list .panel-compact-icon {
+    display: inline;
+  }
+
+  .properties-tabs-list .panel-compact-text {
+    display: none;
+  }
+}
+
+/* Hierarchy grouping row has 5 tabs (Spatial / Class / Type / Material /
+   Groups). Their full uppercase labels only fit above ~384px of panel width;
+   below that they truncate and overlap ("MATERIAGROUPS" at the default
+   sidebar width). Collapse to icon-only under the threshold — each button keeps
+   a `title` tooltip, so the meaning stays discoverable. The threshold sits
+   above the default content pane (~22% of the row) so a normal or narrow
+   sidebar shows clean icons, and only a deliberately widened sidebar restores
+   the text labels. This is scoped to the hierarchy tabs so it never changes
+   the shared 200px panel-compact behaviour elsewhere. */
+@container (max-width: 384px) {
+  .hierarchy-grouping-tabs .panel-compact-icon {
+    display: inline;
+  }
+
+  .hierarchy-grouping-tabs .panel-compact-text {
+    display: none;
+  }
+}
+
+/* Tab triggers */
+.tab-trigger {
+  background-color: transparent !important;
+  color: var(--tab-text) !important;
+}
+
+.tab-trigger[data-state="active"] {
+  background-color: var(--tab-active-bg) !important;
+  color: var(--tab-active-text) !important;
+  font-weight: 700;
+}
+
+/* Properties panel tabs: keep tab semantics, but use a clearer segmented active state */
+.properties-tabs-list {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 2.75rem;
+  padding: 0;
+  justify-content: stretch;
+  background-color: var(--tabs-bg) !important;
+  border-bottom: 2px solid var(--tabs-border);
+  border-radius: 0 !important;
+}
+
+.properties-tab-trigger {
+  gap: 0.375rem;
+  height: 100%;
+  padding: 0 0.625rem;
+  border-top: 3px solid transparent;
+  border-right: 1px solid var(--tabs-border);
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0 !important;
+  background-color: var(--tab-inactive-bg) !important;
+  color: var(--tab-text) !important;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: none !important;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.properties-tab-trigger:first-child {
+  border-left: 1px solid var(--tabs-border);
+}
+
+.properties-tab-trigger:hover {
+  background-color: color-mix(in srgb, var(--tab-active-bg) 90%, white 10%) !important;
+  color: var(--tab-active-text) !important;
+}
+
+.properties-tab-trigger[data-state="active"] {
+  background-color: var(--tab-active-bg) !important;
+  color: var(--tab-active-text) !important;
+  border-top-color: var(--color-primary) !important;
+  transform: translateY(2px);
+  box-shadow: none !important;
+}
+
+.properties-tab-trigger[data-state="active"] .panel-compact-icon,
+.properties-tab-trigger[data-state="active"] .panel-compact-text {
+  color: inherit !important;
+}
+
+.properties-tab-trigger[data-state="active"] .panel-compact-icon {
+  color: var(--color-primary) !important;
+}
+
+/* Raw STEP tab — terminal-flavoured dev affordance.
+   Compact (icon-only </>), separates visually from the three "human"
+   tabs with a left divider and a green active state that nods to a
+   shell cursor. Stays width-stable at narrow panel widths because
+   it explicitly opts out of `flex: 1` (uses an `auto`-ish width
+   driven by the </> glyph plus padding). */
+.properties-tab-trigger.raw-step-tab-trigger {
+  flex: 0 0 auto;
+  min-width: 2.25rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  border-left: 1px solid var(--tabs-border);
+  letter-spacing: 0;
+  color: color-mix(in srgb, var(--tab-text) 70%, transparent) !important;
+}
+
+.properties-tab-trigger.raw-step-tab-trigger:hover {
+  background-color: color-mix(in srgb, #10b981 16%, var(--tabs-bg)) !important;
+  color: #047857 !important;
+}
+
+.dark .properties-tab-trigger.raw-step-tab-trigger:hover {
+  background-color: color-mix(in srgb, #10b981 22%, var(--tabs-bg)) !important;
+  color: #34d399 !important;
+}
+
+.properties-tab-trigger.raw-step-tab-trigger[data-state="active"] {
+  background-color: color-mix(in srgb, #10b981 14%, var(--tab-active-bg)) !important;
+  color: #047857 !important;
+  border-top-color: #10b981 !important;
+}
+
+.dark .properties-tab-trigger.raw-step-tab-trigger[data-state="active"] {
+  color: #34d399 !important;
+  border-top-color: #34d399 !important;
+}
+
+/* Quantity cards - cyan accent */
+.dark .border-blue-200,
+.dark .border-blue-800,
+.dark .border-blue-900 {
+  border-color: var(--tokyo-cyan) !important;
+  border-opacity: 0.3;
+}
+
+.dark .text-blue-700,
+.dark .text-blue-400 {
+  color: var(--tokyo-cyan) !important;
+}
+
+.dark .bg-blue-50\/20,
+.dark .bg-blue-950\/20 {
+  background-color: rgba(125, 207, 255, 0.05) !important;
+}
+
+/* Success/Location - teal accent */
+.dark .border-emerald-500\/30 {
+  border-color: rgba(115, 218, 202, 0.3) !important;
+}
+
+.dark .text-emerald-800,
+.dark .text-emerald-400 {
+  color: var(--tokyo-teal) !important;
+}
+
+.dark .bg-emerald-50\/50,
+.dark .bg-emerald-900\/10 {
+  background-color: rgba(115, 218, 202, 0.05) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COLORFUL MODE — Brutalist Aurora
+   Shift+click the toggle. The same sharp, functional, dense UI — but the
+   sky opened up. An aurora gradient behind the 3D scene, frosted-glass
+   panels, and the full Tokyo Night accent palette in its natural places.
+   No decorative borders. No gradient buttons. Just atmosphere.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@custom-variant colorful (&:where(.colorful, .colorful *));
+
+.colorful {
+  /* Tokyo Night accent palette — used only where colour already exists */
+  --cf-blue: #7aa2f7;
+  --cf-cyan: #7dcfff;
+  --cf-teal: #73daca;
+  --cf-magenta: #bb9af7;
+  --cf-purple: #9d7cd8;
+  --cf-orange: #ff9e64;
+  --cf-pink: #f7768e;
+  --cf-green: #9ece6a;
+  --cf-yellow: #e0af68;
+
+  /* Glass */
+  --cf-glass: rgba(255, 255, 255, 0.48);
+  --cf-glass-strong: rgba(255, 255, 255, 0.68);
+  /* Popup surfaces are OPAQUE (issue #1924). Glass reads beautifully on panels,
+     which sit against the aurora backdrop — but a dropdown floats over arbitrary
+     content (the 3D viewport, another panel, its own trigger), so at 0.48-0.68
+     alpha whatever is behind it shows through the option text and the list stops
+     being readable. Tinted to keep the theme's cast rather than reverting to
+     flat white. */
+  --cf-popover-solid: #eceefa;
+
+  /* ── Semantic tokens ── */
+  --color-background: #e0e6f0 !important;
+  --color-foreground: #1a1b2e !important;
+  --color-card: var(--cf-glass) !important;
+  --color-card-foreground: #1a1b2e !important;
+  --color-popover: var(--cf-popover-solid) !important;
+  --color-popover-foreground: #1a1b2e !important;
+  --color-primary: var(--cf-purple) !important;
+  /* Purple is light enough that white is only 3.33:1. Keep the colorful
+     accent and use the theme's dark ink for AA text contrast (#4792). */
+  --color-primary-foreground: #1a1b2e !important;
+  --color-secondary: rgba(157, 124, 216, 0.10) !important;
+  --color-secondary-foreground: #2e3050 !important;
+  --color-muted: rgba(0, 0, 0, 0.04) !important;
+  --color-muted-foreground: #555b78 !important;
+  --color-accent: rgba(157, 124, 216, 0.10) !important;
+  --color-accent-foreground: #2e3050 !important;
+  --color-destructive: var(--cf-pink) !important;
+  --color-destructive-foreground: #fff !important;
+  /* Borders: neutral, semi-transparent — NOT coloured */
+  --color-border: rgba(0, 0, 0, 0.10) !important;
+  --color-input: rgba(0, 0, 0, 0.06) !important;
+  --color-ring: var(--cf-purple) !important;
+
+  /* Hierarchy — lavender tints */
+  --hierarchy-selected-bg: rgba(157, 124, 216, 0.12);
+  --hierarchy-selected-text: #1a1b2e;
+  --hierarchy-text: #40445e;
+  --hierarchy-hover-bg: rgba(200, 195, 230, 0.15);
+
+  /* Tabs — warm peach undertone */
+  --tabs-bg: rgba(235, 215, 195, 0.25);
+  --tabs-border: rgba(0, 0, 0, 0.08);
+  --tab-text: #555b78;
+  --tab-active-bg: rgba(245, 230, 210, 0.55);
+  --tab-active-text: #1a1b2e;
+}
+
+/* ── Page background ── */
+.colorful body,
+.colorful #root {
+  background: #dde3f0 !important;
+}
+
+/* ── Toolbar: cool violet-tinted glass ── */
+.colorful .border-b.bg-white,
+.colorful .border-b.dark\:bg-black {
+  background: rgba(230, 225, 245, 0.60) !important;
+  backdrop-filter: blur(20px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.5) !important;
+}
+
+/* ── Panels & cards: frosted glass (neutral base) ── */
+.colorful .bg-white,
+.colorful .bg-card,
+.colorful .bg-background {
+  background: var(--cf-glass) !important;
+  backdrop-filter: blur(16px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.3) !important;
+}
+
+.colorful .bg-zinc-50,
+.colorful .bg-zinc-100 {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* ── Popup surfaces stay opaque (issue #1924) ──
+   Must come AFTER the .bg-white / .bg-zinc-900 glass rules above: those match
+   any element carrying the utility, including the hand-rolled dropdown popups
+   (`SearchableSelect`, `ComboInput`) which are `bg-white dark:bg-zinc-800`.
+   Glassing them is what made "some pull-downs transparent" — and only *some*,
+   because a native <select>'s option list is drawn by the browser outside page
+   CSS and never picks the override up.
+
+   Radix-based dropdowns (`ui/select.tsx`, `ui/dropdown-menu.tsx`) use
+   `bg-popover` and are already handled by `--color-popover` being solid; the
+   `[data-radix-popper-content-wrapper]` arm keeps any future popper content
+   opaque even if it reaches for a raw utility instead. */
+.colorful .popover-surface,
+.colorful [data-radix-popper-content-wrapper] > * {
+  background: var(--cf-popover-solid) !important;
+  /* No backdrop-filter: besides being pointless on an opaque surface, it
+     creates a stacking context and a containing block, which is the likely
+     cause of the reported paint-order inversion (footer buttons rendering
+     over the option rows). */
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.colorful .bg-zinc-900,
+.colorful .bg-zinc-950,
+.colorful .bg-black {
+  background: var(--cf-glass) !important;
+  backdrop-filter: blur(16px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.3) !important;
+}
+
+/* ── Tinted glass per panel — colour echoes the aurora ── */
+
+/* Left panel: cool lavender tint (echoes aurora top) */
+.colorful .panel-container:first-of-type,
+.colorful [id="left-panel"] > .panel-container,
+.colorful [id="left-panel"] > div {
+  background: rgba(200, 195, 230, 0.38) !important;
+  backdrop-filter: blur(16px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.4) !important;
+}
+
+/* Right panel: warm peach/amber tint (echoes aurora bottom) */
+.colorful [id="right-panel"] > .panel-container,
+.colorful [id="right-panel"] > div {
+  background: rgba(235, 215, 195, 0.40) !important;
+  backdrop-filter: blur(16px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.4) !important;
+}
+
+/* Resize handles: thin, tinted */
+.colorful [data-panel-group-direction="horizontal"] > [data-resize-handle] {
+  background-color: rgba(157, 124, 216, 0.18) !important;
+  transition: background-color 0.15s;
+}
+
+.colorful [data-panel-group-direction="horizontal"] > [data-resize-handle]:hover {
+  background-color: rgba(157, 124, 216, 0.35) !important;
+}
+
+.colorful [data-panel-group-direction="horizontal"] > [data-resize-handle][data-resize-handle-active] {
+  background-color: rgba(157, 124, 216, 0.50) !important;
+}
+
+/* ── Borders: single neutral tone everywhere ── */
+.colorful .border-zinc-100,
+.colorful .border-zinc-200,
+.colorful .border-zinc-300,
+.colorful .border-zinc-400,
+.colorful .border-zinc-500,
+.colorful .border-zinc-600,
+.colorful .border-zinc-700,
+.colorful .border-zinc-800,
+.colorful .border-zinc-900,
+.colorful .border-zinc-950 {
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+
+.colorful .border,
+.colorful .border-b,
+.colorful .border-t,
+.colorful .border-l,
+.colorful .border-r,
+.colorful .border-border {
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+
+/* ── Text ── */
+.colorful .text-zinc-900,
+.colorful .text-zinc-800,
+.colorful .text-zinc-700,
+.colorful .text-zinc-100 {
+  color: #1a1b2e !important;
+}
+
+.colorful .text-zinc-500,
+.colorful .text-zinc-400,
+.colorful .text-zinc-600 {
+  color: #555b78 !important;
+}
+
+.colorful .text-zinc-200,
+.colorful .text-zinc-300 {
+  color: #40445e !important;
+}
+
+/* ── Primary: purple (from Tokyo Night magenta/purple family) ── */
+.colorful .bg-primary {
+  background-color: var(--cf-purple) !important;
+}
+
+.colorful .text-primary {
+  color: var(--cf-purple) !important;
+}
+
+.colorful .border-primary {
+  border-color: var(--cf-purple) !important;
+}
+
+/* ── Shadows ── */
+.colorful .shadow-lg,
+.colorful .shadow-xl {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ── Selection ── */
+.colorful ::selection {
+  background-color: rgba(157, 124, 216, 0.25);
+  color: #1a1b2e;
+}
+
+/* ── Scrollbars ── */
+.colorful .scrollbar-thin {
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
+.colorful .scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+.colorful .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.25);
+}
+
+/* ── Hovers: tinted to match panel context ── */
+.colorful .hover\:bg-primary:hover {
+  background-color: var(--cf-purple) !important;
+}
+
+.colorful .hover\:bg-zinc-50:hover,
+.colorful .hover\:bg-zinc-100:hover,
+.colorful .hover\:bg-zinc-200:hover,
+.colorful .hover\:bg-white:hover {
+  background-color: rgba(200, 195, 230, 0.18) !important;
+}
+
+/* ── Active tabs ── */
+.colorful [data-state="active"] {
+  background-color: var(--cf-glass-strong) !important;
+  color: #1a1b2e !important;
+}
+
+.colorful .data-\[state\=active\]\:bg-white[data-state="active"],
+.colorful .data-\[state\=active\]\:bg-zinc-100[data-state="active"] {
+  background-color: var(--cf-glass-strong) !important;
+}
+
+/* Properties tabs: warm orange accent on active (echoes aurora horizon) */
+.colorful .properties-tab-trigger[data-state="active"] {
+  border-top-color: var(--cf-orange) !important;
+  background: rgba(245, 230, 210, 0.50) !important;
+}
+
+/* ── Tabs container: warmer tint to match right panel ── */
+.colorful .properties-tabs-list {
+  background-color: rgba(235, 215, 195, 0.30) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ── Tree selection: purple tint with left accent ── */
+.colorful .tree-node.selected {
+  background-color: rgba(157, 124, 216, 0.12) !important;
+  border-left-color: var(--cf-purple) !important;
+}
+
+.colorful .hierarchy-item.selected {
+  background-color: rgba(157, 124, 216, 0.12) !important;
+}
+
+/* ── Hierarchy hover: subtle lavender ── */
+.colorful .hierarchy-item:not(.selected):hover {
+  background-color: rgba(200, 195, 230, 0.20) !important;
+}
+
+/* ── Quantity cards ── */
+.colorful .border-blue-200,
+.colorful .border-blue-800,
+.colorful .border-blue-900 {
+  border-color: rgba(122, 162, 247, 0.25) !important;
+}
+
+.colorful .text-blue-700,
+.colorful .text-blue-400 {
+  color: #6a8fd6 !important;
+}
+
+.colorful .bg-blue-50\/20,
+.colorful .bg-blue-950\/20 {
+  background-color: rgba(122, 162, 247, 0.06) !important;
+}
+
+/* ── Success / Location ── */
+.colorful .border-emerald-500\/30 {
+  border-color: rgba(115, 218, 202, 0.25) !important;
+}
+
+.colorful .text-emerald-800,
+.colorful .text-emerald-400 {
+  color: #3d9e88 !important;
+}
+
+.colorful .bg-emerald-50\/50,
+.colorful .bg-emerald-900\/10 {
+  background-color: rgba(115, 218, 202, 0.06) !important;
+}
+
+/* ── Toolbar buttons ── */
+.colorful .toolbar-button:hover {
+  background-color: rgba(200, 195, 230, 0.25) !important;
+}
+
+.colorful .toolbar-button.active {
+  background-color: var(--cf-purple) !important;
+  color: #fff !important;
+}
+
+/* ── Status bar (bottom): warm tint ── */
+.colorful .border-t.bg-white,
+.colorful .border-t.dark\:bg-black {
+  background: rgba(240, 225, 210, 0.50) !important;
+  backdrop-filter: blur(16px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.3) !important;
+}
+
+/* ── Drop overlay ── */
+.colorful .bg-\[\#9ece6a\]\/10 {
+  background-color: rgba(115, 218, 202, 0.10) !important;
+}
+
+.colorful .border-\[\#9ece6a\] {
+  border-color: var(--cf-teal) !important;
+}
+
+.colorful .text-\[\#9ece6a\] {
+  color: var(--cf-teal) !important;
+}
+
+/* ── Popover / dropdown menus: glass ── */
+.colorful [data-radix-popper-content-wrapper] [role="menu"],
+.colorful [data-radix-popper-content-wrapper] [role="listbox"],
+.colorful [data-radix-popper-content-wrapper] [data-radix-collection-item] {
+  background: var(--cf-glass-strong) !important;
+  backdrop-filter: blur(20px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.4) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COLORFUL — Component-specific colour variations
+   Each section gets a subtle tint from the Tokyo palette, mapped to its
+   semantic role. Tasteful, not overwhelming.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Section headers in hierarchy: cool lavender bg ── */
+.colorful .bg-zinc-100.border-b,
+.colorful .bg-zinc-900.border-b {
+  background-color: rgba(200, 195, 230, 0.30) !important;
+}
+
+/* ── Section headers in properties: warm peach bg ── */
+.colorful .bg-zinc-50.border-b {
+  background-color: rgba(240, 220, 195, 0.35) !important;
+}
+
+/* Properties section header text: warmer dark tone */
+.colorful .bg-zinc-50 .text-zinc-700,
+.colorful .bg-zinc-50 .text-zinc-600 {
+  color: #5a4a3a !important;
+}
+
+/* ── FILE INFORMATION / STATISTICS / PROJECT INFO section containers ── */
+/* Alternate warm tints for each section in the properties panel */
+.colorful .bg-zinc-50.dark\:bg-zinc-900\/50 {
+  background-color: rgba(240, 220, 195, 0.30) !important;
+}
+
+/* ── LOCATION section: teal/green tint (geography = nature) ── */
+.colorful [class*="border-emerald"] {
+  border-color: rgba(115, 218, 202, 0.25) !important;
+}
+
+/* ── Landing page / empty state — orange-tinted grid world ── */
+
+/* Viewport container bg — only the wrapper div, NOT the canvas.
+   The canvas has data-viewport="main"; we exclude it so the
+   inline aurora gradient isn't overridden by !important.       */
+.colorful div[data-viewport=""]:not(:has(canvas)),
+.colorful div[data-viewport]:not([data-viewport="main"]) {
+  background-color: rgba(245, 235, 220, 0.60) !important;
+}
+
+/* Orange grid only on the empty-state overlay (no model loaded).
+   This div only exists when the landing page renders.           */
+.colorful [data-viewport] > .absolute.z-10 {
+  background-image:
+    linear-gradient(rgba(255, 158, 100, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 158, 100, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Main landing card: warm glass with orange border */
+.colorful .border-zinc-300.dark\:border-\[\#3b4261\] {
+  border-color: rgba(255, 158, 100, 0.28) !important;
+  background: rgba(255, 248, 240, 0.65) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+
+/* Logo background layer: warm tint */
+.colorful .-rotate-3.border {
+  background-color: rgba(255, 225, 195, 0.30) !important;
+  border-color: rgba(255, 158, 100, 0.18) !important;
+}
+
+/* Feature grid cards (SELECT / FILTER / ANALYZE): warm glass */
+.colorful .bg-zinc-100.dark\:bg-\[\#1f2335\] {
+  background-color: rgba(255, 230, 200, 0.35) !important;
+  border-color: rgba(255, 158, 100, 0.20) !important;
+}
+
+/* Feature card icon boxes */
+.colorful .bg-zinc-100 .bg-white.border,
+.colorful .bg-zinc-100 .dark\:bg-\[\#16161e\].border {
+  background-color: rgba(255, 245, 230, 0.55) !important;
+  border-color: rgba(255, 158, 100, 0.15) !important;
+}
+
+/* Recent files list */
+.colorful .bg-zinc-50.dark\:bg-\[\#1f2335\] {
+  background-color: rgba(255, 235, 210, 0.30) !important;
+  border-color: rgba(255, 158, 100, 0.15) !important;
+}
+
+/* Shortcuts badge */
+.colorful .bg-zinc-100.dark\:bg-\[\#1f2335\].border.border-zinc-300 {
+  background-color: rgba(255, 230, 200, 0.35) !important;
+  border-color: rgba(255, 158, 100, 0.20) !important;
+}
+
+/* "Open .ifc file" hover */
+.colorful .hover\:border-primary:hover {
+  border-color: var(--cf-orange) !important;
+}
+
+.colorful .hover\:text-primary:hover {
+  color: var(--cf-orange) !important;
+}
+
+/* Empty state dashed borders: orange */
+.colorful .border-dashed {
+  border-color: rgba(255, 158, 100, 0.35) !important;
+}
+
+/* Empty state icon boxes (NO MODEL / NO SELECTION) */
+.colorful .border-dashed.border-2 {
+  border-color: rgba(255, 158, 100, 0.30) !important;
+  background-color: rgba(255, 235, 210, 0.25) !important;
+}
+
+/* ── Hierarchy SPATIAL/CLASS/TYPE toggle ── */
+/* Outline buttons: lavender tint */
+.colorful [data-variant="outline"] {
+  border-color: rgba(157, 124, 216, 0.22) !important;
+}
+
+.colorful [data-variant="outline"]:hover {
+  background-color: rgba(200, 195, 230, 0.22) !important;
+}
+
+/* ── Properties panel collapsible sections hover (right panel only) ── */
+.colorful [id="right-panel"] .hover\:bg-zinc-50:hover,
+.colorful [id="right-panel"] .hover\:bg-zinc-900:hover {
+  background-color: rgba(240, 220, 195, 0.25) !important;
+}
+
+/* ── Properties subsection backgrounds ── */
+.colorful .bg-zinc-50\/50,
+.colorful .dark\:bg-zinc-900\/50 {
+  background-color: rgba(240, 225, 205, 0.25) !important;
+}
+
+/* ── Tooltip: dark, sharp ── */
+.colorful [role="tooltip"] {
+  background: rgba(26, 27, 46, 0.90) !important;
+  color: #e0e6f0 !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+
+/* Fix Radix ScrollArea viewport inner div: by default it uses display:table
+   which expands to content width, preventing text truncation in flex children.
+   Force block layout so width constraints cascade correctly. */
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
+}
+
+/* Custom scrollbar */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-muted-foreground) 30%, transparent) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--color-muted-foreground) 30%, transparent);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--color-muted-foreground) 50%, transparent);
+}
+
+/* Panel resize handle */
+.resize-handle {
+  background: transparent;
+  transition: background-color 0.15s;
+}
+
+.resize-handle:hover {
+  background-color: color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.resize-handle[data-resize-handle-active] {
+  background-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+/* Tree node styles */
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.25rem;
+  cursor: pointer;
+  border-radius: 0.125rem;
+  border-left: 2px solid transparent;
+  transition: all 0.1s;
+}
+
+.tree-node:hover {
+  background-color: color-mix(in srgb, var(--color-muted) 50%, transparent);
+}
+
+.tree-node.selected {
+  background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  border-left-color: var(--color-primary);
+}
+
+.tree-node.filtered {
+  opacity: 0.5;
+}
+
+.tree-node.hidden {
+  text-decoration: line-through;
+  opacity: 0.3;
+}
+
+/* Panel-chrome button vocabulary (`data-chrome-btn`, PanelTourButton.tsx /
+   SidebarPanelHost.tsx): every one of these is `h-5 w-5` (20px), under the
+   WCAG 2.2 2.5.8 24x24 CSS px target-size minimum (#5826). One rule here
+   gives all of them (present and future) a >=24px hit area via an invisible
+   `::after` pulled outward by a negative inset, without touching their own
+   visual size, applied by attribute selector instead of by variant because
+   this vocabulary predates and sits outside `ui/button.tsx`. Sized to just
+   close the 4px gap (20 + 2*2 = 24), not beyond: these buttons sit `gap-1`
+   (4px) apart, and a bigger inset overlapped the neighbour (the defect a
+   uniform slop on every `buttonVariants` icon size caused, and was reverted
+   for, in this same review round). */
+[data-chrome-btn] {
+  position: relative;
+}
+
+[data-chrome-btn]::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+}
+
+/* Toolbar button styles */
+.toolbar-button {
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  transition: all 0.15s;
+}
+
+.toolbar-button:hover {
+  background-color: var(--color-muted);
+}
+
+.toolbar-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-ring);
+}
+
+.toolbar-button.active {
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+.toolbar-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Loading skeleton animation */
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.skeleton {
+  background-color: var(--color-muted);
+  border-radius: 0.25rem;
+  animation: skeleton-pulse 2s ease-in-out infinite;
+}

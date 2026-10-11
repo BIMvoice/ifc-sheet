@@ -1,0 +1,343 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Boolean / CSG failure diagnostics.
+//!
+//! Pre-T1.3, the CSG processor silently fell back to returning the un-cut host
+//! mesh whenever it couldn't run an operation (cap exceeded, kernel error,
+//! degenerate input, etc.). This left viewers rendering wrong geometry with no
+//! signal to the user.
+//!
+//! This module gives every fallback a structured failure record. Callers can
+//! drain failures off the `ClippingProcessor` after a sequence of operations
+//! and surface them — e.g. a debug overlay that highlights products with
+//! failed clips, or a CI assertion that no failures occurred on a known-good
+//! fixture.
+//!
+//! The runtime behaviour is unchanged: failures are recorded *in addition*
+//! to (not instead of) the existing fallback. The kernel regression tests
+//! rely on these records.
+
+use std::cell::RefCell;
+use std::fmt;
+
+thread_local! {
+    /// Pending boolean failures from contexts that have no direct router
+    /// handle. Historically fed by `MappedItemProcessor`'s transient
+    /// `BooleanClippingProcessor` (deleted as dead code — every dispatch site
+    /// special-cased `IfcMappedItem` before it could ever be reached; see the
+    /// D5 dead-code sweep), so nothing pushes into this today. Kept + still
+    /// drained by `take_csg_failures` in case a future non-router boolean
+    /// context needs the same escape hatch. Think twice before adding one: a
+    /// thread-local is not scoped to a router, so records a router never
+    /// drains go to whichever router drains next on that thread. A transient
+    /// processor with a router-held PARENT has a better route out — see
+    /// `CsgSolidProcessor::take_failures` (#3821).
+    static PENDING_MAPPED_BOOL_FAILURES: RefCell<Vec<BoolFailure>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+/// Drain failures pushed from a context with no direct router handle (see
+/// `PENDING_MAPPED_BOOL_FAILURES`).
+pub fn take_pending_mapped_bool_failures() -> Vec<BoolFailure> {
+    PENDING_MAPPED_BOOL_FAILURES.with(|cell| std::mem::take(&mut *cell.borrow_mut()))
+}
+
+/// Which boolean operation produced the failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BoolOp {
+    Difference,
+    Union,
+    Intersection,
+    /// `IfcBooleanResult.Operator` was an unrecognised value — used by the
+    /// boolean processor when classifying a failure for an unknown operator
+    /// so the diagnostic doesn't mis-label the op as `Difference`.
+    Unknown,
+}
+
+impl fmt::Display for BoolOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BoolOp::Difference => f.write_str("DIFFERENCE"),
+            BoolOp::Union => f.write_str("UNION"),
+            BoolOp::Intersection => f.write_str("INTERSECTION"),
+            BoolOp::Unknown => f.write_str("UNKNOWN"),
+        }
+    }
+}
+
+/// Why a boolean operation failed or was skipped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BoolFailureReason {
+    /// HISTORICAL: at least one operand exceeded the deleted legacy BSP CSG
+    /// polygon cap. The pure-Rust exact kernel has no operand cap, so this is
+    /// no longer emitted by the boolean ops; the variant (and its JSON label)
+    /// is kept for the frozen diagnostics surface and void-router plumbing.
+    OperandTooLarge {
+        polys_a: usize,
+        polys_b: usize,
+    },
+    /// One or both operand meshes were empty before polygon extraction.
+    EmptyOperand,
+    /// Polygon extraction yielded an empty list (degenerate / non-finite vertices).
+    DegenerateOperand,
+    /// Operand bounding boxes don't overlap. Informational — host returned unchanged.
+    NoBoundsOverlap,
+    /// The CSG kernel returned malformed polygons (NaN / non-finite).
+    KernelOutputInvalid,
+    /// HISTORICAL: solid-vs-solid `IfcBooleanResult.DIFFERENCE` was not
+    /// attempted because the deleted legacy BSP could stack-overflow on
+    /// arbitrary solid combinations. No longer emitted — the exact kernel
+    /// always attempts the cut. Variant kept for the frozen label surface.
+    SolidSolidDifferenceSkipped,
+    /// `IfcPolygonalBoundedHalfSpace` prism-subtraction failed; the kernel
+    /// fell back to an unbounded plane clip, silently dropping the polygonal
+    /// boundary. The clip *is* applied but is a strict superset of the
+    /// requested cut.
+    PolygonalBoundedHalfSpaceFallback,
+    /// The chained-clip cutter prisms couldn't be unioned into one watertight
+    /// solid, so the single batched subtract (issue #960) was skipped and the
+    /// chain fell back to sequential per-cutter subtraction. The cuts *are*
+    /// applied, but abutting cutters may leave zero-thickness seam fins that
+    /// the batched path would have eliminated.
+    CutterUnionUnavailable,
+    /// `IfcBooleanResult` operator string didn't match any known op.
+    UnknownBooleanOperator(String),
+    /// The operand walk under one representation item entered more
+    /// boolean/CSG nodes than `processors::boolean::MAX_OPERAND_VISITS`
+    /// allows and was stopped. The item is dropped (the walk returns `Err`),
+    /// so this is the only trace of why. A shared SecondOperand re-meshed
+    /// down `m^levels` paths is the shape that gets here; a real item does
+    /// not.
+    OperandBudgetExhausted,
+    /// HISTORICAL: the deleted Manifold C++ kernel's `difference` returned
+    /// output implausibly small relative to the host (a Linux-x86_64-only
+    /// pathology). No longer emitted — the deterministic exact kernel
+    /// replaced Manifold. Variant kept for the frozen label surface.
+    ManifoldOutputDegenerate {
+        host_tris: usize,
+        result_tris: usize,
+    },
+    /// Catch-all for kernel-specific errors (free-form string).
+    KernelError(String),
+    /// `IfcBooleanResult.DIFFERENCE` produced an empty mesh from a non-empty
+    /// host. Almost always a buggy export — a clip plane authored AT the
+    /// wall's top with `AgreementFlag = .T.` (issue #821, Revit IFC2x3
+    /// TallBuilding.ifc) makes the half-space material region exactly cover
+    /// the wall body, so the strict-spec subtract yields nothing. The caller
+    /// falls back to the un-cut host (matching what BIMVision and similar
+    /// viewers do in practice) and records this so the loss surfaces in
+    /// diagnostics rather than as a silently missing element.
+    DifferenceEmptiedHost,
+    /// A boolean operand's `IfcRepresentationItem` type has no meshing branch
+    /// in `BooleanClippingProcessor::process_operand_checked`, so the operand
+    /// resolved to an EMPTY mesh. Carries the operand's IFC type name.
+    ///
+    /// As a FIRST operand this is a real element-geometry loss: the base solid
+    /// is empty, the whole boolean result is empty, and the element renders
+    /// nothing from that item. As a SECOND operand it means "unsupported
+    /// cutter" — the host renders un-cut, and the pre-existing `EmptyOperand`
+    /// record for the same step is also emitted (one record for the cause, one
+    /// for the consequence).
+    UnsupportedOperand(String),
+    /// #3440 step 2: the kernel result passed `validate_mesh` (finite,
+    /// in-bounds) but failed the directed-edge closure audit
+    /// (`topology_gate_reject` — same predicate `KernelError`'s step-1
+    /// informational record already checks) and was REJECTED rather than
+    /// merely flagged. Only ever constructed when this crate is built with
+    /// the `csg_topology_gate` feature, which is off by default and enabled
+    /// by nothing downstream — so this variant exists in every build (a
+    /// stable thing for consumers to match on, per the crate's convention for
+    /// its other rarely-emitted variants above) but is only ever actually
+    /// recorded in a `--features csg_topology_gate` build.
+    OpenTopologyRejected,
+    /// #3440 step 3: the kernel result passed `validate_mesh` AND the signed
+    /// closure audit, but carries an edge-multiplicity defect that audit
+    /// cannot express — an undirected edge used by more than two triangles, or
+    /// used twice the same way round (`edge_multiplicity_defects`). Rejected,
+    /// and the caller falls back exactly as it does for
+    /// `KernelOutputInvalid`.
+    ///
+    /// Like [`Self::OpenTopologyRejected`], only ever constructed under a
+    /// feature — its own `csg_manifold_gate`, kept separate from
+    /// `csg_topology_gate` so a census can attribute a flip to one defect
+    /// class rather than to whichever gate fired first. The variant exists in
+    /// every build, per this enum's convention for its other rarely-emitted
+    /// reasons.
+    ///
+    /// The gate reads a defect class benign tessellation cannot produce, so it
+    /// was tried as a default; the fallback a rejection reaches turned out to
+    /// be worse than the tear it replaces. The numbers behind that live in one
+    /// place — `csg_manifold_gate` in `Cargo.toml` — with the corpus sweep in
+    /// `tests/issue_3440_manifold_gate_census.rs`.
+    ///
+    /// Carries the two counts (as `OperandTooLarge` carries its operand sizes)
+    /// so the census can break the flip set down by defect class without a
+    /// second sweep: the two say different things about the kernel, and a bare
+    /// variant would force anyone measuring to re-derive them.
+    NonManifoldRejected {
+        /// Undirected edges used by more than two triangles.
+        over_used: usize,
+        /// Undirected edges used twice, both uses the same way round.
+        same_direction: usize,
+    },
+}
+
+impl BoolFailureReason {
+    /// Stable short label for per-reason aggregation. Single home shared by
+    /// the wasm console diagnostics and the server tracing summary so the
+    /// two surfaces cannot drift (Rust-first).
+    pub fn label(&self) -> &'static str {
+        match self {
+            BoolFailureReason::OperandTooLarge { .. } => "OperandTooLarge",
+            BoolFailureReason::EmptyOperand => "EmptyOperand",
+            BoolFailureReason::DegenerateOperand => "DegenerateOperand",
+            BoolFailureReason::NoBoundsOverlap => "NoBoundsOverlap",
+            BoolFailureReason::KernelOutputInvalid => "KernelOutputInvalid",
+            BoolFailureReason::SolidSolidDifferenceSkipped => "SolidSolidDifferenceSkipped",
+            BoolFailureReason::PolygonalBoundedHalfSpaceFallback => {
+                "PolygonalBoundedHalfSpaceFallback"
+            }
+            BoolFailureReason::CutterUnionUnavailable => "CutterUnionUnavailable",
+            BoolFailureReason::UnknownBooleanOperator(_) => "UnknownBooleanOperator",
+            BoolFailureReason::OperandBudgetExhausted => "OperandBudgetExhausted",
+            BoolFailureReason::ManifoldOutputDegenerate { .. } => "ManifoldOutputDegenerate",
+            BoolFailureReason::KernelError(_) => "KernelError",
+            BoolFailureReason::DifferenceEmptiedHost => "DifferenceEmptiedHost",
+            BoolFailureReason::OpenTopologyRejected => "OpenTopologyRejected",
+            BoolFailureReason::UnsupportedOperand(_) => "UnsupportedOperand",
+            BoolFailureReason::NonManifoldRejected { .. } => "NonManifoldRejected",
+        }
+    }
+}
+
+impl fmt::Display for BoolFailureReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BoolFailureReason::OperandTooLarge { polys_a, polys_b } => write!(
+                f,
+                "operand polygon counts ({polys_a}, {polys_b}) exceed BSP cap"
+            ),
+            BoolFailureReason::EmptyOperand => f.write_str("operand mesh empty"),
+            BoolFailureReason::DegenerateOperand => f.write_str("operand polygons degenerate"),
+            BoolFailureReason::NoBoundsOverlap => f.write_str("operand bounds disjoint"),
+            BoolFailureReason::KernelOutputInvalid => {
+                f.write_str("CSG kernel output had non-finite vertices")
+            }
+            BoolFailureReason::SolidSolidDifferenceSkipped => {
+                f.write_str("solid-vs-solid IfcBooleanResult.DIFFERENCE skipped (BSP unsafe)")
+            }
+            BoolFailureReason::PolygonalBoundedHalfSpaceFallback => f.write_str(
+                "IfcPolygonalBoundedHalfSpace degraded to unbounded plane clip",
+            ),
+            BoolFailureReason::CutterUnionUnavailable => f.write_str(
+                "cutter union not watertight; deferred to sequential per-cutter subtraction",
+            ),
+            BoolFailureReason::UnknownBooleanOperator(op) => {
+                write!(f, "unknown IfcBooleanResult operator '{op}'")
+            }
+            BoolFailureReason::OperandBudgetExhausted => f.write_str(
+                "boolean operand walk exhausted its per-item node visit budget; the item is dropped",
+            ),
+            BoolFailureReason::DifferenceEmptiedHost => f.write_str(
+                "DIFFERENCE removed the entire host; reverted to un-cut",
+            ),
+            BoolFailureReason::ManifoldOutputDegenerate {
+                host_tris,
+                result_tris,
+            } => write!(
+                f,
+                "Manifold difference returned implausibly small result ({result_tris} triangles from {host_tris}-triangle host) — fell back to BSP"
+            ),
+            BoolFailureReason::KernelError(msg) => write!(f, "kernel error: {msg}"),
+            BoolFailureReason::OpenTopologyRejected => f.write_str(
+                "CSG kernel output passed validate_mesh but failed the closure audit; rejected under csg_topology_gate (#3440)",
+            ),
+            BoolFailureReason::UnsupportedOperand(ty) => {
+                write!(f, "boolean operand type '{ty}' has no processor; operand meshed empty")
+            }
+            BoolFailureReason::NonManifoldRejected {
+                over_used,
+                same_direction,
+            } => write!(
+                f,
+                "CSG kernel output passed validate_mesh but carries {over_used} non-manifold and {same_direction} reversed-winding edge(s); rejected (#3440)"
+            ),
+        }
+    }
+}
+
+/// Single boolean / CSG failure record.
+///
+/// `product_id` is optional because the CSG kernel itself doesn't know which
+/// IFC product it's operating on — the router fills that in when it drains
+/// failures after processing an element.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoolFailure {
+    pub op: BoolOp,
+    pub reason: BoolFailureReason,
+    pub product_id: Option<u32>,
+}
+
+impl BoolFailure {
+    pub fn new(op: BoolOp, reason: BoolFailureReason) -> Self {
+        Self {
+            op,
+            reason,
+            product_id: None,
+        }
+    }
+
+    /// Attach an IFC product express ID. Used by the router after the CSG
+    /// kernel returns, since the kernel itself is product-agnostic.
+    pub fn with_product_id(mut self, product_id: u32) -> Self {
+        self.product_id = Some(product_id);
+        self
+    }
+}
+
+impl fmt::Display for BoolFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.product_id {
+            Some(id) => write!(f, "[product #{id}] {} failed: {}", self.op, self.reason),
+            None => write!(f, "{} failed: {}", self.op, self.reason),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_includes_operands() {
+        let f = BoolFailure::new(
+            BoolOp::Difference,
+            BoolFailureReason::OperandTooLarge {
+                polys_a: 36,
+                polys_b: 12,
+            },
+        );
+        let rendered = f.to_string();
+        assert!(rendered.contains("DIFFERENCE"));
+        assert!(rendered.contains("36"));
+        assert!(rendered.contains("12"));
+    }
+
+    #[test]
+    fn with_product_id_attaches_id() {
+        let f = BoolFailure::new(BoolOp::Union, BoolFailureReason::EmptyOperand)
+            .with_product_id(12345);
+        assert_eq!(f.product_id, Some(12345));
+        assert!(f.to_string().contains("12345"));
+    }
+
+    #[test]
+    fn solid_solid_skip_renders_meaningfully() {
+        let f = BoolFailure::new(BoolOp::Difference, BoolFailureReason::SolidSolidDifferenceSkipped);
+        let rendered = f.to_string();
+        assert!(rendered.contains("solid-vs-solid"));
+        assert!(rendered.contains("DIFFERENCE"));
+    }
+}

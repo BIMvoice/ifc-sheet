@@ -1,0 +1,140 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Spatial anchor for in-store builders — the set of references that any
+ * element being added to an existing parsed model needs in order to slot
+ * into the existing IFC graph correctly.
+ *
+ * Resolution from a parsed `IfcDataStore` lives in the backend layer
+ * (where `@ifc-lite/parser` is already a dependency); the builder
+ * functions in this module operate purely on these resolved ids.
+ */
+
+import type { RandomSource } from '@ifc-lite/encoding';
+
+export type SpatialAnchorSchema = 'IFC2X3' | 'IFC4' | 'IFC4X3' | 'IFC5';
+
+export interface SpatialAnchor {
+  /**
+   * IfcOwnerHistory expressId, or null when the model has none.
+   * IfcRoot.OwnerHistory is OPTIONAL from IFC4 onward — minimal files
+   * legitimately omit the entity, and builders emit `$` for it.
+   */
+  ownerHistoryId: number | null;
+  /** IfcGeometricRepresentationSubContext for 'Body' (or its IfcGeometricRepresentationContext fallback). */
+  bodyContextId: number;
+  /** IfcGeometricRepresentationSubContext for 'Axis' (or its IfcGeometricRepresentationContext fallback). */
+  axisContextId: number;
+  /** Root 3D IfcGeometricRepresentationContext, when resolved; optional for anchors constructed by callers. */
+  rootContextId?: number | null;
+  /** The target IfcBuildingStorey expressId. */
+  storeyId: number;
+  /** The IfcLocalPlacement that the storey itself sits on. New element placements are chained from this. */
+  storeyPlacementId: number;
+  /**
+   * Target schema. Builders use this to decide which optional STEP arguments
+   * to emit — e.g. `IfcColumn.PredefinedType` only exists from IFC4 onward.
+   * Defaults to `'IFC4'` when unset for backward compatibility.
+   */
+  schema?: SpatialAnchorSchema;
+  /**
+   * Model length-unit scale: metres per native unit (1 for a metre file,
+   * 0.001 for millimetres). Builder params are always metres (renderer
+   * frame); geometry coordinates are divided by this on emit so they land
+   * in the file's native unit. Defaults to 1 when unset. Without this, a
+   * space baked into a millimetre model exported 1000× too small (its
+   * mesh looked right in-session because that one is built in metres).
+   */
+  lengthUnitScale?: number;
+  /**
+   * Optional seeded randomness for the GlobalIds the builders emit
+   * (`@ifc-lite/encoding`'s `RandomSource`: a `Math.random`-style
+   * `() => number` in `[0, 1)`). Pass a seeded generator to make in-store
+   * builds byte-reproducible - the counterpart of `ProjectParams.GuidSource`
+   * on `IfcCreator`. Omit it for the default platform CSPRNG. A seeded
+   * source trades global uniqueness for reproducibility - only use one
+   * where that is the point.
+   */
+  guidRandom?: RandomSource;
+}
+
+function finiteRoundedLength(value: number): number {
+  if (!Number.isFinite(value)) throw new Error('Length conversion overflow: derived length must be finite');
+  // Above this bound decimal rounding itself would overflow. The number's
+  // representable precision already exceeds nine decimal places.
+  return Math.abs(value) <= Number.MAX_VALUE / 1e9 ? Math.round(value * 1e9) / 1e9 : value;
+}
+
+
+/**
+ * Convert a metre value to the anchor's native length unit for STEP emit.
+ * Rounded to 9 decimals to absorb the float noise the division introduces
+ * (2.8 / 0.001 = 2799.9999999999995 → 2800).
+ *
+ * Takes only `{ lengthUnitScale }` rather than a full `SpatialAnchor` so
+ * narrower anchor shapes (e.g. `drawing-markup.ts`'s `MarkupAnchor`, which
+ * has no `bodyContextId`/`axisContextId`/`storeyId` — markup geometry has no
+ * use for them) can share this one conversion instead of re-implementing it.
+ */
+export function toNativeLength(anchor: Pick<SpatialAnchor, 'lengthUnitScale'>, metres: number): number {
+  const scale = anchor.lengthUnitScale;
+  if (!Number.isFinite(metres)) throw new Error('Length must be finite');
+  if (!scale || !Number.isFinite(scale) || scale <= 0 || scale === 1) return metres;
+  return finiteRoundedLength(metres / scale);
+}
+
+/**
+ * Inverse of {@link toNativeLength}: convert a value stored in the anchor's
+ * native length unit back to metres. Used by read-side translators (e.g.
+ * `apps/viewer`'s drawing-markup reader) to invert a derived value a writer
+ * scaled with `toNativeLength` before storing it in a quantity set — the
+ * mathematical inverse of that function's rounding rule, kept next to it so
+ * a future change to the rounding constant cannot update one side without
+ * the other.
+ */
+export function fromNativeLength(anchor: Pick<SpatialAnchor, 'lengthUnitScale'>, native: number): number {
+  const scale = anchor.lengthUnitScale;
+  if (!Number.isFinite(native)) throw new Error('Native length must be finite');
+  if (!scale || !Number.isFinite(scale) || scale <= 0 || scale === 1) return native;
+  return finiteRoundedLength(native * scale);
+}
+
+/** 2D point variant of {@link toNativeLength}. */
+export function toNativePoint2(anchor: SpatialAnchor, p: readonly [number, number]): [number, number] {
+  return [toNativeLength(anchor, p[0]), toNativeLength(anchor, p[1])];
+}
+
+/** 3D point variant of {@link toNativeLength}. */
+export function toNativePoint3(anchor: SpatialAnchor, p: readonly [number, number, number]): [number, number, number] {
+  return [toNativeLength(anchor, p[0]), toNativeLength(anchor, p[1]), toNativeLength(anchor, p[2])];
+}
+
+/** The host an opening voids: which placement frame it is cut in, and how. */
+export type HostKind = 'wall' | 'slab';
+
+/**
+ * Axis-aligned bounds of a host's Body geometry, expressed in the host's own
+ * `ObjectPlacement` frame and the file's native length unit. For a wall that
+ * frame is the usual `X` along the axis, `Y` across the thickness, `Z` up; for
+ * a slab `Z` spans the thickness.
+ */
+export interface HostBounds {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
+/**
+ * A `SpatialAnchor` for an element that is cut into (or fills an opening in)
+ * an existing host. The storey fields are the HOST's containing storey, so a
+ * filling lands in the same storey as the element it is hosted by.
+ */
+export interface HostAnchor extends SpatialAnchor {
+  hostId: number;
+  hostKind: HostKind;
+  /** The host's own IfcLocalPlacement; openings are placed relative to it. */
+  hostPlacementId: number;
+  /** `null` when the host's Body is not a shape the resolver can bound. */
+  hostBounds: HostBounds | null;
+}

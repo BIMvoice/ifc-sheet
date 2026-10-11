@@ -1,0 +1,141 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Laying out a manual-validation report block (#6401) on the document's
+ * page model: a heading, an overall ring with the four counts in words,
+ * then each group (its own ring, name and counts) followed by its checks.
+ *
+ * PDF text is grey only, so every verdict is printed as a word ("PASS",
+ * "WARNING", …); colour appears only in the rings, which the PDF draws
+ * through the same svg2pdf path charts use, and which always sit next to
+ * their counts in words. A check does not split across pages (its verdict,
+ * text, guidance and comment move together) unless it is taller than a page.
+ */
+
+import { blockTitle, blockTitleStyle } from './block-title.js';
+import { blockTitleItems } from './compose-block-title.js';
+import { resolveEnglish } from '@/i18n/registry';
+import { capturedDocumentNumber, type DocumentLabelFormatter } from './document-labels.js';
+import { reportStamp } from './report-provenance.js';
+import { layoutReportProvenance, REPORT_PROVENANCE_LINE_HEIGHT, wrappedReportProvenance, type WrapLines } from './compose-report-provenance.js';
+import type { LayoutCursor, TextDrawnItem } from './compose-table.js';
+import type { ManualReportBlock, ManualReportCounts, ManualReportItem } from './manual-report-types.js';
+
+/** A ring chart on the page; the PDF renders `ringSvg(counts, size)` into it. */
+export interface RingDrawnItem { kind: 'ring'; x: number; y: number; size: number; counts: ManualReportCounts; role?: 'overall' | 'group' }
+
+export type ManualReportLayoutBlock = ManualReportBlock;
+
+const TITLE_HEIGHT = 18;
+const META_HEIGHT = 14;
+const OVERALL_RING = 44;
+const GROUP_RING = 16;
+const GROUP_HEADER_HEIGHT = 24;
+const LINE = 11;
+const VERDICT_COLUMN = 76;
+
+export const countsLine = (c: ManualReportCounts, t: DocumentLabelFormatter = resolveEnglish): string =>
+  `${t('manualValidation.verdict.pass')} ${capturedDocumentNumber(t, c.pass) ?? c.pass} · ${t('manualValidation.verdict.warning')} ${capturedDocumentNumber(t, c.warning) ?? c.warning} · ${t('manualValidation.verdict.fail')} ${capturedDocumentNumber(t, c.fail) ?? c.fail} · ${t('manualValidation.verdict.unanswered')} ${capturedDocumentNumber(t, c.unanswered) ?? c.unanswered}`;
+
+const passedLine = (c: ManualReportCounts, t: DocumentLabelFormatter): string =>
+  t('manualValidation.report.passed', { percent: c.total > 0 ? Math.floor((c.pass / c.total) * 100) : 0, pass: capturedDocumentNumber(t, c.pass) ?? c.pass, total: capturedDocumentNumber(t, c.total) ?? c.total });
+
+interface ItemLines { text: string[]; description: string[]; comment: string[]; height: number }
+
+function itemLines(item: ManualReportItem, width: number, wrap: WrapLines, detailed: boolean, t: DocumentLabelFormatter): ItemLines {
+  const text = wrap(item.text.trim() || t('manualValidation.item.untitled'), width, 9, false);
+  const description = detailed && item.description ? wrap(item.description, width, 8, false) : [];
+  const comment = detailed && item.comment ? wrap(t('document.print.comment', { comment: item.comment }), width, 8, false) : [];
+  return { text, description, comment, height: (text.length + description.length + comment.length) * LINE + 5 };
+}
+
+export function layoutManualReport(
+  block: ManualReportLayoutBlock,
+  cursor: LayoutCursor,
+  contentW: number,
+  blockGap: number,
+  wrap: WrapLines,
+  pushRing: (item: RingDrawnItem) => void,
+  t: DocumentLabelFormatter = resolveEnglish,
+): void {
+  const text = (item: Omit<TextDrawnItem, 'kind'>): void => cursor.push({ kind: 'text', ...item });
+  const itemX = cursor.x + VERDICT_COLUMN;
+  const itemW = contentW - VERDICT_COLUMN;
+  const benchmarks = block.benchmarks !== false;
+  const detailed = block.variant !== 'compact';
+  const groupHeaderHeight = benchmarks ? GROUP_HEADER_HEIGHT : META_HEIGHT;
+
+  // Heading, meta line and the overall ring move together.
+  const stamp = reportStamp(block);
+  const stampHeight = stamp ? META_HEIGHT : 0;
+  const scope = stamp?.models;
+  const scopeLines = wrappedReportProvenance(scope ? t('validationPanel.history.models', { models: scope }) : '', contentW, wrap);
+  const firstItem = block.groups[0]?.items[0];
+  const keepAfter = benchmarks ? OVERALL_RING + 10 + (block.groups.length === 0 ? META_HEIGHT : 0)
+    : block.groups.length ? groupHeaderHeight + (firstItem ? itemLines(firstItem, itemW, wrap, detailed, t).height : LINE + 5) : META_HEIGHT;
+  const titleHeight = TITLE_HEIGHT + blockTitleStyle(block).extra;
+  cursor.ensure(Math.min(titleHeight + stampHeight + scopeLines.length * REPORT_PROVENANCE_LINE_HEIGHT + keepAfter, cursor.bottom - cursor.top));
+  const title = blockTitle(block, t('manualValidation.report.heading', { name: block.checklistName.trim() || t('manualValidation.name.placeholder') }));
+  cursor.push(...blockTitleItems(block, title, cursor.x, cursor.y, contentW, cursor.truncate));
+  cursor.y += titleHeight;
+  if (stamp) {
+    const meta = stamp.modelName ? t('manualValidation.report.recordedAtModel', { model: stamp.modelName, timestamp: stamp.generatedAt }) : t('manualValidation.report.recordedAt', { timestamp: stamp.generatedAt });
+    text({ x: cursor.x, y: cursor.y + 10, size: 8, bold: false, gray: 130, text: cursor.truncate(meta, contentW, 8, false) });
+    cursor.y += stampHeight;
+  }
+  layoutReportProvenance(scopeLines, cursor, keepAfter, 'report-model-scope');
+
+  if (benchmarks) {
+    cursor.y += 4;
+    pushRing({ kind: 'ring', x: cursor.x, y: cursor.y, size: OVERALL_RING, counts: block.summary, role: 'overall' });
+    const besideX = cursor.x + OVERALL_RING + 12;
+    const besideW = contentW - OVERALL_RING - 12;
+    text({ x: besideX, y: cursor.y + 16, size: 9.5, bold: true, gray: 0, text: cursor.truncate(passedLine(block.summary, t), besideW, 9.5, true) });
+    text({ x: besideX, y: cursor.y + 30, size: 8.5, bold: false, gray: 60, text: cursor.truncate(countsLine(block.summary, t), besideW, 8.5, false) });
+    cursor.y += OVERALL_RING + 6;
+  }
+
+  if (block.groups.length === 0) {
+    text({ x: cursor.x, y: cursor.y + 10, size: 9, bold: false, gray: 130, text: t('manualValidation.report.noGroups') });
+    cursor.y += META_HEIGHT;
+  }
+
+  for (const group of block.groups) {
+    const lines = group.items.map((item) => itemLines(item, itemW, wrap, detailed, t));
+    // A group heading is never left alone at the bottom of a page.
+    cursor.ensure(groupHeaderHeight + (lines[0]?.height ?? 0));
+    if (benchmarks) pushRing({ kind: 'ring', x: cursor.x, y: cursor.y + 2, size: GROUP_RING, counts: group.counts, role: 'group' });
+    const nameX = benchmarks ? cursor.x + GROUP_RING + 8 : cursor.x;
+    const nameW = contentW - (nameX - cursor.x);
+    text({ x: nameX, y: cursor.y + 10, size: 10, bold: true, gray: 0, text: cursor.truncate(group.name.trim() || t('manualValidation.report.untitledGroup'), nameW, 10, true) });
+    if (benchmarks) text({ x: nameX, y: cursor.y + 20, size: 8, bold: false, gray: 60, text: cursor.truncate(countsLine(group.counts, t), nameW, 8, false) });
+    cursor.y += groupHeaderHeight;
+
+    group.items.forEach((item, i) => {
+      const l = lines[i];
+      cursor.ensure(Math.min(l.height, cursor.bottom - cursor.top));
+      text({ x: cursor.x + 8, y: cursor.y + 9, size: 7.5, bold: true, gray: item.status === null ? 130 : 0, text: t(`manualValidation.verdict.${item.status ?? 'unanswered'}`).toUpperCase() });
+      const rows: Array<[string, number, number]> = [
+        ...l.text.map((line): [string, number, number] => [line, 9, 0]),
+        ...l.description.map((line): [string, number, number] => [line, 8, 130]),
+        ...l.comment.map((line): [string, number, number] => [line, 8, 60]),
+      ];
+      // Only a check taller than a whole page continues onto the next one, line by line.
+      for (const [line, size, gray] of rows) {
+        if (cursor.y + LINE > cursor.bottom) cursor.newPage();
+        text({ x: itemX, y: cursor.y + 9, size, bold: false, gray, text: line });
+        cursor.y += LINE;
+      }
+      cursor.y += 5;
+    });
+    if (group.items.length === 0) {
+      text({ x: itemX, y: cursor.y + 9, size: 8, bold: false, gray: 130, text: t('document.print.noGroupChecks') });
+      cursor.y += LINE + 5;
+    }
+    cursor.y += 4;
+  }
+
+  cursor.y += blockGap;
+}

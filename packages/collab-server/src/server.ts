@@ -1,0 +1,541 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/** Websocket sync server entry point. */
+
+import * as http from 'node:http';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { WebSocketServer } from 'ws';
+import { RoomManager, type VerifyMessageFn } from './room-manager.js';
+import { handleConnection } from './connection.js';
+import { startExpirySweep } from './principal-expiry.js';
+import { MemoryPersistence, type Persistence } from './persistence.js';
+import { allowAnonymousEditor, type AuthenticateFn, type Principal } from './auth.js';
+import { type AuditSink } from './audit-log.js';
+import { type RateLimitOptions } from './rate-limit.js';
+import { handleBlobRequest, type BlobAuthorizeFn } from './blob-route.js';
+import { InMemoryBlobStorage, type ServerBlobStorage } from './blob-storage.js';
+import { handleTokenMintRequest, type TokenEndpointOptions } from './room-token.js';
+import { handleKickRequest, handleReleaseRequest, handleRevokeRequest } from './room-admin-routes.js';
+import type { KickEndpointOptions, ReleaseEndpointOptions, RevokeEndpointOptions } from './room-admin-routes.js';
+import { MemoryLayerRegistry, type LayerRegistryStore } from './layer-registry.js';
+import type { RegistryWebhook } from './registry-webhooks.js';
+import {
+  handleLayerRegistryRequest,
+  type RegistryAuthorizeFn,
+} from './layer-registry-route.js';
+import { defaultMetrics, MetricsRegistry } from './metrics.js';
+import { parseRequestUrl } from './request-target.js';
+import { makeBlobAuthorizer, makeRegistryAuthorizer } from './http-authorizers.js';
+
+/**
+ * Cross-origin policy for the HTTP routes (`/blobs`, `/collab/*`, `/healthz`,
+ * `/metrics`). The viewer is typically served from a different origin than the
+ * collab-server, so a browser `fetch()`/`PUT` to the blob route needs
+ * `Access-Control-Allow-*` headers and an `OPTIONS` preflight response —
+ * without them the WebSocket doc syncs but geometry blobs are blocked, so
+ * recipients see an empty model.
+ */
+export interface CorsOptions {
+  /**
+   * Allowed origin(s). `'*'` or omitted reflects whatever `Origin` the
+   * request carries (permissive — fine for dev and same-trust deployments).
+   * An explicit string or array restricts to those origins; a non-matching
+   * origin gets no CORS headers (and the browser blocks the request).
+   */
+  origin?: '*' | string | string[];
+}
+
+/** Headers a browser blob client (`HttpBlobStore`) sends; allowed on preflight. */
+const CORS_ALLOW_HEADERS = 'Content-Type, Authorization, Accept, X-Blob-Hash';
+const CORS_ALLOW_METHODS = 'GET, HEAD, PUT, POST, DELETE, OPTIONS';
+const CORS_EXPOSE_HEADERS = 'X-Blob-Hash, Content-Length';
+
+/**
+ * Resolve the `Access-Control-Allow-Origin` value for a request, or `null`
+ * when the origin isn't allowed (no CORS headers are then written).
+ */
+function resolveAllowedOrigin(
+  cors: CorsOptions | false | undefined,
+  requestOrigin: string | undefined,
+): string | null {
+  if (cors === false) return null;
+  const origin = cors?.origin;
+  // Permissive default: reflect the caller's Origin so credentialed and
+  // credentialless (COEP) browser requests both work. Falls back to '*' for
+  // non-browser callers that send no Origin header.
+  if (origin === undefined || origin === '*') return requestOrigin ?? '*';
+  const allow = Array.isArray(origin) ? origin : [origin];
+  if (requestOrigin && allow.includes(requestOrigin)) return requestOrigin;
+  return null;
+}
+
+/** Write CORS headers onto a response. Returns true if cross-origin is allowed. */
+function applyCors(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  cors: CorsOptions | false | undefined,
+): boolean {
+  const allowed = resolveAllowedOrigin(cors, req.headers.origin);
+  if (allowed === null) return false;
+  res.setHeader('Access-Control-Allow-Origin', allowed);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', CORS_ALLOW_METHODS);
+  res.setHeader('Access-Control-Allow-Headers', CORS_ALLOW_HEADERS);
+  res.setHeader('Access-Control-Expose-Headers', CORS_EXPOSE_HEADERS);
+  res.setHeader('Access-Control-Max-Age', '86400');
+  // Lets the blob bytes be read by a COEP `credentialless`/`require-corp` page.
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  return true;
+}
+
+export interface StartCollabServerOptions {
+  port?: number;
+  /**
+   * Application-level keepalive period in ms (default 15s). Exposed so tests
+   * can observe the keepalive without waiting on the real cadence; production
+   * callers should leave it alone. See `Room.sendKeepalive`.
+   */
+  keepaliveIntervalMs?: number;
+  host?: string;
+  persistence?: Persistence;
+  authenticate?: AuthenticateFn;
+  maxRooms?: number;
+  compactEvery?: number;
+  /** Pre-built http server to attach to instead of creating one. */
+  server?: http.Server;
+  /** Append-only audit sink. Default: drop all events. */
+  auditSink?: AuditSink;
+  /** Per-peer rate limit. Function form lets you tune by role/user. */
+  rateLimit?: RateLimitOptions | ((principal: Principal) => RateLimitOptions);
+  /**
+   * Pluggable blob storage for the `/blobs/...` route. Default:
+   * in-memory. Pass a custom `ServerBlobStorage` to back with S3 or
+   * filesystem in production.
+   */
+  blobStorage?: ServerBlobStorage;
+  /** Reject blob PUTs above this size (default 100 MB). */
+  blobMaxBytes?: number;
+  /**
+   * Authorizer for the `/blobs` route. When omitted it defaults to one
+   * derived from `authenticate` so the blob route shares the websocket
+   * sync token (a missing/invalid token is rejected, and PUT/DELETE
+   * additionally require write capability). With the anonymous default
+   * `authenticate`, blob access stays anonymous — matching the WS path.
+   * Pass `null` to explicitly disable blob authorization.
+   */
+  authorizeBlob?: BlobAuthorizeFn | null;
+  /**
+   * Registry authorizer override. The default adapts `authenticate` with a
+   * pseudo-room, which room-BOUND token schemes can never satisfy — those
+   * deployments supply their own (see `createRoomTokenRegistryAuthorizer`).
+   * `null` disables auth (anonymous registry).
+   */
+  authorizeRegistry?: RegistryAuthorizeFn | null;
+  /**
+   * Require a bearer token (compared against this shared secret) for the
+   * `/metrics` diagnostics endpoint, which labels gauges with raw room
+   * IDs. `/healthz` stays open for liveness probes but omits room detail
+   * unless this token is presented. Defaults to `COLLAB_METRICS_TOKEN`.
+   */
+  metricsToken?: string;
+  /**
+   * Unload rooms that have had zero peers for this many ms (default
+   * disabled). Persistence keeps the durable copy; rehydrate on next
+   * connect.
+   */
+  idleUnloadMs?: number;
+  /** Metrics registry to publish at `/metrics`. Defaults to the package singleton. */
+  metrics?: MetricsRegistry;
+  /**
+   * Optional per-message verifier (anti-replay HMAC etc.). Runs before
+   * rate limit / role check. Returning `{ ok: false }` audits as
+   * `reject` with the reason and drops the message.
+   */
+  verifyMessage?: VerifyMessageFn;
+  /**
+   * Enable the `POST /collab/token` mint route for link-based sharing.
+   * Omit to leave the route disabled (404). Pair with
+   * `authenticate: createRoomTokenAuthenticator({ secret })` so connections
+   * are verified against the same secret.
+   */
+  tokenEndpoint?: TokenEndpointOptions;
+  /**
+   * Enable the `POST /collab/revoke` route so an admin can invalidate a share
+   * link (its `jti` is added to a deny-list the authenticator's `isRevoked`
+   * consults). Omit to leave the route disabled (404).
+   */
+  revokeEndpoint?: RevokeEndpointOptions;
+  /**
+   * Enable the `POST /collab/kick` route so an admin can force-disconnect a
+   * peer by awareness clientId. The server binds the kick to its room manager;
+   * only the verifying `secret` is supplied here. Omit to disable (404).
+   */
+  kickEndpoint?: Pick<KickEndpointOptions, 'secret' | 'isRevoked'>;
+  /** Enable `POST /collab/release` (hand back an unused fresh-room claim). Omit to disable (404). */
+  releaseEndpoint?: ReleaseEndpointOptions;
+  /**
+   * Cross-origin access for the HTTP routes. Default: enabled with origin
+   * reflection (permissive). Pass an allow-list to restrict, or `false` to
+   * disable entirely (e.g. when a reverse proxy owns CORS). Only applies to
+   * the server this function creates — ignored when you pass your own
+   * `server`.
+   */
+  cors?: CorsOptions | false;
+  /**
+   * Mount the layer-registry routes (`/api/v1/layers|refs|reviews`,
+   * 10-registry.md): push/pull content-addressed layers, refs with
+   * server-side merge-policy enforcement, and review objects. Off by
+   * default. Pass `true` for an in-memory registry, or supply a store.
+   * Authorization derives from `authenticate` exactly like the blob
+   * route: any authenticated principal may read, writes require write
+   * capability, and the principal's userId becomes the acting resolver
+   * for merges and waivers.
+   */
+  layerRegistry?: boolean | { store?: LayerRegistryStore; maxBytes?: number; webhooks?: RegistryWebhook[] };
+}
+
+export interface CollabServerHandle {
+  readonly url: string;
+  readonly httpServer: http.Server;
+  readonly wss: WebSocketServer;
+  readonly roomManager: RoomManager;
+  stop(): Promise<void>;
+}
+
+/**
+ * Application-level keepalive period. Must stay comfortably under
+ * y-websocket's hardcoded 30s `messageReconnectTimeout`; 15s matches the
+ * awareness renewal cadence the client's watchdog was written around.
+ * See `Room.sendKeepalive`.
+ */
+const KEEPALIVE_INTERVAL_MS = 15_000;
+
+/**
+ * The watchdog this keepalive exists to feed. y-websocket closes a connection
+ * after this long with no inbound message, and it is a module-level const there
+ * with no per-provider override, so we cannot widen it.
+ */
+const CLIENT_RECONNECT_TIMEOUT_MS = 30_000;
+
+/**
+ * Largest keepalive period that can actually keep a connection alive.
+ *
+ * Merely being under {@link CLIENT_RECONNECT_TIMEOUT_MS} is not enough. A
+ * period of 29_999ms against a 30_000ms watchdog leaves 1ms for timer
+ * scheduling, serialisation and network transit, so the frame routinely lands
+ * after the deadline and the client disconnects anyway. The margin below has
+ * to cover a slow hop and an event loop that is busy, or the keepalive is
+ * configured and still useless.
+ */
+const MAX_KEEPALIVE_INTERVAL_MS = 25_000;
+
+/**
+ * Validate a configured keepalive period, rejecting values that would silently
+ * defeat it in EITHER direction.
+ *
+ * Too small is the classic footgun: `setInterval` coerces 0, negative and
+ * non-finite delays to about 1ms, so a typo turns the keepalive into a flood.
+ * Too large is the subtler one and is specific to this feature: a period that
+ * does not clear the client's watchdog with margin leaves the server looking
+ * correctly configured while the disconnect loop it exists to prevent comes
+ * back. Both fail loudly instead.
+ */
+function resolveKeepaliveMs(configured: number | undefined): number {
+  if (configured === undefined) return KEEPALIVE_INTERVAL_MS;
+  if (
+    !Number.isFinite(configured) ||
+    configured <= 0 ||
+    configured > MAX_KEEPALIVE_INTERVAL_MS
+  ) {
+    throw new Error(
+      `[collab-server] keepaliveIntervalMs must be a finite number in (0, ${MAX_KEEPALIVE_INTERVAL_MS}]; ` +
+        `got ${configured}. The client closes after ${CLIENT_RECONNECT_TIMEOUT_MS}ms of silence, ` +
+        'so the period must clear that with margin for transit and scheduling.',
+    );
+  }
+  return configured;
+}
+
+export async function startCollabServer(
+  opts: StartCollabServerOptions = {},
+): Promise<CollabServerHandle> {
+  const persistence = opts.persistence ?? new MemoryPersistence();
+  const authenticate = opts.authenticate ?? allowAnonymousEditor;
+  const roomManager = new RoomManager({
+    persistence,
+    maxRooms: opts.maxRooms,
+    compactEvery: opts.compactEvery,
+    auditSink: opts.auditSink,
+    rateLimit: opts.rateLimit,
+    idleUnloadMs: opts.idleUnloadMs,
+    verifyMessage: opts.verifyMessage,
+  });
+  const expirySweep = startExpirySweep(roomManager); // #3441; see principal-expiry.ts
+
+  const blobStorage = opts.blobStorage ?? new InMemoryBlobStorage();
+  // Default the blob authorizer to one that reuses the WS `authenticate`
+  // hook so blobs share the same token scheme. `null` disables it.
+  const authorizeBlob: BlobAuthorizeFn | undefined =
+    opts.authorizeBlob === null
+      ? undefined
+      : opts.authorizeBlob ?? makeBlobAuthorizer(authenticate);
+  // Registry: opt-in; authorization derives from `authenticate` like the
+  // blob route (anonymous default stays anonymous, real auth gates writes).
+  const layerRegistry: LayerRegistryStore | undefined = opts.layerRegistry
+    ? typeof opts.layerRegistry === 'object' && opts.layerRegistry.store
+      ? opts.layerRegistry.store
+      : new MemoryLayerRegistry()
+    : undefined;
+  const authorizeRegistry: RegistryAuthorizeFn | undefined = !layerRegistry
+    ? undefined
+    : opts.authorizeRegistry === null
+      ? undefined
+      : opts.authorizeRegistry ?? makeRegistryAuthorizer(authenticate);
+  // Validate at STARTUP, not per connection: a throw inside the connection
+  // handler is swallowed by its own .catch, so a misconfigured server would
+  // come up healthy and only misbehave once someone connected.
+  const keepaliveIntervalMs = resolveKeepaliveMs(opts.keepaliveIntervalMs);
+  const metricsToken = opts.metricsToken ?? process.env.COLLAB_METRICS_TOKEN;
+  const metrics = opts.metrics ?? defaultMetrics;
+  const peersGauge = metrics.gauge(
+    'collab_room_peers',
+    'Currently connected peers per room',
+  );
+  const roomsGauge = metrics.gauge('collab_rooms', 'Currently loaded rooms');
+  const updatesCounter = metrics.counter(
+    'collab_updates_total',
+    'Y updates accepted by the server',
+  );
+  const rejectsCounter = metrics.counter(
+    'collab_rejects_total',
+    'Update messages rejected (rate-limit / role / replay)',
+  );
+
+  const httpServer =
+    opts.server ??
+    http.createServer(async (req, res) => {
+      try {
+        const reqUrl = parseRequestUrl(req.url);
+        if (!reqUrl) { res.writeHead(400).end(); return; } // unparseable target: this client's error
+        const pathname = reqUrl.pathname;
+        applyCors(req, res, opts.cors);
+        // Preflight: answer OPTIONS before any route so cross-origin PUT/HEAD/
+        // DELETE (and GET-with-Authorization) to /blobs aren't rejected.
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+        // Room IDs encode tenant project/model paths, so room-identifying
+        // diagnostics detail is only surfaced to a caller presenting the
+        // metrics token. When no token is configured, behaviour is unchanged
+        // (open) — deployers opt in to gating by setting the token.
+        const diagAuthorized = !metricsToken || isMetricsAuthorized(req, metricsToken);
+        if (pathname === '/healthz') {
+          // Liveness probes must reach /healthz unauthenticated, but the
+          // live room count leaks cross-tenant scale — only include it when
+          // the caller is authorized (or when no token gates diagnostics).
+          const body: Record<string, unknown> = { ok: true };
+          if (diagAuthorized) body.rooms = roomManager.list().length;
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(body));
+          return;
+        }
+        if (pathname === '/metrics') {
+          if (!diagAuthorized) {
+            // /metrics labels gauges with raw roomIds (tenant project/model
+            // paths). Reject rather than leak them; never populate the
+            // registry with room labels on the unauthorized path.
+            res.writeHead(401, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ error: 'unauthorized' }));
+            return;
+          }
+          const stats = await roomManager.stats();
+          roomsGauge.set(stats.length);
+          // Reset first — keyed by peer-chosen roomId, an unloaded room would otherwise report a stale peer count forever.
+          peersGauge.reset();
+          for (const s of stats) peersGauge.set(s.peerCount, { room: s.roomId });
+          res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' });
+          res.end(metrics.render());
+          return;
+        }
+        // Token mint route: POST /collab/token (link-based sharing).
+        if (opts.tokenEndpoint && pathname === '/collab/token') {
+          const handled = await handleTokenMintRequest(req, res, opts.tokenEndpoint);
+          if (handled) return;
+        }
+        // Revoke route: POST /collab/revoke (admin invalidates a share link).
+        if (opts.revokeEndpoint && pathname === '/collab/revoke') {
+          const handled = await handleRevokeRequest(req, res, opts.revokeEndpoint);
+          if (handled) return;
+        }
+        // Kick route: POST /collab/kick (admin force-disconnects a peer).
+        if (opts.kickEndpoint && pathname === '/collab/kick') {
+          const handled = await handleKickRequest(req, res, {
+            secret: opts.kickEndpoint.secret,
+            isRevoked: opts.kickEndpoint.isRevoked,
+            kick: async (room, clientId) => {
+              const pending = roomManager.peek(room);
+              if (!pending) return false;
+              const { kicked, jti } = (await pending).kickClient(clientId);
+              // Also revoke the peer's token so their y-websocket can't just
+              // reconnect with it. Requires the revoke endpoint's deny-list.
+              if (kicked && jti && opts.revokeEndpoint) {
+                await opts.revokeEndpoint.recordRevocation(jti, room);
+              }
+              return kicked;
+            },
+          });
+          if (handled) return;
+        }
+        if (opts.releaseEndpoint && pathname === '/collab/release') {
+          if (await handleReleaseRequest(req, res, opts.releaseEndpoint)) return;
+        }
+        // Blob route: PUT / GET / HEAD / DELETE on /blobs/<hash>, GET /blobs.
+        if (pathname.startsWith('/blobs')) {
+          const handled = await handleBlobRequest(req, res, {
+            storage: blobStorage,
+            maxBytes: opts.blobMaxBytes,
+            authorize: authorizeBlob,
+          });
+          if (handled) return;
+        }
+        // Layer registry (10-registry.md): /api/v1/layers|refs|reviews.
+        if (layerRegistry && pathname.startsWith('/api/v1/')) {
+          const handled = await handleLayerRegistryRequest(req, res, {
+            registry: layerRegistry,
+            authorize: authorizeRegistry,
+            ...(typeof opts.layerRegistry === 'object' && opts.layerRegistry.maxBytes !== undefined
+              ? { maxBytes: opts.layerRegistry.maxBytes }
+              : {}),
+            ...(typeof opts.layerRegistry === 'object' && opts.layerRegistry.webhooks !== undefined
+              ? { webhooks: opts.layerRegistry.webhooks }
+              : {}),
+          });
+          if (handled) return;
+        }
+        res.writeHead(404);
+        res.end();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[collab-server] http handler error:', err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end();
+        }
+      }
+    });
+
+  // Surface the counters on the manager so the room can bump them in
+  // its update / reject paths. Done as opaque setters to keep
+  // RoomManager from importing the metrics module directly.
+  roomManager.setCounters({
+    update: () => updatesCounter.inc(),
+    reject: (reason: string) => rejectsCounter.inc(1, { reason }),
+  });
+
+  // Defense-in-depth: cap the raw frame size at the ws layer so an
+  // oversized write/awareness frame is dropped before it reaches the
+  // room-manager decode + per-message size guards. Sized above the 8 MB
+  // sync write-frame ceiling enforced in room-manager.
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
+
+  httpServer.on('upgrade', (req, socket, head) => {
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      // handleConnection runs async setup (room load, auth callback,
+      // persistence open). If it rejects — e.g. RoomManager.getOrCreate
+      // throws on room-cap or persistence failure — we previously
+      // discarded the promise with `void`, leaving the socket open and
+      // surfacing as a process-level unhandledRejection. Catch the error,
+      // log it, and close the socket with a non-1000 code so the client
+      // sees a deterministic shutdown.
+      handleConnection(ws, req, {
+        roomManager,
+        authenticate,
+        keepaliveIntervalMs,
+        reject: (reason) => rejectsCounter.inc(1, { reason }),
+      }).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error('[collab-server] connection setup failed:', err);
+        try {
+          if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+            // 1011 = server error per RFC 6455
+            ws.close(1011, 'connection setup failed');
+          }
+        } catch {
+          // ignore close errors
+        }
+      });
+    });
+  });
+
+  if (!opts.server) {
+    await new Promise<void>((resolve, reject) => {
+      httpServer.once('error', reject);
+      httpServer.listen(opts.port ?? 1234, opts.host ?? '0.0.0.0', () => {
+        httpServer.off('error', reject);
+        resolve();
+      });
+    });
+  }
+
+  const address = httpServer.address();
+  const url =
+    typeof address === 'object' && address
+      ? `ws://${opts.host ?? '127.0.0.1'}:${address.port}`
+      : `ws://${opts.host ?? '127.0.0.1'}:${opts.port ?? 1234}`;
+
+  return {
+    url,
+    httpServer,
+    wss,
+    roomManager,
+    async stop() {
+      expirySweep.stop();
+      await new Promise<void>((resolve) => wss.close(() => resolve()));
+      if (!opts.server) {
+        await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+      }
+      await roomManager.unloadAll();
+    },
+  };
+}
+
+/**
+ * Lift the bearer credential from a diagnostics request — `Authorization`
+ * header only. Plain-HTTP diagnostics endpoints (`/metrics`) deliberately do
+ * NOT accept `?token=`: a query-string secret leaks via access logs, reverse
+ * proxies, traces, and copied URLs. (The WebSocket path keeps its `?token=`
+ * fallback because browsers can't set custom handshake headers.)
+ */
+function extractDiagToken(req: http.IncomingMessage): string | undefined {
+  const header = req.headers['authorization'];
+  if (typeof header === 'string') {
+    const m = /^Bearer\s+(.+)$/i.exec(header.trim());
+    if (m) return m[1];
+  }
+  return undefined;
+}
+
+/**
+ * Constant-time check that the request carries the configured metrics
+ * token. Callers gate this on `metricsToken` being set.
+ */
+function isMetricsAuthorized(
+  req: http.IncomingMessage,
+  metricsToken: string,
+): boolean {
+  const presented = extractDiagToken(req);
+  if (typeof presented !== 'string') return false;
+  // Compare in constant time WITHOUT branching on length first: returning early
+  // on a length mismatch is a timing/length oracle. Hash both sides to a fixed
+  // 32-byte digest so `timingSafeEqual` always runs on equal-length buffers and
+  // the comparison time is independent of the presented token's length/content.
+  const a = createHash('sha256').update(presented).digest();
+  const b = createHash('sha256').update(metricsToken).digest();
+  return timingSafeEqual(a, b);
+}
+
+export { FilePersistence, MemoryPersistence } from './persistence.js';

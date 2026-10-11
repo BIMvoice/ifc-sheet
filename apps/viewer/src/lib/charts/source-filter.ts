@@ -1,0 +1,155 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * A chart's own source filter (#4946): selector text, read the SAME way the
+ * search Filter tab reads it (`readSelector`) and run through the SAME
+ * groups-aware evaluator every selector-driven feature runs
+ * (`evaluateFilterGroupsFederated`). There is deliberately no second matcher
+ * for charts to drift from the first.
+ *
+ * `readChartFilter` applies the chart's all-or-nothing reading rule: a
+ * parse error, a reading with no rules, or ANY unsupported construct is
+ * refused outright rather than run on the readable remainder — a chart that
+ * silently narrowed to what it could read would be the #4091 defect class
+ * over again, just one field over. `resolveChartFilter` runs a refused
+ * reading's message as a thrown `Error`, which is what the resolution hook
+ * (`useChartSourceFilters`) turns into the card's error state.
+ */
+import { trimSelectorWhitespace } from '@ifc-lite/query';
+import { readSelector } from '@/lib/search/selector-to-rules';
+import { evaluateFilterGroupsFederated } from '@ifc-lite/rules';
+import type { EvaluatorModel } from '@ifc-lite/rules';
+import type { FilterGroup } from '@ifc-lite/rules';
+import { describeSelectorParseError } from '@/components/viewer/SearchModal.filter.feedback';
+import type { ChartDataset, ChartDatasetRow, ChartSourceFilter } from '@ifc-lite/charts';
+import { CLASH_COLUMNS } from './datasets/clash';
+
+export type ChartFilterReading =
+  | { ok: true; groups: FilterGroup[] }
+  | { ok: false; message: string };
+
+/** Stable identity for the element portion of a chart filter. Kept separate
+ * from `clashRule`, which narrows rows after the federation scan. */
+export function chartElementFilterKey(filter: ChartSourceFilter | undefined): string | undefined {
+  if (!filter) return undefined;
+  if (filter.groups?.length) return `groups:${JSON.stringify(filter.groups)}`;
+  return trimSelectorWhitespace(filter.selector).length > 0 ? `selector:${JSON.stringify(filter.selector)}` : undefined;
+}
+
+/** Read + adapt selector text with the chart's refuse-don't-narrow rule.
+ *  `text` is trimmed; an all-whitespace string is never passed in by a
+ *  caller (both the editor and the resolver skip an empty filter). */
+export function readChartFilter(text: string, options: { schemaVersion?: string } = {}): ChartFilterReading {
+  const query = trimSelectorWhitespace(text);
+  const reading = readSelector(query, options);
+  if (!reading.ok) return { ok: false, message: describeSelectorParseError(query, reading.error) };
+  if (reading.rules.length === 0) {
+    return {
+      ok: false,
+      message: `Nothing in this selector maps to a filter rule${reading.unsupported.length > 0 ? `: ${reading.unsupported.join('; ')}` : ''}.`,
+    };
+  }
+  if (reading.unsupported.length > 0) {
+    return {
+      ok: false,
+      message: `Refused rather than run on the readable part alone: ${reading.unsupported.join('; ')}.`,
+    };
+  }
+  return { ok: true, groups: reading.groups };
+}
+
+export interface ResolveChartFilterOptions {
+  schemaVersion?: string;
+  definedModelTagIds?: ReadonlySet<string>;
+  /** Largest match count the evaluator is allowed to return before it stops
+   *  scanning; callers pass the federation's element count so a filter that
+   *  matches everything is never silently truncated. */
+  limit?: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * Resolve one chart's `filter` to the renderer (federated) global ids it
+ * matches. `undefined` / blank selector text resolves to `null` — "no
+ * filter" — which `applyChartFilter` must tell apart from an empty `Set`
+ * ("matched nothing"): rounding the two together would show unfiltered rows
+ * under a filter that matched zero elements.
+ *
+ * Throws when the reading is refused (see `readChartFilter`); the caller
+ * (`useChartSourceFilters`) is expected to catch this into an error state,
+ * exactly as `resolveClashSetFilter` does for a clash set filter.
+ */
+export async function resolveChartFilter(
+  models: readonly EvaluatorModel[],
+  filter: ChartSourceFilter | undefined,
+  toGlobalId: (modelId: string, expressId: number) => number,
+  options: ResolveChartFilterOptions = {},
+): Promise<Set<number> | null> {
+  if (!filter) return null;
+  const groups = filter.groups?.length ? filter.groups : (() => {
+    if (trimSelectorWhitespace(filter.selector).length === 0) return null;
+    const reading = readChartFilter(filter.selector, { schemaVersion: options.schemaVersion });
+    if (!reading.ok) throw new Error(reading.message);
+    return reading.groups;
+  })();
+  if (!groups) return null;
+  const matched = await evaluateFilterGroupsFederated(models, groups, {
+    limit: options.limit,
+    signal: options.signal,
+    definedModelTagIds: options.definedModelTagIds,
+  });
+  const ids = new Set<number>();
+  for (const m of matched) ids.add(toGlobalId(m.modelId, m.expressId));
+  return ids;
+}
+
+function rowMatchesAny(rowIds: ArrayLike<number>, ids: ReadonlySet<number>): boolean {
+  for (let i = 0; i < rowIds.length; i += 1) if (ids.has(rowIds[i])) return true;
+  return false;
+}
+
+/**
+ * ONE post-filter, shared by every chart source: keep a row if ANY of its
+ * ids is in the matched set. For `elements` a row is one element, so this is
+ * the same answer as intersecting `includeSets()`; for `clash` ("clashes
+ * involving a matched element") and `schedule` (a task's products) it is the
+ * any-match reading the plan settled on. Never called for `bcf` / `compare`
+ * — `validate.ts` refuses a `filter` on those sources.
+ */
+/** FNV-1a over the matched ids, sorted so the hash is order-independent —
+ *  two DIFFERENT id sets of the same size must never fingerprint alike
+ *  (review finding: `ids.size` alone collides `{1}` and `{2}`). */
+function fingerprintIds(ids: ReadonlySet<number>): string {
+  const sorted = [...ids].sort((a, b) => a - b);
+  let h = 0x811c9dc5;
+  for (const id of sorted) {
+    h ^= id;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `${sorted.length}:${h.toString(16)}`;
+}
+
+export function applyChartFilter(dataset: ChartDataset, ids: ReadonlySet<number>): ChartDataset {
+  const rows: ChartDatasetRow[] = dataset.rows.filter((row) => rowMatchesAny(row.ids, ids));
+  return { ...dataset, rows, fingerprint: `filtered:${fingerprintIds(ids)}:${dataset.fingerprint}` };
+}
+
+/**
+ * Narrow a `clash` dataset to ONE detection rule/run (#5156): keep a row
+ * only when its `Rule` column equals `ruleId` exactly, the same
+ * `ClashRule.id` `buildClashDataset` already writes into that column.
+ *
+ * Unlike the selector filter this needs no federation scan to resolve — the
+ * rule id is already a value on every clash row — so it runs synchronously,
+ * straight in `ChartCard` / `useDocumentData`, rather than through
+ * `useChartSourceFilters`. Called only for `source: 'clash'`; `validate.ts`
+ * refuses `filter.clashRule` on every other source.
+ */
+export function applyClashRuleFilter(dataset: ChartDataset, ruleId: string): ChartDataset {
+  const ruleIndex = dataset.columns.findIndex((c) => c.id === CLASH_COLUMNS.rule);
+  if (ruleIndex === -1) return dataset;
+  const rows: ChartDatasetRow[] = dataset.rows.filter((row) => row.values[ruleIndex] === ruleId);
+  return { ...dataset, rows, fingerprint: `clashRule:${ruleId}:${dataset.fingerprint}` };
+}

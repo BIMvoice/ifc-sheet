@@ -1,0 +1,223 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Host-side helper that drives a `StreamingPointSource` to completion,
+ * applies a memory-cap downsampling policy, and emits decoded chunks
+ * to a callback.
+ *
+ * Renderers consume this directly: pass `onChunk` as your "upload to
+ * GPU" callback and the host takes care of pacing, abort, and the
+ * end-of-stream `onComplete` notification.
+ */
+
+import type { DecodedPointChunk, PointCloudBBox } from '../types.js';
+import {
+  accumulateClassificationCounts,
+  createClassificationCounts,
+} from '../classification.js';
+import {
+  createDecodeWorkerSource,
+  type CreateDecodeWorkerSourceOptions,
+  type DecodeWorkerFormat,
+} from './worker-client.js';
+import type { PointSourceInfo, StreamingPointSource } from './types.js';
+
+export interface StreamPointCloudOptions {
+  /** Source format. */
+  format: DecodeWorkerFormat;
+  /** File or remote-fetched blob. */
+  blob: Blob;
+  /** Optional label (filename, URL) for diagnostics. */
+  label?: string;
+
+  /**
+   * Soft memory cap measured in points. When the source declares more
+   * than this, the host applies stride-based downsampling so the chunks
+   * fit. Default: 25 million (~600 MB GPU at the 24-byte/point format).
+   */
+  maxPointsInMemory?: number;
+  /** Hard size ceiling — if `blob.size` exceeds, the call rejects. */
+  maxFileSize?: number;
+  /** Points per chunk during streaming decode. Default: 200_000. */
+  chunkSize?: number;
+  /**
+   * Native (X, Y, Z)-axis offset subtracted from each decoded coordinate
+   * in f64, before it's narrowed to f32 (issue #1804, extended to every
+   * point-cloud format). Used to align a georeferenced scan with an IFC
+   * model's `IfcMapConversion` — see
+   * `apps/viewer/src/hooks/ingest/pointCloudAlignment.ts`
+   * `computePointCloudAlignment().decodeOriginOffset`.
+   */
+  originOffset?: readonly [number, number, number];
+  /** Choose a local decode origin when no explicit alignment is supplied (#4226). */
+  autoOrigin?: boolean;
+
+  /** Called once after the source's header parses. */
+  onOpen?: (info: PointSourceInfo & { stride: number; originOffset?: readonly [number, number, number] }) => void;
+  /** Called for each decoded chunk. */
+  onChunk: (chunk: DecodedPointChunk) => void;
+  /** Periodic progress signal in 0..1. */
+  onProgress?: (loaded: number, total: number) => void;
+  /**
+   * Called once with the aggregated bbox once the stream finishes.
+   * `classCounts` is the per-class point histogram (256 slots, one per
+   * LAS classification code) aggregated across every emitted chunk, or
+   * `null` when no chunk carried a classifications buffer (#1783).
+   */
+  onComplete?: (bbox: PointCloudBBox, totalEmitted: number, classCounts: Uint32Array | null) => void;
+  /** Called if the source errors mid-stream. */
+  onError?: (err: Error) => void;
+
+  /** Abort signal for the whole stream. */
+  signal?: AbortSignal;
+  /** Override the source factory (used by tests). */
+  createSource?: (opts: CreateDecodeWorkerSourceOptions) => StreamingPointSource;
+}
+
+const DEFAULT_MAX_POINTS = 25_000_000;
+const DEFAULT_MAX_FILE = 4 * 1024 * 1024 * 1024; // 4 GB
+const DEFAULT_CHUNK = 200_000;
+
+export interface StreamHandle {
+  /** Cancel pending and future decode work. */
+  cancel(): void;
+  /** Resolves once the stream finishes successfully or is cancelled. */
+  done: Promise<void>;
+}
+
+export function streamPointCloud(opts: StreamPointCloudOptions): StreamHandle {
+  const maxPoints = opts.maxPointsInMemory ?? DEFAULT_MAX_POINTS;
+  const maxFile = opts.maxFileSize ?? DEFAULT_MAX_FILE;
+  const chunkSize = opts.chunkSize ?? DEFAULT_CHUNK;
+  if (!Number.isFinite(maxPoints) || maxPoints <= 0) {
+    throw new Error('streamPointCloud: maxPointsInMemory must be a positive finite number');
+  }
+  // chunkSize <= 0 would let the source.next() loop emit empty chunks
+  // forever without advancing its cursor. Fail loudly so callers can't
+  // accidentally lock up the worker.
+  if (!Number.isFinite(chunkSize) || chunkSize <= 0) {
+    throw new Error(`streamPointCloud: chunkSize must be a positive finite number (got ${chunkSize})`);
+  }
+
+  const localAbort = new AbortController();
+  const composed = composeAbort(opts.signal, localAbort.signal);
+
+  const done = (async () => {
+    if (opts.blob.size > maxFile) {
+      throw new Error(
+        `Point cloud rejected: file is ${(opts.blob.size / 1e6).toFixed(0)} MB, ` +
+        `exceeds maxFileSize ${(maxFile / 1e6).toFixed(0)} MB`,
+      );
+    }
+
+    const probeFactory = opts.createSource ?? createDecodeWorkerSource;
+    let source: ReturnType<typeof probeFactory> | undefined;
+    let totalEmitted = 0;
+    let bboxMin: [number, number, number] = [Infinity, Infinity, Infinity];
+    let bboxMax: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+    let info: PointSourceInfo | null = null;
+    const classCounts = createClassificationCounts();
+    let sawClassifications = false;
+
+    try {
+      // First open with stride=1 to learn the true point count, then
+      // re-open with the right stride if we need to downsample.
+      let stride = 1;
+      source = probeFactory({
+        format: opts.format,
+        blob: opts.blob,
+        label: opts.label,
+        stride: 1,
+        originOffset: opts.originOffset,
+      });
+      info = await source.open(composed);
+
+      stride = Math.max(1, Math.ceil(info.totalPointCount / maxPoints));
+      let originOffset = opts.originOffset;
+      let consumedProbe = false;
+      if (opts.autoOrigin && !originOffset && info.totalPointCount > 0) {
+        const { min, max } = info.bbox;
+        if ([...min, ...max].every(Number.isFinite) && [...min, ...max].some((v) => v !== 0)) {
+          originOffset = [min[0] / 2 + max[0] / 2, min[1] / 2 + max[1] / 2, min[2] / 2 + max[2] / 2];
+        } else {
+          // Formats without header bounds (notably E57) can probe one sample.
+          // Its rounded position only CHOOSES a nearby frame. Reopen and decode
+          // from the original bytes so this first sample loses no precision.
+          const probe = await source.next(1, composed);
+          consumedProbe = true;
+          if (probe && probe.pointCount > 0 && probe.positions.subarray(0, 3).every(Number.isFinite)) {
+            originOffset = [probe.positions[0], probe.positions[1], probe.positions[2]];
+          }
+        }
+      }
+      if (stride > 1 || consumedProbe || originOffset !== opts.originOffset) {
+        source.close();
+        source = probeFactory({ format: opts.format, blob: opts.blob, label: opts.label, stride, originOffset });
+        info = await source.open(composed);
+      }
+
+      opts.onOpen?.({ ...info, stride, originOffset });
+
+      while (true) {
+        if (composed.aborted) break;
+        const chunk = await source.next(chunkSize, composed);
+        if (!chunk) break;
+        opts.onChunk(chunk);
+        sawClassifications = accumulateClassificationCounts(classCounts, chunk) || sawClassifications;
+        totalEmitted += chunk.pointCount;
+        if (chunk.bbox.min[0] < bboxMin[0]) bboxMin[0] = chunk.bbox.min[0];
+        if (chunk.bbox.min[1] < bboxMin[1]) bboxMin[1] = chunk.bbox.min[1];
+        if (chunk.bbox.min[2] < bboxMin[2]) bboxMin[2] = chunk.bbox.min[2];
+        if (chunk.bbox.max[0] > bboxMax[0]) bboxMax[0] = chunk.bbox.max[0];
+        if (chunk.bbox.max[1] > bboxMax[1]) bboxMax[1] = chunk.bbox.max[1];
+        if (chunk.bbox.max[2] > bboxMax[2]) bboxMax[2] = chunk.bbox.max[2];
+        opts.onProgress?.(totalEmitted, info.totalPointCount);
+      }
+    } finally {
+      // Catches probe + open + onOpen + decode failures uniformly so
+      // worker-backed sources don't leak the decoder on bad files.
+      source?.close();
+    }
+
+    if (!composed.aborted && info) {
+      const bbox: PointCloudBBox = Number.isFinite(bboxMin[0])
+        ? { min: bboxMin, max: bboxMax }
+        : info.bbox;
+      opts.onComplete?.(bbox, totalEmitted, sawClassifications ? classCounts : null);
+    }
+  })().catch((err) => {
+    if (composed.aborted) return; // expected on cancel
+    opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+    throw err;
+  });
+
+  return {
+    cancel: () => localAbort.abort(),
+    done,
+  };
+}
+
+function composeAbort(...signals: Array<AbortSignal | undefined>): AbortSignal {
+  // Native AbortSignal.any was added in widely-shipping browsers in 2024.
+  // Use the polyfilled fallback so tests in older Node still work.
+  const filtered = signals.filter((s): s is AbortSignal => s !== undefined);
+  if (filtered.length === 0) return new AbortController().signal;
+  if (filtered.length === 1) return filtered[0];
+  // Avoid `as any` per repo TypeScript rules — narrow to a concrete shape.
+  type AbortSignalCtorWithAny = typeof AbortSignal & {
+    any?: (signals: AbortSignal[]) => AbortSignal;
+  };
+  const anyApi = (AbortSignal as AbortSignalCtorWithAny).any;
+  if (typeof anyApi === 'function') return anyApi(filtered);
+  const ctrl = new AbortController();
+  for (const s of filtered) {
+    if (s.aborted) {
+      ctrl.abort(s.reason);
+      break;
+    }
+    s.addEventListener('abort', () => ctrl.abort(s.reason), { once: true });
+  }
+  return ctrl.signal;
+}

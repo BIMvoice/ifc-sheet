@@ -1,0 +1,219 @@
+# create-ifc-lite
+
+## 1.15.0
+
+### Minor Changes
+
+- [#5567](https://github.com/LTplus-AG/ifc-lite/pull/5567) [`64af7d9`](https://github.com/LTplus-AG/ifc-lite/commit/64af7d9d2d15486982a4db12251bc5d059577d6d) Thanks [@louistrue](https://github.com/louistrue)! - The `threejs` and `babylonjs` starters now render the building in the right shape. Both converted `MeshData` without reading `origin`, and `positions` are relative to that per-element local frame — on `AC20-FZK-Haus.ifc` 285 of 317 meshes carry one, up to 15.4 m from their drawn position, so the model arrived as a pile of disconnected slabs. The repo's own Three.js and Babylon.js tutorials already showed the one-line fold; the scaffolds now do it too. Babylon meshes are also double-sided unconditionally, since IFC triangle winding is not reliably outward.
+  
+  `--template server` can be started at all: its `docker-compose.yml` and README referenced `ghcr.io/LTplus-AG/...`, which Docker rejects outright ("repository name must be lowercase"), so `docker compose up -d` — step 1 of the generated Quick Start — failed on every machine.
+  
+  Also: a scaffolded project is version `0.1.0` rather than inheriting `@ifc-lite/parser`'s major; every template ships a `.gitignore`, a `typecheck` script, and `private: true`; the `threejs`/`babylonjs` `postinstall` that rewrote a file inside `node_modules/@ifc-lite/geometry` is gone (it patched a specifier the published dist no longer contains, so it was a no-op); `tsc` no longer emits into a `dist/` that `vite build` immediately wipes; the `basic` sample prints canonical `IfcWallStandardCase` type names instead of raw `IFCWALLSTANDARDCASE`, reports a non-IFC file as a failure instead of "parsed successfully", and exits non-zero when it fails; the React template no longer stamps this project's licence header onto the developer's own files and is aligned on Vite 7 with its sibling templates; and two `ifclite.dev` links that 404 now resolve.
+  
+  The CLI argument parser rejects what it used to silently accept: an unknown flag (`--templat react` scaffolded a project literally named `react`), a second positional (`a b c` produced `c`), and a prototype-chain template name (`--template toString` produced the `basic` scaffold). `--version` prints the version instead of scaffolding a project, `-t` is documented, and a scaffold that fails partway — an offline run, since templates resolve versions from the registry before writing anything — cleans up its directory and reports the underlying cause instead of leaving a husk that makes the retry fail with "already exists".
+  
+  Version resolution also rejects a candidate whose own tarball is missing. A version can be `dist-tags.latest`, be listed in the packument, and advertise a `dist.tarball` that 404s; the resolver only checked the candidate's dependencies, so it happily wrote that version into the scaffold and `npm install` then failed on a URL npm itself had supplied.
+
+## 1.14.13
+
+### Patch Changes
+
+- [#3851](https://github.com/LTplus-AG/ifc-lite/pull/3851) [`1389598`](https://github.com/LTplus-AG/ifc-lite/commit/1389598ac7e8c4986a89b50d7671cbb5028ab066) Thanks [@louistrue](https://github.com/louistrue)! - The `server` and `server-native` scaffolds pinned `parquet-wasm: ^0.6.0` as an optional dependency, which falls outside `@ifc-lite/server-client`'s narrowed `^0.7.2` peer range. A strict package manager rejects the generated project's install; a permissive one installs a decoder the SDK no longer supports, so the first Parquet decode fails at runtime. Both templates now scaffold `^0.7.2`, and a test asserts the scaffolded pin stays inside the peer range that `packages/server-client/package.json` declares.
+
+## 1.14.12
+
+### Patch Changes
+
+- [#2024](https://github.com/LTplus-AG/ifc-lite/pull/2024) [`63905dc`](https://github.com/LTplus-AG/ifc-lite/commit/63905dc3993ad227500a0f68c406276c909eb6f5) Thanks [@BIMvoice](https://github.com/BIMvoice)! - Fixed the remaining `GeometryProcessor` WASM handle leaks tracked in issue [#1959](https://github.com/LTplus-AG/ifc-lite/issues/1959), beyond the viewer P0 sites fixed separately. Each site now frees its handle in a `try/finally` covering every early-return and throw path, not just the happy path:
+
+  - `@ifc-lite/mcp`: `clash_check` / `clash_matrix`'s model meshing (long-lived MCP server process, one handle per never-before-clashed model).
+  - `@ifc-lite/export`: `generateLod1`'s primary and fallback processors, including the forced-meshing-failure fallback path.
+  - `@ifc-lite/cli`: `diagnose-geometry`, `extract-entities --detect`, and `gym`'s lazily-created clash-channel processor — all reachable more than once per process from a long-lived host (a test harness, a REPL session) even though each is a one-shot CLI command in normal use.
+  - `create-ifc-lite`: the generated React + WebGPU template's mount effect now disposes its `GeometryProcessor` on both the mid-init cancellation path and on unmount, so scaffolded projects don't inherit the leak.
+
+  `apps/viewer/src/hooks/useIfcLoader.ts` is intentionally untouched: its processor's WASM handle is shared with `IfcParser.parseColumnar` via `getApi()`, and disposal there needs a design decision (owned-and-reused vs. freed-per-call) that has not been made yet.
+
+## 1.14.11
+
+### Patch Changes
+
+- [#1696](https://github.com/LTplus-AG/ifc-lite/pull/1696) [`41794cd`](https://github.com/LTplus-AG/ifc-lite/commit/41794cde27d31904773bf2042eb0a0331aadf770) Thanks [@louistrue](https://github.com/louistrue)! - Point the remaining old docs links at https://ifclite.dev/docs/: the project templates scaffolded by create-ifc-lite, and the committed wasm pkg README (wasm-pack's copy of the root README, refreshed to the current one).
+
+- [#1691](https://github.com/LTplus-AG/ifc-lite/pull/1691) [`26af236`](https://github.com/LTplus-AG/ifc-lite/commit/26af236a9128f5fc97493d75d7c9642958343a7a) Thanks [@louistrue](https://github.com/louistrue)! - Documentation moved to https://ifclite.dev/docs/ - README links and package homepage fields now point at the new home (the GitHub Pages site remains as a mirror whose canonical URLs point there).
+
+## 1.14.10
+
+### Patch Changes
+
+- [#1678](https://github.com/LTplus-AG/ifc-lite/pull/1678) [`a90182b`](https://github.com/LTplus-AG/ifc-lite/commit/a90182bac110fdd4c15b8b51866e31deefc0378e) Thanks [@louistrue](https://github.com/louistrue)! - Package metadata hygiene: correct the @ifc-lite/codegen license field to MPL-2.0 (the source has always carried MPL headers; the MIT value was a scaffolding accident) and give it a files allowlist so the npm tarball ships dist, schemas, and README instead of the whole package directory. Add the missing publishConfig, homepage, and bugs fields to codegen, embed-protocol, embed-sdk, and wasm, and homepage/bugs to create-ifc-lite, matching the rest of the workspace.
+
+## 1.14.9
+
+### Patch Changes
+
+- [#946](https://github.com/LTplus-AG/ifc-lite/pull/946) [`6378998`](https://github.com/LTplus-AG/ifc-lite/commit/6378998ec146f7f9297ef5fcc5953b155fd6b5e0) Thanks [@louistrue](https://github.com/louistrue)! - Fix a batch of verified findings from a full-codebase review (security, correctness,
+  data-loss, and resource/memory leaks). Highlights:
+
+  **Security**
+
+  - collab-server: a malformed WebSocket frame no longer crashes the whole process
+    (decode is wrapped; a bad frame is rejected/audited instead of throwing).
+  - mcp: the local HTTP transport now validates `Host`/`Origin` and no longer sends a
+    wildcard `Access-Control-Allow-Origin`, closing a DNS-rebinding/CSRF hole; the
+    `AuthScope.modelIds` allowlist is now enforced at model resolution.
+  - server-bin: `extractZip` uses `execFileSync` (argv, no shell), removing command
+    injection via archive/destination paths.
+  - export / sdk / cli / mcp / lists / viewer CSV exporters now neutralize spreadsheet
+    formula injection (CWE-1236) consistently.
+  - create-ifc-lite: validates the project name (no path traversal) and drops the
+    unused `execSync`-based downloader.
+  - embed-sdk: inbound `postMessage` now validates `event.origin`.
+
+  **Correctness / data-loss**
+
+  - parser: `lengthUnitScale` survives the worker transport; the nested STEP list
+    parser is string-aware (commas/parens inside quoted values no longer mis-split).
+  - mutations: deleting a property from a session-created pset and replaying
+    `UPDATE_ATTRIBUTE` / `CREATE_PROPERTY_SET` mutations now work.
+  - export: merged-export ID remapping no longer rewrites `#N` inside quoted strings.
+  - drawing-2d: GPU section cutter triangle upload/readback use correct WGSL std-layout
+    offsets and strides.
+  - ifcx: cyclic children no longer abort the parse; spatial children round-trip; the
+    mesh transform guards a zero/non-finite homogeneous `w`.
+  - data / cache: a `NULL` string property value stays `null` instead of becoming `""`.
+  - pointcloud, bcf, server-client, query, viewer-core, viewer store/federation: assorted
+    decoding, federation-id, and selection-state fixes.
+
+  **Resource / memory leaks**
+
+  - geometry, query (DuckDB), renderer (GPU buffers), collab (federation presence),
+    sandbox (host log capture + runtime), mcp (clash mesh cache), server-bin (signal
+    listeners), and the viewer renderer on unmount now release resources deterministically.
+
+  **Hardening (apps, not published)**
+
+  - server: a dedicated `server-release` Cargo profile (`panic = "unwind"`) plus a
+    `CatchPanicLayer` contain a malformed-IFC parse panic to the offending request
+    instead of aborting the whole server.
+  - desktop (Tauri): a Content-Security-Policy is set, and unused `shell:*` /
+    `fs:allow-write|mkdir|remove` capabilities (and the unused shell plugin) are removed.
+
+  **Second pass** (additional verified findings)
+
+  - collab-server: S3 log load now follows `ListObjectsV2` pagination (no dropped frames);
+    awareness frames are size-capped + rate-limited; path-lock verify runs after role/rate-limit;
+    the blob route requires auth and `/metrics` can be token-gated.
+  - server-bin: downloaded binaries are SHA-256 verified against a release sidecar (fail-closed on
+    mismatch, warn-if-absent for older releases).
+  - extensions: inner-ring capability check fails _closed_ for unknown namespaces; signing
+    canonicalization is now injective (length-prefixed).
+  - correctness/leaks: mutations quantity type+unit preserved on replay; `findByProperty` boolean
+    comparisons; Parquet REAL columns kept as Float64; blob GC fail-safe on missing `uploadedAt`;
+    spatial-hierarchy + codegen cycle guards; BVH NaN edge; bSDD/playground caches bounded;
+    point-cloud GPU asset freed on federation error; mcp `parseColor` rejects non-hex; bcf/SVG/STEP
+    output escaping; and more.
+
+## 1.14.8
+
+### Patch Changes
+
+- [#955](https://github.com/LTplus-AG/ifc-lite/pull/955) [`30235c9`](https://github.com/LTplus-AG/ifc-lite/commit/30235c90d922e12d383a6d9f60c028984709001b) Thanks [@louistrue](https://github.com/louistrue)! - three.js template: render opaque IFC meshes double-sided and enable `logarithmicDepthBuffer`. IFC triangle winding is not reliably outward (the native renderer draws with `cullMode: 'none'` for the same reason), so culling one side of two coincident coplanar walls left the survivors z-fighting into a comb along the seam; and IFC models far from the origin with stacked near-coplanar slabs (a roof on a gable wall) stair-stepped without a logarithmic depth buffer. Both are fixed in the scaffolded viewer.
+
+## 1.14.7
+
+### Patch Changes
+
+- [#874](https://github.com/LTplus-AG/ifc-lite/pull/874) [`e73ac09`](https://github.com/LTplus-AG/ifc-lite/commit/e73ac0931b85cd299ae9b723073e956b6b124c85) Thanks [@louistrue](https://github.com/louistrue)! - Centralize IFC STEP entity scan selection behind a typed scanner helper, remove the unused duplicate `parseEntityOnDemand` implementation, keep the legacy `parse()` adapter on the shared scan path, route LOD exports through shared/adaptive ingestion paths, persist cache entity-index columns to avoid cache reload rescans, and update public docs away from legacy sync parse/geometry paths.
+
+## 1.14.6
+
+### Patch Changes
+
+- [#632](https://github.com/louistrue/ifc-lite/pull/632) [`d1fab87`](https://github.com/louistrue/ifc-lite/commit/d1fab875f680e6b923d3a75d52459fd4514467e6) Thanks [@maxkrut](https://github.com/maxkrut)! - Fix npm package version resolution when scaffolding projects on Windows.
+
+  `create-ifc-lite` resolves published `@ifc-lite/*` package versions by
+  calling `npm view` before writing the generated template's `package.json`.
+  On Windows, spawning `npm` directly from Node can fail with
+  `spawnSync npm ENOENT` because the executable is exposed through the
+  shell shim (`npm.cmd`) rather than as a directly spawnable binary in all
+  environments. The CLI then reports this as a registry access failure, even
+  though `npm view @ifc-lite/geometry version` works from the same terminal.
+
+  Run the npm query through `cmd.exe /c npm ...` on Windows so template
+  creation follows the same command resolution path as the user's shell,
+  while keeping the direct `npm` spawn path unchanged on other platforms.
+
+## 1.14.5
+
+### Patch Changes
+
+- [#507](https://github.com/louistrue/ifc-lite/pull/507) [`7b0a5f6`](https://github.com/louistrue/ifc-lite/commit/7b0a5f6a395e49d2dc846b3c955b0ba01b75c88b) Thanks [@louistrue](https://github.com/louistrue)! - Repair create-ifc-lite template scaffolds with installable package versions and dedicated React starter
+
+## 1.14.4
+
+### Patch Changes
+
+- [#494](https://github.com/louistrue/ifc-lite/pull/494) [`ec0d3a0`](https://github.com/louistrue/ifc-lite/commit/ec0d3a0e4c7f9eaeb26ab0a724fd76d955e52ac5) Thanks [@louistrue](https://github.com/louistrue)! - Remove recursive package `prebuild` hooks and run TypeScript via `pnpm exec` so workspace builds resolve correctly on Windows.
+
+## 1.13.0
+
+### Minor Changes
+
+- [#270](https://github.com/louistrue/ifc-lite/pull/270) [`3bc1cda`](https://github.com/louistrue/ifc-lite/commit/3bc1cdabcff1d9992ec6799ddbd83a169152fa3c) Thanks [@louistrue](https://github.com/louistrue)! - Add Babylon.js viewer template to create-ifc-lite scaffolding
+
+  New `babylonjs` template option for `create-ifc-lite` that generates a complete Babylon.js-based IFC viewer with geometry streaming, selection, and camera controls. Includes full example project and documentation tutorial.
+
+## 1.11.5
+
+### Patch Changes
+
+- [#262](https://github.com/louistrue/ifc-lite/pull/262) [`d204ed8`](https://github.com/louistrue/ifc-lite/commit/d204ed807484a3a6b337a1186dcea311626493ad) Thanks [@louistrue](https://github.com/louistrue)! - Fix WASM loading in threejs template: revert to `optimizeDeps.exclude: ['@ifc-lite/wasm']` (matching the working example). `vite-plugin-wasm` was incorrect — the wasm-bindgen `new URL('ifc-lite_bg.wasm', import.meta.url)` pattern works correctly when the package is excluded from Vite pre-bundling.
+
+## 1.11.4
+
+### Patch Changes
+
+- [#260](https://github.com/louistrue/ifc-lite/pull/260) [`e342a43`](https://github.com/louistrue/ifc-lite/commit/e342a430c07b4611b94225a74776e9855bf1450a) Thanks [@louistrue](https://github.com/louistrue)! - Fix WASM loading in threejs template: add `vite-plugin-wasm` and `vite-plugin-top-level-await` to vite config. Without these plugins Vite cannot serve the `.wasm` file with the correct `application/wasm` MIME type, causing a `CompileError: wasm validation error` at runtime.
+
+## 1.11.3
+
+### Patch Changes
+
+- [#257](https://github.com/louistrue/ifc-lite/pull/257) [`025d3b1`](https://github.com/louistrue/ifc-lite/commit/025d3b14161e63045f8c79b58b49c7da4d91594b) Thanks [@louistrue](https://github.com/louistrue)! - Fix all template TypeScript errors caught by new CI audit:
+
+  - basic template: add `@types/node` + `types: ["node"]` in tsconfig; fix `Buffer` → `ArrayBuffer` conversion when calling `IfcParser.parse()`
+  - Add `test-templates.yml` CI workflow that scaffolds every template, runs `npm install` + `tsc --noEmit` (+ `vite build` for threejs) on every PR touching `packages/create-ifc-lite`
+
+- [#257](https://github.com/louistrue/ifc-lite/pull/257) [`b1dd28b`](https://github.com/louistrue/ifc-lite/commit/b1dd28beccbec361651dc61d71a9b32d12b03071) Thanks [@louistrue](https://github.com/louistrue)! - Fix TypeScript error in generated Three.js template: use non-null assertions on DOM element declarations so type narrowing works across function boundaries.
+
+## 1.11.2
+
+### Patch Changes
+
+- [#251](https://github.com/louistrue/ifc-lite/pull/251) [`a13e5c0`](https://github.com/louistrue/ifc-lite/commit/a13e5c04eaf6369815eb66af5174a724a4e38937) Thanks [@louistrue](https://github.com/louistrue)! - Fix TypeScript errors in generated Three.js template: add explicit type casts for `HTMLCanvasElement` and `HTMLInputElement` DOM queries; disable OrbitControls damping for sharp camera stops.
+
+## 1.8.1
+
+### Patch Changes
+
+- [#227](https://github.com/louistrue/ifc-lite/pull/227) [`67c0064`](https://github.com/louistrue/ifc-lite/commit/67c00640a0ca344337e5e79d80888d329df9130d) Thanks [@louistrue](https://github.com/louistrue)! - Fix react template generating wrong `@ifc-lite/*` versions in package.json.
+
+  Previously all workspace dependencies were replaced with the latest version of
+  `@ifc-lite/parser`, which broke installs when a package (e.g. `@ifc-lite/sandbox`)
+  had not yet been published at that version. Each package is now queried
+  individually from the npm registry so the generated package.json always
+  references the actual published version of every dependency.
+
+## 1.6.1
+
+### Patch Changes
+
+- [#182](https://github.com/louistrue/ifc-lite/pull/182) [`5e78765`](https://github.com/louistrue/ifc-lite/commit/5e78765139b6c9c28612ae3f9e58760ccc9b524e) Thanks [@louistrue](https://github.com/louistrue)! - Fix **APP_VERSION** not defined error in react template by adding Vite define config
+
+## 1.1.8
+
+### Patch Changes
+
+- 8cb195d: Fix Ubuntu setup issues and monorepo resolution.
+  - Fix `@ifc-lite/parser` worker resolution for Node.js/tsx compatibility
+  - Fix `create-ifc-lite` to properly replace `workspace:` protocol in templates

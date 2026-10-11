@@ -1,0 +1,414 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Adapter that bridges IfcDataStore (parser output) to the
+ * ListDataProvider interface used by @ifc-lite/lists.
+ *
+ * Handles on-demand property/quantity extraction via WASM when needed.
+ * Also handles on-demand attribute extraction for Description, ObjectType,
+ * and Tag which are not stored during the fast initial parse.
+ */
+
+import type { IfcDataStore } from '@ifc-lite/parser';
+import {
+  extractPropertiesOnDemand,
+  extractQuantitiesOnDemand,
+  extractEntityAttributesOnDemand,
+  extractAllMaterialsOnDemand,
+  extractClassificationsOnDemand,
+  extractTypePropertiesOnDemand,
+  extractTypeQuantitiesOnDemand,
+} from '@ifc-lite/parser';
+import type { PropertySet, QuantitySet } from '@ifc-lite/data';
+import { RelationshipType, exactTypeName } from '@ifc-lite/data';
+import { ENTITY_ATTRIBUTES } from '@ifc-lite/lists';
+import type { ListDataProvider, ListClassificationRef, DiscoveredColumns } from '@ifc-lite/lists';
+import { quantitySetsFor, resolveEntityPredefinedType, typePropertySetsFor } from '@ifc-lite/rules';
+import { buildSpatialAncestryIndex, type SpatialAncestryIndex } from '../../utils/spatialHierarchy.js';
+import { validEntry } from '../zones/index.js';
+import type { MutablePropertyView } from '@ifc-lite/mutations';
+import { effectiveListEntitySets, effectiveListStringAttribute, effectiveListTypeName, effectiveTypeQuantitySets } from './effective-provider-entities.js';
+import type { ZoneListContext } from './zone-list-context.js';
+import { materialNamesOf } from './list-material-names.js';
+export type { ZoneListContext } from './zone-list-context.js';
+
+/**
+ * Create a ListDataProvider backed by an IfcDataStore.
+ * The provider handles on-demand WASM extraction transparently.
+ *
+ * `modelName` is the source model / file display name used by the `model`
+ * federation-identity column; pass the `FederatedModel.name` so a list over
+ * several models can tell which file each row came from. Defaults to '' for the
+ * single-model legacy path where there's nothing to disambiguate.
+ *
+ * `zoneContext`, when supplied, enables the `zone`/`geometry` column sources
+ * (issues #1810, #3671); omitted fields resolve to `null`, same as every
+ * other optional `ListDataProvider` accessor.
+ */
+export function createListDataProvider(
+  store: IfcDataStore,
+  modelName = '',
+  zoneContext?: ZoneListContext,
+  view?: MutablePropertyView,
+): ListDataProvider {
+  // Cache for on-demand attribute extraction (description, objectType, tag)
+  // These are not stored during initial parse to keep load times fast,
+  // but are needed for list display. Cache avoids re-parsing per column.
+  const attrCache = new Map<number, { description: string; objectType: string; tag: string }>();
+
+  // Lazily materialised list of every non-empty express id — used for
+  // class-less list targeting. Cached because the provider outlives a run.
+  let allIdsCache: number[] | null = null;
+  let effectiveEntities: ReturnType<typeof effectiveListEntitySets> | null = null;
+  const liveEntities = () => view ? (effectiveEntities ??= effectiveListEntitySets(store, view)) : null;
+  const stringAttr = (id: number, name: string, base: () => string) =>
+    effectiveListStringAttribute(store, view, id, name, base);
+
+  function getOnDemandAttrs(id: number): { description: string; objectType: string; tag: string } {
+    const cached = attrCache.get(id);
+    if (cached) return cached;
+
+    if (store.source?.length > 0 && store.entityIndex) {
+      const attrs = extractEntityAttributesOnDemand(store, id);
+      const result = { description: attrs.description, objectType: attrs.objectType, tag: attrs.tag };
+      attrCache.set(id, result);
+      return result;
+    }
+
+    const empty = { description: '', objectType: '', tag: '' };
+    attrCache.set(id, empty);
+    return empty;
+  }
+
+  // PredefinedType re-parses the entity (no columnar accessor); cache it so
+  // a list column doesn't re-extract per row across re-renders.
+  const predefCache = new Map<number, string>();
+  function getPredefinedTypeFor(id: number): string {
+    const cached = predefCache.get(id);
+    if (cached !== undefined) return cached;
+    // Table first (server-parsed stores carry PredefinedType since the v4
+    // payload, issue #1765); the source-gated resolver covers the WASM path.
+    const value = store.entities.getPredefinedType?.(id) || resolveEntityPredefinedType(store, id) || '';
+    predefCache.set(id, value);
+    return value;
+  }
+
+  // Complete column discovery is cached — the provider outlives a builder
+  // open, and the scan touches every entity that declares a pset/qto.
+  let columnsCache: DiscoveredColumns | null = null;
+
+  // Spatial ancestry (element -> containing Site / Building name, + the model's
+  // Project name) is precomputed once in a single tree pass, then O(1) per
+  // element. Cached because the provider outlives a run and the Site / Building
+  // columns hit it per row.
+  let ancestryCache: SpatialAncestryIndex | null = null;
+  function ancestry(): SpatialAncestryIndex {
+    if (!ancestryCache) {
+      ancestryCache = buildSpatialAncestryIndex(
+        store.spatialHierarchy,
+        (id) => store.entities.getName(id),
+        (id) => store.entities.getTypeName(id),
+      );
+    }
+    return ancestryCache;
+  }
+
+  const usesOnDemandProps = !!store.onDemandPropertyMap && store.source?.length > 0;
+  const usesOnDemandQtos = !!store.onDemandQuantityMap && store.source?.length > 0;
+
+  // Geometry-bearing (selectable) products — the raw expressId column also
+  // holds relationships, psets, materials, etc., which a class-less list must
+  // not surface as rows. Cached; also reused by column discovery to enumerate
+  // the model's element types.
+  function selectableIds(): number[] {
+    if (view) return liveEntities()!.selectable;
+    if (allIdsCache) return allIdsCache;
+    const ids: number[] = [];
+    const col = store.entities.expressId;
+    for (let i = 0; i < col.length; i++) {
+      const id = col[i];
+      if (id && store.entities.hasGeometry(id)) ids.push(id);
+    }
+    allIdsCache = ids;
+    return ids;
+  }
+
+  function getPropertySetsFor(entityId: number): PropertySet[] {
+    if (view) return view.isDeleted(entityId) ? [] : view.getForEntity(entityId);
+    if (usesOnDemandProps) return extractPropertiesOnDemand(store, entityId) as PropertySet[];
+    return store.properties?.getForEntity(entityId) ?? [];
+  }
+
+  function getQuantitySetsFor(entityId: number): QuantitySet[] {
+    if (view) return view.isDeleted(entityId) ? [] : quantitySetsFor(store, entityId, view) as QuantitySet[];
+    if (usesOnDemandQtos) return extractQuantitiesOnDemand(store, entityId) as QuantitySet[];
+    return store.quantities?.getForEntity(entityId) ?? [];
+  }
+
+  // ── Type-inherited property/quantity fallback (issue #1745) ──
+  // Resolve the element's IfcTypeProduct once, then cache the extracted type
+  // psets/qtos BY TYPE ID so a schedule over thousands of instances sharing a
+  // type parses that type only once. `entityToTypeId` memoises the (cheap)
+  // relationship lookup; -1 marks "no type" so we don't re-probe.
+  const entityToTypeId = new Map<number, number>();
+  const typePsetCache = new Map<number, PropertySet[]>();
+  const typeQsetCache = new Map<number, QuantitySet[]>();
+
+  function definingTypeId(entityId: number): number {
+    const cached = entityToTypeId.get(entityId);
+    if (cached !== undefined) return cached;
+    const ids = store.relationships?.getRelated(entityId, RelationshipType.DefinesByType, 'inverse') ?? [];
+    const typeId = ids.length > 0 ? ids[0] : -1;
+    entityToTypeId.set(entityId, typeId);
+    return typeId;
+  }
+
+  // Type fallback works on BOTH parse paths (issue #1751 gives the server path
+  // the element→type relationship + type-owned sets). Mirror getPropertySetsFor's
+  // split: the source-backed extractor for WASM-parsed stores; the prebuilt
+  // table (keyed by the type's own id) for server-parsed stores whose `source`
+  // is empty. `definingTypeId` resolves the type via the relationship graph on
+  // both paths.
+  function getTypePropertySetsFor(entityId: number): PropertySet[] {
+    const typeId = definingTypeId(entityId);
+    if (typeId < 0) return [];
+    const cached = typePsetCache.get(typeId);
+    if (cached) return cached;
+    const basePsets = usesOnDemandProps
+      ? ((extractTypePropertiesOnDemand(store, entityId)?.properties ?? []) as PropertySet[])
+      : (store.properties?.getForEntity(typeId) ?? []);
+    const psets = view ? typePropertySetsFor(basePsets, typeId, view) as PropertySet[] : basePsets;
+    typePsetCache.set(typeId, psets);
+    return psets;
+  }
+
+  function getTypeQuantitySetsFor(entityId: number): QuantitySet[] {
+    const typeId = definingTypeId(entityId);
+    if (typeId < 0) return [];
+    const cached = typeQsetCache.get(typeId);
+    if (cached) return cached;
+    const baseQsets = usesOnDemandQtos
+      ? ((extractTypeQuantitiesOnDemand(store, entityId)?.quantities ?? []) as QuantitySet[])
+      : (store.quantities?.getForEntity(typeId) ?? []);
+    const qsets = effectiveTypeQuantitySets(baseQsets, typeId, view);
+    typeQsetCache.set(typeId, qsets);
+    return qsets;
+  }
+
+  // The element's IfcTypeProduct name (issue #1754) — e.g. "WT-Standard" on an
+  // IfcWallType. Distinct from the `Class` attribute (the IFC class, IfcWall)
+  // and `ObjectType` (the instance's own attribute). Resolves via the same
+  // relationship on both parse paths, so it's identical server vs client.
+  function getEntityDefiningTypeNameFor(entityId: number): string {
+    const typeId = definingTypeId(entityId);
+    return typeId >= 0 ? stringAttr(typeId, 'Name', () => store.entities.getName(typeId) || '') : '';
+  }
+
+  return {
+    getEntitiesByType(type) {
+      if (view) return liveEntities()!.byType.get(type) ?? [];
+      // @raw-entity-enumeration-ok no mutation view exists; the parsed type bucket is the effective set
+      return store.entities.getByType(type);
+    },
+
+    getEntityName: (id) => stringAttr(id, 'Name', () => store.entities.getName(id)),
+    getEntityGlobalId: (id) => stringAttr(id, 'GlobalId', () => store.entities.getGlobalId(id)),
+    getEntityDescription: (id) => stringAttr(id, 'Description', () => store.entities.getDescription(id) || getOnDemandAttrs(id).description),
+    getEntityObjectType: (id) => stringAttr(id, 'ObjectType', () => store.entities.getObjectType(id) || getOnDemandAttrs(id).objectType),
+    getEntityPredefinedType: (id) => stringAttr(id, 'PredefinedType', () => getPredefinedTypeFor(id)),
+    getEntityTag: (id) => stringAttr(id, 'Tag', () => store.entities.getTag?.(id) || getOnDemandAttrs(id).tag),
+    getEntityTypeName: (id) => view ? effectiveListTypeName(store, view, id) : exactTypeName(store.entities, id), // declared class, not coalesced (#3325)
+
+    getPropertySets: getPropertySetsFor,
+    getQuantitySets: getQuantitySetsFor,
+    getTypePropertySets: getTypePropertySetsFor,
+    getTypeQuantitySets: getTypeQuantitySetsFor,
+    getEntityDefiningTypeName: getEntityDefiningTypeNameFor,
+
+    getAllEntityIds(): number[] {
+      return selectableIds();
+    },
+
+    getMaterialNames(entityId: number): string[] {
+      // Union across ALL associations (elements may carry several).
+      const seen = new Set<string>();
+      for (const info of extractAllMaterialsOnDemand(store, entityId)) {
+        for (const n of materialNamesOf(info)) seen.add(n);
+      }
+      return [...seen];
+    },
+
+    getClassifications(entityId: number): ListClassificationRef[] {
+      return extractClassificationsOnDemand(store, entityId).map((c) => ({
+        system: c.system,
+        code: c.identification,
+        name: c.name,
+      }));
+    },
+
+    getStoreyName(entityId: number): string {
+      const hierarchy = store.spatialHierarchy;
+      if (!hierarchy) return '';
+      const storeyId = hierarchy.elementToStorey.get(entityId);
+      if (!storeyId) return '';
+      return store.entities.getName(storeyId) || '';
+    },
+
+    getAggregateParents(entityId: number): number[] {
+      return store.relationships?.getRelated(entityId, RelationshipType.Aggregates, 'inverse') ?? [];
+    },
+
+    getContainerName(entityId: number): string {
+      return ancestry().containerOf(entityId);
+    },
+
+    getBuildingName(entityId: number): string {
+      return ancestry().buildingOf(entityId);
+    },
+
+    getSiteName(entityId: number): string {
+      return ancestry().siteOf(entityId);
+    },
+
+    getProjectName(): string {
+      return ancestry().projectName;
+    },
+
+    getModelName(): string {
+      return modelName;
+    },
+    getWorldPosition: (id) => zoneContext?.getWorldPosition?.(id) ?? null,
+
+    discoverAllColumns(): DiscoveredColumns {
+      if (columnsCache) return columnsCache;
+
+      const properties = new Map<string, Set<string>>();
+      const quantities = new Map<string, Set<string>>();
+      const seenProps = new Set<number>();
+      const seenQtos = new Set<number>();
+
+      const ingestProps = (id: number) => {
+        if (view?.isDeleted(id) || seenProps.has(id)) return;
+        seenProps.add(id);
+        for (const set of getPropertySetsFor(id)) {
+          if (!set.name) continue;
+          let bucket = properties.get(set.name);
+          if (!bucket) { bucket = new Set(); properties.set(set.name, bucket); }
+          for (const p of set.properties) if (p.name) bucket.add(p.name);
+        }
+      };
+      const ingestQtos = (id: number) => {
+        if (view?.isDeleted(id) || seenQtos.has(id)) return;
+        seenQtos.add(id);
+        for (const set of getQuantitySetsFor(id)) {
+          if (!set.name) continue;
+          let bucket = quantities.get(set.name);
+          if (!bucket) { bucket = new Set(); quantities.set(set.name, bucket); }
+          for (const q of set.quantities) if (q.name) bucket.add(q.name);
+        }
+      };
+
+      // On-demand path: scan exactly the entities that declare a pset/qto —
+      // the minimal complete set (every distinct set/property in the model).
+      if (usesOnDemandProps && store.onDemandPropertyMap) {
+        for (const id of store.onDemandPropertyMap.keys()) ingestProps(id);
+      }
+      if (usesOnDemandQtos && store.onDemandQuantityMap) {
+        for (const id of store.onDemandQuantityMap.keys()) ingestQtos(id);
+      }
+      // Table path (e.g. server-loaded models): scan the entity column using
+      // the pre-built tables. Capped so it can't run away on huge models.
+      if (!usesOnDemandProps || !usesOnDemandQtos) {
+        const col = store.entities.expressId;
+        const CAP = 100_000;
+        for (let i = 0, seen = 0; i < col.length && seen < CAP; i++) {
+          const id = col[i];
+          if (!id) continue;
+          seen++;
+          if (!usesOnDemandProps) ingestProps(id);
+          if (!usesOnDemandQtos) ingestQtos(id);
+        }
+      }
+      // Property/quantity edits and overlay creations may have no entry in
+      // either parsed index. Always include them; a tombstone is skipped above.
+      if (view) {
+        const editedIds = new Set(view.getEffectiveChanges().map((change) => change.entityId));
+        for (const entity of view.getNewEntities()) editedIds.add(entity.expressId);
+        for (const id of editedIds) { ingestProps(id); ingestQtos(id); }
+      }
+
+      // Type-level sets (#1745): a pset/qto that lives ONLY on an element's
+      // IfcTypeProduct must also be offered by the picker — otherwise the
+      // fallback resolves values (e.g. a type-only Manufacturer) the user has
+      // no way to select. Enumerate each selectable element's type once
+      // (deduped by type id; getType*SetsFor caches the extraction per type).
+      const seenTypeIds = new Set<number>();
+      for (const id of selectableIds()) {
+        const typeId = definingTypeId(id);
+        if (typeId < 0 || seenTypeIds.has(typeId)) continue;
+        seenTypeIds.add(typeId);
+        for (const set of getTypePropertySetsFor(id)) {
+          if (!set.name) continue;
+          let bucket = properties.get(set.name);
+          if (!bucket) { bucket = new Set(); properties.set(set.name, bucket); }
+          for (const p of set.properties) if (p.name) bucket.add(p.name);
+        }
+        for (const set of getTypeQuantitySetsFor(id)) {
+          if (!set.name) continue;
+          let bucket = quantities.get(set.name);
+          if (!bucket) { bucket = new Set(); quantities.set(set.name, bucket); }
+          for (const q of set.quantities) if (q.name) bucket.add(q.name);
+        }
+      }
+
+      const toSorted = (m: Map<string, Set<string>>) => {
+        const out = new Map<string, string[]>();
+        for (const [k, s] of m) out.set(k, Array.from(s).sort());
+        return out;
+      };
+      columnsCache = {
+        attributes: [...ENTITY_ATTRIBUTES],
+        properties: toSorted(properties),
+        quantities: toSorted(quantities),
+      };
+      return columnsCache;
+    },
+
+    ...(zoneContext ? {
+      getZoneAssignment(expressId: number, zoneSetId: string) {
+        const globalId = zoneContext.toGlobalId(expressId);
+        const assignment = zoneContext.zoneAssignments.get(globalId)?.[zoneSetId];
+        if (!assignment) return null;
+        const zoneSet = zoneContext.zoneSets.find((zs) => zs.id === zoneSetId);
+        const touchedZoneNames = assignment.touchedZoneIds
+          .map((zoneId) => zoneSet?.zones.find((z) => z.id === zoneId)?.name)
+          .filter((n): n is string => !!n);
+        return { zoneName: assignment.zoneName, straddles: assignment.straddles, touchedZoneNames };
+      },
+      getZoneVolumeShares(expressId: number, zoneSetId: string) {
+        const zoneSet = zoneContext.zoneSets.find((zs) => zs.id === zoneSetId);
+        if (!zoneSet || !zoneContext.apportionment) return null;
+        const entry = validEntry(zoneContext.apportionment, zoneSet);
+        if (!entry) return null;
+        const globalId = zoneContext.toGlobalId(expressId);
+        const apportionment = entry.byElement.get(globalId);
+        if (!apportionment) return null;
+        const scale = zoneContext.volumeSiScale && zoneContext.volumeSiScale > 0 ? zoneContext.volumeSiScale : 1;
+        const homeZoneId = zoneContext.zoneAssignments.get(globalId)?.[zoneSetId]?.zoneId ?? null;
+        const shares = apportionment.shares.map((s) => ({ zoneName: s.zoneName, value: s.volumeM3 / scale }));
+        // The HOME zone is v1's centroid-containment answer, which is the zone
+        // the element's `Zone` column already names — so the numeric column and
+        // the name column describe the same zone rather than two different ones.
+        const home = homeZoneId === null
+          ? null
+          : apportionment.shares.find((s) => s.zoneId === homeZoneId)?.volumeM3 ?? null;
+        return { homeValue: home === null ? null : home / scale, shares };
+      },
+      getZoneSetNames() {
+        return zoneContext.zoneSets.map((zs) => ({ id: zs.id, name: zs.name }));
+      },
+    } : {}),
+  };
+}

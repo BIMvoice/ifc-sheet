@@ -1,0 +1,348 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import {
+  type IfcDataStore,
+  EntityExtractor,
+  extractClassificationsOnDemand,
+} from '@ifc-lite/parser';
+import { isProperSubtypeOfAny, type HierarchyRegistry } from '@ifc-lite/codegen/schema-hierarchy';
+import * as IFC4_SCHEMA from '@ifc-lite/codegen/ifc4';
+import * as IFC4X3_SCHEMA from '@ifc-lite/codegen/ifc4x3';
+import { iterateEffectiveEntities } from '@ifc-lite/data';
+import type { ClassificationInfo } from '../types.js';
+import { typedAuthoredValue, type EntityVisibilityView } from './entity-visibility.js';
+
+interface ClassRecord {
+  system?: string;
+  identification?: string;
+  name?: string;
+  path?: string[];
+  unresolved?: boolean;
+  presenceUnknown?: boolean;
+}
+
+/**
+ * Resolve every classification associated with `expressId`, including
+ *   1. the standard `IfcRelAssociatesClassification` path (handled by
+ *      the parser's resolver), and
+ *   2. the non-rooted-resource path: `IfcExternalReferenceRelationship`
+ *      pointing at the entity from `RelatedResourceObjects`.
+ *
+ * Each classification is expanded into multiple `ClassificationInfo`
+ * entries — one per parent reference in the chain — so a requirement
+ * for `EF_25_10` matches an actual leaf of `EF_25_10_25`.
+ */
+export function resolveClassifications(
+  store: IfcDataStore,
+  expressId: number,
+  externalReferences?: ExternalReferenceContext
+): ClassificationInfo[] {
+  const list: ClassRecord[] = [
+    ...(extractClassificationsOnDemand(store, expressId) || []),
+  ];
+
+  appendExternalReferenceClassifications(
+    store, expressId, list, externalReferences ?? createExternalReferenceContext(store, undefined)
+  );
+
+  const out: ClassificationInfo[] = [];
+  for (const c of list) {
+    const system = c.system || '';
+    const baseValue = c.identification || c.name || '';
+    // Always push at least one entry per associated classification —
+    // even when the value is empty — so optional-cardinality value
+    // mismatches register as a value mismatch rather than as a
+    // missing-classification (which optional pardons).
+    out.push({
+      system,
+      value: baseValue,
+      name: c.name,
+      unresolved: c.unresolved,
+      presenceUnknown: c.presenceUnknown,
+    });
+    if (Array.isArray(c.path)) {
+      for (const code of c.path) {
+        if (code && code !== baseValue) {
+          out.push({ system, value: code, name: c.name });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Non-rooted resources (IfcMaterial, IfcProfileDef, …) carry
+ * classifications via `IfcExternalReferenceRelationship` rather than
+ * `IfcRelAssociatesClassification`. The parser doesn't categorize
+ * external-ref edges into the relationship graph today, so we scan
+ * the type table directly.
+ *
+ * On a server-parsed (source-empty) store this type table is not merely
+ * incomplete — it structurally cannot contain `IFCEXTERNALREFERENCERELATIONSHIP`
+ * (or `IFCMATERIAL`/`IFCPROFILEDEF`) entries at all: the server pipeline's
+ * `IfcTypeEnum` (packages/data/src/types.ts) has no slot for any of them, and
+ * the server resolves classifications only via `IfcRelAssociatesClassification`
+ * (apps/server/src/services/data_model/classifications.rs). So an empty
+ * `byType` lookup here proves nothing about whether THIS entity carries a
+ * classification through this pathway — unlike the sibling
+ * `IfcRelAssociatesClassification` path (#3951), there is no
+ * relationship-graph fallback at all for this one (#3954): presence cannot
+ * be proven OR disproven without source bytes.
+ */
+function appendExternalReferenceClassifications(
+  store: IfcDataStore,
+  expressId: number,
+  list: ClassRecord[],
+  context: ExternalReferenceContext
+): void {
+  if (!store.source?.length) {
+    // Only fall back to "cannot determine" when:
+    //  1. the IfcRelAssociatesClassification path (already applied to `list`
+    //     by the caller) found nothing — an entity already confirmed
+    //     classified, or confirmed-but-unresolved, through that path doesn't
+    //     also rely on this non-rooted-resource pathway, so leave it
+    //     untouched rather than diluting a real match/mismatch into
+    //     "unresolved"; and
+    //  2. `expressId` could actually BE a `RelatedResourceObjects` target —
+    //     the IFC schema restricts that role to non-rooted resource-level
+    //     entities (IfcResourceObjectSelect: IfcMaterial(Select) members,
+    //     IfcProfileDef, …), never an IfcRoot subtype like IfcWall. A rooted
+    //     element's `list.length === 0` genuinely means unclassified — no
+    //     external-ref ambiguity is even schema-possible for it — so
+    //     blanket-marking every empty result as unresolved would regress the
+    //     overwhelming common case (a genuinely unclassified wall/door/etc.)
+    //     into a false "cannot determine" on every server-parsed model.
+    if (list.length === 0 && isNonRootedClassifiableResource(store, expressId)) {
+      list.push({ unresolved: true, presenceUnknown: true });
+    }
+    return;
+  }
+
+  const { read, relationshipIds: erIds } = context;
+  for (const erId of erIds) {
+    const erEntity = read(erId);
+    if (!erEntity) continue;
+    // [Name, Description, RelatingReference, RelatedResourceObjects]
+    const relating = erEntity.attributes?.[2];
+    const related = erEntity.attributes?.[3];
+    if (typeof relating !== 'number') continue;
+    if (!Array.isArray(related)) continue;
+    if (!related.includes(expressId)) continue;
+
+    const refEntity = read(relating);
+    if (!refEntity) continue;
+    if (refEntity.type.toUpperCase() !== 'IFCCLASSIFICATIONREFERENCE') continue;
+
+    const a = refEntity.attributes || [];
+    const info: ClassRecord = {
+      identification: typeof a[1] === 'string' ? a[1] : undefined,
+      name: typeof a[2] === 'string' ? a[2] : undefined,
+      path: [],
+    };
+
+    let cursor = typeof a[3] === 'number' ? a[3] : undefined;
+    const seen = new Set<number>();
+    // #5290: this walk is the `IfcExternalReferenceRelationship` twin of
+    // `@ifc-lite/parser`'s `walkClassificationChain` — same chain, same
+    // break-without-reporting defect. A dangling `cursor`, an unreadable
+    // entity, an unexpected type, or a cycle back to an already-seen id all
+    // mean "this data cannot say whether a system exists", distinct from
+    // `cursor` legitimately becoming `undefined` (`ReferencedSource`
+    // omitted — schema-legal). `info.system` is `undefined` either way, so
+    // `info.unresolved` is the only signal `resolveClassifications`'
+    // caller has to tell the two apart; without it, `c.system || ''`
+    // flattens a broken chain into a confident empty system.
+    while (cursor !== undefined) {
+      if (seen.has(cursor)) {
+        info.unresolved = true;
+        break;
+      }
+      seen.add(cursor);
+      const e = read(cursor);
+      if (!e) {
+        info.unresolved = true;
+        break;
+      }
+      const cu = e.type.toUpperCase();
+      const ca = e.attributes || [];
+      if (cu === 'IFCCLASSIFICATION') {
+        info.system = typeof ca[3] === 'string' ? ca[3] : undefined;
+        break;
+      }
+      if (cu === 'IFCCLASSIFICATIONREFERENCE') {
+        const code =
+          typeof ca[1] === 'string'
+            ? ca[1]
+            : typeof ca[2] === 'string'
+              ? ca[2]
+              : undefined;
+        if (code) info.path!.unshift(code);
+        cursor = typeof ca[3] === 'number' ? ca[3] : undefined;
+        continue;
+      }
+      info.unresolved = true;
+      break;
+    }
+    list.push(info);
+  }
+}
+
+/**
+ * The schema registries this predicate checks type membership against — the
+ * union of IFC4 and IFC4X3, since a type introduced in only one of them
+ * (`IfcOpenCrossProfileDef`, IFC4X3-only) must still be recognised when a
+ * store built from the OTHER schema is queried against it (a server-parsed
+ * store's `EntityRef.type` names an entity, not a schema version).
+ */
+const HIERARCHY_REGISTRIES: readonly HierarchyRegistry[] = [
+  IFC4_SCHEMA.SCHEMA_REGISTRY,
+  IFC4X3_SCHEMA.SCHEMA_REGISTRY,
+];
+
+/**
+ * Could an entity of this upper-cased type name be a `RelatedResourceObjects`
+ * target of an `IfcExternalReferenceRelationship`? The IFC schema restricts
+ * that role to `IfcResourceObjectSelect` members — subtypes of
+ * `IfcMaterialDefinition` or `IfcProfileDef` — never an `IfcRoot` subtype
+ * (`IfcWall`, `IfcDoor`, …), which can only be classified via
+ * `IfcRelAssociatesClassification`.
+ *
+ * This is a schema-hierarchy fact, answered here via `@ifc-lite/codegen`'s
+ * generated `SCHEMA_REGISTRY.entities[type].inheritanceChain` (through
+ * `isProperSubtypeOfAny` — `IfcMaterialDefinition` and `IfcProfileDef` are
+ * themselves abstract with no concrete instances, so the CONCRETE-MEMBER
+ * question this predicate answers wants the self-match excluded) rather
+ * than a string test — `startsWith`, `endsWith` and `includes` variants of
+ * this predicate were each wrong at a different edge across three separate
+ * incidents (ifc-lite #3999):
+ *
+ *   1. `startsWith('IFCMATERIAL')` admitted `IfcMaterialList` (an
+ *      `IfcMaterialSelect` member, not `IfcMaterialDefinition`),
+ *      `IfcMaterialLayerSetUsage`, `IfcMaterialDefinitionRepresentation`,
+ *      `IfcMaterialRelationship` — none is `IfcMaterialDefinition`.
+ *   2. `endsWith('PROFILEDEF')` missed `IfcArbitraryProfileDefWithVoids`, a
+ *      genuine `IfcProfileDef` subtype whose name doesn't end that way.
+ *   3. `includes('PROFILEDEF')` (the fix for #2) admitted
+ *      `IfcRelAssociatesProfileDef`, a *rooted* relationship that points AT
+ *      a profile def via `RelatingProfileDef`, not a profile def itself.
+ *
+ * `isProperSubtypeOfAny` reads the actual `SUBTYPE OF` chain the schemas declare,
+ * so none of those three edges is reachable by construction —
+ * `is-non-rooted-classifiable-resource.exp-derived.test.ts` still
+ * independently re-derives the answer from the `.exp` files and asserts
+ * agreement for every entity in both schemas, as a check against a bug in
+ * codegen's own chain computation, not just against a string test.
+ *
+ * Pulled out of `isNonRootedClassifiableResource` as a pure function of the
+ * type name so that test can exercise it directly against every entity name
+ * in both schemas, without building a store for each one.
+ */
+export function isNonRootedClassifiableResourceType(upperType: string): boolean {
+  return (
+    isProperSubtypeOfAny(HIERARCHY_REGISTRIES, upperType, 'IfcMaterialDefinition') ||
+    isProperSubtypeOfAny(HIERARCHY_REGISTRIES, upperType, 'IfcProfileDef')
+  );
+}
+
+/**
+ * Could `expressId` be a `RelatedResourceObjects` target of an
+ * `IfcExternalReferenceRelationship`? See `isNonRootedClassifiableResourceType`
+ * for the schema rule this applies. `EntityRef.type` is available from the
+ * type-table index without reading `source` bytes (it's set from the raw
+ * STEP/server type name, not extracted attributes), so this check costs
+ * nothing on a server-parsed store.
+ */
+function isNonRootedClassifiableResource(
+  store: IfcDataStore,
+  expressId: number
+): boolean {
+  // @raw-entity-enumeration-ok point read of the queried resource's parsed class, only on a server-parsed store where no source bytes exist to extend
+  const type = store.entityIndex?.byId?.get?.(expressId)?.type;
+  if (typeof type !== 'string') return false;
+  return isNonRootedClassifiableResourceType(type.toUpperCase());
+}
+
+interface RecordRead {
+  type: string;
+  attributes: unknown[];
+}
+
+/**
+ * The session's external-reference relationships and a reader for the records
+ * they point at, built ONCE per accessor (#5249). `getClassifications` runs once
+ * per candidate, and `getNewEntities()` copies on every call, so rebuilding this
+ * per call would be O(candidates x created entities).
+ */
+export interface ExternalReferenceContext {
+  /** Effective `IfcExternalReferenceRelationship` ids: deleted out, created in. */
+  readonly relationshipIds: readonly number[];
+  /** One effective record, or `undefined` when absent or deleted. */
+  read(id: number): RecordRead | undefined;
+}
+
+/**
+ * Valid for ONE validation run: the relationship list and created records are
+ * snapshotted when built. Callers build a fresh accessor per run.
+ */
+export function createExternalReferenceContext(
+  store: IfcDataStore,
+  overlay: EntityVisibilityView | undefined
+): ExternalReferenceContext {
+  if (!store.entityIndex) return { relationshipIds: [], read: () => undefined };
+  const ex = new EntityExtractor(store.source);
+  const created = new Map<number, { type: string; attributes: ReadonlyArray<unknown> }>();
+  for (const entity of overlay?.getNewEntities() ?? []) {
+    created.set(entity.expressId, { type: entity.type, attributes: entity.attributes ?? [] });
+  }
+  const retypes = overlay?.getTypeMutations?.();
+  const relationshipIds = Array.from(
+    iterateEffectiveEntities(store, overlay, ['IFCEXTERNALREFERENCERELATIONSHIP']),
+    (e) => e.expressId
+  );
+  return {
+    relationshipIds,
+    read(id) {
+      if (overlay?.isDeleted(id)) return undefined;
+      const retype = retypes?.get(id)?.newType;
+      const authored = created.get(id);
+      if (authored) {
+        return { type: retype ?? authored.type, attributes: authored.attributes.map(authoredValue) };
+      }
+      // @raw-entity-enumeration-ok point read of one source record, after the overlay answered for deleted and created ids
+      const ref = store.entityIndex.byId.get(id);
+      if (!ref) return undefined;
+      const entity = ex.extractEntity(ref);
+      if (!entity) return undefined;
+      return { type: retype ?? entity.type, attributes: entity.attributes ?? [] };
+    },
+  };
+}
+
+/**
+ * An authored attribute in the shape `EntityExtractor` yields for a parsed
+ * one: a `#id` reference as a number, `$`/`*` as absent, a typed wrapper or a
+ * `{ real }` number unwrapped. A plain string is the literal value. The STEP
+ * serializer (`serializeStepValue`) writes it quoted, so it is never
+ * pre-quoted here, and quote characters are kept as data.
+ */
+function authoredValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(authoredValue);
+  if (value && typeof value === 'object') {
+    if ('real' in value && typeof value.real === 'number') return value.real;
+    // A typed value is converted by its base type, as the writer does; a
+    // typed label whose text is '#12' or '$' stays that text.
+    if ('typed' in value && value.typed && typeof value.typed === 'object' && 'value' in value.typed) {
+      return typedAuthoredValue(value.typed as { type?: unknown; value: unknown });
+    }
+    return value;
+  }
+  if (typeof value !== 'string') return value;
+  const token = value.trim();
+  const ref = /^#(\d+)$/.exec(token);
+  if (ref) return Number(ref[1]);
+  if (token === '$' || token === '*') return undefined;
+  return value;
+}

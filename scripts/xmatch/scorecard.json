@@ -1,0 +1,1044 @@
+{
+  "fixture": "content-matching validation (#1891)",
+  "spec": "scripts/xmatch/SPEC.md",
+  "generatedBy": "node scripts/xmatch/run.mjs",
+  "thresholdsSha256": "bdc496626156f28834e06c45bcd3a74f4cf01b88748553e613866a4898e80865",
+  "geometryHashToleranceMetres": 0.001,
+  "verdict": "PASS",
+  "corpusFailures": [],
+  "corpusTargetGaps": [],
+  "pairs": [
+    {
+      "model": "tests/models/ara3d/duplex.ifc",
+      "seed": 20260803,
+      "schema": "IFC2X3",
+      "unitScale": 1,
+      "guards": {
+        "propertyNamesIdentical": true,
+        "propertyNameCount": 6714,
+        "propertyNameDrift": [],
+        "sharedGlobalIds": 0,
+        "headGlobalIds": 3879,
+        "invalidGlobalIds": 0,
+        "lookalikeTokens": 3,
+        "lookalikeTokensPreserved": 3,
+        "sharedFingerprintKeys": 0,
+        "keyedBasePopulation": 333,
+        "fingerprintedBasePopulation": 333,
+        "keyedHeadsPresent": 333,
+        "duplicateKeyBaseIds": 0,
+        "duplicateKeyHeadIds": 0,
+        "mergedHeadFanInWrong": 0,
+        "containersCompared": 239,
+        "containersAgree": 239,
+        "containersUnstable": 0,
+        "insertedNearbyExpected": 4,
+        "insertedNearbyInside": 4,
+        "duplicateBaseRefs": 0,
+        "duplicateHeadRefs": 0,
+        "keyedHeadsExpected": 333,
+        "baseHasGeometryHashes": true,
+        "headHasGeometryHashes": true
+      },
+      "fixtureFailures": [],
+      "thresholdFailures": [],
+      "thresholdsSkipped": [
+        "byTier.positional.precision (no pairs)",
+        "byMerge (population 0)"
+      ],
+      "targetGaps": [],
+      "applied": {
+        "renamed": 227,
+        "moved": 24,
+        "reshaped": 18,
+        "retriangulated": 10,
+        "duplicated": 8,
+        "deleted": 12,
+        "inserted": 8,
+        "respecified": 14,
+        "thickened": 10,
+        "swapped": 6,
+        "splitLength": 4,
+        "merged": 0,
+        "insertedNearby": 4
+      },
+      "score": {
+        "population": 333,
+        "populations": {
+          "renamed": 227,
+          "reshaped": 18,
+          "thickened": 10,
+          "respecified": 14,
+          "swapped": 6,
+          "retriangulated": 10,
+          "moved": 24,
+          "deleted": 12,
+          "duplicated": 8,
+          "splitLength": 4
+        },
+        "inserted": 8,
+        "overall": {
+          "claimedPairs": 293,
+          "correctPairs": 293,
+          "precision": 1,
+          "recallPopulation": 293,
+          "recalled": 293,
+          "recall": 1,
+          "abstained": 8
+        },
+        "falsePairs": {
+          "deletedBase": 0,
+          "insertedHead": 0,
+          "wrongPartner": 0,
+          "unkeyed": 0
+        },
+        "byTier": {
+          "geometry-hash": {
+            "claimed": 179,
+            "correct": 179,
+            "wrong": 0,
+            "precision": 1
+          },
+          "geometry-only": {
+            "claimed": 14,
+            "correct": 14,
+            "wrong": 0,
+            "precision": 1
+          },
+          "residue-1-1": {
+            "claimed": 100,
+            "correct": 100,
+            "wrong": 0,
+            "precision": 1
+          }
+        },
+        "byKind": {
+          "renamed": {
+            "population": 227,
+            "recalled": 227,
+            "abstained": 0,
+            "kindAgreed": 226,
+            "claimed": 227,
+            "correct": 227,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 0.995595
+          },
+          "reshaped": {
+            "population": 18,
+            "recalled": 18,
+            "abstained": 0,
+            "kindAgreed": 18,
+            "claimed": 18,
+            "correct": 18,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 1
+          },
+          "respecified": {
+            "population": 14,
+            "recalled": 14,
+            "abstained": 0,
+            "kindAgreed": 14,
+            "claimed": 14,
+            "correct": 14,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 1
+          },
+          "retriangulated": {
+            "population": 10,
+            "recalled": 10,
+            "abstained": 0,
+            "kindAgreed": 10,
+            "claimed": 10,
+            "correct": 10,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 1
+          },
+          "moved": {
+            "population": 24,
+            "recalled": 24,
+            "abstained": 0,
+            "kindAgreed": 24,
+            "claimed": 24,
+            "correct": 24,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 1
+          }
+        },
+        "byClass": {
+          "none": {
+            "population": 47,
+            "recalled": 47,
+            "abstained": 0,
+            "claimed": 47,
+            "correct": 47,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1
+          },
+          "prismatic": {
+            "population": 219,
+            "recalled": 219,
+            "abstained": 0,
+            "claimed": 219,
+            "correct": 219,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1
+          },
+          "curved": {
+            "population": 27,
+            "recalled": 27,
+            "abstained": 0,
+            "claimed": 27,
+            "correct": 27,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1
+          }
+        },
+        "calibration": {
+          "matchedByGeometryHash": [],
+          "reportedRenamed": [],
+          "recovered": 10,
+          "population": 10,
+          "recoveredByLowerTiers": 1
+        },
+        "duplicateContainment": {
+          "population": 8,
+          "contained": 8,
+          "rate": 1
+        },
+        "respecifiedControl": {
+          "population": 14,
+          "reportedRenamed": [],
+          "matchedByGeometryOnly": 14
+        },
+        "contentMatchedSuccessorKinds": 0,
+        "insertedNearby": 4,
+        "bySuccessor": {
+          "footprint": {
+            "population": 10,
+            "recalled": 10,
+            "kindAgreed": 10,
+            "claimed": 10,
+            "correct": 10,
+            "wrong": 0,
+            "recall": 1,
+            "kindAgreement": 1,
+            "precision": 1
+          },
+          "position": {
+            "population": 6,
+            "recalled": 5,
+            "kindAgreed": 5,
+            "claimed": 5,
+            "correct": 5,
+            "wrong": 0,
+            "recall": 0.833333,
+            "kindAgreement": 1,
+            "precision": 1
+          }
+        },
+        "bySuccessorConfidence": {
+          "footprint": {
+            "claimed": 12,
+            "correct": 12,
+            "wrong": 0,
+            "precision": 1
+          },
+          "position": {
+            "claimed": 3,
+            "correct": 3,
+            "wrong": 0,
+            "precision": 1
+          }
+        },
+        "falseSuccessors": {
+          "insertedNearby": 0,
+          "neighbourSuccessor": 0
+        },
+        "successorClaims": 15,
+        "recoveredContentKinds": 0,
+        "wrongSuccessors": [],
+        "bySplit": {
+          "population": 4,
+          "recalled": 4,
+          "kindAgreed": 4,
+          "claimed": 4,
+          "correct": 4,
+          "wrong": 0,
+          "recall": 1,
+          "precision": 1,
+          "kindAgreement": 1,
+          "byConfidence": {
+            "verified": 4
+          },
+          "mergeClaims": 0
+        },
+        "wrongSplits": [],
+        "byMerge": {
+          "population": 0,
+          "recalled": 0,
+          "kindAgreed": 0,
+          "claimed": 0,
+          "correct": 0,
+          "wrong": 0,
+          "recall": null,
+          "precision": null,
+          "kindAgreement": null,
+          "byConfidence": {},
+          "splitClaims": 4
+        },
+        "wrongMerges": [],
+        "moveDistance": {
+          "checked": 24,
+          "agreed": 24,
+          "agreement": 1
+        },
+        "missed": {
+          "abstained": 0,
+          "silent": 0,
+          "byType": {}
+        },
+        "kindDisagreements": [
+          {
+            "base": 5448,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          }
+        ],
+        "anomalies": []
+      }
+    },
+    {
+      "model": "tests/models/ara3d/AC20-FZK-Haus.ifc",
+      "seed": 20260804,
+      "schema": "IFC4",
+      "unitScale": 1,
+      "guards": {
+        "propertyNamesIdentical": true,
+        "propertyNameCount": 8217,
+        "propertyNameDrift": [],
+        "sharedGlobalIds": 0,
+        "headGlobalIds": 1255,
+        "invalidGlobalIds": 0,
+        "lookalikeTokens": 3,
+        "lookalikeTokensPreserved": 3,
+        "sharedFingerprintKeys": 0,
+        "keyedBasePopulation": 146,
+        "fingerprintedBasePopulation": 146,
+        "keyedHeadsPresent": 142,
+        "duplicateKeyBaseIds": 0,
+        "duplicateKeyHeadIds": 0,
+        "mergedHeadFanInWrong": 0,
+        "containersCompared": 99,
+        "containersAgree": 99,
+        "containersUnstable": 0,
+        "insertedNearbyExpected": 0,
+        "insertedNearbyInside": 0,
+        "duplicateBaseRefs": 0,
+        "duplicateHeadRefs": 0,
+        "keyedHeadsExpected": 142,
+        "baseHasGeometryHashes": true,
+        "headHasGeometryHashes": true
+      },
+      "fixtureFailures": [],
+      "thresholdFailures": [],
+      "thresholdsSkipped": [
+        "byTier.positional.precision (no pairs)",
+        "byKind.retriangulated (population 0)",
+        "byClass.curved (population 0)",
+        "bySuccessor.footprint (population 0)",
+        "bySuccessor.position (population 0)",
+        "bySuccessorConfidence.footprint.precision (no claims)",
+        "bySuccessorConfidence.position.precision (no claims)",
+        "bySplit (population 0)",
+        "byMerge (population 0)"
+      ],
+      "targetGaps": [
+        "byKind.renamed.recall: 0.7875 < target 0.9"
+      ],
+      "applied": {
+        "renamed": 80,
+        "moved": 24,
+        "reshaped": 18,
+        "retriangulated": 0,
+        "duplicated": 8,
+        "deleted": 12,
+        "inserted": 4,
+        "respecified": 4,
+        "thickened": 0,
+        "swapped": 0,
+        "splitLength": 0,
+        "merged": 0,
+        "insertedNearby": 0
+      },
+      "score": {
+        "population": 146,
+        "populations": {
+          "renamed": 80,
+          "duplicated": 8,
+          "reshaped": 18,
+          "respecified": 4,
+          "deleted": 12,
+          "moved": 24
+        },
+        "inserted": 4,
+        "overall": {
+          "claimedPairs": 109,
+          "correctPairs": 109,
+          "precision": 1,
+          "recallPopulation": 126,
+          "recalled": 109,
+          "recall": 0.865079,
+          "abstained": 25
+        },
+        "falsePairs": {
+          "deletedBase": 0,
+          "insertedHead": 0,
+          "wrongPartner": 0,
+          "unkeyed": 0
+        },
+        "byTier": {
+          "geometry-hash": {
+            "claimed": 41,
+            "correct": 41,
+            "wrong": 0,
+            "precision": 1
+          },
+          "geometry-only": {
+            "claimed": 4,
+            "correct": 4,
+            "wrong": 0,
+            "precision": 1
+          },
+          "residue-1-1": {
+            "claimed": 64,
+            "correct": 64,
+            "wrong": 0,
+            "precision": 1
+          }
+        },
+        "byKind": {
+          "renamed": {
+            "population": 80,
+            "recalled": 63,
+            "abstained": 17,
+            "kindAgreed": 63,
+            "claimed": 63,
+            "correct": 63,
+            "wrong": 0,
+            "recall": 0.7875,
+            "precision": 1,
+            "kindAgreement": 1
+          },
+          "reshaped": {
+            "population": 18,
+            "recalled": 18,
+            "abstained": 0,
+            "kindAgreed": 18,
+            "claimed": 18,
+            "correct": 18,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 1
+          },
+          "respecified": {
+            "population": 4,
+            "recalled": 4,
+            "abstained": 0,
+            "kindAgreed": 4,
+            "claimed": 4,
+            "correct": 4,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 1
+          },
+          "moved": {
+            "population": 24,
+            "recalled": 24,
+            "abstained": 0,
+            "kindAgreed": 24,
+            "claimed": 24,
+            "correct": 24,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 1
+          }
+        },
+        "byClass": {
+          "none": {
+            "population": 25,
+            "recalled": 22,
+            "abstained": 3,
+            "claimed": 22,
+            "correct": 22,
+            "wrong": 0,
+            "recall": 0.88,
+            "precision": 1
+          },
+          "prismatic": {
+            "population": 101,
+            "recalled": 87,
+            "abstained": 14,
+            "claimed": 87,
+            "correct": 87,
+            "wrong": 0,
+            "recall": 0.861386,
+            "precision": 1
+          }
+        },
+        "calibration": {
+          "matchedByGeometryHash": [],
+          "reportedRenamed": [],
+          "recovered": 0,
+          "population": 0,
+          "recoveredByLowerTiers": null
+        },
+        "duplicateContainment": {
+          "population": 8,
+          "contained": 8,
+          "rate": 1
+        },
+        "respecifiedControl": {
+          "population": 4,
+          "reportedRenamed": [],
+          "matchedByGeometryOnly": 4
+        },
+        "contentMatchedSuccessorKinds": 0,
+        "insertedNearby": 0,
+        "bySuccessor": {
+          "footprint": {
+            "population": 0,
+            "recalled": 0,
+            "kindAgreed": 0,
+            "claimed": 0,
+            "correct": 0,
+            "wrong": 0,
+            "recall": null,
+            "kindAgreement": null,
+            "precision": null
+          },
+          "position": {
+            "population": 0,
+            "recalled": 0,
+            "kindAgreed": 0,
+            "claimed": 0,
+            "correct": 0,
+            "wrong": 0,
+            "recall": null,
+            "kindAgreement": null,
+            "precision": null
+          }
+        },
+        "bySuccessorConfidence": {},
+        "falseSuccessors": {
+          "insertedNearby": 0,
+          "neighbourSuccessor": 0
+        },
+        "successorClaims": 0,
+        "recoveredContentKinds": 0,
+        "wrongSuccessors": [],
+        "bySplit": {
+          "population": 0,
+          "recalled": 0,
+          "kindAgreed": 0,
+          "claimed": 0,
+          "correct": 0,
+          "wrong": 0,
+          "recall": null,
+          "precision": null,
+          "kindAgreement": null,
+          "byConfidence": {},
+          "mergeClaims": 0
+        },
+        "wrongSplits": [],
+        "byMerge": {
+          "population": 0,
+          "recalled": 0,
+          "kindAgreed": 0,
+          "claimed": 0,
+          "correct": 0,
+          "wrong": 0,
+          "recall": null,
+          "precision": null,
+          "kindAgreement": null,
+          "byConfidence": {},
+          "splitClaims": 0
+        },
+        "wrongMerges": [],
+        "moveDistance": {
+          "checked": 24,
+          "agreed": 24,
+          "agreement": 1
+        },
+        "missed": {
+          "abstained": 17,
+          "silent": 0,
+          "byType": {
+            "IfcAnnotation": 14,
+            "IfcVirtualElement": 3
+          }
+        },
+        "kindDisagreements": [],
+        "anomalies": []
+      }
+    },
+    {
+      "model": "tests/models/various/rvt01.ifc",
+      "seed": 20260805,
+      "schema": "IFC4",
+      "unitScale": 1,
+      "guards": {
+        "propertyNamesIdentical": true,
+        "propertyNameCount": 8663,
+        "propertyNameDrift": [],
+        "sharedGlobalIds": 0,
+        "headGlobalIds": 8180,
+        "invalidGlobalIds": 0,
+        "lookalikeTokens": 0,
+        "lookalikeTokensPreserved": 0,
+        "sharedFingerprintKeys": 0,
+        "keyedBasePopulation": 940,
+        "fingerprintedBasePopulation": 940,
+        "keyedHeadsPresent": 936,
+        "duplicateKeyBaseIds": 0,
+        "duplicateKeyHeadIds": 0,
+        "mergedHeadFanInWrong": 0,
+        "containersCompared": 644,
+        "containersAgree": 644,
+        "containersUnstable": 0,
+        "insertedNearbyExpected": 8,
+        "insertedNearbyInside": 8,
+        "duplicateBaseRefs": 0,
+        "duplicateHeadRefs": 0,
+        "keyedHeadsExpected": 936,
+        "baseHasGeometryHashes": true,
+        "headHasGeometryHashes": true
+      },
+      "fixtureFailures": [],
+      "thresholdFailures": [],
+      "thresholdsSkipped": [
+        "byKind.retriangulated (population 0)",
+        "byClass.curved (population 0)"
+      ],
+      "targetGaps": [
+        "byKind.renamed.kindAgreement: 0.943272 < target 0.98",
+        "bySuccessor.footprint.kindAgreement: 0.857143 < target 0.9"
+      ],
+      "applied": {
+        "renamed": 804,
+        "moved": 34,
+        "reshaped": 18,
+        "retriangulated": 0,
+        "duplicated": 8,
+        "deleted": 12,
+        "inserted": 8,
+        "respecified": 20,
+        "thickened": 14,
+        "swapped": 6,
+        "splitLength": 8,
+        "merged": 8,
+        "insertedNearby": 8
+      },
+      "score": {
+        "population": 940,
+        "populations": {
+          "renamed": 804,
+          "reshaped": 18,
+          "respecified": 20,
+          "moved": 34,
+          "thickened": 14,
+          "splitLength": 8,
+          "deleted": 12,
+          "duplicated": 8,
+          "swapped": 6,
+          "merged": 16
+        },
+        "inserted": 8,
+        "overall": {
+          "claimedPairs": 830,
+          "correctPairs": 830,
+          "precision": 1,
+          "recallPopulation": 876,
+          "recalled": 830,
+          "recall": 0.947489,
+          "abstained": 54
+        },
+        "falsePairs": {
+          "deletedBase": 0,
+          "insertedHead": 0,
+          "wrongPartner": 0,
+          "unkeyed": 0
+        },
+        "byTier": {
+          "geometry-hash": {
+            "claimed": 579,
+            "correct": 579,
+            "wrong": 0,
+            "precision": 1
+          },
+          "geometry-only": {
+            "claimed": 20,
+            "correct": 20,
+            "wrong": 0,
+            "precision": 1
+          },
+          "residue-1-1": {
+            "claimed": 221,
+            "correct": 221,
+            "wrong": 0,
+            "precision": 1
+          },
+          "positional": {
+            "claimed": 10,
+            "correct": 10,
+            "wrong": 0,
+            "precision": 1
+          }
+        },
+        "byKind": {
+          "renamed": {
+            "population": 804,
+            "recalled": 758,
+            "abstained": 46,
+            "kindAgreed": 715,
+            "claimed": 758,
+            "correct": 758,
+            "wrong": 0,
+            "recall": 0.942786,
+            "precision": 1,
+            "kindAgreement": 0.943272
+          },
+          "reshaped": {
+            "population": 18,
+            "recalled": 18,
+            "abstained": 0,
+            "kindAgreed": 18,
+            "claimed": 18,
+            "correct": 18,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 1
+          },
+          "respecified": {
+            "population": 20,
+            "recalled": 20,
+            "abstained": 0,
+            "kindAgreed": 20,
+            "claimed": 20,
+            "correct": 20,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 1
+          },
+          "moved": {
+            "population": 34,
+            "recalled": 34,
+            "abstained": 0,
+            "kindAgreed": 34,
+            "claimed": 34,
+            "correct": 34,
+            "wrong": 0,
+            "recall": 1,
+            "precision": 1,
+            "kindAgreement": 1
+          }
+        },
+        "byClass": {
+          "none": {
+            "population": 177,
+            "recalled": 136,
+            "abstained": 41,
+            "claimed": 136,
+            "correct": 136,
+            "wrong": 0,
+            "recall": 0.768362,
+            "precision": 1
+          },
+          "prismatic": {
+            "population": 699,
+            "recalled": 694,
+            "abstained": 5,
+            "claimed": 694,
+            "correct": 694,
+            "wrong": 0,
+            "recall": 0.992847,
+            "precision": 1
+          }
+        },
+        "calibration": {
+          "matchedByGeometryHash": [],
+          "reportedRenamed": [],
+          "recovered": 0,
+          "population": 0,
+          "recoveredByLowerTiers": null
+        },
+        "duplicateContainment": {
+          "population": 8,
+          "contained": 8,
+          "rate": 1
+        },
+        "respecifiedControl": {
+          "population": 20,
+          "reportedRenamed": [],
+          "matchedByGeometryOnly": 20
+        },
+        "contentMatchedSuccessorKinds": 0,
+        "insertedNearby": 8,
+        "bySuccessor": {
+          "footprint": {
+            "population": 14,
+            "recalled": 14,
+            "kindAgreed": 12,
+            "claimed": 14,
+            "correct": 14,
+            "wrong": 0,
+            "recall": 1,
+            "kindAgreement": 0.857143,
+            "precision": 1
+          },
+          "position": {
+            "population": 6,
+            "recalled": 6,
+            "kindAgreed": 6,
+            "claimed": 6,
+            "correct": 6,
+            "wrong": 0,
+            "recall": 1,
+            "kindAgreement": 1,
+            "precision": 1
+          }
+        },
+        "bySuccessorConfidence": {
+          "position": {
+            "claimed": 5,
+            "correct": 5,
+            "wrong": 0,
+            "precision": 1
+          },
+          "footprint": {
+            "claimed": 15,
+            "correct": 15,
+            "wrong": 0,
+            "precision": 1
+          }
+        },
+        "falseSuccessors": {
+          "insertedNearby": 0,
+          "neighbourSuccessor": 0
+        },
+        "successorClaims": 20,
+        "recoveredContentKinds": 0,
+        "wrongSuccessors": [],
+        "bySplit": {
+          "population": 8,
+          "recalled": 8,
+          "kindAgreed": 8,
+          "claimed": 8,
+          "correct": 8,
+          "wrong": 0,
+          "recall": 1,
+          "precision": 1,
+          "kindAgreement": 1,
+          "byConfidence": {
+            "verified": 8
+          },
+          "mergeClaims": 8
+        },
+        "wrongSplits": [],
+        "byMerge": {
+          "population": 8,
+          "recalled": 8,
+          "kindAgreed": 8,
+          "claimed": 8,
+          "correct": 8,
+          "wrong": 0,
+          "recall": 1,
+          "precision": 1,
+          "kindAgreement": 1,
+          "byConfidence": {
+            "verified": 8
+          },
+          "splitClaims": 8
+        },
+        "wrongMerges": [],
+        "moveDistance": {
+          "checked": 34,
+          "agreed": 34,
+          "agreement": 1
+        },
+        "missed": {
+          "abstained": 46,
+          "silent": 0,
+          "byType": {
+            "IfcMemberType": 27,
+            "IfcDoorType": 12,
+            "IfcGrid": 5,
+            "IfcWindowType": 2
+          }
+        },
+        "kindDisagreements": [
+          {
+            "base": 38745,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 12449,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 7700,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 21999,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 32081,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 16286,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 12345,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 6511,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 12235,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 6163,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 9400,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 25914,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 6810,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 7137,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 14797,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 13797,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 6934,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 14638,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 16231,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          },
+          {
+            "base": 7403,
+            "expected": [
+              "renamed"
+            ],
+            "reported": "reshaped"
+          }
+        ],
+        "anomalies": []
+      }
+    }
+  ]
+}

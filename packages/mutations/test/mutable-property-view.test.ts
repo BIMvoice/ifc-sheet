@@ -1,0 +1,690 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, expect, it } from 'vitest';
+import { PropertyValueType, QuantityType } from '@ifc-lite/data';
+import { BulkQueryEngine, MutablePropertyView, type Mutation } from '../src/index.js';
+
+describe('MutablePropertyView', () => {
+  it('creates a new property set automatically and returns mutated values', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+
+    view.setProperty(42, 'Pset_Custom', 'Code', 'A-01', PropertyValueType.Label);
+
+    expect(view.getPropertyValue(42, 'Pset_Custom', 'Code')).toBe('A-01');
+    expect(view.getForEntity(42)).toMatchObject([
+      {
+        name: 'Pset_Custom',
+        properties: [
+          {
+            name: 'Code',
+            type: PropertyValueType.Label,
+            value: 'A-01',
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('deletes an existing property from the overlaid view', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor((entityId) => entityId === 7 ? [{
+      name: 'Pset_Base',
+      globalId: 'base-guid',
+      properties: [
+        { name: 'Status', type: PropertyValueType.Label, value: 'Existing' },
+      ],
+    }] : []);
+
+    view.deleteProperty(7, 'Pset_Base', 'Status');
+
+    expect(view.getPropertyValue(7, 'Pset_Base', 'Status')).toBeNull();
+    expect(view.getForEntity(7)).toEqual([]);
+  });
+
+  it('reports a property-set deletion that masks a base set', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor((entityId) => entityId === 7 ? [{
+      name: 'Pset_WallCommon',
+      properties: [{ name: 'IsExternal', type: PropertyValueType.Boolean, value: true }],
+    }] : []);
+    view.deletePropertySet(7, 'Pset_WallCommon');
+
+    expect(view.isPropertySetDeleted(7, 'Pset_WallCommon')).toBe(true);
+  });
+
+  it('treats a null/unset property as present, not absent (issue #1107)', () => {
+    // A bSDD Boolean is added unset (value null) so we never pick a value for
+    // the user. Such a property still EXISTS — null must not be read as absent.
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+
+    const created = view.setProperty(9, 'Pset_WallCommon', 'Combustible', null, PropertyValueType.Boolean);
+    expect(created.type).toBe('CREATE_PROPERTY');
+    expect(view.getForEntity(9)).toMatchObject([
+      {
+        name: 'Pset_WallCommon',
+        properties: [{ name: 'Combustible', type: PropertyValueType.Boolean, value: null }],
+      },
+    ]);
+
+    // Editing an existing-but-unset property is an UPDATE (not a CREATE), so a
+    // later undo restores the prior unset state instead of deleting the property.
+    const edited = view.setProperty(9, 'Pset_WallCommon', 'Combustible', true, PropertyValueType.Boolean);
+    expect(edited.type).toBe('UPDATE_PROPERTY');
+    expect(edited.oldValue).toBeNull();
+
+    // The unset property is still deletable — the trash button is not a no-op.
+    const fresh = new MutablePropertyView(null, 'model-1');
+    fresh.setOnDemandExtractor(() => []);
+    fresh.setProperty(9, 'Pset_WallCommon', 'Combustible', null, PropertyValueType.Boolean);
+    expect(fresh.deleteProperty(9, 'Pset_WallCommon', 'Combustible')).not.toBeNull();
+    expect(fresh.getForEntity(9)).toEqual([]);
+  });
+
+  it('treats a null/unset property already present in BASE data as present, not absent (issue #1107, base-table shape)', () => {
+    // Same #1107 hazard as above, but the unset property comes from the
+    // *source IFC file* itself (an unset Boolean parsed with value null),
+    // not from a same-session `setProperty` call. `getPropertyValue()`
+    // still returns null for it before any edit, so the CREATE/UPDATE
+    // classification cannot rely on `oldValue !== null` alone — it must
+    // also check the base pset's property list directly, the same way
+    // `deleteProperty`'s `propExistsInBase` check already does.
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor((entityId) => entityId === 9 ? [{
+      name: 'Pset_WallCommon',
+      globalId: 'base-guid',
+      properties: [
+        { name: 'Combustible', type: PropertyValueType.Boolean, value: null },
+      ],
+    }] : []);
+
+    const edited = view.setProperty(9, 'Pset_WallCommon', 'Combustible', true, PropertyValueType.Boolean);
+    expect(edited.type).toBe('UPDATE_PROPERTY');
+    expect(edited.oldValue).toBeNull();
+  });
+
+  it('a NEW property inside an existing base pset is still a CREATE (the base check is per-property, not per-pset)', () => {
+    // The third direction of the same rule, and the one every fixture here
+    // was blind to: each base pset above contains exactly the property being
+    // set, so "this pset exists in base" and "this property exists in base"
+    // coincide and a per-PSET existence check reads as correct.
+    //
+    // Verified by mutation: relaxing the disjunct to
+    // `basePsets.some(p => p.name === psetName)` — dropping the inner
+    // `p.properties.some(prop => prop.name === propName)` — left all 28 tests
+    // green, while it classifies every brand-new property added to an
+    // existing pset as an UPDATE with `oldValue: null`. The viewer's undo
+    // handler decides by mutation TYPE (mutationSlice.ts), so undoing that
+    // add would replay the null and leave the property behind as a
+    // present-but-unset row instead of removing it.
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor((entityId) => entityId === 11 ? [{
+      name: 'Pset_WallCommon',
+      globalId: 'base-guid',
+      properties: [
+        { name: 'IsExternal', type: PropertyValueType.Boolean, value: true },
+      ],
+    }] : []);
+
+    const created = view.setProperty(11, 'Pset_WallCommon', 'LoadBearing', true, PropertyValueType.Boolean);
+    expect(created.type).toBe('CREATE_PROPERTY');
+    // A property that was never there has no old value to restore.
+    expect(created.oldValue).toBeNull();
+    // The sibling that IS in base still classifies as an UPDATE, so this is
+    // a per-property distinction and not a blanket "base psets are absent".
+    const updated = view.setProperty(11, 'Pset_WallCommon', 'IsExternal', false, PropertyValueType.Boolean);
+    expect(updated.type).toBe('UPDATE_PROPERTY');
+    expect(updated.oldValue).toBe(true);
+  });
+
+  // The other direction of the rule above: "present in base" must stop meaning
+  // present once the user has deleted it. Counting a masked base row as present
+  // makes the re-set an UPDATE with `oldValue: null`, and the viewer's undo
+  // handler decides by mutation TYPE (mutationSlice.ts) — so undo would replay
+  // that null and bring the deleted property back as a present-but-unset row
+  // instead of removing it again.
+  describe('a base property the user already deleted is absent again', () => {
+    const withBaseProp = () => {
+      const view = new MutablePropertyView(null, 'model-1');
+      view.setOnDemandExtractor((entityId) => entityId === 7 ? [{
+        name: 'Pset_Base',
+        globalId: 'base-guid',
+        properties: [
+          { name: 'Status', type: PropertyValueType.Label, value: 'Existing' },
+        ],
+      }] : []);
+      return view;
+    };
+
+    it('re-setting a deleted base property is a CREATE, not an UPDATE', () => {
+      const view = withBaseProp();
+      view.deleteProperty(7, 'Pset_Base', 'Status');
+      const m = view.setProperty(7, 'Pset_Base', 'Status', 'Again', PropertyValueType.Label);
+      expect(m.type).toBe('CREATE_PROPERTY');
+    });
+
+    it('re-setting a property whose whole base pset was deleted is a CREATE', () => {
+      const view = withBaseProp();
+      view.deletePropertySet(7, 'Pset_Base');
+      const m = view.setProperty(7, 'Pset_Base', 'Status', 'Again', PropertyValueType.Label);
+      expect(m.type).toBe('CREATE_PROPERTY');
+    });
+
+    // The two halves of `maskedInSession` — the per-property DELETE marker and
+    // `deletedPsets` — overlap in the tests above, because `deletePropertySet`
+    // also writes a DELETE marker for every property it masks. So the
+    // `deletedPsets` half is load-bearing for exactly one route and nothing
+    // fails if it is deleted: verified by mutation, dropping it left the whole
+    // file green. The halves separate once that marker has been overwritten,
+    // which the first re-set does. The second re-set then has no DELETE marker
+    // and a null `oldValue`, so only `deletedPsets` still knows the base row is
+    // masked; without it the base row counts as present and the re-set comes
+    // back as UPDATE with `oldValue: null` — the resurrection the guard exists
+    // to prevent. Null values throughout because a non-null first re-set makes
+    // `oldValue !== null` carry the classification on its own.
+    it('a deleted base PSET keeps masking after its per-property DELETE marker is overwritten', () => {
+      const view = withBaseProp();
+      view.deletePropertySet(7, 'Pset_Base');
+
+      const first = view.setProperty(7, 'Pset_Base', 'Status', null, PropertyValueType.Label);
+      expect(first.type).toBe('CREATE_PROPERTY');
+
+      // The DELETE marker is gone now (overwritten by the SET above), so
+      // `deletedPsets` is the only remaining mask on the base row.
+      const second = view.setProperty(7, 'Pset_Base', 'Status', null, PropertyValueType.Label);
+      expect(second.type).toBe('CREATE_PROPERTY');
+      expect(second.oldValue).toBeNull();
+    });
+
+    it('an undeleted base property is still an UPDATE (the guard is not blanket)', () => {
+      const view = withBaseProp();
+      const m = view.setProperty(7, 'Pset_Base', 'Status', 'Again', PropertyValueType.Label);
+      expect(m.type).toBe('UPDATE_PROPERTY');
+      expect(m.oldValue).toBe('Existing');
+    });
+  });
+
+  describe('setQuantity oldValue/type on a base quantity (undo correctness, #2297 shape)', () => {
+    it('carries the base value as oldValue on the first edit of an existing quantity', () => {
+      // `apps/viewer`'s undo handler only replays `mutation.oldValue` for
+      // UPDATE_QUANTITY when it is non-null (`mutationSlice.ts`): if the
+      // first edit of an already-existing base quantity reports
+      // `oldValue: null` instead of the true prior value, undo silently
+      // does nothing — the mutation stays applied. Unlike `setProperty`,
+      // which resolves `oldValue` via `getPropertyValue()` (base data +
+      // overlay), `setQuantity` must resolve the same way rather than only
+      // consulting an existing overlay mutation.
+      const view = new MutablePropertyView(null, 'model-1');
+      view.setQuantityExtractor((entityId) => entityId === 11 ? [{
+        name: 'Qto_Base',
+        quantities: [{ name: 'Area', type: QuantityType.Area, value: 10 }],
+      }] : []);
+
+      const mutation = view.setQuantity(11, 'Qto_Base', 'Area', 99, QuantityType.Area);
+
+      expect(mutation.type).toBe('UPDATE_QUANTITY');
+      expect(mutation.oldValue).toBe(10);
+    });
+
+    it('classifies a brand-new quantity added to an existing base qset as CREATE, not UPDATE', () => {
+      // `qsetExistsInBase` alone doesn't mean THIS quantity existed — adding
+      // a never-before-seen quantity name to an existing qset must report
+      // CREATE_QUANTITY (undo removes the mutation outright) rather than
+      // UPDATE_QUANTITY with a null oldValue (undo would try, and fail, to
+      // restore a "prior" value that never existed).
+      const view = new MutablePropertyView(null, 'model-1');
+      view.setQuantityExtractor((entityId) => entityId === 11 ? [{
+        name: 'Qto_Base',
+        quantities: [{ name: 'Area', type: QuantityType.Area, value: 10 }],
+      }] : []);
+
+      const mutation = view.setQuantity(11, 'Qto_Base', 'Volume', 42, QuantityType.Volume);
+
+      expect(mutation.type).toBe('CREATE_QUANTITY');
+      expect(mutation.oldValue).toBeNull();
+    });
+
+    it('still reports UPDATE with the overlay value on a second edit (control)', () => {
+      const view = new MutablePropertyView(null, 'model-1');
+      view.setQuantityExtractor((entityId) => entityId === 11 ? [{
+        name: 'Qto_Base',
+        quantities: [{ name: 'Area', type: QuantityType.Area, value: 10 }],
+      }] : []);
+
+      view.setQuantity(11, 'Qto_Base', 'Area', 99, QuantityType.Area);
+      const second = view.setQuantity(11, 'Qto_Base', 'Area', 123, QuantityType.Area);
+
+      expect(second.type).toBe('UPDATE_QUANTITY');
+      expect(second.oldValue).toBe(99);
+    });
+  });
+
+  describe('entity aliases (duplicate flow)', () => {
+    it('routes base property reads to the source entity when aliased', () => {
+      const view = new MutablePropertyView(null, 'model-1');
+      view.setOnDemandExtractor((entityId) => entityId === 100 ? [{
+        name: 'Pset_WallCommon',
+        globalId: 'wall-guid',
+        properties: [
+          { name: 'FireRating', type: PropertyValueType.Label, value: 'REI 60' },
+        ],
+      }] : []);
+
+      // Without an alias, the duplicate (id 200) has no base props.
+      expect(view.getForEntity(200)).toEqual([]);
+
+      // After aliasing, the duplicate inherits the source's psets.
+      view.setEntityAlias(200, 100);
+      expect(view.getForEntity(200)).toMatchObject([
+        {
+          name: 'Pset_WallCommon',
+          properties: [
+            { name: 'FireRating', value: 'REI 60' },
+          ],
+        },
+      ]);
+    });
+
+    it('keeps overrides scoped to the duplicate id, not the source', () => {
+      const view = new MutablePropertyView(null, 'model-1');
+      view.setOnDemandExtractor((entityId) => entityId === 100 ? [{
+        name: 'Pset_WallCommon',
+        globalId: 'wall-guid',
+        properties: [
+          { name: 'FireRating', type: PropertyValueType.Label, value: 'REI 60' },
+        ],
+      }] : []);
+
+      view.setEntityAlias(200, 100);
+
+      // Edit on the duplicate.
+      view.setProperty(200, 'Pset_WallCommon', 'FireRating', 'REI 120', PropertyValueType.Label);
+
+      // Source's view of FireRating is unchanged.
+      expect(view.getPropertyValue(100, 'Pset_WallCommon', 'FireRating')).toBe('REI 60');
+      // Duplicate's view shows the override.
+      expect(view.getPropertyValue(200, 'Pset_WallCommon', 'FireRating')).toBe('REI 120');
+    });
+
+    it('clears the alias when sourceId is null', () => {
+      const view = new MutablePropertyView(null, 'model-1');
+      view.setEntityAlias(200, 100);
+      expect(view.getEntityAlias(200)).toBe(100);
+      view.setEntityAlias(200, null);
+      expect(view.getEntityAlias(200)).toBeNull();
+    });
+
+    it('refuses self-aliases (no-op)', () => {
+      const view = new MutablePropertyView(null, 'model-1');
+      view.setEntityAlias(42, 42);
+      expect(view.getEntityAlias(42)).toBeNull();
+    });
+  });
+});
+
+describe('BulkQueryEngine', () => {
+  it('selects by GlobalId and applies property mutations', () => {
+    const strings = ['guid-wall-a', 'guid-wall-b', 'Wall Alpha', 'Wall Beta'];
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+
+    const entities = {
+      count: 2,
+      expressId: new Int32Array([1, 2]),
+      typeEnum: new Uint32Array([10, 10]),
+      globalId: new Int32Array([0, 1]),
+      name: new Int32Array([2, 3]),
+    } as any;
+
+    const engine = new BulkQueryEngine(
+      entities,
+      view,
+      null,
+      { get: (idx: number) => strings[idx] },
+    );
+
+    const preview = engine.preview({
+      select: { globalIds: ['guid-wall-b'] },
+      action: {
+        type: 'SET_PROPERTY',
+        psetName: 'Pset_Bulk',
+        propName: 'Zone',
+        value: 'B',
+        valueType: PropertyValueType.Label,
+      },
+    });
+
+    expect(preview.matchedEntityIds).toEqual([2]);
+
+    const result = engine.execute({
+      select: { entityTypes: [10], namePattern: 'Wall' },
+      action: {
+        type: 'SET_PROPERTY',
+        psetName: 'Pset_Bulk',
+        propName: 'Zone',
+        value: 'North',
+        valueType: PropertyValueType.Label,
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.affectedEntityCount).toBe(2);
+    expect(view.getPropertyValue(1, 'Pset_Bulk', 'Zone')).toBe('North');
+    expect(view.getPropertyValue(2, 'Pset_Bulk', 'Zone')).toBe('North');
+  });
+});
+
+describe('MutablePropertyView.hasPendingChanges', () => {
+  it('is false on a fresh view and true once an overlay edit is recorded', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+    expect(view.hasPendingChanges()).toBe(false);
+
+    view.setProperty(1, 'Pset_Test', 'Foo', 'bar', PropertyValueType.Label);
+    expect(view.hasPendingChanges()).toBe(true);
+  });
+
+  it('returns to false after clear()', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.createPropertySet(1, 'Pset_New', [{ name: 'A', value: 'x', type: PropertyValueType.Label }]);
+    expect(view.hasPendingChanges()).toBe(true);
+
+    view.clear();
+    expect(view.hasPendingChanges()).toBe(false);
+  });
+
+  it('tracks the current overlay footprint, not append-only history', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+    view.setProperty(1, 'Pset_Test', 'Foo', 'bar', PropertyValueType.Label);
+    // History only grows; the overlay footprint is what gates the export bake.
+    expect(view.getMutations().length).toBeGreaterThan(0);
+    expect(view.hasPendingChanges()).toBe(true);
+  });
+
+  it('reports a type-only (retype) edit so merged export does not drop it', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    expect(view.hasPendingChanges()).toBe(false);
+
+    view.setEntityType(1, 'IfcColumn');
+    expect(view.hasPendingChanges()).toBe(true);
+  });
+});
+
+describe('MutablePropertyView.getModifiedEntityCount / hasChanges (issue #1915)', () => {
+  it('agrees with hasPendingChanges() after an undo that only clears the overlay entry', () => {
+    // Exactly what undoing a freshly-created attribute mutation does
+    // (mutationSlice.ts): the overlay entry is removed, but mutationHistory
+    // (append-only) still holds the original record.
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setAttribute(42, 'Name', 'Edited');
+    expect(view.getModifiedEntityCount()).toBe(1);
+    expect(view.hasChanges()).toBe(true);
+    expect(view.hasChanges(42)).toBe(true);
+
+    view.removeAttributeMutation(42, 'Name');
+
+    expect(view.hasPendingChanges()).toBe(false);
+    expect(view.getModifiedEntityCount()).toBe(0);
+    expect(view.hasChanges()).toBe(false);
+    expect(view.hasChanges(42)).toBe(false);
+    // mutationHistory itself is untouched (append-only) — the discrepancy
+    // this fix closes.
+    expect(view.getMutations().length).toBe(1);
+  });
+
+  it('counts distinct entities, not distinct mutations', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+    view.setProperty(1, 'Pset1', 'Prop1', 'a', PropertyValueType.Label);
+    view.setProperty(1, 'Pset1', 'Prop2', 'b', PropertyValueType.Label);
+    view.setAttribute(2, 'Name', 'Two');
+
+    expect(view.getModifiedEntityCount()).toBe(2);
+  });
+});
+
+// The enumeration itself (`collectEffectiveChanges`, extracted into
+// `effective-changes.ts` to keep this file from growing past the AGENTS.md
+// module-split guideline) is covered in `effective-changes.test.ts`. This
+// integration test stays here because it's specifically about
+// `MutablePropertyView`'s own undo/redo behaviour — `setProperty(..., true)`
+// with `skipHistory` — agreeing with `getEffectiveChanges()`'s base-value
+// resolution, not about the enumeration logic in isolation.
+describe('MutablePropertyView.getEffectiveChanges (issue #1915)', () => {
+  it('reports the true original value across an undo -> redo cycle, not a stale history entry', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor((entityId) => entityId === 7 ? [{
+      name: 'Pset_Base',
+      globalId: 'base-guid',
+      properties: [
+        { name: 'Status', type: PropertyValueType.Label, value: 'Original' },
+      ],
+    }] : []);
+
+    // Edit.
+    view.setProperty(7, 'Pset_Base', 'Status', 'Edited', PropertyValueType.Label);
+    expect(view.getEffectiveChanges()).toEqual([
+      {
+        entityId: 7,
+        kind: 'property',
+        setName: 'Pset_Base',
+        name: 'Status',
+        previousValue: 'Original',
+        newValue: 'Edited',
+      },
+    ]);
+
+    // Undo: revert the overlay to the original value (mirrors mutationSlice's
+    // undo, which re-applies the inverse with skipHistory rather than
+    // popping mutationHistory).
+    view.setProperty(7, 'Pset_Base', 'Status', 'Original', PropertyValueType.Label, undefined, true);
+    // previousValue still comes from the base extractor, not from the now-stale
+    // history entry — so it resolves to 'Original' — same as newValue. That
+    // makes this a no-op edit: the user undid it, so the review must not list
+    // a "Status Original -> Original" row for a change that no longer exists
+    // (maintainer finding on #1967 — a fully-undone edit was rendering as a
+    // phantom no-op row).
+    expect(view.getEffectiveChanges()).toEqual([]);
+
+    // Redo: re-apply the edit.
+    view.setProperty(7, 'Pset_Base', 'Status', 'Edited', PropertyValueType.Label, undefined, true);
+    expect(view.getEffectiveChanges()).toEqual([
+      {
+        entityId: 7,
+        kind: 'property',
+        setName: 'Pset_Base',
+        name: 'Status',
+        previousValue: 'Original',
+        newValue: 'Edited',
+      },
+    ]);
+  });
+});
+
+describe('hasQuantityBase (github.com/LTplus-AG/ifc-lite/issues/2487)', () => {
+  it('is false until a quantity extractor is wired, and the overlay is then the only source', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+
+    // The default. Properties always have SOMETHING under the overlay — the
+    // `baseTable` the constructor takes, or the on-demand extractor — but
+    // `setQuantityExtractor` is opt-in and there is no fallback, so a view
+    // without one reports whatever this session edited and nothing else.
+    expect(view.hasQuantityBase()).toBe(false);
+    view.setQuantity(7, 'Qto_WallBaseQuantities', 'GrossArea', 12, QuantityType.Area);
+    expect(view.getQuantitiesForEntity(7)).toEqual([
+      { name: 'Qto_WallBaseQuantities', quantities: [{ name: 'GrossArea', type: QuantityType.Area, value: 12, unit: undefined }] },
+    ]);
+  });
+
+  it('is true once one is, and the set is then reported whole', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+    view.setQuantityExtractor(() => [
+      { name: 'Qto_WallBaseQuantities', quantities: [{ name: 'NetVolume', type: QuantityType.Volume, value: 1.5 }] },
+    ]);
+
+    expect(view.hasQuantityBase()).toBe(true);
+    view.setQuantity(7, 'Qto_WallBaseQuantities', 'GrossArea', 12, QuantityType.Area);
+    // Both: the base quantity and the edit. This is the difference a consumer
+    // holding the base data can now detect before writing the set out.
+    expect(view.getQuantitiesForEntity(7)[0].quantities.map((q) => q.name)).toEqual([
+      'NetVolume',
+      'GrossArea',
+    ]);
+  });
+});
+
+describe('deleteQuantitySet (#2508)', () => {
+  it('deletes one base quantity, retains its siblings, and replays the mutation', () => {
+    const quantities = () => [{
+      name: 'Qto_Base',
+      quantities: [
+        { name: 'Length', type: QuantityType.Length, value: 3 },
+        { name: 'Count', type: QuantityType.Count, value: 2 },
+      ],
+    }];
+    const origin = new MutablePropertyView(null, 'model-1');
+    origin.setQuantityExtractor(quantities);
+    expect(origin.deleteQuantity(7, 'Qto_Base', 'Length')?.type).toBe('DELETE_QUANTITY');
+    expect(origin.getQuantitiesForEntity(7)[0]?.quantities.map(quantity => quantity.name)).toEqual(['Count']);
+
+    const replayed = new MutablePropertyView(null, 'model-1');
+    replayed.setQuantityExtractor(quantities);
+    replayed.applyMutations(origin.getMutations());
+    expect(replayed.getQuantitiesForEntity(7)[0]?.quantities.map(quantity => quantity.name)).toEqual(['Count']);
+  });
+
+  it('retains a replayed member tombstone when the base extractor is configured later', () => {
+    const deletion: Mutation = {
+      id: 'delete-length', type: 'DELETE_QUANTITY', timestamp: 1,
+      modelId: 'model-1', entityId: 7, psetName: 'Qto_Base', propName: 'Length',
+    };
+    const replayed = new MutablePropertyView(null, 'model-1');
+    replayed.applyMutations([deletion]);
+    const quantities = () => [{
+      name: 'Qto_Base',
+      quantities: [
+        { name: 'Length', type: QuantityType.Length, value: 3 },
+        { name: 'Count', type: QuantityType.Count, value: 2 },
+      ],
+    }];
+    replayed.setQuantityExtractor(quantities);
+
+    expect(replayed.getQuantitiesForEntity(7)[0]?.quantities.map(quantity => quantity.name)).toEqual(['Count']);
+    expect(replayed.getMutations()).toEqual([deletion]);
+
+    const secondHop = new MutablePropertyView(null, 'model-1');
+    secondHop.setQuantityExtractor(quantities);
+    secondHop.applyMutations(replayed.getMutations());
+    expect(secondHop.getQuantitiesForEntity(7)[0]?.quantities.map(quantity => quantity.name)).toEqual(['Count']);
+    expect(secondHop.getMutations()).toHaveLength(1);
+  });
+
+  it('keeps a delayed-base quantity deleted after replaying an update followed by delete', () => {
+    const replayed = new MutablePropertyView(null, 'model-1');
+    replayed.applyMutations([
+      {
+        id: 'update-length', type: 'UPDATE_QUANTITY', timestamp: 1,
+        modelId: 'model-1', entityId: 7, psetName: 'Qto_Base', propName: 'Length',
+        oldValue: 3, newValue: 4, quantityType: QuantityType.Length,
+      },
+      {
+        id: 'delete-length', type: 'DELETE_QUANTITY', timestamp: 2,
+        modelId: 'model-1', entityId: 7, psetName: 'Qto_Base', propName: 'Length',
+      },
+    ]);
+    const quantities = () => [{
+      name: 'Qto_Base',
+      quantities: [
+        { name: 'Length', type: QuantityType.Length, value: 3 },
+        { name: 'Count', type: QuantityType.Count, value: 2 },
+      ],
+    }];
+    replayed.setQuantityExtractor(quantities);
+
+    expect(replayed.getQuantitiesForEntity(7)[0]?.quantities.map(quantity => quantity.name)).toEqual(['Count']);
+    expect(replayed.getMutations().map(mutation => mutation.type)).toEqual([
+      'CREATE_QUANTITY',
+      'DELETE_QUANTITY',
+    ]);
+
+    const secondHop = new MutablePropertyView(null, 'model-1');
+    secondHop.setQuantityExtractor(quantities);
+    secondHop.applyMutations(replayed.getMutations());
+    expect(secondHop.getQuantitiesForEntity(7)[0]?.quantities.map(quantity => quantity.name)).toEqual(['Count']);
+  });
+
+  it('removes a quantity set created in this session, along with its quantities', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+    view.setQuantityExtractor(() => []);
+
+    view.createQuantitySet(7, 'IfcLite_ZoneVolumes [Takt] (mesh)', [
+      { name: 'Takt A', value: 2, quantityType: QuantityType.Volume },
+    ]);
+    expect(view.getQuantitiesForEntity(7)).toHaveLength(1);
+
+    view.deleteQuantitySet(7, 'IfcLite_ZoneVolumes [Takt] (mesh)');
+
+    // Not merely absent from the set list: the per-quantity SET mutations the
+    // create recorded are dropped too, so nothing can re-add the quantity to a
+    // base set of the same name later, and the entity stops reporting itself
+    // as modified with nothing to show for it.
+    expect(view.getQuantitiesForEntity(7)).toEqual([]);
+    expect(view.hasChanges(7)).toBe(false);
+  });
+
+  it('masks a quantity set that exists in the base file', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+    view.setQuantityExtractor((entityId) => entityId === 7 ? [{
+      name: 'Qto_WallBaseQuantities',
+      quantities: [{ name: 'NetVolume', type: QuantityType.Volume, value: 1.5 }],
+    }] : []);
+
+    view.deleteQuantitySet(7, 'Qto_WallBaseQuantities');
+
+    expect(view.getQuantitiesForEntity(7)).toEqual([]);
+    // A base deletion IS a change, unlike dropping a set this session created.
+    expect(view.hasChanges(7)).toBe(true);
+  });
+
+  it('replays a serialized deletion even where this view cannot see the base', () => {
+    // The quantity extractor is opt-in and several in-tree callers wire the
+    // property one beside it and not it. A replayed deletion is a decision the
+    // origin session already made, so a view with no base must still mask the
+    // set: otherwise a later export regenerates what the user removed.
+    const origin = new MutablePropertyView(null, 'model-1');
+    origin.setOnDemandExtractor(() => []);
+    origin.setQuantityExtractor((entityId) => entityId === 7 ? [{
+      name: 'Qto_WallBaseQuantities',
+      quantities: [{ name: 'NetVolume', type: QuantityType.Volume, value: 1.5 }],
+    }] : []);
+    origin.deleteQuantitySet(7, 'Qto_WallBaseQuantities');
+
+    const replayed = new MutablePropertyView(null, 'model-1');
+    replayed.setOnDemandExtractor(() => []);
+    // No quantity extractor here, on purpose.
+    replayed.applyMutations(origin.getMutations());
+
+    expect(replayed.isQuantitySetDeleted(7, 'Qto_WallBaseQuantities')).toBe(true);
+  });
+
+  it('leaves other quantity sets on the same entity alone', () => {
+    const view = new MutablePropertyView(null, 'model-1');
+    view.setOnDemandExtractor(() => []);
+    view.setQuantityExtractor(() => []);
+
+    view.createQuantitySet(7, 'Kept', [{ name: 'A', value: 1, quantityType: QuantityType.Volume }]);
+    view.createQuantitySet(7, 'Dropped', [{ name: 'B', value: 2, quantityType: QuantityType.Volume }]);
+
+    view.deleteQuantitySet(7, 'Dropped');
+
+    expect(view.getQuantitiesForEntity(7).map((q) => q.name)).toEqual(['Kept']);
+  });
+});

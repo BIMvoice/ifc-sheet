@@ -1,0 +1,123 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import type { EntityRef, VisibilityBackendMethods } from '@ifc-lite/sdk';
+import type { StoreApi } from './types.js';
+import { getModelForRef, type ModelLike } from './model-compat.js';
+import { collectSpatialSubtreeElementsWithIfcSpace } from '../../store/basketVisibleSet.js';
+import { toGlobalIdForRef, toGlobalIdFromModels } from '../../store/globalId.js';
+import type { AggregationRelationships } from '../../utils/aggregation.js';
+import { resolvePresentationIds } from '../../lib/presentation/resolvePresentationIds.js';
+import { isSpaceLikeSpatialTypeName, isSpatialStructureTypeName, type SpatialNode } from '@ifc-lite/data';
+
+function findDescendantNode(root: SpatialNode, expressId: number): SpatialNode | null {
+  const stack: SpatialNode[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (node.expressId === expressId) return node;
+    for (const child of node.children) {
+      stack.push(child);
+    }
+  }
+  return null;
+}
+
+/**
+ * If `ref` points to a spatial structure element (storey, building, etc.),
+ * expand it to the local expressIds of all contained elements.
+ * Otherwise return the original expressId as-is.
+ */
+function expandSpatialRef(ref: EntityRef, model: ModelLike): number[] {
+  const dataStore = model.ifcDataStore;
+  // Native-metadata-only models have no parsed data store — visibility
+  // expansion isn't possible, fall back to the single ref.
+  if (!dataStore) return [ref.expressId];
+  const typeName = dataStore.entities.getTypeName(ref.expressId) || '';
+  if (!isSpatialStructureTypeName(typeName) || isSpaceLikeSpatialTypeName(typeName)) {
+    return [ref.expressId];
+  }
+
+  const hierarchy = dataStore.spatialHierarchy;
+  if (!hierarchy) return [ref.expressId];
+  const startNode = findDescendantNode(hierarchy.project, ref.expressId);
+  if (!startNode) return [ref.expressId];
+
+  const ids = collectSpatialSubtreeElementsWithIfcSpace(
+    hierarchy,
+    ref.expressId,
+    dataStore.relationships as AggregationRelationships | undefined,
+  );
+  return ids && ids.length > 0 ? ids : [ref.expressId];
+}
+
+export function createVisibilityAdapter(store: StoreApi): VisibilityBackendMethods {
+  return {
+    hide(refs: EntityRef[]) {
+      const state = store.getState();
+      // Convert EntityRef to global IDs — the renderer subscribes to the flat
+      // hiddenEntities set (global IDs).
+      const globalIds: number[] = [];
+      for (const ref of refs) {
+        if (!getModelForRef(state, ref.modelId)) continue;
+        globalIds.push(toGlobalIdForRef(state.models, ref));
+      }
+      if (globalIds.length > 0) {
+        // #3338: `hiddenEntities` is matched against MESH ids, so a
+        // geometry-less `IfcElementAssembly` ref hides nothing at all unless
+        // it becomes its `IfcRelAggregates` parts first. Same resolver, same
+        // union policy as `isolate()` below.
+        state.hideEntities(resolvePresentationIds(state.cameraCallbacks.resolveHighlightIds, globalIds));
+      }
+      return undefined;
+    },
+    show(refs: EntityRef[]) {
+      const state = store.getState();
+      const globalIds: number[] = [];
+      for (const ref of refs) {
+        if (!getModelForRef(state, ref.modelId)) continue;
+        globalIds.push(toGlobalIdForRef(state.models, ref));
+      }
+      if (globalIds.length > 0) {
+        // #3338: must expand for the reason `hide()` does, plus one of its
+        // own — after `hide()` expands, `hiddenEntities` holds the PARTS, so
+        // a `show()` that removed only the parent id could never undo it.
+        state.showEntities(resolvePresentationIds(state.cameraCallbacks.resolveHighlightIds, globalIds));
+      }
+      return undefined;
+    },
+    isolate(refs: EntityRef[]) {
+      const state = store.getState();
+      const globalIds: number[] = [];
+      for (const ref of refs) {
+        const model = getModelForRef(state, ref.modelId);
+        if (model) {
+          const expanded = expandSpatialRef(ref, model);
+          for (const id of expanded) {
+            globalIds.push(toGlobalIdFromModels(state.models, ref.modelId, id));
+          }
+        }
+      }
+      if (globalIds.length > 0) {
+        // #3338: this is a selection/isolation channel like LensPanel,
+        // PropertiesPanel and both SearchModal isolate paths, so it must
+        // resolve the same way they do — a geometry-less `IfcElementAssembly`
+        // ref (spatial expansion above leaves it untouched) has to become its
+        // geometry-bearing `IfcRelAggregates` parts, or the viewport isolates
+        // an id with nothing to render and shows an empty scene.
+        //
+        // #3382's union policy, now via the shared `resolvePresentationIds` so
+        // `check-isolate-expansion-routing.mjs` can require every channel to
+        // use the same one: the resolved ids are unioned with the raw ids, and
+        // an empty resolve keeps the raw ids rather than isolating nothing.
+        state.isolateEntities?.(resolvePresentationIds(state.cameraCallbacks.resolveHighlightIds, globalIds));
+      }
+      return undefined;
+    },
+    reset() {
+      const state = store.getState();
+      state.showAllInAllModels?.();
+      return undefined;
+    },
+  };
+}

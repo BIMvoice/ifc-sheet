@@ -1,0 +1,317 @@
+# @ifc-lite/viewer-core
+
+## 0.2.25
+
+### Patch Changes
+
+- Updated dependencies [[`455ddc3`](https://github.com/LTplus-AG/ifc-lite/commit/455ddc3899ea6a5debce36543de5b8f009bb711f), [`495591f`](https://github.com/LTplus-AG/ifc-lite/commit/495591f97d5c6328bf122b1ed0940149f91d25f8), [`9eeefec`](https://github.com/LTplus-AG/ifc-lite/commit/9eeefec2d62444f6fbb61c7f5ea1a42713e76fe3), [`ff2d452`](https://github.com/LTplus-AG/ifc-lite/commit/ff2d452d8a85a1306fc984dc7b8283c48dd706fc), [`b0617b5`](https://github.com/LTplus-AG/ifc-lite/commit/b0617b5306f4562b2a635ae2f6325297e51d55d3), [`e8ced94`](https://github.com/LTplus-AG/ifc-lite/commit/e8ced940d5cd6c9789f1221c5aeb7cdae883da3b), [`89be760`](https://github.com/LTplus-AG/ifc-lite/commit/89be760d4eb8adba93e9f5660f6e4ceda0c507d5), [`93098dc`](https://github.com/LTplus-AG/ifc-lite/commit/93098dcb7f4125326db5d602977c5b3f9e9083cb), [`c380322`](https://github.com/LTplus-AG/ifc-lite/commit/c3803226a6a6b11fd23e1472ae5f54d7c4ebc083), [`dd8e27c`](https://github.com/LTplus-AG/ifc-lite/commit/dd8e27cccbfd27cc6c16f09d66542c1c9bd17075), [`6acbc17`](https://github.com/LTplus-AG/ifc-lite/commit/6acbc17f88aa58baf5d8f258582b41fc4b6ca094), [`ba5b8c0`](https://github.com/LTplus-AG/ifc-lite/commit/ba5b8c0de4cf957001cae181b4e1201ce5c86136), [`20c9c90`](https://github.com/LTplus-AG/ifc-lite/commit/20c9c90a658d6d62a544c72ef39e28de2baeac34), [`455ddc3`](https://github.com/LTplus-AG/ifc-lite/commit/455ddc3899ea6a5debce36543de5b8f009bb711f), [`7dda95f`](https://github.com/LTplus-AG/ifc-lite/commit/7dda95f8b39222dc25479c0037b3b806fce24cbb), [`ea8af2c`](https://github.com/LTplus-AG/ifc-lite/commit/ea8af2cefcc4074b2ffd133eddb22f03e34a2a87), [`9e2f15b`](https://github.com/LTplus-AG/ifc-lite/commit/9e2f15b9dd46403cc9b06bb882ee3f5c2b16f014), [`003f4ff`](https://github.com/LTplus-AG/ifc-lite/commit/003f4ff7fdc12ab92d601811792baa71b997a3ff), [`526a91b`](https://github.com/LTplus-AG/ifc-lite/commit/526a91bdf33e2be2d6167df95a68db343b5337c0), [`4c0ebf2`](https://github.com/LTplus-AG/ifc-lite/commit/4c0ebf24c8c7b8470602300d56f0b1bd7c2a01e0), [`1b1ea38`](https://github.com/LTplus-AG/ifc-lite/commit/1b1ea389250d7f0437ae522f0bad893b2c362eed), [`a02add5`](https://github.com/LTplus-AG/ifc-lite/commit/a02add592587ce018ecbfbdda3a08245f7664ff1), [`e3b5f98`](https://github.com/LTplus-AG/ifc-lite/commit/e3b5f98fd6dadb605fea49521eb290b9b5abc704), [`9d09f9f`](https://github.com/LTplus-AG/ifc-lite/commit/9d09f9fafb8100f995574d2629c7d1f466125225)]:
+  - @ifc-lite/create@4.0.0
+  - @ifc-lite/sdk@9.0.0
+  - @ifc-lite/wasm@10.3.0
+
+## 0.2.24
+
+### Patch Changes
+
+- Updated dependencies [[`8901816`](https://github.com/LTplus-AG/ifc-lite/commit/8901816fa9171b1af0a9af5036105db0fa72cb24), [`7020f24`](https://github.com/LTplus-AG/ifc-lite/commit/7020f24b86d9d06ef59791214ee2658b2d1721d0), [`46efab7`](https://github.com/LTplus-AG/ifc-lite/commit/46efab72317a6f9603f236f6f4784e1c7bdb6be4), [`e89d58b`](https://github.com/LTplus-AG/ifc-lite/commit/e89d58b3ba5ae6f8a94fff72c488904d334782ae), [`bffa875`](https://github.com/LTplus-AG/ifc-lite/commit/bffa875a07ed2b4e3e61e12bc25966278f346d6a), [`888a9a7`](https://github.com/LTplus-AG/ifc-lite/commit/888a9a72e1b1f59a0692942b15612a62c87033cb), [`c1bff6c`](https://github.com/LTplus-AG/ifc-lite/commit/c1bff6c774cc6fbc51d0600d337ad516f3e60a21), [`443e013`](https://github.com/LTplus-AG/ifc-lite/commit/443e013ac6c1b5664a43c9b5df2e5600219c706b), [`d3d2d6f`](https://github.com/LTplus-AG/ifc-lite/commit/d3d2d6fd64ef66ffb6dc4f117c188661ecfa05a5), [`632d6f1`](https://github.com/LTplus-AG/ifc-lite/commit/632d6f1195453b76cc29c4ca3a0f1a7e743bd653), [`fe7f513`](https://github.com/LTplus-AG/ifc-lite/commit/fe7f5130cb1d1d84a694b98f11b734d9ed74e28e), [`96feb08`](https://github.com/LTplus-AG/ifc-lite/commit/96feb088320809beb4f4b8b572f67d9099050dd3), [`c2b72b7`](https://github.com/LTplus-AG/ifc-lite/commit/c2b72b78ac6da3830267eec5f32cc6baf22055d8), [`1edec99`](https://github.com/LTplus-AG/ifc-lite/commit/1edec99fb723acf61863cb6cf30d480dcb69786f), [`509a65e`](https://github.com/LTplus-AG/ifc-lite/commit/509a65e267ea45a4f5e8285a1e34b9b54fa70dbb), [`9bd4d3c`](https://github.com/LTplus-AG/ifc-lite/commit/9bd4d3c88336de33eb20d3d405989c1f2d8297cf), [`9d1ce44`](https://github.com/LTplus-AG/ifc-lite/commit/9d1ce44abc9e3fdf6a0998c4533e6ed3121a35c4), [`b2562e8`](https://github.com/LTplus-AG/ifc-lite/commit/b2562e85da9e0229fa0c2f24acf5f72c0e7adf41), [`88b454a`](https://github.com/LTplus-AG/ifc-lite/commit/88b454a10da0f27b90799cbc1469fccf9d70a2c7), [`1eb821b`](https://github.com/LTplus-AG/ifc-lite/commit/1eb821b9e6223fdf0243d3ad3dd7e0ca14e84e13), [`0476281`](https://github.com/LTplus-AG/ifc-lite/commit/0476281b0476ec65564e65b6fc7cfe729a3982bb), [`773a54f`](https://github.com/LTplus-AG/ifc-lite/commit/773a54ff450d872bc6cd49ec7e0a1108b965cf96), [`da22190`](https://github.com/LTplus-AG/ifc-lite/commit/da22190245789a7e3240b8dbb6de5717415ac448), [`b8b8c8f`](https://github.com/LTplus-AG/ifc-lite/commit/b8b8c8fd231df458c1a1af411c98c6d8ee316b77), [`59b0668`](https://github.com/LTplus-AG/ifc-lite/commit/59b06685f2a0604c0ff305b63d831a81ecaff199), [`10b3a44`](https://github.com/LTplus-AG/ifc-lite/commit/10b3a44ea325740562be7cafab14e28beebd3180), [`673cb3f`](https://github.com/LTplus-AG/ifc-lite/commit/673cb3f38c1eea117c2176565b6937538c3dfaa5), [`0ae5784`](https://github.com/LTplus-AG/ifc-lite/commit/0ae5784d8251134aab778e9c86e787f2f77286cd), [`c94feac`](https://github.com/LTplus-AG/ifc-lite/commit/c94feacf6684a27b99876cc48f1e569bc98d09d2)]:
+  - @ifc-lite/create@3.2.0
+  - @ifc-lite/wasm@10.2.0
+  - @ifc-lite/sdk@8.0.0
+
+## 0.2.23
+
+### Patch Changes
+
+- Updated dependencies [[`bf32c6a`](https://github.com/LTplus-AG/ifc-lite/commit/bf32c6a128d9ce1c8d9d2a0efcfe7f8754c3d01c), [`d376d2c`](https://github.com/LTplus-AG/ifc-lite/commit/d376d2c02ff35ea25efca5983626fa0b8073bc90), [`975c430`](https://github.com/LTplus-AG/ifc-lite/commit/975c43086065cc7eaaf841d18f6f5ecbe626f0bd), [`b218ab4`](https://github.com/LTplus-AG/ifc-lite/commit/b218ab440fc09011c6bb1d39524525120e119cb1), [`e095908`](https://github.com/LTplus-AG/ifc-lite/commit/e0959083fa58854ce536c0a68d7b0c52f824f5ef), [`d83d9fe`](https://github.com/LTplus-AG/ifc-lite/commit/d83d9fe4138e0d6ae64a3ed439c8a5c9a280878a), [`91b1340`](https://github.com/LTplus-AG/ifc-lite/commit/91b1340bbba42abc42d9842169e422b540aa96eb), [`dcdc8df`](https://github.com/LTplus-AG/ifc-lite/commit/dcdc8dff3ea9e0588ffcce802b0f3ec781082f2e), [`ddebcd9`](https://github.com/LTplus-AG/ifc-lite/commit/ddebcd91b999d6304e19358f90d142cd439a420a), [`cddb321`](https://github.com/LTplus-AG/ifc-lite/commit/cddb32122c9d628b635910158a06fa5a94c0071a), [`6bf4181`](https://github.com/LTplus-AG/ifc-lite/commit/6bf418103e872f13666037ae4868e03468e3840c), [`d2cfb9e`](https://github.com/LTplus-AG/ifc-lite/commit/d2cfb9e66affc2674d6de5da44ecdc5d8a76b59e), [`a3dfacb`](https://github.com/LTplus-AG/ifc-lite/commit/a3dfacb2862d1db09267ebe52707193630c35ff7), [`477c1d5`](https://github.com/LTplus-AG/ifc-lite/commit/477c1d5ef5bb5057ff12f9d074270ec2359b39e1), [`db7f991`](https://github.com/LTplus-AG/ifc-lite/commit/db7f991eb63998c65389a28e7331ac984a5448ad)]:
+  - @ifc-lite/wasm@10.1.1
+  - @ifc-lite/create@3.0.0
+  - @ifc-lite/sdk@7.1.2
+
+## 0.2.22
+
+### Patch Changes
+
+- Updated dependencies [[`2523acc`](https://github.com/LTplus-AG/ifc-lite/commit/2523acc5881252316439de2f69f7fab4266d559f), [`5909977`](https://github.com/LTplus-AG/ifc-lite/commit/5909977e0631cc242c421b5ded6c887acadd92ba), [`32ac1f9`](https://github.com/LTplus-AG/ifc-lite/commit/32ac1f9846a5703c63ea859e5aeaf224f164db0c), [`c8fcbfb`](https://github.com/LTplus-AG/ifc-lite/commit/c8fcbfbfcc8e45526ef93c84ee8a254df586c10b), [`809e2ba`](https://github.com/LTplus-AG/ifc-lite/commit/809e2baa4b796a91ea2a2dbd52ae29e7dd4ef5ff), [`d8f7c64`](https://github.com/LTplus-AG/ifc-lite/commit/d8f7c643703012c55a41a1e8224db6e21a0c66b3), [`a250a92`](https://github.com/LTplus-AG/ifc-lite/commit/a250a928b1c8c64ac6153136772fe6c71398eee9), [`b8a9cde`](https://github.com/LTplus-AG/ifc-lite/commit/b8a9cde0a7dfe40137632bf083875961efb57c1a), [`3166183`](https://github.com/LTplus-AG/ifc-lite/commit/31661831c8137f31aa6c3b0da286832ed6e16a7b), [`d05f542`](https://github.com/LTplus-AG/ifc-lite/commit/d05f5423a7caf761f0a2e12d064d85e84355d031), [`87d62bc`](https://github.com/LTplus-AG/ifc-lite/commit/87d62bca61704029b92882f2dd280dd497a77bd7), [`9132f7a`](https://github.com/LTplus-AG/ifc-lite/commit/9132f7ab81939eb145e8fe1b26eb1e9048321638), [`be636b4`](https://github.com/LTplus-AG/ifc-lite/commit/be636b414c11e7c5b77c2b98d0e916822ac39d09), [`5665917`](https://github.com/LTplus-AG/ifc-lite/commit/566591746eead289fcc5aa60258ef96b30366456), [`e6f46cb`](https://github.com/LTplus-AG/ifc-lite/commit/e6f46cbaf7d2ea515296f40497556b2b31bc5bd2), [`76d1119`](https://github.com/LTplus-AG/ifc-lite/commit/76d1119fb1573ef81f50d03c04026be3c83674ce), [`316c0bf`](https://github.com/LTplus-AG/ifc-lite/commit/316c0bf248ca2573cc63acf421e4ccba4c7638c7), [`24b7921`](https://github.com/LTplus-AG/ifc-lite/commit/24b79210c442f44614d5786ff2986ee3a2b9c0d7), [`9f48e65`](https://github.com/LTplus-AG/ifc-lite/commit/9f48e653f8264d303f70f47370be727ebca6049a), [`897eb6c`](https://github.com/LTplus-AG/ifc-lite/commit/897eb6c15342ad20a032b40fcb803559bf1a10f7), [`177f6d1`](https://github.com/LTplus-AG/ifc-lite/commit/177f6d18decd296ab6c25e7ec1d8200e461ceda0)]:
+  - @ifc-lite/wasm@10.0.0
+  - @ifc-lite/create@2.9.0
+  - @ifc-lite/sdk@7.1.0
+
+## 0.2.21
+
+### Patch Changes
+
+- Updated dependencies [[`a11c090`](https://github.com/LTplus-AG/ifc-lite/commit/a11c090d0c86a9241bb67ce42822be5b6a631196), [`51c36ec`](https://github.com/LTplus-AG/ifc-lite/commit/51c36ecd9051769be7762d711bff705ef76866aa), [`3b0c496`](https://github.com/LTplus-AG/ifc-lite/commit/3b0c496bc2789c56812bfce40021e2beb2eb830e), [`0eafae1`](https://github.com/LTplus-AG/ifc-lite/commit/0eafae1cb19e70828815c658a6ee3c14f9c4c8a8), [`3eaf48c`](https://github.com/LTplus-AG/ifc-lite/commit/3eaf48cd8cf10ee117be4086f78224a21e4960c8), [`9b910f4`](https://github.com/LTplus-AG/ifc-lite/commit/9b910f4ad0a187addead0f578b81e332287f0ea3), [`30984b4`](https://github.com/LTplus-AG/ifc-lite/commit/30984b4abecb838c132e5823ad51455a6ee0c15a), [`bde27c5`](https://github.com/LTplus-AG/ifc-lite/commit/bde27c581e242f8479147e865b17a5ff6a0dc436), [`b6ac473`](https://github.com/LTplus-AG/ifc-lite/commit/b6ac4730babff9ba78fa06bae8f98c14958c0cea), [`b9d0ff6`](https://github.com/LTplus-AG/ifc-lite/commit/b9d0ff6eab8dca015497c6e8e0598b81ee81a43d), [`86ffd75`](https://github.com/LTplus-AG/ifc-lite/commit/86ffd751cc783dfc4ee7a9b55508d5c75b844178), [`829b566`](https://github.com/LTplus-AG/ifc-lite/commit/829b566988aabe0ed3676b7df6082d3169df8830), [`18833c8`](https://github.com/LTplus-AG/ifc-lite/commit/18833c86af7d8ff9699970c4440d90b2235ef2f7), [`816114a`](https://github.com/LTplus-AG/ifc-lite/commit/816114ad21120e3bd84394e080c44e6679ae959d), [`0eafae1`](https://github.com/LTplus-AG/ifc-lite/commit/0eafae1cb19e70828815c658a6ee3c14f9c4c8a8), [`3be90af`](https://github.com/LTplus-AG/ifc-lite/commit/3be90af6fa5b0446f6077ddff92873f68b58a7c0), [`b0d489e`](https://github.com/LTplus-AG/ifc-lite/commit/b0d489ea7270b84c1d373b5e340fc09ba0c798e6)]:
+  - @ifc-lite/wasm@9.3.0
+  - @ifc-lite/create@2.8.0
+  - @ifc-lite/sdk@7.0.0
+
+## 0.2.20
+
+### Patch Changes
+
+- [#4822](https://github.com/LTplus-AG/ifc-lite/pull/4822) [`a46657b`](https://github.com/LTplus-AG/ifc-lite/commit/a46657b63fc2848c3fc2b26359fdf511662b6368) Thanks [@louistrue](https://github.com/louistrue)! - Keep an explicit empty entity list distinct from an omitted list when resetting viewer colors, so a zero-match reset is a no-op instead of clearing every override.
+- Updated dependencies [[`a46657b`](https://github.com/LTplus-AG/ifc-lite/commit/a46657b63fc2848c3fc2b26359fdf511662b6368), [`863a60e`](https://github.com/LTplus-AG/ifc-lite/commit/863a60ea70034cb8b5c2ebd27e7153a312556c6c)]:
+  - @ifc-lite/sdk@6.1.0
+  - @ifc-lite/create@2.5.0
+
+## 0.2.19
+
+### Patch Changes
+
+- Updated dependencies [[`0635737`](https://github.com/LTplus-AG/ifc-lite/commit/06357376a7badddf9359e0663999964948504e6e), [`e8e319f`](https://github.com/LTplus-AG/ifc-lite/commit/e8e319ff76e4dac5e0d0de3cc0a00b4d9f3c8e76), [`6fa3d14`](https://github.com/LTplus-AG/ifc-lite/commit/6fa3d1425a822c5dcc3f0e811b809791eea163da), [`be17583`](https://github.com/LTplus-AG/ifc-lite/commit/be175830fb938af4dde6c1f6990b1faa194c8771), [`7b34e97`](https://github.com/LTplus-AG/ifc-lite/commit/7b34e97f2abdc49be3eef78031d52d1107622544), [`36fa88e`](https://github.com/LTplus-AG/ifc-lite/commit/36fa88e8862416ac6a9f493135c6fdfca793d0eb)]:
+  - @ifc-lite/wasm@9.0.1
+  - @ifc-lite/sdk@6.0.0
+
+## 0.2.18
+
+### Patch Changes
+
+- Updated dependencies [[`d03e3ce`](https://github.com/LTplus-AG/ifc-lite/commit/d03e3ce4a01dffb60d8951a3ac13f17db37c3415), [`b1a22d7`](https://github.com/LTplus-AG/ifc-lite/commit/b1a22d721e4873883badbdb637630ea0ff88ea82), [`aef7203`](https://github.com/LTplus-AG/ifc-lite/commit/aef7203665f5374f2e867aa4bd43f26ef517c578), [`2343871`](https://github.com/LTplus-AG/ifc-lite/commit/2343871ceed4f42503e770c0a4e593e8827e9f91), [`5f3a915`](https://github.com/LTplus-AG/ifc-lite/commit/5f3a915bc061d4155fb80a6f195b845f4a147a6b), [`8d6df23`](https://github.com/LTplus-AG/ifc-lite/commit/8d6df23e670fbdd771643631d8960db6af99c6da), [`d731f16`](https://github.com/LTplus-AG/ifc-lite/commit/d731f16988996bcba5f5ef01283cdf1c8ab041ba), [`b5920f3`](https://github.com/LTplus-AG/ifc-lite/commit/b5920f316c6dd27030f8b2390deb803a0b9deef8), [`74ba2f2`](https://github.com/LTplus-AG/ifc-lite/commit/74ba2f24e664b37b96e871620fbfdbab653042f3), [`c53b946`](https://github.com/LTplus-AG/ifc-lite/commit/c53b946b5411d613fb5316f48fd03949cf656f75), [`a1b2b77`](https://github.com/LTplus-AG/ifc-lite/commit/a1b2b77d7d3de6878d14e73d888e04b50295a5e2), [`b4bc7df`](https://github.com/LTplus-AG/ifc-lite/commit/b4bc7df25e9cdcd6c46f4affd289c0b3da7829fa), [`9f32c63`](https://github.com/LTplus-AG/ifc-lite/commit/9f32c63083c9341871adac1d645c533c7afcac87), [`eb1b2b1`](https://github.com/LTplus-AG/ifc-lite/commit/eb1b2b1704d0ad5c8a0ee546871e8a266eb53955), [`4091265`](https://github.com/LTplus-AG/ifc-lite/commit/4091265e59279c87444d13f1d25537c00a430797), [`ec446fd`](https://github.com/LTplus-AG/ifc-lite/commit/ec446fd10b5e09724d88be75400119c1456afe6a), [`5ae670d`](https://github.com/LTplus-AG/ifc-lite/commit/5ae670d9701623b98414aafbedc3e8606db9bfa3), [`bbedaf6`](https://github.com/LTplus-AG/ifc-lite/commit/bbedaf629c635e102a3f65e2f7ba3feb77300d98), [`9b9f2df`](https://github.com/LTplus-AG/ifc-lite/commit/9b9f2df47e0b1192fe033ca36021499af532220b), [`a4e04e7`](https://github.com/LTplus-AG/ifc-lite/commit/a4e04e7868d6950e0139145319265788699d0afd), [`1f0f2ad`](https://github.com/LTplus-AG/ifc-lite/commit/1f0f2ad8fd3476cb705b0d32e00d07f874705088), [`c3492d1`](https://github.com/LTplus-AG/ifc-lite/commit/c3492d188d9353778dcb62e491cc8b1987d93767), [`7f31b01`](https://github.com/LTplus-AG/ifc-lite/commit/7f31b014f917ac038a316867673528810d9ba46a), [`9df0f93`](https://github.com/LTplus-AG/ifc-lite/commit/9df0f936e291c509c5914a8418535b1dae505517), [`be2fed0`](https://github.com/LTplus-AG/ifc-lite/commit/be2fed0945e7dff83e3fb5d9ba810f0b5a6339a7), [`56cc096`](https://github.com/LTplus-AG/ifc-lite/commit/56cc09672219d33e094b81d419d360ca3ec6e26e), [`4db9471`](https://github.com/LTplus-AG/ifc-lite/commit/4db9471098a42ed948c4920cce1cb71a99d60d6a), [`478b5fb`](https://github.com/LTplus-AG/ifc-lite/commit/478b5fba37108dd0cf19cd2f71d71158e204f42f), [`6f5e74b`](https://github.com/LTplus-AG/ifc-lite/commit/6f5e74b028d4e8a2b94b05ead18163dd0c46ce9a), [`be2fed0`](https://github.com/LTplus-AG/ifc-lite/commit/be2fed0945e7dff83e3fb5d9ba810f0b5a6339a7)]:
+  - @ifc-lite/wasm@9.0.0
+  - @ifc-lite/sdk@5.1.0
+
+## 0.2.17
+
+### Patch Changes
+
+- Updated dependencies [[`0bd9521`](https://github.com/LTplus-AG/ifc-lite/commit/0bd9521554b616c101ab61425d6dc46beb3e904d), [`7562e5b`](https://github.com/LTplus-AG/ifc-lite/commit/7562e5b3f62ec57ca49cd412e35489bbf9e2ee6e), [`9a7710c`](https://github.com/LTplus-AG/ifc-lite/commit/9a7710c9c66e2285aeb215aec5600dfbce1b070e), [`624bfa3`](https://github.com/LTplus-AG/ifc-lite/commit/624bfa3b7d1d636a6142af984613eb5bd79c09b4), [`535055e`](https://github.com/LTplus-AG/ifc-lite/commit/535055ed47af49a22bc04788a1ff7e5755a54933), [`4eef3be`](https://github.com/LTplus-AG/ifc-lite/commit/4eef3be61bcc6fea16fb1a4376a7d7340ab5dc69), [`94074df`](https://github.com/LTplus-AG/ifc-lite/commit/94074df5c7e53557e45dd838ce22990c19544df8), [`ad4672f`](https://github.com/LTplus-AG/ifc-lite/commit/ad4672fc9007f8ac86076f123a1e6020b04af7b6), [`6295f8b`](https://github.com/LTplus-AG/ifc-lite/commit/6295f8b58ee5f85be27470463e4f333f5aa11b35), [`0d8c5da`](https://github.com/LTplus-AG/ifc-lite/commit/0d8c5dac6175255d12ce758fe69c177af849dd03), [`6cc1b43`](https://github.com/LTplus-AG/ifc-lite/commit/6cc1b4362ed7ab2e909b81995bd7d4d99bc268d0), [`f7ea57f`](https://github.com/LTplus-AG/ifc-lite/commit/f7ea57f0555ca77695e28e41cfcfb0e9e7e3a2bb), [`a3aaaf0`](https://github.com/LTplus-AG/ifc-lite/commit/a3aaaf0832b0924237841075f37e76391ef200a2)]:
+  - @ifc-lite/wasm@8.0.0
+
+## 0.2.16
+
+### Patch Changes
+
+- Updated dependencies [[`9a271dc`](https://github.com/LTplus-AG/ifc-lite/commit/9a271dcb19dff2f9bca72fc3505ce5a71b3e800b), [`6fe4fc8`](https://github.com/LTplus-AG/ifc-lite/commit/6fe4fc8ddac8cbc18f3556fa7bfa778bf6115928), [`4c9a88d`](https://github.com/LTplus-AG/ifc-lite/commit/4c9a88d80b9ba9631be97050d896b5f5834d3628), [`4c9a88d`](https://github.com/LTplus-AG/ifc-lite/commit/4c9a88d80b9ba9631be97050d896b5f5834d3628), [`c952d49`](https://github.com/LTplus-AG/ifc-lite/commit/c952d497c424ec15b972d87b878b41bf0573460b), [`5e94b1a`](https://github.com/LTplus-AG/ifc-lite/commit/5e94b1a646d7e02c909b8835f3adf8e0bf4feb5f), [`abda2d8`](https://github.com/LTplus-AG/ifc-lite/commit/abda2d8114ad17b0366f448100953d6e1972164c), [`c952d49`](https://github.com/LTplus-AG/ifc-lite/commit/c952d497c424ec15b972d87b878b41bf0573460b)]:
+  - @ifc-lite/sdk@5.0.0
+  - @ifc-lite/wasm@7.0.0
+  - @ifc-lite/create@2.4.0
+
+## 0.2.15
+
+### Patch Changes
+
+- [#3514](https://github.com/LTplus-AG/ifc-lite/pull/3514) [`0add82c`](https://github.com/LTplus-AG/ifc-lite/commit/0add82cb1692f98528f6d9d5f6be5e99a46bfed1) Thanks [@BIMvoice](https://github.com/BIMvoice)! - Fix `bim.viewer.clearSection()` enabling a section plane instead of removing one, against the streaming viewer server started by `ifc-lite view <file.ifc> --port PORT`.
+  
+  `ViewerNamespace.clearSection()` calls `backend.viewer.setSection(null)`. `createStreamingViewerAdapter().setSection()` (`src/streaming-viewer.ts`) forwarded that verbatim as `{ action: 'section', section: null }`. The browser's `'section'` handler (`src/viewer-html.ts`) falls back to `cmd` itself when `cmd.section` is falsy, then defaults a missing axis to `'y'` and a missing position to the model's center — so a `null` section produced a brand-new horizontal section plane through the middle of the model instead of clearing anything. The server already exposes a dedicated `'clearSection'` action for this, and two other clients already send it — the `ifc-lite view` REPL's `clearsection` command (`packages/cli/src/commands/view.ts`) and the MCP `viewer_clear_section` tool (`packages/mcp/src/tools/viewer.ts`). The streaming adapter was the one client that diverged; `setSection(null)` now sends that action instead of a `'section'` command with a null payload.
+
+- [#3484](https://github.com/LTplus-AG/ifc-lite/pull/3484) [`3ef0460`](https://github.com/LTplus-AG/ifc-lite/commit/3ef0460d3bea57ea7e3257289c87dc1d0311e502) Thanks [@BIMvoice](https://github.com/BIMvoice)! - Fix `bim.viewer.setCamera()` doing nothing against the streaming viewer — the server started by `ifc-lite view <file.ifc> --port PORT`, driven either by another command's `--viewer PORT` flag or by the MCP server.
+  
+  `createStreamingViewerAdapter().setCamera(state)` (`src/streaming-viewer.ts`) has always POSTed `{ action: 'camera', state }` to the server, and the server has always accepted `'camera'` as a valid action and broadcast it to every connected browser tab — but the browser's own command switch (`handleCommand` in `src/viewer-html.ts`) had no `case 'camera'` at all, so the command fell into the `default: console.log('Unknown command', cmd)` branch and the 3D camera never moved. Every other `ViewerBackendMethods` call this adapter exposes (`colorize`, `flyTo`, `setSection`, …) reaches the browser and takes effect; `setCamera` alone was a silent no-op end to end, invisible to the caller since the adapter is fire-and-forget by design.
+  
+  `handleCommand` now applies `state.position`/`state.target` to the viewer's orbit camera (`camTarget`/`camDist`/`camTheta`/`camPhi`), deriving distance and orientation from `position` relative to `target` when both are given. `state.mode`/`state.up` are accepted but have no effect, since this viewer only ever renders in perspective.
+- Updated dependencies [[`f283c62`](https://github.com/LTplus-AG/ifc-lite/commit/f283c62da53d672d590322edd3351e7b71724757), [`f98e601`](https://github.com/LTplus-AG/ifc-lite/commit/f98e601e5efc749088949665e41efd44f1b889c4), [`8904273`](https://github.com/LTplus-AG/ifc-lite/commit/890427360361fba5232bef614371fe69d9528e47), [`7b79a93`](https://github.com/LTplus-AG/ifc-lite/commit/7b79a93f80afe104ebe3e20ae742af26b48b21a2), [`55b69fb`](https://github.com/LTplus-AG/ifc-lite/commit/55b69fbac09155f4cc9c8b2eecba17fd84067c32), [`36719c2`](https://github.com/LTplus-AG/ifc-lite/commit/36719c22f2cbd6027d8afc73c660cda5c994fdf4), [`b9c8fdf`](https://github.com/LTplus-AG/ifc-lite/commit/b9c8fdfbc5e224003fa2094f7b9703aa71600dbf), [`59fae4c`](https://github.com/LTplus-AG/ifc-lite/commit/59fae4cb4c4841b27cbe26a618648407d74d2326), [`9f945d1`](https://github.com/LTplus-AG/ifc-lite/commit/9f945d1e2193cb27e5471f5272496b2791975ede), [`586fa29`](https://github.com/LTplus-AG/ifc-lite/commit/586fa292b69cdb3ba6e45764b4ff742b2fa7b9a9), [`3d11231`](https://github.com/LTplus-AG/ifc-lite/commit/3d11231806fec3047c9ed32b9d095be3abe60c2f), [`7160b73`](https://github.com/LTplus-AG/ifc-lite/commit/7160b73d573e276e390f62c065b66eb80862c1c5), [`e09b5c3`](https://github.com/LTplus-AG/ifc-lite/commit/e09b5c364138d56816e45452622078e951e051ee), [`1000dce`](https://github.com/LTplus-AG/ifc-lite/commit/1000dce72e9ec75c59848efefc1f709d01172e72), [`afb9725`](https://github.com/LTplus-AG/ifc-lite/commit/afb972525bb99e3056ccaa84ee7a78e0c7de81ef), [`c1390f3`](https://github.com/LTplus-AG/ifc-lite/commit/c1390f38e32f7a345a4f2651b8a3b6d849e56af6), [`62bb58f`](https://github.com/LTplus-AG/ifc-lite/commit/62bb58fc8364c27bcf8452ab8edbde26727f527c), [`74d76bb`](https://github.com/LTplus-AG/ifc-lite/commit/74d76bb52d03397734022855c9cbcd6bdef38632), [`456d189`](https://github.com/LTplus-AG/ifc-lite/commit/456d1898cdfdc1e31b145777b0f33bad203cc62a), [`4475e58`](https://github.com/LTplus-AG/ifc-lite/commit/4475e583ea35def444fb6d7ba92410629bd89096), [`182215a`](https://github.com/LTplus-AG/ifc-lite/commit/182215a835c4beac6a776bcb4eb1d019cab9063e), [`ce8ca9f`](https://github.com/LTplus-AG/ifc-lite/commit/ce8ca9f3b8fd51ed89a9c21a275f00d63c240875), [`4b043d4`](https://github.com/LTplus-AG/ifc-lite/commit/4b043d4e77345e77532c328ddd62d58c39b6bbe8), [`afb9725`](https://github.com/LTplus-AG/ifc-lite/commit/afb972525bb99e3056ccaa84ee7a78e0c7de81ef), [`0b13e2d`](https://github.com/LTplus-AG/ifc-lite/commit/0b13e2d89b51608c2be3425ba2e5c95bfb8c0e5e), [`c4dafbf`](https://github.com/LTplus-AG/ifc-lite/commit/c4dafbf418810c519d49d5739bfedb2da41651b0), [`c3bdc8f`](https://github.com/LTplus-AG/ifc-lite/commit/c3bdc8fe55536a9b27adaa7ed92fb214c975fe2e), [`c3bdc8f`](https://github.com/LTplus-AG/ifc-lite/commit/c3bdc8fe55536a9b27adaa7ed92fb214c975fe2e), [`a2488e8`](https://github.com/LTplus-AG/ifc-lite/commit/a2488e858bc7792cdcc818f7759c0a6e46e7d892), [`2a2c73f`](https://github.com/LTplus-AG/ifc-lite/commit/2a2c73fc95044c5e6823f0dbc55f5e2c7a87a948), [`2213431`](https://github.com/LTplus-AG/ifc-lite/commit/22134312e50d7f2dbe5d45928740eef5f6ffa241), [`499ccf2`](https://github.com/LTplus-AG/ifc-lite/commit/499ccf2f97fe1e24728eb4eb99f895044c36f7b2), [`4475e58`](https://github.com/LTplus-AG/ifc-lite/commit/4475e583ea35def444fb6d7ba92410629bd89096), [`80a0cd9`](https://github.com/LTplus-AG/ifc-lite/commit/80a0cd9b946a5ff1aa6ca214ddb427a5d1f5303c)]:
+  - @ifc-lite/wasm@6.2.0
+  - @ifc-lite/sdk@4.0.0
+  - @ifc-lite/create@2.2.1
+
+## 0.2.14
+
+### Patch Changes
+
+- [#3001](https://github.com/LTplus-AG/ifc-lite/pull/3001) [`24c0d75`](https://github.com/LTplus-AG/ifc-lite/commit/24c0d75c5e5f1f162737e82e1ff24f7958b9f9b6) Thanks [@BIMvoice](https://github.com/BIMvoice)! - Build the entity-picking panel with `textContent` instead of string-concatenated `innerHTML`.
+  
+  `showPickInfo` in the generated viewer HTML wrote the picked entity's IFC type into `#pick-info` by concatenating it straight into `.innerHTML` — the one interpolation site in the file that did this; every other dynamic value (model stats, the command log, the loading text) is written via `.textContent`. `showPickInfo` now builds the panel's rows with `document.createElement` and `.textContent`, matching the pattern used everywhere else.
+  
+  This is hardening, not a fix for a reachable escape. `info.ifcType` is not attacker-controlled today: it reaches the panel only through `addMeshBatch`, which is fed exclusively by `parseMeshesViaPrePass` → the WASM parser, where the value is `IfcType::name()` — a closed set of generated `"Ifc…"` literals, with any unrecognised keyword collapsing to `Unknown(hash)` whose `name()` is the literal `"Unknown"`. No IFC file and no `/api/create` payload can put `<` or `&` into it. What the change buys is that the panel no longer depends on that guarantee holding: the last interpolation site that would break if the type string ever stopped coming from the enum is gone.
+- Updated dependencies [[`0ea7167`](https://github.com/LTplus-AG/ifc-lite/commit/0ea7167a6bd96d5b5e12e7e5a8c5615ab0b7c3b2), [`7ff31ba`](https://github.com/LTplus-AG/ifc-lite/commit/7ff31ba854671a9ca3ebbf30b15e928e1b52a8b9), [`8ba612f`](https://github.com/LTplus-AG/ifc-lite/commit/8ba612f90d3bb0ad41f756d6fdef6b3250e8d330), [`5781e5c`](https://github.com/LTplus-AG/ifc-lite/commit/5781e5c2998111926683419d27f8efa3519de7c6), [`f76c805`](https://github.com/LTplus-AG/ifc-lite/commit/f76c80511dce5ffc1756365b786042c4bc64808d), [`75867a7`](https://github.com/LTplus-AG/ifc-lite/commit/75867a7e6ebf51b2da47cab14242bcd71787ba3b), [`4a8fe77`](https://github.com/LTplus-AG/ifc-lite/commit/4a8fe77707127d251702610490f53430610e4ef7), [`dec0708`](https://github.com/LTplus-AG/ifc-lite/commit/dec0708ef841c88abea6ec91404419fd7a3d93c6), [`dec0708`](https://github.com/LTplus-AG/ifc-lite/commit/dec0708ef841c88abea6ec91404419fd7a3d93c6), [`dec0708`](https://github.com/LTplus-AG/ifc-lite/commit/dec0708ef841c88abea6ec91404419fd7a3d93c6), [`945c4d7`](https://github.com/LTplus-AG/ifc-lite/commit/945c4d7a773614dd664feb9490e13372782a543b), [`75867a7`](https://github.com/LTplus-AG/ifc-lite/commit/75867a7e6ebf51b2da47cab14242bcd71787ba3b), [`78d85dc`](https://github.com/LTplus-AG/ifc-lite/commit/78d85dcd4c59ee5b3b3b7857a454113c4911bc36), [`147693a`](https://github.com/LTplus-AG/ifc-lite/commit/147693a7a8fd0778ddb71839199b75bf1d622327), [`bea50bd`](https://github.com/LTplus-AG/ifc-lite/commit/bea50bd7bca7fdf69f01076ebb96a31b8e797a46), [`3969c52`](https://github.com/LTplus-AG/ifc-lite/commit/3969c523063d02e501f421e6b42d1a9a516dc2e4), [`bb734da`](https://github.com/LTplus-AG/ifc-lite/commit/bb734da27afbea4b6e595714950cdb195cddeb1f), [`74a55a9`](https://github.com/LTplus-AG/ifc-lite/commit/74a55a999117b4e21aa58d0435473073f35c1e81), [`74a55a9`](https://github.com/LTplus-AG/ifc-lite/commit/74a55a999117b4e21aa58d0435473073f35c1e81), [`00f6e79`](https://github.com/LTplus-AG/ifc-lite/commit/00f6e79c22641ff59bfb3327d910b04f9a164d8b), [`e43582b`](https://github.com/LTplus-AG/ifc-lite/commit/e43582b069007c6c2c932f6981743a80630fe217)]:
+  - @ifc-lite/wasm@6.0.0
+  - @ifc-lite/sdk@3.0.0
+  - @ifc-lite/create@2.2.0
+
+## 0.2.13
+
+### Patch Changes
+
+- Updated dependencies [[`0ed2582`](https://github.com/LTplus-AG/ifc-lite/commit/0ed2582b71973fa6d16307999ed2ea59f7a2db3f), [`9fb50eb`](https://github.com/LTplus-AG/ifc-lite/commit/9fb50ebcfaaf2926b2badd4d4d8dfc6ca55b762f), [`ccc38b0`](https://github.com/LTplus-AG/ifc-lite/commit/ccc38b0de9925a3de1106893a5785117e0e7551d), [`679c7cb`](https://github.com/LTplus-AG/ifc-lite/commit/679c7cb680ab0d8f17e8f5c267fdb424049ec0d0), [`c49c7f6`](https://github.com/LTplus-AG/ifc-lite/commit/c49c7f644cd7930bd3937ed850f3864aa516934b)]:
+  - @ifc-lite/wasm@5.0.0
+  - @ifc-lite/create@2.1.2
+  - @ifc-lite/sdk@2.1.3
+
+## 0.2.12
+
+### Patch Changes
+
+- [#2280](https://github.com/LTplus-AG/ifc-lite/pull/2280) [`160bf1f`](https://github.com/LTplus-AG/ifc-lite/commit/160bf1fda7ad5f2c7921b833982a53acd1ee79ad) Thanks [@BIMvoice](https://github.com/BIMvoice)! - Fix `ifc-lite view` rendering most elements collapsed near the world origin instead of at their real placement ([#2261](https://github.com/LTplus-AG/ifc-lite/issues/2261)). wasm's mesh geometry is stored in a per-element local frame by default (world position = `mesh.origin` + `position`, added to keep f32 vertex storage precise at building/georef scale); the standalone CLI viewer's minimal WebGL renderer read `positions` directly without folding `origin` back in, so every element rendered near its own local frame instead of its true world placement. The main web viewer (`@ifc-lite/geometry` / `@ifc-lite/renderer`) already applied this fold and was unaffected.
+
+- [#2351](https://github.com/LTplus-AG/ifc-lite/pull/2351) [`6d52ca3`](https://github.com/LTplus-AG/ifc-lite/commit/6d52ca369fa7cece428a15bedd69ae1d933b888f) Thanks [@BIMvoice](https://github.com/BIMvoice)! - Fix `startViewerServer` hanging forever if the caller's `onReady` callback threw. The executor for the returned promise only took a `resolve` parameter; `onReady` runs inside the `server.listen` callback, outside any try/catch the caller can see, so a throw there silently skipped `promiseResolve` and the returned promise never settled. It now rejects with the thrown error, and closes the already-bound server first so the rejection doesn't leak a listening socket.
+
+  Also fix the same class of hang on a `server.listen()` bind failure (e.g. `EADDRINUSE`): a bind failure emits `error` and never runs the `listen` callback, so the returned promise hung forever with no way to observe the failure. It now rejects with the underlying error; since the server never bound on this path there is no listening socket to close.
+
+- Updated dependencies [[`5dd1d18`](https://github.com/LTplus-AG/ifc-lite/commit/5dd1d181437bf0d1d357f3c5505049f802beb2cf), [`6f5566f`](https://github.com/LTplus-AG/ifc-lite/commit/6f5566fa761f25a02818a750351b0b0db785ef9b), [`8d1972d`](https://github.com/LTplus-AG/ifc-lite/commit/8d1972d059fe5e8725fffbf661cc56bb6a23767b), [`5d763d6`](https://github.com/LTplus-AG/ifc-lite/commit/5d763d6bde10c0232cbf28e7d8e4e956ebaf4ff1)]:
+  - @ifc-lite/create@2.0.2
+  - @ifc-lite/sdk@2.0.3
+
+## 0.2.11
+
+### Patch Changes
+
+- Updated dependencies [[`59792cc`](https://github.com/LTplus-AG/ifc-lite/commit/59792cc7d15bba68708a88475861f499f7b15647), [`40e9c59`](https://github.com/LTplus-AG/ifc-lite/commit/40e9c5931fab27b0de05655e08804562dd794389), [`af869bd`](https://github.com/LTplus-AG/ifc-lite/commit/af869bd6c8133d8d13c9d62edecf04c37baa0245), [`e4782e8`](https://github.com/LTplus-AG/ifc-lite/commit/e4782e8362c0899d0df1070d5eafb70ef18481b6), [`c868444`](https://github.com/LTplus-AG/ifc-lite/commit/c868444e94348a34cbea2b130968a6c7affc474e), [`e4d2db5`](https://github.com/LTplus-AG/ifc-lite/commit/e4d2db5f11798e3ec78f45249139d69aa1e65275), [`8967a03`](https://github.com/LTplus-AG/ifc-lite/commit/8967a033704a7edbb03140291df7a8536d3dd892), [`8f139a8`](https://github.com/LTplus-AG/ifc-lite/commit/8f139a8ef44235b68c2f97c032419fa586111b62)]:
+  - @ifc-lite/wasm@4.3.0
+  - @ifc-lite/sdk@2.0.0
+  - @ifc-lite/create@2.0.0
+
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies [[`8f3fafd`](https://github.com/LTplus-AG/ifc-lite/commit/8f3fafd7cc777e60cdc006956f8336680723c440), [`a2c31a1`](https://github.com/LTplus-AG/ifc-lite/commit/a2c31a185e868d15183df8360badb001789bd978)]:
+  - @ifc-lite/wasm@4.0.0
+
+## 0.2.9
+
+### Patch Changes
+
+- [#1691](https://github.com/LTplus-AG/ifc-lite/pull/1691) [`26af236`](https://github.com/LTplus-AG/ifc-lite/commit/26af236a9128f5fc97493d75d7c9642958343a7a) Thanks [@louistrue](https://github.com/louistrue)! - Documentation moved to https://ifclite.dev/docs/ - README links and package homepage fields now point at the new home (the GitHub Pages site remains as a mirror whose canonical URLs point there).
+
+- Updated dependencies [[`41794cd`](https://github.com/LTplus-AG/ifc-lite/commit/41794cde27d31904773bf2042eb0a0331aadf770), [`26af236`](https://github.com/LTplus-AG/ifc-lite/commit/26af236a9128f5fc97493d75d7c9642958343a7a), [`d0647c9`](https://github.com/LTplus-AG/ifc-lite/commit/d0647c9a1801fc03b7c5d32314e53ef922c56f2f), [`633882f`](https://github.com/LTplus-AG/ifc-lite/commit/633882fa15940f5faddb9dcb32031fcf3f38e287), [`40ac0a8`](https://github.com/LTplus-AG/ifc-lite/commit/40ac0a85d5aaac1b6fed9ad96b3e2f9d0378d65b), [`47bf759`](https://github.com/LTplus-AG/ifc-lite/commit/47bf759b1b801d44f6a0ba7408f65d368096cb04)]:
+  - @ifc-lite/wasm@3.0.14
+  - @ifc-lite/create@1.16.4
+  - @ifc-lite/sdk@1.21.2
+
+## 0.2.8
+
+### Patch Changes
+
+- [#1676](https://github.com/LTplus-AG/ifc-lite/pull/1676) [`da04601`](https://github.com/LTplus-AG/ifc-lite/commit/da0460183dcb4e2b26ceb53cfebd8cca33c78c39) Thanks [@louistrue](https://github.com/louistrue)! - Docs refresh: correct stale README claims and API samples against the current codebase; add READMEs to the ten published packages that shipped without one (cli, create, sdk, sandbox, lens, lists, embed-sdk, embed-protocol, encoding, viewer-core).
+
+- Updated dependencies [[`da04601`](https://github.com/LTplus-AG/ifc-lite/commit/da0460183dcb4e2b26ceb53cfebd8cca33c78c39), [`84cd5aa`](https://github.com/LTplus-AG/ifc-lite/commit/84cd5aa3b59bfb5cb5599423f22406f56f3c0e6c), [`2c52076`](https://github.com/LTplus-AG/ifc-lite/commit/2c5207631c3dbc164ffde0147a3cd71104006d36), [`a90182b`](https://github.com/LTplus-AG/ifc-lite/commit/a90182bac110fdd4c15b8b51866e31deefc0378e)]:
+  - @ifc-lite/create@1.16.3
+  - @ifc-lite/sdk@1.21.1
+  - @ifc-lite/wasm@3.0.13
+
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [[`8e43ecf`](https://github.com/LTplus-AG/ifc-lite/commit/8e43ecf540b88b942a4ec2127dd9bcf24ec244fa), [`6d2cb21`](https://github.com/LTplus-AG/ifc-lite/commit/6d2cb21a170413c6c98aadf10d254667b2ed2b53), [`66f31ac`](https://github.com/LTplus-AG/ifc-lite/commit/66f31acb761209f7cf78e83ef01c02a1ec3dc13a), [`3d25765`](https://github.com/LTplus-AG/ifc-lite/commit/3d25765edc2cee40268a6d5a27d4055f88f76489), [`6a515ba`](https://github.com/LTplus-AG/ifc-lite/commit/6a515ba31bbe31bb6f018f7476cc9616e4691448), [`b66ff1d`](https://github.com/LTplus-AG/ifc-lite/commit/b66ff1dd915a0ff4f60198a511adb7ed7f714079)]:
+  - @ifc-lite/wasm@3.0.0
+
+## 0.2.6
+
+### Patch Changes
+
+- [#1036](https://github.com/LTplus-AG/ifc-lite/pull/1036) [`0205c4d`](https://github.com/LTplus-AG/ifc-lite/commit/0205c4d50995572ef796ce66877aa389f19c6fbc) Thanks [@louistrue](https://github.com/louistrue)! - Add a `default` condition to every package's exports map. The maps only
+  declared `import` + `types`, so any resolver hitting the CJS/default
+  condition path (tsx, jest, plain `require`, some bundlers) failed with
+  ERR_PACKAGE_PATH_NOT_EXPORTED. The `default` entry points at the same
+  ESM dist file; pure ESM consumers are unaffected.
+- Updated dependencies [[`0205c4d`](https://github.com/LTplus-AG/ifc-lite/commit/0205c4d50995572ef796ce66877aa389f19c6fbc), [`8d5bd67`](https://github.com/LTplus-AG/ifc-lite/commit/8d5bd6701dc9962c2de5e42a7462008b2b8c2885)]:
+  - @ifc-lite/create@1.16.1
+  - @ifc-lite/sdk@1.18.1
+  - @ifc-lite/wasm@2.5.1
+
+## 0.2.5
+
+### Patch Changes
+
+- [#946](https://github.com/LTplus-AG/ifc-lite/pull/946) [`6378998`](https://github.com/LTplus-AG/ifc-lite/commit/6378998ec146f7f9297ef5fcc5953b155fd6b5e0) Thanks [@louistrue](https://github.com/louistrue)! - Fix a batch of verified findings from a full-codebase review (security, correctness,
+  data-loss, and resource/memory leaks). Highlights:
+
+  **Security**
+
+  - collab-server: a malformed WebSocket frame no longer crashes the whole process
+    (decode is wrapped; a bad frame is rejected/audited instead of throwing).
+  - mcp: the local HTTP transport now validates `Host`/`Origin` and no longer sends a
+    wildcard `Access-Control-Allow-Origin`, closing a DNS-rebinding/CSRF hole; the
+    `AuthScope.modelIds` allowlist is now enforced at model resolution.
+  - server-bin: `extractZip` uses `execFileSync` (argv, no shell), removing command
+    injection via archive/destination paths.
+  - export / sdk / cli / mcp / lists / viewer CSV exporters now neutralize spreadsheet
+    formula injection (CWE-1236) consistently.
+  - create-ifc-lite: validates the project name (no path traversal) and drops the
+    unused `execSync`-based downloader.
+  - embed-sdk: inbound `postMessage` now validates `event.origin`.
+
+  **Correctness / data-loss**
+
+  - parser: `lengthUnitScale` survives the worker transport; the nested STEP list
+    parser is string-aware (commas/parens inside quoted values no longer mis-split).
+  - mutations: deleting a property from a session-created pset and replaying
+    `UPDATE_ATTRIBUTE` / `CREATE_PROPERTY_SET` mutations now work.
+  - export: merged-export ID remapping no longer rewrites `#N` inside quoted strings.
+  - drawing-2d: GPU section cutter triangle upload/readback use correct WGSL std-layout
+    offsets and strides.
+  - ifcx: cyclic children no longer abort the parse; spatial children round-trip; the
+    mesh transform guards a zero/non-finite homogeneous `w`.
+  - data / cache: a `NULL` string property value stays `null` instead of becoming `""`.
+  - pointcloud, bcf, server-client, query, viewer-core, viewer store/federation: assorted
+    decoding, federation-id, and selection-state fixes.
+
+  **Resource / memory leaks**
+
+  - geometry, query (DuckDB), renderer (GPU buffers), collab (federation presence),
+    sandbox (host log capture + runtime), mcp (clash mesh cache), server-bin (signal
+    listeners), and the viewer renderer on unmount now release resources deterministically.
+
+  **Hardening (apps, not published)**
+
+  - server: a dedicated `server-release` Cargo profile (`panic = "unwind"`) plus a
+    `CatchPanicLayer` contain a malformed-IFC parse panic to the offending request
+    instead of aborting the whole server.
+  - desktop (Tauri): a Content-Security-Policy is set, and unused `shell:*` /
+    `fs:allow-write|mkdir|remove` capabilities (and the unused shell plugin) are removed.
+
+  **Second pass** (additional verified findings)
+
+  - collab-server: S3 log load now follows `ListObjectsV2` pagination (no dropped frames);
+    awareness frames are size-capped + rate-limited; path-lock verify runs after role/rate-limit;
+    the blob route requires auth and `/metrics` can be token-gated.
+  - server-bin: downloaded binaries are SHA-256 verified against a release sidecar (fail-closed on
+    mismatch, warn-if-absent for older releases).
+  - extensions: inner-ring capability check fails _closed_ for unknown namespaces; signing
+    canonicalization is now injective (length-prefixed).
+  - correctness/leaks: mutations quantity type+unit preserved on replay; `findByProperty` boolean
+    comparisons; Parquet REAL columns kept as Float64; blob GC fail-safe on missing `uploadedAt`;
+    spatial-hierarchy + codegen cycle guards; BVH NaN edge; bSDD/playground caches bounded;
+    point-cloud GPU asset freed on federation error; mcp `parseColor` rejects non-hex; bcf/SVG/STEP
+    output escaping; and more.
+
+- Updated dependencies [[`6378998`](https://github.com/LTplus-AG/ifc-lite/commit/6378998ec146f7f9297ef5fcc5953b155fd6b5e0), [`90060b7`](https://github.com/LTplus-AG/ifc-lite/commit/90060b7eaad7a07bdab13907c1b52bb24fbc8597)]:
+  - @ifc-lite/sdk@1.17.1
+  - @ifc-lite/wasm@2.3.0
+
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies [[`e73ac09`](https://github.com/LTplus-AG/ifc-lite/commit/e73ac0931b85cd299ae9b723073e956b6b124c85), [`e73ac09`](https://github.com/LTplus-AG/ifc-lite/commit/e73ac0931b85cd299ae9b723073e956b6b124c85)]:
+  - @ifc-lite/wasm@2.0.0
+  - @ifc-lite/create@1.15.1
+  - @ifc-lite/sdk@1.16.1
+
+## 0.2.3
+
+### Patch Changes
+
+- [#494](https://github.com/louistrue/ifc-lite/pull/494) [`ec0d3a0`](https://github.com/louistrue/ifc-lite/commit/ec0d3a0e4c7f9eaeb26ab0a724fd76d955e52ac5) Thanks [@louistrue](https://github.com/louistrue)! - Remove recursive package `prebuild` hooks and run TypeScript via `pnpm exec` so workspace builds resolve correctly on Windows.
+
+- Updated dependencies [[`7a1aeb7`](https://github.com/louistrue/ifc-lite/commit/7a1aeb7fabdb4b9692d02186fe4254fc561bece4), [`ec0d3a0`](https://github.com/louistrue/ifc-lite/commit/ec0d3a0e4c7f9eaeb26ab0a724fd76d955e52ac5)]:
+  - @ifc-lite/wasm@1.16.1
+  - @ifc-lite/create@1.14.5
+  - @ifc-lite/sdk@1.14.6
+
+## 0.2.2
+
+### Patch Changes
+
+- [#432](https://github.com/louistrue/ifc-lite/pull/432) [`113bafc`](https://github.com/louistrue/ifc-lite/commit/113bafc07436c809a8cb24d8682cf63ae5ed99e9) Thanks [@louistrue](https://github.com/louistrue)! - Fix `ifc-lite view` WASM package resolution on Windows by converting module file URLs with `fileURLToPath`, which avoids duplicated drive prefixes and decodes spaces in installed paths.
+
+- [#432](https://github.com/louistrue/ifc-lite/pull/432) [`113bafc`](https://github.com/louistrue/ifc-lite/commit/113bafc07436c809a8cb24d8682cf63ae5ed99e9) Thanks [@louistrue](https://github.com/louistrue)! - Serve generated `@ifc-lite/wasm` snippet assets from the embedded viewer server so `ifc-lite view` can load the rayon worker helper modules at runtime in addition to resolving Windows package paths correctly.
+
+- Updated dependencies [[`113bafc`](https://github.com/louistrue/ifc-lite/commit/113bafc07436c809a8cb24d8682cf63ae5ed99e9), [`113bafc`](https://github.com/louistrue/ifc-lite/commit/113bafc07436c809a8cb24d8682cf63ae5ed99e9)]:
+  - @ifc-lite/wasm@1.14.6
+
+## 0.2.1
+
+### Patch Changes
+
+- [#411](https://github.com/louistrue/ifc-lite/pull/411) [`af1ef14`](https://github.com/louistrue/ifc-lite/commit/af1ef1422d41fb4f7bb7f63720cca96ef7fe5515) Thanks [@louistrue](https://github.com/louistrue)! - Simplify orbit behavior: remove dynamic pivot and use camera target. Update frustum utilities and viewer HTML integration.
+
+- Updated dependencies [[`af1ef14`](https://github.com/louistrue/ifc-lite/commit/af1ef1422d41fb4f7bb7f63720cca96ef7fe5515), [`f0da00c`](https://github.com/louistrue/ifc-lite/commit/f0da00c162f2713ed9144691d52c75a21faa18dd)]:
+  - @ifc-lite/wasm@1.14.5
+
+## 0.2.0
+
+### Minor Changes
+
+- [#388](https://github.com/louistrue/ifc-lite/pull/388) [`30e4f04`](https://github.com/louistrue/ifc-lite/commit/30e4f048dba5e615f44d3d358cdec56dfc83eb14) Thanks [@louistrue](https://github.com/louistrue)! - Add 3D viewer package and CLI `view`/`analyze` commands for interactive browser-based model visualization with REST API

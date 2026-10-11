@@ -1,0 +1,631 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Differential test: the Rust/WASM kernel must produce the same clashes as the
+ * pure-TypeScript reference engine. Both run through the identical orchestrator,
+ * so any divergence is in the geometry kernel. We assert identical clash sets
+ * (by id), status and severity, with distances and points within epsilon
+ * (f64 summation order can differ by ~1e-12 across the two implementations).
+ *
+ * SCOPE (#2830): "both run through the identical orchestrator" above is a
+ * limitation, not just an explanation. `engine-wasm/index.ts` calls the same
+ * `runClash` (`engine-ts/orchestrator.ts`) that `engine-ts/index.ts` uses, so
+ * selection (`selectors.ts`), severity (`disciplines.ts`), exclusions
+ * (`exclude.ts`), identity/dedup/sort and the summary (`analysis.ts`) are
+ * SHARED CODE on both sides of this comparison — a bug there produces the
+ * same wrong answer on both backends and this suite stays green. Only the
+ * kernel call (broad + narrow phase geometry) genuinely differs between the
+ * two paths, so that is the only thing this suite actually audits. Verified:
+ * constant-folding `inferClashSeverity` to always return `'info'` leaves
+ * every test below passing. Shared orchestration has its own direct cover in
+ * `engine-ts/orchestrator.test.ts` and `analysis.test.ts` — don't rely on
+ * this file for it.
+ */
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { createClashEngine } from './engine.js';
+import { disciplineMatrixRules } from './disciplines.js';
+import { WasmClashEngine, initClashWasm } from './engine-wasm/index.js';
+import type { ClashElement, ClashResult, ClashRule, Mat4, Vec3 } from './types.js';
+
+const EPS = 1e-6;
+
+function makeBox(center: Vec3, size: number): { positions: Float32Array; indices: Uint32Array } {
+  const h = size / 2;
+  const [cx, cy, cz] = center;
+  const v = [
+    cx - h, cy - h, cz - h, cx + h, cy - h, cz - h, cx + h, cy + h, cz - h, cx - h, cy + h, cz - h,
+    cx - h, cy - h, cz + h, cx + h, cy - h, cz + h, cx + h, cy + h, cz + h, cx - h, cy + h, cz + h,
+  ];
+  const indices = new Uint32Array([
+    0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1,
+    1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0,
+  ]);
+  return { positions: new Float32Array(v), indices };
+}
+
+let refCounter = 1;
+function box(key: string, tag: string, center: Vec3, size = 1): ClashElement {
+  const { positions, indices } = makeBox(center, size);
+  const h = size / 2;
+  return {
+    key,
+    ref: refCounter++,
+    model: 'm',
+    tag,
+    positions,
+    indices,
+    bounds: {
+      min: [center[0] - h, center[1] - h, center[2] - h],
+      max: [center[0] + h, center[1] + h, center[2] + h],
+    },
+  };
+}
+
+/**
+ * A "dumbbell" element: two tiny, far-apart triangles that together give a
+ * wide AABB — the AABB overlaps a target while neither triangle does. Models
+ * one sub-prim of a split entity that is a broad-phase false positive. Same
+ * fixture as `packages/clash/src/regression.test.ts`'s `dumbbellElement`;
+ * reproduced here rather than imported, since the two files must stay
+ * independently readable.
+ */
+function dumbbell(key: string, tag: string, cxNear: number, cxFar: number): ClashElement {
+  const eps = 0.01;
+  const positions = new Float32Array([
+    cxNear, 0, 0, cxNear + eps, 0, 0, cxNear, eps, 0,
+    cxFar, 0, 0, cxFar + eps, 0, 0, cxFar, eps, 0,
+  ]);
+  const indices = new Uint32Array([0, 1, 2, 3, 4, 5]);
+  // Bounds padded by a fixed margin around the two triangle CENTERS, not the
+  // triangles' own eps-sized extent — matching the #5194 issue's own executed
+  // repro exactly ([0.45, 20.55] for cxNear=0.5, cxFar=20.5).
+  const margin = 0.05;
+  return {
+    key, ref: refCounter++, model: 'm', tag, positions, indices,
+    bounds: { min: [cxNear - margin, -margin, -margin], max: [cxFar + margin, margin, margin] },
+  };
+}
+
+const BOX_CORNER_ORDER: ReadonlyArray<readonly [number, number, number]> = [
+  [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+  [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+];
+const BOX_IDX = new Uint32Array([
+  0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1,
+  1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0,
+]);
+
+/** Box element with per-axis half-extents (world positions, no transform). */
+function boxHxyz(key: string, tag: string, center: Vec3, half: Vec3): ClashElement {
+  const v: number[] = [];
+  let min: Vec3 = [Infinity, Infinity, Infinity];
+  let max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (const [sx, sy, sz] of BOX_CORNER_ORDER) {
+    const p: Vec3 = [center[0] + sx * half[0], center[1] + sy * half[1], center[2] + sz * half[2]];
+    v.push(...p);
+    for (let a = 0; a < 3; a += 1) { if (p[a] < min[a]) min[a] = p[a]; if (p[a] > max[a]) max[a] = p[a]; }
+  }
+  return { key, ref: refCounter++, model: 'm', tag, positions: new Float32Array(v), indices: BOX_IDX, bounds: { min, max } };
+}
+
+const PRISM_IDX = new Uint32Array([
+  0, 1, 2, 3, 4, 5, 0, 1, 4, 0, 4, 3, 1, 2, 5, 1, 5, 4, 2, 0, 3, 2, 3, 5,
+]);
+
+/** Closed triangular prism: footprint (XY) extruded between z0 and z1. */
+function triPrism(
+  key: string,
+  tag: string,
+  footprint: [[number, number], [number, number], [number, number]],
+  z0: number,
+  z1: number,
+): ClashElement {
+  const [p0, p1, p2] = footprint;
+  const v = [
+    p0[0], p0[1], z0, p1[0], p1[1], z0, p2[0], p2[1], z0,
+    p0[0], p0[1], z1, p1[0], p1[1], z1, p2[0], p2[1], z1,
+  ];
+  let min: Vec3 = [Infinity, Infinity, Infinity];
+  let max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < v.length; i += 3) {
+    for (let a = 0; a < 3; a += 1) { const c = v[i + a]; if (c < min[a]) min[a] = c; if (c > max[a]) max[a] = c; }
+  }
+  return { key, ref: refCounter++, model: 'm', tag, positions: new Float32Array(v), indices: PRISM_IDX, bounds: { min, max } };
+}
+
+function applyMat4Pt(m: Mat4, x: number, y: number, z: number): Vec3 {
+  return [
+    m[0] * x + m[4] * y + m[8] * z + m[12],
+    m[1] * x + m[5] * y + m[9] * z + m[13],
+    m[2] * x + m[6] * y + m[10] * z + m[14],
+  ];
+}
+
+/**
+ * A box that carries a deferred world `transform` (the federation hook on the
+ * STEP adapter). World bounds are f32-quantized to mirror what both kernels
+ * ultimately feed the narrow phase, isolating the transform-precision parity.
+ */
+function boxWithTransform(key: string, tag: string, center: Vec3, size: number, transform: Mat4): ClashElement {
+  const { positions, indices } = makeBox(center, size);
+  let min: Vec3 = [Infinity, Infinity, Infinity];
+  let max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i + 2 < positions.length; i += 3) {
+    const w = applyMat4Pt(transform, positions[i], positions[i + 1], positions[i + 2]);
+    for (let a = 0; a < 3; a += 1) {
+      const v = Math.fround(w[a]);
+      if (v < min[a]) min[a] = v;
+      if (v > max[a]) max[a] = v;
+    }
+  }
+  return { key, ref: refCounter++, model: 'm', tag, positions, indices, bounds: { min, max }, transform };
+}
+
+/** Rotation `Rz(rz) * Ry(ry) * Rx(rx)`, row-major. */
+function rotationZyx(rz: number, ry: number, rx: number): number[][] {
+  const [cz, sz, cy, sy, cx, sx] = [Math.cos(rz), Math.sin(rz), Math.cos(ry), Math.sin(ry), Math.cos(rx), Math.sin(rx)];
+  return [
+    [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx],
+    [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx],
+    [-sy, cy * sx, cy * cx],
+  ];
+}
+
+/** Box with half-extents `half` centred at `center`, both in the frame `r`,
+ *  baked to f32 world positions (bounds from the baked vertices). */
+function rotatedBox(key: string, tag: string, r: number[][], center: Vec3, half: Vec3): ClashElement {
+  const rot = (v: Vec3): Vec3 => [0, 1, 2].map((k) => r[k]![0]! * v[0] + r[k]![1]! * v[1] + r[k]![2]! * v[2]) as unknown as Vec3;
+  const c = rot(center);
+  const v: number[] = [];
+  const min: Vec3 = [Infinity, Infinity, Infinity];
+  const max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (const [sx, sy, sz] of BOX_CORNER_ORDER) {
+    const w = rot([sx * half[0], sy * half[1], sz * half[2]]);
+    for (let a = 0; a < 3; a += 1) {
+      const f = Math.fround(w[a]! + c[a]!);
+      v.push(f);
+      if (f < min[a]!) min[a] = f;
+      if (f > max[a]!) max[a] = f;
+    }
+  }
+  return { key, ref: refCounter++, model: 'm', tag, positions: new Float32Array(v), indices: BOX_IDX, bounds: { min, max } };
+}
+
+const ts = createClashEngine({ backend: 'ts' });
+const wasm = new WasmClashEngine();
+
+function assertParity(a: ClashResult, b: ClashResult): void {
+  expect(b.clashes.length).toBe(a.clashes.length);
+  const byId = new Map(b.clashes.map((c) => [c.id, c]));
+  for (const x of a.clashes) {
+    const y = byId.get(x.id);
+    expect(y, `clash ${x.id} should exist in the WASM result`).toBeDefined();
+    if (!y) continue;
+    expect(y.status).toBe(x.status);
+    expect(y.severity).toBe(x.severity);
+    // Provenance is a discrete label, so it must match EXACTLY — an epsilon
+    // comparison on `distance` alone would let one kernel measure the meshes
+    // while the other read the AABBs, on a fixture where the two happen to
+    // agree numerically.
+    expect(y.distanceKind, `clash ${x.id} distanceKind must match`).toBe(x.distanceKind);
+    expect(x.distanceKind, `clash ${x.id} must carry a distanceKind`).toBeDefined();
+    expect(Math.abs(y.distance - x.distance)).toBeLessThan(EPS);
+    // The depth floor both kernels classified against, carried out on every
+    // `hard` clash (#5639): presence must match, and the value too — it is the
+    // same generated `depthFloor` / `estimateFloor` on both sides.
+    expect(y.depthFloor === undefined, `clash ${x.id} depthFloor presence must match`).toBe(x.depthFloor === undefined);
+    expect(x.depthFloor !== undefined, `clash ${x.id}: depthFloor iff hard`).toBe(x.status === 'hard');
+    if (x.depthFloor !== undefined && y.depthFloor !== undefined) {
+      expect(Math.abs(y.depthFloor - x.depthFloor)).toBeLessThan(EPS);
+    }
+    for (let i = 0; i < 3; i += 1) {
+      expect(Math.abs(y.point[i] - x.point[i])).toBeLessThan(EPS);
+    }
+    // Tight-contact bounds must agree across backends too (#1402 Bug B), not just
+    // count/status/point — otherwise a bounds regression in one kernel slips by.
+    // Both kernels must also agree on whether bounds exist at all, so a one-sided
+    // bounds regression cannot hide behind a presence check.
+    expect(Boolean(y.bounds), `clash ${x.id} bounds presence must match`).toBe(Boolean(x.bounds));
+    if (x.bounds && y.bounds) {
+      for (let i = 0; i < 3; i += 1) {
+        expect(Math.abs(y.bounds.min[i] - x.bounds.min[i])).toBeLessThan(EPS);
+        expect(Math.abs(y.bounds.max[i] - x.bounds.max[i])).toBeLessThan(EPS);
+      }
+    }
+  }
+}
+
+async function bothAgree(elements: ClashElement[], rules: ClashRule[]): Promise<number> {
+  const a = await ts.run(elements, rules);
+  const b = await wasm.run(elements, rules);
+  assertParity(a, b);
+  return a.clashes.length;
+}
+
+beforeAll(async () => {
+  // Load the web-target wasm in Node by feeding the bytes directly.
+  const wasmPath = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
+  await initClashWasm(readFileSync(wasmPath));
+});
+
+describe('differential: WASM kernel === TS kernel', () => {
+  it('agrees on a hard clash', async () => {
+    const els = [box('A', 'IfcWall', [0, 0, 0]), box('B', 'IfcDuctSegment', [0.5, 0, 0])];
+    const n = await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }]);
+    expect(n).toBe(1);
+  });
+
+  it('agrees on clearance (inside and outside the gap)', async () => {
+    const els = [box('A', 'IfcWall', [0, 0, 0]), box('B', 'IfcDuctSegment', [2, 0, 0])];
+    expect(await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'clearance', clearance: 0.5 }])).toBe(0);
+    expect(await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'clearance', clearance: 1.5 }])).toBe(1);
+  });
+
+  it('agrees on touch (suppressed and reported)', async () => {
+    const els = [box('A', 'IfcWall', [0, 0, 0]), box('B', 'IfcDuctSegment', [1, 0, 0])];
+    expect(await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }])).toBe(0);
+    expect(await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard', reportTouch: true }])).toBe(1);
+  });
+
+  it('agrees on a self-clash', async () => {
+    const els = [
+      box('A', 'IfcBeam', [0, 0, 0]),
+      box('B', 'IfcBeam', [0.5, 0, 0]),
+      box('C', 'IfcBeam', [10, 0, 0]),
+    ];
+    expect(await bothAgree(els, [{ id: 'self', name: 'self', a: 'IfcBeam', mode: 'hard' }])).toBe(1);
+  });
+
+  // #5354: a rule that NAMES a B side which resolves to zero elements must
+  // report nothing on BOTH backends. The WASM kernel used to marshal a
+  // declared-but-empty group B into the same zero-length Uint32Array it used
+  // for "no B side", and Rust read an empty `group_b` as a request for a
+  // self-clash — so the rule silently ran as A-vs-A. On a real MEP-only model
+  // a "pipes vs building elements" rule returned 1,892 pipe-vs-pipe pairs.
+  //
+  // The two beams here DO overlap, so a self-clash finds them: that is what
+  // makes `toBe(0)` load-bearing rather than vacuous, and the self-clash test
+  // directly above is the companion that pins the same pair at 1.
+  it('agrees that a rule whose B side matched nothing yields no clashes (#5354)', async () => {
+    const els = [box('A', 'IfcBeam', [0, 0, 0]), box('B', 'IfcBeam', [0.5, 0, 0])];
+
+    // B declared by selector, matching nothing.
+    expect(
+      await bothAgree(els, [
+        { id: 'r', name: 'unmatched b selector', a: 'IfcBeam', b: 'IfcNoSuchThing', mode: 'hard' },
+      ]),
+    ).toBe(0);
+
+    // B declared by explicit membership, empty. `membersB: []` is documented
+    // as "matched nothing", never "everything" — and never "no B side".
+    expect(
+      await bothAgree(els, [
+        { id: 'r', name: 'empty membersB', a: 'IfcBeam', membersB: [], mode: 'hard' },
+      ]),
+    ).toBe(0);
+  });
+
+  it('agrees on same-key exclusion (WASM has no key concept in its broad phase)', async () => {
+    // The Rust/WASM broad phase ingests only positions/indices/AABBs — it has no
+    // notion of durable `key`/`model`, so same-entity exclusion for the WASM
+    // engine relies entirely on the shared orchestrator's post-filter (see
+    // orchestrator.ts `elA.key === elB.key` check). This pins that the WASM
+    // engine agrees with TS (0 clashes) for two overlapping elements sharing a
+    // durable key, the way a split IFC5/USD entity would.
+    const els = [box('SAME', 'IfcWall', [0, 0, 0]), box('SAME', 'IfcWall', [0.2, 0, 0])];
+    expect(await bothAgree(els, [{ id: 'self', name: 'wall self-clash', a: 'IfcWall', mode: 'hard' }])).toBe(0);
+  });
+
+  // #5220 / #5194: the shape the same-key test above does NOT cover — two
+  // same-key submeshes where one (a1) is a broad-phase false positive and the
+  // other (a2) genuinely clashes with a third element (b). The TS engine's
+  // old cross-group broad phase deduped candidate pairs by entity KEY before
+  // the narrow phase, so a1's spurious pair hid a2's real one when a1 came
+  // first. The Rust session dedups by GLOBAL ELEMENT INDEX only (`session.rs`
+  // `candidate_pairs`), so it never had the defect; keying that dedup on
+  // entity identity would reintroduce it, and this case would go red. Both
+  // orders, both backends.
+  it('agrees on the #5194 same-key dumbbell shape (broad-phase false positive + a real clash)', async () => {
+    const a1 = dumbbell('A', 'IfcWall', 0.5, 20.5);
+    const a2 = box('A', 'IfcWall', [10.5, 0, 0], 2);
+    const b = box('B', 'IfcBeam', [10, 0, 0], 2);
+    const rules: ClashRule[] = [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcBeam', mode: 'hard' }];
+    expect(await bothAgree([a1, a2, b], rules)).toBe(1);
+    expect(await bothAgree([a2, a1, b], rules)).toBe(1);
+  });
+
+  // #5194: when BOTH same-key sub-prims genuinely clash, the orchestrator
+  // keeps the deeper record. Each kernel hands it both records, so the kept
+  // distance/point must agree across backends in either order. The deeper
+  // sub-prim sits at the HIGHER x, so BVH traversal order cannot fake it.
+  it('agrees on which same-key sub-prim record survives the dedup (#5194)', async () => {
+    const shallow = box('A', 'IfcWall', [9.6, 0, 0]);
+    const deep = box('A', 'IfcWall', [10.05, 0, 0]);
+    const b = box('B', 'IfcBeam', [10, 0, 0]);
+    const rules: ClashRule[] = [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcBeam', mode: 'hard' }];
+    const deepAlone = await ts.run([deep, b], rules);
+    for (const order of [[shallow, deep, b], [deep, shallow, b]]) {
+      expect(await bothAgree(order, rules)).toBe(1);
+      const kept = (await wasm.run(order, rules)).clashes[0];
+      expect(Math.abs(kept.distance - deepAlone.clashes[0].distance)).toBeLessThan(EPS);
+    }
+  });
+
+  it('agrees across the full discipline matrix on a mixed model', async () => {
+    const els = [
+      box('w1', 'IfcWall', [0, 0, 0]),
+      box('d1', 'IfcDuctSegment', [0.4, 0, 0]),
+      box('b1', 'IfcBeam', [0.4, 0, 0]),
+      box('p1', 'IfcPipeSegment', [3, 0, 0]),
+      box('c1', 'IfcColumn', [3.3, 0, 0]),
+      box('s1', 'IfcSlab', [3.3, 0, 0]),
+      box('cab', 'IfcCableSegment', [6, 0, 0]),
+      box('p2', 'IfcPipeSegment', [6.3, 0, 0]),
+    ];
+    const n = await bothAgree(els, disciplineMatrixRules('hard'));
+    expect(n).toBeGreaterThan(0);
+  });
+
+  it('agrees on a fully-enclosed solid (no surface crossing)', async () => {
+    // A 1×1 duct centered inside a 10×10 wall: surfaces are 4.5 m apart so no
+    // triangle pair is within margin — the only signal is full enclosure, which
+    // both kernels must detect via the point-in-solid ray cast.
+    const els = [box('OUT', 'IfcWall', [0, 0, 0], 10), box('IN', 'IfcDuctSegment', [0, 0, 0], 1)];
+    const n = await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }]);
+    expect(n).toBe(1);
+  });
+
+  it('agrees that disjoint solids are not a clash (enclosure must not over-fire)', async () => {
+    const els = [box('A', 'IfcWall', [0, 0, 0], 1), box('B', 'IfcDuctSegment', [20, 0, 0], 1)];
+    const n = await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }]);
+    expect(n).toBe(0);
+  });
+
+  it('agrees that skewed members sharing only a face are not a hard clash (#1362 Bug A)', async () => {
+    const els = [
+      triPrism('A', 'IfcWall', [[0, 0], [2, 0], [0, 2]], 0, 1),
+      triPrism('B', 'IfcDuctSegment', [[2, 0], [0, 2], [5, 5]], 0, 1),
+    ];
+    const n = await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }]);
+    expect(n).toBe(0);
+  });
+
+  it('agrees that members that interpenetrate are a hard clash (#1362 recall)', async () => {
+    const els = [
+      triPrism('A', 'IfcWall', [[0, 0], [2, 0], [0, 2]], 0, 1),
+      boxHxyz('B', 'IfcDuctSegment', [1, 1, 0.5], [0.5, 0.5, 0.5]),
+    ];
+    const n = await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }]);
+    expect(n).toBe(1);
+  });
+
+  it('agrees on a genuine crossing (tight-contact path) (#1402 Bug B)', async () => {
+    const els = [
+      boxHxyz('A', 'IfcWall', [0, 0, 0], [5, 0.5, 0.5]),
+      boxHxyz('B', 'IfcDuctSegment', [0, 0, 0], [0.5, 5, 0.5]),
+    ];
+    const n = await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }]);
+    expect(n).toBe(1);
+  });
+
+  it('agrees on unequal-length aligned overlap (overlap-centre probe) (#1362)', async () => {
+    // Long bar x[-5,5] and short bar x[4.9,5.9] sharing y/z extents: the centroid
+    // midpoint falls outside the short bar, so both kernels must rely on the
+    // AABB-overlap-centre probe and agree it is a hard clash.
+    const els = [
+      boxHxyz('A', 'IfcWall', [0, 0, 0], [5, 0.5, 0.5]),
+      boxHxyz('B', 'IfcDuctSegment', [5.4, 0, 0], [0.5, 0.5, 0.5]),
+    ];
+    const n = await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }]);
+    expect(n).toBe(1);
+  });
+
+  it('agrees on transformed elements (f32-quantized world coords)', async () => {
+    // Rotate ~0.3 rad about Z + a large, non-f32-exact RTC-style translation: the
+    // transformed coords are NOT f32-representable, so the WASM arena's f32 packing
+    // and the TS kernel's transform must quantize identically (Math.fround) or the
+    // contact point drifts by ~1e-4 at this scale — far beyond the 1e-6 parity EPS.
+    const c = Math.cos(0.3);
+    const s = Math.sin(0.3);
+    const m: Mat4 = [c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 1234.567, -89.0, 0.123, 1];
+    // Same rigid transform on both boxes, which overlap locally → still overlap.
+    const els = [
+      boxWithTransform('A', 'IfcWall', [0, 0, 0], 1, m),
+      boxWithTransform('B', 'IfcDuctSegment', [0.5, 0, 0], 1, m),
+    ];
+    const n = await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }]);
+    expect(n).toBe(1);
+  });
+
+  it('agrees on a flush pair coplanar only to within f32 rounding, and on a 20 mm coplanar gap (#5406)', async () => {
+    // A 50 mm panel and a mullion under a three-axis rotation, baked through
+    // f32, so their flush faces are coplanar only to within rounding: the
+    // tri-tri predicate must read that as contact (touch), and two coplanar
+    // end faces 20 mm apart as a 20 mm gap, on BOTH kernels. They share the
+    // generated predicate; this is what proves the TS flattening codemod and
+    // the Rust output still agree on it end to end. Same scene as
+    // `rust/clash/src/world_frame_tests.rs`.
+    const r = rotationZyx(1.1, 0.37, -0.61);
+    const touchRule: ClashRule[] = [{ id: 'r', name: 'r', a: 'IfcPlate', b: 'IfcMember', mode: 'hard', reportTouch: true }];
+    const flush = [
+      rotatedBox('P', 'IfcPlate', r, [1, 2, 1.5], [0.025, 0.75, 1.5]),
+      rotatedBox('M', 'IfcMember', r, [1.125, 2, 1.5], [0.1, 0.1, 1.5]),
+    ];
+    const a = await ts.run(flush, touchRule);
+    assertParity(a, await wasm.run(flush, touchRule));
+    expect(a.clashes.map((c) => c.status)).toEqual(['touch']);
+
+    const clearanceRule: ClashRule[] = [{ id: 'r', name: 'r', a: 'IfcPlate', b: 'IfcMember', mode: 'clearance', clearance: 0.05 }];
+    const gap = [
+      rotatedBox('P', 'IfcPlate', r, [1, 2, 1.5], [0.025, 0.75, 1.5]),
+      rotatedBox('M', 'IfcMember', r, [1.145, 2, 1.5], [0.1, 0.1, 1.5]),
+    ];
+    const g = await ts.run(gap, clearanceRule);
+    assertParity(g, await wasm.run(gap, clearanceRule));
+    expect(g.clashes.map((c) => c.status)).toEqual(['clearance']);
+    expect(g.clashes[0]!.distance).toBeCloseTo(0.02, 6);
+  });
+
+  it('agrees on a rotated thin-panel overlap 1 km out, at the certified depth (#5474)', async () => {
+    // Box recognition used to rebuild the centre from absolute coordinates,
+    // so this 20 mm overlap fell back to the AABB estimate 1 km out. Both
+    // kernels must now certify both boxes there and report the 20 mm.
+    const r = rotationZyx(0.3, 0, 0);
+    const shift = (el: ClashElement): ClashElement => {
+      const p = new Float32Array(el.positions.length);
+      for (let i = 0; i < p.length; i += 1) p[i] = el.positions[i]! + (i % 3 === 0 ? 1000 : 0);
+      const f = (v: Vec3): Vec3 => [Math.fround(v[0] + 1000), v[1], v[2]];
+      return { ...el, positions: p, bounds: { min: f(el.bounds.min), max: f(el.bounds.max) } };
+    };
+    const els = [
+      shift(rotatedBox('P', 'IfcPlate', r, [1, 2, 1.5], [0.025, 0.75, 1.5])),
+      shift(rotatedBox('M', 'IfcMember', r, [1.105, 2, 1.5], [0.1, 0.1, 1.5])),
+    ];
+    const rules: ClashRule[] = [{ id: 'r', name: 'r', a: 'IfcPlate', b: 'IfcMember', mode: 'hard' }];
+    const a = await ts.run(els, rules);
+    assertParity(a, await wasm.run(els, rules));
+    expect(a.clashes).toHaveLength(1);
+    expect(a.clashes[0]!.distanceKind).toBe('mesh');
+    expect(a.clashes[0]!.distance).toBeCloseTo(-0.02, 3);
+  });
+
+  it('agrees on a through-penetration tie, at the same depth wherever the pair sits (#5742)', async () => {
+    // A member overlapping a 26 mm plate by 26 mm pokes out of the far face
+    // by microns, so `through` is decided per placement by f32 noise. The
+    // through side used to report the rotated boxes' 0.786 m AABB estimate
+    // and the other side the certified 0.026 m MTD. Capped by the MTD, both
+    // kernels report the 26 mm on both sides of the tie.
+    const r = rotationZyx(1.5800129994571253, 3.5225093160578957, 1.8017834383956415);
+    const h0: Vec3 = [0.013013728003234151, 0.9714054867418568, 1.3767230571852422];
+    const h1: Vec3 = [0.23902077510958353, 0.7165054118524359, 0.26588907459338434];
+    const sep = -0.02604616601887833;
+    const rules: ClashRule[] = [{ id: 'r', name: 'r', a: 'IfcPlate', b: 'IfcMember', mode: 'hard' }];
+    for (const t of [[0, 0, 0], [0, 1000, 0], [10_000, 0, 0]] as Vec3[]) {
+      const shift = (el: ClashElement): ClashElement => {
+        const p = new Float32Array(el.positions.length);
+        for (let i = 0; i < p.length; i += 1) p[i] = Math.fround(el.positions[i]! + t[i % 3]!);
+        const min: Vec3 = [Infinity, Infinity, Infinity];
+        const max: Vec3 = [-Infinity, -Infinity, -Infinity];
+        for (let i = 0; i < p.length; i += 1) {
+          const k = i % 3;
+          if (p[i]! < min[k]!) min[k] = p[i]!;
+          if (p[i]! > max[k]!) max[k] = p[i]!;
+        }
+        return { ...el, positions: p, bounds: { min, max } };
+      };
+      const els = [
+        shift(rotatedBox('P', 'IfcPlate', r, [0, 0, 0], h0)),
+        shift(rotatedBox('M', 'IfcMember', r, [h0[0] + h1[0] + sep, 0, 0], h1)),
+      ];
+      const a = await ts.run(els, rules);
+      assertParity(a, await wasm.run(els, rules));
+      expect(a.clashes, `translated by ${t}`).toHaveLength(1);
+      expect(a.clashes[0]!.distance, `translated by ${t}`).toBeCloseTo(sep, 3);
+    }
+  });
+
+  it('agrees that flush interlocking L prisms are a touch, not the AABB estimate (#5751)', async () => {
+    // Their AABB-overlap centre lies ON the shared face y = 1: the probe
+    // there used to decide Hard by a coin-flip ray parity. Both kernels now
+    // trust a probe only when it is clearly inside both solids.
+    const prism = (key: string, tag: string, foot: number[][], idxFoot: number[], dy: number): ClashElement => {
+      const v: number[] = [];
+      for (const z of [0, 1]) for (const [x, y] of foot) v.push(x!, y! + dy, z);
+      const n = foot.length;
+      const idx = [...idxFoot, ...idxFoot.map((i) => i + n)];
+      for (let k = 0; k < n; k += 1) {
+        const m = (k + 1) % n;
+        idx.push(k, m, m + n, k, m + n, k + n);
+      }
+      const positions = new Float32Array(v);
+      let min: Vec3 = [Infinity, Infinity, Infinity];
+      let max: Vec3 = [-Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < positions.length; i += 1) {
+        const a = i % 3;
+        if (positions[i]! < min[a]!) min[a] = positions[i]!;
+        if (positions[i]! > max[a]!) max[a] = positions[i]!;
+      }
+      return { key, ref: refCounter++, model: 'm', tag, positions, indices: new Uint32Array(idx), bounds: { min, max } };
+    };
+    const lFoot = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]];
+    const cFoot = [[2, 0], [3, 0], [3, 2], [1, 2], [1, 1], [2, 1]];
+    const rules: ClashRule[] = [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcSlab', mode: 'hard', reportTouch: true }];
+    for (const dy of [0, -0.02]) {
+      const els = [
+        prism('L', 'IfcWall', lFoot, [0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 5, 4], 0),
+        prism('C', 'IfcSlab', cFoot, [5, 1, 0, 5, 2, 1, 5, 3, 2, 5, 4, 3], dy),
+      ];
+      const a = await ts.run(els, rules);
+      assertParity(a, await wasm.run(els, rules));
+      expect(a.clashes.map((c) => c.status), `dy ${dy}`).toEqual([dy === 0 ? 'touch' : 'hard']);
+    }
+  });
+
+  it('agrees on the mesh label for coincident-footprint BOX layers', async () => {
+    // Stacked BOX layers sharing a footprint: no crossing-triangle vertex lies
+    // inside the other solid, so this lands in the coplanar-overlap branch.
+    // Both parts are boxes, so both kernels must certify the exact box-box
+    // depth (the Z overlap) and BOTH must say so.
+    const lower = boxHxyz('L1', 'IfcSlab', [5, 5, 0.1], [5, 5, 0.1]);
+    const upper = boxHxyz('L2', 'IfcSlab', [5, 5, 0.285], [5, 5, 0.125]);
+    const rules: ClashRule[] = [{ id: 'r', name: 'r', a: 'IfcSlab', b: 'IfcSlab', mode: 'hard' }];
+    const a = await ts.run([lower, upper], rules);
+    const b = await wasm.run([lower, upper], rules);
+    assertParity(a, b);
+    expect(a.clashes).toHaveLength(1);
+    expect(a.clashes[0].distanceKind).toBe('mesh');
+  });
+
+  it('agrees on the estimate label for two walls crossing at an X-junction', async () => {
+    // The through-penetration guard's cross-section containment test is where
+    // the two kernels are easiest to drift apart: it is one `-`-vs-`+` sign in
+    // each of `obb.ts` and `obb.rs`, with no shared source. This pair is the
+    // one that discriminates — at an X-junction of two equal-height walls the
+    // height axis TIES, so the sign decides between the honest 0.2 m AABB
+    // estimate and the wall's full 3 m height certified as `'mesh'`. Patching
+    // only one kernel makes THIS test fail (verified: TS-only fix, before the
+    // Rust side and the WASM rebuild).
+    const wallA = boxHxyz('WA', 'IfcWall', [0, 0, 1.5], [5, 0.1, 1.5]);
+    const wallB = boxHxyz('WB', 'IfcWall', [0, 0, 1.5], [0.1, 5, 1.5]);
+    const rules: ClashRule[] = [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcWall', mode: 'hard' }];
+    const a = await ts.run([wallA, wallB], rules);
+    const b = await wasm.run([wallA, wallB], rules);
+    assertParity(a, b);
+    expect(a.clashes).toHaveLength(1);
+    expect(a.clashes[0].distanceKind).toBe('estimate');
+  });
+
+  it('agrees on the AABB-estimate fallback for a non-box contained pair (#1866)', async () => {
+    // Concave L prism (notch [1,2]x[1,2] inside the AABB but outside the solid)
+    // and a small box in the notch, AABB-contained, dipping ~0.05 into the notch
+    // wall at x=1. The L prism is not a box, so neither kernel can certify a
+    // box-box depth here; both must agree on the (now honestly labelled)
+    // AABB-estimate fallback rather than diverge on it.
+    const positions = new Float32Array([
+      0, 0, 0, 2, 0, 0, 2, 1, 0, 1, 1, 0, 1, 2, 0, 0, 2, 0,
+      0, 0, 1, 2, 0, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 0, 2, 1,
+    ]);
+    const indices = new Uint32Array([
+      0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 5, 4,
+      6, 7, 8, 6, 8, 9, 6, 9, 10, 6, 10, 11,
+      0, 1, 7, 0, 7, 6, 1, 2, 8, 1, 8, 7, 2, 3, 9, 2, 9, 8,
+      3, 4, 10, 3, 10, 9, 4, 5, 11, 4, 11, 10, 5, 0, 6, 5, 6, 11,
+    ]);
+    const wall: ClashElement = {
+      key: 'A', ref: refCounter++, model: 'm', tag: 'IfcWall',
+      positions, indices, bounds: { min: [0, 0, 0], max: [2, 2, 1] },
+    };
+    const duct = boxHxyz('B', 'IfcDuctSegment', [1.2, 1.4, 0.5], [0.25, 0.2, 0.2]);
+    const rules: ClashRule[] = [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }];
+    const a = await ts.run([wall, duct], rules);
+    const b = await wasm.run([wall, duct], rules);
+    assertParity(a, b);
+    expect(a.clashes).toHaveLength(1);
+    expect(a.clashes[0].distanceKind).toBe('estimate');
+  });
+});

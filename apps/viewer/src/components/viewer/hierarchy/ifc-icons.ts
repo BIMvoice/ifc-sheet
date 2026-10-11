@@ -1,0 +1,174 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * IFC class to Material Symbols icon code point mapping.
+ * Based on https://github.com/AECgeeks/ifc-icons (MIT license).
+ *
+ * Values are Unicode code points for the Material Symbols Outlined font.
+ */
+export const IFC_ICON_CODEPOINTS: Record<string, string> = {
+  // Spatial / context
+  IfcContext: '\uf1c4',
+  IfcProject: '\uf1c4',
+  IfcProjectLibrary: '\uf1c4',
+  IfcSite: '\ue80b',
+  IfcBuilding: '\uea40',
+  IfcBuildingStorey: '\ue8fe',
+  IfcSpace: '\ueff4',
+  // IfcSpatialZone (modelled GFA volume) shares the space-family icon \u2014 it is a
+  // space-like spatial element, distinguished from IfcSpace by name/colour (#1075).
+  IfcSpatialZone: '\ueff4',
+  IfcZone: '\ueb97', // "workspaces" \u2014 a grouping of spaces/zones
+
+  // Functional groupings (Groups hierarchy tab, #1622). Systems share the
+  // "account_tree" glyph (a network of members); the generic IfcGroup uses
+  // "group_work".
+  IfcGroup: '\ue886', // "group_work"
+  IfcSystem: '\ue97a', // "account_tree"
+  IfcDistributionSystem: '\ue97a',
+  IfcBuiltSystem: '\ue97a',
+  IfcBuildingSystem: '\ue97a',
+  IfcStructuralAnalysisModel: '\ue97a',
+  // IFC4.3 facility containers \u2014 same family as IfcBuilding (multi-storey
+  // spatial root) but `domain` carries the "campus / infrastructure
+  // facility" reading; IfcFacilityPart follows the storey-line icon for
+  // consistency. (Issue #860 \u2014 user reported no icon on IfcFacility.)
+  IfcFacility: '\ue7ee', // "domain"
+  IfcFacilityPart: '\ue8fe', // "layers" \u2014 mirrors IfcBuildingStorey
+  IfcFacilityPartCommon: '\ue8fe',
+  IfcBridge: '\uebbf', // "directions_railway" \u2014 civil bridge icon
+  IfcBridgePart: '\ue8fe',
+  IfcRoad: '\uebbe', // "route"
+  IfcRoadPart: '\ue8fe',
+  IfcRailway: '\ue570', // "train"
+  IfcRailwayPart: '\ue8fe',
+  IfcMarineFacility: '\ue532', // "directions_boat"
+  IfcMarinePart: '\ue8fe',
+
+  // Structural
+  IfcBeam: '\uf108',
+  IfcBeamStandardCase: '\uf108',
+  IfcColumn: '\ue233',
+  IfcColumnStandardCase: '\ue233',
+  IfcWall: '\ue3c0',
+  IfcWallStandardCase: '\ue3c0',
+  IfcWallElementedCase: '\ue3c0',
+  IfcSlab: '\ue229',
+  IfcSlabStandardCase: '\ue229',
+  IfcSlabElementedCase: '\ue229',
+  IfcRoof: '\uf201',
+  IfcFooting: '\uf200',
+  IfcPile: '\ue047',
+  IfcPlate: '\ue047',
+  IfcPlateStandardCase: '\ue047',
+  IfcMember: '\ue047',
+  IfcMemberStandardCase: '\ue047',
+
+  // Openings & access
+  IfcDoor: '\ueb4f',
+  IfcDoorStandardCase: '\ueb4f',
+  IfcWindow: '\uf088',
+  IfcWindowStandardCase: '\uf088',
+  IfcOpeningElement: '\ue3c6',
+  IfcOpeningStandardCase: '\ue3c6',
+  IfcCurtainWall: '\ue047',
+
+  // Vertical circulation
+  IfcStair: '\uf1a9',
+  IfcStairFlight: '\uf1a9',
+  IfcRamp: '\ue86b',
+  IfcRampFlight: '\ue86b',
+  IfcRailing: '\ue58f',
+
+  // Furnishing
+  IfcFurnishingElement: '\uea45',
+  IfcFurniture: '\uea45',
+  IfcSystemFurnitureElement: '\uea45',
+
+  // MEP terminals
+  IfcAirTerminal: '\uefd8',
+  IfcLamp: '\uf02a',
+  IfcLightFixture: '\uf02a',
+  IfcSanitaryTerminal: '\uea41',
+  IfcSpaceHeater: '\uf076',
+  IfcAudioVisualAppliance: '\ue333',
+  IfcSensor: '\ue51e',
+
+  // Assemblies & misc
+  IfcElementAssembly: '\ue9b0',
+  IfcTransportElement: '\uf1a0',
+  IfcGrid: '\uf015',
+  IfcPort: '\ue8c0',
+  IfcDistributionPort: '\ue8c0',
+  IfcAnnotation: '\ue3c9',
+
+  // Civil / geographic
+  IfcCivilElement: '\uea99',
+  IfcGeographicElement: '\uea99',
+  IfcLinearElement: '\uebaa',
+
+  // IFC4.3 alignment / positioning. IfcAlignment shares the linear-element
+  // glyph because that's exactly what it is at the geometry level (a
+  // parameterised curve). IfcReferent is a station marker along that
+  // alignment (mileposts, kilometre posts) \u2014 pin glyph. IfcPositioningElement
+  // is the abstract base.
+  IfcAlignment: '\uebaa', // "polyline" / linear scale
+  IfcPositioningElement: '\ue55f', // "place"
+  IfcReferent: '\ue55f', // "place" \u2014 station marker
+
+  // IFC4.3 transportation signage & signals (rail/road). Same traffic-light
+  // glyph for both since the spec treats signals as the trackside subtype of
+  // signs.
+  IfcSign: '\ue9b2', // "traffic"
+  IfcSignal: '\ue9b2',
+
+  // IFC4.3 road / rail wearing surface. Pavement is the assembly, courses
+  // are its layers, kerbs sit at the edge.
+  IfcPavement: '\ue4f4', // "texture"
+  IfcCourse: '\ue8fe', // "layers"
+  IfcKerb: '\uf108', // "horizontal_rule"
+
+  // IFC4.3 earthworks. Cut/Fill share the geotechnical "terrain" glyph
+  // since they're shape-of-ground operations on the same domain.
+  IfcEarthworksElement: '\ue564',
+  IfcEarthworksFill: '\ue564',
+  IfcEarthworksCut: '\ue564',
+
+  // Geotechnical strata (IFC4.3) \u2014 issue #860. The abstract base plus the
+  // three concrete leaves (IfcSolidStratum / IfcVoidStratum / IfcWaterStratum)
+  // all share the `terrain` glyph. The geometry pipeline routes the leaves
+  // through IfcGeotechnicalStratum via legacy_entities.rs, so the icon map
+  // covers both the leaf names (when entries land in the spatial tree with
+  // their original type string) and the base.
+  IfcGeotechnicalAssembly: '\ue564',
+  IfcGeotechnicalElement: '\ue564',
+  IfcGeotechnicalStratum: '\ue564',
+  IfcSolidStratum: '\ue564',
+  IfcVoidStratum: '\ue564',
+  IfcWaterStratum: '\ue564',
+
+  // IFC4.3 marine / navigation / track / vehicle leaves.
+  IfcMooringDevice: '\uf1cd', // "anchor"
+  IfcNavigationElement: '\ue55d', // "navigation"
+  IfcTrackElement: '\ue260', // "linear_scale"
+  IfcVehicle: '\ue531', // "directions_car"
+
+  // Materials (Materials hierarchy tab)
+  IfcMaterial: '\ue4f4', // "texture"
+  IfcMaterialLayerSet: '\ue8fe', // "layers"
+  IfcMaterialLayerSetUsage: '\ue8fe',
+  IfcMaterialProfileSet: '\ue8fe',
+  IfcMaterialProfileSetUsage: '\ue8fe',
+  IfcMaterialConstituentSet: '\ue4f4',
+  IfcMaterialList: '\ue4f4',
+
+  // Proxy / generic fallback
+  IfcProduct: '\ue047',
+  IfcBuildingElementProxy: '\ue047',
+  IfcProxy: '\ue047',
+};
+
+/** Default code point for unmapped IFC classes (Material Symbols "widgets" / generic product) */
+export const IFC_ICON_DEFAULT = '\ue047';

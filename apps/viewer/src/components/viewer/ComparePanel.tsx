@@ -1,0 +1,350 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Model comparison panel (issue #924). Pick two loaded models as A (base) and
+ * B (head), choose a data/geometry/both scope, run the `@ifc-lite/diff` engine,
+ * and review added / modified / deleted elements — colour-coded in 3D (via
+ * `useCompareOverlay`) and listed here. Row click selects + frames the element.
+ */
+
+import { useEffect, useMemo } from 'react';
+import { GitCompareArrows, ChevronLeft } from 'lucide-react';
+import { useTranslation } from '@/i18n';
+import { useViewerStore } from '@/store';
+import { useCompare } from '@/hooks/useCompare';
+import { useCompareOverlay } from '@/hooks/useCompareOverlay';
+import type { CompareRef } from '@/lib/compare/buildFingerprints';
+import { modelsAsCompared } from '@/lib/compare/comparedModels';
+import { describeChange, type ChangeDetail } from '@/lib/compare/describeChange';
+import { ChangeDetailView } from './compare/ChangeDetailView';
+import { BcfFromChange } from './compare/BcfFromChange';
+import { useBcfFromChange } from './compare/useBcfFromChange';
+import { CompareResultsList, LISTED_STATES, type CompareBucket } from './compare/CompareResultsList';
+import { CompareResultView } from './compare/CompareResultView';
+import { CompareSetupControls } from './compare/CompareSetupControls';
+import { CompareRunControls } from './compare/CompareRunControls';
+import { SavedComparisonLibrary } from './compare/SavedComparisonLibrary';
+import { CompareExportBar } from './compare/CompareExportBar';
+import { AnalysisPanel, AnalysisStaleRegion } from './analysis/AnalysisPanel';
+import { AnalysisEmptyState } from './analysis/AnalysisEmptyState';
+import { loadDemoRevisions } from '@/lib/tours/demo-kit';
+import { useCompareSuggestions } from './compare/useCompareSuggestions';
+import { focusRefs } from './compare/focusRefs';
+import { changedTypeCounts, contentMatchRows, hasReportableChanges, type CompareMatchRow, type CompareRow } from './compare/changeRow';
+import { contentMatchCounts, contentMatchingRan } from '@/lib/compare/contentMatches';
+import { productTypeSplit } from '@/lib/compare/productTypeCounts';
+import { duplicateAuthoredKeyInfo } from '@/lib/compare/authoredKeys';
+import type { DiffState, DiffEntry } from '@ifc-lite/diff';
+
+interface ComparePanelProps {
+  onClose?: () => void;
+}
+
+/** The side actually drawn for an entry: base for deletions, head otherwise. */
+function renderRef(entry: DiffEntry<CompareRef>): CompareRef | undefined {
+  return (entry.state === 'deleted' ? entry.base?.ref : entry.head?.ref) ?? entry.base?.ref;
+}
+
+export function ComparePanel({ onClose }: ComparePanelProps) {
+  const { t } = useTranslation();
+  useCompareOverlay();
+
+  const liveModels = useViewerStore((s) => s.models);
+  const baseModelId = useViewerStore((s) => s.compareBaseModelId);
+  const headModelId = useViewerStore((s) => s.compareHeadModelId);
+  const scope = useViewerStore((s) => s.compareScope);
+  const showUnchanged = useViewerStore((s) => s.compareShowUnchanged);
+  const matchByContent = useViewerStore((s) => s.compareMatchByContent);
+  const keyProperty = useViewerStore((s) => s.compareKeyProperty);
+  const excludedTypes = useViewerStore((s) => s.compareExcludedTypes);
+  const selectedKey = useViewerStore((s) => s.compareSelectedKey);
+  const setBaseModelId = useViewerStore((s) => s.setCompareBaseModelId);
+  const setHeadModelId = useViewerStore((s) => s.setCompareHeadModelId);
+  const setScope = useViewerStore((s) => s.setCompareScope);
+  const setShowUnchanged = useViewerStore((s) => s.setCompareShowUnchanged);
+  const setMatchByContent = useViewerStore((s) => s.setCompareMatchByContent);
+  const setKeyProperty = useViewerStore((s) => s.setCompareKeyProperty);
+  const addExcludedType = useViewerStore((s) => s.addCompareExcludedType);
+  const removeExcludedType = useViewerStore((s) => s.removeCompareExcludedType);
+  const clearExcludedTypes = useViewerStore((s) => s.clearCompareExcludedTypes);
+  const bcfAuthor = useViewerStore((s) => s.bcfAuthor);
+
+  // `clearCompare` comes from the hook, not the raw store action (#2802): an
+  // in-flight `runComparison()` only learns "the user cleared" by watching
+  // THIS wrapper get called, so every clear in this panel must go through it
+  // or a stale result can resurrect itself once the run resolves.
+  const { running, result, error, runComparison, cancelComparison, clearCompare } = useCompare();
+  // Row names and change details read the stores the diff was computed from (#5312).
+  const models = useMemo(() => modelsAsCompared(liveModels, result?.comparedStores), [liveModels, result]);
+
+  const modelList = useMemo(() => Array.from(models.values()), [models]);
+
+  // BCF-from-change flow (form state, viewpoint capture, topic creation).
+  const bcf = useBcfFromChange(modelList, selectedKey);
+
+  // Default the A/B selection to the first two loaded models, and repair the
+  // selection if a chosen model was removed.
+  useEffect(() => {
+    const ids = modelList.map((m) => m.id);
+    // A comparison computed against a model that's since been removed leaves a
+    // stale overlay on the survivor (the overlay hook keys off the result, not
+    // the model list) — drop it so the scene is restored.
+    const ran = useViewerStore.getState().compareResult;
+    if (ran && (!ids.includes(ran.baseModelId) || !ids.includes(ran.headModelId))) {
+      clearCompare();
+    }
+    if (ids.length === 0) return;
+    if (!baseModelId || !ids.includes(baseModelId)) {
+      setBaseModelId(ids[0]);
+    }
+    if (ids.length > 1 && (!headModelId || !ids.includes(headModelId) || headModelId === ids[0])) {
+      const other = ids.find((id) => id !== ids[0]);
+      if (other) setHeadModelId(other);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelList]);
+
+  // Resolve a display name + grouped rows from the diff result. Names live in
+  // the per-model store (the engine result carries only type + key), so we
+  // look them up here via each entry's ref.
+  const groups = useMemo(() => {
+    const empty = new Map<DiffState, CompareBucket>();
+    if (!result) return empty;
+    const out = new Map<DiffState, CompareBucket>();
+    for (const { state } of LISTED_STATES) out.set(state, { rows: [] });
+
+    for (const entry of result.diff.entries) {
+      const bucket = out.get(entry.state);
+      if (!bucket) continue; // skip unchanged
+      const ref = renderRef(entry);
+      if (!ref) continue;
+      const store = models.get(ref.modelId)?.ifcDataStore;
+      const name = store?.entities.getName(ref.localId) || '';
+      const ifcType = (entry.head ?? entry.base)?.ifcType ?? 'IfcProduct';
+      bucket.rows.push({ key: entry.key, ifcType, name, state: entry.state, changeKinds: entry.changeKinds, ref });
+    }
+    return out;
+  }, [result, models]);
+
+  // Content-match rows (#1891). They live on `diff.contentMatches`, NOT in
+  // `diff.entries` - a retiring match removed its entries outright - so this is
+  // separate plumbing rather than another bucket of `groups`.
+  const matchRows = useMemo<CompareMatchRow[]>(
+    () =>
+      contentMatchRows(result?.diff.contentMatches, (ref) =>
+        models.get(ref.modelId)?.ifcDataStore?.entities.getName(ref.localId) || '',
+      ),
+    [result, models],
+  );
+  const matchCounts = useMemo(() => contentMatchCounts(result?.diff.contentMatches), [result]);
+
+  // Suggestions (#4955): claims the engine reports but will not decide.
+  const suggest = useCompareSuggestions(
+    result,
+    (ref) => models.get(ref.modelId)?.ifcDataStore?.entities.getName(ref.localId) || '',
+  );
+
+  const counts = result?.diff.counts;
+  const canRun = !!baseModelId && !!headModelId && baseModelId !== headModelId && !running;
+
+  // Products vs type objects (headline-count confusion, see `productTypeCounts.ts`).
+  const split = useMemo(
+    () => (result ? productTypeSplit(result.diff.entries) : null),
+    [result],
+  );
+
+  // Classes present among the current changes - the "ignore a class" picker's
+  // options (#1470). Excluded classes are already absent from the diff.
+  const typeCounts = useMemo(
+    () => (result ? changedTypeCounts(result.diff.entries) : []),
+    [result],
+  );
+
+  // "What changed" detail for the selected entry — computed lazily from both
+  // stores so a huge diff stays cheap (only the selection is described).
+  const detail = useMemo<ChangeDetail | null>(() => {
+    if (!result || !selectedKey) return null;
+    const entry = result.diff.byKey.get(selectedKey);
+    return entry ? describeChange(entry, models) : null;
+  }, [result, selectedKey, models]);
+
+  const selectedRow = useMemo<CompareRow | null>(() => {
+    if (!selectedKey) return null;
+    for (const bucket of groups.values()) {
+      const row = bucket.rows.find((r) => r.key === selectedKey);
+      if (row) return row;
+    }
+    return null;
+  }, [groups, selectedKey]);
+
+  // Every row kind selects through `focusRefs`. Entry rows keep their key so
+  // the "what changed" detail follows; group headers pass `null` (bulk select
+  // has no single detail). A group iterates the FULL diff entries, not the
+  // display-capped `groups` rows, so the selection matches the header count.
+  const focusEntry = (row: CompareRow) => focusRefs([row.ref], row.key);
+  const focusGroup = (groupState: DiffState) => {
+    if (!result) return;
+    const refs = result.diff.entries
+      .filter((e) => e.state === groupState)
+      .map(renderRef)
+      .filter((r): r is CompareRef => !!r);
+    focusRefs(refs, null);
+  };
+  // A content match or a suggestion is not a `DiffEntry`, so it has no "what
+  // changed" detail and no BCF pre-fill - the row key still drives the list
+  // highlight. Retiring matches select their head copies (the base copies are
+  // hidden by the overlay); review groups and claims select every candidate.
+  const focusMatch = (row: CompareMatchRow) => focusRefs(row.refs, row.key);
+  const focusMatchGroup = (rows: CompareMatchRow[]) => focusRefs(rows.flatMap((row) => row.refs), null);
+
+  // Composing a BCF topic: collapse the diff chrome so the form owns the panel.
+  // Gate on the selected row too, so a vanished selection can never leave the
+  // panel empty (chrome hidden but no form to show).
+  const bcfComposing = bcf.formOpen && !!selectedRow;
+
+  return (
+    <AnalysisPanel
+      icon={<GitCompareArrows className="text-primary" />}
+      title={t('comparePanel.panel.title')}
+      onClose={onClose}
+      // Composing a BCF topic hides the diff chrome, re-run and clear included.
+      run={bcfComposing ? undefined : {
+        hasResult: result != null,
+        running,
+        onRerun: () => { void runComparison(); },
+        onCancel: cancelComparison,
+        rerunLabel: t('comparePanel.panel.rerunTitle'),
+        cancelLabel: t('comparePanel.runControls.cancel'),
+      }}
+      onClearResults={clearCompare}
+      error={bcfComposing ? null : error}
+      progress={running ? { label: t('comparePanel.panel.comparing') } : null}
+      staleFor={result}
+    >
+      {!bcfComposing && <SavedComparisonLibrary result={result} running={running} />}
+      {modelList.length < 2 ? (
+        <AnalysisEmptyState
+          icon={<GitCompareArrows className="size-8" />}
+          title={t('comparePanel.panel.needTwoModels')}
+          description={t('comparePanel.panel.loadSecondModel')}
+          loadDemo={loadDemoRevisions}
+        />
+      ) : (
+        <>
+          {/* Diff chrome (run controls, counts, report, results, detail) — hidden
+              while composing a BCF topic so the form owns the panel. The user has
+              committed to raising a topic and the change context is already in the
+              pre-filled form, so re-running / exports / browsing only get in the way. */}
+          {!bcfComposing && (
+            <>
+              <CompareSetupControls />
+      <CompareRunControls
+                models={modelList}
+                baseModelId={baseModelId}
+                headModelId={headModelId}
+                onBaseModelId={setBaseModelId}
+                onHeadModelId={setHeadModelId}
+                scope={scope}
+                onScope={setScope}
+                showUnchanged={showUnchanged}
+                onShowUnchanged={setShowUnchanged}
+                matchByContent={matchByContent}
+                onMatchByContent={setMatchByContent}
+                keyProperty={keyProperty}
+                onKeyProperty={setKeyProperty}
+                duplicateInfo={
+                  result && result.keyProperty === keyProperty && result.duplicateAuthoredKeys
+                    ? duplicateAuthoredKeyInfo(result.duplicateAuthoredKeys)
+                    : null
+                }
+                canRun={canRun}
+                running={running}
+                onRun={() => void runComparison()}
+                onCancel={cancelComparison}
+                geometryUnavailable={!!result?.geometryUnavailable}
+                placementOnlyGeometry={!!result?.placementOnlyGeometry}
+                excludedTypes={excludedTypes}
+                changedTypeCounts={typeCounts}
+                onAddExcludedType={addExcludedType}
+                onRemoveExcludedType={removeExcludedType}
+                onClearExcludedTypes={clearExcludedTypes}
+              />
+
+              <AnalysisStaleRegion className="flex-1 min-h-0 flex flex-col">
+                <CompareResultView
+                  result={result}
+                  split={split}
+                  matchedElements={contentMatchingRan(result?.diff.contentMatches) ? matchCounts.matchedElements : null}
+                  // Export the full change report (#1202): the report bar is the exact negation of the
+                  // results list's empty state; the sidecar bar (#4955) is always offered.
+                  exportBar={result && counts ? <CompareExportBar result={result} reportable={hasReportableChanges(counts, matchRows)} /> : null}
+                  list={(
+                    <CompareResultsList
+                      result={result}
+                      groups={groups}
+                      counts={counts}
+                      split={split}
+                      matchRows={matchRows}
+                      selectedKey={selectedKey}
+                      onFocus={focusEntry}
+                      onFocusGroup={focusGroup}
+                      onFocusMatch={focusMatch}
+                      onFocusMatchGroup={focusMatchGroup}
+                      suggestions={suggest.suggestions}
+                      suggestionDecisions={suggest.decisions}
+                      onFocusSuggestion={(row) => focusRefs(row.refs, row.key)}
+                      onFocusSuggestionGroup={(rows) => focusRefs(rows.flatMap((row) => row.refs), null)}
+                      onAcceptSuggestion={suggest.accept}
+                      onRejectSuggestion={suggest.reject}
+                    />
+                  )}
+                  detail={detail && selectedRow ? <ChangeDetailView row={selectedRow} detail={detail} /> : null}
+                />
+              </AnalysisStaleRegion>
+            </>
+          )}
+
+          {/* Compose context — slim strip naming the target element while the BCF
+              form is open, with a way back to the change list. */}
+          {bcfComposing && (
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-border text-xs shrink-0">
+              <button
+                type="button"
+                onClick={() => bcf.setFormOpen(false)}
+                className="flex items-center text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                title={t('comparePanel.panel.backToChangesTitle')}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-muted-foreground shrink-0">{t('comparePanel.panel.topicFor')}</span>
+              <span className="font-medium truncate min-w-0">{selectedRow.name || selectedRow.ifcType}</span>
+              <span className="ml-auto text-2xs text-muted-foreground shrink-0">
+                {selectedRow.ifcType.replace(/^Ifc/, '')}
+              </span>
+            </div>
+          )}
+
+          {/* Raise a BCF topic from the focused change (#1199) */}
+          {selectedRow && (
+            <BcfFromChange
+              row={selectedRow}
+              detail={detail}
+              author={bcfAuthor}
+              open={bcf.formOpen}
+              createdTitle={bcf.createdTitle}
+              onStart={() => { bcf.setCreatedTitle(null); bcf.setFormOpen(true); }}
+              onCancel={() => bcf.setFormOpen(false)}
+              onSubmit={bcf.submit}
+              onOpenBcfPanel={() => useViewerStore.getState().openWorkspacePanel('bcf')}
+              snapshot={bcf.viewpoint?.snapshot ?? null}
+              onCaptureSnapshot={() => void bcf.captureViewpoint()}
+              capturingSnapshot={bcf.capturingSnapshot}
+            />
+          )}
+        </>
+      )}
+    </AnalysisPanel>
+  );
+}

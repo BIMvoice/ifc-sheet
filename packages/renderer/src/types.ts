@@ -1,0 +1,398 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Renderer types for IFC-Lite
+ */
+
+export interface Vec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface Mat4 {
+  m: Float32Array; // 16 elements, column-major
+}
+
+export interface Camera {
+  position: Vec3;
+  target: Vec3;
+  up: Vec3;
+  fov: number;
+  aspect: number;
+  near: number;
+  far: number;
+}
+
+export interface Material {
+  baseColor: [number, number, number, number];
+  metallic: number;
+  roughness: number;
+  transparency?: number;
+}
+
+/** IFC-authored metallic/roughness (#5582); an absent field keeps the renderer's default. */
+export type MeshFinish = Partial<Pick<Material, 'metallic' | 'roughness'>>;
+
+export interface Mesh {
+  expressId: number;
+  modelIndex?: number;  // Index of the model this mesh belongs to (for multi-model federation)
+  vertexBuffer: GPUBuffer;
+  indexBuffer: GPUBuffer;
+  indexCount: number;
+  transform: Mat4;
+  /** Canonical f64-like translation used by the RTE mesh path.  It is kept
+   * separate from the GPU f32 transform so hydrated selection meshes do not
+   * reintroduce national-grid rounding after their source batch was rebased. */
+  rteOrigin?: [number, number, number];
+  color: [number, number, number, number];
+  material?: Material;
+  finish?: MeshFinish; // IFC-authored (#5582); packMeshMaterial prefers it over `material`
+  // Per-mesh GPU resources for unique colors
+  uniformBuffer?: GPUBuffer;
+  bindGroup?: GPUBindGroup;
+  // Bounding box for frustum culling (optional)
+  bounds?: { min: [number, number, number]; max: [number, number, number] };
+  /** True when this mesh was lazily hydrated for picking / selection highlight
+   *  (createMeshFromData) rather than added as authored geometry via addMesh().
+   *  Such meshes duplicate geometry already drawn by a batch, so they are freed
+   *  when their entity leaves the selection (see Scene.disposeHydratedMeshesExcept)
+   *  to stop unbounded accumulation + transparent double-draw on deselect. */
+  hydrated?: boolean;
+  /** Source `MeshData.geometryItemId`, carried through hydration so a pick can
+   *  report the representation item it hit. See {@link PickResult.geometryItemId}
+   *  for when it is absent. */
+  geometryItemId?: number;
+}
+
+/**
+ * Batched mesh - groups multiple meshes with same color into single draw call
+ * Reduces draw calls from N meshes to ~100-500 batches
+ *
+ * When a single color group's geometry would exceed the GPU's maxBufferSize
+ * limit, the data is automatically split across multiple buckets at
+ * accumulation time. Each bucket gets a unique colorKey (base key or
+ * "base#N"), so the rest of the pipeline stays unchanged.
+ */
+export interface BatchedMesh {
+  id: number;        // Unique monotonic identifier for this batch instance
+  colorKey: string;  // Unique batch key (base color hash, or "hash#N" for overflow buckets)
+  vertexBuffer: GPUBuffer;
+  indexBuffer: GPUBuffer;
+  indexCount: number;
+  color: [number, number, number, number];
+  /** Finish shared by every piece: `colorKey` folds it in at 1/1000, so a batch never mixes finishes (#5582). */
+  finish?: MeshFinish;
+  expressIds: number[];  // For picking - all expressIds in this batch
+  /** Per-entry modelIndex, parallel to `expressIds` (same index = same source
+   *  piece): batches group by colour (see Scene.bucketBaseKey), NOT by model,
+   *  so two federated models sharing an expressId AND colour can land in the
+   *  SAME batch as distinct entries. Picking must scope each entry by its own
+   *  modelIndex here rather than treating the batch as single-model. Absent
+   *  entries (or `undefined` values) mean "unscoped" for that entry — legacy
+   *  batches built before this field existed, or single-model scenes. */
+  modelIndices?: (number | undefined)[];
+  bindGroup?: GPUBindGroup;
+  uniformBuffer?: GPUBuffer;
+  // Bounding box for frustum culling (optional) — WORLD space.
+  bounds?: { min: [number, number, number]; max: [number, number, number] };
+  /** Per-batch local-frame origin: stored vertex positions are RELATIVE to it,
+   *  so this batch must be drawn with model = translate(origin) to land in world
+   *  space (world = origin + position). Keeps f32 vertex coords element-small at
+   *  building/georef scale (no fan collapse). [0,0,0] = absolute (legacy). */
+  origin?: [number, number, number];
+  /** LOD1 (issue #1682 phase 5): simplified index range over the SAME vertex
+   *  buffer, drawn instead of the full indices when the batch projects below
+   *  the configured screen size. Absent = no LOD (draw full detail always). */
+  lod1IndexBuffer?: GPUBuffer;
+  lod1IndexCount?: number;
+  /** 12-byte lattice-quantized vertex buffer (issue #1682 phase 6): when
+   *  present, `vertexBuffer` holds uint16x4+u32 records and the batch must
+   *  draw through the quantized pipeline variants with these dequantization
+   *  params in the uniform. Absent = 28-byte f32 layout (the default). */
+  quantized?: { min: [number, number, number]; step: number };
+  /** GPU residency (issue #1682 phase 3a): `false` = evicted metadata shell —
+   *  bounds/expressIds/counts remain valid for culling, picking-fallback and
+   *  bookkeeping, but the GPU buffers are destroyed and MUST NOT be bound.
+   *  The draw loop skips such batches and requests a rebuild via
+   *  `Scene.requestBatchResidency`. `undefined`/`true` = resident. */
+  gpuResident?: boolean;
+}
+
+// Section plane for clipping
+// Semantic axis names: down (Y), front (Z), side (X) for intuitive user experience
+export type SectionPlaneAxis = 'down' | 'front' | 'side';
+
+export type SectionCapHatchId =
+  | 'solid'
+  | 'diagonal'
+  | 'crossHatch'
+  | 'horizontal'
+  | 'vertical'
+  | 'concrete'
+  | 'brick'
+  | 'insulation';
+
+export interface SectionCapStyleOptions {
+  /** Fill colour behind the hatch. RGBA 0-1. */
+  fillColor?: [number, number, number, number];
+  /** Hatch stroke colour. RGBA 0-1. */
+  strokeColor?: [number, number, number, number];
+  /** Hatch pattern id. */
+  pattern?: SectionCapHatchId;
+  /** Spacing between hatch lines, in screen pixels. */
+  spacingPx?: number;
+  /** Primary angle in radians. */
+  angleRad?: number;
+  /** Line width in pixels. */
+  widthPx?: number;
+  /** Secondary angle (cross-hatch). */
+  secondaryAngleRad?: number;
+}
+
+export interface SectionPlane {
+  axis: SectionPlaneAxis;
+  position: number; // 0-100 percentage of model bounds
+  enabled: boolean;
+  flipped?: boolean; // If true, show the opposite side of the cut
+  min?: number;      // Optional override for min range value
+  max?: number;      // Optional override for max range value
+  /** If true (default), render filled cap surfaces with a screen-space hatch. */
+  showCap?: boolean;
+  /**
+   * If true (default), draw polygon outlines on the cut surfaces. Users
+   * can turn surfaces and outlines on/off independently from the UI.
+   */
+  showOutlines?: boolean;
+  /** Override the default cap appearance. */
+  capStyle?: SectionCapStyleOptions;
+  /**
+   * Optional world-space plane normal (unit vector). When provided
+   * together with `distance`, the shader clip uses them verbatim and
+   * ignores `axis`, `position`, `min`, `max`, and any `buildingRotation`.
+   * Used for face-pick / arbitrary slice planes (issue #243).
+   */
+  normal?: [number, number, number];
+  /** Plane offset in world units: `dot(pointOnPlane, normal)`. */
+  distance?: number;
+}
+
+/**
+ * Axis-aligned clip box (section / crop box): geometry is kept only where it
+ * lies INSIDE all six box planes; fragments outside the box are discarded by the
+ * shader (real geometry cut, unlike bounding-box element isolation). Coordinates
+ * are in the same world space the shader sees as `input.worldPos` — i.e. the
+ * viewer space the camera/section planes use. Independent of `sectionPlane`; both
+ * can be active at once.
+ */
+export interface ClipBox {
+  /** Box min corner [x, y, z] in world space. */
+  min: [number, number, number];
+  /** Box max corner [x, y, z] in world space. */
+  max: [number, number, number];
+  /** When false (or omitted), the box has no effect. */
+  enabled: boolean;
+}
+
+export type ContactShadingQuality = 'off' | 'low' | 'high';
+export type SeparationLinesQuality = 'off' | 'low' | 'high';
+
+export interface VisualEnhancementOptions {
+  enabled?: boolean;
+  /** @deprecated No effect since #5746: edges come from the edge pass, see `separationLines`. Kept so existing settings type-check. */
+  edgeContrast?: { enabled?: boolean; intensity?: number };
+  /**
+   * Screen-space ambient occlusion (the option keeps its historical name).
+   * Darkens corners, junctions and contact areas from the depth buffer; the
+   * sky and background are never darkened. Paused while navigating on GPUs
+   * that miss frames (see {@link RenderOptions.isInteracting}).
+   */
+  contactShading?: {
+    /** `'low'`: half-resolution AO, 12 taps. `'high'`: full resolution, 16 taps. Default `'off'`. */
+    quality?: ContactShadingQuality;
+    /** Darkening strength, 0-1 (clamped). Default 0.8. */
+    intensity?: number;
+    /**
+     * Occlusion radius in WORLD units (metres for IFC models), 0.05-10
+     * (clamped). Geometry farther than this from a point does not occlude it.
+     * Default 1.
+     */
+    radius?: number;
+  };
+  separationLines?: {
+    enabled?: boolean;
+    quality?: SeparationLinesQuality;
+    intensity?: number;
+    radius?: number;
+  };
+}
+
+export interface RenderOptions {
+  clearColor?: [number, number, number, number];
+  /**
+   * Global lighting environment (sun direction/colour, hemisphere ambient,
+   * exposure, procedural sky). Omitted/empty uses the default rig. See
+   * {@link import('./environment.js').LightingEnvironment}.
+   */
+  environment?: import('./environment.js').LightingEnvironment;
+  /**
+   * Declared but never read. This is the only occurrence of the name in the
+   * package: nothing sets it and nothing consults it, so it is dead on both
+   * ends. Depth testing is decided per pipeline at construction time and is
+   * not configurable through `RenderOptions`; there is no substitute field.
+   * Slated for removal; see issue #2731.
+   *
+   * @deprecated Ignored by the renderer — see above.
+   */
+  enableDepthTest?: boolean;
+  enableFrustumCulling?: boolean;
+  spatialIndex?: import('@ifc-lite/spatial').SpatialIndex;
+  /**
+   * Entities to hide. Change detection is by CONTENT, not reference: the
+   * renderer snapshots the set and compares element-wise each frame, so
+   * mutating the same Set in place and passing a fresh Set per frame are both
+   * correct — and a fresh Set with unchanged content does not invalidate the
+   * per-batch visibility caches. An empty set is equivalent to omitting the
+   * option. The per-frame compare costs O(set size) membership checks.
+   */
+  hiddenIds?: Set<number>;
+  /**
+   * Only show these entities (`null`/absent = no isolation). Unlike
+   * {@link hiddenIds}, an EMPTY set is meaningful: it isolates nothing, hiding
+   * everything. Same content-based change-detection contract as `hiddenIds`.
+   */
+  isolatedIds?: Set<number> | null;
+  selectedId?: number | null;     // Currently selected mesh (for highlighting)
+  selectedIds?: Set<number>;      // Multi-selection support
+  selectedItemId?: number;        // #4382: narrows selectedId's highlight to one representation item (geometryItemId); no effect on selectedIds
+  hoverOutline?: { id: number; modelIndex?: number } | null; // #5390 thin visible-only pre-highlight; modelIndex scopes federation
+  /**
+   * Render the active colour overrides almost full-bright so they POP like a
+   * highlight rather than reading as normal lit materials. Used while a clash is
+   * focused so the amber/cyan pair stands out. (#1277/#1339)
+   */
+  emphasizeOverrides?: boolean;
+  /**
+   * Per-frame alpha overrides — primary use case is X-Ray mode.
+   *
+   * Map<expressId, alpha 0..1>. Non-selected meshes/batches whose expressId
+   * appears in this map render at the override alpha through the transparent
+   * pipeline. Selected meshes (`selectedId` / `selectedIds`) are exempt at
+   * every site, so highlights always paint with their own alpha.
+   *
+   * The alpha applies to THOSE ENTITIES, not to their colour batch (#4129):
+   * a batch whose entities no longer share one alpha is drawn as one
+   * sub-batch per distinct alpha. A batch that cannot be partitioned — its
+   * CPU geometry was released or evicted, it is colour-merged, or it carries
+   * more than 8 distinct alphas — falls back to the minimum override alpha
+   * across its non-selected ids, so degrading fades too much, never too little.
+   *
+   * The renderer snapshots this map at frame start, so callers may freely
+   * mutate or recycle their copy after `render()` returns.
+   *
+   * Note: alphas `>= 0.99` are treated as opaque (the cutoff for switching to
+   * the transparent pipeline). Entries at or above that threshold are no-ops
+   * — keep them out of the map to avoid unnecessary work.
+   */
+  transparencyOverrides?: Map<number, number> | null;
+  /**
+   * X-Ray *context* mode: every non-selected mesh whose `expressId` is NOT in
+   * this set renders at {@link ghostAlpha}, so a focused subset (e.g. a clash
+   * pair) stays solid while the rest of the model fades to translucent context.
+   *
+   * `null`/absent disables ghosting. Selected meshes (`selectedId`/`selectedIds`)
+   * are always exempt, and explicit {@link transparencyOverrides} entries win
+   * over the ghost alpha. Same id space as `isolatedIds` (federated global id).
+   *
+   * Resolution is per entity, with the same batch partition and the same
+   * whole-batch fallback documented on {@link transparencyOverrides}: an
+   * excepted id sharing a colour batch with ghosted ids stays solid on its own,
+   * without having to be in `selectedIds` as well.
+   */
+  ghostExceptIds?: Set<number> | null;
+  /** Alpha (0..1) for ghosted meshes under {@link ghostExceptIds}. Default 0.12. */
+  ghostAlpha?: number;
+  // Building rotation in radians (from IfcSite placement) - used to orient section planes
+  buildingRotation?: number;
+  selectedModelIndex?: number;    // Model index for multi-model selection (must match mesh.modelIndex)
+  // Section plane clipping
+  sectionPlane?: SectionPlane;
+  // Section / crop box: clip geometry to an axis-aligned world-space box (all six
+  // sides). Independent of `sectionPlane`. The GPU picker mirrors the active
+  // section plane + clip box from the last render, so cropped/sectioned-away
+  // geometry is unpickable too with no extra wiring.
+  clipBox?: ClipBox;
+  // Terrain clipping: discard fragments below this Y value in viewer space.
+  // Used by Cesium overlay to prevent model from showing below terrain.
+  terrainClipY?: number;
+  // Optional visual effects for better subelement readability
+  visualEnhancement?: VisualEnhancementOptions;
+  // Streaming state
+  isStreaming?: boolean;          // If true, skip expensive operations like picker
+  // True during rapid camera movement (zoom, orbit, pan, animations).
+  // Post effects (ambient occlusion / separation lines) KEEP RUNNING during
+  // interaction as long as the measured frame cadence holds; on GPUs that
+  // miss frames the renderer adaptively degrades to skipping the post passes
+  // for the rest of the gesture (see InteractionEffectsGovernor). Full
+  // quality is always restored on the next non-interacting frame.
+  isInteracting?: boolean;
+  // The app's own intentional cap on continuous render cadence in ms
+  // (e.g. the large-model interaction throttle). When set, the effects
+  // governor judges missed frames against this slower schedule instead of
+  // the display refresh — a deliberately throttled 33ms cadence is not a
+  // GPU miss.
+  interactionFrameIntervalMs?: number;
+  /**
+   * Contribution culling (issue #1682): skip colour batches whose world AABB
+   * projects below `pixelRadius` device pixels (raised to
+   * `interactingPixelRadius` while the camera moves). Applies to the batched
+   * draw path only — instanced templates, textured meshes and the no-batches
+   * fallback are never contribution-culled. Absent or `pixelRadius <= 0`
+   * disables it (the default), so snapshot/export renders that omit the
+   * option stay exhaustive.
+   */
+  contributionCull?: import('./contribution-cull.js').ContributionCullOptions;
+  /**
+   * One-shot capture renders (IDS/clash/BCF snapshots): synchronously
+   * rebuild every GPU-evicted batch before drawing, so isolation options
+   * that reveal batches aged out under the residency budget still capture a
+   * complete image. Has a frame-time cost proportional to the evicted set —
+   * do NOT pass it on the interactive render loop (evicted batches restore
+   * asynchronously there).
+   */
+  restoreEvictedForCapture?: boolean;
+  /**
+   * LOD selection (issue #1682 phase 5): batches whose world AABB projects
+   * below `screenPx` device pixels draw their simplified LOD1 index range
+   * (when one was built — see Scene.setLodBuildsEnabled) instead of full
+   * detail. Absent or `screenPx <= 0` = always full detail.
+   */
+  lod?: { screenPx: number };
+  /**
+   * Sun cast shadows (issue #2670, Phase 2). When `enabled`, the renderer runs
+   * a depth pre-pass from the sun before the colour pass, rasterising every
+   * geometry path (flat / quantized / instanced / textured) into a shadow map,
+   * then samples it in the shading pass with a rotated 12-tap Poisson-disk PCF
+   * kernel to occlude the direct sun term. Absent or `enabled: false` (the
+   * default) skips the pass entirely, so the hot path pays only a boolean check.
+   *
+   * - `resolution`: square shadow-map side in texels. `0` or unset means Auto —
+   *   the renderer picks from the device's texture limit (2048 on a 4096-capped
+   *   iGPU, 4096 on an 8192+ GPU). A manual value is honoured but clamped to the
+   *   device limit so it can't fail texture allocation. A device/Quality dial.
+   * - `sunAngleDeg`: the sun's apparent angular diameter in degrees (default
+   *   ~0.53, the real sun on a clear sky). It sets shadow-edge SOFTNESS, not the
+   *   sun position: larger widens the penumbra. The renderer maps it to the PCF
+   *   kernel radius (`pcfRadius ≈ clamp(sunAngleDeg × 3, 0.75, 8)` texels), so a
+   *   later PCSS swap can consume the same angle without a UI change.
+   */
+  sunShadows?: { enabled: boolean; resolution?: number; sunAngleDeg?: number };
+}
+
+export type { PickOptions, PickClipState } from './pick-types.js';
+
+// `PickResult` lives with the code that builds it (pick-resolve.ts) and is
+// re-exported here so every existing `from './types.js'` import still resolves.
+export type { PickResult } from './pick-resolve.js';

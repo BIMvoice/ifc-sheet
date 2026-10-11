@@ -1,0 +1,160 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The dropdown material a `RuleRow` needs: IFC types, storeys, pset/qto names
+ * and distinct values for the active model.
+ *
+ * Lifted out of `SearchModal.filter.builder.tsx` when the clash panel started
+ * building filter rows of its own (#3902). Discovery is cached in the search
+ * slice per model, so several mounted builders share one scan — the clash rule
+ * form alone mounts two of this hook (set A and set B) and the search modal can
+ * be open behind it. Each effect therefore re-reads the cache from the LIVE
+ * store rather than from the render's captured copy: instances that commit in
+ * the same pass all see the same pre-update map, and the whole-model pset/qto
+ * and value scans (which parse property sets on demand) would run once per
+ * instance.
+ */
+
+import { useEffect, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { useViewerStore } from '@/store';
+import { COMMON_IFC_TYPES } from '@/lib/search/common-ifc-types';
+import type { FilterRule } from '@ifc-lite/rules';
+import {
+  discoverFilterSchema,
+  discoverPropertyAndQuantitySchema,
+  discoverFilterValues,
+} from '@/lib/search/filter-schema';
+import type { RuleRowProps } from '@/components/viewer/SearchModal.filter.editors';
+
+/** Exactly the option props `RuleRow` takes, so a caller can spread this. */
+export type FilterRuleOptions = Pick<
+  RuleRowProps,
+  'modelOptions' | 'tagOptions' | 'ifcTypeOptions' | 'storeyOptions' | 'psetQto' | 'valueSchema'
+>;
+
+export function useFilterRuleOptions(rules: readonly FilterRule[], modelIdOverride?: string): FilterRuleOptions {
+  const {
+    schemaMap,
+    models,
+    modelTags,
+    activeModelId,
+    mutationViews,
+    mutationVersion,
+    setFilterSchema,
+    setFilterPsetQtoSchema,
+    setFilterValueSchema,
+  } = useViewerStore(
+    useShallow((s) => ({
+      schemaMap: s.searchFilterSchema,
+      models: s.models,
+      modelTags: s.modelTags,
+      activeModelId: s.activeModelId,
+      mutationViews: s.mutationViews,
+      mutationVersion: s.mutationVersion,
+      setFilterSchema: s.setFilterSchema,
+      setFilterPsetQtoSchema: s.setFilterPsetQtoSchema,
+      setFilterValueSchema: s.setFilterValueSchema,
+    })),
+  );
+
+  const selectedModelId = modelIdOverride ?? activeModelId;
+
+  const activeModel = selectedModelId ? models.get(selectedModelId) : undefined;
+  const activeStore = activeModel?.ifcDataStore ?? null;
+  const activeView = selectedModelId ? mutationViews.get(selectedModelId) : undefined;
+  const cachedEntry = selectedModelId ? schemaMap.get(selectedModelId) : undefined;
+  const schemaEntry = cachedEntry?.sourceStore === activeStore
+    && cachedEntry?.mutationVersion === mutationVersion ? cachedEntry : undefined;
+
+  // Cheap schema discovery — runs once per active model.
+  useEffect(() => {
+    if (!selectedModelId || !activeStore) return;
+    const cached = useViewerStore.getState().searchFilterSchema.get(selectedModelId);
+    if (cached?.sourceStore === activeStore && cached.mutationVersion === mutationVersion) return;
+    setFilterSchema(selectedModelId, discoverFilterSchema(activeStore, activeView), {
+      sourceStore: activeStore, mutationVersion,
+    });
+  }, [selectedModelId, activeStore, activeView, mutationVersion, schemaMap, setFilterSchema]);
+
+  // Lazy pset/qto schema — fired the first time a property/quantity rule appears.
+  useEffect(() => {
+    if (!selectedModelId || !activeStore) return;
+    const cached = useViewerStore.getState().searchFilterSchema.get(selectedModelId);
+    if (cached?.sourceStore !== activeStore || cached.mutationVersion !== mutationVersion || cached.psetQto) return;
+    const needs = rules.some((r) => r.kind === 'property' || r.kind === 'quantity');
+    if (!needs) return;
+    setFilterPsetQtoSchema(selectedModelId, discoverPropertyAndQuantitySchema(activeStore, undefined, activeView));
+  }, [selectedModelId, activeStore, activeView, mutationVersion, rules, schemaMap, setFilterPsetQtoSchema]);
+
+  // Lazy value discovery - distinct material / classification / property /
+  // predefined-type values for the chip value suggestions. Fired the first time
+  // a rule that benefits from them appears.
+  useEffect(() => {
+    if (!selectedModelId || !activeStore) return;
+    const cached = useViewerStore.getState().searchFilterSchema.get(selectedModelId);
+    if (cached?.sourceStore !== activeStore || cached.mutationVersion !== mutationVersion || cached.values) return;
+    const needs = rules.some(
+      (r) =>
+        r.kind === 'property' ||
+        r.kind === 'material' ||
+        r.kind === 'classification' ||
+        r.kind === 'predefinedType',
+    );
+    if (!needs) return;
+    setFilterValueSchema(selectedModelId, discoverFilterValues(activeStore, activeView));
+  }, [selectedModelId, activeStore, activeView, mutationVersion, rules, schemaMap, setFilterValueSchema]);
+
+  const ifcTypeOptions = useMemo<string[]>(() => {
+    if (schemaEntry?.basic.ifcTypes && schemaEntry.basic.ifcTypes.length > 0) {
+      return schemaEntry.basic.ifcTypes;
+    }
+    return COMMON_IFC_TYPES.slice();
+  }, [schemaEntry]);
+
+  const modelOptions = useMemo(
+    () => Array.from(models.values(), (model) => ({
+      label: model.name,
+      value: model.sourceFingerprint ?? model.id,
+    })),
+    [models],
+  );
+
+  // The canonical IFC types the rules select (ifcType "is one of" rules).
+  const selectedTypes = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rules) {
+      if (r.kind === 'ifcType' && r.op === 'in') {
+        for (const v of r.values) if (v) set.add(v);
+      }
+    }
+    return Array.from(set);
+  }, [rules]);
+
+  const hasPropOrQty = useMemo(
+    () => rules.some((r) => r.kind === 'property' || r.kind === 'quantity'),
+    [rules],
+  );
+
+  // Pset/Qto dropdown source: when the rules target specific IFC types, scope
+  // discovery to just those elements so only their (legal + user-defined) psets
+  // show - no scrolling past unrelated MEP/structural sets - and read them
+  // directly so a pset missing from the on-demand map still appears. Otherwise
+  // use the cached whole-model schema. (#1462)
+  const psetQto = useMemo(() => {
+    const cached = schemaEntry?.psetQto ?? null;
+    if (!activeStore || !hasPropOrQty || selectedTypes.length === 0) return cached;
+    return discoverPropertyAndQuantitySchema(activeStore, selectedTypes, activeView);
+  }, [activeStore, activeView, mutationVersion, hasPropOrQty, selectedTypes, schemaEntry?.psetQto]);
+
+  return {
+    modelOptions,
+    tagOptions: modelTags,
+    ifcTypeOptions,
+    storeyOptions: schemaEntry?.basic.storeys ?? [],
+    psetQto,
+    valueSchema: schemaEntry?.values ?? null,
+  };
+}

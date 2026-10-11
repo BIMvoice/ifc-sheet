@@ -1,0 +1,366 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Install / uninstall / enable-disable lifecycle for the extension
+ * host, extracted from `host.ts`. The class methods delegate here so
+ * the lifecycle logic — including rollback on failed updates — can be
+ * read and tested as a unit.
+ *
+ * All functions take the host's primitives as a `deps` object and an
+ * optional `notify` callback for emitting changes back to the host.
+ */
+
+import {
+  sha256Hex,
+  unpackBundleWithSignature,
+  verifyBundle,
+  type ActionIntent,
+  type ActionParams,
+  type ActivationDispatcher,
+  type AuditLog,
+  type Bundle,
+  type ExtensionLoader,
+  type ExtensionRuntime,
+  type InstalledExtensionRecord,
+  type LoadedExtensionStatus,
+  type SignatureInfo,
+  type ValidationError,
+  type ValidationResult,
+} from '@ifc-lite/extensions';
+import type { IdbExtensionStorage } from './idb-storage.js';
+
+export interface ExtensionInstallSummary {
+  id: string;
+  version: string;
+  bundleHash: string;
+  capabilities: string[];
+  bundle: Bundle;
+  /**
+   * True iff the bundle envelope contained a signature block and that
+   * signature verified against the bundle's canonical content hash.
+   * UI should surface signed/unsigned status alongside the capability
+   * review so users can refuse unsigned bundles for sensitive grants.
+   */
+  signed: boolean;
+  /** Verified signer info — only present when `signed` is true. */
+  signature?: SignatureInfo;
+}
+
+export interface InstallerDeps {
+  storage: IdbExtensionStorage;
+  runtime: ExtensionRuntime;
+  loader: ExtensionLoader;
+  dispatcher: ActivationDispatcher;
+  audit: AuditLog;
+  emitAction: <K extends ActionIntent>(intent: K, params: ActionParams[K]) => void;
+  emit: () => void;
+}
+
+export class ExtensionInstallError extends Error {
+  readonly validationErrors: readonly ValidationError[];
+  constructor(message: string, errors: readonly ValidationError[]) {
+    super(message);
+    this.name = 'ExtensionInstallError';
+    this.validationErrors = errors;
+  }
+}
+
+/**
+ * Inspect a `.iflx` byte string without installing it.
+ *
+ * If the bundle envelope carries a signature block we verify it here
+ * — failing the preview rather than the later install, so the user
+ * never gets as far as the capability-review screen for a tampered
+ * bundle. Unsigned bundles preview successfully but are flagged via
+ * `summary.signed = false` so the UI can warn (or block, depending
+ * on policy) before granting capabilities.
+ */
+export async function previewBundleBytes(
+  bytes: Uint8Array,
+): Promise<ValidationResult<ExtensionInstallSummary>> {
+  const unpacked = unpackBundleWithSignature(bytes);
+  if (!unpacked.ok) return unpacked;
+  const { bundle, signature: sigBlock } = unpacked.value;
+
+  let signature: SignatureInfo | undefined;
+  if (sigBlock) {
+    try {
+      signature = await verifyBundle(bundle, sigBlock);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        errors: [{
+          path: 'signature',
+          code: 'invalid_format',
+          message: `Signature verification failed: ${message}`,
+        }],
+      };
+    }
+  }
+
+  const hash = await sha256Hex(bytes);
+  return {
+    ok: true,
+    value: {
+      id: bundle.manifest.id,
+      version: bundle.manifest.version,
+      bundleHash: hash,
+      capabilities: bundle.manifest.capabilities,
+      bundle,
+      signed: signature !== undefined,
+      signature,
+    },
+  };
+}
+
+/**
+ * Install a previewed bundle. On failure, restore the previous install
+ * (if any) so a bad update doesn't wipe a working extension.
+ */
+export async function installFromBytes(
+  deps: InstallerDeps,
+  bytes: Uint8Array,
+  grantedCapabilities: string[],
+): Promise<LoadedExtensionStatus> {
+  const preview = await previewBundleBytes(bytes);
+  if (!preview.ok) {
+    throw new ExtensionInstallError('Bundle did not unpack', preview.errors);
+  }
+  const { bundle, bundleHash, id, version, signed, signature } = preview.value;
+
+  // Callers can only grant capabilities the manifest declares. Drops
+  // accidental grant escalation if the review screen pre-filled state
+  // from an earlier version of the bundle.
+  const declaredCaps = new Set(bundle.manifest.capabilities);
+  const unexpected = grantedCapabilities.filter((cap) => !declaredCaps.has(cap));
+  if (unexpected.length > 0) {
+    throw new ExtensionInstallError(
+      `Unexpected capability grants not declared by manifest: ${unexpected.join(', ')}`,
+      unexpected.map((cap) => ({
+        path: 'grantedCapabilities',
+        code: 'invalid_capability' as const,
+        message: `Capability "${cap}" was not requested by the bundle manifest.`,
+      })),
+    );
+  }
+
+  // Snapshot the previous install so we can restore it if the new
+  // bundle fails to load. Without this, a bad update wipes the
+  // user's previously-working install entirely.
+  //
+  // The snapshot is taken for every previous install, not only for a version
+  // change. Bundle bytes are keyed by `id + version`, so a reinstall of the
+  // same version overwrites them in `putBundle` below — that is exactly the
+  // case where the rollback has nothing left to read, and it deletes the
+  // record and the bundle of an install the failed write never changed the
+  // identity of. The teardown stays conditional: replacing the bytes under a
+  // version that is already loaded is not a version change, and unloading a
+  // still-working extension is not this function's business.
+  const previous = await deps.storage.getExtension(id);
+  let previousBundleBytes: Uint8Array | undefined;
+  if (previous) {
+    previousBundleBytes = await deps.storage.getBundle(id, previous.version);
+    if (previous.version !== version) await teardownExtension(deps, id);
+  }
+
+  const record: InstalledExtensionRecord = {
+    id,
+    version,
+    bundleHash,
+    grantedCapabilities,
+    enabled: true,
+    installedAt: new Date().toISOString(),
+    source: 'local',
+  };
+  await deps.storage.putBundle(id, version, bytes);
+  await deps.storage.putExtension(record);
+
+  const status = await deps.loader.load(id);
+  if (!status || !status.ok) {
+    // `load` is an await point, so the record in storage may no longer be the
+    // one written above: the user can hit Uninstall while a slow load is in
+    // flight. An uninstall is explicit and it wins. Rolling back over it would
+    // both delete bytes this install no longer owns and put `previous` back —
+    // undoing the removal the user asked for and leaving a listed record
+    // behind whose bundle is gone.
+    //
+    // This is a record-identity check, not the byte gate the rest of this
+    // rollback deliberately does without: it asks whether the record we wrote
+    // is still the record in storage, never whether any bundle bytes exist. A
+    // previous install whose bytes were already missing still has its record
+    // restored below, which is the case a byte gate here would break.
+    //
+    // A failed read proves nothing either way, so it falls back to rolling
+    // back — what happens when no one touched storage, which is every case
+    // but this one.
+    let ownsStoredRecord = true;
+    try {
+      const current = await deps.storage.getExtension(id);
+      ownsStoredRecord = current?.version === version && current?.bundleHash === bundleHash;
+    } catch (readErr) {
+      console.error(
+        `[ext-host] Could not re-read the record of ${id} before rolling back:`,
+        readErr,
+      );
+    }
+
+    if (ownsStoredRecord) {
+      // Roll back. Delete the new bundle + record we just wrote.
+      await deps.storage.deleteBundle(id, version);
+      await deps.storage.deleteExtension(id);
+
+      // Restore the previous install if we had one — re-write its record and
+      // bundle bytes, then re-load. Best effort: log if a step fails, don't
+      // mask the original error.
+      //
+      // The record and the bytes are restored under independent guards, so
+      // neither takes the other down. That is what is load-bearing here, not
+      // the order of the two writes: the record is not gated on the byte
+      // snapshot, and a failing `putBundle` — the plausible failure, since it
+      // is the step with a quota path — leaves the record standing.
+      //
+      // Keeping a record whose bundle is missing is deliberate. The record
+      // carries the capability grants, the enabled bit, the install time and
+      // the source, none of which need bytes and none of which the user can
+      // reconstruct; unloaded *and* deleted is strictly worse than unloaded.
+      // The loader already names the resulting state (`invalid_reference`,
+      // "Bundle for X@Y not found in storage"). Reinstalling the same version
+      // repairs it and keeps the grants, but the app offers the user no route
+      // to that: the Repair queue passes any extension whose engine range
+      // still matches, so it never reaches the missing bytes, and fork reads
+      // an in-memory cache that is empty after a boot. Treat the reinstall as
+      // something a user who still holds the `.iflx` can do, not as a repair
+      // path the UI provides.
+      if (previous) {
+        try {
+          await deps.storage.putExtension(previous);
+        } catch (restoreErr) {
+          console.error(
+            `[ext-host] Failed to restore the previous record of ${id}:`,
+            restoreErr,
+          );
+        }
+        if (previousBundleBytes) {
+          try {
+            await deps.storage.putBundle(id, previous.version, previousBundleBytes);
+          } catch (restoreErr) {
+            console.error(
+              `[ext-host] Failed to restore the previous bundle of ${id}:`,
+              restoreErr,
+            );
+          }
+        }
+        try {
+          // Best effort either way: with the bytes back this reloads the
+          // working install; without them the loader reports
+          // `invalid_reference` and nothing is left running, which is the
+          // truthful state and not something a throw here would improve.
+          await deps.loader.load(id);
+        } catch (restoreErr) {
+          console.error(
+            `[ext-host] Failed to reload the previous install of ${id}:`,
+            restoreErr,
+          );
+        }
+      }
+    }
+    throw new ExtensionInstallError(
+      'Loader rejected the new bundle',
+      status?.errors ?? [],
+    );
+  }
+
+  deps.audit.append({
+    kind: previous ? 'update' : 'install',
+    extensionId: id,
+    version,
+    previousVersion: previous?.version,
+    grantedCapabilities,
+    signed,
+    signerFingerprint: signature?.fingerprint,
+  });
+  deps.emitAction('extension.install', { id });
+
+  // Re-fire onStartup so the freshly-loaded extension activates if it
+  // declared the event. Other startup-subscribed extensions are
+  // unaffected (the dispatcher dedupes activations per session).
+  await deps.dispatcher.fire('onStartup');
+  deps.emit();
+  return status;
+}
+
+/** Uninstall an extension and remove its bundle. */
+export async function uninstall(deps: InstallerDeps, id: string): Promise<void> {
+  const record = await deps.storage.getExtension(id);
+  if (!record) return;
+  await teardownExtension(deps, id);
+  // Delete bundle bytes too — the storage's cascade already handles
+  // this on deleteExtension, but call it explicitly so the contract
+  // is clear at this layer and a future storage impl can't drift.
+  await deps.storage.deleteBundle(id, record.version);
+  await deps.storage.deleteExtension(id);
+  deps.audit.append({
+    kind: 'uninstall',
+    extensionId: id,
+    version: record.version,
+  });
+  deps.emitAction('extension.uninstall', { id });
+  deps.emit();
+}
+
+/** Enable/disable without uninstalling. */
+export async function setEnabled(
+  deps: InstallerDeps,
+  id: string,
+  enabled: boolean,
+): Promise<void> {
+  const record = await deps.storage.getExtension(id);
+  if (!record) return;
+  if (record.enabled === enabled) return;
+
+  if (enabled) {
+    // Persist enabled=true only after the loader confirms it can
+    // bring the extension up. Without this, a failed load leaves the
+    // persisted state lying about runtime reality.
+    const tentative = { ...record, enabled: true };
+    await deps.storage.putExtension(tentative);
+    const status = await deps.loader.load(id);
+    if (!status?.ok) {
+      await deps.storage.putExtension(record);
+      throw new ExtensionInstallError(
+        `Failed to enable extension ${id}`,
+        status?.errors ?? [],
+      );
+    }
+  } else {
+    await teardownExtension(deps, id);
+    await deps.storage.putExtension({ ...record, enabled: false });
+  }
+  deps.audit.append({
+    kind: enabled ? 'enable' : 'disable',
+    extensionId: id,
+    version: record.version,
+  });
+  deps.emitAction(enabled ? 'extension.enable' : 'extension.disable', { id });
+  deps.emit();
+}
+
+/**
+ * Tear an extension down: run its `entry.deactivate` hook (via the
+ * loaded bundle), unload it, and clear the dispatcher's
+ * "already activated" flag so a later enable / event re-fire genuinely
+ * re-activates it. Used by update / uninstall / disable.
+ */
+async function teardownExtension(deps: InstallerDeps, id: string): Promise<void> {
+  const bundle = deps.loader.getBundle(id);
+  if (bundle) {
+    await deps.runtime.deactivateWithBundle(id, bundle);
+  } else {
+    await deps.runtime.deactivate(id);
+  }
+  await deps.loader.unload(id);
+  deps.dispatcher.resetActivation(id);
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [
+    "**/dist/**",
+    "**/pkg/**",
+    "**/*.d.ts",
+    "**/generated/**",
+    ".claude/**",
+    "packages/create-ifc-lite/src/templates/**",
+    "apps/viewer/src/lib/scripts/templates/**",
+    "packages/extensions/test/fixtures/**",
+    "tests/extensions/canaries/**",
+    "docs/javascripts/**",
+    "apps/landing/app.jsx",
+    "apps/viewer-embed/public/**"
+  ],
+  "ignoreBinaries": ["wasm-pack", "cargo", "rustup", "serve"],
+  "ignoreWorkspaces": ["examples/*"],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "api/*.ts",
+        "scripts/dev-chat-api.ts",
+        "scripts/add-license-headers.mjs",
+        "docs/architecture/evidence/pdf-annotation-ui/browser-proof.mjs",
+        "docs/architecture/evidence/pdf-fidelity-report/browser-proof.mjs"
+      ]
+    },
+    "packages/ids": {
+      "ignoreDependencies": ["@xmldom/xmldom"]
+    },
+    "packages/server-bin": {
+      "entry": ["src/index.ts", "src/postinstall.ts"]
+    },
+    "apps/viewer-embed": {
+      "ignoreDependencies": ["@ifc-lite/.+", "zustand"]
+    }
+  }
+}

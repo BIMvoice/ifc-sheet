@@ -1,0 +1,488 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Worker transport splits clone-safe columns from live store accessors.
+ * toTransport serializes columns; fromTransport rebuilds their closures.
+ * Source bytes stay in the shared buffer, supplied separately by the receiver.
+ */
+
+import {
+  type EntityTable,
+  type EntityTableColumns,
+  type PropertyTable,
+  type PropertyTableColumns,
+  type QuantityTable,
+  type QuantityTableColumns,
+  type RelationshipGraph,
+  type RelationshipGraphColumns,
+  type SpatialHierarchy,
+  type SpatialNode,
+  type StringTable as DataStringTable,
+  IfcTypeEnum,
+  StringTable,
+  entityTableFromColumns,
+  entityTableToColumns,
+  propertyTableFromColumns,
+  propertyTableToColumns,
+  quantityTableFromColumns,
+  quantityTableToColumns,
+  relationshipGraphFromColumns,
+  relationshipGraphToColumns,
+  findStoreyByElevation,
+  spatialLookups,
+} from '@ifc-lite/data';
+
+import { CompactEntityIndex } from './compact-entity-index.js';
+import {
+  type CompactEntityIndexColumns,
+  compactEntityIndexFromColumns,
+  compactEntityIndexToColumns,
+} from './compact-entity-index-transport.js';
+import type { EntityRef } from './types.js';
+import { asSourceBytes, type IfcSourceBytes } from './source-bytes.js';
+import type { IfcDataStore, EntityByIdIndex } from './columnar-parser.js';
+import { attachDataStoreAccessors } from './data-store-accessors.js';
+import type { GeoreferenceInfo } from './georef-extractor.js';
+
+export type { CompactEntityIndexColumns };
+
+// ────────────────────────────────────────────────────────────────────────────
+// SpatialHierarchy transport
+//
+// SpatialHierarchy is a tree of plain objects + Maps + closures. We
+// serialize the tree + maps (no closures), then rebuild closures on the
+// receiving thread with the same algorithms desktop snapshot hydration uses.
+// ────────────────────────────────────────────────────────────────────────────
+
+interface SerializedSpatialNode {
+  expressId: number;
+  type: number;
+  name: string;
+  longName?: string;
+  elevation?: number;
+  children: SerializedSpatialNode[];
+  elements: number[];
+}
+
+export interface SpatialHierarchyColumns {
+  project: SerializedSpatialNode;
+  byStorey: Array<[number, number[]]>;
+  byBuilding: Array<[number, number[]]>;
+  bySite: Array<[number, number[]]>;
+  bySpace: Array<[number, number[]]>;
+  storeyElevations: Array<[number, number]>;
+  storeyHeights: Array<[number, number]>;
+  elementToStorey: Array<[number, number]>;
+  elementToContainer?: Array<[number, number]>;
+  ambiguousStorey?: number[]; // #4311
+  reachableSpatialNodes?: number[]; // #4314
+}
+
+function serializeSpatialNode(node: SpatialNode): SerializedSpatialNode {
+  return {
+    expressId: node.expressId,
+    type: node.type,
+    name: node.name,
+    longName: node.longName,
+    elevation: node.elevation,
+    children: node.children.map(serializeSpatialNode),
+    elements: [...node.elements],
+  };
+}
+
+function deserializeSpatialNode(node: SerializedSpatialNode): SpatialNode {
+  return {
+    expressId: node.expressId,
+    type: node.type as IfcTypeEnum,
+    name: node.name,
+    longName: node.longName,
+    elevation: node.elevation,
+    children: node.children.map(deserializeSpatialNode),
+    elements: [...node.elements],
+  };
+}
+
+export function spatialHierarchyToColumns(hierarchy: SpatialHierarchy): SpatialHierarchyColumns {
+  return {
+    project: serializeSpatialNode(hierarchy.project),
+    byStorey: [...hierarchy.byStorey.entries()].map(([id, els]) => [id, [...els]]),
+    byBuilding: [...hierarchy.byBuilding.entries()].map(([id, els]) => [id, [...els]]),
+    bySite: [...hierarchy.bySite.entries()].map(([id, els]) => [id, [...els]]),
+    bySpace: [...hierarchy.bySpace.entries()].map(([id, els]) => [id, [...els]]),
+    storeyElevations: [...hierarchy.storeyElevations.entries()],
+    storeyHeights: [...hierarchy.storeyHeights.entries()],
+    elementToStorey: [...hierarchy.elementToStorey.entries()],
+    elementToContainer: hierarchy.elementToContainer
+      ? [...hierarchy.elementToContainer.entries()]
+      : undefined,
+    ambiguousStorey: hierarchy.ambiguousStorey ? [...hierarchy.ambiguousStorey] : undefined, // #4311
+    reachableSpatialNodes: hierarchy.reachableSpatialNodes ? [...hierarchy.reachableSpatialNodes] : undefined, // #4314
+  };
+}
+
+export function spatialHierarchyFromColumns(columns: SpatialHierarchyColumns): SpatialHierarchy {
+  const project = deserializeSpatialNode(columns.project);
+  const byStorey = new Map<number, number[]>(columns.byStorey.map(([id, els]) => [id, [...els]]));
+  const byBuilding = new Map<number, number[]>(columns.byBuilding.map(([id, els]) => [id, [...els]]));
+  const bySite = new Map<number, number[]>(columns.bySite.map(([id, els]) => [id, [...els]]));
+  const bySpace = new Map<number, number[]>(columns.bySpace.map(([id, els]) => [id, [...els]]));
+  const storeyElevations = new Map<number, number>(columns.storeyElevations);
+  const storeyHeights = new Map<number, number>(columns.storeyHeights);
+  const elementToStorey = new Map<number, number>(columns.elementToStorey);
+  const elementToContainer = columns.elementToContainer
+    ? new Map<number, number>(columns.elementToContainer)
+    : undefined;
+  const ambiguousStorey = columns.ambiguousStorey ? new Set<number>(columns.ambiguousStorey) : undefined; // #4311
+  const reachableSpatialNodes = columns.reachableSpatialNodes ? new Set<number>(columns.reachableSpatialNodes) : undefined; // #4314
+
+  return {
+    project,
+    byStorey,
+    byBuilding,
+    bySite,
+    bySpace,
+    storeyElevations,
+    storeyHeights,
+    elementToStorey,
+    elementToContainer,
+    ambiguousStorey, // #4311
+    reachableSpatialNodes, // #4314
+
+    getStoreyElements(storeyId: number): number[] {
+      return byStorey.get(storeyId) ?? [];
+    },
+    getStoreyByElevation(z: number): number | null {
+      // Canonical resolver (#1841). Rehydrating a store over the worker
+      // transport used to drop the 1m tolerance that `SpatialHierarchyBuilder`
+      // applies, so the SAME parse answered differently either side of the
+      // worker boundary.
+      return findStoreyByElevation(storeyElevations, z);
+    },
+    ...spatialLookups(project, bySpace, elementToContainer),
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Memory snapshot helper (parser worker → main)
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface ParserMemorySnapshot {
+  /** `performance.memory.usedJSHeapSize` from inside the parser worker (Chromium). */
+  jsHeapBytes?: number;
+  /** Per-realm bytes from `performance.measureUserAgentSpecificMemory()` (cross-origin-isolated). */
+  uaMemoryBytes?: number;
+  /** Total byte length of all transferable typed arrays in the payload. */
+  transportBytes: number;
+  /** Source buffer byteLength (unchanged by parse, included for the receiver's overall accounting). */
+  sourceBytes: number;
+  /** Wall-clock parse duration in milliseconds. */
+  parseTimeMs: number;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Top-level transport payload
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface DataStoreTransport {
+  /** Worker-prepared render data (#3983); absent on older transports. */
+  sourceContentKey?: string | null;
+  georeferencing?: GeoreferenceInfo | null;
+  fileSize: number;
+  schemaVersion: IfcDataStore['schemaVersion'];
+  sourceHeader?: IfcDataStore['sourceHeader'];
+  entityCount: number;
+  parseTime: number;
+  lengthUnitScale?: number;
+
+  entityIndex: {
+    byId: CompactEntityIndexColumns;
+    byType: Array<[string, number[]]>;
+  };
+  deferredEntityIndex?: CompactEntityIndexColumns;
+
+  strings: string[];
+  entities: EntityTableColumns;
+  properties: PropertyTableColumns;
+  quantities: QuantityTableColumns;
+  relationships: RelationshipGraphColumns;
+
+  spatialHierarchy?: SpatialHierarchyColumns;
+
+  onDemandPropertyMap: Array<[number, number[]]>;
+  onDemandQuantityMap: Array<[number, number[]]>;
+  onDemandClassificationMap: Array<[number, number[]]>;
+  onDemandMaterialMap: Array<[number, number[]]>;
+  resolvedMaterials?: Array<[number, Array<[number, import('./material-resolver.js').MaterialInfo]>]>;
+  onDemandDocumentMap: Array<[number, number[]]>;
+
+  memory?: ParserMemorySnapshot;
+}
+
+/**
+ * Shape of the value `toTransport` returns: the cloneable payload plus the
+ * list of `Transferable` buffers that should be moved (rather than copied)
+ * via `postMessage(payload, transfers)`.
+ */
+export interface DataStoreTransportEnvelope {
+  payload: DataStoreTransport;
+  transfers: Transferable[];
+}
+
+/**
+ * Pull every typed-array buffer out of a `DataStoreTransport` into a flat
+ * array suitable for the `postMessage` transfer list. Order is not
+ * meaningful — the structured-clone algorithm matches by buffer identity.
+ *
+ * Exported so the parser worker can append additional buffers (e.g. memory
+ * snapshot byte arrays) before posting.
+ */
+export function collectTransferables(payload: DataStoreTransport): Transferable[] {
+  const list: Transferable[] = [];
+  const push = (buf: ArrayBufferLike | undefined): void => {
+    if (buf && buf instanceof ArrayBuffer) list.push(buf);
+  };
+
+  // @raw-entity-enumeration-ok Transport collects the four serialized source-index buffers, not live entities.
+  push(payload.entityIndex.byId.expressIds.buffer);
+  // @raw-entity-enumeration-ok Transport collects the serialized source-index byte offsets buffer.
+  push(payload.entityIndex.byId.byteOffsets.buffer);
+  // @raw-entity-enumeration-ok Transport collects the serialized source-index byte lengths buffer.
+  push(payload.entityIndex.byId.byteLengths.buffer);
+  // @raw-entity-enumeration-ok Transport collects the serialized source-index type indices buffer.
+  push(payload.entityIndex.byId.typeIndices.buffer);
+
+  if (payload.deferredEntityIndex) {
+    push(payload.deferredEntityIndex.expressIds.buffer);
+    push(payload.deferredEntityIndex.byteOffsets.buffer);
+    push(payload.deferredEntityIndex.byteLengths.buffer);
+    push(payload.deferredEntityIndex.typeIndices.buffer);
+  }
+
+  // EntityTableColumns
+  for (const arr of [
+    payload.entities.expressId,
+    payload.entities.typeEnum,
+    payload.entities.globalId,
+    payload.entities.name,
+    payload.entities.description,
+    payload.entities.objectType,
+    payload.entities.flags,
+    payload.entities.containedInStorey,
+    payload.entities.definedByType,
+    payload.entities.geometryIndex,
+  ]) push(arr.buffer);
+  if (payload.entities.rawTypeName) push(payload.entities.rawTypeName.buffer);
+
+  // PropertyTableColumns
+  for (const arr of [
+    payload.properties.entityId,
+    payload.properties.psetName,
+    payload.properties.psetGlobalId,
+    payload.properties.propName,
+    payload.properties.propType,
+    payload.properties.valueString,
+    payload.properties.valueReal,
+    payload.properties.valueInt,
+    payload.properties.valueBool,
+    payload.properties.unitId,
+  ]) push(arr.buffer);
+
+  // QuantityTableColumns
+  for (const arr of [
+    payload.quantities.entityId,
+    payload.quantities.qsetName,
+    payload.quantities.qsetGlobalId,
+    payload.quantities.quantityName,
+    payload.quantities.quantityType,
+    payload.quantities.value,
+    payload.quantities.unitId,
+    payload.quantities.formula,
+  ]) push(arr.buffer);
+
+  // RelationshipGraphColumns. shadowed* (#3782) are absent unless an edge
+  // collapsed more than one IfcRel* instance.
+  for (const half of [payload.relationships.forward, payload.relationships.inverse]) {
+    for (const arr of [half.edgeTargets, half.edgeTypes, half.edgeRelIds, half.shadowedEdgeIndex, half.shadowedGroupOffsets, half.shadowedRelIds]) if (arr) push(arr.buffer);
+  }
+
+  // De-duplicate: a typed array sliced from another aliases the same
+  // buffer, and listing the same Transferable twice throws.
+  const seen = new Set<Transferable>();
+  const unique: Transferable[] = [];
+  for (const t of list) {
+    if (!seen.has(t)) {
+      seen.add(t);
+      unique.push(t);
+    }
+  }
+  return unique;
+}
+
+function sumBytes(payload: DataStoreTransport): number {
+  let total = 0;
+  for (const transferable of collectTransferables(payload)) {
+    if (transferable instanceof ArrayBuffer) total += transferable.byteLength;
+  }
+  return total;
+}
+
+/**
+ * Convert a live `IfcDataStore` into a structured-clone-safe payload plus a
+ * list of buffers to move via `postMessage(payload, transfers)`.
+ *
+ * `source` is dropped from the payload because the parser worker and main
+ * thread both view the same upstream `SharedArrayBuffer`. Callers must
+ * reattach `source` on the receiving side when calling `fromTransport`.
+ */
+export function toTransport(
+  store: IfcDataStore,
+  indexOverride?: DataStoreTransport['entityIndex'],
+): DataStoreTransportEnvelope {
+  const byTypeEntries: Array<[string, number[]]> = [];
+  // @raw-entity-enumeration-ok Worker transport copies the parsed source index before live edits exist.
+  for (const [key, value] of indexOverride ? [] : store.entityIndex.byType) {
+    byTypeEntries.push([key, [...value]]);
+  }
+
+  // @raw-entity-enumeration-ok Worker transport requires parsed compact source-index columns.
+  const compactById = store.entityIndex.byId as unknown;
+  if (!(compactById instanceof CompactEntityIndex)) {
+    throw new Error('toTransport requires CompactEntityIndex (the lite parser path always provides one)');
+  }
+
+  const payload: DataStoreTransport = {
+    fileSize: store.fileSize,
+    schemaVersion: store.schemaVersion,
+    sourceHeader: store.sourceHeader,
+    entityCount: store.entityCount,
+    parseTime: store.parseTime,
+    lengthUnitScale: store.lengthUnitScale,
+    georeferencing: store.georeferencing,
+
+    entityIndex: indexOverride ?? {
+      byId: compactEntityIndexToColumns(compactById),
+      byType: byTypeEntries,
+    },
+    deferredEntityIndex: store.deferredEntityIndex instanceof CompactEntityIndex
+      ? compactEntityIndexToColumns(store.deferredEntityIndex)
+      : undefined,
+
+    strings: store.strings.getAll(),
+    entities: entityTableToColumns(store.entities),
+    properties: propertyTableToColumns(store.properties),
+    quantities: quantityTableToColumns(store.quantities),
+    relationships: relationshipGraphToColumns(store.relationships),
+
+    spatialHierarchy: store.spatialHierarchy
+      ? spatialHierarchyToColumns(store.spatialHierarchy)
+      : undefined,
+
+    onDemandPropertyMap: store.onDemandPropertyMap
+      ? [...store.onDemandPropertyMap.entries()].map(([k, v]) => [k, [...v]])
+      : [],
+    onDemandQuantityMap: store.onDemandQuantityMap
+      ? [...store.onDemandQuantityMap.entries()].map(([k, v]) => [k, [...v]])
+      : [],
+    onDemandClassificationMap: store.onDemandClassificationMap
+      ? [...store.onDemandClassificationMap.entries()].map(([k, v]) => [k, [...v]])
+      : [],
+    onDemandMaterialMap: store.onDemandMaterialMap
+      ? [...store.onDemandMaterialMap.entries()]
+      : [],
+    resolvedMaterials: store.resolvedMaterials
+      ? [...store.resolvedMaterials].map(([owner, defs]) => [owner, [...defs]])
+      : undefined,
+    onDemandDocumentMap: store.onDemandDocumentMap
+      ? [...store.onDemandDocumentMap.entries()].map(([k, v]) => [k, [...v]])
+      : [],
+  };
+
+  return { payload, transfers: collectTransferables(payload) };
+}
+
+/**
+ * Reconstruct a live `IfcDataStore` (closures rebuilt) from a
+ * `DataStoreTransport` payload and the `source` buffer view that lives on
+ * the receiving thread.
+ */
+export function fromTransport(
+  payload: DataStoreTransport,
+  source: Uint8Array | IfcSourceBytes,
+  byTypeOverride?: Map<string, number[]>,
+): IfcDataStore {
+  const strings: DataStringTable = StringTable.fromArray(payload.strings);
+  const entities = entityTableFromColumns(payload.entities, strings);
+  const properties = propertyTableFromColumns(payload.properties, strings);
+  const quantities = quantityTableFromColumns(payload.quantities, strings);
+  const relationships = relationshipGraphFromColumns(payload.relationships);
+
+  // @raw-entity-enumeration-ok Transport reconstruction restores the parsed source index from its wire columns.
+  const byIdIndex = compactEntityIndexFromColumns(payload.entityIndex.byId);
+  // @raw-entity-enumeration-ok Transport reconstruction restores source type buckets from the wire payload.
+  const byType = byTypeOverride ?? new Map<string, number[]>(
+    payload.entityIndex.byType.map(([k, v]) => [k, [...v]]),
+  );
+  const deferredEntityIndex = payload.deferredEntityIndex
+    ? compactEntityIndexFromColumns(payload.deferredEntityIndex)
+    : undefined;
+
+  const spatialHierarchy = payload.spatialHierarchy
+    ? spatialHierarchyFromColumns(payload.spatialHierarchy)
+    : undefined;
+
+  const entityIndex = {
+    byId: byIdIndex as unknown as EntityByIdIndex,
+    byType,
+  };
+  const onDemandPropertyMap = new Map(payload.onDemandPropertyMap.map(([k, v]) => [k, [...v]]));
+  const onDemandQuantityMap = new Map(payload.onDemandQuantityMap.map(([k, v]) => [k, [...v]]));
+  // Lazy accessors are wired by the shared helper so the fresh-parse, transport,
+  // and cache-restore paths can never drift (see data-store-accessors.ts).
+  const store = attachDataStoreAccessors({
+    fileSize: payload.fileSize,
+    schemaVersion: payload.schemaVersion,
+    sourceHeader: payload.sourceHeader,
+    entityCount: payload.entityCount,
+    parseTime: payload.parseTime,
+    lengthUnitScale: payload.lengthUnitScale,
+    georeferencing: payload.georeferencing,
+
+    source: asSourceBytes(source),
+    entityIndex,
+    deferredEntityIndex: deferredEntityIndex as unknown as EntityByIdIndex | undefined,
+
+    strings,
+    entities,
+    properties,
+    quantities,
+    relationships,
+    spatialHierarchy,
+
+    onDemandPropertyMap,
+    onDemandQuantityMap,
+    onDemandClassificationMap: new Map(payload.onDemandClassificationMap.map(([k, v]) => [k, [...v]])),
+    onDemandMaterialMap: new Map(payload.onDemandMaterialMap),
+    resolvedMaterials: payload.resolvedMaterials
+      ? new Map(payload.resolvedMaterials.map(([owner, defs]) => [owner, new Map(defs)]))
+      : undefined,
+    onDemandDocumentMap: new Map(payload.onDemandDocumentMap.map(([k, v]) => [k, [...v]])),
+  });
+  return store;
+}
+
+/**
+ * Convenience: compute the byte-size of the transferable payload so the
+ * receiver can record it in the memory accounting snapshot.
+ */
+export function transportByteSize(payload: DataStoreTransport): number {
+  return sumBytes(payload);
+}
+
+// Internal type re-exports for tests and adjacent worker code.
+export type { EntityTable, PropertyTable, QuantityTable, RelationshipGraph, SpatialHierarchy };
+
+// Helper used by the worker init handshake: the worker needs to know
+// what an EntityRef looks like when it builds intermediate results.
+export type { EntityRef };

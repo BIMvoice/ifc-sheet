@@ -1,0 +1,54 @@
+{
+  "name": "@ifc-lite/embed-sdk",
+  "version": "1.15.0",
+  "description": "SDK for embedding the IFC-Lite 3D viewer in any web page via iframe",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm exec tsc",
+    "typecheck": "node ../../scripts/typecheck-tests.mjs",
+    "dev": "pnpm exec tsc --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ifc-lite/embed-protocol": "workspace:^"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.14.5",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
+  },
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LTplus-AG/ifc-lite.git",
+    "directory": "packages/embed-sdk"
+  },
+  "keywords": [
+    "ifc",
+    "bim",
+    "3d-viewer",
+    "embed",
+    "iframe",
+    "power-bi",
+    "superset",
+    "grafana"
+  ],
+  "files": [
+    "dist"
+  ],
+  "author": "Louis True",
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://ifclite.dev/docs/",
+  "bugs": "https://github.com/LTplus-AG/ifc-lite/issues"
+}

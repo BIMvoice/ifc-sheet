@@ -1,0 +1,381 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Model-comparison panel state (issue #924). Holds the panel's UI state, the
+ * A/B model selection, the data-vs-geometry scope, and the last `@ifc-lite/diff`
+ * result. The orchestration (building per-entity fingerprints from each model's
+ * `IfcDataStore` + geometry hashes, running `diffModels`, applying the 3D
+ * colour/visibility overlay) lives in the `useCompare` hook — this slice is
+ * deliberately dumb, mirroring `clashSlice` + `useClash`.
+ */
+
+import type { StateCreator } from 'zustand';
+import type { DiffScope, IdentityMapEntry, ModelDiff } from '@ifc-lite/diff';
+import type { CompareRef } from '@/lib/compare/buildFingerprints';
+import {
+  addAcceptedIdentity,
+  rejectClaim,
+  removeAcceptedIdentity,
+  type AcceptedIdentity,
+  type ComparePair,
+  type RejectedClaim,
+} from '@/lib/compare/acceptedIdentity';
+import type { IfcDataStore } from '@ifc-lite/parser';
+import { defineSliceTeardown, notApplicable } from '../teardown.js';
+
+/** A completed comparison: the engine result plus the A/B context it ran on. */
+export interface CompareResult {
+  /** Federation model id chosen as the base (version A). */
+  baseModelId: string;
+  /** Federation model id chosen as the head (version B). */
+  headModelId: string;
+  /** Display name of the base model. */
+  baseName: string;
+  /** Display name of the head model. */
+  headName: string;
+  /** The scope the diff was computed with. */
+  scope: DiffScope;
+  /** True when a compared model carries no geometry hashes (loaded outside the
+   *  WASM mesh path), so geometry-scope changes can't be detected. */
+  geometryUnavailable: boolean;
+  /**
+   * The authored key scheme this comparison ran under (issue #4989):
+   * `Tag` or `<PsetName>.<PropertyName>`, or `undefined` for GlobalId. Fixed
+   * at extraction time (`useCompare`'s `BuiltPair`), so it always agrees with
+   * the fingerprint keys the diff below was actually computed on. Decisions
+   * (`AcceptedIdentity` / `RejectedClaim`) are scoped to a pair carrying this
+   * same value — a GlobalId a user accepted must not replay under a
+   * different scheme, and vice versa.
+   */
+  keyProperty?: string;
+  /**
+   * Authored values more than one entity carried within either revision —
+   * resolved to GlobalId instead of `prop:<value>` for every owner on both
+   * revisions. Present only when non-empty.
+   */
+  duplicateAuthoredKeys?: ReadonlyMap<string, number[]>;
+  /** `geometryUnavailable` with placement fingerprints still in play (both
+   *  sides mesh-less, placements kept): the geometry channel still reports
+   *  placement-driven moves, only reshapes are invisible — the warning must
+   *  say so or it contradicts the panel's own rows. See
+   *  `geometryCapability.resolveGeometryChannel`. */
+  placementOnlyGeometry?: boolean;
+  /**
+   * Federation global ids of meshed entities whose class is on the blacklist
+   * ({@link CompareSlice.compareExcludedTypes}) - dropped from the diff, so the
+   * overlay hides them in 3D rather than leaving their meshes drawn at full
+   * colour amid the ghosted compare scene (issue #1470). Both A and B copies.
+   */
+  excludedHiddenIds: Set<number>;
+  /** The engine output — entries keyed by GlobalId, with per-entity refs. */
+  diff: ModelDiff<CompareRef>;
+  /** Stores the diff was computed from, for each model compared with unsaved
+   *  edits (#5312); read entry data back through `modelsAsCompared`. */
+  comparedStores?: ReadonlyMap<string, IfcDataStore>;
+  /** Store `mutationVersion` the comparison was computed at (#5312). A result
+   *  whose version is behind the store's describes a pre-edit model. */
+  mutationVersion?: number;
+}
+
+/** localStorage key for the cross-file compare blacklist (issue #1470). */
+const EXCLUDED_TYPES_STORAGE_KEY = 'ifc-lite:compare-excluded-types-v1';
+
+/** localStorage key for the content-matching toggle (issue #1891). */
+const MATCH_BY_CONTENT_STORAGE_KEY = 'ifc-lite:compare-match-by-content-v1';
+
+/** Case-insensitive de-dup while preserving the first-seen display casing (IFC
+ *  PascalCase from the store, e.g. `IfcOpeningElement`). Trims and drops blanks. */
+function dedupeTypes(names: Iterable<string>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of names) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const canon = trimmed.toUpperCase();
+    if (seen.has(canon)) continue;
+    seen.add(canon);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+function loadPersistedExcludedTypes(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(EXCLUDED_TYPES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? dedupeTypes(parsed) : [];
+  } catch (error) {
+    console.warn('[compare] ignoring malformed persisted blacklist:', error);
+    return [];
+  }
+}
+
+function persistExcludedTypes(types: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(EXCLUDED_TYPES_STORAGE_KEY, JSON.stringify(types));
+  } catch (error) {
+    // Quota / private mode - the blacklist just won't persist this session.
+    console.warn('[compare] failed to persist blacklist:', error);
+  }
+}
+
+/** Read the persisted content-matching preference. Defaults to ON (#1891): a
+ *  from-scratch re-export re-GUIDs every element, and without this pass the
+ *  panel reports the whole model as deleted-and-added, which is the single
+ *  most common way Compare mode is wrong. `null` (never set) is the default,
+ *  so only an explicit opt-out is remembered. */
+function loadPersistedMatchByContent(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const raw = window.localStorage.getItem(MATCH_BY_CONTENT_STORAGE_KEY);
+    if (raw === null) return true;
+    return raw !== 'false';
+  } catch (error) {
+    console.warn('[compare] ignoring unreadable content-matching preference:', error);
+    return true;
+  }
+}
+
+function persistMatchByContent(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(MATCH_BY_CONTENT_STORAGE_KEY, enabled ? 'true' : 'false');
+  } catch (error) {
+    // Quota / private mode - the preference just won't persist this session.
+    console.warn('[compare] failed to persist content-matching preference:', error);
+  }
+}
+
+export interface CompareSlice {
+  comparePanelVisible: boolean;
+  /** Selected base (A) / head (B) federation model ids. */
+  compareBaseModelId: string | null;
+  compareHeadModelId: string | null;
+  /** What counts as a change: data, geometry, or both. */
+  compareScope: DiffScope;
+  /**
+   * IFC classes the user has blacklisted - never considered as changes in the
+   * comparison (issue #1470). Persisted across files/sessions to localStorage.
+   * Display casing is preserved; matching against entities is case-insensitive.
+   */
+  compareExcludedTypes: string[];
+  /**
+   * Whether the diff runs the content-matching pass (issue #1891) - the second
+   * pass that re-pairs entities the GlobalId diff left as `added`/`deleted`
+   * because the file was re-exported from scratch. Default ON; persisted the
+   * same way as {@link compareExcludedTypes} so an opt-out survives a reload.
+   */
+  compareMatchByContent: boolean;
+  /**
+   * An authored key to compare on instead of GlobalId (issue #4989): `Tag`
+   * or `<PsetName>.<PropertyName>`, validated with `parseAuthoredKeySpec`
+   * before it ever lands here — an invalid spec is never applied, so this
+   * field is always `undefined` or a parseable spec. `undefined` means
+   * GlobalId, the pre-#4989 default.
+   */
+  compareKeyProperty?: string;
+  /** Whether unchanged elements are drawn (ghosted) or hidden. */
+  compareShowUnchanged: boolean;
+  /** Last comparison result (null when idle / not yet run). */
+  compareResult: CompareResult | null;
+  /**
+   * Monotonic count of COMPLETED comparisons (a fresh run or a scope re-diff).
+   * Bumped by `useCompare` right after each successful non-null
+   * `setCompareResult` - never on error paths and never reset - so a consumer
+   * needing "a comparison completed since X" (e.g. the compare tour's run
+   * gate) can baseline-compare a number instead of reference-diffing
+   * `compareResult`. Mirrors `clashRunSeq`.
+   */
+  compareRunSeq: number;
+  compareRunning: boolean;
+  compareError: string | null;
+  /** GlobalId of the entry focused in the list (for highlight). */
+  compareSelectedKey: string | null;
+  /**
+   * Identity the user accepted this session out of the Suggestions section
+   * or imported from an identity-map sidecar (issue #4955): `{ base, here,
+   * reason }` with reason `successor:<confidence>` or `accepted:ambiguous`,
+   * each tagged with the (A, B) model pair it was accepted for - a GlobalId
+   * means nothing outside its file, so a decision for A vs B is never
+   * replayed onto A vs C (`acceptedForPair`). Replayed as `keyAliases` on
+   * every diff of its pair, so an accepted pair classifies by key and leaves
+   * the suggestions. Kept 1:1 per pair by `addAcceptedIdentity`. Survives
+   * `clearCompare` (the decisions outlive one run's result) and dies with
+   * the session.
+   */
+  compareAcceptedIdentity: AcceptedIdentity[];
+  /** Suggestions the user marked "Not the same", per model pair, so they are
+   *  hidden and never re-offered this session. */
+  compareRejectedClaims: RejectedClaim[];
+
+  setComparePanelVisible: (visible: boolean) => void;
+  toggleComparePanel: () => void;
+  setCompareBaseModelId: (id: string | null) => void;
+  setCompareHeadModelId: (id: string | null) => void;
+  setCompareScope: (scope: DiffScope) => void;
+  /** Replace the whole blacklist (de-duped + persisted). */
+  setCompareExcludedTypes: (types: string[]) => void;
+  /** Add one IFC class to the blacklist (no-op if already present). */
+  addCompareExcludedType: (type: string) => void;
+  /** Remove one IFC class from the blacklist (case-insensitive). */
+  removeCompareExcludedType: (type: string) => void;
+  /** Empty the blacklist. */
+  clearCompareExcludedTypes: () => void;
+  /** Turn the content-matching pass on/off (persisted). */
+  setCompareMatchByContent: (enabled: boolean) => void;
+  /** Set the authored-key scheme (`undefined` for GlobalId). Callers must
+   *  validate with `parseAuthoredKeySpec` first — the slice does not. */
+  setCompareKeyProperty: (keyProperty: string | undefined) => void;
+  setCompareShowUnchanged: (show: boolean) => void;
+  setCompareResult: (result: CompareResult | null) => void;
+  bumpCompareRunSeq: () => void;
+  setCompareRunning: (running: boolean) => void;
+  setCompareError: (error: string | null) => void;
+  setCompareSelectedKey: (key: string | null) => void;
+  /** Clear the run result + selection; keeps the A/B + scope choices. */
+  clearCompare: () => void;
+  /** Accept identity entries for a model pair; returns the ones refused for
+   *  colliding with a pair already accepted (identity is 1:1). */
+  acceptCompareIdentity: (pair: ComparePair, entries: Iterable<IdentityMapEntry>) => IdentityMapEntry[];
+  /** Withdraw one accepted pair. */
+  removeCompareIdentity: (pair: ComparePair, base: string, here: string) => void;
+  /** Mark a suggested pair "Not the same". */
+  rejectCompareClaim: (pair: ComparePair, base: string, here: string) => void;
+}
+
+/**
+ * The fields `clearCompare` and a session reset both drop.
+ *
+ * Compare (#924): a stale diff result references models by id and the loaded
+ * set is changing. Panel visibility and the A/B/scope choices are UI prefs and
+ * stay; the user re-runs against the new set.
+ *
+ * Named once and consumed by both so neither can drift, the same shape
+ * `sheetSlice`'s `getClearedSheetState` uses. `compareRunSeq` is deliberately
+ * absent from both: it is a monotonic guard against a stale async result
+ * landing after a newer run, so resetting it would let exactly that through.
+ */
+function getClearedCompareState() {
+  return {
+    compareResult: null,
+    compareSelectedKey: null,
+    compareRunning: false,
+    compareError: null,
+  } as const;
+}
+
+/** A session reset also drops the reviewed identity (#4955): the decisions
+ *  name entities of the outgoing files. `clearCompare` keeps them. */
+function getResetCompareState() {
+  return {
+    ...getClearedCompareState(),
+    compareAcceptedIdentity: [] as AcceptedIdentity[],
+    compareRejectedClaims: [] as RejectedClaim[],
+    // A session reset drops the key scheme with the decisions it gates
+    // (#4989): both name entities/claims of the outgoing files' authored
+    // properties, which mean nothing once those files are gone.
+    compareKeyProperty: undefined as string | undefined,
+  };
+}
+
+export const compareTeardown = defineSliceTeardown(
+  'compareSlice',
+  ['compareResult', 'compareSelectedKey', 'compareRunning', 'compareError', 'compareAcceptedIdentity', 'compareRejectedClaims', 'compareKeyProperty'],
+  { 'session-reset': getResetCompareState, 'model-removed': notApplicable, 'all-models-cleared': notApplicable },
+);
+
+export const createCompareSlice: StateCreator<CompareSlice, [], [], CompareSlice> = (set, get) => ({
+  comparePanelVisible: false,
+  compareBaseModelId: null,
+  compareHeadModelId: null,
+  compareScope: 'both',
+  compareExcludedTypes: loadPersistedExcludedTypes(),
+  compareMatchByContent: loadPersistedMatchByContent(),
+  compareKeyProperty: undefined,
+  compareShowUnchanged: false,
+  compareResult: null,
+  compareRunSeq: 0,
+  compareRunning: false,
+  compareError: null,
+  compareSelectedKey: null,
+  compareAcceptedIdentity: [],
+  compareRejectedClaims: [],
+
+  setComparePanelVisible: (comparePanelVisible) => set({ comparePanelVisible }),
+  toggleComparePanel: () => set((s) => ({ comparePanelVisible: !s.comparePanelVisible })),
+  setCompareBaseModelId: (compareBaseModelId) => set({ compareBaseModelId }),
+  setCompareHeadModelId: (compareHeadModelId) => set({ compareHeadModelId }),
+  setCompareScope: (compareScope) => set({ compareScope }),
+
+  setCompareExcludedTypes: (types) => {
+    const compareExcludedTypes = dedupeTypes(types);
+    persistExcludedTypes(compareExcludedTypes);
+    set({ compareExcludedTypes });
+  },
+  addCompareExcludedType: (type) =>
+    set((s) => {
+      const compareExcludedTypes = dedupeTypes([...s.compareExcludedTypes, type]);
+      // dedupeTypes trims/skips blanks, so a no-op add (blank or already present)
+      // leaves the length unchanged - skip the persist + state write entirely.
+      if (compareExcludedTypes.length === s.compareExcludedTypes.length) return s;
+      persistExcludedTypes(compareExcludedTypes);
+      return { compareExcludedTypes };
+    }),
+  removeCompareExcludedType: (type) =>
+    set((s) => {
+      const canon = type.trim().toUpperCase();
+      const compareExcludedTypes = s.compareExcludedTypes.filter(
+        (t) => t.toUpperCase() !== canon,
+      );
+      if (compareExcludedTypes.length === s.compareExcludedTypes.length) return s;
+      persistExcludedTypes(compareExcludedTypes);
+      return { compareExcludedTypes };
+    }),
+  clearCompareExcludedTypes: () => {
+    persistExcludedTypes([]);
+    set({ compareExcludedTypes: [] });
+  },
+
+  setCompareMatchByContent: (compareMatchByContent) => {
+    persistMatchByContent(compareMatchByContent);
+    set({ compareMatchByContent });
+  },
+
+  setCompareKeyProperty: (compareKeyProperty) => set((state) => (
+    state.compareKeyProperty === compareKeyProperty
+      ? state
+      : { ...getClearedCompareState(), compareKeyProperty }
+  )),
+
+  setCompareShowUnchanged: (compareShowUnchanged) => set({ compareShowUnchanged }),
+  setCompareResult: (compareResult) => set({ compareResult }),
+  bumpCompareRunSeq: () => set((s) => ({ compareRunSeq: s.compareRunSeq + 1 })),
+  setCompareRunning: (compareRunning) => set({ compareRunning }),
+  setCompareError: (compareError) => set({ compareError }),
+  setCompareSelectedKey: (compareSelectedKey) => set({ compareSelectedKey }),
+
+  clearCompare: () => set(getClearedCompareState()),
+
+  acceptCompareIdentity: (pair, additions) => {
+    const { entries, refused } = addAcceptedIdentity(get().compareAcceptedIdentity, pair, additions);
+    // Same-array-when-unchanged: no subscriber re-renders for a duplicate accept.
+    if (entries !== get().compareAcceptedIdentity) set({ compareAcceptedIdentity: entries });
+    return refused;
+  },
+  removeCompareIdentity: (pair, base, here) =>
+    set((s) => {
+      const compareAcceptedIdentity = removeAcceptedIdentity(s.compareAcceptedIdentity, pair, base, here);
+      return compareAcceptedIdentity === s.compareAcceptedIdentity ? s : { compareAcceptedIdentity };
+    }),
+  rejectCompareClaim: (pair, base, here) =>
+    set((s) => {
+      const compareRejectedClaims = rejectClaim(s.compareRejectedClaims, pair, base, here);
+      return compareRejectedClaims === s.compareRejectedClaims ? s : { compareRejectedClaims };
+    }),
+});

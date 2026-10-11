@@ -1,0 +1,1423 @@
+# WASM Bindings API
+
+API documentation for the WebAssembly bindings.
+
+## Overview
+
+IFClite provides WebAssembly bindings for high-performance parsing and geometry processing in the browser.
+
+```mermaid
+flowchart LR
+    subgraph JS["JavaScript"]
+        App["Application"]
+        API["@ifc-lite/parser"]
+    end
+
+    subgraph WASM["WebAssembly"]
+        Bindings["ifc-lite-wasm"]
+        Core["ifc-lite-core"]
+        Geo["ifc-lite-geometry"]
+    end
+
+    App --> API --> Bindings
+    Bindings --> Core
+    Bindings --> Geo
+```
+
+## Loading the WASM Module
+
+### Automatic Loading
+
+The TypeScript packages handle WASM loading automatically:
+
+```typescript
+import { IfcParser } from '@ifc-lite/parser';
+
+// WASM is loaded automatically
+const parser = new IfcParser();
+await parser.parseColumnar(buffer);
+```
+
+### Manual Loading
+
+For custom setups:
+
+```typescript
+import init, { IfcAPI } from '@ifc-lite/wasm';
+
+// Initialize WASM
+await init();
+
+// Or with custom URL
+await init('/path/to/ifc-lite_bg.wasm');
+
+// Create API instance
+const api = new IfcAPI();
+```
+
+## IfcAPI Class
+
+Main entry point for WASM functionality.
+
+### Constructor
+
+```typescript
+class IfcAPI {
+  constructor();
+}
+```
+
+### Methods
+
+The methods below reflect the real `IfcAPI` surface (see `packages/wasm/pkg/ifc-lite.d.ts`). There is no single `parse()` call: scanning, geometry, and export are separate entry points.
+
+#### Measured Plane Calibration
+
+`IfcAPI.calibrateAppearancePlane(requestJson)` returns UTF-8 JSON containing a
+world-space planar mapping, four raster corners (top-left clockwise), and metres
+per native source unit. The request is capped at 8 KiB. This fixed-size
+calculation does not load IFC geometry, decode an image or apply an edit.
+
+Supply `rasterToSource` (the six-element pixel-edge-to-native-source affine),
+`rasterSize`, two native `sourcePoints`, their measured `distanceMetres`, and a
+`worldAnchor`, `worldDirection` and `planeNormal` in IFC Z-up metres. For PDF
+pages, use the raster recipe's `pixelToPdf` affine; paper dimensions and DPI do
+not establish drawing scale. Keep the native landmarks when recropping or
+rotating the raster. The returned mapping uses IFC's bottom-left UV origin.
+
+Zero spans, invalid directions, sheared rasters, oversized images and
+unrepresentable coordinates return errors. Each reconstructed edge and anchor
+displacement must preserve its intended vector within one part per million,
+independently of the absolute world origin. Calibrating a plane does not provide
+bounded image compositing: preserving prior appearance outside a PDF page
+requires the separate projection/bake stage.
+
+#### Appearance Planning
+
+`IfcAPI.planAppearance(content, requestJson)` accepts an effective IFC STEP
+snapshot as `Uint8Array` and an `AppearanceRequest` JSON string. It returns
+UTF-8 `AppearancePlan` JSON bytes and never mutates the source. Run this
+synchronous operation in a dedicated worker; terminate that worker to cancel.
+Free the `IfcAPI` handle in `finally` when the job ends.
+
+The browser client rejects source snapshots above 128 MiB before copying them to
+the worker. The binding limits request JSON to 256 KiB and serialized results to
+64 MiB; the Rust planner separately bounds aggregate geometry and texture work.
+Budget errors require a smaller source or scope and do not return a partial edit.
+
+The request supplies `schema` (`IFC4` or `IFC4X3`), `sourceRevision`, the reserved
+`nextExpressId` allocator watermark, `productIds`, a safe relative `imageUri`,
+`repeatS`, `repeatT`, and `mapping`. Mapping accepts `existingUv` with scale,
+offset and rotation in radians; `planar` with an item/world frame, orthonormal
+axes, origin and tile dimensions in metres; or `box` with an item/world frame,
+origin and three tile dimensions in metres. Exact shapes are defined in
+`rust/processing/src/appearance/types.rs`.
+
+Only direct, unshared `IfcTriangulatedFaceSet` Body representations are initially
+eligible. The result reports exclusions per product; hosts must obtain explicit
+acceptance of a reduced scope. Plans contain created IFC entities, positional
+attribute edits and canonical source/target triangle indices with preview UVs
+in triangle-corner order. Consumers must validate geometry provenance; matching
+vertex counts alone cannot establish UV correspondence.
+
+Before committing, the host must revalidate the source revision and allocator,
+retain the referenced image bytes, and prepare all renderer and IFC changes.
+Apply the complete plan atomically with one undo entry. Package the image at its
+relative URI when exporting IFCZIP. Planning does not provide asset persistence,
+GPU preview, history or collaboration by itself.
+
+#### Entity Scanning
+
+SIMD-accelerated scanners that return entity references for the data-model layer to decode.
+
+```typescript
+scanEntitiesFast(content: string): any;         // all entities, from a decoded string
+scanEntitiesFastBytes(data: Uint8Array): any;   // all entities, straight from bytes (no TextDecoder)
+scanGeometryEntitiesFast(content: string): any; // only entities that carry geometry
+```
+
+**Example:**
+```typescript
+const api = new IfcAPI();
+const text = await fetch('model.ifc').then(r => r.text());
+const entities = api.scanEntitiesFast(text);
+```
+
+#### Geometry Pipeline
+
+Geometry is produced in two phases: a pre-pass over the file, then one or more batched mesh-production calls.
+
+```typescript
+buildPrePassOnce(data: Uint8Array): any;
+buildPrePassStreaming(
+  data: Uint8Array,
+  onEvent: (event: unknown) => void,
+  chunkSize: number,
+  disabledTypeNames: string[] | null,
+  skipTypeGeometry: boolean,
+): any;
+
+// jobsFlat is [id, start, end] triples from the pre-pass; the trailing args
+// carry unit scale, RTC offset, void keys, and styles (see the .d.ts).
+processGeometryBatch(
+  data: Uint8Array,
+  jobsFlat: Uint32Array,
+  unitScale: number,
+  /* rtcX, rtcY, rtcZ, needsShift, void + style + material args */
+): MeshCollection;
+```
+
+`processGeometryBatchInstanced` (returns an IFNS instancing shard as a `Uint8Array`) and `processGeometryBatchPartitioned` (returns a `PartitionedBatch`) are variants of the same call. Each returned `MeshCollection` exposes `length`, `get(i)` / `takeMesh(i)`, and RTC offsets (see Data Types).
+
+To avoid re-copying the file bytes on every batch, call `setSourceBytes(data)` once and then use the `FromSource` twins, which read the held bytes and are byte-for-byte identical to the legacy calls:
+
+```typescript
+setSourceBytes(data: Uint8Array): void;
+processGeometryBatchFromSource(jobsFlat, unitScale, /* same trailing args */): MeshCollection;
+processGeometryBatchPartitionedFromSource(jobsFlat, unitScale, /* ... */): PartitionedBatch;
+```
+
+The sharded pre-pass can reuse the same installed source before geometry batches:
+
+```typescript
+scanEntityIndexShardFromSource(start: number, end: number): any;
+resolveStyledItemsShardFromSource(spans: Uint32Array): any;
+finalizePrepassStylesFromSource(
+  orphanIds: Uint32Array, orphanColors: Float32Array,
+  geomIds: Uint32Array, geomColors: Float32Array,
+  colourMapSpans: Uint32Array, materialDefSpans: Uint32Array,
+  relMaterialSpans: Uint32Array, voidSpans: Uint32Array,
+  fillsSpans: Uint32Array, aggregateSpans: Uint32Array,
+  planeAngleToRadians: number,
+): any;
+```
+
+Call `setSourceBytes` before these methods and `setEntityIndex` before resolving
+or finalizing styles. They use the same scanner and style processing as the
+byte-taking methods, with identical arguments after omitting the source bytes.
+`clearPrePassCache()` releases the installed source and index; use it on completion,
+cancellation, or failure. Install the new source and index before reusing an API
+instance for another model. JavaScript input arrays remain usable after
+`setEntityIndex`; its binding adopts its own WASM allocations, while the Rust
+`set_entity_index` method continues to accept borrowed slices.
+
+#### Export
+
+Each exporter takes the raw IFC bytes (or already-produced meshes) and returns a `Uint8Array`.
+
+```typescript
+exportGlb(content, includeMetadata, hidden, isolated, hiddenTypesCsv, lit?): Uint8Array;
+exportGlbFromMeshes(/* flattened MeshData buffers */): Uint8Array;
+exportObj(content, includeNormals, hidden, isolated): Uint8Array;
+exportKmzFromMeshes(
+  positions, normals, indices, vertexCounts, indexCounts, colors, origins,
+  latitude, longitude, altitude, xAxisAbscissa?, xAxisOrdinate?, name?, altitudeMode?
+): Uint8Array;
+exportCsv(content, mode, delimiter, includeProperties): Uint8Array;
+exportJson(content, pretty, includeProperties, includeQuantities): Uint8Array;
+exportJsonld(content, context, includeProperties, includeQuantities, pretty, included?): Uint8Array;
+exportIfcx(content, onlyKnownProperties, pretty): Uint8Array;
+exportStep(content, schema, included, mutationsJson): Uint8Array;  // `included` accepts undefined
+exportMerged(concatenated, lengths, schema): Uint8Array;
+exportHbjson(content, name): Uint8Array;
+```
+
+**Example:**
+```typescript
+const obj = api.exportObj(ifcContent, true, new Uint32Array(), new Uint32Array());
+const hbjson = api.exportHbjson(ifcContent, 'my_model');
+```
+
+`exportGlb` fails closed: when the visible mesh set is empty it throws an `Error` whose message starts with `NO_RENDER_GEOMETRY` rather than returning an empty GLB.
+
+The `isolated` / `included` isolation filters on `exportObj`, `exportGlb`,
+`exportJsonld` and `exportStep` all carry the same null-vs-empty distinction:
+`undefined` means "no isolation filter" (the whole model), while an empty
+`Uint32Array` means "isolation is active and currently matches nothing" and
+exports nothing — no meshes, an empty `@graph`, a header-only STEP file.
+Collapsing the two exports the whole model to a caller who asked for a subset.
+
+`exportStep` also fails closed on `mutationsJson`: an empty string means "no mutations" and exports cleanly, but a non-empty string that fails to parse throws (message prefixed `exportStep:`) instead of silently exporting the model with none of the caller's edits applied.
+
+`mutationsJson` is either the mutation log `MutablePropertyView.exportMutations()` returns (an object with a `mutations` array, optionally `newEntities` and `georefMutations`) or the older pre-serialized `{ attributeUpdates, propertyMutations }` shape. A log is written by the Rust mutation-log writer, byte-identical to the TypeScript `StepExporter` for the same edits apart from generated GlobalIds (#5941); it throws when the log carries a mutation kind the writer does not apply yet, a `type` it does not recognise (the TypeScript replay skips one with a warning), or an `UPDATE_ATTRIBUTE` with a `null` `newValue` (clear with `''`), when it is combined with `included`, or when it also carries the older shape's keys.
+
+#### Other Parsing
+
+```typescript
+extractProfiles(content: string, modelIndex: number): ProfileCollection;
+parseGridLines(content: string): Float32Array;                        // flat line-list vertices
+parseGridAxes(content: string): GridAxisCollection;                   // axes with tags
+parseAlignmentLines(content: string): Float32Array;
+parseSymbolicRepresentations(content: string): SymbolicRepresentationCollection;
+diagnoseGeometry(content: Uint8Array): any;                           // CSG / opening diagnostics
+```
+
+Grid, alignment, and symbolic parsing can instead reuse the exact effective
+mesh-producer RTC frame (after any federation override):
+
+```typescript
+interface RtcFrame {
+  x: number;
+  y: number;
+  z: number;
+  needsShift: boolean;
+}
+
+parseGridLinesInFrame(content: string, frame: RtcFrame): Float32Array;
+parseGridAxesInFrame(content: string, frame: RtcFrame): GridAxisCollection;
+parseAlignmentLinesInFrame(content: string, frame: RtcFrame): Float32Array;
+parseSymbolicRepresentationsInFrame(
+  content: string,
+  frame: RtcFrame,
+): SymbolicRepresentationCollection;
+```
+
+The frame coordinates must be finite IFC Z-up metres and `needsShift` must be
+a boolean. `false` subtracts nothing, even when the inactive coordinates are
+nonzero; `true` subtracts the supplied coordinates, including an authoritative
+zero frame. These raw `*InFrame` methods reject a missing or malformed frame.
+Use the legacy methods above for standalone whole-source detection (or omit the
+optional frame on a higher-level TypeScript wrapper). Standalone detection can
+differ from an earlier streaming sample or federation-wide shared frame.
+
+The frame controls RTC subtraction only. Unit scaling and each method's output
+axis convention are unchanged. Reusing it guarantees agreement with the mesh
+RTC frame; it does not apply an arbitrary rebaked affine or CRS transform.
+Typed-array results need no cleanup. Free collection and child handles at the
+first ownership boundary:
+
+```typescript
+const gridLines = api.parseGridLinesInFrame(content, frame);
+const alignmentLines = api.parseAlignmentLinesInFrame(content, frame);
+const axes = api.parseGridAxesInFrame(content, frame);
+try {
+  const firstAxis = axes.getAxis(0);
+  try {
+    console.log(gridLines.length, alignmentLines.length, firstAxis?.tag);
+  } finally {
+    firstAxis?.free();
+  }
+
+  const symbols = api.parseSymbolicRepresentationsInFrame(content, frame);
+  try {
+    console.log(symbols.totalCount);
+  } finally {
+    symbols.free();
+  }
+} finally {
+  axes.free();
+}
+```
+
+#### Diagnostics and Tuning
+
+```typescript
+getPipelineDiagnostics(): any;
+getMemory(): any;
+
+setEntityIndex(ids: Uint32Array, starts: Uint32Array, lengths: Uint32Array): void;
+setMergeLayers(enabled: boolean): void;
+setSkipSmallCuts(on: boolean): void;
+setRectParamFastPath(enabled: boolean): void;
+setTessellationQuality(level?: string | null): void;
+setComputeGeometryHashes(tolerance?: number | null): void;
+setReferencedRepmaps(ids: Uint32Array): void;
+setMappedInstancePlan(sourceIds: Uint32Array): void;
+setInstantiatedTypeIds(ids: Uint32Array): void;
+setMaterialLayerIndex(/* per-element layer buildup columns, see the .d.ts */): void;
+clearPrePassCache(): void;
+```
+
+#### Getters
+
+```typescript
+readonly version: string;   // build version string
+readonly is_ready: boolean; // true once the API is initialized
+```
+
+### Other Exported Classes
+
+Beyond `IfcAPI` and the mesh types below, the module exports `ClashSession` / `ClashRunResult` (native clash detection over ingested mesh buffers), `GridAxisCollection` / `GridAxisJs` (parsed grid axes), `ProfileCollection` / `ProfileEntryJs`, `PartitionedBatch`, `MeshOutlineJs`, `SpacePlateHandle` (interactive room-layout topology), `Contours2D` and `ScanOutlineJs` (see below), and the `Symbolic*` classes (`SymbolicRepresentationCollection`, `SymbolicPolyline`, `SymbolicCircle`, `SymbolicText`, `SymbolicFillArea`). See `packages/wasm/pkg/ifc-lite.d.ts` for their full definitions.
+
+`SymbolicFillArea.geometryItemId` optionally identifies an unambiguous direct
+fill item in a single flat representation. Match it together with the owning
+`expressId` and model identity when avoiding duplicate 3D mesh/symbolic rendering.
+Nested, mapped, repeated or otherwise unqualified item occurrences leave it
+undefined. The symbolic primitive remains available for 2D drawing generation.
+
+### 2D Boolean Operations (contour sets)
+
+General union / difference / intersection over 2D contour sets, backed by the same `i_overlay` engine the void/CSG paths use. This is the general form of `meshOutline2d`: where that unions one mesh's projected triangles into a silhouette, these combine two silhouettes. Use them for analytic hidden-surface removal (subtract an accumulated occluder from each element's outline), screen tiling, or any downstream 2D CSG.
+
+```typescript
+class Contours2D {
+  // Build from flat [x0,y0,x1,y1,…] coords + per-ring VERTEX counts.
+  // Throws if the counts don't sum to coords.length / 2. Degenerate rings
+  // (< 3 vertices, non-finite, or exactly collinear) are dropped at construction.
+  constructor(coords: Float64Array, ringLengths: Uint32Array);
+
+  // Adopt a meshOutline2d result directly (widens its f32 coords to f64).
+  static fromMeshOutline(outline: MeshOutlineJs): Contours2D;
+
+  readonly ringCount: number;   // total boundary rings across all shapes
+  readonly shapeCount: number;  // disjoint shapes; 0 for a raw, unresolved set
+  readonly isEmpty: boolean;
+
+  shapeOffsets(): Uint32Array;  // ring index where each shape's OUTER ring starts
+  ring(index: number): Float64Array | undefined;  // one ring, flat [x,y,…]
+  coords(): Float64Array;       // every ring concatenated (one boundary crossing)
+  ringLengths(): Uint32Array;   // vertex count per ring, matching coords()
+  bounds(): Float64Array | undefined;  // [minX, minY, maxX, maxY]
+  free(): void;
+}
+
+function union2d(a: Contours2D, b: Contours2D): Contours2D;         // a ∪ b
+function difference2d(a: Contours2D, b: Contours2D): Contours2D;    // a − b
+function intersection2d(a: Contours2D, b: Contours2D): Contours2D;  // a ∩ b
+function resolve2d(a: Contours2D): Contours2D;  // self-union a ring soup into shapes
+```
+
+**Winding is the contract.** The fill rule is always `nonzero`, and input winding is respected — matching `meshOutline2d` output and SVG `fill-rule="nonzero"`, so holes survive a round trip. Because it is NonZero, winding is relative to the rings around a point, not absolute: a counter-clockwise ring covers area, and a clockwise ring subtracts only where it overlaps positive winding — so a CW ring nested inside a CCW ring is a hole, but a *lone* CW ring still fills (it has non-zero winding). Raw contours that all mean "covered" (e.g. projected triangles) must be wound CCW before use.
+
+**Results keep every disjoint shape.** `difference2d` that splits its subject returns one shape per island (grouped via `shapeOffsets()`) — a wall seen past a column is two visible slivers, not one. The `b` contour set may itself hold any number of clip rings; they subtract as their union, so there is no separate "difference against many" overload — collect the clips into one `Contours2D` and pass it as `b`.
+
+**Manual freeing.** Every returned `Contours2D` owns wasm memory and the operations return **new** handles without mutating their operands. An accumulating loop must `free()` the handle it replaces:
+
+```typescript
+import { Contours2D, difference2d, union2d } from '@ifc-lite/wasm';
+
+let occluders = new Contours2D(new Float64Array(), new Uint32Array()); // empty
+for (const outline of frontToBackOutlines) {
+  const visible = difference2d(outline, occluders); // may split into islands
+  const grown = union2d(occluders, outline);
+  occluders.free();          // free the handle we're replacing
+  occluders = grown;
+  emitSvgPath(visible);      // fill-rule="nonzero"
+  visible.free();
+  outline.free();
+}
+occluders.free();
+```
+
+`bounds()` is cheap enough to gate the boolean itself: skip the difference when an accumulated occluder's bounds miss the next element.
+
+### Scan section outlines
+
+`traceScanOutline` turns a slab of scan points, already projected into a section plane, into closed vector rings: the boundary of what the scan shows as solid at the cut (walls, columns, furniture). It is the vector counterpart of the scan section layer's dots, meant for drawings and DXF.
+
+```typescript
+function traceScanOutline(
+  planeXY: Float32Array,                 // [u0, v0, u1, v1, …] slab points in plane coordinates (metres)
+  options?: ScanOutlineOptionsJs,        // every field optional; unknown fields throw
+  planeFrame?: ScanOutlinePlaneFrameJs,  // { origin, uAxis, vAxis }: world = origin + u·uAxis + v·vAxis
+): ScanOutlineJs;
+
+class ScanOutlineJs {
+  readonly ringCount: number;
+  readonly shapeCount: number;
+  coords(): Float64Array;              // every ring's [u, v] concatenated, no closing duplicate
+  ringLengths(): Uint32Array;          // vertices per ring
+  shapeOffsets(): Uint32Array;         // first ring of each shape: its outer ring, then its holes
+  ringParents(): Int32Array;           // direct container of each ring, -1 at top level
+  worldCoords(): Float64Array | undefined; // [x, y, z, …] through planeFrame, when given
+  diagnostics(): ScanOutlineDiagnosticsJs; // cellSize, cellCapHit, ringCount, squaredEdges, …
+  free(): void;
+}
+```
+
+The pipeline: a count grid (cell size adaptive to the point density between `minCellSize` and `maxCellSize`, under a `maxCells` budget that reports `cellCapHit` when it forces coarser cells) thresholded against the median occupied-cell count; a closing that bridges gaps up to `maxGap` (about a wall thickness, clamped to 0.5 m) and an opening by reconstruction that drops speckle; small components dropped and small holes filled; a cell-edge contour trace; Douglas-Peucker simplification; snapping each edge to a least-squares fit of the points along it; and squaring edges within `squareAngleToleranceDeg` of the dominant building direction.
+
+**Guarantees.** Outer rings wind counter-clockwise and holes clockwise, in plane coordinates. No ring touches or crosses itself or another, and every ring stays inside the ring `ringParents()` names. Any simplification, snap or squaring move that would break that is undone, and `diagnostics().revertedMoves` counts those undo steps. Gaps narrower than `maxGap` are closed, which is what turns the two faces of a wall into one solid band. Wider gaps, such as door openings, stay open.
+
+**Inputs.** Points are `f32`, so pass plane coordinates local to the slab (for example, the viewer's render frame), not map coordinates. `diagnostics().coordinatePrecisionDegraded` is set when the f32 step at the largest coordinate exceeds a tenth of a cell. Options that size work are bounded: `maxCells` from the padded-grid floor (81 with the defaults), `minCellSize` ≥ 1 mm, `snapDistanceCells` ≤ 16, `maxVertexMoveCells` ≤ 32. `undefined` fields mean the default. Unknown fields and non-finite numbers throw.
+
+**Cost.** Linear in the points and the grid cells. In Node, a synthetic 2 M point slab at the default 2 cm cells traces in about 0.2 s through the wasm build; natively it takes about 0.3 s. In the browser, a 914 k point band from a 9.3 M point scan took about 0.18 s to trace, after about 0.13 s to collect the band. That is too long for the main thread, so the viewer runs both in a worker (`workers/scanOutline.worker.ts`). Do the same for large slabs.
+
+## Data Types
+
+### MeshCollection
+
+Returned by `processGeometryBatch`. Holds the batch's meshes plus RTC and totals.
+
+```typescript
+class MeshCollection {
+  readonly length: number;
+  get(index: number): MeshDataJs | undefined;      // clones (non-destructive)
+  takeMesh(index: number): MeshDataJs | undefined; // moves out (read-once, faster)
+  hasRtcOffset(): boolean;
+  readonly rtcOffsetX: number;
+  readonly rtcOffsetY: number;
+  readonly rtcOffsetZ: number;
+  readonly totalVertices: number;
+  readonly totalTriangles: number;
+  readonly buildingRotation: number | undefined;
+  readonly diagnostics: any;
+  // Geometry-diff hashes, populated when setComputeGeometryHashes() is on
+  readonly geometryHashIds: Uint32Array;
+  readonly geometryHashValues: BigUint64Array;
+  readonly geometryHashCount: number;
+  readonly geometryAabbValues: Float64Array;  // 6 per id, see below
+  readonly geometryVolumeValues: Float64Array; // 1 per id, NaN = not provable
+  readonly geometryClosureFlags: Uint8Array;   // 1 per id, packed verdict
+}
+```
+
+#### geometryAabbValues
+
+Per-entity world bounding boxes from the same pass as the hashes, gated by the
+same `setComputeGeometryHashes()` switch — empty when geometry hashing is off.
+
+Six `f64` per entry, `[minX, minY, minZ, maxX, maxY, maxZ]`, in
+`geometryHashIds` order: entry `i` occupies `[6*i, 6*i+6)`, so
+`geometryAabbValues.length === 6 * geometryHashCount` always. An entity that
+produced a hash but no box reserves its six slots as `NaN` rather than
+shortening the array, which would mis-attribute every later entry.
+
+The box is in the **WebGL Y-up frame**, like `positions`, `origin` and
+`localBounds` — not the IFC Z-up frame the hasher accumulates in. It holds
+absolute world coordinates while `positions` are RTC-relative, so fold the
+collection's RTC offset in (itself Y-up-swapped) before comparing the two:
+
+```js
+const world = [
+  origin[0] + positions[3 * v + 0] + collection.rtcOffsetX,
+  origin[1] + positions[3 * v + 1] + collection.rtcOffsetZ,
+  origin[2] + positions[3 * v + 2] - collection.rtcOffsetY,
+];
+```
+
+Why it exists: a changed geometry hash conflates *moved*, *reshaped* and
+*re-tessellated* into one bit. The box separates them — same extent at a new
+centre is a move, a different extent is a reshape, an identical box with a
+different hash is retriangulation.
+
+`@ifc-lite/geometry` reads this for you: the box lands on `MeshData.geometryAabb`
+(and, for entities whose whole geometry went to the GPU-instanced shard, on
+`GeometryResult.instancedGeometryAabbs`). The `NaN` sentinel is resolved to
+`undefined` at that boundary, so a `geometryAabb` you hold is always a real box.
+
+#### geometryVolumeValues and geometryClosureFlags
+
+Two companions from the same pass, gated by the same
+`setComputeGeometryHashes()` switch and following the same index-parallel rule:
+one value per entry in `geometryHashIds` order.
+
+`geometryVolumeValues` is the enclosed volume in **cubic metres**, and `NaN`
+means no trustworthy volume — the same absent convention as the box. It is
+`NaN` for roughly a third of entities BY DESIGN. A divergence-theorem volume
+needs a closed, consistently wound surface, so a value is emitted only when the
+entity produced exactly one segment and that segment was exactly one closed,
+orientable component. An open `SurfaceModel`, a material-layered wall (whose
+slices are open bands by construction) and any element assembled from more than
+one representation item all report nothing rather than a plausible wrong number
+— summing overlapping items produced a volume larger than the element's own
+bounding box on 987 measured elements.
+
+`geometryClosureFlags` says WHICH clause failed, so a refusal is actionable:
+bit 0 (`1`) all segments closed, bit 1 (`2`) all orientable, bit 2 (`4`) all a
+single connected component, bit 3 (`8`) exactly one segment. `0x0F` is exactly
+the set that carries a volume. "This wall is an open shell" (bit 0 clear) and
+"this door is a multi-item assembly" (bit 3 clear) are different findings with
+different fixes.
+
+A clear bit means **not proved**, not proved-false. Almost always the two
+coincide, but bits 0-2 are also *retracted* when the mesh was edited after the
+verdict was taken: the f32-collapse degenerate-triangle backstop runs at the end
+of mesh production, and a dropped triangle turns each of its three edges' other
+side into a boundary edge, so an element that dropped anything can no longer be
+certified closed and ships no volume.
+
+Closedness is a property of the surface, not evidence it is the RIGHT surface:
+when the CSG budget trips, the uncut host is still a flawless closed solid that
+merely still contains its openings, so a consumer that cares must also read
+`diagnostics.totalCsgFailures`.
+
+`@ifc-lite/geometry` reads the volume for you, exactly as it reads the box: it
+lands on `MeshData.geometryVolume` (and, for a fully GPU-instanced entity, on
+`GeometryResult.instancedGeometryVolumes`), with the `NaN` resolved to
+`undefined` at that boundary. Nothing downstream ever holds a NaN-bearing
+number, and a `geometryVolume` you hold is one the mesher proved. The closure
+flags are **not** plumbed to JS: their audience is a model checker asking why a
+volume is missing, and re-deriving the answer from a byte on every batch would
+cost every load for a diagnosis nothing on that side consumes.
+
+### MeshDataJs
+
+A single triangulated mesh. All typed arrays are copied to JS on access.
+
+```typescript
+class MeshDataJs {
+  readonly expressId: number;
+  readonly ifcType: string;           // e.g. "IfcWall"
+  readonly positions: Float32Array;   // xyz triplets
+  readonly normals: Float32Array;     // xyz triplets
+  readonly indices: Uint32Array;      // triangle indices
+  readonly uvs: Float32Array;         // uv pairs (empty when untextured)
+  readonly color: Float32Array;       // [r, g, b, a]
+  readonly origin: Float64Array;      // per-element local-frame origin (metres)
+  readonly vertexCount: number;
+  readonly triangleCount: number;
+  readonly geometryClass: number;     // 0 = occurrence, 1 = orphan type, 2 = instanced type
+
+  // Optional capture of the local frame (undefined when not captured)
+  readonly localBounds: Float32Array | undefined;   // object-space AABB [minX..maxZ]
+  readonly localToWorld: Float64Array | undefined;  // resolved placement, row-major 4x4
+
+  // Surface textures (empty / false when untextured)
+  readonly hasTexture: boolean;
+  readonly textureRgba: Uint8Array;   // decoded RGBA8 bytes (width*height*4)
+  readonly textureWidth: number;
+  readonly textureHeight: number;
+  readonly textureRepeatS: boolean;
+  readonly textureRepeatT: boolean;
+  readonly shadingColor: Float32Array | undefined;  // authored SurfaceColour, when distinct
+}
+```
+
+### Pre-pass Streaming Events
+
+`buildPrePassStreaming` invokes its callback with one of:
+
+```typescript
+type PrePassEvent =
+  | { type: 'meta'; unitScale: number; rtcOffset: [number, number, number]; needsShift: boolean; buildingRotation?: number }
+  | { type: 'jobs'; jobs: Uint32Array }   // [id, start, end] triples
+  | { type: 'complete'; totalJobs: number }
+  // Auxiliary events — carry data the pre-pass already computed so callers can
+  // skip a second file scan. Consumers that only need geometry jobs can ignore
+  // them. Each shape below lists its principal fields; the styles / columns
+  // events also carry additional material-plumbing arrays (see
+  // `geometry-parallel.ts`).
+  | { type: 'entity-index'; ids: Uint32Array; starts: Uint32Array; lengths: Uint32Array }
+  | { type: 'styles'; styleIds: Uint32Array; styleColors: Uint8Array; voidKeys: Uint32Array; voidCounts: Uint32Array; voidValues: Uint32Array }
+  | { type: 'prepass-columns'; referencedRepmaps: Uint32Array; instantiatedTypeIds: Uint32Array; mliElementIds: Uint32Array };
+```
+
+The auxiliary events (`entity-index`, `styles`, `prepass-columns`) carry the scanned entity index, style colours, and pre-pass column data. Type the callback against the full union above so exhaustive handling does not silently miss them.
+
+## Error Handling
+
+WASM functions surface failures as standard JavaScript `Error` objects (a Rust `Result::Err` is mapped across the boundary). Wrap calls that can fail:
+
+```typescript
+try {
+  const glb = api.exportGlb(content, true, new Uint32Array(), new Uint32Array(), '');
+} catch (error) {
+  if (error instanceof Error) {
+    console.error('Export error:', error.message);
+  }
+}
+```
+
+### Sentinel Messages
+
+Some boundaries fail closed with a sentinel-prefixed message so callers can distinguish an expected empty result from a real failure. For example, `exportGlb` throws an `Error` whose message starts with `NO_RENDER_GEOMETRY` when the visible mesh set is empty, instead of returning a structurally valid but empty GLB.
+
+## Performance Tips
+
+### 1. Stream the Pre-pass for Large Files
+
+```typescript
+// Good: stream jobs as the file is scanned (time-to-first-geometry drops sharply)
+api.buildPrePassStreaming(bytes, onEvent, 512, null, false);
+
+// Avoid on very large files: a single blocking pre-pass over the whole file
+api.buildPrePassOnce(bytes);
+```
+
+### 2. Read Each Mesh Once
+
+```typescript
+// Good: takeMesh moves the mesh out (one fewer vertex-data copy per mesh)
+const meshes = api.processGeometryBatch(bytes, jobsFlat, unitScale /* ... */);
+for (let i = 0; i < meshes.length; i++) {
+  const mesh = meshes.takeMesh(i);
+  if (mesh) uploadMesh(mesh);
+}
+```
+
+### 3. Release Memory
+
+```typescript
+// Clean up when done
+api.free();
+```
+
+## Browser Compatibility
+
+| Feature | Chrome | Firefox | Safari | Edge |
+|---------|--------|---------|--------|------|
+| WebAssembly | 57+ | 52+ | 11+ | 16+ |
+| WASM SIMD | 91+ | 89+ | 16.4+ | 91+ |
+| Streaming | 61+ | 58+ | 15+ | 16+ |
+| Threads | 74+ | 79+ | 14.1+ | 79+ |
+
+## Module Size
+
+The built artifacts land in `packages/wasm/pkg/` (`ifc-lite_bg.wasm` binary plus `ifc-lite.js` glue). `scripts/build-wasm.sh` targets a 1100 KB budget for the single-thread bundle and warns when the binary exceeds it (`wasm-opt` is disabled in the crate's wasm-pack profile). The threaded bundle is built separately and carries no budget. Sizes vary by build profile and target.
+
+## Building from Source
+
+Use `scripts/build-wasm.sh` — it's the build CI and Vercel run, and the one
+this repo wants people running. It sets `CARGO_UNSTABLE_BUILD_STD` (needed for
+the single-thread and threaded bundles) and the wasm-target `rustflags`
+before invoking `wasm-pack`; running `wasm-pack build` directly, without that
+env var, silently produces a different (larger, `build-std`-less) bundle than
+the one CI ships.
+
+```bash
+# Install wasm-pack
+cargo install wasm-pack
+
+# Build WASM module
+bash scripts/build-wasm.sh
+
+# Output files
+# packages/wasm/pkg/ifc-lite.js
+# packages/wasm/pkg/ifc-lite_bg.wasm
+# packages/wasm/pkg/ifc-lite.d.ts
+```
+
+### Build Targets
+
+| Target | Output | Use Case |
+|--------|--------|----------|
+| `web` | ES modules | Modern browsers |
+| `bundler` | CommonJS | Webpack/Rollup |
+| `nodejs` | Node.js | Server-side |
+| `no-modules` | Global | Script tag |
+
+
+### Streaming prepass source fingerprints
+
+`IfcAPI.buildPrePassStreamingWithSourceFingerprint` and
+`IfcAPI.buildPrePassStreamingShardedWithSourceFingerprint` accept the same arguments
+as `buildPrePassStreaming` and `buildPrePassStreamingSharded`, respectively. They
+run the same prepass and add `sourceContentKey` to the final `complete` event. The
+key is the existing full-byte FNV-1a source identity, including comments and any
+unparsed tail. Existing methods and their Rust signatures remain unchanged and do
+not compute this extra key. Feature-detect the new methods when supporting older
+WASM builds. The viewer uses these methods only when a matching parser has a fresh
+fingerprint cell; no additional file-sized buffer is created.
+
+
+### Effective appearance scope catalog
+
+`IfcAPI.catalogAppearance(content, requestJson)` accepts the same effective IFC
+STEP snapshot as planning, plus `{schema, sourceRevision, productIds}`. It returns
+UTF-8 JSON with `sourceRevision`, sorted `products` (`productId`, canonical
+PascalCase `ifcClass`, sorted `typeIds`), sorted `types` (`typeId`, `ifcClass`, exact
+IFC `Name` or null), and sorted `missingProductIds`. Missing/deleted IDs and
+non-`IfcProduct` owners are explicitly ineligible. Duplicate type names retain
+separate identities. Membership comes from effective `IfcRelDefinesByType` rows.
+
+Call from a worker. The host must serialize its current overlay first and validate
+its captured revision/checkpoint before accepting selectors; the source store's
+original relationship tables do not include SDK edits. The existing `planAppearance`
+API is unchanged. The viewer client shares cancellation, supersession, timeout and
+worker disposal across `catalog()` and `plan()` jobs, without retaining a WASM
+context or transferring caller-owned source storage.
+
+Catalog limits are 10,000 requested IDs, a 4,096-byte revision, the planner's shared
+128 MiB source/200,000 entities/eight-million-value parse bounds, 200,000 unique
+owner/type memberships and 4 MiB total type-name bytes. Request JSON is limited to
+256 KiB and output serialization uses the existing 64 MiB ceiling. A refusal throws
+instead of returning a truncated selector catalog.
+
+### Finite page appearance output
+
+`IfcAPI.planPageAppearance(content, requestJson, rgba)` is the worker-oriented
+binding for `plan_page_appearance`. The JSON request is
+`{appearance, page, sourceImages: [{imageUri, raster}], texelsPerMetre}`; raster
+ranges use `{width, height, byteOffset, byteLength}`. It preserves existing
+appearance outside the finite planar page by baking bounded PNG atlases. The
+original image-only `planAppearance` method remains unchanged.
+
+The returned bytes contain the ASCII magic `IFPA`, a little-endian `u32` JSON
+byte length, UTF-8 JSON metadata, then concatenated PNG payloads. Metadata is
+`{plan, itemImages, assets, texelsPerMetre}`. Each asset is
+`{imageUri, width, height, byteOffset, byteLength}` with its range relative to the
+PNG section. `itemImages` maps `geometryItemId` to `imageUri`. The metadata ceiling
+is 64 MiB and the complete envelope ceiling is 160 MiB. No PNG bytes are expanded
+into base64 or JSON number arrays. Hosts should run this synchronously expensive
+operation in a cancellable worker, validate the source/allocator checkpoint,
+and atomically register every digest-named PNG before applying its IFC plan.
+See [finite page appearance](rust.md#finite-page-appearance) for quality limits
+and explicit refusals.
+
+### Calibrated annotation creation
+
+`IfcAPI.planAnnotationPlane(content, requestJson)` returns UTF-8
+`AnnotationPlanePlan` JSON from the native creation planner. Requests use
+`{schema, sourceRevision, nextExpressId, containerId, GlobalId, containmentGlobalId,
+Name, imageUri, frame: {origin, axisU, axisV, sizeMetres}}`. No image bytes or new
+model-load call are needed: retain the already registered image URI and commit
+its asset lease together with the typed creation plan. Run in a cancellable worker
+and revalidate the captured source/allocator immediately before publication.
+
+The viewer's `annotationPlan()` shares cancellation, supersession, timeout,
+worker teardown and stale-result validation with image/page planning and catalog
+requests. Its `mesh` is canonical native Z-up geometry, while UVs already use
+bitmap top-down orientation. See [calibrated annotations](rust.md#calibrated-image-annotations)
+for the exact coordinate/containment contract and bounded refusal conditions.
+
+### Captured textured surface creation
+
+`IfcAPI.planCapturedMesh(source, requestJson)` plans one explicitly segmented
+textured surface as `IfcBuildingElementProxy`. It shares annotation creation's
+canonical placement, container validation, IFC entity planning and ordinary
+geometry producer. It does not decode a scan, reconstruct a surface, or infer a
+semantic class.
+
+The request contains `schema` (`IFC4` or `IFC4X3`), `sourceRevision`,
+`nextExpressId`, `containerId`, `GlobalId`, `containmentGlobalId`, `Name`,
+`imageUri`, and `mesh`. The mesh contains `positions` in IFC world Z-up metres,
+zero-based `triangles`, independent `uvs` in IFC V-up convention, and zero-based
+`uvTriangles`. Independent UV indices retain seams without conflating geometry
+and image vertices. The non-repeating image must cover UVs within `[0, 1]`.
+
+Each of the position, UV and triangle arrays is bounded to 200,000 rows. The
+request and serialized result each have a 64 MiB ceiling. Invalid indices,
+non-finite coordinates, degenerate triangles, stale allocation, duplicate IFC
+identities and unrepresentable canonical coordinates fail before publication.
+The planner retains original image URI ownership; callers must bundle the exact
+image bytes and publish the entity plan, canonical mesh, hierarchy and history
+atomically after checking the revision and allocator again.
+
+The UTF-8 JSON response contains `plan`, `objectId`, `geometryItemId`, `mesh`,
+`coordinateSpace: 'ifc-z-up'`, and `rtcOffset`. As with annotation creation,
+canonical mesh UVs are already top-down for GPU upload; do not flip them again.
+A fresh import can weld vertices differently, so round-trip correspondence is
+measured per triangle corner rather than by assuming an identical vertex layout.
+
+Captured mesh requests accept optional `repeatS` and `repeatT` booleans to retain
+an imported image sampler on the authored `IfcImageTexture` and canonical mesh.
+Both default to `false` when omitted. This does not extend the current supported
+UV range: capture coordinates must still lie within `[0, 1]`.
+
+### Scan correspondence registration
+
+`IfcAPI.registerScanCorrespondences(requestJson)` returns UTF-8 JSON from the
+canonical Rust `register_scan_correspondences` solver. It computes a proper rigid
+rotation and anchored translation from manually identified point pairs; it does
+not load, align or mark a scan as registered, estimate scale, run ICP, or transfer
+appearance. Use the existing model/point-cloud alignment path when applying an
+explicitly accepted result, preserving decode origins and federation transforms.
+
+The request is `{sourceFrame, targetFrame, fit, heldOut}`. Each frame contains a
+lowercase `assetSha256` for the exact source asset/effective IFC snapshot and a
+`frameKey` identifying its coordinate frame and placement revision. Source points
+are orthonormal native-source **metres**; target points are destination IFC world
+**Z-up metres**, before viewer axis conversion or offsets. Convert known units
+before creating the request; the solver never guesses them.
+
+Each point pair has `id`, `sourceObservation`, `targetFeature`, `source: [x,y,z]`
+and `target: [x,y,z]`. Hosts resolve target features through the normal model/entity
+resolver and retain model identity, `GlobalId` and the geometric feature definition.
+Source observations identify original points or reviewed neighborhoods. IDs,
+source observations, target features and exact coordinates must be distinct across
+both sets. Hosts must additionally ensure that differently named neighborhoods do
+not reuse the same underlying observation; the solver cannot infer that from IDs.
+
+The fit accepts 3–256 non-collinear points; held-out accepts 0–256. Planar
+non-collinear point sets are mathematically valid. Each ID/frame key is at most
+256 bytes; coordinates are finite and bounded to ±1e12 m; JSON is bounded to
+512 KiB. Nearly collinear source/target scatter or correspondence covariance is
+rejected at a second/first singular-value ratio below `1e-10`. Decompositions have
+a finite iteration budget. Bounds and ratios are numerical refusal criteria,
+not accepted scan accuracy tolerances.
+
+The report contains both frame identities, `algorithm`, `requestSha256`, a
+row-major `rotation`, `sourceAnchor`, `targetAnchor`, source/target scatter spectra,
+and separate `fit`/`heldOut` residual lists with RMS and maximum in metres.
+Apply the transform as `targetAnchor + rotation * (sourcePoint - sourceAnchor)`.
+Each residual vector is predicted target minus observed target. Empty checks
+produce null summary values, not zero error. No observations are automatically
+removed as outliers. Reflections and scale changes remain visible as mismatch;
+the emitted rotation is proper and has unit scale.
+
+### Scan plane segmentation
+
+`IfcAPI.segmentScanPoints(positions, optionsJson)` returns UTF-8 JSON (planes and
+cylinders) from the
+canonical Rust `ifc_lite_processing::scan_segmentation` (#6870). `positions` are
+xyz `Float32Array` metres (at most 100,000,000 points); `optionsJson` is a
+camelCase options object, `{}` for the defaults. Unknown fields are refused. The
+call loads nothing and changes nothing. The typed wrapper is
+`segmentScan` in `@ifc-lite/geometry/scan-segmentation`.
+
+The pipeline averages points into voxels (default 0.03 m) with integer
+fixed-point sums, so the report is byte-identical for any point order or
+chunking. When the voxel count exceeds `maxVoxels` (default 1,500,000), the
+voxel edge doubles and the existing voxels fold exactly into the coarser
+lattice; `limits.voxelBudgetCoarsened` reports this. Memory is roughly 180 bytes per
+voxel; the 8,000,000 maximum peaks near 1.4 GB, so browser callers should stay
+near the default. Positions far from their frame origin lose f32 precision:
+when the f32 spacing at the largest coordinate exceeds a tenth of the voxel
+edge, `limits.coordinatePrecisionDegraded` is set (`stats.coordinateSpacingMetres`
+carries the spacing). Subtract a local origin before narrowing to f32 and pass
+it as `origin`.
+
+A PCA over the 26 neighbouring voxel means gives each voxel a normal and a curvature. Regions
+grow from the flattest voxels (curvature at most `maxSeedCurvature`, 0.02, or
+at most the curvature of the flattest 5 % of voxels when that is larger;
+`stats.seedCurvature` reports the gate used) while a voxel's normal stays within `maxNormalAngleDegrees` (10) of the
+refitted plane and its mean within `maxPlaneDistanceMetres` (0.02). Each
+region then gets a median/MAD refit. Coplanar regions within two voxels of
+each other merge, so a one-voxel scan gap does not split a wall.
+Regions whose normals turn faster than `maxBendPerMetre` (1, i.e. a radius of
+curvature under 1 m: column faces) are refused. So are regions smaller than
+`minPlaneAreaSquareMetres` (0.25). A wider round column grows as vertical
+strips of planes (each turning less than the angle tolerance); see wide and
+polygonal columns below.
+
+The seed floor matters on fine, noisy voxels. Noise lifts the curvature of
+even a flat surface in proportion to (noise / voxel edge)^2, because the 26
+neighbours cannot tell a slab of noisy means from a bend: at 8 mm noise on
+2 cm voxels under 2 % of a room's voxels passed 0.02, and nothing grew. With
+the floor, columns at a 2 cm voxel and 8 mm noise are found at 9,000 points
+per m^2 (3.6 points per voxel, as the 3 cm rows have at 4,000). At 4,000
+points per m^2 (1.6 per voxel) each voxel mean is little more than one noisy
+point, and the normals themselves are the floor: pass
+`normalNeighborRings: 2`, or a coarser voxel.
+
+Each plane reports `normal` and `d` (`normal . x + d = 0`), `centroid`,
+`inlierPoints`, `inlierVoxels`, `areaSquareMetres` (occupied voxel columns),
+`rmsMetres`, an in-plane `extent` box (up-aligned for vertical and sloped
+planes, minimum-area for horizontal ones) and `orientation`
+(`horizontal`/`vertical`/`sloped` relative to `upAxis`, default +Z; the
+viewer's Y-up scan sample passes `[0, 1, 0]`). With `scannerPosition` every
+normal faces the scanner (`normalSource: 'scanner'`). Without it the
+orientation is `canonical`: horizontal planes face up. `region` crops to a box,
+and `origin` is added to every output coordinate. `stats` counts points,
+voxels and the regions grown, merged and refused.
+
+Cylinders (columns, pipes) are sought among the voxels clear of every plane
+(neither in a plane nor next to one), when `detectCylinders` is true (the
+default). Keeping plane-adjacent voxels out stops the rounded crease along a
+wall/floor junction from passing for a thin pipe, or from chaining a column
+near a wall into one room-sized group. The remaining voxels form groups
+connected across neighbours whose normals turn by at most 35°. For each group,
+largest first and at most `maxCylinderGroups` (1,024), a seeded RANSAC runs
+`cylinderDraws` (256) draws. Each draw takes two voxels whose normals are at
+least 30° from parallel: the axis is `n1 × n2`, and the axis line and radius
+come from the closest approach of the two normal lines. Draws are scored on
+`cylinderScoreSample` (2,048) voxels.
+
+The best candidate is refitted by least squares: the axis is the direction all
+inlier normals are perpendicular to, and the circle across it is fitted
+algebraically, then by Gauss-Newton. It is kept only when the refit fits at
+least `minCylinderInlierFraction` (0.6) of the group, and it is refused when:
+- a sphere fits its inliers as well;
+- they cover less than `minCylinderArcDegrees` (90);
+- they are shorter than `minCylinderLengthMetres` (0.3);
+- fewer than half of its axial slices (3 voxels thick) agree with the widest
+  slice's arc (10° bins, three quarters inside it): fragments at different
+  heights, such as clutter in a wall corner. A column occluded low down
+  agrees, because its smaller lower arcs lie inside the arc seen higher up;
+- its inliers cover under 40 % of the patch its length and arc claim (a loose
+  fit through scattered voxels);
+- a scanned plane lies inside it (closer to the axis than radius minus
+  tolerance) over more than half its length: a flat surface cannot lie inside
+  a solid column or pipe, but the walls of an inside corner cut through the
+  circle a rounded crease fits;
+- its normals do not behave as a round surface's: they point more than 11°
+  (RMS over 5° bins) away from the radial direction, or they turn under 0.6
+  radians per radian of position around the axis (compared between angular
+  bins at least 5° and one voxel of arc wide). The ends of each visible arc
+  are left out of the radial test, by one normal neighbourhood plus one bin,
+  because normals estimated from a one-sided neighbourhood lean toward the
+  arc there. Flat facets meeting at an angle, such as a pier or a chamfered
+  corner, fail this; when nothing can be measured the candidate passes;
+- the radius falls outside `minCylinderRadiusMetres`..`maxCylinderRadiusMetres`.
+  The minimum defaults to two voxel edges (0.06 m at the default voxel; below
+  that a circumference cannot carry its curvature), the maximum to 2 m.
+  When that default minimum exceeds the maximum (a small maximum, or a voxel
+  coarsened by the budget), no radius is acceptable and every group counts
+  in `cylindersRejectedForRadius`.
+
+Near-identical cylinders (axes within 5°, axis lines within half the larger
+radius, radii within 25 %, overlapping extents) are one surface found twice,
+and the better supported one is kept. Coaxial pieces whose radii differ by at
+most one voxel and that lie up to 0.3 m (plus two voxels) apart along the axis
+are one column with a band of missing points, and are joined; a narrower
+column on a wider plinth stays two cylinders.
+
+Each cylinder reports `axisStart`, `axisEnd`, `axisDirection` (up, unless
+horizontal), `radius`, `length`, `heightRange` along `upAxis`, `arcDegrees`,
+inlier counts, `rmsMetres`, `orientation` (`vertical` for a column,
+`horizontal` for a pipe or beam, or `sloped`) and `faceted` (below; `null` for
+a round surface). `stats` counts each refusal;
+`limits.cylinderGroupLimitHit` reports a group budget that acted.
+
+#### Wide and polygonal columns
+
+A round column wider than about 0.8 m (at the default voxel) is claimed by
+region growing as vertical strips: each strip turns by less than the angle
+tolerance, and their bend (1 / r) is too small, and on noisy scans too
+attenuated, to tell from a noisy wall (measured 0.04..0.49 per metre on r 1.5
+strips at 8 mm noise, up to 0.65 on small wall planes), so no curvature gate
+on the planes can separate them. A polygonal column is, correctly, one plane
+per face. Both are recovered from the planes (#6893):
+
+- **Rings.** Seen from above, each vertical plane is a segment. Two are
+  linked when their nearest ends lie within four voxels plus the distance
+  tolerance plus half the narrower segment, their heights overlap by half the
+  shorter, their faces turn by 3..65° (a polygon of six or more faces turns at
+  most 60°, a wall corner 90°), and the perpendiculars through their middles
+  (on a circle the chord bisectors, on a regular polygon the apothems) meet
+  behind both faces at distances that agree within 15 % plus twice the
+  distance tolerance. Linked planes form rings; members whose distance from
+  the ring's centre disagrees leave it, and rings about one centre at one
+  distance (one column seen in pieces) join.
+- **Solid.** A ring whose footprint (inside the apothem less two voxels and
+  the tolerance, from just below to just above its faces) holds scanned
+  voxels over more than a tenth of its cells is hollow and stays planes: a bay
+  window, a niche or a polygonal or round apse seen from the room, whose floor
+  runs inside it (`stats.planeRingsRejectedAsHollow`).
+- **Round first.** The ring's planes are searched like a cylinder group, starting from the ring's
+  vertical axis and median radius (two noisy normals cross too imprecisely on
+  a wide column to seed RANSAC well), under every refusal above; the ring's
+  own planes do not count as piercing it. A candidate refused only for its arc
+  is pooled with the coaxial refused candidates of a similar radius and the
+  planes lying on it, and searched again: at low noise an r 0.8 column grows a
+  few isolated strips that cut its other voxels into arcs too narrow to pass
+  alone.
+- **Precedence.** A column wins over the planes it is made of. Every plane
+  with at least 80 % of its voxels within the tolerance of a round cylinder's
+  surface, normals radial, leaves `planes` and joins the cylinder (its arc,
+  extent and RMS are measured again over them); `stats.planesAbsorbedIntoCylinders`
+  counts them. A surface is reported once.
+- **Faceted.** A ring that yielded no round cylinder is a faceted column when
+  it has at least three faces turning by one step of a regular polygon (each
+  turn within 15 % of the step, at least 2°; links turn at most 65°, so six
+  or more sides) through at least 120° in all; every face lies at one distance from a common axis
+  (least-squares fit of axis and apothem, within the distance tolerance; equal
+  turns about one apothem make equal sides); and its circumradius is within
+  the radius range. It is reported as a
+  cylinder with `radius` the circumradius and `faceted: { faces, faceNormal,
+  apothem }`: `faceNormal` is one face's outward normal (the face nearest +x,
+  or +y when the axis runs along x), the others following at multiples of
+  360° / `faces`. Its faces leave `planes`. Rings that are neither round nor
+  regular stay planes (`stats.planeRingsRejectedAsIrregular`).
+
+A rectangular column, a staircase core and an outside wall corner (faces
+turning 90°) stay planes, and so do a pilaster and a 135° bay of three faces
+(turning 90° in all). Faces narrower than about ten voxels may come out round,
+with a radius between the apothem and the circumradius (the facet guard cannot
+see them through 8 mm noise), and faces of two to three voxels are the
+resolution limit below. A convex polygonal bay of six or more sides seen from
+outside, its floor unscanned, cannot be told from a column. Rings are formed
+from vertical planes only, so a wide horizontal cylinder (a culvert) stays
+strips.
+
+Resolution limit: flat faces two to three voxels wide (a pier of 0.1 m faces
+spans about 3.3 voxels at 3 cm and 2 at 5 cm) deviate from their best-fit
+circle by under 1 cm and are
+indistinguishable from thin pipes, so such a pier is reported as a cylinder.
+Every measured property of the pier (radial deviation, normal turning,
+cross-section curvature, slice agreement, coverage) lies within the range of
+real pipes of 0.06 to 0.12 m radius. A 2 cm voxel with low noise resolves it.
+Radii at the two-voxel minimum (0.06 m at 3 cm, 0.1 m at 5 cm) are found
+less reliably, because a refit just under the minimum is refused.
+
+Every threshold above is guarded by the cylinder acceptance table
+(`rust/processing/tests/scan_cylinder_acceptance.rs`): real pipes and columns
+(thin half-visible pipes at two voxels of radius, grazing ceiling pipes,
+occluded, out-of-round and strapped columns, round columns of r 0.8 to 1.5 m,
+8-, 12- and 16-gon columns, columns at a 2 cm voxel with 8 mm noise) must be
+found, with no plane left on their surface, and flat-facet and wall decoys
+(bays, a niche, apses, pilasters, outside corners, a rectangular column, a
+staircase core) must not be. The convex corner of a pilaster with 0.15 m
+chamfers is found as a round cylinder in about half the runs, as in #6870 (its
+normals' turning straddles the 0.6 bar); it is printed, not asserted. Every `cargo test` runs a compact tier (one seed per
+noise level, small rooms); after changing a threshold, run the full matrix
+with
+`cargo test -p ifc-lite-processing --test scan_cylinder_acceptance -- --ignored --nocapture`.
+
+### Scan element proposals
+
+`IfcAPI.proposeScanElements(reportJson, optionsJson)` turns a
+`segmentScanPoints` report into proposed IFC elements, as UTF-8 JSON, from
+the canonical Rust `ifc_lite_processing::scan_proposals` (#6894). It creates
+nothing: the viewer reviews the proposals and creates the accepted ones
+through its modelling commands. The typed wrapper is `proposeScanElements` in
+`@ifc-lite/geometry/scan-proposals`. Options are camelCase, `{}` for the
+defaults; unknown fields are refused. The report is bounded to 20,000 planes
+and 20,000 cylinders (64 MiB of JSON).
+
+Everything is measured in the IFC model frame: Z up, metres. `scanToModel` is
+a row-major 4x4 similarity (rotation, one uniform scale, translation) from
+the report's frame into it, identity by default; reflections, shears and
+projective rows are refused. The viewer's scan sample is Y-up and relative to
+its decode origin, so its `scanToModel` composes the point cloud's placement,
+the Y-up to Z-up swap and the model's world offset. Planes are reclassified
+in the model frame (`classificationAngleDegrees`, 10).
+
+- **Walls** (`IfcWall`): two vertical faces pair when they are parallel within
+  `pairingAngleDegrees` (5), `minWallThicknessMetres`..`maxWallThicknessMetres`
+  (0.05..0.6) apart, overlap along the wall by `minWallOverlapFraction` (0.5)
+  of the shorter face, and share some height. When both normals face the
+  scanner and point into the gap between them, the gap was seen from inside
+  (a niche) and they do not pair. Pairs are taken nearest first, each face
+  once. The axis lies halfway between the faces and spans the union of both.
+  A face without a partner gets `defaultWallThicknessMetres` (0.2) behind its
+  scanned side: opposite a scanner-facing normal, otherwise away from
+  `interiorPoint` (default: the area-weighted mean of the plane centroids).
+  Faces shorter than `minWallLengthMetres` (0.5) or lower than
+  `minWallHeightMetres` (1) are skipped.
+- **Floors and ceilings**: a horizontal plane is a floor when the walls that
+  reach its outline stand on it, and a ceiling when they end under it (within
+  half of `levelSnapMetres`, weighted by area). With no such wall, a
+  scanner-facing normal decides, and otherwise the plane's height relative to
+  the interior point.
+- **Slabs** (`IfcSlab`): the outline is the plane's extent rectangle. A
+  ceiling and the floor above it pair into one slab, with measured thickness,
+  when they are at least `minWallThicknessMetres` (0.05) and at most
+  `maxSlabThicknessMetres` (0.6) apart and half of the
+  smaller outline lies over the larger. A single floor gets
+  `defaultSlabThicknessMetres` (0.2) below it, a single ceiling the same above
+  it. Planes under `minSlabAreaSquareMetres` (1) are skipped. Sloped planes
+  propose nothing.
+- **Columns** (`IfcColumn`): cylinders whose axis is within the
+  classification angle of vertical, with a circular profile. A polygonal
+  column (a cylinder reported with `faceted`) gets the circle of the
+  polygon's cross-section area, not its circumradius: an octagon's radius is
+  0.949 of its circumradius. A polygonal profile is not proposed.
+- **Pipes**: other cylinders, `IfcPipeSegment` for `schema` `IFC4` (default)
+  or `IFC4X3`, and `IfcFlowSegment` for `IFC2X3`, which has no
+  `IfcPipeSegment`.
+
+Wall and column ends within `levelSnapMetres` (0.3) of a floor or ceiling
+whose outline reaches them extend to it, because segmented walls stop a voxel
+or two short of the junction. For a column, "reaches" means its axis lies
+within `levelSnapMetres` plus its radius of the outline, since a slab's
+extent can stop at the column's face.
+
+Each proposal has an `id` (`wall-0`, `slab-1`, `column-0`, `pipe-0`), its
+`ifcClass`, a `basis` (`pairedFaces`, `singleFace`, `floorCeilingPair`,
+`floor`, `ceiling`, `cylinder`), its `sources` (indices into the report's
+`planes` or `cylinders`), `fit` (inlier-weighted `rmsMetres`, inlier counts,
+area) and `geometry`:
+
+- a wall's axis `start` and `end` at its base, with `thicknessMetres` and
+  `heightMetres`;
+- a slab's top-face `outline`, counter-clockwise from above, with
+  `thicknessMetres` below it;
+- a column's `base`, `heightMetres` and `radiusMetres`;
+- a pipe's axis `start`, `end` and `radiusMetres`.
+
+`confidence` is `prior x quality x coverage`. The prior is 0.95 for a
+measured thickness (paired faces, floor and ceiling pairs), 0.9 for a
+cylinder, 0.75 for a single floor or ceiling and 0.7 for a single wall face.
+Quality is `1 / (1 + (rms / 1 cm)^2)`. Coverage is the share of the proposed
+surface the inliers cover; for a cylinder it is `0.5 + 0.5 * arc / 360`.
+`stats` counts the planes by orientation, the paired and single walls and
+slabs, the planes too small to propose, and the columns and pipes.
+`transformScale` reports the scale of `scanToModel`.
+
+`requestSha256` hashes the algorithm ID `ifclite-rigid-correspondence-v1`, one
+zero byte, and compact typed request JSON in Rust field order. It binds all frame
+identities, coordinates, observation identities and the ordered fit/check partition.
+Hosts retain the frozen request with the report and invalidate it after any source,
+frame, feature or partition change. This digest binds declared inputs; it does not
+verify the asset bytes or validate a user's correspondence claim.
+
+A successful solve is not an accuracy verdict. F4 acceptance requires at least
+four fitting and four independently selected, spatially distributed held-out
+features at different heights, uncertainty review, a tolerance chosen from the
+held-out residuals, and explicit assessment of unknown areas and thin-wall
+transfer. The [CRAS real-pair evidence](../architecture/evidence/scan-registration-cras/README.md)
+does this for one licensed pair (8 fit, 8 held-out, tolerance 7 cm).
+
+### Registered textured-mesh appearance transfer
+
+`IfcAPI.planMeshTransfer(content, requestJson, rgba)` invokes canonical Rust
+`plan_mesh_transfer` and returns the same `IFPA` metadata/PNG envelope as page
+composition. It is a native/worker foundation; the call does not enable an Apply
+button, move a model, approve registration accuracy, or infer IFC objects.
+
+The typed `MeshTransferRequest` contains:
+
+- `schema`, `sourceRevision`, `nextExpressId`, and nonempty `productIds`, with the
+  same effective-snapshot/allocator contract as ordinary appearance planning.
+- The immutable `registration` request and its `registrationSha256`. Rust repeats
+  the fit-only solve and checks the report digest. The target frame's asset SHA-256
+  must match the exact supplied IFC bytes. Holding out observations remains a host
+  acceptance policy; a mathematical fit alone never authorizes transfer.
+- Explicit `targetFromIfcWorld: {rotation, sourceAnchor, targetAnchor}`. This maps
+  canonical IFC world Z-up metres into the registration's frozen target frame as
+  `targetAnchor + rotation * (point - sourceAnchor)`. It must be proper rigid even
+  for identity. The host derives it from actual model/workspace placement; never
+  assume identity for federated or repositioned models. Unsupported reprojection
+  must be refused until the exact transform is available.
+- `source`, a tagged union. `{kind: 'mesh', meshOrdinal, positions, triangles,
+  uvs, baseColorFactor, repeatS, repeatT}`: positions are original GLB scene **Y-up metres**, with node transforms
+  and the canonical mesh origin included, before workspace/model placement.
+  Triangles use zero-based indices; per-vertex UVs retain duplicated seam vertices
+  and the canonical decoder's texture transform. UVs are GLB image-top-down; Rust
+  performs the single V conversion at its existing IFC raster-sampler boundary.
+- `{kind: 'points', pointCount, orientation, neighborhoodRadiusMetres,
+  minNeighbors, maxNeighbors, surfaceBandMetres, viewpoints}` describes an RGB
+  point cloud whose positions (3n f64, source-frame metres), RGB8 colours,
+  optional oriented normals (3n f32) and optional station indices (n u32 into
+  `viewpoints`) travel as binary arguments of
+  `IfcAPI.planPointTransfer(content, requestJson, rgba, positions, colors,
+  normals, stations)`; up to 2,000,000 points cannot travel inside the 64 MiB
+  JSON request. `orientation` is `source-normals` (normals required, stations
+  refused), `viewpoints` (one station per point, 1..4096 stations, normals
+  refused) or `target-referenced` (neither supplied); a payload that does not
+  match the declared orientation is refused rather than reinterpreted. Each
+  sample is a least-squares plane through the points within
+  `neighborhoodRadiusMetres` of it (or of its nearest point when none lies
+  within the radius), bounded by `minNeighbors..maxNeighbors` (3..256); the
+  support must be planar within `surfaceBandMetres`, its oriented normal must
+  agree with the target face, and its plane must lie within the distance and
+  behind bounds. In every mode the nearest point is refused when the segment
+  from the sampled face to it crosses another face of the same item, and
+  supporting points deeper than the item's own thickness along the face normal
+  are dropped. Under `target-referenced` the item's thickness also caps
+  `maxBehindMetres` at half its value, so a capture inside the solid is
+  attributed to its nearest face only, and a capture in front of the face
+  within the distance bound is preferred over one inside the solid. Together
+  these keep opposite thin-wall faces apart for captures outside the solid and
+  for captures inside it up to the midplane; a capture deeper than the midplane
+  belongs to the opposite face by geometry, which only oriented sources can
+  overrule. Colour is the mean of the supporting points. `maxDistanceMetres` may not exceed 16 support radii.
+  Supports too thin to fit are counted as `unknownSparseSamples`.
+- `sourceImage` (mesh sources only; absent for points) and existing target
+  `sourceImages` use the page API's RGBA range descriptors. A mesh source needs
+  one opaque source image and neutral `[1,1,1,1]` base-color factor. Tint,
+  alpha, missing old rasters and unsupported target materials are explicit
+  refusals, never silently discarded.
+- `texelsPerMetre`, positive `maxDistanceMetres` (at most 10), `minNormalDot` in
+  `(0,1]`, `ambiguityDistanceMetres` and `maxBehindMetres`, each between zero and
+  the maximum distance. These are explicit sampling criteria, not estimated
+  registration uncertainty. `maxBehindMetres` bounds how far a same-facing
+  nearest surface may lie behind the IFC face (along its outward normal) before
+  it is unknown: the far side of a thin wall, or a cabinet standing beyond it,
+  is never painted onto the near face. A coplanar capture is tolerated under a
+  zero bound within f64 rounding at the coordinate magnitude.
+
+The host verifies that decoded mesh, UVs, sampler and pixels belong to the pinned
+original GLB. Rust receives decoded data and **does not verify original GLB bytes**.
+Only currently supported occurrence-owned direct `IfcTriangulatedFaceSet` targets
+are used; conversion policy is fixed to preserve. Canonical geometry, placement,
+triangle winding and source-corner correspondence are checked before sampling.
+Topology repair or inadequate coordinate precision prevents guessing provenance.
+
+The sampler uses the existing geometry BVH to find geometric-nearest triangles
+before filtering oriented normals. An incompatible nearest face becomes unknown;
+a farther compatible face cannot paint through it. Near-tied separate surfaces,
+duplicate overlaps and UV seams become unknown. A compatible nearest surface
+deeper than `maxBehindMetres` behind the face is unknown too. Exact continuous
+shared edges between consistently oriented, nonoverlapping coplanar triangles
+remain one surface. Source UVs come from closest-point barycentrics. Because the
+observation is always the geometric-nearest surface, no other source surface can
+lie between a target sample and its observation; occlusion therefore reduces to
+these nearest-first refusals. A same-facing surface within the distance bound in
+front of the face (a poster, a sheet) is the visible surface there and cannot be
+told from the wall without scanner viewpoints, which belong to F9. This is local
+surface matching, not camera visibility reconstruction or confidence learned
+from scans.
+
+Unknown samples preserve existing target albedo through the shared atlas/material
+planner. The output adds `transfer` metadata: `preparedSha256` (digest v4,
+binding the request, the target bytes, the RGBA payload and any point payload),
+`source: {kind, orientation, pointCount}` so the orientation source of every
+point plan is auditable, `budget: {workUsed, workLimit}` against the fixed
+128,000,000-unit work budget, `registrationSha256`, the full `registration`
+fit/check residual report,
+`applicable`, aggregate `coverage`, per-item coverage, target eligibility
+`exclusions` (also retained without an applicable plan), and
+explicit diagnostics. Fewer than four fit or four held-out observations carries
+an insufficient-evidence diagnostic and `plan: null`, `applicable: false`, even
+when samples are observed. Operational acceptance additionally requires that the
+host verifies spatially distributed held-out observations and
+their accepted residuals. Counts distinguish observed, distance, normal, ambiguity
+and behind-surface outcomes (`unknownBehindSamples`). `centroidSamples` / `observedCentroidSamples` describe the mandatory
+per-triangle geometric observations; `rasterInteriorTexels` /
+`observedRasterInteriorTexels` count actual interior raster pixel evaluations.
+The existing `samples` and `observedSamples` include both sets. Application also
+requires at least one observed interior raster texel: centroid-only coverage
+returns `plan: null`, `applicable: false`, and no PNG assets. This prevents sparse
+sampling from offering an atlas containing only the old appearance. Review the
+interior texel counts separately from the geometric estimate; increasing density
+can resolve subpixel observations, but never guarantees coverage.
+Area values remain triangle-area-weighted estimates from centroid/interior
+texel observations over eligible planned items; chart padding is excluded and
+excluded products are reported separately, not counted as observed area. They are not exact covered-area
+integrals. Entirely unknown output has `plan: null` and no PNG assets or mutations.
+Partial coverage remains a review decision; it is never hidden behind a percent.
+
+The prepared digest binds the entire typed request, IFC and supplied RGBA bytes.
+Its input is `ifclite-mesh-transfer-v3-behind-bound`, a zero byte, little-endian u64 IFC length,
+IFC bytes, little-endian u64 RGBA length, RGBA bytes, then compact typed request JSON.
+Invalidate prepared results after any source, frame, target, pixel or criterion
+change. Atomically adopt all assets and edits through the existing appearance
+transaction, retaining owner leases and rechecking snapshot/allocator revisions.
+
+JSON transport is capped at 64 MiB, source revision at 256 bytes, target raster
+identities at 10,000 entries of 4,096 bytes, source vertices/triangles at 200,000 each,
+source/target RGBA at 128 MiB combined and individual images at the existing
+16-megapixel/8192-axis limits. Transfer preparation, BVH traversal/candidate tests
+and atlas sampling share 64 million work units and a conservative 256-MiB
+transfer-allocation budget. Existing canonical geometry, atlas pixel, PNG and
+IFPA output caps also apply. These are separate bounded domains, not a claim
+about exact whole-process peak memory. Run inside an owned cancellable worker;
+termination discards the pending result, and any exhausted budget returns an
+error rather than partial success. Input caps are maxima, not guaranteed capacity
+at every combination of density, overlap and geometry complexity.
+
+[Independent transfer evidence](../architecture/evidence/mesh-transfer/README.md)
+checks a controlled IFC/PNG roundtrip. No real scan-to-BIM accuracy is claimed
+without valid spatially distributed held-out correspondences.
+
+### PDF vector graphics-state preparation and fidelity report
+
+`IfcAPI.preparePdfVectorPage(requestJson)` returns UTF-8 JSON bytes for a bounded
+`PreparedPdfVectorPage`. The strict request is the decoder-neutral
+`PdfVectorPage` defined in `rust/processing/src/pdf_vector/types.rs`; the viewer's
+existing PDF worker produces it through its `vectors` job using pinned PDF.js
+6.3.289. It retains original operator indices, page/source identity and the host's
+explicit calibrated native-PDF-to-model-plane affine, and it types every
+operation the pinned decoder emits: path construction, colour and line state,
+`save`/`restore`, `transform`, `clip`, `textClip`, `text` (with its estimated
+em-box), `image` placements, `shading`, fill/stroke `pattern` colours, decoded
+`graphicsState` dictionaries, `formBegin`/`formEnd`, `groupBegin`/`groupEnd`,
+`annotationBegin`/`annotationEnd`, `markedContent`/`endMarkedContent` and
+`unsupported` operators.
+
+An optional `conversionClipPdf: [x0, y0, x1, y1]` selects a rectangle inside
+the immutable source `viewBox`. Fully outside paths do not consume the converted
+path cap. A supported fill or conservative painted stroke envelope that crosses
+the rectangle refuses, so the host must place the boundary through empty space.
+The effective rectangle is returned as `pageClipPdf` and recorded in IFC as
+`ConversionClipPdf`; this selection does not rewrite `SourceCropBox`. Because
+zero-width hairlines have a device-dependent minimum width, every hairline on
+an interior selection remains a visible omission unless a future authenticated
+raster target can prove it contributes no pixels.
+
+The response holds `paths` — only the paths whose complete graphics state the
+planner understands — and a canonical `fidelity` report (`ifclite-pdf-fidelity-v1`)
+naming everything else:
+
+- `exact`: no visible content would be omitted. Says nothing about geometric
+  qualification (curves, stroke topology and budgets are decided when planning).
+- `rasterOnly`: nothing converts, no visible vector content is omitted and at
+  least one image is visible; the page stays a raster reference.
+- `convertiblePaths`, `omittedPaints`: how many paths convert and how many
+  visible painted fill/stroke parts are left out.
+- `summary`: one entry per omission kind — `text`, `image`, `clip`,
+  `transparency`, `pattern`, `dash`, `curvedStroke`,
+  `hairline`, `hidden`, `annotation`, `unsupported:<operator>` — with total
+  `count`, `visibleCount` and `bboxPdf`, the union extent of the visible entries
+  in unrotated PDF user space (CropBox coordinates).
+- `omissions`: up to 4,096 individual entries with `operatorOrdinal`, `bboxPdf`
+  and `visible`; `omissionsTruncated` says when that detailed list stopped while
+  the summary counts stayed complete.
+- `sha256`, `algorithm`: the report digest binds the request digest to the
+  verdict (exact, raster-only, convertible paths, omitted paints and the
+  summary). A partial plan must quote it.
+
+This call does not flatten curves, outline strokes, compose fills, create IFC
+entities or approve a conversion. A rectangular clip that still contains the
+page (within the declared tolerance) is not an omission; any other clip, text
+clip, transparency, pattern colour or unknown operator taints the rest of its
+save scope so later paints there are reported rather than drawn without their
+effect. Malformed structure, unbalanced graphics-state stacks and exceeded
+work/JSON limits throw before any report is published.
+
+The request digest is SHA-256 of the UTF-8 algorithm ID concatenated directly with
+compact typed Rust serde JSON. JSON number spelling and field order follow the
+Rust types; a JavaScript JSON reserialization is not that canonical byte stream.
+Keep the immutable request paired with its report. Native code does not parse the
+PDF bytes; the host verifies original source ownership and decoder provenance.
+See [the full preparation contract](../architecture/pdf-vector-annotations.md#bounded-graphics-state-preparation)
+and [the fidelity contract](../architecture/pdf-vector-annotations.md#fidelity-report-and-partial-acceptance)
+for limits, kinds, visibility and the subsequent geometry/creation stages.
+
+### PDF fill annotation planning
+
+`IfcAPI.planPdfFillAnnotation(content, requestJson)` returns UTF-8 JSON bytes for
+one colored `IfcAnnotation` in an effective IFC4/IFC4X3 source. The request uses
+the existing annotation source revision, allocator, container, `GlobalId`,
+containment GlobalId, `Name` and plane frame, plus a canonical decoded
+`PdfVectorPage`, host-owned `propertySetGlobalId` and `propertyRelationGlobalId`
+for the provenance rows, and `acceptedFidelitySha256` (a string or `null`). Its
+calibrated PDF-to-plane affine determines model scale; `frame.sizeMetres` is
+descriptive page extent, not a second scale. The decoded page also carries
+PDF.js's effective `pdfFormatVersion`, including a Catalog `/Version` override,
+because PDF 2.0 resolves an ambiguity in the earlier closed-dash seam rules.
+
+The planner recomputes the fidelity report and applies the acceptance rule: an
+exact page plans directly; a page with visible omissions plans only when
+`acceptedFidelitySha256` equals the `sha256` of the report the host displayed
+(a missing or different digest refuses with an explicit message); a raster-only
+page refuses regardless. Acceptance covers the listed omissions, not geometry.
+
+The geometry scope accepts opaque RGB pages made of straight fill edges,
+qualified quadratic/cubic curved rings, and qualified solid straight strokes.
+Strokes support positive width, butt/square/round caps, bevel/miter/round joins,
+miter-limit fallback and positive dash patterns on open or closed straight subpaths,
+outlined before the full affine transform. Dash phase, odd-array repetition,
+per-subpath reset and joins across vertices are preserved. A closed subpath
+includes its closing edge. PDF 1.0–1.7 retain caps where first and last on-dash
+pieces meet at the closure seam; PDF 2.0 joins them as the newer specification
+requires. Explicit close-path and close-and-stroke operators use the same path.
+An absent, malformed or unsupported effective version reports the closed stroke
+as a `dashVersion` omission. A PDF 1.x dash that covers the entire closed
+perimeter reports `dashTopology` until coincident independent caps can be
+decomposed without weakening the topology qualifier.
+Combined fill and
+dashed-stroke paints still pass the same region-composition qualifier; a page
+with multiple dash-run crossings that it cannot prove refuses atomically. Round arcs
+are subdivided against the declared metric tolerance after accounting for
+nonuniform scale, reflection and shear. It resolves
+nonzero/even-odd winding, holes, islands, implicit CropBox clipping and paint
+order, including fill then stroke in combined operators. Text, images, explicit
+clips, transparency, patterns, unqualified dashed, curved and hairline
+strokes and unsupported state are never drawn approximately: they are the
+report's omissions, left out only under acceptance and recorded with the
+annotation. Quantization collapse, uncertain near contacts and exhausted
+work/size budgets still refuse the entire page. No subset is exported silently.
+
+The result contains the canonical `plan`, `annotationId`, `propertySetId`,
+multiple untextured colored `meshes`, `coordinateSpace: 'ifc-z-up'`, `rtcOffset`,
+`frame`, source IFC and PDF digests, `requestSha256`, page/calibration identity,
+declared tolerance, actual grid size/work count, per-region source operator/RGB
+provenance and the `fidelity` report the plan was built under. The plan's rows
+include an `IfcLite_PdfVectorConversion` `IfcPropertySet` (source PDF digest,
+page, CropBox, UserUnit, rotation, effective PDF format version, decoder, calibration key and affine,
+`ToleranceMetres`, grid, request/fidelity digests, `ExactConversion`,
+`AcceptedPartialConversion`, converted paths, fill regions, omitted paints and
+the omission summary as JSON) attached through `IfcRelDefinesByProperties`, and
+`IfcAnnotation.Description` states the verdict in words.
+Mesh positions are relative to the returned RTC offset. The host must bind the
+decoded operations to the retained original PDF and validate the effective IFC
+revision, frame and allocator before committing the plan. Native receives decoded
+operations, so the supplied PDF digest is not independently authenticated.
+
+The planner limits input to 128 convertible painted paths, each with 4,096 commands, and
+charges conservative overlay/precision work against a shared bounded budget.
+All original page contours and CropBox share one integer lattice (at most 1,024
+source vertices), retained through classification, clipping and paint ordering;
+there is no intermediate floating re-quantization.
+Emitted output is capped at 256 meshes, 65,536 vertices and 131,072 triangles.
+The boundary caps effective IFC input at 128 MiB and request JSON at 32 MiB.
+The existing worker owns timeout and cancellation. The declared tolerance and
+quantized-contour transport checks are not a claim of arbitrary original PDF
+topology fidelity; only qualified inputs produce a plan.
+
+Curved fills use iterative de Casteljau subdivision after transforming controls
+into calibrated model-plane metres. One eighth of the declared metric tolerance
+is reserved for flattening; finite-chord control-hull distance bounds each
+accepted segment. The initial topology scope requires convex control polygons for each Bezier
+piece, provably separated control hulls within each ring, and separation from
+other ring, paint and CropBox boundaries. Adjacent pieces may share their endpoint;
+a two-piece lens or curve with its closing chord has an explicit sidedness proof.
+Unresolved curved crossings, near contacts and overlapping control hulls refuse,
+even when a fuller curve-arrangement implementation could handle them. Holes with separated curved
+boundaries are supported. This is visual filled geometry, not editable Bezier
+entities. Depth, vertex and shared work limits may refuse finely tessellated
+curves; the implementation never silently increases tolerance to fit a budget.

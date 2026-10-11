@@ -1,0 +1,684 @@
+# ifclite-geom
+
+Native [ifc-lite](https://github.com/LTplus-AG/ifc-lite) geometry tessellation for
+Python. It turns an IFC file into per-entity triangle meshes with no Node, no
+WASM, and no subprocess: the Rust geometry kernel runs directly inside the
+Python process.
+
+Meshes come back **welded**, **IFC Z-up**, in **absolute world metres**, keyed by
+IFC STEP id (occurrences only). This is the analysis-ready export, distinct from
+the render-oriented GLB the viewer uses.
+
+## Install
+
+```bash
+pip install ifclite-geom
+```
+
+Prebuilt wheels ship for CPython 3.9+ on Linux (x86_64, aarch64), macOS (Apple
+silicon and Intel), and Windows (x64). No Rust toolchain needed.
+
+## Quick start
+
+The module is `ifclite_geom`; its analysis functions take the raw IFC file as
+`bytes`. `geometry_data_buffers` and `geometry_data_json` return the
+same geometry and differ only in output format; pass
+`include_directrices=True` to include analytic swept-disk paths. `entity_data`
+reads attributes and property sets instead, without tessellating.
+`check_swept_disks` checks authored swept-disk paths without tessellating, and
+`swept_disk_definitions` returns reusable raw source paths and occurrence transforms.
+`extrusion_definitions` returns exact source profiles and placed extrusion occurrences.
+`authored_quantity_analysis` reads IFC-authored quantity observations, while
+`quantity_analysis` joins them with nominal analytic source estimates.
+`rebar_schedule` combines authored bar metadata with derived source geometry.
+
+```python
+import ifclite_geom
+import numpy as np
+
+with open("model.ifc", "rb") as f:
+    ifc_bytes = f.read()
+
+data = ifclite_geom.geometry_data_buffers(ifc_bytes)
+
+print(data["element_count"], "elements")
+print("up axis:", data["up_axis"], "| units:", data["units"])
+print("rtc offset:", data["rtc_offset"])
+
+for step_id, el in data["elements"].items():
+    verts = np.frombuffer(el["vertices"], dtype=np.float64).reshape(-1, 3)
+    faces = np.frombuffer(el["faces"],    dtype=np.uint32 ).reshape(-1, 3)
+    print(step_id, el["ifc_type"], el["global_id"], verts.shape, faces.shape)
+```
+
+Prefer no numpy dependency? Use the JSON variant, which returns the same data as
+arrays of numbers:
+
+```python
+import ifclite_geom, json
+
+doc = json.loads(ifclite_geom.geometry_data_json(ifc_bytes))
+first = next(iter(doc["elements"].values()))
+print(first["ifc_type"], first["vertices"][0])  # [x, y, z] in metres
+```
+
+## API
+
+### `geometry_data_buffers(ifc_bytes: bytes, quality: str | None = None, ids: set[int] | None = None, *, include_directrices: bool = False) -> dict`
+
+The fast path. Vertices and faces come back as raw little-endian byte buffers so
+you can hand them straight to `numpy.frombuffer` with zero parsing.
+
+```text
+{
+  "up_axis": "Z",            # always Z (IFC native)
+  "units": "m",              # always metres
+  "rtc_offset": [x, y, z],   # geo-reference offset already folded into vertices
+  "element_count": 1234,
+  "elements": {
+    <step_id:int>: {
+      "ifc_type":  "IfcWall",
+      "global_id": "3vB2...",   # may be None
+      "name":      "Basic Wall:...",  # may be None
+      "color":     [r, g, b, a],      # 0..1
+      "vertices":  <bytes>,           # f64 little-endian, xyz triplets
+      "faces":     <bytes>,           # u32 little-endian, triangle indices
+      "palette":   [[r, g, b, a], ...], # optional, per-face color overrides
+      "face_colors": <bytes>,         # optional, u64 little-endian palette indices
+    },
+    ...
+  }
+}
+```
+
+Decode the buffers with:
+
+```python
+verts = np.frombuffer(el["vertices"], dtype=np.float64).reshape(-1, 3)  # (V, 3)
+faces = np.frombuffer(el["faces"],    dtype=np.uint32 ).reshape(-1, 3)  # (F, 3)
+```
+
+Elements whose surviving faces cannot be represented by the fallback `color` also
+carry `palette` and `face_colors`.
+Decode `face_colors` using `np.frombuffer(el["face_colors"], dtype="<u8")`:
+there is one palette index per surviving triangle, including transparency.
+The JSON form carries the same indices as an array of integers. Both fields are
+omitted when `color` represents all surviving faces; `color` remains the first
+submesh's RGBA for existing consumers.
+Palette order follows first occurrence and supports more than 65,536 colors.
+
+### `geometry_data_json(ifc_bytes: bytes, quality: str | None = None, ids: set[int] | None = None, *, include_directrices: bool = False) -> str`
+
+The same geometry as a readable `ifc-lite-geometry-data` JSON document (a
+string; call `json.loads` on it). Vertices are `[x, y, z]` arrays and faces are
+`[a, b, c]` index arrays, so no numpy is required. Each element also carries
+`global_id` and `name` when the source entity has them.
+
+### Analytic swept-disk paths
+
+Pass `include_directrices=True` to either geometry function. The result adds
+`swept_disks`, keyed by occurrence STEP id, and `directrix_diagnostics`. Each
+occurrence can have multiple source `IfcSweptDiskSolid` items. A description
+preserves `solid_id`, `directrix_id`, `Radius`, `InnerRadius`, `mapping_path`,
+`source_modified`, `status`, an ordered `Directrix` of typed line and
+circular-arc segments, `directrix_metrics`, and `nominal_quantities`. Coordinates are in absolute IFC
+Z-up world metres, matching mesh vertices.
+For a complete description, `Radius` and `InnerRadius` are the effective world
+radii in metres. For an unsupported transform, they retain the authored radii
+converted to metres; the status indicates that no world circular radius is
+available. `directrix_metrics` gives `total_length` and one entry per directrix
+segment, with a matching `segment_index` and centreline `length` in world
+metres. Arc entries have a positive `bend_angle` in radians; line entries have
+`bend_angle=None`. The signed arc `sweep_angle` on `Directrix` still gives
+travel direction. These are geometric bend angles, without bend allowances or
+fabrication deductions. The buffer path uses integer keys; the JSON path uses
+string object keys.
+
+For complete, unmodified source sweeps, `nominal_quantities` contains
+`cross_section_area`, `nominal_volume`, `outer_lateral_area`, and optional
+`inner_lateral_area` in m²/m³. They are calculated from the world-space radii
+and directrix length; they are estimates, not authored `IfcElementQuantity`
+values or net quantities. Self-overlap and mitred joins can change the physical
+body. The field is `None` for unsupported paths, CSG operands, broken joins,
+degenerate segments, and arcs whose radius does not exceed the disk radius.
+Sharp but joined mitres remain nominal estimates.
+
+```python
+data = ifclite_geom.geometry_data_buffers(ifc_bytes, include_directrices=True)
+for step_id, sweeps in data["swept_disks"].items():
+    for sweep in sweeps:
+        metrics = sweep["directrix_metrics"]
+        if metrics is None:
+            print(step_id, sweep["status"])
+            continue
+        print(step_id, "centreline metres:", metrics["total_length"])
+        for segment, measured in zip(sweep["Directrix"], metrics["segments"]):
+            if segment["type"] == "line":
+                print(step_id, segment["start"], segment["end"], measured["length"])
+            else:  # circular arc
+                print(step_id, segment["center"], segment["radius"],
+                      measured["bend_angle"])
+```
+
+An arc also carries `normal`, `x_axis`, `start_angle`, and `sweep_angle` to
+define its orientation and travel. `status` is `{"type": "complete"}` or
+`{"type": "unsupported", "reason": ...}`; unsupported paths have no partial
+segments and `directrix_metrics=None`. `source_modified=True` means the sweep is
+a source operand and later booleans may alter the final solid. Inspect that
+field before using the source path for fabrication. The flag does not describe
+cuts from external `IfcRelVoidsElement` openings. Extraction issues appear in
+`directrix_diagnostics`. With the flag omitted, both functions keep their
+existing output shape and skip this extraction.
+
+### `check_swept_disks(ifc_bytes: bytes, ids: set[int] | None = None, *, zero_length_tolerance_m: float = 1e-9, gap_tolerance_m: float = 1e-6, tangent_tolerance_rad: float = 1e-6) -> dict`
+
+Run numerical checks on authored `IfcSweptDiskSolid` paths, without a mesh
+pass. The function extracts each selected occurrence once and runs the shared
+Rust checker on each source solid. Results are keyed by occurrence STEP id;
+multiple sweeps under one occurrence stay separate and retain `occurrence_index`, `solid_id`,
+`directrix_id`, and `mapping_path`. `diagnostics` reports problems traversing
+the representation. `ids` filters product occurrences as it does in the
+geometry functions; an empty set returns empty `elements`.
+
+```python
+checks = ifclite_geom.check_swept_disks(ifc_bytes)
+for step_id, entries in checks["elements"].items():
+    for entry in entries:
+        report = entry["report"]
+        if report["skipped_reason"] is not None:
+            print(step_id, "uncheckable:", report["skipped_reason"])
+            continue
+        for finding in report["findings"]:
+            print(step_id, entry["solid_id"], finding["code"],
+                  finding["segment_index"], finding["measured"])
+```
+
+Each finding carries a stable `code`, `segment_index`, optional
+`next_segment_index` for a join, measured value, threshold and units (`m` or
+`rad`). Codes are `zero_length_segment`, `consecutive_gap`,
+`tangent_discontinuity`, and `arc_radius_not_greater_than_disk_radius`.
+The defaults flag segments at or below 1 nanometre, gaps above 1 micrometre,
+and tangent changes above 1 microradian. Supply finite, nonnegative tolerances
+to suit the model; invalid values raise `ValueError` even when `ids` is empty.
+An unsupported analytic path has a `skipped_reason` and no partial findings.
+`source_modified=True` means the checker measured an authored CSG operand,
+which may differ from the finished body. These geometric findings do not
+certify fabrication compliance or calculate bend allowances. IFC allows
+non-tangent consecutive segments to form a miter, so
+`tangent_discontinuity` is an inspection cue rather than an automatic schema
+violation ([IfcSweptDiskSolid](https://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/IfcSweptDiskSolid.htm)).
+
+### `swept_disk_definitions(ifc_bytes: bytes, ids: set[int] | None = None) -> dict`
+
+Return one source definition per representation-map path and solid, with one
+instance per use in a product. This is an opt-in, untessellated view; the
+flattened `include_directrices=True` contract is unchanged. `sources` contain
+authored `Radius`, `InnerRadius`, and `Directrix` in the IFC file's length
+units. `instances` is keyed by product STEP id and preserves deterministic
+`ordinal`, `mapping_path` (mapped-item STEP ids), `source_modified`, and
+`status`. The `source` key contains the SHA-256 of the IFC bytes, `FILE_SCHEMA`,
+unit scale (as 16 hex digits of its f64 bits), solid STEP id, and either a
+top-level representation id or ordered `IfcRepresentationMap` ids. Repeated
+`MappingTarget`s therefore share a source
+without collapsing distinct uses.
+
+`world_from_source` is a column-major 4×4 f64 matrix mapping source file-unit
+coordinates directly to absolute IFC Z-up metres. It includes the file length
+scale, product placement, and nested mapping transforms. The source radius is
+raw; a uniform instance's effective world radius also includes the matrix's
+uniform scale. A nonuniform instance carries `status=unsupported` because its
+world disk is not circular. An invalid matrix is `None` with an unsupported
+status. Source and instance output have independent work budgets; truncation
+appears in `diagnostics`.
+
+```python
+view = ifclite_geom.swept_disk_definitions(ifc_bytes, ids={50})
+for instance in view["instances"].get(50, []):
+    print(instance["source"], instance["world_from_source"])
+```
+
+### `extrusion_definitions(ifc_bytes: bytes, ids: set[int] | None = None) -> dict`
+
+Return exact authored `IfcExtrudedAreaSolid` profiles once per source and a
+separate record for each product occurrence. Sources retain raw IFC file-length
+units, `ProfileType`, ordered line and arc loops, signed area and perimeter,
+authored `DirectionRatios`, normalized `axis_unit_vector`, and `Depth`.
+Complete sources with valid positive net profile area carry
+`nominal_quantities` from the shared Rust calculator: net profile area in
+squared file units, projected height in file units, and their nominal volume
+in cubed file units. Unsupported or invalid sources have
+`nominal_quantities=None`.
+Unsupported or tapered sources carry an explicit `status`; no approximate
+boundary is substituted. A source key uses the same model/schema/unit/context
+identity as `swept_disk_definitions`, so repeated `MappingTarget`s share a
+definition while each use has its own deterministic `ordinal` and mapped-item
+path. `source_modified=True` marks a CSG operand whose final body can differ.
+
+For a complete source-profile point, apply `profile_position`, then the
+extrusion's `position_matrix`, then the occurrence's `world_from_source`.
+Matrices are column-major f64. The first two use raw IFC file units; the last
+includes file-unit scale and maps to absolute IFC Z-up world metres. When an
+optional `Position` is absent, its matrix field is `None` (JSON `null`): use
+identity for that step when composing transforms, rather than expecting an
+identity array in the response. Check `status` before using an absent matrix;
+an invalid reference can also leave an unsupported source without one. A
+non-finite transform is `None`; a singular transform retains its matrix, and
+both have unsupported status.
+Source reference keys use exact IFC names: both profile and extrusion carry
+`Position`, and the extrusion carries `ExtrudedDirection`; the separate
+derived matrices keep their descriptive names.
+The API does not infer a post-boolean solid or a world volume from a raw source.
+Source and occurrence budgets are independent; truncation is reported in
+`diagnostics`.
+
+```python
+view = ifclite_geom.extrusion_definitions(ifc_bytes, ids={50})
+for instance in view["instances"].get(50, []):
+    print(instance["source"], instance["world_from_source"])
+```
+
+### `authored_quantity_analysis(ifc_bytes: bytes, ids: set[int] | None = None) -> dict`
+
+Return IFC-authored quantities keyed by actual product STEP ID without meshing.
+Each observation retains the exact `IfcElementQuantity.Name` and
+`IfcPhysicalSimpleQuantity.Name`, both source entity IDs, kind, numeric value,
+and occurrence or inherited type origin. A same-named occurrence/type disagreement
+appears in `conflicts`; neither value is overwritten. `unit` records the resolved
+symbol, SI factor, source, and explicit unit ID where present. If a unit cannot
+be resolved or has the wrong dimension, `unit=None` and `unit_diagnostic`
+explains why. `IfcQuantityCount` and IFC4X3 `IfcQuantityNumber` are
+dimensionless when no unit is supplied; a resolved explicit named unit is
+preserved instead of being discarded.
+
+```python
+view = ifclite_geom.authored_quantity_analysis(ifc_bytes, ids={50})
+for quantity in view["products"].get(50, {}).get("authored", []):
+    print(quantity["set_name"], quantity["quantity_name"], quantity["value"], quantity["unit"])
+```
+
+`product_count` counts selected IFC product entities. It is not a physical bar
+count, source-solid count, cutting length or material takeoff. This authored
+view contains no calculated estimate; use the analytic source APIs separately
+and keep their provenance distinct. A malformed or over-budget relationship
+or quantity set appears in `diagnostics`. An absent optional
+`IfcTypeObject.HasPropertySets` is valid; a malformed list or member is
+reported and its type-authored quantities are refused. Conflicting
+`IfcRelDefinesByType` assignments likewise refuse type inheritance for that
+product while preserving its occurrence-authored observations.
+
+### `quantity_analysis(ifc_bytes: bytes, ids: set[int] | None = None) -> dict`
+
+Join authored `IfcElementQuantity` observations with exact analytic swept-disk
+and extrusion source occurrences. `products` is keyed by product STEP ID;
+`authored` retains exact names, IDs, units, origin and conflicts. Each entry in
+`sources` keeps its canonical source key, solid ID, mapping path, ordinal,
+status and nominal values with formula, origin, unit and limitation. Swept-disk centreline
+and section estimates use world metres; extrusion depth and profile estimates
+remain in raw IFC file units because an occurrence transform may scale them.
+`Depth` is an authored solid parameter, not an `IfcElementQuantity` value.
+
+```python
+view = ifclite_geom.quantity_analysis(ifc_bytes, ids={50})
+for source in view["products"][50]["sources"]:
+    for estimate in source["quantities"]:
+        print(source["solid_id"], estimate["name"], estimate["value"], estimate["unit"])
+```
+
+`product_count` counts IFC products, `source_occurrence_count` counts uses of
+analytic solids, and `unique_source_count` counts distinct source definitions.
+Mapped products can share one source. `product_total` is always `None` with an
+`aggregate_diagnostic`: source estimates exclude voids, CSG results, overlap,
+self-intersection and cutting allowances. They cannot establish a physical
+part count or final material quantity. Unsupported and source-modified sources
+retain explicit status; extraction failures appear in `diagnostics`.
+When a complete swept-disk occurrence has no defensible nominal section or
+volume estimate, `status_reason` explains the omission even if its centreline
+length remains available. Joined diagnostics have one bounded output budget.
+
+### Reinforcing-bar schedule inputs
+
+`rebar_schedule(ifc_bytes, ids=None)` returns one row per selected
+`IfcReinforcingBar`, including bars with no supported swept-disk geometry.
+Each row exposes the occurrence's `GlobalId` and `Name` under their exact
+EXPRESS names.
+Authored attributes use exact EXPRESS names and record whether they came from
+the occurrence or its `IfcReinforcingBarType`. Numeric attributes retain their
+raw IFC value and an SI conversion. An authored `CrossSectionArea` of zero
+remains in the record, with a row diagnostic stating that it does not establish
+a physical section area. Each source sweep separately carries
+radius, centreline length and bend angles, geometric checks, and reusable
+`source` identity. For complete paths, radii are effective world values in
+metres; an unsupported transform retains source radii in metres and does not
+establish a world circular radius. If a file's unit conversion makes a radius
+non-finite, the binding raises `ValueError` instead of returning JSON `null`.
+Mapped repetitions remain separate, while repeated
+uses of one representation map share a source key. If the independent definition
+output budget is exhausted, `source` is `None` with a row diagnostic; the
+world-space schedule sweep remains available. An authored `BarLength`
+can differ from the derived centreline length; neither value is a certified
+cutting length. IFC bar entities and represented sweeps do not imply a physical
+bar count.
+
+```python
+schedule = ifclite_geom.rebar_schedule(ifc_bytes)
+for step_id, row in schedule["rows"].items():
+    print(step_id, row["GlobalId"], row["Name"], row["authored"].get("BarLength"), row["sweeps"])
+```
+
+For project-specific comparisons, call
+`rebar_schedule_with_preflight(ifc_bytes, min_inside_bend_radius_m,
+min_straight_segment_length_m, max_developed_centreline_length_m=None)`.
+The measured comparisons identify their source segments; equality passes.
+Inside bend radius is arc centreline radius minus swept outer radius. Modified
+or unsupported sources and rows without sweeps carry explicit skip reasons.
+For a skipped sweep, `comparisons` is `None`; an assessed sweep has a list of
+measured comparisons. Check `skipped_reason` before interpreting pass results.
+No result certifies a cutting length or fabrication-code compliance.
+
+For independently optional SI policy checks use
+`rebar_schedule_with_fabrication_precheck(ifc_bytes, ids=None, **policy)`.
+Options are `min_inside_bend_radius_m`, `min_straight_segment_length_m`,
+`max_developed_centreline_length_m`,
+`max_nominal_geometric_diameter_delta_m`, and paired `min_bend_angle_rad` /
+`max_bend_angle_rad` (finite, nonnegative, ordered radians). Each requested check
+reports `pass`, `fail` or `uncheckable`, with source IDs, measured value,
+threshold, units and reason. Missing/conflicting authored `NominalDiameter`,
+modified CSG, unsupported transforms and incomplete directrices cannot pass.
+
+```python
+schedule = ifclite_geom.rebar_schedule_with_fabrication_precheck(
+    ifc_bytes, min_inside_bend_radius_m=0.05,
+    max_nominal_geometric_diameter_delta_m=0.001,
+)
+for row in schedule["rows"].values():
+    for sweep in row["sweeps"]:
+        report = sweep["fabrication_precheck"]
+        print(report["outcome"], report["checks"], report["unchecked_factors"])
+```
+
+Every outcome is `precheck_only`; material, fabrication process, allowances,
+jurisdiction and physical bar count are unchecked. Authored `BarLength` is not
+a verified cutting length. The Revit Snowdon fixture validates source geometry
+but its authored schedule is not independently verified.
+
+### Tessellation quality
+
+Both geometry functions take an optional `quality` label:
+
+| label | density | 
+|---|---|
+| `"lowest"` | quarter |
+| `"low"` | half |
+| `"medium"` | engine default, used when `quality` is omitted |
+| `"high"` | double |
+| `"highest"` | quadruple |
+
+It scales the segment count on every curved primitive: swept-disk tubes,
+cylinders, revolutions, arcs, circular profiles. On curve-heavy elements the
+effect is large. A single `IfcReinforcingBar` authored as an `IfcSweptDiskSolid`
+over a composite arc tessellates to 1056 triangles at `"medium"` and 96 at
+`"lowest"`.
+
+```python
+data = ifclite_geom.geometry_data_buffers(ifc_bytes, "lowest")
+```
+
+An unrecognised label raises `ValueError` rather than silently falling back, so
+a typo cannot cost you a 10x triangle budget without saying so. This is the same
+knob the browser build exposes as `setTessellationQuality` and the server as
+`?tessellation_quality=`; the level is model-wide, not per IFC type.
+
+### Filter by IFC STEP id
+
+Both geometry functions accept an optional `ids` set. Only matching occurrence
+ids are tessellated, which lets you select products through `entity_data` first
+without paying to mesh the rest of the model:
+
+```python
+entities = ifclite_geom.entity_data(ifc_bytes)
+wall_ids = {
+    step_id
+    for step_id, row in entities["entities"].items()
+    if row["ifc_type"] == "IfcWall"
+}
+walls = ifclite_geom.geometry_data_buffers(ifc_bytes, ids=wall_ids)
+```
+
+`ids=None` preserves the unfiltered behaviour. An empty set returns zero
+elements, and ids not present in the file are ignored. The pipeline still
+resolves relationship and representation dependencies: for example, selecting
+a wall keeps its unselected `IfcOpeningElement` cutters available to the wall's
+CSG operation without emitting meshes for those openings.
+
+### `entity_data(ifc_bytes, placements=False, type_properties=True, attributes=True) -> dict`
+
+Attributes, property sets and quantity sets. No tessellation runs, so this is
+cheap compared with the geometry functions.
+
+```text
+{
+  "length_unit_scale": 0.001,      # file length unit -> metres
+  "plane_angle_to_radians": 0.0174,
+  "project_id": 42,                # may be None
+  "entity_count": 1234,
+  "entities": {
+    <step_id:int>: {
+      "ifc_type":      "IfcWall",
+      "global_id":     "3vB2...",       # may be None
+      "name":          "WALL 1",        # may be None
+      "description":   None,
+      "object_type":   None,
+      "has_geometry":  True,
+      "placement":     None,            # see below
+      "property_sets": [
+        {"name": "Pset_WallCommon",
+         "properties": [{"name": "IsExternal", "value": "True",
+                         "value_type": "IFCBOOLEAN"}]},
+      ],
+      "quantity_sets": [
+        {"name": "Qto_WallBaseQuantities",
+         "quantities": [{"name": "Length", "value": 3000.0, "kind": "Length"}]},
+      ],
+      "attributes": [                  # schema-declared entity attributes
+        {"name": "PredefinedType", "value": "SOLIDWALL", "value_type": "IFCENUM"},
+      ],
+    },
+    ...
+  }
+}
+```
+
+`entities` is keyed by IFC STEP id in file order, the same key
+`geometry_data_buffers` uses, so the two join directly. The join is one-way
+total: every meshed element has a row, but not every row has an element, so
+drive the loop from `elements` (or use `.get()`) rather than the other way
+round. Besides products with no geometry, an orphan `IfcTypeProduct` carries
+`has_geometry: True` and still never appears in `elements`, because the
+geometry functions emit occurrences only.
+
+```python
+geom = ifclite_geom.geometry_data_buffers(ifc_bytes)
+ents = ifclite_geom.entity_data(ifc_bytes)
+
+for step_id, el in geom["elements"].items():
+    row = ents["entities"].get(step_id)
+    if row:
+        print(el["ifc_type"], row["name"], row["property_sets"])
+```
+
+Pass `placements=True` to also resolve each product's `ObjectPlacement` into a
+list of 16 floats: a **column-major** 4x4, translation in metres at indices
+12/13/14. It is off by default because it costs an extra decode per product.
+
+The matrix is in the **same absolute IFC world frame as
+`geometry_data_buffers` vertices**, so the two line up directly. Do not fold
+`rtc_offset` into either: the geometry export already adds it back into every
+vertex, and the placement is never RTC-rebased. On a georeferenced model both
+are large absolute coordinates, and a product's placement origin lands inside
+its own mesh bounds.
+
+#### Units, and two current limits
+
+- **Property and quantity values are in the file's own units**, unlike geometry,
+  which is always metres. A millimetre model reports a wall length of `3000`.
+  Property values are always strings; quantity values are floats.
+
+  Converting is per dimension, not one blanket factor:
+
+  | quantity kind | to SI |
+  |---|---|
+  | `Length` | `value * length_unit_scale` |
+  | `Area` | `value * length_unit_scale ** 2` |
+  | `Volume` | `value * length_unit_scale ** 3` |
+  | `Count` | unchanged (dimensionless) |
+  | angles (properties) | `value * plane_angle_to_radians` |
+
+  Only the length and plane-angle scales are resolved, so a model that declares
+  an area or volume unit inconsistent with its length unit cannot be reconciled
+  from what is returned here.
+- **Only `IfcPropertySingleValue` properties are decoded.** Enumerated, list,
+  bounded, table and reference properties are skipped; the pset still appears,
+  with those entries missing.
+### Entity attributes
+
+Note the two senses of "type" on this page. The section below concerns an
+`IfcTypeObject`, the shared definition an occurrence inherits from. This one
+concerns the IFC **entity class** (`IfcWall`, `IfcReinforcingBar`) and the
+attributes its schema declares. They are unrelated.
+
+`attributes` is on by default. These are **not** property sets and no amount of
+pset work surfaces them, because they are declared on the entity itself:
+
+```python
+row = ents["entities"][step_id]
+{a["name"]: a["value"] for a in row["attributes"]}
+# A bar with every attribute set:
+# {'Tag': 'TAG-1', 'SteelGrade': 'B500B', 'NominalDiameter': '29',
+#  'CrossSectionArea': '660', 'BarLength': '500',
+#  'PredefinedType': 'NOTDEFINED', 'BarSurface': 'PLAIN'}
+#
+# A bar leaving most of them `$`, which is the common case:
+# {'NominalDiameter': '29', 'CrossSectionArea': '0',
+#  'PredefinedType': 'NOTDEFINED'}
+```
+
+**Only what the file sets is returned.** An attribute left `$` is omitted
+rather than reported empty, so the list is usually shorter than the class
+declares, and its length varies between two entities of the same class.
+
+Every IFC entity class has its own schema-declared attributes: `IfcDoor` yields
+`OverallHeight` / `OverallWidth`, and so on, named and ordered as the schema
+declares them. Entries share the `{name, value, value_type}` shape of a
+property, so one code path reads both.
+
+Fields the row already carries (`global_id`, `name`, `description`,
+`object_type`) are not repeated, and reference-valued attributes are omitted
+rather than rendered as a dangling `#123`. Pass `attributes=False` to skip.
+
+### Type-inherited properties
+
+`type_properties` is on by default. A type attaches its sets through
+`IfcTypeObject.HasPropertySets` and gets no row of its own unless it carries
+orphan geometry, so without this the properties authoring tools put on types
+are unreachable. Each occurrence therefore also carries what it inherits
+through `IfcRelDefinesByType`, merged **per property**:
+
+- A type set whose name the occurrence does not use is added whole.
+- A type set sharing a name contributes only the properties the occurrence does
+  not already define. On a collision the occurrence wins, and the type-only
+  properties beside it still survive. Replacing the whole set instead would
+  hide them, which is the bug this rule exists to prevent.
+
+**`quantity_sets` inherit on exactly the same terms.** A type attaches
+`IfcElementQuantity` definitions through the same `HasPropertySets` attribute,
+so they arrive by the same route and merge by the same rule: a type quantity
+set the occurrence does not name is added whole, and a same-named one
+contributes only the quantities the occurrence does not already define, so the
+occurrence wins a collision. `type_properties` governs both lists; there is no
+separate switch.
+
+```python
+# Own sets only, as in 4.3.0. Affects property_sets AND quantity_sets.
+ents = ifclite_geom.entity_data(ifc_bytes, type_properties=False)
+```
+
+This mirrors what the browser has done since the same fix landed there, so a
+property visible in the viewer is now visible here.
+
+## Notes
+
+- **One mesh per element.** Per-material submeshes of an element are merged into a
+  single indexed triangle soup, keyed by its IFC STEP id.
+- **Coordinates are absolute world metres.** The per-element local frame and the
+  model RTC offset are folded back into every vertex. For geo-referenced models
+  `rtc_offset` is non-zero; subtract it if you want f32-friendly local
+  coordinates.
+- **Welded and indexed.** Coincident corners are merged (1 micron grid), so
+  closed-mesh consumers (volume, watertightness checks) work directly.
+- **Occurrences only.** Type-product / RepresentationMap geometry is not
+  emitted, matching what occurrence-based tessellators produce.
+- **Errors** surface as `RuntimeError` (pipeline failure) or `ValueError` (an
+  unrecognised `quality` label, or JSON serialization failure).
+
+## Examples
+
+Runnable scripts live in [`examples/`](./examples):
+
+- [`quickstart_numpy.py`](./examples/quickstart_numpy.py) - load a file and
+  inspect meshes via numpy.
+- [`dump_json.py`](./examples/dump_json.py) - write the JSON document to disk.
+- [`export_obj.py`](./examples/export_obj.py) - write every element to a single
+  Wavefront `.obj` (numpy only, no extra deps).
+- [`schedule_csv.py`](./examples/schedule_csv.py) - join `entity_data` against
+  `geometry_data_buffers` and write a quantity schedule to CSV (stdlib only).
+
+## License
+
+MPL-2.0. Part of the [ifc-lite](https://github.com/LTplus-AG/ifc-lite) project.
+
+### Alignment axes
+
+`alignment_axes(ifc_bytes, spacing_m=1.0, max_samples_per_axis=5001,
+max_total_samples=100000)` returns `axes` keyed by integer STEP ExpressId and
+`diagnostics` (at most 1,000 entries, with `diagnostics_omitted` reporting
+suppressed entries). Each axis carries `GlobalId`, `Name`, geometric horizontal length
+in metres, and samples containing `geometric_horizontal_distance_m`, an absolute
+world-space f64 `point` in IFC Z-up metres, and a normalized 3D `tangent`.
+
+Distance starts at the physical start, **not authored chainage**, and differs
+from 3D arc length on graded paths. Placement and declared length units use the
+shared Rust resolvers. Missing or unsupported axes, unresolved units and invalid
+placements produce diagnostics instead of fabricated identity or metre values.
+The strict sampling API accepts absent placement or a valid finite, nondegenerate
+`IfcLocalPlacement` chain with 3D relative placements; grid/linear axis placements
+and 2D relative placements are explicitly unsupported.
+IFC4x3 gradient/composite curves use the canonical medium-quality tessellation;
+this approximation is reported, as are the canonical cubic-parabola and
+biquadratic-parabola transition approximations. Horizontal distance is measured
+in the alignment-local XY plane even if placement tilts it in world space.
+Existing renderer alignment lines are unchanged.
+
+Sampling includes both endpoints. Per-axis and total bounds may coarsen spacing
+and report that action; later axes are omitted with diagnostics when fewer than
+two samples remain. Bounds must be between 2 and 1,000,000 and spacing must be
+finite and positive. Failed axes also spend the total frame-evaluation budget, so a late invalid
+frame cannot repeatedly reset that budget. Composite/gradient curve validation
+also has a per-axis budget of 100,000 reference-work items, including repeated
+references; exhaustion reports an invalid axis rather than truncated geometry.
+These limits do not limit the input IFC file size. The binding releases the GIL
+during Rust evaluation.
+
+```python
+from ifclite_geom import alignment_axes
+
+with open("road.ifc", "rb") as file:
+    report = alignment_axes(file.read(), spacing_m=5.0)
+for express_id, axis in report["axes"].items():
+    print(express_id, axis["Name"], axis["samples"][0]["point"])
+for diagnostic in report["diagnostics"]:
+    print(diagnostic["express_id"], diagnostic["code"], diagnostic["message"])
+```
+
+The capability adapts GeoBIM's published `alignment_axes` idea through the
+canonical evaluator, rather than duplicating evaluation or sampling renderer
+Float32 lines. Source: <https://github.com/geobim-app/geobim> (MPL-2.0).

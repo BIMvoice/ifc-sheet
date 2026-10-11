@@ -1,0 +1,258 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Public CSG / opening diagnostics contract for @ifc-lite/geometry. The shape
+ * mirrors the Rust `GeometryDiagnostics` (rust/geometry router::diagnostics),
+ * which is built once per geometry batch and serialized to a JS object. The
+ * geometry worker merges per-batch values across batches and the parallel loader
+ * merges across workers, surfacing one `diagnostics` object on the streaming
+ * `complete` event. The native `ProcessingStats` path reuses the same
+ * aggregator (wired: `rust/processing` populates `geometry_diagnostics`).
+ *
+ * Counts are best-effort observability: `totalCsgFailures` and the classification
+ * counts are exact, while `productsWithFailures` / `hostsWithOpenings` /
+ * `silentNoOps` are summed per batch and are therefore upper bounds (a product
+ * whose geometry spans batches may be counted more than once).
+ */
+export interface GeometryDiagnostics {
+  /**
+   * Contract version handshake (mirrors Rust
+   * `GEOMETRY_DIAGNOSTICS_SCHEMA_VERSION`, currently 3 — that constant carries
+   * the per-version changelog and is the single source of truth). Bumped on
+   * field renames, field removals, and count-semantics changes; also on an
+   * additive field whose absence a consumer must tell apart from a real zero,
+   * which is why 2 (removed `guardSaved`) and 3 (added
+   * `totalUnsupportedItems`) both bumped. A purely additive optional field
+   * that no consumer gates on does not bump.
+   *
+   * REQUIRED, not optional: the Rust field is a plain `u32` serialized
+   * unconditionally, so every producer since #1514 writes the key. A value of
+   * `0` is what Rust's `#[serde(default)]` yields when it READS a payload
+   * written before #1514, and is the only "pre-versioned producer" signal a
+   * consumer sees.
+   */
+  schemaVersion: number;
+  /** Total CSG boolean failures (un-cut openings, emptied hosts, kernel fallbacks). */
+  totalCsgFailures: number;
+  /** Distinct products with at least one failure (batch-summed upper bound). */
+  productsWithFailures: number;
+  /** Hosts that had openings processed (batch-summed upper bound). */
+  hostsWithOpenings: number;
+  /** Opening-classifier outcome counts. */
+  classification: {
+    rectangular: number;
+    diagonal: number;
+    nonRectangular: number;
+    total: number;
+  };
+  /** Failure counts by stable reason label, sorted desc by count. */
+  failuresByReason: Array<{ reason: string; count: number }>;
+  /**
+   * Hosts where rectangular cutters ran, the triangle count was unchanged, and NO
+   * failure was recorded (cut attempted, geometry not modified) - the highest-
+   * signal "looks wrong but did not error" indicator. Hosts that failed are
+   * excluded (they are loud failures counted in totalCsgFailures, not silent).
+   * Batch-summed upper bound.
+   */
+  silentNoOps: number;
+  /** rect_fast fast-path engagement (perf observability). */
+  rectFast: {
+    fired: number;
+    openingsCut: number;
+    deferHostNotBox: number;
+    deferNotThrough: number;
+    deferOffFace: number;
+    deferNearEdge: number;
+    deferNoOpenings: number;
+    /** Optional: absent on payloads produced before this counter existed (#1649). */
+    deferTooManyOpenings?: number;
+  };
+  /**
+   * Content-hash references the geometry pass refused because they exceeded
+   * `u32::MAX` (#3421 / #3752). Nonzero means some instancing was skipped, not
+   * that geometry is wrong. Optional: absent on payloads from producers
+   * predating the counter.
+   */
+  oversizedRefDrops?: number;
+  /** Bounded top-N worst-failing hosts (opt-in per-product detail). */
+  worstHosts: Array<{
+    productId: number;
+    ifcType: string;
+    openings: number;
+    csgFailures: number;
+    firstFailureLabel?: string;
+    /** World-space AABB of the host mesh, when a void cut captured it.
+     *  Mirrors the `{min, max}` shape used by `MeshData.localBounds`. */
+    bbox?: { min: [number, number, number]; max: [number, number, number] };
+    /** Final triangle count of the host's mesh (post-cut when a void
+     *  subtraction ran, otherwise the pre-cut count). */
+    triangleCount?: number;
+  }>;
+  /**
+   * Representation items dropped from the output: no processor is registered
+   * for the IFC type, or the registered processor errored (degenerate/failed
+   * geometry). Excludes elements with no Body representation at all — those
+   * are correctly absent from the 3D view and never counted here. Absent on
+   * a payload produced before this counter existed (schemaVersion < 3).
+   *
+   * A lower bound on instances: a drop inside a `RepresentationMap` source is
+   * counted once per walking router, not once per `IfcMappedItem` occurrence
+   * that reuses the cached source. That is once model-wide on the wasm batch
+   * path, which uses one router; the native pool builds a router per element,
+   * and a source whose items ALL drop is never published to the shared cache
+   * (it meshes to nothing), so there it contributes once per owning element.
+   * Read it as "these types were dropped", never as a count of affected
+   * elements or of distinct sources.
+   */
+  totalUnsupportedItems?: number;
+  /** `totalUnsupportedItems` broken down by IFC type, sorted desc by count. */
+  unsupportedItemsByType?: Array<{ reason: string; count: number }>;
+}
+
+/** Cap on the merged worst-hosts detail list (matches the Rust WORST_HOSTS_LIMIT). */
+const WORST_HOSTS_LIMIT = 16;
+
+/** One reason/type and how many times it was seen. */
+type ReasonCount = { reason: string; count: number };
+
+/**
+ * Sum two reason-keyed lists by key, count-desc then reason-asc. The tie-break
+ * is load-bearing, not cosmetic: without it equal counts come out in Map
+ * insertion order, so the same model could render a different string on two
+ * runs. Shared by `failuresByReason` and `unsupportedItemsByType` so the two
+ * cannot order themselves differently. Agrees with the Rust `summarize` for the
+ * ASCII `Ifc*` type names and reason labels that actually reach here; the two
+ * are not identical orderings in general, since Rust ties break on byte order
+ * and `localeCompare` does not.
+ */
+function mergeReasonCounts(a: readonly ReasonCount[], b: readonly ReasonCount[]): ReasonCount[] {
+  const byKey = new Map<string, number>();
+  for (const r of [...a, ...b]) byKey.set(r.reason, (byKey.get(r.reason) ?? 0) + r.count);
+  return [...byKey.entries()]
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((x, y) => y.count - x.count || x.reason.localeCompare(y.reason));
+}
+
+/**
+ * Merge two GeometryDiagnostics (per-batch -> per-load, or per-worker ->
+ * per-model). Scalars sum; classification + rectFast sum field-wise;
+ * failuresByReason merges by reason; worstHosts concatenates, re-ranks by failure
+ * count, and is capped. `null` operands pass through so callers can fold a stream.
+ */
+export function mergeGeometryDiagnostics(
+  a: GeometryDiagnostics | null | undefined,
+  b: GeometryDiagnostics | null | undefined,
+): GeometryDiagnostics | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+
+  const schemaVersion = Math.max(a.schemaVersion ?? 0, b.schemaVersion ?? 0);
+
+  const failuresByReason = mergeReasonCounts(a.failuresByReason, b.failuresByReason);
+
+  // Fold by productId first (a host whose geometry spans batches/workers can
+  // appear in both operands' lists) before re-ranking and capping, mirroring the
+  // failuresByReason merge-by-key above. Copy each entry so the operands are not
+  // mutated.
+  const hostById = new Map<number, GeometryDiagnostics['worstHosts'][number]>();
+  for (const h of [...a.worstHosts, ...b.worstHosts]) {
+    const prev = hostById.get(h.productId);
+    if (prev) {
+      prev.csgFailures += h.csgFailures;
+      prev.openings += h.openings;
+      prev.firstFailureLabel = prev.firstFailureLabel ?? h.firstFailureLabel;
+      // bbox/triangleCount describe a single physical host's mesh, not a
+      // per-batch tally — keep the first captured value rather than summing
+      // (matches the firstFailureLabel precedent above).
+      prev.bbox = prev.bbox ?? h.bbox;
+      prev.triangleCount = prev.triangleCount ?? h.triangleCount;
+    } else {
+      hostById.set(h.productId, { ...h });
+    }
+  }
+  const worstHosts = [...hostById.values()]
+    .sort((x, y) => y.csgFailures - x.csgFailures || x.productId - y.productId)
+    .slice(0, WORST_HOSTS_LIMIT);
+
+  // Whether EITHER operand actually carried the counter. Folding an absent field
+  // to 0 here would hand back `totalUnsupportedItems: 0` on a payload still
+  // labelled `schemaVersion: 2` — "we counted, and nothing was dropped" built out
+  // of "this producer never counted". That is the precise confusion the v3 bump
+  // exists to prevent, so absence has to survive the merge: the fields are
+  // omitted unless at least one side supplied one.
+  const countedUnsupported =
+    a.totalUnsupportedItems !== undefined ||
+    b.totalUnsupportedItems !== undefined ||
+    a.unsupportedItemsByType !== undefined ||
+    b.unsupportedItemsByType !== undefined;
+  const unsupportedFields = countedUnsupported
+    ? {
+        totalUnsupportedItems: (a.totalUnsupportedItems ?? 0) + (b.totalUnsupportedItems ?? 0),
+        unsupportedItemsByType: mergeReasonCounts(
+          a.unsupportedItemsByType ?? [],
+          b.unsupportedItemsByType ?? [],
+        ),
+      }
+    : {};
+
+  return {
+    schemaVersion,
+    totalCsgFailures: a.totalCsgFailures + b.totalCsgFailures,
+    productsWithFailures: a.productsWithFailures + b.productsWithFailures,
+    hostsWithOpenings: a.hostsWithOpenings + b.hostsWithOpenings,
+    classification: {
+      rectangular: a.classification.rectangular + b.classification.rectangular,
+      diagonal: a.classification.diagonal + b.classification.diagonal,
+      nonRectangular: a.classification.nonRectangular + b.classification.nonRectangular,
+      total: a.classification.total + b.classification.total,
+    },
+    failuresByReason,
+    silentNoOps: a.silentNoOps + b.silentNoOps,
+    rectFast: {
+      fired: a.rectFast.fired + b.rectFast.fired,
+      openingsCut: a.rectFast.openingsCut + b.rectFast.openingsCut,
+      deferHostNotBox: a.rectFast.deferHostNotBox + b.rectFast.deferHostNotBox,
+      deferNotThrough: a.rectFast.deferNotThrough + b.rectFast.deferNotThrough,
+      deferOffFace: a.rectFast.deferOffFace + b.rectFast.deferOffFace,
+      deferNearEdge: a.rectFast.deferNearEdge + b.rectFast.deferNearEdge,
+      deferNoOpenings: a.rectFast.deferNoOpenings + b.rectFast.deferNoOpenings,
+      deferTooManyOpenings: (a.rectFast.deferTooManyOpenings ?? 0) + (b.rectFast.deferTooManyOpenings ?? 0),
+    },
+    oversizedRefDrops: (a.oversizedRefDrops ?? 0) + (b.oversizedRefDrops ?? 0),
+    worstHosts,
+    ...unsupportedFields,
+  };
+}
+
+/** Payload shape of the geometry worker's streaming `complete` message. */
+export interface GeometryWorkerCompleteMessage {
+  type: 'complete';
+  totalMeshes: number;
+  /** CSG / opening diagnostics merged over this worker's batches (the
+   *  GeometryDiagnostics contract). Omitted when none were recorded. */
+  diagnostics?: GeometryDiagnostics;
+}
+
+/**
+ * Build the streaming `complete` event payload (`geometry.worker.ts`'s
+ * `emitSessionEnd`, the only caller). Extracted so it can be exercised
+ * directly by tests without importing the worker module itself, which
+ * assigns `self.onmessage` at module load time and therefore cannot be
+ * imported outside a Worker/browser-like global (see diagnostics.test.ts).
+ *
+ * `diagnostics` is omitted from the returned object entirely (not sent as
+ * `undefined`) when `null` — callers gate on presence
+ * (`if (event.diagnostics)`), not just truthy counts.
+ */
+export function buildGeometryWorkerCompleteMessage(
+  totalMeshes: number,
+  diagnostics: GeometryDiagnostics | null,
+): GeometryWorkerCompleteMessage {
+  return {
+    type: 'complete',
+    totalMeshes,
+    ...(diagnostics ? { diagnostics } : {}),
+  };
+}

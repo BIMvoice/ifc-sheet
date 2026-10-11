@@ -1,0 +1,189 @@
+# @ifc-lite/export
+
+Export formats for IFClite. Writes Apache Parquet (Arrow-based internally), IFC STEP (with mutations applied), IFC5 IFCX (JSON + USD geometry), and lightweight LOD0/LOD1 envelopes — all from a single parsed `IfcDataStore`.
+
+> **glTF/GLB, CSV and JSON-LD moved to Rust.** They are now assembled by the `ifc-lite-export` crate and reached through `GeometryProcessor` in [`@ifc-lite/geometry`](../geometry); the standalone `GLTFExporter`/`CSVExporter`/`JSONLDExporter` classes were retired.
+
+## Installation
+
+```bash
+npm install @ifc-lite/export
+```
+
+## glTF / GLB — for the web
+
+```typescript
+import { GeometryProcessor } from '@ifc-lite/geometry';
+
+const gp = new GeometryProcessor();
+await gp.init();
+
+// From already-produced meshes (no re-mesh) …
+const glb = gp.exportGlbFromMeshes(result.meshes, /* includeMetadata */ true);
+// … or straight from IFC bytes (meshes internally):
+//   gp.exportGlb(bytes, true, new Uint32Array(), new Uint32Array(), '')
+
+// Download
+const url = URL.createObjectURL(new Blob([new Uint8Array(glb)], { type: 'model/gltf-binary' }));
+```
+
+## CSV / JSON-LD / HBJSON - also via GeometryProcessor
+
+```typescript
+// `file` is a caller-provided File (e.g. from an <input type="file">)
+const bytes = new Uint8Array(await file.arrayBuffer()); // raw IFC bytes
+
+// CSV: mode is one of entities | properties | quantities | spatial
+const csv = gp.exportCsv(bytes, 'properties');
+
+// JSON-LD knowledge graph
+const jsonld = gp.exportJsonld(bytes);
+
+// HBJSON (Honeybee JSON for energy simulation)
+const hbjson = gp.exportHbjson(bytes, 'model');
+// Each returns Uint8Array | null (null until the processor is initialized)
+```
+
+## IFC STEP — with mutations
+
+```typescript
+import { exportToStep } from '@ifc-lite/export';
+
+const stepText = exportToStep(store, {
+  schema: 'IFC4',           // 'IFC2X3' | 'IFC4' | 'IFC4X3' | 'IFC5'
+  applyMutations: true,     // include edits from MutablePropertyView
+  visibleOnly: false,       // export only entities visible in the renderer
+});
+
+// Save as .ifc
+const blob = new Blob([stepText], { type: 'application/x-step' });
+```
+
+`exportToStep` is the round-trip path for property edits. Edit via `@ifc-lite/mutations`, export with `applyMutations: true`, ship the resulting `.ifc` to whatever consumes IFC.
+
+## Anonymized isolated export — for bug reports
+
+`collectRelatedEntities` + `exportAnonymizedSubset` pick a seed selection,
+expand it by relationship context (host, openings/fillers, type, materials,
+spatial containment), and export exactly that subset with every
+project-identifying signal removed — while local placement rotations and
+non-orthogonal cuts survive, so a parsing/geometry bug reproduction still
+reproduces:
+
+```typescript
+import { collectRelatedEntities, exportAnonymizedSubset } from '@ifc-lite/export';
+
+const related = collectRelatedEntities(store, new Set([312])); // seed expressId(s)
+const result = exportAnonymizedSubset(store, related.all);
+await saveFile('anonymized.ifc', result.content);
+```
+
+Every `AnonymizeOptions` field defaults to the maximally-scrubbed direction
+(names pseudonymized, `GlobalId`s regenerated, property sets dropped, owner
+history and georeferencing scrubbed) — `ObjectType` and material/style names
+are pseudonymized right along with everything else under the default
+`pseudonymizeAllNames`, and the STEP header's `originating_system` is
+blanked under the default `scrubOwnerHistory`. What stays in the file by
+decision: geometry and local placement rotations/non-orthogonal cuts (only
+the root placement's translation is zeroed), structural entity types,
+material *assignments* (which material, just not its original name), and
+the header's `preprocessor_version` (from `IfcApplication`, defaults to
+`'ifc-lite'`) — that is what makes the file useful for a bug repro. See the
+[Exporting
+Guide](https://ifclite.dev/docs/guide/exporting/#anonymized-isolated-export)
+for the full option list, including how to opt back into authored names via
+`--keep-other-names`.
+
+## Apache Parquet — for analytics
+
+```typescript
+import { ParquetExporter } from '@ifc-lite/export';
+
+const exporter = new ParquetExporter(store);
+
+// One .bos archive (ZIP of Parquet tables: entities, properties, quantities, …)
+const bos = await exporter.exportBOS();
+
+// …or a single table on its own
+//   tableName ∈ entities|properties|quantities|relationships|strings|vertices|indices|meshes
+const entities = await exporter.exportTable('entities');
+
+// Each Parquet table is ~15–50× smaller than equivalent JSON
+// Loadable directly from DuckDB, Polars, pandas, BigQuery, …
+```
+
+Editing via `@ifc-lite/mutations`? Pass the `MutablePropertyView` as the third constructor
+argument to drop overlay-deleted entities (and every row that references one) from
+the Parquet tables and include overlay-created entities in `Entities.parquet`:
+
+```typescript
+import { ParquetExporter } from '@ifc-lite/export';
+
+const exporter = new ParquetExporter(store, geometryResult, mutationView);
+```
+
+Created relationship/property/quantity/geometry rows and edits to parsed
+property/quantity/attribute values aren't reflected yet. Those table writers
+still column-copy the parsed store. `StepExporter`/`Ifc5Exporter` cover the full
+edit surface today.
+
+## IFC5 IFCX — JSON + USD geometry
+
+```typescript
+import { Ifc5Exporter } from '@ifc-lite/export';
+
+const exporter = new Ifc5Exporter(store, geometryResult, mutationView);
+
+const result = exporter.export({
+  includeGeometry: true,    // tessellated meshes as USD
+  includeProperties: true,  // psets in bsi::ifc::prop:: namespace
+  applyMutations: true,
+  visibleOnly: false,
+});
+
+// result.content → IFCX JSON string
+// result.stats   → { nodeCount, propertyCount, meshCount, fileSize }
+```
+
+Cross-schema conversion happens automatically — feed an IFC2X3 store, get IFC5 output.
+
+## LOD0 / LOD1 — lightweight previews
+
+Generate cheap geometric envelopes for use in dashboards, list views, or first-paint hints. Environment-agnostic (Node, browser, server) — accepts raw IFC bytes:
+
+```typescript
+import { generateLod0, generateLod1 } from '@ifc-lite/export';
+
+const bytes = new Uint8Array(await file.arrayBuffer());
+
+// LOD0 — bounding boxes + transforms per element, JSON
+const lod0 = await generateLod0(bytes);
+
+// LOD1 — meshes simplified to bounding boxes / convex hulls, returned as GLB
+const lod1 = await generateLod1(bytes);
+//   { glb: Uint8Array, meta: { failedElements, mapping, ... } }
+
+// Falls back gracefully to box geometry if a complex element fails to mesh
+```
+
+## Also exported
+
+- `MergedExporter` - merge several parsed models into one STEP export
+- `collectRelatedEntities` / `exportAnonymizedSubset` - anonymized isolated export (see above)
+- `convertEntityType` / `convertStepLine` / `needsConversion` - IFC2X3 / IFC4 / IFC4X3 schema conversion helpers
+- `parseGLB` / `parseGLBToMeshData` / `extractGlbMapping` - GLB round-trip readers
+
+## API
+
+See the [Exporting Guide](https://ifclite.dev/docs/guide/exporting/) and [API Reference](https://ifclite.dev/docs/api/typescript/#ifc-liteexport).
+
+## License
+
+[MPL-2.0](../../LICENSE)
+
+IFCX geometry exports retain texture fragments and owner identity through a
+versioned IFClite appearance extension, with bounded shared RGBA pixels and
+optional `textureSources` containing original PNG/JPEG bytes. Unresolved images
+fail explicitly. This preserves IFClite roundtrips; third-party readers must
+implement the extension to recover textures. See
+[IFCX texture portability](../../docs/guide/exporting.md#ifcx-texture-portability).

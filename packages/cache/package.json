@@ -1,0 +1,54 @@
+{
+  "name": "@ifc-lite/cache",
+  "version": "3.7.0",
+  "description": "Binary cache format for IFC-Lite - fast model loading",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm exec tsc",
+    "typecheck": "node ../../scripts/typecheck-tests.mjs",
+    "dev": "pnpm exec tsc --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ifc-lite/data": "workspace:^",
+    "@ifc-lite/geometry": "workspace:^",
+    "@ifc-lite/load-trace": "workspace:^"
+  },
+  "devDependencies": {
+    "@ifc-lite/parser": "workspace:^",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
+  },
+  "license": "MPL-2.0",
+  "author": "Louis True",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LTplus-AG/ifc-lite.git",
+    "directory": "packages/cache"
+  },
+  "homepage": "https://ifclite.dev/docs/",
+  "bugs": "https://github.com/LTplus-AG/ifc-lite/issues",
+  "keywords": [
+    "ifc",
+    "bim",
+    "cache",
+    "binary",
+    "aec"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

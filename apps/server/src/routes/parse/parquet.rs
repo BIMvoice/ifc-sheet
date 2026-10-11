@@ -1,0 +1,303 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Binary Parquet parse endpoints.
+
+use super::cache_keys::{
+    data_model_cache_key, has_current_data_model, has_cached_symbolic, parquet_geometry_key,
+    parquet_metadata_key, request_cache_key,
+};
+use super::replay_header::mark_header_from_cache;
+use super::{cache_symbolic_data_off_runtime, extract_file, ParseQuery};
+use crate::error::ApiError;
+use crate::services::baked_basis_zup;
+use crate::services::parquet::serialize_combined_for_layout;
+use crate::services::{extract_data_model, serialize_data_model_to_parquet};
+use crate::types::{finish_meshes, ModelMetadata, ProcessingStats};
+use ifc_lite_processing::style::ModelFinishes;
+use crate::AppState;
+use axum::{
+    body::Body,
+    extract::{Multipart, Query, State},
+    http::{header, StatusCode},
+    response::Response,
+};
+use ifc_lite_processing::{
+    extract_symbolic_data_with_provenance_in_frame, process_geometry_filtered_with_quality,
+    MeshCoordinateSpace,
+};
+use serde::{Deserialize, Serialize};
+
+/// Response header containing metadata for Parquet response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParquetMetadataHeader {
+    pub cache_key: String,
+    pub metadata: ModelMetadata,
+    pub stats: ProcessingStats,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mesh_coordinate_space: Option<MeshCoordinateSpace>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub site_transform: Option<Vec<f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub building_transform: Option<Vec<f64>>,
+    /// Data model statistics (if included).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_model_stats: Option<DataModelStats>,
+}
+
+/// Data model extraction statistics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataModelStats {
+    pub entity_count: usize,
+    pub property_set_count: usize,
+    pub relationship_count: usize,
+    pub spatial_node_count: usize,
+}
+
+/// POST /api/v1/parse/parquet - Full parse with Parquet-encoded geometry.
+///
+/// Returns binary Parquet data with ~15x smaller payload than JSON.
+/// Response format:
+/// - Content-Type: application/x-parquet-geometry
+/// - X-IFC-Metadata: JSON-encoded ParquetMetadataHeader
+/// - Body: Binary Parquet data (mesh_parquet + vertex_parquet + index_parquet)
+pub async fn parse_parquet(
+    State(state): State<AppState>,
+    Query(query): Query<ParseQuery>,
+    mut multipart: Multipart,
+) -> Result<Response, ApiError> {
+    // Extract file from multipart
+    // Admission gate (bounded concurrency + byte budget): acquired BEFORE the
+    // upload is buffered, reserving the max upload size since multipart rarely
+    // declares a length up front. Held for the request's whole lifetime so a
+    // disconnected-but-still-running job keeps its memory slot.
+    let admission_guard = state
+        .admission
+        .acquire(state.config.max_file_size_mb as u64 * 1024 * 1024)
+        .await?;
+    let data = extract_file(&mut multipart, state.config.max_file_size_mb).await?;
+
+    // Generate cache key (include opening filter so different modes get different cache entries)
+    let tessellation_quality = query.resolved_tessellation_quality()?;
+    let cache_key = request_cache_key(&data, &query, tessellation_quality);
+
+    // Check cache first (before any processing)
+    let layout = query.parquet_layout;
+    let parquet_cache_key = parquet_geometry_key(&cache_key, layout);
+    let metadata_cache_key = parquet_metadata_key(&cache_key);
+
+    // The cached-geometry short-circuit skips the parse, and the parse is what
+    // writes the data model. A geometry entry that outlived a data-model
+    // version bump must fall through so both get rewritten (issue #3869).
+    // The same rule applies to symbolic schema freshness (#4459).
+    if let (Some(cached_parquet), Some(cached_metadata_json), true, true) = (
+        state.cache.get_bytes(&parquet_cache_key).await?,
+        state.cache.get_bytes(&metadata_cache_key).await?,
+        has_current_data_model(&state.cache, &cache_key, query.data_model_entities).await,
+        has_cached_symbolic(&state.cache, &cache_key).await,
+    ) {
+        tracing::info!(
+            cache_key = %cache_key,
+            parquet_size = cached_parquet.len(),
+            "Parquet cache HIT - returning cached response"
+        );
+
+        // Build response from cached data. The stored header is the one the
+        // live parse wrote, `from_cache: false` included (#5542).
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/x-parquet-geometry")
+            .header(
+                "X-IFC-Metadata",
+                mark_header_from_cache(
+                    String::from_utf8(cached_metadata_json)
+                        .map_err(|error| ApiError::Internal(error.to_string()))?,
+                ),
+            )
+            .header(header::CONTENT_LENGTH, cached_parquet.len())
+            .body(Body::from(cached_parquet))
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+        return Ok(response);
+    }
+
+    tracing::info!(
+        cache_key = %cache_key,
+        size = data.len(),
+        "Parquet cache MISS - processing file"
+    );
+
+    // Parse content
+    let content = data;
+
+    // Process geometry and data model extraction + serialization ALL in parallel
+    // rayon::join works correctly here because rayon has its own thread pool
+    // that's independent of tokio's blocking thread pool
+    let serialize_start = tokio::time::Instant::now();
+    let opening_filter = query.opening_filter;
+    let data_model_entities = query.data_model_entities;
+    // Guard rides the blocking task (see parse_full): a cancelled handler
+    // future must not release the admission slot while the work runs on.
+    let (
+        (
+            ((geometry_result, mesh_count), combined_parquet),
+            (data_model_stats, data_model_parquet),
+            symbolic_data,
+        ),
+        _admission,
+    ) = tokio::task::spawn_blocking(move || {
+            // First: extract geometry and the data model in parallel.
+            // #5984: the finish index is a third independent read of the bytes.
+            let (mut geometry_result, (mut data_model, mut finishes)) = rayon::join(
+                || process_geometry_filtered_with_quality(&content, opening_filter, tessellation_quality),
+                || rayon::join(|| extract_data_model(&content), || ModelFinishes::from_content(&content)),
+            );
+            let meshes = finish_meshes(&mut finishes, std::mem::take(&mut geometry_result.meshes));
+            drop(finishes);
+
+            // Capture stats before moving data_model
+            let dm_stats = DataModelStats {
+                entity_count: data_model.entities.len(),
+                property_set_count: data_model.property_sets.len(),
+                relationship_count: data_model.relationships.len(),
+                spatial_node_count: data_model.spatial_hierarchy.nodes.len(),
+            };
+            // After the stats (#6034): they describe the MODEL, so the
+            // metadata header both entities variants share stays one value.
+            data_model_entities.apply(&mut data_model);
+
+            // Second: the 2D symbol stream (IfcAnnotation + IfcGrid, endpoint
+            // parity, issue #900) alongside serializing BOTH geometry and data
+            // model, so the data model is ready by the time the client needs it.
+            //
+            // Symbolic extraction used to run in the join ABOVE, beside the
+            // parse. It cannot: it needs the frame the parse selected, or a
+            // site-local model's symbols keep the site translation and rotation
+            // its meshes dropped (#4706). Moved down beside the serialization
+            // instead of made sequential, so it still overlaps other work.
+            let (symbolic_data, (geo_parquet, dm_parquet)) = rayon::join(
+                || extract_symbolic_data_with_provenance_in_frame(&content, geometry_result.frame),
+                || rayon::join(
+                    || {
+                        // The frame `geometry_result`'s vertices were baked in
+                        // (#4118). Without it a site-rotated model's repeated
+                        // shapes fail the residual check and silently keep
+                        // their per-occurrence geometry.
+                        let basis = baked_basis_zup(
+                            Some(geometry_result.mesh_coordinate_space),
+                            geometry_result.site_transform.as_deref(),
+                            geometry_result.metadata.coordinate_info.origin_shift,
+                        );
+                        serialize_combined_for_layout(
+                            &meshes,
+                            layout,
+                            Some(&basis),
+                        )
+                    },
+                    || serialize_data_model_to_parquet(&data_model),
+                ),
+            );
+
+            (
+                (
+                    ((geometry_result, meshes.len()), geo_parquet),
+                    (dm_stats, dm_parquet),
+                    symbolic_data,
+                ),
+                admission_guard,
+            )
+        })
+        .await?;
+
+    // Unwrap serialization results
+    let combined_parquet = combined_parquet?;
+    let data_model_parquet = data_model_parquet?;
+
+    let serialize_time = serialize_start.elapsed();
+    tracing::info!(
+        meshes = mesh_count,
+        geometry_parquet_size = combined_parquet.len(),
+        data_model_parquet_size = data_model_parquet.len(),
+        total_serialize_time_ms = serialize_time.as_millis(),
+        "Geometry and data model serialization complete (parallel)"
+    );
+
+    // Cache data model IMMEDIATELY (not in background) so it's ready when client polls
+    let data_model_cache_key = data_model_cache_key(&cache_key, data_model_entities);
+    if let Err(e) = state
+        .cache
+        .set_bytes(&data_model_cache_key, &data_model_parquet)
+        .await
+    {
+        tracing::error!(error = %e, "Failed to cache data model");
+    } else {
+        tracing::info!(
+            cache_key = %data_model_cache_key,
+            size = data_model_parquet.len(),
+            "Data model cached (ready for client)"
+        );
+    }
+
+    // Cache the symbolic stream immediately so it's ready when the client
+    // fetches `GET /api/v1/parse/symbolic/{cache_key}` (issue #900).
+    cache_symbolic_data_off_runtime(state.cache.clone(), cache_key.clone(), symbolic_data).await;
+
+    // Create metadata header with data model stats (captured before background task)
+    let cache_key_clone = cache_key.clone();
+    let metadata_header = ParquetMetadataHeader {
+        cache_key: cache_key_clone.clone(),
+        metadata: geometry_result.metadata,
+        stats: geometry_result.stats,
+        mesh_coordinate_space: Some(geometry_result.mesh_coordinate_space),
+        site_transform: geometry_result.site_transform,
+        building_transform: geometry_result.building_transform,
+        data_model_stats: Some(data_model_stats),
+    };
+
+    let metadata_json = serde_json::to_string(&metadata_header)?;
+
+    // Cache the results for future requests. `Bytes` makes the cache task's
+    // copy an O(1) refcount bump instead of duplicating the whole payload.
+    let parquet_cache_key = parquet_geometry_key(&cache_key_clone, layout);
+    let metadata_cache_key = parquet_metadata_key(&cache_key_clone);
+    let combined_parquet_clone = combined_parquet.clone();
+    let metadata_json_clone = metadata_json.clone();
+    let cache = state.cache.clone();
+
+    // Cache in background (don't block response). Deliberately NOT the
+    // optimized route's synchronous write (#3889): this payload is the large
+    // one, so blocking the response on it costs the client real time. The
+    // trade is a window where an immediate repeat request re-parses because
+    // the write has not landed yet.
+    tokio::spawn(async move {
+        if let Err(e) = cache
+            .set_bytes(&parquet_cache_key, &combined_parquet_clone)
+            .await
+        {
+            tracing::error!(error = %e, "Failed to cache Parquet bytes");
+        }
+        if let Err(e) = cache
+            .set_bytes(&metadata_cache_key, metadata_json_clone.as_bytes())
+            .await
+        {
+            tracing::error!(error = %e, "Failed to cache metadata");
+        }
+        tracing::info!(
+            cache_key = %cache_key_clone,
+            parquet_size = combined_parquet_clone.len(),
+            "Cached Parquet response"
+        );
+    });
+
+    // Build response with binary body and metadata header
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/x-parquet-geometry")
+        .header("X-IFC-Metadata", metadata_json)
+        .header(header::CONTENT_LENGTH, combined_parquet.len())
+        .body(Body::from(combined_parquet))
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(response)
+}

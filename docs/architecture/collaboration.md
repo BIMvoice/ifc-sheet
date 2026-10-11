@@ -1,0 +1,88 @@
+# Collaboration architecture
+
+IFC-Lite collaboration is built around `@ifc-lite/collab`, with the sync and
+persistence service provided by `@ifc-lite/collab-server`. The browser viewer,
+CLI, MCP server, and third-party clients consume these shared packages rather
+than implementing independent collaboration protocols.
+
+## Model
+
+An editing session stores IFCX operations in a Yjs document. Operations are
+identified independently of transient STEP express IDs, and snapshots are
+materialized through the same IFCX composition and mutation paths used by
+headless consumers. Tombstones represent deletions; immutable published layers
+carry canonical content identifiers and provenance manifests.
+
+Geometry blobs are content-addressed and remain separate from the CRDT document.
+The document contains references and parametric state, which keeps ordinary
+updates small and makes missing or corrupt blobs detectable.
+
+A room carries one or more *model slots* (`models` map, `slotId → record`).
+Slot ids are minted in share order (`m0`, `m1`, …), never derived from a file
+name, its bytes or its GlobalIds, and every entity path is qualified by its
+slot: `/<slotId>/<GlobalId>` for STEP-seeded entities, `/<slotId>` prepended to
+the file's own path for IFCX seeds, whose header, imports and schemas are
+recorded per slot as well. Two copies of one file are therefore two disjoint
+entity sets, each with its own geometry references (STEP mesh blobs encode the
+federation-global express id, so the copies do not share blobs). Rooms shared
+before slots existed have an empty `models` map and unqualified paths; readers
+treat them as a single implicit slot with an empty prefix, so nothing on disk
+is rewritten. A recipient reconstructs one federated viewer model per slot,
+registered in its own global-id range like any added file, and suffixes a
+model name that another slot also carries (`AC20-FZK-Haus.ifc (2)`). The
+reconstructed store keys entities by their room path (the IFCX ingest uses the
+node path as GlobalId); an IFCX export of a room model removes the slot prefix
+again (`Ifc5ExportOptions.stripPathPrefix`, chosen by `roomExportPathPrefix`
+for the recipient's `room:<roomId>:<slotId>` models only), so the file carries
+`/<GlobalId>` like a single-model room's export. The owner's seed writes each
+slot in four transactions (slot record, structure, mesh resolve with every
+placement-baseline stamp, geometry records + refs) plus one seed marker: the
+relay's per-connection write budget is a token bucket, and an unbatched burst of
+per-entity frames is dropped there — after which Yjs holds every later frame
+from that client pending — so the frame count is pinned by test.
+
+STEP models with authored `IfcAnnotation` representations also carry one
+content-addressed, mutation-materialized STEP source in their slot record. The
+room snapshot remains authoritative for live roots and edits; recipients attach
+the STEP source for representation-level symbolic extraction and remap its
+owners through slot-qualified GlobalIds. This preserves native 2D fills while
+the same annotation's mesh blobs remain selectable 3D parts. The source upload
+and recipient fetch are both capped at 96 MiB, and only canonical 32-character lowercase blob
+references are accepted. When that source still covers every live room root,
+Export emits ordinary STEP and remaps room edits and visibility IDs back to
+source express IDs. A root created later in the room makes IFCX the complete
+export again, so it is never omitted to preserve the older STEP representation.
+
+## Synchronization
+
+Clients exchange Yjs updates through `@ifc-lite/collab-server`. The server owns
+room admission, authorization, persistence, audit records, retention, and blob
+transport. It does not introduce a second IFC decoding or geometry pipeline.
+
+The client provider handles reconnects and awareness state. Awareness—cursor,
+selection, identity, and presence—is ephemeral and is not part of a model
+snapshot.
+
+## Conflict and history model
+
+CRDT convergence guarantees that peers reach the same operation state; it does
+not make concurrent BIM edits semantically compatible. Domain conflicts are
+detected separately and presented through the shared merge and review models.
+Published layers and refs provide durable history, while local undo remains a
+session concern.
+
+## Security boundary
+
+Deployments choose anonymous or token-authenticated access. Authorization is
+checked by the server for room, role, and protected registry operations. Audit
+events and content hashes provide evidence for changes, but callers must still
+apply transport security, retention, and deployment controls appropriate to
+their data.
+
+## Further reading
+
+- [Using collaboration](../guide/collaboration.md)
+- [Collaboration server](../guide/collab-server.md)
+- [Testing collaboration](../contributing/collaboration-testing.md)
+- [Layer format](layer-prs/02-layer-format.md)
+- [Diff and merge semantics](layer-prs/05-merge.md)

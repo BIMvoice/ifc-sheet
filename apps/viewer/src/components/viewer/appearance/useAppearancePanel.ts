@@ -1,0 +1,337 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+import { resolveAppearanceScope } from '@/lib/appearance/query-scope.js';
+import { modelDisplayLabels } from '@/lib/model-labels.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { imageCalibrationFrame } from '@/lib/appearance/raster-calibration.js';
+import type { AppearanceIntent } from '@/lib/appearance/draft-types.js';
+import { pdfCalibrationFrame } from '@/lib/appearance/pdf/calibration.js';
+import { usePdfAppearanceSource } from './usePdfAppearanceSource.js';
+import { preparePdfPagePreview } from '@/lib/appearance/pdf/page-preview.js';
+import { prepareAppearanceSnapshot, type AppearanceSnapshot } from '@/lib/appearance/snapshot.js';
+import { expandAppearanceCorners } from '@ifc-lite/renderer';
+import { useViewerStore } from '@/store';
+import { getGlobalRenderer } from '@/hooks/useBCF';
+import { appearanceAssets, modelAppearanceAssets } from '@/lib/appearance/model-assets.js';
+import { appearanceOwners, appearanceScope } from '@/lib/appearance/scope.js';
+import { appearanceMapping, DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance/settings.js';
+import { createAppearancePlanner } from '@/lib/appearance/planner-worker-client.js';
+import { AppearancePreviewSession, bindAppearancePreview, type AppearancePreviewParts } from '@/lib/appearance/preview.js';
+import { appearanceRevision, captureAppearanceSource, commitAppearance } from '@/lib/appearance/command.js';
+import type { AppearanceCatalog, AppearancePlan } from '@/lib/appearance/planner-types.js';
+import type { AppearanceAssetOwner } from '@/lib/appearance/assets.js';
+import type { AppearancePanelViewProps, AppearanceScope, AppearanceDraftSettings } from './types.js';
+import { useFaceMasks } from './face-mask/useFaceMasks.js';
+import { rawMessage, translatedMessage, type LocalizedMessage } from './localized-message.js';
+
+class AppearanceValidationError extends Error {
+  constructor(readonly key: Parameters<typeof translatedMessage>[0]) { super(key); }
+}
+const appearanceErrorMessage = (error: unknown): LocalizedMessage => error instanceof AppearanceValidationError
+  ? translatedMessage(error.key) : rawMessage(error);
+
+interface Draft {
+  modelId: string;
+  assetIds: string[];
+  plan: AppearancePlan;
+  groups: AppearancePreviewParts[];
+  session: AppearancePreviewSession | null;
+  owner: AppearanceAssetOwner;
+  source: ReturnType<typeof captureAppearanceSource>;
+}
+function discardDraft(draft: Draft | null): void {
+  if (!draft) return;
+  try { draft.session?.cancel(); }
+  finally { appearanceAssets.releaseOwner(draft.owner); }
+}
+
+export function useAppearancePanel(intent: AppearanceIntent = 'apply', suspendPreview = false): AppearancePanelViewProps {
+  const models = useViewerStore(state => state.models);
+  const activeModelId = useViewerStore(state => state.activeModelId);
+  const mutationVersion = useViewerStore(state => state.mutationVersion);
+  const selection = useViewerStore(state => state.selectedEntityIds);
+  const primarySelection = useViewerStore(state => state.selectedEntityId);
+  const sources = useViewerStore(state => state.appearanceSources);
+  const roomId = useViewerStore(state => state.collabRoomId);
+  const savedDraft = useRef(useViewerStore.getState().appearanceDraft).current;
+  const canResumeModel = !savedDraft?.modelId || models.has(savedDraft.modelId);
+  const [chosenModel, setChosenModel] = useState<string | null>(canResumeModel ? savedDraft?.modelId ?? null : null);
+  const modelId = chosenModel && models.has(chosenModel) ? chosenModel : activeModelId;
+  const [sourceId, setSourceId] = useState<string | null>(savedDraft
+    ? sources.find(source => source.id === savedDraft.sourceId)?.id ?? null : sources[0]?.id ?? null);
+  const [scope, setScope] = useState<AppearanceScope>(canResumeModel && savedDraft ? savedDraft.scope
+    : { kind: selection.size || primarySelection !== null ? 'selection' : 'model' });
+  const [settings, setSettings] = useState<AppearanceDraftSettings>({ ...(savedDraft?.settings ?? DEFAULT_APPEARANCE_SETTINGS), ...useViewerStore.getState().appearanceReferenceEntry?.settings });
+  const [status, setStatus] = useState<AppearancePanelViewProps['status']>('idle');
+  const [statusMessage, setStatusMessage] = useState<LocalizedMessage | undefined>(savedDraft && !savedDraft.previewEnabled
+    ? translatedMessage('appearance.controller.adjustMapping') : undefined);
+  const [sourceBusy, setSourceBusy] = useState(false);
+  const [showingOriginal, setShowingOriginal] = useState(false);
+  const [counts, setCounts] = useState({ affected: 0, excluded: 0, reasons: [] as string[] });
+  const [convertedObjects, setConvertedObjects] = useState<NonNullable<AppearancePanelViewProps['convertedObjects']>>([]);
+  const [previewEnabled, setPreviewEnabled] = useState(canResumeModel && (savedDraft?.previewEnabled ?? true));
+  const previousIntent = useRef(intent);
+  useEffect(() => {
+    if (previousIntent.current !== intent) { previousIntent.current = intent; setPreviewEnabled(true); }
+  }, [intent]);
+  const pendingAbort = useRef<AbortController | null>(null);
+  const applyAbort = useRef<AbortController | null>(null);
+  const appliedRevision = useRef<string | null>(null);
+  const draft = useRef<Draft | null>(null);
+  const planner = useRef<ReturnType<typeof createAppearancePlanner> | null>(null);
+  const supported = useRef<number[]>([]);
+  const snapshot = useRef<AppearanceSnapshot | null>(null);
+  const [catalogState, setCatalogState] = useState<{ modelId: string; catalog: AppearanceCatalog } | null>(null);
+  const mounted = useRef(true);
+  const selectedSource = sources.find(source => source.id === sourceId);
+  const target = models.get(modelId ?? '');
+  const faceMasks = useFaceMasks(modelId);
+  const owners = useMemo(() => appearanceOwners(useViewerStore.getState(), modelId ?? ''),
+    [models, modelId, selection, primarySelection, mutationVersion]);
+  const scopeResult = appearanceScope(catalogState?.modelId === modelId ? catalogState.catalog : null, owners.selectedProductIds, scope);
+  const unavailableReason = useMemo(() => roomId ? translatedMessage('appearance.controller.leaveRoom')
+    : !target?.ifcDataStore ? translatedMessage('appearance.controller.openIfc')
+    : target.schemaVersion === 'IFC2X3' || target.schemaVersion === 'IFC5' ? translatedMessage('appearance.controller.requiresIfc4')
+    : target.loadState && target.loadState !== 'complete' ? translatedMessage('appearance.controller.waitForModel') : undefined,
+  [roomId, target?.ifcDataStore, target?.schemaVersion, target?.loadState]);
+
+  const pdfSource = usePdfAppearanceSource(selectedSource, id => {
+    setSourceId(id); setSettings(current => ({ ...current, kind: 'planar', repeatS: false, repeatT: false }));
+    setPreviewEnabled(true);
+  }, error => {
+    pendingAbort.current?.abort(); planner.current?.cancel();
+    setStatus('error'); setStatusMessage(rawMessage(error));
+  });
+
+  useEffect(() => {
+    useViewerStore.getState().saveAppearanceDraft({ intent, modelId, sourceId, scope, settings, previewEnabled });
+  }, [intent, modelId, sourceId, scope, settings, previewEnabled]);
+
+  useEffect(() => {
+    mounted.current = true;
+    const ownedPlanner = createAppearancePlanner();
+    planner.current = ownedPlanner;
+    return () => {
+      mounted.current = false;
+      applyAbort.current?.abort();
+      ownedPlanner.dispose();
+      snapshot.current = null;
+      if (planner.current === ownedPlanner) planner.current = null;
+      const previous = draft.current; draft.current = null;
+      discardDraft(previous);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (intent !== 'apply' || !modelId || unavailableReason) {
+      const previous = draft.current; draft.current = null;
+      discardDraft(previous);
+      snapshot.current = null; setCatalogState(null); setConvertedObjects([]); faceMasks.reset();
+      setStatus('idle');
+      setCounts({ affected: 0, excluded: 0, reasons: [] });
+      setStatusMessage(undefined);
+      return;
+    }
+    if (suspendPreview || !previewEnabled || !sourceId) {
+      const previous = draft.current; draft.current = null; discardDraft(previous);
+    }
+    const controller = new AbortController();
+    pendingAbort.current = controller;
+    const revision = appearanceRevision(modelId);
+    if (draft.current && draft.current.plan.sourceRevision !== revision) {
+      const previous = draft.current; draft.current = null; discardDraft(previous);
+    }
+    const owner: AppearanceAssetOwner = { kind: 'draft', id: crypto.randomUUID() };
+    let adopted = false;
+    supported.current = []; setConvertedObjects([]);
+    setCounts({ affected: 0, excluded: 0, reasons: [] });
+    setStatus('preparing'); setStatusMessage(translatedMessage(previewEnabled && sourceId
+      ? 'appearance.controller.preparingPreview' : 'appearance.controller.preparingScope'));
+    const timer = setTimeout(() => { void (async () => {
+      try {
+        const worker = planner.current;
+        if (!worker) throw new AppearanceValidationError('appearance.controller.workerUnavailable');
+        const currentSnapshot = await prepareAppearanceSnapshot(snapshot.current, modelId, owners.productIds, worker, controller.signal);
+        if (controller.signal.aborted || !mounted.current) return;
+        snapshot.current = currentSnapshot;
+        setCatalogState({ modelId, catalog: currentSnapshot.catalog });
+        if (suspendPreview || !previewEnabled || !sourceId) {
+          setCounts({ affected: 0, excluded: 0, reasons: [] });
+          setStatus('idle');
+          setStatusMessage(!sourceId ? undefined : appliedRevision.current
+            ? appliedRevision.current === currentSnapshot.revision ? translatedMessage('appearance.controller.applied')
+              : translatedMessage('appearance.controller.modelUpdated')
+            : translatedMessage('appearance.controller.discardedAdjust'));
+          return;
+        }
+        const currentScope = await resolveAppearanceScope(currentSnapshot, owners.selectedProductIds, scope, controller.signal);
+        if (!currentScope.productIds.length) throw new AppearanceValidationError('appearance.controller.emptyScope');
+        const renderer = getGlobalRenderer();
+        if (!renderer) throw new AppearanceValidationError('appearance.controller.rendererNotReady');
+        const { source, schema, nextExpressId, bytes } = currentSnapshot;
+        const assetId = selectedSource?.assetId ?? sourceId;
+        // Face masks are a request-shape fault under any other policy; a
+        // dormant selection waits in the session for the policy to return.
+        const masks = settings.representationPolicy === 'evaluatedOccurrence' ? faceMasks.requests(currentScope.productIds) : undefined;
+        const page = selectedSource?.pdf ? await preparePdfPagePreview({ snapshot: currentSnapshot,
+          productIds: currentScope.productIds, source: selectedSource, settings, planner: worker, owner, signal: controller.signal, faceMasks: masks }) : undefined;
+        const firstPageImage = page?.itemImages.values().next().value;
+        const imageUri = page ? firstPageImage?.imageUri ?? '' : modelAppearanceAssets.getAuthoredUri(modelId, assetId);
+        if (!page) appearanceAssets.retain(assetId, owner);
+        const bitmap = page ? firstPageImage?.bitmap : await appearanceAssets.decode(assetId, owner, controller.signal);
+        currentSnapshot.validate();
+        const plan = page?.plan ?? await worker.plan(bytes, { schema, sourceRevision: currentSnapshot.revision, nextExpressId,
+          productIds: currentScope.productIds, imageUri, repeatS: settings.repeatS,
+          repeatT: settings.repeatT, representationPolicy: settings.representationPolicy ?? 'preserve', mapping: appearanceMapping(settings),
+          ...(masks ? { faceMasks: masks } : {}) }, { signal: controller.signal });
+        if (controller.signal.aborted || !mounted.current) return;
+        currentSnapshot.validate();
+        // A stale or spent face selection is dropped here with its diagnostic; the
+        // mask change re-runs this effect, so this plan is not staged.
+        if (faceMasks.reconcile(plan, modelId, id => `IFC object #${id}`).diagnostics.length) {
+          setStatusMessage(translatedMessage('appearance.controller.faceSelectionChanged')); return;
+        }
+        const state = useViewerStore.getState();
+        if (!plan.items.length) {
+          if (plan.exclusions[0]?.reason) throw new Error(plan.exclusions[0].reason);
+          throw new AppearanceValidationError('appearance.controller.noSupportedSurfaces');
+        }
+        // Exclusions must be acknowledged explicitly before the narrower scope applies.
+        supported.current = [...new Set(plan.items.map(item => item.productId))];
+        if (plan.exclusions.length) {
+          setCounts({ affected: new Set(plan.items.map(item => item.productId)).size,
+            excluded: plan.exclusions.length, reasons: [...new Set(plan.exclusions.map(item => item.reason))] });
+          throw new AppearanceValidationError('appearance.controller.partialExclusions');
+        }
+        const previous = draft.current; draft.current = null;
+        discardDraft(previous);
+        if (!bitmap) throw new AppearanceValidationError('appearance.controller.noProjectedImage');
+        const groups = bindAppearancePreview(state, renderer, modelId, plan, bitmap, imageUri,
+          settings.repeatS, settings.repeatT, expandAppearanceCorners, page?.itemImages);
+        const session = new AppearancePreviewSession(renderer);
+        session.stage(groups);
+        draft.current = { modelId, assetIds: page?.assetIds ?? [assetId], plan, groups, session, owner, source };
+        adopted = true;
+        setCounts({ affected: groups.length, excluded: 0, reasons: [] });
+        setConvertedObjects((plan.conversions ?? []).map(item => ({ productId: item.productId, name: `IFC object #${item.productId}` })));
+        setShowingOriginal(false); setStatus('ready'); setStatusMessage(translatedMessage('appearance.controller.previewReady'));
+      } catch (error) {
+        if (!controller.signal.aborted && mounted.current) { setStatus('error'); setStatusMessage(appearanceErrorMessage(error)); }
+      } finally { if (!adopted) appearanceAssets.releaseOwner(owner); }
+    })(); }, 250);
+    return () => { clearTimeout(timer); controller.abort(); applyAbort.current?.abort(); if (!adopted) appearanceAssets.releaseOwner(owner); };
+  }, [intent, modelId, sourceId, selectedSource, settings, owners, scope, unavailableReason, mutationVersion, previewEnabled, suspendPreview, faceMasks.masks]);
+
+  async function upload(file: File): Promise<void> {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) { await pdfSource.upload(file); return; }
+    pdfSource.cancel();
+    const uploadOwner: AppearanceAssetOwner = { kind: 'draft', id: crypto.randomUUID() };
+    let assetId: string | undefined;
+    let sourceOwner: AppearanceAssetOwner | undefined;
+    let url: string | undefined;
+    setSourceBusy(true);
+    try {
+      const asset = await appearanceAssets.add(file, { owner: uploadOwner });
+      assetId = asset.id;
+      if (!useViewerStore.getState().appearanceSources.some(source => source.id === asset.id)) {
+        url = URL.createObjectURL(new Blob([appearanceAssets.encoded(asset.id)], { type: asset.mimeType }));
+        sourceOwner = { kind: 'source', id: `appearance:${asset.id}` };
+        appearanceAssets.retain(asset.id, sourceOwner);
+        useViewerStore.getState().addAppearanceSource({ id: asset.id, name: file.name,
+          width: asset.width, height: asset.height, thumbnailUrl: url });
+      }
+      if (mounted.current) { setSourceId(asset.id); setPreviewEnabled(true); }
+    } catch (error) {
+      if (mounted.current) {
+        // An older scope/preview job must not overwrite the upload failure with
+        // its later success message. Keep the previous committed appearance.
+        pendingAbort.current?.abort(); planner.current?.cancel();
+        setStatus('error'); setStatusMessage(rawMessage(error));
+      }
+    } finally {
+      // A subscriber may throw after publication; the catalog still owns that
+      // image. Only provisional resources that were never adopted are released.
+      const adopted = useViewerStore.getState().appearanceSources.find(source => source.id === assetId);
+      if (sourceOwner && !adopted) appearanceAssets.releaseOwner(sourceOwner);
+      appearanceAssets.releaseOwner(uploadOwner);
+      if (url && adopted?.thumbnailUrl !== url) URL.revokeObjectURL(url);
+      if (mounted.current) setSourceBusy(false);
+    }
+  }
+  function discard(): void {
+    pdfSource.cancel();
+    applyAbort.current?.abort();
+    appliedRevision.current = null;
+    pendingAbort.current?.abort();
+    planner.current?.cancel();
+    setPreviewEnabled(false);
+    const previous = draft.current; draft.current = null;
+    discardDraft(previous);
+    faceMasks.reset();
+    setConvertedObjects([]); setShowingOriginal(false); setStatus('idle'); setStatusMessage(translatedMessage('appearance.controller.discarded'));
+  }
+  function compare(original: boolean): void {
+    const current = draft.current;
+    const renderer = getGlobalRenderer();
+    if (!current || !renderer) return;
+    try {
+      if (original) { current.session?.cancel(); current.session = null; }
+      else { const session = new AppearancePreviewSession(renderer); session.stage(current.groups); current.session = session; }
+      setShowingOriginal(original);
+    } catch (error) { setStatus('error'); setStatusMessage(rawMessage(error)); }
+  }
+  async function apply(): Promise<void> {
+    const current = draft.current;
+    const renderer = getGlobalRenderer();
+    if (!current?.session || !renderer || status !== 'ready') return;
+    const controller = new AbortController(); applyAbort.current = controller;
+    setStatus('applying');
+    try {
+      await commitAppearance(current.modelId, current.assetIds, current.plan, renderer, current.session, current.groups, current.source, {
+        signal: controller.signal,
+        onProgress: phase => { if (mounted.current) setStatusMessage(translatedMessage(phase === 'preparing'
+          ? 'appearance.controller.preparingChanges' : 'appearance.controller.saving')); },
+      });
+      setPreviewEnabled(false); setConvertedObjects([]);
+      faceMasks.clearApplied((current.plan.conversions ?? []).map(conversion => conversion.productId));
+      appliedRevision.current = appearanceRevision(current.modelId);
+      draft.current = null;
+      appearanceAssets.releaseOwner(current.owner);
+      setStatus('idle'); setStatusMessage(translatedMessage('appearance.controller.applied'));
+    } catch (error) { if (mounted.current && !controller.signal.aborted) { setStatus('error'); setStatusMessage(rawMessage(error)); } }
+    finally { if (applyAbort.current === controller) applyAbort.current = null; }
+  }
+  return {
+    allowPdf: true, pdf: pdfSource.controls, pdfPassword: pdfSource.passwordPrompt,
+    calibration: selectedSource && (selectedSource.pdf || intent === 'reference') && selectedSource.thumbnailUrl ? {
+      frame: selectedSource.calibrationFrame ?? (selectedSource.pdf ? pdfCalibrationFrame(selectedSource.pdf.recipe) : imageCalibrationFrame(selectedSource.width, selectedSource.height)), sourceKey: `${selectedSource.id}:${selectedSource.pdf?.recipe.page.pageNumber ?? 0}`, thumbnailUrl: selectedSource.thumbnailUrl,
+      value: selectedSource.calibration, onChange: calibration => {
+        const current = useViewerStore.getState().appearanceSources.find(source => source.id === selectedSource.id);
+        if (current) useViewerStore.getState().updateAppearanceSource({ ...current, calibration });
+        setPreviewEnabled(true);
+      },
+    } : undefined,
+    models: [...modelDisplayLabels(models)].map(([id, name]) => ({ id, name })), modelId,
+    onModelChange: id => { useViewerStore.getState().setActiveModel(id); setChosenModel(id); setSettings(current => ({ ...current, representationPolicy: 'preserve' })); setPreviewEnabled(true); }, sources, sourceId,
+    onSourceChange: id => {
+      pdfSource.cancel(); setSourceId(id);
+      if (sources.find(source => source.id === id)?.pdf) setSettings(current => ({ ...current, kind: 'planar', repeatS: false, repeatT: false }));
+      setPreviewEnabled(true);
+    },
+    onRemoveSource: id => { pdfSource.cancel(); if (sourceId === id) { discard(); setSourceId(null); } useViewerStore.getState().removeAppearanceSource(id); },
+    onUpload: file => { void upload(file); }, sourceBusy: sourceBusy || pdfSource.busy, scope, onScopeChange: value => { setScope(value); setPreviewEnabled(true); },
+    classes: scopeResult.classes, types: scopeResult.types, selectionCount: scopeResult.selectionCount,
+    onUseSupported: () => {
+      if (!modelId || !supported.current.length) return;
+      const state = useViewerStore.getState();
+      state.setSelectedEntityIds(supported.current.map(id => state.toGlobalId(modelId, id)));
+      setScope({ kind: 'selection' }); setPreviewEnabled(true);
+    },
+    affectedCount: counts.affected, convertedObjects, faceMasks: faceMasks.controls, excludedCount: counts.excluded, exclusions: counts.reasons,
+    settings, onSettingsChange: patch => { setSettings(current => ({ ...current, ...patch })); setPreviewEnabled(true); },
+    status, statusMessage, unavailableReason, canApply: status === 'ready' && !!draft.current?.session,
+    canDiscard: !!draft.current || status === 'preparing' || pdfSource.busy || !!pdfSource.passwordPrompt, hasPreview: !!draft.current,
+    showingOriginal, onCompareChange: compare, onApply: () => { void apply(); }, onDiscard: discard,
+  };
+}

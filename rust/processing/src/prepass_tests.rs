@@ -1,0 +1,474 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Tests for `prepass.rs`, split out under the house pattern (AGENTS.md).
+//!
+//! Moved out so the production module stays under the module-size ratchet
+//! (`rust/processing/tests/module_size_ratchet.rs`); this file is exempt via
+//! the `_tests.rs` suffix convention.
+
+use super::*;
+use ifc_lite_core::{EntityIndex, EntityScanner};
+
+#[test]
+fn find_ifcproject_id_late_in_file() {
+    let ifc = b"ISO-10303-21;\nDATA;\n#1=IFCWALL('x',$,$,$,$,$,$,$,$);\n#999123=IFCPROJECT('g',$,'P',$,$,$,$,$,$);\nENDSEC;\n";
+    assert_eq!(find_ifcproject_id(ifc), Some(999123));
+}
+
+#[test]
+fn find_ifcproject_id_absent() {
+    let ifc = b"ISO-10303-21;\nDATA;\n#1=IFCWALL('x',$,$,$,$,$,$,$,$);\nENDSEC;\n";
+    assert_eq!(find_ifcproject_id(ifc), None);
+}
+
+#[test]
+fn find_ifcproject_id_skips_string_decoys() {
+    let ifc = b"DATA;\n#5=IFCWALL('decoy =IFCPROJECT( in a name',$);\n#7=IFCPROJECT('g',$);\n";
+    assert_eq!(find_ifcproject_id(ifc), Some(7));
+}
+
+#[test]
+fn find_ifcproject_id_handles_whitespace_around_equals() {
+    // Revit/EDM exporters write `#id= IFCPROJECT(` with a space after `=`;
+    // the old `=IFCPROJECT(` literal never matched → the whole unit chain
+    // defaulted to metres + radians (issue #1367, arched openings → circles).
+    let space_after = b"DATA;\n#1=IFCWALL('x',$);\n#1593796= IFCPROJECT('g',$,'P',$,$,$,$,$,$);\n";
+    assert_eq!(find_ifcproject_id(space_after), Some(1593796));
+
+    let space_both = b"DATA;\n#42 = IFCPROJECT('g',$);\n";
+    assert_eq!(find_ifcproject_id(space_both), Some(42));
+
+    // IFCPROJECTEDCRS must not be mistaken for IFCPROJECT.
+    let crs_only = b"DATA;\n#9= IFCPROJECTEDCRS('EPSG:32632',$,'WGS84',$,'UTM','32N',$);\n";
+    assert_eq!(find_ifcproject_id(crs_only), None);
+}
+
+/// Control: an ordinary express id is found unchanged (issue #3421).
+#[test]
+fn find_ifcproject_id_ordinary_id_is_unaffected() {
+    let ifc = b"DATA;\n#42=IFCPROJECT('g',$,'P',$,$,$,$,$,$);\n";
+    assert_eq!(find_ifcproject_id(ifc), Some(42));
+}
+
+/// Boundary: an id at exactly `u32::MAX` is not refused (issue #3421).
+#[test]
+fn find_ifcproject_id_accepts_a_ref_at_exactly_u32_max() {
+    let ifc = b"DATA;\n#4294967295=IFCPROJECT('g',$,'P',$,$,$,$,$,$);\n";
+    assert_eq!(find_ifcproject_id(ifc), Some(u32::MAX));
+}
+
+/// Issue #4497: `find_ifcproject_id_inner`'s `memchr::memmem::find` against
+/// the literal `b"IFCPROJECT("` was case-sensitive, so this — this exact
+/// resolver, the fallback `resolve_unit_scales` falls back to when no
+/// project-id hint is available — silently returned `None` on a lowercase
+/// STEP file, which is the exact "no project" branch that then defaults
+/// length/angle scale to 1.0.
+#[test]
+fn find_ifcproject_id_lowercase_keyword() {
+    let ifc = b"DATA;\n#1=ifcwall('x',$,$,$,$,$,$,$,$);\n#7=ifcproject('g',$,'P',$,$,$,$,$,$);\n";
+    assert_eq!(find_ifcproject_id(ifc), Some(7));
+}
+
+/// The realistic case per #4497: CamelCase keywords from some exporters.
+#[test]
+fn find_ifcproject_id_mixed_case_keyword() {
+    let ifc = b"DATA;\n#7=IfcProject('g',$,'P',$,$,$,$,$,$);\n";
+    assert_eq!(find_ifcproject_id(ifc), Some(7));
+}
+
+/// Lowercase must still respect whitespace-around-`=` and the
+/// IFCPROJECTEDCRS non-collision, exactly like the uppercase cases above.
+#[test]
+fn find_ifcproject_id_lowercase_handles_whitespace_and_crs_collision() {
+    let space_after = b"DATA;\n#1=ifcwall('x',$);\n#1593796= ifcproject('g',$,'P',$,$,$,$,$,$);\n";
+    assert_eq!(find_ifcproject_id(space_after), Some(1593796));
+
+    let crs_only = b"DATA;\n#9= ifcprojectedcrs('EPSG:32632',$,'WGS84',$,'UTM','32N',$);\n";
+    assert_eq!(find_ifcproject_id(crs_only), None);
+}
+
+/// End-to-end: `resolve_unit_scales` with no hint (forcing the
+/// `find_ifcproject_id` fallback path) resolves a lowercase-keyword,
+/// millimetre + degree file exactly like its uppercase equivalent
+/// (`resolve_unit_scales_resolves_degrees_and_millimetres` below).
+#[test]
+fn resolve_unit_scales_fallback_path_lowercase_keywords() {
+    const IFC: &[u8] = b"ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Test'),'2;1');
+FILE_NAME('test.ifc','2024-01-01',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=ifcproject('guid',$,'Test',$,$,$,$,(#2),#3);
+#2=ifcgeometricrepresentationcontext($,'Model',3,1.E-5,#4,$);
+#3=ifcunitassignment((#5,#10));
+#4=ifcaxis2placement3d(#7,$,$);
+#5=ifcsiunit(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#7=ifccartesianpoint((0.,0.,0.));
+#8=ifcsiunit(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#9=ifcmeasurewithunit(ifcratiomeasure(0.0174532925199433),#8);
+#10=ifcconversionbasedunit(#11,.PLANEANGLEUNIT.,'DEGREE',#9);
+#11=ifcdimensionalexponents(0,0,0,0,0,0,0);
+ENDSEC;
+END-ISO-10303-21;
+";
+    let index = ifc_lite_core::build_entity_index(IFC);
+    let mut decoder = EntityDecoder::with_index(IFC, index);
+
+    // No hint: forces resolve_unit_scales to call find_ifcproject_id.
+    let scales = resolve_unit_scales(IFC, None, &mut decoder);
+    assert_eq!(scales.project_id, Some(1));
+    assert!(
+        (scales.length_unit_scale - 0.001).abs() < 1e-12,
+        "expected 0.001 (mm), got {}",
+        scales.length_unit_scale
+    );
+    assert!(
+        (scales.plane_angle_to_radians - 0.0174532925199433).abs() < 1e-9,
+        "expected 0.01745… (degree), got {}",
+        scales.plane_angle_to_radians
+    );
+}
+
+/// RED for issue #3421: `find_ifcproject_id` used to accumulate the express
+/// id with `wrapping_mul`/`wrapping_add`, so `#4294967297=IFCPROJECT(...)`
+/// wrapped onto id 1 instead of refusing. A real `#1=IFCWALL(...)` earlier in
+/// the same file proves the wrap would have misidentified the wall as the
+/// project were parse_express_id not used; this asserts the oversized
+/// IFCPROJECT is skipped (refused) and the search keeps going, finding
+/// nothing (there is no other IFCPROJECT).
+#[test]
+fn find_ifcproject_id_refuses_a_ref_above_u32_max_instead_of_wrapping_onto_a_real_entity() {
+    let ifc = b"DATA;\n#1=IFCWALL('x',$,$,$,$,$,$,$,$);\n#4294967297=IFCPROJECT('g',$,'P',$,$,$,$,$,$);\nENDSEC;\n";
+    assert_eq!(
+        find_ifcproject_id(ifc),
+        None,
+        "an oversized IFCPROJECT id must be refused, never aliased onto id 1 (the IFCWALL)"
+    );
+}
+
+/// Mimics the Revit/EDM ordering of Architecture.ifc (issue #1367): the
+/// DEGREE plane-angle unit sits near the file head but its conversion
+/// `IFCMEASUREWITHUNIT` is at the very tail. With a PARTIAL index that has the
+/// project + assignment + degree unit but NOT the measure, the plane-angle
+/// resolver must report "incomplete" so `resolve_unit_scales` retries against
+/// a full index instead of silently shipping radians.
+#[test]
+fn resolve_unit_scales_recovers_degrees_when_measure_past_partial_index() {
+    const IFC: &[u8] = br#"ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('u.ifc','2026-06-26T00:00:00',(''),(''),'','','');
+FILE_SCHEMA(('IFC2X3'));
+ENDSEC;
+DATA;
+#10= IFCPROJECT('g',$,'P',$,$,$,$,$,#11);
+#11= IFCUNITASSIGNMENT((#12,#13));
+#12= IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#13= IFCCONVERSIONBASEDUNIT(#14,.PLANEANGLEUNIT.,'DEGREE',#15);
+#14= IFCDIMENSIONALEXPONENTS(0,0,0,0,0,0,0);
+#16= IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#15= IFCMEASUREWITHUNIT(IFCRATIOMEASURE(0.0174532925199433),#16);
+ENDSEC;
+END-ISO-10303-21;
+"#;
+    // Build a PARTIAL index that omits the tail measure (#15) and exponents
+    // (#14), exactly the streaming-gate situation that masked the bug.
+    let mut partial = EntityIndex::default();
+    let mut scanner = EntityScanner::new(&IFC);
+    while let Some((id, _t, start, end)) = scanner.next_entity() {
+        if id == 15 || id == 14 {
+            continue; // forward-referenced past the gate
+        }
+        partial.insert(id, (start, end));
+    }
+    let mut decoder = EntityDecoder::with_index(IFC, partial);
+    let scales = resolve_unit_scales(IFC, Some(10), &mut decoder);
+    assert_eq!(scales.project_id, Some(10));
+    assert!((scales.length_unit_scale - 0.001).abs() < 1e-12);
+    assert!(
+        (scales.plane_angle_to_radians - 0.0174532925199433).abs() < 1e-12,
+        "expected degrees via full-index retry, got {}",
+        scales.plane_angle_to_radians
+    );
+}
+
+#[test]
+fn material_colors_flat_round_trip() {
+    let mut map: FxHashMap<u32, Vec<[f32; 4]>> = FxHashMap::default();
+    map.insert(10, vec![[0.5, 0.5, 0.5, 1.0], [0.7, 0.9, 0.5, 0.2]]);
+    map.insert(42, vec![[1.0, 0.0, 0.0, 1.0]]);
+
+    let (ids, counts, rgba) = flat_material_colors(&map);
+    let back = material_colors_from_flat(&ids, &counts, &rgba);
+
+    assert_eq!(back.len(), 2);
+    assert_eq!(back[&42].len(), 1);
+    assert_eq!(back[&10].len(), 2);
+    // RGBA8 quantization: equal within 1/255.
+    for (orig, round) in map[&10].iter().zip(back[&10].iter()) {
+        for (a, b) in orig.iter().zip(round.iter()) {
+            assert!((a - b).abs() <= 1.0 / 255.0 + 1e-6);
+        }
+    }
+}
+
+/// The flat wire arrays are an EXPLICIT id-ascending contract (pinned by
+/// the mesh-output determinism manifest), not an FxHashMap iteration-order
+/// artifact.
+#[test]
+fn flat_wire_arrays_are_sorted_by_id() {
+    let mut voids: FxHashMap<u32, Vec<u32>> = FxHashMap::default();
+    voids.insert(300, vec![301, 302]);
+    voids.insert(7, vec![8]);
+    voids.insert(90, vec![91]);
+    let (keys, counts, values) = flat_voids(&voids);
+    assert_eq!(keys, vec![7, 90, 300]);
+    assert_eq!(counts, vec![1, 1, 2]);
+    // Per-host opening lists keep their (file-order) sequence.
+    assert_eq!(values, vec![8, 91, 301, 302]);
+
+    let mut colors: FxHashMap<u32, Vec<[f32; 4]>> = FxHashMap::default();
+    colors.insert(42, vec![[1.0, 0.0, 0.0, 1.0]]);
+    colors.insert(10, vec![[0.0, 1.0, 0.0, 1.0], [0.0, 0.0, 1.0, 0.5]]);
+    let (ids, counts, rgba) = flat_material_colors(&colors);
+    assert_eq!(ids, vec![10, 42]);
+    assert_eq!(counts, vec![2, 1]);
+    assert_eq!(rgba.len(), 12);
+    // First colour on the wire is element #10's first (green), not #42's.
+    assert_eq!(&rgba[0..4], &[0, 255, 0, 255]);
+}
+
+#[test]
+fn resolve_unit_scales_resolves_degrees_and_millimetres() {
+    const IFC: &[u8] = br#"ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('u.ifc','2026-06-12T00:00:00',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCWALL('w',$,$,$,$,$,$,$,$);
+#10=IFCPROJECT('g',$,'P',$,$,$,$,$,#11);
+#11=IFCUNITASSIGNMENT((#12,#13));
+#12=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#13=IFCCONVERSIONBASEDUNIT(#14,.PLANEANGLEUNIT.,'DEGREE',#15);
+#14=IFCDIMENSIONALEXPONENTS(0,0,0,0,0,0,0);
+#15=IFCMEASUREWITHUNIT(IFCPLANEANGLEMEASURE(0.017453292519943295),#16);
+#16=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+ENDSEC;
+END-ISO-10303-21;
+"#;
+    // No hint: found by substring search; resolved on a fresh decoder.
+    let mut decoder = EntityDecoder::new(IFC);
+    let scales = resolve_unit_scales(IFC, None, &mut decoder);
+    assert_eq!(scales.project_id, Some(10));
+    assert!((scales.length_unit_scale - 0.001).abs() < 1e-12);
+    assert!((scales.plane_angle_to_radians - 0.017_453_292_519_943_295).abs() < 1e-12);
+}
+
+/// A `#<id>=IFCPROJECT(` sequence embedded in a STEP string literal is not a
+/// record definition, so the scan must not return its id and must not stop:
+/// the real project follows it. The old case-sensitive scan could only be
+/// fooled by an uppercase decoy; matching `ifcproject(` too widens the
+/// hazard to ordinary lowercase prose in a comment or a description.
+///
+/// The consequence of a false positive is the exact symptom issue #4497
+/// exists to remove: `extract_length_unit_scale` rejects the wrong id on its
+/// `IFCPROJECT` type guard and the caller's `unwrap_or(1.0)` defaults a
+/// millimetre model to metres.
+#[test]
+fn find_ifcproject_id_skips_a_full_record_decoy_inside_a_string() {
+    let ifc = b"DATA;\n#5=IFCWALL('note: #9=ifcproject( in the source',$);\n#7=IFCPROJECT('g',$);\n";
+    assert_eq!(find_ifcproject_id(ifc), Some(7));
+
+    let upper = b"DATA;\n#5=IFCWALL('note: #9=IFCPROJECT( in the source',$);\n#7=IFCPROJECT('g',$);\n";
+    assert_eq!(find_ifcproject_id(upper), Some(7));
+}
+
+/// The record-start guard must not refuse a real declaration that a
+/// 10303-21 comment separates from the previous record's `;` — a comment is
+/// legal wherever whitespace is, and the entity scanner accepts it (see
+/// `skip_step_trivia` in `rust/core/src/parser/lexical.rs`). A false
+/// negative here is the same silent 1.0 default as a miss.
+#[test]
+fn find_ifcproject_id_accepts_a_record_behind_a_step_comment() {
+    let ifc = b"DATA;\n#1=IFCWALL('x',$); /* was #9 */ #7=IFCPROJECT('g',$);\n";
+    assert_eq!(find_ifcproject_id(ifc), Some(7));
+
+    let two = b"DATA;\n#1=IFCWALL('x',$);/**//* b */#7=IFCPROJECT('g',$);\n";
+    assert_eq!(find_ifcproject_id(two), Some(7));
+}
+
+/// A project declared at byte 0, with no preceding `;` at all, is still a
+/// record start.
+#[test]
+fn find_ifcproject_id_accepts_a_record_at_the_start_of_input() {
+    assert_eq!(find_ifcproject_id(b"#7=IFCPROJECT('g',$);\n"), Some(7));
+}
+
+/// `find_ifcproject_keyword` is `find_keyword` anchored on `J` rather than
+/// the lead `I` (a ~20x scan win on a project-less file, since every IFC
+/// keyword starts with `I`). The offset arithmetic that buys it — candidate
+/// start is `j - 6`, with the first six bytes skipped and `from` applied by
+/// slicing — is exactly where such a rewrite goes wrong, so pin it against a
+/// naive reference over every offset of adversarial and pseudo-random buffers.
+#[test]
+fn find_ifcproject_keyword_matches_a_naive_reference_at_every_offset() {
+    const KEYWORD: &[u8] = b"IFCPROJECT(";
+    fn naive(content: &[u8], from: usize) -> Option<usize> {
+        if content.len() < KEYWORD.len() {
+            return None;
+        }
+        (from..=content.len() - KEYWORD.len())
+            .find(|&i| content[i..i + KEYWORD.len()].eq_ignore_ascii_case(KEYWORD))
+    }
+
+    let mut cases: Vec<Vec<u8>> = vec![
+        b"".to_vec(),
+        b"J".to_vec(),
+        b"j(".to_vec(),
+        b"IFCPROJECT(".to_vec(),
+        b"ifcproject(".to_vec(),
+        b"IfcProject(".to_vec(),
+        b"IFCPROJECTEDCRS(".to_vec(),
+        b"IFCPROJECT".to_vec(),
+        b"XXXXXXIFCPROJECT(".to_vec(),
+        b"IFCPROJECT(IFCPROJECT(".to_vec(),
+        b"ifcprojectIFCPROJECT(".to_vec(),
+        b"JIFCPROJECT(".to_vec(),
+        b"#9=ifcproject( #7=IFCPROJECT(".to_vec(),
+        b"AAJAA".to_vec(),
+    ];
+
+    // xorshift64 over an alphabet dense in the keyword's own bytes, so near
+    // misses are common rather than astronomically rare.
+    let alphabet = b"IiFfCcPpRrOoJjEeTt(#=; \n'";
+    let mut state = 0x2545_F491_4F6C_DD1Du64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    for _ in 0..400 {
+        let len = (next() % 48) as usize;
+        cases.push(
+            (0..len)
+                .map(|_| alphabet[(next() as usize) % alphabet.len()])
+                .collect(),
+        );
+    }
+
+    let mut checked = 0usize;
+    for case in &cases {
+        for from in 0..=case.len() {
+            assert_eq!(
+                find_ifcproject_keyword(case, from),
+                naive(case, from),
+                "from={from} in {:?}",
+                String::from_utf8_lossy(case)
+            );
+            checked += 1;
+        }
+    }
+    // Anti-vacuity: an empty or tiny case list would pass silently.
+    assert!(
+        checked > 5_000,
+        "only {checked} (buffer, offset) pairs checked"
+    );
+}
+
+/// #5582: the authored finish survives the flatten, aligned with its id.
+/// Three sources share one wire: a METAL-rendered styled item (#10), a styled
+/// item with no specular evidence (#11), and an indexed-colour fallback (#30).
+/// #10 also has an indexed colour, which the geometry style must win together
+/// with its finish. A finish shifted by one slot lands on a neighbour that
+/// must stay NaN.
+#[test]
+fn flat_styles_with_finishes_carries_the_geometry_style_finish_by_id() {
+    let content = b"ISO-10303-21;\nDATA;\n\
+        #1=IFCCOLOURRGB($,0.8,0.8,0.85);\n\
+        #2=IFCSURFACESTYLERENDERING(#1,0.,$,$,$,$,IFCNORMALISEDRATIOMEASURE(0.9),$,.METAL.);\n\
+        #3=IFCSURFACESTYLE('Brushed steel',.BOTH.,(#2));\n\
+        #4=IFCSTYLEDITEM(#10,(#3),$);\n\
+        #5=IFCCOLOURRGB($,0.2,0.4,0.6);\n\
+        #6=IFCSURFACESTYLERENDERING(#5,0.,$,$,$,$,$,$,.NOTDEFINED.);\n\
+        #7=IFCSURFACESTYLE('Plain',.BOTH.,(#6));\n\
+        #8=IFCSTYLEDITEM(#11,(#7),$);\n\
+        ENDSEC;\nEND-ISO-10303-21;\n";
+    let mut decoder = EntityDecoder::new(content);
+    let mut spans = PrepassSpans::default();
+    let mut scanner = EntityScanner::new(content);
+    while let Some((id, type_name, start, end)) = scanner.next_entity() {
+        spans.stash(type_name, id, start, end);
+    }
+    let mut resolved = resolve_prepass(&spans, &mut decoder, ResolveOptions::default());
+    resolved.indexed_colour_index.insert(10, [0.0, 1.0, 0.0, 1.0]);
+    resolved.indexed_colour_index.insert(30, [1.0, 0.0, 0.0, 1.0]);
+
+    let geometry_finishes = resolve_geometry_finishes(&spans.styled_items, &mut decoder);
+    let (ids, rgba, finishes) = flat_styles_with_finishes(&resolved, &geometry_finishes, &mut decoder);
+    assert_eq!(ids, vec![10, 11, 30]);
+    assert_eq!((rgba.len(), finishes.len()), (12, 6), "4 bytes and 2 floats per id");
+    assert_eq!(
+        (ids.clone(), rgba.clone()),
+        flat_styles_rgba8(&resolved, &mut decoder),
+        "carrying finishes leaves the rgba8 wire unchanged"
+    );
+    assert_eq!(&rgba[0..4], &[204, 204, 217, 255], "#10 keeps its styled colour over the indexed one");
+
+    let finish_of = |i: usize| finish_from_wire([finishes[i * 2], finishes[i * 2 + 1]]);
+    let steel = finish_of(0).expect("#10's METAL rendering is on the wire");
+    assert_eq!(steel.metallic, Some(1.0));
+    assert!(steel.roughness.is_some_and(|r| (r - 0.1).abs() < 1e-6), "1 - 0.9 -> 0.1");
+    assert!(finishes[2..6].iter().all(|v| v.is_nan()), "#11 and #30 carry no finish: {finishes:?}");
+}
+
+#[test]
+fn finish_wire_pair_round_trips_and_treats_non_finite_as_absent() {
+    let both = SpecularMaterial { metallic: Some(0.0), roughness: Some(0.25) };
+    assert_eq!(finish_from_wire(finish_to_wire(Some(both))), Some(both), "0.0 is authored, not absent");
+    let half = SpecularMaterial { metallic: None, roughness: Some(0.5) };
+    assert_eq!(finish_from_wire(finish_to_wire(Some(half))), Some(half));
+    assert_eq!(finish_from_wire(finish_to_wire(None)), None);
+    assert_eq!(
+        finish_from_wire([f32::INFINITY, f32::NEG_INFINITY]),
+        None,
+        "an infinite field is as unauthored as NaN"
+    );
+}
+
+/// An `IfcRelInterferesElements` with ImpliedOrder TRUE subtracts its
+/// related element from its relating one, as an opening would (a wall cut by
+/// a column); FALSE cuts nothing; in the IFC4X3 layout (an extra
+/// InterferenceSpace before ImpliedOrder) the order still reads off the last
+/// attribute.
+#[test]
+fn interference_with_implied_order_cuts_the_relating_element() {
+    let content = b"ISO-10303-21;\nDATA;\n\
+        #1=IFCWALL('w',$,$,$,$,$,$,$,$);\n\
+        #2=IFCCOLUMN('c',$,$,$,$,$,$,$,$);\n\
+        #3=IFCSLAB('s',$,$,$,$,$,$,$,$);\n\
+        #4=IFCOPENINGELEMENT('o',$,$,$,$,$,$,$,$);\n\
+        #10=IFCRELVOIDSELEMENT('v',$,$,$,#1,#4);\n\
+        #11=IFCRELINTERFERESELEMENTS('i1',$,$,$,#1,#2,$,'Cut',.T.);\n\
+        #12=IFCRELINTERFERESELEMENTS('i2',$,$,$,#3,#2,$,'Cut',.F.);\n\
+        #13=IFCRELINTERFERESELEMENTS('i3',$,$,$,#3,#2,$,$,'Cut',.T.);\n\
+        ENDSEC;\nEND-ISO-10303-21;\n";
+    let mut decoder = EntityDecoder::new(content);
+    let mut spans = PrepassSpans::default();
+    let mut scanner = EntityScanner::new(content);
+    while let Some((id, type_name, start, end)) = scanner.next_entity() {
+        spans.stash(type_name, id, start, end);
+    }
+    let resolved = resolve_prepass(&spans, &mut decoder, ResolveOptions::default());
+    let mut wall = resolved.void_index.get(&1).cloned().unwrap_or_default();
+    wall.sort_unstable();
+    assert_eq!(wall, vec![2, 4]);
+    assert_eq!(resolved.void_index.get(&3), Some(&vec![2]));
+    assert_eq!(resolved.void_index.get(&2), None);
+}

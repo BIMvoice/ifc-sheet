@@ -1,0 +1,249 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * PropertyTable serialization
+ */
+
+import type { PropertyTable, PropertyValue, StringTable } from '@ifc-lite/data';
+import { comparePropertyValues, groupPropertySetsByInstance, PropertyValueType } from '@ifc-lite/data';
+import { BufferWriter, BufferReader } from '../utils/buffer-utils.js';
+
+/**
+ * List-value parse failures are per-property on a cache-rehydration path, so
+ * the warning is latched: a corrupt cache would otherwise emit one line per
+ * row.
+ */
+let listParseWarningShown = false;
+
+/** @internal test seam — reset the once-per-process list-parse warning latch. */
+export function __resetListParseWarningLatch(): void {
+  listParseWarningShown = false;
+}
+
+function warnListParseFailureOnce(listStr: string, err: unknown): void {
+  if (listParseWarningShown) return;
+  listParseWarningShown = true;
+  console.warn(
+    `[cache] cached property list value is not valid JSON; reporting an empty ` +
+      `list (further occurrences suppressed). value=${JSON.stringify(listStr.slice(0, 120))}`,
+    err,
+  );
+}
+
+/**
+ * Write PropertyTable to buffer
+ * Format:
+ *   - count: uint32
+ *   - entityId: Uint32Array[count]
+ *   - psetName: Uint32Array[count]
+ *   - psetGlobalId: Uint32Array[count]
+ *   - propName: Uint32Array[count]
+ *   - propType: Uint8Array[count]
+ *   - valueString: Uint32Array[count]
+ *   - valueReal: Float64Array[count]
+ *   - valueInt: Int32Array[count]
+ *   - valueBool: Uint8Array[count]
+ *   - unitId: Int32Array[count]
+ *   - entityIndexCount: uint32
+ *   - entityIndex entries: [key:uint32, count:uint32, indices:uint32[]]...
+ */
+export function writeProperties(writer: BufferWriter, properties: PropertyTable): void {
+  const count = properties.count;
+
+  writer.writeUint32(count);
+
+  writer.writeTypedArray(properties.entityId);
+  writer.writeTypedArray(properties.psetName);
+  writer.writeTypedArray(properties.psetGlobalId);
+  writer.writeTypedArray(properties.propName);
+  writer.writeTypedArray(properties.propType);
+  writer.writeTypedArray(properties.valueString);
+  writer.writeTypedArray(properties.valueReal);
+  writer.writeTypedArray(properties.valueInt);
+  writer.writeTypedArray(properties.valueBool);
+  writer.writeTypedArray(properties.unitId);
+
+  // Write entity index
+  writeIndex(writer, properties.entityIndex);
+  writeIndex(writer, properties.psetIndex);
+  writeIndex(writer, properties.propIndex);
+}
+
+/**
+ * Read PropertyTable from buffer
+ */
+export function readProperties(reader: BufferReader, strings: StringTable): PropertyTable {
+  const count = reader.readUint32();
+
+  const entityId = reader.readUint32Array(count);
+  const psetName = reader.readUint32Array(count);
+  const psetGlobalId = reader.readUint32Array(count);
+  const propName = reader.readUint32Array(count);
+  const propType = reader.readUint8Array(count);
+  const valueString = reader.readUint32Array(count);
+  const valueReal = reader.readFloat64Array(count);
+  const valueInt = reader.readInt32Array(count);
+  const valueBool = reader.readUint8Array(count);
+  const unitId = reader.readInt32Array(count);
+
+  const entityIndex = readIndex(reader, count, 'entityIndex');
+  const psetIndex = readIndex(reader, count, 'psetIndex');
+  const propIndex = readIndex(reader, count, 'propIndex');
+
+  const getPropertyValue = (idx: number): PropertyValue => {
+    const type = propType[idx];
+    switch (type) {
+      case PropertyValueType.String:
+      case PropertyValueType.Label:
+      case PropertyValueType.Identifier:
+      case PropertyValueType.Text:
+      case PropertyValueType.Enum: {
+        // valueString is a Uint32Array, so a `< 0` check is dead (the NULL
+        // sentinel -1 wraps to 4294967295). Reject any index past the table so
+        // a genuine NULL property value stays null instead of becoming "".
+        const si = valueString[idx];
+        return si >= 0 && si < strings.count ? strings.get(si) : null;
+      }
+      case PropertyValueType.Real:
+        return valueReal[idx];
+      case PropertyValueType.Integer:
+        return valueInt[idx];
+      case PropertyValueType.Boolean:
+      case PropertyValueType.Logical:
+        const boolVal = valueBool[idx];
+        return boolVal === 255 ? null : boolVal === 1;
+      case PropertyValueType.List: {
+        // Mirrors the string branch above (and @ifc-lite/data's
+        // `getPropertyValue`): the NULL sentinel -1 wraps to 4294967295 and
+        // `strings.get` answers '' for it, so without this guard a NULL list
+        // property was rehydrated from cache as `[]` — a real empty list —
+        // with the silent catch hiding the difference.
+        const li = valueString[idx];
+        if (!(li >= 0 && li < strings.count)) return null;
+        const listStr = strings.get(li);
+        if (listStr === '') return null;
+        try {
+          return JSON.parse(listStr);
+        } catch (err) {
+          warnListParseFailureOnce(listStr, err);
+          return [];
+        }
+      }
+      default:
+        return null;
+    }
+  };
+
+  return {
+    count,
+    entityId,
+    psetName,
+    psetGlobalId,
+    propName,
+    propType,
+    valueString,
+    valueReal,
+    valueInt,
+    valueBool,
+    unitId,
+    entityIndex,
+    psetIndex,
+    propIndex,
+
+    getForEntity: (id) => {
+      const rowIndices = entityIndex.get(id) || [];
+      return groupPropertySetsByInstance(
+        rowIndices,
+        psetName,
+        psetGlobalId,
+        propName,
+        propType,
+        strings,
+        (idx) => getPropertyValue(idx),
+      );
+    },
+
+    getPropertyValue: (id, pset, prop) => {
+      const rowIndices = entityIndex.get(id) || [];
+      const psetIdx = strings.indexOf(pset);
+      const propIdx = strings.indexOf(prop);
+
+      for (const idx of rowIndices) {
+        if (psetName[idx] === psetIdx && propName[idx] === propIdx) {
+          return getPropertyValue(idx);
+        }
+      }
+
+      return null;
+    },
+
+    findByProperty: (prop, operator, value, pset) => {
+      const propIdx = strings.indexOf(prop);
+      if (propIdx < 0) return [];
+
+      // When a property-set is named, only rows in that pset match; a same-named
+      // property in another pset must not. An unknown pset name matches nothing.
+      const psetIdx = pset === undefined ? -1 : strings.indexOf(pset);
+      if (pset !== undefined && psetIdx < 0) return [];
+
+      const rowIndices = propIndex.get(propIdx) || [];
+      const results: number[] = [];
+
+      for (const idx of rowIndices) {
+        if (psetIdx >= 0 && psetName[idx] !== psetIdx) continue;
+        const propValue = getPropertyValue(idx);
+        if (comparePropertyValues(propValue, operator, value)) {
+          results.push(entityId[idx]);
+        }
+      }
+
+      return results;
+    },
+  };
+}
+
+function writeIndex(writer: BufferWriter, index: Map<number, number[]>): void {
+  writer.writeUint32(index.size);
+  for (const [key, values] of index) {
+    writer.writeUint32(key);
+    writer.writeUint32(values.length);
+    for (const v of values) {
+      writer.writeUint32(v);
+    }
+  }
+}
+
+/**
+ * Read a row-index table (entityIndex/psetIndex/propIndex): key -> row
+ * indices into the parallel column arrays. Each row index MUST be < rowCount
+ * — the column arrays (entityId, psetName, propType, valueString, ...) are
+ * fixed-size `Uint32Array`/`Float64Array`s, so an out-of-range read returns
+ * `undefined` instead of throwing (`arr[idx]` on a typed array never throws).
+ * A corrupt cache with an inflated row index would otherwise flow `undefined`
+ * names and types into `getForEntity` results silently instead of failing the
+ * cache load. Same defect shape, and same fix, as `entity-index.ts`'s
+ * `typeIndex` bounds check.
+ */
+function readIndex(reader: BufferReader, rowCount: number, name: string): Map<number, number[]> {
+  const size = reader.readUint32();
+  const index = new Map<number, number[]>();
+  for (let i = 0; i < size; i++) {
+    const key = reader.readUint32();
+    const valueCount = reader.readUint32();
+    const values: number[] = [];
+    for (let j = 0; j < valueCount; j++) {
+      const rowIndex = reader.readUint32();
+      if (rowIndex >= rowCount) {
+        throw new Error(
+          `Corrupt cache PropertyTable ${name}: row index ${rowIndex} for key ${key} ` +
+            `exceeds row count ${rowCount}`,
+        );
+      }
+      values.push(rowIndex);
+    }
+    index.set(key, values);
+  }
+  return index;
+}

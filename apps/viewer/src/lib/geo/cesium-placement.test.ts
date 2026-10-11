@@ -1,0 +1,559 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+
+import {
+  closestYOnVerticalLineFromRay,
+  computeCesiumPlacement,
+  computeIfcOriginHeight,
+  computeOrthogonalHeightForBaseAltitude,
+  getMapUnitScale,
+  intersectRayWithHorizontalPlane,
+  mapUnitsToMeters,
+  metersToMapUnits,
+  orthometricTargetForTerrain,
+  projectedDeltaToViewerDelta,
+  projectedDeltaToViewerDeltaForGeometry,
+  shouldApplyGeoidUndulation,
+  shouldPreferOrthometricTerrain,
+  viewerDeltaToProjectedDelta,
+  viewerDeltaToProjectedDeltaForGeometry,
+} from './cesium-placement.js';
+import type { CoordinateInfo } from '@ifc-lite/geometry';
+import type { MapConversion } from '@ifc-lite/parser';
+import { getEffectiveAxisScales } from './geo-scale.js';
+
+describe('cesium placement helpers', () => {
+  it('defaults to METRES when MapUnit is absent (overrides project length unit)', () => {
+    // Per IFC4 spec, missing MapUnit falls back to the project's length unit.
+    // In practice (Bonsai/IfcOpenShell/Revit), MapConversion offsets are
+    // authored in METRES regardless of project unit. Honouring the spec
+    // pushes offsets thousands of km out of the CRS's valid range and lands
+    // models at the projection's antipode (Hans's IXAS_KW 018 file: mm
+    // project + MapConversion (126500, 480000) → South Pacific instead of
+    // Netherlands). See `resolveMapUnitToMetreScale` rationale.
+    assert.strictEqual(getMapUnitScale(undefined, 0.001), 1);
+    assert.strictEqual(getMapUnitScale({ mapUnitScale: 1 }, 0.001), 1);
+    // Explicit non-metre MapUnit still wins — the heuristic only fires when
+    // MapUnit is unset.
+    assert.strictEqual(getMapUnitScale({ mapUnitScale: 0.3048006096 }, 1), 0.3048006096);
+  });
+
+  it('converts between metres and map units using ProjectedCRS.mapUnitScale', () => {
+    const usFoot = { mapUnitScale: 0.3048006096 };
+    assert.strictEqual(mapUnitsToMeters(10, usFoot, 1), 3.048006096);
+    assert.strictEqual(
+      metersToMapUnits(3.048006096, usFoot, 1),
+      10,
+    );
+  });
+
+  it('prefers orthometric terrain when a vertical datum is present', () => {
+    assert.strictEqual(shouldPreferOrthometricTerrain({ verticalDatum: 'EPSG:8357' }), true);
+    assert.strictEqual(shouldPreferOrthometricTerrain({ verticalDatum: '$' }), false);
+    assert.strictEqual(shouldPreferOrthometricTerrain({ verticalDatum: '' }), false);
+    assert.strictEqual(shouldPreferOrthometricTerrain(undefined), false);
+  });
+
+  it('applies the geoid correction by DEFAULT, regardless of vertical datum (#1355)', () => {
+    // The bug: the orthometric->ellipsoidal correction used to be gated on a
+    // declared VerticalDatum, but that attribute is optional in IFC4/IFC4X3 and
+    // routinely omitted (e.g. Dutch RD-New / NAP files). The authored altitude
+    // is orthometric per spec, so the correction must be the default. This
+    // predicate is now decoupled from shouldPreferOrthometricTerrain and keys
+    // only off the user's "heights are ellipsoidal" opt-out.
+    assert.strictEqual(shouldApplyGeoidUndulation(undefined), true);
+    assert.strictEqual(shouldApplyGeoidUndulation(false), true);
+    // Opt-out: the rare file whose OrthogonalHeight is already ellipsoidal.
+    assert.strictEqual(shouldApplyGeoidUndulation(true), false);
+  });
+
+  it('places the model at its authored IFC height — no terrain/storey clamp', () => {
+    // Model placement is purely IfcMapConversion.OrthogonalHeight + the
+    // geometry origin. Terrain and storey data never move the model.
+    const placement = computeCesiumPlacement({
+      coordinateInfo: {
+        originShift: { x: 0, y: 0, z: 0 },
+        originalBounds: {
+          min: { x: 0, y: -3, z: 0 },
+          max: { x: 10, y: 9, z: 10 },
+        },
+        shiftedBounds: {
+          min: { x: 0, y: -3, z: 0 },
+          max: { x: 10, y: 9, z: 10 },
+        },
+        hasLargeCoordinates: false,
+      },
+      projectedCRS: { verticalDatum: 'EPSG:8357' },
+      ifcOriginHeight: 244,
+      terrainHeight: 245,
+      storeyElevations: new Map([[1, -3], [2, 0], [3, 3]]),
+      viewerUpScale: 1,
+    });
+
+    // placementHeight == authored ifcOriginHeight, NOT terrain+anchorOffset.
+    assert.strictEqual(placement.placementHeight, 244);
+    // clampAnchorY / anchorOffset are still derived (gizmo + clip math use
+    // them) but no longer feed placementHeight.
+    assert.strictEqual(placement.clampAnchorY, 0);
+    assert.strictEqual(placement.anchorOffset, 3);
+    assert.strictEqual(placement.preferOrthometricTerrain, true);
+  });
+
+  it('keeps the authored height whether it is above OR below terrain', () => {
+    // Above terrain — unchanged.
+    const above = computeCesiumPlacement({ ifcOriginHeight: 244, terrainHeight: 195.4, viewerUpScale: 1 });
+    assert.strictEqual(above.placementHeight, 244);
+
+    // Below terrain — the model stays sub-grade, NOT lifted to terrain.
+    // (Regression: the old Math.max floor pinned it to terrain, which froze
+    //  the vertical placement gizmo and lifted basements above ground.)
+    const below = computeCesiumPlacement({ ifcOriginHeight: -20, terrainHeight: 70.61, viewerUpScale: 1 });
+    assert.strictEqual(below.placementHeight, -20);
+  });
+
+  it('puts the below-terrain clip plane on the terrain in a FactorZ-scaled frame (#4675)', () => {
+    // The camera frame places viewer Y at `placementHeight + viewerUpScale *
+    // (y - modelCenterY)` (cesium-bridge.ts, m21). Centre Y 3, model at 244,
+    // terrain at 250, Scale x FactorZ 2: the terrain is 6 m up, which is 3
+    // viewer units, so the plane sits at Y 6. Ignoring the scale gives 9,
+    // which the frame draws at 256, 6 m above the ground.
+    const placement = computeCesiumPlacement({
+      coordinateInfo: {
+        originShift: { x: 0, y: 0, z: 0 },
+        originalBounds: { min: { x: 0, y: -3, z: 0 }, max: { x: 10, y: 9, z: 10 } },
+        shiftedBounds: { min: { x: 0, y: -3, z: 0 }, max: { x: 10, y: 9, z: 10 } },
+        hasLargeCoordinates: false,
+      },
+      ifcOriginHeight: 244,
+      terrainHeight: 250,
+      viewerUpScale: 2,
+    });
+    assert.strictEqual(placement.terrainClipY, 6);
+    const worldHeightOfPlane = placement.placementHeight
+      + 2 * (placement.terrainClipY! - placement.modelCenterY);
+    assert.strictEqual(worldHeightOfPlane, 250);
+    // Scale 0 flattens the frame: no plane rather than a floor at infinity.
+    const flat = computeCesiumPlacement({ ifcOriginHeight: 244, terrainHeight: 250, viewerUpScale: 0 });
+    assert.strictEqual(flat.terrainClipY, null);
+    const flatAtTerrain = computeCesiumPlacement({ ifcOriginHeight: 250, terrainHeight: 250, viewerUpScale: 0 });
+    assert.strictEqual(flatAtTerrain.terrainClipY, null);
+  });
+
+  it('computes OrthogonalHeight from target base altitude with shift and RTC', () => {
+    // storeyElevations picks the clamp anchor (ground-floor storey) that
+    // targetBaseAltitude gets measured from — see findClampAnchorY. A
+    // storey at elevation 0 makes that term vanish from the subtraction,
+    // silently passing even if the anchor-Y term were dropped entirely.
+    // Use a genuinely non-zero elevation so the anchor term is load-bearing.
+    const storeyElevations = new Map([[1, 5]]);
+    assert.notStrictEqual(storeyElevations.get(1), 0, 'fixture must use a non-zero storey elevation');
+    // Producer contract (localParsingUtils.ts createCoordinateInfo):
+    // shiftedBounds = originalBounds - originShift. originalBounds is ALREADY
+    // world-frame, so shiftedBounds is not a free variable here.
+    const orthogonalHeight = computeOrthogonalHeightForBaseAltitude({
+      coordinateInfo: {
+        originShift: { x: 0, y: 2, z: 0 },
+        originalBounds: {
+          min: { x: 0, y: -1, z: 0 },
+          max: { x: 10, y: 11, z: 10 },
+        },
+        shiftedBounds: {
+          min: { x: 0, y: -3, z: 0 },
+          max: { x: 10, y: 9, z: 10 },
+        },
+        hasLargeCoordinates: false,
+        wasmRtcOffset: { x: 0, y: 0, z: 3 },
+      },
+      projectedCRS: { mapUnitScale: 0.3048 },
+      mapConversion: undefined,
+      lengthUnitScale: 1,
+      storeyElevations,
+      targetBaseAltitude: 245,
+    });
+
+    // anchorY comes from originalBounds (already world-frame, per
+    // findClampAnchorY/cesium-placement.ts control reads) so originShift
+    // must NOT be subtracted again here — only the RTC offset still needs
+    // folding in: 245 - rtcYupY(3) - anchorY(5) = 237 meters; /0.3048 mapUnitScale.
+    assert.strictEqual(orthogonalHeight, 777.56);
+  });
+
+  it('inverts the FactorZ-scaled read path when solving OrthogonalHeight (#4615)', () => {
+    // Read path: base altitude = OrthogonalHeight + scaleZ * (rtc + anchorY).
+    // Scale 1 x FactorZ 2, anchor storey at 5, RTC 3, target 100:
+    // 100 - 2 * (3 + 5) = 84, which the read path places at 84 + 16 = 100.
+    // Scaling only the anchor would give 87; ignoring FactorZ gives 92.
+    const orthogonalHeight = computeOrthogonalHeightForBaseAltitude({
+      coordinateInfo: {
+        originShift: { x: 0, y: 0, z: 0 },
+        originalBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 10, z: 10 } },
+        shiftedBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 10, z: 10 } },
+        hasLargeCoordinates: false,
+        wasmRtcOffset: { x: 0, y: 0, z: 3 },
+      },
+      projectedCRS: { mapUnitScale: 1 },
+      mapConversion: {
+        id: 1, sourceCRS: 2, targetCRS: 3, eastings: 0, northings: 0, orthogonalHeight: 0,
+        scale: 1, factorZ: 2,
+      },
+      lengthUnitScale: 1,
+      storeyElevations: new Map([[1, 5]]),
+      targetBaseAltitude: 100,
+    });
+    assert.strictEqual(orthogonalHeight, 84);
+  });
+
+  it('computes the IFC origin height from OrthogonalHeight and model center', () => {
+    const height = computeIfcOriginHeight(
+      { orthogonalHeight: 12 },
+      { mapUnitScale: 0.5 },
+      {
+        originShift: { x: 0, y: 3, z: 0 },
+        originalBounds: {
+          min: { x: 0, y: 2, z: 0 },
+          max: { x: 10, y: 8, z: 10 },
+        },
+        shiftedBounds: {
+          min: { x: 0, y: 2, z: 0 },
+          max: { x: 10, y: 8, z: 10 },
+        },
+        hasLargeCoordinates: false,
+      },
+      1,
+    );
+
+    assert.strictEqual(height, 14);
+  });
+
+  it('applies FactorZ to the IFC origin height (#4615)', () => {
+    const height = computeIfcOriginHeight(
+      { orthogonalHeight: 12, scale: 2, factorZ: 0.25 },
+      { mapUnitScale: 1 },
+      {
+        originShift: { x: 0, y: 0, z: 0 },
+        originalBounds: { min: { x: 0, y: 4, z: 0 }, max: { x: 0, y: 8, z: 0 } },
+        shiftedBounds: { min: { x: 0, y: 4, z: 0 }, max: { x: 0, y: 8, z: 0 } },
+        hasLargeCoordinates: false,
+      },
+      1,
+    );
+    assert.strictEqual(height, 15);
+  });
+
+  it('converts viewer XY drag deltas into projected map deltas', () => {
+    const projected = viewerDeltaToProjectedDelta(
+      2,
+      -1,
+      { xAxisAbscissa: 1, xAxisOrdinate: 0, scale: 1 },
+      { mapUnitScale: 1 },
+      1,
+    );
+
+    assert.deepStrictEqual(projected, { eastings: 2, northings: 1 });
+  });
+
+  it('converts projected map deltas back to viewer drag deltas', () => {
+    const viewer = projectedDeltaToViewerDelta(
+      2,
+      1,
+      { xAxisAbscissa: 1, xAxisOrdinate: 0, scale: 1 },
+      { mapUnitScale: 1 },
+      1,
+    );
+
+    assert.deepStrictEqual(viewer, { x: 2, z: -1 });
+  });
+
+  it('applies IfcMapConversionScaled factors per axis and round-trips the drag', () => {
+    const conversion = {
+      xAxisAbscissa: 0.6,
+      xAxisOrdinate: 0.8,
+      scale: 2,
+      factorX: 0.5,
+      factorY: 0.25,
+    };
+    const projected = viewerDeltaToProjectedDelta(3, -4, conversion, { mapUnitScale: 1 }, 1);
+
+    assert.ok(Math.abs(projected.eastings - 0.2) < 1e-9);
+    assert.ok(Math.abs(projected.northings - 3.6) < 1e-9);
+    const viewer = projectedDeltaToViewerDelta(
+      projected.eastings,
+      projected.northings,
+      conversion,
+      { mapUnitScale: 1 },
+      1,
+    );
+    assert.ok(Math.abs(viewer.x - 3) < 1e-9);
+    assert.ok(Math.abs(viewer.z - -4) < 1e-9);
+
+    const flatX = projectedDeltaToViewerDelta(
+      2,
+      1,
+      { ...conversion, factorX: 0 },
+      { mapUnitScale: 1 },
+      1,
+    );
+    assert.strictEqual(flatX.x, 0, 'a flat authored axis must not put the preview at infinity');
+    assert.ok(Number.isFinite(flatX.z));
+
+    const feetToMetres = viewerDeltaToProjectedDelta(
+      2,
+      -1,
+      { xAxisAbscissa: 1, xAxisOrdinate: 0, scale: 1, factorX: 0.3048, factorY: 0.3048 },
+      { mapUnitScale: 1 },
+      0.3048,
+    );
+    assert.deepStrictEqual(feetToMetres, { eastings: 2, northings: 1 });
+  });
+
+  it('keeps an explicit axis factor on top of a unit-bridging Scale (#4615)', () => {
+    // mm project, metre map: Scale .001 is the authored unit bridge, so the
+    // conversion is spec-strict and FactorX 1000 scales on top of it.
+    assert.strictEqual(getEffectiveAxisScales({ scale: 0.001, factorX: 1000 }, 1, 0.001).x, 1000);
+  });
+
+  it('rotates viewer XY drag deltas by a genuine (non-identity) grid rotation', () => {
+    // A no-rotation fixture (xAxisAbscissa: 1, xAxisOrdinate: 0) zeroes the
+    // cross terms of the rotation matrix (`ordinate * deltaZ` in eastMeters,
+    // `abscissa * deltaZ` cancelling with a zero ordinate elsewhere), so a
+    // sign error in those terms is invisible to it. Use a real rotation
+    // (cos/sin of a 3-4-5 angle) with both delta components nonzero so every
+    // term of the 2x2 rotation actually contributes to the result.
+    const rotation = { xAxisAbscissa: 0.6, xAxisOrdinate: 0.8, scale: 1 };
+    // Decay-proofing: the fixture itself must stay a genuine rotation — both
+    // axes nonzero and distinct — or this test silently degrades back to the
+    // identity case it was written to replace.
+    assert.notStrictEqual(rotation.xAxisAbscissa, 0);
+    assert.notStrictEqual(rotation.xAxisOrdinate, 0);
+    assert.notStrictEqual(rotation.xAxisAbscissa, rotation.xAxisOrdinate);
+
+    const projected = viewerDeltaToProjectedDelta(1, 2, rotation, { mapUnitScale: 1 }, 1);
+
+    // eastMeters = 0.6*1 + 0.8*2 = 2.2; northMeters = 0.8*1 - 0.6*2 = -0.4.
+    assert.ok(Math.abs(projected.eastings - 2.2) < 1e-9, `eastings = ${projected.eastings}`);
+    assert.ok(Math.abs(projected.northings - -0.4) < 1e-9, `northings = ${projected.northings}`);
+  });
+
+  it('rotates projected map deltas back to viewer deltas by a genuine (non-identity) grid rotation', () => {
+    const rotation = { xAxisAbscissa: 0.6, xAxisOrdinate: 0.8, scale: 1 };
+    assert.notStrictEqual(rotation.xAxisAbscissa, 0);
+    assert.notStrictEqual(rotation.xAxisOrdinate, 0);
+    assert.notStrictEqual(rotation.xAxisAbscissa, rotation.xAxisOrdinate);
+
+    // Inverse of the forward-rotation case above: (2.2, -0.4) must round-trip
+    // back to the original (1, 2) viewer delta.
+    const viewer = projectedDeltaToViewerDelta(2.2, -0.4, rotation, { mapUnitScale: 1 }, 1);
+
+    assert.ok(Math.abs(viewer.x - 1) < 1e-9, `x = ${viewer.x}`);
+    assert.ok(Math.abs(viewer.z - 2) < 1e-9, `z = ${viewer.z}`);
+  });
+
+  it('intersects a downward ray with a horizontal plane at the expected point', () => {
+    const hit = intersectRayWithHorizontalPlane(
+      { origin: { x: 5, y: 10, z: -3 }, direction: { x: 0, y: -1, z: 0 } },
+      0,
+    );
+    assert.deepStrictEqual(hit, { x: 5, y: 0, z: -3 });
+  });
+
+  it('intersects an oblique ray with a horizontal plane consistently for two cursor samples', () => {
+    // Two parallel rays separated by a known horizontal offset should map to
+    // hit points separated by the same offset on the plane. This is the
+    // invariant the placement gizmo relies on for stable XY drag at any
+    // camera angle.
+    const direction = { x: 0.4, y: -0.6, z: 0.5 };
+    const hitA = intersectRayWithHorizontalPlane(
+      { origin: { x: 0, y: 12, z: 0 }, direction },
+      0,
+    );
+    const hitB = intersectRayWithHorizontalPlane(
+      { origin: { x: 1, y: 12, z: 2 }, direction },
+      0,
+    );
+    assert.ok(hitA && hitB);
+    assert.strictEqual(Math.round((hitB.x - hitA.x) * 1e6) / 1e6, 1);
+    assert.strictEqual(Math.round((hitB.z - hitA.z) * 1e6) / 1e6, 2);
+  });
+
+  it('rejects rays that are parallel to the horizontal plane', () => {
+    const hit = intersectRayWithHorizontalPlane(
+      { origin: { x: 0, y: 5, z: 0 }, direction: { x: 1, y: 0, z: 0 } },
+      0,
+    );
+    assert.strictEqual(hit, null);
+  });
+
+  it('rejects rays whose intersection lies behind the origin', () => {
+    // Ray going up, plane below origin: t < 0.
+    const hit = intersectRayWithHorizontalPlane(
+      { origin: { x: 0, y: 5, z: 0 }, direction: { x: 0, y: 1, z: 0 } },
+      0,
+    );
+    assert.strictEqual(hit, null);
+  });
+
+  it('returns the cursor-aligned Y on a vertical line for an oblique ray', () => {
+    // Ray that passes exactly through (anchorX, 7, anchorZ) — the closest
+    // point on the vertical axis is the same point, so Y = 7.
+    const anchorX = 4;
+    const anchorZ = -2;
+    const target = { x: anchorX, y: 7, z: anchorZ };
+    const origin = { x: 0, y: 0, z: 0 };
+    const dx = target.x - origin.x;
+    const dy = target.y - origin.y;
+    const dz = target.z - origin.z;
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const direction = { x: dx / len, y: dy / len, z: dz / len };
+    const y = closestYOnVerticalLineFromRay({ origin, direction }, anchorX, anchorZ);
+    assert.ok(y !== null);
+    assert.ok(Math.abs((y as number) - 7) < 1e-9);
+  });
+
+  it('preserves vertical drag amount when cursor moves up by a known screen offset', () => {
+    // Two rays that pass through points (anchorX, y1, anchorZ) and
+    // (anchorX, y2, anchorZ) on the vertical line: returned Y values must
+    // equal y1 and y2 exactly — the basis of frame-rate-independent height
+    // dragging at oblique camera angles.
+    const anchorX = 0;
+    const anchorZ = 0;
+    const origin = { x: 6, y: 0, z: 4 };
+
+    const aim = (y: number) => {
+      const dx = anchorX - origin.x;
+      const dy = y - origin.y;
+      const dz = anchorZ - origin.z;
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      return { origin, direction: { x: dx / len, y: dy / len, z: dz / len } };
+    };
+
+    const y1 = closestYOnVerticalLineFromRay(aim(2), anchorX, anchorZ);
+    const y2 = closestYOnVerticalLineFromRay(aim(9), anchorX, anchorZ);
+    assert.ok(y1 !== null && y2 !== null);
+    assert.ok(Math.abs((y1 as number) - 2) < 1e-9);
+    assert.ok(Math.abs((y2 as number) - 9) < 1e-9);
+  });
+
+  it('rejects vertical rays for closest-Y-on-line (degenerate)', () => {
+    const y = closestYOnVerticalLineFromRay(
+      { origin: { x: 0, y: 10, z: 0 }, direction: { x: 0, y: -1, z: 0 } },
+      0,
+      0,
+    );
+    assert.strictEqual(y, null);
+  });
+});
+
+describe('snap-to-terrain geoid round-trip (#1456)', () => {
+  it('inverts the read-path geoid add (ellipsoidal terrain - N)', () => {
+    // True orthometric ~515 m, geoid undulation ~45 m -> ellipsoidal terrain 560.
+    assert.ok(Math.abs(orthometricTargetForTerrain(560, 45) - 515) < 1e-9);
+    // Correction off (heights ellipsoidal) -> N = 0 -> identity.
+    assert.strictEqual(orthometricTargetForTerrain(560, 0), 560);
+  });
+
+  it('round-trips: saved OrthogonalHeight + applied N lands back on the terrain', () => {
+    // Without CRS / offsets, OrthogonalHeight == targetBaseAltitude, and the read
+    // path adds N back, so a Cesium-sourced (ellipsoidal) terrain sample saved via
+    // this target reconstructs the original ellipsoidal terrain altitude.
+    const ellipsoidalTerrain = 560.0;
+    const appliedN = 45.3;
+    const target = orthometricTargetForTerrain(ellipsoidalTerrain, appliedN);
+    const orthogonalHeight = computeOrthogonalHeightForBaseAltitude({
+      mapConversion: undefined,
+      lengthUnitScale: 1,
+      targetBaseAltitude: target,
+    });
+    assert.ok(
+      Math.abs((orthogonalHeight + appliedN) - ellipsoidalTerrain) < 0.02,
+      `expected round-trip to ${ellipsoidalTerrain}, got ${orthogonalHeight + appliedN}`,
+    );
+  });
+});
+
+describe('placement-gizmo deltas with map-absolute geometry (#2526)', () => {
+  // Vectorworks-style file: geometry at the ABSOLUTE map coordinates (folded
+  // into wasmRtcOffset), IfcMapConversion repeating the anchor with a
+  // 90-degree rotation. A gizmo drag is a DELTA: it has no offsets to double
+  // apply, but the bogus authored rotation still turns "drag east" into a
+  // northing change. For map-absolute geometry the viewer axes ARE the map
+  // axes, so the delta must go through the neutralised (identity-rotation)
+  // conversion.
+  const mapAbsInfo: CoordinateInfo = {
+    originShift: { x: 0, y: 0, z: 0 },
+    originalBounds: { min: { x: -1, y: -1, z: -1 }, max: { x: 1, y: 1, z: 1 } },
+    shiftedBounds: { min: { x: -1, y: -1, z: -1 }, max: { x: 1, y: 1, z: 1 } },
+    hasLargeCoordinates: false,
+    wasmRtcOffset: { x: 312000, y: 5996150, z: 10 },
+  };
+  const mapAbsConversion: MapConversion = {
+    id: 1,
+    sourceCRS: 0,
+    targetCRS: 0,
+    eastings: 312000,
+    northings: 5996150,
+    orthogonalHeight: 0,
+    xAxisAbscissa: 0,
+    xAxisOrdinate: 1,
+    scale: 1,
+  };
+  const crs = { mapUnitScale: 1 };
+  const near = (a: number, b: number, label: string) =>
+    assert.ok(Math.abs(a - b) < 1e-9, `${label}: expected ${b}, got ${a}`);
+
+  it('viewerDeltaToProjectedDeltaForGeometry expresses a drag in the map frame (identity rotation)', () => {
+    const delta = viewerDeltaToProjectedDeltaForGeometry(
+      5, -7, mapAbsConversion, crs, 1, mapAbsInfo,
+    );
+    // Viewer +X is map east, viewer -Z is map north for absolute geometry.
+    near(delta.eastings, 5, 'eastings');
+    near(delta.northings, 7, 'northings');
+  });
+
+  it('projectedDeltaToViewerDeltaForGeometry previews an E/N delta along the map axes', () => {
+    const delta = projectedDeltaToViewerDeltaForGeometry(
+      5, 7, mapAbsConversion, crs, 1, mapAbsInfo,
+    );
+    near(delta.x, 5, 'x');
+    near(delta.z, -7, 'z');
+  });
+
+  it('round-trips through both directions', () => {
+    const projected = viewerDeltaToProjectedDeltaForGeometry(
+      3.25, -1.5, mapAbsConversion, crs, 1, mapAbsInfo,
+    );
+    const viewer = projectedDeltaToViewerDeltaForGeometry(
+      projected.eastings, projected.northings, mapAbsConversion, crs, 1, mapAbsInfo,
+    );
+    near(viewer.x, 3.25, 'x');
+    near(viewer.z, -1.5, 'z');
+  });
+
+  it('control: a compliant file (no RTC rebase) keeps the authored rotation for the delta', () => {
+    const compliant = { ...mapAbsInfo, wasmRtcOffset: undefined };
+    const guarded = viewerDeltaToProjectedDeltaForGeometry(
+      5, -7, mapAbsConversion, crs, 1, compliant,
+    );
+    const authored = viewerDeltaToProjectedDelta(5, -7, mapAbsConversion, crs, 1);
+    near(guarded.eastings, authored.eastings, 'eastings');
+    near(guarded.northings, authored.northings, 'northings');
+    const guardedViewer = projectedDeltaToViewerDeltaForGeometry(
+      5, 7, mapAbsConversion, crs, 1, compliant,
+    );
+    const authoredViewer = projectedDeltaToViewerDelta(5, 7, mapAbsConversion, crs, 1);
+    near(guardedViewer.x, authoredViewer.x, 'x');
+    near(guardedViewer.z, authoredViewer.z, 'z');
+  });
+
+  it('control: no coordinateInfo keeps the authored rotation', () => {
+    const guarded = viewerDeltaToProjectedDeltaForGeometry(
+      5, -7, mapAbsConversion, crs, 1, undefined,
+    );
+    const authored = viewerDeltaToProjectedDelta(5, -7, mapAbsConversion, crs, 1);
+    near(guarded.eastings, authored.eastings, 'eastings');
+    near(guarded.northings, authored.northings, 'northings');
+  });
+});

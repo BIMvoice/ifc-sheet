@@ -1,0 +1,81 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * @ifc-lite/clash — representation-agnostic clash detection core.
+ *
+ * This entry point depends only on `@ifc-lite/spatial` and geometry *types*.
+ * Source adapters (STEP, IFCx) and the BCF bridge live behind subpath exports
+ * (`@ifc-lite/clash/step`, …) so the core import graph stays free of
+ * version-specific dependencies — the boundary that keeps IFC5 a new adapter
+ * rather than a rewrite.
+ */
+
+export * from './types.js';
+export { clashTableRows, bareIfcGuid, CLASH_TABLE_COLUMNS, type ClashTableRow, type ClashTableOptions } from './export/table.js';
+export { matchesSelector } from './selectors.js';
+export { clashMemberKey, clashMemberSet, inClashSet } from './members.js';
+export {
+  DISCIPLINES,
+  CLASH_RULE_PRESETS,
+  inferClashSeverity,
+  disciplineMatrixRules,
+  rulesFromPresets,
+  type Discipline,
+  type DisciplineInfo,
+  type ClashRulePreset,
+} from './disciplines.js';
+export { createClashEngine, type ClashEngine, type ClashBackend, type CreateClashEngineOptions } from './engine.js';
+export { NonFiniteToleranceError } from './engine-ts/orchestrator.js';
+export { makeExclusionSet, isExcluded, pairKey, qualifiedKey } from './exclude.js';
+export {
+  buildTriageSystemPrompt,
+  buildTriageUserMessage,
+  parseTriageResponse,
+  type ClashTriageResult,
+} from './triage.js';
+export { groupClashes, isClusterGroupingIneffective, type GroupOptions } from './grouping.js';
+export { groupDuplicateSets } from './duplicate-sets.js';
+export {
+  clashReviewKey,
+  aggregateReviewStatus,
+  reviewStatusToBcfTopicStatus,
+} from './review.js';
+export { compareClashRuns, type ClashRevisionDiff } from './lifecycle.js';
+export {
+  compareClashRevisions,
+  type ClashRevisionSide,
+  type ClashRevisionComparison,
+  type ClashRevisionReasons,
+} from './revision.js';
+export {
+  SEVERITY_RANK,
+  TOUCHING_EPSILON,
+  penetrationDepth,
+  isTouching,
+  sortClashes,
+  summarizeClashes,
+  ruleHadNoMatch,
+  classifyRuleCoverage,
+  describeEmptyRuleSides,
+  type ClashSortBy,
+  type RuleCoverageOutcome,
+} from './analysis.js';
+export {
+  findDuplicates,
+  DUPLICATES_RULE,
+  type DuplicateOptions,
+} from './duplicates.js';
+/**
+ * Per-triangle mesh analysis, re-exported for consumers outside this package
+ * (issue #2199: "mesh analysis reachable from TypeScript"). Previously
+ * package-internal — `triangleArea` existed for the clash contact solver but
+ * nothing outside `@ifc-lite/clash` could reach it, so the viewer's Measure
+ * tool had no path to a triangulated-mesh area even though every `MeshData`
+ * already carries the `positions`/`indices` a caller needs to use it.
+ */
+export {
+  triangleArea,
+  type Triangle,
+} from './contact/triangle.js';

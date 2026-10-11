@@ -1,0 +1,345 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Hand-maintained schema helpers built on top of the auto-generated
+//! `IfcType` enum.
+//!
+//! These helpers used to live appended to `generated/schema.rs` despite that
+//! file's "DO NOT EDIT" header. Moving them here keeps them safe from a
+//! re-run of `@ifc-lite/codegen` and lets us derive answers from the EXPRESS
+//! inheritance graph instead of maintaining a leaf-level allow-list that has
+//! to be amended every time a new IFC4X3 subtype shows up (see PR #585 for
+//! `IfcSolarDevice`, which inherits from `IfcEnergyConversionDevice` and was
+//! therefore already covered conceptually by the old whitelist's parent
+//! entry, but missed in practice because the whitelist was only checked by
+//! string match).
+//!
+//! Co-authored with Geronimo <gerald.stampfel+geronimo@gmail.com> (PR #585).
+//!
+//! `has_geometry_by_name`, `is_representationless_spatial_container_by_name`
+//! and `is_simple_geometry_type` are all on the hot path during scene
+//! construction, where the same ~50–100 distinct type names are queried
+//! millions of times per file. An immutable, schema-derived table memoises
+//! all generated names and bounded exporter aliases without taking a read-lock for each entity.
+//! Unknown names use the same predicates without entering a growing cache.
+
+use std::sync::OnceLock;
+
+use rustc_hash::FxHashMap;
+
+use crate::generated::IfcType;
+
+/// Normalise to uppercase ASCII without allocating when the input is already
+/// uppercase (the common case — STEP type tokens are emitted uppercase).
+///
+/// `pub(crate)` so record-level parsing and keyword resolution share one exact
+/// normalisation rule.
+pub(crate) fn normalise_uppercase(type_name: &str) -> std::borrow::Cow<'_, str> {
+    if type_name.bytes().any(|b| b.is_ascii_lowercase()) {
+        std::borrow::Cow::Owned(type_name.to_ascii_uppercase())
+    } else {
+        std::borrow::Cow::Borrowed(type_name)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct TypeClassification {
+    has_geometry: bool,
+    representationless_spatial: bool,
+    simple_geometry: bool,
+}
+
+/// Build only from the finite schema catalog: file-supplied unknown names
+/// cannot retain memory here. Compute via the canonical predicates, including
+/// legacy overrides for names that also occur in the modern schema.
+fn classifications() -> &'static FxHashMap<&'static str, TypeClassification> {
+    static TABLE: OnceLock<FxHashMap<&'static str, TypeClassification>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        crate::generated::IFC_TYPES
+            .iter()
+            .map(IfcType::as_str)
+            .chain(crate::EXPORTER_STRATUM_ALIASES.iter().copied())
+            .map(|name| {
+                (
+                    name,
+                    TypeClassification {
+                        has_geometry: compute_has_geometry(name),
+                        representationless_spatial: compute_is_representationless_spatial_container(
+                            name,
+                        ),
+                        simple_geometry: compute_is_simple(name),
+                    },
+                )
+            })
+            .collect()
+    })
+}
+
+/// Check if a type name (UPPERCASE STEP string) represents an `IfcProduct`
+/// subtype that can bear geometry (has `ObjectPlacement` + `Representation`).
+///
+/// Implementation:
+/// 1. Modern names go through `IfcType::from_str` and are accepted iff they
+///    inherit from `IfcProduct`, with a small block-list for abstract spatial
+///    containers (`IfcBuildingStorey`, `IfcFacility`, `IfcFacilityPart`,
+///    `IfcSpatialElement`, `IfcSpatialStructureElement`) that don't carry
+///    geometry directly. `IfcSpace`, `IfcSite`, `IfcSpatialZone` and
+///    `IfcBuilding` (and any concrete subtype of those) are intentionally
+///    kept — they have boundary representations the renderer consumes. See
+///    [`is_non_geometric_spatial`] for how that exempt set is maintained.
+/// 2. The only non-EXPRESS compatibility spellings are the documented exporter
+///    stratum aliases.
+/// 3. Reinforcement variants not covered above fall back to a substring
+///    match (`REINFORCING…` / `REINFORCED…`).
+pub fn has_geometry_by_name(type_name: &str) -> bool {
+    let upper = normalise_uppercase(type_name);
+    classifications().get(upper.as_ref()).map_or_else(
+        || compute_has_geometry(upper.as_ref()),
+        |class| class.has_geometry,
+    )
+}
+
+/// Return the geometry-bearing and representationless-spatial predicates together.
+/// The tuple matches [`has_geometry_by_name`] and
+/// [`is_representationless_spatial_container_by_name`], respectively, while
+/// sharing one lookup of the immutable schema classification (#3987).
+pub fn geometry_flags_by_name(type_name: &str) -> (bool, bool) {
+    let upper = normalise_uppercase(type_name);
+    classifications().get(upper.as_ref()).map_or_else(
+        || {
+            let geometry = compute_has_geometry(upper.as_ref());
+            // These predicates are disjoint, including legacy and unknown names.
+            (
+                geometry,
+                !geometry && compute_is_representationless_spatial_container(upper.as_ref()),
+            )
+        },
+        |class| (class.has_geometry, class.representationless_spatial),
+    )
+}
+
+fn compute_has_geometry(upper: &str) -> bool {
+    if crate::is_exporter_stratum_alias(upper) {
+        return true;
+    }
+
+    let t = IfcType::from_str(upper);
+    if matches!(t, IfcType::Unknown(_)) {
+        // Reinforcement bars/meshes/elements are common in IFC2x3 files. Match
+        // a tighter prefix than `contains("REINFORC")` to avoid catching
+        // unrelated tokens with the substring.
+        return upper.starts_with("IFCREINFORCING") || upper.starts_with("IFCREINFORCED");
+    }
+
+    if !t.is_subtype_of(IfcType::IfcProduct) {
+        return false;
+    }
+
+    !is_non_geometric_spatial(t)
+}
+
+/// Subtypes of `IfcProduct` that exist solely as spatial containers and
+/// aren't rendered directly. `IfcSpace`/`IfcSite`/`IfcSpatialZone`/`IfcBuilding`
+/// and their concrete subtypes are deliberately exempt — their boundary
+/// representations are consumed by the renderer when present.
+///
+/// The exempt set grows as exporters are found that attach a body to a
+/// container. `IfcSpatialZone` was unblocked for Revit Family geometry authored
+/// via Dynamo (issue #1075); `IfcBuilding` for terrain/DGM exports that hang an
+/// `IfcShellBasedSurfaceModel` straight off the building (issue #1910). In both
+/// cases the class was blocked, so the entity never became a geometry job and
+/// the model rendered nothing at all. **The gate only *permits* meshing; a
+/// container with no representation still produces nothing**, so exempting a
+/// class costs one abandoned job per instance and is the safe direction.
+/// `IfcBuildingStorey` and the `IfcFacility`/`IfcFacilityPart` families stay
+/// blocked only because no exporter has been observed giving them a body; the
+/// same one-line exemption applies if one is.
+///
+/// We block by inheritance, not by exact match, so IFC4X3 facility
+/// subclasses like `IfcBridge`/`IfcRoad`/`IfcRailway`/`IfcMarineFacility`
+/// (under `IfcFacility`), their `*Part` variants (under `IfcFacilityPart`),
+/// and any future concrete spatial container all collapse to the same answer
+/// without the whitelist needing to enumerate them.
+fn is_non_geometric_spatial(t: IfcType) -> bool {
+    if t.is_subtype_of(IfcType::IfcSpace)
+        || t.is_subtype_of(IfcType::IfcSite)
+        || t.is_subtype_of(IfcType::IfcSpatialZone)
+        || t.is_subtype_of(IfcType::IfcBuilding)
+    {
+        return false;
+    }
+    t.is_subtype_of(IfcType::IfcSpatialElement)
+}
+
+/// Whether `type_name` is one of the spatial-container types that
+/// [`has_geometry_by_name`] still blocks by name (`IfcBuildingStorey`,
+/// `IfcFacility`, `IfcFacilityPart`, `IfcSpatialElement`,
+/// `IfcSpatialStructureElement`, and their subtypes) — i.e. `IfcProduct`
+/// subtypes that `is_non_geometric_spatial` treats as never carrying
+/// geometry directly. `IfcBuilding` (along with `IfcSpace`, `IfcSite` and
+/// `IfcSpatialZone`) is handled class-wide by `has_geometry_by_name` instead
+/// — see [`is_non_geometric_spatial`] — so it is no longer part of this
+/// instance-level exception.
+///
+/// In the overwhelming majority of real files that assumption holds for the
+/// still-blocked types: these entities are pure hierarchy nodes with a null
+/// `Representation`. Issue #1910 was discovered against a DGM/terrain export
+/// that attached an `IfcShellBasedSurfaceModel` directly to `IfcBuilding`
+/// with no `IfcBuildingElement` children at all; that concrete case is now
+/// covered by `IfcBuilding`'s class-wide exemption above, but the same
+/// exporter shape could in principle target `IfcBuildingStorey` or another
+/// still-blocked container. `has_geometry_by_name` alone can't distinguish
+/// "this type never has a body" from "this specific instance happens not
+/// to", so callers that need to catch that exceptional case combine this
+/// predicate with an instance-level check of whether the entity's
+/// `Representation` attribute (index 6 on any `IfcProduct`) is actually
+/// non-null before scheduling it for meshing
+/// (`crate::parser::nth_attribute_is_present`). See
+/// `rust/processing/src/processor/mod.rs` and
+/// `rust/wasm-bindings/src/api/gpu_meshes/prepass.rs`.
+pub fn is_representationless_spatial_container_by_name(type_name: &str) -> bool {
+    let upper = normalise_uppercase(type_name);
+    classifications().get(upper.as_ref()).map_or_else(
+        || compute_is_representationless_spatial_container(upper.as_ref()),
+        |class| class.representationless_spatial,
+    )
+}
+
+fn compute_is_representationless_spatial_container(upper: &str) -> bool {
+    if crate::is_exporter_stratum_alias(upper) {
+        return false;
+    }
+    let t = IfcType::from_str(upper);
+    if matches!(t, IfcType::Unknown(_)) || !t.is_subtype_of(IfcType::IfcProduct) {
+        return false;
+    }
+    is_non_geometric_spatial(t)
+}
+
+/// Check if an IFC entity class is "simple" geometry (processed first for
+/// fast first frame). Driven off the EXPRESS inheritance graph rather than
+/// a leaf-level blacklist, so new IFC4X3 subtypes (e.g. `IfcSolarDevice`
+/// under `IfcEnergyConversionDevice`) are categorised correctly without
+/// code changes — see PR #585.
+///
+/// Returns `true` for "simple" elements (load first), `false` for
+/// "secondary/complex" (openings, doors, windows, furniture, MEP/distribution
+/// elements, spaces, sites, annotations, virtual/proxy entities).
+pub fn is_simple_geometry_type(type_name: &str) -> bool {
+    let upper = normalise_uppercase(type_name);
+    classifications().get(upper.as_ref()).map_or_else(
+        || compute_is_simple(upper.as_ref()),
+        |class| class.simple_geometry,
+    )
+}
+
+/// Resolve a STEP keyword to its schema-local `IfcType`. Supported keywords
+/// retain their exact generated variants. The three non-EXPRESS exporter
+/// stratum aliases remain owned `Unknown` values and are handled explicitly by
+/// `has_geometry_by_name`. Any pass that *classifies* or *labels* an entity
+/// must use this helper rather than reimplementing keyword normalization
+/// (#4203).
+pub fn ifc_type_from_keyword(type_name: &str) -> IfcType {
+    let upper = normalise_uppercase(type_name);
+    IfcType::from_str(upper.as_ref())
+}
+
+/// The `IfcTypeProduct` subtype a STEP keyword names, or `None` when it is
+/// not one.
+///
+/// The single predicate behind every type-geometry candidate gate (#957/#962):
+/// the native processor, the streaming and sharded browser pre-passes, the
+/// styling pre-pass, and the attribute export's pass 3. They MUST agree — a
+/// keyword one admits and another drops is either geometry with no attribute
+/// row or an attribute row with no geometry (#1518).
+///
+/// Keeps the cheap `ends_with` pre-filter that kept the resolve and the
+/// `is_subtype_of` walk off the hot path for the non-type majority, and
+/// resolves through the generated schema universe. Exact variants are
+/// preserved for every supported schema keyword, while the three non-EXPRESS
+/// exporter stratum aliases remain owned `Unknown` values and are handled by
+/// the explicit compatibility predicates (#4203).
+///
+/// `type_name` is the raw STEP keyword as the scanner read it, in whatever case the file wrote it.
+pub fn type_product_ifc_type(type_name: &str) -> Option<IfcType> {
+    if !crate::parser::keyword_ends_with(type_name, "TYPE")
+        && !crate::parser::keyword_ends_with(type_name, "STYLE")
+    {
+        return None;
+    }
+    let ty = ifc_type_from_keyword(type_name);
+    ty.is_subtype_of(IfcType::IfcTypeProduct).then_some(ty)
+}
+
+/// The schema-resolved type for an entity, recovered from its RAW STEP RECORD.
+///
+/// For callers that hold a `DecodedEntity` and its source bytes but no keyword.
+/// `DecodedEntity.ifc_type` comes from a bare [`IfcType::from_str`]. Supported
+/// supported schema names arrive as exact variants. A genuinely unknown name,
+/// including an exporter stratum alias, remains `IfcType::Unknown`, which owns
+/// its normalized keyword alongside its CRC32 ID. The raw record is only the
+/// fallback when a decoder has not retained a recoverable keyword.
+///
+/// `decoded` is returned unchanged when it is already a known type, so the
+/// scan is paid only by entities that need it, and when the record is
+/// malformed enough that no keyword can be read.
+///
+/// Exists because the wasm mesh batch had exactly this shape and got it wrong:
+/// unknown keywords reached the browser labelled `"Unknown"` even when the
+/// raw record could identify them. The raw-record fallback keeps both paths
+/// aligned (#3179).
+pub fn ifc_type_from_record(decoded: IfcType, record: &[u8]) -> IfcType {
+    // #4203: supported schema names have exact enum variants. The raw record
+    // is only needed when the decoder preserved an owned unknown value.
+    if !matches!(decoded, IfcType::Unknown(_)) {
+        return decoded;
+    }
+    match crate::fast_parse::extract_entity_type_name(record) {
+        Some(name) => ifc_type_from_keyword(name),
+        None => decoded,
+    }
+}
+
+fn compute_is_simple(upper: &str) -> bool {
+    let t = ifc_type_from_keyword(upper);
+
+    // Anything not in the modern schema defaults to "simple" priority,
+    // matching the original blacklist's "anything else is simple" behaviour.
+    if matches!(t, IfcType::Unknown(_)) {
+        return true;
+    }
+
+    let is_secondary = t.is_subtype_of(IfcType::IfcOpeningElement)
+        || t.is_subtype_of(IfcType::IfcWindow)
+        || t.is_subtype_of(IfcType::IfcDoor)
+        || t.is_subtype_of(IfcType::IfcFurnishingElement)
+        // Covers IfcEnergyConversionDevice + IfcSolarDevice + every Flow*
+        // and every MEP terminal — all inherit from IfcDistributionElement.
+        || t.is_subtype_of(IfcType::IfcDistributionElement)
+        || matches!(
+            t,
+            // Spatial elements that have geometry but aren't structural.
+            IfcType::IfcSpace
+                | IfcType::IfcSpatialZone
+                | IfcType::IfcSite
+                // Annotations / virtual / proxy.
+                | IfcType::IfcAnnotation
+                | IfcType::IfcVirtualElement
+                | IfcType::IfcBuildingElementProxy
+                // IFC2X3-only keywords the registry parents outside the arms
+                // above (#5180). `IfcProxy` sits on IfcProduct, not on
+                // IfcBuildingElementProxy; `IfcEquipmentElement` sits on
+                // IfcElement although its IFC4 successors are all
+                // IfcDistributionElement subtypes. The retired legacy table
+                // routed them through those two types, so both were deferred.
+                | IfcType::IfcProxy
+                | IfcType::IfcEquipmentElement
+        );
+
+    !is_secondary
+}
+
+#[cfg(test)]
+#[path = "schema_helpers_tests.rs"]
+mod tests;

@@ -1,0 +1,496 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import {
+  composeInstanceMatrix,
+  composeInstanceAnchor,
+  writeInstanceRecord,
+  prepareInstancedRender,
+  foldOccurrenceWorldBox,
+  INSTANCE_STRIDE_BYTES,
+  INSTANCE_FLAGS_OFFSET,
+  INSTANCE_FLAG_SELECTED,
+  INSTANCE_FLAG_METALLIC,
+  INSTANCE_FLAG_ROUGHNESS,
+  INSTANCE_FINISH_FLAGS_MASK,
+  packInstanceFinish,
+} from './instanced-render.js';
+import { OPAQUE_ALPHA_CUTOFF } from './overlay-routing.js';
+
+// --- frame helpers (independent re-derivation of the expected world coord) ---
+
+/** Apply a column-major mat4 (the composeInstanceMatrix output) to a point. */
+function applyColMajor(m: Float32Array, p: readonly [number, number, number]): [number, number, number] {
+  const [x, y, z] = p;
+  return [
+    m[0] * x + m[4] * y + m[8] * z + m[12],
+    m[1] * x + m[5] * y + m[9] * z + m[13],
+    m[2] * x + m[6] * y + m[10] * z + m[14],
+  ];
+}
+
+/** Apply a row-major mat4 (the IFNS rel_k convention) to a point. */
+function applyRowMajor(rm: Float32Array, p: readonly [number, number, number]): [number, number, number] {
+  const [x, y, z] = p;
+  return [
+    rm[0] * x + rm[1] * y + rm[2] * z + rm[3],
+    rm[4] * x + rm[5] * y + rm[6] * z + rm[7],
+    rm[8] * x + rm[9] * y + rm[10] * z + rm[11],
+  ];
+}
+
+/** The IFC Z-up → WebGL Y-up swap MeshDataJs::new bakes into the flat path. */
+function swap([x, y, z]: readonly [number, number, number]): [number, number, number] {
+  return [x, z, -y];
+}
+
+const rowMajorIdentity = () =>
+  new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+
+const rowMajorTranslation = (tx: number, ty: number, tz: number) =>
+  new Float32Array([1, 0, 0, tx, 0, 1, 0, ty, 0, 0, 1, tz, 0, 0, 0, 1]);
+
+const rowMajorRotZ = (theta: number) => {
+  const c = Math.cos(theta);
+  const s = Math.sin(theta);
+  return new Float32Array([c, -s, 0, 0, s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+};
+
+function assertClose(
+  got: readonly [number, number, number],
+  want: readonly [number, number, number],
+  msg: string,
+  eps = 1e-5,
+) {
+  for (let i = 0; i < 3; i++) {
+    assert.ok(
+      Math.abs(got[i] - want[i]) < eps,
+      `${msg}: axis ${i} got ${got[i]} want ${want[i]}`,
+    );
+  }
+}
+
+/**
+ * The contract: composeInstanceMatrix(rel_k, origin) applied to a template's
+ * LOCAL vertex p must equal the flat path's world coordinate for that occurrence,
+ * which is swap(rel_k · (origin + p)). This independently re-derives the RHS.
+ */
+function expectedRenderCoord(
+  relK: Float32Array,
+  origin: readonly [number, number, number],
+  pLocal: readonly [number, number, number],
+): [number, number, number] {
+  const nativeWorld: [number, number, number] = [
+    origin[0] + pLocal[0],
+    origin[1] + pLocal[1],
+    origin[2] + pLocal[2],
+  ];
+  return swap(applyRowMajor(relK, nativeWorld));
+}
+
+describe('composeInstanceMatrix — frame correctness vs the flat path', () => {
+  it('keeps a canonical centimetre residual at a 5,000 km template origin (#5049)', () => {
+    const origin: [number, number, number] = [5_000_000.01, -2_000_000.02, 30.03];
+    const anchor = composeInstanceAnchor(rowMajorTranslation(0.02, 0.04, -0.06), origin);
+    // Native [5000000.03, -1999999.98, 29.97] → Y-up [x, z, -y].
+    assertClose(anchor, [5_000_000.03, 29.97, 1_999_999.98], 'f64 occurrence anchor', 1e-8);
+    const v1 = composeInstanceMatrix(rowMajorTranslation(0.02, 0.04, -0.06), origin);
+    assert.notEqual(v1[12], anchor[0], 'the V1 f32 matrix demonstrably loses the residual');
+  });
+  it('identity rel_k + origin: only the Z-up→Y-up swap of (origin + p)', () => {
+    const relK = rowMajorIdentity();
+    const origin: [number, number, number] = [1, 2, 3];
+    const p: [number, number, number] = [0.5, 0.6, 0.7];
+    const mat = composeInstanceMatrix(relK, origin);
+    // (origin + p) = [1.5, 2.6, 3.7]; swap → [1.5, 3.7, -2.6]
+    assertClose(applyColMajor(mat, p), [1.5, 3.7, -2.6], 'identity');
+    assertClose(applyColMajor(mat, p), expectedRenderCoord(relK, origin, p), 'identity vs derived');
+  });
+
+  it('translation rel_k folds before the swap', () => {
+    const relK = rowMajorTranslation(10, 20, 30);
+    const origin: [number, number, number] = [1, 2, 3];
+    const p: [number, number, number] = [0.5, 0.6, 0.7];
+    const mat = composeInstanceMatrix(relK, origin);
+    // rel_k·(origin+p) = [11.5, 22.6, 33.7]; swap → [11.5, 33.7, -22.6]
+    assertClose(applyColMajor(mat, p), [11.5, 33.7, -22.6], 'translation');
+    assertClose(applyColMajor(mat, p), expectedRenderCoord(relK, origin, p), 'translation vs derived');
+  });
+
+  it('rotation rel_k (90° about native Z) composes in the right order', () => {
+    const relK = rowMajorRotZ(Math.PI / 2);
+    const origin: [number, number, number] = [0, 0, 0];
+    const p: [number, number, number] = [1, 0, 0];
+    const mat = composeInstanceMatrix(relK, origin);
+    // rotZ90·[1,0,0] = [0,1,0]; swap([0,1,0]) = [0,0,-1]
+    assertClose(applyColMajor(mat, p), [0, 0, -1], 'rotZ90');
+    assertClose(applyColMajor(mat, p), expectedRenderCoord(relK, origin, p), 'rotZ90 vs derived');
+  });
+
+  it('rotation + translation + origin, multiple vertices', () => {
+    const relK = rowMajorRotZ(Math.PI / 3);
+    relK[3] = 5; // tx
+    relK[7] = -2; // ty
+    relK[11] = 9; // tz
+    const origin: [number, number, number] = [12.5, -3.25, 7.0];
+    for (const p of [
+      [0, 0, 0],
+      [1, 2, 3],
+      [-4.5, 0.25, 8.0],
+    ] as const) {
+      const mat = composeInstanceMatrix(relK, origin);
+      assertClose(applyColMajor(mat, p), expectedRenderCoord(relK, origin, p), `vertex ${p}`);
+    }
+  });
+});
+
+describe('writeInstanceRecord — GPU buffer byte layout', () => {
+  it('packs mat4 + entityId + rgba + flags into an 88-byte record with no anchor lanes (#6393), little-endian', () => {
+    const buf = new ArrayBuffer(INSTANCE_STRIDE_BYTES);
+    const dv = new DataView(buf);
+    const mat = new Float32Array(16);
+    for (let i = 0; i < 16; i++) mat[i] = i + 0.5;
+    writeInstanceRecord(dv, 0, mat, 4242, [0.1, 0.2, 0.3, 0.4], INSTANCE_FLAG_SELECTED);
+
+    // #6393: the camera-relative anchor moved to a per-template delta stream,
+    // so the record ends at the flags lane.
+    assert.strictEqual(INSTANCE_STRIDE_BYTES, 88);
+    for (let i = 0; i < 16; i++) {
+      assert.ok(Math.abs(dv.getFloat32(i * 4, true) - (i + 0.5)) < 1e-6, `mat[${i}]`);
+    }
+    assert.strictEqual(dv.getUint32(64, true), 4242, 'entityId');
+    const expectedColor = [0.1, 0.2, 0.3, 0.4];
+    for (let j = 0; j < 4; j++) {
+      assert.ok(
+        Math.abs(dv.getFloat32(68 + j * 4, true) - expectedColor[j]) < 1e-6,
+        `color[${j}]`,
+      );
+    }
+    assert.strictEqual(dv.getUint32(INSTANCE_FLAGS_OFFSET, true), INSTANCE_FLAG_SELECTED, 'flags');
+  });
+
+  it('defaults flags to 0 (unselected) when omitted', () => {
+    const buf = new ArrayBuffer(INSTANCE_STRIDE_BYTES);
+    const dv = new DataView(buf);
+    writeInstanceRecord(dv, 0, new Float32Array(16), 7, [1, 1, 1, 1]);
+    assert.strictEqual(dv.getUint32(INSTANCE_FLAGS_OFFSET, true), 0, 'flags default 0');
+  });
+});
+
+describe('prepareInstancedRender — grouping + buffer assembly', () => {
+  it('groups instances by template, sizes buffers, composes matrices', () => {
+    const origin0: [number, number, number] = [1, 2, 3];
+    const origin1: [number, number, number] = [-5, 0, 4];
+    const shard = {
+      templates: [
+        { positions: new Float32Array([0, 0, 0]), normals: new Float32Array([0, 1, 0]), indices: new Uint32Array([0]), origin: origin0 },
+        { positions: new Float32Array([1, 1, 1]), normals: new Float32Array([0, 0, 1]), indices: new Uint32Array([0]), origin: origin1 },
+      ],
+      instances: [
+        { templateIndex: 0, entityId: 11, color: [1, 0, 0, 1] as [number, number, number, number], transform: rowMajorTranslation(0, 0, 0) },
+        { templateIndex: 1, entityId: 22, color: [0, 1, 0, 1] as [number, number, number, number], transform: rowMajorTranslation(7, 0, 0) },
+        { templateIndex: 0, entityId: 33, color: [0, 0, 1, 1] as [number, number, number, number], transform: rowMajorTranslation(0, 5, 0) },
+      ],
+      carriesItemIds: false,
+    };
+
+    const out = prepareInstancedRender(shard);
+    assert.strictEqual(out.length, 2, 'two templates with occurrences');
+
+    const t0 = out.find((t) => t.templateIndex === 0)!;
+    const t1 = out.find((t) => t.templateIndex === 1)!;
+    assert.strictEqual(t0.instanceCount, 2, 'template 0 has 2 occurrences');
+    assert.deepStrictEqual(Array.from(t0.entityIds), [11, 33], 'template 0 entityIds in buffer order');
+    assert.strictEqual(t1.instanceCount, 1, 'template 1 has 1 occurrence');
+    assert.strictEqual(t0.instanceBuffer.byteLength, 2 * INSTANCE_STRIDE_BYTES);
+    assert.strictEqual(t1.instanceBuffer.byteLength, 1 * INSTANCE_STRIDE_BYTES);
+
+    // First occurrence of template 0: identity rel_k → instMat applied to its
+    // local vertex equals swap(origin0 + p).
+    const dv = new DataView(t0.instanceBuffer);
+    const mat = new Float32Array(16);
+    for (let i = 0; i < 16; i++) mat[i] = dv.getFloat32(i * 4, true);
+    assert.strictEqual(dv.getUint32(64, true), 11, 'first entityId');
+    const p: [number, number, number] = [0.25, 0.5, 0.75];
+    assertClose(applyColMajor(mat, p), swap([origin0[0] + p[0], origin0[1] + p[1], origin0[2] + p[2]]), 'template0 inst0');
+  });
+
+  // #2985. The item id is CPU-side only: the GPU per-instance record has
+  // INSTANCE_STRIDE_BYTES bytes, because that layout is shading data packed identically by the
+  // pipeline, shadow pass and picker, and the item id answers a host query
+  // ("which entity produced this piece"), not a shading one. So it must appear
+  // in `itemIds` and NOT in `instanceBuffer` — and the buffer's byte length is
+  // the check that says so, since an item-id widening would still "work".
+  //
+  // `carriesItemIds` comes off the shard's declared stride, and the encoder
+  // derives that from the data — so a shard that says false has no ids to lose
+  // and gets NO id column at all (the case below).
+  it('carries per-occurrence item ids beside the GPU buffer, not inside it', () => {
+    const origin: [number, number, number] = [0, 0, 0];
+    const opaque = [1, 0, 0, 1] as [number, number, number, number];
+    const shard = {
+      templates: [
+        { positions: new Float32Array([0, 0, 0]), normals: new Float32Array([0, 1, 0]), indices: new Uint32Array([0]), origin },
+      ],
+      instances: [
+        { templateIndex: 0, entityId: 40, color: opaque, transform: rowMajorIdentity(), itemId: 11 },
+        // Transparent occurrences are dropped; the itemIds array must stay
+        // aligned with the KEPT occurrences, not with the shard's instance list.
+        { templateIndex: 0, entityId: 41, color: [0, 1, 0, 0.3] as [number, number, number, number], transform: rowMajorIdentity(), itemId: 99 },
+        { templateIndex: 0, entityId: 47, color: opaque, transform: rowMajorIdentity(), itemId: 15 },
+        // No itemId at all (a v1 shard, or a producer with none) → 0.
+        { templateIndex: 0, entityId: 54, color: opaque, transform: rowMajorIdentity() },
+      ],
+      carriesItemIds: true,
+    };
+
+    const [t0] = prepareInstancedRender(shard);
+    assert.deepStrictEqual(Array.from(t0.entityIds), [40, 47, 54]);
+    assert.deepStrictEqual(Array.from(t0.itemIds!), [11, 15, 0], 'itemIds track the kept occurrences');
+    assert.strictEqual(
+      t0.instanceBuffer.byteLength,
+      3 * INSTANCE_STRIDE_BYTES,
+      'the GPU record must not have grown — the item id is host-query data, not shading data',
+    );
+  });
+
+  // The other side of the same contract: a shard whose stride declares no item
+  // ids gets no id column. A zero-filled Uint32Array per template, retained for
+  // the model's lifetime, is memory spent to say nothing — and a caller reading
+  // `itemIds[i]` off it would get 0, which is the same answer `undefined` gives.
+  it('allocates no item-id column for a shard that declares none', () => {
+    const origin: [number, number, number] = [0, 0, 0];
+    const out = prepareInstancedRender({
+      templates: [
+        { positions: new Float32Array([0, 0, 0]), normals: new Float32Array([0, 1, 0]), indices: new Uint32Array([0]), origin },
+      ],
+      instances: [
+        { templateIndex: 0, entityId: 40, color: [1, 0, 0, 1] as [number, number, number, number], transform: rowMajorIdentity() },
+      ],
+      carriesItemIds: false,
+    });
+
+    assert.strictEqual(out[0].itemIds, undefined, 'no ids declared → no array');
+    assert.deepStrictEqual(Array.from(out[0].entityIds), [40], 'the entity ids are unaffected');
+  });
+
+  it('excludes transparent instances (alpha < 0.99) so glass renders via the flat path', () => {
+    const origin: [number, number, number] = [0, 0, 0];
+    const shard = {
+      templates: [
+        { positions: new Float32Array([0, 0, 0]), normals: new Float32Array([0, 1, 0]), indices: new Uint32Array([0]), origin },
+        // template 1: ONLY transparent occurrences → should be dropped entirely.
+        { positions: new Float32Array([1, 1, 1]), normals: new Float32Array([0, 0, 1]), indices: new Uint32Array([0]), origin },
+      ],
+      instances: [
+        { templateIndex: 0, entityId: 1, color: [1, 0, 0, 1] as [number, number, number, number], transform: rowMajorIdentity() }, // opaque → kept
+        { templateIndex: 0, entityId: 2, color: [0.6, 0.8, 0.9, 0.3] as [number, number, number, number], transform: rowMajorIdentity() }, // glass → dropped
+        { templateIndex: 1, entityId: 3, color: [0.6, 0.8, 0.9, 0.5] as [number, number, number, number], transform: rowMajorIdentity() }, // glass → dropped
+      ],
+      carriesItemIds: false,
+    };
+
+    const out = prepareInstancedRender(shard);
+    assert.strictEqual(out.length, 1, 'only the template with an opaque occurrence survives');
+    const t0 = out[0];
+    assert.strictEqual(t0.templateIndex, 0);
+    assert.strictEqual(t0.instanceCount, 1, 'the transparent occurrence of template 0 is excluded');
+    const dv = new DataView(t0.instanceBuffer);
+    assert.strictEqual(dv.getUint32(64, true), 1, 'the kept instance is the opaque one (entityId 1)');
+  });
+
+  // The cutoff boundary itself. Alpha EXACTLY at OPAQUE_ALPHA_CUTOFF must be
+  // treated as opaque, because that is what the flat split does too
+  // (`alpha < OPAQUE_ALPHA_CUTOFF` in overlay-routing.ts and scene.ts). If the
+  // instanced path used `<=` instead, an occurrence at alpha 0.99 would be
+  // dropped from the instanced pass while the flat pass also considers it
+  // opaque — the geometry renders nowhere and the user sees repeated elements
+  // silently missing. Existing fixtures only use 0.3/0.5/1.0, so the boundary
+  // was free in both directions.
+  it('treats alpha EXACTLY at the opaque cutoff as opaque, one epsilon below as transparent', () => {
+    const origin: [number, number, number] = [0, 0, 0];
+    const tmpl = () => ({
+      positions: new Float32Array([0, 0, 0]),
+      normals: new Float32Array([0, 1, 0]),
+      indices: new Uint32Array([0]),
+      origin,
+    });
+    const inst = (entityId: number, alpha: number) => ({
+      templateIndex: 0,
+      entityId,
+      color: [1, 1, 1, alpha] as [number, number, number, number],
+      transform: rowMajorIdentity(),
+    });
+
+    // Exactly at the cutoff → opaque → kept by the instanced path.
+    const atCutoff = prepareInstancedRender({
+      templates: [tmpl()],
+      instances: [inst(1, OPAQUE_ALPHA_CUTOFF)],
+      carriesItemIds: false,
+    });
+    assert.strictEqual(atCutoff.length, 1, 'alpha === cutoff must stay in the instanced path');
+    assert.strictEqual(atCutoff[0].instanceCount, 1);
+    assert.deepStrictEqual(Array.from(atCutoff[0].entityIds), [1]);
+
+    // One representable step below → transparent → excluded.
+    const belowCutoff = prepareInstancedRender({
+      templates: [tmpl()],
+      instances: [inst(2, OPAQUE_ALPHA_CUTOFF - Number.EPSILON)],
+      carriesItemIds: false,
+    });
+    assert.strictEqual(belowCutoff.length, 0, 'just below the cutoff must route to the flat path');
+  });
+
+  // Documented defensive branch ("a corrupt templateIndex would otherwise
+  // throw; drop it loudly-safe") that no fixture ever reached. Without the
+  // guard an out-of-range or negative templateIndex in a decoded IFNS shard
+  // throws mid-upload, so the whole model fails to appear instead of losing
+  // one bad occurrence.
+  it('drops occurrences with an out-of-range templateIndex instead of throwing', () => {
+    const origin: [number, number, number] = [0, 0, 0];
+    const shard = {
+      templates: [
+        {
+          positions: new Float32Array([0, 0, 0]),
+          normals: new Float32Array([0, 1, 0]),
+          indices: new Uint32Array([0]),
+          origin,
+        },
+      ],
+      instances: [
+        { templateIndex: 0, entityId: 1, color: [1, 0, 0, 1] as [number, number, number, number], transform: rowMajorIdentity() },
+        { templateIndex: 5, entityId: 2, color: [1, 0, 0, 1] as [number, number, number, number], transform: rowMajorIdentity() },
+        { templateIndex: -1, entityId: 3, color: [1, 0, 0, 1] as [number, number, number, number], transform: rowMajorIdentity() },
+      ],
+      carriesItemIds: false,
+    };
+
+    let out!: ReturnType<typeof prepareInstancedRender>;
+    assert.doesNotThrow(() => {
+      out = prepareInstancedRender(shard);
+    }, 'a corrupt templateIndex must not abort the whole shard');
+    assert.strictEqual(out.length, 1, 'the one valid template still uploads');
+    assert.strictEqual(out[0].instanceCount, 1, 'only the valid occurrence is kept');
+    assert.deepStrictEqual(Array.from(out[0].entityIds), [1]);
+  });
+});
+
+describe('foldOccurrenceWorldBox — template cull metadata', () => {
+  const freshMeta = () => ({ bounds: null as { min: [number, number, number]; max: [number, number, number] } | null, maxOccRadius: 0 });
+  const box = (minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number) =>
+    ({ minX, minY, minZ, maxX, maxY, maxZ });
+
+  it('initializes bounds from the first occurrence and grows the union after', () => {
+    const meta = freshMeta();
+    foldOccurrenceWorldBox(meta, box(0, 0, 0, 2, 2, 2));
+    assert.deepStrictEqual(meta.bounds, { min: [0, 0, 0], max: [2, 2, 2] });
+    assert.ok(Math.abs(meta.maxOccRadius - Math.sqrt(12) / 2) < 1e-9);
+
+    foldOccurrenceWorldBox(meta, box(-5, 1, 1, -4, 2, 2));
+    assert.deepStrictEqual(meta.bounds, { min: [-5, 0, 0], max: [2, 2, 2] });
+  });
+
+  it('grows the union bounds independently on each of the six min/max faces', () => {
+    // The prior "grows the union after" test only ever moves the min-X face
+    // (the second box's minY/minZ/maxY/maxZ all equal the seed box's), so a
+    // copy-paste bug in any of the OTHER five branches — e.g. `maxY` writing
+    // into `tb.max[0]` instead of `tb.max[1]` — is invisible to it. Exercise
+    // each of the six comparisons with a box that extends the union on
+    // exactly one face and leaves the other five untouched, so a
+    // wrong-axis write is caught on the specific face it corrupts.
+    const meta = freshMeta();
+    foldOccurrenceWorldBox(meta, box(0, 0, 0, 10, 10, 10)); // seed union
+
+    foldOccurrenceWorldBox(meta, box(-1, 4, 4, 5, 5, 5)); // extends min-X only
+    assert.deepStrictEqual(meta.bounds, { min: [-1, 0, 0], max: [10, 10, 10] }, 'min-X');
+
+    foldOccurrenceWorldBox(meta, box(4, -2, 4, 5, 5, 5)); // extends min-Y only
+    assert.deepStrictEqual(meta.bounds, { min: [-1, -2, 0], max: [10, 10, 10] }, 'min-Y');
+
+    foldOccurrenceWorldBox(meta, box(4, 4, -3, 5, 5, 5)); // extends min-Z only
+    assert.deepStrictEqual(meta.bounds, { min: [-1, -2, -3], max: [10, 10, 10] }, 'min-Z');
+
+    foldOccurrenceWorldBox(meta, box(4, 4, 4, 11, 5, 5)); // extends max-X only
+    assert.deepStrictEqual(meta.bounds, { min: [-1, -2, -3], max: [11, 10, 10] }, 'max-X');
+
+    foldOccurrenceWorldBox(meta, box(4, 4, 4, 5, 12, 5)); // extends max-Y only
+    assert.deepStrictEqual(meta.bounds, { min: [-1, -2, -3], max: [11, 12, 10] }, 'max-Y');
+
+    foldOccurrenceWorldBox(meta, box(4, 4, 4, 5, 5, 13)); // extends max-Z only
+    assert.deepStrictEqual(meta.bounds, { min: [-1, -2, -3], max: [11, 12, 13] }, 'max-Z');
+  });
+
+  it('maxOccRadius tracks the LARGEST single occurrence, not the union diagonal', () => {
+    const meta = freshMeta();
+    foldOccurrenceWorldBox(meta, box(0, 0, 0, 1, 1, 1));       // r = sqrt(3)/2
+    foldOccurrenceWorldBox(meta, box(100, 0, 0, 101, 1, 1));   // same size, far away
+    const single = Math.sqrt(3) / 2;
+    assert.ok(Math.abs(meta.maxOccRadius - single) < 1e-9, `got ${meta.maxOccRadius}`);
+    // The union spans >100 units — the occurrence radius must NOT.
+    assert.ok(meta.maxOccRadius < 1);
+  });
+
+  it('poisons on a non-finite box: bounds wiped, radius pinned to Infinity', () => {
+    const meta = freshMeta();
+    foldOccurrenceWorldBox(meta, box(0, 0, 0, 1, 1, 1));
+    foldOccurrenceWorldBox(meta, box(NaN, 0, 0, 1, 1, 1));
+    assert.strictEqual(meta.bounds, null);
+    assert.strictEqual(meta.maxOccRadius, Infinity);
+  });
+
+  it('poison is sticky: later finite occurrences must not resurrect bounds', () => {
+    const meta = freshMeta();
+    foldOccurrenceWorldBox(meta, box(Infinity, 0, 0, Infinity, 1, 1));
+    foldOccurrenceWorldBox(meta, box(0, 0, 0, 1, 1, 1));
+    assert.strictEqual(meta.bounds, null, 'bounds stay null after poison');
+    assert.strictEqual(meta.maxOccRadius, Infinity);
+  });
+
+  it('poisons when min/max are individually finite-summing but a coordinate is NaN', () => {
+    const meta = freshMeta();
+    // NaN in max only; min sum is finite.
+    foldOccurrenceWorldBox(meta, box(0, 0, 0, NaN, 1, 1));
+    assert.strictEqual(meta.bounds, null);
+    assert.strictEqual(meta.maxOccRadius, Infinity);
+  });
+});
+
+describe('prepareInstancedRender — per-occurrence finish (#5984)', () => {
+  it('packs each occurrence finish into its flags lane, keeping an authored 0', () => {
+    const color: [number, number, number, number] = [1, 1, 1, 1];
+    const shard = {
+      templates: [{ positions: new Float32Array([0, 0, 0]), normals: new Float32Array([0, 1, 0]), indices: new Uint32Array([0]), origin: [0, 0, 0] as [number, number, number] }],
+      instances: [
+        // FZK-Haus 'Kiefer' (roughness 0.9), a mirror (metallic 1, roughness 0), and nothing.
+        { templateIndex: 0, entityId: 1, color, transform: rowMajorTranslation(0, 0, 0), roughness: 0.9 },
+        { templateIndex: 0, entityId: 2, color, transform: rowMajorTranslation(1, 0, 0), metallic: 1, roughness: 0 },
+        { templateIndex: 0, entityId: 3, color, transform: rowMajorTranslation(2, 0, 0) },
+      ],
+      carriesItemIds: false,
+      carriesFinishes: true,
+    };
+    const [t] = prepareInstancedRender(shard);
+    const dv = new DataView(t.instanceBuffer);
+    const flags = (i: number) => dv.getUint32(i * INSTANCE_STRIDE_BYTES + INSTANCE_FLAGS_OFFSET, true);
+    // What the shader decodes: bit 2/3 = authored, bits 16-23 / 24-31 = unorm8.
+    const decode = (f: number) => ({
+      metallic: f & INSTANCE_FLAG_METALLIC ? ((f >>> 16) & 255) / 255 : undefined,
+      roughness: f & INSTANCE_FLAG_ROUGHNESS ? ((f >>> 24) & 255) / 255 : undefined,
+    });
+    assert.ok(Math.abs(decode(flags(0)).roughness! - 0.9) < 1 / 255);
+    assert.strictEqual(decode(flags(0)).metallic, undefined);
+    assert.deepStrictEqual(decode(flags(1)), { metallic: 1, roughness: 0 }, 'an authored 0 still sets its bit');
+    assert.strictEqual(flags(2), 0, 'no finish, no bits: the shared default applies');
+    for (let i = 0; i < 3; i++) {
+      assert.strictEqual(flags(i) & ~INSTANCE_FINISH_FLAGS_MASK, 0, 'selection and hidden bits start clear');
+    }
+  });
+
+  it('packInstanceFinish ignores non-finite input', () => {
+    assert.strictEqual(packInstanceFinish(Number.NaN, undefined), 0);
+    assert.strictEqual(packInstanceFinish(undefined, Number.POSITIVE_INFINITY), 0);
+  });
+});

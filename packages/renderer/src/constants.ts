@@ -1,0 +1,125 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Renderer constants - extracted magic numbers for maintainability
+ */
+
+// ============================================================================
+// Camera Constants
+// ============================================================================
+
+export const CAMERA_CONSTANTS = {
+  // Inertia system
+  /** Inertia damping factor (0-1), higher = more damping */
+  DAMPING_FACTOR: 0.92,
+  /** Minimum velocity threshold for inertia */
+  MIN_VELOCITY_THRESHOLD: 0.001,
+
+  // Movement speeds
+  /** First-person movement speed */
+  FIRST_PERSON_SPEED: 0.1,
+  /** Orbit sensitivity (radians per pixel) */
+  ORBIT_SENSITIVITY: 0.01,
+  /** Pan speed multiplier */
+  PAN_SPEED_MULTIPLIER: 0.001,
+  /** Zoom sensitivity */
+  ZOOM_SENSITIVITY: 0.001,
+  /** Maximum zoom delta per frame */
+  MAX_ZOOM_DELTA: 0.1,
+  /** Minimum perspective camera distance from target */
+  MIN_PERSPECTIVE_DISTANCE: 0.00001,
+
+  // Default camera setup
+  DEFAULT_POSITION: { x: 50, y: 50, z: 100 } as const,
+  DEFAULT_TARGET: { x: 0, y: 0, z: 0 } as const,
+  DEFAULT_UP: { x: 0, y: 1, z: 0 } as const,
+  DEFAULT_FOV: Math.PI / 4, // 45 degrees
+  DEFAULT_NEAR: 0.1,
+  DEFAULT_FAR: 100000,
+
+  // Depth precision
+  /** Maximum near/far ratio for depth precision */
+  MAX_NEAR_FAR_RATIO: 10000,
+  /** Near plane as percentage of distance */
+  NEAR_DISTANCE_FACTOR: 0.001,
+  /** Far plane multiplier of distance */
+  FAR_DISTANCE_MULTIPLIER: 10,
+
+  // Polar angle constraints (gimbal-lock protection)
+  // Phi is clamped just off the two poles (±Y). camera.up stays world Y
+  // throughout, so the orbit math (sinφ in the tangent) is well-defined
+  // for any phi ∈ [MIN_PHI, π − MIN_PHI]. The full sphere minus the exact
+  // poles is reachable — top/bottom/front/back/left/right presets all fit
+  // inside this range without needing per-preset clamp overrides.
+  //
+  // Pattern matches yomotsu/camera-controls and Autodesk Viewer.
+  /** Minimum phi angle. Top preset uses this — keeps phi off the +Y pole. */
+  MIN_PHI: 0.01,
+  /** Maximum phi angle. Bottom preset uses this — keeps phi off the −Y pole. */
+  MAX_PHI: Math.PI - 0.01,
+  /** Sin phi threshold for pole detection */
+  POLE_THRESHOLD: 0.05,
+
+  // Animation
+  /** Default animation duration in ms */
+  DEFAULT_ANIMATION_DURATION: 500,
+  /** Quick animation duration in ms */
+  QUICK_ANIMATION_DURATION: 300,
+
+  // Fit to bounds
+  /** Distance multiplier for fitToBounds */
+  FIT_DISTANCE_MULTIPLIER: 2.0,
+  /** Padding multiplier for frame selection */
+  FRAME_PADDING_MULTIPLIER: 1.2,
+  /** Padding multiplier for zoom extent */
+  ZOOM_EXTENT_PADDING: 1.5,
+
+  // Isometric view offsets
+  ISOMETRIC_OFFSET: { right: 0.6, up: 0.5, front: 0.6 } as const,
+} as const;
+
+// ============================================================================
+// Pipeline Constants
+// ============================================================================
+
+export const PIPELINE_CONSTANTS = {
+  // Buffer layout (bytes) - must match WGSL shader expectations.
+  // 60 floats: viewProj(16)+model(16)+baseColor(4)+metallicRoughness/pad(4)+
+  // sectionPlane(4)+flags(4)+clipBoxMin(4)+clipBoxMax(4)+quantParams(4)+
+  // RTE view-projection(16)+drawable high/low(8) = 336 bytes.
+  /** Total uniform buffer size */
+  UNIFORM_BUFFER_SIZE: 336,
+  /** Byte offset for flags in uniform buffer */
+  FLAGS_BYTE_OFFSET: 176,
+
+  // MSAA
+  /** Default MSAA sample count */
+  DEFAULT_SAMPLE_COUNT: 4,
+
+  // Depth buffer
+  /**
+   * Depth/stencil format used by RenderPipeline. Switched from depth32float
+   * to depth24plus-stencil8 when the 3D section work introduced a render
+   * pass shared by the main opaque, the section-plane preview, and the 2D
+   * overlay cap — WebGPU requires a single depth-stencil format across all
+   * pipelines that write to the same pass attachment.
+   */
+  DEPTH_FORMAT: 'depth24plus-stencil8' as const,
+} as const;
+
+// ============================================================================
+// Batch Buffer Constants
+// ============================================================================
+
+export const BATCH_CONSTANTS = {
+  /** Safety factor for GPU buffer size — use 90% of device limit to leave headroom */
+  BUFFER_SIZE_SAFETY_FACTOR: 0.9,
+  /** Fallback max buffer size when device limit is unavailable (256 MB) */
+  FALLBACK_MAX_BUFFER_SIZE: 256 * 1024 * 1024,
+  /** Bytes per vertex in the interleaved layout (pos3 + norm3 + entityId1 = 7 × 4) */
+  BYTES_PER_VERTEX: 7 * 4,
+  /** Bytes per index (uint32) */
+  BYTES_PER_INDEX: 4,
+} as const;

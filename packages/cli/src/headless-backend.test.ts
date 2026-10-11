@@ -1,0 +1,165 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, it, expect } from 'vitest';
+import {
+  expandTypes,
+  isProductType,
+  normalizeBooleanValue,
+  normalizePropertyValue,
+} from './headless-backend.js';
+
+describe('expandTypes', () => {
+  it('expands IfcWall to include subtypes', () => {
+    const result = expandTypes(['IfcWall'], 'IFC4');
+    expect(result).toContain('IFCWALL');
+    expect(result).toContain('IFCWALLSTANDARDCASE');
+    expect(result).toContain('IFCWALLELEMENTEDCASE');
+  });
+
+  it('expands IfcSlab with 3 subtypes', () => {
+    const result = expandTypes(['IfcSlab'], 'IFC4');
+    expect(result).toContain('IFCSLAB');
+    expect(result).toContain('IFCSLABSTANDARDCASE');
+    expect(result).toContain('IFCSLABELEMENTEDCASE');
+  });
+
+  it('handles types without subtypes', () => {
+    const result = expandTypes(['IfcRoof'], 'IFC4');
+    expect(result).toEqual(['IFCROOF']);
+  });
+
+  it('handles multiple input types', () => {
+    const result = expandTypes(['IfcWall', 'IfcRoof'], 'IFC4');
+    expect(result).toContain('IFCWALL');
+    expect(result).toContain('IFCWALLSTANDARDCASE');
+    expect(result).toContain('IFCROOF');
+  });
+
+  it('handles empty input', () => {
+    expect(expandTypes([], 'IFC4')).toEqual([]);
+  });
+
+  it('is case-insensitive', () => {
+    const result = expandTypes(['ifcwall'], 'IFC4');
+    expect(result).toContain('IFCWALL');
+    expect(result).toContain('IFCWALLSTANDARDCASE');
+  });
+});
+
+describe('isProductType', () => {
+  it('returns false for relationship types', () => {
+    expect(isProductType('IFCRELAGGREGATES')).toBe(false);
+    expect(isProductType('IFCRELCONTAINEDINSPATIALSTRUCTURE')).toBe(false);
+    expect(isProductType('IFCRELDEFINESBYTYPE')).toBe(false);
+  });
+
+  it('returns false for property types', () => {
+    expect(isProductType('IFCPROPERTYSINGLEVALUE')).toBe(false);
+    expect(isProductType('IFCPROPERTYSET')).toBe(false);
+  });
+
+  it('returns false for quantity types', () => {
+    expect(isProductType('IFCQUANTITYLENGTH')).toBe(false);
+    expect(isProductType('IFCELEMENTQUANTITY')).toBe(false);
+  });
+
+  it('returns false for type objects (ending with TYPE)', () => {
+    expect(isProductType('IFCWALLTYPE')).toBe(false);
+    expect(isProductType('IFCSLABTYPE')).toBe(false);
+  });
+
+  it('returns false for unknown/unrecognized type names', () => {
+    expect(isProductType('NOT_A_REAL_IFC_TYPE')).toBe(false);
+  });
+
+  it('returns true for real building-element product types', () => {
+    // This is the load-bearing default path: query.entities() with no
+    // --type filter walks store.entityIndex.byType and keeps only entries
+    // where isProductType(typeName) is true. Every prior case in this
+    // describe block only exercises a false-returning branch, so a mutant
+    // that hard-codes `return false` at the end of the function was not
+    // caught by any of them.
+    expect(isProductType('IFCWALL')).toBe(true);
+    expect(isProductType('IFCSLAB')).toBe(true);
+    expect(isProductType('IFCDOOR')).toBe(true);
+  });
+
+  it('returns true for product classes the curated IfcTypeEnum omits', () => {
+    // The regression this replaced: the gate was IfcTypeEnumFromString, and
+    // TYPE_STRING_TO_ENUM is a curated 138-entry subset. All three resolve to
+    // IfcTypeEnum.Unknown, so an unfiltered query dropped every one of them —
+    // 2,575 real elements on a 176k-entity MEP model, reported as absent
+    // rather than as unclassified.
+    expect(isProductType('IFCAIRTERMINAL')).toBe(true);
+    expect(isProductType('IFCDUCTFITTING')).toBe(true);
+    expect(isProductType('IFCDISTRIBUTIONPORT')).toBe(true);
+  });
+
+  it('returns false for geometry and other non-rooted resource classes', () => {
+    // IFC_ENTITY_NAMES alone would not do: it carries all ~880 classes, so
+    // keying on "is a known IFC name" floods an unfiltered query with the
+    // 42,024 IfcCartesianPoint of that same model. The inheritance chain is
+    // what separates them.
+    expect(isProductType('IFCCARTESIANPOINT')).toBe(false);
+    expect(isProductType('IFCEXTRUDEDAREASOLID')).toBe(false);
+    expect(isProductType('IFCMATERIAL')).toBe(false);
+    expect(isProductType('IFCOWNERHISTORY')).toBe(false);
+    expect(isProductType('IFCPRESENTATIONLAYERASSIGNMENT')).toBe(false);
+  });
+
+  it('excludes type objects by inheritance, not by a TYPE suffix', () => {
+    expect(isProductType('IFCDUCTFITTINGTYPE')).toBe(false);
+    // IfcRelDefinesByType also ends in TYPE and is excluded, but as a
+    // relationship rather than as a type object.
+    expect(isProductType('IFCRELDEFINESBYTYPE')).toBe(false);
+  });
+
+  it('keeps spatial structure, groups and the project in the default set', () => {
+    expect(isProductType('IFCPROJECT')).toBe(true);
+    expect(isProductType('IFCSITE')).toBe(true);
+    expect(isProductType('IFCBUILDINGSTOREY')).toBe(true);
+    expect(isProductType('IFCDISTRIBUTIONSYSTEM')).toBe(true);
+  });
+});
+
+describe('normalizeBooleanValue', () => {
+  it('normalizes true values to "true"', () => {
+    expect(normalizeBooleanValue(true)).toBe('true');
+    expect(normalizeBooleanValue('.T.')).toBe('true');
+    expect(normalizeBooleanValue('true')).toBe('true');
+    expect(normalizeBooleanValue('TRUE')).toBe('true');
+  });
+
+  it('normalizes false values to "false"', () => {
+    expect(normalizeBooleanValue(false)).toBe('false');
+    expect(normalizeBooleanValue('.F.')).toBe('false');
+    expect(normalizeBooleanValue('false')).toBe('false');
+    expect(normalizeBooleanValue('FALSE')).toBe('false');
+  });
+
+  it('passes through non-boolean values unchanged', () => {
+    expect(normalizeBooleanValue('hello')).toBe('hello');
+    expect(normalizeBooleanValue(42)).toBe(42);
+    expect(normalizeBooleanValue(null)).toBe(null);
+  });
+});
+
+describe('normalizePropertyValue', () => {
+  it('returns null for null/undefined', () => {
+    expect(normalizePropertyValue(null)).toBeNull();
+    expect(normalizePropertyValue(undefined)).toBeNull();
+  });
+
+  it('passes through primitives', () => {
+    expect(normalizePropertyValue('hello')).toBe('hello');
+    expect(normalizePropertyValue(42)).toBe(42);
+    expect(normalizePropertyValue(true)).toBe(true);
+  });
+
+  it('JSON-stringifies objects and arrays', () => {
+    expect(normalizePropertyValue({ key: 'val' })).toBe('{"key":"val"}');
+    expect(normalizePropertyValue([1, 2, 3])).toBe('[1,2,3]');
+  });
+});

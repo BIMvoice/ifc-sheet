@@ -1,0 +1,653 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Entity-level operations on the Y.Doc.
+ *
+ * Each function maps directly to a row in the spec §6 operations table.
+ * Callers are expected to wrap multi-step edits in `ydoc.transact()`.
+ */
+
+import { ATTR } from '@ifc-lite/ifcx';
+import * as Y from 'yjs';
+import {
+  ENTITY_KEY,
+  entitiesMap,
+  type ClassificationRef,
+  type EntityMeta,
+  type GeometryRefRecord,
+  type MaterialAssignment,
+  type PropertyValue,
+} from './schema.js';
+
+/** Options for `createEntity`. */
+export interface CreateEntityOptions {
+  ifcClass?: string;
+  schemaVersion?: 'ifc4' | 'ifc4x3' | 'ifc5';
+  attributes?: Record<string, unknown>;
+  children?: Record<string, string>;
+  inherits?: Record<string, string>;
+  psets?: Record<string, Record<string, PropertyValue>>;
+  quantities?: Record<string, Record<string, number>>;
+  classifications?: ClassificationRef[];
+  materials?: MaterialAssignment[];
+  geometryRef?: GeometryRefRecord;
+  meta?: EntityMeta;
+  /**
+   * Stamp `meta.createdAt` with the wall clock when the caller supplies
+   * no `meta.createdAt` (default `true` — a genuinely new entity is
+   * created *now*, and that stamp is real provenance).
+   *
+   * Seeders pass `false`: an entity restored from a wire that carries no
+   * creation time has an UNKNOWN creation time, and the read clock is
+   * indistinguishable from the real thing once written. Absent
+   * provenance beats invented provenance — a missing field reads as
+   * "unknown", a fabricated one gets trusted.
+   */
+  stampCreatedAt?: boolean;
+}
+
+/**
+ * Look up the entity Y.Map by path. Returns `undefined` if missing or
+ * tombstoned.
+ */
+export function getEntity(doc: Y.Doc, path: string): Y.Map<unknown> | undefined {
+  return entitiesMap(doc).get(path) as Y.Map<unknown> | undefined;
+}
+
+/** Existence check that ignores tombstones. */
+export function hasEntity(doc: Y.Doc, path: string): boolean {
+  return entitiesMap(doc).has(path);
+}
+
+/**
+ * Build a fresh entity Y.Map shape and register it under `path`.
+ *
+ * Idempotent: if the entity already exists, this is a no-op (use
+ * `setAttribute` etc. for incremental updates). To replace an entity
+ * outright, call `deleteEntity` first.
+ */
+export function createEntity(
+  doc: Y.Doc,
+  path: string,
+  options: CreateEntityOptions = {},
+): Y.Map<unknown> {
+  const ents = entitiesMap(doc);
+  const existing = ents.get(path) as Y.Map<unknown> | undefined;
+  if (existing) {
+    return existing;
+  }
+
+  const entity = new Y.Map<unknown>();
+
+  const attributes = new Y.Map<unknown>();
+  if (options.attributes) {
+    for (const [k, v] of Object.entries(options.attributes)) {
+      attributes.set(k, v);
+    }
+  }
+  // `meta.ifcClass` is doc-local bookkeeping with no IFCX wire form, so an
+  // entity whose class was only ever passed as the `ifcClass` option would
+  // snapshot without `bsi::ifc::class` and come back classless. The
+  // attribute IS the wire form — write it here, once, instead of leaving
+  // every caller to remember (the MCP draft path already open-coded it).
+  // A caller that supplied the attribute itself wins: it may carry more
+  // than the bare code. That check reads the plain options record rather
+  // than the Y.Map, because a Y.Map not yet integrated into a doc answers
+  // `has` from prelim state and would not see what the loop just wrote.
+  if (options.ifcClass && options.attributes?.[ATTR.CLASS] === undefined) {
+    attributes.set(ATTR.CLASS, { code: options.ifcClass });
+  }
+  entity.set(ENTITY_KEY.ATTRIBUTES, attributes);
+
+  const children = new Y.Map<string>();
+  if (options.children) {
+    for (const [role, target] of Object.entries(options.children)) {
+      children.set(role, target);
+    }
+  }
+  entity.set(ENTITY_KEY.CHILDREN, children);
+
+  const inherits = new Y.Map<string>();
+  if (options.inherits) {
+    for (const [role, target] of Object.entries(options.inherits)) {
+      inherits.set(role, target);
+    }
+  }
+  entity.set(ENTITY_KEY.INHERITS, inherits);
+
+  const psets = new Y.Map<Y.Map<PropertyValue>>();
+  if (options.psets) {
+    for (const [psetName, props] of Object.entries(options.psets)) {
+      assertStructuredName('pset name', psetName);
+      const pset = new Y.Map<PropertyValue>();
+      for (const [propName, value] of Object.entries(props)) {
+        assertStructuredName('property name', propName);
+        pset.set(propName, value);
+      }
+      psets.set(psetName, pset);
+    }
+  }
+  entity.set(ENTITY_KEY.PSETS, psets);
+
+  const quantities = new Y.Map<Y.Map<number>>();
+  if (options.quantities) {
+    for (const [qsetName, qtys] of Object.entries(options.quantities)) {
+      assertStructuredName('quantity set name', qsetName);
+      const qset = new Y.Map<number>();
+      for (const [qtyName, value] of Object.entries(qtys)) {
+        assertStructuredName('quantity name', qtyName);
+        qset.set(qtyName, value);
+      }
+      quantities.set(qsetName, qset);
+    }
+  }
+  entity.set(ENTITY_KEY.QUANTITIES, quantities);
+
+  const classifications = new Y.Array<ClassificationRef>();
+  if (options.classifications && options.classifications.length > 0) {
+    classifications.push([...options.classifications]);
+  }
+  entity.set(ENTITY_KEY.CLASSIFICATIONS, classifications);
+
+  const materials = new Y.Array<MaterialAssignment>();
+  if (options.materials && options.materials.length > 0) {
+    materials.push([...options.materials]);
+  }
+  entity.set(ENTITY_KEY.MATERIALS, materials);
+
+  const geometryRef = new Y.Map<unknown>();
+  if (options.geometryRef && options.geometryRef.geomIds.length > 0) {
+    geometryRef.set('geomIds', [...options.geometryRef.geomIds]);
+  }
+  entity.set(ENTITY_KEY.GEOMETRY_REF, geometryRef);
+
+  const meta = new Y.Map<unknown>();
+  const stamp =
+    options.meta?.createdAt ??
+    (options.stampCreatedAt === false ? undefined : new Date().toISOString());
+  if (options.ifcClass) meta.set('ifcClass', options.ifcClass);
+  if (options.schemaVersion) meta.set('schemaVersion', options.schemaVersion);
+  if (stamp !== undefined) meta.set('createdAt', stamp);
+  if (options.meta) {
+    for (const [k, v] of Object.entries(options.meta)) {
+      // An explicit `undefined` is "not known", not a value: storing it
+      // would make `meta.has(k)` true for a key with nothing behind it,
+      // which `privacy.ts`'s redaction and every `has`-guarded reader
+      // treat as present.
+      if (v === undefined) continue;
+      meta.set(k, v as unknown);
+    }
+  }
+  entity.set(ENTITY_KEY.META, meta);
+
+  ents.set(path, entity);
+  return entity;
+}
+
+/**
+ * Delete an entity. Yjs preserves the operation as a tombstone; observers
+ * see a `delete` event.
+ */
+export function deleteEntity(doc: Y.Doc, path: string): boolean {
+  const ents = entitiesMap(doc);
+  if (!ents.has(path)) return false;
+  ents.delete(path);
+  return true;
+}
+
+/**
+ * Type promotion (e.g. IfcWall → IfcCurtainWall). Implemented as
+ * delete + create with `meta.previousPath` linking the new entity to the
+ * old path so consumers can render history.
+ */
+export function promoteEntityType(
+  doc: Y.Doc,
+  oldPath: string,
+  newPath: string,
+  newIfcClass: string,
+  options: { keepAttributes?: boolean } = {},
+): Y.Map<unknown> | undefined {
+  const old = getEntity(doc, oldPath);
+  if (!old) return undefined;
+  // createEntity is idempotent — a pre-existing target silently no-ops and
+  // returns the existing entity unmodified. Without this check that no-op
+  // would surface here as "success" (a truthy Y.Map) while oldPath has
+  // already been deleted below, permanently losing its carried state.
+  if (hasEntity(doc, newPath)) {
+    throw new Error(
+      `@ifc-lite/collab: promoteEntityType target "${newPath}" already exists`,
+    );
+  }
+
+  const oldAttrs = old.get(ENTITY_KEY.ATTRIBUTES) as Y.Map<unknown> | undefined;
+  const oldChildren = old.get(ENTITY_KEY.CHILDREN) as Y.Map<string> | undefined;
+  const oldMeta = old.get(ENTITY_KEY.META) as Y.Map<unknown> | undefined;
+
+  const carried: Record<string, unknown> = {};
+  if (options.keepAttributes !== false && oldAttrs) {
+    for (const [k, v] of oldAttrs.entries()) carried[k] = v;
+  }
+  // ifcClass attribute, if any, is overridden.
+  carried['bsi::ifc::class'] = { code: newIfcClass };
+
+  const carriedChildren: Record<string, string> = {};
+  if (oldChildren) {
+    for (const [role, target] of oldChildren.entries()) {
+      carriedChildren[role] = target;
+    }
+  }
+
+  const meta: EntityMeta = {
+    ifcClass: newIfcClass,
+    previousPath: oldPath,
+    createdAt: new Date().toISOString(),
+    lastEditedAt: new Date().toISOString(),
+  };
+  if (oldMeta) {
+    const createdBy = oldMeta.get('createdBy');
+    if (typeof createdBy === 'string') meta.createdBy = createdBy;
+  }
+
+  deleteEntity(doc, oldPath);
+  return createEntity(doc, newPath, {
+    ifcClass: newIfcClass,
+    attributes: carried,
+    children: carriedChildren,
+    meta,
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Attributes                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Set a flat namespaced attribute (e.g. `bsi::ifc::class` or
+ * `usd::xformOp::translate`). Mirrors IFCX's wire shape.
+ */
+export function setAttribute(doc: Y.Doc, path: string, name: string, value: unknown): void {
+  const entity = getEntity(doc, path);
+  if (!entity) throw new Error(`@ifc-lite/collab: entity "${path}" not found`);
+  const attrs = entity.get(ENTITY_KEY.ATTRIBUTES) as Y.Map<unknown> | undefined;
+  if (!attrs) throw new Error(`@ifc-lite/collab: entity "${path}" missing attributes map`);
+  attrs.set(name, value);
+}
+
+export function deleteAttribute(doc: Y.Doc, path: string, name: string): boolean {
+  const entity = getEntity(doc, path);
+  if (!entity) return false;
+  const attrs = entity.get(ENTITY_KEY.ATTRIBUTES) as Y.Map<unknown> | undefined;
+  if (!attrs || !attrs.has(name)) return false;
+  attrs.delete(name);
+  return true;
+}
+
+export function getAttribute(doc: Y.Doc, path: string, name: string): unknown {
+  return (getEntity(doc, path)?.get(ENTITY_KEY.ATTRIBUTES) as Y.Map<unknown> | undefined)?.get(name);
+}
+
+/* ------------------------------------------------------------------ */
+/* Children / hierarchy                                                */
+/* ------------------------------------------------------------------ */
+
+/** Set or update a `role → child path` entry on an entity. */
+export function setChild(doc: Y.Doc, path: string, role: string, childPath: string): void {
+  const entity = getEntity(doc, path);
+  if (!entity) throw new Error(`@ifc-lite/collab: entity "${path}" not found`);
+  const children = entity.get(ENTITY_KEY.CHILDREN) as Y.Map<string> | undefined;
+  if (!children) throw new Error(`@ifc-lite/collab: entity "${path}" missing children map`);
+  children.set(role, childPath);
+}
+
+export function removeChild(doc: Y.Doc, path: string, role: string): boolean {
+  const entity = getEntity(doc, path);
+  if (!entity) return false;
+  const children = entity.get(ENTITY_KEY.CHILDREN) as Y.Map<string> | undefined;
+  if (!children || !children.has(role)) return false;
+  children.delete(role);
+  return true;
+}
+
+/** Set or update a `role → inherited path` entry on an entity. */
+export function setInherit(doc: Y.Doc, path: string, role: string, targetPath: string): void {
+  const entity = getEntity(doc, path);
+  if (!entity) throw new Error(`@ifc-lite/collab: entity "${path}" not found`);
+  const inherits = entity.get(ENTITY_KEY.INHERITS) as Y.Map<string> | undefined;
+  if (!inherits) throw new Error(`@ifc-lite/collab: entity "${path}" missing inherits map`);
+  inherits.set(role, targetPath);
+}
+
+export function removeInherit(doc: Y.Doc, path: string, role: string): boolean {
+  const entity = getEntity(doc, path);
+  if (!entity) return false;
+  const inherits = entity.get(ENTITY_KEY.INHERITS) as Y.Map<string> | undefined;
+  if (!inherits || !inherits.has(role)) return false;
+  inherits.delete(role);
+  return true;
+}
+
+/** Move an entity's containment by updating both endpoints atomically. */
+export function moveEntity(
+  doc: Y.Doc,
+  childPath: string,
+  fromParentPath: string,
+  toParentPath: string,
+  role: string,
+): void {
+  doc.transact(() => {
+    removeChild(doc, fromParentPath, role);
+    setChild(doc, toParentPath, role, childPath);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Property sets                                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Pset/quantity set and member names ride in `::`-delimited IFCX wire
+ * keys (#1031); a name containing the delimiter would flatten to an
+ * irreversible key and corrupt the structured branch on re-seed.
+ */
+function assertStructuredName(label: string, name: string): void {
+  if (name.includes('::')) {
+    throw new Error(
+      `@ifc-lite/collab: ${label} "${name}" must not contain "::" (IFCX namespace delimiter)`,
+    );
+  }
+}
+
+/** Set a property within a Pset; creates the Pset map if missing. */
+export function setPropertyValue(
+  doc: Y.Doc,
+  path: string,
+  psetName: string,
+  propName: string,
+  value: PropertyValue,
+): void {
+  assertStructuredName('pset name', psetName);
+  assertStructuredName('property name', propName);
+  const entity = getEntity(doc, path);
+  if (!entity) throw new Error(`@ifc-lite/collab: entity "${path}" not found`);
+  const psets = entity.get(ENTITY_KEY.PSETS) as Y.Map<Y.Map<PropertyValue>> | undefined;
+  if (!psets) throw new Error(`@ifc-lite/collab: entity "${path}" missing psets map`);
+
+  let pset = psets.get(psetName);
+  if (!pset) {
+    pset = new Y.Map<PropertyValue>();
+    psets.set(psetName, pset);
+  }
+  pset.set(propName, value);
+}
+
+export function deletePropertyValue(
+  doc: Y.Doc,
+  path: string,
+  psetName: string,
+  propName: string,
+): boolean {
+  const psets = getEntity(doc, path)?.get(ENTITY_KEY.PSETS) as
+    | Y.Map<Y.Map<PropertyValue>>
+    | undefined;
+  const pset = psets?.get(psetName);
+  if (!pset || !pset.has(propName)) return false;
+  pset.delete(propName);
+  // Clean up empty psets.
+  if (pset.size === 0) psets!.delete(psetName);
+  return true;
+}
+
+export function getPropertyValue(
+  doc: Y.Doc,
+  path: string,
+  psetName: string,
+  propName: string,
+): PropertyValue | undefined {
+  const psets = getEntity(doc, path)?.get(ENTITY_KEY.PSETS) as
+    | Y.Map<Y.Map<PropertyValue>>
+    | undefined;
+  return psets?.get(psetName)?.get(propName);
+}
+
+/* ------------------------------------------------------------------ */
+/* Quantities                                                           */
+/* ------------------------------------------------------------------ */
+
+export function setQuantityValue(
+  doc: Y.Doc,
+  path: string,
+  qsetName: string,
+  qtyName: string,
+  value: number,
+): void {
+  assertStructuredName('quantity set name', qsetName);
+  assertStructuredName('quantity name', qtyName);
+  const entity = getEntity(doc, path);
+  if (!entity) throw new Error(`@ifc-lite/collab: entity "${path}" not found`);
+  const qsets = entity.get(ENTITY_KEY.QUANTITIES) as Y.Map<Y.Map<number>> | undefined;
+  if (!qsets) throw new Error(`@ifc-lite/collab: entity "${path}" missing quantities map`);
+  let qset = qsets.get(qsetName);
+  if (!qset) {
+    qset = new Y.Map<number>();
+    qsets.set(qsetName, qset);
+  }
+  qset.set(qtyName, value);
+}
+
+export function deleteQuantityValue(
+  doc: Y.Doc,
+  path: string,
+  qsetName: string,
+  qtyName: string,
+): boolean {
+  const qsets = getEntity(doc, path)?.get(ENTITY_KEY.QUANTITIES) as
+    | Y.Map<Y.Map<number>>
+    | undefined;
+  const qset = qsets?.get(qsetName);
+  if (!qset || !qset.has(qtyName)) return false;
+  qset.delete(qtyName);
+  // Clean up empty qsets, mirroring deletePropertyValue.
+  if (qset.size === 0) qsets!.delete(qsetName);
+  return true;
+}
+
+export function getQuantityValue(
+  doc: Y.Doc,
+  path: string,
+  qsetName: string,
+  qtyName: string,
+): number | undefined {
+  const qsets = getEntity(doc, path)?.get(ENTITY_KEY.QUANTITIES) as
+    | Y.Map<Y.Map<number>>
+    | undefined;
+  return qsets?.get(qsetName)?.get(qtyName);
+}
+
+/* ------------------------------------------------------------------ */
+/* Classifications & materials                                          */
+/* ------------------------------------------------------------------ */
+
+export function addClassification(doc: Y.Doc, path: string, ref: ClassificationRef): number {
+  const entity = getEntity(doc, path);
+  if (!entity) throw new Error(`@ifc-lite/collab: entity "${path}" not found`);
+  const arr = entity.get(ENTITY_KEY.CLASSIFICATIONS) as Y.Array<ClassificationRef> | undefined;
+  if (!arr) throw new Error(`@ifc-lite/collab: entity "${path}" missing classifications`);
+  arr.push([ref]);
+  return arr.length - 1;
+}
+
+export function removeClassification(doc: Y.Doc, path: string, index: number): boolean {
+  const arr = getEntity(doc, path)?.get(ENTITY_KEY.CLASSIFICATIONS) as
+    | Y.Array<ClassificationRef>
+    | undefined;
+  if (!arr || index < 0 || index >= arr.length) return false;
+  arr.delete(index, 1);
+  return true;
+}
+
+export function addMaterial(doc: Y.Doc, path: string, assignment: MaterialAssignment): number {
+  const entity = getEntity(doc, path);
+  if (!entity) throw new Error(`@ifc-lite/collab: entity "${path}" not found`);
+  const arr = entity.get(ENTITY_KEY.MATERIALS) as Y.Array<MaterialAssignment> | undefined;
+  if (!arr) throw new Error(`@ifc-lite/collab: entity "${path}" missing materials`);
+  arr.push([assignment]);
+  return arr.length - 1;
+}
+
+export function removeMaterial(doc: Y.Doc, path: string, index: number): boolean {
+  const arr = getEntity(doc, path)?.get(ENTITY_KEY.MATERIALS) as
+    | Y.Array<MaterialAssignment>
+    | undefined;
+  if (!arr || index < 0 || index >= arr.length) return false;
+  arr.delete(index, 1);
+  return true;
+}
+
+/* ------------------------------------------------------------------ */
+/* Geometry reference                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Read the geomIds list off a geometryRef map (legacy single `geomId` wraps to one element). */
+function readGeomIds(refMap: Y.Map<unknown> | undefined): string[] {
+  if (!refMap) return [];
+  const ids = refMap.get('geomIds');
+  if (Array.isArray(ids)) return ids.filter((v): v is string => typeof v === 'string');
+  const legacy = refMap.get('geomId');
+  return typeof legacy === 'string' ? [legacy] : [];
+}
+
+/** Point an entity at one or more entries in the top-level geometry map (replaces any existing refs). */
+export function setGeometryRef(doc: Y.Doc, path: string, ref: GeometryRefRecord): void {
+  const entity = getEntity(doc, path);
+  if (!entity) throw new Error(`@ifc-lite/collab: entity "${path}" not found`);
+  const refMap = entity.get(ENTITY_KEY.GEOMETRY_REF) as Y.Map<unknown> | undefined;
+  if (!refMap) throw new Error(`@ifc-lite/collab: entity "${path}" missing geometryRef`);
+  refMap.set('geomIds', [...ref.geomIds]);
+}
+
+/** Append a geomId to an entity's geometry refs (idempotent — no duplicates). */
+export function addGeometryRef(doc: Y.Doc, path: string, geomId: string): void {
+  const entity = getEntity(doc, path);
+  if (!entity) throw new Error(`@ifc-lite/collab: entity "${path}" not found`);
+  const refMap = entity.get(ENTITY_KEY.GEOMETRY_REF) as Y.Map<unknown> | undefined;
+  if (!refMap) throw new Error(`@ifc-lite/collab: entity "${path}" missing geometryRef`);
+  const ids = readGeomIds(refMap);
+  if (ids.includes(geomId)) return;
+  refMap.set('geomIds', [...ids, geomId]);
+}
+
+export function clearGeometryRef(doc: Y.Doc, path: string): boolean {
+  const refMap = getEntity(doc, path)?.get(ENTITY_KEY.GEOMETRY_REF) as
+    | Y.Map<unknown>
+    | undefined;
+  if (!refMap || (!refMap.has('geomIds') && !refMap.has('geomId'))) return false;
+  if (refMap.has('geomIds')) refMap.delete('geomIds');
+  // Legacy single-id docs store `geomId`; clear both spellings.
+  if (refMap.has('geomId')) refMap.delete('geomId');
+  return true;
+}
+
+export function getGeometryRef(doc: Y.Doc, path: string): GeometryRefRecord | undefined {
+  const refMap = getEntity(doc, path)?.get(ENTITY_KEY.GEOMETRY_REF) as
+    | Y.Map<unknown>
+    | undefined;
+  const geomIds = readGeomIds(refMap);
+  return geomIds.length > 0 ? { geomIds } : undefined;
+}
+
+/* ------------------------------------------------------------------ */
+/* Iteration helpers                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Iterate every (path, entity) pair currently live. */
+export function* iterEntities(
+  doc: Y.Doc,
+): IterableIterator<[string, Y.Map<unknown>]> {
+  const ents = entitiesMap(doc);
+  for (const [path, entity] of ents.entries()) {
+    yield [path, entity];
+  }
+}
+
+/**
+ * Convert an entity Y.Map into a plain JSON snapshot. Useful for tests and
+ * for the IFCX writer.
+ */
+export function entityToJSON(entity: Y.Map<unknown>): {
+  attributes: Record<string, unknown>;
+  children: Record<string, string>;
+  inherits: Record<string, string>;
+  psets: Record<string, Record<string, PropertyValue>>;
+  quantities: Record<string, Record<string, number>>;
+  classifications: ClassificationRef[];
+  materials: MaterialAssignment[];
+  geometryRefs: string[];
+  meta: Record<string, unknown>;
+} {
+  const attrs = entity.get(ENTITY_KEY.ATTRIBUTES) as Y.Map<unknown> | undefined;
+  const children = entity.get(ENTITY_KEY.CHILDREN) as Y.Map<string> | undefined;
+  const inherits = entity.get(ENTITY_KEY.INHERITS) as Y.Map<string> | undefined;
+  const psets = entity.get(ENTITY_KEY.PSETS) as Y.Map<Y.Map<PropertyValue>> | undefined;
+  const quantities = entity.get(ENTITY_KEY.QUANTITIES) as Y.Map<Y.Map<number>> | undefined;
+  const classifications = entity.get(ENTITY_KEY.CLASSIFICATIONS) as
+    | Y.Array<ClassificationRef>
+    | undefined;
+  const materials = entity.get(ENTITY_KEY.MATERIALS) as Y.Array<MaterialAssignment> | undefined;
+  const geomRef = entity.get(ENTITY_KEY.GEOMETRY_REF) as Y.Map<unknown> | undefined;
+  const meta = entity.get(ENTITY_KEY.META) as Y.Map<unknown> | undefined;
+
+  const attributes: Record<string, unknown> = {};
+  if (attrs) for (const [k, v] of attrs.entries()) attributes[k] = v;
+
+  const childrenJson: Record<string, string> = {};
+  if (children) for (const [k, v] of children.entries()) childrenJson[k] = v;
+
+  const inheritsJson: Record<string, string> = {};
+  if (inherits) for (const [k, v] of inherits.entries()) inheritsJson[k] = v;
+
+  const psetsJson: Record<string, Record<string, PropertyValue>> = Object.create(null);
+  if (psets) {
+    for (const [psetName, pset] of psets.entries()) {
+      const props: Record<string, PropertyValue> = Object.create(null);
+      for (const [propName, val] of pset.entries()) {
+        props[propName] = val;
+      }
+      psetsJson[psetName] = props;
+    }
+  }
+
+  const quantitiesJson: Record<string, Record<string, number>> = Object.create(null);
+  if (quantities) {
+    for (const [qsetName, qset] of quantities.entries()) {
+      const qtys: Record<string, number> = Object.create(null);
+      for (const [qtyName, val] of qset.entries()) {
+        qtys[qtyName] = val;
+      }
+      quantitiesJson[qsetName] = qtys;
+    }
+  }
+
+  const metaJson: Record<string, unknown> = {};
+  if (meta) for (const [k, v] of meta.entries()) metaJson[k] = v;
+
+  const geomIdsRaw = geomRef?.get('geomIds');
+  const geometryRefs = Array.isArray(geomIdsRaw)
+    ? geomIdsRaw.filter((v): v is string => typeof v === 'string')
+    : typeof geomRef?.get('geomId') === 'string'
+      ? [geomRef.get('geomId') as string]
+      : [];
+
+  return {
+    attributes,
+    children: childrenJson,
+    inherits: inheritsJson,
+    psets: psetsJson,
+    quantities: quantitiesJson,
+    classifications: classifications ? classifications.toArray() : [],
+    materials: materials ? materials.toArray() : [],
+    geometryRefs,
+    meta: metaJson,
+  };
+}

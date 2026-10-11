@@ -1,0 +1,373 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Cross-bucket seam conforming for `consolidate_coplanar`.
+//!
+//! `consolidate_coplanar` re-triangulates each coplanar plane bucket independently.
+//! Where a bucket's boundary runs along a facet shared with an abutting bucket, its
+//! collinear simplify can drop a vertex the neighbour keeps — the shared edge is then
+//! spanned by one long edge on one side and two short ones on the other. That is a
+//! T-junction, and it renders as a hairline crack.
+//!
+//! The discrimination this module rests on: a GENUINE seam vertex is a hard corner in
+//! the abutting bucket, so it survives that bucket's own simplify and gets recorded
+//! here. An i_overlay PHANTOM (a fragment-boundary artefact the simplify exists to
+//! remove) is near-collinear in every bucket that touches it, is dropped everywhere,
+//! and therefore never becomes an insertion source. The simplify's own judgment,
+//! read across buckets, is the discriminator — no geometric proxy for "is this a real
+//! corner" is needed.
+//!
+//! Split out of `consolidate.rs` to keep both files under the module-size ratchet.
+
+mod emit;
+mod open_edges;
+mod raw;
+mod snap;
+
+pub(super) use emit::emit_plans;
+pub(super) use open_edges::count_open_boundary_edges_at;
+use raw::conform_raw_triangles;
+use snap::snap_near_duplicates;
+
+use nalgebra::{Point3, Vector3};
+
+/// Perpendicular / endpoint tolerance for the cross-bucket conform (0.1 mm) — the
+/// same 0.1 mm as the seam-vertex quantisation, and two orders below the smallest
+/// real facet width we ever conform against.
+pub(super) const CONFORM_TOL: f64 = 1.0e-4;
+
+/// A ring vertex that survived `weld_near_coincident_2d` + `simplify_2d_collinear`
+/// in at least one plane bucket, keyed by its 0.1 mm-quantised position.
+///
+/// `buckets`/`first` answer the only question that separates the two cases the
+/// simplify conflates: did some bucket OTHER than this one keep this position as a
+/// hard corner? A genuine seam vertex is a corner in the abutting bucket (on
+/// dental_clinic #217 the four peers keep it at sin = 1.00), so it is recorded; an
+/// i_overlay phantom is near-collinear in EVERY bucket that touches it, so it is
+/// dropped everywhere and never becomes an insertion source.
+pub(super) struct SeamVert {
+    /// First 3D position seen at this key — inserted verbatim, so the lift lands
+    /// exactly on the peer bucket's vertex rather than on a dequantised cell centre.
+    pos: Point3<f64>,
+    buckets: u32,
+    first: u32,
+    last: u32,
+}
+
+pub(super) type SeamMap = std::collections::BTreeMap<(i64, i64, i64), SeamVert>;
+
+/// Inclusive range bounds on the 0.1 mm lattice `SeamMap` is keyed by. Widened by
+/// one cell on each side so the range is a strict SUPERSET of the box — the plane
+/// and AABB tests inside `conform_plans` still reject everything spurious, this only
+/// stops each bucket walking the whole map.
+fn seam_bounds(lo: [f64; 3], hi: [f64; 3]) -> ((i64, i64, i64), (i64, i64, i64)) {
+    let q = |v: f64| (v * 1.0e4).round() as i64;
+    (
+        (q(lo[0]) - 1, i64::MIN, i64::MIN),
+        (q(hi[0]) + 1, i64::MAX, i64::MAX),
+    )
+}
+
+/// Record `p` as kept by bucket `bid`. Buckets are visited in order, so `last`
+/// dedupes repeats inside one bucket without a per-position set. BTreeMap keeps the
+/// whole pass target-independent (native == wasm), like the bucket map itself.
+pub(super) fn record_seam_vert(map: &mut SeamMap, bid: u32, p: Point3<f64>) {
+    let key = (
+        (p.x * 1.0e4).round() as i64,
+        (p.y * 1.0e4).round() as i64,
+        (p.z * 1.0e4).round() as i64,
+    );
+    match map.get_mut(&key) {
+        Some(e) => {
+            if e.last != bid {
+                e.buckets += 1;
+                e.last = bid;
+            }
+        }
+        None => {
+            map.insert(
+                key,
+                SeamVert {
+                    pos: p,
+                    buckets: 1,
+                    first: bid,
+                    last: bid,
+                },
+            );
+        }
+    }
+}
+
+/// Insert every candidate that lies STRICTLY INTERIOR to one of `ring`'s edges
+/// (within `CONFORM_TOL` perpendicular) into that edge, ordered along it. Returns
+/// whether anything moved.
+///
+/// Conforming by ADDITION is the point: it cannot defeat the phantom merge
+/// `simplify_2d_collinear` exists to perform (blanket retention did), it only puts
+/// back the boundary vertices an abutting bucket still has.
+pub(super) fn conform_ring(
+    ring: &mut Vec<nalgebra::Point2<f64>>,
+    cands: &[nalgebra::Point2<f64>],
+) -> bool {
+    let n = ring.len();
+    if n < 3 || cands.is_empty() {
+        return false;
+    }
+    let mut out: Vec<nalgebra::Point2<f64>> = Vec::with_capacity(n + cands.len());
+    let mut inserted = false;
+    let mut hits: Vec<(f64, nalgebra::Point2<f64>)> = Vec::new();
+    for i in 0..n {
+        let a = ring[i];
+        let b = ring[(i + 1) % n];
+        out.push(a);
+        let (ex, ey) = (b.x - a.x, b.y - a.y);
+        let len2 = ex * ex + ey * ey;
+        if len2 <= 0.0 {
+            continue;
+        }
+        let len = len2.sqrt();
+        hits.clear();
+        for &q in cands {
+            let (dx, dy) = (q.x - a.x, q.y - a.y);
+            let t = (dx * ex + dy * ey) / len2;
+            // strictly interior — a candidate at an endpoint is already in the ring
+            if t * len <= CONFORM_TOL || (1.0 - t) * len <= CONFORM_TOL {
+                continue;
+            }
+            if (dx * ey - dy * ex).abs() / len > CONFORM_TOL {
+                continue;
+            }
+            hits.push((t, q));
+        }
+        if hits.is_empty() {
+            continue;
+        }
+        hits.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let mut last_t = f64::NEG_INFINITY;
+        for &(t, q) in hits.iter() {
+            // Two seam verts can land in adjacent quantisation cells; inserting both
+            // would leave a sub-0.1 mm pair that the needle backstop then drops,
+            // re-opening the very edge we are conforming.
+            if (t - last_t) * len <= CONFORM_TOL {
+                continue;
+            }
+            out.push(q);
+            last_t = t;
+            inserted = true;
+        }
+    }
+    if inserted {
+        *ring = out;
+    }
+    inserted
+}
+
+/// One union region of one plane bucket: the simplified rings, plus the
+/// cross-bucket-conformed copies phase B fills in.
+pub(super) struct PlanRegion {
+    pub(super) outer: Vec<nalgebra::Point2<f64>>,
+    pub(super) holes: Vec<Vec<nalgebra::Point2<f64>>>,
+    pub(super) outer_conformed: Vec<nalgebra::Point2<f64>>,
+    pub(super) holes_conformed: Vec<Vec<nalgebra::Point2<f64>>>,
+    /// Did phase B actually change this region's rings?
+    pub(super) changed: bool,
+    /// Pass-1 CDT result, reused verbatim by the conformed pass for every region
+    /// phase B left alone. The quality CDT with Ruppert refinement is the dominant
+    /// cost of a consolidate, and re-running it on untouched regions is what made
+    /// the second emit a +61% geometry regression on ISSUE_129.
+    pub(super) cached: Option<(Vec<nalgebra::Point2<f64>>, Vec<usize>)>,
+}
+
+/// One plane bucket after phase A: its 2D basis, the triangles that bypass the
+/// union round-trip (single-triangle bucket / union collapse), and its regions.
+pub(super) struct PlanBucket {
+    pub(super) bid: u32,
+    pub(super) normal: Vector3<f64>,
+    pub(super) origin: Point3<f64>,
+    pub(super) u_axis: Vector3<f64>,
+    pub(super) v_axis: Vector3<f64>,
+    pub(super) raw: Vec<[Point3<f64>; 3]>,
+    /// Conformed copies of `raw` singleton/fallback triangles. `None` keeps the
+    /// baseline byte-identical when no peer seam vertex touches a raw edge.
+    pub(super) raw_conformed: Option<Vec<[Point3<f64>; 3]>>,
+    pub(super) regions: Vec<PlanRegion>,
+}
+
+/// Build the seam map from finished plans: every kept corner of every bucket, in
+/// bucket order, keyed at 0.1 mm.
+///
+/// Deferred rather than recorded inline during phase A because ~85% of hosts are
+/// already watertight and never consult it, and paying a BTreeMap insert per ring
+/// vertex on all of them cost +61% geometry time on the ISSUE_129 fixture.
+/// Bucket-ordered iteration keeps it target-independent, exactly as the inline
+/// version was.
+pub(super) fn build_seam_map(plans: &[PlanBucket]) -> SeamMap {
+    let mut seam = SeamMap::new();
+    for plan in plans {
+        for tri in &plan.raw {
+            for p in tri {
+                record_seam_vert(&mut seam, plan.bid, *p);
+            }
+        }
+        for region in &plan.regions {
+            for p in region.outer.iter().chain(region.holes.iter().flatten()) {
+                let lifted = plan.origin + plan.u_axis * p.x + plan.v_axis * p.y;
+                record_seam_vert(&mut seam, plan.bid, lifted);
+            }
+        }
+    }
+    seam
+}
+
+/// Phase B — for every bucket, insert into its regions and raw fallback triangles
+/// the seam vertices that land on this bucket's plane and strictly inside one of
+/// its edges. Simplified regions retain the original cross-bucket asymmetry rule;
+/// raw triangles also conform to sibling corners in their own fallback bucket.
+/// Returns whether any ring or raw triangle changed.
+///
+/// The plane test is the strong filter — only positions landing exactly on this
+/// bucket's plane survive it — so the per-bucket scan of `seam` stays cheap. That
+/// prefilter is what the earlier post-hoc conforming attempts (run outside the bucket
+/// structure, in `tris_to_mesh` and after consolidation) could not have.
+pub(super) fn conform_plans(plans: &mut [PlanBucket], seam: &SeamMap) -> bool {
+    let mut changed = false;
+    for plan in plans.iter_mut() {
+        crate::progress::tick();
+        if plan.regions.is_empty() && plan.raw.is_empty() {
+            continue;
+        }
+        let (mut minx, mut miny, mut maxx, mut maxy) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for tri in &plan.raw {
+            for p in tri {
+                let d = *p - plan.origin;
+                let (x, y) = (d.dot(&plan.u_axis), d.dot(&plan.v_axis));
+                minx = minx.min(x);
+                miny = miny.min(y);
+                maxx = maxx.max(x);
+                maxy = maxy.max(y);
+            }
+        }
+        for r in &plan.regions {
+            for p in r.outer.iter().chain(r.holes.iter().flatten()) {
+                minx = minx.min(p.x);
+                miny = miny.min(p.y);
+                maxx = maxx.max(p.x);
+                maxy = maxy.max(p.y);
+            }
+        }
+        // 3D AABB of this bucket's rings, so the grid query below only visits cells
+        // that can contain a candidate. Without it every bucket scanned the whole
+        // seam map — O(buckets x seam), which on a 300-bucket host was the bulk of a
+        // +61% geometry regression on ISSUE_129.
+        let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
+        for tri in &plan.raw {
+            for p in tri {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(p[k]);
+                    hi[k] = hi[k].max(p[k]);
+                }
+            }
+        }
+        for r in &plan.regions {
+            for p in r.outer.iter().chain(r.holes.iter().flatten()) {
+                let w = plan.origin + plan.u_axis * p.x + plan.v_axis * p.y;
+                for k in 0..3 {
+                    lo[k] = lo[k].min(w[k]);
+                    hi[k] = hi[k].max(w[k]);
+                }
+            }
+        }
+        let mut cands: Vec<nalgebra::Point2<f64>> = Vec::new();
+        let mut raw_cands: Vec<nalgebra::Point2<f64>> = Vec::new();
+        let (klo, khi) = seam_bounds(lo, hi);
+        for sv in seam.range(klo..=khi).map(|(_, v)| v) {
+            let d = sv.pos - plan.origin;
+            if plan.normal.dot(&d).abs() > 1.0e-5 {
+                continue;
+            }
+            let (x, y) = (d.dot(&plan.u_axis), d.dot(&plan.v_axis));
+            if x < minx - CONFORM_TOL
+                || x > maxx + CONFORM_TOL
+                || y < miny - CONFORM_TOL
+                || y > maxy + CONFORM_TOL
+            {
+                continue;
+            }
+            let candidate = nalgebra::Point2::new(x, y);
+            if !plan.raw.is_empty() {
+                // A union-collapse fallback can leave several triangles in one
+                // raw bucket. Their own hard corners must split sibling edges;
+                // there is no neighbouring bucket to provide the asymmetry signal.
+                raw_cands.push(candidate);
+            }
+            // "kept by some bucket OTHER than this one" — the asymmetry signal
+            // remains mandatory for simplified union regions.
+            if sv.buckets >= 2 || sv.first != plan.bid {
+                cands.push(candidate);
+            }
+        }
+        if conform_raw_triangles(plan, &raw_cands) {
+            changed = true;
+        }
+        if cands.is_empty() {
+            continue;
+        }
+        for region in plan.regions.iter_mut() {
+            // Phase B0 — snap a ring vertex this region ALREADY carries (within
+            // CONFORM_TOL of a candidate) onto the candidate's exact position when
+            // the two are not already bit-identical. This is the residual gap the
+            // "already carries" filter below leaves: two buckets can land the SAME
+            // physical corner on floats a few µm apart, and the filter's OWN test
+            // (a ring vertex within CONFORM_TOL) reads that as "already shared" and
+            // drops the candidate, leaving the buckets disagreeing by that residual.
+            // Snapping — not inserting a second near-duplicate vertex, which the
+            // needle backstop would then drop — closes it without changing the
+            // vertex count, so it cannot fight the never-lose-triangles guard.
+            let mut this = snap_near_duplicates(
+                &mut region.outer_conformed,
+                &cands,
+                plan.origin,
+                plan.u_axis,
+                plan.v_axis,
+            );
+            for hole in region.holes_conformed.iter_mut() {
+                crate::progress::tick();
+                this |= snap_near_duplicates(hole, &cands, plan.origin, plan.u_axis, plan.v_axis);
+            }
+            // A candidate this region ALREADY carries must not be re-inserted: a
+            // duplicate ring vertex fails the CDT and would drop the whole region.
+            // Each candidate scans every ring vertex, so a many-hole face can
+            // spend seconds here: report progress every 64 candidates.
+            let mut scanned = 0u32;
+            let local: Vec<nalgebra::Point2<f64>> = cands
+                .iter()
+                .copied()
+                .inspect(|_| crate::progress::tick_strided(&mut scanned, 0x3F))
+                .filter(|q| {
+                    !region
+                        .outer
+                        .iter()
+                        .chain(region.holes.iter().flatten())
+                        .any(|p| {
+                            (p.x - q.x).abs() <= CONFORM_TOL && (p.y - q.y).abs() <= CONFORM_TOL
+                        })
+                })
+                .collect();
+            if !local.is_empty() {
+                this |= conform_ring(&mut region.outer_conformed, &local);
+                for hole in region.holes_conformed.iter_mut() {
+                    crate::progress::tick();
+                    this |= conform_ring(hole, &local);
+                }
+            }
+            region.changed = this;
+            changed |= this;
+        }
+    }
+    changed
+}
+
+#[cfg(test)]
+#[path = "conform_tests.rs"]
+mod tests;

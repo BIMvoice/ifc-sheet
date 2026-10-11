@@ -1,0 +1,40 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Regression test for issue #860 — IFC4.3's concrete stratum subtypes
+//! must be recognised as geometry-bearing IfcGeotechnicalStratum even
+//! though the auto-generated schema enum only exposes the abstract base.
+//!
+//! Pre-fix: `has_geometry_by_name("IFCSOLIDSTRATUM")` returned `false`,
+//! and the wasm geometry pipeline silently skipped every stratum element
+//! in the user's UT_Tin_in_MGA_56 terrain fixture.
+
+use ifc_lite_core::{has_geometry_by_name, ifc_type_from_keyword};
+
+#[test]
+fn solid_stratum_recognised_as_geotechnical_stratum() {
+    assert_eq!(
+        ifc_type_from_keyword("IFCSOLIDSTRATUM").as_str(),
+        "IFCSOLIDSTRATUM"
+    );
+}
+
+#[test]
+fn void_and_water_strata_are_also_geotechnical_stratum() {
+    for name in &["IFCVOIDSTRATUM", "IFCWATERSTRATUM"] {
+        assert_eq!(ifc_type_from_keyword(name).as_str(), *name);
+    }
+}
+
+#[test]
+fn has_geometry_by_name_passes_for_all_stratum_subtypes() {
+    for name in &["IFCSOLIDSTRATUM", "IFCVOIDSTRATUM", "IFCWATERSTRATUM"] {
+        assert!(
+            has_geometry_by_name(name),
+            "{name} must report has_geometry=true; pre-fix it returned false \
+             and the wasm pipeline silently dropped every stratum element \
+             from the spatial tree (issue #860)."
+        );
+    }
+}

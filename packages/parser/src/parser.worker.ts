@@ -1,0 +1,397 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Parser Web Worker.
+ *
+ * Receives a SharedArrayBuffer view of the IFC file bytes, runs
+ * `IfcParser.parseColumnar` off the main thread, and posts back two
+ * messages — `partial-store` (after spatial hierarchy is ready, for the
+ * fast hierarchy panel paint) and `complete` (full store with on-demand
+ * maps) — each carrying the column data plus a transferable list.
+ *
+ * The worker disables the inner scan-worker spawn (`disableWorkerScan: true`)
+ * because nesting workers serves no purpose and adds postMessage latency.
+ */
+
+import { readPrepassFingerprint } from './prepass-source-fingerprint.js';
+import init, { IfcAPI } from '@ifc-lite/wasm';
+import { initWasmWithRetry } from './wasm-init-retry.js';
+import { IfcParser } from './index.js';
+import { extractGeoreferencingOnDemand } from './on-demand-georeferencing.js';
+import type { IfcDataStore } from './columnar-parser.js';
+import type { WasmScanApi } from './entity-scanner.js';
+import type { ParserMemorySnapshot } from './data-store-transport.js';
+import { WorkerIndexPublisher, type WorkerStorePayload } from './worker-index-publication.js';
+import { takeWasmPanicStash } from './wasm-panic-forward.js';
+import { createLogger } from '@ifc-lite/data';
+import { columnarPhaseSpan, createParserWorkerTrace, finishParseTrace } from './parser-worker-trace.js';
+
+/** Input message: pass the SAB-backed source bytes and an opaque request id. */
+export interface ParserWorkerInputMessage {
+  type: 'parse';
+  sourceFingerprint?: SharedArrayBuffer;
+  indexTransport?: 'packed-index-v1';
+  id: string;
+  source: SharedArrayBuffer;
+  /** Optional yieldIntervalMs override (forwarded to parseColumnar). */
+  yieldIntervalMs?: number;
+  /** Defer indexing of property atoms (huge-file mode). */
+  deferPropertyAtomIndex?: boolean;
+  /**
+   * If set, the worker holds the parse before the WASM scan until a
+   * `set-entity-index` message arrives. The streaming geometry pre-pass
+   * already builds the same index in another worker — handing it across
+   * via SAB lets us skip a second 6–10 s file scan.
+   */
+  waitForEntityIndex?: boolean;
+}
+
+/** Hand the worker a pre-built entity index (typically from the geometry pre-pass). */
+export interface ParserWorkerEntityIndexMessage {
+  type: 'set-entity-index';
+  ids: Uint32Array;
+  starts: Uint32Array;
+  lengths: Uint32Array;
+  /**
+   * Records the pre-pass refused for an express id above the u32 storage
+   * bound (#3395). Absent from `ids` by construction, so the count has to be
+   * handed over with the columns or the parse reports a clean load that is
+   * quietly short. Optional: an older host sends the three columns only.
+   */
+  oversizedIdCount?: number;
+  /**
+   * Whether the pre-pass stopped early at a record whose quoted string or
+   * block comment never closed (#3790). 0 or 1. Everything after that byte is
+   * missing from the columns, so this is the only evidence the parse gets.
+   * Optional: an older host sends the three columns only.
+   */
+  malformedRecordCount?: number;
+}
+
+/** Progress update from the worker. */
+export interface ParserWorkerProgressMessage {
+  type: 'progress';
+  id: string;
+  progress: { phase: string; percent: number };
+}
+
+const parseLiteLog = createLogger('parseLite');
+const trace = createParserWorkerTrace(); // #6979 load-trace spans, off until enabled
+
+/** Optional structured diagnostic line (mirrors parseColumnar `onDiagnostic`). */
+export interface ParserWorkerDiagnosticMessage {
+  type: 'diagnostic';
+  id: string;
+  message: string;
+}
+
+/** Hierarchy is ready — UI can render the spatial panel before full parse completes. */
+export interface ParserWorkerPartialStoreMessage {
+  type: 'partial-store';
+  id: string;
+  payload: WorkerStorePayload;
+}
+
+/** Full data store is ready. */
+export interface ParserWorkerCompleteMessage {
+  type: 'complete';
+  id: string;
+  payload: WorkerStorePayload;
+  memory: ParserMemorySnapshot;
+}
+
+export interface ParserWorkerErrorMessage {
+  type: 'error';
+  id: string;
+  message: string;
+  /** This worker realm's wasm panic-location stash (#2527 follow-up), forwarded
+   *  so the main thread can re-plant it on ITS global for the existing
+   *  `attachWasmPanicLocation` gate. Location only, never the panic message.
+   *  Absent when there was no stash. See `wasm-panic-forward.ts`. */
+  wasmPanicLocation?: string;
+  wasmPanicAt?: number;
+}
+
+export type ParserWorkerOutputMessage =
+  | ParserWorkerProgressMessage
+  | ParserWorkerDiagnosticMessage
+  | ParserWorkerPartialStoreMessage
+  | ParserWorkerCompleteMessage
+  | ParserWorkerErrorMessage;
+
+interface JsHeapPerf {
+  memory?: { usedJSHeapSize: number };
+}
+
+function readJsHeapBytes(): number | undefined {
+  const perf = performance as unknown as JsHeapPerf;
+  return perf.memory?.usedJSHeapSize;
+}
+
+function postOutput(message: ParserWorkerOutputMessage, transfers?: Transferable[]): void {
+  const w = self as unknown as Worker;
+  if (transfers && transfers.length > 0) {
+    w.postMessage(message, transfers);
+  } else {
+    w.postMessage(message);
+  }
+}
+
+/**
+ * One-shot WASM init. The first parse pays ~50–100 ms to compile the
+ * 1 MB module; subsequent parses on the same worker reuse the instance.
+ *
+ * The WASM `IfcAPI` exposes `scanEntitiesFastBytes` (full Rust scan,
+ * 5–10× faster than the JS tokenizer); the lite parser needs the FULL
+ * entity set (IFCSIUNIT, IFCMATERIAL, IFCCLASSIFICATIONREFERENCE, …), so
+ * a filtered scan would build an incomplete index.
+ */
+let cachedFullScanApi: Pick<WasmScanApi, 'scanEntitiesFastBytes'> | null = null;
+let initPromise: Promise<void> | null = null;
+
+async function ensureWasmScanApi(): Promise<Pick<WasmScanApi, 'scanEntitiesFastBytes'>> {
+  if (cachedFullScanApi) return cachedFullScanApi;
+  // `init` is wrapped in `initWasmWithRetry` so a transient engine-binary
+  // download failure is retried once before failing. Clear `initPromise` on
+  // failure so a later call can recover (e.g. the network came back) instead
+  // of memoising the rejection forever.
+  if (!initPromise) {
+    initPromise = initWasmWithRetry(() => init(), { label: 'parser.worker' }).catch((err) => {
+      initPromise = null;
+      throw err;
+    });
+  }
+  await initPromise;
+  const api = new IfcAPI();
+  cachedFullScanApi = {
+    // Bind so `parseColumnar` can call without needing the IfcAPI receiver.
+    scanEntitiesFastBytes: api.scanEntitiesFastBytes.bind(api),
+  };
+  return cachedFullScanApi;
+}
+
+/**
+ * Promise/handoff for a pre-built entity index from the streaming geometry
+ * pre-pass. When the host posts `set-entity-index`, we resolve the pending
+ * waiter (if any) and stash the columns for the next `parse`.
+ */
+let pendingEntityIndex: {
+  ids: Uint32Array;
+  starts: Uint32Array;
+  lengths: Uint32Array;
+  oversizedIdCount?: number;
+  malformedRecordCount?: number;
+} | null = null;
+let entityIndexWaiter: ((value: NonNullable<typeof pendingEntityIndex>) => void) | null = null;
+
+function takeEntityIndex(): NonNullable<typeof pendingEntityIndex> | null {
+  if (!pendingEntityIndex) return null;
+  const taken = pendingEntityIndex;
+  pendingEntityIndex = null;
+  return taken;
+}
+
+/**
+ * Wait for an entity-index handoff with a watchdog timeout. If the host
+ * promised one via `waitForEntityIndex` but never delivers (path mismatch,
+ * pre-pass aborted, etc.), we fall through to the regular WASM scan after
+ * the timeout instead of hanging the parse forever.
+ */
+function awaitEntityIndex(timeoutMs: number): Promise<NonNullable<typeof pendingEntityIndex> | null> {
+  const taken = takeEntityIndex();
+  if (taken) return Promise.resolve(taken);
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      entityIndexWaiter = null;
+      console.warn(`[parser.worker] entity-index timeout after ${timeoutMs}ms — falling back to WASM scan`);
+      resolve(null);
+    }, timeoutMs);
+    entityIndexWaiter = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      pendingEntityIndex = null;
+      resolve(value);
+    };
+  });
+}
+
+type ParserInbound = ParserWorkerInputMessage | ParserWorkerEntityIndexMessage;
+
+self.onmessage = async (event: MessageEvent<ParserInbound>) => {
+  const data = event.data;
+  if (trace.accept(data)) return;
+  if (data.type === 'set-entity-index') {
+    pendingEntityIndex = {
+      ids: data.ids,
+      starts: data.starts,
+      lengths: data.lengths,
+      oversizedIdCount: data.oversizedIdCount,
+      malformedRecordCount: data.malformedRecordCount,
+    };
+    if (entityIndexWaiter) {
+      const resolve = entityIndexWaiter;
+      entityIndexWaiter = null;
+      resolve(pendingEntityIndex);
+    }
+    return;
+  }
+  if (data.type !== 'parse') return;
+
+  const { id, source, yieldIntervalMs, deferPropertyAtomIndex, waitForEntityIndex } = data;
+  const startedAt = performance.now();
+  const parseSpan = trace.begin('parser.parse');
+
+  try {
+    // The SAB itself is shared by reference — both this worker and the
+    // main thread (and the geometry workers) hold views of the same bytes.
+    // We never transfer or clone it. The parser's UTF-8 reader also supports
+    // runtimes that reject TextDecoder over SAB-backed views.
+    //
+    // Initialise the WASM scanner. `parseColumnar` prefers the WASM scan when
+    // `wasmApi` is supplied (5–10× faster on huge files — a 14 M-entity, 986 MB
+    // file goes from ~28 s of JS tokenising to ~5 s of Rust+SIMD).
+    //
+    // BUT only compile it when the WASM scan will actually RUN. When the host
+    // promised an entity-index handoff (`waitForEntityIndex`), the streaming
+    // pre-pass builds the index and hands it over, and the entity scanner
+    // short-circuits on `preScannedEntityIndex` WITHOUT ever calling the wasm
+    // scan (see entity-scanner.ts). Eager-compiling the ~3.9 MB engine binary
+    // here would then be pure waste — a multi-hundred-ms compile that steals a
+    // core from the concurrent geometry pre-pass on exactly the ≥2 MB cold
+    // loads this path serves (the host gates `waitForEntityIndex` on
+    // fileSizeMB >= 2). So defer the compile: eager only on the no-handoff
+    // path, lazy on the fallback branch below if the promised index never
+    // arrives. (#1185 shipped the parallel-compile; this trims the case where
+    // that compile is never consumed.)
+    let wasmApiPromise = waitForEntityIndex ? null : ensureWasmScanApi();
+
+    // If the host promised to ship an entity index, hold here until it
+    // arrives. The streaming geometry pre-pass already walked the file
+    // once and built the same index — reusing it skips a duplicate
+    // 6–10 s scan inside this worker.
+    let preScanned: NonNullable<typeof pendingEntityIndex> | null = null;
+    if (waitForEntityIndex) {
+      // 60 s is generous — pre-pass on a 1 GB file completes in ~5 s.
+      // The fallback path (own WASM scan) costs ~10 s, so an over-long
+      // wait here would hurt more than it helps. The host gates this
+      // flag to paths that actually emit, so timeouts shouldn't fire
+      // in practice.
+      const waitSpan = trace.begin('parser.entityIndexWait');
+      preScanned = await awaitEntityIndex(60_000);
+      trace.end(waitSpan, { handedOver: preScanned !== null });
+      if (!preScanned) {
+        // The promised index never came (pre-pass aborted / path mismatch):
+        // we now DO need the wasm scan, so compile it — serially here, which
+        // is acceptable on this rare fallback (it already logged a warning).
+        wasmApiPromise = ensureWasmScanApi();
+      }
+    } else {
+      preScanned = takeEntityIndex();
+    }
+
+    // `undefined` when the handoff succeeded — parseColumnar then uses the
+    // pre-scanned index and never touches the (uncompiled) wasm scanner. If the
+    // index were somehow empty, the scanner falls through to the JS tokeniser.
+    const wasmInit = wasmApiPromise;
+    const wasmApi = wasmInit ? await trace.span('parser.wasmInit', () => wasmInit) : undefined;
+    const parser = new IfcParser();
+    const indexPublisher = new WorkerIndexPublisher(data.indexTransport === 'packed-index-v1');
+    let publishedContentKey: string | null | undefined;
+    let fingerprintChosen = false;
+    const chooseContentKey = (store: IfcDataStore): string | null => {
+      if (!fingerprintChosen) {
+        const prepassKey = readPrepassFingerprint(data.sourceFingerprint, source.byteLength);
+        publishedContentKey = prepassKey ?? store.source.contentKey;
+        fingerprintChosen = true;
+        // Report the actual choice, not readiness observed later on the host.
+        parseLiteLog.debug(`source fingerprint: origin=${prepassKey === undefined ? 'parser' : 'prepass'} bytes=${source.byteLength}`);
+      }
+      return publishedContentKey ?? null;
+    };
+    let georeferencing: ReturnType<typeof extractGeoreferencingOnDemand> | undefined;
+    // `source` is the SAB-backed payload — `parseColumnar` accepts
+    // `ArrayBuffer | SharedArrayBuffer` so no cast is needed.
+    const dataStore: IfcDataStore = await parser.parseColumnar(source, {
+      // Inside a worker, spawning another worker for scan is wasteful.
+      disableWorkerScan: true,
+      wasmApi,
+      yieldIntervalMs,
+      deferPropertyAtomIndex,
+      preScannedEntityIndex: preScanned ?? undefined,
+      onProgress: (progress) => {
+        trace.step(columnarPhaseSpan(progress.phase));
+        postOutput({ type: 'progress', id, progress });
+      },
+      onDiagnostic: (message) => {
+        postOutput({ type: 'diagnostic', id, message });
+      },
+      onSpatialReady: (partialStore) => {
+        try {
+          const { payload, transfers } = trace.span('parser.spatialReady.serialize', () => {
+            const serialized = indexPublisher.serialize(partialStore, false);
+            // #3983: overlays and Cesium availability read these during React
+            // rendering. Do the full-source/hash and property-set walks here.
+            serialized.payload.sourceContentKey = chooseContentKey(partialStore);
+            if (!deferPropertyAtomIndex) {
+              georeferencing = extractGeoreferencingOnDemand(partialStore);
+              serialized.payload.georeferencing = georeferencing;
+            }
+            return serialized;
+          });
+          // The packed byType snapshot is worker-independent; primary numeric
+          // columns still clone because parsing continues to read them.
+          postOutput({ type: 'partial-store', id, payload }, transfers);
+          indexPublisher.publishedPartial(partialStore);
+          trace.flush();
+        } catch (err) {
+          postOutput({
+            type: 'error',
+            id,
+            message: `partial-store serialization failed: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
+      },
+    });
+    trace.step(null);
+    const { payload, transfers, transportBytes } = trace.span('parser.transport.serialize', () => {
+      const serialized = indexPublisher.serialize(dataStore, true);
+      serialized.payload.sourceContentKey = chooseContentKey(dataStore);
+      serialized.payload.georeferencing = georeferencing === undefined
+        ? extractGeoreferencingOnDemand(dataStore) : georeferencing;
+      return serialized;
+    });
+    // CRITICAL: every field here MUST be synchronous. Do NOT await on this path —
+    // it gates the 'complete' message (the full data store) reaching the main thread.
+    // This previously `await`ed performance.measureUserAgentSpecificMemory(); in a
+    // cross-origin-isolated context (always true here — SAB requires COI) Chrome
+    // defers that probe until the next major GC, which right after a large parse
+    // stalled 'complete' by multiple seconds (Holter Tower: ~3.8s of the load). The
+    // value (uaMemoryBytes) was never read by any consumer, so it is simply dropped.
+    const memory: ParserMemorySnapshot = {
+      jsHeapBytes: readJsHeapBytes(),
+      transportBytes,
+      sourceBytes: source.byteLength,
+      parseTimeMs: performance.now() - startedAt,
+    };
+    finishParseTrace(trace, parseSpan, { entities: dataStore.entityCount });
+    postOutput({ type: 'complete', id, payload, memory }, transfers);
+  } catch (err) {
+    finishParseTrace(trace, parseSpan, { error: true });
+    // #2527 follow-up: forward this realm's panic-location stash (set by the
+    // Rust panic hook if this failure was a wasm trap) so the main thread can
+    // re-plant it on ITS global for `attachWasmPanicLocation`.
+    const panic = takeWasmPanicStash(self);
+    postOutput({
+      type: 'error',
+      id,
+      message: err instanceof Error ? err.message : String(err),
+      ...(panic ? { wasmPanicLocation: panic.location, wasmPanicAt: panic.at } : {}),
+    });
+  }
+};

@@ -1,0 +1,835 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * SearchModalFilter — chip-based structured-rule filtering.
+ *
+ * Owns the run lifecycle: assembles per-model arguments, folds the
+ * inline search query into a Tier-1/Tier-0 candidate set when present,
+ * runs the path-B evaluator (chunked + cancellable + progress), and
+ * renders the result table. The chip-editing UI lives in
+ * `SearchModalFilterBuilder`; that's a UI-only sibling that reads /
+ * writes the same slice state.
+ *
+ * No DuckDB. No SQL editor. The path-B evaluator handles 4M-entity
+ * models via `selectIterationSource` (byType / byStorey index
+ * prefilter under AND + op:in), cheap-first per-entity rule ordering,
+ * and async chunked yielding — so a single Run button is the whole
+ * story.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { Play, AlertCircle, Download, ListPlus, Equal } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
+import { useViewerStore } from '@/store';
+import { toGlobalIdFromModels } from '@/store/globalId';
+import { useTranslation } from '@/i18n';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import { evaluateFilterGroupsFederated } from '@ifc-lite/rules';
+import { totalRuleCount } from '@ifc-lite/rules';
+import { definedModelTagIdsOf, evaluatorModelsFromState } from '@/lib/model-tags/evaluator-models';
+import { runTier0Scan, type ScanModel } from '@/lib/search/tier0-scan';
+import { queryTier1Indexes, type Tier1Index } from '@/lib/search/tier1-index';
+import { downloadResult } from '@/lib/search/result-export';
+import {
+  collectFilterResultGlobalIds,
+  expandFilterRowsThroughAggregation,
+  scanFilterResultRows,
+} from '@/lib/search/isolate-filter-result';
+import { filterResultToSearchResults } from '@/lib/search/filter-result-to-search-results';
+import { selectionKeyColumnIndex } from '@/lib/search/selection-key-column';
+import type { ListDefinition } from '@/lib/lists';
+import { toast } from '@/components/ui/toast';
+import { SearchModalFilterBuilder } from './SearchModal.filter.builder';
+import { RuleSummary } from './SearchModal.filter.ruleSummary';
+
+/** Rows per virtualizer page — tuned for the result table row height. */
+const RESULT_ROW_HEIGHT = 28;
+const TEXT_HIT_LIMIT = 50_000;
+const FILTER_CHUNK_SIZE = 20_000;
+const DEFAULT_LIMIT = 5_000;
+
+export function SearchModalFilter() {
+  const { t } = useTranslation();
+  const {
+    searchFilter,
+    searchFilterResult,
+    searchFilterRunning,
+    searchFilterError,
+    searchQuery,
+    searchIndexes,
+    setSearchFilterRunning,
+    setSearchFilterResult,
+    setSearchFilterError,
+    models,
+    activeModelId,
+    setSelectedEntity,
+    setSelectedEntityId,
+    setSelectedEntityIds,
+    isolateEntities,
+    isolatedEntities,
+    typeVisibility,
+    toggleTypeVisibility,
+    enterVimCycle,
+    cameraCallbacks,
+    setPendingListDraft,
+    setListPanelVisible,
+    setSearchModalOpen,
+    autoRunPending,
+    setAutoRunPending,
+  } = useViewerStore(
+    useShallow((s) => ({
+      searchFilter: s.searchFilter,
+      searchFilterResult: s.searchFilterResult,
+      searchFilterRunning: s.searchFilterRunning,
+      searchFilterError: s.searchFilterError,
+      searchQuery: s.searchQuery,
+      searchIndexes: s.searchIndexes,
+      setSearchFilterRunning: s.setSearchFilterRunning,
+      setSearchFilterResult: s.setSearchFilterResult,
+      setSearchFilterError: s.setSearchFilterError,
+      models: s.models,
+      activeModelId: s.activeModelId,
+      setSelectedEntity: s.setSelectedEntity,
+      setSelectedEntityId: s.setSelectedEntityId,
+      setSelectedEntityIds: s.setSelectedEntityIds,
+      isolateEntities: s.isolateEntities,
+      isolatedEntities: s.isolatedEntities,
+      typeVisibility: s.typeVisibility,
+      toggleTypeVisibility: s.toggleTypeVisibility,
+      enterVimCycle: s.enterVimCycle,
+      cameraCallbacks: s.cameraCallbacks,
+      setPendingListDraft: s.setPendingListDraft,
+      setListPanelVisible: s.setListPanelVisible,
+      setSearchModalOpen: s.setSearchModalOpen,
+      autoRunPending: s.searchFilterAutoRunPending,
+      setAutoRunPending: s.setSearchFilterAutoRunPending,
+    })),
+  );
+
+  const activeModel = activeModelId ? models.get(activeModelId) : undefined;
+  const activeStore = activeModel?.ifcDataStore ?? null;
+  const multiModel = models.size > 1;
+  const filterRuleCount = totalRuleCount(searchFilter.groups);
+
+  // ── Run lifecycle: progress, cancel, limit-hit badge ──────────────────
+  const runController = useRef<AbortController | null>(null);
+  const [progress, setProgress] = useState<{ scanned: number; total: number } | null>(null);
+  const [limitHit, setLimitHit] = useState<number | null>(null);
+
+  const runFilter = useCallback(async () => {
+    if (searchFilterRunning) return;
+    if (totalRuleCount(searchFilter.groups) === 0) {
+      setSearchFilterError(t('searchModal.filterRun.noRulesError'));
+      return;
+    }
+
+    runController.current?.abort();
+    const controller = new AbortController();
+    runController.current = controller;
+
+    setSearchFilterRunning(true);
+    setSearchFilterError(null);
+    setLimitHit(null);
+    setProgress({ scanned: 0, total: 0 });
+
+    const start = performance.now();
+    try {
+      // Tag sets are read here, once — the run's membership is a snapshot (#4215).
+      const modelArgs = evaluatorModelsFromState(useViewerStore.getState()).filter((m) => m.store);
+
+      // Fold the inline search query in as a Tier-1/Tier-0 candidate
+      // set when present. Empty query → no narrowing (full scan with
+      // index prefilter applied inside the evaluator).
+      const trimmedQuery = searchQuery.trim();
+      let candidatesByModel: Map<string, Iterable<number>> | undefined;
+      if (trimmedQuery.length > 0) {
+        const t0Models: ScanModel[] = [];
+        const t1Indexes: Tier1Index[] = [];
+        for (const m of modelArgs) {
+          const rec = searchIndexes.get(m.id);
+          if (rec?.status === 'ready' && rec.index) {
+            t1Indexes.push(rec.index);
+          } else {
+            t0Models.push({ id: m.id, ifcDataStore: m.store });
+          }
+        }
+        const t1Hits = t1Indexes.length > 0
+          ? queryTier1Indexes(t1Indexes, trimmedQuery, { limit: TEXT_HIT_LIMIT })
+          : [];
+        const t0Hits = t0Models.length > 0
+          ? runTier0Scan(t0Models, trimmedQuery, { limit: TEXT_HIT_LIMIT })
+          : [];
+        const grouped = new Map<string, Set<number>>();
+        for (const hit of t1Hits.concat(t0Hits)) {
+          let bucket = grouped.get(hit.modelId);
+          if (!bucket) { bucket = new Set(); grouped.set(hit.modelId, bucket); }
+          bucket.add(hit.expressId);
+        }
+        candidatesByModel = new Map();
+        for (const [id, set] of grouped) candidatesByModel.set(id, set);
+        for (const m of modelArgs) {
+          // Models with no text hits get an empty candidate so structured
+          // rules can't slip through under intersection semantics.
+          if (!candidatesByModel.has(m.id)) candidatesByModel.set(m.id, []);
+        }
+      }
+
+      const limit = searchFilter.limit > 0 ? searchFilter.limit : DEFAULT_LIMIT;
+      const matched = await evaluateFilterGroupsFederated(
+        modelArgs,
+        searchFilter.groups,
+        {
+          limit,
+          definedModelTagIds: definedModelTagIdsOf(useViewerStore.getState()),
+          chunkSize: FILTER_CHUNK_SIZE,
+          candidateExpressIdsByModel: candidatesByModel,
+          signal: controller.signal,
+          onProgress: (scanned, total) => setProgress({ scanned, total }),
+        },
+      );
+
+      const multi = modelArgs.length > 1;
+      const columns = multi
+        ? ['express_id', 'global_id', 'name', 'type', 'model_id']
+        : ['express_id', 'global_id', 'name', 'type'];
+      const rows: unknown[][] = matched.map((m) =>
+        multi
+          ? [m.expressId, m.globalId, m.name, m.ifcType, m.modelId]
+          : [m.expressId, m.globalId, m.name, m.ifcType],
+      );
+      setSearchFilterResult({
+        columns,
+        rows,
+        runMs: Math.round(performance.now() - start),
+      });
+      if (matched.length >= limit) setLimitHit(limit);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setSearchFilterError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (runController.current === controller) {
+        runController.current = null;
+        setSearchFilterRunning(false);
+        setProgress(null);
+      }
+    }
+  }, [
+    models,
+    searchFilter,
+    searchFilterRunning,
+    searchIndexes,
+    searchQuery,
+    setSearchFilterError,
+    setSearchFilterResult,
+    setSearchFilterRunning,
+  ]);
+
+  const cancelFilter = useCallback(() => {
+    runController.current?.abort();
+  }, []);
+
+  // Auto-run when the Filter was populated from outside the modal (a
+  // Hierarchy node click arms `searchFilterAutoRunPending`). Because the
+  // panel only mounts when the modal is open, the flag survives a closed
+  // modal and fires on the next open — so the user sees results without
+  // pressing Run. Clear the flag first so a slow run can't re-trigger.
+  useEffect(() => {
+    if (!autoRunPending) return;
+    setAutoRunPending(false);
+    if (totalRuleCount(searchFilter.groups) === 0) {
+      // Hierarchy cleared the last rule — drop the stale table rather than
+      // run an empty filter (which the runner rejects anyway).
+      setSearchFilterResult(null);
+    } else if (!searchFilterRunning) {
+      void runFilter();
+    }
+  }, [
+    autoRunPending,
+    searchFilter.groups,
+    searchFilterRunning,
+    setAutoRunPending,
+    setSearchFilterResult,
+    runFilter,
+  ]);
+
+  // Cancel any in-flight run when the modal unmounts so background
+  // chunked work doesn't keep ticking after close.
+  useEffect(() => () => {
+    runController.current?.abort();
+  }, []);
+
+  // Locate the model_id column (only present in federated runs) — same
+  // routing rule as before: known column → use that model's id space.
+  const modelIdColumnIndex = useMemo(() => {
+    const cols = searchFilterResult?.columns;
+    if (!cols) return -1;
+    return cols.indexOf('model_id');
+  }, [searchFilterResult]);
+
+  const selectionKeyIndex = useMemo(() => {
+    const cols = searchFilterResult?.columns;
+    if (!cols) return -1;
+    return selectionKeyColumnIndex(cols);
+  }, [searchFilterResult]);
+
+  // Frozen (per-run) conversion of the filter table into SearchResult-shaped
+  // entries so the existing vim-cycle machinery (enterVimCycle/stepVimCycle,
+  // stepped by SearchInline's n/N listener) can step through Filter-tab
+  // results the same way it steps through Search-tab results. Only recomputed
+  // when the result table itself changes, not per click, so the array identity
+  // stays stable across a run's clicks — the same 'frozen snapshot' semantics
+  // the Search tab's cycle documents (searchSlice.ts SearchVimCycleState).
+  const cycleResults = useMemo(
+    () => (searchFilterResult ? filterResultToSearchResults(searchFilterResult, activeModelId) : []),
+    [searchFilterResult, activeModelId],
+  );
+
+  const handleRowClick = useCallback((row: unknown[]) => {
+    if (selectionKeyIndex < 0) return;
+    const rowModelId = modelIdColumnIndex >= 0 && typeof row[modelIdColumnIndex] === 'string'
+      ? (row[modelIdColumnIndex] as string)
+      : activeModelId;
+    if (!rowModelId) return;
+    const raw = row[selectionKeyIndex];
+    const expressId = typeof raw === 'number'
+      ? raw
+      : typeof raw === 'string'
+        ? Number(raw)
+        : null;
+    // Kept in sync with filter-result-to-search-results.ts's identical
+    // guard: express ids are Uint32Array-backed integers, so a row must
+    // satisfy the same Number.isInteger check to be clickable as it does
+    // to enter the vim cycle (otherwise a row could be one but not the
+    // other).
+    if (expressId === null || !Number.isInteger(expressId) || expressId <= 0) return;
+    const globalId = toGlobalIdFromModels(models, rowModelId, expressId);
+    // Clear any live multi-selection FIRST. `frameSelection` prefers the
+    // numeric `selectedEntityIds` set over `selectedEntityId`
+    // (Viewport.tsx:935), so a stale set left over from a previous
+    // box/basket selection would frame the OLD elements instead of this row.
+    // Ordering is load-bearing: `setSelectedEntityIds([])` also resets
+    // `selectedEntityId`, so it has to run before the two setters below —
+    // same sequence HierarchyPanel uses (HierarchyPanel.tsx:410-411).
+    setSelectedEntityIds([]);
+    setSelectedEntityId(globalId);
+    setSelectedEntity({ modelId: rowModelId, expressId });
+    if (cameraCallbacks.frameSelection) {
+      window.setTimeout(() => cameraCallbacks.frameSelection?.(), 50);
+    }
+    // Enter the vim cycle so n/N steps through the rest of this run's
+    // matches, same as the Search tab. Index is found by (modelId, expressId)
+    // rather than by row position, since filterResultToSearchResults can skip
+    // unselectable rows and the two arrays needn't stay position-aligned.
+    const cycleIndex = cycleResults.findIndex(
+      (r) => r.modelId === rowModelId && r.expressId === expressId,
+    );
+    if (cycleIndex >= 0) {
+      enterVimCycle(`filter: ${filterRuleCount} rule${filterRuleCount === 1 ? '' : 's'}`, cycleResults, cycleIndex);
+    }
+    // Close the modal so the framing is actually visible. The dialog overlay
+    // is `fixed inset-0 bg-black/80` (ui/dialog.tsx:23), so without this the
+    // camera does fly to the element behind a full-screen scrim and the click
+    // reads as doing nothing. The Search tab (SearchModal.text.tsx) and the
+    // inline bar (SearchInline.tsx) both already close on commit; this is
+    // parity with them and with the modal's own documented commit semantics
+    // ("select + frame + ... + close", SearchModal.tsx:19).
+    // Results survive: `searchFilterResult` is only dropped on a model change
+    // (store/index.ts:544), never on close, so reopening shows the same table
+    // without re-running the filter.
+    setSearchModalOpen(false);
+  }, [activeModelId, cameraCallbacks, cycleResults, enterVimCycle, models, modelIdColumnIndex, filterRuleCount, selectionKeyIndex, setSearchModalOpen, setSelectedEntity, setSelectedEntityId, setSelectedEntityIds]);
+
+  const handleExport = useCallback((format: 'csv' | 'json') => {
+    if (!searchFilterResult || searchFilterResult.rows.length === 0) return;
+    downloadResult(searchFilterResult, format);
+  }, [searchFilterResult]);
+
+  /** Isolate the filter result's elements in the 3D view — same store
+   *  channel (`isolateEntities` / `isolatedEntities`) HierarchyPanel uses
+   *  for type/material/group isolation, so undo rides the existing
+   *  "Clear type filter" ×  affordance for free. Federated results resolve
+   *  each row through ITS OWN model_id column (see
+   *  `collectFilterResultGlobalIds`), so a multi-model result isolates
+   *  correctly across every source model, not just the active one — and a
+   *  row whose model was unloaded after the run is skipped rather than
+   *  colliding with another model's id space (#2532 review). Geometry-less
+   *  assemblies are resolved to their geometry-bearing parts via
+   *  `cameraCallbacks.resolveHighlightIds` (#2531) before isolating, or a
+   *  result made of assemblies would blank the view. */
+  const handleIsolateResult = useCallback(() => {
+    const result = searchFilterResult;
+    if (!result || result.rows.length === 0) return;
+    const defaultModelId = activeModelId ?? 'default';
+
+    const globalIds = collectFilterResultGlobalIds(result, defaultModelId, (modelId, expressId) => {
+      const isSpecial = modelId === 'legacy' || modelId === 'default' || modelId === '__legacy__';
+      // toGlobalIdFromModels falls back to the raw expressId for an unknown
+      // modelId (store/globalId.ts:31-34) — fine for the single-model
+      // aliases, wrong for a federated row whose source model is no longer
+      // loaded, where that raw id can collide with a still-loaded model's
+      // id space. Skip those rows instead.
+      if (!isSpecial && !models.has(modelId)) return null;
+      return toGlobalIdFromModels(models, modelId, expressId);
+    });
+
+    if (globalIds.length === 0) {
+      toast.error(t('searchModal.filterRun.nothingToIsolate'));
+      return;
+    }
+
+    // A geometry-less assembly (IfcElementAssembly, an IfcStair used as a
+    // container, …) owns no mesh: the renderer resolves `isolatedEntities`
+    // against mesh ids directly, so isolating its bare id blanks the view.
+    // Resolve through the same Viewport channel the Search tab's commit and
+    // frameSelection use (`resolveHighlightIds`, backed by
+    // expandToGeometryBearingIds — #2531): a geometry-bearing id passes
+    // through untouched and deduplicated, a geometry-less one is replaced by
+    // its geometry-bearing aggregated parts.
+    const resolved = cameraCallbacks.resolveHighlightIds?.(globalIds) ?? [];
+    let isolationIds = resolved;
+    let fallbackPartTypes: ReadonlySet<string> | null = null;
+    if (resolved.length === 0) {
+      // Nothing resolved: either the renderer has not registered its
+      // callbacks yet, or every matched row looks geometry-less to it. The
+      // resolver checks bounds against the type-visibility-FILTERED mesh
+      // list (Viewport gets ViewportContainer's `filteredGeometry`), so an
+      // assembly whose only parts are currently hidden types (IfcSpace,
+      // IfcOpeningElement, ...) lands here even though it IS renderable once
+      // those toggles flip (#2660 review). Expand through the aggregation
+      // graph directly -- data-store side, visibility-blind -- so those
+      // parts join the isolation set, and feed their types into the
+      // matchedTypes gate below so the toggles actually flip. The raw ids
+      // stay in the set: rows without aggregated parts keep their own mesh
+      // ids that way, and isolating an empty set would hide the ENTIRE
+      // model, which is strictly worse than the pre-resolution behaviour.
+      //
+      // Residual gap, documented rather than closed: when SOME rows resolve,
+      // hidden-type parts of the ones that do not are still dropped, and a
+      // second press after the toggles flipped recomputes a resolver-based
+      // set (so it re-isolates instead of clearing). Both need the resolver
+      // to see UNFILTERED geometry, which is Viewport plumbing shared with
+      // frameSelection and the Search tab -- out of scope here.
+      const expansion = expandFilterRowsThroughAggregation(result, defaultModelId, {
+        relationshipsFor: (modelId) => models.get(modelId)?.ifcDataStore?.relationships,
+        typeNameFor: (modelId, expressId) =>
+          models.get(modelId)?.ifcDataStore?.entities.getTypeName(expressId) ?? null,
+        toGlobalId: (modelId, expressId) =>
+          models.has(modelId) ? toGlobalIdFromModels(models, modelId, expressId) : null,
+      });
+      fallbackPartTypes = expansion.partTypes;
+      const merged = new Set(globalIds);
+      for (const id of expansion.partGlobalIds) merged.add(id);
+      isolationIds = [...merged];
+    }
+
+    // isolateEntities is a same-set TOGGLE (visibilitySlice.ts, `isolateEntities`):
+    // pressing "Isolate in 3D" again on the identical result un-isolates
+    // rather than re-isolating. Detect that up front so the un-isolate press
+    // only clears — it must not also select/frame the id set and close the
+    // modal as if a fresh isolation had just landed (#2532 review). Compared
+    // against the RESOLVED ids, which are what the first press stored.
+    const alreadyIsolated = isolatedEntities !== null &&
+      isolatedEntities.size === isolationIds.length &&
+      isolationIds.every((id) => isolatedEntities.has(id));
+
+    if (alreadyIsolated) {
+      isolateEntities(isolationIds);
+      setSelectedEntityIds([]);
+      toast.info(t('searchModal.filterRun.isolationCleared'));
+      setSearchModalOpen(false);
+      return;
+    }
+
+    // Sibling isolate paths (PropertiesPanel.handleIsolateGroupMembers,
+    // HierarchyPanel's group isolation) flip the relevant hidden-by-default
+    // type-visibility toggle BEFORE isolating, or the isolated set renders
+    // nothing (#1075 / PR #1094 review) — the renderer independently drops
+    // these types (store/constants.ts TYPE_VISIBILITY_SEMANTIC_DEFAULTS)
+    // regardless of what isolateEntities is given. The Filter tab can match
+    // any class, so apply the same gate here rather than blanking the view.
+    const matchedTypes = new Set<string>();
+    for (const row of scanFilterResultRows(result, defaultModelId)) {
+      if (row.ifcType) matchedTypes.add(row.ifcType);
+    }
+    // Aggregated parts pulled in by the fallback above are isolated too, so
+    // their types must clear the same gate -- a result of bare assemblies
+    // over hidden-type parts would otherwise flip nothing and still blank.
+    if (fallbackPartTypes) {
+      for (const partType of fallbackPartTypes) matchedTypes.add(partType);
+    }
+    if (matchedTypes.has('IfcSpace') && !typeVisibility.spaces) toggleTypeVisibility('spaces');
+    if (matchedTypes.has('IfcSpatialZone') && !typeVisibility.spatialZones) toggleTypeVisibility('spatialZones');
+    if (matchedTypes.has('IfcOpeningElement') && !typeVisibility.openings) toggleTypeVisibility('openings');
+    if (matchedTypes.has('IfcVirtualElement') && !typeVisibility.virtualElements) toggleTypeVisibility('virtualElements');
+
+    isolateEntities(isolationIds);
+    // Select the full isolated set (not just one row) so the frame below
+    // encloses every isolated element. A single `setSelectedEntityIds` call
+    // replaces both `selectedEntityIds` and `selectedEntityId` wholesale
+    // (selectionSlice.ts:160-163), so no leading clear is needed here. The
+    // MATCHED ids go last: `selectedEntityId` becomes the array's final
+    // element, so the primary selection (what the Properties panel shows via
+    // useModelSelection) stays a row the filter actually matched instead of
+    // whichever expanded part happened to come out of the resolver last --
+    // the same #1133 convention as SearchModal.text.tsx's commit
+    // (`[...renderableParts, globalId]`) and HierarchyPanel's group isolate
+    // (#2660 review). The Set dedups the overlap.
+    setSelectedEntityIds([...isolationIds, ...globalIds]);
+
+    if (limitHit !== null) {
+      toast.info(t('searchModal.filterRun.isolatingLimited', { limit: limitHit.toLocaleString() }));
+    }
+
+    // frameEntities takes the explicit id set directly rather than reading it
+    // back off selection state, and — unlike frameSelection — guards against
+    // a degenerate/NaN bound (Viewport.tsx:1029-1033), so a non-geometric id
+    // in the mix can't fling the camera off-model.
+    if (cameraCallbacks.frameEntities) {
+      window.setTimeout(() => cameraCallbacks.frameEntities?.(isolationIds), 50);
+    }
+    // Close the modal so the framing is actually visible — same reasoning
+    // as handleRowClick above (dialog overlay is `fixed inset-0 bg-black/80`,
+    // ui/dialog.tsx:23; PR #2396 is the regression this guards against).
+    setSearchModalOpen(false);
+  }, [
+    searchFilterResult,
+    activeModelId,
+    models,
+    isolatedEntities,
+    typeVisibility,
+    toggleTypeVisibility,
+    limitHit,
+    setSelectedEntityIds,
+    isolateEntities,
+    cameraCallbacks,
+    setSearchModalOpen,
+  ]);
+
+  /** Freeze the current filter result into a new list — a per-model snapshot
+   *  of the matched express IDs — and open the list builder to configure
+   *  columns. Keyed by model so federated results don't over-select when
+   *  local express IDs collide across files. */
+  const handleCreateList = useCallback(() => {
+    const result = searchFilterResult;
+    if (!result || result.rows.length === 0) return;
+
+    const byModel: Record<string, number[]> = {};
+    for (const row of scanFilterResultRows(result, activeModelId ?? 'default')) {
+      (byModel[row.modelId] ??= []).push(row.expressId);
+    }
+    const total = Object.values(byModel).reduce((n, ids) => n + ids.length, 0);
+    if (total === 0) return;
+
+    // Seed columns from the property / quantity rules the filter used, so a
+    // NetVolume (or any pset value) the user filtered on shows up as a column
+    // without re-adding it by hand. (#1462) Name + Class stay as the base set.
+    const columns: ListDefinition['columns'] = [
+      { id: 'attr-name', source: 'attribute', propertyName: 'Name', label: 'Name' },
+      { id: 'attr-class', source: 'attribute', propertyName: 'Class', label: 'Class' },
+    ];
+    const seenCol = new Set<string>();
+    for (const rule of searchFilter.groups.flatMap((g) => g.rules)) {
+      if (rule.kind === 'property' && rule.setName && rule.propertyName) {
+        const key = `property:${rule.setName}:${rule.propertyName}`;
+        if (seenCol.has(key)) continue;
+        seenCol.add(key);
+        columns.push({
+          id: `col-${columns.length}`,
+          source: 'property',
+          psetName: rule.setName,
+          propertyName: rule.propertyName,
+          label: rule.propertyName,
+        });
+      } else if (rule.kind === 'quantity' && rule.setName && rule.quantityName) {
+        const key = `quantity:${rule.setName}:${rule.quantityName}`;
+        if (seenCol.has(key)) continue;
+        seenCol.add(key);
+        columns.push({
+          id: `col-${columns.length}`,
+          source: 'quantity',
+          psetName: rule.setName,
+          propertyName: rule.quantityName,
+          label: rule.quantityName,
+        });
+      }
+    }
+
+    const now = Date.now();
+    const draft: ListDefinition = {
+      id: crypto.randomUUID(),
+      name: 'Filter result',
+      createdAt: now,
+      updatedAt: now,
+      entityTypes: [],
+      expressIdsByModel: byModel,
+      groups: [],
+      columns,
+    };
+    setPendingListDraft(draft);
+    setListPanelVisible(true);
+    setSearchModalOpen(false);
+  }, [searchFilterResult, searchFilter.groups, activeModelId, setPendingListDraft, setListPanelVisible, setSearchModalOpen]);
+
+  if (!activeStore) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">
+        {t('searchModal.filterRun.noModelLoaded')}
+      </div>
+    );
+  }
+
+  const canRun = filterRuleCount > 0;
+
+  return (
+    <div className="flex flex-1 min-h-0 flex-col">
+      {/* ── Builder (chip palette) ─────────────────────────────────────── */}
+      {/* Bounded height so a long rules list scrolls with the wheel instead of
+          growing unbounded and pushing the result table off-screen. (#1462) */}
+      <div className="max-h-[45vh] shrink-0 overflow-y-auto border-b">
+        <SearchModalFilterBuilder />
+      </div>
+
+      {/* ── Run bar: status · run/cancel · export ──────────────────────── */}
+      <div className="flex items-center gap-2 border-b px-3 py-2 text-2xs">
+        <RuleSummary
+          ruleCount={filterRuleCount}
+          groupCount={searchFilter.groups.length}
+          combinator={searchFilter.groups[0]?.combinator ?? 'AND'}
+          limit={searchFilter.limit}
+        />
+
+        {progress && progress.total > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <span className="relative h-1.5 w-32 overflow-hidden rounded bg-zinc-200 dark:bg-zinc-800">
+              <span
+                className="absolute left-0 top-0 h-full bg-primary transition-[width] duration-100"
+                style={{
+                  width: `${Math.min(100, Math.round((progress.scanned / progress.total) * 100))}%`,
+                }}
+              />
+            </span>
+            <span className="font-mono">
+              {progress.scanned.toLocaleString()} / {progress.total.toLocaleString()}
+            </span>
+          </span>
+        )}
+        {progress && progress.total <= 0 && (
+          <span className="font-mono text-muted-foreground">
+            {t('searchModal.filterRun.scannedCount', { count: progress.scanned.toLocaleString() })}
+          </span>
+        )}
+
+        {!searchFilterRunning && limitHit !== null && (
+          <span
+            className="rounded bg-amber-100 px-1.5 py-0.5 text-2xs font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
+            title={t('searchModal.filterRun.limitedToTitle')}
+          >
+            {t('searchModal.filterRun.limitedToBadge', { limit: limitHit.toLocaleString() })}
+          </span>
+        )}
+
+        {searchFilterResult && !searchFilterRunning && (
+          <span className="text-muted-foreground">
+            {t('searchModal.filterRun.timingSummary', {
+              runMs: searchFilterResult.runMs,
+              rows: searchFilterResult.rows.length.toLocaleString(),
+            })}
+          </span>
+        )}
+
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!searchFilterResult || searchFilterResult.rows.length === 0}
+            onClick={handleCreateList}
+            className="h-7 gap-1 text-xs"
+            title={t('searchModal.filterRun.createListTitle')}
+          >
+            <ListPlus className="h-3 w-3" /> {t('searchModal.filterRun.createListLabel')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!searchFilterResult || searchFilterResult.rows.length === 0}
+            onClick={handleIsolateResult}
+            className="h-7 gap-1 text-xs"
+            title={t('searchModal.filterRun.isolateTitle')}
+          >
+            <Equal className="h-3 w-3" /> {t('searchModal.filterRun.isolateLabel')}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!searchFilterResult || searchFilterResult.rows.length === 0}
+                className="h-7 gap-1 text-xs"
+                title={t('searchModal.filterRun.exportTitle')}
+              >
+                <Download className="h-3 w-3" /> {t('searchModal.filterRun.exportLabel')}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => handleExport('csv')}>
+                {t('searchModal.filterRun.downloadCsv')}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleExport('json')}>
+                {t('searchModal.filterRun.downloadJson')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {searchFilterRunning ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={cancelFilter}
+              className="h-7 gap-1 text-xs"
+            >
+              {t('searchModal.filterRun.cancel')}
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={runFilter}
+              disabled={!canRun}
+              className="h-7 gap-1 text-xs"
+              title={t(canRun ? 'searchModal.filterRun.runTitleReady' : 'searchModal.filterRun.runTitleDisabled')}
+            >
+              <Play className="h-3 w-3" />
+              {t('searchModal.filterRun.run')}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {multiModel && (
+        <div className="border-b bg-zinc-50 px-3 py-1.5 text-2xs text-muted-foreground dark:bg-zinc-900/30">
+          {t('searchModal.filterRun.multiModelNote', { count: models.size })}
+        </div>
+      )}
+
+      {/* ── Result area: error stacks above the last good table ────────── */}
+      {searchFilterError && <FilterErrorBox raw={searchFilterError} />}
+      <FilterResultTable
+        result={searchFilterResult}
+        selectionKeyIndex={selectionKeyIndex}
+        onRowClick={handleRowClick}
+      />
+    </div>
+  );
+}
+
+// ── Sub-components ────────────────────────────────────────────────────
+
+function FilterErrorBox({ raw }: { raw: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="border-b bg-red-50/50 px-4 py-3 dark:bg-red-950/20">
+      <div className="flex items-start gap-2">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+        <div className="min-w-0 flex-1 text-xs">
+          <div className="font-semibold text-red-900 dark:text-red-200">{t('searchModal.filterRun.filterFailed')}</div>
+          <div className="mt-1 break-words text-red-800 dark:text-red-300">{raw}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface FilterResultTableProps {
+  result: { columns: string[]; rows: unknown[][] } | null;
+  selectionKeyIndex: number;
+  onRowClick: (row: unknown[]) => void;
+}
+
+function FilterResultTable({ result, selectionKeyIndex, onRowClick }: FilterResultTableProps) {
+  const { t } = useTranslation();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: result?.rows.length ?? 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => RESULT_ROW_HEIGHT,
+    overscan: 20,
+  });
+
+  if (!result) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+        {t('searchModal.filterRun.addRulesPrompt')}
+      </div>
+    );
+  }
+
+  if (result.rows.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+        {t('searchModal.filterRun.noMatches')}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 min-h-0 flex-col">
+      <div className="flex items-center border-b bg-zinc-50/50 px-3 py-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground dark:bg-zinc-900/30">
+        {result.columns.map((c) => (
+          <div key={c} className="flex-1 truncate px-2 font-mono">
+            {c}
+          </div>
+        ))}
+      </div>
+      <div ref={scrollRef} className="flex-1 overflow-auto">
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {virtualizer.getVirtualItems().map((vRow) => {
+            const row = result.rows[vRow.index];
+            const clickable = selectionKeyIndex >= 0;
+            return (
+              <button type="button" disabled={!clickable}
+                key={vRow.key}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: vRow.size,
+                  transform: `translateY(${vRow.start}px)`,
+                }}
+                className={cn(
+                  'flex w-full items-center border-b border-zinc-100 px-3 text-left text-2xs dark:border-zinc-900 focus-visible:ring-2 focus-visible:ring-ring',
+                  clickable && 'cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800',
+                )}
+                onClick={() => onRowClick(row)}
+              >
+                {result.columns.map((_, i) => (
+                  <span key={i} className="flex-1 truncate px-2 font-mono">
+                    {formatCell(row[i])}
+                  </span>
+                ))}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatCell(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (typeof v === 'bigint') return v.toString();
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}

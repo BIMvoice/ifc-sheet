@@ -1,0 +1,392 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * 3D display + interactive editing for location zones (issue #1810 v1).
+ *
+ * On the shared scene-overlay kernel (#5486/#5512, charter #5478): mounted
+ * inside `ViewportContainer`'s `<SceneOverlayRoot>`, so `useProjectorTick`
+ * re-renders this component once per dirty tick of the ONE shared
+ * `SceneProjector` loop instead of running its own unconditional
+ * `requestAnimationFrame` poll (`useCameraTickSubscription`, deleted here).
+ * `projectToScreen` still turns world points into screen pixels directly
+ * (there's no react-three-fiber/drei layer to do it for us), and per-axis
+ * drag math reduces to a dot product against the cursor's screen delta
+ * because a probe at +1 world unit gives "screen pixels per metre" directly.
+ *
+ * Picking contract: the root `<svg>` is `pointer-events: none` always (so
+ * zone boxes never intercept clicks on model elements). Only the currently
+ * `editingZone`'s handles turn pointer-events back on for themselves — every
+ * other zone box (and this one outside of edit mode) is decorative only.
+ */
+
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useViewerStore } from '@/store';
+import { useProjectorTick } from '@/components/viewport-ui/scene';
+import { useZoneAssignmentSync } from '@/hooks/useZoneAssignmentSync';
+import { zoneColorForIndex, zoneWorldCorners, type Zone } from '@/lib/zones';
+import { capturePointer, releasePointer } from '@/lib/pointer-capture';
+import { computeZoneDragPatch, type DragKind, type DragState, type Vec2, type Vec3 } from './zoneDrag';
+
+type Project = (worldPos: Vec3) => Vec2 | null;
+
+/**
+ * Wireframe edges as pairs of corner indices, for a hull of `2n` corners in
+ * `zoneWorldCorners`' bottom-ring-then-top-ring order.
+ *
+ * Derived rather than listed since #2508 item 4: a box is the `n = 4` case, and
+ * a prism zone has as many corners as its footprint has points. A hardcoded
+ * 12-edge table drew a box-shaped lie around every prism.
+ */
+function hullEdges(cornerCount: number): Array<readonly [number, number]> {
+  const n = cornerCount / 2;
+  const edges: Array<readonly [number, number]> = [];
+  for (let i = 0; i < n; i++) {
+    const next = (i + 1) % n;
+    edges.push([i, next], [n + i, n + next], [i, n + i]);
+  }
+  return edges;
+}
+
+function rgbToCss([r, g, b]: readonly [number, number, number], alpha: number): string {
+  return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`;
+}
+
+/** One rendered box: projected corner screen positions + the zone/colour it
+ *  came from. `null` corners (offscreen / behind camera) drop the whole box
+ *  from rendering rather than drawing a corrupted hull. */
+interface ProjectedZone {
+  setId: string;
+  setName: string;
+  zone: Zone;
+  color: readonly [number, number, number];
+  corners: Vec2[];
+  labelAnchor: Vec2;
+}
+
+function projectZones(
+  project: Project,
+  zoneSets: ReadonlyArray<{ id: string; name: string; visible: boolean; zones: Zone[] }>,
+): ProjectedZone[] {
+  const out: ProjectedZone[] = [];
+  for (const set of zoneSets) {
+    if (!set.visible) continue;
+    set.zones.forEach((zone, index) => {
+      const worldCorners = zoneWorldCorners(zone);
+      const corners: Vec2[] = [];
+      let ok = true;
+      for (const [x, y, z] of worldCorners) {
+        const p = project({ x, y, z });
+        if (!p) { ok = false; break; }
+        corners.push(p);
+      }
+      if (!ok) return;
+      // Label anchors above the centre of the TOP ring, which is the second
+      // half of the corner list whatever the footprint's point count.
+      const top = worldCorners.slice(worldCorners.length / 2);
+      const topCenter: Vec3 = {
+        x: top.reduce((s, c) => s + c[0], 0) / top.length,
+        y: top.reduce((s, c) => s + c[1], 0) / top.length + 0.3,
+        z: top.reduce((s, c) => s + c[2], 0) / top.length,
+      };
+      const labelAnchor = project(topCenter);
+      if (!labelAnchor) return;
+      out.push({
+        setId: set.id,
+        setName: set.name,
+        zone,
+        color: zone.color ?? zoneColorForIndex(index),
+        corners,
+        labelAnchor,
+      });
+    });
+  }
+  return out;
+}
+
+const HANDLE_HIT_RADIUS = 10;
+
+const LABEL_FONT_SIZE = 11;
+const LABEL_PAD_X = 6;
+const LABEL_HEIGHT = 18;
+
+/**
+ * The zone's name on a pill sized to the text.
+ *
+ * MEASURED rather than estimated. The width was `zone.name.length * 6.4`, which
+ * was wrong twice: it counted only the zone's name while the label also renders
+ * the SET's name and a separator, so every pill was short by that much and the
+ * text ran off its own background; and a per-character constant cannot size a
+ * proportional font, where "Wohnung West" and "Illinois III" differ by a third
+ * at the same character count.
+ *
+ * `getBBox` is the browser's own answer for the font that actually rendered, at
+ * whatever zoom. The character estimate survives only as the pre-measurement
+ * fallback - for the first paint before the layout effect runs, and for a test
+ * DOM that implements no SVG layout - and it now counts the WHOLE string.
+ */
+export function ZoneLabel({ text }: { text: string }) {
+  const textRef = useRef<SVGTextElement>(null);
+  const [measured, setMeasured] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const element = textRef.current;
+    if (!element || typeof element.getBBox !== 'function') return;
+    try {
+      const width = element.getBBox().width;
+      // A detached or display:none SVG measures 0; keeping the estimate then is
+      // better than collapsing the pill to nothing.
+      if (width > 0) setMeasured(width);
+    } catch {
+      // Firefox throws on getBBox for an unrendered element rather than
+      // returning zeroes. The estimate covers it.
+    }
+  }, [text]);
+
+  const width = (measured ?? text.length * 6.2) + LABEL_PAD_X * 2;
+  return (
+    <>
+      <rect
+        x={-2}
+        y={-14}
+        width={width}
+        height={LABEL_HEIGHT}
+        rx={4}
+        fill="rgba(15, 23, 42, 0.85)"
+      />
+      <text ref={textRef} x={-2 + LABEL_PAD_X} y={-1} fontSize={LABEL_FONT_SIZE} fill="#fff">
+        {text}
+      </text>
+    </>
+  );
+}
+
+export function ZoneOverlay() {
+  const zoneSets = useViewerStore((s) => s.zoneSets);
+  const editingZone = useViewerStore((s) => s.editingZone);
+  const updateZone = useViewerStore((s) => s.updateZone);
+  const projectToScreen = useViewerStore((s) => s.cameraCallbacks.projectToScreen);
+
+  const anyVisible = zoneSets.some((zs) => zs.visible && zs.zones.length > 0);
+  // The returned frame tick MUST participate in the projection memo below:
+  // `projectToScreen` is a stable callback, so without the tick an orbit/pan/
+  // zoom re-render would reuse the memoized screen coordinates and the boxes
+  // would visibly detach from the model (PR #1869 review, P1). Sourced from
+  // the shared `SceneProjector`'s dirty tick, not a private rAF poll.
+  const frameTick = useProjectorTick(anyVisible);
+
+  const dragRef = useRef<DragState | null>(null);
+
+  const projected = useMemo(() => {
+    if (!projectToScreen || !anyVisible) return [];
+    return projectZones(projectToScreen as Project, zoneSets);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- frameTick is the
+    // camera-motion signal: it isn't read inside, but a new tick means the
+    // same world corners project to new screen positions.
+  }, [zoneSets, projectToScreen, anyVisible, frameTick]);
+
+  if (!anyVisible || !projectToScreen) return null;
+  const project = projectToScreen as Project;
+
+  const editingEntry = editingZone
+    ? projected.find((p) => p.setId === editingZone.setId && p.zone.id === editingZone.zoneId)
+    : undefined;
+  // The move/resize/rotate gizmo edits `center` / `size` / `rotationY`, which
+  // for a PRISM are derived from its footprint rather than authoritative
+  // (#2508 item 4). Dragging them would move a bounding box the exact tests do
+  // not read, so the zone would visibly change and behave identically. No
+  // handles is the honest state until a footprint editor exists; the numeric
+  // fields stay available for the vertical extent, which IS authoritative.
+  const gizmoEntry = editingEntry?.zone.footprint ? undefined : editingEntry;
+
+  /** Probe `+1` world unit along `dir` from `origin`, returning screen
+   *  pixels-per-metre in that direction (or null if degenerate/offscreen). */
+  const probeScreenPerUnit = (origin: Vec3, dir: Vec3): Vec2 | null => {
+    const originScreen = project(origin);
+    const tipScreen = project({ x: origin.x + dir.x, y: origin.y + dir.y, z: origin.z + dir.z });
+    if (!originScreen || !tipScreen) return null;
+    const d = { x: tipScreen.x - originScreen.x, y: tipScreen.y - originScreen.y };
+    if (Math.hypot(d.x, d.y) < 1e-3) return null;
+    return d;
+  };
+
+  const startDrag = (
+    e: React.PointerEvent<SVGElement>,
+    entry: ProjectedZone,
+    op: DragKind,
+    probeOrigin: Vec3,
+    probeDir: Vec3,
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const screenPerUnit = probeScreenPerUnit(probeOrigin, probeDir);
+    if (!screenPerUnit) return;
+    capturePointer(e.target as SVGElement, e.pointerId);
+
+    dragRef.current = {
+      op,
+      setId: entry.setId,
+      zoneId: entry.zone.id,
+      cursorStart: { x: e.clientX, y: e.clientY },
+      screenPerUnit,
+      probeDir,
+      startCenter: entry.zone.center,
+      startSize: entry.zone.size,
+      startRotationY: entry.zone.rotationY,
+    };
+  };
+
+  const onDragMove = (e: React.PointerEvent<SVGElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    // All the drag math is in `computeZoneDragPatch` (pure, unit-tested —
+    // see zoneDrag.test.ts for the rotated-zone cases from PR #1869).
+    const patch = computeZoneDragPatch(drag, { x: e.clientX, y: e.clientY });
+    if (patch) updateZone(drag.setId, drag.zoneId, patch);
+  };
+
+  const onDragEnd = (e: React.PointerEvent<SVGElement>) => {
+    if (!dragRef.current) return;
+    releasePointer(e.target as SVGElement, e.pointerId);
+    dragRef.current = null;
+  };
+
+  return (
+    <svg className="absolute inset-0 pointer-events-none z-20" style={{ overflow: 'visible' }}>
+      {projected.map((entry) => {
+        const isEditing = editingZone?.setId === entry.setId && editingZone.zoneId === entry.zone.id;
+        const stroke = rgbToCss(entry.color, isEditing ? 1 : 0.85);
+        const fill = rgbToCss(entry.color, isEditing ? 0.18 : 0.1);
+        const topFace = entry.corners.slice(entry.corners.length / 2)
+          .map((p) => `${p.x},${p.y}`).join(' ');
+        return (
+          <g key={`${entry.setId}:${entry.zone.id}`}>
+            <polygon points={topFace} fill={fill} stroke="none" />
+            {hullEdges(entry.corners.length).map(([a, b], i) => (
+              <line
+                key={i}
+                x1={entry.corners[a].x} y1={entry.corners[a].y}
+                x2={entry.corners[b].x} y2={entry.corners[b].y}
+                stroke={stroke}
+                strokeWidth={isEditing ? 2 : 1.25}
+                strokeDasharray={isEditing ? undefined : '4,3'}
+              />
+            ))}
+            <g transform={`translate(${entry.labelAnchor.x}, ${entry.labelAnchor.y})`}>
+              <ZoneLabel text={`${entry.setName} / ${entry.zone.name}`} />
+            </g>
+          </g>
+        );
+      })}
+
+      {gizmoEntry && (() => {
+        const zone = gizmoEntry.zone;
+        const center: Vec3 = { x: zone.center[0], y: zone.center[1], z: zone.center[2] };
+        const cos = Math.cos(zone.rotationY);
+        const sin = Math.sin(zone.rotationY);
+        const localX: Vec3 = { x: cos, y: 0, z: sin };
+        const localZ: Vec3 = { x: -sin, y: 0, z: cos };
+        const worldY: Vec3 = { x: 0, y: 1, z: 0 };
+
+        const handles: Array<{
+          key: string; world: Vec3; color: string; op: DragKind; probeOrigin: Vec3; probeDir: Vec3;
+        }> = [
+          {
+            key: 'move-x',
+            world: { x: center.x + localX.x * (zone.size[0] / 2 + 0.6), y: center.y, z: center.z + localX.z * (zone.size[0] / 2 + 0.6) },
+            color: '#ef4444',
+            op: { kind: 'move' },
+            probeOrigin: center,
+            probeDir: localX,
+          },
+          {
+            key: 'move-z',
+            world: { x: center.x + localZ.x * (zone.size[2] / 2 + 0.6), y: center.y, z: center.z + localZ.z * (zone.size[2] / 2 + 0.6) },
+            color: '#3b82f6',
+            op: { kind: 'move' },
+            probeOrigin: center,
+            probeDir: localZ,
+          },
+          {
+            key: 'move-y',
+            world: { x: center.x, y: center.y + zone.size[1] / 2 + 0.6, z: center.z },
+            color: '#10b981',
+            op: { kind: 'move' },
+            probeOrigin: center,
+            probeDir: worldY,
+          },
+          {
+            key: 'resize-x',
+            world: { x: center.x + localX.x * (zone.size[0] / 2), y: center.y, z: center.z + localX.z * (zone.size[0] / 2) },
+            color: '#fca5a5',
+            op: { kind: 'resize', axis: 'x' },
+            probeOrigin: center,
+            probeDir: localX,
+          },
+          {
+            key: 'resize-z',
+            world: { x: center.x + localZ.x * (zone.size[2] / 2), y: center.y, z: center.z + localZ.z * (zone.size[2] / 2) },
+            color: '#93c5fd',
+            op: { kind: 'resize', axis: 'z' },
+            probeOrigin: center,
+            probeDir: localZ,
+          },
+          {
+            key: 'resize-y',
+            world: { x: center.x, y: center.y + zone.size[1] / 2, z: center.z },
+            color: '#6ee7b7',
+            op: { kind: 'resize', axis: 'y' },
+            probeOrigin: center,
+            probeDir: worldY,
+          },
+          {
+            key: 'rotate',
+            world: {
+              x: center.x + localX.x * (zone.size[0] / 2 + 1.2),
+              y: center.y,
+              z: center.z + localX.z * (zone.size[0] / 2 + 1.2),
+            },
+            color: '#facc15',
+            op: { kind: 'rotate' },
+            probeOrigin: center,
+            probeDir: { x: -localX.z, y: 0, z: localX.x }, // tangent direction at the handle
+          },
+        ];
+
+        return (
+          <g style={{ pointerEvents: 'auto' }}>
+            {handles.map((h) => {
+              const screen = project(h.world);
+              if (!screen) return null;
+              return (
+                <circle
+                  key={h.key}
+                  cx={screen.x}
+                  cy={screen.y}
+                  r={HANDLE_HIT_RADIUS}
+                  fill={h.color}
+                  stroke="#18181b"
+                  strokeWidth={1.5}
+                  style={{ cursor: h.op.kind === 'rotate' ? 'grab' : 'move' }}
+                  onPointerDown={(e) => startDrag(e, gizmoEntry, h.op, h.probeOrigin, h.probeDir)}
+                  onPointerMove={onDragMove}
+                  onPointerUp={onDragEnd}
+                  onPointerCancel={onDragEnd}
+                />
+              );
+            })}
+          </g>
+        );
+      })()}
+    </svg>
+  );
+}
+
+/** Mounts the assignment-recompute wiring (`useZoneAssignmentSync`) without
+ *  rendering anything. Mount once near `ZoneOverlay` (same lifetime as the
+ *  renderer) so `zoneAssignments` stays live as models/zones change. */
+export function ZoneAssignmentSyncMount() {
+  useZoneAssignmentSync();
+  return null;
+}

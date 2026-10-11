@@ -1,0 +1,129 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, expect, it } from 'vitest';
+import { parseCapability } from './parse.js';
+import { computeRisk, computeRisks, overallTier } from './risk.js';
+
+function p(raw: string) {
+  const r = parseCapability(raw);
+  if (!r.ok) throw new Error(r.errors[0].message);
+  return r.value;
+}
+
+describe('computeRisk', () => {
+  it('green: model.read', () => {
+    const risk = computeRisk(p('model.read'));
+    expect(risk.tier).toBe('green');
+    expect(risk.capabilityId).toBe('model.read');
+    expect(risk.reasonCode).toBe('catalogue');
+  });
+
+  it('green: viewer.colorize', () => {
+    expect(computeRisk(p('viewer.colorize')).tier).toBe('green');
+  });
+
+  it('green: storage.local', () => {
+    expect(computeRisk(p('storage.local')).tier).toBe('green');
+  });
+
+  it('yellow: model.create', () => {
+    expect(computeRisk(p('model.create')).tier).toBe('yellow');
+  });
+
+  it('yellow: model.mutate with specific target', () => {
+    expect(computeRisk(p('model.mutate:Pset_WallCommon.FireRating')).tier).toBe('yellow');
+  });
+
+  it('red: model.mutate universal wildcard', () => {
+    expect(computeRisk(p('model.mutate:*')).tier).toBe('red');
+  });
+
+  it('red: model.delete', () => {
+    expect(computeRisk(p('model.delete')).tier).toBe('red');
+  });
+
+  it('yellow: network.fetch with single host', () => {
+    const risk = computeRisk(p('network.fetch:bsdd.example.com'));
+    expect(risk.tier).toBe('yellow');
+    expect(risk.reasonCode).toBe('specific-network-host');
+    expect(risk.description).toContain('restricted to a specific host');
+  });
+
+  it('red: network.fetch with wildcard host', () => {
+    expect(computeRisk(p('network.fetch:*.example.com')).tier).toBe('red');
+  });
+
+  it('red: network.fetch with universal wildcard', () => {
+    expect(computeRisk(p('network.fetch:*')).tier).toBe('red');
+  });
+
+  it('red: unknown capability', () => {
+    const r = computeRisk({
+      raw: 'unknown.action',
+      scope: 'model' as const,
+      action: 'doesnotexist',
+    });
+    expect(r.tier).toBe('red');
+    expect(r.capabilityId).toBe('model.doesnotexist');
+    expect(r.reasonCode).toBe('unknown-capability');
+  });
+
+  it('includes the target in description', () => {
+    const r = computeRisk(p('network.fetch:example.com'));
+    expect(r.description).toContain('example.com');
+  });
+
+  it('red: a requiresTarget capability with no target is treated as universal', () => {
+    // Regression: command.invoke's catalogue entry sets requiresTarget:
+    // true precisely so an untargeted grant (equivalent to "invoke any
+    // command") escalates past its yellow baseRisk. Disabling the
+    // requiresTarget branch entirely left the full suite green — nothing
+    // else exercises a grammatically-valid but target-missing grant on a
+    // requiresTarget scope/action.
+    const r = computeRisk(p('command.invoke'));
+    expect(r.tier).toBe('red');
+    expect(r.reasonCode).toBe('missing-required-target');
+    expect(r.description).toContain('Missing required target');
+  });
+
+  it('reports stable wildcard reason codes while retaining English diagnostics', () => {
+    const universal = computeRisk(p('network.fetch:*'));
+    const hostPattern = computeRisk(p('network.fetch:*.example.com'));
+    const targetPattern = computeRisk(p('viewer.colorize:IfcW*'));
+
+    expect(universal.reasonCode).toBe('universal-wildcard-target');
+    expect(universal.description).toContain('Universal wildcard target');
+    expect(hostPattern.reasonCode).toBe('host-pattern-wildcard');
+    expect(hostPattern.description).toContain('Host pattern contains a wildcard');
+    expect(targetPattern.tier).toBe('yellow');
+    expect(targetPattern.reasonCode).toBe('target-pattern-wildcard');
+    expect(targetPattern.description).toContain('risk is elevated');
+  });
+
+  it('red: model.mutate with no target is treated as universal (same rule)', () => {
+    expect(computeRisk(p('model.mutate')).tier).toBe('red');
+  });
+});
+
+describe('computeRisks / overallTier', () => {
+  it('overall green when all green', () => {
+    const risks = computeRisks([p('model.read'), p('viewer.colorize')]);
+    expect(overallTier(risks)).toBe('green');
+  });
+
+  it('overall yellow with at least one yellow', () => {
+    const risks = computeRisks([p('model.read'), p('model.create')]);
+    expect(overallTier(risks)).toBe('yellow');
+  });
+
+  it('overall red wins over yellow', () => {
+    const risks = computeRisks([p('model.create'), p('model.delete')]);
+    expect(overallTier(risks)).toBe('red');
+  });
+
+  it('empty list is green', () => {
+    expect(overallTier([])).toBe('green');
+  });
+});

@@ -1,0 +1,248 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * CollabSession — the public façade documented in spec §16.2.
+ *
+ * Glues the Y.Doc, providers, presence, undo, and conflict detector into
+ * a single object. Callers don't touch the underlying libraries unless
+ * they want to.
+ */
+
+import type { IfcxFile } from '@ifc-lite/ifcx';
+import * as Y from 'yjs';
+import { createCollabDoc, LOCAL_ORIGIN } from './doc/schema.js';
+import {
+  createConflictDetector,
+  type ConflictDetector,
+  type ConflictListener,
+} from './conflicts/detector.js';
+import { createPresence, type Presence, type UserIdentity } from './awareness/presence.js';
+import {
+  createIndexedDbProvider,
+  createMemoryProvider,
+  type IndexedDbProvider,
+} from './providers/indexeddb.js';
+import {
+  createWebSocketProvider,
+  type WebSocketProvider,
+  type WebSocketStatus,
+} from './providers/websocket.js';
+import { snapshotToIfcx, type SnapshotOptions } from './snapshot/to-ifcx.js';
+import { seedFromIfcx, type IfcxInput, type SeedOptions } from './snapshot/from-ifcx.js';
+import {
+  captureBaseline as captureBaselineSV,
+  extractUserLayer as extractLayerForClient,
+} from './snapshot/layers.js';
+import { createUndoManager, type UndoController } from './undo.js';
+
+export type ProviderKind = 'memory' | 'indexeddb' | 'websocket' | 'indexeddb+websocket';
+
+export interface CollabSessionOptions {
+  roomId: string;
+  user: UserIdentity;
+  /**
+   * Choice of network/persistence stack. `'indexeddb+websocket'` runs both
+   * (recommended for browser deployments). `'memory'` is for tests and
+   * ephemeral rooms.
+   */
+  provider?: ProviderKind;
+  /** Required when `provider` involves websocket. */
+  serverUrl?: string;
+  /** Bearer token forwarded to the websocket server. */
+  token?: string;
+  /** Override the IDB database name. */
+  dbName?: string;
+  /** Auto-connect the websocket on construction (default true). */
+  connect?: boolean;
+  /** Existing Y.Doc to bind to. Defaults to a fresh `createCollabDoc()`. */
+  doc?: Y.Doc;
+  /** Ws polyfill (e.g. `ws` package in Node tests). */
+  WebSocketPolyfill?: unknown;
+  /**
+   * Disable BroadcastChannel intra-browser sync — every edit goes
+   * through the websocket. Forwarded to the websocket provider; ignored
+   * for memory / indexeddb-only sessions. Default `false`.
+   */
+  disableBc?: boolean;
+  /** Presence config knobs. */
+  presence?: { updateRateHz?: number; staleAfterMs?: number };
+  /**
+   * Bind to an existing `Presence` (e.g. a shared federation presence)
+   * instead of creating one. When supplied, this session does NOT own the
+   * instance and will not dispose it — the caller remains responsible for
+   * its lifecycle.
+   */
+  presenceInstance?: Presence;
+}
+
+export interface CollabSession {
+  readonly roomId: string;
+  readonly doc: Y.Doc;
+  readonly clientId: number;
+  readonly presence: Presence;
+  readonly undoController: UndoController;
+  readonly conflicts: ConflictDetector;
+  readonly provider: ProviderKind;
+  /** Resolves once both persistence and (if applicable) websocket sync have completed. */
+  readonly whenSynced: Promise<void>;
+  status(): WebSocketStatus | 'memory' | 'indexeddb';
+  onStatus(listener: (s: WebSocketStatus | 'memory' | 'indexeddb') => void): () => void;
+  /** Seed this session's Y.Doc from an IFCX file. */
+  seed(input: IfcxInput, options?: SeedOptions): IfcxFile;
+  /** Snapshot the current state to an IFCX object. */
+  snapshot(options?: SnapshotOptions): IfcxFile;
+  /** Capture a baseline state vector for later layer extraction. */
+  captureBaseline(): Uint8Array;
+  /**
+   * Capture the doc's FULL state (`Y.encodeStateAsUpdate`) as the fork
+   * point for whole-doc publishing (`publishLayer`'s `baseline`). Distinct
+   * from `captureBaseline`, which returns a state VECTOR for the per-user
+   * `extractUserLayer` path.
+   */
+  captureDocState(): Uint8Array;
+  /** Extract a per-user layer (defaults to *this* peer). */
+  extractUserLayer(baseline: Uint8Array, clientId?: number, snapshot?: SnapshotOptions): IfcxFile;
+  /** Wrap edits in a Yjs transaction tagged with our local origin. */
+  transact<T>(fn: () => T): T;
+  /** Local-origin undo via Y.UndoManager. */
+  undo(): boolean;
+  redo(): boolean;
+  onConflict(listener: ConflictListener): () => void;
+  dispose(): void;
+}
+
+export async function createCollabSession(opts: CollabSessionOptions): Promise<CollabSession> {
+  const doc = opts.doc ?? createCollabDoc();
+
+  // When a shared presence is supplied (federation), bind to it and let the
+  // owner dispose it; otherwise create and own one for this session.
+  const ownsPresence = !opts.presenceInstance;
+  const presence = opts.presenceInstance ?? createPresence(doc, opts.presence ?? {});
+  presence.setUser(opts.user);
+  presence.setStatus('active');
+
+  const undoController = createUndoManager(doc);
+  const conflicts = createConflictDetector(doc);
+
+  const providerKind: ProviderKind = opts.provider ?? 'memory';
+  let idb: IndexedDbProvider | undefined;
+  let ws: WebSocketProvider | undefined;
+
+  let currentStatus: WebSocketStatus | 'memory' | 'indexeddb' =
+    providerKind === 'memory' ? 'memory' : 'indexeddb';
+  const statusListeners = new Set<(s: WebSocketStatus | 'memory' | 'indexeddb') => void>();
+  const setStatus = (s: WebSocketStatus | 'memory' | 'indexeddb') => {
+    if (s === currentStatus) return;
+    currentStatus = s;
+    statusListeners.forEach((l) => l(s));
+  };
+
+  const synced: Promise<void>[] = [];
+
+  // `presence` (and its live awareness-eviction timers, started the moment
+  // `createPresence` ran above) is constructed before either provider. If a
+  // provider fails to come up — e.g. `createIndexedDbProvider` throwing in a
+  // non-browser test harness where `indexedDB` is undefined — this function
+  // rejects and its caller never receives a `session` to call `.dispose()`
+  // on. Nothing else references `presence`, so its two `setInterval`s (the
+  // eviction sweep in presence.ts and y-protocols' own outdated-clients
+  // timer inside `new Awareness`) keep running forever, which is exactly
+  // the leak that kept a Node test process alive indefinitely (never
+  // observed in the browser, where a page unload reclaims everything).
+  // Dispose what we've built so far before propagating the failure.
+  try {
+    if (providerKind === 'indexeddb' || providerKind === 'indexeddb+websocket') {
+      idb = await createIndexedDbProvider(doc, opts.roomId, { dbName: opts.dbName });
+      synced.push(idb.whenSynced);
+    } else if (providerKind === 'memory') {
+      idb = createMemoryProvider(doc, opts.roomId);
+      synced.push(idb.whenSynced);
+    }
+
+    if (providerKind === 'websocket' || providerKind === 'indexeddb+websocket') {
+      if (!opts.serverUrl) {
+        throw new Error('@ifc-lite/collab: serverUrl is required for websocket providers');
+      }
+      ws = await createWebSocketProvider(doc, opts.roomId, opts.serverUrl, {
+        WebSocketPolyfill: opts.WebSocketPolyfill,
+        token: opts.token,
+        awareness: presence.awareness,
+        connect: opts.connect ?? true,
+        disableBc: opts.disableBc,
+      });
+      ws.onStatus(setStatus);
+      synced.push(ws.whenSynced);
+    }
+  } catch (err) {
+    if (ownsPresence) presence.dispose();
+    undoController.destroy();
+    conflicts.destroy();
+    if (idb) idb.destroy();
+    if (ws) ws.destroy();
+    throw err;
+  }
+
+  const session: CollabSession = {
+    roomId: opts.roomId,
+    doc,
+    clientId: doc.clientID,
+    presence,
+    undoController,
+    conflicts,
+    provider: providerKind,
+    whenSynced: Promise.all(synced).then(() => undefined),
+    status: () => currentStatus,
+    onStatus(listener) {
+      statusListeners.add(listener);
+      listener(currentStatus);
+      return () => statusListeners.delete(listener);
+    },
+    seed(input, options) {
+      return seedFromIfcx(doc, input, options);
+    },
+    snapshot(options) {
+      return snapshotToIfcx(doc, options);
+    },
+    captureBaseline() {
+      return captureBaselineSV(doc);
+    },
+    captureDocState() {
+      return Y.encodeStateAsUpdate(doc);
+    },
+    extractUserLayer(baseline, clientId, snapshot) {
+      return extractLayerForClient(doc, baseline, {
+        clientId: clientId ?? doc.clientID,
+        snapshot,
+      });
+    },
+    transact(fn) {
+      let result!: ReturnType<typeof fn>;
+      doc.transact(() => {
+        result = fn();
+      }, LOCAL_ORIGIN);
+      return result;
+    },
+    undo() {
+      return undoController.undo();
+    },
+    redo() {
+      return undoController.redo();
+    },
+    onConflict(listener) {
+      return conflicts.onConflict(listener);
+    },
+    dispose() {
+      conflicts.destroy();
+      undoController.destroy();
+      // Only dispose presence we created; a shared (federation) presence is
+      // owned and disposed by the caller that passed it in.
+      if (ownsPresence) presence.dispose();
+      if (ws) ws.destroy();
+      if (idb) idb.destroy();
+    },
+  };
+
+  return session;
+}

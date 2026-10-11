@@ -1,0 +1,164 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The project's door and window catalogue as actions: add, duplicate,
+ * change, remove, import, pick the one the Door / Window tools place — and
+ * keep the loaded models in step. A change to an entry already placed
+ * rewrites its IFC type in every model that has it, resizes the occurrences
+ * and re-meshes them, as one undo step per model; "apply to selection"
+ * moves selected doors / windows to an entry.
+ */
+
+import {
+  defaultDoorSpec, defaultWindowSpec, retypeOccurrencesInStore, syncJoineryTypeInStore,
+  type JoineryKind, type JoinerySpec,
+} from '@ifc-lite/create';
+import { useViewerStore } from '@/store';
+import { recordModellingCommit } from '@/store/slices/mutation-modelling-records';
+import { requestRemesh } from '@/lib/remesh/remesh-service';
+import { useProjectStore } from '@/project/project-store';
+import { freshProjectId } from '@/project/view-defaults';
+import { invalidateJoineryReads } from './element-spec';
+import { ensureEditMode } from '@/project/edit-mode';
+
+type State = ReturnType<typeof useProjectStore.getState>;
+
+export const catalogue = (s: State = useProjectStore.getState()): JoinerySpec[] => s.joineryTypes ?? [];
+
+export function joineryEntry(id: string | undefined): JoinerySpec | null {
+  return id ? catalogue().find((t) => t.id === id) ?? null : null;
+}
+
+/** The entry the tool of `kind` places, or null (a plain, untyped door / window). */
+export function currentJoinery(kind: JoineryKind): JoinerySpec | null {
+  const s = useProjectStore.getState();
+  return joineryEntry(s.currentJoinery?.[kind]);
+}
+
+export function setCurrentJoinery(kind: JoineryKind, id: string | null): void {
+  const s = useProjectStore.getState();
+  const next = { ...(s.currentJoinery ?? {}) };
+  if (id) next[kind] = id;
+  else delete next[kind];
+  useProjectStore.setState({ currentJoinery: next, dirty: true });
+}
+
+function nextMark(kind: JoineryKind, list: readonly JoinerySpec[]): string {
+  const prefix = kind === 'door' ? 'D' : 'W';
+  const used = new Set(list.map((t) => t.mark));
+  for (let n = 1; ; n++) if (!used.has(`${prefix}${n}`)) return `${prefix}${n}`;
+}
+
+export function addJoinery(kind: JoineryKind, from?: JoinerySpec): string {
+  const list = catalogue();
+  const base = from ? structuredClone(from) : kind === 'door' ? defaultDoorSpec() : defaultWindowSpec();
+  const mark = nextMark(kind, list);
+  const id = freshProjectId('joinery');
+  const name = from ? `${from.name} copy` : `${kind === 'door' ? 'Door' : 'Window'} ${mark}`;
+  useProjectStore.setState({ joineryTypes: [...list, { ...base, id, kind, mark, name }], dirty: true });
+  return id;
+}
+
+export function removeJoinery(id: string): void {
+  const s = useProjectStore.getState();
+  const current = { ...(s.currentJoinery ?? {}) };
+  for (const k of ['door', 'window'] as const) if (current[k] === id) delete current[k];
+  useProjectStore.setState({ joineryTypes: catalogue(s).filter((t) => t.id !== id), currentJoinery: current, dirty: true });
+}
+
+/** Replace an entry in the catalogue only (the models follow on `pushJoinery`). */
+export function updateJoinery(spec: JoinerySpec): void {
+  useProjectStore.setState({ joineryTypes: catalogue().map((t) => (t.id === spec.id ? spec : t)), dirty: true });
+}
+
+/** Add imported entries; an entry whose id is already in the catalogue replaces it. */
+export function importJoinery(specs: readonly JoinerySpec[]): number {
+  const list = [...catalogue()];
+  for (const spec of specs) {
+    const id = spec.id ?? freshProjectId('joinery');
+    const at = list.findIndex((t) => t.id === id);
+    if (at >= 0) list[at] = { ...spec, id };
+    else list.push({ ...spec, id });
+  }
+  useProjectStore.setState({ joineryTypes: list, dirty: true });
+  return specs.length;
+}
+
+export interface JoineryModelOutcome {
+  /** Occurrences updated / moved across all models. */
+  updated: number;
+  refused: string[];
+}
+
+function eachEditableModel(run: (modelId: string) => void): void {
+  for (const [modelId, model] of useViewerStore.getState().models) {
+    if (model.ifcDataStore?.source?.byteLength) run(modelId);
+  }
+}
+
+/** Rewrite `spec`'s IFC type wherever it is placed and refit its occurrences. */
+export function pushJoinery(spec: JoinerySpec): JoineryModelOutcome {
+  ensureEditMode();
+  const out: JoineryModelOutcome = { updated: 0, refused: [] };
+  eachEditableModel((modelId) => {
+    try {
+      const result = recordModellingCommit(useViewerStore, modelId, (editor, ds) => syncJoineryTypeInStore(ds, editor, spec));
+      if (!result.type) return;
+      invalidateJoineryReads(modelId);
+      out.updated += result.remesh.length ? new Set(result.remesh).size : 0;
+      out.refused.push(...result.refused.map((r) => `#${r.id}: ${r.reason}`));
+      if (result.remesh.length) void requestRemesh(useViewerStore.getState, modelId, result.remesh, 'shape');
+    } catch (err) {
+      out.refused.push(err instanceof Error ? err.message : String(err));
+    }
+  });
+  return out;
+}
+
+/**
+ * A type's overall size changed from one of its occurrences (the inspector):
+ * the catalogue entry follows — added when the type came with the model —
+ * and every occurrence of the type with it.
+ */
+export function resizeJoineryType(spec: JoinerySpec, size: { width?: number; height?: number }): JoineryModelOutcome {
+  ensureEditMode();
+  const next = { ...spec, ...size };
+  if (joineryEntry(spec.id)) updateJoinery(next);
+  else importJoinery([next]);
+  return pushJoinery(next);
+}
+
+/** Move the selected doors / windows of `spec`'s kind to it. */
+export function applyJoineryToSelection(spec: JoinerySpec): JoineryModelOutcome {
+  ensureEditMode();
+  const s = useViewerStore.getState();
+  const ids = new Set<number>(s.selectedEntityIds ?? []);
+  if (s.selectedEntityId !== null && s.selectedEntityId !== undefined) ids.add(s.selectedEntityId);
+  const byModel = new Map<string, number[]>();
+  for (const id of ids) {
+    const ref = s.resolveGlobalIdFromModels(id);
+    if (ref) byModel.set(ref.modelId, [...(byModel.get(ref.modelId) ?? []), ref.expressId]);
+  }
+  const out: JoineryModelOutcome = { updated: 0, refused: [] };
+  for (const [modelId, elements] of byModel) {
+    const one = retypeJoineryElements(modelId, elements, spec);
+    out.updated += one.updated;
+    out.refused.push(...one.refused);
+  }
+  return out;
+}
+
+/** Move doors / windows `ids` of one model to `spec`: typed by it and refitted to its size. One undo step. */
+export function retypeJoineryElements(modelId: string, ids: readonly number[], spec: JoinerySpec): JoineryModelOutcome {
+  ensureEditMode();
+  try {
+    const result = recordModellingCommit(useViewerStore, modelId, (editor, ds) => retypeOccurrencesInStore(ds, editor, spec, ids));
+    invalidateJoineryReads(modelId);
+    if (result.remesh.length) void requestRemesh(useViewerStore.getState, modelId, result.remesh, 'shape');
+    return { updated: ids.length - result.refused.length, refused: result.refused.map((r) => `#${r.id}: ${r.reason}`) };
+  } catch (err) {
+    return { updated: 0, refused: [err instanceof Error ? err.message : String(err)] };
+  }
+}

@@ -1,0 +1,443 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, expect, it } from 'vitest';
+import { readStepSlots, replaceStepArgument, splitTopLevelListItems, splitTopLevelStepArguments } from './step-argument-parser.js';
+
+describe('replaceStepArgument slot validation', () => {
+  const LINE = "#5=IFCWALLTYPE('0OSuGGYUFyIf0LtE29OSuT',$,'WT1',$,$,(#30),$,$,$,.STANDARD.);";
+
+  it('replaces the requested slot and leaves every other token byte-identical', () => {
+    const out = replaceStepArgument(LINE, 5, '(#33)');
+    expect(out).toBe("#5=IFCWALLTYPE('0OSuGGYUFyIf0LtE29OSuT',$,'WT1',$,$,(#33),$,$,$,.STANDARD.);");
+  });
+
+  it('returns null for a slot past the end rather than a silently unchanged line', () => {
+    expect(replaceStepArgument(LINE, 99, '(#33)')).toBeNull();
+  });
+
+  // A negative or fractional index would assign a NAMED PROPERTY on the array
+  // instead of an element; `join` skips it, so the function would hand back the
+  // line unchanged but NON-NULL. Callers read non-null as "the replacement
+  // happened" -- `rewriteTypeOwnedPsetLine` turns it into `repointed: true` --
+  // so an unchanged non-null is a silent false success, the same shape as the
+  // drop this module's caller was fixed for. Unreachable through the exporter
+  // today (the only slot is a constant), pinned because the contract is public.
+  for (const slot of [-1, -5, 1.5, Number.NaN]) {
+    it(`returns null for the invalid slot ${String(slot)}`, () => {
+      expect(replaceStepArgument(LINE, slot, '(#33)')).toBeNull();
+    });
+  }
+});
+
+describe('readStepSlots (#4200)', () => {
+  it('returns the type, framing, and validated positional slots together', () => {
+    expect(readStepSlots("#5=IFCWALL('g',$,'Größe');")).toEqual({
+      prefix: '#5=IFCWALL(',
+      type: 'IFCWALL',
+      slots: ["'g'", '$', "'Größe'"],
+      suffix: ');',
+    });
+  });
+
+  it('refuses a record whose apparent slots fail the shared grammar', () => {
+    expect(readStepSlots(`#5=IFCWALL('g',"01,23");`)).toBeNull();
+  });
+});
+
+/**
+ * #3789's TS/Rust adjacency fix widened `entity-extractor.ts`'s regexes but
+ * left this identically-shaped one untouched: `replaceStepArgument` required
+ * its type name to be immediately followed by `(`, so a STEP writer's line
+ * wrap (or, per ISO 10303-21, a `/* ... *​/` comment — legal anywhere
+ * whitespace is) between them made the caller (`rewriteTypeOwnedPsetLine`)
+ * degrade with a surfaced warning instead of repointing the property set.
+ */
+describe('replaceStepArgument: trivia between the type name and "(" (#3789)', () => {
+  it('replaces a slot on a record wrapped across a CRLF before "("', () => {
+    const line = '#5=IFCLENGTHMEASURE\r\n(100.);';
+    expect(replaceStepArgument(line, 0, '0.1')).toBe('#5=IFCLENGTHMEASURE\r\n(0.1);');
+  });
+
+  it('replaces a slot on a record with a comment before "("', () => {
+    const line = '#5=IFCLENGTHMEASURE/* mm */(100.);';
+    expect(replaceStepArgument(line, 0, '0.1')).toBe('#5=IFCLENGTHMEASURE/* mm */(0.1);');
+  });
+
+  it('a comment containing "(" or ";" does not derail the parse (control)', () => {
+    const line = "#5=IFCWALLTYPE/* has ( and ; inside */('a',$,'WT1',$,$,(#30),$,$,$,.STANDARD.);";
+    const out = replaceStepArgument(line, 5, '(#33)');
+    expect(out).toBe("#5=IFCWALLTYPE/* has ( and ; inside */('a',$,'WT1',$,$,(#33),$,$,$,.STANDARD.);");
+  });
+
+  it('two-way rule: an unterminated comment before "(" does not match', () => {
+    // A comment that never closes is not trivia; the record must be refused
+    // rather than silently accepted with the "comment" treated as text.
+    const line = '#5=IFCLENGTHMEASURE/* never closes (100.);';
+    expect(replaceStepArgument(line, 0, '0.1')).toBeNull();
+  });
+
+  it('still replaces an adjacent record correctly (no regression)', () => {
+    const line = "#5=IFCWALLTYPE('0OSuGGYUFyIf0LtE29OSuT',$,'WT1',$,$,(#30),$,$,$,.STANDARD.);";
+    expect(replaceStepArgument(line, 5, '(#33)')).toBe(
+      "#5=IFCWALLTYPE('0OSuGGYUFyIf0LtE29OSuT',$,'WT1',$,$,(#33),$,$,$,.STANDARD.);",
+    );
+  });
+});
+
+/**
+ * github.com/LTplus-AG/ifc-lite/issues/2470, second half: the helper's failure
+ * SIGNALLING, one level below the null contract above.
+ *
+ * `splitTopLevelStepArguments` tracked quote state and paren depth to find the
+ * top-level commas and then ignored where that scan ended up. Text that never
+ * left a string, or never closed a nested list, still produced parts — parts
+ * whose boundaries are wherever the scanner stopped rather than the record's
+ * slots. `replaceStepArgument`'s regex pins only the two ENDS of the record, so
+ * such a line reaches the split, gets a slot written by index, and comes back
+ * NON-NULL: a success it did not achieve, and a corrupted line where #2469 had
+ * a dropped one.
+ *
+ * Each malformed case below returned a string before the fix — the mutation
+ * check for this block is to delete one rejection and watch its case go from
+ * `null` to a plausible-looking rewritten line. The VALID block underneath is
+ * the bounding control: rejecting everything would pass the block above alone,
+ * and would take the type-object repoint down with it (every real IfcWallType
+ * line goes through here).
+ */
+describe('replaceStepArgument rejects an argument list it could not scan', () => {
+  it('returns null for an unterminated quoted string', () => {
+    // The quote before `WT1` never closes, so everything after it is one
+    // "string" and the remaining commas are invisible to the scan.
+    expect(
+      replaceStepArgument("#5=IFCWALLTYPE('0OSuGGYU',$,'WT1,$,$,(#30),$);", 1, "'X'"),
+    ).toBeNull();
+  });
+
+  it('returns null for an unbalanced nested list', () => {
+    // `(#30` never closes: the scan ends at depth 1 having swallowed every
+    // comma after it.
+    expect(
+      replaceStepArgument("#5=IFCWALLTYPE('0OSuGGYU',$,'WT1',$,$,(#30,$,$,$,.STANDARD.);", 1, "'X'"),
+    ).toBeNull();
+  });
+
+  it('returns null for a stray closing paren the scan recovers from', () => {
+    // Depth goes NEGATIVE at the paren after `'a'` and back to zero at the one
+    // before `'b'`, so the FINAL state is balanced and a final-state check alone
+    // calls this well-formed. It is not: every comma while depth was negative
+    // was swallowed, so the parts that come out are `["'a'),('b'", '$', '$',
+    // '$', '$']` and writing slot 1 lands on an argument the record does not
+    // have — the corrupted-output case, returned as a success.
+    expect(replaceStepArgument("#7=IFCFOO('a'),('b',$,$,$,$);", 1, "'X'")).toBeNull();
+  });
+
+  it('writes the slot on a line with an EMPTY one rather than refusing it', () => {
+    // Invalid STEP, and deliberately still accepted: an empty argument is ONE
+    // part, exactly as the entity parser counts it, so slot 5 is still slot 5.
+    // Refusing it is what would do damage — the parser resolves
+    // `HasPropertySets` on such a line, so by the time the repoint runs the
+    // export has already withheld the property set's own lines, and a refused
+    // repoint leaves the record pointing at an entity that is no longer in the
+    // file. The exporter-level case is `a line the parser accepted keeps its
+    // slot 5 in step with the psets it dropped` in `slot5-caller-audit.test.ts`.
+    expect(replaceStepArgument("#5=IFCWALLTYPE('0OSuGGYU',,'WT1',$,$,(#30));", 5, '(#33)'))
+      .toBe("#5=IFCWALLTYPE('0OSuGGYU',,'WT1',$,$,(#33));");
+    expect(replaceStepArgument("#5=IFCWALLTYPE('0OSuGGYU',$,'WT1',$,$,(#30),);", 5, '(#33)'))
+      .toBe("#5=IFCWALLTYPE('0OSuGGYU',$,'WT1',$,$,(#33),);");
+  });
+
+  it('returns null for a record with no arguments at all', () => {
+    // Not an empty SLOT — a record that has no slots, so slot 0 is still past
+    // the end and the answer is the same null the bounds check gives.
+    expect(replaceStepArgument('#5=IFCWALLTYPE();', 0, '(#33)')).toBeNull();
+  });
+});
+
+describe('splitTopLevelStepArguments contract', () => {
+  it('splits a well-formed list and keeps each token verbatim', () => {
+    expect(splitTopLevelStepArguments("'a',$,(#1,#2),.T.")).toEqual(["'a'", '$', '(#1,#2)', '.T.']);
+  });
+
+  it('reads an EMPTY argument list as no arguments, not as a malformed one', () => {
+    // `#1=IFCFOO();` is a record with no slots — different from `(,)`, which is
+    // a record with a slot nothing was written into. Callers that ask for a
+    // slot get their answer from the bounds check instead.
+    expect(splitTopLevelStepArguments('')).toEqual([]);
+    expect(splitTopLevelStepArguments('   ')).toEqual([]);
+  });
+
+  it('returns null, not partial parts, for each way the scan can end badly', () => {
+    expect(splitTopLevelStepArguments("'a',$,'unterminated")).toBeNull();
+    expect(splitTopLevelStepArguments("'a',(#1,#2")).toBeNull();
+    expect(splitTopLevelStepArguments("'a'),('b',$")).toBeNull();
+  });
+
+  it('keeps an empty slot as a slot, so every index after it still lines up', () => {
+    // The only malformity that does NOT shift the parts: one empty argument is
+    // one part, which is how the entity parser reads it too.
+    expect(splitTopLevelStepArguments("'a',,$")).toEqual(["'a'", '', '$']);
+    expect(splitTopLevelStepArguments("'a',$,")).toEqual(["'a'", '$', '']);
+  });
+});
+
+/**
+ * LTplus-AG/ifc-lite#4162: the three structural checks
+ * (quote-parity / paren-depth / final-depth) all pass on a slot list that is
+ * NOT the record's actual arguments, when an undoubled `'` inside one
+ * string-typed argument reads as a string spanning into the NEXT one — the
+ * phantom string swallows a real boundary (`),$,IFCLABEL(` and similar), so
+ * the text between two real slots gets folded into one part while every
+ * structural check stays clean. `replaceStepArgument` then writes a slot BY
+ * INDEX into that wrong part list, corrupting a record that still looks
+ * well-formed. A per-part check — every returned part must itself be one
+ * well-formed STEP value — catches what the structural checks cannot.
+ */
+describe('replaceStepArgument rejects a phantom-string mis-split (#4162)', () => {
+  it('returns null rather than writing a slot into a boundary a phantom string swallowed', () => {
+    // Two separate slots each hold a string with an undoubled apostrophe:
+    // 'a's' and 'b's'. The first phantom string absorbs "),$,IFCLABEL(",
+    // one ')' and one '(', so quote parity and paren depth both look fine at
+    // the end even though the split landed on the wrong boundaries.
+    const line = "#5=IFCLABEL('guid',$,IFCLABEL('a's'),$,IFCLABEL('b's'),$);";
+    expect(replaceStepArgument(line, 3, "'X'")).toBeNull();
+  });
+
+  it('splitTopLevelStepArguments itself rejects the phantom-string input, not just the caller', () => {
+    expect(splitTopLevelStepArguments("'guid',$,IFCLABEL('a's'),$,IFCLABEL('b's'),$")).toBeNull();
+  });
+
+  it('rejects a comment sitting alone between two commas as its own phantom slot', () => {
+    // A comment has no value of its own; treating it as one more empty slot
+    // (like `a,,b`) would shift the index of every real argument after it.
+    expect(splitTopLevelStepArguments("'guid',$,'Name',/* c */,$")).toBeNull();
+  });
+
+  it('still accepts a comment attached to a real value in the same slot', () => {
+    // The comment decorates the value in its own slot rather than occupying
+    // a slot of its own — no boundary is ambiguous here.
+    expect(splitTopLevelStepArguments('$,/* renamed */ $')).toEqual(['$', '/* renamed */ $']);
+  });
+
+  it('does not silently keep the pre-#4162 line: a caller reading null must not treat it as unchanged', () => {
+    // Contract check, not a caller test: null must be distinguishable from
+    // "no change requested". `rewriteTypeOwnedPsetLine` (type-owned-psets.ts)
+    // is the one production caller, and already falls back to the
+    // pre-rewrite line with `repointed: false` plus a surfaced warning on
+    // null -- verified failure is surfaced, not a silent corruption.
+    const line = "#5=IFCLABEL('guid',$,IFCLABEL('a's'),$,IFCLABEL('b's'),$);";
+    const out = replaceStepArgument(line, 3, "'X'");
+    expect(out).not.toBe(line);
+    expect(out).toBeNull();
+  });
+});
+
+/**
+ * A `/* ... *​/` comment's content is unrestricted ISO-10303-21 text — nothing
+ * stops it containing a comma, an unbalanced paren, or an odd number of `'`.
+ * The outer scan in `splitTopLevelStepArguments` (unlike `isWellFormedStepSlot`,
+ * which already skips comments via its own `skipTrivia`) had no comment
+ * awareness at all, so it read a comma inside a comment as a top-level
+ * separator, producing a phantom fragment beginning with `/` that
+ * `isWellFormedStepSlot` then rejected — turning a fully legal line into a
+ * `null` split. Previously silent (the null was swallowed as "no change");
+ * #4173 made `rescaleEntityLengths` throw on it instead, so a legal comment
+ * now crashed a legal export.
+ */
+describe('splitTopLevelStepArguments skips comment content in the outer scan', () => {
+  it('does not read a comma inside a comment as a top-level separator', () => {
+    expect(splitTopLevelStepArguments('1,/* a, b */2')).toEqual(['1', '/* a, b */2']);
+  });
+
+  it('does not let an unbalanced paren inside a comment corrupt the depth count', () => {
+    expect(splitTopLevelStepArguments('1,/* ( */2')).toEqual(['1', '/* ( */2']);
+  });
+
+  it('does not let an apostrophe inside a comment toggle string state', () => {
+    expect(splitTopLevelStepArguments("#1,/* wall's edge */5.048")).toEqual(['#1', "/* wall's edge */5.048"]);
+  });
+
+  it('still rejects a comment sitting alone as its own phantom slot (#4162 still holds)', () => {
+    expect(splitTopLevelStepArguments('#1,/* c */,#2')).toBeNull();
+  });
+
+  it('a top-level comma glued directly to the closing "*/" is still a boundary', () => {
+    // Same `skipStepComment` off-by-one hazard as `splitTopLevelListItems`: it must
+    // stop AT `*/` (`end + 2`), not past it, or the comma right after a
+    // comment attached to a real value gets swallowed into that value's slot.
+    expect(splitTopLevelStepArguments('5/* c */,#2')).toEqual(['5/* c */', '#2']);
+  });
+});
+
+/**
+ * ISO 10303-21 binary literal (`"..."`, e.g. `"0123ABC"`) — confirmed legal
+ * in any slot against ifcopenshell's own tokenizer (`IfcParse.cpp`,
+ * `GeneralTokenPtr`: `else if (first == '"') { token.type = Token_BINARY; }`).
+ * `isWellFormedStepSlot`'s `parseValue` did not recognize it as a value
+ * (only `'`, `(`, `$`, `*`, and a bare-token character class), so a
+ * perfectly legal line containing one was rejected outright by #4162's
+ * per-part check — a regression this suite pins.
+ */
+describe('replaceStepArgument accepts a binary literal in any slot (ISO 10303-21)', () => {
+  it('splits a line whose Description is a binary literal', () => {
+    expect(splitTopLevelStepArguments('\'Len\',"0123ABC",$,5000.,$')).toEqual([
+      "'Len'",
+      '"0123ABC"',
+      '$',
+      '5000.',
+      '$',
+    ]);
+  });
+
+  it('replaces a different slot on a line carrying a binary literal, leaving it byte-identical', () => {
+    const line = '#1=IFCQUANTITYLENGTH(\'Len\',"0123ABC",$,5000.,$);';
+    expect(replaceStepArgument(line, 3, '5.')).toBe(
+      '#1=IFCQUANTITYLENGTH(\'Len\',"0123ABC",$,5.,$);',
+    );
+  });
+
+  it('rejects an unterminated binary literal (opening quote never closes)', () => {
+    expect(splitTopLevelStepArguments('\'Len\',"0123ABC,$,5000.,$')).toBeNull();
+  });
+
+  it('accepts a binary literal nested inside a typed value / list', () => {
+    expect(splitTopLevelStepArguments('IFCBINARY("00FF"),$')).toEqual(['IFCBINARY("00FF")', '$']);
+  });
+});
+
+describe('replaceStepArgument still accepts every well-formed list', () => {
+  it('keeps a comma inside a quoted string out of the split', () => {
+    const line = "#5=IFCWALLTYPE('0OSuGGYU',$,'WT1, exterior',$,$,(#30),$,$,$,.STANDARD.);";
+    expect(replaceStepArgument(line, 5, '(#33)')).toBe(
+      "#5=IFCWALLTYPE('0OSuGGYU',$,'WT1, exterior',$,$,(#33),$,$,$,.STANDARD.);",
+    );
+  });
+
+  it('keeps a doubled-quote escape and the parens inside a string intact', () => {
+    const line = "#5=IFCWALLTYPE('0OSuGGYU',$,'O''Brien (west),$',$,$,(#30),$,$,$,.STANDARD.);";
+    expect(replaceStepArgument(line, 5, '(#33)')).toBe(
+      "#5=IFCWALLTYPE('0OSuGGYU',$,'O''Brien (west),$',$,$,(#33),$,$,$,.STANDARD.);",
+    );
+  });
+
+  it('keeps a nested list argument intact', () => {
+    const line = '#7=IFCFOO((1.,2.,3.),$,(#1,#2),$,$,(#30));';
+    expect(replaceStepArgument(line, 5, '(#33)')).toBe('#7=IFCFOO((1.,2.,3.),$,(#1,#2),$,$,(#33));');
+  });
+
+  it('keeps a multi-line record intact', () => {
+    const line = "#5=IFCWALLTYPE('0OSuGGYU',\n$,\n'WT1',$,$,(#30),$,$,$,.STANDARD.);";
+    expect(replaceStepArgument(line, 5, '(#33)')).toBe(
+      "#5=IFCWALLTYPE('0OSuGGYU',\n$,\n'WT1',$,$,(#33),$,$,$,.STANDARD.);",
+    );
+  });
+});
+
+/**
+ * #4227: `splitTopLevelListItems` shipped with none of `splitTopLevelStepArguments`'s
+ * comment-skip logic, so a `,` inside a `/* ... *​/` comment inside an
+ * argument list was read as a top-level argument separator — a phantom slot
+ * boundary that let a hidden/deleted `#N` reference survive
+ * `filterHiddenRefsFromRelationshipLine`'s per-slot exclusion check (that
+ * check only matches a slot that is EXACTLY `#N`; the split comment left the
+ * ref attached to a slot like `comment *​/#5`, which never matches). Both
+ * splitters now share `skipStepComment`.
+ */
+describe('splitTopLevelListItems skips comment content in the outer scan (#4227)', () => {
+  it('does not read a comma inside a comment as an argument boundary', () => {
+    // The exact adversarial argument list from #4227 (the record wrapper is
+    // exercised end-to-end in reference-collector.test.ts).
+    expect(splitTopLevelListItems("'guid',$,$,$,#1,/* void, comment */#5")).toEqual([
+      "'guid'",
+      '$',
+      '$',
+      '$',
+      '#1',
+      '/* void, comment */#5',
+    ]);
+  });
+
+  it('a commented comma inside a NESTED list still resolves to the right slot boundaries', () => {
+    expect(splitTopLevelListItems("$,(#2,/* c, with a comma */#3),#1")).toEqual([
+      '$',
+      '(#2,/* c, with a comma */#3)',
+      '#1',
+    ]);
+  });
+
+  it('a comment containing an apostrophe (odd quote count) does not flip string-scan state', () => {
+    // An undoubled `'` inside a comment must not be read as opening a string
+    // — if it were, the comma in the next real argument would be swallowed.
+    expect(splitTopLevelListItems("$,/* it's a void */#5,$")).toEqual(['$', "/* it's a void */#5", '$']);
+  });
+
+  it('a comment before the argument list even starts is untouched (no regression)', () => {
+    // splitTopLevelListItems only ever receives the text INSIDE a record's `(` and
+    // `)` — a comment before that `(` is stripped by the caller's record
+    // regex before this function ever sees it. Pinned here as a control: the
+    // comment-skip branch added for #4227 must not affect a plain list with
+    // no comment in it at all.
+    expect(splitTopLevelListItems("'guid',$,$,$,#1,#5")).toEqual(["'guid'", '$', '$', '$', '#1', '#5']);
+  });
+
+  it('a top-level comma glued directly to the closing "*/" is still a boundary', () => {
+    // `skipStepComment` must stop exactly at `*/` (`end + 2`), not one char
+    // past it. Consuming an extra char swallows a comma with zero whitespace
+    // after the comment, merging the next argument into this one.
+    expect(splitTopLevelListItems('$,/* c */,#5')).toEqual(['$', '/* c */', '#5']);
+  });
+});
+
+/**
+ * The nesting bound (`MAX_SLOT_NESTING_DEPTH`, `step-slot-grammar.ts`).
+ *
+ * The per-slot grammar is recursive descent over text this process did not
+ * write, so before the bound a deeply nested list did not return `null` — it
+ * threw a `RangeError` out of `splitTopLevelStepArguments`, a third outcome for
+ * a function documented to return parts or `null` and callers that treat `null`
+ * as "this edit cannot be made". One malformed record would abort a whole
+ * export instead of refusing one edit.
+ *
+ * Three cases, because the bound has to be right in three different ways: it
+ * must not refuse what it was set above (real files nest 3 deep at most, so 64
+ * has room to spare), it must actually refuse past itself, and — the case the
+ * bound exists for — it must turn the depth that used to blow the stack into a
+ * clean `null`. Depth 5000 was measured to throw here before the bound (fresh
+ * Node 22 and vitest alike gave out around 3765).
+ */
+describe('a slot nested past the grammar bound is refused, not thrown out of', () => {
+  /** `'g',((((…1…)))),'b'`: one nested list `depth` parens deep, between two plain slots. */
+  const nested = (depth: number): string => `'g',${'('.repeat(depth)}1${')'.repeat(depth)},'b'`;
+
+  it('accepts nesting just under the bound', () => {
+    // The parts, not the count. A length assertion passes even if the 64-deep
+    // middle slot comes back truncated or rewritten, which is the one payload
+    // the accept side of the bound exists to protect.
+    expect(splitTopLevelStepArguments(nested(64))).toEqual([
+      "'g'",
+      `${'('.repeat(64)}1${')'.repeat(64)}`,
+      "'b'",
+    ]);
+  });
+
+  it('returns null one level past the bound', () => {
+    expect(splitTopLevelStepArguments(nested(65))).toBeNull();
+  });
+
+  it('returns null at a depth that used to throw, rather than throwing', () => {
+    // `toBeNull` alone would be satisfied by a throw only in the sense that the
+    // test fails either way; asserting the call does not throw FIRST names which
+    // of the two regressions came back.
+    expect(() => splitTopLevelStepArguments(nested(5000))).not.toThrow();
+    expect(splitTopLevelStepArguments(nested(5000))).toBeNull();
+  });
+
+  it('a record whose argument nests past the bound refuses the by-index write', () => {
+    // The reason the bound is in this module and not left to each caller: a
+    // throw would have escaped `replaceStepArgument` too, past the `null` its
+    // own contract promises.
+    const line = `#7=IFCFOO(${'('.repeat(5000)}1${')'.repeat(5000)},$,$);`;
+    expect(replaceStepArgument(line, 1, '#33')).toBeNull();
+  });
+});

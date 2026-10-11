@@ -1,0 +1,288 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The Charts panel (#3944): a dashboard of charts bound to the loaded models,
+ * bidirectional with the 3D view. Click a bar and its elements are selected
+ * and ghosted / isolated / highlighted; pick in 3D and the bars light up;
+ * the selection in one chart slices the others.
+ *
+ * Bottom-strip panel like Schedule and Lists (`lib/panels/bottom-panels`).
+ * Dashboards persist in localStorage; the first open seeds "Model overview".
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { BarChart3, Plus } from 'lucide-react';
+import { chartElementFilterKey } from '@/lib/charts/source-filter';
+import { elementFieldColumnId, type Aggregation, type ChartScope, type ChartSpec, type DashboardLayoutItem, type DashboardSpec } from '@ifc-lite/charts';
+import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n/useTranslation';
+import { useViewerStore } from '@/store';
+import { chartElementFields } from '@/lib/charts/chart-fields';
+import type { ChartFocusMode } from '@/store/slices/chartSlice';
+import { DASHBOARD_PRESETS, duplicateChart, modelOverviewDashboard, newChartSpec } from '@/lib/charts/presets';
+import { AssistantAction } from '@/components/viewer/assistant/AssistantAction';
+import { ChartCard } from './ChartCard';
+import { ChartEditor, type ClashRuleOption } from './ChartEditor';
+import { isSavedComparisonChart } from '@/lib/charts/comparison-source';
+import { DashboardGrid } from './DashboardGrid';
+import { DashboardMenu } from './DashboardMenu';
+import { ReportExportDialog } from './ReportExportDialog';
+import { useChart3DLink, useChartColorOverlay } from './useChart3DLink';
+import { useChartDatasets } from './useChartDatasets';
+import { useChartSourceFilters } from './useChartSourceFilters';
+import type { ChartRenderer } from './useEChart';
+import type { ReportPdfSeams } from '@/lib/export/report/generate-report-pdf';
+import { useElementFieldCatalog } from './useElementFieldCatalog';
+
+const FOCUS_LABEL: Record<ChartFocusMode, string> = { highlight: 'Highlight', isolate: 'Isolate', ghost: 'Ghost others' };
+const SCOPE_LABEL: Record<ChartScope['kind'], string> = { all: 'All models', visible: 'Visible elements', basket: 'Basket' };
+const EMPTY_CLASH_RULES: readonly ClashRuleOption[] = [];
+
+export interface ChartsPanelProps {
+  /** Injectable chart renderer; tests pass a recorder, the app uses ECharts. */
+  renderer?: ChartRenderer;
+  /** Injectable PDF seams for the report export; the app uses jsPDF + the live renderer. */
+  reportSeams?: () => Promise<ReportPdfSeams>;
+}
+
+/**
+ * Seeds "Model overview" when there is no dashboard and makes sure one is
+ * active. Reads and writes the live slice, so it is idempotent: StrictMode
+ * runs the mount effect twice on the same (empty) render snapshot, and the
+ * second run must see the first run's seed rather than add another.
+ */
+export function ensureActiveDashboard(): void {
+  const live = useViewerStore.getState();
+  if (live.dashboards.length === 0) {
+    const seeded = modelOverviewDashboard();
+    live.upsertDashboard(seeded);
+    live.setActiveDashboardId(seeded.id);
+  } else if (!live.activeDashboardId || !live.dashboards.some((d) => d.id === live.activeDashboardId)) {
+    live.setActiveDashboardId(live.dashboards[0].id);
+  }
+}
+
+export function ChartsPanel({ renderer, reportSeams }: ChartsPanelProps) {
+  const { t } = useTranslation();
+  const dashboards = useViewerStore((s) => s.dashboards);
+  const activeDashboardId = useViewerStore((s) => s.activeDashboardId);
+  const setActiveDashboardId = useViewerStore((s) => s.setActiveDashboardId);
+  const upsertDashboard = useViewerStore((s) => s.upsertDashboard);
+  const deleteDashboard = useViewerStore((s) => s.deleteDashboard);
+  const focusMode = useViewerStore((s) => s.chartFocusMode);
+  const setFocusMode = useViewerStore((s) => s.setChartFocusMode);
+  const colorIn3D = useViewerStore((s) => s.chartColorIn3D);
+  const setColorIn3D = useViewerStore((s) => s.setChartColorIn3D);
+  const chartSlice = useViewerStore((s) => s.chartSlice);
+  const chartSliceSource = useViewerStore((s) => s.chartSliceSource);
+  const chartSliceBuckets = useViewerStore((s) => s.chartSliceBuckets);
+  const modelCount = useViewerStore((s) => s.models.size);
+
+  // Seed the first dashboard so the panel opens with something to click.
+  useEffect(() => { ensureActiveDashboard(); }, [dashboards, activeDashboardId]);
+
+  const dashboard = useMemo(() => dashboards.find((d) => d.id === activeDashboardId) ?? null, [dashboards, activeDashboardId]);
+  const scope = dashboard?.scope ?? { kind: 'all' as const };
+  const [editing, setEditing] = useState<ChartSpec | null>(null);
+  // Only SAVED charts decide which IFC fields the shared datasets carry. The
+  // editor's draft binds to a synthesized column of its own (`editorColumns`),
+  // so picking through fields never rebuilds every card's dataset (#4833).
+  const elementFields = useMemo(() => chartElementFields(dashboard?.charts ?? []), [dashboard]);
+  const datasets = useChartDatasets(scope, elementFields);
+  // The editor can switch sources without replacing its outer `editing` seed;
+  // keep discovery available for the whole edit session so Clash → Elements
+  // exposes IFC fields immediately.
+  const fieldCatalog = useElementFieldCatalog(editing !== null);
+  const link = useChart3DLink();
+  const sourceFilters = useChartSourceFilters(dashboard?.charts ?? []);
+  // The current clash run's rules, for the editor's "Clash rule" picker
+  // (#5156) — the same `rulesRun` id/name pairs `ClashPanel.tsx` reads for
+  // its "By rule" labels, so the two never drift apart on what a rule is
+  // called. Read the raw array off the store (stable across renders that
+  // don't touch it) and derive the picker's shape in a memo, rather than
+  // mapping inside the selector — that would hand `ChartEditor` a fresh
+  // array identity every render.
+  const rulesRun = useViewerStore((s) => s.clashResult?.rulesRun);
+  const clashRuleOptions = useMemo(() => rulesRun?.map((r) => ({ id: r.id, name: r.name })) ?? EMPTY_CLASH_RULES, [rulesRun]);
+
+  const [aggregations, setAggregations] = useState<Map<string, Aggregation | null>>(new Map());
+  const chartIds = useMemo(() => dashboard?.charts.map((c) => c.id) ?? [], [dashboard]);
+  const chartIdSet = useMemo(() => new Set(chartIds), [chartIds]);
+  const recordedChartIds = useMemo(() => new Set(dashboard?.charts.filter(isSavedComparisonChart).map((chart) => chart.id) ?? []), [dashboard]);
+  const onAggregation = useCallback((spec: ChartSpec, aggregation: Aggregation | null) => {
+    setAggregations((prev) => (prev.get(spec.id) === aggregation ? prev : new Map(prev).set(spec.id, aggregation)));
+  }, []);
+  useEffect(() => {
+    setAggregations((prev) => {
+      const next = new Map([...prev].filter(([id]) => chartIdSet.has(id) && (modelCount > 0 || recordedChartIds.has(id))));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [chartIdSet, modelCount, recordedChartIds]);
+  useEffect(() => {
+    if (chartSliceSource && chartSlice && chartSliceBuckets && !chartIdSet.has(chartSliceSource)) {
+      link.clearSelectionIfOwned(chartSliceSource, chartSlice, chartSliceBuckets);
+    }
+  }, [chartIdSet, chartSlice, chartSliceBuckets, chartSliceSource, link]);
+  // A clicked bucket keeps the colour of the chart it came from. With no
+  // selection, colour by the first populated chart (the dashboard headline).
+  const overlayAggregation = useMemo(() => {
+    if (modelCount === 0) return null;
+    if (chartSliceSource && chartIdSet.has(chartSliceSource)) {
+      const selected = aggregations.get(chartSliceSource);
+      if (selected && selected.categories.length > 0) return selected;
+    }
+    for (const spec of dashboard?.charts ?? []) {
+      const agg = aggregations.get(spec.id);
+      if (agg && agg.categories.length > 0) return agg;
+    }
+    return null;
+  }, [dashboard, aggregations, chartSliceSource, chartIdSet, modelCount]);
+  const overlaySelection = overlayAggregation?.spec.id === chartSliceSource ? chartSliceBuckets : null;
+  useChartColorOverlay(overlayAggregation, overlaySelection);
+
+  const update = useCallback((next: DashboardSpec) => upsertDashboard(next), [upsertDashboard]);
+  const saveChart = useCallback((spec: ChartSpec) => {
+    if (!dashboard) return;
+    const exists = dashboard.charts.some((c) => c.id === spec.id);
+    const previous = dashboard.charts.find((c) => c.id === spec.id);
+    const fieldsOf = (chart: ChartSpec) => JSON.stringify([chart.elementField, chart.measureField].map((field) => field ? elementFieldColumnId(field) : null));
+    if (previous && (previous.source !== spec.source || previous.comparisonId !== spec.comparisonId || fieldsOf(previous) !== fieldsOf(spec)) && chartSliceSource === spec.id && chartSlice && chartSliceBuckets) {
+      link.clearSelectionIfOwned(spec.id, chartSlice, chartSliceBuckets);
+    }
+    const charts = exists ? dashboard.charts.map((c) => (c.id === spec.id ? spec : c)) : [...dashboard.charts, spec];
+    const layout = exists ? dashboard.layout : [...dashboard.layout, { chartId: spec.id, x: 0, y: dashboard.layout.length * 4, w: 6, h: 4 }];
+    update({ ...dashboard, charts, layout });
+    setEditing(null);
+  }, [chartSlice, chartSliceBuckets, chartSliceSource, dashboard, link, update]);
+  const removeChart = useCallback((id: string) => {
+    if (!dashboard) return;
+    update({ ...dashboard, charts: dashboard.charts.filter((c) => c.id !== id), layout: dashboard.layout.filter((l) => l.chartId !== id) });
+  }, [dashboard, update]);
+  // Copy, save, and open the copy in the editor — the point is to tweak it.
+  const duplicateChartById = useCallback((id: string) => {
+    if (!dashboard) return;
+    const source = dashboard.charts.find((c) => c.id === id);
+    if (!source) return;
+    const result = duplicateChart(dashboard, id, t('chartCard.copyName', { name: source.title }));
+    if (!result) return;
+    update(result.dashboard);
+    setEditing(result.chart);
+  }, [dashboard, t, update]);
+  const setScope = useCallback((kind: ChartScope['kind']) => {
+    if (!dashboard) return;
+    update({ ...dashboard, scope: { kind } });
+  }, [dashboard, update]);
+  const setLayout = useCallback((layout: DashboardLayoutItem[]) => {
+    if (dashboard) update({ ...dashboard, layout });
+  }, [dashboard, update]);
+  const renderCard = useCallback((id: string) => {
+    const spec = dashboard?.charts.find((c) => c.id === id);
+    if (!spec) return null;
+    // Trimmed-empty is no filter, consistent with ChartCard (review finding).
+    const filterKey = chartElementFilterKey(spec.filter);
+    return (
+      <ChartCard
+        spec={spec}
+        dataset={datasets[spec.source]}
+        filterState={filterKey ? sourceFilters.get(filterKey) : undefined}
+        link={link}
+        renderer={renderer}
+        onEdit={() => setEditing(spec)}
+        onDuplicate={() => duplicateChartById(spec.id)}
+        onRemove={() => removeChart(spec.id)}
+        onAggregation={onAggregation}
+      />
+    );
+  }, [dashboard, datasets, sourceFilters, link, renderer, duplicateChartById, removeChart, onAggregation]);
+
+  const select = 'min-w-0 rounded border border-border bg-transparent px-1.5 py-0.5';
+
+  return (
+    <div className="flex h-full min-h-0 flex-col text-xs" data-charts-panel>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5 border-b border-border">
+        <BarChart3 className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+        <select
+          className={select}
+          value={activeDashboardId ?? ''}
+          onChange={(e) => {
+            // The preset entries create a new dashboard from a template.
+            const preset = DASHBOARD_PRESETS.find((p) => `preset:${p.name}` === e.target.value);
+            if (preset) {
+              const created = preset.create();
+              upsertDashboard(created);
+              setActiveDashboardId(created.id);
+            } else {
+              setActiveDashboardId(e.target.value);
+            }
+          }}
+          aria-label={t('chartsPanel.dashboardAriaLabel')}
+        >
+          {dashboards.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          <optgroup label="New from preset">
+            {DASHBOARD_PRESETS.map((p) => <option key={p.name} value={`preset:${p.name}`}>{p.name}</option>)}
+          </optgroup>
+        </select>
+        <DashboardMenu dashboard={dashboard} onUpsert={upsertDashboard} onDelete={deleteDashboard} onActivate={setActiveDashboardId} />
+        <label className="inline-flex items-center gap-1 text-muted-foreground">
+          {t('chartsPanel.scopeLabel')}
+          <select className={select} value={scope.kind} onChange={(e) => setScope(e.target.value as ChartScope['kind'])} aria-label={t('chartsPanel.scopeAriaLabel')}>
+            {(['all', 'visible', 'basket'] as const).map((k) => <option key={k} value={k}>{SCOPE_LABEL[k]}</option>)}
+          </select>
+        </label>
+        <label className="inline-flex items-center gap-1 text-muted-foreground" title={t('chartsPanel.focusModeTitle')}>
+          {t('chartsPanel.onClickLabel')}
+          <select className={select} value={focusMode} onChange={(e) => setFocusMode(e.target.value as ChartFocusMode)} aria-label={t('chartsPanel.focusModeAriaLabel')}>
+            {(Object.keys(FOCUS_LABEL) as ChartFocusMode[]).map((m) => <option key={m} value={m}>{FOCUS_LABEL[m]}</option>)}
+          </select>
+        </label>
+        <label className="inline-flex items-center gap-1 cursor-pointer text-muted-foreground" title={t('chartsPanel.colorIn3DTitle')}>
+          <input type="checkbox" checked={colorIn3D} onChange={(e) => setColorIn3D(e.target.checked)} className="accent-[#7aa2f7]" />
+          {t('chartsPanel.colorIn3DLabel')}
+        </label>
+        {chartSlice && (
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={link.clearSelection} title={t('chartsPanel.clearSliceTitle')}>
+            {t('chartsPanel.clearSliceButton', { count: chartSlice.size })}
+          </Button>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setEditing(newChartSpec())} disabled={!dashboard}>
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            {t('chartsPanel.addChartButton')}
+          </Button>
+          <ReportExportDialog dashboard={dashboard} aggregations={aggregations} onSaveReportSetup={upsertDashboard} seams={reportSeams} />
+          <AssistantAction />
+        </div>
+      </div>
+
+      {editing && (
+        <div className="border-b border-border bg-muted/20">
+          <ChartEditor
+            key={editing.id}
+            spec={editing}
+            isNew={!dashboard?.charts.some((chart) => chart.id === editing.id)}
+            datasets={datasets}
+            elementFieldCatalog={fieldCatalog.catalog}
+            elementFieldCatalogLoading={fieldCatalog.loading}
+            clashRuleOptions={clashRuleOptions}
+            onSave={saveChart}
+            onCancel={() => setEditing(null)}
+          />
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0 overflow-auto p-2">
+        {modelCount === 0 && recordedChartIds.size === 0 ? (
+          <div className="h-full flex items-center justify-center text-muted-foreground">{t('chartsPanel.loadModelEmptyState')}</div>
+        ) : !dashboard || dashboard.charts.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <span>{t('chartsPanel.noChartsEmptyState')}</span>
+            <Button size="sm" className="h-7 px-2 text-xs" onClick={() => setEditing(newChartSpec())}>{t('chartsPanel.addChartEmptyStateButton')}</Button>
+          </div>
+        ) : (
+          <DashboardGrid layout={dashboard.layout} ids={chartIds} renderItem={renderCard} onLayoutChange={setLayout} />
+        )}
+      </div>
+    </div>
+  );
+}

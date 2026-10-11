@@ -1,0 +1,246 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The chart data contract (#3944).
+ *
+ * A chart is bound to a DATASET — rows that each carry the renderer ids of
+ * the elements they stand for — and a SPEC that says how to bucket those
+ * rows. Aggregation keeps every bucket's member ids, which is what makes the
+ * chart bidirectional with the 3D view: a bar is a set of element ids, and a
+ * 3D selection is a set of buckets. The chart library only ever sees
+ * `(seriesIndex, dataIndex)`; the id math lives here.
+ */
+import type { FilterGroup } from '@ifc-lite/rules';
+
+export type CellValue = string | number | boolean | null;
+
+/** Where a dataset's rows come from; decides which adapter builds it. */
+export type ChartSource = 'elements' | 'clash' | 'bcf' | 'schedule' | 'ids' | 'compare';
+
+export interface ChartDatasetColumn {
+  id: string;
+  label: string;
+  kind: 'category' | 'number' | 'boolean' | 'date';
+  /** Display unit for a `number` column (`m²`, `m³`, `mm`), if any. */
+  unit?: string;
+}
+
+export interface ChartDatasetRow {
+  /** Renderer (federated) global ids of the elements this row stands for —
+   *  one for an element, two for a clash pair, N for a schedule task. */
+  ids: ArrayLike<number>;
+  /** One value per dataset column, in column order. */
+  values: CellValue[];
+  /** Optional normalization status per column; omitted by adapters without IFC scalar diagnostics. */
+  statuses?: Array<'value' | 'missing' | 'unsupported'>;
+}
+
+export interface ChartDataset {
+  source: ChartSource;
+  columns: ChartDatasetColumn[];
+  rows: ChartDatasetRow[];
+  /** Changes whenever the rows do; lets a consumer skip re-aggregation. */
+  fingerprint: string;
+}
+
+export type ChartType = 'bar' | 'stackedBar' | 'pie' | 'treemap' | 'histogram' | 'timeline' | 'elementCount';
+
+export type ChartAggregate = 'count' | 'sum';
+
+export interface ChartMeasure {
+  agg: ChartAggregate;
+  /** The `number` column to sum; ignored for `count`. */
+  column?: string;
+}
+
+export type ElementFieldValueKind = 'category' | 'number' | 'boolean';
+
+interface ElementFieldBindingBase {
+  /** Persisted interpretation; empty scopes must not change a field's kind. */
+  valueKind: ElementFieldValueKind;
+  /** Stable common unit used for numeric aggregation, when safely resolved. */
+  unit?: string;
+  /** IFC typed-measure name used to normalize values across model units. */
+  dataType?: string;
+}
+
+/** Spatial levels a `spatial` field can name; `Storey` is a built-in column already. */
+export type ElementFieldSpatialLevel = 'Container' | 'Building' | 'Site' | 'Project';
+
+/** Relation-borne fields read names, so they are only ever categories. */
+type ElementFieldCategoryBindingBase = Omit<ElementFieldBindingBase, 'valueKind'> & { valueKind: 'category' };
+
+export type ElementFieldBinding =
+  | (ElementFieldBindingBase & { kind: 'attribute'; attributeName: string })
+  | (ElementFieldBindingBase & { kind: 'property'; psetName: string; propertyName: string })
+  /** An `IfcPhysicalSimpleQuantity` by its exact `IfcElementQuantity` and quantity names. */
+  | (Omit<ElementFieldBindingBase, 'valueKind'> & { valueKind: 'number' | 'category'; kind: 'quantity'; qsetName: string; quantityName: string })
+  /** Every material name the element is associated with (`IfcRelAssociatesMaterial`), joined. */
+  | (ElementFieldCategoryBindingBase & { kind: 'material' })
+  /** `IfcClassificationReference` identification (else name), optionally for one classification system only. */
+  | (ElementFieldCategoryBindingBase & { kind: 'classification'; system?: string })
+  /** `Name` of the element's defining `IfcTypeObject` (`IfcRelDefinesByType`). */
+  | (ElementFieldCategoryBindingBase & { kind: 'type' })
+  /** Name of the containing spatial element at one level (`IfcRelContainedInSpatialStructure` / `IfcRelAggregates`). */
+  | (ElementFieldCategoryBindingBase & { kind: 'spatial'; level: ElementFieldSpatialLevel });
+
+/** A chart's own source filter (#4946): IfcOpenShell selector text, read the
+ *  same way the Filter tab reads it (`readSelector`) and run through the
+ *  same evaluator (`evaluateFilterRulesFederated`) — never a second matcher.
+ *  Not applicable to `bcf` or `compare` (see `validate.ts`), because their
+ *  rows do not stand for one element the selector can match against. */
+export interface ChartSourceFilter {
+  selector: string;
+  /** Rules authored in the shared filter builder. These can express model
+   * tags and other predicates with no faithful selector spelling. */
+  groups?: FilterGroup[];
+  /** Restrict a `clash` chart to ONE detection rule/run (#5156) by its
+   *  `ClashRule.id` — the same id a clash row's `Rule` column already
+   *  carries. Absent means every rule of the current clash result is
+   *  counted together, same as before this field existed; never an empty
+   *  string (that reads as "no filter" everywhere else in this file, so it
+   *  would be indistinguishable from absent). Only valid when `source` is
+   *  `clash` — `validate.ts` rejects it on every other source, the same way
+   *  `elementField` is rejected off `elements`. */
+  clashRule?: string;
+}
+
+interface ChartSpecCommon {
+  id: string;
+  title: string;
+  source: ChartSource;
+  /** Completed comparison in the viewer's canonical saved history (#6549).
+   * Only valid for `compare`. Absent preserves the legacy live comparison.
+   * Dashboard/document files retain this ID; the matching saved history is
+   * a local dependency and is not embedded into the chart specification. */
+  comparisonId?: string;
+  /** IFC field used for grouping, materialized beside the built-in element columns. */
+  elementField?: ElementFieldBinding;
+  /** Numeric IFC field to sum independently of the grouping field. */
+  measureField?: ElementFieldBinding;
+  /** Narrows this chart's rows to those touching the matched elements, on top of the dashboard scope. */
+  filter?: ChartSourceFilter;
+  /** Second category column for `stackedBar`: one series per distinct value. */
+  stackBy?: string;
+  measure: ChartMeasure;
+  /** Bucket order; default `value` (largest first). `label` sorts by label, dates chronologically. */
+  sort?: 'value' | 'label';
+  /** Keep the first N buckets and fold the rest into one `Other` bucket. */
+  topN?: number;
+  /** Histogram bin count; Sturges' rule when absent. */
+  bins?: number;
+}
+
+/** Every chart type except `elementCount` buckets rows by a dimension column
+ *  and MUST declare it — there is no sentinel value that means "none". */
+export interface BucketedChartSpec extends ChartSpecCommon {
+  type: Exclude<ChartType, 'elementCount'>;
+  /** Column id to bucket by. A `date` column for `timeline`, a `number` column for `histogram`. */
+  dimension: string;
+}
+
+/** `elementCount` shows one total over the (optionally filtered/sliced)
+ *  source and never buckets by a column, so it carries no `dimension` at
+ *  all — not even an empty string (#5151). */
+export interface ElementCountChartSpec extends ChartSpecCommon {
+  type: 'elementCount';
+  dimension?: undefined;
+}
+
+/** A chart's persisted definition. Every type but `elementCount` requires a
+ *  `dimension`; `elementCount` must omit it (`aggregate()` and
+ *  `validateDashboardSpec()` both enforce this — see `aggregate.ts` and
+ *  `validate.ts`). */
+export type ChartSpec = BucketedChartSpec | ElementCountChartSpec;
+
+/** What a dashboard aggregates over; resolved by the host into a dataset
+ *  scope. `list` (a saved-list scope) was removed in version 2 (#4946): the
+ *  per-chart `ChartSpec.filter` supersedes it, and a saved list is already
+ *  reachable as a selector (`lib/search/saved-filters.ts`). */
+export type ChartScope =
+  | { kind: 'all' }
+  | { kind: 'visible' }
+  | { kind: 'basket' };
+
+export interface DashboardLayoutItem {
+  chartId: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface DashboardSpec {
+  /** 2 (#4946): adds `ChartSpec.filter`, drops the `list` scope kind. A
+   *  version-1 file is migrated on load (`migrate.ts`), never read as-is. */
+  version: 2;
+  id: string;
+  name: string;
+  scope: ChartScope;
+  charts: ChartSpec[];
+  layout: DashboardLayoutItem[];
+}
+
+export interface ReportPageSetup {
+  size: 'A4' | 'A3';
+  orientation: 'portrait' | 'landscape';
+}
+
+/** A dashboard plus what a printed report needs: page setup, title-block fields, snapshots. */
+export interface ReportSpec extends DashboardSpec {
+  page: ReportPageSetup;
+  titleBlock: Record<string, string>;
+  /** Render a 3D snapshot of each chart's top bucket under it. */
+  snapshots: boolean;
+}
+
+export interface Bucket {
+  /** Stable key: the dimension value (stringified) or a bin/week key. */
+  key: string;
+  /** True only for the synthetic tail produced by `topN`; never inferred from `key`. */
+  isOther?: true;
+  label: string;
+  /** The measure: count, or sum of the measure column. */
+  value: number;
+  /** Rows in the bucket, regardless of measure. */
+  count: number;
+  /** Renderer global ids of every element in the bucket, de-duplicated. */
+  ids: Uint32Array;
+  /** Hex colour, stable per label across re-aggregations. */
+  color: string;
+}
+
+/** One series of buckets — a plain chart has one, a stacked bar one per `stackBy` value. */
+export interface BucketSeries {
+  key: string;
+  label: string;
+  buckets: Bucket[];
+}
+
+/** One selectable mark in a chart: a bucket of one series. A plain chart has one series. */
+export interface ChartItem {
+  seriesIndex: number;
+  dataIndex: number;
+}
+
+export interface Aggregation {
+  spec: ChartSpec;
+  /** Source-data revision, stable across cross-filtering of the same dataset. */
+  dataFingerprint: string;
+  /** Category axis in display order; every series aligns to it. */
+  categories: Bucket[];
+  series: BucketSeries[];
+  total: number;
+  /** Rows the spec could not place (missing dimension value). */
+  unbucketed: number;
+  /** Bucketed rows that contributed no finite value to a sum. */
+  unmeasured?: number;
+  /** Rows whose selected dimension, stack, or measure was non-scalar/incompatible. */
+  unsupported?: number;
+  /** Element id → every index into `categories` it belongs to (a clash element under two rules is in two). */
+  categoryOf: Map<number, number[]>;
+  /** Display unit of the summed column, when the measure is a sum. */
+  unit?: string;
+}

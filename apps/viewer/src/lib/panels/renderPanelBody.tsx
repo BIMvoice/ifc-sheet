@@ -1,0 +1,186 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Single id → panel-component map (#1208 follow-up).
+ *
+ * The unified sidebar, the floating-panel host (#1201) and the pop-out
+ * windows all need to render the *same* panel body for a given id. Keeping
+ * the switch here means a panel only has to be wired once, and the three
+ * hosts stay in lock-step.
+ */
+
+import { AssistantSourceContext } from '@/components/viewer/assistant/AssistantAction';
+import { lazy, Suspense, type ReactNode } from 'react';
+import { panelModelGateMode, type WorkspacePanelId } from './registry';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
+import { HierarchyPanel } from '@/components/viewer/HierarchyPanel';
+import { PropertiesPanel } from '@/components/viewer/PropertiesPanel';
+import { ComparePanel } from '@/components/viewer/ComparePanel';
+import { BCFPanel } from '@/components/viewer/BCFPanel';
+import { ValidationPanel } from '@/components/viewer/validation/ValidationPanel';
+import { LensPanel } from '@/components/viewer/LensPanel';
+import { ClashPanel } from '@/components/viewer/ClashPanel';
+import { ScriptPanel } from '@/components/viewer/ScriptPanel';
+import { GanttPanel } from '@/components/viewer/schedule/GanttPanel';
+import { ListPanel } from '@/components/viewer/lists/ListPanel';
+import { RoomPanel } from '@/components/viewer/RoomPanel';
+import { ZonesPanel } from '@/components/viewer/ZonesPanel';
+import { LoadReportPanel } from '@/components/viewer/LoadReportPanel';
+import { ChangesPanel } from '@/components/viewer/ChangesPanel';
+import { ChangeSetPanel } from '@/components/viewer/change-sets/ChangeSetPanel';
+import { CostPanel } from '@/components/viewer/CostPanel';
+import { EnvironmentPanel } from '@/components/viewer/EnvironmentPanel';
+import { MeasurementsPanel } from '@/components/viewer/MeasurementsPanel';
+import { PlacementPanel } from '@/components/viewer/placement/PlacementPanel';
+import { ModelInspectorPanel } from '@/components/viewer/model-inspector/ModelInspectorPanel';
+import { PanelModelGate } from '@/components/viewer/PanelModelGate';
+import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
+import { useViewerStore } from '@/store';
+// Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
+// dynamic chunk keeps it out of the initial bundle until first opened.
+const LayersPanel = lazy(() =>
+  import('@/components/viewer/layers/LayersPanel').then((m) => ({ default: m.LayersPanel })),
+);
+// Lazy: the Sources panel (cloud-source browser + provider plumbing) is only
+// needed once a user opens it — keep it out of the first-paint bundle.
+const SourcesPanel = lazy(() =>
+  import('@/components/sources/SourcesPanel').then((m) => ({ default: m.SourcesPanel })),
+);
+
+// Lazy: the Point Clouds panel carries scan-to-BIM detection, review and creation (#6894);
+// it stays out of the first-paint bundle until first opened.
+const PointCloudPanel = lazy(() => import('@/components/viewer/PointCloudPanel').then((m) => ({ default: m.PointCloudPanel })));
+// Lazy: the Charts panel pulls in ECharts; it stays out of the first-paint bundle.
+const ChartsPanel = lazy(() => import('@/components/viewer/charts/ChartsPanel').then((m) => ({ default: m.ChartsPanel })));
+const DocumentPanel = lazy(() => import('@/components/viewer/document/DocumentPanel').then((m) => ({ default: m.DocumentPanel })));
+// Lazy: the drawing view pulls in its canvas, export and underlay code; its runtime
+// (generation, persistence) is DrawingRuntimeHost, mounted eagerly in ViewportContainer.
+const DrawingPanel = lazy(() => import('@/components/viewer/drawing/DrawingPanel').then((m) => ({ default: m.DrawingPanel })));
+// Lazy: the filmstrip of saved basket views (#5508), out of the first-paint bundle like the other bottom panels.
+const PresentationPanel = lazy(() => import('@/components/viewer/presentation/PresentationPanel').then((m) => ({ default: m.PresentationPanel })));
+
+const AssistantPanel = lazy(() => import('@/components/viewer/assistant/AssistantPanel').then(m => ({ default: m.AssistantPanel })));
+
+const SemanticPanel = lazy(() => import('@/components/viewer/SemanticPanel').then(m => ({ default: m.SemanticPanel })));
+function SemanticPanelBody() {
+  return <ChunkErrorBoundary label="Linked records panel"><Suspense fallback={null}><SemanticPanel /></Suspense></ChunkErrorBoundary>;
+}
+
+const AppearancePanel = lazy(() => import('@/components/viewer/appearance/AppearancePanel').then(m => ({ default: m.AppearancePanel })));
+
+// Each lazy panel needs its own stable host identity. Reusing the boundary
+// itself as the body can retain another panel's failed-chunk state on a switch.
+function AppearancePanelBody() {
+  return <ChunkErrorBoundary label="Appearance panel"><Suspense fallback={null}><AppearancePanel /></Suspense></ChunkErrorBoundary>;
+}
+
+function DocumentPanelBody() {
+  return <ChunkErrorBoundary label="Document panel"><Suspense fallback={null}><DocumentPanel /></Suspense></ChunkErrorBoundary>;
+}
+
+function DrawingPanelBody() {
+  return <ChunkErrorBoundary label="Drawing panel"><Suspense fallback={null}><DrawingPanel /></Suspense></ChunkErrorBoundary>;
+}
+
+function PresentationPanelBody() {
+  return <ChunkErrorBoundary label="Presentation panel"><Suspense fallback={null}><PresentationPanel /></Suspense></ChunkErrorBoundary>;
+}
+
+function ChartsPanelBody() {
+  return <ChunkErrorBoundary label="Charts panel"><Suspense fallback={null}><ChartsPanel /></Suspense></ChunkErrorBoundary>;
+}
+
+function LayersPanelBody({ onClose }: { onClose: () => void }) {
+  return <ChunkErrorBoundary label="Layers panel"><Suspense fallback={null}><LayersPanel onClose={onClose} /></Suspense></ChunkErrorBoundary>;
+}
+
+function SourcesPanelBody({ onClose }: { onClose: () => void }) {
+  return <Suspense fallback={null}><SourcesPanel onClose={onClose} /></Suspense>;
+}
+
+/**
+ * Tiny indirection (formerly `ViewportOverlays`'s `PointCloudPanelMount`,
+ * #5507) so the panel can subscribe to its own slice without pulling extra
+ * state into every other panel body.
+ */
+function PointCloudPanelBody({ onClose }: { onClose: () => void }) {
+  const assetCount = useViewerStore((s) => s.pointCloudAssetCount);
+  // BIM↔scan deviation is a CROSS-MODEL operation: the point cloud is one
+  // federated model, the BIM mesh is another. `renderer.computeDeviations()`
+  // builds its BVH from EVERY mesh in the scene (`collectAllSceneMeshes`),
+  // so the compute button must appear whenever ANY loaded model contributes
+  // triangles — not just the active one. Gating on `s.geometryResult` (the
+  // ACTIVE model's result) hid the button whenever the point cloud was the
+  // active model (its synthetic geometryResult has totalTriangles === 0),
+  // which is exactly the common case — so deviation could never be computed
+  // and the colour mode showed every point at the ramp centre (grey). Sum
+  // across all loaded models to mirror the scene the BVH is actually built from.
+  const triangleCount = useViewerStore((s) => {
+    let total = 0;
+    for (const m of s.models.values()) total += m.geometryResult?.totalTriangles ?? 0;
+    return total;
+  });
+  return (
+    <ChunkErrorBoundary label="Point cloud panel">
+      <Suspense fallback={null}><PointCloudPanel assetCount={assetCount} triangleCount={triangleCount} onClose={onClose} /></Suspense>
+    </ChunkErrorBoundary>
+  );
+}
+
+/**
+ * Render the body for a workspace panel. `onClose` is the host's "close this
+ * panel" handler (re-dock to Information, remove the float, or re-dock the
+ * window). The Information panel ignores it — it is the always-on fallback —
+ * and so do the bottom-strip panels (Script / Schedule / Lists / Charts /
+ * Document / Flow / Drawing / Presentation), whose own close row #5498
+ * retired in favour of the strip header's single Close.
+ */
+export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): ReactNode {
+  const body = panelBody(id, onClose);
+  const gate = panelModelGateMode(id);
+  return <AssistantSourceContext panel={id}>{gate ? <PanelModelGate id={id} mode={gate} onClose={onClose}>{body}</PanelModelGate> : body}</AssistantSourceContext>;
+}
+
+function panelBody(id: WorkspacePanelId, onClose: () => void): ReactNode {
+  switch (id) {
+    // Hierarchy's home is the left slot (#1267); it is never routed to the right
+    // pane / float / pop-out, but the case keeps the id to body map exhaustive.
+    case 'assistant': return <ChunkErrorBoundary label="Assistant panel"><Suspense fallback={null}><AssistantPanel /></Suspense></ChunkErrorBoundary>;
+    case 'appearance': return <AppearancePanelBody />;
+    case 'hierarchy': return <HierarchyPanel />;
+    // The anchor wraps every Information branch (entity, model metadata,
+    // multi-selection, empty): the welcome tour's "Read its data" step broke
+    // whenever the panel showed one of the branches that lacked it.
+    case 'properties': return <div {...tourAnchor(TOUR_ANCHORS.propertiesPanel)} className="h-full"><PropertiesPanel /></div>;
+    case 'compare': return <ComparePanel onClose={onClose} />;
+    case 'bcf': return <BCFPanel onClose={onClose} />;
+    case 'validation': return <ValidationPanel onClose={onClose} />;
+    case 'lens': return <LensPanel onClose={onClose} />;
+    case 'clash': return <ClashPanel onClose={onClose} />;
+    case 'extensions': return null;
+    case 'script': return <ScriptPanel />;
+    case 'gantt': return <GanttPanel />;
+    case 'lists': return <ListPanel />;
+    case 'collab': return <RoomPanel onClose={onClose} />;
+    case 'zones': return <ZonesPanel onClose={onClose} />;
+    case 'loadReport': return <LoadReportPanel onClose={onClose} />;
+    case 'changes': return <ChangesPanel onClose={onClose} />;
+    case 'layers': return <LayersPanelBody onClose={onClose} />;
+    case 'sources': return <SourcesPanelBody onClose={onClose} />;
+    case 'charts': return <ChartsPanelBody />;
+    case 'flow': return null;
+    case 'document': return <DocumentPanelBody />;
+    case 'cost': return <CostPanel onClose={onClose} />;
+    case 'environment': return <EnvironmentPanel onClose={onClose} />;
+    case 'drawing': return <DrawingPanelBody />;
+    case 'presentation': return <PresentationPanelBody />;
+    case 'pointclouds': return <PointCloudPanelBody onClose={onClose} />;
+    case 'measurements': return <MeasurementsPanel onClose={onClose} />;
+    case 'placement': return <PlacementPanel onClose={onClose} />;
+    case 'model': return <ModelInspectorPanel onClose={onClose} />;
+    case 'semantic': return <SemanticPanelBody />;
+    case 'changeSets': return <ChangeSetPanel onClose={onClose} />;
+  }
+}

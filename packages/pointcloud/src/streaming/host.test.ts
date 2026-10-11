@@ -1,0 +1,389 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { describe, it, expect } from 'vitest';
+import { streamPointCloud } from './host.js';
+import { LasStreamingSource } from './las-source.js';
+import type { DecodedPointChunk } from '../types.js';
+import type { StreamingPointSource } from './types.js';
+
+function buildLasFile(rows: Array<{ x: number; y: number; z: number; cls?: number }>): Blob {
+  const headerSize = 227;
+  const recordLen = 20;
+  const total = headerSize + rows.length * recordLen;
+  const buf = new ArrayBuffer(total);
+  const view = new DataView(buf);
+  view.setUint32(0, 0x4653414c, true);
+  view.setUint8(24, 1);
+  view.setUint8(25, 2);
+  view.setUint16(94, headerSize, true);
+  view.setUint32(96, headerSize, true);
+  view.setUint32(100, 0, true);
+  view.setUint8(104, 0);
+  view.setUint16(105, recordLen, true);
+  view.setUint32(107, rows.length, true);
+  view.setFloat64(131, 1, true);
+  view.setFloat64(139, 1, true);
+  view.setFloat64(147, 1, true);
+  view.setFloat64(155, 0, true);
+  view.setFloat64(163, 0, true);
+  view.setFloat64(171, 0, true);
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (const r of rows) {
+    if (r.x < minX) minX = r.x; if (r.x > maxX) maxX = r.x;
+    if (r.y < minY) minY = r.y; if (r.y > maxY) maxY = r.y;
+    if (r.z < minZ) minZ = r.z; if (r.z > maxZ) maxZ = r.z;
+  }
+  view.setFloat64(179, maxX, true);
+  view.setFloat64(187, minX, true);
+  view.setFloat64(195, maxY, true);
+  view.setFloat64(203, minY, true);
+  view.setFloat64(211, maxZ, true);
+  view.setFloat64(219, minZ, true);
+  for (let i = 0; i < rows.length; i++) {
+    const off = headerSize + i * recordLen;
+    view.setInt32(off, rows[i].x, true);
+    view.setInt32(off + 4, rows[i].y, true);
+    view.setInt32(off + 8, rows[i].z, true);
+    // Format-0 classification byte (low 5 bits; high 3 are flag bits).
+    view.setUint8(off + 15, (rows[i].cls ?? 0) & 0x1f);
+  }
+  return new Blob([buf], { type: 'application/octet-stream' });
+}
+
+describe('streamPointCloud (in-process source)', () => {
+  it('preserves millimetre LAS samples loaded before an IFC provides an alignment (#4226)', async () => {
+    const bytes = await buildLasFile([{ x: 1, y: 0, z: 0 }, { x: 2, y: 0, z: 0 }]).arrayBuffer();
+    const view = new DataView(bytes);
+    view.setFloat64(131, 0.001, true);
+    view.setFloat64(155, 10_000_000, true);
+    view.setFloat64(179, 10_000_000.002, true);
+    view.setFloat64(187, 10_000_000.001, true);
+    let origin = 0;
+    const samples: number[] = [];
+    const handle = streamPointCloud({
+      format: 'las', blob: new Blob([bytes]), autoOrigin: true,
+      onOpen: (info) => { origin = info.originOffset?.[0] ?? 0; },
+      onChunk: (chunk) => {
+        for (let i = 0; i < chunk.pointCount; i++) samples.push(chunk.positions[i * 3]);
+      },
+      createSource: ({ blob, stride, originOffset }) => new LasStreamingSource(blob, {
+        downsample: { stride: stride ?? 1 }, originOffset,
+      }),
+    });
+    await handle.done;
+    expect(samples).toHaveLength(2);
+    // Coarse translation is evaluated in f64 before the final small coordinates
+    // reach the renderer; the decoder must not already have collapsed the pair.
+    expect(Math.abs((origin - 10_000_000) + samples[0] - 0.001)).toBeLessThan(1e-7);
+    expect(Math.abs((origin - 10_000_000) + samples[1] - 0.002)).toBeLessThan(1e-7);
+    expect(samples[1] - samples[0]).toBeGreaterThan(0.000999);
+  });
+
+  it('streams chunks to the host callback and reports completion', async () => {
+    const rows: Array<{ x: number; y: number; z: number }> = [];
+    for (let i = 0; i < 12; i++) rows.push({ x: i, y: 0, z: 0 });
+
+    const collected: number[] = [];
+    let opened = 0;
+    let completedTotal = 0;
+
+    const handle = streamPointCloud({
+      format: 'las',
+      blob: buildLasFile(rows),
+      chunkSize: 5,
+      onOpen: (info) => {
+        opened++;
+        expect(info.totalPointCount).toBe(12);
+        expect(info.stride).toBe(1);
+      },
+      onChunk: (chunk) => {
+        for (let i = 0; i < chunk.pointCount; i++) {
+          collected.push(chunk.positions[i * 3]);
+        }
+      },
+      onComplete: (_bbox, total) => {
+        completedTotal = total;
+      },
+      // Run the source in-process — the worker glue isn't available
+      // in node:test/vitest's environment.
+      createSource: ({ blob, label, stride }) => new LasStreamingSource(blob, {
+        label,
+        downsample: { stride: stride ?? 1 },
+      }),
+    });
+
+    await handle.done;
+    expect(opened).toBe(1);
+    expect(completedTotal).toBe(12);
+    expect(collected).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  });
+
+  it('rejects invalid point caps before opening a source (#4226)', () => {
+    for (const maxPointsInMemory of [0, -1, NaN, Infinity]) {
+      expect(() => streamPointCloud({ format: 'las', blob: buildLasFile([]), maxPointsInMemory,
+        onChunk: () => {}, createSource: () => { throw new Error('must not open'); } })).toThrow(/maxPointsInMemory/);
+    }
+  });
+
+  it('downsamples when total exceeds maxPointsInMemory', async () => {
+    const rows: Array<{ x: number; y: number; z: number }> = [];
+    for (let i = 0; i < 100; i++) rows.push({ x: i, y: 0, z: 0 });
+
+    let openInfo: { totalPointCount: number; stride: number } | null = null;
+    const collected: number[] = [];
+
+    const handle = streamPointCloud({
+      format: 'las',
+      blob: buildLasFile(rows),
+      maxPointsInMemory: 10,
+      chunkSize: 50,
+      onOpen: (info) => { openInfo = info; },
+      onChunk: (chunk) => {
+        for (let i = 0; i < chunk.pointCount; i++) {
+          collected.push(chunk.positions[i * 3]);
+        }
+      },
+      createSource: ({ blob, stride }) => new LasStreamingSource(blob, {
+        downsample: { stride: stride ?? 1 },
+      }),
+    });
+
+    await handle.done;
+    expect(openInfo).not.toBeNull();
+    // ceil(100 / 10) = stride 10; expect ~10 emitted points (every 10th source row).
+    const open = openInfo as unknown as { totalPointCount: number; stride: number };
+    expect(open.stride).toBe(10);
+    expect(open.totalPointCount).toBe(10);
+    expect(collected).toEqual([0, 10, 20, 30, 40, 50, 60, 70, 80, 90]);
+  });
+
+  it('aggregates a per-class histogram across chunks into onComplete (#1783)', async () => {
+    const rows: Array<{ x: number; y: number; z: number; cls: number }> = [];
+    // 7 ground + 4 building + 1 unassigned, spread across 3 chunks of 5.
+    for (let i = 0; i < 7; i++) rows.push({ x: i, y: 0, z: 0, cls: 2 });
+    for (let i = 0; i < 4; i++) rows.push({ x: i, y: 1, z: 0, cls: 6 });
+    rows.push({ x: 0, y: 2, z: 0, cls: 1 });
+
+    let classCounts: Uint32Array | null = null;
+    const handle = streamPointCloud({
+      format: 'las',
+      blob: buildLasFile(rows),
+      chunkSize: 5,
+      onChunk: () => {},
+      onComplete: (_bbox, _total, counts) => { classCounts = counts; },
+      createSource: ({ blob, stride }) => new LasStreamingSource(blob, {
+        downsample: { stride: stride ?? 1 },
+      }),
+    });
+
+    await handle.done;
+    expect(classCounts).not.toBeNull();
+    const counts = classCounts as unknown as Uint32Array;
+    expect(counts.length).toBe(256);
+    expect(counts[1]).toBe(1);
+    expect(counts[2]).toBe(7);
+    expect(counts[6]).toBe(4);
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(12);
+  });
+
+  it('aggregates the bbox across 3+ chunks with each axis extreme in a different chunk', async () => {
+    // Chunk 1 (rows 0-3): widest X range, mid Y/Z.
+    // Chunk 2 (rows 4-7): widest Y range, X min tightens here.
+    // Chunk 3 (rows 8-11): widest Z range (both the global min and max).
+    // No single chunk holds every axis extreme, so a swapped min/max
+    // comparison in the aggregation (host.ts) would report a bbox that
+    // doesn't match any chunk's own box, or would fail to widen at all.
+    const rows = [
+      { x: 0, y: 10, z: 100 },
+      { x: 1, y: 10, z: 100 },
+      { x: 2, y: 10, z: 100 },
+      { x: 3, y: 10, z: 100 }, // global x max = 3
+      { x: -5, y: 20, z: 100 },
+      { x: -5, y: 21, z: 100 },
+      { x: -5, y: 22, z: 100 },
+      { x: -5, y: 23, z: 100 }, // global y max = 23; global x min = -5
+      { x: -5, y: 10, z: 5 }, // global z min = 5
+      { x: -5, y: 10, z: 200 }, // global z max = 200
+      { x: -5, y: 10, z: 100 },
+      { x: -5, y: 10, z: 100 },
+    ];
+
+    let bbox: { min: readonly number[]; max: readonly number[] } | null = null;
+    const handle = streamPointCloud({
+      format: 'las',
+      blob: buildLasFile(rows),
+      chunkSize: 4,
+      onChunk: () => {},
+      onComplete: (b) => { bbox = b; },
+      createSource: ({ blob, stride }) => new LasStreamingSource(blob, {
+        downsample: { stride: stride ?? 1 },
+      }),
+    });
+
+    await handle.done;
+    expect(bbox).not.toBeNull();
+    const b = bbox as unknown as { min: readonly number[]; max: readonly number[] };
+    expect(b.min).toEqual([-5, 10, 5]);
+    expect(b.max).toEqual([3, 23, 200]);
+  });
+
+  it('rejects files larger than maxFileSize', async () => {
+    const blob = buildLasFile([{ x: 0, y: 0, z: 0 }]);
+    let errored: Error | null = null;
+    const handle = streamPointCloud({
+      format: 'las',
+      blob,
+      maxFileSize: 10,
+      onChunk: () => {},
+      onError: (err) => { errored = err; },
+      createSource: ({ blob: b, stride }) => new LasStreamingSource(b, {
+        downsample: { stride: stride ?? 1 },
+      }),
+    });
+    await handle.done.catch(() => {});
+    expect(errored).not.toBeNull();
+    const e = errored as unknown as Error;
+    expect(e.message).toContain('exceeds maxFileSize');
+  });
+
+  it('cancel() stops the stream cleanly', async () => {
+    const rows: Array<{ x: number; y: number; z: number }> = [];
+    for (let i = 0; i < 1000; i++) rows.push({ x: i, y: 0, z: 0 });
+    let chunksSeen = 0;
+
+    const handle = streamPointCloud({
+      format: 'las',
+      blob: buildLasFile(rows),
+      chunkSize: 100,
+      onChunk: () => {
+        chunksSeen++;
+        if (chunksSeen === 2) handle.cancel();
+      },
+      createSource: ({ blob, stride }) => new LasStreamingSource(blob, {
+        downsample: { stride: stride ?? 1 },
+      }),
+    });
+
+    await handle.done.catch(() => {});
+    // We should have seen at most a couple chunks before the cancel kicked in.
+    expect(chunksSeen).toBeLessThan(10);
+  });
+
+  it('does not let a wholly non-finite chunk drag the aggregate bbox toward the origin (#4348 regression)', async () => {
+    // One chunk overflows entirely (e.g. a finite-but-huge LAS header scale
+    // sends every point in that chunk to ±Infinity — see las.ts's
+    // decodeLasPoints); the other chunk is ordinary, far-from-origin data.
+    // decodeLasPoints must report the bad chunk's bbox as the ±Infinity
+    // seed (an absorbing no-op in the union below), NOT a finite [0,0,0] —
+    // a finite sentinel would win the `< bboxMin` / `> bboxMax` comparisons
+    // here and report a bbox that includes the origin even though no real
+    // point is anywhere near it.
+    const goodChunk: DecodedPointChunk = {
+      normalState: 'absent',
+      positions: new Float32Array([500000, 200000, 100, 500100, 200100, 120]),
+      pointCount: 2,
+      bbox: { min: [500000, 200000, 100], max: [500100, 200100, 120] },
+    };
+    const badChunk: DecodedPointChunk = {
+      normalState: 'absent',
+      positions: new Float32Array(0),
+      pointCount: 0,
+      bbox: {
+        min: [Infinity, Infinity, Infinity],
+        max: [-Infinity, -Infinity, -Infinity],
+      },
+    };
+    const chunks = [badChunk, goodChunk];
+    let bbox: { min: readonly number[]; max: readonly number[] } | null = null;
+    const stub: StreamingPointSource = {
+      open: async () => ({
+        totalPointCount: 2,
+        bbox: { min: [-1, -1, -1], max: [-1, -1, -1] }, // deliberately wrong: proves onComplete used the fold, not this
+        hasColor: false,
+        hasClassification: false,
+        hasIntensity: false,
+      }),
+      next: async () => chunks.shift() ?? null,
+      close: () => {},
+    };
+    const handle = streamPointCloud({
+      format: 'las',
+      blob: new Blob([new Uint8Array(0)]),
+      onChunk: () => {},
+      onComplete: (b) => { bbox = b; },
+      createSource: () => stub,
+    });
+    await handle.done;
+    expect(bbox).not.toBeNull();
+    const b = bbox as unknown as { min: readonly number[]; max: readonly number[] };
+    expect(b.min).toEqual([500000, 200000, 100]);
+    expect(b.max).toEqual([500100, 200100, 120]);
+  });
+
+  it('falls back to the header bbox when every chunk in the stream is non-finite', async () => {
+    const badChunk: DecodedPointChunk = {
+      normalState: 'absent',
+      positions: new Float32Array(0),
+      pointCount: 0,
+      bbox: {
+        min: [Infinity, Infinity, Infinity],
+        max: [-Infinity, -Infinity, -Infinity],
+      },
+    };
+    const chunks = [badChunk];
+    const headerBbox: DecodedPointChunk['bbox'] = { min: [1, 2, 3], max: [4, 5, 6] };
+    let bbox: { min: readonly number[]; max: readonly number[] } | null = null;
+    const stub: StreamingPointSource = {
+      open: async () => ({
+        totalPointCount: 1,
+        bbox: headerBbox,
+        hasColor: false,
+        hasClassification: false,
+        hasIntensity: false,
+      }),
+      next: async () => chunks.shift() ?? null,
+      close: () => {},
+    };
+    const handle = streamPointCloud({
+      format: 'las',
+      blob: new Blob([new Uint8Array(0)]),
+      onChunk: () => {},
+      onComplete: (b) => { bbox = b; },
+      createSource: () => stub,
+    });
+    await handle.done;
+    expect(bbox).not.toBeNull();
+    const b = bbox as unknown as { min: readonly number[]; max: readonly number[] };
+    expect(b.min).toEqual([1, 2, 3]);
+    expect(b.max).toEqual([4, 5, 6]);
+  });
+
+  it('uses the createSource override (in-process source contract)', async () => {
+    let factoryCalls = 0;
+    const stub: StreamingPointSource = {
+      open: async () => ({
+        totalPointCount: 0,
+        bbox: { min: [0, 0, 0], max: [0, 0, 0] },
+        hasColor: false,
+        hasClassification: false,
+        hasIntensity: false,
+      }),
+      next: async () => null,
+      close: () => {},
+    };
+    const handle = streamPointCloud({
+      format: 'las',
+      blob: new Blob([new Uint8Array(0)]),
+      onChunk: () => {},
+      createSource: () => {
+        factoryCalls++;
+        return stub;
+      },
+    });
+    await handle.done;
+    expect(factoryCalls).toBe(1);
+  });
+});

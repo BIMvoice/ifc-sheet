@@ -1,0 +1,54 @@
+{
+  "name": "@ifc-lite/pointcloud",
+  "version": "0.11.0",
+  "description": "Point cloud decoders and types for IFC-Lite",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm exec tsc && node -e \"const f='dist/streaming/worker-client.js';require('fs').writeFileSync(f,require('fs').readFileSync(f,'utf8').replace(/decode-worker\\.ts/g,'decode-worker.js'))\" && node scripts/build-worker-bundle.mjs",
+    "typecheck": "node ../../scripts/typecheck-tests.mjs",
+    "dev": "pnpm exec tsc --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "laz-perf": "^0.0.7"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
+  },
+  "license": "MPL-2.0",
+  "author": "Louis True",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LTplus-AG/ifc-lite.git",
+    "directory": "packages/pointcloud"
+  },
+  "homepage": "https://ifclite.dev/docs/",
+  "bugs": "https://github.com/LTplus-AG/ifc-lite/issues",
+  "keywords": [
+    "ifc",
+    "ifc5",
+    "ifcx",
+    "pointcloud",
+    "pcd",
+    "bim",
+    "aec"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

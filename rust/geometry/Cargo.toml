@@ -1,0 +1,182 @@
+[package]
+name = "ifc-lite-geometry"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Geometry processing and mesh generation for IFC models"
+keywords = ["ifc", "bim", "geometry", "mesh", "aec"]
+categories = ["graphics", "parsing"]
+readme = "../../README.md"
+
+[features]
+# Opt-in #6516 route-work diagnostic; absent from shipping builds.
+opening-perf-trace = []
+# CSG runs on the in-tree pure-Rust exact mesh-arrangement kernel
+# (`src/kernel/`) on every target — native and wasm32 alike. The former
+# Manifold C++ kernel (`manifold-csg` / `manifold-csg-wasm-uu`) and the
+# legacy BSP port were removed in the kernel consolidation
+# (docs/architecture/geometry-pipeline.md).
+default = []
+debug_geometry = []
+# Measurement-only: record the (host, cutters) of every kernel subtract into a
+# global buffer so a bench can replay the real CSG corpus under varying thread
+# counts. Zero cost when absent. See src/csg_capture.rs.
+csg_capture = []
+# Structured diagnostics: routes the production warn/debug messages through
+# `tracing` (structured fields, subscriber-controlled) instead of eprintln.
+# Default OFF so default builds carry no tracing code in this crate; the
+# native server enables it (via ifc-lite-processing/observability) so
+# geometry-crate diagnostics land in its existing tracing subscriber.
+# See src/diag.rs for the warn-vs-debug gating policy.
+observability = ["dep:tracing"]
+# Test-only differential oracle: makes `earcut` available ALONGSIDE the production
+# `earcutr` as a second, independent triangulator, so
+# `tests/triangulation_invariance.rs` can feed the pipeline two equally valid
+# triangulations of the same polygons. Never enabled in a shipping build.
+triangulation-alt = ["dep:earcut"]
+# Test-only: exposes `test_support` (the receive-and-diagnose watchdog used by
+# the termination suites) to OTHER crates' integration tests, which cannot see
+# this crate's `cfg(test)` tree. `ifc-lite-processing` enables it as a
+# dev-dependency. Never enabled in a shipping build.
+test-support = []
+# #3440 step 2: turns `csg/mod.rs`'s four boolean-op accept paths' informational
+# open-topology check (step 1, always on) into a REJECT — a torn kernel result
+# falls back exactly like an existing `KernelOutputInvalid`. Off by default and
+# enabled by NOTHING downstream (no other crate in this workspace turns it on,
+# unlike `observability`, which the native server does enable) — deliberately
+# so this stays a `cargo test/build --features csg_topology_gate` opt-in for
+# CI/census measurement, not a change to what any shipping build accepts. The
+# repo's own watertightness census reports a nonzero count of currently-torn
+# hosts on the un-gated default (see issue #3440's measurements), so enabling
+# this by default today would reject geometry that currently renders.
+csg_topology_gate = []
+# #3440 step 3, and NOT on by default either. Turns the edge-multiplicity check
+# (`edge_multiplicity_defects`: an undirected edge used by more than two
+# triangles, or twice the same way round) into a REJECT at the same four accept
+# paths. Separate from `csg_topology_gate` on purpose: the two read different
+# defect classes, and a census run needs to attribute a flip to one of them, not
+# to whichever gate happened to fire first.
+#
+# It was TRIED as a default. It reads a defect class benign tessellation cannot
+# produce, and over the fixture corpus (115 models, 2071 void hosts) it rejects
+# 110 hosts, all of which a downstream fallback still cuts — which looked like
+# enough to ship. It is not: on this repo's own pinned quality fixtures the
+# fallback is WORSE than the torn result it replaces. `issue_098_reveal_wall`
+# goes from ~42 to 380 unpaired edges, `issue_098_v5c` from ~108 to 416, and
+# `issue_960_segmented_roof_clip` grows back the full-height seam sliver that
+# test exists to catch. Rejecting a tear is only an improvement if what replaces
+# it is better, and here it is not — so this stays an opt-in until the fallback
+# path is the one that gets fixed.
+csg_manifold_gate = []
+
+[dependencies]
+
+# Triangulation
+earcutr = "0.5"
+# Differential oracle only, behind `triangulation-alt`. Present to be DIFFERENT
+# from earcutr, not to be depended on.
+earcut = { version = "0.4", optional = true }
+
+# 2D polygon boolean operations for profile-level void subtraction
+i_overlay = "8.0"
+
+# Core IFC parsing
+ifc-lite-core.workspace = true
+
+# Math library
+nalgebra = { version = "0.35", default-features = false, features = ["std"] }
+
+# Parallel processing
+rayon = "1.10"
+
+# Fast hashing
+rustc-hash = "2.1"
+memchr = "2.8"
+
+# Serialization for the public GeometryDiagnostics contract (already present in
+# the wasm tree transitively via ifc-lite-processing; no new bundle weight).
+serde = { version = "1.0", features = ["derive"] }
+
+# PNG decode for IfcBlobTexture (issue #961). Already in the dependency tree
+# (transitive), so it adds no new wasm weight. Pure-Rust inflate
+# (miniz_oxide / fdeflate) — wasm-safe.
+png = "0.18"
+
+# JPEG decode for IfcBlobTexture with RasterFormat 'JPG'/'JPEG' (issue #961).
+# `default-features = false` drops the `rayon` parallelism (no threads on
+# wasm32) — pure-Rust, wasm-safe. ~adds a small decoder to the bundle.
+jpeg-decoder = { version = "0.3", default-features = false }
+
+# Small vector optimization for frequently allocated small collections
+smallvec = "1.13"
+
+# Error handling
+thiserror = "2.0"
+
+# Structured diagnostics, only behind the `observability` feature (dep:tracing
+# keeps it out of default builds entirely). Package-local on purpose: the
+# workspace root does not force tracing on every crate. ifc-lite-processing
+# already depends on tracing unconditionally, so enabling the feature adds no
+# new crate to consumers that use both.
+tracing = { version = "0.1", optional = true }
+
+# Pure-Rust CSG kernel (`kernel/`) — exact geometric predicates.
+# geometry-predicates: Shewchuk adaptive predicates + the public expansion
+# primitives (two_sum/two_product/scale_expansion_zeroelim) for the indirect
+# layer. no_std, no C, wasm-clean, FMA-free (platform-deterministic signs).
+geometry-predicates = "0.3"
+# Exact BigRational oracle + the predicate cascade's exact fallback tier
+# (already transitive; promoted to direct).
+num-rational = { version = "0.4", default-features = false, features = ["num-bigint"] }
+num-traits = { version = "0.2", default-features = false }
+bnum = { version = "0.14.4", features = ["numtraits"] }
+
+[dev-dependencies]
+approx = "0.5"
+# The real clash engine, used ONLY by tests/clash_intersection_real_model.rs to
+# produce the same candidate pairs the product reports, so the intersection-solid
+# measurements are taken on genuine clash pairs rather than a test-local
+# broad-phase approximation. `ifc-lite-clash` has zero dependencies and does not
+# depend on this crate, so this is not circular and adds nothing to a shipping
+# build.
+ifc-lite-clash.workspace = true
+# JSON serialization for the GeometryDiagnostics camelCase-contract test (asserts
+# the serde rename_all keys match the @ifc-lite/geometry TS interface).
+serde_json = "1.0"
+# Property-based testing for the CSG kernel invariants
+# (tests/csg_property_test.rs): volume bounds, NaN-freedom, watertightness
+# over bounded randomized inputs. Case counts are set explicitly per
+# property to keep the suite fast.
+proptest = "1.6"
+# Snapshot testing for the geometry correctness harness
+# (tests/geometry_correctness_harness.rs). Plain string snapshots only, so
+# no serde-format features are needed. Accept intentional geometry changes
+# with `cargo insta review`.
+insta = { version = "1.43", default-features = false }
+# Shewchuk adaptive exact geometric predicates (sign-exact, no_std, no C deps).
+# Used by the cross-platform determinism floor test that underpins the
+# pure-Rust CSG kernel. Dev-only: not linked into the shipping crate.
+robust = "1.2"
+
+[[example]]
+name = "color_extraction_test"
+path = "examples/color_extraction_test.rs"
+
+# Geometry inherits the workspace numeric-safety policy (restated here, since a
+# member cannot both inherit and extend `[lints]`) and additionally allows the
+# structure lints that fire pervasively in a numerics kernel and are intentional
+# here. These structure allows are deliberately NOT workspace-wide, so the parser,
+# server, and exporters stay strict on them.
+[lints.clippy]
+excessive_precision = "allow"
+manual_range_contains = "allow"
+manual_clamp = "allow"
+neg_cmp_op_on_partial_ord = "allow"
+approx_constant = "allow"
+type_complexity = "allow"
+too_many_arguments = "allow"
+large_enum_variant = "allow"
+needless_range_loop = "allow"
+should_implement_trait = "allow"

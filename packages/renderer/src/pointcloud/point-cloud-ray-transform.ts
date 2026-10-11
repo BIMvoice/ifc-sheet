@@ -1,0 +1,238 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Ray <-> point-cloud local-frame conversion for snap queries.
+ *
+ * ## Why this exists
+ *
+ * Two features landed independently and left a gap between them:
+ *
+ * - #1804 gives each point-cloud node a per-asset model matrix
+ *   (`PointCloudNode.model`) applied at RENDER time — the shader places
+ *   points through it, and `transformAabb` folds it into reported bounds.
+ * - #1860 built the snap/measure spatial index, which stores RAW,
+ *   untransformed chunk positions straight off the decoder.
+ *
+ * So for a georeferenced (aligned) scan the renderer draws points at
+ * aligned positions while the snap query walks an index of pre-alignment
+ * positions: a measurement snapped to where the point USED to be, not
+ * where the user can see it. Both features are individually correct; the
+ * defect only exists in their composition, which is why neither PR's tests
+ * caught it.
+ *
+ * ## Why the ray moves, not the points
+ *
+ * We inverse-transform the ray into the node's local frame rather than
+ * transforming candidate points into world space:
+ *
+ * - The index's cell keys are packed RELATIVE to the first indexed point
+ *   and are only meaningful in local space — transforming points would
+ *   invalidate the whole acceleration structure.
+ * - It is O(1) per node instead of O(points-examined).
+ *
+ * ## Distances stay in world units
+ *
+ * `queryRay` treats `t` as a distance along a UNIT direction and compares
+ * `toleranceAt(t)` as a perpendicular radius, both in the index's own
+ * space. Under a matrix with scale `s`, a world distance `d` is a local
+ * distance `d / s`. Every distance-valued quantity therefore has to be
+ * converted on the way in and back on the way out:
+ *
+ *   maxDistance_local = maxDistance_world / s
+ *   toleranceAt_local(t_local) = toleranceAt_world(t_local * s) / s
+ *   distance_world = distance_local * s
+ *
+ * Get this wrong and the ~8px screen-space snap tolerance silently means
+ * something different on any scan whose CRS is not in metres (a foot-based
+ * CRS carries s = 0.3048), which would read as "snapping feels wrong on
+ * US survey-foot projects" — the sort of bug that is very hard to trace
+ * back to a matrix.
+ *
+ * The alignment matrices this handles are similarity transforms (uniform
+ * scale * rotation about Y, zero translation — see `pointCloudAlignment`),
+ * so a single scalar `s` is exact. `matrixUniformScale` falls back to the
+ * mean column length for anything else, which keeps a non-uniform matrix
+ * approximately right rather than wildly wrong.
+ *
+ * ## Known limit: long-range reach under a sub-unit scale
+ *
+ * `PointCloudSpatialIndex` caps its per-step dilation at
+ * `MAX_DILATION_RADIUS_CELLS * cellSize` = 2 LOCAL units, a deliberate
+ * bound on march cost. Because the tolerance is converted into local
+ * units, a matrix with `s < 1` tightens that cap in world terms: a
+ * foot-based CRS (`s = 0.3048`) caps the effective snap radius at
+ * `2 * 0.3048 = 0.61 m` rather than 2 m, so at long range a point inside
+ * the nominal ~8px tolerance can sit outside the searched cells and be
+ * missed.
+ *
+ * This is a reach limit, not a wrong answer: whatever the query returns is
+ * correctly placed, and near-to-mid range (where measuring actually
+ * happens) is unaffected. Restoring the full world-space reach means
+ * scaling the cap to `MAX_DILATION_RADIUS_CELLS / s` (~14 cells at
+ * s = 0.3048), which re-inflates the per-step probe cost that the
+ * leading-slab bound exists to contain — a perf trade that should be made
+ * deliberately, with a benchmark, rather than folded into this fix.
+ */
+
+import type { Vec3 } from '../raycaster.js';
+import { isUsableModelMatrix } from './point-cloud-node.js';
+
+/** The subset of a `PointCloudNode` the snap-source snapshot reads. */
+export interface RayQueryNodeLike<I extends { pointCount: number } = { pointCount: number }> {
+  meta: { expressId: number; modelIndex?: number };
+  spatialIndex: I;
+  /** Per-key indexes of removable chunks (COPC LOD nodes, #6869). */
+  keyedIndexes?: ReadonlyMap<string, I>;
+  model?: Float32Array;
+  placement?: Float64Array;
+}
+
+/** One entry of the snapshot handed to `queryPointClouds`. */
+export interface RayQuerySource<I extends { pointCount: number }> {
+  expressId: number;
+  modelIndex?: number;
+  index: I;
+  classMask: Uint32Array;
+  model?: Float32Array | Float64Array;
+}
+
+/**
+ * Build the snap-query snapshot from live nodes.
+ *
+ * Pure and node-shaped rather than inlined in `PointCloudRenderer` so it is
+ * testable without a `GPUDevice`. That matters here specifically: the
+ * renderer-to-query wiring is exactly where the aligned-scan gap lived, and
+ * it went unnoticed because nothing could exercise it without a GPU. Empty
+ * indexes are skipped, mirroring `getPickNodes`. A node with keyed chunks
+ * contributes one source per key index, all sharing the node's placement.
+ */
+export function buildRayQuerySources<I extends { pointCount: number }>(
+  nodes: Iterable<RayQueryNodeLike<I>>,
+  classMask: Uint32Array,
+): Array<RayQuerySource<I>> {
+  const out: Array<RayQuerySource<I>> = [];
+  for (const node of nodes) {
+    const indexes = node.keyedIndexes ? [node.spatialIndex, ...node.keyedIndexes.values()] : [node.spatialIndex];
+    for (const index of indexes) {
+      if (index.pointCount === 0) continue;
+      out.push({
+        expressId: node.meta.expressId,
+        modelIndex: node.meta.modelIndex,
+        index,
+        // The index stores RAW decoder positions while the shader draws
+        // through `model` (#1804) — the query needs the matrix to reconcile
+        // the two, or an aligned scan snaps to pre-alignment coordinates.
+        model: node.placement ?? node.model,
+        classMask,
+      });
+    }
+  }
+  return out;
+}
+
+/** A ray rewritten into a point cloud's local frame, plus the conversions
+ *  needed to move distances and hit positions back out to world space. */
+export interface LocalFrameRay {
+  origin: Vec3;
+  /** Unit-length in local space, so `queryRay`'s `t` stays a true distance. */
+  direction: Vec3;
+  /** World distance = local distance * this. 1 for an identity transform. */
+  distanceScale: number;
+  /** Map a local-space hit position back to world space. */
+  toWorld(p: Vec3): Vec3;
+}
+
+/**
+ * Uniform scale factor of a column-major 4x4's linear part.
+ *
+ * Exact for a similarity transform (every column has the same length);
+ * for a non-uniform matrix it returns the mean, which keeps snap
+ * tolerances in the right ballpark rather than exact. Returns 1 for a
+ * degenerate (~zero) matrix so callers never divide by zero.
+ */
+export function matrixUniformScale(m: Float32Array | Float64Array): number {
+  const cx = Math.hypot(m[0], m[1], m[2]);
+  const cy = Math.hypot(m[4], m[5], m[6]);
+  const cz = Math.hypot(m[8], m[9], m[10]);
+  const mean = (cx + cy + cz) / 3;
+  return mean > 1e-12 ? mean : 1;
+}
+
+/**
+ * True when `m` is close enough to the identity that transforming through
+ * it is pure overhead. The overwhelmingly common case is an unaligned
+ * scan, and this keeps that path allocation-free.
+ */
+export function isIdentityMatrix(m: Float32Array | Float64Array): boolean {
+  const EPS = 1e-6;
+  for (let i = 0; i < 16; i++) {
+    const expected = i % 5 === 0 ? 1 : 0;
+    if (Math.abs(m[i] - expected) > EPS) return false;
+  }
+  return true;
+}
+
+/**
+ * Rewrite a world-space ray into `model`'s local frame.
+ *
+ * Returns `null` when no transform is needed (absent, malformed, identity)
+ * or when the matrix is singular — callers should then query with the
+ * original world ray, which is the correct behaviour for an unaligned
+ * cloud and a safe fallback for a degenerate matrix.
+ */
+export function toLocalFrameRay(
+  origin: Vec3,
+  direction: Vec3,
+  model: Float32Array | Float64Array | undefined,
+): LocalFrameRay | null {
+  if (!isUsableModelMatrix(model) || isIdentityMatrix(model)) return null;
+
+  // Point-cloud alignment is affine. Inverting its 3×3 linear part directly
+  // keeps the f64 translation in JavaScript numbers; `MathUtils.invert`
+  // returns an f32 Mat4 and would reintroduce the very map-grid rounding this
+  // RTE contract prevents.
+  const determinant =
+    model[0] * (model[5] * model[10] - model[9] * model[6])
+    - model[4] * (model[1] * model[10] - model[9] * model[2])
+    + model[8] * (model[1] * model[6] - model[5] * model[2]);
+  if (!Number.isFinite(determinant) || Math.abs(determinant) <= 1e-18) return null;
+  const invDet = 1 / determinant;
+  const i00 = (model[5] * model[10] - model[9] * model[6]) * invDet;
+  const i01 = (model[8] * model[6] - model[4] * model[10]) * invDet;
+  const i02 = (model[4] * model[9] - model[8] * model[5]) * invDet;
+  const i10 = (model[9] * model[2] - model[1] * model[10]) * invDet;
+  const i11 = (model[0] * model[10] - model[8] * model[2]) * invDet;
+  const i12 = (model[8] * model[1] - model[0] * model[9]) * invDet;
+  const i20 = (model[1] * model[6] - model[5] * model[2]) * invDet;
+  const i21 = (model[4] * model[2] - model[0] * model[6]) * invDet;
+  const i22 = (model[0] * model[5] - model[4] * model[1]) * invDet;
+  const tx = model[12]; const ty = model[13]; const tz = model[14];
+  const itx = -(i00 * tx + i01 * ty + i02 * tz);
+  const ity = -(i10 * tx + i11 * ty + i12 * tz);
+  const itz = -(i20 * tx + i21 * ty + i22 * tz);
+
+  const ox = i00 * origin.x + i01 * origin.y + i02 * origin.z + itx;
+  const oy = i10 * origin.x + i11 * origin.y + i12 * origin.z + ity;
+  const oz = i20 * origin.x + i21 * origin.y + i22 * origin.z + itz;
+
+  // Direction is a vector: no translation column.
+  const dx = i00 * direction.x + i01 * direction.y + i02 * direction.z;
+  const dy = i10 * direction.x + i11 * direction.y + i12 * direction.z;
+  const dz = i20 * direction.x + i21 * direction.y + i22 * direction.z;
+  const len = Math.hypot(dx, dy, dz);
+  if (!(len > 1e-12)) return null;
+
+  const m = model;
+  return {
+    origin: { x: ox, y: oy, z: oz },
+    direction: { x: dx / len, y: dy / len, z: dz / len },
+    distanceScale: matrixUniformScale(m),
+    toWorld: (p: Vec3): Vec3 => ({
+      x: m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12],
+      y: m[1] * p.x + m[5] * p.y + m[9] * p.z + m[13],
+      z: m[2] * p.x + m[6] * p.y + m[10] * p.z + m[14],
+    }),
+  };
+}

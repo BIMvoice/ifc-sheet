@@ -1,0 +1,138 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * `ValidationPanel` chrome (#5138 PR 4): the panel title, the empty-state
+ * entry cards, the rule-set authoring/running states, the set-level result
+ * rows (`IDSResultRows.tsx`'s `SetResultRow`) and the closed
+ * `FailureReasonCode` labels. `ids-panel.en.ts` keeps every IDS-only
+ * string (IDS document load/audit/run, the results toolbar, entity/
+ * requirement rows) — this catalogue is additive to it, not a replacement.
+ */
+export const validationPanelEn = {
+  'validationPanel.title': 'Data validation',
+
+  'validationPanel.entry.idsTitle': 'IDS validation',
+  'validationPanel.entry.idsDescription': 'Check the model against a buildingSMART IDS requirements file.',
+  'validationPanel.entry.rulesTitle': 'Information validation',
+  'validationPanel.entry.rulesDescription': 'Author checks — uniqueness, totals, comparisons — the model must satisfy.',
+  'validationPanel.entry.newRuleSet': 'New rule set',
+  'validationPanel.entry.openRuleSet': 'Open .rules.json',
+  'validationPanel.entry.recent': 'Recent rule sets',
+  'validationPanel.entry.importIds': 'Import IDS as rules',
+
+  'validationPanel.toggle.ids': 'IDS validation',
+  'validationPanel.toggle.rules': 'Information validation',
+  'validationPanel.toggle.manual': 'Manual validation',
+
+  'validationPanel.editRules': 'Edit rules',
+  'validationPanel.save': 'Save',
+  'validationPanel.exportIds': 'Export as IDS',
+
+  'validationPanel.idsExport.summary': 'Exported {converted} of {total} rules to IDS.',
+  'validationPanel.idsExport.none': 'No rule in this set can be expressed in IDS, so nothing was exported.',
+  'validationPanel.idsExport.refusedHeading': 'Not exported',
+  'validationPanel.idsImport.summary': 'Imported {converted} of {total} IDS specifications as rules.',
+  'validationPanel.idsImport.none': 'No specification in this IDS has a rule equivalent, so nothing was imported.',
+  'validationPanel.idsImport.refusedHeading': 'Not imported',
+  'validationPanel.idsImport.droppedHeading': 'Imported without these checks',
+  'validationPanel.idsSummary.notesHeading': 'Note',
+  'validationPanel.idsSummary.dismiss': 'Dismiss',
+  'validationPanel.run': 'Run',
+  'validationPanel.cancel': 'Cancel',
+
+  'validationPanel.running.rule': 'Checking rule {current} of {total}',
+  'validationPanel.running.applicability': 'Finding applicable elements…',
+  'validationPanel.running.requirements': 'Checking requirements…',
+
+  // Shared result view (#6925): population and coverage of a validation run.
+  'validationPanel.result.population': { one: '{countDisplay} entity–specification result', other: '{countDisplay} entity–specification results' },
+  'validationPanel.result.applied': '{applied} of {total} specifications applied to elements',
+  'validationPanel.result.notApplicable': { one: '{count} specification had no applicable elements', other: '{count} specifications had no applicable elements' },
+  'validationPanel.result.unevaluable': { one: '{count} specification could not be evaluated', other: '{count} specifications could not be evaluated' },
+  'validationPanel.result.setsCapped': { one: '{count} specification stopped its set checks at the limit', other: '{count} specifications stopped their set checks at the limit' },
+  'validationPanel.results.resizeSummary': 'Resize validation summary',
+
+  'validationPanel.error.validationFailed': 'Validation failed',
+  'validationPanel.error.corruptRecent': '"{name}" could not be loaded — it may be corrupted. It has been removed from Recent rule sets.',
+
+  'validationPanel.setResult.heading': 'Set-level results',
+  'validationPanel.setResult.actualExpected': '{actual} (expected {expected})',
+  'validationPanel.setResult.members': { one: '{countDisplay} member', other: '{countDisplay} members' },
+  'validationPanel.setResult.isolate': 'Isolate',
+  'validationPanel.setResult.truncated': 'Some set results were omitted — too many to list.',
+  'validationPanel.setResult.duplicateGroupsSummary': { one: '{countDisplay} duplicate group', other: '{countDisplay} duplicate groups' },
+  'validationPanel.setResult.aggregateFailuresSummary': { one: '{countDisplay} aggregate check failed', other: '{countDisplay} aggregate checks failed' },
+
+  'validationPanel.reason.absent': 'Value is absent',
+  'validationPanel.reason.mismatch': 'Value does not match',
+  'validationPanel.reason.notNumeric': 'Value is not numeric',
+  'validationPanel.reason.cardinality': 'Cardinality not satisfied',
+  'validationPanel.reason.duplicate': 'Duplicate value',
+  'validationPanel.reason.aggregate': 'Aggregate check failed',
+  'validationPanel.reason.notDate': 'Value is not a date',
+  'validationPanel.history.title': 'Saved reports',
+  'validationPanel.history.select': 'Select saved validation report',
+  'validationPanel.history.name': 'Report name',
+  'validationPanel.history.remove': 'Remove report',
+  'validationPanel.history.frozen': 'Saved evidence. Later runs do not change this report.',
+  'validationPanel.history.models': 'Models: {models}',
+  'validationPanel.history.empty': 'Choose Save report after an IDS or information check to keep it here. Save a manual report from its checklist.',
+  'validationPanel.history.saveReport': 'Save report',
+  'validationPanel.history.saved': 'Report saved',
+  'validationPanel.history.savePending': 'Save pending',
+  'validationPanel.history.saveRejected': 'This report could not be saved.',
+  'validationPanel.history.retrySave': 'Retry save',
+  'validationPanel.history.saveManual': 'Save report',
+  'validationPanel.history.documentSource': 'Saved report source',
+  'validationPanel.history.embedded': 'Current document snapshot',
+  'validationPanel.library.rulesSelect': 'Select rule set',
+  'validationPanel.library.idsSelect': 'Select IDS document',
+  'validationPanel.library.none': 'No check selected',
+  'validationPanel.library.untitled': 'Untitled check',
+  'validationPanel.library.new': 'New rule set',
+  'validationPanel.library.import': 'Import another check',
+  'validationPanel.library.copy': 'New from this check',
+  'validationPanel.library.copyName': '{name} copy',
+  'validationPanel.library.delete': 'Delete check',
+  'validationPanel.library.idsDownload': 'Download IDS',
+  'contentStorage.loading': 'Loading saved content…',
+  'contentStorage.saving': 'Saving changes…',
+  'contentStorage.saved': 'Changes saved in this browser.',
+  'contentStorage.quota': 'Browser storage is full. Your changes remain in this tab. Download a backup or free space, then retry.',
+  'contentStorage.unavailable': 'Browser storage is unavailable. Keep this tab open and download a backup before closing it.',
+  'contentStorage.conflict': 'Another tab changed or deleted this item. Download your draft or save it as a new copy; retry will not overwrite the other version.',
+  'contentStorage.invalid': 'This content could not be saved. Finish incomplete blocks and fields, or use a new copy for changed report evidence.',
+  'contentStorage.recovered': 'Some older entries could not be imported. Their original data is preserved in the recovery download.',
+  'contentStorage.controls': 'Storage and backup',
+  'contentStorage.export': 'Download library backup',
+  'contentStorage.import': 'Import library backup',
+  'contentStorage.imported': 'Imported {count} items. Existing conflicting items were kept; imported versions are separate copies.',
+  'contentStorage.refreshFailed': 'The import was saved, but the visible libraries could not refresh. Reload this page to view the saved content.',
+  'contentStorage.draftsPreserved': {
+    one: 'Preserved {count} incomplete draft as raw recovery evidence. Download preserved originals to inspect or recover it; complete the unfinished fields before adding it to a library.',
+    other: 'Preserved {count} incomplete drafts as raw recovery evidence. Download preserved originals to inspect or recover them; complete the unfinished fields before adding them to a library.',
+  },
+  'contentStorage.draftsUnsaved': {
+    one: '{count} incomplete draft remains only in this tab. Use Retry all libraries, or download a library backup or preserved originals before closing it.',
+    other: '{count} incomplete drafts remain only in this tab. Use Retry all libraries, or download a library backup or preserved originals before closing it.',
+  },
+  'contentStorage.draftReadUnavailable': 'Archived draft evidence could not be read. This download contains the libraries and draft evidence currently available in this tab. Keep earlier backups too.',
+  'contentStorage.importFailed': 'The backup was not saved. Its valid content remains in this tab. Use Retry all libraries to save the complete import, or download a backup before closing it.',
+  'contentStorage.retryAll': 'Retry all libraries',
+  'contentStorage.someUnsaved': 'Some content could not be saved. Keep this tab open and download a backup before closing it.',
+  'contentStorage.recovery': 'Download preserved originals',
+  'contentStorage.cleanup': 'Remove migrated legacy copies',
+  'contentStorage.restore': 'Reload saved versions',
+  'contentStorage.restoreConfirm': 'Download a backup of your drafts first. Replace this library’s unsaved changes with the versions saved in this browser?',
+  'contentStorage.cleanupConfirm': 'Close other viewer tabs first. Remove only unchanged legacy copies that have been preserved in the new storage?',
+  'contentStorage.cleaned': 'Unchanged migrated legacy copies were removed. Preserved originals remain available in recovery.',
+  'contentStorage.protect': 'Protect browser storage',
+  'contentStorage.checkUsage': 'Check storage usage',
+  'contentStorage.unknown': 'unknown',
+  'contentStorage.estimate': 'Library payloads in this tab: about {library} MiB. Origin storage: {usage} MiB of approximately {quota} MiB, including model caches and other site data.',
+  'contentStorage.protected': 'Persistent storage is enabled. Keep exported backups: clearing site data still deletes browser content.',
+  'contentStorage.notProtected': 'The browser did not grant persistent storage. Saving still works; use exported backups for important work.',
+  'contentStorage.failed': 'Storage operation failed: {message}',
+} as const;

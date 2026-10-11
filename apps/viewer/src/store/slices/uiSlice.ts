@@ -1,0 +1,361 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * UI state slice
+ */
+
+import { can } from '../../edition';
+import type { StateCreator } from 'zustand';
+import {
+  RIBBON_COLLAPSED_STORAGE_KEY,
+  RIBBON_CONTEXTUAL_TABS_STORAGE_KEY,
+  UI_DEFAULTS,
+  type RibbonTabId,
+} from '../constants.js';
+import {
+  createGeometryLoadSettings,
+  geometryLoadSettingsInitialState,
+  type GeometryLoadSettingsActions,
+  type GeometryLoadSettingsState,
+} from './geometryLoadSettings.js';
+import type { ContactShadingQuality, SeparationLinesQuality } from '@ifc-lite/renderer';
+import type { FederatedModel } from '../types.js';
+import type { GeometryResult } from '@ifc-lite/geometry';
+import type { CesiumPlacementDraft } from './cesiumSlice.js';
+import { applyThemeClasses, hasLoadedModel, initialShowPerformanceStats, persistShowPerformanceStats } from './uiSlice.helpers.js';
+import type { NavigationPreset } from '@/lib/navigation/presets.js';
+import type { SelectedDirectrixSegment } from '@/lib/analytic/segment-selection.js';
+import { getInitialHierarchyMode, getInitialNavigationPreset, persistHierarchyMode, persistNavigationPreset } from './uiPreferences.js';
+
+export type ThemeMode = 'light' | 'dark' | 'colorful';
+export type { GeometryReloadReason } from './geometryLoadSettings.js';
+
+export type HierarchyMode = 'spatial' | 'type' | 'ifc-type' | 'material' | 'groups';
+
+/**
+ * One-shot target for "jump to a property and edit it" flows (issue #1107).
+ * Armed when a property is added from the bSDD card, consumed by the
+ * Properties panel once the user arrives on the Properties tab — it scrolls
+ * the row into view, highlights it and enters edit mode, then clears itself.
+ * Identified by the same (raw) modelId + expressId the selection carries, so
+ * a stale focus left over from a different entity is simply never matched.
+ */
+export interface PropertyFocusTarget {
+  modelId: string;
+  entityId: number;
+  psetName: string;
+  propName: string;
+}
+
+/**
+ * Tools that require edit mode to function. Entering one flips
+ * `editEnabled` on; leaving edit mode forces these back to `'select'`.
+ * Keep in sync between `setActiveTool` and `setEditEnabled` — duplicating
+ * the check is how the two states drift in "enter edit, switch tool, exit".
+ */
+const AUTHORING_TOOLS: ReadonlySet<string> = new Set([
+  'cesium-placement',
+  'command',
+]);
+
+/** The authoring session and collab gate, reached through the combined `get()`. */
+interface WorkspaceCrossSlice {
+  canCollabEdit?: () => boolean;
+  workspaceMode?: 'view' | 'model';
+  enterModelWorkspace?: () => boolean;
+  exitModelWorkspace?: () => void;
+}
+
+/**
+ * Cross-slice surface UISlice reaches into via the combined Zustand
+ * `get()` to decide whether toggling a load-time setting needs a
+ * reload (only meaningful while a model is in scope).
+ */
+export interface UICrossSliceState {
+  models: Map<string, FederatedModel>;
+  geometryResult: GeometryResult | null;
+  /**
+   * Cesium placement draft state owned by `CesiumSlice`. UISlice
+   * reaches in to clear it when global edit mode flips off, so that
+   * "exit edit" really exits everything (the placement editor, the
+   * draft values, the active tool) in a single atomic update.
+   */
+  cesiumPlacementEditMode: boolean;
+  cesiumPlacementDraftModelId: string | null;
+  cesiumPlacementDraft: CesiumPlacementDraft | null;
+}
+
+export interface UISlice extends GeometryLoadSettingsState, GeometryLoadSettingsActions {
+  // State
+  leftPanelCollapsed: boolean;
+  rightPanelCollapsed: boolean;
+  activeTool: string;
+  /**
+   * Global edit mode. When `true`, all in-place editing affordances (inline
+   * property/attribute editors, future geometry manipulators, georeference
+   * placement, the Model workspace's draw tools) are unlocked; `false` (default) is
+   * strictly read-only. One pill in the main toolbar, not per-panel toggles.
+   */
+  editEnabled: boolean;
+  /** Active tab in the Properties panel. Controlled so in-app flows (e.g.
+   *  adding a bSDD property) can jump back to "properties" — issue #1107. */
+  propertiesActiveTab: 'properties' | 'quantities' | 'bsdd' | 'raw-step';
+  /** Active grouping tab shared by the Hierarchy panel and Ribbon. */
+  hierarchyMode: HierarchyMode;
+  /** One-shot "scroll to + highlight + edit this property" request, armed by
+   *  the bSDD add flow and consumed by the Properties panel. Null when idle. */
+  pendingPropertyFocus: PropertyFocusTarget | null;
+  theme: ThemeMode;
+  isMobile: boolean;
+  hoverTooltipsEnabled: boolean;
+  showPerformanceStats: boolean;
+  navigationPreset: NavigationPreset;
+  visualEnhancementsEnabled: boolean;
+  /** Show exact authored swept-disk directrices for selected IFC products. */
+  centrelineOverlayEnabled: boolean;
+  selectedDirectrixSegment: SelectedDirectrixSegment | null;
+  contactShadingQuality: ContactShadingQuality;
+  contactShadingIntensity: number;
+  contactShadingRadius: number;
+  separationLinesEnabled: boolean;
+  separationLinesQuality: SeparationLinesQuality;
+  separationLinesIntensity: number;
+  separationLinesRadius: number;
+  /** Ribbon collapsed to its tab strip (Office-style double-click). */
+  ribbonCollapsed: boolean;
+  /**
+   * Ribbon tab showing in the band. Lives in the store, not the component,
+   * so non-React drivers (walkthrough, command palette) can open a tab;
+   * deliberately NOT persisted, so every session still starts on Home.
+   */
+  ribbonTab: RibbonTabId;
+  /**
+   * Ribbon tabs follow the working context: a selection opens Elements,
+   * edit mode opens Author, an empty scene opens File, and dropping the
+   * context returns the user to the tab they came from. Persisted opt-out.
+   */
+  ribbonContextualTabs: boolean;
+
+  // Actions
+  setLeftPanelCollapsed: (collapsed: boolean) => void;
+  setRightPanelCollapsed: (collapsed: boolean) => void;
+  setActiveTool: (tool: string, via?: import('@/lib/analytics-ui-events').ToolChangeVia) => void; // via: see withToolTelemetry (#5618)
+  setEditEnabled: (enabled: boolean) => void;
+  toggleEditEnabled: () => void;
+  setPropertiesActiveTab: (tab: 'properties' | 'quantities' | 'bsdd' | 'raw-step') => void;
+  setHierarchyMode: (mode: HierarchyMode) => void;
+  /** Arm (or clear, with null) the one-shot property-focus request. */
+  setPendingPropertyFocus: (focus: PropertyFocusTarget | null) => void;
+  setTheme: (theme: ThemeMode) => void;
+  toggleTheme: () => void;
+  /** Shift+click secret: toggle colorful mode on/off */
+  toggleColorful: () => void;
+  setIsMobile: (isMobile: boolean) => void;
+  toggleHoverTooltips: () => void;
+  setShowPerformanceStats: (enabled: boolean) => void;
+  setNavigationPreset: (preset: NavigationPreset) => void;
+  setVisualEnhancementsEnabled: (enabled: boolean) => void;
+  setCentrelineOverlayEnabled: (enabled: boolean) => void;
+  setSelectedDirectrixSegment: (segment: SelectedDirectrixSegment | null) => void;
+  setContactShadingQuality: (quality: ContactShadingQuality) => void;
+  setContactShadingIntensity: (intensity: number) => void;
+  setContactShadingRadius: (radius: number) => void;
+  setSeparationLinesEnabled: (enabled: boolean) => void;
+  setSeparationLinesQuality: (quality: SeparationLinesQuality) => void;
+  setSeparationLinesIntensity: (intensity: number) => void;
+  setSeparationLinesRadius: (radius: number) => void;
+  /** Collapse/expand the ribbon band and persist the choice. */
+  setRibbonCollapsed: (collapsed: boolean) => void;
+  /** Open a ribbon tab (session-local). */
+  setRibbonTab: (tab: RibbonTabId) => void;
+  /** Turn contextual tab following on/off and persist the choice. */
+  setRibbonContextualTabs: (enabled: boolean) => void;
+
+  /**
+   * When true, `AnonymizedExportDialog` should auto-open. Set by the entity
+   * context menu ("Export anonymized…") and the Command Palette
+   * (`export:anonymized`) — the two entry points that are not the export
+   * toolbar dropdown itself. Consumed once then cleared by the dialog
+   * (mirrors `flavorDialogRequested`, `extensionsSlice.ts`).
+   */
+  anonymizedExportRequested: boolean;
+  setAnonymizedExportRequested: (requested: boolean) => void;
+}
+
+export const createUISlice: StateCreator<UISlice & UICrossSliceState, [], [], UISlice> = (set, get) => ({
+  ...geometryLoadSettingsInitialState,
+  ...createGeometryLoadSettings(set, get, () => hasLoadedModel(get())),
+  // Initial state
+  leftPanelCollapsed: false,
+  rightPanelCollapsed: false,
+  activeTool: UI_DEFAULTS.ACTIVE_TOOL,
+  editEnabled: false,
+  propertiesActiveTab: 'properties',
+  hierarchyMode: getInitialHierarchyMode(),
+  pendingPropertyFocus: null,
+  theme: UI_DEFAULTS.THEME,
+  isMobile: false,
+  hoverTooltipsEnabled: UI_DEFAULTS.HOVER_TOOLTIPS_ENABLED,
+  showPerformanceStats: initialShowPerformanceStats(),
+  navigationPreset: getInitialNavigationPreset(),
+  visualEnhancementsEnabled: UI_DEFAULTS.VISUAL_ENHANCEMENTS_ENABLED,
+  centrelineOverlayEnabled: false,
+  selectedDirectrixSegment: null,
+  contactShadingQuality: UI_DEFAULTS.CONTACT_SHADING_QUALITY,
+  contactShadingIntensity: UI_DEFAULTS.CONTACT_SHADING_INTENSITY,
+  contactShadingRadius: UI_DEFAULTS.CONTACT_SHADING_RADIUS,
+  separationLinesEnabled: UI_DEFAULTS.SEPARATION_LINES_ENABLED,
+  separationLinesQuality: UI_DEFAULTS.SEPARATION_LINES_QUALITY,
+  separationLinesIntensity: UI_DEFAULTS.SEPARATION_LINES_INTENSITY,
+  separationLinesRadius: UI_DEFAULTS.SEPARATION_LINES_RADIUS,
+  ribbonCollapsed: UI_DEFAULTS.RIBBON_COLLAPSED,
+  ribbonTab: UI_DEFAULTS.RIBBON_TAB,
+  ribbonContextualTabs: UI_DEFAULTS.RIBBON_CONTEXTUAL_TABS,
+  anonymizedExportRequested: false,
+
+  // Actions
+  setLeftPanelCollapsed: (leftPanelCollapsed) => set({ leftPanelCollapsed }),
+  setRightPanelCollapsed: (rightPanelCollapsed) => set({ rightPanelCollapsed }),
+  setActiveTool: (activeTool) => {
+    // Authoring tools require edit mode; entering one flips the global
+    // toggle on so the rest of the UI (Properties panel, future
+    // manipulators) stays in sync — read-only tools leave it alone.
+    //
+    // Leaving 'measure' must discard any in-progress gesture — MeasureOverlay
+    // only mounts while activeTool === 'measure' (ToolOverlays.tsx), so this
+    // is the one place a stray drag/polyline sequence could be left stranded.
+    // Routed through measurementSlice's resetMeasureGesture instead of
+    // duplicating the clear here, keeping one place that knows what
+    // "in-progress gesture" means (see measurementSlice.ts's measureMode doc).
+    const leavingMeasure = get().activeTool === 'measure' && activeTool !== 'measure';
+    if (AUTHORING_TOOLS.has(activeTool)) {
+      // The docs edition has no authoring tools (it never changes the model's geometry).
+      if (!can('modelling')) return;
+      // Collab role gate: in a shared session only editor/admin may
+      // unlock authoring. Viewers/commenters can still pick read-only
+      // tools, so we only block the authoring branch.
+      const cross = get() as unknown as WorkspaceCrossSlice;
+      if (cross.canCollabEdit && !cross.canCollabEdit()) return;
+      if (leavingMeasure) (get() as unknown as { resetMeasureGesture?: () => void }).resetMeasureGesture?.();
+      // Authoring happens in the Model workspace; no editable model, no tool.
+      if (cross.workspaceMode !== 'model' && cross.enterModelWorkspace && !cross.enterModelWorkspace()) return;
+      set({ activeTool, editEnabled: true });
+      return;
+    }
+    if (leavingMeasure) (get() as unknown as { resetMeasureGesture?: () => void }).resetMeasureGesture?.();
+    set({ activeTool });
+  },
+  setEditEnabled: (editEnabled) => {
+    // Edit mode is the Model workspace's (#6232): entering or leaving goes
+    // through the session slice, which keeps `editEnabled` in step (no
+    // editable model = no workspace = edit mode stays off). The bare flag is
+    // for a UISlice composed without the session slice.
+    const cross = get() as unknown as WorkspaceCrossSlice;
+    if (editEnabled) {
+      // Collab role gate: only editor/admin (or single-user, role===null)
+      // may enter edit mode — the single chokepoint for every authoring surface.
+      if (cross.canCollabEdit && !cross.canCollabEdit()) return;
+      // The docs edition edits properties only: edit mode without the Model workspace.
+      if (!can('modelling')) { set({ editEnabled: true }); return; }
+      if (cross.enterModelWorkspace) cross.enterModelWorkspace();
+      else set({ editEnabled: true });
+      return;
+    }
+    if (cross.workspaceMode === 'model' && cross.exitModelWorkspace) {
+      cross.exitModelWorkspace();
+      return;
+    }
+    // Flipping edit mode off must clear every authoring sub-state that
+    // depends on it — otherwise the viewer ends up "not in edit mode" but
+    // still carrying a georef draft or a half-drawn slab polygon.
+    set((s) => ({
+      editEnabled: false,
+      activeTool: AUTHORING_TOOLS.has(s.activeTool) ? 'select' : s.activeTool,
+      cesiumPlacementEditMode: false,
+      cesiumPlacementDraftModelId: null,
+      cesiumPlacementDraft: null,
+    }));
+  },
+  toggleEditEnabled: () => {
+    get().setEditEnabled(!get().editEnabled);
+  },
+
+  setPropertiesActiveTab: (propertiesActiveTab) => set({ propertiesActiveTab }),
+
+  setHierarchyMode: (mode) => {
+    set({ hierarchyMode: mode });
+    persistHierarchyMode(mode);
+  },
+
+  setPendingPropertyFocus: (pendingPropertyFocus) => set({ pendingPropertyFocus }),
+
+  setTheme: (theme) => {
+    applyThemeClasses(theme);
+    localStorage.setItem('ifc-lite-theme', theme);
+    set({ theme });
+  },
+
+  toggleTheme: () => {
+    // Normal toggle: dark ↔ light. If currently colorful, drop to dark.
+    const current = get().theme;
+    const newTheme = current === 'dark' ? 'light' : 'dark';
+    applyThemeClasses(newTheme);
+    localStorage.setItem('ifc-lite-theme', newTheme);
+    set({ theme: newTheme });
+  },
+
+  toggleColorful: () => {
+    // Shift+click secret: toggle colorful on/off
+    // Into colorful from any state. Out of colorful → light (the storm clears).
+    const current = get().theme;
+    const newTheme: ThemeMode = current === 'colorful' ? 'light' : 'colorful';
+    applyThemeClasses(newTheme);
+    localStorage.setItem('ifc-lite-theme', newTheme);
+    set({ theme: newTheme });
+  },
+
+  setIsMobile: (isMobile) => set({ isMobile }),
+  toggleHoverTooltips: () => set((state) => ({ hoverTooltipsEnabled: !state.hoverTooltipsEnabled })),
+  setShowPerformanceStats: (showPerformanceStats) => {
+    persistShowPerformanceStats(showPerformanceStats);
+    set({ showPerformanceStats });
+  },
+  setNavigationPreset: (navigationPreset) => {
+    persistNavigationPreset(navigationPreset);
+    set({ navigationPreset });
+  },
+  setVisualEnhancementsEnabled: (visualEnhancementsEnabled) => set({ visualEnhancementsEnabled }),
+  setCentrelineOverlayEnabled: (centrelineOverlayEnabled) => set({ centrelineOverlayEnabled }),
+  setSelectedDirectrixSegment: (selectedDirectrixSegment) => set({ selectedDirectrixSegment }),
+  setContactShadingQuality: (contactShadingQuality) => set({ contactShadingQuality }),
+  setContactShadingIntensity: (contactShadingIntensity) => set({ contactShadingIntensity }),
+  setContactShadingRadius: (contactShadingRadius) => set({ contactShadingRadius }),
+  setSeparationLinesEnabled: (separationLinesEnabled) => set({ separationLinesEnabled }),
+  setSeparationLinesQuality: (separationLinesQuality) => set({ separationLinesQuality }),
+  setSeparationLinesIntensity: (separationLinesIntensity) => set({ separationLinesIntensity }),
+  setSeparationLinesRadius: (separationLinesRadius) => set({ separationLinesRadius }),
+
+  setRibbonCollapsed: (ribbonCollapsed) => {
+    try {
+      localStorage.setItem(RIBBON_COLLAPSED_STORAGE_KEY, String(ribbonCollapsed));
+    } catch (err) {
+      console.warn('[ribbon-collapsed] persist failed; in-memory only', err);
+    }
+    set({ ribbonCollapsed });
+  },
+
+  setRibbonTab: (ribbonTab) => set({ ribbonTab }),
+
+  setRibbonContextualTabs: (ribbonContextualTabs) => {
+    try {
+      localStorage.setItem(RIBBON_CONTEXTUAL_TABS_STORAGE_KEY, String(ribbonContextualTabs));
+    } catch (err) {
+      console.warn('[ribbon-contextual-tabs] persist failed; in-memory only', err);
+    }
+    set({ ribbonContextualTabs });
+  },
+
+  setAnonymizedExportRequested: (anonymizedExportRequested) => set({ anonymizedExportRequested }),
+});

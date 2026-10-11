@@ -1,0 +1,364 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! SurfaceOfLinearExtrusion processor - surface sweep geometry.
+
+use crate::{Error, Mesh, Point2, Point3, Result, TessellationQuality, Vector3};
+use ifc_lite_core::{DecodedEntity, EntityDecoder, IfcSchema, IfcType};
+use nalgebra::Matrix4;
+
+use super::helpers::{get_axis2_placement_transform_by_id, get_direction_by_id};
+use crate::router::GeometryProcessor;
+
+/// SurfaceOfLinearExtrusion processor
+/// Handles IfcSurfaceOfLinearExtrusion - surface created by sweeping a curve along a direction
+pub struct SurfaceOfLinearExtrusionProcessor;
+
+#[path = "curve_walk.rs"]
+mod curve_walk;
+use curve_walk::{CurveWalk, MAX_CURVE_NODES, SEAM_EPS};
+
+impl SurfaceOfLinearExtrusionProcessor {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl GeometryProcessor for SurfaceOfLinearExtrusionProcessor {
+    fn process(
+        &self,
+        entity: &DecodedEntity,
+        decoder: &mut EntityDecoder,
+        _schema: &IfcSchema,
+        _quality: TessellationQuality,
+    ) -> Result<Mesh> {
+        // IfcSurfaceOfLinearExtrusion attributes:
+        // 0: SweptCurve (IfcProfileDef - usually IfcArbitraryOpenProfileDef)
+        // 1: Position (IfcAxis2Placement3D)
+        // 2: ExtrudedDirection (IfcDirection)
+        // 3: Depth (length)
+
+        // Get the swept curve (profile)
+        let curve_attr = entity.get(0).ok_or_else(|| {
+            Error::geometry("SurfaceOfLinearExtrusion missing SweptCurve".to_string())
+        })?;
+
+        let curve_id = curve_attr.as_entity_ref().ok_or_else(|| {
+            Error::geometry("Expected entity reference for SweptCurve".to_string())
+        })?;
+
+        // Get position
+        let position_attr = entity.get(1);
+        let position_transform = if let Some(attr) = position_attr {
+            if let Some(pos_id) = attr.as_entity_ref() {
+                get_axis2_placement_transform_by_id(pos_id, decoder)?
+            } else {
+                Matrix4::identity()
+            }
+        } else {
+            Matrix4::identity()
+        };
+
+        // Get extrusion direction
+        let direction_attr = entity.get(2).ok_or_else(|| {
+            Error::geometry("SurfaceOfLinearExtrusion missing ExtrudedDirection".to_string())
+        })?;
+
+        let direction = if let Some(dir_id) = direction_attr.as_entity_ref() {
+            get_direction_by_id(dir_id, decoder)
+                .ok_or_else(|| Error::geometry("Failed to get direction".to_string()))?
+        } else {
+            Vector3::new(0.0, 0.0, 1.0) // Default to Z-up
+        };
+
+        // Get depth
+        let depth = entity
+            .get(3)
+            .and_then(|v| v.as_float())
+            .ok_or_else(|| Error::geometry("SurfaceOfLinearExtrusion missing Depth".to_string()))?;
+
+        // Get curve points from the profile
+        let curve_points = Self::get_profile_curve_points(curve_id, decoder)?;
+
+        if curve_points.len() < 2 {
+            return Ok(Mesh::new());
+        }
+
+        // Extrude the curve to create a surface (quad strip)
+        let extrusion = direction.normalize() * depth;
+
+        let mut positions = Vec::with_capacity(curve_points.len() * 2 * 3);
+        let mut indices = Vec::with_capacity((curve_points.len() - 1) * 6);
+
+        // Create vertices: bottom row, then top row
+        for point in &curve_points {
+            // Transform 2D point to 3D using position
+            let p3d = position_transform.transform_point(&Point3::new(point.x, point.y, 0.0));
+            positions.push(p3d.x as f32);
+            positions.push(p3d.y as f32);
+            positions.push(p3d.z as f32);
+        }
+
+        for point in &curve_points {
+            // Extruded point
+            let p3d = position_transform.transform_point(&Point3::new(point.x, point.y, 0.0));
+            let p_extruded = p3d + extrusion;
+            positions.push(p_extruded.x as f32);
+            positions.push(p_extruded.y as f32);
+            positions.push(p_extruded.z as f32);
+        }
+
+        // Create quad strip triangles
+        let n = curve_points.len() as u32;
+        for i in 0..n - 1 {
+            // Two triangles per quad
+            // Triangle 1: bottom-left, bottom-right, top-left
+            indices.push(i);
+            indices.push(i + 1);
+            indices.push(i + n);
+
+            // Triangle 2: bottom-right, top-right, top-left
+            indices.push(i + 1);
+            indices.push(i + n + 1);
+            indices.push(i + n);
+        }
+
+        Ok(Mesh {
+            positions,
+            normals: Vec::new(),
+            indices,
+            rtc_applied: false, 
+            welded_in_object_frame: false,
+            plane_tags: None,
+            origin: [0.0; 3],        instance_meta: None, local_bounds: None, local_to_world: None })
+    }
+
+    fn supported_types(&self) -> Vec<IfcType> {
+        vec![IfcType::IfcSurfaceOfLinearExtrusion]
+    }
+}
+
+impl SurfaceOfLinearExtrusionProcessor {
+    /// Extract curve points from a profile definition
+    /// Longest nested-curve chain the profile sampler will follow. See
+    /// `curve_points_guarded` for why this sits alongside the visited set.
+    const MAX_CURVE_NESTING_DEPTH: u32 = 32;
+
+    fn get_profile_curve_points(
+        profile_id: u32,
+        decoder: &mut EntityDecoder,
+    ) -> Result<Vec<Point2<f64>>> {
+        let mut walk = CurveWalk::new();
+        Self::profile_curve_points_guarded(profile_id, decoder, &mut walk)
+    }
+
+    fn profile_curve_points_guarded(
+        profile_id: u32,
+        decoder: &mut EntityDecoder,
+        walk: &mut CurveWalk,
+    ) -> Result<Vec<Point2<f64>>> {
+        let profile = decoder.decode_by_id(profile_id)?;
+
+        // IfcArbitraryOpenProfileDef: 0=ProfileType, 1=ProfileName, 2=Curve
+        // IfcArbitraryClosedProfileDef: 0=ProfileType, 1=ProfileName, 2=OuterCurve
+        let curve_attr = profile
+            .get(2)
+            .ok_or_else(|| Error::geometry("Profile missing curve".to_string()))?;
+
+        let curve_id = curve_attr
+            .as_entity_ref()
+            .ok_or_else(|| Error::geometry("Expected entity reference for curve".to_string()))?;
+
+        Self::curve_points_guarded(curve_id, decoder, 0, walk)
+    }
+
+    /// Sample a CURVE (not a profile) into 2D points.
+    ///
+    /// Split out of `get_profile_curve_points` because
+    /// `extract_composite_curve_points` was calling that function with a
+    /// segment's `ParentCurve` id — a curve where a profile was expected. It
+    /// read attribute 2 of the curve as "the profile's curve", and an
+    /// `IfcPolyline` has no attribute 2, so every composite-curve profile
+    /// errored on each segment, had the error swallowed by the caller's
+    /// `if let Ok(..)`, and returned `Ok(vec![])`. Silently: no points, no
+    /// error, indistinguishable from a legitimately empty profile.
+    ///
+    /// Guarded by BOTH a visited set and a depth cap, because they bound
+    /// different things. The set stops cycles and fan-out --
+    /// `extract_composite_curve_points` loops over segments, so `k` segments
+    /// each leading back cost `O(k^depth)` and a cap alone would trade the
+    /// abort for a hang. The cap stops a long ACYCLIC chain, where every
+    /// insert succeeds, the set never fires, and the recursion aborts on stack
+    /// depth alone (Codex, #2871/#2872 review). Neither substitutes for the
+    /// other (#2866).
+    fn curve_points_guarded(
+        curve_id: u32,
+        decoder: &mut EntityDecoder,
+        depth: u32,
+        walk: &mut CurveWalk,
+    ) -> Result<Vec<Point2<f64>>> {
+        if depth >= Self::MAX_CURVE_NESTING_DEPTH || !walk.seen.insert(curve_id) {
+            return Ok(Vec::new());
+        }
+        walk.spend()?;
+        let out = Self::curve_points_inner(curve_id, decoder, depth, walk);
+        // PATH-scoped: removed on the way out. A global set would be a memo
+        // that returns the WRONG value -- it hands back an empty vec rather
+        // than the points it computed the first time -- and the caller
+        // ACCUMULATES, so a ParentCurve legitimately reused by two segments
+        // would contribute once and silently shorten the profile.
+        walk.seen.remove(&curve_id);
+        out
+    }
+
+    fn curve_points_inner(
+        curve_id: u32,
+        decoder: &mut EntityDecoder,
+        depth: u32,
+        walk: &mut CurveWalk,
+    ) -> Result<Vec<Point2<f64>>> {
+
+        // Get curve entity to determine type
+        let curve = decoder.decode_by_id(curve_id)?;
+
+        match curve.ifc_type {
+            IfcType::IfcPolyline => {
+                // IfcPolyline: attribute 0 is Points (list of IfcCartesianPoint)
+                let point_ids = decoder
+                    .get_polyloop_point_ids_fast(curve_id)
+                    .ok_or_else(|| Error::geometry("Failed to get polyline points".to_string()))?;
+
+                // A point that does not resolve refuses the whole curve, never
+                // the one corner: a polyline one vertex short is a different
+                // outline, meshed as if it were the authored one. Same rule as
+                // `helpers::extract_loop_points_by_id`.
+                let mut points = Vec::with_capacity(point_ids.len());
+                for point_id in point_ids {
+                    let (x, y, _z) = decoder.get_cartesian_point_fast(point_id).ok_or_else(|| {
+                        Error::geometry(format!("Polyline point #{point_id} did not resolve"))
+                    })?;
+                    points.push(Point2::new(x, y));
+                }
+                Ok(points)
+            }
+            IfcType::IfcCompositeCurve => {
+                // Handle composite curves by extracting segments
+                Self::extract_composite_curve_points(curve_id, decoder, depth, walk)
+            }
+            _ => {
+                // Fallback: try to get points directly
+                if let Some(point_ids) = decoder.get_polyloop_point_ids_fast(curve_id) {
+                    let mut points = Vec::with_capacity(point_ids.len());
+                    for point_id in point_ids {
+                        let (x, y, _z) = decoder.get_cartesian_point_fast(point_id).ok_or_else(|| {
+                            Error::geometry(format!("Curve point #{point_id} did not resolve"))
+                        })?;
+                        points.push(Point2::new(x, y));
+                    }
+                    Ok(points)
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+        }
+    }
+
+    /// Extract points from a composite curve
+    fn extract_composite_curve_points(
+        curve_id: u32,
+        decoder: &mut EntityDecoder,
+        depth: u32,
+        walk: &mut CurveWalk,
+    ) -> Result<Vec<Point2<f64>>> {
+        let curve = decoder.decode_by_id(curve_id)?;
+
+        // IfcCompositeCurve: attribute 0 is Segments (list of IfcCompositeCurveSegment)
+        let segments_attr = curve
+            .get(0)
+            .ok_or_else(|| Error::geometry("CompositeCurve missing Segments".to_string()))?;
+
+        let segment_refs = segments_attr
+            .as_list()
+            .ok_or_else(|| Error::geometry("Expected segment list".to_string()))?;
+
+        let mut all_points: Vec<Point2<f64>> = Vec::new();
+
+        for seg_ref in segment_refs {
+            let seg_id = seg_ref.as_entity_ref().ok_or_else(|| {
+                Error::geometry("Expected entity reference for segment".to_string())
+            })?;
+
+            let segment = decoder.decode_by_id(seg_id)?;
+
+            // IfcCompositeCurveSegment: 0=Transition, 1=SameSense, 2=ParentCurve
+            let parent_curve_attr = segment
+                .get(2)
+                .ok_or_else(|| Error::geometry("Segment missing ParentCurve".to_string()))?;
+
+            let parent_curve_id = parent_curve_attr.as_entity_ref().ok_or_else(|| {
+                Error::geometry("Expected entity reference for parent curve".to_string())
+            })?;
+
+            // IfcCompositeCurveSegment.SameSense (attribute 1): when false the
+            // segment traverses its ParentCurve BACKWARDS. Nothing applied it
+            // before because no segment ever produced points to orient -- the
+            // dispatch bug above meant every one came back empty, so a
+            // reversed segment and a forward one were indistinguishable.
+            let same_sense = segment
+                .get(1)
+                .map(|v| match v {
+                    ifc_lite_core::AttributeValue::Enum(e) => e != "F" && e != ".F.",
+                    _ => true,
+                })
+                .unwrap_or(true);
+
+            // The ParentCurve is a CURVE, not a profile. Routing it through the
+            // profile entry point read its attribute 2 as "the curve" and
+            // dropped every segment (#2866).
+            if let Ok(mut segment_points) =
+                Self::curve_points_guarded(parent_curve_id, decoder, depth + 1, walk)
+            {
+                if !same_sense {
+                    segment_points.reverse();
+                }
+                // Drop the seam point only when it ACTUALLY duplicates the
+                // previous segment's end. A `.DISCONTINUOUS.` transition, or a
+                // gap from a malformed file, leaves a real point that an
+                // unconditional skip would eat.
+                let drop_seam = match (all_points.last(), segment_points.first()) {
+                    (Some(prev), Some(next)) => {
+                        (prev.x - next.x).abs() < SEAM_EPS && (prev.y - next.y).abs() < SEAM_EPS
+                    }
+                    _ => false,
+                };
+                let start_idx = usize::from(drop_seam);
+                all_points.extend(segment_points.into_iter().skip(start_idx));
+            }
+
+            // The `if let Ok(..)` above deliberately tolerates ONE malformed
+            // segment rather than losing the whole profile -- but it must not
+            // swallow budget exhaustion, or the loop keeps going and returns a
+            // truncated profile as if it were complete. That is the silent
+            // wrong answer this guard exists to avoid, so exhaustion is
+            // re-raised here where the tolerance cannot hide it.
+            if walk.exhausted {
+                return Err(Error::geometry(format!(
+                    "Curve traversal exceeded {MAX_CURVE_NODES} nested curves"
+                )));
+            }
+        }
+
+        Ok(all_points)
+    }
+}
+
+impl Default for SurfaceOfLinearExtrusionProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+#[path = "surface_cycle_tests.rs"]
+mod surface_cycle_tests;

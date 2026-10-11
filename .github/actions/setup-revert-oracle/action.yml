@@ -1,0 +1,81 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+name: Setup revert-oracle runners
+description: Provision the optional runner toolchains declared by the revert-oracle adapter manifest
+
+inputs:
+  python:
+    description: 'Python provisioning: none, pytest, or full IFC reference requirements'
+    required: false
+    default: none
+  rust:
+    description: 'Trigger the repository-pinned Rust toolchain'
+    required: false
+    default: 'false'
+  browser:
+    description: 'Provision the Playwright observer (#6267): restore/fetch and verify the test fixtures. Chrome is the runner image''s'
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Validate provisioning inputs
+      shell: bash
+      env:
+        PYTHON_MODE: ${{ inputs.python }}
+        RUST_MODE: ${{ inputs.rust }}
+        BROWSER_MODE: ${{ inputs.browser }}
+      run: |
+        case "$PYTHON_MODE" in none|pytest|full) ;; *) echo "invalid python mode: $PYTHON_MODE" >&2; exit 2;; esac
+        case "$RUST_MODE" in true|false) ;; *) echo "invalid rust mode: $RUST_MODE" >&2; exit 2;; esac
+        case "$BROWSER_MODE" in true|false) ;; *) echo "invalid browser mode: $BROWSER_MODE" >&2; exit 2;; esac
+
+    - name: Setup Python 3.12
+      if: ${{ inputs.python != 'none' }}
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: '3.12'
+
+    - name: Install pytest probe dependency
+      if: ${{ inputs.python == 'pytest' }}
+      shell: bash
+      run: pip install pytest
+
+    - name: Install IFC reference Python requirements
+      if: ${{ inputs.python == 'full' }}
+      shell: bash
+      run: pip install -r tools/ifcopenshell_reference/requirements.lock pytest
+
+    - name: Setup Rust pinned by rust-toolchain.toml
+      if: ${{ inputs.rust == 'true' }}
+      shell: bash
+      run: rustup show
+
+    # Same cache key, fetch and unconditional verify as the viewer-e2e lane,
+    # so a Playwright spec measured here sees the fixtures it sees there.
+    - name: Cache test fixtures
+      if: ${{ inputs.browser == 'true' }}
+      id: fixtures-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: tests/models
+        key: ci-fixtures-${{ runner.os }}-${{ hashFiles('tests/models/manifest.json') }}
+
+    - name: Fetch fixtures
+      if: ${{ inputs.browser == 'true' && steps.fixtures-cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: pnpm fixtures
+
+    - name: Verify fixtures
+      if: ${{ inputs.browser == 'true' }}
+      shell: bash
+      run: pnpm fixtures:check
+
+    # Recording-enabled witnesses use the runner's Chrome plus Playwright's encoder.
+    - name: Install Playwright video encoder
+      if: ${{ inputs.browser == 'true' }}
+      shell: bash
+      run: pnpm exec playwright install ffmpeg

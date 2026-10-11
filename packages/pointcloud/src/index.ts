@@ -1,0 +1,147 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * @ifc-lite/pointcloud — point cloud decoders, streaming sources, and
+ * a worker-backed host for off-main-thread decoding.
+ *
+ * Phase 0: IFCx schemas (`pcd::base64`, `points::array`, `points::base64`).
+ * Phase 1: streaming `.las` from local Files / fetched Blobs.
+ * Phase 2: streaming `.laz` (laz-perf in the worker).
+ */
+
+export type { DecodedPointChunk, PointCloudBBox, PointNormalState } from './types.js';
+
+// Inline / IFCx decoders (Phase 0)
+export { decodePcd } from './formats/pcd.js';
+export {
+  decodePointsArray,
+  decodePointsBase64,
+  type PointsArrayAttribute,
+  type PointsBase64Attribute,
+} from './formats/ifcx-points.js';
+export { decompressLZF } from './lzf.js';
+export {
+  POINTCLOUD_ATTR,
+  POINTCLOUD_ATTR_KEYS,
+  decodeIfcxPointAttribute,
+} from './from-ifcx-attributes.js';
+
+// LAS reader primitives
+export {
+  parseLasHeader,
+  decodeLasPoints,
+  sampleMaxRgbChannel,
+  type LasHeader,
+} from './formats/las.js';
+
+// Streaming sources & worker host (Phase 1+)
+export type {
+  StreamingPointSource,
+  PointSourceInfo,
+  PointSourceSpatialMetadata,
+  DownsampleHint,
+} from './streaming/types.js';
+export { LasStreamingSource } from './streaming/las-source.js';
+export { LazStreamingSource } from './streaming/laz-source.js';
+export { probeLazPerfWasmLoad } from './streaming/laz-perf-loader.js';
+export { PlyStreamingSource } from './streaming/ply-source.js';
+export { PcdStreamingSource } from './streaming/pcd-source.js';
+export { E57StreamingSource, inspectE57SpatialMetadata } from './streaming/e57-source.js';
+export {
+  extractWktCrsIdentifiers,
+  extractWktSpatialMetadata,
+  type WktAxisDirection,
+  type WktCrsIdentifiers,
+  type WktSpatialMetadata,
+} from './spatial-wkt.js';
+export { AsciiPointsStreamingSource } from './streaming/ascii-points-source.js';
+export {
+  decodeAsciiPoints,
+  decodeAsciiPointsFromText,
+  probeAsciiPointsLayout,
+  type AsciiPointsFormat,
+  type AsciiPointsLayout,
+} from './formats/ascii-points.js';
+export { parsePlyHeader, decodePly } from './formats/ply.js';
+export {
+  parseE57FileHeader,
+  parseE57Xml,
+  stripPageCrc as stripE57PageCrc,
+  decodeE57,
+  decodeE57Scan,
+  type E57FileHeader,
+  type Data3DEntry,
+} from './formats/e57.js';
+export { BlobByteSource } from './streaming/blob-source.js';
+export {
+  createDecodeWorkerSource,
+  type CreateDecodeWorkerSourceOptions,
+  type DecodeWorkerOptions,
+  type DecodeWorkerFormat,
+} from './streaming/worker-client.js';
+export {
+  streamPointCloud,
+  type StreamPointCloudOptions,
+  type StreamHandle,
+} from './streaming/host.js';
+
+// LAS classification helpers (#1783)
+export {
+  LAS_CLASS_COUNT,
+  lasClassificationName,
+  createClassificationCounts,
+  accumulateClassificationCounts,
+  classificationCountEntries,
+  type ClassificationCountEntry,
+} from './classification.js';
+
+// COPC: range-read octree LAZ, decoded node by node in the worker (#6869)
+export type { RangeByteSource } from './streaming/types.js';
+export type { CopcSourceDescriptor } from './streaming/protocol.js';
+export { HttpRangeSource, type HttpRangeSourceOptions } from './streaming/http-range-source.js';
+export {
+  COPC_PROBE_BYTES,
+  isCopcHeader,
+  copcNodeBounds,
+  voxelKeyId,
+  type CopcInfo,
+  type CopcFileInfo,
+  type VoxelKey,
+} from './copc/copc-info.js';
+export {
+  CopcHierarchy,
+  copcChildKeys,
+  type CopcChildState,
+  type CopcHierarchyLimits,
+  type CopcHierarchyPage,
+  type CopcNodeEntry,
+  type CopcPageRef,
+} from './copc/copc-hierarchy.js';
+export {
+  openCopcWorkerReader,
+  type CopcWorkerReader,
+  type OpenCopcOptions,
+} from './copc/copc-worker-client.js';
+
+// View-dependent LOD selection + progressive pacing, renderer-agnostic (#6869)
+export {
+  selectLod,
+  type LodNode,
+  type LodCamera,
+  type LodOptions,
+  type LodSelection,
+  type LodSelectedNode,
+} from './lod/select.js';
+export {
+  LodPacer,
+  shouldReplacePass,
+  type LodPacerOptions,
+  type LodPassQuality,
+} from './lod/pacer.js';
+export {
+  createCopcLodTree,
+  type CopcLodNode,
+  type CopcLodTree,
+} from './lod/copc-lod-tree.js';

@@ -1,0 +1,385 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Geometry types for IFC-Lite
+ */
+
+import type { CoordinateInfo } from './coordinate-types.js';
+
+/**
+ * An entity's world-space axis-aligned bounding box, in the renderer frame
+ * (WebGL Y-up, metres) and in ABSOLUTE world coordinates — the RTC offset and
+ * the per-element {@link MeshData.origin} are already folded in.
+ *
+ * Distinct from {@link MeshData.localBounds}, which is the pre-placement
+ * object-space box of one submesh, and from `origin`, which is a translation
+ * carried purely for f32 precision. Do not conflate the three.
+ */
+export interface EntityWorldAabb {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
+/**
+ * Mesh data for a single geometric representation of an IFC element.
+ *
+ * An element may produce MULTIPLE MeshData entries (one per material, CSG part,
+ * or representation item). Group by `expressId` for per-element operations such
+ * as DOM grouping, picking, or depth sorting. The number of meshes per element
+ * depends on the IFC file's geometric complexity.
+ */
+export interface MeshData {
+  expressId: number;
+  ifcType?: string;          // IFC type name (e.g., "IfcWall", "IfcSpace") - optional for backward compatibility with old caches
+  modelIndex?: number;       // Index of the model this mesh belongs to (for multi-model federation)
+  positions: Float32Array;  // [x,y,z, x,y,z, ...]
+  normals: Float32Array;    // [nx,ny,nz, ...]
+  /** Triangle indices (3 per face).
+   *  NOTE: Winding order is UNRELIABLE (meshes are double-sided by design).
+   *  Do not use winding for front/back-face determination or normal-based
+   *  culling. Use depth testing or `abs(dot(normal, viewDir))` for shading. */
+  indices: Uint32Array;
+  /** Canonical item triangle order, stamped at WASM extraction before streaming.
+   * Rebuilt topology must discard this metadata. The repeated indices reference
+   * survives structured clone and detects replacement without hashing geometry. */
+  appearanceSource?: {
+    kind: 'canonical-item';
+    /** Identity fence for the current geometry topology. */
+    indices: Uint32Array;
+    /** Original canonical final geometry, before streaming fragments. */
+    sourceIndices: Uint32Array;
+    /** Current triangle corner -> canonical triangle corner. Absent means identity. */
+    cornerIndices?: Uint32Array;
+  };
+  /** Apparent rendering colour: IfcSurfaceStyleRendering.DiffuseColour
+   *  when authored, otherwise the SurfaceColour. Matches what most IFC
+   *  viewers display and what the GLB exporter uses by default. */
+  color: [number, number, number, number];
+  /** SurfaceColour, populated by the WASM extractor only when the file
+   *  authored a distinct DiffuseColour (so `shadingColor !== color`).
+   *  Consumed by the GLB exporter's "Shading" colour-source option.
+   *  For basic rendering, use `color` (matches most IFC viewers).
+   *  For physically-accurate rendering, prefer `shadingColor ?? color`. */
+  shadingColor?: [number, number, number, number];
+  /** Per-vertex entity IDs for color-merged batches (desktop fast path).
+   *  When present the renderer writes these instead of repeating `expressId`
+   *  for every vertex, so picking/selection resolves to the correct individual
+   *  entity even though many entities share a single GPU batch. */
+  entityIds?: Uint32Array;
+  /** The `IfcRepresentationItem` this mesh came from, so a host can drill from
+   *  a rendered piece to its entity (#2985). ALWAYS a representation item;
+   *  `materialId` carries the other case and the two are NEVER both set.
+   *  Absent where identity is merged away (single-mesh fallback, cached
+   *  `IfcMappedItem`, GPU instancing) (#3199). */
+  geometryItemId?: number;
+  /** The `IfcMaterial` layer this mesh slices. DISJOINT from `geometryItemId`,
+   *  which used to carry it — so following that field for a layered wall landed
+   *  on the wrong entity. `geometryClass === 3` cannot substitute (#3199).
+   *  Same id space as `expressId`: a federated viewer session re-homes it
+   *  alongside `expressId` and `geometryItemId` (`applyFederationOffsetToMesh`
+   *  in `apps/viewer/src/hooks/useIfcLoader.ts`), so a value read off this
+   *  field is always safe to resolve the same way as `expressId` (#3525). */
+  materialId?: number;
+  /** IFC-authored metallic/roughness (#5582): `IfcSurfaceStyleRendering`'s
+   *  `SpecularColour` / `SpecularHighlight` / `ReflectanceMethod`, mapped in
+   *  Rust (`ifc_lite_processing::style::extract_surface_style_specular`).
+   *  Either field, or the whole object, is absent when the file authored no
+   *  evidence for it — the renderer's `packMeshMaterial` then keeps its own
+   *  default (a matte dielectric, or glass roughness when the authored colour
+   *  is translucent). */
+  material?: {
+    metallic?: number;
+    roughness?: number;
+  };
+  /** Per-vertex texture coordinates (u, v pairs, 1:1 with positions), present
+   *  only for textured meshes (issue #961). */
+  uvs?: Float32Array;
+  /** Decoded surface texture (IfcBlobTexture / IfcPixelTexture), present only
+   *  for textured meshes (#961). Decoded to RGBA8 entirely in Rust; the
+   *  renderer uploads `rgba` verbatim to a GPU texture. */
+  texture?: MeshTexture;
+  /** External image texture reference (`IfcImageTexture`, #1781): the image
+   *  ships OUTSIDE the model (a sibling file inside the `.ifcZIP`), so the
+   *  pipeline carries the reference and the viewer resolves + decodes it once
+   *  per `textureId`, sharing the GPU texture across every mesh that samples
+   *  it. Mutually exclusive with `texture`. `uvs` are present alongside. */
+  textureRef?: MeshTextureRef;
+  /** The decoded image for `textureRef`, attached on the MAIN thread by the
+   *  viewer after resolving `textureRef.url` against the `.ifcZIP` sibling
+   *  images (#1781). One ImageBitmap instance is shared by every mesh with the
+   *  same `textureRef.textureId`; the renderer uploads it to ONE GPU texture
+   *  per id. Never set by the worker. */
+  textureBitmap?: ImageBitmap;
+  /** RTC-invariant per-entity geometry fingerprint from the WASM mesh pass,
+   *  populated only when geometry hashing is enabled
+   *  (`GeometryProcessor.enableGeometryHashes()`). All submeshes of one entity
+   *  share the same value (it is the whole-entity hash). Consumed by the
+   *  model-diff / compare feature (issue #924); renderers ignore it. */
+  geometryHash?: bigint;
+  /** Whole-entity world bounding box from the SAME hashing pass as
+   *  {@link MeshData.geometryHash} (`MeshCollection.geometryAabbValues`),
+   *  populated only when geometry hashing is enabled
+   *  (`GeometryProcessor.enableGeometryHashes()`). Like the hash, all submeshes
+   *  of one entity carry the same box — it spans the entity, not this submesh.
+   *
+   *  ABSOLUTE world, unlike `positions`: the RTC offset and the per-element
+   *  {@link MeshData.origin} are already folded in, so two revisions that chose
+   *  different RTC offsets report the same box. Do NOT add `origin` to it.
+   *
+   *  Absent when the pass produced no box for the entity (the wasm side writes
+   *  six `NaN`s there; the extractor drops them rather than passing a
+   *  NaN-bearing object on), when hashing is off, or on a wasm build predating
+   *  the getter. Consumed by the model-diff / compare feature to tell a move
+   *  from a reshape (#1891); renderers ignore it. */
+  geometryAabb?: EntityWorldAabb;
+  /** Whole-entity enclosed volume in CUBIC METRES, from the SAME hashing pass
+   *  as {@link MeshData.geometryHash} (`MeshCollection.geometryVolumeValues`,
+   *  #1993). Like the hash and the box, all submeshes of one entity carry the
+   *  identical value — it is the volume of the entity, not of this submesh, so
+   *  summing it across submeshes would multiply it.
+   *
+   *  Present only when the meshed geometry was PROVABLY a single closed,
+   *  orientable, single-component solid (measured coverage on a real corpus:
+   *  71.4%, 24,073 of 33,701 elements). Absent means the kernel could not prove
+   *  a volume — an open shell, a material-layered wall, a multi-item assembly —
+   *  and NEVER that the volume is zero or that it differs. The wasm side writes
+   *  `NaN` there; the extractor drops it rather than passing a NaN-bearing
+   *  number on.
+   *
+   *  It is the volume of what was actually meshed, AFTER opening cuts, so it is
+   *  not an IFC `BaseQuantities` `GrossVolume` and must not be compared with
+   *  one. Consumed by the model-diff split/merge detector (#1891); renderers
+   *  ignore it. */
+  geometryVolume?: number;
+  /** Geometry provenance for rendering and the viewer's Model/Types view switch:
+   *  - 0 = occurrence (placed IfcProduct). RENDER THIS in normal/Model views.
+   *  - 1 = orphan type geometry (an IfcTypeProduct RepresentationMap with no
+   *    occurrence). RENDER THIS in both Model and Types views.
+   *  - 2 = instanced type template. DO NOT RENDER in normal/Model view.
+   *    Instances of this type appear as class 0 occurrences with the same shape.
+   *    Rendering class 2 produces duplicate overlapping geometry.
+   *    Shown only in the viewer's Types mode.
+   *
+   *  Absent/undefined is treated as 0 (occurrence).
+   *  Downstream filter: `if ((mesh.geometryClass ?? 0) === 2) continue;` */
+  geometryClass?: number;
+  /** Per-element local-frame origin (WebGL Y-up, metres): world position of
+   *  vertex i = `origin + positions[3i..3i+3]`. Present when the wasm pipeline
+   *  emits a per-element frame (building-scale f32 precision); absent/[0,0,0]
+   *  means `positions` are already absolute world coords (legacy / native /
+   *  caches predating local frame). The renderer reconstructs world via a
+   *  per-batch model-matrix translate. */
+  origin?: [number, number, number];
+  /** Stable key for CPU caches that must distinguish *occurrences* sharing one
+   *  `expressId`. GPU-instanced occurrences are materialized on demand as one
+   *  MeshData per occurrence, all stamped with the same `expressId` but holding
+   *  different world-space `positions` (issue #1405). Caches keyed on `expressId`
+   *  alone (e.g. the measure-snap geometry cache) would collide across them and
+   *  serve the first occurrence's geometry for every later one. When present,
+   *  such caches must key on this instead. Absent for flat meshes (one MeshData
+   *  per `expressId`), where `expressId` is already a sufficient key. */
+  occurrenceKey?: string;
+  /** Local (pre-placement, object-space) AABB — `positions` bounds as they
+   *  were BEFORE the element's `IfcLocalPlacement` was baked in (issue #1474).
+   *  Absent when not captured (e.g. an instancing template, or a mesh built
+   *  outside the standard element pipeline). Unrelated to `origin`, which is
+   *  a *world*-space translation captured AFTER placement, purely for f32
+   *  precision — don't conflate the two. */
+  localBounds?: { min: [number, number, number]; max: [number, number, number] };
+  /** The resolved `IfcLocalPlacement` chain applied to this mesh (issue
+   *  #1474): row-major 4x4, 16 numbers, WebGL Y-up axis convention — but its
+   *  translation is the placement's PRE-RTC absolute origin, not the frame
+   *  `positions` render in (`mesh_world.rs` assigns this before subtracting
+   *  the model's RTC offset). Do NOT shift it when RTC changes. Absent when
+   *  not captured. All of one entity's `MeshData` pieces share the same
+   *  value (one placement per element). */
+  localToWorld?: number[];
+}
+
+/**
+ * One element simplified by the demesher (`GeometryProcessor.simplifyMeshes`).
+ */
+export interface SimplifiedElementMesh {
+  expressId: number;
+  /** Demesher level this result was produced at (1-5). */
+  level: number;
+  /** Replacement render mesh (WebGL Y-up, same conventions as pipeline
+   *  MeshData) — feed to `Scene.addMeshes` after removing the element's old
+   *  meshes. */
+  render: MeshData;
+  /** The same vertices in the element's IFC object-placement frame, FILE
+   *  units, IFC Z-up (xyz triplets) — the tessellated-IFC export payload. */
+  localPositions: Float64Array;
+  /** Triangle indices over `localPositions`, 0-based, IFC winding. */
+  localIndices: Uint32Array;
+  trisBefore: number;
+  trisAfter: number;
+  cavitiesDropped: number;
+}
+
+/** Result of `GeometryProcessor.simplifyMeshes`. */
+export interface SimplifyMeshesResult {
+  elements: SimplifiedElementMesh[];
+  /** Elements left untouched (keep their original meshes), with reason slugs
+   *  (`no-geometry` / `missing-placement` / `singular-placement` /
+   *  `empty-result` / `invalid-unit-scale` / `no-records`). */
+  skipped: Array<{ expressId: number; reason: string }>;
+}
+
+/**
+ * KML `<altitudeMode>` for KMZ (Google Earth) export — how Google Earth places
+ * the model vertically (#1427):
+ *  - `'clampToGround'` (default): rest the origin on the terrain, ignoring the
+ *    KMZ `altitude`. A building can never float and is immune to a wrong / zero /
+ *    double-counted `IfcMapConversion.OrthogonalHeight`.
+ *  - `'absolute'`: place the origin at `altitude` metres above mean sea level.
+ *    Use when the OrthogonalHeight is a true MSL elevation the user wants honoured.
+ * `'relativeToGround'` (altitude above the terrain below the origin) exists in
+ * the Rust exporter but is not surfaced in the viewer UI.
+ */
+export type KmzAltitudeMode = 'clampToGround' | 'absolute' | 'relativeToGround';
+
+/** A decoded RGBA8 surface texture attached to a mesh (issue #961). */
+export interface MeshTexture {
+  /** `width * height * 4` bytes, row-major, top-down, straight alpha. */
+  rgba: Uint8Array;
+  width: number;
+  height: number;
+  /** Sampler wrap from `IfcSurfaceTexture.RepeatS/RepeatT` (true = repeat). */
+  repeatS: boolean;
+  repeatT: boolean;
+}
+
+/**
+ * An external image texture reference (`IfcImageTexture`, #1781). The viewer
+ * resolves `url` against the `.ifcZIP` sibling images (basename match) and
+ * decodes it ONCE per `textureId` — meshes only carry this lightweight ref.
+ */
+export interface MeshTextureRef {
+  /** Stable dedup key: the `IfcSurfaceTexture` express id. */
+  textureId: number;
+  /** `IfcImageTexture.URLReference` verbatim (usually a relative filename). */
+  url: string;
+  /** Sampler wrap from `IfcSurfaceTexture.RepeatS/RepeatT` (true = repeat). */
+  repeatS: boolean;
+  repeatT: boolean;
+}
+
+/**
+ * Tessellation detail level for curved geometry (issue #976), mirroring the
+ * Rust `ifc_lite_geometry::TessellationQuality` enum.
+ *
+ * `'medium'` is the engine default and reproduces the historical hardcoded
+ * densities byte-for-byte — leaving the option unset never changes output.
+ * Lower levels coarsen curved surfaces (swept pipes, cylinders, NURBS) and
+ * profile circles for throughput / preview; higher levels refine curved
+ * surfaces (×2 / ×4 segment density) to reduce visible faceting, at a
+ * proportional triangle-count and processing cost. Profile-plane outlines
+ * (extruded caps / opening cutters) never get finer than `'medium'` — denser
+ * opening circles only multiply earcut cap-bridge slivers.
+ */
+export type TessellationQuality = 'lowest' | 'low' | 'medium' | 'high' | 'highest';
+
+/**
+ * One resolved structural grid axis (`IfcGridAxis`), with its tag and the two
+ * endpoints of its curve in the renderer's Y-up world frame (RTC-subtracted,
+ * metres) — the same frame the streamed meshes render in, so grids overlay the
+ * model by construction. See issue #945.
+ */
+export interface GridAxis {
+  /** Express ID of the owning `IfcGrid`. */
+  gridId: number;
+  /** Express ID of the `IfcGridAxis`. */
+  axisId: number;
+  /** Axis tag (e.g. `"A"`, `"1"`); empty string when unauthored. */
+  tag: string;
+  /** Start endpoint `[x, y, z]` in renderer Y-up world space (metres). */
+  start: [number, number, number];
+  /** End endpoint `[x, y, z]` in renderer Y-up world space (metres). */
+  end: [number, number, number];
+}
+
+/**
+ * A point cloud attached to an IFC entity.
+ *
+ * Phase 0 carries a single inline `chunk`; future phases will add a
+ * `source` reference for streaming sources (LAS/LAZ/Potree) and emit
+ * multiple chunks per asset.
+ *
+ * Coordinates in `chunk.positions` are in the entity's local space (any
+ * IFCx `usd::xformop` lineage transform has already been baked in by the
+ * extractor). The renderer applies its own RTC + Y-up flip on upload.
+ */
+export interface PointCloudAsset {
+  /** Express ID of the IFC entity that owns this scan. */
+  expressId: number;
+  /** IFC type name when known (`IfcPointCloud`, `IfcBuildingElementProxy`, ...). */
+  ifcType?: string;
+  /** Federation index — set when multiple models are loaded. */
+  modelIndex?: number;
+  /** A single chunk of decoded points (positions + optional rgb in 0..1). */
+  chunk: {
+    positions: Float32Array;
+    /** Per-point RGB in 0..1; absent → renderer defaults to gray. */
+    colors?: Float32Array;
+    /** Per-point u8 LAS-style classification; absent → 0. */
+    classifications?: Uint8Array;
+    /** Per-point u16 intensity; absent → 0. */
+    intensities?: Uint16Array;
+    pointCount: number;
+    bbox: { min: [number, number, number]; max: [number, number, number] };
+  };
+}
+
+export interface GeometryResult {
+  meshes: MeshData[];
+  /**
+   * Optional point clouds emitted alongside meshes. Renderers that don't
+   * understand points are free to ignore this; the dedicated point pipeline
+   * in `@ifc-lite/renderer` consumes it via `Renderer.addPointClouds()`.
+   */
+  pointClouds?: PointCloudAsset[];
+  totalTriangles: number;
+  totalVertices: number;
+  coordinateInfo: CoordinateInfo;
+  /**
+   * Geometry-diff hashes (#924) for instanced-ONLY entities — repeated opaque
+   * geometry whose whole mesh set went to the GPU-instanced shard, so it never
+   * appears in `meshes`. Keyed by express id → hash. Lets the compare feature
+   * detect geometry changes on instanced elements (it would otherwise silently
+   * miss them, a regression vs. the pre-instancing flat path). Absent when
+   * geometry hashing is off or no entity was fully instanced.
+   */
+  instancedGeometryHashes?: Map<number, bigint>;
+  /**
+   * World bounding boxes for the SAME instanced-only entities as
+   * {@link GeometryResult.instancedGeometryHashes}, keyed the same way. A
+   * separate map rather than a field on the hash entry because an entity can
+   * have a hash and no box (the wasm side writes six `NaN`s there); a key
+   * missing here means exactly that. Absent when geometry hashing is off,
+   * nothing was fully instanced, or the wasm build predates the getter.
+   */
+  instancedGeometryAabbs?: Map<number, EntityWorldAabb>;
+  /**
+   * Enclosed volumes (m³) for the SAME instanced-only entities, keyed the same
+   * way (#1993). A third map for the same reason the boxes are a second one: an
+   * entity can be hashed and boxed with no PROVED volume, so a key missing here
+   * means exactly "not proved", and folding it into the hash entry would make
+   * absence indistinguishable from an entity that has no fingerprint at all.
+   * Absent when geometry hashing is off, nothing was fully instanced, or the
+   * wasm build predates the getter.
+   */
+  instancedGeometryVolumes?: Map<number, number>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SYMBOLIC REPRESENTATION TYPES
+// For Plan, Annotation, FootPrint representations (2D curves for drawings)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// The symbolic-representation family lives in its own module (#3199); re-exported
+// here so every existing `from './types.js'` import keeps working unchanged.
+export * from './symbolic-types.js';
+export type { AABB, CoordinateInfo, Vec3 } from './coordinate-types.js';

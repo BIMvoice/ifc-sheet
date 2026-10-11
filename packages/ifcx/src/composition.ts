@@ -1,0 +1,233 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * IFCX Composition Engine
+ * Flattens ECS-style nodes into a composed tree structure
+ */
+
+import type { IfcxFile, IfcxNode, ComposedNode } from './types.js';
+import { applyTombstones } from './tombstones.js';
+
+interface PreComposedNode {
+  path: string;
+  children: Record<string, string | null>;
+  inherits: Record<string, string | null>;
+  attributes: Record<string, unknown>;
+}
+
+/**
+ * Compose IFCX nodes into a flattened tree structure.
+ *
+ * Algorithm:
+ * 1. Group all nodes by path (multiple nodes can reference same path)
+ * 2. Merge attributes (later wins - layer semantics)
+ * 3. Resolve inherits references (type-level data)
+ * 4. Build parent-child tree from children references
+ * 5. Apply tombstones: nodes whose strongest `ifclite::deleted` opinion is
+ *    true are removed together with their subtrees (see tombstones.ts)
+ */
+export function composeIfcx(file: IfcxFile): Map<string, ComposedNode> {
+  // Phase 1: Group nodes by path
+  const nodesByPath = new Map<string, IfcxNode[]>();
+  for (const node of file.data) {
+    const existing = nodesByPath.get(node.path) || [];
+    existing.push(node);
+    nodesByPath.set(node.path, existing);
+  }
+
+  // Phase 2: Flatten to pre-composition nodes
+  const preComposed = new Map<string, PreComposedNode>();
+  for (const [path, nodes] of nodesByPath) {
+    preComposed.set(path, flattenNodes(path, nodes));
+  }
+
+  // Phase 3: Resolve inherits and build tree
+  const composed = new Map<string, ComposedNode>();
+  for (const [path] of preComposed) {
+    if (!composed.has(path)) {
+      composeNode(path, preComposed, composed, new Set());
+    }
+  }
+
+  // Phase 4: Apply deletion overlays
+  return applyTombstones(composed);
+}
+
+/**
+ * Flatten multiple nodes with the same path into a single pre-composed node.
+ * Later nodes override earlier ones (layer semantics).
+ */
+function flattenNodes(path: string, nodes: IfcxNode[]): PreComposedNode {
+  const result: PreComposedNode = {
+    path,
+    children: {},
+    inherits: {},
+    attributes: {},
+  };
+
+  // Later nodes override earlier (layer semantics)
+  for (const node of nodes) {
+    if (node.children) {
+      // Later wins, INCLUDING null: a null is a removal opinion and must
+      // survive flattening as a mask — composeNode resolves it after
+      // inheritance so a removed child also shadows an inherited child of
+      // the same name, mirroring the attribute mask (#1031). A later
+      // non-null opinion overwrites the mask (resurrect).
+      Object.assign(result.children, node.children);
+    }
+    if (node.inherits) {
+      for (const [key, value] of Object.entries(node.inherits)) {
+        if (value === null) {
+          // null means remove this inheritance
+          delete result.inherits[key];
+        } else {
+          result.inherits[key] = value;
+        }
+      }
+    }
+    if (node.attributes) {
+      // Later wins, INCLUDING null: a null is a removal opinion and must
+      // survive flattening as a mask — composeNode resolves it after
+      // inheritance so removals also shadow inherited values (#1031). A
+      // later non-null opinion overwrites the mask (resurrect).
+      Object.assign(result.attributes, node.attributes);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Compose a single node by resolving its inherits and children.
+ */
+function composeNode(
+  path: string,
+  preComposed: Map<string, PreComposedNode>,
+  composed: Map<string, ComposedNode>,
+  visited: Set<string>
+): ComposedNode {
+  // Already composed?
+  if (composed.has(path)) {
+    return composed.get(path)!;
+  }
+
+  // Cycle detection: break the cycle gracefully instead of aborting the parse.
+  // (Mirrors federated-composition.ts and traversal.ts, which both tolerate cycles.)
+  if (visited.has(path)) {
+    const stub: ComposedNode = { path, attributes: new Map(), children: new Map() };
+    composed.set(path, stub);
+    console.warn(`[ifcx] Circular reference detected, breaking cycle at: ${path}`);
+    return stub;
+  }
+  visited.add(path);
+
+  const pre = preComposed.get(path);
+  const node: ComposedNode = {
+    path,
+    attributes: new Map(),
+    children: new Map(),
+  };
+
+  if (!pre) {
+    composed.set(path, node);
+    return node;
+  }
+
+  // Resolve inherits first (type-level data)
+  for (const inheritPath of Object.values(pre.inherits)) {
+    if (inheritPath) {
+      const inherited = composeNode(inheritPath, preComposed, composed, new Set(visited));
+      // Copy inherited attributes (can be overridden)
+      for (const [key, value] of inherited.attributes) {
+        node.attributes.set(key, value);
+      }
+      // Copy inherited children
+      for (const [key, child] of inherited.children) {
+        node.children.set(key, child);
+      }
+    }
+  }
+
+  // Apply own attributes (override inherited). Null opinions are removal
+  // masks: they delete the (possibly inherited) attribute and never
+  // appear in composed output.
+  for (const [key, value] of Object.entries(pre.attributes)) {
+    if (value === null) {
+      node.attributes.delete(key);
+    } else {
+      node.attributes.set(key, value);
+    }
+  }
+
+  // Resolve children. A null opinion is a removal mask: it deletes the
+  // (possibly inherited) child and never appears in composed output.
+  for (const [name, childPath] of Object.entries(pre.children)) {
+    if (childPath === null) {
+      node.children.delete(name);
+    } else if (childPath) {
+      const child = composeNode(childPath, preComposed, composed, new Set(visited));
+      node.children.set(name, child);
+    }
+  }
+
+  composed.set(path, node);
+  return node;
+}
+
+/**
+ * Find root nodes (nodes with no parent reference).
+ */
+export function findRoots(composed: Map<string, ComposedNode>): ComposedNode[] {
+  const roots: ComposedNode[] = [];
+  const childPaths = new Set<string>();
+
+  // Collect all child paths
+  for (const node of composed.values()) {
+    for (const child of node.children.values()) {
+      childPaths.add(child.path);
+    }
+  }
+
+  // Roots are nodes not referenced as children
+  for (const node of composed.values()) {
+    if (!childPaths.has(node.path)) {
+      roots.push(node);
+    }
+  }
+
+  return roots;
+}
+
+/**
+ * Get all descendant nodes of a given node — the whole subtree, not just
+ * the direct children. Each node appears once; a cycle terminates.
+ *
+ * The child is marked visited by the recursive call that opens on it, NOT
+ * by the loop before it. Marking it here and then recursing made
+ * `traverse`'s own `visited.has(n.path)` guard fire on entry every single
+ * time, so the walk returned after one level: `a -> b -> c -> d` answered
+ * `[b]` instead of `[b, c, d]`. The two tests over this function could not
+ * see it — one asserts only that the result is duplicate-free (true of a
+ * one-level result) and the other's expectation, `['b']` for a two-node
+ * cycle, is what the truncated walk produces anyway.
+ */
+export function getDescendants(node: ComposedNode): ComposedNode[] {
+  const descendants: ComposedNode[] = [];
+  const visited = new Set<string>();
+
+  function traverse(n: ComposedNode): void {
+    if (visited.has(n.path)) return;
+    visited.add(n.path);
+
+    for (const child of n.children.values()) {
+      if (visited.has(child.path)) continue;
+      descendants.push(child);
+      traverse(child);
+    }
+  }
+
+  traverse(node);
+  return descendants;
+}

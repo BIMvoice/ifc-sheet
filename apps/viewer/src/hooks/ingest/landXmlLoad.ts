@@ -1,0 +1,367 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import type { LoadTrace } from '@ifc-lite/load-trace';
+import type { IfcDataStore } from '@ifc-lite/parser';
+import type { CoordinateInfo, GeometryResult, ModelSpatialReference } from '@ifc-lite/geometry';
+import { totalYupOffset } from '@ifc-lite/geometry/world-frame';
+import { captureModelLoaded, snapshotFromGeometry } from '../../utils/loadTelemetry.js';
+import { createEmptyBounds, type Bounds3D } from '../../utils/localParsingUtils.js';
+import { toast } from '../../components/ui/toast.js';
+import { parseLandXmlViewerModelFromBlobAsync, type LandXmlViewerModel } from './landXmlViewerModel.js';
+import type { LandXmlGeometryPreflight } from './landXmlIngest.js';
+import type { LandXmlSchema, LandXmlTinDocument } from './landXmlSemantics.js';
+import { landXmlRenderFrameWarning, MAX_RENDER_FRAME_LOCAL_EXTENT_METRES, meshFitsRenderFrame, meshRenderFrameBounds } from './landXmlRenderFrame.js';
+import { LandXmlProvisionalTransaction } from './landXmlProvisionalTransaction.js';
+import { LandXmlProvisionalUploadError } from './landXmlGpuTransactions.js';
+import { markLandXmlGpuUploaded } from './landXmlGpuOwnership.js';
+import { type FederatedLandXmlStreamingFinalization, FederatedLandXmlStreamingPlan } from './federatedLandXmlStreaming.js';
+import { GeoRasterBundle } from '@/lib/terrain-imagery/raster-bundle.js';
+
+interface LandXmlLoadOptions {
+  file: File;
+  fileSizeMB: number;
+  targetKind: 'primary' | 'federated';
+  totalStartTime: number;
+  wasHidden: boolean;
+  /** The load's trace: `ifc_model_loaded` reads its field properties off it (#6961). */
+  trace: LoadTrace;
+  /**
+   * #5175: opt-in linear unit for a source with no declared `<Units>`. Absent
+   * by default, so a unitless source refuses exactly as it did before this
+   * option existed; the viewer supplies it only on a user-chosen retry after
+   * that refusal.
+   */
+  assumedLinearUnit?: string;
+  isCurrent(): boolean;
+  setProgress(progress: { phase: string; percent: number }): void;
+  setGeometryStreamingActive(active: boolean): void;
+  setLoading(loading: boolean): void;
+  openProvisional?(preflight: LandXmlGeometryPreflight): LandXmlProvisionalTransaction | null;
+  openFederatedStreamingPlan?(
+    preflight: LandXmlGeometryPreflight,
+    sourceCoordinateInfo: CoordinateInfo,
+    spatialReference?: ModelSpatialReference,
+  ): FederatedLandXmlStreamingPlan | null;
+  onPrimary(result: LandXmlViewerModel): void;
+  finalize(
+    dataStore: IfcDataStore,
+    geometry: GeometryResult,
+    schemaVersion: 'IFC4',
+    patch: {
+      loadPath: 'landxml';
+      landXmlDocument?: LandXmlTinDocument;
+      sourceSchema?: LandXmlSchema;
+      spatialReference?: ModelSpatialReference;
+      postAlignmentReframe?: boolean;
+      federatedLandXmlStreamingPlan?: FederatedLandXmlStreamingFinalization;
+    },
+  ): Promise<void>;
+  onError(message: string): void;
+}
+
+interface LandXmlRollbackOwnership { rollback(): void }
+
+/**
+ * A finalizer may suspend for CRS alignment after streamed ownership commits.
+ * Re-check liveness at that exact boundary and release both reservations
+ * before any model-visible success effects are allowed to run.
+ */
+export async function awaitLandXmlFinalization(
+  finalization: Promise<void>,
+  isCurrent: () => boolean,
+  provisional: LandXmlRollbackOwnership | null,
+  federatedPlan: LandXmlRollbackOwnership | null,
+): Promise<boolean> {
+  await finalization;
+  if (isCurrent()) return true;
+  provisional?.rollback();
+  federatedPlan?.rollback();
+  return false;
+}
+
+function shiftBounds(
+  bounds: CoordinateInfo['originalBounds'],
+  offset: Readonly<{ x: number; y: number; z: number }>,
+): CoordinateInfo['originalBounds'] {
+  return {
+    min: { x: bounds.min.x - offset.x, y: bounds.min.y - offset.y, z: bounds.min.z - offset.z },
+    max: { x: bounds.max.x - offset.x, y: bounds.max.y - offset.y, z: bounds.max.z - offset.z },
+  };
+}
+
+function mergeBounds(target: Bounds3D, source: Bounds3D): void {
+  target.min.x = Math.min(target.min.x, source.min.x);
+  target.min.y = Math.min(target.min.y, source.min.y);
+  target.min.z = Math.min(target.min.z, source.min.z);
+  target.max.x = Math.max(target.max.x, source.max.x);
+  target.max.y = Math.max(target.max.y, source.max.y);
+  target.max.z = Math.max(target.max.z, source.max.z);
+}
+
+/** Keep source inspection counts honest after federation drops mesh components. */
+function recomputeRenderedFaceCounts(document: LandXmlTinDocument): void {
+  const renderedBySurface = new Map<string, number>();
+  for (const mesh of document.rendering.meshProvenance) {
+    renderedBySurface.set(
+      mesh.surfaceSourceId,
+      (renderedBySurface.get(mesh.surfaceSourceId) ?? 0) + mesh.renderedFaceSourceIds.length,
+    );
+  }
+  for (const counts of document.rendering.surfaceCounts) {
+    counts.renderedFaces = renderedBySurface.get(counts.surfaceSourceId) ?? 0;
+  }
+}
+
+function retainFederatedStreamedProvenance(document: LandXmlTinDocument, meshes: readonly GeometryResult['meshes'][number][]): void {
+  const retainedIds = new Set(meshes.map((mesh) => mesh.expressId));
+  for (const provenance of document.rendering.meshProvenance) {
+    if (retainedIds.has(provenance.meshExpressId)) continue;
+    const counts = document.rendering.surfaceCounts.find((count) => count.surfaceSourceId === provenance.surfaceSourceId);
+    if (counts) counts.droppedReframeFaces += provenance.renderedFaceSourceIds.length;
+  }
+  document.rendering.meshProvenance = document.rendering.meshProvenance
+    .filter((provenance) => retainedIds.has(provenance.meshExpressId));
+  recomputeRenderedFaceCounts(document);
+}
+
+/** Recompute counts and frame metadata from the meshes that survived reframing. */
+function updateRetainedGeometry(geometry: GeometryResult, frame: CoordinateInfo): void {
+  const bounds = createEmptyBounds();
+  let totalVertices = 0;
+  let totalTriangles = 0;
+  for (const mesh of geometry.meshes) {
+    const meshBounds = meshRenderFrameBounds(mesh);
+    if (meshBounds === null) throw new Error('LandXML retained a mesh without finite render-frame bounds');
+    mergeBounds(bounds, meshBounds);
+    totalVertices += mesh.positions.length / 3;
+    totalTriangles += mesh.indices.length / 3;
+  }
+  const targetOffset = totalYupOffset(frame);
+  const originShift = frame.originShift ?? { x: 0, y: 0, z: 0 };
+  const worldBounds = shiftBounds(bounds, { x: -targetOffset.x, y: -targetOffset.y, z: -targetOffset.z });
+  const rtcYup = {
+    x: targetOffset.x - originShift.x,
+    y: targetOffset.y - originShift.y,
+    z: targetOffset.z - originShift.z,
+  };
+  geometry.totalVertices = totalVertices;
+  geometry.totalTriangles = totalTriangles;
+  geometry.coordinateInfo = {
+    ...geometry.coordinateInfo,
+    originShift: { ...originShift },
+    originalBounds: shiftBounds(worldBounds, rtcYup),
+    shiftedBounds: bounds,
+    hasLargeCoordinates: Math.max(
+      Math.abs(worldBounds.min.x), Math.abs(worldBounds.min.y), Math.abs(worldBounds.min.z),
+      Math.abs(worldBounds.max.x), Math.abs(worldBounds.max.y), Math.abs(worldBounds.max.z),
+    ) > 10_000,
+    wasmRtcOffset: frame.wasmRtcOffset ? { ...frame.wasmRtcOffset } : undefined,
+    wasmRtcFrame: frame.wasmRtcFrame ? { ...frame.wasmRtcFrame } : undefined,
+  };
+}
+
+/** Move parsed LandXML into the federation's already-published render frame. */
+export function reframeLandXmlGeometry(geometry: GeometryResult, document: LandXmlTinDocument, frame: CoordinateInfo): string[] {
+  // Geometry-free LandXML still owns visible authored line overlays. Its
+  // coordinates remain absolute until the overlay renderer subtracts this
+  // frame, so there are no mesh origins to move: adopt the complete frame.
+  // This also covers native adapter frames that use `originShift` without a
+  // wasm RTC offset.
+  if (geometry.meshes.length === 0) {
+    geometry.coordinateInfo = structuredClone(frame);
+    return [];
+  }
+  const ownOffset = totalYupOffset(geometry.coordinateInfo);
+  const targetOffset = totalYupOffset(frame);
+  const delta = {
+    x: ownOffset.x - targetOffset.x,
+    y: ownOffset.y - targetOffset.y,
+    z: ownOffset.z - targetOffset.z,
+  };
+  for (const mesh of geometry.meshes) {
+    const origin = mesh.origin ?? [0, 0, 0];
+    mesh.origin = [origin[0] + delta.x, origin[1] + delta.y, origin[2] + delta.z];
+  }
+  const retained = geometry.meshes.filter(meshFitsRenderFrame);
+  const skipped = geometry.meshes.length - retained.length;
+  if (skipped > 0) {
+    const retainedIds = new Set(retained.map((mesh) => mesh.expressId));
+    for (const mesh of document.rendering.meshProvenance) {
+      if (retainedIds.has(mesh.meshExpressId)) continue;
+      const counts = document.rendering.surfaceCounts.find((count) => count.surfaceSourceId === mesh.surfaceSourceId);
+      if (counts) counts.droppedReframeFaces += mesh.renderedFaceSourceIds.length;
+    }
+    document.rendering.meshProvenance = document.rendering.meshProvenance.filter((mesh) => retainedIds.has(mesh.meshExpressId));
+    recomputeRenderedFaceCounts(document);
+  }
+  if (retained.length === 0) {
+    throw new Error(`LandXML model cannot be federated: every surface component lies outside the ${MAX_RENDER_FRAME_LOCAL_EXTENT_METRES / 1000} km shared render-frame envelope`);
+  }
+  geometry.meshes = retained;
+  updateRetainedGeometry(geometry, frame);
+  return skipped === 0
+    ? []
+    : [`Skipped ${skipped} LandXML surface component(s) outside the ${MAX_RENDER_FRAME_LOCAL_EXTENT_METRES / 1000} km shared federation render-frame envelope`];
+}
+
+/** Own the format-specific branch while `loadFile` retains lifecycle ownership. */
+export async function loadLandXmlModel(options: LandXmlLoadOptions): Promise<void> {
+  options.setProgress({ phase: 'Parsing LandXML TIN surfaces', percent: 10 });
+  options.setGeometryStreamingActive(false);
+  // The callbacks run after this stack frame has yielded to the worker. Keep
+  // their mutable state in cells so both TypeScript and the error finalizer
+  // observe the same live transaction.
+  const provisional = { value: null as LandXmlProvisionalTransaction | null };
+  const federatedPlan = { value: null as FederatedLandXmlStreamingPlan | null };
+  let streamedComponents = 0;
+  const hasFederatedStreamingPlan = options.openFederatedStreamingPlan !== undefined;
+  try {
+    const result = await parseLandXmlViewerModelFromBlobAsync(
+      options.file,
+      options.isCurrent,
+      (loadedBytes, totalBytes) => {
+        if (!options.isCurrent()) return;
+        options.setProgress({
+          phase: 'Streaming LandXML TIN surfaces',
+          percent: Math.min(90, 10 + Math.round((loadedBytes / totalBytes) * 80)),
+        });
+      },
+      (preflight) => {
+        if (!options.isCurrent()) throw new Error('LandXML parsing cancelled');
+        provisional.value = options.openProvisional?.(preflight) ?? null;
+      },
+      (mesh) => {
+        if (federatedPlan.value !== null) return federatedPlan.value.publish(mesh);
+        if (provisional.value === null) return;
+        try {
+          provisional.value.publish(mesh);
+          streamedComponents++;
+        } catch (error) {
+          // The provisional upload is a progressive-rendering optimisation, not
+          // the load itself (#5175). `publish` has already rolled back its own
+          // partial GPU/registry state, so abandoning it here lands on exactly
+          // the path taken when no renderer was available, and the geometry is
+          // published normally once parsing completes. Only an environmental
+          // upload failure degrades; an invariant violation stays fatal.
+          if (!(error instanceof LandXmlProvisionalUploadError)) throw error;
+          console.warn('[landxml] provisional GPU upload failed; continuing without it:', error.message);
+          provisional.value = null;
+          streamedComponents = 0;
+        }
+      },
+      hasFederatedStreamingPlan
+        ? (preflight, sourceCoordinateInfo, spatialReference) => {
+          federatedPlan.value = options.openFederatedStreamingPlan?.(preflight, sourceCoordinateInfo, spatialReference) ?? null;
+          return federatedPlan.value !== null;
+        }
+        : undefined,
+      hasFederatedStreamingPlan ? (component) => federatedPlan.value?.measure(component.mesh) : undefined,
+      hasFederatedStreamingPlan ? () => federatedPlan.value?.freeze() : undefined,
+      hasFederatedStreamingPlan ? (component) => federatedPlan.value?.admit(component) : undefined,
+      hasFederatedStreamingPlan ? () => federatedPlan.value?.freezeAdmission() : undefined,
+      (component) => {
+        if (federatedPlan.value !== null) {
+          throw new Error('LandXML federated stream skipped a component before destination alignment');
+        }
+        provisional.value?.skip(component);
+      },
+      options.assumedLinearUnit,
+    );
+    // The browser worker is terminated within the cancellation polling bound;
+    // this guard also prevents a racing stale reply from mutating model state.
+    if (!options.isCurrent()) {
+      provisional.value?.rollback();
+      federatedPlan.value?.rollback();
+      return;
+    }
+    if (provisional.value !== null) {
+      try {
+        if (streamedComponents === 0) {
+          // Worker-less Blob loads still reserve the exact measured envelope.
+          // Their direct completion may have refused frame slots, so replay the
+          // original source order and consume each gap rather than compacting
+          // surviving mesh identities before committing the reservation.
+          const bySourceId = new Map(result.geometryResult.meshes.map((mesh) => [mesh.expressId, mesh]));
+          for (let expressId = 1; expressId <= provisional.value.reservedMaxExpressId; expressId++) {
+            const mesh = bySourceId.get(expressId);
+            if (mesh === undefined) provisional.value.skip({ expressId });
+            else provisional.value.publish(mesh);
+          }
+        } else {
+          for (const mesh of result.geometryResult.meshes.slice(streamedComponents)) provisional.value.publish(mesh);
+        }
+        for (const mesh of result.geometryResult.meshes) {
+          mesh.expressId += provisional.value.idOffset;
+          markLandXmlGpuUploaded(mesh);
+        }
+        for (const provenance of result.semanticDocument.rendering.meshProvenance) {
+          provenance.meshExpressId += provisional.value.idOffset;
+        }
+        provisional.value.commit();
+      } catch (error) {
+        // Same degradation as the streaming callback above (#5175): the
+        // transaction has rolled back, and no express id was rewritten because
+        // the offset pass runs only after every publish succeeds, so dropping
+        // the provisional here leaves `result` exactly as the no-renderer path
+        // would have produced it.
+        if (!(error instanceof LandXmlProvisionalUploadError)) throw error;
+        console.warn('[landxml] provisional GPU commit failed; continuing without it:', error.message);
+        provisional.value = null;
+      }
+    }
+    if (federatedPlan.value !== null) {
+      federatedPlan.value.complete(result.geometryResult);
+      retainFederatedStreamedProvenance(result.semanticDocument, result.geometryResult.meshes);
+      const dropped = federatedPlan.value.droppedComponentCount;
+      if (dropped > 0) result.warnings.push(landXmlRenderFrameWarning(dropped));
+      for (const mesh of result.geometryResult.meshes) markLandXmlGpuUploaded(mesh);
+    }
+    if (options.targetKind === 'primary') options.onPrimary(result);
+    const finalization = options.finalize(result.dataStore, result.geometryResult, result.schemaVersion, {
+      loadPath: 'landxml',
+      landXmlDocument: result.semanticDocument,
+      sourceSchema: result.semanticDocument.schema,
+      // Reframing has to run after neutral spatial alignment. Doing it here
+      // first clips a correctly georeferenced Swiss TIN against an unrelated
+      // local IFC render frame before it can be brought into that frame.
+      ...(options.targetKind === 'federated' ? { postAlignmentReframe: true } : {}),
+      ...(federatedPlan.value ? { federatedLandXmlStreamingPlan: federatedPlan.value } : {}),
+      ...(result.spatialReference ? { spatialReference: result.spatialReference } : {}),
+    });
+    if (!(await awaitLandXmlFinalization(finalization, options.isCurrent, provisional.value, federatedPlan.value))) return;
+    for (const warning of result.warnings) toast.info(warning);
+    options.setProgress({ phase: 'Complete', percent: 100 });
+    captureModelLoaded({
+      format: 'landxml',
+      file_size_mb: Math.round(options.fileSizeMB * 100) / 100,
+      load_target: options.targetKind,
+      load_path: 'landxml',
+      total_elapsed_ms: Math.round(performance.now() - options.totalStartTime),
+      was_hidden: options.wasHidden,
+    }, snapshotFromGeometry(options.fileSizeMB, result.geometryResult), options.trace);
+    options.setLoading(false);
+  } catch (error) {
+    provisional.value?.rollback();
+    federatedPlan.value?.rollback();
+    if (!options.isCurrent()) return;
+    console.error('[useIfc] LandXML parsing failed:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    options.onError(message);
+    options.setLoading(false);
+  }
+}
+
+/**
+ * #5942: a georeferenced raster bundle is imagery for the loaded terrain, not
+ * a model. It enters `useIfcLoader.loadFile` like every source, and this
+ * returns the drape before `loadFile` bumps the load session or resets the
+ * scene; `null` for anything else. The drape module loads only when used.
+ */
+export function drapeIfGeoRaster(file: File, setLoading: (loading: boolean) => void): Promise<void> | null {
+  if (!(file instanceof GeoRasterBundle)) return null;
+  return import('./terrainImageryDrape.js')
+    .then(({ drapeGeoRasterBundle }) => drapeGeoRasterBundle(file))
+    .finally(() => setLoading(false));
+}

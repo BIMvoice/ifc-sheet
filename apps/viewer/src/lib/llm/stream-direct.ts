@@ -1,0 +1,381 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Direct browser-to-provider streaming for BYOK (Bring Your Own Key) models.
+ *
+ * Anthropic: Uses the official @anthropic-ai/sdk with `dangerouslyAllowBrowser`,
+ *            constructed in ./anthropic-client.ts.
+ * OpenAI:    Uses fetch against the OpenAI chat completions API (same SSE format
+ *            the proxy already returns, so SSE parsing is shared).
+ *
+ * Keys are stored in localStorage and sent directly to the provider.
+ * They never pass through our server.
+ */
+
+import { outputTokenLimit, ANTHROPIC_OUTPUT_TOKEN_CEILING, OPENAI_OUTPUT_TOKEN_CEILING } from '../../../../../shared/ai/output-budget.js';
+import {
+  anthropicErrorMessage,
+  createAnthropicClient,
+  type AnthropicCredentials,
+} from './anthropic-client.js';
+import { readSseStream, type StreamMessage, type StreamOptions } from './stream-client.js';
+import { getModelById, sendsSamplingParams } from './models.js';
+import { buildCacheableSystem, logCacheHit } from './prompt-cache.js';
+import { anthropicUsage, chatCompletionsUsage, responsesUsage } from './token-usage.js';
+
+const STREAM_REQUEST_TIMEOUT_MS = 45_000;
+
+// ── Anthropic ──────────────────────────────────────────────────────────────
+
+type AnthropicMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+
+type AnthropicContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: AnthropicMediaType; data: string } };
+
+function toAnthropicMessages(
+  messages: StreamMessage[],
+): Array<{ role: 'user' | 'assistant'; content: string | AnthropicContentBlock[] }> {
+  return messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => {
+      if (typeof m.content === 'string') {
+        return { role: m.role as 'user' | 'assistant', content: m.content };
+      }
+      // Multimodal content — convert OpenAI-style parts to Anthropic format
+      const blocks: AnthropicContentBlock[] = m.content.map((part) => {
+        if (part.type === 'text') {
+          return { type: 'text' as const, text: part.text };
+        }
+        // image_url → Anthropic image block
+        const dataUrl = part.image_url.url;
+        const match = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+        if (match) {
+          return {
+            type: 'image' as const,
+            source: {
+              type: 'base64' as const,
+              media_type: match[1] as AnthropicMediaType,
+              data: match[2],
+            },
+          };
+        }
+        // Fallback: pass URL as text
+        return { type: 'text' as const, text: `[Image: ${dataUrl.slice(0, 100)}]` };
+      });
+      return { role: m.role as 'user' | 'assistant', content: blocks };
+    });
+}
+
+export async function streamAnthropicChat(
+  credentials: AnthropicCredentials,
+  options: Omit<StreamOptions, 'proxyUrl' | 'authToken' | 'onUsageInfo'>,
+): Promise<void> {
+  const { model, messages, system, signal, onChunk, onComplete, onError, onFinishReason } = options;
+
+  // Send a tuned temperature only where the model is flagged for it. Naming
+  // the models here instead just grows a second registry nothing keeps honest.
+  const sendSamplingParams = sendsSamplingParams(model);
+
+  let fullText = '';
+  try {
+    // Inside the try: constructing the client rejects a workspace id that
+    // cannot go in a header, and that belongs on `onError` like every other
+    // failure rather than escaping as an unhandled throw.
+    const maxOutputTokens = outputTokenLimit(options.maxOutputTokens, ANTHROPIC_OUTPUT_TOKEN_CEILING);
+    if (signal?.aborted) return;
+    const client = createAnthropicClient(credentials);
+    const stream = client.messages.stream({
+      model,
+      // Opus 5.5 (the default BYOK model) runs adaptive thinking when `thinking`
+      // is omitted. Thinking spends this ceiling, and
+      // `display` defaults to omitted, so too low a value truncates the visible
+      // answer with nothing to show for the tokens. Keep that default unless
+      // the caller explicitly chooses a smaller budget.
+      max_tokens: maxOutputTokens,
+      ...(sendSamplingParams ? { temperature: 0.3 } : {}),
+      // Wrap the system prompt in an ephemeral cache block when it's
+      // long enough to be worth caching (Anthropic's minimum is ~1024
+      // tokens, ≈ 4 KiB). Authoring turns ship the manifest schema +
+      // widget DSL contract which is well over the threshold; one-shot
+      // turns fall under it and pass through as plain string.
+      system: buildCacheableSystem(system),
+      messages: toAnthropicMessages(messages),
+    });
+
+    // Wire up abort signal
+    if (signal) {
+      const onAbort = () => stream.abort();
+      signal.addEventListener('abort', onAbort, { once: true });
+      stream.on('end', () => signal.removeEventListener('abort', onAbort));
+    }
+
+    stream.on('text', (text) => {
+      fullText += text;
+      onChunk(text);
+    });
+
+    const finalMessage = await stream.finalMessage();
+
+    if (signal?.aborted) return;
+
+    // Surface cache hit/miss numbers in dev tools so we can see
+    // whether the authoring contract is paying off.
+    logCacheHit(finalMessage.usage as { cache_creation_input_tokens?: number; cache_read_input_tokens?: number });
+    // The SDK accumulates message_start.usage and message_delta.usage into this.
+    const tokenUsage = anthropicUsage(finalMessage.usage);
+    if (tokenUsage) options.onTokenUsage?.(tokenUsage);
+
+    const stopReason = finalMessage.stop_reason;
+    onFinishReason?.(stopReason === 'end_turn' ? 'stop' : stopReason);
+    onComplete(fullText);
+  } catch (err) {
+    if (signal?.aborted) return;
+
+    onError(new Error(anthropicErrorMessage(err, credentials.workspaceId)));
+  }
+}
+
+// ── OpenAI ─────────────────────────────────────────────────────────────────
+
+/**
+ * Stream an OpenAI model. Automatically picks the right API:
+ * - Chat Completions (`/v1/chat/completions`) for standard chat models
+ * - Responses (`/v1/responses`) for Codex-style models
+ */
+export async function streamOpenAiChat(
+  apiKey: string,
+  options: Omit<StreamOptions, 'proxyUrl' | 'authToken' | 'onUsageInfo'>,
+): Promise<void> {
+  try {
+    options = { ...options, maxOutputTokens: outputTokenLimit(options.maxOutputTokens, OPENAI_OUTPUT_TOKEN_CEILING) };
+  } catch (error) {
+    options.onError(error instanceof Error ? error : new Error(String(error)));
+    return;
+  }
+  if (options.signal?.aborted) return;
+  const modelDef = getModelById(options.model);
+  if (modelDef?.openaiApi === 'responses') {
+    return streamOpenAiResponses(apiKey, options);
+  }
+  return streamOpenAiChatCompletions(apiKey, options);
+}
+
+/** Standard Chat Completions API; the Responses variant is handled above. */
+async function streamOpenAiChatCompletions(
+  apiKey: string,
+  options: Omit<StreamOptions, 'proxyUrl' | 'authToken' | 'onUsageInfo'>,
+): Promise<void> {
+  const { model, messages, system, signal, onChunk, onComplete, onError, onFinishReason } = options;
+
+  const allMessages: StreamMessage[] = system
+    ? [{ role: 'system', content: system }, ...messages]
+    : [...messages];
+
+  // Mirror the Anthropic path.
+  const sendSamplingParams = sendsSamplingParams(model);
+
+  const { response, cleanup } = await openAiFetch(
+    'https://api.openai.com/v1/chat/completions',
+    {
+      model,
+      messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
+      stream: true,
+      ...(sendSamplingParams ? { temperature: 0.3 } : {}),
+      max_completion_tokens: options.maxOutputTokens,
+      // Without this OpenAI streams no usage at all; with it the last chunk carries it.
+      stream_options: { include_usage: true },
+    },
+    apiKey,
+    signal,
+    onError,
+  );
+  if (!response) return;
+
+  if (!response.body) { cleanup(); onError(new Error('No response body')); return; }
+
+  let fullText = '';
+  let finishReason: string | null = null;
+
+  const ok = await readSseStream(response.body, signal, (data) => {
+    const parsed = JSON.parse(data) as {
+      choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>;
+    };
+    const tokenUsage = chatCompletionsUsage(parsed);
+    if (tokenUsage) options.onTokenUsage?.(tokenUsage);
+    const content = parsed.choices?.[0]?.delta?.content;
+    if (content) { fullText += content; onChunk(content); }
+    const fr = parsed.choices?.[0]?.finish_reason;
+    if (fr) finishReason = fr;
+  }, onError);
+
+  cleanup();
+  if (ok) { onFinishReason?.(finishReason); onComplete(fullText); }
+}
+
+/** Responses API for Codex-style models (GPT-5.3 Codex) */
+async function streamOpenAiResponses(
+  apiKey: string,
+  options: Omit<StreamOptions, 'proxyUrl' | 'authToken' | 'onUsageInfo'>,
+): Promise<void> {
+  const { model, messages, system, signal, onChunk, onComplete, onError, onFinishReason } = options;
+
+  // Build the input array: system instructions + conversation
+  const input: Array<{ role: string; content: string | unknown[] }> = [];
+  if (system) {
+    input.push({ role: 'developer', content: system });
+  }
+  for (const m of messages) {
+    input.push({ role: m.role, content: m.content });
+  }
+
+  const { response, cleanup } = await openAiFetch(
+    'https://api.openai.com/v1/responses',
+    {
+      model,
+      input,
+      stream: true,
+      max_output_tokens: options.maxOutputTokens,
+    },
+    apiKey,
+    signal,
+    onError,
+  );
+  if (!response) return;
+
+  if (!response.body) { cleanup(); onError(new Error('No response body')); return; }
+
+  let fullText = '';
+  // Map Responses API terminal events → chat-style finish_reason.
+  // `response.incomplete` is any non-completed terminal state: when the
+  // reason is `max_output_tokens` — or simply absent — map to 'length' so
+  // the ChatPanel "Continue" UX can resume a truncated Codex reply. Other
+  // explicit reasons (e.g. `content_filter`) pass through unchanged.
+  let finishReason: string | null = 'stop';
+  const reportResponsesUsage = (event: unknown) => {
+    const tokenUsage = responsesUsage(event);
+    if (tokenUsage) options.onTokenUsage?.(tokenUsage);
+  };
+
+  const ok = await readSseStream(response.body, signal, (data) => {
+    const event = JSON.parse(data) as {
+      type?: string;
+      delta?: string;
+      response?: {
+        status?: string;
+        incomplete_details?: { reason?: string } | null;
+      };
+    };
+    if (event.type === 'response.output_text.delta' && event.delta) {
+      fullText += event.delta;
+      onChunk(event.delta);
+    } else if (event.type === 'response.incomplete') {
+      reportResponsesUsage(event);
+      const reason = event.response?.incomplete_details?.reason;
+      finishReason = reason == null || reason === 'max_output_tokens' ? 'length' : reason;
+    } else if (event.type === 'response.completed') {
+      reportResponsesUsage(event);
+      finishReason = 'stop';
+    }
+  }, onError);
+
+  cleanup();
+  if (ok) { onFinishReason?.(finishReason); onComplete(fullText); }
+}
+
+// ── Shared helpers ─────────────────────────────────────────────────────────
+
+async function openAiFetch(
+  url: string,
+  body: Record<string, unknown>,
+  apiKey: string,
+  signal: AbortSignal | undefined,
+  onError: (err: Error) => void,
+): Promise<{ response: Response | null; cleanup: () => void }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(new Error('Chat request timed out. Please try again.')),
+    STREAM_REQUEST_TIMEOUT_MS,
+  );
+  const abortFromParent = () => controller.abort(signal?.reason);
+  if (signal) {
+    if (signal.aborted) { clearTimeout(timeoutId); return { response: null, cleanup: () => {} }; }
+    signal.addEventListener('abort', abortFromParent, { once: true });
+  }
+
+  // cleanup() clears the connect timeout and removes the abort listener.
+  // Callers must call it AFTER streaming completes, not before — otherwise
+  // user cancellation during SSE consumption won't abort the fetch.
+  const cleanup = () => {
+    clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', abortFromParent);
+  };
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    cleanup();
+    if (signal?.aborted) return { response: null, cleanup: () => {} };
+    if (controller.signal.aborted && controller.signal.reason instanceof Error) {
+      onError(controller.signal.reason);
+    } else {
+      onError(err instanceof Error ? err : new Error(String(err)));
+    }
+    return { response: null, cleanup: () => {} };
+  }
+
+  if (!response.ok) {
+    cleanup();
+    let detail = `OpenAI error (${response.status})`;
+    let error: { code?: string; message?: string } | undefined;
+    try {
+      const errBody = (await response.json()) as { error?: { code?: string; message?: string } };
+      error = errBody.error;
+    } catch (parseError) {
+      console.warn('Could not parse OpenAI error response:', parseError);
+    }
+    if (response.status === 401) {
+      detail = 'Invalid OpenAI API key. Check your key in the chat panel.';
+    } else if (response.status === 429) {
+      switch (error?.code) {
+        case 'credit_balance_exhausted':
+          detail = 'OpenAI API credits are exhausted. Check your organization billing.';
+          break;
+        case 'organization_spend_limit_exceeded':
+          detail = 'OpenAI organization spend limit reached. Check organization limits.';
+          break;
+        case 'project_spend_limit_exceeded':
+          detail = 'OpenAI project spend limit reached. Check project limits.';
+          break;
+        case 'organization_usage_limit_exceeded':
+          detail = 'OpenAI organization usage limit reached. Check organization limits.';
+          break;
+        case 'rate_limit_exceeded':
+        case 'slow_down':
+          detail = 'OpenAI rate limit reached. Please wait and try again.';
+          break;
+        default:
+          detail = error?.message
+            ? `OpenAI (429): ${error.message}`
+            : 'OpenAI rejected the request (429). Check API rate limits, billing, and project limits.';
+      }
+    } else if (error?.message) {
+      detail = `OpenAI: ${error.message}`;
+    }
+    onError(new Error(detail));
+    return { response: null, cleanup: () => {} };
+  }
+
+  return { response, cleanup };
+}

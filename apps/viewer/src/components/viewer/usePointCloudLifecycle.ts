@@ -1,0 +1,90 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Tear down streamed point cloud GPU resources when a model is removed.
+ *
+ * Streamed assets (LAS/LAZ) live in a separate ownership bucket on the
+ * renderer (see `PointCloudRenderer`'s `'streamed'` owner tag), so they
+ * survive `setPointClouds` calls. That isolation cuts both ways: nothing
+ * else clears them, so when a model is removed we have to do it here or
+ * the GPU buffers leak for the rest of the session.
+ *
+ * The hook tracks the previous set of `(modelId → handleId)` pairs and,
+ * on every model change, frees handles for disappeared models while mirroring
+ * model visibility onto resident streamed assets.
+ */
+
+import { useEffect, useRef, type MutableRefObject } from 'react';
+import type { Renderer } from '@ifc-lite/renderer';
+import { useViewerStore } from '@/store';
+import { unregisterPointCloudAlignment, hasRegisteredPointCloudAlignment } from '@/hooks/ingest/pointCloudAlignment';
+import { removePointCloudScanCache } from '@/hooks/ingest/pointCloudScanCache';
+import { stopCopcLodStream } from '@/hooks/ingest/copc/copcLodStream';
+
+export interface UsePointCloudLifecycleParams {
+  rendererRef: MutableRefObject<Renderer | null>;
+  isInitialized: boolean;
+}
+
+export function usePointCloudLifecycle(params: UsePointCloudLifecycleParams): void {
+  const { rendererRef, isInitialized } = params;
+  const models = useViewerStore((s) => s.models);
+  const setAssetCount = useViewerStore((s) => s.setPointCloudAssetCount);
+  const setClassCounts = useViewerStore((s) => s.setPointCloudClassCounts);
+  const previousRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+
+    const current = new Map<string, number>();
+    for (const [modelId, model] of models) {
+      if (typeof model.pointCloudHandleId === 'number') {
+        current.set(modelId, model.pointCloudHandleId);
+        renderer.setPointCloudVisibility({ id: model.pointCloudHandleId }, model.visible);
+      }
+    }
+
+    // Dispose handles whose model disappeared OR whose model still
+    // exists but was rebound to a new handle (e.g. the user reloaded
+    // the same file and got a fresh streaming session). Without the
+    // rebind branch the old GPU buffers stay allocated for the rest
+    // of the session.
+    for (const [modelId, handleId] of previousRef.current) {
+      const nextHandle = current.get(modelId);
+      if (nextHandle !== handleId) {
+        renderer.removePointCloudAsset({ id: handleId });
+        // A COPC asset also stops its view-dependent node stream (#6869).
+        stopCopcLodStream(handleId);
+        // Drop the asset's classification histogram so the classes
+        // checklist stops listing points that are no longer loaded.
+        setClassCounts(handleId, null);
+        // Drop its IfcMapConversion alignment registration (issue #1804)
+        // so a later toggle doesn't push a stale matrix to a freed handle,
+        // and re-derive the panel toggle's visibility from the registry —
+        // otherwise removing the last aligned scan leaves a toggle that
+        // silently does nothing for the next (e.g. PLY) scan.
+        unregisterPointCloudAlignment(handleId);
+        useViewerStore.getState().setPointCloudAlignmentAvailable(hasRegisteredPointCloudAlignment());
+        // Same cleanup for the 2D section scan-layer cache (issue #1805) —
+        // nothing else frees this, since streamed assets live outside the
+        // normal geometryResult/pointClouds lifecycle.
+        removePointCloudScanCache(handleId);
+        // The replacement renderer may already have rebuilt CPU-backed IFCx
+        // clouds before this stale streamed handle is observed. Recompute from
+        // the renderer after removal instead of decrementing the fresh count;
+        // a lost-device handle is a no-op there and must not subtract an IFCx
+        // asset that is visibly present.
+        setAssetCount(renderer.getPointCloudAssetCount());
+      }
+    }
+
+    previousRef.current = current;
+    renderer.requestRender();
+  }, [models, isInitialized, rendererRef, setAssetCount, setClassCounts]);
+}
+
+export default usePointCloudLifecycle;

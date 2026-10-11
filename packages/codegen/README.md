@@ -1,0 +1,118 @@
+# @ifc-lite/codegen
+
+TypeScript code generator for IFC EXPRESS schemas. Parses official `.exp` schema files from buildingSMART and emits typed TypeScript: 1000+ entity interfaces with full inheritance, schema metadata for runtime introspection, and exhaustive enum unions.
+
+This is a build-time tool — you don't depend on it at runtime. The generated output ships with `@ifc-lite/parser`.
+
+## Installation
+
+```bash
+npm install --save-dev @ifc-lite/codegen
+```
+
+## Generate from the official IFC schema
+
+```bash
+# IFC4 (776 entities)
+node dist/cli.js schemas/IFC4_ADD2_TC1.exp --output ./generated/ifc4
+
+# IFC4X3 (876 entities, includes infrastructure: roads, bridges, alignments)
+node dist/cli.js schemas/IFC4X3.exp --output ./generated/ifc4x3
+```
+
+Pass `--rust` to also emit Rust type tables (consumed by the ifc-lite Rust core).
+Rust output is public by default. Add `--rust-crate-private` when the generated
+registry is an implementation detail of one crate and must use `pub(crate)`
+instead of becoming part of that crate's public API; the flag has no effect
+unless `--rust` is also present.
+Pass `--rust` to also emit Rust type tables (consumed by the ifc-lite Rust core). To generate
+one exact-name universe across supported releases while keeping the first schema authoritative
+for attributes, pass older schemas with `--rust-supplemental-schema`. Rust generation also
+includes class-shaped rows from `@ifc-lite/data`'s IFC4 family catalog, covering accepted IFC4X1
+entities such as `IfcAlignmentCurve` that are absent from the bundled IFC4 ADD2 EXPRESS file:
+
+```bash
+node dist/cli.js schemas/IFC4X3.exp --rust \
+  --rust-supplemental-schema schemas/IFC4_ADD2_TC1.exp schemas/IFC2X3_TC1.exp
+```
+
+Generated files (one per output directory, e.g. `./generated/ifc4`):
+
+```text
+generated/ifc4/
+├── entities.ts          ← TypeScript interfaces for every entity
+├── types.ts             ← defined-type aliases
+├── enums.ts             ← enum definitions
+├── selects.ts           ← SELECT union types
+├── schema-registry.ts   ← runtime metadata (parent, attributes, ...)
+├── type-ids.ts          ← numeric type-id lookup tables
+├── serializers.ts       ← STEP serializer bound to the schema registry
+└── index.ts             ← barrel export
+```
+
+## Programmatic usage
+
+```typescript
+import { parseExpressSchema, generateTypeScript } from '@ifc-lite/codegen';
+import { readFile, writeFile } from 'node:fs/promises';
+
+const schema = parseExpressSchema(await readFile('./schemas/IFC4.exp', 'utf-8'));
+
+console.log(`Parsed ${schema.entities.length} entities, ${schema.types.length} types`);
+
+const generated = generateTypeScript(schema);
+
+await writeFile('./generated/ifc4/entities.ts', generated.entities);
+await writeFile('./generated/ifc4/schema-registry.ts', generated.schemaRegistry);
+```
+
+## What you get
+
+For an EXPRESS entity like:
+
+```express
+ENTITY IfcWall
+  SUBTYPE OF (IfcBuildingElement);
+  PredefinedType : OPTIONAL IfcWallTypeEnum;
+END_ENTITY;
+```
+
+You get a TypeScript interface with full inheritance:
+
+<!-- Reason: shows generator OUTPUT; IfcBuildingElement and IfcWallTypeEnum only exist in the emitted files. -->
+<!-- docs-check: skip -->
+```typescript
+export interface IfcWall extends IfcBuildingElement {
+  PredefinedType?: IfcWallTypeEnum;
+}
+```
+
+Plus runtime metadata for the same entity:
+
+<!-- Reason: shows generator OUTPUT; SCHEMA_REGISTRY lives in the emitted schema-registry.ts. -->
+<!-- docs-check: skip -->
+```typescript
+SCHEMA_REGISTRY.IfcWall = {
+  parent: 'IfcBuildingElement',
+  inheritanceChain: ['IfcRoot', 'IfcObjectDefinition', /* ... */, 'IfcWall'],
+  attributes: [
+    { name: 'PredefinedType', type: 'IfcWallTypeEnum', optional: true },
+  ],
+  allAttributes: [/* every inherited attribute, in inheritance order */],
+};
+```
+
+## Why generate vs. hand-write
+
+- **Coverage:** 776 IFC4 entities and 876 IFC4X3 entities — manual implementation gets ~7% there.
+- **Updates:** when buildingSMART releases a new schema, regenerate; no manual edits.
+- **Consistency:** every entity follows the same shape. Types, names, optional-ness all match the spec exactly.
+- **Type safety:** TypeScript catches schema-violating attribute access at compile time.
+
+## API
+
+See the [API Reference](https://ifclite.dev/docs/api/typescript/#ifc-litecodegen).
+
+## License
+
+[MPL-2.0](../../LICENSE)

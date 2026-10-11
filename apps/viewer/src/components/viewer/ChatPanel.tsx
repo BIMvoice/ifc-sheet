@@ -1,0 +1,1682 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * ChatPanel — Interactive LLM chat with live 3D model generation.
+ *
+ * Features:
+ * - Streaming responses with blinking cursor
+ * - Executable code blocks with "Run" and "Fix this" buttons
+ * - Drag-and-drop file upload with visual dropzone
+ * - Smart auto-scroll with "scroll to bottom" button
+ * - Clickable example prompts in empty state
+ * - Auto-execute toggle for hands-free workflow
+ * - Keyboard shortcuts (Cmd+L focus, Escape close)
+ * - Conversation persistence via localStorage
+ * - Clear confirmation dialog
+ * - Error-to-LLM feedback loop for failed scripts
+ */
+
+import { useCallback, useRef, useEffect, useState, type KeyboardEvent, type DragEvent } from 'react';
+import { X, Send, Square, Trash2, Paperclip, ArrowDown, Zap, Wrench } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
+import { PromoteToolDialog } from '@/components/extensions/PromoteToolDialog';
+import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
+import { toast } from '@/components/ui/toast';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useTranslation } from '@/i18n';
+import { useViewerStore } from '@/store';
+import { buildErrorFeedbackContent } from '@/store/slices/chatSlice';
+import { ChatMessageComponent } from './chat/ChatMessage';
+import { ModelSelector } from './chat/ModelSelector';
+import {
+  createAttachmentId,
+  imageFileToCompressedBase64,
+  compressDataUrlImage,
+  stripContinuationOverlap,
+  estimateTextTokens,
+  estimateMessagesTokens,
+  summarizeDroppedMessages,
+} from './chat/chatPanelHelpers';
+import { streamChat, type UsageInfo } from '@/lib/llm/stream-client';
+import { fetchUsageSnapshot } from '@/lib/llm/usage-quota';
+import { streamAnthropicChat, streamOpenAiChat } from '@/lib/llm/stream-direct';
+import { buildStreamMessagesForModel, filterAttachmentsForModel } from '@/lib/llm/message-capabilities';
+import { buildSystemPrompt } from '@/lib/llm/system-prompt';
+import { getModelContext, parseCSV } from '@/lib/llm/context-builder';
+import { collectActiveFileAttachments } from '@/lib/attachments';
+import { MAX_PDF_ATTACHMENT_BYTES } from '@/lib/llm/document-text';
+import { attachPdfDocument, createDocumentUploadGate, shouldContinueDocumentUploadBatch } from '@/lib/llm/document-upload';
+import { extractCodeBlocks } from '@/lib/llm/code-extractor';
+import { extractScriptEditOps, filterUnappliedScriptOps } from '@/lib/llm/script-edit-ops';
+import { createPatchDiagnostic, getPrimaryRootCause, type RepairScope, type ScriptDiagnostic } from '@/lib/llm/script-diagnostics';
+import { shortcutLabel } from '@/lib/commands/shortcut-label';
+import { registerKeyboardCommand } from '@/lib/commands/dispatcher';
+import { buildRepairSessionKey, getEscalatedRepairScope, pruneMessagesForRepair } from '@/lib/llm/repair-loop';
+import type { ChatMessage, ChatRepairRequest, FileAttachment } from '@/lib/llm/types';
+import { canUsePlainCodeBlockFallback, type ScriptMutationIntent } from '@/lib/llm/script-preservation';
+import { Image as ImageIcon, KeyRound } from 'lucide-react';
+import { getModelById } from '@/lib/llm/models';
+import { resolveStreamRoute } from '@/lib/llm/byok-guard';
+import { settleTurnAfter, startChatTurnTelemetry } from '@/lib/llm/chat-telemetry';
+import { getApiKeys, hasAnthropicKey, hasOpenaiKey, subscribeApiKeys } from '@/services/api-keys';
+import { ByokKeyModal } from './chat/ByokKeyModal';
+import { ByokStreamingPill } from './chat/ByokStreamingPill';
+import type { BYOKProvider } from '@/lib/llm/clipboard-detect';
+import { useSandbox } from '@/hooks/useSandbox';
+import { useOptionalExtensionHost } from '@/sdk/ExtensionHostProvider';
+import {
+  classifyIntent,
+  packBundle,
+  validateBundleResponse,
+} from '@ifc-lite/extensions';
+
+// Environment variable for the proxy URL
+const PROXY_URL = import.meta.env.VITE_LLM_PROXY_URL as string || '/api/chat';
+
+const EXAMPLE_PROMPTS = [
+  'Create a 3-story house with walls, slabs, and a gable roof',
+  'Color all IfcWalls by their fire rating',
+  'Export a quantity takeoff as CSV',
+  'Create a skyscraper with 4x4 column grid, 30x40m, concrete shaft',
+];
+
+const CONTINUE_PROMPT = 'Continue from exactly where your last response stopped. Do not repeat previously generated text.';
+const USAGE_REFRESH_INTERVAL_MS = 15_000;
+const INPUT_BUDGET_RATIO = 0.72;
+const OUTPUT_TOKEN_RESERVE = 9_000;
+const MIN_INPUT_BUDGET = 8_000;
+const MAX_RECENT_MESSAGES = 48;
+const MAX_INLINE_IMAGE_DATA_URL_CHARS = 1_200_000;
+const MAX_ATTACHMENTS_PER_MESSAGE = 6;
+const MAX_TEXT_ATTACHMENT_BYTES = 512_000;
+const MAX_IMAGE_ATTACHMENT_BYTES = 8_000_000;
+
+interface ChatSendOptions {
+  continuationBase?: string;
+  intent?: ScriptMutationIntent;
+  repairDiagnostics?: ScriptDiagnostic[];
+  requestedRepairScope?: RepairScope;
+  rootCauseKey?: string;
+}
+
+interface ChatPanelProps {
+  onClose?: () => void;
+}
+
+export function ChatPanel({ onClose }: ChatPanelProps) {
+  const { t } = useTranslation();
+  const extensionHost = useOptionalExtensionHost();
+  /** Most recent chat classification; surfaced in the status bar as authoring telemetry. */
+  const [authoringTelemetry, setAuthoringTelemetry] = useState<{
+    intent: 'authoring' | 'fork';
+    startedAt: number;
+  } | null>(null);
+  const setPendingAuthoredBundle = useViewerStore((s) => s.setPendingAuthoredBundle);
+  const setExtensionsPanelVisible = useViewerStore((s) => s.setExtensionsPanelVisible);
+  const setExtensionsRequestedView = useViewerStore((s) => s.setExtensionsRequestedView);
+  const setScriptPanelVisible = useViewerStore((s) => s.setScriptPanelVisible);
+  const chatToolReady = useViewerStore((s) => s.chatToolReady);
+  const setChatToolReady = useViewerStore((s) => s.setChatToolReady);
+  /**
+   * Local: the inline Promote-to-tool dialog (script path). `source`
+   * is snapshotted from the live editor when the dialog opens — the
+   * dialog is modal so the script can't change underneath it, and
+   * snapshotting avoids re-rendering ChatPanel on every keystroke.
+   */
+  const [promoteFromChat, setPromoteFromChat] = useState<{ open: boolean; source: string }>({
+    open: false,
+    source: '',
+  });
+  /** One-shot guard for the "use the Ideas panel" authoring hint toast. */
+  const authoringHintShownRef = useRef(false);
+
+  /**
+   * Try to parse an authoring response as an extension bundle. If it
+   * validates, pack it and surface a toast linking to the Extensions
+   * panel for the user to review and install. Failures stay silent —
+   * the regular chat flow already showed the response.
+   */
+  const handleAuthoringResponse = useCallback(
+    async (fullText: string): Promise<boolean> => {
+      try {
+        const result = validateBundleResponse(fullText);
+        if (!result.ok || !result.manifest || !result.parsed) return false;
+        // Assemble a Bundle from the parsed pieces, pack it, hand it
+        // to the Extensions panel.
+        const files = new Map<string, { path: string; bytes: Uint8Array; text?: string }>();
+        const encoder = new TextEncoder();
+        const manifestText = JSON.stringify(result.manifest, null, 2);
+        files.set('manifest.json', {
+          path: 'manifest.json',
+          bytes: encoder.encode(manifestText),
+          text: manifestText,
+        });
+        for (const [path, text] of Object.entries(result.parsed.files)) {
+          files.set(path, { path, bytes: encoder.encode(text), text });
+        }
+        const bytes = packBundle({ manifest: result.manifest, files });
+        setPendingAuthoredBundle(bytes);
+        // Drive the inline CTA card instead of relying on a toast the
+        // user scrolls past — the bundle is one click from installed.
+        setChatToolReady({ kind: 'bundle', name: result.manifest.name });
+        return true;
+      } catch (err) {
+        console.warn('[ChatPanel] authoring response parse failed:', err);
+        return false;
+      }
+    },
+    [setPendingAuthoredBundle, setChatToolReady],
+  );
+  const messages = useViewerStore((s) => s.chatMessages);
+  const status = useViewerStore((s) => s.chatStatus);
+  const streamingContent = useViewerStore((s) => s.chatStreamingContent);
+  const activeModel = useViewerStore((s) => s.chatActiveModel);
+  const autoExecute = useViewerStore((s) => s.chatAutoExecute);
+  const error = useViewerStore((s) => s.chatError);
+  const attachments = useViewerStore((s) => s.chatAttachments);
+  const addMessage = useViewerStore((s) => s.addChatMessage);
+  const setChatStatus = useViewerStore((s) => s.setChatStatus);
+  const updateStreaming = useViewerStore((s) => s.updateLastAssistantMessage);
+  const finalizeAssistant = useViewerStore((s) => s.finalizeAssistantMessage);
+  const setChatError = useViewerStore((s) => s.setChatError);
+  const setChatAbortController = useViewerStore((s) => s.setChatAbortController);
+  const setAutoExecute = useViewerStore((s) => s.setChatAutoExecute);
+  const addAttachment = useViewerStore((s) => s.addChatAttachment);
+  const removeAttachment = useViewerStore((s) => s.removeChatAttachment);
+  const clearAttachments = useViewerStore((s) => s.clearChatAttachments);
+  const clearMessages = useViewerStore((s) => s.clearChatMessages);
+  const resetScriptEditorForNewChat = useViewerStore((s) => s.resetScriptEditorForNewChat);
+  const pendingPrompt = useViewerStore((s) => s.chatPendingPrompt);
+  const consumePendingPrompt = useViewerStore((s) => s.consumeChatPendingPrompt);
+  const pendingRepairRequest = useViewerStore((s) => s.chatPendingRepairRequest);
+  const consumePendingRepairRequest = useViewerStore((s) => s.consumeChatPendingRepairRequest);
+  const setChatHasByokKey = useViewerStore((s) => s.setChatHasByokKey);
+  const usage = useViewerStore((s) => s.chatUsage);
+  const setChatUsage = useViewerStore((s) => s.setChatUsage);
+  const { execute } = useSandbox();
+
+  // Sync BYOK key availability into the store and track per-provider state
+  const [keyStateAnthropic, setKeyStateAnthropic] = useState(hasAnthropicKey);
+  const [keyStateOpenai, setKeyStateOpenai] = useState(hasOpenaiKey);
+  useEffect(() => {
+    const refresh = () => {
+      const a = hasAnthropicKey();
+      const o = hasOpenaiKey();
+      setKeyStateAnthropic(a);
+      setKeyStateOpenai(o);
+      setChatHasByokKey(a || o);
+    };
+    refresh();
+    return subscribeApiKeys(refresh);
+  }, [setChatHasByokKey]);
+
+  // BYOK key modal — controlled state for both auto-open (on locked-model pick)
+  // and manual open via the header 🔑 button. `provider` selects the initial tab.
+  const [byokModal, setByokModal] = useState<{ open: boolean; provider: BYOKProvider }>({
+    open: false,
+    provider: 'anthropic',
+  });
+  const openByokModal = useCallback((provider: BYOKProvider) => {
+    setByokModal({ open: true, provider });
+  }, []);
+  const closeByokModal = useCallback(() => {
+    setByokModal((s) => ({ ...s, open: false }));
+  }, []);
+
+  // The usage indicator tracks the free-tier proxy quota we enforce server-side.
+  // BYOK routes go directly from the browser to the provider, so the user's
+  // own provider account is what gates them — our quota doesn't apply, and
+  // showing it here is misleading. Hide it whenever the active model is
+  // direct-to-provider.
+  const activeModelSource = getModelById(activeModel)?.source ?? 'proxy';
+  const displayUsage: UsageInfo | null = activeModelSource === 'proxy' ? usage : null;
+  const usageResetLabel = displayUsage?.resetAt && displayUsage.resetAt > 0
+    ? new Date(displayUsage.resetAt * 1000).toLocaleDateString()
+    : '—';
+
+  const [inputText, setInputText] = useState('');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
+  const [lastFinishReason, setLastFinishReason] = useState<string | null>(null);
+
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const documentUploadsRef = useRef<ReturnType<typeof createDocumentUploadGate> | null>(null);
+  documentUploadsRef.current ??= createDocumentUploadGate();
+  const documentUploads = documentUploadsRef.current;
+  const dragCounterRef = useRef(0);
+  const autoRepairAttemptCountsRef = useRef(new Map<string, { attempts: number; lastScope: RepairScope }>());
+
+  const resizeInput = useCallback(() => {
+    const target = inputRef.current;
+    if (!target) return;
+    target.style.height = 'auto';
+    target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+  }, []);
+
+  useEffect(() => {
+    resizeInput();
+  }, [inputText, resizeInput]);
+  useEffect(() => () => documentUploads.cancel(), [activeModel, documentUploads]);
+
+  // ── Smart auto-scroll ──
+  // Only auto-scroll if user hasn't scrolled up to read old messages
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (!userScrolledUp) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages.length, streamingContent, userScrolledUp]);
+
+  // Detect whether user has scrolled up from the bottom
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+      setUserScrolledUp(!isNearBottom);
+      setShowScrollBtn(!isNearBottom && (messages.length > 0 || !!streamingContent));
+    };
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [messages.length, streamingContent]);
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+      setUserScrolledUp(false);
+      setShowScrollBtn(false);
+    }
+  }, []);
+
+  // Focus input on mount
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  // Keep usage meter hydrated even before first prompt and refresh periodically.
+  useEffect(() => {
+    let cancelled = false;
+    const refreshUsage = async () => {
+      const snapshot = await fetchUsageSnapshot(PROXY_URL);
+      if (!cancelled && snapshot.ok) {
+        setChatUsage(snapshot.usage);
+      }
+    };
+
+    void refreshUsage();
+    const timer = window.setInterval(() => {
+      void refreshUsage();
+    }, USAGE_REFRESH_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [setChatUsage]);
+
+  // ── Keyboard shortcuts ──
+  useEffect(() => {
+    const removeFocus = registerKeyboardCommand('chat.focusInput', () => {
+      inputRef.current?.focus();
+    }, { allowInTextEntry: true });
+    const removeClose = registerKeyboardCommand('chat.close', () => {
+      if (!onClose) return false;
+      const isChatFocused = document.activeElement === inputRef.current;
+      if (isChatFocused && inputText) return false;
+      onClose();
+    }, { allowInTextEntry: true, layer: 'popover' });
+    return () => { removeFocus(); removeClose(); };
+  }, [onClose, inputText]);
+
+  const buildRepairPromptFromLiveState = useCallback((request: ChatRepairRequest) => {
+    const state = useViewerStore.getState();
+    return buildErrorFeedbackContent(state.scriptEditorContent, request.error, {
+      diagnostics: request.diagnostics ?? state.scriptLastDiagnostics,
+      currentRevision: state.scriptEditorRevision,
+      currentSelection: request.includeSelection ? state.scriptEditorSelection : undefined,
+      staleCodeBlock: request.staleCodeBlock,
+      reason: request.reason,
+      requestedRepairScope: request.requestedRepairScope,
+    });
+  }, []);
+
+  const triggerAutoRepair = (request: ChatRepairRequest) => {
+    const state = useViewerStore.getState();
+    const diagnostics = request.diagnostics ?? state.scriptLastDiagnostics;
+    const primaryRootCause = getPrimaryRootCause(diagnostics);
+    const sessionKey = buildRepairSessionKey({
+      diagnostics,
+      currentCode: state.scriptEditorContent,
+    });
+    const sessionState = autoRepairAttemptCountsRef.current.get(sessionKey);
+    const defaultScope = request.requestedRepairScope ?? primaryRootCause?.repairScope ?? 'local';
+    const requestedScope = sessionState
+      ? sessionState.attempts >= 1 && sessionState.lastScope === defaultScope
+        ? getEscalatedRepairScope(defaultScope) ?? null
+        : defaultScope
+      : defaultScope;
+
+    if (!requestedScope) {
+      setChatError('Auto-repair stopped after the same root cause persisted through escalation. Use Fix with LLM after adjusting the script or make a broader manual change.');
+      return;
+    }
+
+    autoRepairAttemptCountsRef.current.set(sessionKey, {
+      attempts: (sessionState?.attempts ?? 0) + 1,
+      lastScope: requestedScope,
+    });
+
+    void doSend(buildRepairPromptFromLiveState({
+      ...request,
+      diagnostics,
+      requestedRepairScope: requestedScope,
+      rootCauseKey: primaryRootCause?.rootCauseKey,
+    }), {
+      intent: 'repair',
+      repairDiagnostics: diagnostics,
+      requestedRepairScope: requestedScope,
+      rootCauseKey: primaryRootCause?.rootCauseKey,
+    });
+  };
+
+  // ── Core send logic ──
+  const doSend = useCallback(async (text: string, options?: ChatSendOptions) => {
+    if (!text.trim() || status === 'streaming' || status === 'sending') return;
+    // Clear any stale post-authoring CTA — this turn re-establishes it
+    // on completion if it's another authoring turn.
+    setChatToolReady(null);
+
+    // Classify the prompt for the action log and to nudge the user
+    // toward plan-first authoring when appropriate. The classifier is
+    // rule-based and content-free metadata only — we record the coarse
+    // intent the message looks like, never the prompt text itself.
+    const classified = options?.intent === 'repair'
+      ? { intent: 'one-shot' as const, confidence: 1, reason: 'repair turn' }
+      : classifyIntent(text, {
+          hasExistingExtension: false,
+          hasLoadedModel: useViewerStore.getState().models.size > 0,
+        });
+    extensionHost?.emitAction('chat.message', {
+      intent: classified.intent === 'out-of-scope' ? 'one-shot' : classified.intent,
+    });
+    // For high-confidence authoring/fork intents, suggest the
+    // plan-first path. Non-blocking — we still send through the
+    // existing chat pipeline so the user always gets a response.
+    if (
+      (classified.intent === 'authoring' || classified.intent === 'fork')
+      && classified.confidence >= 0.75
+      && !options?.intent
+    ) {
+      // Show the "use the Ideas panel" hint at most once per chat
+      // session — a multi-turn authoring conversation shouldn't
+      // re-toast it on every message.
+      if (!authoringHintShownRef.current) {
+        authoringHintShownRef.current = true;
+        toast.info(
+          classified.intent === 'fork'
+            ? 'Heads up: that reads like a fork. Use the Extensions → Ideas panel for diff-based authoring.'
+            : 'Heads up: that reads like an authoring request. The Extensions → Ideas panel offers plan-first authoring.',
+        );
+      }
+      setAuthoringTelemetry({ intent: classified.intent, startedAt: Date.now() });
+    } else if (classified.intent !== 'authoring' && classified.intent !== 'fork') {
+      setAuthoringTelemetry(null);
+    }
+
+    // Authoring turns write code into the Script Editor — open it so
+    // the user watches the tool take shape instead of only seeing
+    // chat text. Chat is *part* of the authoring surface, not a
+    // detour away from it.
+    if (classified.intent === 'authoring' || classified.intent === 'fork') {
+      setScriptPanelVisible(true);
+    }
+
+    // Resolve the stream route BEFORE any user-visible side effects (adding
+    // the user message, clearing attachments, setting sending state). If the
+    // selected BYOK model has no key, bail out now so the chat transcript
+    // doesn't stack orphaned user messages on repeated sends.
+    const route = resolveStreamRoute(activeModel, getApiKeys());
+    if (route.kind === 'missing-key') {
+      openByokModal(route.provider);
+      setChatError(
+        `${route.provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} key required for this model — set it up to continue.`,
+      );
+      return;
+    }
+
+    const continuationBase = options?.continuationBase;
+    const responseIntent = options?.intent ?? 'create';
+    if (responseIntent !== 'repair') {
+      autoRepairAttemptCountsRef.current.clear();
+    }
+    const liveState = useViewerStore.getState();
+    const currentMessages = responseIntent === 'repair'
+      ? pruneMessagesForRepair(liveState.chatMessages)
+      : liveState.chatMessages;
+    const liveScriptContext = {
+      content: liveState.scriptEditorContent,
+      revision: liveState.scriptEditorRevision,
+      selection: liveState.scriptEditorSelection,
+    };
+    const liveDiagnostics = liveState.scriptLastDiagnostics;
+    const effectiveDiagnostics = options?.repairDiagnostics ?? liveDiagnostics;
+    const primaryRootCause = options?.rootCauseKey
+      ? { rootCauseKey: options.rootCauseKey, repairScope: options.requestedRepairScope ?? 'local' }
+      : getPrimaryRootCause(effectiveDiagnostics);
+    setLastFinishReason(null);
+
+    const activeModelInfo = getModelById(activeModel);
+    const supportsImages = activeModelInfo?.supportsImages ?? false;
+    const supportsFileAttachments = activeModelInfo?.supportsFileAttachments ?? true;
+    const filtered = filterAttachmentsForModel(attachments, supportsImages, supportsFileAttachments);
+    const droppedAttachmentWarnings: string[] = [];
+    if (filtered.droppedImages > 0) {
+      droppedAttachmentWarnings.push('image attachments');
+    }
+    if (filtered.droppedFiles > 0) {
+      droppedAttachmentWarnings.push('file attachments');
+    }
+    if (droppedAttachmentWarnings.length > 0) {
+      setChatError(
+        `Selected model does not support ${droppedAttachmentWarnings.join(' and ')}. Unsupported attachments were skipped.`,
+      );
+    }
+
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text.trim(),
+      createdAt: Date.now(),
+      attachments: filtered.accepted.length > 0 ? [...filtered.accepted] : undefined,
+    };
+    addMessage(userMessage);
+    setInputText('');
+    setChatStatus('sending');
+    setUserScrolledUp(false);
+
+    // Reset textarea height
+    resizeInput();
+
+    // Check for auto-captured viewport screenshot to include
+    const pendingViewportScreenshot = useViewerStore.getState().chatViewportScreenshot;
+    if (pendingViewportScreenshot) {
+      useViewerStore.getState().setChatViewportScreenshot(null);
+    }
+    let viewportScreenshot: string | null = null;
+    if (pendingViewportScreenshot && supportsImages) {
+      // Normalize legacy/uncompressed screenshots before attaching.
+      const normalized = await compressDataUrlImage(pendingViewportScreenshot);
+      if (normalized.length <= MAX_INLINE_IMAGE_DATA_URL_CHARS) {
+        viewportScreenshot = normalized;
+      } else {
+        setChatError('Auto-captured screenshot was too large and was skipped.');
+      }
+    }
+
+    const allMessages = [...currentMessages, userMessage];
+
+    const modelContext = getModelContext();
+    const fileAttachments = supportsFileAttachments
+      ? collectActiveFileAttachments(allMessages, filtered.accepted)
+      : [];
+    // Personal prompt overlay from the active flavor (RFC §06.4) —
+    // durable user preferences appended to the system prompt. Best
+    // effort: a missing host / flavor / overlay just omits it.
+    let personalOverlay: string | undefined;
+    if (extensionHost) {
+      try {
+        const activeFlavor = await extensionHost.flavors.getActive();
+        const content = activeFlavor?.promptOverlay?.content?.trim();
+        if (content) personalOverlay = content;
+      } catch {
+        // Overlay is non-essential — never block a chat turn on it.
+      }
+    }
+    const systemPrompt = buildSystemPrompt(modelContext, fileAttachments, {
+      content: liveScriptContext.content,
+      revision: liveScriptContext.revision,
+      selection: liveScriptContext.selection,
+    }, {
+      userPrompt: text.trim(),
+      diagnostics: effectiveDiagnostics,
+      // Include the extension-authoring contract when the classifier
+      // flagged the turn as authoring/fork — the LLM gets the manifest
+      // schema, widget DSL, and capability catalogue in context so it
+      // can emit a valid bundle.
+      includeAuthoringContract:
+        classified.intent === 'authoring' || classified.intent === 'fork',
+      personalOverlay,
+    });
+    const contextWindow = activeModelInfo?.contextWindow ?? 128_000;
+    const inputBudget = Math.max(
+      MIN_INPUT_BUDGET,
+      Math.floor(contextWindow * INPUT_BUDGET_RATIO) - OUTPUT_TOKEN_RESERVE,
+    );
+
+    let compactedMessages = [...allMessages];
+    let droppedMessages: ChatMessage[] = [];
+    let streamBuild = buildStreamMessagesForModel(compactedMessages, viewportScreenshot, supportsImages);
+    let streamMessages = streamBuild.messages;
+    let estimatedInputTokens = estimateTextTokens(systemPrompt) + estimateMessagesTokens(streamMessages);
+
+    while (estimatedInputTokens > inputBudget && compactedMessages.length > 2) {
+      const dropCount = Math.min(4, Math.max(1, compactedMessages.length - 2));
+      droppedMessages = [...droppedMessages, ...compactedMessages.slice(0, dropCount)];
+      compactedMessages = compactedMessages.slice(dropCount);
+      if (compactedMessages.length > MAX_RECENT_MESSAGES) {
+        const over = compactedMessages.length - MAX_RECENT_MESSAGES;
+        droppedMessages = [...droppedMessages, ...compactedMessages.slice(0, over)];
+        compactedMessages = compactedMessages.slice(over);
+      }
+      streamBuild = buildStreamMessagesForModel(compactedMessages, viewportScreenshot, supportsImages);
+      streamMessages = streamBuild.messages;
+      estimatedInputTokens = estimateTextTokens(systemPrompt) + estimateMessagesTokens(streamMessages);
+    }
+
+    if (streamBuild.droppedInlineImages > 0 || streamBuild.droppedViewportScreenshot) {
+      setChatError(
+        'Selected model does not support image input. Screenshot/image payload was omitted.',
+      );
+    }
+
+    if (droppedMessages.length > 0) {
+      const summary = summarizeDroppedMessages(droppedMessages);
+      if (summary) {
+        const summaryMessage = {
+          role: 'system' as const,
+          content: `Conversation summary of earlier turns (for continuity only):\n${summary}`,
+        };
+        streamMessages = [summaryMessage, ...streamMessages];
+        estimatedInputTokens = estimateTextTokens(systemPrompt) + estimateMessagesTokens(streamMessages);
+      }
+    }
+
+    if (estimatedInputTokens > inputBudget && import.meta.env.DEV) {
+      console.info('[llm-budget]', {
+        model: activeModel,
+        contextWindow,
+        inputBudget,
+        estimatedInputTokens,
+        droppedMessages: droppedMessages.length,
+      });
+    }
+
+    const abortController = new AbortController();
+    setChatAbortController(abortController);
+    useViewerStore.getState().beginAssistantScriptTurn();
+
+    let accumulated = '';
+    const responseBaseRevision = liveScriptContext.revision;
+    const responseBaseContent = liveScriptContext.content;
+    const editParseOptions = {
+      baseRevision: responseBaseRevision,
+      baseContent: responseBaseContent,
+      intent: responseIntent,
+      requestedRepairScope: options?.requestedRepairScope ?? primaryRootCause?.repairScope,
+      targetRootCause: options?.rootCauseKey ?? primaryRootCause?.rootCauseKey,
+    } as const;
+    const responseEditState = {
+      intent: responseIntent,
+      appliedOpIds: new Set<string>(),
+      acceptedOps: [] as ReturnType<typeof extractScriptEditOps>['operations'],
+      appliedAny: false,
+      applyFailed: false,
+      fallbackApplied: false,
+      rolledBack: false,
+      applyFailureStatus: null as null | 'revision_conflict' | 'range_error' | 'semantic_error' | 'parse_error',
+      applyFailureError: null as string | null,
+      applyFailureDiagnostic: null as ReturnType<typeof useViewerStore.getState>['scriptLastDiagnostics'][number] | null,
+    };
+    let pendingAttachmentsCleared = attachments.length === 0;
+    const turnTelemetry = startChatTurnTelemetry({
+      route: route.kind, modelId: activeModel, turnCount: streamMessages.length, attachmentCount: attachments.length,
+      kind: continuationBase ? 'continue' : options?.intent === 'repair' ? 'repair' : 'chat',
+    });
+
+    const clearPendingAttachmentsOnce = () => {
+      if (pendingAttachmentsCleared) return;
+      clearAttachments();
+      pendingAttachmentsCleared = true;
+    };
+
+    const rollbackAssistantTurnIfNeeded = () => {
+      if (responseEditState.rolledBack || !responseEditState.appliedAny) return;
+      useViewerStore.getState().rollbackAssistantScriptTurn();
+      responseEditState.appliedAny = false;
+      responseEditState.fallbackApplied = false;
+      responseEditState.rolledBack = true;
+    };
+
+    const commitAssistantTurn = () => {
+      if (!responseEditState.rolledBack) {
+        useViewerStore.getState().commitAssistantScriptTurn();
+      }
+    };
+
+    // ── Shared stream callbacks ──
+    const handleChunk = (chunk: string) => {
+        turnTelemetry.noteFirstChunk();
+        clearPendingAttachmentsOnce();
+        accumulated += chunk;
+        if (!responseEditState.applyFailed && responseEditState.intent !== 'repair') {
+          const parsed = extractScriptEditOps(accumulated, editParseOptions);
+          const freshOps = filterUnappliedScriptOps(parsed.operations, responseEditState.appliedOpIds);
+          if (freshOps.length > 0) {
+            const applyResult = useViewerStore.getState().applyScriptEditOps(freshOps, {
+              acceptedBaseRevision: responseBaseRevision,
+              baseContentSnapshot: responseBaseContent,
+              priorAcceptedOps: responseEditState.acceptedOps,
+              intent: responseEditState.intent,
+            });
+            if (applyResult.ok) {
+              applyResult.appliedOpIds.forEach((id) => responseEditState.appliedOpIds.add(id));
+              responseEditState.acceptedOps.push(...freshOps);
+              responseEditState.appliedAny = true;
+              useViewerStore.getState().setScriptPanelVisible(true);
+            } else {
+              rollbackAssistantTurnIfNeeded();
+              responseEditState.applyFailed = true;
+              responseEditState.applyFailureStatus = applyResult.status === 'ok' ? 'semantic_error' : (applyResult.status ?? 'semantic_error');
+              responseEditState.applyFailureError = applyResult.error ?? 'unknown error';
+              responseEditState.applyFailureDiagnostic = applyResult.diagnostic ?? null;
+              setChatError(
+                applyResult.status === 'revision_conflict'
+                  ? `Incremental edit apply hit a revision conflict: ${applyResult.error ?? 'unknown error'}`
+                  : `Incremental edit apply failed: ${applyResult.error ?? 'unknown error'}`,
+              );
+            }
+          }
+        }
+        setChatStatus('streaming');
+        updateStreaming(accumulated);
+    };
+    const completeTurn = (fullText: string) => {
+        clearPendingAttachmentsOnce();
+        const normalizedText = continuationBase
+          ? stripContinuationOverlap(continuationBase, fullText)
+          : fullText;
+        const messageId = finalizeAssistant(normalizedText || fullText);
+
+        if (!responseEditState.applyFailed) {
+          const parsed = extractScriptEditOps(fullText, editParseOptions);
+          if (parsed.parseErrors.length > 0) {
+            if (responseEditState.intent === 'repair') {
+              rollbackAssistantTurnIfNeeded();
+              responseEditState.applyFailed = true;
+              responseEditState.applyFailureDiagnostic = parsed.parseDiagnostics[0] ?? createPatchDiagnostic(
+                'patch_semantic_error',
+                parsed.parseErrors[0],
+                'error',
+                {
+                  failureKind: 'parse_error',
+                  fixHint: 'Return exactly one valid `ifc-script-edits` block for the current script revision and do not mix it with a `js` fence.',
+                },
+              );
+            }
+            responseEditState.applyFailureStatus = 'parse_error';
+            responseEditState.applyFailureError = parsed.parseErrors[0];
+            setChatError(parsed.parseErrors[0]);
+          }
+          const canApplyCompletedOps = !(responseEditState.intent === 'repair' && parsed.parseErrors.length > 0);
+          const freshOps = canApplyCompletedOps
+            ? filterUnappliedScriptOps(parsed.operations, responseEditState.appliedOpIds)
+            : [];
+          if (freshOps.length > 0) {
+            const applyResult = useViewerStore.getState().applyScriptEditOps(freshOps, {
+              acceptedBaseRevision: responseBaseRevision,
+              baseContentSnapshot: responseBaseContent,
+              priorAcceptedOps: responseEditState.acceptedOps,
+              intent: responseEditState.intent,
+            });
+            if (applyResult.ok) {
+              applyResult.appliedOpIds.forEach((id) => responseEditState.appliedOpIds.add(id));
+              responseEditState.acceptedOps.push(...freshOps);
+              responseEditState.appliedAny = true;
+              useViewerStore.getState().setScriptPanelVisible(true);
+            } else {
+              rollbackAssistantTurnIfNeeded();
+              responseEditState.applyFailed = true;
+              responseEditState.applyFailureStatus = applyResult.status === 'ok' ? 'semantic_error' : (applyResult.status ?? 'semantic_error');
+              responseEditState.applyFailureError = applyResult.error ?? 'unknown error';
+              responseEditState.applyFailureDiagnostic = applyResult.diagnostic ?? null;
+              setChatError(
+                applyResult.status === 'revision_conflict'
+                  ? `Incremental edit apply hit a revision conflict: ${applyResult.error ?? 'unknown error'}`
+                  : `Incremental edit apply failed: ${applyResult.error ?? 'unknown error'}`,
+              );
+            }
+          }
+        }
+
+        if (!responseEditState.appliedAny && !responseEditState.applyFailed && canUsePlainCodeBlockFallback(responseEditState.intent)) {
+          const blocks = extractCodeBlocks(fullText);
+          if (blocks.length > 0) {
+            const lastBlock = blocks[blocks.length - 1];
+            const fallbackResult = useViewerStore.getState().replaceScriptContentFallback(lastBlock.code, {
+              intent: responseEditState.intent,
+              source: 'code_block_fallback',
+            });
+            if (fallbackResult.ok) {
+              useViewerStore.getState().setScriptPanelVisible(true);
+              responseEditState.fallbackApplied = true;
+            } else {
+              responseEditState.applyFailed = true;
+              responseEditState.applyFailureStatus = fallbackResult.status === 'ok' ? 'semantic_error' : (fallbackResult.status ?? 'semantic_error');
+              responseEditState.applyFailureError = fallbackResult.error ?? 'unknown error';
+              responseEditState.applyFailureDiagnostic = fallbackResult.diagnostic ?? null;
+              setChatError(`Full-script apply blocked: ${fallbackResult.error ?? 'unknown error'}`);
+            }
+          }
+        }
+
+        // Auto-execute if enabled
+        const autoExec = useViewerStore.getState().chatAutoExecute;
+        if (autoExec) {
+          if (responseEditState.appliedAny || responseEditState.fallbackApplied) {
+            const currentCode = useViewerStore.getState().scriptEditorContent;
+            if (currentCode.trim()) {
+              void (async () => {
+                const result = await execute(currentCode);
+                if (!result) {
+                  const { scriptLastError, scriptLastDiagnostics, chatStatus } = useViewerStore.getState();
+                  if (
+                    scriptLastError &&
+                    scriptLastError.startsWith('Preflight validation failed:') &&
+                    chatStatus !== 'sending' &&
+                    chatStatus !== 'streaming'
+                  ) {
+                    triggerAutoRepair({
+                      error: scriptLastError,
+                      diagnostics: scriptLastDiagnostics,
+                      reason: 'preflight',
+                    });
+                  }
+                }
+              })();
+            }
+          } else if (!responseEditState.applyFailed && responseEditState.intent !== 'repair') {
+            const blocks = extractCodeBlocks(fullText);
+            if (blocks.length > 0) {
+              const lastBlock = blocks[blocks.length - 1];
+              useViewerStore.getState().setCodeExecResult(
+                messageId,
+                lastBlock.index,
+                { status: 'running' },
+              );
+            }
+          }
+        }
+
+        if (responseEditState.applyFailureStatus === 'revision_conflict') {
+          const {
+            chatStatus,
+          } = useViewerStore.getState();
+          if (chatStatus !== 'sending' && chatStatus !== 'streaming') {
+            triggerAutoRepair({
+              error: responseEditState.applyFailureError ?? 'Patch revision conflict.',
+              diagnostics: responseEditState.applyFailureDiagnostic ? [responseEditState.applyFailureDiagnostic] : [],
+              reason: 'patch-conflict',
+            });
+          }
+        } else if (responseEditState.intent === 'repair' && responseEditState.applyFailed) {
+          const {
+            chatStatus,
+          } = useViewerStore.getState();
+          if (chatStatus !== 'sending' && chatStatus !== 'streaming') {
+            triggerAutoRepair({
+              error: responseEditState.applyFailureError ?? 'Patch apply failed.',
+              diagnostics: responseEditState.applyFailureDiagnostic ? [responseEditState.applyFailureDiagnostic] : [],
+              reason: 'patch-apply',
+            });
+          }
+        }
+
+        // Authoring loop: when the classifier flagged this turn as
+        // 'authoring' or 'fork', the response may contain a bundle in
+        // the ifc-extension-* fenced format. If it does, surface the
+        // bundle CTA. If it doesn't but code landed in the editor,
+        // surface the script CTA so "promote to tool" is one click
+        // away — the user never has to hunt for the Promote button.
+        //
+        // Offer the script-path install CTA whenever the assistant
+        // produced runnable code this turn — NOT only on authoring-
+        // classified turns. The classifier tags follow-up messages
+        // ("yes, use Pset_DoorCommon") as one-shot, but that's often
+        // the turn where the final code lands. A one-shot script is
+        // just as promotable as an "authored" one.
+        const offerScriptInstall = () => {
+          if (options?.intent === 'repair') return;
+          const wroteCode = responseEditState.appliedAny || responseEditState.fallbackApplied;
+          const code = useViewerStore.getState().scriptEditorContent;
+          const hasRealCode =
+            code.trim().length > 0 && !/Write your BIM script here/.test(code);
+          if (wroteCode && hasRealCode) {
+            setChatToolReady({ kind: 'script', name: '' });
+          }
+        };
+
+        if (
+          (classified.intent === 'authoring' || classified.intent === 'fork')
+          && !options?.intent
+        ) {
+          // Authoring-classified turn — try the bundle path first; if
+          // no bundle was emitted, fall back to the script CTA.
+          void handleAuthoringResponse(fullText).then((bundleFound) => {
+            if (!bundleFound) offerScriptInstall();
+          });
+        } else {
+          offerScriptInstall();
+        }
+
+        commitAssistantTurn();
+    };
+    const handleComplete = (fullText: string) => settleTurnAfter(turnTelemetry, () => completeTurn(fullText),
+      () => ({ scriptEdited: responseEditState.appliedAny || responseEditState.fallbackApplied }));
+    const handleUsageInfo = (info: UsageInfo) => {
+        setChatUsage(info);
+    };
+    const handleFinishReason = (reason: string | null) => {
+        turnTelemetry.noteFinishReason(reason);
+        setLastFinishReason(reason);
+        if (reason === 'length') {
+          setChatError('Response reached output limit. Click Continue to resume.');
+        }
+    };
+    const handleError = (err: Error) => {
+        turnTelemetry.finish('error', { error: err });
+        setChatError(err.message);
+        setChatAbortController(null);
+        commitAssistantTurn();
+    };
+
+    // Route to direct provider streaming for BYOK models, or through the proxy
+    // for free models. The route was already resolved (and the missing-key
+    // case handled) at the top of doSend, so this dispatch is total.
+    if (route.kind === 'anthropic') {
+      await streamAnthropicChat(route.credentials, {
+        model: activeModel,
+        messages: streamMessages,
+        system: systemPrompt,
+        signal: abortController.signal,
+        onChunk: handleChunk,
+        onComplete: handleComplete,
+        onFinishReason: handleFinishReason,
+        onError: handleError,
+      });
+    } else if (route.kind === 'openai') {
+      await streamOpenAiChat(route.apiKey, {
+        model: activeModel,
+        messages: streamMessages,
+        system: systemPrompt,
+        signal: abortController.signal,
+        onChunk: handleChunk,
+        onComplete: handleComplete,
+        onFinishReason: handleFinishReason,
+        onError: handleError,
+      });
+    } else {
+      await streamChat({
+        proxyUrl: PROXY_URL,
+        model: activeModel,
+        messages: streamMessages,
+        system: systemPrompt,
+        signal: abortController.signal,
+        onChunk: handleChunk,
+        onComplete: handleComplete,
+        onFinishReason: handleFinishReason,
+        onError: handleError,
+        onUsageInfo: handleUsageInfo,
+      });
+    }
+
+    if (abortController.signal.aborted) {
+      turnTelemetry.finish('aborted');
+      commitAssistantTurn();
+      const currentState = useViewerStore.getState();
+      if (currentState.chatAbortController === abortController) {
+        setChatStatus('idle');
+        setChatAbortController(null);
+      }
+    }
+  }, [
+    status, activeModel, attachments,
+    addMessage, setChatStatus, updateStreaming, finalizeAssistant,
+    setChatError, setChatAbortController, clearAttachments, setChatUsage, resizeInput,
+    buildRepairPromptFromLiveState, triggerAutoRepair, execute, extensionHost,
+    setChatToolReady, handleAuthoringResponse, setScriptPanelVisible,
+  ]);
+
+  const handleSend = useCallback(() => {
+    doSend(inputText);
+  }, [doSend, inputText]);
+
+  // Allow other panels (e.g. ScriptPanel errors) to trigger a chat repair turn.
+  useEffect(() => {
+    if (!pendingPrompt) return;
+    if (status === 'sending' || status === 'streaming') return;
+    consumePendingPrompt();
+    const intent: ScriptMutationIntent | undefined = (
+      pendingPrompt.startsWith('The script needs a root-cause repair.')
+      || pendingPrompt.startsWith('The script needs a targeted fix.')
+    )
+      ? 'repair'
+      : undefined;
+    void doSend(pendingPrompt, { intent });
+  }, [pendingPrompt, status, consumePendingPrompt, doSend]);
+
+  useEffect(() => {
+    if (!pendingRepairRequest) return;
+    if (status === 'sending' || status === 'streaming') return;
+    consumePendingRepairRequest();
+    void doSend(buildRepairPromptFromLiveState(pendingRepairRequest), {
+      intent: 'repair',
+      repairDiagnostics: pendingRepairRequest.diagnostics,
+      requestedRepairScope: pendingRepairRequest.requestedRepairScope,
+      rootCauseKey: pendingRepairRequest.rootCauseKey,
+    });
+  }, [pendingRepairRequest, status, consumePendingRepairRequest, buildRepairPromptFromLiveState, doSend]);
+
+  const handleContinue = useCallback(() => {
+    const state = useViewerStore.getState();
+    const partial = state.chatStreamingContent.trim();
+    const lastAssistant = [...state.chatMessages].reverse().find((m) => m.role === 'assistant');
+    const continuationBase = partial || lastAssistant?.content || '';
+    if (!continuationBase) return;
+
+    // Preserve the partial completion in history, then request continuation.
+    if (partial) {
+      finalizeAssistant(partial);
+    }
+    setChatError(null);
+    doSend(CONTINUE_PROMPT, { continuationBase });
+  }, [doSend, finalizeAssistant, setChatError]);
+
+  const handleStop = useCallback(() => {
+    const controller = useViewerStore.getState().chatAbortController;
+    if (controller) {
+      controller.abort();
+      const partial = useViewerStore.getState().chatStreamingContent;
+      if (partial) {
+        finalizeAssistant(partial);
+      } else {
+        setChatStatus('idle');
+        setChatAbortController(null);
+      }
+    }
+  }, [finalizeAssistant, setChatStatus, setChatAbortController]);
+
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
+
+  // ── Error feedback (Fix this) ──
+  const handleFixError = useCallback((code: string, errorMsg: string) => {
+    const diagnostics = useViewerStore.getState().scriptLastDiagnostics;
+    const liveCode = useViewerStore.getState().scriptEditorContent;
+    const staleCode = code.trim() !== liveCode.trim() ? code : undefined;
+    void doSend(buildRepairPromptFromLiveState({
+      error: errorMsg,
+      diagnostics,
+      staleCodeBlock: staleCode,
+      reason: 'runtime',
+    }), {
+      intent: 'repair',
+      repairDiagnostics: diagnostics,
+      requestedRepairScope: getPrimaryRootCause(diagnostics)?.repairScope,
+      rootCauseKey: getPrimaryRootCause(diagnostics)?.rootCauseKey,
+    });
+  }, [buildRepairPromptFromLiveState, doSend]);
+
+  // ── Clickable example prompts ──
+  const handleExampleClick = useCallback((prompt: string) => {
+    setInputText(prompt);
+    inputRef.current?.focus();
+  }, []);
+
+  // ── Clear with confirmation ──
+  const handleClearClick = useCallback(() => {
+    documentUploads.cancel();
+    if (messages.length <= 2) {
+      resetScriptEditorForNewChat();
+      clearMessages();
+      setChatToolReady(null);
+      authoringHintShownRef.current = false;
+      setInputText('');
+      setLastFinishReason(null);
+    } else {
+      setShowClearConfirm(true);
+    }
+  }, [messages.length, clearMessages, resetScriptEditorForNewChat, setChatToolReady, documentUploads]);
+
+  const confirmClear = useCallback(() => {
+    documentUploads.cancel();
+    resetScriptEditorForNewChat();
+    clearMessages();
+    setChatToolReady(null);
+    authoringHintShownRef.current = false;
+    setInputText('');
+    setLastFinishReason(null);
+    setShowClearConfirm(false);
+  }, [clearMessages, resetScriptEditorForNewChat, setChatToolReady, documentUploads]);
+
+  // ── File upload (button + drag-drop + paste) ──
+  const processFiles = useCallback(async (files: FileList | File[]) => {
+    const model = getModelById(activeModel);
+    const supportsImages = model?.supportsImages ?? false;
+    const supportsFileAttachments = model?.supportsFileAttachments ?? true;
+    let remainingSlots = Math.max(0, MAX_ATTACHMENTS_PER_MESSAGE - attachments.length);
+    const documentBatch = documentUploads.begin();
+
+    for (const file of Array.from(files)) {
+      if (!documentBatch.current()) break;
+      if (remainingSlots <= 0) {
+        setChatError(`You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files per message.`);
+        break;
+      }
+      try {
+        // Handle image files
+        if (file.type.startsWith('image/')) {
+          if (!supportsImages) {
+            setChatError('Selected model does not support image input. Switch model to attach images.');
+            continue;
+          }
+          if (file.size > MAX_IMAGE_ATTACHMENT_BYTES) {
+            setChatError(`Image attachments must be smaller than ${Math.round(MAX_IMAGE_ATTACHMENT_BYTES / 1_000_000)} MB.`);
+            continue;
+          }
+          const base64 = await imageFileToCompressedBase64(file);
+          if (base64.length > MAX_INLINE_IMAGE_DATA_URL_CHARS) {
+            setChatError('Image attachment is still too large after compression. Please use a smaller image.');
+            continue;
+          }
+          const attachment: FileAttachment = {
+            id: createAttachmentId(),
+            name: file.name,
+            type: 'image/jpeg',
+            size: Math.round((base64.length * 3) / 4),
+            imageBase64: base64,
+            isImage: true,
+          };
+          addAttachment(attachment);
+          remainingSlots -= 1;
+          continue;
+        }
+        // Extract PDF text locally so the same bounded document context works
+        // with every configured model and with bim.files scripts.
+        if (file.name.match(/\.pdf$/i) || file.type === 'application/pdf') {
+          if (!supportsFileAttachments) {
+            setChatError('Selected model does not support file attachments. Switch model to attach PDFs.');
+            continue;
+          }
+          if (file.size > MAX_PDF_ATTACHMENT_BYTES) {
+            setChatError(`PDF attachments must be smaller than ${Math.round(MAX_PDF_ATTACHMENT_BYTES / 1_000_000)} MB.`);
+            continue;
+          }
+          await attachPdfDocument(file, documentBatch, addAttachment);
+          remainingSlots -= 1;
+          continue;
+        }
+        // Excel / ODS binaries — we can't parse them yet, but we don't want
+        // to silently drop them. Register a metadata-only attachment so the
+        // user (and the LLM via the system prompt) know it's there and can
+        // suggest exporting as CSV.
+        if (file.name.match(/\.(xlsx|xls|ods)$/i)) {
+          if (!supportsFileAttachments) {
+            setChatError('Selected model does not support file attachments. Switch model to attach spreadsheets.');
+            continue;
+          }
+          const attachment: FileAttachment = {
+            id: createAttachmentId(),
+            name: file.name,
+            type: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            size: file.size,
+            isSpreadsheetBinary: true,
+            textContent: `[Binary spreadsheet ${file.name} (${Math.round(file.size / 1024)} KB). Export to CSV for full content access.]`,
+          };
+          addAttachment(attachment);
+          remainingSlots -= 1;
+          continue;
+        }
+        // Text-based files — CSV, TSV, JSON, TXT and Markdown.
+        if (!file.name.match(/\.(csv|json|txt|tsv|md|markdown)$/i)) continue;
+        if (!supportsFileAttachments) {
+          setChatError('Selected model does not support file attachments. Switch model to attach files.');
+          continue;
+        }
+        if (file.size > MAX_TEXT_ATTACHMENT_BYTES) {
+          setChatError(`Text attachments must be smaller than ${Math.round(MAX_TEXT_ATTACHMENT_BYTES / 1024)} KB.`);
+          continue;
+        }
+        const text = await file.text();
+        const attachment: FileAttachment = {
+          id: createAttachmentId(),
+          name: file.name,
+          type: file.type || 'text/plain',
+          size: file.size,
+          textContent: text,
+        };
+        if (file.name.endsWith('.csv') || file.name.endsWith('.tsv')) {
+          const { columns, rows } = parseCSV(text);
+          attachment.csvColumns = columns;
+          attachment.csvData = rows;
+        }
+        addAttachment(attachment);
+        remainingSlots -= 1;
+      } catch (error) {
+        if (!shouldContinueDocumentUploadBatch(error)) break;
+        setChatError(`Could not read ${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }, [activeModel, addAttachment, attachments.length, setChatError, documentUploads]);
+
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    await processFiles(files);
+    e.target.value = '';
+  }, [processFiles]);
+
+  // Drag and drop handlers
+  const handleDragEnter = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(async (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      await processFiles(files);
+    }
+  }, [processFiles]);
+
+  // ── Paste handler for images ──
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      await processFiles(imageFiles);
+    }
+  }, [processFiles]);
+
+  const isActive = status === 'streaming' || status === 'sending';
+  const modelForUi = getModelById(activeModel);
+  const modelSupportsImages = modelForUi?.supportsImages ?? false;
+  const modelSupportsFiles = modelForUi?.supportsFileAttachments ?? true;
+  const attachmentAccept = [
+    modelSupportsFiles
+      ? '.csv,.json,.txt,.tsv,.md,.markdown,text/markdown,.pdf,application/pdf,.xlsx,.xls,.ods,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.oasis.opendocument.spreadsheet'
+      : '',
+    modelSupportsImages ? 'image/*' : '',
+  ].filter(Boolean).join(',');
+  const canAttachInput = modelSupportsFiles || modelSupportsImages;
+  // Detect when selected model needs a missing BYOK key (reactive state, not raw reads)
+  const modelSource = modelForUi?.source ?? 'proxy';
+  const needsAnthropicKey = modelSource === 'anthropic' && !keyStateAnthropic;
+  const needsOpenaiKey = modelSource === 'openai' && !keyStateOpenai;
+  const needsByokKey = needsAnthropicKey || needsOpenaiKey;
+
+  // Auto-open the BYOK modal when the user picks a locked model. We only fire on
+  // the *transition* into needsByokKey so the modal doesn't keep popping back up
+  // after the user dismisses it without entering a key.
+  const prevNeedsByokRef = useRef(false);
+  useEffect(() => {
+    if (needsByokKey && !prevNeedsByokRef.current) {
+      openByokModal(needsAnthropicKey ? 'anthropic' : 'openai');
+    }
+    prevNeedsByokRef.current = needsByokKey;
+  }, [needsByokKey, needsAnthropicKey, openByokModal]);
+  const showSupportEmail = Boolean(error && error.includes('louis@ltplus.com'));
+  const canContinue = Boolean(
+    !isActive && (streamingContent.trim().length > 0 || lastFinishReason === 'length'),
+  );
+  return (
+    <div
+      className="h-full flex flex-col bg-background relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 bg-blue-500/10 border-2 border-dashed border-blue-500 rounded-md flex items-center justify-center pointer-events-none">
+          <div className="flex flex-col items-center gap-2 text-blue-500">
+            <Paperclip className="h-8 w-8" />
+            <span className="text-sm font-medium">{t('chat.panel.dropOverlay')}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex items-center gap-0.5 px-2 py-1 border-b shrink-0">
+        <IconButton
+          label={t('chat.panel.clearTooltip')}
+          size="icon-xs"
+          onClick={handleClearClick}
+          disabled={messages.length === 0}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </IconButton>
+
+        <ModelSelector />
+        <ByokStreamingPill modelId={activeModel} className="ml-1" />
+        {authoringTelemetry && (
+          <span
+            className="ml-1 text-xs uppercase tracking-wide font-semibold bg-primary/15 text-primary rounded px-1.5 py-0.5"
+            title={t('chat.panel.authoringBadgeTooltip', { intent: authoringTelemetry.intent })}
+          >
+            {t('chat.panel.authoringBadge', {
+              label: authoringTelemetry.intent === 'fork'
+                ? t('chat.panel.authoringBadgeFork')
+                : t('chat.panel.authoringBadgeAuthoring'),
+              seconds: Math.round((Date.now() - authoringTelemetry.startedAt) / 1000),
+            })}
+          </span>
+        )}
+        <div className="flex-1" />
+
+        <IconButton
+          label={keyStateAnthropic || keyStateOpenai ? t('chat.panel.manageKeysLabel') : t('chat.panel.addKeyLabel')}
+          size="icon-xs"
+          onClick={() => openByokModal(modelSource === 'openai' ? 'openai' : 'anthropic')}
+          className={keyStateAnthropic || keyStateOpenai ? 'text-emerald-500' : ''}
+        >
+          <KeyRound className="h-3.5 w-3.5" />
+        </IconButton>
+
+        <IconButton
+          label={t('chat.panel.autoRunStatus', { state: autoExecute ? t('chat.panel.stateOn') : t('chat.panel.stateOff') })}
+          size="icon-xs"
+          onClick={() => setAutoExecute(!autoExecute)}
+          className={autoExecute ? 'text-amber-500' : ''}
+        >
+          <Zap className="h-3.5 w-3.5" />
+        </IconButton>
+
+        {onClose && (
+          <IconButton label={t('chat.panel.closeLabel')} size="icon-xs" onClick={onClose}>
+            <X className="h-3.5 w-3.5" />
+          </IconButton>
+        )}
+      </div>
+
+      {/* Slim CTA banner — appears when the modal has been dismissed but the
+          selected model still needs a key. Re-opens the modal on click. */}
+      {needsByokKey && !byokModal.open && (
+        <button
+          type="button"
+          onClick={() => openByokModal(needsAnthropicKey ? 'anthropic' : 'openai')}
+          className="w-full border-b bg-amber-500/10 px-3 py-2 text-left text-xs hover:bg-amber-500/15 transition-colors flex items-center gap-2"
+        >
+          <KeyRound className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+          <span>
+            <strong>
+              {t('chat.panel.keyNeededStrong', {
+                provider: needsAnthropicKey ? t('chat.panel.providerAnthropic') : t('chat.panel.providerOpenai'),
+              })}
+            </strong>{' '}
+            {t('chat.panel.keyNeededSuffix')}
+          </span>
+        </button>
+      )}
+
+      {/* Clear confirmation */}
+      {showClearConfirm && (
+        <div className="px-3 py-2 bg-destructive/5 border-b flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">
+            {t('chat.panel.clearConfirmPrompt', { count: messages.length })}
+          </span>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={confirmClear}
+            className="h-5 px-2 text-xs"
+          >
+            {t('chat.panel.clearConfirmButton')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowClearConfirm(false)}
+            className="h-5 px-2 text-xs"
+          >
+            {t('chat.panel.clearCancelButton')}
+          </Button>
+        </div>
+      )}
+
+      {/* Messages */}
+      <div className="flex-1 min-h-0 overflow-y-auto relative" ref={scrollRef}>
+        {/* Empty state */}
+        {messages.length === 0 && !streamingContent && (
+          <div className="flex flex-col justify-end h-full px-3 pb-2">
+            <p className="text-xs text-muted-foreground mb-2">{t('chat.panel.emptyStateHint')}</p>
+            <div className="flex flex-col gap-1">
+              {EXAMPLE_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => handleExampleClick(prompt)}
+                  className="text-xs text-left px-2.5 py-1.5 rounded border border-transparent hover:border-border hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Message list */}
+        {messages.map((msg) => (
+          <ChatMessageComponent
+            key={msg.id}
+            message={msg}
+            onFixError={handleFixError}
+          />
+        ))}
+
+        {/* Streaming assistant response */}
+        {streamingContent && (
+          <ChatMessageComponent
+            message={{
+              id: 'streaming',
+              role: 'assistant',
+              content: streamingContent,
+              createdAt: Date.now(),
+              codeBlocks: extractCodeBlocks(streamingContent),
+            }}
+            isStreaming
+          />
+        )}
+
+        {/* Sending indicator */}
+        {status === 'sending' && (
+          <div className="flex items-center gap-2 px-3 py-2 text-muted-foreground">
+            <Spinner size="sm" />
+            <span className="text-xs">{t('chat.panel.sendingIndicator')}</span>
+          </div>
+        )}
+
+        {/* Post-authoring install CTA — rendered INLINE at the end of
+            the conversation, directly under the generated code, so the
+            "now install it" step is impossible to miss. Highlighted
+            (ring + accent) the moment a workflow is authored. */}
+        {chatToolReady && status === 'idle' && (
+          <div className="mx-3 my-3 rounded-lg border-2 border-primary bg-primary/10 p-3 shadow-sm ring-2 ring-primary/30">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <Wrench className="h-4 w-4" />
+              </div>
+              <div className="text-sm font-semibold">
+                {chatToolReady.kind === 'bundle'
+                  ? t('chat.panel.bundleReadyTitle', { name: chatToolReady.name || t('chat.panel.defaultExtensionName') })
+                  : t('chat.panel.scriptReadyTitle')}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mb-2.5 pl-9">
+              {t('chat.panel.installCtaPrefix')}{' '}
+              <span className="font-medium text-foreground">{t('chat.panel.installCtaHighlight')}</span>.
+            </p>
+            <div className="flex items-center gap-2 pl-9">
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (chatToolReady.kind === 'bundle') {
+                    setExtensionsRequestedView('installed');
+                    setExtensionsPanelVisible(true);
+                  } else {
+                    setPromoteFromChat({
+                      open: true,
+                      source: useViewerStore.getState().scriptEditorContent,
+                    });
+                  }
+                  setChatToolReady(null);
+                }}
+              >
+                <Wrench className="mr-1 h-3.5 w-3.5" />
+                {chatToolReady.kind === 'bundle' ? t('chat.panel.reviewInstallButton') : t('chat.panel.installAsToolButton')}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setChatToolReady(null)}
+              >
+                {t('chat.panel.notNowButton')}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Scroll to bottom button */}
+      {showScrollBtn && (
+        <div className="absolute bottom-[120px] right-4 z-20">
+          <IconButton
+            label={t('chat.panel.scrollToBottomLabel')}
+            variant="outline"
+            size="icon-xs"
+            onClick={scrollToBottom}
+            className="rounded-full shadow-md bg-background"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+          </IconButton>
+        </div>
+      )}
+
+      {/* Error display */}
+      {error && (
+        <div className="px-3 py-1.5 bg-destructive/10 text-destructive text-xs border-t flex items-center justify-between gap-2">
+          <span>{error}</span>
+          <div className="flex items-center gap-2">
+            {canContinue && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-5 px-2 text-xs"
+                onClick={handleContinue}
+              >
+                {t('chat.panel.continueButton')}
+              </Button>
+            )}
+            {showSupportEmail && (
+              <a className="underline text-xs" href="mailto:louis@ltplus.com">
+                {t('chat.panel.contactSupportLink')}
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Attachments preview */}
+      {attachments.length > 0 && (
+        <div className="px-2 py-1 border-t flex flex-wrap gap-1">
+          {attachments.map((a) => (
+            <span
+              key={a.id}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-muted text-xs"
+            >
+              {a.isImage ? (
+                <>
+                  {a.imageBase64 && (
+                    <img
+                      src={a.imageBase64}
+                      alt={a.name}
+                      className="h-6 w-6 object-cover rounded"
+                    />
+                  )}
+                  <ImageIcon className="h-3 w-3" />
+                </>
+              ) : (
+                <Paperclip className="h-3 w-3" />
+              )}
+              {a.name}
+              <IconButton
+                label={t('chat.panel.removeAttachment', { name: a.name })}
+                size="icon-xs"
+                className="ml-0.5 h-4 w-4 p-0 hover:text-destructive"
+                onClick={() => removeAttachment(a.id)}
+              >
+                <X className="h-3 w-3" />
+              </IconButton>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Promote-to-tool dialog, opened from the post-authoring CTA.
+          `source` was snapshotted from the editor at open time. */}
+      <PromoteToolDialog
+        open={promoteFromChat.open}
+        source={promoteFromChat.source}
+        onClose={() => setPromoteFromChat((p) => ({ ...p, open: false }))}
+      />
+
+      {/* Input area */}
+      <div className="shrink-0 border-t p-2">
+        <div className="flex items-end gap-1.5">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={attachmentAccept}
+            multiple
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <IconButton
+            label={canAttachInput ? t('chat.panel.attachTooltipEnabled') : t('chat.panel.attachTooltipDisabled')}
+            size="icon-xs"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!canAttachInput}
+            className="shrink-0 mb-0.5"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+          </IconButton>
+
+          <textarea
+            ref={inputRef}
+            value={inputText}
+            aria-label={t('chat.panel.messageLabel')}
+            onChange={(e) => {
+              setInputText(e.target.value);
+              resizeInput();
+            }}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            placeholder={needsByokKey
+              ? t('chat.panel.placeholderNeedsKey', {
+                  provider: needsAnthropicKey ? t('chat.panel.providerAnthropic') : t('chat.panel.providerOpenai'),
+                })
+              : t('chat.panel.placeholderDefault')}
+            rows={1}
+            className="flex-1 resize-none rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground px-3 py-1.5 text-sm min-h-[32px] max-h-[120px] focus:outline-none focus:ring-1 focus:ring-ring"
+            style={{ height: 'auto', overflow: 'hidden' }}
+            disabled={needsByokKey}
+          />
+
+          {isActive ? (
+            <IconButton
+              label={t('chat.panel.stopGeneratingTooltip')}
+              size="icon-xs"
+              onClick={handleStop}
+              className="shrink-0 mb-0.5"
+            >
+              <Square className="h-3.5 w-3.5" />
+            </IconButton>
+          ) : (
+            <IconButton
+              label={t('chat.panel.sendTooltip')}
+              variant="default"
+              size="icon-xs"
+              onClick={handleSend}
+              disabled={!inputText.trim() || needsByokKey}
+              className="shrink-0 mb-0.5"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </IconButton>
+          )}
+        </div>
+        <div className="flex items-center justify-between mt-1 px-0.5">
+          {isActive ? (
+            <span className="text-xs text-muted-foreground">{t('chat.panel.streamingIndicator')}</span>
+          ) : displayUsage ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5 cursor-default">
+                  <div className="w-12 h-1 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${displayUsage.pct >= 90 ? 'bg-destructive' : displayUsage.pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                        }`}
+                      style={{ width: `${Math.min(100, displayUsage.pct)}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground tabular-nums">{displayUsage.pct}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {displayUsage.type === 'credits'
+                  ? t('chat.panel.usageCredits', { used: displayUsage.used, limit: displayUsage.limit, resetLabel: usageResetLabel })
+                  : t('chat.panel.usageRequests', { used: displayUsage.used, limit: displayUsage.limit, resetLabel: usageResetLabel })
+                }
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <span className="text-xs text-muted-foreground">{t('chat.panel.shiftEnterHint')}</span>
+          )}
+          <span className="text-xs text-muted-foreground">{shortcutLabel('chat.focusInput')}</span>
+        </div>
+      </div>
+
+      <ByokKeyModal
+        open={byokModal.open}
+        onOpenChange={(open) => (open ? openByokModal(byokModal.provider) : closeByokModal())}
+        initialProvider={byokModal.provider}
+      />
+    </div>
+  );
+}

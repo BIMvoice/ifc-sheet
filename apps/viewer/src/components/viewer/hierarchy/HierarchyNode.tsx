@@ -1,0 +1,394 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { useState } from 'react';
+import { ChevronRight, Layers, Eye, EyeOff, FileBox } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n';
+import { isNoGeometryNode, isSpatialContainer, type TreeNode } from './types';
+import { HierarchyNodeBadges } from './HierarchyNodeBadges';
+import { IFC_ICON_CODEPOINTS, IFC_ICON_DEFAULT } from './ifc-icons';
+import { ModelTagGroupRow } from './ModelTagGroupRow';
+import { ModelHeaderRow } from './ModelHeaderRow';
+import { ModelBadge } from '../ModelBadge';
+import { HierarchyRowActions, type HierarchyRowAction } from './HierarchyRowActions';
+
+/**
+ * Resolve the Material Symbols code point for a given IFC type string.
+ * Falls back to the generic product icon for unmapped classes.
+ */
+function getIfcIconCodepoint(ifcType: string | undefined): string {
+  if (!ifcType) return IFC_ICON_DEFAULT;
+  return IFC_ICON_CODEPOINTS[ifcType] ?? IFC_ICON_DEFAULT;
+}
+
+/** Lucide fallback icons for non-IFC node types */
+const NODE_TYPE_ICONS: Record<string, React.ElementType> = {
+  'unified-storey': Layers,
+  'model-header': FileBox,
+};
+
+/** Indent per tree level. 12 px (was 16) still reads as a hierarchy and gives
+ *  a storey row 12 px more for its name (#5394). */
+const HIERARCHY_INDENT_STEP_PX = 12;
+
+/** ARIA tree-row attributes plus the roving-tabIndex/focus wiring every row
+ *  type needs to behave as a `treeitem` (#5883) — computed once per rendered
+ *  list in `HierarchyPanel.tsx` (`ariaTreeAttrs.ts` + `useTreeKeyboard.ts`)
+ *  and threaded through here so `ModelHeaderRow`/`ModelTagGroupRow` apply
+ *  them on their own root element instead of duplicating the computation. */
+export interface HierarchyNodeAriaProps {
+  /** Optional so pre-existing unit tests that construct a row directly (not
+   *  through `HierarchyPanel.tsx`'s `renderNode`) don't all need updating for
+   *  a concern they aren't testing; `HierarchyPanel.tsx` always supplies them. */
+  ariaLevel?: number;
+  ariaSetSize?: number;
+  ariaPosInSet?: number;
+  tabIndex?: 0 | -1;
+  rowRef?: (el: HTMLElement | null) => void;
+  onRowFocus?: () => void;
+}
+
+export interface HierarchyNodeProps extends HierarchyNodeAriaProps {
+  node: TreeNode;
+  virtualRow: { size: number; start: number };
+  isSelected: boolean;
+  nodeHidden: boolean;
+  isMultiModel: boolean;
+  modelsCount: number;
+  searchActive?: boolean;
+  modelVisible?: boolean;
+  onNodeClick: (node: TreeNode, e: React.MouseEvent | React.KeyboardEvent) => void;
+  onToggleExpand: (nodeId: string) => void;
+  onVisibilityToggle: (node: TreeNode) => void;
+  onModelVisibilityToggle: (modelId: string, e: React.MouseEvent) => void;
+  onRemoveModel: (modelId: string, e: React.MouseEvent) => void;
+  onSyncSourceModel?: (modelId: string, e: React.MouseEvent) => void;
+  onModelHeaderClick: (modelId: string, nodeId: string, hasChildren: boolean) => void;
+  actions?: readonly HierarchyRowAction[];
+  onAction?: (node: TreeNode, action: HierarchyRowAction) => void;
+  sourceBacked?: boolean;
+  sourceSyncing?: boolean;
+}
+
+export function HierarchyNode({
+  node,
+  virtualRow,
+  isSelected,
+  nodeHidden,
+  isMultiModel,
+  modelsCount,
+  searchActive = false,
+  modelVisible,
+  onNodeClick,
+  onToggleExpand,
+  onVisibilityToggle,
+  onModelVisibilityToggle,
+  onRemoveModel,
+  onSyncSourceModel,
+  onModelHeaderClick,
+  actions = [],
+  onAction,
+  sourceBacked = false,
+  sourceSyncing = false,
+  ariaLevel = 1,
+  ariaSetSize = 1,
+  ariaPosInSet = 1,
+  tabIndex = -1,
+  rowRef,
+  onRowFocus,
+}: HierarchyNodeProps) {
+  const { t } = useTranslation();
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const resolvedType = node.ifcType || node.type;
+  // Use Lucide icon for non-IFC structural nodes, Material Symbols for IFC classes
+  const LucideIcon = NODE_TYPE_ICONS[node.type];
+  const iconCodepoint = getIfcIconCodepoint(resolvedType);
+
+  // Spatial containers, storeys, spaces, and grouping headers get the emphasized
+  // label treatment; element rows stay lighter.
+  const primaryNameClass =
+    isSpatialContainer(node.type) ||
+    node.type === 'IfcBuildingStorey' ||
+    node.type === 'IfcSpace' ||
+    node.type === 'IfcSpatialZone' ||
+    node.type === 'unified-storey' ||
+    node.type === 'type-group' ||
+    node.type === 'material-group' ||
+    node.type === 'group' ||
+    node.type === 'other-group'
+      ? 'font-medium text-zinc-900 dark:text-zinc-100'
+      : 'text-zinc-700 dark:text-zinc-300';
+  const strikeWhenHidden = nodeHidden && 'line-through decoration-zinc-400 dark:decoration-zinc-600';
+  const noGeometry = isNoGeometryNode(node);
+  if (node.type === 'model-tag-group') {
+    return (
+      <ModelTagGroupRow
+        node={node}
+        virtualRow={virtualRow}
+        ariaLevel={ariaLevel}
+        ariaSetSize={ariaSetSize}
+        ariaPosInSet={ariaPosInSet}
+        tabIndex={tabIndex}
+        rowRef={rowRef}
+        onRowFocus={onRowFocus}
+      />
+    );
+  }
+  // Model header nodes (for visibility control and expansion)
+  if (node.type === 'model-header' && node.id.startsWith('model-')) {
+    return (
+      <ModelHeaderRow
+        node={node}
+        virtualRow={virtualRow}
+        modelsCount={modelsCount}
+        modelVisible={modelVisible}
+        onModelVisibilityToggle={onModelVisibilityToggle}
+        onRemoveModel={onRemoveModel}
+        onSyncSourceModel={onSyncSourceModel}
+        onModelHeaderClick={onModelHeaderClick}
+        sourceBacked={sourceBacked}
+        sourceSyncing={sourceSyncing}
+        ariaLevel={ariaLevel}
+        ariaSetSize={ariaSetSize}
+        ariaPosInSet={ariaPosInSet}
+        tabIndex={tabIndex}
+        rowRef={rowRef}
+        onRowFocus={onRowFocus}
+      />
+    );
+  }
+
+  // The visibility toggle shares the type icon's slot (#5394); spatial
+  // containers in multi-model mode have none.
+  const hasToggle = !(isMultiModel && isSpatialContainer(node.type));
+  const iconClass = cn(
+    'text-zinc-500 dark:text-zinc-400 transition-opacity',
+    hasToggle && 'group-hover:opacity-0',
+    hasToggle && nodeHidden && 'opacity-0',
+  );
+
+  // Regular node rendering (spatial hierarchy nodes and elements)
+  return (
+    <div
+      // Query container for the badges below (#5394): its width is the tree
+      // panel's, whatever the row's depth.
+      className="@container"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: `${virtualRow.size}px`,
+        transform: `translateY(${virtualRow.start}px)`,
+      }}
+    >
+      <div
+        ref={rowRef}
+        role="treeitem"
+        aria-level={ariaLevel}
+        aria-setsize={ariaSetSize}
+        aria-posinset={ariaPosInSet}
+        data-hierarchy-node-type={node.type}
+        aria-selected={isSelected}
+        aria-expanded={node.hasChildren ? node.isExpanded : undefined}
+        data-node-id={node.id}
+        tabIndex={tabIndex}
+        onFocus={onRowFocus}
+        className={cn(
+          'relative flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group hierarchy-item',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2',
+          // No selection styling for spatial containers in multi-model mode
+          isMultiModel && isSpatialContainer(node.type)
+            ? 'border-transparent cursor-default'
+            : cn(
+                'cursor-pointer',
+                isSelected ? 'border-l-primary font-medium selected' : 'border-transparent'
+              ),
+          (nodeHidden || noGeometry) && 'opacity-50 grayscale'
+        )}
+        style={{
+          paddingLeft: `${node.depth * HIERARCHY_INDENT_STEP_PX + 8}px`,
+          // No selection highlighting for spatial containers in multi-model mode
+          backgroundColor: isSelected && !(isMultiModel && isSpatialContainer(node.type))
+            ? 'var(--hierarchy-selected-bg)' : undefined,
+          color: isSelected && !(isMultiModel && isSpatialContainer(node.type))
+            ? 'var(--hierarchy-selected-text)' : undefined,
+        }}
+        onClick={(e) => {
+          // React bubbles through portals even when the menu item is outside
+          // this row in the DOM. Only a physical row click selects entities.
+          if (e.currentTarget.contains(e.target as Node) &&
+              (e.target as HTMLElement).closest('button') === null) {
+            onNodeClick(node, e);
+          }
+        }}
+        // No row-level Enter/Space handler: the tree container's onKeyDown
+        // (useTreeKeyboard) already handles it for every row uniformly —
+        // one here too would double-activate (#5823 part 1 added one, this
+        // #6139 review round removed it).
+        onKeyDown={(e) => {
+          if (e.target === e.currentTarget && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) {
+            e.preventDefault();
+            setActionsOpen(true);
+          }
+        }}
+        onMouseDown={(e) => {
+          if (e.currentTarget.contains(e.target as Node) &&
+              (e.target as HTMLElement).closest('button') === null) {
+            e.preventDefault();
+          }
+        }}
+        onContextMenu={(e) => {
+          if (actions.length === 0 || !e.currentTarget.contains(e.target as Node)) return;
+          e.preventDefault();
+          setActionsOpen(true);
+        }}
+      >
+        {/* Expand/Collapse */}
+        {node.hasChildren ? (
+          <button
+            disabled={searchActive}
+            // Not in the tab order: the treeitem itself is (roving tabIndex).
+            tabIndex={-1}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand(node.id);
+            }}
+            aria-label={
+              node.isExpanded
+                ? t('hierarchy.node.collapseAriaLabel', { name: node.name })
+                : t('hierarchy.node.expandAriaLabel', { name: node.name })
+            }
+            aria-expanded={node.isExpanded}
+            // 14px icon, `p-[5px]` a side: 14 + 2*5 = 24, the WCAG 2.2 2.5.8
+            // minimum with no headroom to spare (#5826 review round) — grown
+            // via padding (part of the button's own box) rather than a
+            // pseudo-element slop, so normal flex flow keeps it from
+            // overlapping the type-icon slot that follows.
+            className="p-[5px] hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-none mr-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <ChevronRight
+              className={cn(
+                'h-3.5 w-3.5 transition-transform duration-200',
+                node.isExpanded && 'rotate-90'
+              )}
+            />
+          </button>
+        ) : (
+          <div className="w-5" />
+        )}
+
+        {/* Type icon, with the visibility toggle overlaid in the same 14 px slot
+            (#5394). The toggle used to reserve its own slot while invisible;
+            now it replaces the icon on row hover, and stays shown while the node
+            is hidden. Spatial containers in multi-model mode have no toggle. */}
+        <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {LucideIcon ? (
+                <LucideIcon data-hierarchy-type-icon className={cn('h-3.5 w-3.5 shrink-0', iconClass)} />
+              ) : (
+                <span
+                  data-hierarchy-type-icon
+                  className={cn('material-symbols-outlined shrink-0 leading-none', iconClass)}
+                  style={{ fontSize: '14px' }}
+                  aria-hidden="true"
+                >
+                  {iconCodepoint}
+                </span>
+              )}
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">{resolvedType}</p>
+            </TooltipContent>
+          </Tooltip>
+          {hasToggle && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onVisibilityToggle(node);
+                  }}
+                  aria-label={
+                    node.isVisible
+                      ? t('hierarchy.node.hideAriaLabel', { name: node.name })
+                      : t('hierarchy.node.showAriaLabel', { name: node.name })
+                  }
+                  className={cn(
+                    // The 14px slot itself is `inset-0`; `-inset-[5px]`
+                    // grows the button's own box to 14 + 2*5 = 24, the WCAG
+                    // 2.2 2.5.8 minimum (#5826). The type-icon slot's
+                    // neighbours (the chevron before, the name after) sit
+                    // >=8px away in normal flow, so this clears them.
+                    'absolute -inset-[5px] flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring transition-opacity',
+                    nodeHidden && 'opacity-100'
+                  )}
+                >
+                  {node.isVisible ? (
+                    <Eye className="h-3 w-3 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
+                  ) : (
+                    <EyeOff className="h-3 w-3 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">
+                  {node.isVisible ? t('hierarchy.node.hide') : t('hierarchy.node.show')}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </span>
+
+        {/* Name (+ optional muted LongName for spatial nodes carrying an ISO
+            19650 code in Name and the descriptive label in LongName, #1634) */}
+        {node.secondaryName ? (
+          <span
+            className="flex-1 min-w-0 flex items-baseline text-sm ml-1.5"
+            title={t('hierarchy.node.nameAndSecondaryTitle', { name: node.name, secondaryName: node.secondaryName ?? '' })}
+          >
+            {/* The Name takes its full width first and the LongName gets the
+                rest (#5394). A 55% cap truncated a descriptive Name to make
+                room for a LongName that was often an id; the #1634 case, a
+                short ISO code, still leaves the LongName its room. */}
+            <span className={cn('shrink-0 max-w-full truncate', primaryNameClass, strikeWhenHidden)}>
+              {node.name}
+            </span>
+            <span className={cn('truncate min-w-0 ml-1.5 font-normal text-zinc-400 dark:text-zinc-500', strikeWhenHidden)}>
+              {node.secondaryName}
+            </span>
+          </span>
+        ) : (
+          <span className={cn('flex-1 text-sm truncate ml-1.5', primaryNameClass, strikeWhenHidden)}>
+            {node.name}
+          </span>
+        )}
+
+        {isMultiModel && node.type !== 'model-header' && node.modelIds.length === 1 && (
+          <ModelBadge modelId={node.modelId ?? node.modelIds[0]} className="max-w-24 shrink-0" />
+        )}
+
+        {node.ifcType && (node.type === 'element' || node.type === 'group-member') && (
+          <span className="text-2xs font-mono text-zinc-400 dark:text-zinc-500 truncate max-w-[90px]">
+            {node.ifcType}
+          </span>
+        )}
+
+        <HierarchyNodeBadges node={node} />
+        {onAction && (
+          <HierarchyRowActions
+            name={node.name}
+            actions={actions}
+            open={actionsOpen}
+            onOpenChange={setActionsOpen}
+            onAction={(action) => onAction(node, action)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

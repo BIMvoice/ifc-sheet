@@ -1,0 +1,223 @@
+# @ifc-lite/geometry
+
+Streaming geometry processor for IFClite. Converts IFC bytes to renderable mesh batches via Rust + WASM (or Tauri native), with first triangles in 300–500ms and progressive streaming for large models.
+
+## Installation
+
+```bash
+npm install @ifc-lite/geometry
+```
+
+## Process geometry from IFC bytes
+
+```typescript
+import { GeometryProcessor } from '@ifc-lite/geometry';
+
+const processor = new GeometryProcessor();
+await processor.init();
+
+const buffer = new Uint8Array(await file.arrayBuffer());
+const result = await processor.process(buffer);
+
+console.log(`${result.meshes.length} meshes, ${result.totalTriangles} triangles`);
+// Each mesh: { expressId, positions: Float32Array, normals, indices: Uint32Array, color, ifcType }
+```
+
+## Stream geometry (recommended for large models)
+
+```typescript
+const buffer = new Uint8Array(await file.arrayBuffer());
+
+for await (const event of processor.processStreaming(buffer)) {
+  if (event.type === 'batch') {
+    renderer.addMeshes(event.meshes, true);
+    console.log(`Loaded ${event.totalSoFar} meshes so far`);
+  } else if (event.type === 'complete') {
+    console.log(`Done: ${event.totalMeshes} meshes`);
+  }
+}
+```
+
+The streaming path emits batches every ~100 meshes so the renderer can paint progressively — first triangles typically arrive 300–500ms after `processStreaming()` returns.
+
+## Tessellation quality
+
+Curved geometry (swept pipes, cylinders, fillets, NURBS) is approximated with straight segments; the detail level is selectable per processor:
+
+```typescript
+// 'lowest' | 'low' | 'medium' (default) | 'high' | 'highest'
+const processor = new GeometryProcessor({ tessellationQuality: 'high' });
+// or at runtime, before processing:
+processor.setTessellationQuality('low');
+```
+
+Unset / `'medium'` reproduces the engine's historical densities byte-for-byte. Lower levels coarsen curved surfaces (×0.5 / ×0.25 segment density) for throughput; higher levels refine them (×2 / ×4) to reduce visible faceting, with a proportional triangle-count and processing-time cost on curved-heavy models. Profile circles (opening cutters / extruded caps) never get finer than `'medium'`. Applies to the WASM paths (main-thread, streaming, worker pool); the native Tauri path does not consume it yet. See the [Geometry Guide](https://ifclite.dev/docs/guide/geometry/) for the full level table.
+
+## Coordinate handling
+
+```typescript
+const buffer = new Uint8Array(await file.arrayBuffer());
+const result = await processor.process(buffer);
+
+// Models with large world coordinates (geo-referenced) get auto-shifted
+// to keep float precision inside the renderer.
+if (result.coordinateInfo?.hasLargeCoordinates) {
+  const { x, y, z } = result.coordinateInfo.originShift;
+  console.log(`Origin shifted by [${x}, ${y}, ${z}] for renderer precision`);
+}
+```
+
+The mesh pre-pass also publishes its exact IFC Z-up, metre-based `RtcFrame` as
+`coordinateInfo.wasmRtcFrame`. Pass that frame to auxiliary parsers for the
+same loaded model so grids, alignments, and symbolic geometry use the mesh
+origin exactly:
+
+```typescript
+const bytes = new Uint8Array(await file.arrayBuffer());
+const loaded = await processor.process(bytes);
+const frame = loaded.coordinateInfo.wasmRtcFrame;
+const gridLines = processor.parseGridLines(bytes, frame);
+const alignmentLines = processor.parseAlignmentLines(bytes, frame);
+const symbols = processor.parseSymbolicRepresentations(bytes, frame);
+try {
+  console.log(gridLines?.length, alignmentLines?.length, symbols?.totalCount);
+} finally {
+  symbols?.free(); // WASM-owned collection; typed arrays need no cleanup
+}
+```
+
+`needsShift: false` is an authoritative decision to subtract nothing, even if
+the frame's inactive `x`/`y`/`z` values are non-zero. It disables only RTC
+subtraction; the parser's documented unit scaling and IFC Z-up to renderer
+Y-up output conversion are unchanged. An absent
+`wasmRtcFrame` means the producer did not publish frame provenance (for example,
+the native bridge); it does not mean `needsShift: false`. Omitting the parser
+argument retains standalone whole-source detection. That is useful for an
+independent IFC source, but it can differ from a streaming pre-pass's sampled
+frame or a federation-wide shared frame, so loaded-model overlays should use
+the published frame when present.
+
+## Vite setup
+
+The geometry workers ship as ESM and use the standard
+`new Worker(new URL('./geometry.worker.js', import.meta.url), { type: 'module' })`
+spawn pattern. Vite's default `worker.format: 'iife'` setting can't host
+ESM workers, so consumers need one config line:
+
+```ts
+// vite.config.ts
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  worker: { format: 'es' },
+});
+```
+
+This is the same contract that Mapbox-GL, Three.js, Cesium, and Monaco
+require — ESM workers are not the Vite default, but they are the modern
+standard and the pattern wasm-bindgen produces by default.
+
+If your bundler can't transform
+`new URL('ifc-lite_bg.wasm', import.meta.url)` inside the worker bundle
+(or you serve the wasm from a CDN at a separate origin), pass explicit
+wasm URLs through the `processAdaptive` / `processParallel` `wasmUrls`
+option:
+
+<!-- Reason: Vite-only `?url` import specifier, unresolvable by tsc. -->
+<!-- docs-check: skip -->
+```ts
+// Vite's `?url` suffix yields a fully-resolved URL string at build time.
+// `@ifc-lite/wasm` exposes the binary at the `./ifc-lite_bg.wasm` subpath
+// so this resolves cleanly through the package's `exports` map.
+import wasmUrl from '@ifc-lite/wasm/ifc-lite_bg.wasm?url';
+
+for await (const event of processor.processAdaptive(buffer, {
+  wasmUrls: { wasm: wasmUrl },
+})) { /* ... */ }
+```
+
+The worker forwards the URL to wasm-bindgen's documented `init(url)`
+parameter, bypassing the default `new URL(..., import.meta.url)`
+resolution inside the worker entirely. For webpack 5 use
+`new URL('@ifc-lite/wasm/ifc-lite_bg.wasm', import.meta.url).href`;
+for other bundlers, any string the runtime can resolve to the binary
+works.
+
+## Performance
+
+- **First triangles:** 300–500ms (streaming path)
+- **Correctness:** exact-arithmetic boolean kernel - openings are cut exactly, verified element-by-element against IfcOpenShell on the public benchmark corpus
+- **Worker support:** files > 50 MB process off-main-thread automatically
+- **Native (Tauri):** `preferNative: true` enables the native Rust pipeline when running under a Tauri host — an extension point for third parties building their own desktop app (`@tauri-apps/api` is an optional dep; web builds never load it). See the [Building for Desktop](https://ifclite.dev/docs/guide/desktop/) guide.
+
+## API
+
+See the [Geometry Guide](https://ifclite.dev/docs/guide/geometry/) and [API Reference](https://ifclite.dev/docs/api/typescript/#ifc-litegeometry).
+
+`GeometryProcessor.planMapConversionNormalization(content)` returns a JSON
+entity-patch plan for opt-in STEP coordinate compatibility export. Initialize
+the processor first and dispose it in `finally`. Canonical Rust validates units,
+placements and representation ownership; unsupported coordinate consumers return
+warnings with no patches. `StepExporter.exportAsync({ normalizeMapGeometry:
+true })` applies this plan after edits using its existing modification ledger.
+See the [exporting guide](https://ifclite.dev/docs/guide/exporting/) for the
+supported subset and warning handling. Third-party platform bridges may expose
+the optional planner capability; the bundled native bridge explicitly refuses it.
+
+## Scan plane segmentation
+
+`@ifc-lite/geometry/scan-segmentation` types the wasm plane and cylinder
+detector for point clouds. Pass xyz metres, either a whole buffer or a reservoir with a `count`.
+Every option is optional; see the
+[segmentation contract](https://ifclite.dev/docs/api/wasm/#scan-plane-segmentation)
+for the defaults.
+
+```ts
+import { segmentScan } from '@ifc-lite/geometry/scan-segmentation';
+
+const api = new IfcAPI(); // after the wasm module is initialised
+const positions = new Float32Array([/* x, y, z, ... in metres */]);
+try {
+  const report = segmentScan(api, { positions }, { scannerPosition: [3, 2, 1.5] });
+  for (const plane of report.planes) {
+    console.log(plane.orientation, plane.normal, plane.d, plane.areaSquareMetres);
+  }
+  for (const cylinder of report.cylinders) {
+    // `faceted` is set for a polygonal column (radius is then the circumradius).
+    console.log(cylinder.orientation, cylinder.axisStart, cylinder.radius, cylinder.length, cylinder.faceted?.faces);
+  }
+} finally {
+  api.free();
+}
+```
+
+## Scan element proposals
+
+`@ifc-lite/geometry/scan-proposals` turns a segmentation report into proposed
+`IfcWall`, `IfcSlab`, `IfcColumn` and pipe elements in the IFC model frame (Z
+up, metres): opposite wall faces pair into walls of measured thickness, floors
+and ceilings into slabs, vertical cylinders into columns. See the
+[proposal contract](https://ifclite.dev/docs/api/wasm/#scan-element-proposals).
+
+```ts
+import { segmentScan } from '@ifc-lite/geometry/scan-segmentation';
+import { proposeScanElements } from '@ifc-lite/geometry/scan-proposals';
+
+const api = new IfcAPI(); // after the wasm module is initialised
+const positions = new Float32Array([/* x, y, z, ... Y-up metres */]);
+try {
+  const report = segmentScan(api, { positions }, { upAxis: [0, 1, 0] });
+  // Y-up (x, y, z) -> IFC Z-up (x, -z, y), row-major.
+  const scanToModel = [1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1];
+  const { proposals } = proposeScanElements(api, report, { scanToModel, schema: 'IFC4' });
+  for (const p of proposals) {
+    console.log(p.id, p.ifcClass, p.basis, p.confidence.toFixed(2), p.geometry);
+  }
+} finally {
+  api.free();
+}
+```
+
+## License
+
+[MPL-2.0](../../LICENSE)

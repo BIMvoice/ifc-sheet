@@ -1,0 +1,485 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * CesiumOverlay — renders Google Photorealistic 3D Tiles behind the WebGPU
+ * canvas, providing real-world 3D context for georeferenced IFC models.
+ *
+ * Architecture:
+ *   - A separate <div> behind the WebGPU <canvas> (z-index layering)
+ *   - WebGPU canvas uses transparent clear color so Cesium shows through
+ *   - Camera is synchronized every frame from the IFC viewer camera
+ *   - CesiumJS is lazy-loaded on first activation to avoid bundle bloat
+ *   - User controls remain on the WebGPU canvas; Cesium's are disabled
+ *
+ * Live edit support:
+ *   - When georef props change (e.g. user edits EPSG, eastings, rotation),
+ *     the coordinate bridge is rebuilt and the globe flies to the new location
+ *   - The Cesium viewer itself is NOT recreated — only the bridge is updated
+ */
+
+import { useEffect, useRef, useState } from 'react';
+import { AlertCircle, AlertTriangle } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
+import { useViewerStore } from '@/store';
+import { useTranslation } from '@/i18n';
+import { HudChip, HudItem } from '../viewport-ui/hud';
+import type { MapConversion, ProjectedCRS } from '@ifc-lite/parser';
+import type { CoordinateInfo, GeometryResult } from '@ifc-lite/geometry';
+import type { CesiumBridge } from '@/lib/geo/cesium-bridge';
+import { attachTileSuccessRetraction, classifyTileProviderError, toUrlTemplateProviderOptions } from '@/lib/geo/custom-basemap';
+import { tilesetLoadErrorMessage } from '@/lib/geo/custom-3dtiles';
+import { loadCesium } from './cesium/cesium-module';
+import { addDataSourceLayer } from './cesium/addDataSourceLayer';
+import { useCesiumBridge } from './cesium/useCesiumBridge';
+import { useCesiumModel } from './cesium/useCesiumModel';
+import { useCesiumSolar } from './cesium/useCesiumSolar';
+import { useCesiumCameraSync } from './cesium/useCesiumCameraSync';
+import { CesiumViewerLifetime } from './cesium/cesium-viewer-lifetime';
+export interface CesiumOverlayProps {
+  mapConversion?: MapConversion;
+  cameraMapConversion?: MapConversion;
+  projectedCRS?: ProjectedCRS;
+  coordinateInfo?: CoordinateInfo;
+  geometryResult?: GeometryResult | null;
+  /** IFC project length unit → metres (e.g. 0.001 for mm models). Default 1. */
+  lengthUnitScale?: number;
+  /** IfcBuildingStorey elevations (express id → metres, viewer-Y aligned).
+   *  Used to clamp the model's ground-floor storey to terrain instead of
+   *  the lowest geometry vertex (which can be a basement or foundation). */
+  storeyElevations?: Map<number, number>;
+  /** Storey isolation, class filter and manual isolation already intersected,
+   *  exactly as the viewport receives it. The world view must hide what the
+   *  viewport hides (#2578). */
+  computedIsolatedIds?: ReadonlySet<number> | null;
+}
+
+export function CesiumOverlay({
+  mapConversion,
+  cameraMapConversion,
+  projectedCRS,
+  coordinateInfo,
+  geometryResult,
+  lengthUnitScale = 1,
+  storeyElevations,
+  computedIsolatedIds,
+}: CesiumOverlayProps) {
+  const { t } = useTranslation();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const viewerRef = useRef<InstanceType<typeof import('cesium').Viewer> | null>(null);
+  /** Published synchronously after construction; retires all async owners (#4807). */
+  const viewerLifetimeRef = useRef<CesiumViewerLifetime | null>(null);
+  const bridgeRef = useRef<CesiumBridge | null>(null);
+  const cameraBridgeRef = useRef<CesiumBridge | null>(null);
+  const rafRef = useRef<number | null>(null);
+  // Bridges the model hook's teardown back to the viewer effect, which is
+  // DECLARED FIRST and so cannot call the hook's return value directly. Read
+  // only from that effect's cleanup, long after the assignment below.
+  const invalidateModelRef = useRef<() => void>(() => {});
+  const invalidateSolarRef = useRef<() => void>(() => {});
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [error, setError] = useState<string | null>(null);
+  /**
+   * Non-fatal basemap trouble — a custom tile server the browser is not allowed
+   * to read (#2685). Deliberately NOT `status: 'error'`: the overlay is
+   * otherwise working (model, terrain, camera sync all live) and the hooks below
+   * key off `status`, so failing the whole overlay over imagery would tear down
+   * a working world context.
+   */
+  const [basemapWarning, setBasemapWarning] = useState<string | null>(null);
+
+  const cesiumEnabled = useViewerStore((s) => s.cesiumEnabled);
+  const dataSource = useViewerStore((s) => s.cesiumDataSource);
+  const storedCustomBasemap = useViewerStore((s) => s.cesiumCustomBasemap);
+  // Null unless the custom source is actually selected, so editing the tile URL
+  // while another basemap is showing does not tear down and rebuild the viewer.
+  const customBasemap = dataSource === 'custom' ? storedCustomBasemap : null;
+  const storedCustomTilesetUrl = useViewerStore((s) => s.cesiumCustomTilesetUrl);
+  // Same reasoning as `customBasemap`: null unless this source is actually
+  // selected, so editing the URL elsewhere does not tear down the viewer.
+  const customTilesetUrl = dataSource === 'custom-3dtiles' ? storedCustomTilesetUrl : null;
+  const ionToken = useViewerStore((s) => s.cesiumIonToken);
+  const terrainEnabled = useViewerStore((s) => s.cesiumTerrainEnabled);
+  const terrainClipY = useViewerStore((s) => s.cesiumTerrainClipY);
+
+  // Active 3D context tileset (Google Photorealistic / OSM buildings) — kept so
+  // solar mode can toggle its shadow casting/receiving.
+  const tilesetRef = useRef<{ shadows?: any } | null>(null);
+
+  // ─── Effect 1: Create/destroy the Cesium viewer (heavy, rare) ───────────
+  // Only depends on cesiumEnabled, ionToken, terrainEnabled, dataSource.
+  // NOT on mapConversion/projectedCRS — those are handled by Effect 2.
+  useEffect(() => {
+    if (!cesiumEnabled || !containerRef.current) return;
+
+    let cancelled = false;
+    /** Exact owner for this effect run; status gates all consumers. */
+    let ownedViewer: InstanceType<typeof import('cesium').Viewer> | null = null;
+    let ownedLifetime: CesiumViewerLifetime | null = null;
+    const destroyOwnedViewer = () => {
+      ownedLifetime?.retire();
+      if (ownedViewer && !ownedViewer.isDestroyed?.()) ownedViewer.destroy();
+      if (viewerRef.current === ownedViewer) viewerRef.current = null;
+      if (viewerLifetimeRef.current === ownedLifetime) viewerLifetimeRef.current = null;
+      ownedViewer = null;
+      ownedLifetime = null;
+    };
+    // Cesium's `addEventListener` returns its own remover; hold it so the
+    // cleanup can detach the basemap error listener with the effect.
+    let removeBasemapErrorListener: (() => void) | null = null;
+    setStatus('loading');
+    setError(null);
+    setBasemapWarning(null);
+
+    (async () => {
+      try {
+        const Cesium = await loadCesium();
+        if (cancelled || !containerRef.current) return;
+
+        // Configure Cesium ion token if provided
+        if (ionToken) Cesium.Ion.defaultAccessToken = ionToken;
+
+        const viewer = new Cesium.Viewer(containerRef.current, {
+          animation: false,
+          baseLayerPicker: false,
+          fullscreenButton: false,
+          geocoder: false,
+          homeButton: false,
+          infoBox: false,
+          sceneModePicker: false,
+          selectionIndicator: false,
+          timeline: false,
+          navigationHelpButton: false,
+          navigationInstructionsInitiallyVisible: false,
+          // Cesium ion ToS requires visible attribution — use a small container
+          // at bottom of the overlay rather than hiding credits entirely.
+          msaaSamples: 1,
+          requestRenderMode: true,
+          maximumRenderTimeChange: Infinity,
+          baseLayer: false,
+        });
+        const lifetime = new CesiumViewerLifetime(viewer);
+        ownedViewer = viewer;
+        ownedLifetime = lifetime;
+        viewerRef.current = viewer;
+        viewerLifetimeRef.current = lifetime;
+        if (cancelled) { destroyOwnedViewer(); return; }
+
+        // IFC viewer owns input; Cesium camera controls stay disabled.
+        const scene = viewer.scene;
+        const sscc = scene.screenSpaceCameraController;
+        sscc.enableInputs = false;
+        sscc.enableRotate = false;
+        sscc.enableTranslate = false;
+        sscc.enableZoom = false;
+        sscc.enableTilt = false;
+        sscc.enableLook = false;
+        sscc.enableCollisionDetection = false;
+        sscc.minimumZoomDistance = 0;
+        sscc.maximumZoomDistance = Infinity;
+        // Enable depth testing so the model (and other objects) get clipped
+        // by terrain — prevents seeing underground portions.
+        scene.globe.depthTestAgainstTerrain = true;
+
+        // Move credit/logo from bottom-left to top-left to avoid overlap
+        // with other UI elements.
+        const bottomContainer = viewer.bottomContainer as HTMLElement;
+        if (bottomContainer) {
+          bottomContainer.style.top = '0';
+          bottomContainer.style.bottom = 'auto';
+          bottomContainer.style.left = '0';
+          bottomContainer.style.right = 'auto';
+        }
+
+        // Disable skybox/atmosphere/fog for transparent compositing.
+        // (The Environment panel's Sky toggle re-enables atmosphere/sun/fog
+        // via Effect 4b.)
+        if (scene.skyBox) scene.skyBox.show = false;
+        if (scene.sun) scene.sun.show = false;
+        if (scene.moon) scene.moon.show = false;
+        if (scene.skyAtmosphere) scene.skyAtmosphere.show = false;
+        scene.fog.enabled = false;
+        scene.globe.showGroundAtmosphere = false;
+        scene.backgroundColor = Cesium.Color.TRANSPARENT;
+        scene.globe.baseColor = Cesium.Color.TRANSPARENT;
+        if (dataSource === 'osm-map') {
+          // Plain OpenStreetMap slippy map: a simple, uncluttered flat base
+          // map (no satellite imagery, no 3D massing) for users who find the
+          // photorealistic globe overwhelming (#1744). The globe drapes the
+          // OSM tiles (over terrain when enabled) and receives cast shadows.
+          scene.globe.show = true;
+          scene.globe.shadows = Cesium.ShadowMode.RECEIVE_ONLY;
+          try {
+            // maximumLevel 19 = OSM's deepest tile zoom; conforms to the
+            // OpenStreetMap tile usage policy and avoids 404s past z19.
+            // Pass an explicit `credit`: Cesium's default OSM credit is the
+            // outdated "MapQuest … CC-BY-SA" string, but the OSMF tile policy
+            // requires a visible "© OpenStreetMap contributors" attribution
+            // linking to the copyright page. Cesium renders credit HTML, so the
+            // anchor is clickable in the on-canvas attribution.
+            const osm = new Cesium.OpenStreetMapImageryProvider({
+              maximumLevel: 19,
+              credit:
+                '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+            });
+            if (!cancelled) viewer.imageryLayers.addImageryProvider(osm);
+          } catch (e) { console.warn('[CesiumOverlay] OSM base map unavailable:', e); }
+        } else if (dataSource === 'custom') {
+          // User-supplied XYZ tile template (#2685). Same globe treatment as
+          // the OSM map: the imagery IS the context, draped over terrain.
+          scene.globe.show = true;
+          scene.globe.shadows = Cesium.ShadowMode.RECEIVE_ONLY;
+          if (!customBasemap) {
+            // Reachable only if the picker and the stored basemap disagree; the
+            // globe would otherwise come up blank with no explanation.
+            setBasemapWarning(t('cesiumGeo.overlay.noCustomBasemapWarning'));
+          } else {
+            try {
+              const provider = new Cesium.UrlTemplateImageryProvider(
+                toUrlTemplateProviderOptions(customBasemap),
+              );
+              // The failure this catches is the one that otherwise looks like
+              // nothing: a server without `Access-Control-Allow-Origin` never
+              // produces a response, so Cesium reports a RequestErrorEvent with
+              // no `statusCode` and the globe just stays empty. Cesium retries
+              // and re-raises per tile, so the listener fires repeatedly —
+              // setting the same string is a no-op for React.
+              //
+              // `!cancelled` for the same reason the `addImageryProvider` line
+              // below has it. Cesium frees a tile's texture on teardown but
+              // never cancels the in-flight request, and `viewer.destroy()`
+              // does not clear this listener array — so a provider belonging to
+              // an already-destroyed viewer can still raise, and warn about a
+              // basemap the user has since switched away from. Pick Custom with
+              // a slow host, switch to OSM Map inside the connect timeout, and
+              // BROWSER_ACCESS_BLOCKED lands on top of a working OSM globe.
+              //
+              // The unsubscribe Cesium returns is kept rather than discarded,
+              // so the listener's lifetime is the EFFECT's rather than the
+              // provider's — the flag alone would leave a dead listener holding
+              // this closure for as long as the provider lives.
+              removeBasemapErrorListener = provider.errorEvent.addEventListener(
+                (event: unknown) => {
+                  const message = classifyTileProviderError(event);
+                  if (message && !cancelled) setBasemapWarning(message);
+                },
+              );
+              // …and this is how it goes away again: a single transient failure
+              // must not leave the banner up forever over a working basemap.
+              //
+              // Guarded too, and this one matters more than the listener,
+              // because it RETRACTS. Switch away from a slow custom basemap to
+              // a different one that genuinely is CORS-blocked, and a late tile
+              // from the destroyed provider would clear the new basemap's
+              // legitimate warning — leaving a blank globe with nothing on
+              // screen, the exact failure this feature exists to eliminate.
+              // The wrapper is left on the dead provider; only its effect on
+              // this component's state is cut, which is all that outlives the
+              // provider anyway.
+              attachTileSuccessRetraction(provider, (update) => {
+                if (!cancelled) setBasemapWarning(update);
+              });
+              if (!cancelled) viewer.imageryLayers.addImageryProvider(provider);
+            } catch (e) {
+              console.warn('[CesiumOverlay] Custom basemap unavailable:', e);
+              // Same effect, same hole: the constructor can throw after a
+              // teardown that already cleared the banner.
+              if (!cancelled) setBasemapWarning(t('cesiumGeo.overlay.customBasemapUnavailable'));
+            }
+          }
+        } else if (dataSource === 'custom-3dtiles') {
+          // User-supplied 3D Tiles tileset (#3607) — e.g. Dutch 3D BAG/PDOK
+          // data. Cesium's own loader handles both 3D Tiles 1.0 (B3DM) and
+          // 1.1 (glTF) content, so there is no version branch here. Globe
+          // stays visible (RECEIVE_ONLY shadows), same as OSM Buildings: an
+          // arbitrary building-massing tileset — the common case for this
+          // format — has no ground of its own, unlike Google Photorealistic.
+          scene.globe.show = true;
+          scene.globe.shadows = Cesium.ShadowMode.RECEIVE_ONLY;
+          if (!customTilesetUrl) {
+            // Reachable only if the picker and the stored URL disagree; the
+            // globe would otherwise come up blank with no explanation.
+            setBasemapWarning(t('cesiumGeo.overlay.noCustomTilesetWarning'));
+          } else {
+            try {
+              const tileset = await Cesium.Cesium3DTileset.fromUrl(customTilesetUrl);
+              // `!cancelled`: a bad host can take a while to fail (or a slow
+              // one to succeed), and the user may have switched sources by
+              // then — same guard as the custom XYZ basemap above.
+              if (!cancelled && lifetime.isLive(viewer)) {
+                viewer.scene.primitives.add(tileset);
+                tilesetRef.current = tileset;
+              } else {
+                // `fromUrl` already resolved a real tileset by the time the
+                // effect was cancelled -- it is never added to any scene's
+                // primitives, so nothing else will ever call `.destroy()` on
+                // it. Cesium3DTileset's own docs are explicit that this is
+                // required "for the explicit release of WebGL resources,
+                // instead of relying on the garbage collector"; skipping it
+                // here leaked the tileset's in-flight requests and any
+                // resources already allocated for its root tile on every
+                // source switch made before a slow custom URL resolved.
+                tileset.destroy();
+              }
+            } catch (e) {
+              console.warn('[CesiumOverlay] Custom 3D Tiles URL failed to load:', customTilesetUrl, e);
+              if (!cancelled) setBasemapWarning(tilesetLoadErrorMessage(e));
+            }
+          }
+        } else if (dataSource === 'osm-buildings') {
+          // OSM massing context: keep the globe with the satellite base map —
+          // the extruded buildings sit ON TOP of the imagery, and the globe
+          // is what receives their cast shadows during a sun study.
+          scene.globe.show = true;
+          scene.globe.shadows = Cesium.ShadowMode.RECEIVE_ONLY;
+          try {
+            const imagery = await Cesium.createWorldImageryAsync();
+            if (!cancelled) viewer.imageryLayers.addImageryProvider(imagery);
+          } catch (err) {
+            // Not fatal: the buildings layer still renders without imagery.
+            // Logged rather than swallowed so a failing imagery endpoint is
+            // diagnosable instead of presenting as an unexplained grey globe.
+            console.warn('[CesiumOverlay] world imagery unavailable, buildings still render', err);
+          }
+        } else {
+          // Photorealistic tiles bring their own ground; the globe would
+          // z-fight underneath them.
+          scene.globe.show = false;
+        }
+        if (cancelled || !lifetime.isLive(viewer)) { destroyOwnedViewer(); return; }
+
+        if (terrainEnabled && ionToken) {
+          try {
+            const terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1);
+            if (lifetime.isLive(viewer)) viewer.terrainProvider = terrainProvider;
+          } catch (err) {
+            // Terrain is optional, but do not hide a live setup failure.
+            if (lifetime.isLive(viewer)) console.warn('[CesiumOverlay] terrain unavailable:', err);
+          }
+        }
+        if (dataSource !== 'custom-3dtiles') {
+          const tileset = await addDataSourceLayer(Cesium, viewer, dataSource, ionToken, lifetime);
+          if (!cancelled && lifetime.isLive(viewer)) tilesetRef.current = tileset;
+        }
+        if (cancelled || !lifetime.isLive(viewer)) { destroyOwnedViewer(); return; }
+
+        setStatus('ready');
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[CesiumOverlay] Init failed:', err);
+          setError(err instanceof Error ? err.message : t('cesiumGeo.overlay.initFailed'));
+          setStatus('error');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      destroyOwnedViewer();
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      invalidateModelRef.current();
+      bridgeRef.current = null;
+      // The destroyed viewer also took the tileset + sun-path entities.
+      tilesetRef.current = null;
+      invalidateSolarRef.current();
+      removeBasemapErrorListener?.();
+      removeBasemapErrorListener = null;
+      setStatus('idle');
+      setBasemapWarning(null);
+    };
+  }, [cesiumEnabled, ionToken, terrainEnabled, dataSource, customBasemap, customTilesetUrl]);
+
+  // ─── Coordinate bridge: georeference to a place on the globe ────────────
+  // After the viewer effect (it needs a live viewer for terrain sampling) and
+  // before the model hook, which rebuilds its matrix from `bridgeVersion`.
+  const { bridgeVersion } = useCesiumBridge({
+    status,
+    viewerRef,
+    viewerLifetimeRef,
+    bridgeRef,
+    cameraBridgeRef,
+    mapConversion,
+    cameraMapConversion,
+    projectedCRS,
+    coordinateInfo,
+    lengthUnitScale,
+    storeyElevations,
+  });
+
+  // ─── Model lifecycle: build, load, swap, keep the matrix current ────────
+  // Called HERE, between the bridge and the solar study, because React runs a
+  // component's effects — setups AND cleanups — in declaration order. Each
+  // hook's header states what that buys it; moving a call changes teardown
+  // order as much as setup order.
+  const { modelRef: cesiumModelRef, modelEpoch: cesiumModelEpoch, invalidate: invalidateModel } = useCesiumModel({
+    status,
+    bridgeVersion,
+    viewerRef,
+    viewerLifetimeRef,
+    bridgeRef,
+    geometryResult,
+    coordinateInfo,
+    mapConversion,
+    projectedCRS,
+    lengthUnitScale,
+    computedIsolatedIds,
+  });
+  invalidateModelRef.current = invalidateModel;
+
+  // ─── Solar study: lighting, shadows, sun-path dome, sky ─────────────────
+  // Declared AFTER the model hook: it applies shadow settings to the primitive
+  // that hook owns, and keys on its epoch so a swapped-in model gets them.
+  const { invalidate: invalidateSolar } = useCesiumSolar({
+    status,
+    bridgeVersion,
+    viewerRef,
+    viewerLifetimeRef,
+    bridgeRef,
+    modelRef: cesiumModelRef,
+    modelEpoch: cesiumModelEpoch,
+    tilesetRef,
+    coordinateInfo,
+  });
+  invalidateSolarRef.current = invalidateSolar;
+
+  // ─── Camera sync: mirror the viewport's pose onto the globe, per frame ──
+  useCesiumCameraSync({ status, viewerRef, bridgeRef, cameraBridgeRef, terrainClipY, rafRef });
+
+  if (!cesiumEnabled || !mapConversion || !projectedCRS) {
+    return null;
+  }
+
+  return (
+    <>
+      <div ref={containerRef} className="absolute inset-0 z-0" style={{ pointerEvents: 'none' }} />
+      {(status === 'loading' || (status === 'error' && error) || basemapWarning) && (
+        // Top-left HudChips (#5504, charter #5478 item 22), stacked below the
+        // level-display and edit-mode chips — one HudItem so all three share
+        // a parent and lay out in the region's own column, never overlapping.
+        <HudItem region="top-left" order={2}>
+          <div className="flex flex-col items-start gap-1.5">
+            {status === 'loading' && (
+              <HudChip icon={<Spinner size="sm" className="text-muted-foreground" />}>
+                {t('cesiumGeo.overlay.loadingLabel')}
+              </HudChip>
+            )}
+            {status === 'error' && error && (
+              <HudChip icon={<AlertCircle className="h-3.5 w-3.5 text-status-danger" aria-hidden />}>
+                {error}
+              </HudChip>
+            )}
+            {basemapWarning && (
+              <HudChip role="status" icon={<AlertTriangle className="h-3.5 w-3.5 text-status-warn" aria-hidden />}>
+                {basemapWarning}
+              </HudChip>
+            )}
+          </div>
+        </HudItem>
+      )}
+    </>
+  );
+}

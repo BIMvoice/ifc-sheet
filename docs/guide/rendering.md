@@ -1,0 +1,1179 @@
+# Rendering
+
+Guide to the WebGPU rendering pipeline in IFClite, including section planes, snap detection, and GPU picking.
+
+## Overview
+
+IFClite uses WebGPU for modern, high-performance 3D rendering:
+
+```mermaid
+flowchart TB
+    subgraph Input["Input Data"]
+        Meshes["Mesh Buffers"]
+        Camera["Camera State"]
+    end
+
+    subgraph Pipeline["Render Pipeline"]
+        Cull["Frustum Culling"]
+        Sort["Depth Sorting"]
+        Upload["GPU Upload"]
+        Render["Draw Calls"]
+    end
+
+    subgraph Features["Interactive Features"]
+        Section["Section Planes"]
+        Snap["Snap Detection"]
+        Pick["GPU Picking"]
+    end
+
+    subgraph Output["Output"]
+        Canvas["WebGPU Canvas"]
+    end
+
+    Input --> Pipeline
+    Pipeline --> Features
+    Features --> Output
+
+    style Input fill:#6366f1,stroke:#312e81,color:#fff
+    style Pipeline fill:#2563eb,stroke:#1e3a8a,color:#fff
+    style Features fill:#10b981,stroke:#064e3b,color:#fff
+    style Output fill:#a855f7,stroke:#581c87,color:#fff
+```
+
+Key rendering features include section planes for model slicing, snap detection for precision interaction, GPU picking for object selection, and measurement tools for calculating distances and angles between geometry points. For generating 2D plans and elevations from 3D models, see the [2D Drawing Guide](drawing-2d.md).
+
+## Inspecting swept-disk source geometry
+
+Select a product containing `IfcSweptDiskSolid` geometry, then open **Properties → Quantities → Derived source geometry** or **Measure → Source**. Each solid shows its source solid and directrix IDs, mapped path, effective radius, optional inner radius, complete or unsupported status, and whether a CSG operation modified the source. Complete records show analytic total and per-segment centreline lengths, plus each arc's bend magnitude and signed sweep. Click an unmodified segment row to isolate it in the centreline overlay; click it again to clear the highlight.
+
+These lengths come from the authored directrix in metres, with the viewer's display-unit preference applied. They are separate from authored IFC attributes and `IfcElementQuantity` values. A source modified by CSG may differ from the visible mesh, and an unsupported description cannot provide a derived length. The readout does not infer fabrication quantities or a bar count.
+
+## Inspecting authored extrusion profiles
+
+Select a product containing `IfcExtrudedAreaSolid` geometry and open **Properties → Quantities → Authored extrusion sources**. Each occurrence identifies its solid, mapped path, depth, extrusion direction, profile type and profile ID. Expand a profile loop to inspect its exact line and arc segments, perimeter and signed area. Expand **Source placement** to inspect the profile, solid and world transform translations and axes. Lengths and areas are converted from IFC file units to SI for display; world translation is absolute IFC Z-up metres, before the viewer's render-origin shift. A CSG-modified occurrence is marked because its authored profile can differ from the visible result. Unsupported profiles are reported without reconstructing a profile from the mesh. The section stays hidden for products with no extrusion source.
+
+With the centreline overlay enabled, the Measure tool can snap to its authored line and signed arc segments. The snap point is evaluated on the source curve in the displayed model frame, including federation alignment and model placement; the drawn line approximation does not determine it. Segment snapping stops when the overlay is off, the product is hidden or isolated away, or a CSG-modified source cannot describe the visible solid. `SnapTarget.metadata.sourceCurve` identifies the source model, product, solid, directrix, mapped path, occurrence and segment, and carries the exact source length and normalized parameter. Mesh and scan snaps remain available at the same cursor.
+
+For renderer integrations, `Renderer.setSourceSnapCurves(curves)` replaces the opt-in list used by magnetic picking. Each `SourceSnapCurve` supplies a global picking ID, authored source identity, kind (`line` or `arc`), exact length, and `pointAt(t)` evaluator in displayed Y-up world metres; signed arcs also supply `sweepAngle`. Set `affineDisplayFrame: false` when the evaluator includes a nonlinear cross-CRS reprojection, so clip handling checks the evaluated point instead of assuming linear or circular clip roots. An extremely narrow clipped span after nonlinear reprojection may have no candidate; the picker never returns a clipped point. Pass `[]` when the source overlay is hidden or its selection changes.
+
+## Basic Setup
+
+```typescript
+import { Renderer } from '@ifc-lite/renderer';
+
+// Initialize renderer
+const canvas = document.getElementById('viewer') as HTMLCanvasElement;
+const renderer = new Renderer(canvas);
+
+// Initialize WebGPU
+await renderer.init();
+
+// Add meshes (from parser or server)
+renderer.addMeshes(meshes);
+
+// Fit camera to model
+renderer.fitToView();
+
+// Start render loop
+function animate() {
+  renderer.render();
+  requestAnimationFrame(animate);
+}
+animate();
+```
+
+## Appearance triangle mapping
+
+`expandAppearanceCorners(mesh, sourceIndices, cornerUvs, targetIndices, targetCornerNormals, targetVertexCount)` binds
+canonical authored UVs to a mesh or streamed fragment. It validates the source
+topology against `mesh.appearanceSource`, preserves exact triangle positions, installs canonical target corner normals in renderer Y-up,
+and expands welded vertices when individual corners need different UVs. The
+returned mesh records the target canonical topology for a subsequent edit.
+The canonical target vertex count bounds index references; retained unused vertices
+mean that triangle-corner count is not a valid vertex-pool bound.
+Missing or stale provenance throws; matching array lengths alone are insufficient.
+
+`equivalentAppearanceGeometry(before, after)` checks exact triangle-corner
+equivalence, including compressed-to-expanded undo/redo. Its default also checks
+normal equality; `{ allowNormalChanges: true }` permits canonical shading changes
+while still requiring exact positions and corner order. Validate the current
+history state with the strict default before applying such a transition. Both functions consume
+canonical planner data; they do not calculate IFC mapping rules. Callers retain
+ownership of the input arrays and must treat shared geometry/provenance arrays
+as immutable. Expansion allocates one vertex per triangle corner and is an
+explicit authoring operation, outside ordinary model loading.
+
+## Reversible appearance previews
+
+After model streaming and GPU uploads finish, call
+`renderer.getAppearancePreview()` to obtain the scene's owned preview API.
+`begin({ expressId, modelIndex })` claims one renderer entity and returns a
+token. Resolve federation IDs before calling it. The model index is checked
+against every part so another model cannot be edited through the token.
+
+`update(token, parts)` takes every original mesh part in order. It preserves
+exact triangle positions/normals and ownership; corner expansion through
+`expandAppearanceCorners` may represent the same triangles with UV seams.
+New bitmap content requires a new texture identity. Input geometry, image and
+UV arrays are borrowed immutable data. Textured and ordinary untextured parts
+are supported, including owners sharing a flat GPU batch. Instanced geometry,
+per-vertex mixed-owner data, released CPU geometry and unfinished uploads are
+explicitly rejected.
+
+Replacement GPU resources are staged before replacing the current preview.
+Original resources remain owned by the token until `cancel(token)` restores
+them or `commit(token)` keeps the result and releases the originals. A cancelled
+or scene-invalidated issued token can be cancelled again safely; updates and
+commits with stale/foreign tokens fail. Model removal and scene teardown release
+hidden originals as well as active previews.
+
+For a multi-object command, `prepareCommit(tokens)` validates the entire group
+and returns an idempotent commit function. Changing any prepared draft fences
+that commit before it consumes an owner. The caller must coordinate this with
+its IFC/entity transaction and image leases; the renderer does not publish IFC
+changes or manage application history. Returned `AppearanceChange` records hold
+frozen CPU mesh wrappers for before/after history, never GPU handles. Retain
+the images and arrays as long as history needs them, and request a render after
+the application publishes the completed command.
+
+## Camera Controls
+
+### Configuration
+
+```typescript
+// Access camera directly
+const camera = renderer.getCamera();
+
+camera.setPosition(10, 10, 10);
+camera.setTarget(0, 0, 0);
+```
+
+### Camera Operations
+
+```typescript
+const camera = renderer.getCamera();
+
+// Fit camera to view all geometry
+renderer.fitToView();
+
+// Fit to specific bounds
+camera.fitToBounds(
+  { x: 0, y: 0, z: 0 },      // min
+  { x: 10, y: 5, z: 10 }     // max
+);
+
+// Animated fit to bounds
+await camera.frameBounds(
+  { x: 0, y: 0, z: 0 },
+  { x: 10, y: 5, z: 10 },
+  300  // duration in ms
+);
+
+// Set view preset (with model bounds)
+camera.setPresetView('front', modelBounds);  // 'front', 'back', 'left', 'right', 'top', 'bottom'
+
+// Animated camera movement
+await camera.animateTo(
+  { x: 20, y: 15, z: 20 },   // position
+  { x: 0, y: 0, z: 5 },      // target
+  500                         // duration
+);
+
+// Interactive controls
+camera.orbit(deltaX, deltaY);   // Rotate around target
+camera.pan(deltaX, deltaY);     // Move camera sideways
+camera.zoom(delta);             // Zoom in/out
+// Zoom in toward the surface under the cursor, stopping short of it (#5393):
+// camera.zoom(delta, false, x, y, w, h, false, renderer.raycastScene(x, y)?.intersection.point);
+```
+
+## Section Planes
+
+Interactive model slicing with semantic axis names.
+
+### Section Plane Types
+
+| Axis | Direction | Color | Use Case |
+|------|-----------|-------|----------|
+| `down` | Y-axis | Light Blue | Floor plans |
+| `front` | Z-axis | Green | Elevation views |
+| `side` | X-axis | Orange | Cross sections |
+
+### Creating Section Planes
+
+```typescript
+// Add a section plane
+const sectionPlane = {
+  axis: 'down' as const,    // 'down', 'front', or 'side'
+  position: 50,              // 0-100 percentage of model bounds
+  enabled: true,             // Active cutting (vs preview)
+  flipped: false             // Show opposite side
+};
+
+// Set in render options
+renderer.render({
+  sectionPlane: sectionPlane
+});
+```
+
+### Section Plane Controls
+
+```typescript
+// Update plane position
+sectionPlane.position = 75;  // Move to 75% of model height
+
+// Toggle between preview and cut modes
+sectionPlane.enabled = false;  // Preview mode (transparent)
+sectionPlane.enabled = true;   // Cut mode (active clipping)
+
+// Flip to show opposite side
+sectionPlane.flipped = true;
+
+// Storey-based range override
+sectionPlane.min = storeyElevation;
+sectionPlane.max = storeyElevation + storeyHeight;
+
+// Cut-surface rendering (both default true)
+sectionPlane.showCap = true;       // filled cap surfaces with screen-space hatch
+sectionPlane.showOutlines = true;  // polygon outlines on the cut surfaces
+
+// Arbitrary slice plane: providing a world-space unit normal + distance
+// bypasses axis/position/min/max entirely (face-pick section planes)
+sectionPlane.normal = [0.3, 0.9, 0.1];
+sectionPlane.distance = 12.5;
+```
+
+### Section Plane Visualization
+
+```mermaid
+graph TD
+    subgraph SectionPlane["Section Plane Rendering"]
+        Preview["Preview Pipeline"]
+        Cut["Cut Pipeline"]
+        Grid["Grid Visualization"]
+    end
+
+    Preview -->|"Respects depth"| Behind["Behind geometry"]
+    Cut -->|"Always visible"| Front["In front"]
+    Grid --> Minor["100 divisions"]
+    Grid --> Major["10 major cells"]
+    Grid --> Edge["Soft edge fade"]
+```
+
+### Section Plane Example
+
+```typescript
+import type { SectionPlane } from '@ifc-lite/renderer';
+
+// Interactive section plane control
+let sectionPlane: SectionPlane = {
+  axis: 'down',
+  position: 50,
+  enabled: true,
+  flipped: false
+};
+
+// Slider control
+slider.addEventListener('input', (e) => {
+  sectionPlane.position = parseFloat(e.target.value);
+});
+
+// Axis toggle
+axisButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    sectionPlane.axis = btn.dataset.axis as 'down' | 'front' | 'side';
+  });
+});
+
+// Flip toggle
+flipBtn.addEventListener('click', () => {
+  sectionPlane.flipped = !sectionPlane.flipped;
+});
+
+// Render with section plane
+function animate() {
+  renderer.render({ sectionPlane });
+  requestAnimationFrame(animate);
+}
+```
+
+## Snap Detection
+
+Advanced "magnetic" edge snapping for precision measurement and interaction.
+
+### Snap Types
+
+| Type | Description | Priority |
+|------|-------------|----------|
+| `vertex` | Snap to mesh vertices | Highest |
+| `edge` | Snap to edge lines | High |
+| `face` | Snap to face surfaces | Medium |
+| `face_center` | Snap to face centroids | Medium |
+| `point_cloud` | Snap to a point-cloud scan point | See below |
+
+Point-cloud snapping is produced by `raycastSceneMagnetic` (not
+`SnapDetector` itself) whenever point-cloud assets are loaded: the nearest
+scan point within a small screen-space tolerance of the cursor ray is
+returned, and a mesh vertex/edge/face snap is only overridden when the scan
+point is meaningfully *in front of* the mesh surface (beyond its own snap
+tolerance), so a scan draped over its as-designed model does not steal
+intended vertex snaps. It follows the same snap options: with
+`snapToVertices`/`snapToEdges`/`snapToFaces` all `false` point snapping is
+off too, and the optional `snapToPointClouds` flag overrides that default
+in either direction.
+
+### Basic Snap Detection
+
+```typescript
+// Raycast with snap detection
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  const result = renderer.raycastScene(x, y, {
+    snapOptions: {
+      snapToVertices: true,
+      snapToEdges: true,
+      snapToFaces: true,
+      snapRadius: 0.1,           // deprecated: ignored, screenSnapRadius is what is read
+      screenSnapRadius: 20       // 20 pixels
+    }
+  });
+
+  if (result?.snap) {
+    // Draw snap indicator at snap position
+    drawSnapIndicator(result.snap.position, result.snap.type);
+    console.log(`Snapped to ${result.snap.type} on entity #${result.snap.expressId}`);
+  }
+});
+```
+
+### Magnetic Edge Snapping
+
+"Stick and slide" behavior for precision edge measurement:
+
+```typescript
+let edgeLock = {
+  edge: null,
+  meshExpressId: null,
+  lockStrength: 0
+};
+
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  // Use magnetic snapping
+  const result = renderer.raycastSceneMagnetic(x, y, edgeLock, {
+    snapOptions: {
+      snapToVertices: true,
+      snapToEdges: true,
+      snapRadius: 0.1,          // deprecated: ignored
+      screenSnapRadius: 20
+    }
+  });
+
+  if (result.edgeLock.shouldLock) {
+    // Lock to this edge. lockStrength is maintained locally (renderer input
+    // only); the result never emits it, so grow it per frame while locked.
+    edgeLock = {
+      edge: result.edgeLock.edge,
+      meshExpressId: result.edgeLock.meshExpressId,
+      lockStrength: edgeLock.lockStrength + 0.05
+    };
+  } else if (result.edgeLock.shouldRelease) {
+    // Release the lock
+    edgeLock = { edge: null, meshExpressId: null, lockStrength: 0 };
+  }
+
+  if (result.snapTarget) {
+    const snap = result.snapTarget;
+
+    // Corner detection (vertex at edge intersection)
+    if (result.edgeLock.isCorner) {
+      console.log(`Corner with ${result.edgeLock.cornerValence} edges`);
+    }
+
+    // Position along edge (0-1)
+    console.log(`Edge position: ${result.edgeLock.edgeT}`);
+  }
+});
+```
+
+### Magnetic Snap Configuration
+
+```typescript
+const magneticConfig = {
+  // Attraction radius multipliers
+  EDGE_ATTRACTION_MULTIPLIER: 3.0,     // 3x base snap radius
+  CORNER_ATTRACTION_MULTIPLIER: 2.0,   // 2x edge radius
+
+  // Confidence boosts
+  CORNER_CONFIDENCE_BOOST: 0.15,
+
+  // Lock escape thresholds
+  EDGE_ESCAPE_MULTIPLIER: 2.5,         // Movement to escape edge lock
+  CORNER_ESCAPE_MULTIPLIER: 3.5,       // Movement to escape corner lock
+
+  // Lock strength
+  LOCK_STRENGTH_GROWTH: 0.05,          // Per frame growth
+  MAX_LOCK_STRENGTH: 1.5,
+
+  // Corner detection
+  MIN_CORNER_VALENCE: 2,               // Minimum edges at vertex
+  CORNER_THRESHOLD: 0.08               // % of edge length
+};
+```
+
+### Snap Target Structure
+
+```typescript
+interface SnapTarget {
+  type: 'vertex' | 'edge' | 'face' | 'face_center' | 'point_cloud';
+  position: { x: number; y: number; z: number };
+  normal?: { x: number; y: number; z: number };
+  expressId: number;
+  confidence: number;  // 0-1, higher is better
+  metadata?: {
+    vertices?: Vec3[];     // For edges/faces
+    edgeIndex?: number;
+    faceIndex?: number;
+  };
+}
+```
+
+## GPU Picking
+
+Depth-aware object selection supporting 100K+ meshes.
+
+### Basic Picking
+
+```typescript
+import { extractPropertiesOnDemand } from '@ifc-lite/parser';
+
+// Track selection state
+let selectedIds = new Set<number>();
+
+canvas.addEventListener('click', async (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  const hit = await renderer.pick(x, y);
+
+  if (hit !== null) {
+    const expressId = hit.expressId;
+    console.log(`Selected entity #${expressId}`);
+    selectedIds = new Set([expressId]);
+
+    // Get entity data using on-demand extraction
+    const props = extractPropertiesOnDemand(store, expressId);
+    displayProperties(props);
+  } else {
+    selectedIds.clear();
+  }
+
+  // Re-render with selection highlighting
+  renderer.render({ selectedIds });
+});
+```
+
+### Which representation item was picked
+
+`PickResult.expressId` names the product that was clicked. `PickResult.geometryItemId`
+names the `IfcRepresentationItem` that particular surface was built from, so a host can
+drill from one pane of a curtain wall down to its own entity in the IFC source instead of
+stopping at the wall. It is the same value under the same name as `MeshData.geometryItemId`
+from `@ifc-lite/geometry`, and it is reported on both pick paths: the GPU pick pass, and
+the CPU raycast fallback that every model past the pick-mesh budget takes.
+
+```typescript
+canvas.addEventListener('click', async (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const hit = await renderer.pick(e.clientX - rect.left, e.clientY - rect.top);
+  if (!hit) return;
+
+  console.log(`Product #${hit.expressId} ${store.entities.getTypeName(hit.expressId)}`);
+
+  if (hit.geometryItemId === undefined) {
+    // No item identity available for this hit. Not the same as "this product
+    // has no representation item" - see below.
+    return;
+  }
+
+  // Drill to the item's own STEP line in the original file. `entityIndex.byId`
+  // indexes every entity the file declares, representation items included; the
+  // entity table behind `store.entities` only carries products and relations,
+  // so it cannot resolve an item id.
+  const ref = store.entityIndex.byId.get(hit.geometryItemId);
+  if (ref) {
+    console.log(`Item #${ref.expressId} is a ${ref.type}`);
+    const stepLine = store.source.decodeUtf8(ref.byteOffset, ref.byteOffset + ref.byteLength);
+    console.log(stepLine); // #4711=IFCEXTRUDEDAREASOLID(...);
+  }
+});
+```
+
+`EntityRef` carries the byte range along with the type. When you hold the index as its
+concrete `CompactEntityIndex`, `getByteRange(id)` returns `{ byteOffset, byteLength }`
+on its own, without building an `EntityRef`. Its `maxExpressId` getter reads the
+highest indexed ID in constant time and returns `0` for an empty index.
+
+#### When `geometryItemId` is absent
+
+The key is left off the result, never written as `0`. A real id of `0` cannot happen
+because STEP express ids start at `#1`, so `hit.geometryItemId === undefined` is the only
+"no answer" state and it never collides with a valid id.
+
+Absent means **no item identity is available for this hit**, not that the product has no
+representation item. It is absent when:
+
+- the element fell back to the single merged mesh path, where one mesh stands for the
+  whole product;
+- the geometry came through the cached `IfcMappedItem` path, where a representation map's
+  items really are merged into one piece;
+- the hit landed on a colour-merged batch, which holds many entities at once, so whatever
+  item id the batch carries belongs to none of them individually.
+
+Every case in that list is geometry whose item identity was merged away before the pick
+ran. GPU-instanced occurrences are **not** in it: they carry their own item id, because
+the instanced wire format was extended to hold one. See
+[Item ids on instanced occurrences](./geometry.md#item-ids-on-instanced-occurrences) for
+that path, including how to tell a shard that declares no ids from a piece that has none.
+
+The list is the set of merge cases known today, not a closed set. Treat the check as the
+contract: read `geometryItemId` and handle `undefined`, rather than
+deciding up front which geometry can answer.
+
+Rectangle select stays product-level. `Renderer.pickRect` resolves to a `Set<number>` of
+express ids, which has no room for a per-item answer. Drill down with a single click on
+the piece you want.
+
+### Multi-Selection
+
+```typescript
+// Track selection state
+let selectedIds = new Set<number>();
+
+// Add to selection (Ctrl+click)
+function addToSelection(expressId: number) {
+  selectedIds.add(expressId);
+  renderer.render({ selectedIds });
+}
+
+// Clear selection
+function clearSelection() {
+  selectedIds.clear();
+  renderer.render({ selectedIds });
+}
+
+// Select multiple entities
+selectedIds = new Set([id1, id2, id3]);
+renderer.render({ selectedIds });
+```
+
+### Raycasting
+
+Scene raycasts and magnetic snapping include regular, batched, textured and
+instanced geometry. A textured surface in front of another object participates
+in nearest-surface selection, with the same hidden/isolation filters and retained
+local origins. CPU raycasts intersect triangles; texture alpha does not cut holes
+in the picking surface. `Renderer.raycastScene()` also uses the active section
+plane and crop box; when a front triangle is clipped, the ray continues to the
+nearest visible triangle behind it.
+
+Custom `RaycastEngine` scene adapters can optionally implement
+`getTexturedMeshes()` returning owners with `expressId` and optional `modelIndex`;
+`getMeshDataPieces` supplies their retained geometry. Existing adapters without
+that capability keep their regular/batched/instanced behavior. This does not add
+texture GPU handles to the `Renderer.getScene()` interface.
+
+```typescript
+// Full raycast with intersection details
+const result = renderer.raycastScene(x, y);
+
+if (result) {
+  const { intersection } = result;
+
+  console.log(`Hit point: ${intersection.point.x}, ${intersection.point.y}, ${intersection.point.z}`);
+  console.log(`Normal: ${intersection.normal.x}, ${intersection.normal.y}, ${intersection.normal.z}`);
+  console.log(`Distance: ${intersection.distance}`);
+  console.log(`Entity: #${intersection.expressId}`);
+  console.log(`Triangle: ${intersection.triangleIndex}`);
+  console.log(`Federation model: ${intersection.modelIndex}`);
+  console.log(`Representation item: ${intersection.geometryItemId}`);
+  console.log(`Evaluated-surface triangle: ${intersection.sourceTriangleIndex}`);
+}
+```
+
+`triangleIndex` is local to the rendered mesh piece. Use
+`sourceTriangleIndex` for persisted face masks: it follows
+`MeshData.appearanceSource.cornerIndices` through streaming fragments, UV seam
+expansion and textured/retained mask partitions. The key is absent when that
+mapping or the representation-item identity cannot be proved.
+
+## Visibility Control
+
+Visibility is controlled through `render()` options:
+
+```typescript
+// Track visibility state
+let hiddenIds = new Set<number>();
+let isolatedIds: Set<number> | null = null;
+
+// Hide specific entities
+hiddenIds = new Set([entity1.expressId, entity2.expressId]);
+renderer.render({ hiddenIds });
+
+// Isolate (show only these)
+isolatedIds = new Set([wallId, doorId]);
+renderer.render({ isolatedIds });
+
+// Clear isolation (show all)
+isolatedIds = null;
+renderer.render({ isolatedIds });
+
+// Hide by entity type (combine with parser data)
+const spaceIds = store.entityIndex.byType.get('IFCSPACE') ?? [];
+hiddenIds = new Set(spaceIds);
+renderer.render({ hiddenIds });
+
+// Combined visibility + selection
+renderer.render({
+  hiddenIds,
+  isolatedIds,
+  selectedIds
+});
+```
+
+### Basket Isolation (Viewer App)
+
+The viewer app provides a **basket** — an incremental isolation set that lets you build up a working set of entities interactively. Unlike simple isolation which replaces the set each time, the basket supports add/remove operations:
+
+| Operation | Keyboard | Toolbar | Context Menu | Description |
+|-----------|----------|---------|--------------|-------------|
+| **Isolate** | `I` | Isolate button | Isolate selection | Replace basket with current selection and isolate it |
+| **Set** | — | Set button | Set as Basket | Replace basket with current selection |
+| **Add** | `=` or `+` | `+` button | Add to Basket | Add current selection to basket |
+| **Remove** | `-` | `-` button | Remove from Basket (-) | Remove current selection from basket |
+| **Show All** | `A` | Eye icon | Show All | Clear every filter; see below |
+
+**Workflow example:**
+
+1. Click a wall, press `I` — basket now contains just that wall (everything else hidden)
+2. Cmd+Click two doors to multi-select them, press `=` or `+` — doors are added to the basket
+3. Click a window, press `=` or `+` — window added too
+4. Click the wall, press `-` — wall removed from basket, only doors and window remain
+
+The toolbar Set button shows a badge with the current basket count when active. Multi-select (Cmd/Ctrl+Click) works with all basket operations — select multiple entities first, then press `=` / `+` or `-` to add/remove them all at once.
+
+**Additional visibility shortcuts:**
+
+| Shortcut | Action |
+|----------|--------|
+| `Del` / `Backspace` | Hide selected entity |
+| `Space` | Hide selected entity (viewport-focused only) |
+| `A` | Show all (see below for what it clears and what it keeps) |
+| `Esc` | One step per press: cancel the gesture in progress, else leave the tool, else clear the selection. Never changes visibility |
+
+**What Show All clears.** Show All, the `A` key and the context menu's Show all use one visibility-reason table (`apps/viewer/src/lib/visibility/visibility-reasons.ts`). Home changes the camera pose and fit while leaving visibility intact. At 1 model and at N models alike, Show All clears:
+
+- manual hides outside the active lens's hide set;
+- isolation (and leaves the basket view);
+- X-ray ghosting;
+- the Class filter;
+- the storey filter and Solo mode;
+- Exploded mode (levels return to Stacked);
+- hidden federated models.
+
+It deliberately **keeps** four settings that are preferences rather than filters on this view:
+
+- the active lens, with its colours and its hides;
+- the class-type toggles (Spaces, Openings, Site, …), which are remembered between sessions;
+- the Model/Types view mode;
+- classes an embedding page hid.
+
+If you manually hid an element before the active lens also hid it, the element
+stays manually hidden when you turn the lens off. Show All keeps that overlap
+with the lens without transferring ownership of your hide to the lens.
+
+## Render Options
+
+```typescript
+interface RenderOptions {
+  // Clear color
+  clearColor?: [number, number, number, number];
+
+  // Performance
+  enableDepthTest?: boolean;        // deprecated: declared but never read
+  enableFrustumCulling?: boolean;
+  spatialIndex?: SpatialIndex;
+
+  // Visibility filtering
+  hiddenIds?: Set<number>;           // Hide these meshes
+  isolatedIds?: Set<number> | null;  // Only show these (null = show all)
+
+  // Selection
+  selectedId?: number | null;        // Single selection
+  selectedIds?: Set<number>;         // Multi-selection
+
+  // Section planes
+  sectionPlane?: SectionPlane;
+
+  // Streaming mode
+  isStreaming?: boolean;             // Skip expensive ops during load
+}
+
+renderer.render({
+  clearColor: [0.9, 0.9, 0.9, 1.0],
+  enableFrustumCulling: true,
+  hiddenIds: new Set([123, 456]),
+  selectedIds: new Set([789]),
+  sectionPlane: {
+    axis: 'down',
+    position: 50,
+    enabled: true
+  }
+});
+```
+
+## Materials and Colors
+
+IFClite uses colors from the IFC file. Mesh colors are determined during geometry processing based on IFC styles and material definitions.
+
+```typescript
+// Colors are set when loading geometry
+// Each mesh has a color property: [r, g, b, a] (0-1 range)
+const geometryResult = await geometry.process(new Uint8Array(buffer));
+
+// Meshes include colors from IFC materials/styles
+for (const mesh of geometryResult.meshes) {
+  console.log(`Entity #${mesh.expressId} color:`, mesh.color);
+}
+```
+
+!!! note "Custom Colors"
+    Dynamic color changes per-entity are not currently supported in the public API.
+    Colors are baked into geometry at load time. For advanced use cases,
+    see the viewer app source code for how batch rendering handles colors.
+
+## Performance Optimization
+
+### Frustum Culling
+
+Frustum culling is enabled by passing a spatial index to render options:
+
+```typescript
+import { buildSpatialIndex } from '@ifc-lite/spatial';
+
+// Build spatial index from meshes
+const spatialIndex = buildSpatialIndex(geometryResult.meshes);
+
+// Enable frustum culling in render
+renderer.render({
+  enableFrustumCulling: true,
+  spatialIndex
+});
+```
+
+## Spatial Indexing API
+
+The `@ifc-lite/spatial` package provides spatial indexing utilities for efficient geometry queries and frustum culling.
+
+### buildSpatialIndex
+
+Builds a BVH (Bounding Volume Hierarchy) spatial index from geometry meshes for fast spatial queries.
+
+```typescript
+import type { SpatialIndex } from '@ifc-lite/spatial';
+import type { MeshData } from '@ifc-lite/geometry';
+
+/**
+ * Builds a spatial index from an array of mesh data
+ * @param meshes - Array of MeshData objects from GeometryProcessor
+ * @returns BVH spatial index that implements SpatialIndex interface
+ */
+declare function buildSpatialIndex(meshes: MeshData[]): SpatialIndex;
+```
+
+**Parameters:**
+- `meshes: MeshData[]` - Array of mesh data objects, typically from `GeometryProcessor.process()` result
+
+**Returns:**
+- `SpatialIndex` - A BVH spatial index with methods for AABB queries, raycasting, and frustum queries
+
+**Usage Example:**
+
+```typescript
+import { GeometryProcessor } from '@ifc-lite/geometry';
+import { buildSpatialIndex } from '@ifc-lite/spatial';
+import { Renderer } from '@ifc-lite/renderer';
+
+const geometry = new GeometryProcessor();
+await geometry.init();
+
+// Process geometry
+const geometryResult = await geometry.process(new Uint8Array(buffer));
+
+// Build spatial index for frustum culling
+const spatialIndex = buildSpatialIndex(geometryResult.meshes);
+
+// Load geometry into renderer
+const renderer = new Renderer(canvas);
+await renderer.init();
+renderer.loadGeometry(geometryResult);
+
+// Render with frustum culling enabled
+renderer.render({
+  enableFrustumCulling: true,
+  spatialIndex
+});
+```
+
+### SpatialIndex Interface
+
+The spatial index provides efficient spatial queries:
+
+```typescript
+interface SpatialIndex {
+  /**
+   * Query AABB - returns expressIds of meshes that intersect the query bounds
+   * @param bounds - Axis-aligned bounding box to query
+   * @returns Array of expressIds for meshes intersecting the bounds
+   */
+  queryAABB(bounds: AABB): number[];
+
+  /**
+   * Raycast - returns expressIds of meshes hit by ray
+   * @param origin - Ray origin point [x, y, z]
+   * @param direction - Ray direction vector [x, y, z] (normalized)
+   * @returns Array of expressIds for meshes hit by the ray
+   */
+  raycast(origin: [number, number, number], direction: [number, number, number]): number[];
+
+  /**
+   * Query frustum - returns expressIds of meshes visible in frustum
+   * @param frustum - Camera frustum planes
+   * @returns Array of expressIds for meshes visible in the frustum
+   */
+  queryFrustum(frustum: Frustum): number[];
+}
+```
+
+### Exported Types
+
+```typescript
+// AABB (Axis-Aligned Bounding Box)
+interface AABB {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
+// Frustum planes
+interface Frustum {
+  planes: Plane[];
+}
+
+interface Plane {
+  normal: [number, number, number];
+  distance: number;
+}
+```
+
+### BVH Acceleration
+
+The renderer uses a Bounding Volume Hierarchy for fast raycasting:
+
+```typescript
+// BVH is built automatically for CPU raycasting
+// For large models (100K+ meshes), ray intersection is O(log n)
+
+// Clear BVH cache when geometry changes significantly
+renderer.invalidateBVHCache();
+renderer.clearCaches();
+```
+
+### Color Batching
+
+Meshes are automatically grouped by color for efficient rendering:
+
+```typescript
+// Batching happens internally in loadGeometry() and addMeshes()
+// Multiple meshes with the same color = single draw call
+
+// For streaming, use isStreaming flag to throttle batch rebuilding
+renderer.addMeshes(meshes, true);  // isStreaming = true
+```
+
+### GPU Instancing
+
+Repeated opaque geometry is production-ready on a dedicated GPU-instancing
+path: unique mesh templates are stored once and drawn with per-occurrence
+transform/color buffers, which keeps draw calls and GPU memory low on models
+with heavy repetition (steel connections, bolts, standard components).
+
+The geometry processor emits packed instanced shards on its streaming batch
+events (see the [Geometry Guide](geometry.md)); decode and upload them to the
+scene:
+
+```typescript
+import { decodeInstancedShard } from '@ifc-lite/geometry';
+
+const device = renderer.getGPUDevice();
+
+for await (const event of geometry.processAdaptive(new Uint8Array(buffer))) {
+  if (event.type === 'batch') {
+    renderer.addMeshes(event.meshes, true);
+    for (const bytes of event.instancedShards ?? []) {
+      const shard = decodeInstancedShard(new Uint8Array(bytes));
+      if (shard && device) renderer.getScene().addInstancedShard(device, shard);
+    }
+  }
+}
+```
+
+Selection, hide/isolate, section planes, and picking all work on instanced
+occurrences; the renderer mirrors `selectedIds`, `hiddenIds`, and
+`isolatedIds` onto the instanced pass automatically. Instancing is
+primary-model only: disable it (`enableInstancing: false` on the
+`GeometryProcessor`) for federated multi-model loads.
+
+## Annotation Overlays
+
+IFC annotation content — dimension lines, leaders, room labels, grid axes and their
+bubbles — is uploaded separately from meshed geometry, as world-space lines, texts
+and filled regions.
+
+```typescript
+import type { SymbolicTextInput, SymbolicFillInput } from '@ifc-lite/renderer';
+
+const labels: SymbolicTextInput[] = [
+  {
+    worldPos: [12, 3, 4],
+    dirX: 1,
+    dirZ: 0,
+    height: 0.25,
+    content: 'A',
+    alignment: 'center',
+  },
+];
+
+renderer.uploadAnnotationTexts3D(labels);
+```
+
+Each upload REPLACES the whole array, so pass everything that should be visible;
+an empty array clears the channel.
+
+### Keeping content out of the camera framing
+
+By default every uploaded text and fill grows the model's bounding box, so a
+camera fit or a "zoom to extents" will frame it. That is right for annotations,
+which are often the only content a drawing-like file has. It is wrong for
+reference content that deliberately reaches past the building — a grid bubble
+sits beyond the end of its axis, so framing on it pushes the model off screen.
+
+Set `definesExtent: false` to draw an item without letting the scene bounds grow
+to it:
+
+```typescript
+import type { SymbolicFillInput } from '@ifc-lite/renderer';
+
+const gridBubble: SymbolicFillInput = {
+  points: new Float32Array([0, 0, 1, 0, 1, 1]),
+  holesOffsets: new Uint32Array(0),
+  worldY: 3,
+  color: [0.2, 0.2, 0.2, 1],
+  // Drawn, but the camera will not frame on it.
+  definesExtent: false,
+};
+
+renderer.uploadAnnotationFills3D([gridBubble]);
+```
+
+The field is optional and defaults to `true`, so existing callers keep the
+behaviour they had. It is set per item rather than per call because an upload
+replaces the whole array — one call cannot carry both a framing annotation and a
+non-framing grid bubble otherwise.
+
+The equivalent for 3D line overlays is keyed by channel rather than per item:
+`setLineOverlay('annotation', …)` grows the bounds and `setLineOverlay('grid', …)`
+does not. The `centreline` channel is also non-framing: it is intended for a
+selected element's analytic directrix, and clearing it with
+`setLineOverlay('centreline', null)` leaves the other line channels alone.
+The centreline drawing remains visible as x-ray context through section and
+crop cuts. Magnetic snapping to its exact source curve still follows the active
+pick clipping, so a clipped-out part of that drawing is not a snap target.
+
+## Complete Example
+
+```typescript
+import { Renderer } from '@ifc-lite/renderer';
+import { IfcServerClient } from '@ifc-lite/server-client';
+
+async function createViewer() {
+  const canvas = document.getElementById('viewer') as HTMLCanvasElement;
+  const renderer = new Renderer(canvas);
+  await renderer.init();
+
+  // Load from server
+  const client = new IfcServerClient({ baseUrl: 'http://localhost:3001' });
+  const result = await client.parseParquet(file);
+
+  // Server meshes use snake_case fields (express_id); map them into the
+  // renderer's camelCase MeshData shape before uploading.
+  renderer.addMeshes(result.meshes.map((m) => ({
+    expressId: m.express_id,
+    ifcType: m.ifc_type,
+    positions: m.positions,
+    normals: m.normals,
+    indices: m.indices,
+    color: m.color,
+  })));
+  renderer.fitToView();
+
+  // Visibility and selection state
+  let selectedIds = new Set<number>();
+  let hiddenIds = new Set<number>();
+  let sectionPlane: { axis: 'down' | 'front' | 'side'; position: number; enabled: boolean } | undefined;
+
+  // Edge lock state for magnetic snapping
+  let edgeLock = { edge: null, meshExpressId: null, lockStrength: 0 };
+
+  // Click handler with picking
+  canvas.addEventListener('click', async (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const hit = await renderer.pick(e.clientX - rect.left, e.clientY - rect.top);
+
+    if (hit !== null) {
+      selectedIds = new Set([hit.expressId]);
+    } else {
+      selectedIds.clear();
+    }
+
+    // Re-render with updated selection
+    renderer.render({ selectedIds, hiddenIds, sectionPlane });
+  });
+
+  // Mousemove handler with magnetic snapping
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const result = renderer.raycastSceneMagnetic(x, y, edgeLock, {
+      snapOptions: { snapToVertices: true, snapToEdges: true }
+    });
+
+    if (result.edgeLock.shouldLock) {
+      // Rebuild the EdgeLockInput; the result has no lockStrength, so keep
+      // it as a locally maintained number.
+      edgeLock = {
+        edge: result.edgeLock.edge,
+        meshExpressId: result.edgeLock.meshExpressId,
+        lockStrength: edgeLock.lockStrength + 0.05
+      };
+    } else if (result.edgeLock.shouldRelease) {
+      edgeLock = { edge: null, meshExpressId: null, lockStrength: 0 };
+    }
+
+    if (result.snapTarget) {
+      showSnapIndicator(result.snapTarget);
+    }
+  });
+
+  // Render loop
+  function animate() {
+    renderer.render({
+      sectionPlane,
+      selectedIds,
+      hiddenIds
+    });
+    requestAnimationFrame(animate);
+  }
+  animate();
+
+  return { 
+    renderer, 
+    setSectionPlane: (p: typeof sectionPlane) => { sectionPlane = p; },
+    hide: (ids: number[]) => { ids.forEach(id => hiddenIds.add(id)); },
+    show: (ids: number[]) => { ids.forEach(id => hiddenIds.delete(id)); }
+  };
+}
+```
+
+## Next Steps
+
+- [Geometry Guide](geometry.md) - Geometry processing
+- [Query Guide](querying.md) - Query entity data
+- [Server Guide](server.md) - Server-based rendering
+- [2D Drawing Guide](drawing-2d.md) - Generate 2D plans and elevations
+- [API Reference](../api/typescript.md) - Complete API docs
+
+Preview cancellation rejoins only partitions of the same original flat batch,
+after every related draft closes. Committed textured owners remain separate;
+undoing them can rejoin their original cohort. Restoration respects original
+vertex/index allocation bounds and current colors. If replacement allocation
+fails, split batches remain drawable and the renderer reports a warning.
+Cohort metadata is cleared when its entities or scene are removed.
+
+## Model workspace translations
+
+`Renderer.setModelTranslation(modelIndex, [x, y, z])` sets an absolute manual
+translation in **renderer Y-up metres**. It applies to flat, textured, instanced
+and embedded pointcloud geometry assigned that model index, including later
+uploads. Pass `[0, 0, 0]` to reset. Keep each loaded model's index stable until
+it is removed; do not compact indices while its geometry remains on the GPU.
+`renderer.getScene().getModelTranslation(modelIndex)` reads the current offset
+in the same Y-up metre frame. It defaults to zero before a placement is set.
+The scene retains occurrence records and bounds after releasing CPU vertices,
+so whole-model movement remains available in GPU-resident mode.
+
+`Renderer.setModelRotation(modelIndex, angle, [px, py, pz])` turns a model's
+GPU-instanced occurrences about the vertical (+Y) axis through the render-frame
+pivot `(px, pz)` (`py` is unused — the axis is always vertical); `angle === 0`
+clears it. It is the instanced-geometry counterpart to `setModelTranslation`
+and composes with it (rotate about the pivot, then translate). It does not
+touch flat, authored, batched or point-cloud geometry — an instanced-only
+model's flat pieces, if any, must be rotated separately (e.g. by the caller's
+own bake).
+
+For a separately streamed scan, call
+`Renderer.setPointCloudTranslation(handle, [x, y, z])`. Its manual translation
+composes after the matrix passed to `setPointCloudTransform`, which accepts
+`Float64Array` as well as `Float32Array`. Pass coarse alignment matrices in
+float64 so cancellation with a manual correction happens before GPU rounding.
+`getPointCloudTransform(handle)` returns the final draw matrix for CPU spatial
+consumers. `getModelPlacementBounds(modelIndex, handle?)` returns placed bounds
+for framing a model and its streamed scan.
+
+These APIs move workspace geometry; they do not rewrite source IFC placements
+or point records. The web viewer supplies transactions, undo, persistence and
+engineering Z-up inputs on top of them. See [Repositioning models and
+pointclouds](federation.md#repositioning-models-and-pointclouds).
+
+
+## Registered raster references
+
+`renderer.getReferenceImages()` manages image and PDF-page rasters in a separate string-ID namespace. `set({ id, bitmap, corners, visible, locked, opacity }, signal?)` uploads a raster and resolves after GPU validation. Corners are renderer Y-up coordinates, ordered top-left, top-right, bottom-right, bottom-left. The viewer derives them from immutable engineering Z-up metre registration using its existing federation offset; an RTC-only rebase preserves the registration, while an incompatible map frame reports a mismatch.
+
+Keep the bitmap's inventory lease until `set` settles. The renderer owns uploaded texture and buffer resources, and never closes the caller's bitmap. Replacement retains the previous valid image until upload succeeds. `remove(id)` and `clear()` invalidate pending publication and release resources; device loss and renderer destruction do the same. Draft controllers should remove only their own IDs, rather than clearing registered references.
+
+`await references.pick(x, y, options)` uses canvas-relative CSS pixels and the same visibility options as IFC picking. It returns `{ referenceId, point, distance }` separately from IFC selection. Hidden, locked and zero-opacity references do not select. The existing scene picker supplies occlusion depth; its CPU fallback uses the picked owner's precise raycast and conservatively refuses a reference when depth cannot be recovered. Picking uses the rectangular page footprint, including transparent pixels. References depth-test against IFC geometry without writing IFC object IDs or changing BIM bounds. Overlapping translucent planes use back-to-front ordering; intersecting translucent planes retain ordinary alpha-sorting limitations.
+
+This is a visual registration API. It does not create `IfcAnnotation`, persist image bytes, or promise arbitrary CRS reprojection. Application metadata/history and IFC authoring own those operations independently.
+
+### Creating an authored owner atomically
+
+`renderer.prepareAuthoredOwner(parts)` uploads all canonical `MeshData` parts for one
+new IFC owner, including separate colours and optional retained textures, while keeping it outside the visible scene and picking index. The owner
+must not already exist, and every part must have the same object and model identity.
+`prepareTexturedOwner(mesh)` remains the single textured-part convenience entry point.
+Keep the borrowed mesh buffers immutable until disposal. Clear/rebuild or placement
+changes invalidate an outstanding preparation. Call the returned `commit()` after the matching IFC
+transaction is ready, then publish the model/history state in the same synchronous
+turn. Always call `dispose()` in `finally`; it releases an uncommitted upload and
+leaves a committed scene owner intact. Keep the source image retained through the
+owner's model and undo history lifetimes. This API inserts native-produced geometry;
+it does not construct IFC entities or synthesize geometry from a reference image.

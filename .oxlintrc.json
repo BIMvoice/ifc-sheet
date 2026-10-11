@@ -1,0 +1,174 @@
+// ERROR = the gate. Only rules whose every hit in this repo was a real defect;
+// a rule here fails CI. WARN = visible in the output, not blocking.
+//
+// `"categories": {}` does NOT switch oxlint's defaults off: about 35 further
+// rules run at warn severity, so 98 rules run in total and a rule you cannot
+// find below is one of those. The ERROR tier is exactly this list.
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "unicorn",
+    "typescript",
+    "oxc",
+    // #5607: the plugin's correctness rules run at the default WARN, so none
+    // is a gate here. scripts/check-jsx-a11y.mjs ratchets their per-file
+    // counts against scripts/jsx-a11y-baseline.json instead.
+    "jsx-a11y"
+  ],
+  "categories": {},
+  "rules": {
+    "no-async-promise-executor": "error",
+    "no-await-in-loop": "off",
+    "no-compare-neg-zero": "error",
+    "no-cond-assign": "error",
+    "no-const-assign": "error",
+    "no-constant-binary-expression": "error",
+    "no-control-regex": "error",
+    "no-debugger": "error",
+    "no-dupe-class-members": "error",
+    "no-dupe-else-if": "error",
+    "no-dupe-keys": "error",
+    "no-duplicate-case": "error",
+    "no-empty-character-class": "error",
+    "no-empty-pattern": "error",
+    "no-ex-assign": "error",
+    "no-fallthrough": "error",
+    "no-func-assign": "error",
+    "no-import-assign": "error",
+    "no-inner-declarations": "error",
+    "no-invalid-regexp": "error",
+    // Stated, not inherited: oxlint <=1.78 defaulted skipComments to true and
+    // this repo relied on that; 1.79 reports four comment hits (#3290), each an
+    // invisible character the comment is DESCRIBING. Two of them are load-bearing:
+    // the ZWSP in `packages/*<ZWSP>/src/**.ts` is what stops the text reading `*/`
+    // and closing its own block comment early.
+    "no-irregular-whitespace": ["error", { "skipComments": true }],
+    "no-new-native-nonconstructor": "error",
+    "no-obj-calls": "error",
+    "no-self-assign": "error",
+    "no-self-compare": "error",
+    "no-setter-return": "error",
+    "no-sparse-arrays": "error",
+    "no-template-curly-in-string": "error",
+    "no-this-before-super": "error",
+    "no-unreachable": "error",
+    "no-unsafe-finally": "error",
+    "no-unsafe-negation": "error",
+    "no-useless-backreference": "error",
+    "no-useless-catch": "error",
+    "no-with": "error",
+    "require-yield": "error",
+    "use-isnan": "error",
+    "valid-typeof": "error",
+    "typescript/no-duplicate-enum-values": "error",
+    "typescript/no-extra-non-null-assertion": "error",
+    "typescript/no-misused-new": "error",
+    "typescript/no-non-null-asserted-optional-chain": "error",
+    "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/no-useless-empty-export": "error",
+    "typescript/prefer-as-const": "error",
+    "unicorn/no-await-in-promise-methods": "error",
+    "unicorn/no-invalid-fetch-options": "error",
+    "unicorn/no-invalid-remove-event-listener": "error",
+    "unicorn/no-single-promise-in-promise-methods": "error",
+    "unicorn/no-thenable": "error",
+    "unicorn/no-unnecessary-await": "error",
+    "unicorn/no-useless-fallback-in-spread": "warn",
+    "unicorn/no-useless-length-check": "warn",
+    "unicorn/no-useless-spread": "warn",
+    "unicorn/no-new-array": "off",
+    "eslint/no-unused-vars": "warn",
+    "eslint/no-unused-expressions": "warn",
+    "eslint/no-useless-escape": "warn",
+    "eslint/no-unsafe-optional-chaining": "warn",
+    "eslint/no-loss-of-precision": "error",
+    "oxc/erasing-op": "off",
+    "oxc/only-used-in-recursion": "warn",
+    // #5204: `@ifc-lite/data`'s raw ENTITIES_IFC4 lists 24 entities IFC4 does
+    // not declare and a `TagList` IFC4 never had. Production code reads the
+    // checked table instead; the overrides below are the files allowed the
+    // raw one, each for a stated reason.
+    "no-restricted-imports": ["error", {
+      "paths": [{
+        "name": "@ifc-lite/data",
+        "importNames": ["ENTITIES_IFC4"],
+        "message": "Import ENTITIES_IFC4_EXPRESS instead: the raw IFC4 table carries entities and attributes IFC4 does not declare (#5204)."
+      }]
+    }]
+  },
+  "overrides": [
+    {
+      // codegen, whose IFC4_FAMILY catalog is generated from the raw table as
+      // committed; and tests, which use the raw table as a fixture or as the
+      // thing under test. Inside @ifc-lite/data the table is a relative
+      // import, which this rule does not match.
+      "files": [
+        "packages/codegen/src/generator.ts",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/test/**"
+      ],
+      "rules": { "no-restricted-imports": "off" }
+    },
+    {
+      // #5403: the raw capture methods throw InvalidStateError / NotFoundError
+      // in states a pointer handler cannot rule out (element detached, pointer
+      // lock held, pointer already released), aborting the drag. In the viewer
+      // `src/lib/pointer-capture.ts` is the one call site. Scoped to the viewer
+      // because examples/ are standalone and cannot import its helper.
+      "files": ["apps/viewer/src/**"],
+      "rules": {
+        "no-restricted-properties": ["error",
+          {
+            "property": "setPointerCapture",
+            "message": "Use capturePointer from apps/viewer/src/lib/pointer-capture.ts: the raw call throws when the pointer is no longer active (#5403)."
+          },
+          {
+            "property": "releasePointerCapture",
+            "message": "Use releasePointer from apps/viewer/src/lib/pointer-capture.ts: the raw call throws when the pointer is no longer active (#5403)."
+          }
+        ]
+      }
+    },
+    {
+      // Tests stub the raw capture methods on fakes and prototypes; they never
+      // drive a real pointer, so the #5403 throw cannot happen there.
+      "files": ["apps/viewer/src/**/*.test.ts", "apps/viewer/src/**/*.test.tsx", "apps/viewer/src/test/**"],
+      "rules": { "no-restricted-properties": "off" }
+    },
+    {
+      // #5813: native dialogs block rendering and have no shared focus contract.
+      "files": ["apps/viewer/src/**"],
+      "rules": { "no-alert": "error" }
+    },
+    {
+      "files": ["apps/viewer/src/**/*.test.ts", "apps/viewer/src/**/*.test.tsx", "apps/viewer/src/test/**"],
+      "rules": { "no-alert": "off" }
+    },
+    {
+      // #5814: keep the loading icon and accessibility behavior in Spinner.
+      "files": ["apps/viewer/src/components/**/*.tsx"],
+      "excludeFiles": ["apps/viewer/src/components/**/*.test.tsx", "apps/viewer/src/components/**/test/**"],
+      "rules": { "no-restricted-imports": ["error", {
+        "paths": [
+          { "name": "@ifc-lite/data", "importNames": ["ENTITIES_IFC4"], "message": "Import ENTITIES_IFC4_EXPRESS instead (#5204)." },
+          { "name": "lucide-react", "importNames": ["Loader2"], "message": "Use the shared Spinner from components/ui/spinner (#5814)." }
+        ]
+      }] }
+    },
+    {
+      "files": ["apps/viewer/src/components/ui/spinner.tsx"],
+      "rules": { "no-restricted-imports": "off" }
+    }
+  ],
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/pkg/**",
+    "**/node_modules/**",
+    "**/*.d.ts",
+    "apps/viewer/src/lib/scripts/templates/**",
+    "**/generated/**",
+    "**/__fixtures__/**",
+    "apps/landing/**"
+  ]
+}

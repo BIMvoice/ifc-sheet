@@ -1,0 +1,78 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * RemoteBackend — implements BimBackend by proxying all calls over a Transport.
+ *
+ * Used when the SDK is in a different context than the viewer (cross-tab, iframe, etc).
+ * Each typed namespace is a Proxy that throws synchronously, since the remote transport
+ * requires async implementation (future iteration).
+ */
+
+import type {
+  BimBackend,
+  Transport,
+  BimEventType,
+  ModelBackendMethods,
+  QueryBackendMethods,
+  SelectionBackendMethods,
+  VisibilityBackendMethods,
+  ViewerBackendMethods,
+  MutateBackendMethods,
+  StoreBackendMethods,
+  SpatialBackendMethods,
+  ExportBackendMethods,
+  LensBackendMethods,
+  FilesBackendMethods,
+  ScheduleBackendMethods,
+  StructuralBackendMethods,
+  CostBackendMethods,
+} from '../types.js';
+
+/**
+ * `optional` names methods the backend contract marks optional and a remote
+ * backend does not provide: they read as absent, so a namespace that probes
+ * them (`backend.viewer.getRenderFrameOffset?.()`) falls back instead of
+ * throwing.
+ */
+function makeRemoteProxy<T extends object>(namespace: string, optional: readonly string[] = []): T {
+  return new Proxy(Object.create(null) as T, {
+    get(_, method: string) {
+      if (optional.includes(method)) return undefined;
+      return (..._args: unknown[]): never => {
+        throw new Error(
+          `RemoteBackend: Cannot call ${namespace}.${method}() synchronously. ` +
+          `Remote transport requires async implementation.`
+        );
+      };
+    },
+  });
+}
+
+export class RemoteBackend implements BimBackend {
+  readonly model: ModelBackendMethods = makeRemoteProxy('model');
+  readonly query: QueryBackendMethods = makeRemoteProxy('query');
+  readonly selection: SelectionBackendMethods = makeRemoteProxy('selection');
+  readonly visibility: VisibilityBackendMethods = makeRemoteProxy('visibility');
+  readonly viewer: ViewerBackendMethods = makeRemoteProxy('viewer', ['getRenderFrameOffset']);
+  readonly mutate: MutateBackendMethods = makeRemoteProxy('mutate');
+  readonly store: StoreBackendMethods = makeRemoteProxy('store');
+  readonly spatial: SpatialBackendMethods = makeRemoteProxy('spatial');
+  readonly export: ExportBackendMethods = makeRemoteProxy('export');
+  readonly lens: LensBackendMethods = makeRemoteProxy('lens');
+  readonly files: FilesBackendMethods = makeRemoteProxy('files');
+  readonly schedule: ScheduleBackendMethods = makeRemoteProxy('schedule');
+  readonly structural: StructuralBackendMethods = makeRemoteProxy('structural');
+  readonly cost: CostBackendMethods = makeRemoteProxy('cost');
+
+  constructor(private transport: Transport) {}
+
+  subscribe(event: BimEventType, handler: (data: unknown) => void): () => void {
+    return this.transport.subscribe((sdkEvent) => {
+      if (sdkEvent.type === event) {
+        handler(sdkEvent.data);
+      }
+    });
+  }
+}

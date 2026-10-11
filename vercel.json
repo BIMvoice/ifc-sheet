@@ -1,0 +1,125 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "bash scripts/vercel-build.sh '@ifc-lite/viewer...'",
+  "outputDirectory": "apps/viewer/dist",
+  "installCommand": "bash scripts/vercel-install.sh",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/autodesk/:path*",
+      "destination": "https://autodesk-production-50bc.up.railway.app/api/autodesk/:path*"
+    },
+    {
+      "source": "/api/cloud/:path*",
+      "destination": "https://cloud-production-6b9b.up.railway.app/api/cloud/:path*"
+    },
+    {
+      "source": "/oauth/autodesk/callback",
+      "destination": "/oauth/autodesk/callback.html"
+    },
+    {
+      "source": "/api/epsg/:path*",
+      "destination": "https://epsg.io/:path*"
+    },
+    {
+      "source": "/api/bsdd/:path*",
+      "destination": "https://api.bsdd.buildingsmart.org/:path*"
+    },
+    {
+      "source": "/api/dalux/:path*",
+      "destination": "/api/dalux?path=:path*"
+    },
+    {
+      "source": "/oauth/dropbox/callback",
+      "destination": "/oauth/dropbox/callback.html"
+    },
+    {
+      "source": "/oauth/msgraph/callback",
+      "destination": "/oauth/msgraph/callback.html"
+    },
+    {
+      "source": "/oauth/bcf/callback",
+      "destination": "/oauth/bcf/callback.html"
+    },
+    {
+      "source": "/mcp",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/mcp/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/((?!.*\\.).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/oauth/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "credentialless"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)\\.wasm",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/wasm"
+        }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,375 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The inline editor for one chart spec: title, type, dimension (a column of
+ * the dataset), an optional stack column, the measure, and top-N. Native
+ * selects, like the clash panel's — nothing here needs a portal.
+ */
+import { useMemo, useState } from 'react';
+import { HelpCircle } from 'lucide-react';
+import { trimSelectorWhitespace } from '@ifc-lite/query';
+import { CHART_FILTER_NOT_APPLICABLE_SOURCES, elementFieldColumn, elementFieldColumnId, type ChartDataset, type ChartSource, type ChartSpec, type ChartType, type ElementFieldBinding } from '@ifc-lite/charts';
+import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n/useTranslation';
+import { readChartFilter } from '@/lib/charts/source-filter';
+import { useViewerStore } from '@/store';
+import { groupsToSelectorText, type FilterGroup } from '@ifc-lite/rules';
+import { FilterGroupEditor, type FilterGroupEditorState } from '../FilterGroupEditor';
+import { DOCS_URL, useActiveSchemaVersion } from '../SearchModal.filter.selector';
+import { SelectorFeedbackList, type SelectorFeedback } from '../SearchModal.filter.feedback';
+import { ElementFieldPicker } from './ElementFieldPicker';
+import { ChartSourcePicker, SOURCE_LABELS } from './ChartSourcePicker';
+import { resolveComparisonChartSource } from '@/lib/charts/comparison-source';
+import { isSavedComparison } from '@/lib/compare/savedComparisons';
+import { dimensionColumns, draftToSpec, editorColumns, specToDraft, type ChartDraft } from './chart-editor-draft';
+import type { ElementFieldCatalog } from '@/lib/charts/element-field-reader';
+
+const FILTER_PLACEHOLDER = 'IfcWall, Pset_WallCommon.FireRating=/REI.*/';
+
+const TYPE_LABELS: Record<ChartType, string> = {
+  bar: 'Bar',
+  stackedBar: 'Stacked bar',
+  pie: 'Pie',
+  treemap: 'Treemap',
+  histogram: 'Histogram',
+  timeline: 'Timeline (per week)',
+  elementCount: 'Element Count',
+};
+
+/** One detection rule of the current clash run, for the "Clash rule" picker
+ *  (#5156) — the `ClashRule.id`/`name` pair `ClashPanel.tsx` already reads
+ *  off `result.rulesRun`, passed down rather than read from the store here
+ *  so the editor stays a plain function of its props. */
+export interface ClashRuleOption {
+  id: string;
+  name: string;
+}
+
+/** Module-level so a caller that passes no rules does not hand the memo a
+ *  fresh `[]` every render (same reasoning as `useChartDatasets`'s `NO_FIELDS`). */
+const NO_CLASH_RULES: readonly ClashRuleOption[] = [];
+
+export interface ChartEditorProps {
+  spec: ChartSpec;
+  datasets: Record<ChartSource, ChartDataset>;
+  onSave: (spec: ChartSpec) => void;
+  onCancel: () => void;
+  elementFieldCatalog: ElementFieldCatalog;
+  elementFieldCatalogLoading: boolean;
+  /** The rules of the current clash run, for `filter.clashRule` (#5156). */
+  clashRuleOptions?: readonly ClashRuleOption[];
+  /** New charts bind to a completed saved comparison; legacy charts stay readable. */
+  isNew?: boolean;
+}
+
+export function ChartEditor({ spec, datasets, onSave, onCancel, elementFieldCatalog, elementFieldCatalogLoading, clashRuleOptions = NO_CLASH_RULES, isNew = false }: ChartEditorProps) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<ChartDraft>(() => specToDraft(spec));
+  const schemaVersion = useActiveSchemaVersion();
+  const [filterText, setFilterText] = useState(spec.filter?.selector ?? '');
+  const [filterMode, setFilterMode] = useState<'selector' | 'rules'>(spec.filter?.groups?.length ? 'rules' : 'selector');
+  const [filterGroups, setFilterGroups] = useState<FilterGroup[]>(spec.filter?.groups ?? [{ combinator: 'AND', rules: [] }]);
+  const [activeFilterGroup, setActiveFilterGroup] = useState(0);
+  const models = useViewerStore((s) => s.models);
+  const modelOptions = useMemo(() => Array.from(models.values(), (model) => ({
+    id: model.id, name: model.name, sourceFingerprint: model.sourceFingerprint,
+  })), [models]);
+  const [filterFeedback, setFilterFeedback] = useState<SelectorFeedback | null>(null);
+  // '' means "All rules" — the same UI-only sentinel `stackBy`'s `<select>`
+  // already uses (`value={draft.stackBy ?? ''}`); it is never what gets
+  // persisted (#5156's `filter.clashRule` is `undefined`, not `''`, for "no
+  // filter" — see the submit handler).
+  const [clashRuleId, setClashRuleId] = useState(spec.filter?.clashRule ?? '');
+  const filterApplicable = !CHART_FILTER_NOT_APPLICABLE_SOURCES.has(draft.source);
+  // `null` means "no filter typed" — always valid; a real reading is either
+  // ok or a refusal message (#4946's all-or-nothing rule, `readChartFilter`).
+  const filterReading = useMemo(
+    () => (filterApplicable && filterMode === 'selector' && trimSelectorWhitespace(filterText).length > 0 ? readChartFilter(filterText, { schemaVersion }) : null),
+    [filterApplicable, filterMode, filterText, schemaVersion],
+  );
+  const filterValid = filterReading === null || filterReading.ok;
+  const savedComparisons = useViewerStore((state) => state.savedComparisons);
+  const history = useMemo(() => savedComparisons.filter(isSavedComparison), [savedComparisons]);
+  const source = useMemo(() => resolveComparisonChartSource(draft, datasets[draft.source], history), [draft, datasets, history]);
+  const allowLegacy = !isNew && spec.source === 'compare' && spec.comparisonId === undefined;
+  const comparisonValid = draft.source !== 'compare' || source.status === 'saved' || (allowLegacy && draft.comparisonId === undefined);
+  const columns = editorColumns(source.dataset, draft);
+  const rowCount = source.dataset.rows.length;
+  const numberColumns = columns.filter((c) => c.kind === 'number');
+  const numericFields = draft.source === 'elements' ? [
+    ...elementFieldCatalog.attributes,
+    ...[...elementFieldCatalog.properties.values()].flat(),
+    ...[...elementFieldCatalog.quantities.values()].flat(),
+  ].filter((option) => option.binding.valueKind === 'number') : [];
+  const numericFieldsById = new Map(numericFields.map((option) => [elementFieldColumnId(option.binding), option.binding]));
+  const measureOptions = new Map((draft.type === 'elementCount' ? [] : numberColumns).map((column) => [column.id, column]));
+  for (const option of draft.type === 'elementCount' ? [] : numericFields) {
+    const column = elementFieldColumn(option.binding);
+    if (!measureOptions.has(column.id)) measureOptions.set(column.id, column);
+  }
+  const categoryColumns = columns.filter((c) => c.kind === 'category' || c.kind === 'boolean');
+  const dims = dimensionColumns(draft.type, columns);
+  const dimensionOk = draft.type === 'elementCount' || dims.some((c) => c.id === draft.dimension);
+  const measureOk = draft.measure.agg === 'count' || measureOptions.has(draft.measure.column ?? '');
+  const stackOk = draft.type !== 'stackedBar' || (draft.stackBy !== draft.dimension && categoryColumns.some((c) => c.id === draft.stackBy));
+  const topNOk = draft.topN === undefined || (Number.isInteger(draft.topN) && draft.topN >= 0);
+  const rulesValid = filterMode !== 'rules' || filterGroups.every((g) => g.rules.length > 0) || filterGroups.every((g) => g.rules.length === 0);
+  const valid = draft.title.trim().length > 0 && dimensionOk && measureOk && stackOk && topNOk && filterValid && rulesValid && comparisonValid;
+
+  const setSource = (source: ChartSource): void => {
+    const cols = datasets[source].columns;
+    const allowed = dimensionColumns(draft.type, cols);
+    setDraft({ ...draft, source, comparisonId: undefined, elementField: undefined, measureField: undefined, dimension: allowed[0]?.id ?? '', stackBy: undefined, measure: { agg: 'count' } });
+    // Not every source can be filtered (#4946); switching to one clears the
+    // field rather than leave text behind that the next save would drop
+    // silently. `clashRule` is meaningless off `clash` for the same reason.
+    setFilterText('');
+    setFilterGroups([{ combinator: 'AND', rules: [] }]);
+    setActiveFilterGroup(0);
+    setFilterMode('selector');
+    setFilterFeedback(null);
+    setClashRuleId('');
+  };
+
+  const setElementField = (elementField: ElementFieldBinding | undefined): void => {
+    const oldId = draft.elementField ? elementFieldColumnId(draft.elementField) : undefined;
+    const nextId = elementField ? elementFieldColumnId(elementField) : undefined;
+    const next: ChartDraft = { ...draft, elementField };
+    if (nextId && elementField?.valueKind === 'number') {
+      next.type = 'histogram';
+      next.dimension = nextId;
+      next.stackBy = undefined;
+      if (oldId && next.measure.column === oldId && !next.measureField) next.measure = { agg: 'count' };
+    } else if (nextId) {
+      if (next.type === 'histogram' || next.type === 'timeline') next.type = 'bar';
+      next.dimension = nextId;
+      next.stackBy = undefined;
+      if (oldId && next.measure.column === oldId && !next.measureField) next.measure = { agg: 'count' };
+    }
+    else {
+      // Back to the built-in columns: a histogram over the cleared numeric
+      // field has no number column left, so it would sit unsaveable (#4833).
+      if (next.type === 'histogram' || next.type === 'timeline') next.type = 'bar';
+      const columns = editorColumns(datasets.elements, next);
+      if (!dimensionColumns(next.type, columns).some((column) => column.id === next.dimension)) {
+        next.dimension = columns.find((column) => column.kind === 'category')?.id ?? '';
+      }
+      if (oldId && next.stackBy === oldId) next.stackBy = undefined;
+      if (oldId && next.measure.column === oldId && !next.measureField) next.measure = { agg: 'count' };
+    }
+    setDraft(next);
+  };
+
+  const setType = (type: ChartType): void => {
+    const next: ChartDraft = { ...draft, type };
+    const allowed = dimensionColumns(type, columns);
+    if (type === 'elementCount') {
+      // elementCount doesn't use dimension, stackBy, or a sum measure — a
+      // stale `{ agg: 'sum', column }` from a type this chart used to be
+      // would otherwise survive the switch and, unless something normalizes
+      // it back to count, add zero for every row once saved (#5151).
+      next.dimension = '';
+      next.stackBy = undefined;
+      next.measure = { agg: 'count' };
+      next.measureField = undefined;
+    } else {
+      // Other types need a valid dimension
+      if (!allowed.some((c) => c.id === next.dimension)) next.dimension = allowed[0]?.id ?? next.dimension;
+      if (type === 'stackedBar') {
+        if (!categoryColumns.some((c) => c.id === next.stackBy && c.id !== next.dimension)) next.stackBy = categoryColumns.find((c) => c.id !== next.dimension)?.id;
+      } else next.stackBy = undefined;
+    }
+    setDraft(next);
+  };
+
+  const field = 'min-w-0 rounded border border-border bg-transparent px-1.5 py-0.5 text-xs';
+
+  return (
+    <form
+      className="flex w-full max-w-3xl flex-col gap-2 p-2 text-xs"
+      data-chart-editor
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (filterReading && !filterReading.ok) {
+          setFilterFeedback({ tone: 'error', lines: [filterReading.message] });
+          return;
+        }
+        if (!valid) return;
+        const trimmedSelector = trimSelectorWhitespace(filterText);
+        // A rule id only ever narrows `clash`; picking one on any other
+        // source cannot happen through this form (the control is hidden),
+        // but a stale `clashRuleId` from a previous source must not leak
+        // into the saved spec (#5156, mirrors `elementField`'s per-source
+        // guard above).
+        const clashRule = draft.source === 'clash' && clashRuleId ? clashRuleId : undefined;
+        const groups = filterMode === 'rules' && filterGroups.some((g) => g.rules.length > 0) ? filterGroups : undefined;
+        const selector = filterMode === 'selector' ? trimmedSelector : '';
+        const filter = filterApplicable && (selector.length > 0 || groups !== undefined || clashRule !== undefined)
+          ? { selector, groups, clashRule }
+          : undefined;
+        // draftToSpec (#5151) is still the one place that resolves the
+        // `dimension`/`measure` sentinels back into the real contract —
+        // e.g. it drops `dimension` and normalizes `measure` to `count` for
+        // `elementCount` — so the clash-rule filter above must go through
+        // it rather than a raw `onSave({ ...draft, ... })`.
+        onSave(draftToSpec({ ...draft, title: draft.title.trim(), filter }));
+      }}
+    >
+      <label className="flex flex-col gap-0.5">
+        <span className="text-muted-foreground">{t('chartEditor.titleLabel')}</span>
+        <input className={field} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} aria-label={t('chartEditor.titleAriaLabel')} />
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <ChartSourcePicker source={draft.source} rowCount={rowCount} comparisonId={draft.comparisonId} history={history}
+          allowLegacy={allowLegacy} className={field} onSource={setSource} onComparison={(comparisonId) => setDraft({ ...draft, comparisonId })} />
+        {draft.source === 'elements' && (
+          <ElementFieldPicker value={draft.elementField} catalog={elementFieldCatalog} loading={elementFieldCatalogLoading} className={field} onChange={setElementField} />
+        )}
+        {draft.source === 'clash' && (
+          <label className="flex flex-col gap-0.5">
+            <span className="text-muted-foreground">{t('chartEditor.clashRuleLabel')}</span>
+            <select className={field} value={clashRuleId} onChange={(e) => setClashRuleId(e.target.value)} aria-label={t('chartEditor.clashRuleAriaLabel')}>
+              <option value="">{t('chartEditor.clashRuleAllOption')}</option>
+              {clashRuleOptions.map((rule) => <option key={rule.id} value={rule.id}>{rule.name}</option>)}
+            </select>
+          </label>
+        )}
+        <div className="col-span-2 flex flex-col gap-0.5">
+          <span className="text-muted-foreground">{t('chartEditor.sourceFilterLabel')}</span>
+          {filterApplicable ? (
+            <>
+              <div className="flex gap-1"
+                // These mode buttons are a named command group, not a form fieldset.
+                // eslint-disable-next-line jsx-a11y/prefer-tag-over-role
+                role="group" aria-label={t('chartEditor.sourceFilterMode')}>
+                <Button type="button" size="sm" variant={filterMode === 'selector' ? 'secondary' : 'ghost'} onClick={() => {
+                  if (filterMode === 'rules') setFilterText(groupsToSelectorText(filterGroups));
+                  setFilterMode('selector');
+                }}>{t('chartEditor.selectorMode')}</Button>
+                <Button type="button" size="sm" variant={filterMode === 'rules' ? 'secondary' : 'ghost'} onClick={() => {
+                  if (filterReading && !filterReading.ok) {
+                    setFilterFeedback({ tone: 'error', lines: [filterReading.message] });
+                    return;
+                  }
+                  if (filterMode === 'selector' && filterReading?.ok) setFilterGroups(filterReading.groups);
+                  setFilterMode('rules');
+                }}>{t('chartEditor.rulesMode')}</Button>
+              </div>
+              {filterMode === 'selector' ? <div className="flex items-center gap-1">
+                <input
+                  className={`${field} flex-1 font-mono`}
+                  value={filterText}
+                  onChange={(e) => {
+                    setFilterText(e.target.value);
+                    // A blur error describes the previous reading. Do not leave it
+                    // visible while the user has already corrected the selector.
+                    setFilterFeedback(null);
+                  }}
+                  onBlur={() => setFilterFeedback(filterReading && !filterReading.ok ? { tone: 'error', lines: [filterReading.message] } : null)}
+                  placeholder={FILTER_PLACEHOLDER}
+                  aria-label={t('chartEditor.sourceFilterAriaLabel')}
+                  spellCheck={false}
+                />
+                <a
+                  href={DOCS_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={t('chartEditor.selectorSyntaxReference')}
+                  title={t('chartEditor.selectorSyntaxReference')}
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </a>
+              </div> : <FilterGroupEditor groups={filterGroups} activeGroup={activeFilterGroup} models={modelOptions} onChange={(updater: (prev: FilterGroupEditorState) => FilterGroupEditorState) => {
+                const next = updater({ groups: filterGroups, activeGroup: activeFilterGroup });
+                setFilterGroups(next.groups);
+                setActiveFilterGroup(next.activeGroup);
+              }} />}
+              {filterMode === 'selector' && filterFeedback && <SelectorFeedbackList feedback={filterFeedback} />}
+            </>
+          ) : (
+            <span className="text-2xs text-muted-foreground">
+              {t('chartEditor.sourceFilterNotApplicable', { source: SOURCE_LABELS[draft.source] })}
+            </span>
+          )}
+        </div>
+        <label className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">{t('chartEditor.chartTypeLabel')}</span>
+          <select className={field} value={draft.type} onChange={(e) => setType(e.target.value as ChartType)} aria-label={t('chartEditor.chartTypeAriaLabel')}>
+            {(Object.keys(TYPE_LABELS) as ChartType[]).map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
+          </select>
+        </label>
+        {draft.type !== 'elementCount' && (
+          <label className="flex flex-col gap-0.5">
+            <span className="text-muted-foreground">{t('chartEditor.groupByLabel')}</span>
+            <select className={field} value={draft.dimension} onChange={(e) => {
+              const dimension = e.target.value;
+              setDraft({ ...draft, dimension, stackBy: draft.type === 'stackedBar' && draft.stackBy === dimension
+                ? categoryColumns.find((column) => column.id !== dimension)?.id : draft.stackBy });
+            }} aria-label={t('chartEditor.groupByAriaLabel')}>
+              {!dimensionOk && <option value={draft.dimension}>—</option>}
+              {dims.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </label>
+        )}
+        {draft.type === 'stackedBar' && (
+          <label className="flex flex-col gap-0.5">
+            <span className="text-muted-foreground">{t('chartEditor.stackByLabel')}</span>
+            <select className={field} value={draft.stackBy ?? ''} onChange={(e) => setDraft({ ...draft, stackBy: e.target.value || undefined })} aria-label={t('chartEditor.stackByAriaLabel')}>
+              <option value="">—</option>
+              {categoryColumns.filter((c) => c.id !== draft.dimension).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </label>
+        )}
+        <label className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">{t('chartEditor.measureLabel')}</span>
+          <select
+            className={field}
+            value={draft.measure.agg === 'count' ? 'count' : `sum:${draft.measure.column ?? ''}`}
+            onChange={(e) => {
+              const v = e.target.value;
+              const column = v.slice(4);
+              const boundField = [draft.measureField, draft.elementField].find((candidate) =>
+                candidate?.valueKind === 'number' && elementFieldColumnId(candidate) === column);
+              setDraft({ ...draft, measure: v === 'count' ? { agg: 'count' } : { agg: 'sum', column },
+                measureField: v === 'count' ? undefined : numericFieldsById.get(column) ?? boundField });
+            }}
+            aria-label={t('chartEditor.measureAriaLabel')}
+          >
+            <option value="count">{t('chartEditor.countOption')}</option>
+            {[...measureOptions.values()].map((c) => <option key={c.id} value={`sum:${c.id}`}>{t('chartEditor.sumOfOption', { column: c.label, unit: c.unit ? ` (${c.unit})` : '' })}</option>)}
+          </select>
+        </label>
+        {draft.type !== 'elementCount' && (
+          <>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-muted-foreground">{t('chartEditor.topNLabel')}</span>
+              <input
+                className={field}
+                type="number"
+                min={0}
+                step={1}
+                value={draft.topN ?? ''}
+                onChange={(e) => setDraft({ ...draft, topN: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) })}
+                aria-label={t('chartEditor.topNAriaLabel')}
+              />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-muted-foreground">{t('chartEditor.orderLabel')}</span>
+              <select className={field} value={draft.sort ?? 'value'} onChange={(e) => setDraft({ ...draft, sort: e.target.value as 'value' | 'label' })} aria-label={t('chartEditor.orderAriaLabel')}>
+                <option value="value">{t('chartEditor.orderValueOption')}</option>
+                <option value="label">{t('chartEditor.orderLabelOption')}</option>
+              </select>
+            </label>
+          </>
+        )}
+      </div>
+      <div className="flex justify-end gap-1">
+        <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onCancel}>{t('chartEditor.cancelButton')}</Button>
+        <Button type="submit" size="sm" className="h-6 px-2 text-xs" disabled={!valid}>{t('chartEditor.saveButton')}</Button>
+      </div>
+    </form>
+  );
+}

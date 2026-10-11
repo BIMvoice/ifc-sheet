@@ -1,0 +1,288 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Organized store selectors for the Viewport component
+ * Groups 47+ store subscriptions into logical categories for better maintainability
+ * Extracted from Viewport.tsx for reusability
+ */
+
+import { useMemo } from 'react';
+import { modelHiddenEntities } from '../lib/visibility/model-hidden-entities.js';
+import { useViewerStore } from '../store/index.js';
+import { useStoreyContextVisibility } from './useStoreyContext.js';
+
+/**
+ * Selection-related store state and actions
+ */
+export function useSelectionState() {
+  const selectedEntityId = useViewerStore((state) => state.selectedEntityId);
+  const selectedEntityIds = useViewerStore((state) => state.selectedEntityIds);
+  const setSelectedEntityId = useViewerStore((state) => state.setSelectedEntityId);
+  const setSelectedEntity = useViewerStore((state) => state.setSelectedEntity);
+  const toggleSelection = useViewerStore((state) => state.toggleSelection);
+  const models = useViewerStore((state) => state.models);
+
+  return {
+    selectedEntityId,
+    selectedEntityIds,
+    setSelectedEntityId,
+    setSelectedEntity,
+    toggleSelection,
+    models,
+  };
+}
+
+/**
+ * Visibility-related store state (hidden/isolated entities), as the 3D
+ * viewport draws it: model visibility and the workspace storey context folded in.
+ */
+export function useVisibilityState() {
+  const userHiddenEntities = useViewerStore((state) => state.hiddenEntities);
+  const models = useViewerStore((state) => state.models);
+  const geometryContentVersion = useViewerStore((state) => state.geometryContentVersion);
+  const toGlobalId = useViewerStore((state) => state.toGlobalId);
+  const hiddenEntities = useMemo(
+    () => modelHiddenEntities(models, userHiddenEntities, toGlobalId),
+    [models, userHiddenEntities, toGlobalId, geometryContentVersion],
+  );
+  const isolatedEntities = useViewerStore((state) => state.isolatedEntities);
+  const userGhostExcept = useViewerStore((state) => state.ghostExceptEntities);
+  // The Model workspace hides (or ghosts) the storeys above the one being
+  // drawn on, on top of the user's own sets (#6232 D9).
+  const { hidden, ghostExcept } = useStoreyContextVisibility({ hidden: hiddenEntities, ghostExcept: userGhostExcept });
+
+  return {
+    hiddenEntities: hidden,
+    isolatedEntities,
+    ghostExceptEntities: ghostExcept,
+  };
+}
+
+/**
+ * Tool-related store state and actions
+ */
+export function useToolState() {
+  const activeTool = useViewerStore((state) => state.activeTool);
+  const sectionPlane = useViewerStore((state) => state.sectionPlane);
+  const sectionPickMode = useViewerStore((state) => state.sectionPickMode);
+  const setSectionPlaneFromFace = useViewerStore((state) => state.setSectionPlaneFromFace);
+  const setSectionPickMode = useViewerStore((state) => state.setSectionPickMode);
+  const setSectionPickPreview = useViewerStore((state) => state.setSectionPickPreview);
+  const setSectionCustomDistance = useViewerStore((state) => state.setSectionCustomDistance);
+
+  return {
+    activeTool,
+    sectionPlane,
+    sectionPickMode,
+    setSectionPlaneFromFace,
+    setSectionPickMode,
+    setSectionPickPreview,
+    setSectionCustomDistance,
+  };
+}
+
+/**
+ * Measurement-related store state and actions
+ */
+export function useMeasurementState() {
+  // Basic measurement state
+  const measurements = useViewerStore((state) => state.measurements);
+  const pendingMeasurePoint = useViewerStore((state) => state.pendingMeasurePoint);
+  const activeMeasurement = useViewerStore((state) => state.activeMeasurement);
+
+  // Measurement actions
+  const addMeasurePoint = useViewerStore((state) => state.addMeasurePoint);
+  const completeMeasurement = useViewerStore((state) => state.completeMeasurement);
+  const startMeasurement = useViewerStore((state) => state.startMeasurement);
+  const updateMeasurement = useViewerStore((state) => state.updateMeasurement);
+  const finalizeMeasurement = useViewerStore((state) => state.finalizeMeasurement);
+  const cancelMeasurement = useViewerStore((state) => state.cancelMeasurement);
+  const updateMeasurementScreenCoords = useViewerStore((state) => state.updateMeasurementScreenCoords);
+
+  // Snap state
+  const snapEnabled = useViewerStore((state) => state.snapEnabled);
+  const setSnapTarget = useViewerStore((state) => state.setSnapTarget);
+  const setSnapVisualization = useViewerStore((state) => state.setSnapVisualization);
+
+  // Edge lock state for magnetic snapping
+  const edgeLockState = useViewerStore((state) => state.edgeLockState);
+  const setEdgeLock = useViewerStore((state) => state.setEdgeLock);
+  const updateEdgeLockPosition = useViewerStore((state) => state.updateEdgeLockPosition);
+  const clearEdgeLock = useViewerStore((state) => state.clearEdgeLock);
+  const incrementEdgeLockStrength = useViewerStore((state) => state.incrementEdgeLockStrength);
+
+  // Orthogonal constraint for shift+drag measurements
+  const measurementConstraintEdge = useViewerStore((state) => state.measurementConstraintEdge);
+  const setMeasurementConstraintEdge = useViewerStore((state) => state.setMeasurementConstraintEdge);
+  const updateConstraintActiveAxis = useViewerStore((state) => state.updateConstraintActiveAxis);
+  const clearMeasurementConstraintEdge = useViewerStore((state) => state.clearMeasurementConstraintEdge);
+
+  return {
+    // State
+    measurements,
+    pendingMeasurePoint,
+    activeMeasurement,
+    snapEnabled,
+    edgeLockState,
+    measurementConstraintEdge,
+
+    // Actions
+    addMeasurePoint,
+    completeMeasurement,
+    startMeasurement,
+    updateMeasurement,
+    finalizeMeasurement,
+    cancelMeasurement,
+    updateMeasurementScreenCoords,
+    setSnapTarget,
+    setSnapVisualization,
+    setEdgeLock,
+    updateEdgeLockPosition,
+    clearEdgeLock,
+    incrementEdgeLockStrength,
+    setMeasurementConstraintEdge,
+    updateConstraintActiveAxis,
+    clearMeasurementConstraintEdge,
+  };
+}
+
+/**
+ * Camera-related store actions
+ */
+export function useCameraState() {
+  const updateCameraRotationRealtime = useViewerStore((state) => state.updateCameraRotationRealtime);
+  const updateScaleRealtime = useViewerStore((state) => state.updateScaleRealtime);
+  const setCameraCallbacks = useViewerStore((state) => state.setCameraCallbacks);
+
+  return {
+    updateCameraRotationRealtime,
+    updateScaleRealtime,
+    setCameraCallbacks,
+  };
+}
+
+/**
+ * Hover/tooltip-related store state and actions
+ */
+export function useHoverState() {
+  const hoverTooltipsEnabled = useViewerStore((state) => state.hoverTooltipsEnabled);
+  const hoverHighlightEnabled = useViewerStore((state) => state.hoverHighlightEnabled);
+  const setHoverState = useViewerStore((state) => state.setHoverState);
+  const clearHover = useViewerStore((state) => state.clearHover);
+  const setHoverHighlightEnabled = useViewerStore((state) => state.setHoverHighlightEnabled);
+
+  return {
+    hoverTooltipsEnabled,
+    hoverHighlightEnabled,
+    setHoverState,
+    clearHover,
+    setHoverHighlightEnabled,
+  };
+}
+
+/**
+ * Theme-related store state
+ */
+export function useThemeState() {
+  const theme = useViewerStore((state) => state.theme);
+  const isMobile = useViewerStore((state) => state.isMobile);
+  const visualEnhancementsEnabled = useViewerStore((state) => state.visualEnhancementsEnabled);
+  const contactShadingQuality = useViewerStore((state) => state.contactShadingQuality);
+  const contactShadingIntensity = useViewerStore((state) => state.contactShadingIntensity);
+  const contactShadingRadius = useViewerStore((state) => state.contactShadingRadius);
+  const separationLinesEnabled = useViewerStore((state) => state.separationLinesEnabled);
+  const separationLinesQuality = useViewerStore((state) => state.separationLinesQuality);
+  const separationLinesIntensity = useViewerStore((state) => state.separationLinesIntensity);
+  const separationLinesRadius = useViewerStore((state) => state.separationLinesRadius);
+
+  return {
+    theme,
+    isMobile,
+    visualEnhancementsEnabled,
+    contactShadingQuality,
+    contactShadingIntensity,
+    contactShadingRadius,
+    separationLinesEnabled,
+    separationLinesQuality,
+    separationLinesIntensity,
+    separationLinesRadius,
+  };
+}
+
+/**
+ * Context menu-related store actions
+ */
+export function useContextMenuState() {
+  const openContextMenu = useViewerStore((state) => state.openContextMenu);
+
+  return {
+    openContextMenu,
+  };
+}
+
+/**
+ * Color update-related store state and actions
+ */
+export function useColorUpdateState() {
+  const pendingColorUpdates = useViewerStore((state) => state.pendingColorUpdates);
+  const pendingMeshColorUpdates = useViewerStore((state) => state.pendingMeshColorUpdates);
+  const pendingMeshRemovals = useViewerStore((state) => state.pendingMeshRemovals);
+  const pendingMeshTranslations = useViewerStore((state) => state.pendingMeshTranslations);
+  const clearPendingColorUpdates = useViewerStore((state) => state.clearPendingColorUpdates);
+  const clearPendingMeshColorUpdates = useViewerStore((state) => state.clearPendingMeshColorUpdates);
+  const clearPendingMeshRemovals = useViewerStore((state) => state.clearPendingMeshRemovals);
+  const pruneGeometryMeshes = useViewerStore((state) => state.pruneGeometryMeshes);
+  const clearPendingMeshTranslations = useViewerStore((state) => state.clearPendingMeshTranslations);
+  const pendingInstancedShards = useViewerStore((state) => state.pendingInstancedShards);
+  const clearInstancedShards = useViewerStore((state) => state.clearInstancedShards);
+  const pendingMeshRotations = useViewerStore((state) => state.pendingMeshRotations);
+  const clearPendingMeshRotations = useViewerStore((state) => state.clearPendingMeshRotations);
+
+  return {
+    pendingColorUpdates,
+    pendingMeshColorUpdates,
+    pendingMeshRemovals,
+    pendingMeshTranslations,
+    pendingMeshRotations,
+    pendingInstancedShards,
+    clearPendingColorUpdates,
+    clearPendingMeshColorUpdates,
+    clearPendingMeshRemovals,
+    pruneGeometryMeshes,
+    clearPendingMeshTranslations,
+    clearPendingMeshRotations,
+    clearInstancedShards,
+  };
+}
+
+/**
+ * IFC data store state
+ */
+export function useIfcDataState() {
+  const ifcDataStore = useViewerStore((state) => state.ifcDataStore);
+
+  return {
+    ifcDataStore,
+  };
+}
+
+/**
+ * All viewport-related selectors combined
+ * Use individual hooks above for more granular control
+ */
+export function useViewerSelectors() {
+  return {
+    selection: useSelectionState(),
+    visibility: useVisibilityState(),
+    tools: useToolState(),
+    measurement: useMeasurementState(),
+    camera: useCameraState(),
+    hover: useHoverState(),
+    theme: useThemeState(),
+    contextMenu: useContextMenuState(),
+    colorUpdates: useColorUpdateState(),
+    ifcData: useIfcDataState(),
+  };
+}
