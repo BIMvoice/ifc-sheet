@@ -131,6 +131,7 @@ export const draftingEn = {
   'drafting.prompt.leaderNext': 'Specify next point (Enter for the text):',
   'drafting.prompt.dimFirst': 'Specify first extension line origin:',
   'drafting.prompt.dimSecond': 'Specify second extension line origin:',
+  'drafting.prompt.dimNext': 'Specify next extension line origin (Enter to finish, SINGLE for one at a time):',
   'drafting.prompt.dimLine': 'Specify dimension line location:',
   'drafting.prompt.pickCircle': 'Select an arc or circle:',
   'drafting.prompt.angleVertex': 'Specify angle vertex:',
