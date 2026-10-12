@@ -36,6 +36,18 @@ const SESSION_ONLY: Record<Exclude<keyof ProjectState, keyof ProjectDocument>, s
   dirty: 'whether there are unsaved edits: computed against what was saved',
 };
 
+/**
+ * State a user sets that lives outside the project store and is not saved, on purpose.
+ * Not enforced by a type: a state holder outside the project store cannot be found from it.
+ */
+const SESSION_ONLY_ELSEWHERE: Record<string, string> = {
+  'open tabs (project/document-tabs.ts)': 'which views are open is workspace layout, reset on open',
+  'selection, camera, zoom and pan (viewer store, drafting/session.ts)': 'where the user is looking, not what the project is',
+  'drawing display toggles (viewer store drawing2DDisplayOptions)': 'panel toggles for the live drawing; a view carries its own graphics and scale',
+  'wall join style, drafting lines in 3D (lib/wall-join-prefs.ts, lib/drafting-3d-prefs.ts)': 'device preferences kept in localStorage, not part of any one project',
+  'generated drawings (project/view-drawings.ts)': 'derived from the model and the view, regenerated on open',
+};
+
 const pt = (x: number, y: number) => ({ x, y });
 
 const category: Required<CategoryGraphics> = {
@@ -175,6 +187,10 @@ describe('project round trip, one of everything', () => {
     const missed = stored.filter((k) => !written.has(k) && !(k in SESSION_ONLY));
     assert.deepEqual(missed, [], `store fields neither saved nor listed in SESSION_ONLY: ${missed.join(', ')}`);
     assert.deepEqual([...written].sort(), Object.keys(FULL).sort());
+  });
+
+  it('names a reason for everything it leaves out on purpose', () => {
+    for (const [what, reason] of [...Object.entries(SESSION_ONLY), ...Object.entries(SESSION_ONLY_ELSEWHERE)]) assert.ok(reason.length > 10, what);
   });
 
   it('opens a file written before the later fields existed', () => {
