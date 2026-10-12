@@ -13,6 +13,7 @@ import { editDrafts, newDraft } from '../draft-store';
 import { styledParams } from '@/project/drafting-standards';
 import { dimensionLayout, entitySkeleton, nextAxisLabel } from '../annotation';
 import { continueDimension, type DimensionShape } from '../dimension-chain';
+import { alignDimensionLine } from '../dimension-align';
 import { findPattern } from '../hatch/library';
 import { regionAt } from '../hatch/region';
 import type { AnnotationShape, AxisShape, DraftShape, Pt } from '../types';
@@ -101,6 +102,11 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
       /** The last dimension placed: the chain continues from its end. */
       let last: DimensionShape | null = null;
       const shape = (at: Pt): DimensionShape => ({ type: 'dimension', variant, a: pts[0], b: pts[1], at, height: ctx.settings.textHeight });
+      /** The dimension line's place for a cursor: aligned to a close existing dimension line (within two text heights). */
+      const place = (cursor: Pt) => {
+        const existing = ctx.entities().flatMap((e) => (e.shape.type === 'dimension' ? [e.shape] : []));
+        return alignDimensionLine(pts[0], pts[1], variant, cursor, existing, 2 * ctx.settings.textHeight);
+      };
       return {
         prompt: () => ({ key: last ? 'drafting.prompt.dimNext' : pts.length === 0 ? 'drafting.prompt.dimFirst' : pts.length === 1 ? 'drafting.prompt.dimSecond' : 'drafting.prompt.dimLine' }),
         input: () => 'point',
@@ -123,7 +129,7 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
             pts.push(p);
             return 'continue';
           }
-          last = shape(p);
+          last = shape(place(p).at);
           add(ctx, last);
           return ctx.settings.dimContinuous ? 'continue' : 'done';
         },
@@ -134,7 +140,10 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
             return next ? skeleton(next) : [];
           }
           if (pts.length === 1) return [{ type: 'line', a: pts[0], b: cursor }];
-          if (pts.length === 2) return skeleton(shape(cursor));
+          if (pts.length === 2) {
+            const { at, guide } = place(cursor);
+            return [...skeleton(shape(at)), ...(guide ? [{ type: 'line' as const, a: guide.a, b: guide.b }] : [])];
+          }
           return [];
         },
       };
