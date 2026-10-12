@@ -20,6 +20,7 @@ import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
 import { isGeometry, type DraftEntity, type DraftLayer, type DraftShape } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { FRAME_MARGIN_MM, mmPerMetre, paperOf, TITLE_BLOCK_MM, viewportBox } from '@/project/sheets';
+import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { shapePath } from '../drafting/DraftOverlay';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
@@ -32,6 +33,8 @@ import type { PlanOverlay } from '@/project/plan-overlays';
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
 import { ScheduleGraphic } from '../joinery/ScheduleGraphic';
 import { CivilDrawingGraphic } from '../civil/CivilDrawingGraphic';
+import { LegendGraphic } from '../legend/LegendGraphic';
+import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
 
 const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
@@ -47,6 +50,8 @@ export interface ViewportContent {
   schedule?: ScheduleLayout;
   /** A road drawing (profile / cross sections) placed here instead of a view (paper millimetres). */
   civil?: CivilLayout;
+  /** A legend placed here instead of a view (paper millimetres). */
+  legend?: LegendLayout;
 }
 
 interface SheetPaperProps {
@@ -91,7 +96,9 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   // A layer shows in a viewport by its own switch, its group's, its view's and the viewport's.
   const layerColor = new Map(layers.map((l) => [l.id, layerShows(l, groups, { view: view?.hiddenLayers, viewport: vp.hiddenLayers }) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));
-  const paperUnit = (view?.scale ?? 100) / 1000;
+  // Annotation prints at the paper size it was drawn for, whatever scale the viewport shows the view at.
+  const paperUnit = viewportPaperUnit(vp.scale);
+  const factor = annotationFactor(vp.scale, view?.scale);
   return (
     <g data-viewport-id={vp.id}>
       <clipPath id={clipId}><rect x={left} y={top} width={box.width} height={box.height} /></clipPath>
@@ -105,7 +112,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
           if (color === null) return null;
           return isGeometry(e.shape)
             ? <PenPath key={e.id} layer={layerById.get(e.layerId)} d={shapePath(e.shape, t, axis)} color={color ?? '#000'} />
-            : <g key={e.id} {...layerTags(layerById.get(e.layerId))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} /></g>;
+            : <g key={e.id} {...layerTags(layerById.get(e.layerId))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} /></g>;
         })}
       </g>
       <rect
@@ -138,6 +145,18 @@ function ScheduleViewport({ vp, layout, selected }: { vp: SheetViewport; layout:
   return (
     <g data-viewport-id={vp.id}>
       <ScheduleGraphic layout={layout} x={vp.x - width / 2} y={vp.y - height / 2} />
+      <rect x={vp.x - width / 2} y={vp.y - height / 2} width={width} height={height} fill="transparent"
+        stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined} data-export-ignore={selected ? 'true' : undefined} />
+    </g>
+  );
+}
+
+/** A legend placed on the sheet, centred on its viewport point. */
+function LegendViewport({ vp, layout, selected }: { vp: SheetViewport; layout: LegendLayout; selected: boolean }) {
+  const { width, height } = layout;
+  return (
+    <g data-viewport-id={vp.id}>
+      <LegendGraphic layout={layout} x={vp.x - width / 2} y={vp.y - height / 2} />
       <rect x={vp.x - width / 2} y={vp.y - height / 2} width={width} height={height} fill="transparent"
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined} data-export-ignore={selected ? 'true' : undefined} />
     </g>
@@ -224,6 +243,7 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
       {(sheet.viewports ?? []).map((vp) => {
         const c = content(vp);
         if (c.civil) return <CivilViewport key={vp.id} vp={vp} layout={c.civil} selected={vp.id === selectedViewportId} />;
+        if (c.legend) return <LegendViewport key={vp.id} vp={vp} layout={c.legend} selected={vp.id === selectedViewportId} />;
         return c.schedule
           ? <ScheduleViewport key={vp.id} vp={vp} layout={c.schedule} selected={vp.id === selectedViewportId} />
           : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} />;

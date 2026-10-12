@@ -11,6 +11,7 @@
 import { memo, useMemo } from 'react';
 import { layerPen, layerShows, lookOf, type LayerGroup } from '@/drafting/styles';
 import { moveGrip, type Grip } from '@/drafting/grips';
+import { resolveLevelRef } from '@/drafting/session';
 import { useProjectStore } from '@/project/project-store';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { isGeometry, type DraftEntity, type DraftLayer, type DraftShape, type Pt, type SnapHit } from '@/drafting/types';
@@ -104,7 +105,7 @@ function GripPreview({ gripDrag, entities, t, axis, look, paperUnit, extraPatter
 }) {
   const entity = entities.find((e) => e.id === gripDrag.grip.id);
   if (!entity) return null;
-  const moved = moveGrip(entity.shape, gripDrag.grip.key, gripDrag.at);
+  const moved = moveGrip(entity.shape, gripDrag.grip.key, gripDrag.at, resolveLevelRef);
   return isGeometry(moved)
     ? <path d={shapePath(moved, t, axis)} fill="none" stroke="#2563eb" strokeWidth={1.5} strokeDasharray="5 3" />
     : <AnnotationGraphics shape={moved} color="#2563eb" selected transform={t} axis={axis} extraPatterns={extraPatterns} look={look(entity)} paperUnit={paperUnit} />;

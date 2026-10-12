@@ -10,14 +10,17 @@
 
 import type { TranslationKey } from '@/i18n';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import type { ViewElement } from '@/labels/view-elements';
 import type { ProjectView } from '@/project/types';
-import type { DraftEntity, DraftShape, Pt } from '../types';
+import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
 
 export type StepResult = 'continue' | 'done';
 
 export interface Prompt {
   key: TranslationKey;
   params?: Record<string, string | number>;
+  /** Answers the step offers to click, besides typing: each is submitted as typed, with a count shown beside it. */
+  choices?: readonly { value: string; count: number }[];
 }
 
 /** What a click on the drawing means at the current step. */
@@ -36,6 +39,9 @@ export interface DraftContext {
   closedLoops(): Pt[][];
   /** The height (m) a level mark at this drawing point reports. */
   levelAt(p: Pt): number;
+  /** What a level mark placed at `p` measures, and the number a reference reads. */
+  levelRefAt(p: Pt): LevelRef;
+  resolveLevel(ref: LevelRef): number | null;
   /** The view's work plane (world units), when known. */
   plane(): SectionPlaneConfig | null;
   /** The kind of view being drafted on. */
@@ -44,6 +50,8 @@ export interface DraftContext {
   view(): ProjectView | null;
   /** The model element (renderer id) drawn under a drawing point, or null. */
   elementAt(p: Pt): number | null;
+  /** Every model element the view draws, with a point to label it at. */
+  viewElements(): ViewElement[];
   /** +1, or −1 when the drawing is mirrored on screen (a user CCW angle is CW in drawing space). */
   orientation: 1 | -1;
   settings: DraftSettings;
@@ -76,9 +84,21 @@ export interface DraftSettings {
   axisEnds: 'both' | 'start' | 'end' | 'none';
   axisSize: number | null;
   axisLineType: 'continuous' | 'dashed' | 'dotted' | 'dashdot';
+  /** DIMALIGNED / DIMLINEAR chain further dimensions from the last end (the default) rather than stopping after one. */
+  dimContinuous: boolean;
   /** The styles new annotations take. */
   currentTextStyle: string;
   currentDimStyle: string;
+  /** TAG: what the label shows. */
+  tagField: 'mark' | 'name' | 'class';
+  /** The annotation type the next annotation of its tool is stamped with (`params.atype`), or null. */
+  annotationType: { id: string; tool: string } | null;
+  /** SYMBOL: the symbol placed, its scale factor and rotation (degrees). */
+  symbolId: string | null;
+  symbolScale: number;
+  symbolRotation: number;
+  /** MAKESYMBOL: the symbol to redefine from the selection, or null for a new one. */
+  symbolTarget: string | null;
 }
 
 export interface DraftCommand {

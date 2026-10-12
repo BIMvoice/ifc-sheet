@@ -10,12 +10,27 @@
 import { editDrafts, newDraft } from '../draft-store';
 import { entitySkeleton, mirrorEntity, rotateEntity, translateEntity } from '../annotation';
 import { sub } from '../vec';
+import { useProjectStore } from '@/project/project-store';
+import { isSectionSymbol, withSectionParts, withoutSectionLink } from '../section-symbol';
 import type { DraftEntity, DraftShape, Pt } from '../types';
 import type { DraftCommandDef, DraftContext } from './types';
 
 function selected(ctx: DraftContext): DraftEntity[] {
   const ids = ctx.selection();
   return ctx.entities().filter((e) => ids.has(e.id));
+}
+
+/**
+ * The part of the selection that may change shape or place. A section symbol
+ * is locked to its section (the cut plane lives on the section view and would
+ * be left behind), so it is left out and the user is told.
+ */
+function editable(ctx: DraftContext): DraftEntity[] {
+  const views = useProjectStore.getState().views;
+  const items = selected(ctx);
+  const free = items.filter((e) => !isSectionSymbol(e, views));
+  if (free.length < items.length) ctx.say('drafting.msg.sectionSymbolLocked');
+  return free;
 }
 
 export const eraseCommand: DraftCommandDef = {
@@ -29,7 +44,8 @@ export const eraseCommand: DraftCommandDef = {
       input: () => 'pick',
       basePoint: () => null,
       onEnter() {
-        const ids = new Set(selected(ctx).map((e) => e.id));
+        // The parts of a section symbol go together.
+        const ids = withSectionParts(new Set(selected(ctx).map((e) => e.id)), ctx.entities());
         if (ids.size) {
           editDrafts({ remove: ids });
           ctx.say('drafting.msg.erased', { count: ids.size });
@@ -49,7 +65,8 @@ function displaceCommand(id: 'move' | 'copy'): DraftCommandDef {
     labelKey: id === 'move' ? 'drafting.cmd.move' : 'drafting.cmd.copy',
     needsSelection: true,
     create(ctx) {
-      const items = selected(ctx);
+      // A copy is plain drawing; only a move would pull the symbol away from its section.
+      const items = id === 'move' ? editable(ctx) : selected(ctx);
       let base: Pt | null = null;
       return {
         prompt: () => ({ key: base ? 'drafting.prompt.secondPoint' : 'drafting.prompt.basePoint' }),
@@ -65,7 +82,7 @@ function displaceCommand(id: 'move' | 'copy'): DraftCommandDef {
             editDrafts({ update: new Map(items.map((e) => [e.id, translateEntity(e.shape, d)])) });
             return 'done';
           }
-          editDrafts({ add: items.map((e) => newDraft(ctx.viewId, e.layerId, translateEntity(e.shape, d), { ...e.params })) });
+          editDrafts({ add: items.map((e) => newDraft(ctx.viewId, e.layerId, translateEntity(e.shape, d), withoutSectionLink(e.params))) });
           return 'continue';
         },
         onEnter: () => 'done',
@@ -84,7 +101,7 @@ export const rotateCommand: DraftCommandDef = {
   labelKey: 'drafting.cmd.rotate',
   needsSelection: true,
   create(ctx) {
-    const items = selected(ctx);
+    const items = editable(ctx);
     let base: Pt | null = null;
     const apply = (angle: number) => {
       if (base) editDrafts({ update: new Map(items.map((e) => [e.id, rotateEntity(e.shape, base as Pt, angle)])) });
@@ -128,8 +145,11 @@ export const mirrorCommand: DraftCommandDef = {
           first = p;
           return 'continue';
         }
-        const mirrored = items.map((e) => newDraft(ctx.viewId, e.layerId, mirrorEntity(e.shape, first as Pt, p), { ...e.params }));
-        editDrafts({ add: mirrored, remove: eraseSource ? new Set(items.map((e) => e.id)) : undefined });
+        const mirrored = items.map((e) => newDraft(ctx.viewId, e.layerId, mirrorEntity(e.shape, first as Pt, p), withoutSectionLink(e.params)));
+        // Erasing the source cannot take a section symbol with it: that would be moving it.
+        const sources = items.filter((e) => !isSectionSymbol(e, useProjectStore.getState().views));
+        if (eraseSource && sources.length < items.length) ctx.say('drafting.msg.sectionSymbolLocked');
+        editDrafts({ add: mirrored, remove: eraseSource ? new Set(sources.map((e) => e.id)) : undefined });
         return 'done';
       },
       onKeyword(word) {

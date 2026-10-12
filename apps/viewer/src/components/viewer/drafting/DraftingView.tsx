@@ -29,12 +29,15 @@ import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import type { ProjectView } from '@/project/types';
+import { viewElements } from '@/labels/view-elements';
 import { pickModelElement, referenceSet, referencesIn } from '@/drafting/references';
 import { selectFromPlan } from '@/components/viewer/plan/PlanPointer';
 import { draftsOfView } from '@/drafting/draft-store';
+import { syncLevelMarks } from '@/drafting/level-sync';
+import { levelResolverFor, storeyOf } from '@/drafting/level-resolver';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
-  attachDraftingView, currentLayerId, setElementPicker, pressEscape, runningCommand, setAnnotationProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
+  attachDraftingView, currentLayerId, setElementPicker, setViewElementsProvider, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
   toggleOrtho, toggleSnap, useDraftingSession, pickEntity, setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
@@ -44,6 +47,7 @@ import { useDraftingKeys } from './useDraftingKeys';
 import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 import { SelectionBar } from './SelectionBar';
 import { gripsOf } from '@/drafting/grips';
+import { isSectionSymbol } from '@/drafting/section-symbol';
 import { arrangementLoops, type Segment } from '@/drafting/arrangement';
 import { shapeSegments } from '@/hooks/useDraftingLines3D';
 import { screenToDrawing } from '@/drafting/frame';
@@ -75,8 +79,9 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
   const showHiddenLines = useViewerStore((s) => s.drawing2DDisplayOptions.showHiddenLines);
   const allDrafts = useProjectStore((s) => s.drafts);
   const layers = useProjectStore((s) => s.draftLayers);
+  const views = useProjectStore((s) => s.views);
   const selection = useDraftingSession((s) => s.selection);
-  const ortho = useDraftingSession((s) => s.ortho);
+  const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
   const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -150,6 +155,11 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
     setElementPicker((p) => (drawing && references ? pickModelElement(drawing, references, p, 6 / viewTransform.scale) : null));
     return () => setElementPicker(null);
   }, [drawing, references, viewTransform.scale]);
+  // LABELALL: the elements this view draws, each with a point to label it at.
+  useEffect(() => {
+    setViewElementsProvider(() => (drawing ? viewElements(drawing) : []));
+    return () => setViewElementsProvider(null);
+  }, [drawing]);
   // Hatch boundaries: drafted closed shapes and the drawing's cut outlines. Level marks: the
   // plan's level, or the point's height on a section / elevation.
   useEffect(() => {
@@ -161,6 +171,12 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
       },
     );
   }, [entities, drawing, view, levels, plane]);
+  // Level marks: a plan's mark reads its storey, a section's the height of its reference.
+  useEffect(() => {
+    const resolve = levelResolverFor(view, levels, plane);
+    setLevelReferenceProviders((p) => (view.kind === 'plan' ? { at: p, storey: storeyOf(view, levels) } : { at: p }), resolve);
+    syncLevelMarks(view.id, resolve);
+  }, [view, levels, plane]);
   useEffect(() => {
     setWorkPlaneProvider(() => viewWorkPlane(view, plane ?? null, levels), () => view);
   }, [plane, view, levels]);
@@ -176,7 +192,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
 
   // The selection's grips (a handful of entities at most) and the on-canvas editing bar.
   const selected = useMemo(() => entities.filter((e) => selection.has(e.id)), [entities, selection]);
-  const grips = useMemo(() => (selected.length <= 20 ? selected.flatMap((e) => gripsOf(e.id, e.shape)) : []), [selected]);
+  const grips = useMemo(() => (selected.length <= 20 ? selected.filter((e) => !isSectionSymbol(e, views)).flatMap((e) => gripsOf(e.id, e.shape)) : []), [selected, views]);
   const [editingText, setEditingText] = useState(false);
   useEffect(() => setEditingText(false), [selection]);
   const { state, handlers } = useDraftingPointer({ containerRef, transform: viewTransform, setTransform: setViewTransform, axis, entityShapes, references, grips });

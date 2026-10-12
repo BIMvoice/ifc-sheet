@@ -6,6 +6,7 @@ import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
+import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
 
 /**
  * The project document: the views and sheets a user organises over the
@@ -15,7 +16,7 @@ import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
  * file kept next to the IFC files (`project-file.ts`).
  */
 
-import type { CameraViewpoint, SectionPlaneAxis } from '@/store/types';
+import type { CameraViewpoint, SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 
@@ -208,6 +209,26 @@ export interface ProjectMaterial {
   membrane?: boolean;
 }
 
+/** The subset of a section plane that defines the cut itself, not its on-screen lifecycle. */
+export interface SavedSectionCutPlane {
+  axis: SectionPlaneAxis;
+  position: number;
+  flipped: boolean;
+  custom?: SectionPlane['custom'];
+  capStyle: SectionCapStyle;
+  showCap: boolean;
+  showOutlines: boolean;
+}
+
+/** A named section cut kept in the project, to put back on screen later. */
+export interface SavedSectionCut {
+  id: string;
+  name: string;
+  plane: SavedSectionCutPlane;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** A typical road cross-section (assembly) kept in the project's library. */
 export interface ProjectTypicalSection {
   id: string;
@@ -252,4 +273,12 @@ export interface ProjectDocument {
   typicalSections?: ProjectTypicalSection[];
   /** Building materials: how each IfcMaterial draws where it is cut. */
   materials?: ProjectMaterial[];
+  /** Named section cuts of the Drawing panel. */
+  savedSectionCuts?: SavedSectionCut[];
+  /** Named presets of the annotation tools. */
+  annotationTypes?: AnnotationType[];
+  /** The project's own symbols (the built-in ones are in code). */
+  symbols?: DraftSymbol[];
+  /** Legends: generated tables of what the drawings use, placeable on sheets. */
+  legends?: ProjectLegend[];
 }

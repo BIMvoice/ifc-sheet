@@ -32,11 +32,14 @@ export function DocumentTabBar() {
   const sheets = useProjectStore((s) => s.sheets);
   const schedules = useProjectStore((s) => s.schedules);
   const civilDrawings = useProjectStore((s) => s.civilDrawings);
+  const legends = useProjectStore((s) => s.legends);
   const tabs = openIds.flatMap((id): { id: string; label: string; icon: ReactNode }[] => {
     const view = views.find((v) => v.id === id);
     if (view) return [{ id, label: view.name, icon: ICONS[view.kind] }];
     const schedule = schedules?.find((s) => s.id === id);
     if (schedule) return [{ id, label: schedule.name, icon: <Table2 className="size-3.5" /> }];
+    const legend = legends?.find((l) => l.id === id);
+    if (legend) return [{ id, label: legend.name, icon: <Table2 className="size-3.5" /> }];
     const civil = civilDrawings?.find((d) => d.id === id);
     if (civil) return [{ id, label: civil.name, icon: <Spline className="size-3.5" /> }];
     const sheet = sheets.find((s) => s.id === id);

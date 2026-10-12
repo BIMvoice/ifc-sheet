@@ -25,7 +25,7 @@ export function DesignTab() {
   const { t } = useTranslation();
   const commandId = useDraftingSession((s) => s.commandId);
   const snap = useDraftingSession((s) => s.snap);
-  const ortho = useDraftingSession((s) => s.ortho);
+  const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
   const on = (id: string) => commandId === id;
   const drafting3d = useDrafting3dPref((s) => s.show);
 

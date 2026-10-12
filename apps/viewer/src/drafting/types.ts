@@ -16,6 +16,8 @@
  * An arc runs counter-clockwise from `start` to `end`.
  */
 
+import type { TextFrame } from './text-block';
+
 export interface Pt {
   x: number;
   y: number;
@@ -33,14 +35,40 @@ export type DraftShape =
  * 0.25). A dimension measures between its points; `at` places its line.
  */
 export type AnnotationShape =
-  | { type: 'text'; p: Pt; text: string; height: number; rotation: number }
+  | { type: 'text'; p: Pt; text: string; height: number; rotation: number; frame?: TextFrame; leader?: Pt }
   | { type: 'leader'; pts: Pt[]; text: string; height: number }
   | { type: 'dimension'; variant: 'aligned' | 'linear'; a: Pt; b: Pt; at: Pt; height: number; text?: string; textAt?: Pt }
   | { type: 'radial'; c: Pt; r: number; at: Pt; diameter: boolean; height: number }
   | { type: 'angular'; c: Pt; a: Pt; b: Pt; at: Pt; height: number }
-  | { type: 'level'; p: Pt; value: number; height: number }
+  | { type: 'level'; p: Pt; value: number; height: number; ref?: LevelRef }
   | AxisShape
+  | SymbolInstanceShape
   | { type: 'hatch'; loops: Pt[][]; pattern: string; scale: number; angle: number; color?: string };
+
+/**
+ * What a level mark measures. `at` is the measured point in drawing
+ * coordinates. `storey` is set on a plan (the level the plan reads, a storey
+ * GlobalId or the level's name): the number then comes from the storey and the
+ * symbol may sit anywhere. Without it (a section or elevation) the number is the
+ * height of `at` and the symbol stays at that height.
+ */
+export interface LevelRef {
+  at: Pt;
+  storey?: string;
+}
+
+/**
+ * An instance of a symbol (`symbols.ts`): placed at `p`, `scale` drawing
+ * units per symbol unit, turned `rotation` radians counter-clockwise as seen
+ * on screen. It refers to the definition by id and draws whatever that holds.
+ */
+export interface SymbolInstanceShape {
+  type: 'symbol';
+  symbolId: string;
+  p: Pt;
+  scale: number;
+  rotation: number;
+}
 
 /** Which ends of an axis carry a bubble. */
 export type AxisEnds = 'both' | 'start' | 'end' | 'none';

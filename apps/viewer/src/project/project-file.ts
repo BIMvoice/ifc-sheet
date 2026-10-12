@@ -12,8 +12,10 @@
 import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
+import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
 import { readSheetLayout } from './sheet-file';
 import { readStandards } from './standards-file';
+import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
@@ -135,6 +137,10 @@ export function parseProjectFile(text: string): ProjectDocument {
     civilDrawings: list('civilDrawings').flatMap((v) => readCivilDrawing(v)),
     typicalSections: list('typicalSections').flatMap((v) => readTypicalSection(v)),
     materials: list('materials').flatMap((v) => readMaterial(v)),
+    savedSectionCuts: list('savedSectionCuts').flatMap((v) => readSavedSectionCuts(v)),
+    annotationTypes: readList(raw, 'annotationTypes', readAnnotationType),
+    symbols: readList(raw, 'symbols', readSymbol),
+    legends: readList(raw, 'legends', readLegend),
   };
 }
 
@@ -185,7 +191,7 @@ function readCurrentJoinery(raw: unknown): { door?: string; window?: string } {
   };
 }
 
-function readMaterial(raw: unknown): ProjectMaterial[] {
+export function readMaterial(raw: unknown): ProjectMaterial[] {
   if (!isObject(raw) || !isString(raw.id) || !isString(raw.name) || !raw.name.trim()) return [];
   const out: ProjectMaterial = { id: raw.id, name: raw.name };
   if (raw.hatch === null || isString(raw.hatch)) out.hatch = raw.hatch;
