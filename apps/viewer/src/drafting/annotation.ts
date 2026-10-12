@@ -15,6 +15,7 @@ import { mirrorShape, rotateShape, translateShape } from './transform';
 import { findSymbol, missingSymbolMark, placeSymbol } from './symbols';
 import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
 import { leaderTextRight } from './leader-segments';
+import { leaderStart } from '@/labels/label-leader';
 import { textBlock, type TextFrame } from './text-block';
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
 
@@ -142,6 +143,15 @@ export function setAnnotationScreenRight(sign: 1 | -1): void {
 /** Model metres per hatch-pattern unit at scale 1: patterns are drawn in paper millimetres, views default to 1:100. */
 export const HATCH_UNIT_M = 0.1;
 
+/** The leader a text carries, drawing coordinates: from the edge of its frame to the tip on the element. */
+export function textLeader(shape: Extract<AnnotationShape, { type: 'text' }>): { from: Pt; tip: Pt } | null {
+  if (!shape.leader) return null;
+  const pts = textBox(shape.p, shape.text, shape.height, shape.rotation, shape.frame);
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const from = leaderStart({ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }, shape.frame === 'bubble', shape.leader);
+  return from ? { from, tip: shape.leader } : null;
+}
+
 /** A text box's corners (frame included), as the text block lays it out. */
 export function textBox(p: Pt, text: string, height: number, rotation: number, frame?: TextFrame): Pt[] {
   const { outer } = textBlock(text, height, frame);
@@ -183,8 +193,11 @@ export function nextAxisLabel(label: string): string {
 export function entitySkeleton(shape: EntityShape): DraftShape[] {
   if (isGeometry(shape)) return [shape];
   switch (shape.type) {
-    case 'text':
-      return [{ type: 'polyline', pts: textBox(shape.p, shape.text, shape.height, shape.rotation, shape.frame), closed: true }];
+    case 'text': {
+      const box: DraftShape = { type: 'polyline', pts: textBox(shape.p, shape.text, shape.height, shape.rotation, shape.frame), closed: true };
+      const line = textLeader(shape);
+      return line ? [box, { type: 'polyline', pts: [line.from, line.tip], closed: false }] : [box];
+    }
     case 'leader': {
       const end = shape.pts[shape.pts.length - 1];
       // The text sits beyond the end of the last segment, on whichever side of the screen that is.

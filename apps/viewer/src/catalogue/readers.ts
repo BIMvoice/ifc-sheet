@@ -15,6 +15,7 @@ import {
   type AnnotationTool, type AnnotationType, type DraftSymbol, type LegendCategory, type ProjectLegend, type SymbolShape, type TagFieldName,
 } from './types';
 import { asTextFrame } from '@/drafting/text-block';
+import { asLeaderMode } from '@/labels/label-leader';
 import { MISSING_MODES } from '@/labels/label-resolve';
 
 type Json = Record<string, unknown>;
@@ -51,7 +52,8 @@ export function readAnnotationType(v: unknown, path: string, what?: string): Ann
   if (field) out.tagField = field;
   if (isObject(v.label) && isString(v.label.template)) {
     const frame = asTextFrame(v.label.frame);
-    out.label = { template: v.label.template, missing: oneOf(v.label.missing, MISSING_MODES) ?? DEFAULT_LABEL.missing, ...(frame ? { frame } : {}) };
+    const leader = asLeaderMode(v.label.leader);
+    out.label = { template: v.label.template, missing: oneOf(v.label.missing, MISSING_MODES) ?? DEFAULT_LABEL.missing, ...(frame ? { frame } : {}), ...(leader ? { leader } : {}) };
   }
   return out;
 }

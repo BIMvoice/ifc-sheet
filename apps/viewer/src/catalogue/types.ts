@@ -13,6 +13,7 @@
 
 import type { AxisShape, DraftShape, AnnotationShape } from '@/drafting/types';
 import type { TextFrame } from '@/drafting/text-block';
+import type { LeaderMode } from '@/labels/label-leader';
 import type { MissingMode } from '@/labels/label-resolve';
 
 /** The annotation tools a type can preset: a drafting command id. */
@@ -31,6 +32,8 @@ export interface LabelSpec {
   template: string;
   frame?: TextFrame;
   missing: MissingMode;
+  /** Whether the label is joined to its element by a leader: never, once displaced, or always. Absent: once displaced. */
+  leader?: LeaderMode;
 }
 
 export const DEFAULT_LABEL: LabelSpec = { template: '{Name}', missing: 'question' };

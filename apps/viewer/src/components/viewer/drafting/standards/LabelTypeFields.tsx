@@ -14,6 +14,7 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import type { LabelSpec } from '@/catalogue/types';
 import { TEXT_FRAMES } from '@/drafting/text-block';
 import { listFields } from '@/labels/label-fields';
+import { DEFAULT_LEADER, LEADER_MODES, type LeaderMode } from '@/labels/label-leader';
 import { labelElementOf } from '@/labels/label-element';
 import { MISSING_MODES, resolveTemplate } from '@/labels/label-resolve';
 import { parseTemplate } from '@/labels/label-template';
@@ -49,9 +50,15 @@ export function LabelTypeFields({ label, onChange }: { label: LabelSpec; onChang
       {parsed.issues.length > 0 ? <p role="alert" className="text-amber-600">{t('label.issues', { text: parsed.issues.map((i) => i.text).join(' ') })}</p> : null}
       <div className="flex min-h-8 items-center justify-between gap-3">
         <span className="text-zinc-500">{t('label.frame')}</span>
-        <select aria-label={t('label.frame')} className={INPUT} value={label.frame ?? ''} onChange={(e) => onChange({ template: label.template, missing: label.missing, ...(e.target.value ? { frame: e.target.value as (typeof TEXT_FRAMES)[number] } : {}) })}>
+        <select aria-label={t('label.frame')} className={INPUT} value={label.frame ?? ''} onChange={(e) => onChange({ template: label.template, missing: label.missing, ...(label.leader ? { leader: label.leader } : {}), ...(e.target.value ? { frame: e.target.value as (typeof TEXT_FRAMES)[number] } : {}) })}>
           <option value="">{t('label.frame.none')}</option>
           {TEXT_FRAMES.map((f) => <option key={f} value={f}>{t(`label.frame.${f}` as TranslationKey)}</option>)}
+        </select>
+      </div>
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <span className="text-zinc-500">{t('label.leader')}</span>
+        <select aria-label={t('label.leader')} className={INPUT} value={label.leader ?? DEFAULT_LEADER} onChange={(e) => onChange({ ...label, leader: e.target.value as LeaderMode })}>
+          {LEADER_MODES.map((m) => <option key={m} value={m}>{t(`label.leader.${m}` as TranslationKey)}</option>)}
         </select>
       </div>
       <div className="flex min-h-8 items-center justify-between gap-3">

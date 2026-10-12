@@ -43,7 +43,7 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
       {
       const frame = asTextFrame(v.frame);
       if (v.frame !== undefined && !frame) fail(`${path}.frame`, 'must be box, rounded or bubble');
-      return { type: 'text', p: pt('p'), text: v.text, height: readHeight(v, path), rotation: isNumber(v.rotation) ? v.rotation : 0, ...(frame ? { frame } : {}) };
+      return { type: 'text', p: pt('p'), text: v.text, height: readHeight(v, path), rotation: isNumber(v.rotation) ? v.rotation : 0, ...(frame ? { frame } : {}), ...(isObject(v.leader) ? { leader: readPt(v.leader, `${path}.leader`) } : {}) };
     }
     case 'leader':
       if (!Array.isArray(v.pts) || v.pts.length < 2 || !isString(v.text)) fail(path, 'must be a leader { pts, text }');

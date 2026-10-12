@@ -84,7 +84,7 @@ const GEOMETRY: { [K in DraftShape['type']]: Required<Extract<DraftShape, { type
   arc: { type: 'arc', c: pt(1, 1), r: 2, start: 0.5, end: 2 },
 };
 const ANNOTATION: { [K in AnnotationShape['type']]: Required<Extract<AnnotationShape, { type: K }>> } = {
-  text: { type: 'text', p: pt(1, 1), text: 'Kitchen\n12.50 m²', height: 0.25, rotation: 1.2, frame: 'bubble' },
+  text: { type: 'text', p: pt(1, 1), text: 'Kitchen\n12.50 m²', height: 0.25, rotation: 1.2, frame: 'bubble', leader: pt(4, 1) },
   leader: { type: 'leader', pts: [pt(0, 0), pt(1, 1)], text: 'W1', height: 0.25 },
   dimension: { type: 'dimension', variant: 'linear', a: pt(0, 0), b: pt(5, 0), at: pt(2, 1), height: 0.25, text: 'EQ', textAt: pt(3, 1.5) },
   radial: { type: 'radial', c: pt(0, 0), r: 2, at: pt(3, 3), diameter: true, height: 0.25 },

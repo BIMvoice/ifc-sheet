@@ -16,7 +16,7 @@
  */
 
 import { memo, useId, useMemo } from 'react';
-import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M } from '@/drafting/annotation';
+import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M, textLeader } from '@/drafting/annotation';
 import { witnessLine } from '@/drafting/level-mark';
 import { findSymbol, flattenShape, missingSymbolMark, placeSymbol } from '@/drafting/symbols';
 import { drawingToScreen, screenSigns, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
@@ -28,6 +28,7 @@ import {
   type DimStyle, type TextStyle,
 } from '@/drafting/styles';
 import { textBlock, type TextFrame } from '@/drafting/text-block';
+import { textWidthEm } from '@/drafting/text-width';
 import type { AnnotationShape, Pt } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 
@@ -102,6 +103,9 @@ function Label({ at, text, px, deg, color, style, anchor = 'middle', shift = 0, 
           fontWeight={style.bold ? 700 : 400}
           fontStyle={style.italic ? 'italic' : 'normal'}
           textAnchor={anchor}
+          // The width the frame was measured for: a renderer that hints advances at small sizes would otherwise run the text past it.
+          textLength={textWidthEm(line.text, style) * size || undefined}
+          lengthAdjust="spacing"
         >
           {line.text}
         </text>
@@ -186,8 +190,22 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
   /** Paper millimetres → screen px. */
   const mm = (v: number) => v * paperUnit * t.scale;
   switch (shape.type) {
-    case 'text':
-      return <Label at={s(shape.p)} text={shape.text} px={px} deg={readableAngle(shape.rotation, axis)} color={textColor} style={look.text} anchor="start" frame={shape.frame} />;
+    case 'text': {
+      const line = textLeader(shape);
+      const label = <Label at={s(shape.p)} text={shape.text} px={px} deg={readableAngle(shape.rotation, axis)} color={textColor} style={look.text} anchor="start" frame={shape.frame} />;
+      if (!line) return label;
+      // The same line and arrow an element tag's leader has.
+      const [from, tip] = [s(line.from), s(line.tip)];
+      const head = arrowPath('arrow', tip, { x: tip.x - from.x, y: tip.y - from.y }, Math.max(mm(look.dim.arrowSize) * 1.2, 4 * k));
+      const lineColor = selected ? '#2563eb' : base;
+      return (
+        <g>
+          <path d={`M${from.x} ${from.y}L${tip.x} ${tip.y}`} stroke={lineColor} strokeWidth={k} fill="none" />
+          <path d={head.d} fill={lineColor} />
+          {label}
+        </g>
+      );
+    }
     case 'leader': {
       const [tip, next] = [shape.pts[0], shape.pts[1] ?? shape.pts[0]];
       const a = s(tip);
