@@ -76,7 +76,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
   const allDrafts = useProjectStore((s) => s.drafts);
   const layers = useProjectStore((s) => s.draftLayers);
   const selection = useDraftingSession((s) => s.selection);
-  const ortho = useDraftingSession((s) => s.ortho);
+  const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
   const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
   const containerRef = useRef<HTMLDivElement>(null);
