@@ -130,6 +130,10 @@ const FULL: Required<ProjectDocument> = {
   civilDrawings: [civil],
   typicalSections: [{ id: 'ts1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: { width: 1, slope: -4 }, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 }, nominalDepth: 0.6 } }],
   materials: [material],
+  savedSectionCuts: [{
+    id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,
+    plane: { axis: 'side', position: 4.2, flipped: true, capStyle: { fillColor: [1, 0.5, 0, 1], strokeColor: [0, 0, 0, 1], pattern: 'brick', spacingPx: 6, angleRad: 0.5, widthPx: 2, secondaryAngleRad: -0.5 }, showCap: false, showOutlines: false },
+  }],
 };
 
 /** Where two JSON values differ, as paths: a failure names the field that was lost. */
@@ -177,8 +181,10 @@ describe('project round trip, one of everything', () => {
     const old = { ...JSON.parse(serializeProject(FULL)) as Record<string, unknown> };
     delete old.openingLines;
     delete old.symbolFlips;
+    delete old.savedSectionCuts;
     const doc = parseProjectFile(JSON.stringify(old));
     assert.equal(doc.openingLines, undefined);
     assert.deepEqual(doc.symbolFlips, {});
+    assert.deepEqual(doc.savedSectionCuts, []);
   });
 });

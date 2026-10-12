@@ -14,6 +14,7 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readSheetLayout } from './sheet-file';
 import { readStandards } from './standards-file';
+import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
@@ -135,6 +136,7 @@ export function parseProjectFile(text: string): ProjectDocument {
     civilDrawings: list('civilDrawings').flatMap((v) => readCivilDrawing(v)),
     typicalSections: list('typicalSections').flatMap((v) => readTypicalSection(v)),
     materials: list('materials').flatMap((v) => readMaterial(v)),
+    savedSectionCuts: list('savedSectionCuts').flatMap((v) => readSavedSectionCuts(v)),
   };
 }
 
