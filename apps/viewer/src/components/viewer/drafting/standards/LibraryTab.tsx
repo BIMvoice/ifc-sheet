@@ -17,15 +17,15 @@ import type { ClashPolicy, MergeReport } from '@/catalogue/catalogue-merge';
 import { exportCatalogue, importCatalogueText, projectCatalogue } from '@/catalogue/catalogue-store';
 import { useProjectStore } from '@/project/project-store';
 
-function count(kind: CatalogueKind, state = useProjectStore.getState()): number {
+function count(kind: CatalogueKind, state: ReturnType<typeof useProjectStore.getState>): number {
   const c = selectKinds(projectCatalogue(state), new Set([kind]));
   return kind === 'hatchPatterns' ? (c.hatchPatterns.match(/^\*/gm) ?? []).length : (c[kind] as unknown[]).length;
 }
 
 function ExportSection() {
   const { t } = useTranslation();
-  // Subscribing to the lists that carry the counts keeps them live while the dialog is open.
-  useProjectStore((s) => [s.draftLayers, s.textStyles, s.dimStyles, s.hatchPatterns, s.materials, s.annotationTypes, s.symbols, s.legends]);
+  // The counts as one string: stable while they do not change, and live while the dialog is open.
+  const counts = useProjectStore((s) => CATALOGUE_KINDS.map((k) => count(k, s)).join(',')).split(',').map(Number);
   const [kinds, setKinds] = useState<ReadonlySet<CatalogueKind>>(new Set(CATALOGUE_KINDS));
   const toggle = (k: CatalogueKind) => setKinds((prev) => {
     const next = new Set(prev);
@@ -38,12 +38,12 @@ function ExportSection() {
       <h3 className="font-medium">{t('library.export.title')}</h3>
       <p className="text-zinc-500">{t('library.export.hint')}</p>
       <ul className="space-y-1">
-        {CATALOGUE_KINDS.map((k) => (
+        {CATALOGUE_KINDS.map((k, i) => (
           <li key={k}>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={kinds.has(k)} onChange={() => toggle(k)} />
               <span>{t(`library.kind.${k}` as TranslationKey)}</span>
-              <span className="text-zinc-500 tabular-nums">({count(k)})</span>
+              <span className="text-zinc-500 tabular-nums">({counts[i]})</span>
             </label>
           </li>
         ))}

@@ -72,7 +72,7 @@ export function serializeCatalogue(catalogue: Catalogue, name: string, now = new
   return JSON.stringify(file, null, 2);
 }
 
-const WHAT = 'catalogue file';
+const WHAT = 'library file';
 
 /** Parse and validate a catalogue file's text. Throws with the first problem found. */
 export function parseCatalogue(text: string): { name: string; catalogue: Catalogue } {

@@ -85,7 +85,7 @@ describe('importing a catalogue into the project', () => {
   });
 
   it('a file that is not a catalogue changes nothing', () => {
-    assert.throws(() => importCatalogueText('{"format":"ifclite-project"}', 'theirs'), /Not a catalogue file/);
+    assert.throws(() => importCatalogueText('{"format":"ifclite-project"}', 'theirs'), /Not a library file/);
     assert.equal(useProjectStore.getState().dirty, false);
   });
 });

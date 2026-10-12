@@ -19,6 +19,7 @@ import { patchDraftSettings, startDraftCommand } from '@/drafting/session';
 import { BUILT_IN_SYMBOLS, flattenShape, isBuiltInSymbol, placeSymbol } from '@/drafting/symbols';
 import { isDrawingTabActive } from '@/project/document-tabs';
 import { useProjectStore } from '@/project/project-store';
+import { closeStandards } from '@/project/standards-dialog-store';
 import { toast } from '@/components/ui/toast';
 
 const INPUT = 'h-7 w-44 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1 text-xs';
@@ -50,6 +51,7 @@ function place(id: string, hint: string): void {
     return;
   }
   patchDraftSettings({ symbolId: id });
+  closeStandards();
   startDraftCommand('symbol');
 }
 

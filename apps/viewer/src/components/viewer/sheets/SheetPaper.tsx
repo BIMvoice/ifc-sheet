@@ -32,6 +32,8 @@ import type { PlanOverlay } from '@/project/plan-overlays';
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
 import { ScheduleGraphic } from '../joinery/ScheduleGraphic';
 import { CivilDrawingGraphic } from '../civil/CivilDrawingGraphic';
+import { LegendGraphic } from '../legend/LegendGraphic';
+import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
 
 const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
@@ -47,6 +49,8 @@ export interface ViewportContent {
   schedule?: ScheduleLayout;
   /** A road drawing (profile / cross sections) placed here instead of a view (paper millimetres). */
   civil?: CivilLayout;
+  /** A legend placed here instead of a view (paper millimetres). */
+  legend?: LegendLayout;
 }
 
 interface SheetPaperProps {
@@ -144,6 +148,18 @@ function ScheduleViewport({ vp, layout, selected }: { vp: SheetViewport; layout:
   );
 }
 
+/** A legend placed on the sheet, centred on its viewport point. */
+function LegendViewport({ vp, layout, selected }: { vp: SheetViewport; layout: LegendLayout; selected: boolean }) {
+  const { width, height } = layout;
+  return (
+    <g data-viewport-id={vp.id}>
+      <LegendGraphic layout={layout} x={vp.x - width / 2} y={vp.y - height / 2} />
+      <rect x={vp.x - width / 2} y={vp.y - height / 2} width={width} height={height} fill="transparent"
+        stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined} data-export-ignore={selected ? 'true' : undefined} />
+    </g>
+  );
+}
+
 const PAPER: ViewTransform = { scale: 1, x: 0, y: 0 };
 
 /** The project's styles and layer groups, as drafting graphics need them. */
@@ -224,6 +240,7 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
       {(sheet.viewports ?? []).map((vp) => {
         const c = content(vp);
         if (c.civil) return <CivilViewport key={vp.id} vp={vp} layout={c.civil} selected={vp.id === selectedViewportId} />;
+        if (c.legend) return <LegendViewport key={vp.id} vp={vp} layout={c.legend} selected={vp.id === selectedViewportId} />;
         return c.schedule
           ? <ScheduleViewport key={vp.id} vp={vp} layout={c.schedule} selected={vp.id === selectedViewportId} />
           : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} />;

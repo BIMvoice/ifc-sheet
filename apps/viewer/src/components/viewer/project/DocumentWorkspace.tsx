@@ -26,6 +26,8 @@ import { DraftingView } from '../drafting/DraftingView';
 import { SheetView } from '../sheets/SheetView';
 import { ScheduleView } from '../joinery/ScheduleView';
 import { CivilDrawingView } from '../civil/CivilDrawingView';
+import { LegendView } from '../legend/LegendView';
+import { scopeViews } from '@/legend/legend-data';
 
 
 /**
@@ -51,24 +53,31 @@ export function DocumentWorkspace({ children }: { children: ReactNode }) {
   const sheets = useProjectStore((s) => s.sheets);
   const schedules = useProjectStore((s) => s.schedules);
   const civilDrawings = useProjectStore((s) => s.civilDrawings);
+  const legends = useProjectStore((s) => s.legends);
   useMirrorFrontDrawing(activeId);
   // Views that need their own drawing: open as a tab, or placed on a sheet that is open as a tab.
   const drawn = new Set(openIds);
   for (const sheet of sheets) {
     if (openIds.includes(sheet.id)) for (const vp of sheet.viewports ?? []) drawn.add(vp.viewId);
   }
+  // A legend lists the cut materials of the drawings in its scope: open as a tab, those drawings are generated.
+  for (const legend of legends ?? []) {
+    if (!openIds.includes(legend.id)) continue;
+    for (const v of scopeViews(legend, views, sheets)) drawn.add(v.id);
+  }
 
   // A deleted view (or another project loaded) takes its tab with it.
   useEffect(() => {
-    const ids = new Set([...views.map((v) => v.id), ...sheets.map((s) => s.id), ...(schedules ?? []).map((s) => s.id), ...(civilDrawings ?? []).map((d) => d.id)]);
+    const ids = new Set([...views.map((v) => v.id), ...sheets.map((s) => s.id), ...(schedules ?? []).map((s) => s.id), ...(civilDrawings ?? []).map((d) => d.id), ...(legends ?? []).map((l) => l.id)]);
     const { activeId: front } = useDocumentTabs.getState();
     if (front !== MODEL_TAB_ID && !ids.has(front)) closeProjectTab(front);
     pruneDocumentTabs(ids);
-  }, [views, sheets, schedules, civilDrawings]);
+  }, [views, sheets, schedules, civilDrawings, legends]);
 
   const frontView = activeId === MODEL_TAB_ID ? undefined : views.find((v) => v.id === activeId);
   const frontSheet = activeId === MODEL_TAB_ID ? undefined : sheets.find((s) => s.id === activeId);
   const frontSchedule = activeId === MODEL_TAB_ID ? undefined : schedules?.find((s) => s.id === activeId);
+  const frontLegend = activeId === MODEL_TAB_ID ? undefined : legends?.find((l) => l.id === activeId);
   const frontCivil = activeId === MODEL_TAB_ID ? undefined : civilDrawings?.find((d) => d.id === activeId);
   return (
     <div className="h-full w-full flex flex-col">
@@ -87,6 +96,11 @@ export function DocumentWorkspace({ children }: { children: ReactNode }) {
         {frontSchedule ? (
           <div className="absolute inset-0 z-30 flex flex-col bg-white dark:bg-black">
             <ScheduleView key={frontSchedule.id} schedule={frontSchedule} />
+          </div>
+        ) : null}
+        {frontLegend ? (
+          <div className="absolute inset-0 z-30 flex flex-col bg-white dark:bg-black">
+            <LegendView key={frontLegend.id} legend={frontLegend} />
           </div>
         ) : null}
         {frontCivil ? (

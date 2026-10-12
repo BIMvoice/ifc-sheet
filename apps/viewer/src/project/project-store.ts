@@ -164,6 +164,10 @@ export function renameProjectItem(id: string, name: string): void {
     useProjectStore.setState({ schedules: state.schedules.map((s) => (s.id === id ? { ...s, name: trimmed } : s)), dirty: true });
     return;
   }
+  if (state.legends?.some((l) => l.id === id)) {
+    useProjectStore.setState({ legends: state.legends.map((l) => (l.id === id ? { ...l, name: trimmed } : l)), dirty: true });
+    return;
+  }
   if (state.civilDrawings?.some((d) => d.id === id)) {
     useProjectStore.setState({ civilDrawings: state.civilDrawings.map((d) => (d.id === id ? { ...d, name: trimmed } : d)), dirty: true });
     return;
@@ -198,6 +202,7 @@ export function removeProjectItem(id: string): void {
     sheets: state.sheets.filter((s) => s.id !== id),
     schedules: (state.schedules ?? []).filter((s) => s.id !== id),
     civilDrawings: (state.civilDrawings ?? []).filter((d) => d.id !== id),
+    legends: (state.legends ?? []).filter((l) => l.id !== id),
     drafts: state.drafts.some((d) => d.viewId === id) ? state.drafts.filter((d) => d.viewId !== id) : state.drafts,
     activeItemId: state.activeItemId === id ? null : state.activeItemId,
     dirty: true,

@@ -52,7 +52,7 @@ export const BUILT_IN_SYMBOLS: readonly DraftSymbol[] = [
   },
   {
     id: 'builtin:tag-bubble', name: 'Tag bubble', unit: 'paper',
-    shapes: [{ type: 'circle', c: { x: 0, y: 0 }, r: 4.5 }, line(-4.5, 0, 4.5, 0), text(-1.6, 0.8, '01', 2.5)],
+    shapes: [{ type: 'circle', c: { x: 0, y: 0 }, r: 4.5 }, text(-1.55, -0.9, '01', 2.5)],
   },
 ];
 

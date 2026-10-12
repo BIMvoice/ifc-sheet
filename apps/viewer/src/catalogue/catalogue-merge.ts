@@ -12,6 +12,9 @@
  *   project's id so everything that uses it follows;
  * - `both`: keep both; the incoming one is renamed "Name (2)".
  *
+ * A clash between definitions that say the same thing (the Standard styles
+ * and layer 0 every project has, say) is no clash: the project's stays.
+ *
  * Everything that is not a clash is added. References between definitions
  * (a dimension style's text style, a layer's group, an annotation type's
  * styles and layer, a legend's text style, a material's hatch) are carried
@@ -49,6 +52,14 @@ export function uniqueName(name: string, taken: ReadonlySet<string>): string {
   }
 }
 
+/** Two definitions that differ only in their id (and a legend's creation time) are the same definition. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (key, v) => {
+    if (key === 'id' || key === 'createdAt') return undefined;
+    return v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b))) : v;
+  });
+}
+
 interface Merged<T> {
   list: T[];
   /** Incoming id → the id of the definition standing for it. */
@@ -70,7 +81,8 @@ function mergeNamed<T extends { id: string; name: string }>(
       list.push({ ...t, id });
       ids.set(raw.id, id);
       report.added++;
-    } else if (policy === 'mine') {
+    } else if (policy === 'mine' || canonical(list[at]) === canonical(t)) {
+      // Nothing to choose between when they say the same thing: the project's stays, whatever the policy.
       ids.set(raw.id, list[at].id);
       report.kept++;
     } else if (policy === 'theirs') {

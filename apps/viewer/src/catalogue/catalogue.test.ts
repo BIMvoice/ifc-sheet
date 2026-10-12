@@ -110,7 +110,8 @@ describe('catalogue merge', () => {
     const { catalogue, report } = mergeCatalogues(mine, full, 'theirs', fresh);
     const big = catalogue.textStyles.find((s) => s.id === 'big');
     assert.equal(big?.height, 5);
-    assert.equal(report.textStyles.replaced, 2);
+    // Standard says the same in both: no clash.
+    assert.deepEqual([report.textStyles.replaced, report.textStyles.kept], [1, 1]);
     assert.equal(catalogue.layers.find((l) => l.id === 'lm')?.color, '#aa0000');
     assert.equal(catalogue.materials.find((m) => m.id === 'mm')?.hatchScale, 1.5);
     assert.equal(catalogue.materials.find((m) => m.id === 'mm')?.name, 'Mineral wool');
@@ -122,7 +123,8 @@ describe('catalogue merge', () => {
     const renamed = catalogue.textStyles.find((s) => s.name === 'Big (2)');
     assert.ok(renamed && renamed.id !== 'big' && renamed.height === 5);
     assert.equal(catalogue.textStyles.find((s) => s.id === 'big')?.height, 3);
-    assert.equal(report.textStyles.renamed, 2);
+    assert.deepEqual([report.textStyles.renamed, report.textStyles.kept], [1, 1]);
+    assert.equal(catalogue.textStyles.some((x) => x.name === 'Standard (2)'), false);
     assert.equal(catalogue.dimStyles.find((d) => d.name === 'Arch')?.textStyle, renamed.id);
     assert.equal(catalogue.annotationTypes.find((a) => a.name === 'Grid axis')?.textStyle, renamed.id);
     assert.equal(catalogue.annotationTypes.find((a) => a.name === 'Grid axis')?.layer, catalogue.layers.find((l) => l.name === 'A-WALL (2)')?.id);
@@ -139,6 +141,16 @@ describe('catalogue merge', () => {
     assert.match(catalogue.hatchPatterns, /\*MY-LINES-2/);
     assert.equal(catalogue.materials.find((m) => m.name === 'Mineral wool')?.hatch, 'MY-LINES-2');
     assert.equal(catalogue.annotationTypes.find((a) => a.name === 'Section fill')?.hatch?.pattern, 'MY-LINES-2');
+  });
+
+  it('a clash between definitions that say the same thing is no clash, whatever the policy', () => {
+    const twin: Catalogue = { ...emptyCatalogue(), textStyles: [{ ...DEFAULT_TEXT_STYLE, id: 'other-id' }], layers: [{ id: 'other', name: '0', color: '#18181b', visible: true, locked: false }] };
+    for (const policy of ['mine', 'theirs', 'both'] as const) {
+      const { catalogue, report } = mergeCatalogues(mine, twin, policy, fresh);
+      assert.equal(catalogue.textStyles.length, 2, policy);
+      assert.equal(catalogue.layers.length, 2, policy);
+      assert.deepEqual([report.textStyles.kept, report.textStyles.renamed, report.layers.kept, report.layers.renamed], [1, 0, 1, 0], policy);
+    }
   });
 
   it('never takes a legend\'s scope id from the file', () => {
