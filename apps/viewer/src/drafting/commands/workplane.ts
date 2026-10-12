@@ -16,7 +16,10 @@
 
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { CustomSectionPlane } from '@/store/section-types';
-import { addProjectView } from '@/project/project-store';
+import { addProjectView, useProjectStore } from '@/project/project-store';
+import { styledParams } from '@/project/drafting-standards';
+import { editDrafts, newDraft } from '../draft-store';
+import { sectionSymbolShapes } from '../section-symbol';
 import { drawingToWorld, type Vec3 } from '../frame';
 import type { Pt } from '../types';
 import type { DraftCommandDef } from './types';
@@ -75,7 +78,14 @@ export const sectionLineCommand: DraftCommandDef = {
           ctx.say('drafting.msg.sectionFailed');
           return 'done';
         }
-        addProjectView({ kind: 'section', name: 'Section', plane: { axis: 'front', offset: custom.distance, flipped: false, custom } });
+        const viewId = addProjectView({ kind: 'section', name: 'Section', plane: { axis: 'front', offset: custom.distance, flipped: false, custom } });
+        // The line must stay on the plan: the new view alone leaves nothing drawn there.
+        const name = useProjectStore.getState().views.find((v) => v.id === viewId)?.name ?? 'Section';
+        const current = { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle };
+        editDrafts({
+          add: sectionSymbolShapes(pts[0], pts[1], p, name, ctx.settings.textHeight).map((shape) =>
+            newDraft(ctx.viewId, ctx.layerId, shape, { ...styledParams(ctx.viewId, shape, current), sectionOf: viewId })),
+        });
         ctx.say('drafting.msg.sectionCreated');
         return 'done';
       },
