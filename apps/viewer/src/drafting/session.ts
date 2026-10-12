@@ -21,10 +21,15 @@ import { entityBounds, nearestOnEntity, setAnnotationScreenUp } from './annotati
 import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
 import { drawingToUserVec, userToDrawingVec, type SectionAxisName } from './frame';
 import { draftsOfView } from './draft-store';
-import type { LevelResolver } from './level-mark';
-import type { DraftEntity, DraftShape, LevelRef, Pt } from './types';
-import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import type { ProjectView } from '@/project/types';
+import {
+  closedLoopsOfView, hasModelPicker, levelAtPoint, levelRefAt, modelElementAt, pickModel, referenceShapesIn, resolveLevelRef, setReferenceProvider, viewKindOf, activeWorkPlane,
+} from './session-providers';
+import type { DraftEntity, DraftShape, Pt } from './types';
+
+// What the view in front installs (providers, pickers) lives in `session-providers.ts`; callers keep importing it from here.
+export {
+  activeWorkPlane, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setWorkPlaneProvider,
+} from './session-providers';
 
 export interface HistoryLine {
   key: TranslationKey;
@@ -70,58 +75,7 @@ const settings: DraftSettings = { filletRadius: 0, offsetDistance: null, textHei
   currentTextStyle: 'standard', currentDimStyle: 'standard' };
 let command: DraftCommand | null = null;
 let pending: DraftCommandDef | null = null;
-let referenceProvider: (min: Pt, max: Pt) => DraftShape[] = () => [];
-/** Picks a model element under an idle click that hit no drafted entity (the view installs it). */
-let modelPicker: ((p: Pt, tolerance: number, additive: boolean) => void) | null = null;
-let loopProvider: () => Pt[][] = () => [];
-let levelProvider: (p: Pt) => number = () => 0;
-let levelRefProvider: (p: Pt) => LevelRef = (p) => ({ at: p });
-let levelResolver: LevelResolver = (ref) => levelProvider(ref.at);
-let planeProvider: () => SectionPlaneConfig | null = () => null;
-let viewKindProvider: () => 'plan' | 'section' | 'elevation' | null = () => null;
-let viewProvider: () => ProjectView | null = () => null;
-
-/** The view installs where hatch boundaries and level values come from. */
-export function setAnnotationProviders(loops: () => Pt[][], levelAt: (p: Pt) => number): void {
-  loopProvider = loops;
-  levelProvider = levelAt;
-}
-
-/**
- * The view installs what a level mark measures: the reference a point gives
- * (a plan names its storey) and the number a reference reads. Without it a
- * point is its own reference and its number is `levelAt`.
- */
-export function setLevelReferenceProviders(refAt: (p: Pt) => LevelRef, resolve: LevelResolver): void {
-  levelRefProvider = refAt;
-  levelResolver = resolve;
-}
-
-/** The number a level reference reads in the view in front (null when it cannot be resolved). */
-export const resolveLevelRef: LevelResolver = (ref) => levelResolver(ref);
-/** The reference a point has in the view in front. */
-export const levelRefAt = (p: Pt): LevelRef => levelRefProvider(p);
-
-/** The view installs its work plane and kind (work-plane commands need them). */
-export function setWorkPlaneProvider(plane: () => SectionPlaneConfig | null, view: () => ProjectView | null): void {
-  planeProvider = plane;
-  viewProvider = view;
-  viewKindProvider = () => {
-    const kind = view()?.kind;
-    return kind === 'plan' || kind === 'section' || kind === 'elevation' ? kind : null;
-  };
-}
-
-/** The view in front and its work plane, and the drafting settings, as the commands see them. */
-export const activeWorkPlane = (): { plane: SectionPlaneConfig | null; view: ProjectView | null } => ({ plane: planeProvider(), view: viewProvider() });
 export const draftSettings = (): Readonly<DraftSettings> => scaledSettings;
-
-export function setModelPicker(picker: typeof modelPicker): void {
-  modelPicker = picker;
-}
-
-/** The model element (renderer id) drawn under a drawing point, from the view in front. */
-let elementPicker: (p: Pt) => number | null = () => null;
 
 /** The styles new annotations take; the text height setting follows the current text style (paper mm → metres at 1:100). */
 export function setCurrentStyles(patch: { textStyle?: string; dimStyle?: string; textHeightMm?: number }): void {
@@ -133,10 +87,6 @@ export function setCurrentStyles(patch: { textStyle?: string; dimStyle?: string;
 
 export function currentStyles(): { textStyle: string; dimStyle: string } {
   return { textStyle: settings.currentTextStyle, dimStyle: settings.currentDimStyle };
-}
-
-export function setElementPicker(picker: ((p: Pt) => number | null) | null): void {
-  elementPicker = picker ?? (() => null);
 }
 
 const get = () => useDraftingSession.getState();
@@ -159,15 +109,15 @@ function context(viewId: string): DraftContext {
     viewId,
     layerId: currentLayerId(),
     entities: () => visibleEntities(viewId),
-    referenceShapes: (min, max) => referenceProvider(min, max),
-    closedLoops: () => loopProvider(),
-    levelAt: (p) => levelProvider(p),
-    levelRefAt: (p) => levelRefProvider(p),
-    resolveLevel: (ref) => levelResolver(ref),
-    plane: () => planeProvider(),
-    viewKind: () => viewKindProvider(),
-    view: () => viewProvider(),
-    elementAt: (p) => elementPicker(p),
+    referenceShapes: referenceShapesIn,
+    closedLoops: closedLoopsOfView,
+    levelAt: levelAtPoint,
+    levelRefAt,
+    resolveLevel: resolveLevelRef,
+    plane: () => activeWorkPlane().plane,
+    viewKind: viewKindOf,
+    view: () => activeWorkPlane().view,
+    elementAt: modelElementAt,
     selection: () => get().selection,
     setSelection: (ids) => set({ selection: ids }),
     // userToDrawing is diag(kx, −ky): orientation-reversing when its determinant is negative.
@@ -219,7 +169,7 @@ const scaledSettings = new Proxy(settings, {
 });
 
 export function attachDraftingView(viewId: string | null, axis: SectionAxisName, references: (min: Pt, max: Pt) => DraftShape[], unitsScale = 1): void {
-  referenceProvider = references;
+  setReferenceProvider(references);
   sizeScale = unitsScale;
   // Plans draw drawing-y downward on screen; text and marks grow up on screen.
   setAnnotationScreenUp(axis === 'down' ? -1 : 1);
@@ -292,9 +242,9 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
   if (selecting || !command) {
     const hit = pickEntity(p, tolerance);
     // Idle, nothing drafted under the click: the click is for the model's elements.
-    if (!hit && !selecting && modelPicker) {
+    if (!hit && !selecting && hasModelPicker()) {
       if (!additive) set({ selection: new Set() });
-      modelPicker(p, tolerance, additive);
+      pickModel(p, tolerance, additive);
       refresh();
       return;
     }
