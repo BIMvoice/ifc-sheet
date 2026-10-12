@@ -27,6 +27,7 @@ import {
   DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, dashOf, fontFamily, formatDimension, readableDeg,
   type DimStyle, type TextStyle,
 } from '@/drafting/styles';
+import { textBlock, textLines, type TextFrame } from '@/drafting/text-block';
 import type { AnnotationShape, Pt } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 
@@ -75,26 +76,36 @@ interface LabelProps {
   shift?: number;
   /** Paper behind the text (a dimension value centred on its line). */
   mask?: boolean;
+  /** An outline round the text (a text anchored at its start only). */
+  frame?: TextFrame;
 }
 
-function Label({ at, text, px, deg, color, style, anchor = 'middle', shift = 0, mask = false }: LabelProps) {
+function Label({ at, text, px, deg, color, style, anchor = 'middle', shift = 0, mask = false, frame }: LabelProps) {
   const size = Math.max(px, 1);
-  const width = Math.max(1, text.length) * size * 0.6;
+  const block = textBlock(text, size, frame);
+  const width = Math.max(1, ...textLines(text).map((l) => l.length)) * size * 0.6;
+  const shape = block.frame;
+  const stroke = { fill: 'none', stroke: color, strokeWidth: Math.max(size * 0.06, 0.5) };
   return (
     <g transform={`rotate(${deg.toFixed(2)} ${at.x} ${at.y}) translate(0 ${shift.toFixed(2)})`}>
       {mask ? <rect x={at.x - (anchor === 'middle' ? width / 2 : 0) - size * 0.2} y={at.y - size * 0.85} width={width + size * 0.4} height={size * 1.1} fill="#fff" /> : null}
-      <text
-        x={at.x}
-        y={at.y}
-        fill={color}
-        fontSize={size}
-        fontFamily={fontFamily(style.font)}
-        fontWeight={style.bold ? 700 : 400}
-        fontStyle={style.italic ? 'italic' : 'normal'}
-        textAnchor={anchor}
-      >
-        {text}
-      </text>
+      {shape?.kind === 'rect' ? <rect x={at.x + shape.x} y={at.y + shape.y} width={shape.w} height={shape.h} rx={shape.radius} {...stroke} /> : null}
+      {shape?.kind === 'ellipse' ? <ellipse cx={at.x + shape.cx} cy={at.y + shape.cy} rx={shape.rx} ry={shape.ry} {...stroke} /> : null}
+      {block.lines.map((line, i) => (
+        <text
+          key={i}
+          x={at.x}
+          y={at.y + line.y}
+          fill={color}
+          fontSize={size}
+          fontFamily={fontFamily(style.font)}
+          fontWeight={style.bold ? 700 : 400}
+          fontStyle={style.italic ? 'italic' : 'normal'}
+          textAnchor={anchor}
+        >
+          {line.text}
+        </text>
+      ))}
     </g>
   );
 }
@@ -176,7 +187,7 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
   const mm = (v: number) => v * paperUnit * t.scale;
   switch (shape.type) {
     case 'text':
-      return <Label at={s(shape.p)} text={shape.text} px={px} deg={readableAngle(shape.rotation, axis)} color={textColor} style={look.text} anchor="start" />;
+      return <Label at={s(shape.p)} text={shape.text} px={px} deg={readableAngle(shape.rotation, axis)} color={textColor} style={look.text} anchor="start" frame={shape.frame} />;
     case 'leader': {
       const [tip, next] = [shape.pts[0], shape.pts[1] ?? shape.pts[0]];
       const a = s(tip);
