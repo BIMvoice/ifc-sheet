@@ -10,7 +10,10 @@
 
 import { dimensionLayout } from './annotation';
 import type { AnnotationShape, Pt } from './types';
-import { COINCIDENT, add, dist, dot, scale, sub } from './vec';
+import { COINCIDENT, add, cross, dist, dot, norm, perp, scale, sub } from './vec';
+
+/** Beyond this sine between the two spans an aligned chain has turned a corner (about 30 degrees). */
+const CORNER_SIN = 0.5;
 
 export type DimensionShape = Extract<AnnotationShape, { type: 'dimension' }>;
 
@@ -26,6 +29,16 @@ export function continueDimension(prev: DimensionShape, next: Pt): DimensionShap
   const along = scale(sub(line.b, line.a), 1 / dist(line.a, line.b));
   const n = { x: -along.y, y: along.x };
   const mid = scale(add(prev.b, next), 0.5);
+  if (prev.variant === 'aligned') {
+    const d1 = norm(sub(prev.b, prev.a));
+    const d2 = norm(sub(next, prev.b));
+    if (Math.abs(cross(d1, d2)) > CORNER_SIN) {
+      // A span at a corner cannot share the previous line: it would collapse onto
+      // the measured edge. Carry the previous offset over, on the same side.
+      const offset = dot(sub(prev.at, scale(add(prev.a, prev.b), 0.5)), perp(d1));
+      return { type: 'dimension', variant: 'aligned', a: prev.b, b: next, at: add(mid, scale(perp(d2), offset)), height: prev.height };
+    }
+  }
   const at = add(mid, scale(n, dot(sub(line.a, mid), n)));
   // `text` / `textAt` belong to the one dimension they were set on.
   return { type: 'dimension', variant: prev.variant, a: prev.b, b: next, at, height: prev.height };

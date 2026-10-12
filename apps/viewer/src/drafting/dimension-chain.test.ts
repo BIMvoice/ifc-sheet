@@ -55,6 +55,17 @@ describe('continueDimension', () => {
     assert.equal(dimensionLayout(next).label, '10.00');
   });
 
+  it('keeps the previous offset when an aligned chain turns a corner, instead of collapsing onto the measured edge', () => {
+    const prev: DimensionShape = { type: 'dimension', variant: 'aligned', a: { x: 0, y: 0 }, b: { x: 4, y: 0 }, at: { x: 2, y: 1 }, height: 0.25 };
+    const next = continueDimension(prev, { x: 4, y: 5 });
+    assert.ok(next);
+    if (!next) return;
+    const line = lineOf(next);
+    near(line.a.x, line.b.x); // parallel to the new (vertical) span
+    near(Math.abs(line.a.x - 4), 1); // the same distance off it as before
+    assert.equal(dimensionLayout(next).label, '5.00');
+  });
+
   it('refuses a point on top of the previous end', () => {
     const prev: DimensionShape = { type: 'dimension', variant: 'aligned', a: { x: 0, y: 0 }, b: { x: 4, y: 0 }, at: { x: 2, y: 1 }, height: 0.25 };
     assert.equal(continueDimension(prev, { x: 4, y: 0 }), null);
