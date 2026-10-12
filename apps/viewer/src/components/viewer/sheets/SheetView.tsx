@@ -15,6 +15,8 @@ import { useViewerStore } from '@/store';
 import { addViewport, paperOf, removeViewport, updateViewport, viewportBox } from '@/project/sheets';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
+import { settleLevelDrafts } from '@/drafting/level-sync';
+import { levelResolverFor } from '@/drafting/level-resolver';
 import { parsePat } from '@/drafting/hatch/pattern';
 import { capturePointer } from '@/lib/pointer-capture';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
@@ -87,14 +89,21 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
   }, [sheet.viewports, views, byView, geometryResult, flips, mutationVersion, materialsTable, joineryTypes, joineryMapping]);
   const placedSchedules = useSheetSchedules(sheet);
   const placedCivil = useSheetCivilDrawings(sheet);
+  // A mark prints the number its reference reads now, not the one cached when the view was last open.
+  const levels = useProjectStore((s) => s.levels);
+  const settledDrafts = useCallback((viewId: string) => {
+    const view = views.find((v) => v.id === viewId);
+    const own = draftsOfView(viewId, drafts);
+    return view ? settleLevelDrafts(own, levelResolverFor(view, levels, byView[viewId]?.drawing?.config.plane)) : own;
+  }, [views, drafts, levels, byView]);
   const content = useCallback((vp: SheetViewport): ViewportContent => ({
     schedule: placedSchedules.get(vp.viewId),
     civil: placedCivil.get(vp.viewId),
     view: views.find((v) => v.id === vp.viewId),
     drawing: styled.get(vp.viewId)?.drawing ?? null,
-    drafts: draftsOfView(vp.viewId, drafts),
+    drafts: settledDrafts(vp.viewId),
     overlays: styled.get(vp.viewId)?.overlays,
-  }), [views, styled, drafts, placedSchedules, placedCivil]);
+  }), [views, styled, settledDrafts, placedSchedules, placedCivil]);
 
   const toPaper = (clientX: number, clientY: number) => {
     const rect = hostRef.current?.getBoundingClientRect();

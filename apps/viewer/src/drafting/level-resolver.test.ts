@@ -16,7 +16,7 @@ import type { ElevationProjectView, PlanProjectView, ProjectLevel } from '@/proj
 import { clearDraftHistory, newDraft } from './draft-store.js';
 import type { LevelShape } from './level-mark.js';
 import { levelResolverFor, storeyOf } from './level-resolver.js';
-import { syncLevelMarks } from './level-sync.js';
+import { settleLevelDrafts, syncLevelMarks } from './level-sync.js';
 
 const ground: ProjectLevel = { name: 'Ground', elevation: 0, storeyGlobalIds: ['G0'] };
 const first: ProjectLevel = { name: 'Level 1', elevation: 3, storeyGlobalIds: ['G1'] };
@@ -71,5 +71,17 @@ describe('a section mark reads its point on the view plane', () => {
 
   it('cannot read without the view plane, so it keeps its number', () => {
     assert.equal(levelResolverFor(elevation, [ground], undefined)(mark(undefined, 0).ref!), null);
+  });
+});
+
+describe('settling drafts for printing', () => {
+  it('settles every view the sheet shows, without opening any, and returns the same array when nothing changed', () => {
+    const a = newDraft('e2', '0', mark(undefined, 2.5));
+    const b = newDraft('e1', '0', mark(undefined, 99));
+    const bare = newDraft('e1', '0', { type: 'level', p: { x: 0, y: 0 }, value: 7, height: 0.25 });
+    const drafts = [a, b, bare];
+    const out = settleLevelDrafts(drafts, levelResolverFor(elevation, [], frontPlane));
+    assert.deepEqual(out.map((d) => (d.shape as LevelShape).value), [2.5, 2.5, 7]);
+    assert.equal(settleLevelDrafts(out, levelResolverFor(elevation, [], frontPlane)), out);
   });
 });
