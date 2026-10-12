@@ -18,6 +18,7 @@
 import { memo, useId, useMemo } from 'react';
 import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M } from '@/drafting/annotation';
 import { drawingToScreen, screenSigns, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
+import { leaderTextRight } from '@/drafting/leader-segments';
 import { findPattern } from '@/drafting/hatch/library';
 import { hatchSegments } from '@/drafting/hatch/fill';
 import {
@@ -67,7 +68,7 @@ interface LabelProps {
   deg: number;
   color: string;
   style: TextStyle;
-  anchor?: 'start' | 'middle';
+  anchor?: 'start' | 'middle' | 'end';
   /** Baseline shift in the text's own frame, px (negative: up, toward the reader's "above"). */
   shift?: number;
   /** Paper behind the text (a dimension value centred on its line). */
@@ -160,13 +161,15 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
       const a = s(tip);
       const b = s(next);
       const end = s(shape.pts[shape.pts.length - 1]);
+      // The text sits beyond the end of the last segment (the one place this is decided is `leaderTextRight`).
+      const textRight = leaderTextRight(shape.pts, screenSigns(axis).kx);
       const head = arrowPath('arrow', a, { x: a.x - b.x, y: a.y - b.y }, Math.max(mm(look.dim.arrowSize) * 1.2, 4 * k));
       const lineColor = selected ? '#2563eb' : base;
       return (
         <g>
           <path d={polyline(shape.pts, t, axis)} stroke={lineColor} strokeWidth={k} fill="none" />
           <path d={head.d} fill={lineColor} />
-          <Label at={{ x: end.x + 3 * k, y: end.y }} text={shape.text} px={px} deg={0} color={textColor} style={look.text} anchor="start" shift={px * 0.35} />
+          <Label at={{ x: end.x + (textRight ? 3 : -3) * k, y: end.y }} text={shape.text} px={px} deg={0} color={textColor} style={look.text} anchor={textRight ? 'start' : 'end'} shift={px * 0.35} />
         </g>
       );
     }

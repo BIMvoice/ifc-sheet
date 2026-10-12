@@ -17,10 +17,11 @@ import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { draftCommandById, draftCommandByName } from './commands/registry';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
-import { entityBounds, nearestOnEntity, setAnnotationScreenUp } from './annotation';
+import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
 import { drawingToUserVec, userToDrawingVec, type SectionAxisName } from './frame';
 import { draftsOfView } from './draft-store';
+import { withSectionParts } from './section-symbol';
 import type { DraftEntity, DraftShape, Pt } from './types';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
@@ -42,6 +43,8 @@ interface SessionState {
   history: HistoryLine[];
   selection: ReadonlySet<string>;
   ortho: boolean;
+  /** Ctrl is down: ortho applies for as long as it is, over the toggle. */
+  orthoHeld: boolean;
   snap: boolean;
   lastCommandId: string | null;
   /** Bumped whenever the running command's internal state changes (preview refresh). */
@@ -57,6 +60,7 @@ export const useDraftingSession = create<SessionState>()(() => ({
   history: [],
   selection: new Set(),
   ortho: false,
+  orthoHeld: false,
   snap: true,
   lastCommandId: null,
   revision: 0,
@@ -66,7 +70,7 @@ const HISTORY_LINES = 50;
 const settings: DraftSettings = { filletRadius: 0, offsetDistance: null, textHeight: 0.25, hatchPattern: 'LINES45', hatchScale: 1, hatchAngle: 0, extrudeClass: 'IfcBuildingElementProxy', extrudeDepth: 1,
   roofKind: 'gable', roofSystem: true, roofPick: false, roofSlope: 30, roofThickness: 0.25, roofOverhang: 0.5,
   axisLabel: '1', axisBubble: 'circle', axisEnds: 'both', axisSize: null, axisLineType: 'dashdot',
-  currentTextStyle: 'standard', currentDimStyle: 'standard' };
+  dimContinuous: true, currentTextStyle: 'standard', currentDimStyle: 'standard' };
 let command: DraftCommand | null = null;
 let pending: DraftCommandDef | null = null;
 let referenceProvider: (min: Pt, max: Pt) => DraftShape[] = () => [];
@@ -203,6 +207,7 @@ export function attachDraftingView(viewId: string | null, axis: SectionAxisName,
   sizeScale = unitsScale;
   // Plans draw drawing-y downward on screen; text and marks grow up on screen.
   setAnnotationScreenUp(axis === 'down' ? -1 : 1);
+  setAnnotationScreenRight(axis === 'side' ? -1 : 1);
   if (get().viewId === viewId && get().axis === axis) return;
   if (get().viewId !== viewId) cancelCommand();
   set({ viewId, axis, selection: get().viewId === viewId ? get().selection : new Set() });
@@ -259,10 +264,10 @@ export function pickEntity(p: Pt, tolerance: number): DraftEntity | null {
   return best;
 }
 
-/** Ortho constrains a point against the command's base point. */
+/** Ortho constrains a point against the command's base point, while its toggle is on or Ctrl is held. */
 export function constrainPoint(p: Pt): Pt {
   const base = command?.basePoint() ?? null;
-  return base && get().ortho ? applyOrtho(base, p) : p;
+  return base && (get().ortho || get().orthoHeld) ? applyOrtho(base, p) : p;
 }
 
 /** A click on the drawing (already snapped), with the pick tolerance in drawing units. */
@@ -280,8 +285,13 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
     }
     const next = new Set(additive || selecting ? get().selection : []);
     if (hit) {
-      if (next.has(hit.id) && additive) next.delete(hit.id);
-      else next.add(hit.id);
+      // The parts of a section symbol are picked and unpicked together.
+      const parts = withSectionParts(new Set([hit.id]), visibleEntities(viewId));
+      const unpick = next.has(hit.id) && additive;
+      for (const id of parts) {
+        if (unpick) next.delete(id);
+        else next.add(id);
+      }
     }
     set({ selection: next });
     refresh();
@@ -308,7 +318,7 @@ export function windowSelect(a: Pt, b: Pt, crossing: boolean, additive: boolean)
     const touches = bb.max.x >= min.x && bb.min.x <= max.x && bb.max.y >= min.y && bb.min.y <= max.y;
     if (inside || (crossing && touches)) next.add(entity.id);
   }
-  set({ selection: next });
+  set({ selection: withSectionParts(next, visibleEntities(viewId)) });
   refresh();
 }
 
@@ -390,6 +400,11 @@ export function submitCommandLine(text: string, cursor: Pt | null): void {
 
 export function toggleOrtho(): void {
   set({ ortho: !get().ortho });
+}
+
+/** The view reports Ctrl going down or up (key and pointer events). */
+export function setOrthoHeld(held: boolean): void {
+  if (get().orthoHeld !== held) set({ orthoHeld: held });
 }
 
 export function toggleSnap(): void {

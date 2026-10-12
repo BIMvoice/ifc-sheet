@@ -14,6 +14,7 @@
 
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { create } from 'zustand';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
@@ -146,7 +147,10 @@ export function renameProjectItem(id: string, name: string): void {
   if (state.views.some((v) => v.id === id)) {
     const others = state.views.filter((v) => v.id !== id);
     const unique = uniqueViewName(trimmed, others);
-    useProjectStore.setState({ views: state.views.map((v) => (v.id === id ? { ...v, name: unique } : v)), dirty: true });
+    const renamed = state.views.find((v) => v.id === id);
+    // A section's symbols on its plans show its name.
+    const drafts = renamed?.kind === 'section' ? relabelSectionSymbol(state.drafts, id, unique) : state.drafts;
+    useProjectStore.setState({ views: state.views.map((v) => (v.id === id ? { ...v, name: unique } : v)), drafts, dirty: true });
     return;
   }
   if (state.schedules?.some((s) => s.id === id)) {
@@ -187,7 +191,8 @@ export function removeProjectItem(id: string): void {
     sheets: state.sheets.filter((s) => s.id !== id),
     schedules: (state.schedules ?? []).filter((s) => s.id !== id),
     civilDrawings: (state.civilDrawings ?? []).filter((d) => d.id !== id),
-    drafts: state.drafts.some((d) => d.viewId === id) ? state.drafts.filter((d) => d.viewId !== id) : state.drafts,
+    // A deleted view takes its own drawing with it, and a section's symbol on its plans.
+    drafts: state.drafts.some((d) => d.viewId === id || d.params.sectionOf === id) ? state.drafts.filter((d) => d.viewId !== id && d.params.sectionOf !== id) : state.drafts,
     activeItemId: state.activeItemId === id ? null : state.activeItemId,
     dirty: true,
   });
