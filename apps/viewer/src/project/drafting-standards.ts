@@ -67,6 +67,9 @@ function commit(patch: Partial<State>): void {
   useProjectStore.setState({ ...patch, ...(drafts !== s.drafts ? { drafts } : {}), dirty: true });
 }
 
+/** Apply a change to the standards (styles, layers…) and re-fit the annotation heights it governs. */
+export const commitStandards = commit;
+
 /** A new annotation takes its style: style ids by kind, and an `o.height` when its height is not the style's. */
 export function styledParams(viewId: string, shape: EntityShape, current: { textStyle: string; dimStyle: string }): Record<string, DraftParamValue> {
   if (!sized(shape)) return {};

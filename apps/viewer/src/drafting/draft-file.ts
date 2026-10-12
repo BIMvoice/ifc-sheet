@@ -74,7 +74,7 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
   }
 }
 
-function readShape(v: unknown, path: string): EntityShape {
+export function readShape(v: unknown, path: string): EntityShape {
   if (!isObject(v)) fail(path, 'must be a shape');
   const annotation = readAnnotation(v, path);
   if (annotation) return annotation;

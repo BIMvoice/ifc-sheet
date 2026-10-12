@@ -66,7 +66,8 @@ const HISTORY_LINES = 50;
 const settings: DraftSettings = { filletRadius: 0, offsetDistance: null, textHeight: 0.25, hatchPattern: 'LINES45', hatchScale: 1, hatchAngle: 0, extrudeClass: 'IfcBuildingElementProxy', extrudeDepth: 1,
   roofKind: 'gable', roofSystem: true, roofPick: false, roofSlope: 30, roofThickness: 0.25, roofOverhang: 0.5,
   axisLabel: '1', axisBubble: 'circle', axisEnds: 'both', axisSize: null, axisLineType: 'dashdot',
-  currentTextStyle: 'standard', currentDimStyle: 'standard' };
+  currentTextStyle: 'standard', currentDimStyle: 'standard', tagField: 'mark', annotationType: null,
+  symbolId: null, symbolScale: 1, symbolRotation: 0, symbolTarget: null };
 let command: DraftCommand | null = null;
 let pending: DraftCommandDef | null = null;
 let referenceProvider: (min: Pt, max: Pt) => DraftShape[] = () => [];
@@ -110,6 +111,13 @@ export function setCurrentStyles(patch: { textStyle?: string; dimStyle?: string;
   if (patch.textStyle) settings.currentTextStyle = patch.textStyle;
   if (patch.dimStyle) settings.currentDimStyle = patch.dimStyle;
   if (patch.textHeightMm) settings.textHeight = patch.textHeightMm / 10;
+  settings.annotationType = null;
+  set({ revision: get().revision + 1 });
+}
+
+/** Change the drafting settings the commands read (an annotation type applying its options, the symbol to place…). */
+export function patchDraftSettings(patch: Partial<DraftSettings>): void {
+  Object.assign(settings, patch);
   set({ revision: get().revision + 1 });
 }
 

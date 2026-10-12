@@ -17,9 +17,21 @@ import { regionAt } from '../hatch/region';
 import type { AnnotationShape, AxisShape, DraftShape, Pt } from '../types';
 import type { DraftCommandDef, DraftContext, StepResult } from './types';
 
+/** The drafting command that draws a shape. */
+export function toolOfShape(shape: AnnotationShape): string {
+  switch (shape.type) {
+    case 'dimension': return shape.variant === 'linear' ? 'dimlinear' : 'dimaligned';
+    case 'radial': return shape.diameter ? 'dimdiameter' : 'dimradius';
+    case 'angular': return 'dimangular';
+    default: return shape.type;
+  }
+}
+
 function add(ctx: DraftContext, shape: AnnotationShape): void {
   // The current style, and an override when the height was typed differently.
   const params = styledParams(ctx.viewId, shape, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle });
+  const type = ctx.settings.annotationType;
+  if (type && type.tool === toolOfShape(shape)) params.atype = type.id;
   editDrafts({ add: [newDraft(ctx.viewId, ctx.layerId, shape, params)] });
 }
 

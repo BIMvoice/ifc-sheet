@@ -79,6 +79,16 @@ export interface DraftSettings {
   /** The styles new annotations take. */
   currentTextStyle: string;
   currentDimStyle: string;
+  /** TAG: what the label shows. */
+  tagField: 'mark' | 'name' | 'class';
+  /** The annotation type the next annotation of its tool is stamped with (`params.atype`), or null. */
+  annotationType: { id: string; tool: string } | null;
+  /** SYMBOL: the symbol placed, its scale factor and rotation (degrees). */
+  symbolId: string | null;
+  symbolScale: number;
+  symbolRotation: number;
+  /** MAKESYMBOL: the symbol to redefine from the selection, or null for a new one. */
+  symbolTarget: string | null;
 }
 
 export interface DraftCommand {
