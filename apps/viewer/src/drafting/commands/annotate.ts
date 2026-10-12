@@ -12,6 +12,7 @@
 import { editDrafts, newDraft } from '../draft-store';
 import { styledParams } from '@/project/drafting-standards';
 import { dimensionLayout, entitySkeleton, nextAxisLabel } from '../annotation';
+import { orthoGuides, snapLeaderEnd } from '../leader-segments';
 import { findPattern } from '../hatch/library';
 import { regionAt } from '../hatch/region';
 import type { AnnotationShape, AxisShape, DraftShape, Pt } from '../types';
@@ -54,6 +55,11 @@ export const textCommand: DraftCommandDef = {
   },
 };
 
+/**
+ * LEADER: the arrow point, a bend at any angle, then the end of the second
+ * segment (which squares itself near horizontal / vertical, with guides for
+ * both), then the text. Enter after the bend makes a one-segment leader.
+ */
 export const leaderCommand: DraftCommandDef = {
   id: 'leader',
   aliases: ['LEADER', 'LE', 'MLEADER'],
@@ -61,12 +67,16 @@ export const leaderCommand: DraftCommandDef = {
   create(ctx) {
     const pts: Pt[] = [];
     let asking = false;
+    /** The end of the second segment for a cursor: the one place preview and click agree on. */
+    const end = (p: Pt): Pt => snapLeaderEnd(pts[1], p);
     return {
-      prompt: () => ({ key: asking ? 'drafting.prompt.enterText' : pts.length === 0 ? 'drafting.prompt.leaderTip' : 'drafting.prompt.leaderNext' }),
+      prompt: () => ({ key: asking ? 'drafting.prompt.enterText' : (['drafting.prompt.leaderTip', 'drafting.prompt.leaderBend', 'drafting.prompt.leaderEnd'] as const)[Math.min(pts.length, 2)] }),
       input: () => 'point',
       basePoint: () => pts.at(-1) ?? null,
       onPoint(p) {
-        if (!asking) pts.push(p);
+        if (asking) return 'continue';
+        pts.push(pts.length === 2 ? end(p) : p);
+        if (pts.length === 3) asking = true;
         return 'continue';
       },
       onEnter() {
@@ -79,7 +89,11 @@ export const leaderCommand: DraftCommandDef = {
         if (pts.length >= 2) add(ctx, { type: 'leader', pts: [...pts], text, height: ctx.settings.textHeight });
         return 'done';
       },
-      preview: (cursor) => (pts.length && !asking ? [{ type: 'polyline', pts: [...pts, cursor], closed: false }] : []),
+      preview(cursor) {
+        if (asking || pts.length === 0) return [];
+        if (pts.length === 1) return [{ type: 'polyline', pts: [pts[0], cursor], closed: false }];
+        return [{ type: 'polyline', pts: [pts[0], pts[1], end(cursor)], closed: false }, ...orthoGuides(pts[1], cursor, 4 * ctx.settings.textHeight).map((g) => ({ type: 'line' as const, a: g.a, b: g.b }))];
+      },
     };
   },
 };
