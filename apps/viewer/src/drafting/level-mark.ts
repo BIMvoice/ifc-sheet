@@ -34,6 +34,27 @@ export function settleLevel(shape: LevelShape, resolve: LevelResolver): LevelSha
 }
 
 /**
+ * A number typed by hand: it replaces the derived one and the mark leaves its
+ * reference, so nothing changes it afterwards. The symbol stays where it is.
+ */
+export function setLevelValue(shape: LevelShape, value: number): LevelShape {
+  const { ref: _detached, ...own } = shape;
+  return { ...own, value };
+}
+
+/** A mark that keeps its own number: typed by hand, or saved before references existed. */
+export const isManualLevel = (shape: LevelShape): boolean => shape.ref === undefined;
+
+/**
+ * The way back from a typed number: the point under the symbol is measured
+ * again (`refAt` gives the reference a point has in the view in front) and the
+ * number is read from it.
+ */
+export function followReference(shape: LevelShape, refAt: (p: Pt) => LevelRef, resolve: LevelResolver): LevelShape {
+  return settleLevel({ ...shape, ref: refAt(shape.p) }, resolve);
+}
+
+/**
  * The symbol put at `p` where it is allowed to be: anywhere on a plan or for a
  * mark without a reference; on a section or elevation only along the horizontal
  * through the reference, so it always sits at the height it states.

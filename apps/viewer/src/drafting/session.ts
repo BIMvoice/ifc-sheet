@@ -99,6 +99,8 @@ export function setLevelReferenceProviders(refAt: (p: Pt) => LevelRef, resolve: 
 
 /** The number a level reference reads in the view in front (null when it cannot be resolved). */
 export const resolveLevelRef: LevelResolver = (ref) => levelResolver(ref);
+/** The reference a point has in the view in front. */
+export const levelRefAt = (p: Pt): LevelRef => levelRefProvider(p);
 
 /** The view installs its work plane and kind (work-plane commands need them). */
 export function setWorkPlaneProvider(plane: () => SectionPlaneConfig | null, view: () => ProjectView | null): void {

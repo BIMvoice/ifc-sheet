@@ -16,7 +16,7 @@ import { readDraft } from './draft-file.js';
 import { mirrorEntity, rotateEntity, translateEntity } from './annotation.js';
 import { gripAt, gripsOf, moveGrip } from './grips.js';
 import {
-  alignLevelMarks, levelValueOf, moveReference, placeSymbol, settleLevel, witnessLine, type LevelRef, type LevelShape,
+  alignLevelMarks, followReference, isManualLevel, levelValueOf, moveReference, placeSymbol, setLevelValue, settleLevel, witnessLine, type LevelRef, type LevelShape,
 } from './level-mark.js';
 import { syncLevelMarks } from './level-sync.js';
 import {
@@ -140,6 +140,27 @@ describe('the symbol and its reference', () => {
     assert.equal(witnessLine(section({ x: 0, y: 2 }, { x: 0, y: 2 })), null);
     assert.deepEqual(witnessLine(section({ x: 6, y: 2 }, { x: 0, y: 2 })), { a: { x: 0, y: 2 }, b: { x: 6, y: 2 } });
     assert.equal(witnessLine({ type: 'level', p: { x: 6, y: 2 }, value: 1, height: 0.25 }), null);
+  });
+});
+
+describe('a typed number', () => {
+  it('replaces the derived one, drops the reference and leaves the symbol', () => {
+    const typed = setLevelValue(section({ x: 6, y: 2 }, { x: 0, y: 2 }), 7.5);
+    assert.equal(typed.value, 7.5);
+    assert.equal(typed.ref, undefined);
+    assert.deepEqual(typed.p, { x: 6, y: 2 });
+    assert.equal(isManualLevel(typed), true);
+    assert.equal(levelValueOf(typed, heightOf), 7.5, 'nothing derives it any more');
+  });
+
+  it('can be taken back to the model: the symbol point is measured again, on a plan with its storey', () => {
+    const typed = setLevelValue(section({ x: 6, y: 2 }, { x: 0, y: 2 }), 7.5);
+    const back = followReference(typed, (p) => ({ at: p }), heightOf);
+    assert.deepEqual(back.ref, { at: { x: 6, y: 2 } });
+    assert.equal(back.value, 2);
+    const onPlan = followReference(setLevelValue(plan({ x: 1, y: 1 }, { x: 0, y: 0 }), 9), (p) => ({ at: p, storey: 'storey-2' }), storeyHeight);
+    assert.deepEqual(onPlan.ref, { at: { x: 1, y: 1 }, storey: 'storey-2' });
+    assert.equal(onPlan.value, 6);
   });
 });
 
