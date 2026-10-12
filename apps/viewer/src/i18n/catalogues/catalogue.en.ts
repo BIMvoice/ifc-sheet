@@ -54,6 +54,7 @@ export const catalogueEn = {
   'atype.tool.text': 'Text',
   'atype.tool.leader': 'Leader',
   'atype.tool.tag': 'Tag',
+  'atype.tool.label': 'Parametric label',
   'atype.tool.dimaligned': 'Aligned dimension',
   'atype.tool.dimlinear': 'Linear dimension',
   'atype.tool.dimradius': 'Radius',

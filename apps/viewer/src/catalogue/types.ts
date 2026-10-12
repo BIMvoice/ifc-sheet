@@ -12,13 +12,28 @@
  */
 
 import type { AxisShape, DraftShape, AnnotationShape } from '@/drafting/types';
+import type { TextFrame } from '@/drafting/text-block';
+import type { MissingMode } from '@/labels/label-resolve';
 
 /** The annotation tools a type can preset: a drafting command id. */
-export const ANNOTATION_TOOLS = ['text', 'leader', 'tag', 'dimaligned', 'dimlinear', 'dimradius', 'dimdiameter', 'dimangular', 'level', 'axis', 'hatch'] as const;
+export const ANNOTATION_TOOLS = ['text', 'leader', 'tag', 'label', 'dimaligned', 'dimlinear', 'dimradius', 'dimdiameter', 'dimangular', 'level', 'axis', 'hatch'] as const;
 export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
 
 export const TAG_FIELDS = ['mark', 'name', 'class'] as const;
 export type TagFieldName = (typeof TAG_FIELDS)[number];
+
+/**
+ * A parametric label: `template` is text with `{field}` placeholders read from
+ * the labelled element (`labels/label-template.ts`), `frame` an outline round
+ * it, `missing` what shows where a field has no value.
+ */
+export interface LabelSpec {
+  template: string;
+  frame?: TextFrame;
+  missing: MissingMode;
+}
+
+export const DEFAULT_LABEL: LabelSpec = { template: '{Name}', missing: 'question' };
 
 /**
  * A named preset for one annotation tool: the text and dimension style it
@@ -38,6 +53,8 @@ export interface AnnotationType {
   hatch?: { pattern: string; scale: number; angle: number };
   /** Tag: what the label shows. */
   tagField?: TagFieldName;
+  /** Label: the template, its frame and what shows for a missing value. */
+  label?: LabelSpec;
 }
 
 /** What a symbol is drawn from: geometry and plain text. */

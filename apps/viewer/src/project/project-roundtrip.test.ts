@@ -99,12 +99,13 @@ const SHAPES: EntityShape[] = [...Object.values(GEOMETRY), ...Object.values(ANNO
 // Ordered by view: a package keeps a view's drafts in drawing order (that is the stacking), views in path order.
 const drafts: DraftEntity[] = SHAPES.map((shape, i) => ({
   id: `d${i}`, viewId: i < SHAPES.length / 2 ? 'v-plan' : 'v-sec', layerId: i % 2 ? 'L-pen' : '0', shape,
-  params: { ifcClass: 'IfcWall', depth: 2.7, flag: true, textStyle: 'big', dimStyle: 'arch', tagOf: '2O2Fr$t4X7Zf8NOew3FLOH', sectionOf: 'v-sec', atype: 'at1' },
+  params: { ifcClass: 'IfcWall', depth: 2.7, flag: true, textStyle: 'big', dimStyle: 'arch', tagOf: '2O2Fr$t4X7Zf8NOew3FLOH', sectionOf: 'v-sec', atype: 'at1', labelOf: '3cUkl32yn9qRSPvBJVyWYp' },
 }));
 
 const annotationType: Required<AnnotationType> = {
   id: 'at1', name: 'Grid axis', tool: 'axis', textStyle: 'big', dimStyle: 'arch', layer: 'L-pen',
   axis: { bubble: 'square', ends: 'start', size: 0.8, lineType: 'dashed' }, hatch: { pattern: 'ANSI31', scale: 2, angle: 45 }, tagField: 'class',
+  label: { template: 'Fire {Pset_WallCommon.FireRating}\n{Qto_WallBaseQuantities.Length:0.00 m|n/a}', frame: 'rounded', missing: 'field' },
 };
 const symbols: Required<DraftSymbol>[] = [
   { id: 'sym-paper', name: 'Mark', unit: 'paper', shapes: [{ type: 'circle', c: pt(0, 0), r: 4 }, { type: 'text', p: pt(0, 1), text: 'A', height: 2.5, rotation: 0.3 }, { type: 'line', a: pt(0, 0), b: pt(5, 0) }] },
