@@ -19,6 +19,8 @@ export type StepResult = 'continue' | 'done';
 export interface Prompt {
   key: TranslationKey;
   params?: Record<string, string | number>;
+  /** Answers the step offers to click, besides typing: each is submitted as typed, with a count shown beside it. */
+  choices?: readonly { value: string; count: number }[];
 }
 
 /** What a click on the drawing means at the current step. */

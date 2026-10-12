@@ -11,18 +11,30 @@
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { Pt } from '@/drafting/types';
+import { convexHull } from './label-geometry';
 
 export type DrawingForLabels = Pick<Drawing2D, 'cutPolygons' | 'projectionPolygons' | 'lines'>;
 
-/** A model element in a view: its renderer id and where its label goes (drawing coordinates). */
+/** A model element in a view: its renderer id, where its label goes and its outline (drawing coordinates). */
 export interface ViewElement {
   renderId: number;
   anchor: Pt;
+  /** The outline labels keep clear of: the biggest cut or projected outline, else the box round its lines. */
+  ring: Pt[];
 }
 
 interface Candidate {
   area: number;
   centre: Pt;
+  ring: Pt[];
+}
+
+/** An outline more detailed than this is stood in for by its convex hull, thinned to this many points. */
+const MAX_RING = 24;
+function simpler(ring: readonly Pt[]): Pt[] {
+  if (ring.length <= MAX_RING) return [...ring];
+  const hull = convexHull(ring);
+  return hull.length <= MAX_RING ? hull : Array.from({ length: MAX_RING }, (_, i) => hull[Math.floor((i * hull.length) / MAX_RING)]);
 }
 
 function ringCentre(ring: readonly Pt[]): Candidate | null {
@@ -36,7 +48,7 @@ function ringCentre(ring: readonly Pt[]): Candidate | null {
     cy += (p.y + q.y) * cross;
   }
   if (Math.abs(a) < 1e-12) return null;
-  return { area: Math.abs(a) / 2, centre: { x: cx / (3 * a), y: cy / (3 * a) } };
+  return { area: Math.abs(a) / 2, centre: { x: cx / (3 * a), y: cy / (3 * a) }, ring: simpler(ring) };
 }
 
 function biggest(into: Map<number, Candidate>, id: number, c: Candidate | null): void {
@@ -59,7 +71,11 @@ export function viewElements(drawing: DrawingForLabels): ViewElement[] {
     box.set(l.entityId, b);
   }
   return [
-    ...[...cut, ...projected].map(([renderId, c]): ViewElement => ({ renderId, anchor: c.centre })),
-    ...[...box].map(([renderId, b]): ViewElement => ({ renderId, anchor: { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2 } })),
+    ...[...cut, ...projected].map(([renderId, c]): ViewElement => ({ renderId, anchor: c.centre, ring: c.ring })),
+    ...[...box].map(([renderId, b]): ViewElement => ({
+      renderId,
+      anchor: { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2 },
+      ring: [b.min, { x: b.max.x, y: b.min.y }, b.max, { x: b.min.x, y: b.max.y }],
+    })),
   ].sort((a, b) => a.renderId - b.renderId);
 }

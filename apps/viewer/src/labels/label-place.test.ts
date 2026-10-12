@@ -8,7 +8,7 @@ import { newDraft } from '@/drafting/draft-store';
 import { textBox } from '@/drafting/annotation';
 import { centredAnchor, classesOf, planTagAll, type LabelTarget } from './label-place.js';
 
-const t = (guid: string, className: string, x = 0): LabelTarget => ({ guid, className, anchor: { x, y: 0 } });
+const t = (guid: string, className: string, x = 0): LabelTarget => ({ guid, className, anchor: { x, y: 0 }, renderId: 1, ring: [] });
 const existing = (guid: string, atype: string) => newDraft('v', '0', { type: 'text', p: { x: 0, y: 0 }, text: 'x', height: 0.25, rotation: 0 }, { labelOf: guid, atype });
 
 describe('planTagAll', () => {
@@ -42,9 +42,9 @@ describe('centredAnchor', () => {
       const box = textBox(anchor, text, 0.25, 0, frame);
       const cx = (Math.min(...box.map((p) => p.x)) + Math.max(...box.map((p) => p.x))) / 2;
       assert.ok(Math.abs(cx - 10) < 1e-9, `${text}: x centre ${cx}`);
-      // The glyphs span 0.8 heights above the first baseline to 0.25 below the last.
+      // The glyphs span 0.72 heights above the first baseline to 0.22 below the last.
       const lastY = (text.split('\n').length - 1) * 1.25 * 0.25;
-      const glyphMid = (anchor.y + 0.8 * 0.25 + (anchor.y - lastY - 0.25 * 0.25)) / 2;
+      const glyphMid = (anchor.y + 0.72 * 0.25 + (anchor.y - lastY - 0.22 * 0.25)) / 2;
       assert.ok(Math.abs(glyphMid - 5) < 1e-9, `${text}: y centre ${glyphMid}`);
     }
   });

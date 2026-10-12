@@ -22,6 +22,10 @@ export interface LabelTarget {
   /** The IFC class as declared. */
   className: string;
   anchor: Pt;
+  /** The renderer id, which tells the elements of a view apart. */
+  renderId: number;
+  /** The element's outline in the view. */
+  ring: Pt[];
 }
 
 /** The targets of a label type that have none of it yet, in the order given; `className` is compared as the same class whatever its case. */

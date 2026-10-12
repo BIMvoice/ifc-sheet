@@ -15,6 +15,11 @@ import { styledParams } from '@/project/drafting-standards';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { labelElementByGlobalId } from './label-element';
 import { centredAnchor, type LabelTarget } from './label-place';
+import { withLeader } from './label-attach';
+import { ringToRef } from './label-leader';
+import { layoutLabels, type LayoutElement } from './label-layout';
+import { rectsOf } from './label-annotations';
+import { textBlock } from '@/drafting/text-block';
 import { resolveTemplate } from './label-resolve';
 import { parseTemplate } from './label-template';
 import type { ViewElement } from './view-elements';
@@ -25,6 +30,8 @@ export interface LabelPlacement {
   textHeight: number;
   textStyle: string;
   dimStyle: string;
+  /** Drawing units per paper millimetre. */
+  paperUnit: number;
 }
 
 /** The elements of a view with their GlobalId and class; one a loaded model does not have is left out. */
@@ -32,17 +39,50 @@ export function labelTargets(elements: readonly ViewElement[]): LabelTarget[] {
   return elements.flatMap((e) => {
     const guid = renderIdGlobalId(e.renderId);
     const className = guid ? labelElementByGlobalId(guid)?.className() : undefined;
-    return guid && className ? [{ guid, className, anchor: e.anchor }] : [];
+    return guid && className ? [{ guid, className, anchor: e.anchor, renderId: e.renderId, ring: e.ring }] : [];
   });
 }
 
-/** The label of `type` for the element `guid`, centred on `centre`; null when the element is not loaded or the type is no label type. */
-export function labelDraft(type: AnnotationType, guid: string, centre: Pt, at: LabelPlacement): DraftEntity | null {
+/** What the label of `type` for the element `guid` says; null when the element is not loaded or the type is no label type. */
+function labelText(type: AnnotationType, guid: string): string | null {
   const spec = type.label;
   const element = labelElementByGlobalId(guid);
-  if (!spec || !element) return null;
-  const text = resolveTemplate(parseTemplate(spec.template), element, spec.missing);
-  const shape = { type: 'text' as const, p: centredAnchor(centre, text, at.textHeight, spec.frame, annotationScreenUp()), text, height: at.textHeight, rotation: 0, ...(spec.frame ? { frame: spec.frame } : {}) };
+  return spec && element ? resolveTemplate(parseTemplate(spec.template), element, spec.missing) : null;
+}
+
+/** The label of `type` for the element `guid`, centred on `centre`; `ring` is the element's outline, which a leader runs to. Null when the element is not loaded or the type is no label type. */
+export function labelDraft(type: AnnotationType, guid: string, centre: Pt, at: LabelPlacement, ring?: readonly Pt[]): DraftEntity | null {
+  const spec = type.label;
+  const text = labelText(type, guid);
+  if (!spec || text === null) return null;
+  const plain = { type: 'text' as const, p: centredAnchor(centre, text, at.textHeight, spec.frame, annotationScreenUp()), text, height: at.textHeight, rotation: 0, ...(spec.frame ? { frame: spec.frame } : {}) };
+  const shape = withLeader(plain, ring ?? null, spec.leader, at.paperUnit);
   const styled = styledParams(at.viewId, shape, { textStyle: at.textStyle, dimStyle: at.dimStyle });
-  return newDraft(at.viewId, at.layerId, shape, { ...styled, labelOf: guid, atype: type.id });
+  return newDraft(at.viewId, at.layerId, shape, { ...styled, labelOf: guid, atype: type.id, ...(ring ? { labelRef: ringToRef(ring) } : {}) });
+}
+
+/** The size a label of `type` for `guid` fills; null as for `labelDraft`. */
+export function labelSize(type: AnnotationType, guid: string, textHeight: number): { w: number; h: number } | null {
+  const text = labelText(type, guid);
+  if (text === null) return null;
+  const { outer } = textBlock(text, textHeight, type.label?.frame);
+  return { w: outer.x1 - outer.x0, h: outer.y1 - outer.y0 };
+}
+
+/** Where a label of `type` for `target` goes beside the element, clear of `others` (the view's elements), the annotations on the view and the labels placed before it. */
+export function defaultCentres(type: AnnotationType, targets: readonly LabelTarget[], elements: readonly ViewElement[], existing: readonly DraftEntity[], at: LabelPlacement): Map<string, Pt> {
+  const items = targets.flatMap((t) => {
+    const size = labelSize(type, t.guid, at.textHeight);
+    return size ? [{ id: String(t.renderId), ring: t.ring, ...size }] : [];
+  });
+  const scene = {
+    elements: elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })),
+    annotations: rectsOf(existing),
+    paperUnit: at.paperUnit,
+  };
+  const placed = layoutLabels(items, scene);
+  return new Map(targets.flatMap((t) => {
+    const p = placed.get(String(t.renderId));
+    return p ? [[t.guid, p.centre] as [string, Pt]] : [];
+  }));
 }
