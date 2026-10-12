@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GraphicOverrideEngine, type Drawing2D } from '@ifc-lite/drawing-2d';
-import { isGeometry, type DraftEntity, type DraftShape, type LevelRef, type Pt } from '@/drafting/types';
+import { isGeometry, type DraftEntity, type DraftShape, type Pt } from '@/drafting/types';
 import { drawingToWorld, type SectionAxisName } from '@/drafting/frame';
 import { parsePat } from '@/drafting/hatch/pattern';
 import { resolvePlanLevel } from '@/project/view-defaults';
@@ -33,6 +33,7 @@ import { pickModelElement, referenceSet, referencesIn } from '@/drafting/referen
 import { selectFromPlan } from '@/components/viewer/plan/PlanPointer';
 import { draftsOfView } from '@/drafting/draft-store';
 import { syncLevelMarks } from '@/drafting/level-sync';
+import { levelResolverFor, storeyOf } from '@/drafting/level-resolver';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
   attachDraftingView, currentLayerId, setElementPicker, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
@@ -164,20 +165,8 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
   }, [entities, drawing, view, levels, plane]);
   // Level marks: a plan's mark reads its storey, a section's the height of its reference.
   useEffect(() => {
-    const planLevel = (storey?: string) => {
-      if (view.kind !== 'plan') return undefined;
-      const own = resolvePlanLevel(view, levels) ?? view.level;
-      const named = storey ? levels.find((l) => l.storeyGlobalIds.includes(storey) || l.name === storey) : undefined;
-      return named ?? own;
-    };
-    const resolve = (ref: LevelRef): number | null => {
-      if (view.kind === 'plan') return ref.storey === undefined ? null : planLevel(ref.storey)?.elevation ?? null;
-      return plane ? drawingToWorld(plane, ref.at).y : null;
-    };
-    setLevelReferenceProviders(
-      (p) => (view.kind === 'plan' ? { at: p, storey: planLevel()?.storeyGlobalIds[0] ?? planLevel()?.name } : { at: p }),
-      resolve,
-    );
+    const resolve = levelResolverFor(view, levels, plane);
+    setLevelReferenceProviders((p) => (view.kind === 'plan' ? { at: p, storey: storeyOf(view, levels) } : { at: p }), resolve);
     syncLevelMarks(view.id, resolve);
   }, [view, levels, plane]);
   useEffect(() => {
