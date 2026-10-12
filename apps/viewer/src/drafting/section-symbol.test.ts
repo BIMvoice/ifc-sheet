@@ -69,4 +69,20 @@ describe('sectionSymbolShapes', () => {
     const flipped = sectionSymbolShapes({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: -3 }, 'S1', 0.25);
     assert.ok(flipped.some((s) => s.type === 'line' && s.a.x === s.b.x && s.b.y < s.a.y));
   });
+
+  it('puts an arrowhead on each stem so the viewing direction reads at a glance', () => {
+    const h = 0.25;
+    const shapes = sectionSymbolShapes({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 3 }, 'S1', h);
+    const tipY = 4 * h;
+    for (const x of [0, 10]) {
+      const barbs = shapes.filter((s) => s.type === 'line' && s.a.x !== s.b.x && Math.abs(s.a.y - tipY) < 1e-9 && Math.abs(s.a.x - x) < 1e-9);
+      assert.equal(barbs.length, 2, `two barbs leave the stem tip at x=${x}`);
+      for (const s of barbs) {
+        if (s.type !== 'line') continue;
+        assert.ok(s.b.y < tipY, 'barbs sweep back toward the cut line');
+      }
+      const [p, q] = barbs.map((s) => (s.type === 'line' ? s.b.x - x : 0));
+      near(p + q, 0); // symmetric about the stem
+    }
+  });
 });
