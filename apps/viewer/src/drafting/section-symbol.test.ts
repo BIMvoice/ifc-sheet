@@ -10,11 +10,11 @@
 
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resetProject, useProjectStore } from '@/project/project-store';
+import { removeProjectItem, renameProjectItem, resetProject, useProjectStore } from '@/project/project-store';
 import type { ProjectView } from '@/project/types';
 import { clearDraftHistory, undoDrafts } from './draft-store.js';
 import { attachDraftingView, cancelCommand, clickDrawing, setWorkPlaneProvider, startDraftCommand, useDraftingSession } from './session.js';
-import { sectionSymbolShapes } from './section-symbol.js';
+import { nextSectionMark, sectionMarkOf, sectionSymbolShapes } from './section-symbol.js';
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≉ ${b}`);
 const TOL = 0.05;
@@ -30,6 +30,15 @@ beforeEach(() => {
   attachDraftingView('plan-1', 'down', () => []);
 });
 
+const drawSection = (y = 0): void => {
+  startDraftCommand('sectionline');
+  clickDrawing({ x: 0, y }, TOL, false);
+  clickDrawing({ x: 10, y }, TOL, false);
+  clickDrawing({ x: 5, y: y + 3 }, TOL, false);
+};
+const drafts = () => useProjectStore.getState().drafts;
+const sections = () => useProjectStore.getState().views.filter((v) => v.kind === 'section');
+
 describe('SECTION on a plan', () => {
   it('leaves the section symbol on the plan, linked to the new section view', () => {
     startDraftCommand('sectionline');
@@ -43,7 +52,7 @@ describe('SECTION on a plan', () => {
     assert.ok(drafts.length > 0, 'the symbol stays drawn on the plan');
     assert.ok(drafts.every((d) => d.viewId === 'plan-1' && d.params.sectionOf === section?.id));
     assert.ok(drafts.some((d) => d.shape.type === 'line' && d.shape.a.x === 0 && d.shape.b.x === 10), 'the cut line itself is kept');
-    assert.ok(drafts.some((d) => d.shape.type === 'text' && d.shape.text === section?.name), 'the section is named at the line');
+    assert.ok(drafts.some((d) => d.shape.type === 'text' && d.shape.text === 'A'), 'the section is marked at the line');
   });
 
   it('removes the symbol with one undo, so no orphan marker is left', () => {
@@ -84,5 +93,43 @@ describe('sectionSymbolShapes', () => {
       const [p, q] = barbs.map((s) => (s.type === 'line' ? s.b.x - x : 0));
       near(p + q, 0); // symmetric about the stem
     }
+  });
+});
+
+describe('section names', () => {
+  it('names each new section A, B, C… at both ends and in the view name', () => {
+    drawSection(0);
+    drawSection(20);
+    assert.deepEqual(sections().map((v) => v.name), ['Section A-A', 'Section B-B']);
+    const marks = (viewId: string) => drafts().filter((d) => d.params.sectionOf === viewId && d.shape.type === 'text').map((d) => d.shape.type === 'text' ? d.shape.text : '');
+    assert.deepEqual(marks(sections()[0].id), ['A', 'A']);
+    assert.deepEqual(marks(sections()[1].id), ['B', 'B']);
+  });
+
+  it('reuses a mark freed by a deleted section, and runs on past Z', () => {
+    const view = (name: string) => ({ name, kind: 'section' as const }) as Pick<ProjectView, 'name' | 'kind'>;
+    assert.equal(nextSectionMark([view('Section A-A'), view('Section C-C')]), 'B');
+    assert.equal(nextSectionMark([]), 'A');
+    const all = Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ', (c) => view(`Section ${c}-${c}`));
+    assert.equal(nextSectionMark(all), 'AA');
+    assert.equal(sectionMarkOf('Section B-B'), 'B');
+    assert.equal(sectionMarkOf('North cut'), 'North cut');
+  });
+
+  it('shows a renamed section on its symbol', () => {
+    drawSection();
+    const id = sections()[0].id;
+    renameProjectItem(id, 'Section K-K');
+    assert.ok(drafts().filter((d) => d.shape.type === 'text').every((d) => d.shape.type === 'text' && d.shape.text === 'K'));
+    renameProjectItem(id, 'Stair cut');
+    assert.ok(drafts().filter((d) => d.shape.type === 'text').every((d) => d.shape.type === 'text' && d.shape.text === 'Stair cut'));
+  });
+
+  it('removes the symbol when its section view is deleted', () => {
+    drawSection();
+    drawSection(20);
+    removeProjectItem(sections()[0].id);
+    assert.ok(drafts().length > 0);
+    assert.ok(drafts().every((d) => d.params.sectionOf === sections()[0].id));
   });
 });

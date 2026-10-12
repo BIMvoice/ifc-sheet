@@ -9,7 +9,8 @@
  * moves and undoes like any other drawing.
  */
 
-import type { AnnotationShape, DraftShape, Pt } from './types';
+import type { AnnotationShape, DraftEntity, DraftParamValue, DraftShape, Pt } from './types';
+import { nextAxisLabel } from './annotation';
 
 /** Stem length in text heights. */
 const STEM = 4;
@@ -54,4 +55,66 @@ export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height
     label(a),
     label(b),
   ];
+}
+
+/** The parameter that ties a drafted shape to the section view whose symbol it belongs to. */
+const LINK = 'sectionOf';
+
+/** `Section A-A`: how drawings name a section view. */
+export function sectionViewName(mark: string): string {
+  return `Section ${mark}-${mark}`;
+}
+
+/** The mark a view name shows on the symbol: `Section A-A` → `A`; any other name is shown whole. */
+export function sectionMarkOf(name: string): string {
+  const m = /^(?:Section\s+)?(.+?)\s*-\s*\1$/.exec(name.trim());
+  return m ? m[1] : name;
+}
+
+/** The first mark (A, B, … Z, AA …) no section view uses yet. */
+export function nextSectionMark(views: readonly { kind: string; name: string }[]): string {
+  const taken = new Set(views.filter((v) => v.kind === 'section').map((v) => sectionMarkOf(v.name).toLowerCase()));
+  let mark = 'A';
+  while (taken.has(mark.toLowerCase())) mark = nextAxisLabel(mark);
+  return mark;
+}
+
+export const sectionLink = (e: Pick<DraftEntity, 'params'>): string | null => {
+  const id = e.params[LINK];
+  return typeof id === 'string' ? id : null;
+};
+
+/** A shape of the symbol of a section view that still exists. Such shapes are locked to their section. */
+export function isSectionSymbol(e: Pick<DraftEntity, 'params'>, views: readonly { id: string }[]): boolean {
+  const id = sectionLink(e);
+  return id !== null && views.some((v) => v.id === id);
+}
+
+/** `ids` plus every other part of any section symbol they touch: the parts act as one thing. */
+export function withSectionParts(ids: ReadonlySet<string>, entities: readonly DraftEntity[]): Set<string> {
+  const sections = new Set<string>();
+  for (const e of entities) {
+    const link = sectionLink(e);
+    if (link && ids.has(e.id)) sections.add(link);
+  }
+  const out = new Set(ids);
+  for (const e of entities) {
+    const link = sectionLink(e);
+    if (link && sections.has(link)) out.add(e.id);
+  }
+  return out;
+}
+
+/** The parameters of a copy: the same, minus the claim to be a section's symbol. */
+export function withoutSectionLink(params: Readonly<Record<string, DraftParamValue>>): Record<string, DraftParamValue> {
+  const rest = { ...params };
+  delete rest[LINK];
+  return rest;
+}
+
+/** The drafts with the symbol of `viewId` showing the mark of `name`. Unchanged (same array) when nothing shows it. */
+export function relabelSectionSymbol(drafts: DraftEntity[], viewId: string, name: string): DraftEntity[] {
+  const mark = sectionMarkOf(name);
+  if (!drafts.some((d) => d.shape.type === 'text' && sectionLink(d) === viewId && d.shape.text !== mark)) return drafts;
+  return drafts.map((d) => (d.shape.type === 'text' && sectionLink(d) === viewId ? { ...d, shape: { ...d.shape, text: mark } } : d));
 }
