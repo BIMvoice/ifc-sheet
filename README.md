@@ -1,7 +1,6 @@
-# BIMVoice — documentation edition
+# IfcSheet
 
-This repository holds the **documentation edition** of BIMVoice: it opens existing IFC models and
-produces their documentation — plans, sections, elevations and sheets, 2D drafting and annotations
+**IfcSheet** opens existing IFC models and produces their documentation — plans, sections, elevations and sheets, 2D drafting and annotations
 (dimensions, level marks, grid axes, hatches, tags), door and window schedules with symbols mapped
 from the door & window library, reports and exports (PDF, DXF, IFC with edited properties). It does
 not model: elements are not created, moved or deleted.
