@@ -17,7 +17,7 @@ import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { draftCommandById, draftCommandByName } from './commands/registry';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
-import { entityBounds, nearestOnEntity, setAnnotationScreenUp } from './annotation';
+import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
 import { drawingToUserVec, userToDrawingVec, type SectionAxisName } from './frame';
 import { draftsOfView } from './draft-store';
@@ -207,6 +207,7 @@ export function attachDraftingView(viewId: string | null, axis: SectionAxisName,
   sizeScale = unitsScale;
   // Plans draw drawing-y downward on screen; text and marks grow up on screen.
   setAnnotationScreenUp(axis === 'down' ? -1 : 1);
+  setAnnotationScreenRight(axis === 'side' ? -1 : 1);
   if (get().viewId === viewId && get().axis === axis) return;
   if (get().viewId !== viewId) cancelCommand();
   set({ viewId, axis, selection: get().viewId === viewId ? get().selection : new Set() });

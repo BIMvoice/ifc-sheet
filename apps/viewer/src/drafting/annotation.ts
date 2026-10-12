@@ -12,6 +12,7 @@
 import { nearestOnShape, shapeBounds } from './curves';
 import { mirrorShape, rotateShape, translateShape } from './transform';
 import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
+import { leaderTextRight } from './leader-segments';
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
 
 export interface DimensionLayout {
@@ -129,6 +130,12 @@ export function setAnnotationScreenUp(sign: 1 | -1): void {
   screenUp = sign;
 }
 
+/** Which way drawing x runs on screen for the view being annotated (-1: mirrored, as in a side view). */
+let screenRight: 1 | -1 = 1;
+export function setAnnotationScreenRight(sign: 1 | -1): void {
+  screenRight = sign;
+}
+
 /** Model metres per hatch-pattern unit at scale 1: patterns are drawn in paper millimetres, views default to 1:100. */
 export const HATCH_UNIT_M = 0.1;
 
@@ -178,7 +185,11 @@ export function entitySkeleton(shape: EntityShape): DraftShape[] {
       return [{ type: 'polyline', pts: textBox(shape.p, shape.text, shape.height, shape.rotation), closed: true }];
     case 'leader': {
       const end = shape.pts[shape.pts.length - 1];
-      return [{ type: 'polyline', pts: shape.pts, closed: false }, { type: 'polyline', pts: textBox(end, shape.text, shape.height, 0), closed: true }];
+      // The text sits beyond the end of the last segment, on whichever side of the screen that is.
+      const toPlusX = (leaderTextRight(shape.pts, screenRight) ? screenRight : -screenRight) > 0;
+      const width = Math.max(1, shape.text.length) * shape.height * 0.62;
+      const anchor = toPlusX ? end : { x: end.x - width, y: end.y };
+      return [{ type: 'polyline', pts: shape.pts, closed: false }, { type: 'polyline', pts: textBox(anchor, shape.text, shape.height, 0), closed: true }];
     }
     case 'level': {
       const h = shape.height * screenUp;

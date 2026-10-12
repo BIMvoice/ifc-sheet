@@ -12,7 +12,8 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { clearDraftHistory } from './draft-store.js';
-import { orthoGuides, snapLeaderEnd } from './leader-segments.js';
+import { entityBounds } from './annotation.js';
+import { leaderTextRight, orthoGuides, snapLeaderEnd } from './leader-segments.js';
 import { attachDraftingView, cancelCommand, clickDrawing, pressEnter, runningCommand, startDraftCommand, submitCommandLine, useDraftingSession } from './session.js';
 import type { AnnotationShape } from './types.js';
 
@@ -103,5 +104,29 @@ describe('orthoGuides', () => {
     near(h.a.y, 2); near(h.b.y, 2);
     near(v.a.x, 3); near(v.b.x, 3);
     assert.ok(Math.min(h.a.x, h.b.x) <= -1 && Math.max(h.a.x, h.b.x) >= 7);
+  });
+});
+
+describe('which side of its end a leader reads on', () => {
+  const P = (x: number, y: number) => ({ x, y });
+  it('puts the text beyond the end of the last segment, whichever way that runs', () => {
+    assert.equal(leaderTextRight([P(0, 0), P(2, 1), P(5, 1)]), true);
+    assert.equal(leaderTextRight([P(0, 0), P(2, 1), P(-1, 1)]), false);
+    assert.equal(leaderTextRight([P(0, 0), P(3, 3)]), true, 'one segment going right');
+    assert.equal(leaderTextRight([P(3, 3), P(0, 0)]), false, 'one segment going left');
+    assert.equal(leaderTextRight([P(0, 0), P(2, 1), P(2, 4)]), true, 'straight up keeps the default');
+    assert.equal(leaderTextRight([P(0, 0)]), true);
+  });
+
+  it('flips with a view whose drawing x runs right to left on screen', () => {
+    assert.equal(leaderTextRight([P(0, 0), P(2, 1), P(5, 1)], -1), false);
+    assert.equal(leaderTextRight([P(0, 0), P(2, 1), P(-1, 1)], -1), true);
+  });
+
+  it('bounds the text on the side it is drawn, so picking and windows find it', () => {
+    const left: AnnotationShape = { type: 'leader', pts: [P(0, 0), P(2, 1), P(-1, 1)], text: 'Note', height: 0.25 };
+    const right: AnnotationShape = { type: 'leader', pts: [P(0, 0), P(2, 1), P(5, 1)], text: 'Note', height: 0.25 };
+    assert.ok(entityBounds(left).min.x < -1.5, 'text runs left of the end');
+    assert.ok(entityBounds(right).max.x > 5.5, 'text runs right of the end');
   });
 });
