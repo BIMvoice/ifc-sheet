@@ -10,7 +10,7 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { addProjectSheet, projectDocument, resetProject, useProjectStore } from './project-store.js';
-import { addViewport, paperOf, removeViewport, sheetsShowing, updateSheet, updateViewport, viewportBox } from './sheets.js';
+import { addViewport, mmPerMetre, paperOf, PAPER_MM, removeViewport, SHEET_SCALES, sheetsShowing, updateSheet, updateViewport, viewportBox } from './sheets.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
 
 beforeEach(() => resetProject());
@@ -23,6 +23,20 @@ describe('sheets', () => {
     assert.deepEqual(paperOf(sheet()), { w: 841, h: 594 });
     updateSheet(sheet().id, { paper: 'A3', orientation: 'portrait' });
     assert.deepEqual(paperOf(sheet()), { w: 297, h: 420 });
+  });
+
+  it('every paper is the ISO A size in millimetres, long side first in landscape', () => {
+    const iso = { A0: [1189, 841], A1: [841, 594], A2: [594, 420], A3: [420, 297], A4: [297, 210] } as const;
+    for (const [paper, [long, short]] of Object.entries(iso)) {
+      assert.deepEqual(PAPER_MM[paper as keyof typeof iso], { w: long, h: short }, paper);
+      assert.deepEqual(paperOf({ id: 's', number: '1', name: 'n', createdAt: 0, paper: paper as keyof typeof iso, orientation: 'portrait' }), { w: short, h: long }, paper);
+    }
+  });
+
+  it('a length in metres is 1000 / scale millimetres on paper, at every offered scale', () => {
+    assert.equal(5 * mmPerMetre({ scale: 100 }), 50);
+    assert.equal(5 * mmPerMetre({ scale: 50 }), 100);
+    for (const scale of SHEET_SCALES) assert.ok(Math.abs(mmPerMetre({ scale }) * scale - 1000) < 1e-9, `1:${scale}`);
   });
 
   it('places, moves, rescales and removes viewports', () => {
