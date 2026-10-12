@@ -9,7 +9,7 @@
  */
 
 import { formatValue } from './label-format';
-import { readField, type LabelElement } from './label-resolve';
+import { readFieldValue, type LabelElement } from './label-resolve';
 import { ATTRIBUTE_FIELDS, fieldPath, type FieldRef } from './label-template';
 
 export interface PickableField {
@@ -31,14 +31,17 @@ export interface FieldGroup {
 /** Characters a path cannot carry; a name with one has no token. */
 const UNWRITABLE = /[.{}:|\\]/;
 
-function tokenFor(ref: FieldRef, numeric: boolean): string {
-  return `{${fieldPath(ref)}${numeric ? ':0.00' : ''}}`;
+function tokenFor(ref: FieldRef, pattern: string): string {
+  return `{${fieldPath(ref)}${pattern ? `:${pattern}` : ''}}`;
 }
 
+/** A length is offered with its unit (it reads in metres), another fractional number with two decimals. */
 function field(ref: FieldRef, el: LabelElement, label: string, numeric = false): PickableField | null {
-  const value = readField(ref, el);
-  const sample = formatValue(value);
-  return sample === null ? null : { token: tokenFor(ref, numeric && typeof value === 'number' && !Number.isInteger(value)), label, sample };
+  const { value, length } = readFieldValue(ref, el);
+  const sample = formatValue(value, length ? { decimals: 3, thousands: false, unit: 'm' } : undefined);
+  if (sample === null) return null;
+  const fractional = numeric && typeof value === 'number' && !Number.isInteger(value);
+  return { token: tokenFor(ref, length ? '0.00 m' : fractional ? '0.00' : ''), label, sample };
 }
 
 const nonNull = <T,>(xs: (T | null)[]): T[] => xs.filter((x): x is T => x !== null);

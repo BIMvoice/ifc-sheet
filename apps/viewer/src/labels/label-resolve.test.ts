@@ -21,6 +21,14 @@ describe('resolveTemplate', () => {
     assert.equal(run('{Qto_WallBaseQuantities.Length:0.00 m}'), '4.29 m');
     assert.equal(run('{Pset_WallCommon.IsExternal}'), 'Yes');
   });
+  it('reads a length in metres whatever the model\'s length unit, and converts to a unit written after the pattern', () => {
+    const mm = wall({ lengthUnitScale: () => 0.001, quantitySets: () => [{ name: 'Qto_WallBaseQuantities', quantities: [{ name: 'Length', value: 4285.7, length: true }, { name: 'NetArea', value: 10.714 }] }] });
+    assert.equal(run('{Qto_WallBaseQuantities.Length:0.00 m}', 'question', mm), '4.29 m');
+    assert.equal(run('{Qto_WallBaseQuantities.Length:0 mm}', 'question', mm), '4286 mm');
+    assert.equal(run('{Qto_WallBaseQuantities.Length:0.0 cm}', 'question', mm), '428.6 cm');
+    assert.equal(run('{Qto_WallBaseQuantities.Length:0.0 ft}', 'question', mm), '4.3 ft', 'a unit it does not know is written as given, the value in metres');
+    assert.equal(run('{Qto_WallBaseQuantities.NetArea:0.00 m²}', 'question', mm), '10.71 m²', 'an area is taken as stored');
+  });
   it('takes the element\'s own value before the type\'s, and the type\'s when the element has none', () => {
     assert.equal(run('{Pset_WallCommon.FireRating}'), 'EI 60');
     assert.equal(run('{Pset_WallCommon.ThermalTransmittance:0.00}'), '0.24');

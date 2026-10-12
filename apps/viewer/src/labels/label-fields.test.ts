@@ -23,15 +23,18 @@ describe('listFields', () => {
     assert.ok(!tokens.includes('{Description}'), 'Description is empty');
     assert.ok(!tokens.includes('{Pset_WallCommon.Note}'), 'an empty property');
   });
-  it('suggests a pattern for a fractional quantity and none for text', () => {
-    assert.ok(tokens.includes('{Qto_WallBaseQuantities.Length:0.00}'));
+  it('suggests a unit for a length, a pattern for another fractional number and none for text', () => {
+    assert.ok(tokens.includes('{Qto_WallBaseQuantities.Length:0.00 m}'));
+    assert.ok(tokens.includes('{Qto_WallBaseQuantities.NetArea:0.00}'));
     const whole = wall({ quantitySets: () => [{ name: 'Qto_X', quantities: [{ name: 'Count', value: 3 }] }] });
     assert.ok(listFields(whole).flatMap((g) => g.fields).some((f) => f.token === '{Qto_X.Count}'), 'a whole number needs none');
     assert.ok(tokens.includes('{Pset_WallCommon.FireRating}'));
   });
   it('gives each field the value it reads now', () => {
     const length = groups.flatMap((g) => g.fields).find((f) => f.token.startsWith('{Qto_WallBaseQuantities.Length'));
-    assert.equal(length?.sample, '4.286');
+    assert.equal(length?.sample, '4.286 m', 'a length reads in metres');
+    const area = groups.flatMap((g) => g.fields).find((f) => f.token.startsWith('{Qto_WallBaseQuantities.NetArea'));
+    assert.equal(area?.sample, '10.714');
   });
   it('every token it offers parses and reads a value for that element', () => {
     for (const token of tokens) {

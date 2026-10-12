@@ -15,7 +15,8 @@ import type { ListDataProvider } from '@ifc-lite/lists';
 import { createListDataProvider } from '@/lib/lists/adapter';
 import { elementByGlobalId } from '@/project/element-label';
 import { useViewerStore } from '@/store';
-import type { LabelElement } from './label-resolve';
+import { QuantityType, type QuantitySet } from '@ifc-lite/data';
+import type { LabelElement, QuantitySetLike } from './label-resolve';
 
 interface Cached {
   version: number;
@@ -36,9 +37,15 @@ function providerOf(modelId: string): ListDataProvider | null {
   return provider;
 }
 
+const withLengths = (set: QuantitySet): QuantitySetLike => ({
+  name: set.name,
+  quantities: set.quantities.map((q) => ({ name: q.name, value: q.value, length: q.type === QuantityType.Length })),
+});
+
 export function labelElementOf(modelId: string, expressId: number): LabelElement | null {
   const p = providerOf(modelId);
   if (!p) return null;
+  const lengthScale = useViewerStore.getState().models.get(modelId)?.ifcDataStore?.lengthUnitScale ?? 1;
   return {
     attribute: (name) => {
       switch (name) {
@@ -53,11 +60,12 @@ export function labelElementOf(modelId: string, expressId: number): LabelElement
     className: () => p.getEntityTypeName(expressId),
     typeName: () => p.getEntityDefiningTypeName?.(expressId) ?? '',
     propertySets: () => p.getPropertySets(expressId),
-    quantitySets: () => p.getQuantitySets(expressId),
+    quantitySets: () => p.getQuantitySets(expressId).map(withLengths),
     typePropertySets: () => p.getTypePropertySets?.(expressId) ?? [],
-    typeQuantitySets: () => p.getTypeQuantitySets?.(expressId) ?? [],
+    typeQuantitySets: () => (p.getTypeQuantitySets?.(expressId) ?? []).map(withLengths),
     materials: () => p.getMaterialNames?.(expressId) ?? [],
     storey: () => p.getStoreyName?.(expressId) ?? '',
+    lengthUnitScale: () => lengthScale,
   };
 }
 
