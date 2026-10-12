@@ -10,7 +10,7 @@
  */
 
 import type { AnnotationShape, DraftEntity, DraftParamValue, DraftShape, Pt } from './types';
-import { nextAxisLabel } from './annotation';
+import { nextAxisLabel, textBox } from './annotation';
 
 /** Stem length in text heights. */
 const STEM = 4;
@@ -32,7 +32,15 @@ export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height
   }
   const stem = STEM * height;
   const tip = (p: Pt): Pt => ({ x: p.x + nx * stem, y: p.y + ny * stem });
-  const label = (p: Pt): AnnotationShape => ({ type: 'text', p: { x: tip(p).x + nx * height * 0.5, y: tip(p).y + ny * height * 0.5 }, text: name, height, rotation: 0 });
+  // The name sits clear of the arrowhead, its box centred on the stem's line: a text's anchor is a corner of its box.
+  const box = textBox({ x: 0, y: 0 }, name, height, 0);
+  const halfW = box[1].x / 2;
+  const halfH = box[3].y / 2;
+  const clear = Math.abs(nx) * Math.abs(halfW) + Math.abs(ny) * Math.abs(halfH) + height * 0.4;
+  const label = (p: Pt): AnnotationShape => {
+    const t = tip(p);
+    return { type: 'text', p: { x: t.x + nx * clear - halfW, y: t.y + ny * clear - halfH }, text: name, height, rotation: 0 };
+  };
   // Two barbs sweeping back from the tip toward the cut line close the stem into an arrow.
   const barbs = (p: Pt): DraftShape[] => {
     const t = tip(p);

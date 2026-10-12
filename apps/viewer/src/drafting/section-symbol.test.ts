@@ -14,6 +14,7 @@ import { removeProjectItem, renameProjectItem, resetProject, useProjectStore } f
 import type { ProjectView } from '@/project/types';
 import { clearDraftHistory, undoDrafts } from './draft-store.js';
 import { attachDraftingView, cancelCommand, clickDrawing, setWorkPlaneProvider, startDraftCommand, useDraftingSession } from './session.js';
+import { textBox } from './annotation.js';
 import { nextSectionMark, sectionMarkOf, sectionSymbolShapes } from './section-symbol.js';
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≉ ${b}`);
@@ -66,6 +67,24 @@ describe('SECTION on a plan', () => {
 });
 
 describe('sectionSymbolShapes', () => {
+  it('sets each name clear of its arrowhead, on the stem line, whichever way the arrow points', () => {
+    const h = 0.25;
+    for (const side of [{ x: 5, y: 3 }, { x: 5, y: -3 }]) {
+      const shapes = sectionSymbolShapes({ x: 0, y: 0 }, { x: 10, y: 0 }, side, 'A', h);
+      const dir = Math.sign(side.y);
+      const tipY = dir * 4 * h;
+      for (const text of shapes.filter((s) => s.type === 'text')) {
+        if (text.type !== 'text') continue;
+        const box = textBox(text.p, text.text, text.height, 0);
+        const ys = box.map((c) => c.y);
+        const nearEdge = dir > 0 ? Math.min(...ys) : Math.max(...ys);
+        assert.ok(dir * (nearEdge - tipY) > 0.2 * h, 'the text box starts beyond the arrow tip');
+        const cx = (Math.min(...box.map((c) => c.x)) + Math.max(...box.map((c) => c.x))) / 2;
+        assert.ok(Math.abs(cx - 0) < 1e-9 || Math.abs(cx - 10) < 1e-9, 'centred on its stem');
+      }
+    }
+  });
+
   it('points the view arrows at the picked side', () => {
     const shapes = sectionSymbolShapes({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 3 }, 'S1', 0.25);
     const stems = shapes.filter((s) => s.type === 'line' && s.a.x === s.b.x);
