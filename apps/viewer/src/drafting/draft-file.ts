@@ -41,6 +41,7 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
       return {
         type: 'dimension', variant: v.variant === 'linear' ? 'linear' : 'aligned', a: pt('a'), b: pt('b'), at: pt('at'),
         height: readHeight(v, path), ...(isString(v.text) ? { text: v.text } : {}),
+        ...(isObject(v.textAt) ? { textAt: readPt(v.textAt, `${path}.textAt`) } : {}),
       };
     case 'radial':
       if (!isNumber(v.r) || v.r <= 0) fail(`${path}.r`, 'must be a positive radius');
