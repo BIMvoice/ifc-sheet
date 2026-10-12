@@ -6,6 +6,7 @@ import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
+import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
 
 /**
  * The project document: the views and sheets a user organises over the
@@ -274,4 +275,10 @@ export interface ProjectDocument {
   materials?: ProjectMaterial[];
   /** Named section cuts of the Drawing panel. */
   savedSectionCuts?: SavedSectionCut[];
+  /** Named presets of the annotation tools. */
+  annotationTypes?: AnnotationType[];
+  /** The project's own symbols (the built-in ones are in code). */
+  symbols?: DraftSymbol[];
+  /** Legends: generated tables of what the drawings use, placeable on sheets. */
+  legends?: ProjectLegend[];
 }

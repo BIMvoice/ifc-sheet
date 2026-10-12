@@ -18,6 +18,7 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
 import { defaultTypeSpec } from '@/element-types/spec';
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import type { AnnotationShape, DraftEntity, DraftLayer, DraftShape, EntityShape } from '@/drafting/types';
@@ -90,6 +91,7 @@ const ANNOTATION: { [K in AnnotationShape['type']]: Required<Extract<AnnotationS
   angular: { type: 'angular', c: pt(0, 0), a: pt(1, 0), b: pt(0, 1), at: pt(2, 2), height: 0.25 },
   level: { type: 'level', p: pt(1, 1), value: 3.2, height: 0.25, ref: { at: pt(1, 1), storey: 'Level 1' } },
   axis: { type: 'axis', a: pt(0, 0), b: pt(0, 9), label: 'B', bubble: 'square', ends: 'start', size: 0.8, height: 0.25, lineType: 'dotted' },
+  symbol: { type: 'symbol', symbolId: 'sym-model', p: pt(2, 3), scale: 1.5, rotation: 0.7 },
   hatch: { type: 'hatch', loops: [[pt(0, 0), pt(2, 0), pt(2, 2)], [pt(0.5, 0.2), pt(1, 0.2), pt(1, 0.8)]], pattern: 'ANSI31', scale: 2, angle: 0.4, color: '#aa5500' },
 };
 const SHAPES: EntityShape[] = [...Object.values(GEOMETRY), ...Object.values(ANNOTATION)];
@@ -97,8 +99,21 @@ const SHAPES: EntityShape[] = [...Object.values(GEOMETRY), ...Object.values(ANNO
 // Ordered by view: a package keeps a view's drafts in drawing order (that is the stacking), views in path order.
 const drafts: DraftEntity[] = SHAPES.map((shape, i) => ({
   id: `d${i}`, viewId: i < SHAPES.length / 2 ? 'v-plan' : 'v-sec', layerId: i % 2 ? 'L-pen' : '0', shape,
-  params: { ifcClass: 'IfcWall', depth: 2.7, flag: true, textStyle: 'big', dimStyle: 'arch', tagOf: '2O2Fr$t4X7Zf8NOew3FLOH', sectionOf: 'v-sec' },
+  params: { ifcClass: 'IfcWall', depth: 2.7, flag: true, textStyle: 'big', dimStyle: 'arch', tagOf: '2O2Fr$t4X7Zf8NOew3FLOH', sectionOf: 'v-sec', atype: 'at1' },
 }));
+
+const annotationType: Required<AnnotationType> = {
+  id: 'at1', name: 'Grid axis', tool: 'axis', textStyle: 'big', dimStyle: 'arch', layer: 'L-pen',
+  axis: { bubble: 'square', ends: 'start', size: 0.8, lineType: 'dashed' }, hatch: { pattern: 'ANSI31', scale: 2, angle: 45 }, tagField: 'class',
+};
+const symbols: Required<DraftSymbol>[] = [
+  { id: 'sym-paper', name: 'Mark', unit: 'paper', shapes: [{ type: 'circle', c: pt(0, 0), r: 4 }, { type: 'text', p: pt(0, 1), text: 'A', height: 2.5, rotation: 0.3 }, { type: 'line', a: pt(0, 0), b: pt(5, 0) }] },
+  { id: 'sym-model', name: 'Scale bar', unit: 'model', shapes: [{ type: 'polyline', pts: [pt(0, 0), pt(5, 0)], closed: false }] },
+];
+const legend: Required<ProjectLegend> = {
+  id: 'lg1', name: 'Plan legend', createdAt: 3, title: 'Key', showTitle: false, scope: 'sheet', scopeId: 'sh1', categories: ['symbols', 'materials'],
+  columns: 2, rowHeight: 9, swatchWidth: 22, textStyle: 'big', headings: false,
+};
 
 const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'dashdot', group: 'g1' };
 
@@ -142,6 +157,9 @@ const FULL: Required<ProjectDocument> = {
   civilDrawings: [civil],
   typicalSections: [{ id: 'ts1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: { width: 1, slope: -4 }, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 }, nominalDepth: 0.6 } }],
   materials: [material],
+  annotationTypes: [annotationType],
+  symbols,
+  legends: [legend],
   savedSectionCuts: [{
     id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,
     plane: { axis: 'side', position: 4.2, flipped: true, capStyle: { fillColor: [1, 0.5, 0, 1], strokeColor: [0, 0, 0, 1], pattern: 'brick', spacingPx: 6, angleRad: 0.5, widthPx: 2, secondaryAngleRad: -0.5 }, showCap: false, showOutlines: false },

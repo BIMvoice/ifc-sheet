@@ -40,6 +40,7 @@ export type AnnotationShape =
   | { type: 'angular'; c: Pt; a: Pt; b: Pt; at: Pt; height: number }
   | { type: 'level'; p: Pt; value: number; height: number; ref?: LevelRef }
   | AxisShape
+  | SymbolInstanceShape
   | { type: 'hatch'; loops: Pt[][]; pattern: string; scale: number; angle: number; color?: string };
 
 /**
@@ -52,6 +53,19 @@ export type AnnotationShape =
 export interface LevelRef {
   at: Pt;
   storey?: string;
+}
+
+/**
+ * An instance of a symbol (`symbols.ts`): placed at `p`, `scale` drawing
+ * units per symbol unit, turned `rotation` radians counter-clockwise as seen
+ * on screen. It refers to the definition by id and draws whatever that holds.
+ */
+export interface SymbolInstanceShape {
+  type: 'symbol';
+  symbolId: string;
+  p: Pt;
+  scale: number;
+  rotation: number;
 }
 
 /** Which ends of an axis carry a bubble. */

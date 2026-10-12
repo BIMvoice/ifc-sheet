@@ -13,6 +13,7 @@
  */
 
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
+import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { create } from 'zustand';
@@ -34,6 +35,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
+  annotationTypes: [], symbols: [], legends: [],
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -42,6 +44,11 @@ export const useProjectStore = create<ProjectState>()(() => ({
   activeItemId: null,
   dirty: false,
 }));
+
+// Symbol instances look their definition up in this library (`drafting/symbols.ts`): keep it the project's.
+useProjectStore.subscribe((s, previous) => {
+  if (s.symbols !== previous.symbols) setSymbolLibrary(s.symbols);
+});
 
 /** The persisted part of the store. */
 export function projectDocument(state: ProjectState = useProjectStore.getState()): ProjectDocument {
@@ -58,6 +65,9 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
     typicalSections: state.typicalSections ?? [],
     materials: state.materials ?? [],
     savedSectionCuts: state.savedSectionCuts ?? [],
+    annotationTypes: state.annotationTypes ?? [],
+    symbols: state.symbols ?? [],
+    legends: state.legends ?? [],
   };
 }
 
@@ -82,6 +92,9 @@ export function loadProjectDocument(doc: ProjectDocument, options: { dirty?: boo
     typicalSections: doc.typicalSections ?? [],
     materials: doc.materials ?? [],
     savedSectionCuts: doc.savedSectionCuts ?? [],
+    annotationTypes: doc.annotationTypes ?? [],
+    symbols: doc.symbols ?? [],
+    legends: doc.legends ?? [],
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
@@ -157,6 +170,10 @@ export function renameProjectItem(id: string, name: string): void {
     useProjectStore.setState({ schedules: state.schedules.map((s) => (s.id === id ? { ...s, name: trimmed } : s)), dirty: true });
     return;
   }
+  if (state.legends?.some((l) => l.id === id)) {
+    useProjectStore.setState({ legends: state.legends.map((l) => (l.id === id ? { ...l, name: trimmed } : l)), dirty: true });
+    return;
+  }
   if (state.civilDrawings?.some((d) => d.id === id)) {
     useProjectStore.setState({ civilDrawings: state.civilDrawings.map((d) => (d.id === id ? { ...d, name: trimmed } : d)), dirty: true });
     return;
@@ -191,6 +208,7 @@ export function removeProjectItem(id: string): void {
     sheets: state.sheets.filter((s) => s.id !== id),
     schedules: (state.schedules ?? []).filter((s) => s.id !== id),
     civilDrawings: (state.civilDrawings ?? []).filter((d) => d.id !== id),
+    legends: (state.legends ?? []).filter((l) => l.id !== id),
     // A deleted view takes its own drawing with it, and a section's symbol on its plans.
     drafts: state.drafts.some((d) => d.viewId === id || d.params.sectionOf === id) ? state.drafts.filter((d) => d.viewId !== id && d.params.sectionOf !== id) : state.drafts,
     activeItemId: state.activeItemId === id ? null : state.activeItemId,

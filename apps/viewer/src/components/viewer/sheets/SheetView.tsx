@@ -37,6 +37,7 @@ import { exportSheetDxf } from './sheet-dxf';
 import { useSheetDrafting } from './useSheetDrafting';
 import { useSheetSchedules } from '../joinery/ScheduleGraphic';
 import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
+import { useSheetLegends } from '../legend/LegendGraphic';
 import { CommandLine } from '../drafting/CommandLine';
 import { useDraftingKeys } from '../drafting/useDraftingKeys';
 import { pressEscape, submitCommandLine } from '@/drafting/session';
@@ -96,21 +97,23 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
     const own = draftsOfView(viewId, drafts);
     return view ? settleLevelDrafts(own, levelResolverFor(view, levels, byView[viewId]?.drawing?.config.plane)) : own;
   }, [views, drafts, levels, byView]);
+  const placedLegends = useSheetLegends(sheet);
   const content = useCallback((vp: SheetViewport): ViewportContent => ({
     schedule: placedSchedules.get(vp.viewId),
     civil: placedCivil.get(vp.viewId),
+    legend: placedLegends.get(vp.viewId),
     view: views.find((v) => v.id === vp.viewId),
     drawing: styled.get(vp.viewId)?.drawing ?? null,
     drafts: settledDrafts(vp.viewId),
     overlays: styled.get(vp.viewId)?.overlays,
-  }), [views, styled, settledDrafts, placedSchedules, placedCivil]);
+  }), [views, styled, settledDrafts, placedSchedules, placedCivil, placedLegends]);
 
   const toPaper = (clientX: number, clientY: number) => {
     const rect = hostRef.current?.getBoundingClientRect();
     return { x: (clientX - (rect?.left ?? 0) - pan.x) / pan.k, y: (clientY - (rect?.top ?? 0) - pan.y) / pan.k };
   };
   const boxOf = (v: SheetViewport) => {
-    const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId);
+    const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);
     return placed ? { width: placed.width, height: placed.height } : viewportBox(v, byView[v.viewId]?.drawing?.bounds ?? null);
   };
   const viewportAt = (p: { x: number; y: number }) => [...(sheet.viewports ?? [])].reverse()

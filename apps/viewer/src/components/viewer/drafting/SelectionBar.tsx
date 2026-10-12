@@ -63,7 +63,8 @@ export function SelectionBar({ entity, transform, axis, editing, onEditingChange
   const { t } = useTranslation();
   const book = useStyleBook();
   const shape = entity.shape;
-  if (isGeometry(shape) || shape.type === 'hatch') return null;
+  // Hatches and symbol instances carry no text style of their own.
+  if (isGeometry(shape) || shape.type === 'hatch' || shape.type === 'symbol') return null;
   const ids = new Set([entity.id]);
   const dimensional = isDimensional(shape);
   const kind = dimensional ? 'dimStyle' : 'textStyle';

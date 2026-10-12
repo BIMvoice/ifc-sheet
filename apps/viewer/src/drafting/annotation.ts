@@ -10,8 +10,9 @@
  */
 
 import { nearestOnShape, shapeBounds } from './curves';
-import { placeSymbol } from './level-mark';
+import { placeSymbol as placeLevelMark } from './level-mark';
 import { mirrorShape, rotateShape, translateShape } from './transform';
+import { findSymbol, missingSymbolMark, placeSymbol } from './symbols';
 import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
 import { leaderTextRight } from './leader-segments';
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
@@ -199,6 +200,12 @@ export function entitySkeleton(shape: EntityShape): DraftShape[] {
         { type: 'line', a: shape.p, b: { x: shape.p.x + shape.height * 5, y: shape.p.y } },
       ];
     }
+    case 'symbol': {
+      const def = findSymbol(shape.symbolId);
+      if (!def) return missingSymbolMark(shape);
+      const { geometry, texts } = placeSymbol(def, shape, screenUp);
+      return [...geometry, ...texts.map((t): DraftShape => ({ type: 'polyline', pts: textBox(t.p, t.text, t.height, t.rotation), closed: true }))];
+    }
     case 'hatch':
       return shape.loops.filter((l) => l.length >= 3).map((pts) => ({ type: 'polyline', pts, closed: true }));
     case 'axis': {
@@ -260,7 +267,9 @@ function mapAnnotation(shape: AnnotationShape, f: (p: Pt) => Pt): AnnotationShap
     // Symbol only: the reference keeps what it measured (a copy reads the same point, a mirror or
     // rotation never changes the number), and the symbol stays where it may be.
     case 'level':
-      return placeSymbol(shape, f(shape.p));
+      return placeLevelMark(shape, f(shape.p));
+    case 'symbol':
+      return { ...shape, p: f(shape.p) };
     case 'axis':
       return { ...shape, a: f(shape.a), b: f(shape.b) };
     case 'hatch':
@@ -276,6 +285,7 @@ export function rotateEntity(shape: EntityShape, center: Pt, angle: number): Ent
   if (isGeometry(shape)) return rotateShape(shape, center, angle);
   const mapped = mapAnnotation(shape, (p) => rotatePt(p, center, angle));
   if (mapped.type === 'text') return { ...mapped, rotation: mapped.rotation + angle };
+  if (mapped.type === 'symbol') return { ...mapped, rotation: mapped.rotation + angle * screenUp };
   if (mapped.type === 'hatch') return { ...mapped, angle: mapped.angle + (angle * 180) / Math.PI };
   return mapped;
 }
@@ -284,3 +294,6 @@ export function rotateEntity(shape: EntityShape, center: Pt, angle: number): Ent
 export function mirrorEntity(shape: EntityShape, a: Pt, b: Pt): EntityShape {
   return isGeometry(shape) ? mirrorShape(shape, a, b) : mapAnnotation(shape, (p) => mirrorPt(p, a, b));
 }
+
+/** The current screen-up direction in drawing y (see {@link setAnnotationScreenUp}). */
+export const annotationScreenUp = (): 1 | -1 => screenUp;

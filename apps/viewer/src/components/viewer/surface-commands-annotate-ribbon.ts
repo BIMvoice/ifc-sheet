@@ -10,7 +10,7 @@
  */
 
 import {
-  AnnoAxis, AnnoDimAligned, AnnoDimAngular, AnnoDimLinear, AnnoDimRadius, AnnoHatch, AnnoLeader, AnnoLevel, AnnoLoadPattern, AnnoTag, AnnoText, DraftingStandards,
+  AnnoAxis, AnnoDimAligned, AnnoDimAngular, AnnoDimLinear, AnnoDimRadius, AnnoHatch, AnnoLeader, AnnoLevel, AnnoLegend, AnnoLoadPattern, AnnoSymbol, AnnoSymbolMake, AnnoTag, AnnoText, DraftingStandards,
 } from '@/icons';
 import { resolve } from '@/i18n/registry';
 import { toast } from '@/components/ui/toast';
@@ -18,6 +18,9 @@ import { isDrawingTabActive } from '@/project/document-tabs';
 import { startDraftCommand } from '@/drafting/session';
 import { importHatchPatternFile } from '@/drafting/hatch-import';
 import { openStandards } from '@/project/standards-dialog-store';
+import { addLegend } from '@/legend/legend-actions';
+import { activateDocumentTab } from '@/project/open-view';
+import { useProjectStore } from '@/project/project-store';
 import type { SurfaceCommandDefinition } from './surface-command-types';
 
 const ribbonOnly = ['ribbon'] as const;
@@ -31,6 +34,15 @@ function draft(id: string): () => void {
     }
     startDraftCommand(id);
   };
+}
+
+/** A new legend that lists what the item in front uses (a sheet and its views, or a view), else the whole project; it opens as a tab. */
+function newLegend(): void {
+  const s = useProjectStore.getState();
+  const front = s.activeItemId;
+  const scope = s.sheets.some((x) => x.id === front) ? { scope: 'sheet' as const, scopeId: front ?? undefined }
+    : s.views.some((x) => x.id === front) ? { scope: 'view' as const, scopeId: front ?? undefined } : {};
+  activateDocumentTab(addLegend(resolve('legend.newName'), scope));
 }
 
 export const RIBBON_ANNOTATE_SURFACE_COMMANDS = [
@@ -47,5 +59,9 @@ export const RIBBON_ANNOTATE_SURFACE_COMMANDS = [
   { id: 'annotate:level', labelKey: 'drafting.tool.level', keywords: 'level mark spot elevation cota', category: 'Tools', icon: AnnoLevel, surfaces: ribbonOnly, enabled: always, run: draft('level') },
   { id: 'annotate:axis', labelKey: 'drafting.tool.axis', keywords: 'axis axes grid gridline bubble ax', category: 'Tools', icon: AnnoAxis, surfaces: ribbonOnly, enabled: always, run: draft('axis') },
   { id: 'annotate:hatch', labelKey: 'drafting.tool.hatch', keywords: 'hatch fill pattern pat', category: 'Tools', icon: AnnoHatch, surfaces: ribbonOnly, enabled: always, run: draft('hatch') },
+  { id: 'annotate:symbol', labelKey: 'drafting.tool.symbol', keywords: 'symbol block north arrow scale bar insert place', category: 'Tools', icon: AnnoSymbol, surfaces: ribbonOnly, enabled: always, run: draft('symbol') },
+  { id: 'annotate:make-symbol', labelKey: 'drafting.tool.makeSymbol', keywords: 'symbol block make create selection', category: 'Tools', icon: AnnoSymbolMake, surfaces: ribbonOnly, enabled: always, run: draft('makesymbol') },
+  { id: 'annotate:edit-symbol', labelKey: 'drafting.tool.explodeSymbol', keywords: 'symbol block edit explode redefine', category: 'Tools', icon: AnnoSymbolMake, surfaces: ribbonOnly, enabled: always, run: draft('explodesymbol') },
+  { id: 'annotate:legend', labelKey: 'legend.new', keywords: 'legend key table materials hatches layers symbols', category: 'Tools', icon: AnnoLegend, surfaces: ribbonOnly, enabled: always, run: newLegend },
   { id: 'annotate:load-pattern', labelKey: 'drafting.tool.loadPattern', keywords: 'load import hatch pattern pat file', category: 'Tools', icon: AnnoLoadPattern, surfaces: ribbonOnly, enabled: always, run: () => { void importHatchPatternFile(); } },
 ] as const satisfies readonly SurfaceCommandDefinition[];

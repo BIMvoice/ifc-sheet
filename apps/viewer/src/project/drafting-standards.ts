@@ -19,6 +19,7 @@ import {
   type DimStyle, type LayerGroup, type StyleBook, type TextStyle,
 } from '@/drafting/styles';
 import type { DraftEntity, DraftLayer, DraftParamValue, EntityShape } from '@/drafting/types';
+import { findSymbol, symbolDrawingScale } from '@/drafting/symbols';
 import { useProjectStore } from './project-store';
 import { freshProjectId } from './view-defaults';
 
@@ -53,6 +54,14 @@ function restyle(s: State, drafts: readonly DraftEntity[], which: (d: DraftEntit
   let changed = false;
   const next = drafts.map((d) => {
     if (!which(d)) return d;
+    if (d.shape.type === 'symbol') {
+      // A symbol keeps its size: paper symbols follow the view scale, and a changed definition unit re-fits.
+      const def = findSymbol(d.shape.symbolId, s.symbols);
+      const scale = def ? symbolDrawingScale(def, typeof d.params.symbolScale === 'number' ? d.params.symbolScale : 1, paperUnitOf(d.viewId, s)) : d.shape.scale;
+      if (Math.abs(scale - d.shape.scale) < 1e-12) return d;
+      changed = true;
+      return { ...d, shape: { ...d.shape, scale } };
+    }
     const h = styledHeight(d, s);
     if (h === null || !sized(d.shape) || Math.abs(d.shape.height - h) < 1e-9) return d;
     changed = true;
@@ -66,6 +75,9 @@ function commit(patch: Partial<State>): void {
   const drafts = restyle(s, s.drafts);
   useProjectStore.setState({ ...patch, ...(drafts !== s.drafts ? { drafts } : {}), dirty: true });
 }
+
+/** Apply a change to the standards (styles, layers…) and re-fit the annotation heights it governs. */
+export const commitStandards = commit;
 
 /** A new annotation takes its style: style ids by kind, and an `o.height` when its height is not the style's. */
 export function styledParams(viewId: string, shape: EntityShape, current: { textStyle: string; dimStyle: string }): Record<string, DraftParamValue> {

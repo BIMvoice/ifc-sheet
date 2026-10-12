@@ -34,6 +34,8 @@ import { exportProjectFile, importProjectFile, PROJECT_FILE_SUFFIX } from '@/pro
 import { activateDocumentTab, openProjectView, saveLiveCameraAsView, saveLiveSectionAsView } from '@/project/open-view';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import { addSchedule } from '@/joinery/schedules';
+import { addLegend, duplicateLegend } from '@/legend/legend-actions';
+import { AnnoLegend } from '@/icons';
 import { duplicateCivilDrawing } from '@/civil/civil-drawings';
 import type { ProjectView, ProjectViewKind } from '@/project/types';
 import { ProjectFolderRow, ProjectItemRow } from './ProjectTreeRow';
@@ -41,9 +43,9 @@ import { ViewPropertiesPanel } from './ViewPropertiesPanel';
 import { LevelsFolder } from './LevelsFolder';
 import { useNavigatorDialogs } from './useNavigatorDialogs';
 
-type FolderId = ProjectViewKind | 'sheets' | 'schedules' | 'civil' | 'models';
+type FolderId = ProjectViewKind | 'sheets' | 'schedules' | 'legends' | 'civil' | 'models';
 
-const FOLDER_ORDER: readonly FolderId[] = ['plan', 'section', 'elevation', '3d', 'schedules', 'civil', 'sheets', 'models'];
+const FOLDER_ORDER: readonly FolderId[] = ['plan', 'section', 'elevation', '3d', 'schedules', 'legends', 'civil', 'sheets', 'models'];
 
 const ICONS: Record<FolderId, ReactNode> = {
   plan: <LayoutTemplate className="size-3.5" />,
@@ -52,6 +54,7 @@ const ICONS: Record<FolderId, ReactNode> = {
   '3d': <Box className="size-3.5" />,
   sheets: <Rows3 className="size-3.5" />,
   schedules: <Table2 className="size-3.5" />,
+  legends: <AnnoLegend className="size-3.5" />,
   civil: <Spline className="size-3.5" />,
   models: <FileBox className="size-3.5" />,
 };
@@ -63,6 +66,7 @@ const FOLDER_LABELS = {
   '3d': 'projectNavigator.folder.views3d',
   sheets: 'projectNavigator.folder.sheets',
   schedules: 'schedule.folder',
+  legends: 'legend.folder',
   civil: 'civilDwg.folder',
   models: 'projectNavigator.folder.models',
 } as const;
@@ -75,6 +79,7 @@ export function ProjectNavigatorPanel() {
   const views = useProjectStore((s) => s.views);
   const sheets = useProjectStore((s) => s.sheets);
   const schedules = useProjectStore((s) => s.schedules) ?? [];
+  const legends = useProjectStore((s) => s.legends) ?? [];
   const civilDrawings = useProjectStore((s) => s.civilDrawings) ?? [];
   const models = useProjectStore((s) => s.models);
   const levels = useProjectStore((s) => s.levels);
@@ -150,6 +155,7 @@ export function ProjectNavigatorPanel() {
     section: <AddButton label={t('projectNavigator.action.saveSection')} onClick={saveSection} />,
     '3d': <AddButton label={t('projectNavigator.action.save3d')} onClick={save3d} icon={<Camera className="size-3.5" />} />,
     sheets: <AddButton label={t('projectNavigator.action.newSheet')} onClick={newSheet} />,
+    legends: <AddButton label={t('legend.new')} onClick={() => setRenamingId(addLegend(t('legend.newName')))} />,
     schedules: <AddButton label={t('schedule.new')} onClick={() => setRenamingId(addSchedule('all', t('schedule.newName')))} />,
     plan: <AddButton label={t('projectNavigator.action.newPlan')} onClick={() => dialogs.open('plan')} />,
     elevation: <AddButton label={t('projectNavigator.action.newElevation')} onClick={() => dialogs.open('elevation')} />,
@@ -213,6 +219,28 @@ export function ProjectNavigatorPanel() {
             onDuplicate={() => setRenamingId(addSchedule(schedule.kind, `${schedule.name} (2)`))}
             onDelete={() => removeProjectItem(schedule.id)}
             dragViewId={schedule.id}
+          />
+        )),
+      };
+    }
+    if (id === 'legends') {
+      const shown = legends.filter((l) => !q || matches(l.name, q));
+      return {
+        count: shown.length,
+        rows: shown.map((legend) => (
+          <ProjectItemRow
+            key={legend.id}
+            label={legend.name}
+            icon={ICONS.legends}
+            active={activeItemId === legend.id}
+            renaming={renamingId === legend.id}
+            onOpen={() => activateDocumentTab(legend.id)}
+            onStartRename={() => setRenamingId(legend.id)}
+            onRename={(value) => rename(legend.id, value)}
+            onCancelRename={() => setRenamingId(null)}
+            onDuplicate={() => setRenamingId(duplicateLegend(legend.id, t('standards.style.copyName', { name: legend.name })))}
+            onDelete={() => removeProjectItem(legend.id)}
+            dragViewId={legend.id}
           />
         )),
       };

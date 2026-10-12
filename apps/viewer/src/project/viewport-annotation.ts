@@ -12,6 +12,7 @@
  * scale, not the view's.
  */
 
+import { findSymbol } from '@/drafting/symbols';
 import type { AnnotationShape } from '@/drafting/types';
 
 /** The view scale a viewport shows it at, when the view carries none. */
@@ -28,6 +29,8 @@ export const viewportPaperUnit = (viewportScale: number): number => viewportScal
 /** `shape` with its paper-size-bound dimensions multiplied by `factor`; geometry is untouched. */
 export function annotationAtFactor(shape: AnnotationShape, factor: number): AnnotationShape {
   if (factor === 1 || shape.type === 'hatch') return shape;
+  // A paper symbol is millimetres of paper and follows the factor; a model symbol is metres and stays put.
+  if (shape.type === 'symbol') return findSymbol(shape.symbolId)?.unit === 'paper' ? { ...shape, scale: shape.scale * factor } : shape;
   const sized = { ...shape, height: shape.height * factor };
   return sized.type === 'axis' ? { ...sized, size: sized.size * factor } : sized;
 }

@@ -18,6 +18,7 @@
 import { memo, useId, useMemo } from 'react';
 import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M } from '@/drafting/annotation';
 import { witnessLine } from '@/drafting/level-mark';
+import { findSymbol, flattenShape, missingSymbolMark, placeSymbol } from '@/drafting/symbols';
 import { drawingToScreen, screenSigns, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { leaderTextRight } from '@/drafting/leader-segments';
 import { findPattern } from '@/drafting/hatch/library';
@@ -145,11 +146,30 @@ function Hatch({ shape, color, t, axis, extraPatterns, k }: { shape: Extract<Ann
   );
 }
 
+/** A symbol instance: the definition's shapes at the instance's place, scale and rotation; text in the project's Standard text style. */
+function Symbol({ shape, color, t, axis, k, look }: { shape: Extract<AnnotationShape, { type: 'symbol' }>; color: string; t: ViewTransform; axis: SectionAxisName; k: number; look: AnnotationLook }) {
+  const def = findSymbol(shape.symbolId);
+  const up = axis === 'down' ? -1 : 1;
+  const placed = def ? placeSymbol(def, shape, up) : null;
+  const geometry = placed ? placed.geometry : missingSymbolMark(shape);
+  const d = geometry.map((g) => { const f = flattenShape(g); return polyline(f.pts, t, axis, f.closed); }).join('');
+  return (
+    <g>
+      <path d={d} stroke={color} strokeWidth={k} fill="none" strokeLinejoin="round" strokeDasharray={def ? undefined : `${3 * k} ${2 * k}`} />
+      {placed?.texts.map((x, i) => {
+        const at = drawingToScreen(x.p, t, axis);
+        return <Label key={i} at={at} text={x.text} px={x.height * t.scale} deg={readableAngle(x.rotation, axis)} color={color} style={look.text} anchor="start" />;
+      })}
+    </g>
+  );
+}
+
 export const AnnotationGraphics = memo(function AnnotationGraphics({
   shape, color: base, selected, transform: t, axis, extraPatterns, strokeScale: k = 1, look = DEFAULT_LOOK, paperUnit = 0.1,
 }: Props) {
   const s = (p: Pt) => drawingToScreen(p, t, axis);
   if (shape.type === 'hatch') return <Hatch shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} extraPatterns={extraPatterns} k={k} />;
+  if (shape.type === 'symbol') return <Symbol shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} k={k} look={look} />;
   const textColor = selected ? '#2563eb' : look.text.color ?? base;
   const px = shape.height * t.scale;
   /** Paper millimetres → screen px. */
