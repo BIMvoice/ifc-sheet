@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/brand/ifcsheet-horizontal-dark.png">
+    <img src=".github/brand/ifcsheet-horizontal-light.png" alt="IfcSheet" width="420">
+  </picture>
+</p>
+
 # IfcSheet
 
 **Drawings and documentation from IFC models, in the browser. For architects, engineers and BIM coordinators who deliver openBIM.**
