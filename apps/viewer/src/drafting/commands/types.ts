@@ -76,6 +76,8 @@ export interface DraftSettings {
   axisEnds: 'both' | 'start' | 'end' | 'none';
   axisSize: number | null;
   axisLineType: 'continuous' | 'dashed' | 'dotted' | 'dashdot';
+  /** DIMALIGNED / DIMLINEAR chain further dimensions from the last end (the default) rather than stopping after one. */
+  dimContinuous: boolean;
   /** The styles new annotations take. */
   currentTextStyle: string;
   currentDimStyle: string;

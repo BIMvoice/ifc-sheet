@@ -12,6 +12,7 @@
 import { editDrafts, newDraft } from '../draft-store';
 import { styledParams } from '@/project/drafting-standards';
 import { dimensionLayout, entitySkeleton, nextAxisLabel } from '../annotation';
+import { continueDimension, type DimensionShape } from '../dimension-chain';
 import { findPattern } from '../hatch/library';
 import { regionAt } from '../hatch/region';
 import type { AnnotationShape, AxisShape, DraftShape, Pt } from '../types';
@@ -84,7 +85,12 @@ export const leaderCommand: DraftCommandDef = {
   },
 };
 
-/** DIMALIGNED / DIMLINEAR: two points, then where the dimension line goes. */
+/**
+ * DIMALIGNED / DIMLINEAR: two points, then where the dimension line goes. By
+ * default the command then continues: each further point adds a dimension from
+ * the previous end on the same dimension line, until Enter. SINGLE ends it after
+ * one dimension, CONTINUOUS (the default) chains.
+ */
 function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
   return {
     id: variant === 'aligned' ? 'dimaligned' : 'dimlinear',
@@ -92,20 +98,41 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
     labelKey: variant === 'aligned' ? 'drafting.cmd.dimAligned' : 'drafting.cmd.dimLinear',
     create(ctx) {
       const pts: Pt[] = [];
-      const shape = (at: Pt): AnnotationShape => ({ type: 'dimension', variant, a: pts[0], b: pts[1], at, height: ctx.settings.textHeight });
+      /** The last dimension placed: the chain continues from its end. */
+      let last: DimensionShape | null = null;
+      const shape = (at: Pt): DimensionShape => ({ type: 'dimension', variant, a: pts[0], b: pts[1], at, height: ctx.settings.textHeight });
       return {
-        prompt: () => ({ key: pts.length === 0 ? 'drafting.prompt.dimFirst' : pts.length === 1 ? 'drafting.prompt.dimSecond' : 'drafting.prompt.dimLine' }),
+        prompt: () => ({ key: last ? 'drafting.prompt.dimNext' : pts.length === 0 ? 'drafting.prompt.dimFirst' : pts.length === 1 ? 'drafting.prompt.dimSecond' : 'drafting.prompt.dimLine' }),
         input: () => 'point',
-        basePoint: () => pts.at(-1) ?? null,
+        basePoint: () => last?.b ?? pts.at(-1) ?? null,
+        onKeyword(word) {
+          if (word !== 'SINGLE' && word !== 'CONTINUOUS') return undefined;
+          ctx.settings.dimContinuous = word === 'CONTINUOUS';
+          return 'continue';
+        },
         onPoint(p) {
+          if (last) {
+            const next = continueDimension(last, p);
+            if (next) {
+              add(ctx, next);
+              last = next;
+            }
+            return 'continue';
+          }
           if (pts.length < 2) {
             pts.push(p);
             return 'continue';
           }
-          add(ctx, shape(p));
-          return 'done';
+          last = shape(p);
+          add(ctx, last);
+          return ctx.settings.dimContinuous ? 'continue' : 'done';
         },
+        onEnter: () => 'done',
         preview(cursor) {
+          if (last) {
+            const next = continueDimension(last, cursor);
+            return next ? skeleton(next) : [];
+          }
           if (pts.length === 1) return [{ type: 'line', a: pts[0], b: cursor }];
           if (pts.length === 2) return skeleton(shape(cursor));
           return [];
