@@ -9,21 +9,21 @@
  * layout for the drawing, the picking box and the bounds, so they agree.
  */
 
+import { textWidthEm, type TextFace } from './text-width';
+
 export const TEXT_FRAMES = ['box', 'rounded', 'bubble'] as const;
 /** The outline around a text, as drawing practice has it; none is the absence of the field. */
 export type TextFrame = (typeof TEXT_FRAMES)[number];
 
 /** Line pitch, in text heights. */
 export const LINE_PITCH = 1.25;
-/** Advance of one character, in text heights (the width estimate every text box uses). */
-export const CHAR_ADVANCE = 0.62;
 /** The text box a text is picked and bounded by: from one height above the first baseline (the anchor is its corner). */
 const BOX_ASCENT = 1;
 /** Where the glyphs of a line reach, for centring the frame round them. */
-const GLYPH_ASCENT = 0.8;
-const GLYPH_DESCENT = 0.25;
-/** Space between the text and its frame, in text heights. */
-const PAD = 0.35;
+export const GLYPH_ASCENT = 0.72;
+export const GLYPH_DESCENT = 0.22;
+/** Space between the text and its frame, in text heights: the same on all four sides. */
+const PAD = 0.42;
 
 export const textLines = (text: string): string[] => text.split('\n');
 
@@ -40,9 +40,10 @@ export interface TextBlock {
   outer: { x0: number; y0: number; x1: number; y1: number };
 }
 
-export function textBlock(text: string, height: number, frame?: TextFrame): TextBlock {
+/** `face` is the font the text is drawn in; the width is that font's, measured where the browser can, else from a table (`text-width.ts`). */
+export function textBlock(text: string, height: number, frame?: TextFrame, face?: TextFace): TextBlock {
   const lines = textLines(text);
-  const width = Math.max(1, ...lines.map((l) => l.length)) * height * CHAR_ADVANCE;
+  const width = Math.max(0.5, ...lines.map((l) => textWidthEm(l, face))) * height;
   const last = (lines.length - 1) * LINE_PITCH * height;
   const box = { x0: 0, y0: -BOX_ASCENT * height, x1: width, y1: last };
   const placed = lines.map((t, i) => ({ text: t, y: i * LINE_PITCH * height }));

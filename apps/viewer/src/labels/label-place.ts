@@ -7,14 +7,13 @@
  * "label all" gives a label (those of the class that carry none of this type yet).
  */
 
-import { textBlock, type TextFrame } from '@/drafting/text-block';
+import { GLYPH_ASCENT, GLYPH_DESCENT, textBlock, type TextFrame } from '@/drafting/text-block';
 import type { DraftEntity, Pt } from '@/drafting/types';
 
 /** The anchor of a text (the baseline start of its first line) that centres the whole block on `centre`; `up` is the drawing's screen-up sign. */
 export function centredAnchor(centre: Pt, text: string, height: number, frame: TextFrame | undefined, up: 1 | -1): Pt {
   const { box, lines } = textBlock(text, height, frame);
-  // The glyphs reach 0.8 heights above the first baseline and 0.25 below the last.
-  const glyphTop = -0.8 * height, glyphBottom = lines.at(-1)!.y + 0.25 * height;
+  const glyphTop = -GLYPH_ASCENT * height, glyphBottom = lines.at(-1)!.y + GLYPH_DESCENT * height;
   return { x: centre.x - (box.x1 - box.x0) / 2, y: centre.y + ((glyphTop + glyphBottom) / 2) * up };
 }
 

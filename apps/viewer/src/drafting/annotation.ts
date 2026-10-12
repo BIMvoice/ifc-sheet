@@ -189,7 +189,7 @@ export function entitySkeleton(shape: EntityShape): DraftShape[] {
       const end = shape.pts[shape.pts.length - 1];
       // The text sits beyond the end of the last segment, on whichever side of the screen that is.
       const toPlusX = (leaderTextRight(shape.pts, screenRight) ? screenRight : -screenRight) > 0;
-      const width = Math.max(1, shape.text.length) * shape.height * 0.62;
+      const width = textBlock(shape.text, shape.height).box.x1;
       const anchor = toPlusX ? end : { x: end.x - width, y: end.y };
       return [{ type: 'polyline', pts: shape.pts, closed: false }, { type: 'polyline', pts: textBox(anchor, shape.text, shape.height, 0), closed: true }];
     }

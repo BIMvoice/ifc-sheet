@@ -27,7 +27,7 @@ import {
   DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, dashOf, fontFamily, formatDimension, readableDeg,
   type DimStyle, type TextStyle,
 } from '@/drafting/styles';
-import { textBlock, textLines, type TextFrame } from '@/drafting/text-block';
+import { textBlock, type TextFrame } from '@/drafting/text-block';
 import type { AnnotationShape, Pt } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 
@@ -82,8 +82,8 @@ interface LabelProps {
 
 function Label({ at, text, px, deg, color, style, anchor = 'middle', shift = 0, mask = false, frame }: LabelProps) {
   const size = Math.max(px, 1);
-  const block = textBlock(text, size, frame);
-  const width = Math.max(1, ...textLines(text).map((l) => l.length)) * size * 0.6;
+  const block = textBlock(text, size, frame, style);
+  const width = block.box.x1;
   const shape = block.frame;
   const stroke = { fill: 'none', stroke: color, strokeWidth: Math.max(size * 0.06, 0.5) };
   return (
