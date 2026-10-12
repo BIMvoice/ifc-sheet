@@ -210,6 +210,7 @@ export const draftingEn = {
   'drafting.msg.sectionOnPlan': 'Draw a section line on a floor plan.',
   'drafting.msg.sectionFailed': 'The section line needs two different points.',
   'drafting.msg.sectionCreated': 'Section created — it is in the Project Navigator under Sections.',
+  'drafting.msg.sectionSymbolLocked': 'A section symbol stays with its section: it cannot be moved, rotated, mirrored or reshaped. Copy it, or erase it and draw the section again.',
   'drafting.cmd.extrude': 'EXTRUDE',
   'drafting.prompt.extrude': 'Click a closed contour or inside a region [class {ifcClass} · depth {depth} m] — type WALL / SLAB / COLUMN / BEAM / PROXY… or IfcXxx, or a depth; Enter to finish:',
   'drafting.msg.noWorkPlane': 'This view has no work plane yet.',

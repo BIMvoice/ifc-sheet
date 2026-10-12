@@ -21,6 +21,7 @@ import { entityBounds, nearestOnEntity, setAnnotationScreenUp } from './annotati
 import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
 import { drawingToUserVec, userToDrawingVec, type SectionAxisName } from './frame';
 import { draftsOfView } from './draft-store';
+import { withSectionParts } from './section-symbol';
 import type { DraftEntity, DraftShape, Pt } from './types';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
@@ -283,8 +284,13 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
     }
     const next = new Set(additive || selecting ? get().selection : []);
     if (hit) {
-      if (next.has(hit.id) && additive) next.delete(hit.id);
-      else next.add(hit.id);
+      // The parts of a section symbol are picked and unpicked together.
+      const parts = withSectionParts(new Set([hit.id]), visibleEntities(viewId));
+      const unpick = next.has(hit.id) && additive;
+      for (const id of parts) {
+        if (unpick) next.delete(id);
+        else next.add(id);
+      }
     }
     set({ selection: next });
     refresh();
@@ -311,7 +317,7 @@ export function windowSelect(a: Pt, b: Pt, crossing: boolean, additive: boolean)
     const touches = bb.max.x >= min.x && bb.min.x <= max.x && bb.max.y >= min.y && bb.min.y <= max.y;
     if (inside || (crossing && touches)) next.add(entity.id);
   }
-  set({ selection: next });
+  set({ selection: withSectionParts(next, visibleEntities(viewId)) });
   refresh();
 }
 
