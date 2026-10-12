@@ -21,7 +21,8 @@ import { entityBounds, nearestOnEntity, setAnnotationScreenUp } from './annotati
 import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
 import { drawingToUserVec, userToDrawingVec, type SectionAxisName } from './frame';
 import { draftsOfView } from './draft-store';
-import type { DraftEntity, DraftShape, Pt } from './types';
+import type { LevelResolver } from './level-mark';
+import type { DraftEntity, DraftShape, LevelRef, Pt } from './types';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
 
@@ -74,6 +75,8 @@ let referenceProvider: (min: Pt, max: Pt) => DraftShape[] = () => [];
 let modelPicker: ((p: Pt, tolerance: number, additive: boolean) => void) | null = null;
 let loopProvider: () => Pt[][] = () => [];
 let levelProvider: (p: Pt) => number = () => 0;
+let levelRefProvider: (p: Pt) => LevelRef = (p) => ({ at: p });
+let levelResolver: LevelResolver = (ref) => levelProvider(ref.at);
 let planeProvider: () => SectionPlaneConfig | null = () => null;
 let viewKindProvider: () => 'plan' | 'section' | 'elevation' | null = () => null;
 let viewProvider: () => ProjectView | null = () => null;
@@ -83,6 +86,19 @@ export function setAnnotationProviders(loops: () => Pt[][], levelAt: (p: Pt) => 
   loopProvider = loops;
   levelProvider = levelAt;
 }
+
+/**
+ * The view installs what a level mark measures: the reference a point gives
+ * (a plan names its storey) and the number a reference reads. Without it a
+ * point is its own reference and its number is `levelAt`.
+ */
+export function setLevelReferenceProviders(refAt: (p: Pt) => LevelRef, resolve: LevelResolver): void {
+  levelRefProvider = refAt;
+  levelResolver = resolve;
+}
+
+/** The number a level reference reads in the view in front (null when it cannot be resolved). */
+export const resolveLevelRef: LevelResolver = (ref) => levelResolver(ref);
 
 /** The view installs its work plane and kind (work-plane commands need them). */
 export function setWorkPlaneProvider(plane: () => SectionPlaneConfig | null, view: () => ProjectView | null): void {
@@ -144,6 +160,8 @@ function context(viewId: string): DraftContext {
     referenceShapes: (min, max) => referenceProvider(min, max),
     closedLoops: () => loopProvider(),
     levelAt: (p) => levelProvider(p),
+    levelRefAt: (p) => levelRefProvider(p),
+    resolveLevel: (ref) => levelResolver(ref),
     plane: () => planeProvider(),
     viewKind: () => viewKindProvider(),
     view: () => viewProvider(),

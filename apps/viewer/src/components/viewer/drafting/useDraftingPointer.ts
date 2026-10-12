@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { screenToDrawing, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
-import { clickDrawing, constrainPoint, pickEntity, runningCommand, useDraftingSession, windowSelect } from '@/drafting/session';
+import { clickDrawing, constrainPoint, pickEntity, resolveLevelRef, runningCommand, useDraftingSession, windowSelect } from '@/drafting/session';
 import { findSnap } from '@/drafting/snaps';
 import { capturePointer } from '@/lib/pointer-capture';
 import { referencesIn, type ReferenceSet } from '@/drafting/references';
@@ -138,7 +138,7 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     if (d.kind === 'grip' && d.grip) {
       const target = state.gripDrag;
       const entity = useProjectStore.getState().drafts.find((x) => x.id === d.grip?.id);
-      if (target && entity) editDrafts({ update: new Map([[entity.id, moveGrip(entity.shape, d.grip.key, target.at)]]) });
+      if (target && entity) editDrafts({ update: new Map([[entity.id, moveGrip(entity.shape, d.grip.key, target.at, resolveLevelRef)]]) });
       setState((prev) => ({ ...prev, gripDrag: null }));
       return;
     }

@@ -188,7 +188,8 @@ export const levelCommand: DraftCommandDef = {
       input: () => 'point',
       basePoint: () => null,
       onPoint(p) {
-        add(ctx, { type: 'level', p, value: ctx.levelAt(p), height: ctx.settings.textHeight });
+        const ref = ctx.levelRefAt(p);
+        add(ctx, { type: 'level', p, value: ctx.resolveLevel(ref) ?? ctx.levelAt(p), height: ctx.settings.textHeight, ref });
         return 'continue';
       },
       onEnter: () => 'done',

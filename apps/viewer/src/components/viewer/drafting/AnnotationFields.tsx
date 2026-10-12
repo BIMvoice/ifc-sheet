@@ -20,9 +20,9 @@ function update(entity: DraftEntity, shape: AnnotationShape): void {
   editDrafts({ update: new Map([[entity.id, shape]]) });
 }
 
-function Field({ label, value, onCommit, numeric }: { label: string; value: string; onCommit: (v: string) => void; numeric?: boolean }) {
+function Field({ label, value, onCommit, numeric, hint }: { label: string; value: string; onCommit: (v: string) => void; numeric?: boolean; hint?: string }) {
   return (
-    <label className="flex items-center justify-between gap-2">
+    <label className="flex items-center justify-between gap-2" title={hint}>
       <span className="shrink-0 text-zinc-500">{label}</span>
       <input
         aria-label={label}
@@ -103,7 +103,17 @@ export function AnnotationFields({ entity, shape, extraPatterns }: { entity: Dra
     case 'level':
       return (
         <>
-          <Field label={t('drafting.props.value')} value={String(shape.value)} numeric onCommit={(v) => update(entity, { ...shape, value: finite(v, shape.value) })} />
+          {/* A typed number is the draughtsman's own: it replaces the derived one, so the mark leaves its reference. */}
+          <Field
+            label={t('drafting.props.value')}
+            value={String(shape.value)}
+            numeric
+            hint={shape.ref ? t('drafting.props.levelDetached') : undefined}
+            onCommit={(v) => {
+              const { ref: _detached, ...own } = shape;
+              update(entity, { ...own, value: finite(v, shape.value) });
+            }}
+          />
           {height}
         </>
       );

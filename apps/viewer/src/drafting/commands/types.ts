@@ -11,7 +11,7 @@
 import type { TranslationKey } from '@/i18n';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
-import type { DraftEntity, DraftShape, Pt } from '../types';
+import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
 
 export type StepResult = 'continue' | 'done';
 
@@ -36,6 +36,9 @@ export interface DraftContext {
   closedLoops(): Pt[][];
   /** The height (m) a level mark at this drawing point reports. */
   levelAt(p: Pt): number;
+  /** What a level mark placed at `p` measures, and the number a reference reads. */
+  levelRefAt(p: Pt): LevelRef;
+  resolveLevel(ref: LevelRef): number | null;
   /** The view's work plane (world units), when known. */
   plane(): SectionPlaneConfig | null;
   /** The kind of view being drafted on. */
