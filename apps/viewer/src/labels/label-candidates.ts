@@ -72,7 +72,7 @@ const DIAG = Math.SQRT1_2;
 /** The eight ways round a compact element, in the order tried when nothing says otherwise: right, left, above, below, then the corners. */
 const COMPASS: readonly Pt[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }, { x: DIAG, y: DIAG }, { x: -DIAG, y: DIAG }, { x: DIAG, y: -DIAG }, { x: -DIAG, y: -DIAG }];
 /** Distances of the further rings, as multiples of the gap. */
-const RINGS = [1, 2.5, 4, 6] as const;
+const RINGS = [1, 2.5, 4, 6, 9, 13] as const;
 
 /** The centres to try, best first. Deterministic: the same input gives the same list. */
 export function candidateCentres(input: CandidateInput): Pt[] {

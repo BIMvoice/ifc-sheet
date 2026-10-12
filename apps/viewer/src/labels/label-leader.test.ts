@@ -56,7 +56,7 @@ describe('dragging a label by hand', () => {
   it('adds the leader once it is dragged away, and drops it when brought back (same rule as placing)', () => {
     const far = settleLeader(textAt(5, 3), 'displaced', 0.1);
     assert.ok(far.shape.type === 'text' && far.shape.leader, 'far: leader');
-    const back = settleLeader({ ...far, shape: { ...far.shape, p: { x: 4.8, y: 0.5 } } }, 'displaced', 0.1);
+    const back = settleLeader({ ...far, shape: { ...far.shape, p: { x: 4.8, y: 0.42 } } }, 'displaced', 0.1);
     assert.ok(back.shape.type === 'text' && !back.shape.leader, 'near again: none');
   });
   it('leaves an old label with no stored outline as it is', () => {

@@ -23,7 +23,7 @@ const BOX_ASCENT = 1;
 export const GLYPH_ASCENT = 0.72;
 export const GLYPH_DESCENT = 0.22;
 /** Space between the text and its frame, in text heights: the same on all four sides. */
-const PAD = 0.42;
+const PAD = 0.5;
 
 export const textLines = (text: string): string[] => text.split('\n');
 

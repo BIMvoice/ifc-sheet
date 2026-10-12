@@ -41,7 +41,7 @@ describe('candidateCentres', () => {
     const door = orientedBox(box(0, 0, 1, 0.5));
     const out = candidateCentres({ box: door, w: 0.5, h: 0.3, gap: 0.1, away: { x: 0, y: 1 } });
     assert.ok(out[0].y > 0.5, 'above first');
-    assert.equal(out.length, 4 * 8);
+    assert.equal(out.length, 6 * 8);
     const gaps = out.map((c) => rectRingGap(rectOf(c, 0.5, 0.3), box(0, 0, 1, 0.5)));
     assert.ok(gaps[8] > gaps[0], 'the second ring is further out');
   });
@@ -94,6 +94,13 @@ describe('layoutLabels', () => {
       const p = layoutLabels([{ ...item(w), w: 20 * unit, h: 8 * unit }], scene([w], [], unit)).get('1')!;
       assert.ok(Math.abs(rectRingGap(rectOf(p.centre, 20 * unit, 8 * unit), w.ring) - LABEL_GAP_MM * unit) < 1e-9, `at ${unit}`);
     }
+  });
+
+  it('reaches past a neighbour that closes in the near places', () => {
+    const w = wallAt('1', 0, 0, 10, 0.2), up = wallAt('up', -1, 0.35, 11, 0.45), down = wallAt('down', -1, -0.45, 11, -0.35);
+    const p = layoutLabels([item(w)], scene([w, up, down])).get('1')!;
+    assert.ok(p.free);
+    assert.ok(!rectHitsRing(rectOf(p.centre), up.ring) && !rectHitsRing(rectOf(p.centre), down.ring));
   });
 
   it('gives the same answer twice, and reports when nowhere is free', () => {

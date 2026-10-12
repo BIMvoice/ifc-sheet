@@ -19,7 +19,7 @@ export const DEFAULT_LEADER: LeaderMode = 'displaced';
 export const asLeaderMode = (v: unknown): LeaderMode | undefined => (LEADER_MODES as readonly unknown[]).includes(v) ? (v as LeaderMode) : undefined;
 
 /** A label further than this from its element, paper millimetres, is displaced. */
-export const DISPLACED_MM = 4;
+export const DISPLACED_MM = 2.5;
 
 /**
  * Where the leader of a label whose box is `label` ends on its element (the ring), or undefined for none.
