@@ -15,6 +15,7 @@ import { HierarchyPanel } from '@/components/viewer/HierarchyPanel';
 import { useProjectSync } from '@/project/project-sync';
 import { useLinkedElementSync } from '@/project/useLinkedElementSync';
 import { useElementTagSync } from '@/project/useElementTagSync';
+import { useParametricLabelSync } from '@/labels/label-sync';
 import { ProjectNavigatorPanel } from './ProjectNavigatorPanel';
 import { NewProjectHost } from './NewProjectDialog';
 import { ProjectPackageHost } from './ProjectPackageHost';
@@ -48,6 +49,7 @@ export function LeftNavigator() {
   useProjectSync();
   useLinkedElementSync();
   useElementTagSync();
+  useParametricLabelSync();
   const [tab, setTab] = useState<LeftTab>(readTab);
   const select = (next: LeftTab) => {
     setTab(next);
