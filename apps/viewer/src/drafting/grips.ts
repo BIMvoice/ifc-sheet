@@ -33,6 +33,7 @@ export function gripsOf(id: string, shape: EntityShape): Grip[] {
     case 'circle':
     case 'arc': return [g('c', shape.c)];
     case 'text':
+    case 'symbol':
     case 'level': return [g('p', shape.p)];
     case 'leader': return shape.pts.map((p, i) => g(`pt${i}`, p));
     case 'dimension': return [g('a', shape.a), g('b', shape.b), g('at', shape.at), g('text', dimensionLayout(shape).textAt)];
@@ -55,6 +56,7 @@ export function moveGrip(shape: EntityShape, key: string, p: Pt): EntityShape {
     case 'circle':
     case 'arc': return key === 'c' ? { ...shape, c: p } : shape;
     case 'text':
+    case 'symbol':
     case 'level': return key === 'p' ? { ...shape, p } : shape;
     case 'dimension':
       if (key === 'text') return { ...shape, textAt: p };

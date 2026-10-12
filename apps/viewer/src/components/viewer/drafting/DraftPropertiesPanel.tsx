@@ -32,6 +32,7 @@ const TYPE_KEYS = {
   level: 'drafting.props.typeLevel',
   axis: 'drafting.props.typeAxis',
   hatch: 'drafting.props.typeHatch',
+  symbol: 'drafting.props.typeSymbol',
 } as const;
 
 const fmt = (n: number) => n.toFixed(3);

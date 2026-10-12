@@ -10,7 +10,7 @@
  */
 
 import {
-  AnnoAxis, AnnoDimAligned, AnnoDimAngular, AnnoDimLinear, AnnoDimRadius, AnnoHatch, AnnoLeader, AnnoLevel, AnnoLoadPattern, AnnoTag, AnnoText, DraftingStandards,
+  AnnoAxis, AnnoDimAligned, AnnoDimAngular, AnnoDimLinear, AnnoDimRadius, AnnoHatch, AnnoLeader, AnnoLevel, AnnoLoadPattern, AnnoSymbol, AnnoSymbolMake, AnnoTag, AnnoText, DraftingStandards,
 } from '@/icons';
 import { resolve } from '@/i18n/registry';
 import { toast } from '@/components/ui/toast';
@@ -46,5 +46,8 @@ export const RIBBON_ANNOTATE_SURFACE_COMMANDS = [
   { id: 'annotate:level', labelKey: 'drafting.tool.level', keywords: 'level mark spot elevation cota', category: 'Tools', icon: AnnoLevel, surfaces: ribbonOnly, enabled: always, run: draft('level') },
   { id: 'annotate:axis', labelKey: 'drafting.tool.axis', keywords: 'axis axes grid gridline bubble ax', category: 'Tools', icon: AnnoAxis, surfaces: ribbonOnly, enabled: always, run: draft('axis') },
   { id: 'annotate:hatch', labelKey: 'drafting.tool.hatch', keywords: 'hatch fill pattern pat', category: 'Tools', icon: AnnoHatch, surfaces: ribbonOnly, enabled: always, run: draft('hatch') },
+  { id: 'annotate:symbol', labelKey: 'drafting.tool.symbol', keywords: 'symbol block north arrow scale bar insert place', category: 'Tools', icon: AnnoSymbol, surfaces: ribbonOnly, enabled: always, run: draft('symbol') },
+  { id: 'annotate:make-symbol', labelKey: 'drafting.tool.makeSymbol', keywords: 'symbol block make create selection', category: 'Tools', icon: AnnoSymbolMake, surfaces: ribbonOnly, enabled: always, run: draft('makesymbol') },
+  { id: 'annotate:edit-symbol', labelKey: 'drafting.tool.explodeSymbol', keywords: 'symbol block edit explode redefine', category: 'Tools', icon: AnnoSymbolMake, surfaces: ribbonOnly, enabled: always, run: draft('explodesymbol') },
   { id: 'annotate:load-pattern', labelKey: 'drafting.tool.loadPattern', keywords: 'load import hatch pattern pat file', category: 'Tools', icon: AnnoLoadPattern, surfaces: ribbonOnly, enabled: always, run: () => { void importHatchPatternFile(); } },
 ] as const satisfies readonly SurfaceCommandDefinition[];

@@ -13,6 +13,7 @@
  */
 
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
+import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { create } from 'zustand';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
@@ -42,6 +43,11 @@ export const useProjectStore = create<ProjectState>()(() => ({
   activeItemId: null,
   dirty: false,
 }));
+
+// Symbol instances look their definition up in this library (`drafting/symbols.ts`): keep it the project's.
+useProjectStore.subscribe((s, previous) => {
+  if (s.symbols !== previous.symbols) setSymbolLibrary(s.symbols);
+});
 
 /** The persisted part of the store. */
 export function projectDocument(state: ProjectState = useProjectStore.getState()): ProjectDocument {

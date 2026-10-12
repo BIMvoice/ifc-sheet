@@ -58,6 +58,10 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
         size: isNumber(v.size) && v.size > 0 ? v.size : 1, height: readHeight(v, path),
         lineType: v.lineType === 'continuous' || v.lineType === 'dashed' || v.lineType === 'dotted' ? v.lineType : 'dashdot',
       };
+    case 'symbol':
+      if (!isString(v.symbolId) || !v.symbolId) fail(`${path}.symbolId`, 'must be a symbol id');
+      if (!isNumber(v.scale) || v.scale <= 0) fail(`${path}.scale`, 'must be a positive scale');
+      return { type: 'symbol', symbolId: v.symbolId, p: pt('p'), scale: v.scale, rotation: isNumber(v.rotation) ? v.rotation : 0 };
     case 'hatch': {
       if (!Array.isArray(v.loops) || v.loops.length === 0 || !isString(v.pattern)) fail(path, 'must be a hatch { loops, pattern }');
       const loops = v.loops.map((loop, i) => {

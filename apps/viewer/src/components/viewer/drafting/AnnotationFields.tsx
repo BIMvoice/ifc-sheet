@@ -10,7 +10,9 @@
 
 import { useTranslation } from '@/i18n';
 import { editDrafts } from '@/drafting/draft-store';
+import { setSymbolPlacement } from '@/catalogue/symbol-actions';
 import { builtInPatterns } from '@/drafting/hatch/library';
+import { allSymbols } from '@/drafting/symbols';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import type { AnnotationShape, AxisShape, DraftEntity } from '@/drafting/types';
 
@@ -100,6 +102,22 @@ export function AnnotationFields({ entity, shape, extraPatterns }: { entity: Dra
       );
     case 'axis':
       return <AxisFields entity={entity} shape={shape} />;
+    case 'symbol': {
+      const factor = typeof entity.params.symbolScale === 'number' ? entity.params.symbolScale : 1;
+      const symbols = allSymbols();
+      return (
+        <>
+          <Choice
+            label={t('drafting.props.symbol')} value={shape.symbolId}
+            options={[...(symbols.some((s) => s.id === shape.symbolId) ? [] : [{ value: shape.symbolId, label: shape.symbolId }]), ...symbols.map((s) => ({ value: s.id, label: s.name }))]}
+            onChange={(symbolId) => setSymbolPlacement(entity.id, { symbolId })}
+          />
+          <Field label={t('drafting.props.symbolFactor')} value={String(factor)} numeric onCommit={(v) => setSymbolPlacement(entity.id, { factor: positive(v, factor) })} />
+          <Field label={t('drafting.props.symbolRotation')} value={String(Math.round(((shape.rotation * 180) / Math.PI) * 100) / 100)} numeric
+            onCommit={(v) => setSymbolPlacement(entity.id, { rotationDeg: finite(v, 0) })} />
+        </>
+      );
+    }
     case 'level':
       return (
         <>
