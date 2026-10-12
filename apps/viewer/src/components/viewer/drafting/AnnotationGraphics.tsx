@@ -17,6 +17,7 @@
 
 import { memo, useId, useMemo } from 'react';
 import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M } from '@/drafting/annotation';
+import { witnessLine } from '@/drafting/level-mark';
 import { drawingToScreen, screenSigns, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { leaderTextRight } from '@/drafting/leader-segments';
 import { findPattern } from '@/drafting/hatch/library';
@@ -177,8 +178,12 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
       const p = s(shape.p);
       const h = Math.max(px, 4 * k);
       const lineColor = selected ? '#2563eb' : base;
+      const witness = witnessLine(shape);
+      const wa = witness ? s(witness.a) : null;
       return (
         <g>
+          {/* The thin line joining the symbol to the point it measures, while they are apart. */}
+          {wa ? <path d={`M${wa.x} ${wa.y}L${p.x} ${p.y}`} stroke={lineColor} strokeWidth={0.5 * k} strokeDasharray={`${3 * k} ${2 * k}`} fill="none" /> : null}
           <g stroke={lineColor} fill="none" strokeWidth={k}>
             <path d={`M${p.x} ${p.y}L${p.x - h} ${p.y - h}L${p.x + h} ${p.y - h}Z`} fill={lineColor} fillOpacity={0.25} />
             <path d={`M${p.x - h} ${p.y}L${p.x + h * 5} ${p.y}`} />

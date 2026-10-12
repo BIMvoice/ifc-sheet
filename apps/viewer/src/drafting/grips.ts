@@ -8,13 +8,15 @@
  *
  *  - dimension: its two measured points, its line (`at`) and its value
  *    (`text`: moving it sets the dimension's own text position, `textAt`);
- *  - radial / angular: the line / arc position; text, level: the insertion
- *    point; leader: every vertex;
+ *  - radial / angular: the line / arc position; text: the insertion point;
+ *    level: the symbol (free along the horizontal on a section) and the
+ *    reference it measures; leader: every vertex;
  *  - axis: its two ends (the bubbles follow);
  *  - line, polyline: every vertex; circle, arc: the centre.
  */
 
 import { dimensionLayout } from './annotation';
+import { moveReference, placeSymbol, type LevelResolver } from './level-mark';
 import type { EntityShape, Pt } from './types';
 
 export interface Grip {
@@ -32,8 +34,8 @@ export function gripsOf(id: string, shape: EntityShape): Grip[] {
     case 'polyline': return shape.pts.map((p, i) => g(`pt${i}`, p));
     case 'circle':
     case 'arc': return [g('c', shape.c)];
-    case 'text':
-    case 'level': return [g('p', shape.p)];
+    case 'text': return [g('p', shape.p)];
+    case 'level': return shape.ref ? [g('p', shape.p), g('ref', shape.ref.at)] : [g('p', shape.p)];
     case 'leader': return shape.pts.map((p, i) => g(`pt${i}`, p));
     case 'dimension': return [g('a', shape.a), g('b', shape.b), g('at', shape.at), g('text', dimensionLayout(shape).textAt)];
     case 'radial':
@@ -43,7 +45,7 @@ export function gripsOf(id: string, shape: EntityShape): Grip[] {
 }
 
 /** `shape` with grip `key` dragged to `p`. */
-export function moveGrip(shape: EntityShape, key: string, p: Pt): EntityShape {
+export function moveGrip(shape: EntityShape, key: string, p: Pt, resolveLevel?: LevelResolver): EntityShape {
   const vertex = /^pt(\d+)$/.exec(key);
   switch (shape.type) {
     case 'line':
@@ -54,8 +56,10 @@ export function moveGrip(shape: EntityShape, key: string, p: Pt): EntityShape {
       return { ...shape, pts: shape.pts.map((q, i) => (i === Number(vertex[1]) ? p : q)) };
     case 'circle':
     case 'arc': return key === 'c' ? { ...shape, c: p } : shape;
-    case 'text':
-    case 'level': return key === 'p' ? { ...shape, p } : shape;
+    case 'text': return key === 'p' ? { ...shape, p } : shape;
+    case 'level':
+      if (key === 'p') return placeSymbol(shape, p);
+      return key === 'ref' ? moveReference(shape, p, resolveLevel ?? (() => null)) : shape;
     case 'dimension':
       if (key === 'text') return { ...shape, textAt: p };
       // Moving the line takes a moved value along (it stays where it was relative to the line).
@@ -77,7 +81,8 @@ export function gripAt(grips: readonly Grip[], p: Pt, tolerance: number): Grip |
   let bestD = tolerance;
   for (const grip of grips) {
     const d = Math.hypot(grip.at.x - p.x, grip.at.y - p.y);
-    if (d <= bestD) { best = grip; bestD = d; }
+    // Strictly nearer wins, so of grips on one spot the first (a level mark's symbol, not its reference) is taken.
+    if (d < bestD || (best === null && d <= bestD)) { best = grip; bestD = d; }
   }
   return best;
 }

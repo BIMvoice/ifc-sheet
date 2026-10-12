@@ -55,6 +55,16 @@ describe('project file', () => {
     assert.deepEqual(parseProjectFile(serializeProject(doc)), doc);
   });
 
+  it('round-trips parametric level marks with their references, and an old mark without one', () => {
+    const marks = [
+      { type: 'level' as const, p: { x: 8, y: 2.5 }, value: 2.5, height: 0.25, ref: { at: { x: 1, y: 2.5 } } },
+      { type: 'level' as const, p: { x: 4, y: 3 }, value: 3, height: 0.25, ref: { at: { x: 4, y: 3 }, storey: 'G1' } },
+      { type: 'level' as const, p: { x: 0, y: 0 }, value: 7.1, height: 0.25 },
+    ];
+    const withMarks = { ...doc, drafts: marks.map((shape, i) => ({ id: `m${i}`, viewId: 'e1', layerId: '0', shape, params: {} })) };
+    assert.deepEqual(parseProjectFile(serializeProject(withMarks)).drafts.map((d) => d.shape), marks);
+  });
+
   it('rejects a file of another format', () => {
     assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-document', version: 1 })), /\/format/);
   });

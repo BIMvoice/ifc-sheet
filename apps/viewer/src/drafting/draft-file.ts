@@ -7,7 +7,7 @@
  * malformed entry fails with its path, like the rest of `project-file.ts`.
  */
 
-import type { AnnotationShape, DraftEntity, DraftLayer, DraftParamValue, DraftShape, EntityShape, Pt } from './types';
+import type { AnnotationShape, DraftEntity, DraftLayer, LevelRef, DraftParamValue, DraftShape, EntityShape, Pt } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -26,6 +26,12 @@ function readPt(v: unknown, path: string): Pt {
 function readHeight(v: Json, path: string): number {
   if (!isNumber(v.height) || v.height <= 0) fail(`${path}.height`, 'must be a positive text height');
   return v.height;
+}
+
+function readLevelRef(v: unknown, path: string): LevelRef {
+  if (!isObject(v)) fail(path, 'must be a level reference { at, storey? }');
+  if (v.storey !== undefined && !isString(v.storey)) fail(`${path}.storey`, 'must be a string');
+  return { at: readPt(v.at, `${path}.at`), ...(isString(v.storey) ? { storey: v.storey } : {}) };
 }
 
 function readAnnotation(v: Json, path: string): AnnotationShape | null {
@@ -50,7 +56,7 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
       return { type: 'angular', c: pt('c'), a: pt('a'), b: pt('b'), at: pt('at'), height: readHeight(v, path) };
     case 'level':
       if (!isNumber(v.value)) fail(`${path}.value`, 'must be a number');
-      return { type: 'level', p: pt('p'), value: v.value, height: readHeight(v, path) };
+      return { type: 'level', p: pt('p'), value: v.value, height: readHeight(v, path), ...(v.ref === undefined ? {} : { ref: readLevelRef(v.ref, `${path}.ref`) }) };
     case 'axis':
       if (!isString(v.label)) fail(`${path}.label`, 'must be a string');
       return {

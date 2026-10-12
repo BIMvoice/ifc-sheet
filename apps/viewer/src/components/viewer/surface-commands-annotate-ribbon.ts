@@ -43,6 +43,7 @@ export const RIBBON_ANNOTATE_SURFACE_COMMANDS = [
   { id: 'annotate:dim-radius', labelKey: 'drafting.tool.dimRadius', keywords: 'dimension radius', category: 'Tools', icon: AnnoDimRadius, surfaces: ribbonOnly, enabled: always, run: draft('dimradius') },
   { id: 'annotate:dim-diameter', labelKey: 'drafting.tool.dimDiameter', keywords: 'dimension diameter', category: 'Tools', icon: AnnoDimRadius, surfaces: ribbonOnly, enabled: always, run: draft('dimdiameter') },
   { id: 'annotate:dim-angular', labelKey: 'drafting.tool.dimAngular', keywords: 'dimension angle angular', category: 'Tools', icon: AnnoDimAngular, surfaces: ribbonOnly, enabled: always, run: draft('dimangular') },
+  { id: 'annotate:level-align', labelKey: 'drafting.tool.levelAlign', keywords: 'align level marks line up stack section', category: 'Tools', icon: AnnoLevel, surfaces: ribbonOnly, enabled: always, run: draft('levelalign') },
   { id: 'annotate:level', labelKey: 'drafting.tool.level', keywords: 'level mark spot elevation cota', category: 'Tools', icon: AnnoLevel, surfaces: ribbonOnly, enabled: always, run: draft('level') },
   { id: 'annotate:axis', labelKey: 'drafting.tool.axis', keywords: 'axis axes grid gridline bubble ax', category: 'Tools', icon: AnnoAxis, surfaces: ribbonOnly, enabled: always, run: draft('axis') },
   { id: 'annotate:hatch', labelKey: 'drafting.tool.hatch', keywords: 'hatch fill pattern pat', category: 'Tools', icon: AnnoHatch, surfaces: ribbonOnly, enabled: always, run: draft('hatch') },

@@ -10,6 +10,7 @@
  */
 
 import { nearestOnShape, shapeBounds } from './curves';
+import { placeSymbol } from './level-mark';
 import { mirrorShape, rotateShape, translateShape } from './transform';
 import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
 import { leaderTextRight } from './leader-segments';
@@ -256,8 +257,10 @@ function mapAnnotation(shape: AnnotationShape, f: (p: Pt) => Pt): AnnotationShap
       return { ...shape, c: f(shape.c), at: f(shape.at) };
     case 'angular':
       return { ...shape, c: f(shape.c), a: f(shape.a), b: f(shape.b), at: f(shape.at) };
+    // Symbol only: the reference keeps what it measured (a copy reads the same point, a mirror or
+    // rotation never changes the number), and the symbol stays where it may be.
     case 'level':
-      return { ...shape, p: f(shape.p) };
+      return placeSymbol(shape, f(shape.p));
     case 'axis':
       return { ...shape, a: f(shape.a), b: f(shape.b) };
     case 'hatch':

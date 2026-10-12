@@ -38,9 +38,21 @@ export type AnnotationShape =
   | { type: 'dimension'; variant: 'aligned' | 'linear'; a: Pt; b: Pt; at: Pt; height: number; text?: string; textAt?: Pt }
   | { type: 'radial'; c: Pt; r: number; at: Pt; diameter: boolean; height: number }
   | { type: 'angular'; c: Pt; a: Pt; b: Pt; at: Pt; height: number }
-  | { type: 'level'; p: Pt; value: number; height: number }
+  | { type: 'level'; p: Pt; value: number; height: number; ref?: LevelRef }
   | AxisShape
   | { type: 'hatch'; loops: Pt[][]; pattern: string; scale: number; angle: number; color?: string };
+
+/**
+ * What a level mark measures. `at` is the measured point in drawing
+ * coordinates. `storey` is set on a plan (the level the plan reads, a storey
+ * GlobalId or the level's name): the number then comes from the storey and the
+ * symbol may sit anywhere. Without it (a section or elevation) the number is the
+ * height of `at` and the symbol stays at that height.
+ */
+export interface LevelRef {
+  at: Pt;
+  storey?: string;
+}
 
 /** Which ends of an axis carry a bubble. */
 export type AxisEnds = 'both' | 'start' | 'end' | 'none';

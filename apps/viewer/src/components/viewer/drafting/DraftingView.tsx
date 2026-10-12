@@ -32,9 +32,11 @@ import type { ProjectView } from '@/project/types';
 import { pickModelElement, referenceSet, referencesIn } from '@/drafting/references';
 import { selectFromPlan } from '@/components/viewer/plan/PlanPointer';
 import { draftsOfView } from '@/drafting/draft-store';
+import { syncLevelMarks } from '@/drafting/level-sync';
+import { levelResolverFor, storeyOf } from '@/drafting/level-resolver';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
-  attachDraftingView, currentLayerId, setElementPicker, pressEscape, runningCommand, setAnnotationProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
+  attachDraftingView, currentLayerId, setElementPicker, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
   toggleOrtho, toggleSnap, useDraftingSession, pickEntity, setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
@@ -163,6 +165,12 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
       },
     );
   }, [entities, drawing, view, levels, plane]);
+  // Level marks: a plan's mark reads its storey, a section's the height of its reference.
+  useEffect(() => {
+    const resolve = levelResolverFor(view, levels, plane);
+    setLevelReferenceProviders((p) => (view.kind === 'plan' ? { at: p, storey: storeyOf(view, levels) } : { at: p }), resolve);
+    syncLevelMarks(view.id, resolve);
+  }, [view, levels, plane]);
   useEffect(() => {
     setWorkPlaneProvider(() => viewWorkPlane(view, plane ?? null, levels), () => view);
   }, [plane, view, levels]);
