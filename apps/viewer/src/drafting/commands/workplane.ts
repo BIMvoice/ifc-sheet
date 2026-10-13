@@ -53,6 +53,35 @@ export function sectionPlaneFromLine(plan: SectionPlaneConfig, a: Pt, b: Pt, sid
   };
 }
 
+export interface SectionSymbolOptions {
+  layerId: string;
+  /** Model metres on the plan. */
+  textHeight: number;
+  current: { textStyle: string; dimStyle: string };
+}
+
+/** Draw the symbol of section view `viewId` (cut line, arrows, name) on the plan `planViewId`. */
+export function addSectionSymbol(planViewId: string, viewId: string, a: Pt, b: Pt, side: Pt, options: SectionSymbolOptions): void {
+  const mark = sectionMarkOf(useProjectStore.getState().views.find((v) => v.id === viewId)?.name ?? 'Section');
+  editDrafts({
+    add: sectionSymbolShapes(a, b, side, mark, options.textHeight).map((shape) =>
+      newDraft(planViewId, options.layerId, shape, { ...styledParams(planViewId, shape, options.current), sectionOf: viewId })),
+  });
+}
+
+/**
+ * A new section view cut by the plan line a-b, looking toward `side`, named with the next free mark,
+ * with its symbol on the plan. Returns its id, or null for a degenerate line.
+ */
+export function addSectionFromLine(plan: SectionPlaneConfig, planViewId: string, a: Pt, b: Pt, side: Pt, options: SectionSymbolOptions): string | null {
+  const custom = sectionPlaneFromLine(plan, a, b, side);
+  if (!custom) return null;
+  const viewId = addProjectView({ kind: 'section', name: sectionViewName(nextSectionMark(useProjectStore.getState().views)), plane: { axis: 'front', offset: custom.distance, flipped: false, custom } });
+  // The line must stay on the plan: the new view alone leaves nothing drawn there.
+  addSectionSymbol(planViewId, viewId, a, b, side, options);
+  return viewId;
+}
+
 export const sectionLineCommand: DraftCommandDef = {
   id: 'sectionline',
   aliases: ['SECTION', 'SE', 'SECTIONLINE'],
@@ -73,19 +102,11 @@ export const sectionLineCommand: DraftCommandDef = {
           return 'continue';
         }
         const plan = ctx.plane();
-        const custom = plan ? sectionPlaneFromLine(plan, pts[0], pts[1], p) : null;
-        if (!custom) {
+        const id = plan ? addSectionFromLine(plan, ctx.viewId, pts[0], pts[1], p, { layerId: ctx.layerId, textHeight: ctx.settings.textHeight, current: { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle } }) : null;
+        if (!id) {
           ctx.say('drafting.msg.sectionFailed');
           return 'done';
         }
-        const viewId = addProjectView({ kind: 'section', name: sectionViewName(nextSectionMark(useProjectStore.getState().views)), plane: { axis: 'front', offset: custom.distance, flipped: false, custom } });
-        // The line must stay on the plan: the new view alone leaves nothing drawn there.
-        const mark = sectionMarkOf(useProjectStore.getState().views.find((v) => v.id === viewId)?.name ?? 'Section');
-        const current = { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle };
-        editDrafts({
-          add: sectionSymbolShapes(pts[0], pts[1], p, mark, ctx.settings.textHeight).map((shape) =>
-            newDraft(ctx.viewId, ctx.layerId, shape, { ...styledParams(ctx.viewId, shape, current), sectionOf: viewId })),
-        });
         ctx.say('drafting.msg.sectionCreated');
         return 'done';
       },
