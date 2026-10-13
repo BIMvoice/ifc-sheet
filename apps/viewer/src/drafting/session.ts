@@ -17,6 +17,8 @@ import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { draftCommandById, draftCommandByName } from './commands/registry';
 import { DRAFTSET_NAMES, makeDraftSet } from '@/draft-set/run';
+import { currentFindings } from '@/check/collect';
+import { checkLines } from '@/check/say';
 import { tryIssueCommand } from '@/issue/run';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
 import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
@@ -334,6 +336,11 @@ export function submitCommandLine(text: string, cursor: Pt | null): void {
   }
   if (!command && !get().selecting) {
     if (tryIssueCommand(trimmed, say)) return;
+    if (trimmed.toUpperCase() === 'CHECKSET') {
+      say({ key: 'drafting.msg.typed', typed: trimmed, params: { text: trimmed } });
+      for (const text of checkLines(currentFindings(), useProjectStore.getState().sheets)) say({ key: 'check.msg.line', params: { text } });
+      return;
+    }
     if (DRAFTSET_NAMES.includes(trimmed.toUpperCase())) {
       say({ key: 'drafting.msg.typed', typed: trimmed, params: { text: trimmed } });
       for (const l of makeDraftSet().lines) say(l);

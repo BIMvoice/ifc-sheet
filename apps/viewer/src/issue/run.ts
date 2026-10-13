@@ -15,6 +15,7 @@ import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
 import type { ProjectDocument } from '@/project/types';
 import type { TranslationKey } from '@/i18n';
+import { currentFindings } from '@/check/collect';
 import { captureSheets } from './capture';
 import { drawingListCsv, issuePrintHtml, uniqueNames, type ListLabels } from './output';
 import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
@@ -68,6 +69,9 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   const plan = planFor(options);
   const csv = drawingListCsv(plan, listLabels());
   const lines: IssueResult['lines'] = plan.leftOut.map((o) => say(o.reason));
+  // What is missing is said before issuing; it does not stop the issue.
+  const missing = currentFindings().length;
+  if (missing > 0) lines.unshift({ key: 'check.msg.unfinished', params: { count: missing } });
   if (plan.sheets.length === 0) return { plan, html: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.nothing', params: {} }] };
   const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf' });
   if (failed.length > 0) return { plan, html: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.noCapture', params: { number: failed[0].number } }] };
