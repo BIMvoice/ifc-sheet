@@ -21,7 +21,7 @@ import { tryIssueCommand } from '@/issue/run';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
 import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
-import { drawingToUserVec, userToDrawingVec, type SectionAxisName } from './frame';
+import { drawingToUserPoint, userToDrawingPoint, type SectionAxisName } from './frame';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
 import {
@@ -182,7 +182,10 @@ const scaledSettings = new Proxy(settings, {
   },
 });
 
-export function attachDraftingView(viewId: string | null, axis: SectionAxisName, references: (min: Pt, max: Pt) => DraftShape[], unitsScale = 1): void {
+/** Where typed absolute coordinates count from, in drawing space (`frame.ts`). */
+let userOrigin: Pt = { x: 0, y: 0 };
+export function attachDraftingView(viewId: string | null, axis: SectionAxisName, references: (min: Pt, max: Pt) => DraftShape[], unitsScale = 1, origin: Pt = { x: 0, y: 0 }): void {
+  userOrigin = origin;
   setReferenceProvider(references);
   sizeScale = unitsScale;
   // Plans draw drawing-y downward on screen; text and marks grow up on screen.
@@ -364,13 +367,13 @@ export function submitCommandLine(text: string, cursor: Pt | null): void {
   }
   const { axis } = get();
   const base = command.basePoint();
-  const parsed = parseCoordinateInput(trimmed, { last: base ? drawingToUserVec(base, axis) : null });
+  const parsed = parseCoordinateInput(trimmed, { last: base ? drawingToUserPoint(base, axis, userOrigin) : null });
   if (!parsed) {
     say({ key: 'drafting.msg.invalidInput' });
     return;
   }
   if (parsed.kind === 'point') {
-    if (command.onPoint) finish(command.onPoint(userToDrawingVec(parsed.pt, axis)));
+    if (command.onPoint) finish(command.onPoint(userToDrawingPoint(parsed.pt, axis, userOrigin)));
     return;
   }
   if (command.wantsValue?.() && command.onValue) {
