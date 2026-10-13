@@ -3,21 +3,19 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * DRAFTSET: read the loaded model, plan the draft set, apply it, and say what
- * was done. The one place the planner and the applier meet the app's stores.
+ * DRAFTSET: make the drawing set whole for the loaded model (the one planner the
+ * Wall starts from, `ensureDrawingSet`) and say what
+ * was done, sheet by sheet with the reason for its scale.
  */
 
 import type { TranslationKey } from '@/i18n';
 import { resolve } from '@/i18n/registry';
 import { useViewerStore } from '@/store';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
-import { collectSpatialContainerNames } from '@/utils/spatialHierarchy';
 import { useProjectStore } from '@/project/project-store';
-import { applyDraftSet, type ApplyReport } from './apply';
-import { draftExtents } from './body';
-import { planDraftSet } from './plan';
-import { appSheetSpec } from './sheet-spec';
-import type { Box3, DraftSetPlan, Reason } from './types';
+import { sheetGroup, sheetScaleReason, type Reason } from '@/project/drawing-set';
+import { ensureDrawingSet, type EnsureReport } from '@/project/drawing-set-actions';
+import { modelMeshes, setExtent } from './body';
 
 export const DRAFTSET_NAMES = ['DRAFTSET', 'DRAFT-SET'];
 
@@ -27,12 +25,11 @@ export interface SummaryLine {
 }
 
 export interface DraftSetOutcome {
-  plan: DraftSetPlan;
-  report: ApplyReport | null;
+  report: EnsureReport | null;
   lines: SummaryLine[];
 }
 
-/** A sentence kept as data, in the person's language. */
+/** A sentence kept as data, in words. */
 export function sayReason(reason: Reason): string {
   const params = { ...reason.params };
   if (typeof params.kind === 'string') params.kind = resolve(`draftSet.kind.${params.kind}` as TranslationKey);
@@ -41,46 +38,30 @@ export function sayReason(reason: Reason): string {
 
 const line = (text: string): SummaryLine => ({ key: 'draftSet.msg.line', params: { text } });
 
-function modelNames(): { project: string; building: string } {
-  const { models, ifcDataStore } = useViewerStore.getState();
-  const stores = models.size > 0 ? Array.from(models.values(), (m) => m.ifcDataStore) : [ifcDataStore];
-  for (const store of stores) {
-    if (!store?.spatialHierarchy) continue;
-    const names = collectSpatialContainerNames(store.spatialHierarchy, (id) => store.entities.getName(id) || '');
-    return { project: names.projects[0] ?? '', building: names.buildings[0] ?? '' };
-  }
-  return { project: '', building: '' };
-}
-
-/** Plan and apply the draft set for the loaded model; one Undo removes what it added. */
-export function makeDraftSet(today: Date = new Date()): DraftSetOutcome {
+/** Make the set whole for the loaded model (one undo step) and describe it. */
+export function makeDraftSet(): DraftSetOutcome {
   const viewer = useViewerStore.getState();
   const whole = mergedSectionBounds(viewer.models, viewer.geometryResult);
-  const { bounds, leftOut } = draftExtents(whole);
-  const project = useProjectStore.getState();
-  const names = modelNames();
-  const plan = planDraftSet({
-    projectName: names.project || project.name,
-    buildingName: names.building,
-    date: today.toISOString().slice(0, 10),
-    storeys: project.levels.map((l) => ({ name: l.name, elevation: l.elevation })),
-    bounds,
-    spec: appSheetSpec(),
+  const meshes = modelMeshes();
+  const { extent, leftOut } = setExtent(useProjectStore.getState().levels, meshes, whole);
+  if (!extent) return { report: null, lines: [line(sayReason({ key: 'draftSet.note.noModel', params: {} }))] };
+  const report = ensureDrawingSet(meshes, extent);
+  const { sheets, views } = useProjectStore.getState();
+  const sheetLines = sheets.filter((s) => ['plans', 'elevations', 'sections'].includes(sheetGroup(s) ?? '')).flatMap((s) => {
+    const why = sheetScaleReason(s, views, extent);
+    return why ? [line(`${s.number} ${s.name}: ${sayReason(why.reason)}`)] : [];
   });
-  const lines: SummaryLine[] = plan.notes.map((n) => line(sayReason(n)));
-  if (leftOut > 0) lines.push(line(sayReason({ key: 'draftSet.note.leftOut', params: { count: leftOut } })));
-  if (!bounds || plan.views.length === 0) return { plan, report: null, lines };
-  const report = applyDraftSet(plan, { levels: project.levels, bounds: whole ?? bounds, text: sayReason });
+  const notes = report.notes.map((n) => line(sayReason(n)));
+  if (leftOut > 0) notes.push(line(sayReason({ key: 'draftSet.note.leftOut', params: { count: leftOut } })));
   return {
-    plan,
     report,
     lines: [
       {
         key: 'draftSet.msg.summary',
-        params: { views: plan.views.length, sheets: plan.sheets.length, newViews: report.viewsAdded, newSheets: report.sheetsAdded, oldViews: report.viewsExisting, oldSheets: report.sheetsExisting },
+        params: { newViews: report.viewsAdded, newSheets: report.sheetsAdded, oldViews: report.viewsExisting, oldSheets: report.sheetsExisting },
       },
-      ...plan.sheets.map((s) => line(`${s.number} ${sayReason(s.title)}: ${sayReason(s.reason)}`)),
-      ...lines,
+      ...sheetLines,
+      ...notes,
     ],
   };
 }

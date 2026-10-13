@@ -4,8 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mainBodyBounds } from './extents.js';
-import type { Box3 } from './types.js';
+import { mainBodyBounds, type Box3 } from './extents.js';
 
 const box = (x0: number, z0: number, x1: number, z1: number, y1 = 3): Box3 => ({ min: { x: x0, y: 0, z: z0 }, max: { x: x1, y: y1, z: z1 } });
 

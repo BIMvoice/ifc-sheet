@@ -12,9 +12,12 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { useViewerStore } from '@/store';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import type { ElevationDirection } from '@/project/types';
-import { mainBodyBounds } from './extents';
-import { elevationPlaneOffset } from './plan';
-import type { Box3 } from './types';
+import type { AxisBounds } from '@/lib/section/section-distance';
+import { buildingExtent } from '@/project/model-rooms';
+import { useProjectStore } from '@/project/project-store';
+import { elevationPlaneOffset } from '@/project/set-defaults';
+import type { ProjectLevel } from '@/project/types';
+import { mainBodyBounds, type Box3 } from './extents';
 
 /** An element's box in the viewer frame, metres: its local box carried through its placement. */
 function worldBox(mesh: MeshData): Box3 | null {
@@ -32,23 +35,39 @@ function worldBox(mesh: MeshData): Box3 | null {
 }
 
 /** The extents to size the set to: the main body of the model's elements, else the model's whole box. */
-export function draftExtents(whole: Box3 | null): { bounds: Box3 | null; leftOut: number } {
+/** The meshes of every model loaded, else of the legacy single model. */
+export function modelMeshes(): MeshData[] {
   const viewer = useViewerStore.getState();
-  const meshes = viewer.models.size > 0 ? Array.from(viewer.models.values()).flatMap((m) => m.geometryResult?.meshes ?? []) : (viewer.geometryResult?.meshes ?? []);
-  const boxes = meshes.map(worldBox).filter((b): b is Box3 => b !== null);
-  const body = mainBodyBounds(boxes);
+  return viewer.models.size > 0 ? Array.from(viewer.models.values()).flatMap((m) => m.geometryResult?.meshes ?? []) : (viewer.geometryResult?.meshes ?? []);
+}
+
+/**
+ * The main building's box and how many elements lie apart from it (a survey
+ * marker, a far outbuilding). `whole` is the box of everything, used when the
+ * elements' own boxes cannot be read or do not agree with it.
+ */
+export function mainBodyExtent(whole: Box3 | null, meshes: readonly MeshData[] = modelMeshes()): { bounds: Box3 | null; leftOut: number } {
+  const body = mainBodyBounds(meshes.map(worldBox).filter((b): b is Box3 => b !== null));
   // A body outside the whole box means the placements are not in the frame the bounds are: trust the bounds.
   const inside = body && whole && body.bounds.min.x >= whole.min.x - 1 && body.bounds.max.x <= whole.max.x + 1 && body.bounds.min.z >= whole.min.z - 1 && body.bounds.max.z <= whole.max.z + 1;
   return inside ? body : { bounds: whole, leftOut: 0 };
 }
 
 /**
- * Where a new elevation looking at `direction` puts its plane, from the loaded
- * model's main body; `undefined` when no model is loaded (the view then
- * follows the model's whole box).
+ * The box the set is measured on: what the storeys contain, else the main
+ * body of the model, else everything. One answer for the Wall's start and
+ * for DRAFTSET.
  */
+export function setExtent(levels: readonly ProjectLevel[], meshes: MeshData[] | null, whole: AxisBounds | null): { extent: AxisBounds | null; leftOut: number } {
+  const building = buildingExtent(levels, meshes);
+  if (building) return { extent: building, leftOut: 0 };
+  const body = mainBodyExtent(whole, meshes ?? modelMeshes());
+  return { extent: body.bounds, leftOut: body.leftOut };
+}
+
+/** Where a new elevation's plane stands: just inside the facade of the building, not of the model box. */
 export function bodyElevationOffset(direction: ElevationDirection): number | undefined {
   const viewer = useViewerStore.getState();
-  const { bounds } = draftExtents(mergedSectionBounds(viewer.models, viewer.geometryResult));
-  return bounds ? elevationPlaneOffset(direction, bounds) : undefined;
+  const { extent } = setExtent(useProjectStore.getState().levels, modelMeshes(), mergedSectionBounds(viewer.models, viewer.geometryResult));
+  return extent ? elevationPlaneOffset(direction, extent) : undefined;
 }

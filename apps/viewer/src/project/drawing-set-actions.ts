@@ -3,23 +3,26 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * What the Wall does to the project: lay out the starting set when a model
- * opens on an empty project, change the scale of a group of sheets, swap the
- * view in a sheet's slot for another proposed section. Each is one store
+ * What the Wall does to the project: make the drawing set whole (the starting
+ * set when a model opens on an empty project, and the DRAFTSET command),
+ * change the scale of a group of sheets, swap the view in a sheet's slot for
+ * another proposed section. Each is one store
  * write over `drawing-set.ts`'s pure layout.
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
-import { buildDrawingSet, drawingArea, nextInSeries, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { addSchedule } from '@/joinery/schedules';
-import { freshProjectId } from './view-defaults';
 import { proposalInputForLevel } from './model-rooms';
-import { useProjectStore } from './project-store';
+import { addProjectView, updateProjectView, useProjectStore } from './project-store';
+import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
+import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
-import type { PlanProjectView, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView } from './types';
+import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView } from './types';
 
 /** How many proposed sections the starting set draws; the rest wait in the tray. */
 export const SET_SECTIONS = 2;
@@ -61,20 +64,140 @@ export function sectionForProposal(proposal: SectionProposal): string | null {
 }
 
 /**
- * Lay out the starting set on a project that has no sheets yet: the first
- * proposed sections are made, then every view is put on a sheet. Returns
+ * Lay out the starting set on a project that has no sheets yet. Returns
  * whether it did; a project with sheets is never touched.
  */
 export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | null): boolean {
   if (!bounds || useProjectStore.getState().sheets.length > 0) return false;
-  if (!useProjectStore.getState().views.some((v) => v.kind === 'section')) {
-    for (const proposal of sectionProposals(meshes, bounds).slice(0, SET_SECTIONS)) sectionForProposal(proposal);
+  return ensureDrawingSet(meshes, bounds, { onOpen: true }).sheetsAdded > 0;
+}
+
+// ---- Make the set whole (the one planner behind the Wall's start and DRAFTSET) ----
+
+const state = () => useProjectStore.getState();
+
+export interface EnsureReport {
+  viewsAdded: number;
+  viewsExisting: number;
+  sheetsAdded: number;
+  sheetsExisting: number;
+  /** Numbers of the sheets added. */
+  addedSheetNumbers: string[];
+  /** Things the person should know: no storeys, a group that does not fit its paper. */
+  notes: Reason[];
+}
+
+export interface EnsureOptions {
+  /** On open: a project that already has sections is not given proposed ones. */
+  onOpen?: boolean;
+}
+
+const ELEVATION_NAMES: Record<ElevationDirection, string> = { north: 'North Elevation', east: 'East Elevation', south: 'South Elevation', west: 'West Elevation' };
+
+
+/** One plan per storey that has none yet; a model with no storeys gets one cut at mid-height. */
+function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
+  const levels: ProjectLevel[] = [];
+  for (const level of [...state().levels].sort((a, b) => a.elevation - b.elevation)) {
+    if (!levels.some((l) => sameElevation(l.elevation, level.elevation))) levels.push(level);
   }
-  const { views } = useProjectStore.getState();
-  const sheets = buildDrawingSet({ views, extent: bounds, titleBlock: modelTitleBlock() });
-  if (sheets.length === 0) return false;
+  if (levels.length === 0) {
+    if (state().views.some((v) => v.kind === 'plan')) return;
+    const height = Math.round(((extent.max.y - extent.min.y) / 2) * 10) / 10;
+    report.notes.push({ key: 'draftSet.note.noStoreys', params: { height } });
+    addProjectView({ kind: 'plan', name: 'Plan', cutHeight: height, level: { name: 'Plan', elevation: extent.min.y, storeyGlobalIds: [] } });
+    report.viewsAdded++;
+    return;
+  }
+  for (const level of levels) {
+    if (state().views.some((v) => v.kind === 'plan' && sameElevation(v.level.elevation, level.elevation))) {
+      report.viewsExisting++;
+      continue;
+    }
+    addProjectView({ kind: 'plan', name: level.name, cutHeight: DEFAULT_PLAN_CUT_HEIGHT_M, level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] } });
+    report.viewsAdded++;
+  }
+}
+
+/** The four elevations, each plane just inside its facade and each seeing through the building; a depth or plane already set stays. */
+function ensureElevations(extent: AxisBounds, report: EnsureReport): void {
+  for (const direction of ELEVATION_DIRECTIONS) {
+    const found = state().views.find((v) => v.kind === 'elevation' && v.direction === direction);
+    if (!found) {
+      addProjectView({ kind: 'elevation', name: ELEVATION_NAMES[direction], direction, planeOffset: elevationPlaneOffset(direction, extent), viewDepth: elevationDepth(direction, extent) });
+      report.viewsAdded++;
+      continue;
+    }
+    report.viewsExisting++;
+    if (found.kind !== 'elevation') continue;
+    if (found.viewDepth == null) updateProjectView(found.id, { viewDepth: elevationDepth(direction, extent) });
+    if (found.planeOffset === undefined) updateProjectView(found.id, { planeOffset: elevationPlaneOffset(direction, extent) });
+  }
+}
+
+/** The sections the starting set draws, made if missing; one with no depth of its own sees to the far side of the building. */
+function ensureSections(meshes: MeshData[] | null, extent: AxisBounds, options: EnsureOptions, report: EnsureReport): void {
+  if (options.onOpen && state().views.some((v) => v.kind === 'section')) return;
+  for (const proposal of sectionProposals(meshes, extent).slice(0, SET_SECTIONS)) {
+    const had = state().views.some((v) => v.kind === 'section' && v.through === proposal.label);
+    const id = sectionForProposal(proposal);
+    if (!id) continue;
+    if (had) report.viewsExisting++;
+    else report.viewsAdded++;
+    if (state().views.find((v) => v.id === id)?.viewDepth == null) updateProjectView(id, { viewDepth: proposalDepth(proposal, extent) });
+  }
+}
+
+/** A plan with no scale of its own takes the one it is drawn at on its sheet, so what is drawn on it is sized for that scale. */
+function ensurePlanScales(extent: AxisBounds): void {
+  const plans = state().views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.detail);
+  const onSheet = new Map(state().sheets.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
+  const planned = state().sheets.length === 0 ? buildDrawingSet({ views: plans, extent, titleBlock: {} }) : [];
+  const plannedScale = new Map(planned.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
+  for (const plan of plans) {
+    const scale = onSheet.get(plan.id) ?? plannedScale.get(plan.id);
+    if (scale !== undefined && plan.scale === undefined && !state().drafts.some((d) => d.viewId === plan.id)) updateProjectView(plan.id, { scale });
+  }
+}
+
+/** Every drawing not on a sheet yet, hung where it belongs. */
+function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
+  const hung = new Set(state().sheets.flatMap((s) => (s.viewports ?? []).map((vp) => vp.viewId)));
+  const loose = state().views.filter((v) => !hung.has(v.id));
+  const before = state().sheets;
+  report.sheetsExisting = before.length;
+  let sheets = before;
+  if (before.length === 0) {
+    sheets = buildDrawingSet({ views: loose, extent, titleBlock: modelTitleBlock() });
+  } else {
+    for (const view of loose) {
+      const next = withViewHung(sheets, state().views, view, extent, sheets[0]?.titleBlock ?? modelTitleBlock());
+      if (next) sheets = next.sheets;
+    }
+  }
+  if (sheets === before) return;
   useProjectStore.setState({ sheets, dirty: true });
-  return true;
+  const known = new Set(before.map((s) => s.id));
+  const added = sheets.filter((s) => !known.has(s.id));
+  report.sheetsAdded = added.length;
+  report.addedSheetNumbers = added.map((s) => s.number);
+}
+
+/**
+ * Make the set whole for a building of `extent`, as one undo step. `meshes`
+ * are the model's, for the rooms and the stair the sections pass through.
+ */
+export function ensureDrawingSet(meshes: MeshData[] | null, extent: AxisBounds, options: EnsureOptions = {}): EnsureReport {
+  const report: EnsureReport = { viewsAdded: 0, viewsExisting: 0, sheetsAdded: 0, sheetsExisting: 0, addedSheetNumbers: [], notes: [] };
+  runAsOneUndoStep(() => {
+    ensurePlans(extent, report);
+    ensureElevations(extent, report);
+    ensurePlanScales(extent);
+    ensureSections(meshes, extent, options, report);
+    ensureSheets(extent, report);
+  });
+  for (const group of groupsThatDoNotFit(state().views, extent)) report.notes.push({ key: 'draftSet.note.noFit', params: { kind: group } });
+  return report;
 }
 
 /** Lay every sheet of `group` out again at `scale`. */

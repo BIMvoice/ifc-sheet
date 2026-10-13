@@ -64,11 +64,11 @@ describe('WallGrid', () => {
 
   it('sets the scale of the plans and only of the plans', () => {
     const ui = render(<WallGrid extent={HOUSE} onStep={() => {}} />);
-    const chip = [...ui.querySelectorAll('button')].find((b) => b.textContent === '1 : 100');
+    const chip = [...ui.querySelectorAll('button')].find((b) => b.textContent === '1 : 50');
     assert.ok(chip);
     click(chip);
-    assert.equal(groupScale('plans'), 100);
-    assert.equal(groupScale('elevations'), 50);
+    assert.equal(groupScale('plans'), 50);
+    assert.deepEqual(useProjectStore.getState().sheets.filter((x) => x.number.startsWith('A-2')).map((x) => x.viewports?.map((v) => v.scale)), [[100, 100], [50, 50]], 'the elevations stay as the set made them');
     assert.equal(chip.getAttribute('aria-pressed'), 'true');
   });
 });

@@ -11,7 +11,11 @@
  * the box so far; the rest are reported as left out.
  */
 
-import type { Box3 } from './types';
+/** A box in the viewer frame, metres. */
+export interface Box3 {
+  min: { x: number; y: number; z: number };
+  max: { x: number; y: number; z: number };
+}
 
 /** Elements farther than this from the building (and from each other), metres, are not part of it. */
 export const MAIN_BODY_GAP_M = 10;

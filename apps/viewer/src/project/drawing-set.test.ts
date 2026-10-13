@@ -5,7 +5,8 @@
 /**
  * The starting drawing set: views on sheets by kind (A-1xx plans, A-2xx
  * elevations, A-3xx sections), each sheet at the most detailed scale its
- * drawings fit at on A2, the title block filled from the model; and the Wall's
+ * drawings fit at on the smallest paper that gives the group 1:100, the title
+ * block filled from the model; and the Wall's
  * actions over it (lay out once, rescale a group, swap a slot).
  */
 
@@ -13,7 +14,7 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject, useProjectStore } from './project-store.js';
 import { defaultViews } from './view-defaults.js';
-import { buildDrawingSet, drawingArea, fittingScale, sheetGroup, sheetScaleReason, withViewHung, type ModelExtent } from './drawing-set.js';
+import { buildDrawingSet, choosePaper, drawingArea, fittingScale, groupsThatDoNotFit, sheetGroup, sheetScaleReason, withViewHung, type ModelExtent } from './drawing-set.js';
 import { addScheduleToSet, groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
 import { PAPER_MM } from './sheets.js';
 import type { ProjectLevel, ProjectView } from './types';
@@ -43,15 +44,38 @@ describe('buildDrawingSet', () => {
     assert.deepEqual(plans, ['Ground Floor', 'First Floor']);
   });
 
-  it('draws a small house at 1:50 and keeps every drawing inside the drawing area', () => {
-    const area = drawingArea();
+  it('draws a small house on A3, each sheet at the most detailed scale it fits, and keeps every drawing inside the drawing area', () => {
+    assert.deepEqual(sheets.map((s) => [s.number, s.paper, s.viewports?.map((v) => v.scale)]), [
+      ['A-101', 'A3', [100, 100]], ['A-201', 'A3', [100, 100]], ['A-202', 'A3', [50, 50]],
+    ]);
     for (const sheet of sheets) {
+      const area = drawingArea(sheet.paper);
       for (const vp of sheet.viewports ?? []) {
-        assert.equal(vp.scale, 50, `${sheet.number} at 1:50`);
         assert.ok(vp.x > area.x && vp.x < area.x + area.w, `${sheet.number} viewport inside the frame`);
       }
     }
-    assert.equal(sheets[0].paper, 'A2');
+  });
+
+  it('makes a group on the smallest paper its widest row reaches 1:100 on, and a more detailed scale where the paper allows', () => {
+    // 4 x 3 m: two side by side reach 1:50 on A3.
+    assert.deepEqual(choosePaper([[{ w: 4, h: 3 }, { w: 4, h: 3 }]]), { paper: 'A3', fits: true });
+    const small = buildDrawingSet({ views, extent: { min: { x: 0, y: 0, z: 0 }, max: { x: 4, y: 3, z: 3 } }, titleBlock: {} });
+    assert.deepEqual(small[0].viewports?.map((v) => v.scale), [50, 50]);
+    // 30 x 12 m: two plans side by side need A1 at 1:100; the rest of the set is chosen apart.
+    assert.equal(choosePaper([[{ w: 30, h: 12 }, { w: 30, h: 12 }]]).paper, 'A1');
+    assert.equal(choosePaper([[{ w: 12, h: 10 }, { w: 12, h: 10 }]]).paper, 'A3');
+  });
+
+  it('takes the largest paper and says when the drawings are still larger than it', () => {
+    assert.deepEqual(choosePaper([[{ w: 2500, h: 2000 }]]), { paper: 'A0', fits: false });
+    const huge: ModelExtent = { min: { x: 0, y: 0, z: 0 }, max: { x: 2500, y: 20, z: 2000 } };
+    assert.deepEqual(groupsThatDoNotFit(views, huge), ['plans', 'elevations', 'sections'].filter((g) => g !== 'sections' || views.some((v) => v.kind === 'section')));
+    assert.deepEqual(groupsThatDoNotFit(views, HOUSE), []);
+  });
+
+  it('is deterministic: the same views and extent give the same sheets', () => {
+    const strip = (set: ReturnType<typeof buildDrawingSet>) => set.map((s) => ({ ...s, id: '', viewports: s.viewports?.map((v) => ({ ...v, id: '' })) }));
+    assert.deepEqual(strip(buildDrawingSet({ views, extent: HOUSE, titleBlock: {}, now: 1 })), strip(buildDrawingSet({ views, extent: HOUSE, titleBlock: {}, now: 1 })));
   });
 
   it('fills the title block from the model on every sheet', () => {
@@ -93,9 +117,9 @@ describe('the Wall actions', () => {
 
   it('changes the scale of one group only', () => {
     startDrawingSet(null, HOUSE);
-    setGroupScale('plans', 100, HOUSE);
-    assert.equal(groupScale('plans'), 100);
-    assert.equal(groupScale('elevations'), 50);
+    setGroupScale('plans', 50, HOUSE);
+    assert.equal(groupScale('plans'), 50);
+    assert.deepEqual(useProjectStore.getState().sheets.filter((x) => x.number.startsWith('A-2')).map((x) => x.viewports?.map((v) => v.scale)), [[100, 100], [50, 50]], 'the elevations stay as the set made them');
   });
 
   it('swaps the view in a slot, keeping the slot', () => {

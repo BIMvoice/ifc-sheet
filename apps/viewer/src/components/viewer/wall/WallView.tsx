@@ -14,7 +14,7 @@ import { useTranslation } from '@/i18n';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { sectionProposals, startDrawingSet } from '@/project/drawing-set-actions';
-import { buildingExtent } from '@/project/model-rooms';
+import { setExtent } from '@/draft-set/body';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { SteppedSheet } from './SteppedSheet';
@@ -32,8 +32,8 @@ export function WallView() {
   const sheets = useProjectStore((s) => s.sheets);
   const views = useProjectStore((s) => s.views);
   const levels = useProjectStore((s) => s.levels);
-  // Measured on the building, not on the site around it; the whole model when it has no storeys.
-  const extent = useMemo(() => buildingExtent(levels, meshes) ?? mergedSectionBounds(models, legacy), [levels, meshes, models, legacy]);
+  // Measured on the building, not on the site around it; the main body of the model when no storey holds geometry.
+  const extent = useMemo(() => setExtent(levels, meshes, mergedSectionBounds(models, legacy)).extent, [levels, meshes, models, legacy]);
   const [intro, setIntro] = useState(false);
   const { stepped, focus, visit, drawer } = useWallNav();
 
