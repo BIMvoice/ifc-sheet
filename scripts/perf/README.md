@@ -3527,3 +3527,21 @@ prototype removing unused nested value trees on this evidence or revisit the
 rejected general constructor. A different worker capture must first establish
 substantial unused materialization on the critical path. This native opportunity
 screen is not a browser speedup or a measurement of indirect style decoding.
+
+## Position welding for edge adjacency: numbers, not strings (packages/drawing-2d)
+
+`EdgeExtractor.extractEdges` welds vertices that share a position before it
+builds adjacency (a tessellated mesh, and every mesh the projection clipper
+emits, repeats a vertex per triangle). The first welding keyed a `Map` with a
+template string per index, which added a measurable cost to the extraction of
+every mesh at every drawing generation. `mesh-weld.ts` now
+quantises each vertex once and probes an open-addressing table of vertex
+numbers: no string, no `Map`, and the same representatives, so the extracted
+edges and the drawn lines are identical. Measured on AC20-FZK-Haus meshes,
+interleaved, as extraction alone and as whole plan and section generations
+(`Drawing2DGenerator`, projection on). `scripts/perf/probe.sh` cannot see this
+code: it times native parse and geometry and never calls into
+`packages/drawing-2d`, so the figure is wall time over a fixed mesh set with
+repetitions, on the code before the welding change, with the string welding and
+with this one. The lesson: an adjacency key that is per index and a string is
+paid on every mesh of every regeneration; weld by number, and per vertex.

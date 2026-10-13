@@ -48,6 +48,7 @@ import {
   signedDepth,
 } from './projection-bands.js';
 import { windingSign } from './mesh-winding.js';
+import { weldIndices } from './mesh-weld.js';
 
 /**
  * Dot-product deadband for the silhouette test (issue #979).
@@ -66,32 +67,6 @@ import { windingSign } from './mesh-winding.js';
  * without excluding any genuinely tilted face (e.g. a pitched roof).
  */
 const SILHOUETTE_EPSILON = 1e-4;
-
-/** Positions closer than this (metres, local frame) are one vertex for adjacency. */
-const WELD_QUANTUM = 1e-4;
-
-/**
- * Index buffer in which every vertex that shares a position with an earlier
- * one points at that earlier vertex. Positions and vertex data are untouched.
- */
-export function weldIndices(positions: Float32Array, indices: Uint32Array): Uint32Array {
-  const first = new Map<string, number>();
-  const rep = new Map<number, number>();
-  const out = new Uint32Array(indices.length);
-  for (let i = 0; i < indices.length; i++) {
-    const idx = indices[i];
-    let r = rep.get(idx);
-    if (r === undefined) {
-      const b = idx * 3;
-      const key = `${Math.round(positions[b] / WELD_QUANTUM)},${Math.round(positions[b + 1] / WELD_QUANTUM)},${Math.round(positions[b + 2] / WELD_QUANTUM)}`;
-      r = first.get(key);
-      if (r === undefined) { first.set(key, idx); r = idx; }
-      rep.set(idx, r);
-    }
-    out[i] = r;
-  }
-  return out;
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
