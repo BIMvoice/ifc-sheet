@@ -13,7 +13,7 @@
 import type { Pt } from '@/drafting/types';
 import { candidateCentres, orientedBox } from './label-candidates';
 import { RectIndex } from './rect-index';
-import { growRect, rectAround, rectHitsRing, ringBounds, type Rect } from './label-geometry';
+import { growRect, rectAround, rectHitsRing, ringBounds, unionRect, type Rect } from './label-geometry';
 
 /** Clear space between a label and its element, paper millimetres. */
 export const LABEL_GAP_MM = 1.5;
@@ -58,7 +58,7 @@ const BACKDROP_SHARE = 0.3;
 export function layoutLabels(items: readonly LayoutItem[], scene: LayoutScene): Map<string, Placed> {
   const gap = LABEL_GAP_MM * scene.paperUnit, clear = LABEL_CLEAR_MM * scene.paperUnit;
   const bounds = scene.elements.map((e) => ({ e, b: ringBounds(e.ring) }));
-  const all = bounds.length ? { x0: Math.min(...bounds.map((x) => x.b.x0)), y0: Math.min(...bounds.map((x) => x.b.y0)), x1: Math.max(...bounds.map((x) => x.b.x1)), y1: Math.max(...bounds.map((x) => x.b.y1)) } : null;
+  const all = unionRect(bounds.map((x) => x.b));
   const area = (r: Rect) => (r.x1 - r.x0) * (r.y1 - r.y0);
   const away = (c: Pt): Pt => {
     if (!all) return { x: 0, y: 0 };

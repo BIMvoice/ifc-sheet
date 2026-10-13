@@ -19,7 +19,7 @@ import type { DraftEntity, Pt } from '@/drafting/types';
 import { labelDraft, labelSize, type ElementReader, type LabelPlacement } from '@/labels/label-all';
 import { rectsOf } from '@/labels/label-annotations';
 import type { LabelExtras } from '@/labels/label-extras';
-import { growRect, rectAround, ringBounds, type Rect } from '@/labels/label-geometry';
+import { growRect, rectAround, ringBounds, unionRect, type Rect } from '@/labels/label-geometry';
 import { candidateCentres, orientedBox } from '@/labels/label-candidates';
 import { layoutLabels, LABEL_CLEAR_MM, LABEL_GAP_MM, type LayoutElement } from '@/labels/label-layout';
 import { DISPLACED_MM } from '@/labels/label-leader';
@@ -171,7 +171,8 @@ const subjectOf = (t: LabelTarget, el: LabelElement): MarkSubject => {
 
 const viewCentre = (elements: readonly ViewElement[]): Pt => {
   const bs = elements.map((e) => ringBounds(e.ring));
-  return bs.length ? { x: (Math.min(...bs.map((b) => b.x0)) + Math.max(...bs.map((b) => b.x1))) / 2, y: (Math.min(...bs.map((b) => b.y0)) + Math.max(...bs.map((b) => b.y1))) / 2 } : { x: 0, y: 0 };
+  const all = unionRect(bs);
+  return all ? { x: (all.x0 + all.x1) / 2, y: (all.y0 + all.y1) / 2 } : { x: 0, y: 0 };
 };
 
 /**

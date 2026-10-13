@@ -73,4 +73,18 @@ describe('TAGALL at a large size', () => {
     assert.equal(summary.rooms, side * side);
     assert.ok(ms < 5_000, `took ${Math.round(ms)} ms`);
   });
+
+  it('labels a plan of 200 000 elements (the extent of the view is not taken with a spread over every box)', () => {
+    const elements: ViewElement[] = Array.from({ length: 200_000 }, (_, i) => ({ renderId: i + 1, anchor: { x: i % 500, y: Math.floor(i / 500) }, ring: box(i % 500, Math.floor(i / 500), (i % 500) + 0.5, Math.floor(i / 500) + 0.5) }));
+    const door = elements[250];
+    const targets: LabelTarget[] = [{ guid: 'D', className: 'IfcDoor', anchor: door.anchor, renderId: door.renderId, ring: door.ring }];
+    const started = performance.now();
+    const { summary } = planTagAll({
+      elements, targets, rooms: [], existing: [],
+      placement: { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', paperUnit: 0.1 },
+      types: { mark, room }, read: () => opening('IfcDoor', 'Door'),
+    });
+    console.log(`TAGALL perf: 1 label among ${elements.length} elements in ${Math.round(performance.now() - started)} ms`);
+    assert.equal(summary.marks, 1);
+  });
 });
