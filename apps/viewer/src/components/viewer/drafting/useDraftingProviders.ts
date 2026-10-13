@@ -6,7 +6,6 @@
 
 import { useEffect } from 'react';
 import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import type { GeometryResult } from '@ifc-lite/geometry';
 import { drawingToWorld } from '@/drafting/frame';
 import { pickModelElement, type ReferenceSet } from '@/drafting/references';
 import { syncLevelMarks } from '@/drafting/level-sync';
@@ -17,8 +16,8 @@ import {
 import type { DraftEntity } from '@/drafting/types';
 import { viewElements } from '@/labels/view-elements';
 import { planParts } from '@/dimall/parts';
-import { roomFootprints } from '@/tagall/footprint';
-import { renderIdGlobalId } from '@/project/element-guid';
+import { roomsOfPlan } from '@/tagall/rooms';
+import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { roofAtPoint } from '@/project/roof-plan';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import { viewWorkPlane } from '@/project/view-plane-config';
@@ -33,12 +32,11 @@ interface Providers {
   entities: readonly DraftEntity[];
   plane: SectionPlaneConfig | undefined;
   levels: readonly ProjectLevel[];
-  runtimeGeometry: GeometryResult | null | undefined;
   /** Screen pixels per drawing unit (the pick tolerance is in pixels). */
   scale: number;
 }
 
-export function useDraftingProviders({ view, drawing, references, entities, plane, levels, runtimeGeometry, scale }: Providers): void {
+export function useDraftingProviders({ view, drawing, references, entities, plane, levels, scale }: Providers): void {
   // An idle click on the drawing selects the model element under it (both selection channels, as the plan view does).
   useEffect(() => {
     setModelPicker((p, tolerance, additive) => {
@@ -63,18 +61,11 @@ export function useDraftingProviders({ view, drawing, references, entities, plan
     setPlanPartsProvider(() => planParts(drawing));
     return () => setPlanPartsProvider(null);
   }, [drawing]);
-  // TAGALL: the rooms of this plan, each space cut at the plan's height.
+  // TAGALL: the rooms of this plan, each space cut at the plan's height (read as the check reads them).
   useEffect(() => {
-    setRoomsProvider(() => {
-      const level = view.kind === 'plan' ? resolvePlanLevel(view, levels) ?? view.level : null;
-      if (!level || view.kind !== 'plan') return [];
-      return roomFootprints(runtimeGeometry?.meshes ?? [], level.elevation + view.cutHeight, level.elevation).flatMap((r) => {
-        const guid = renderIdGlobalId(r.renderId);
-        return guid ? [{ ...r, guid }] : [];
-      });
-    });
+    setRoomsProvider(() => roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult));
     return () => setRoomsProvider(null);
-  }, [view, levels, runtimeGeometry]);
+  }, [view, levels]);
   // Hatch boundaries: drafted closed shapes and the drawing's cut outlines. Level marks: the
   // plan's level, or the point's height on a section / elevation.
   useEffect(() => {

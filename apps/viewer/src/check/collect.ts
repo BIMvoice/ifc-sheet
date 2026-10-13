@@ -6,13 +6,11 @@
 
 import { labelTargets } from '@/labels/label-all';
 import { viewElements } from '@/labels/view-elements';
-import { renderIdGlobalId } from '@/project/element-guid';
 import { elementByGlobalId } from '@/project/element-label';
 import { useProjectStore } from '@/project/project-store';
-import { resolvePlanLevel } from '@/project/view-defaults';
 import { useViewDrawings } from '@/project/view-drawings';
-import { useViewerStore } from '@/store';
-import { roomFootprints } from '@/tagall/footprint';
+import { roomsOfPlan } from '@/tagall/rooms';
+import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { checkSet } from './findings';
 import type { CheckInput, Finding, PlanElement } from './types';
 
@@ -23,12 +21,8 @@ function planElements(viewId: string): PlanElement[] | null {
   const entry = useViewDrawings.getState().byView[viewId];
   if (!view || view.kind !== 'plan' || entry?.status !== 'ready' || !entry.drawing) return null;
   const openings = labelTargets(viewElements(entry.drawing)).filter((t) => /^ifc(door|window)/i.test(t.className)).map((t) => ({ guid: t.guid, className: t.className }));
-  const level = resolvePlanLevel(view, levels) ?? view.level;
-  const meshes = useViewerStore.getState().geometryResult?.meshes ?? [];
-  const rooms = roomFootprints(meshes, level.elevation + view.cutHeight, level.elevation).flatMap((r) => {
-    const guid = renderIdGlobalId(r.renderId);
-    return guid ? [{ guid, className: 'IfcSpace' }] : [];
-  });
+  // The rooms TAGALL would label, read the way it reads them.
+  const rooms = roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult).map((r) => ({ guid: r.guid, className: 'IfcSpace' }));
   return [...openings, ...rooms];
 }
 

@@ -201,7 +201,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     // Annotation sizes are paper sizes at the view's scale (the settings read as at 1:100).
     attachDraftingView(view.id, axis, (min, max) => (references ? referencesIn(references, min, max) : []), (view.scale ?? 100) / 100);
   }, [view.id, axis, references, view.scale]);
-  useDraftingProviders({ view, drawing, references, entities, plane, levels, runtimeGeometry, scale: viewTransform.scale });
+  useDraftingProviders({ view, drawing, references, entities, plane, levels, scale: viewTransform.scale });
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
   const selectedModelIds = useViewerStore((s) => s.selectedEntityIds);
