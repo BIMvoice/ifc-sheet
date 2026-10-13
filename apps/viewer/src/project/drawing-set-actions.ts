@@ -17,7 +17,7 @@ import { buildDrawingSet, rowOfViewports, sheetGroup, viewExtent, type ModelExte
 import { proposalInputForLevel } from './model-rooms';
 import { useProjectStore } from './project-store';
 import { proposeSections, type SectionProposal } from './section-proposals';
-import type { PlanProjectView, ProjectView, SectionProjectView } from './types';
+import type { PlanProjectView, ProjectSheet, ProjectView, SectionProjectView } from './types';
 
 /** How many proposed sections the starting set draws; the rest wait in the tray. */
 export const SET_SECTIONS = 2;
@@ -90,8 +90,8 @@ export function setGroupScale(group: SetGroup, scale: number, extent: ModelExten
 }
 
 /** The scale the sheets of `group` are drawn at, when they all share one. */
-export function groupScale(group: SetGroup): number | null {
-  const scales = new Set(useProjectStore.getState().sheets.filter((s) => sheetGroup(s) === group).flatMap((s) => (s.viewports ?? []).map((v) => v.scale)));
+export function groupScale(group: SetGroup, sheets: readonly ProjectSheet[] = useProjectStore.getState().sheets): number | null {
+  const scales = new Set(sheets.filter((s) => sheetGroup(s) === group).flatMap((s) => (s.viewports ?? []).map((v) => v.scale)));
   return scales.size === 1 ? [...scales][0] : null;
 }
 

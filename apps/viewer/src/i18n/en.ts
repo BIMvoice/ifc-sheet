@@ -74,6 +74,7 @@ import { manualValidationEn } from './catalogues/manual-validation.en';
 import { flowPanelEn } from './catalogues/flow-panel.en';
 import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
+import { wallEn } from './catalogues/wall.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
 import { landXmlEn } from './catalogues/landxml.en';
 import { terrainImageryEn } from './catalogues/terrain-imagery.en';
@@ -240,6 +241,7 @@ export const en = {
   ...drawingUnderlayEn,
   ...keyboardShortcutsEn,
   ...settingsEn,
+  ...wallEn,
   ...hierarchyEn,
   ...propertiesEn,
   ...georeferencingEn,

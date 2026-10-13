@@ -64,7 +64,7 @@ const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').Pro
     level: { name: 'Level 1', elevation: 3.2, storeyGlobalIds: ['G-A', 'G-B'] },
   } satisfies Required<PlanProjectView>,
   section: {
-    ...base, id: 'v-sec', name: 'Section A', kind: 'section',
+    ...base, id: 'v-sec', name: 'Section A', kind: 'section', through: 'Through the stair',
     plane: {
       axis: 'front', offset: -2.5, flipped: true,
       custom: { normal: [0, 0, 1], distance: 1.5, pickedAt: [1, 2, 3], tangent: [1, 0, 0], bitangent: [0, 1, 0] },

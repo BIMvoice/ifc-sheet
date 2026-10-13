@@ -3,17 +3,17 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The central tab strip: the permanent 3D tab, then one tab per opened
+ * The central tab strip: the permanent Wall and 3D tabs, then one tab per opened
  * drawing view. Click brings a tab forward; the × or a middle click closes
  * it (the view stays in the project).
  */
 
 import type { ReactNode } from 'react';
-import { Box, Building2, LayoutTemplate, Scissors, SquareDashed, X, Table2, Spline } from 'lucide-react';
+import { Box, Building2, LayoutGrid, LayoutTemplate, Scissors, SquareDashed, X, Table2, Spline } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useProjectStore } from '@/project/project-store';
-import { MODEL_TAB_ID, useDocumentTabs } from '@/project/document-tabs';
+import { MODEL_TAB_ID, useDocumentTabs, WALL_TAB_ID } from '@/project/document-tabs';
 import { activateDocumentTab, closeProjectTab } from '@/project/open-view';
 import type { ProjectViewKind } from '@/project/types';
 
@@ -48,6 +48,7 @@ export function DocumentTabBar() {
 
   return (
     <div role="tablist" aria-label={t('projectNavigator.documentTabs')} className="flex shrink-0 items-end gap-px overflow-x-auto h-8 px-1 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-950">
+      <Tab active={activeId === WALL_TAB_ID} icon={<LayoutGrid className="size-3.5" />} label={t('wall.tab')} onSelect={() => activateDocumentTab(WALL_TAB_ID)} />
       <Tab active={activeId === MODEL_TAB_ID} icon={ICONS['3d']} label={t('projectNavigator.tab.model3d')} onSelect={() => activateDocumentTab(MODEL_TAB_ID)} />
       {tabs.map((tab) => (
         <Tab

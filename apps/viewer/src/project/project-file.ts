@@ -80,7 +80,8 @@ function readView(v: unknown, path: string): ProjectView {
         fail(`${path}.plane`, 'must be { axis, offset, flipped }');
       }
       const plane = { axis: p.axis as (typeof AXES)[number], offset: p.offset, flipped: p.flipped === true };
-      return { ...base, kind: 'section', plane: isObject(p.custom) ? { ...plane, custom: p.custom as never } : plane };
+      const section = { ...base, kind: 'section' as const, plane: isObject(p.custom) ? { ...plane, custom: p.custom as never } : plane };
+      return isString(v.through) && v.through ? { ...section, through: v.through } : section;
     }
     case 'elevation':
       if (!DIRECTIONS.includes(v.direction as ElevationDirection)) fail(`${path}.direction`, `must be one of ${DIRECTIONS.join(', ')}`);
