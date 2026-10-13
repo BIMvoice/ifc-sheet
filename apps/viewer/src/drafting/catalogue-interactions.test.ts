@@ -60,15 +60,17 @@ beforeEach(() => {
 });
 
 describe('a symbol instance next to a section symbol', () => {
-  it('moves with a mixed selection while the section symbol stays locked', () => {
+  it('moves with a mixed selection, the section symbol moving whole beside it (section-link.ts)', () => {
     drawSection();
     const sym = placeSymbolAt(20, 20);
-    const section = drafts().filter((d) => d.params.sectionOf).map((d) => JSON.stringify(d.shape));
+    const cutBefore = drafts().find((d) => d.params.sectionOf && d.shape.type === 'line')?.shape;
     select(drafts().map((d) => d.id));
     startDraftCommand('move');
     click(0, 0);
     click(2, 5);
-    assert.deepEqual(drafts().filter((d) => d.params.sectionOf).map((d) => JSON.stringify(d.shape)), section);
+    const cutAfter = drafts().find((d) => d.params.sectionOf && d.shape.type === 'line')?.shape;
+    assert.ok(cutBefore?.type === 'line' && cutAfter?.type === 'line');
+    assert.deepEqual(cutAfter.a, { x: cutBefore.a.x + 2, y: cutBefore.a.y + 5 }, 'the cut line moved by the same step');
     const moved = drafts().find((d) => d.id === sym.id)?.shape;
     assert.ok(moved?.type === 'symbol');
     assert.deepEqual(moved.p, { x: 22, y: 25 });
