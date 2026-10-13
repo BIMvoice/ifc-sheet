@@ -21,12 +21,14 @@ import { closeDocumentTab, useDocumentTabs } from '@/project/document-tabs';
 import { useProjectStore } from '@/project/project-store';
 import { useViewDrawings } from '@/project/view-drawings';
 import type { ProjectSheet } from '@/project/types';
+import type { TranslationKey } from '@/i18n';
 
-const WAIT_MS = 120_000;
+/** How long one sheet's drawings may take before the sheet is given up on. */
+export const WAIT_MS = 120_000;
 const SETTLE_MS = 700;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-async function until(done: () => boolean, ms = WAIT_MS): Promise<boolean> {
+async function until(done: () => boolean, ms: number): Promise<boolean> {
   const end = Date.now() + ms;
   while (!done()) {
     if (Date.now() > end) return false;
@@ -40,15 +42,34 @@ export interface Captured {
   svgs: Map<string, string>;
   /** Sheet id → its DXF, when asked for (it is read from the sheet on screen). */
   dxfs: Map<string, Uint8Array>;
-  /** The sheets that could not be drawn. */
-  failed: ProjectSheet[];
+  /** The sheets that could not be drawn, each with what stopped it. */
+  failed: CaptureFailure[];
 }
 
-export async function captureSheets(sheets: readonly ProjectSheet[], options: { dxf?: boolean } = {}): Promise<Captured> {
+export interface CaptureFailure {
+  sheet: ProjectSheet;
+  /** `error`: a view's drawing failed; `timeout`: it did not finish in time; `blank`: the paper did not come out. */
+  reason: 'error' | 'timeout' | 'blank';
+  /** The view whose drawing it was, and what its generator said. */
+  view?: string;
+  message?: string;
+}
+
+/** What to tell the person about a sheet that could not be drawn. */
+export function failureLine(f: CaptureFailure, waitMs = WAIT_MS): { key: TranslationKey; params: Record<string, string | number> } {
+  const params = { number: f.sheet.number, view: f.view ?? '', message: f.message ?? '', seconds: Math.round(waitMs / 1000) };
+  if (f.reason === 'error') return { key: 'issue.msg.viewError', params };
+  if (f.reason === 'timeout') return { key: 'issue.msg.viewTimeout', params };
+  return { key: 'issue.msg.noCapture', params };
+}
+
+/** Draws each sheet; a sheet whose drawings fail or do not come is reported with why, and the others are still drawn. */
+export async function captureSheets(sheets: readonly ProjectSheet[], options: { dxf?: boolean; waitMs?: number } = {}): Promise<Captured> {
+  const waitMs = options.waitMs ?? WAIT_MS;
   const before = useDocumentTabs.getState();
   const svgs = new Map<string, string>();
   const dxfs = new Map<string, Uint8Array>();
-  const failed: ProjectSheet[] = [];
+  const failed: CaptureFailure[] = [];
   const host = document.createElement('div');
   host.setAttribute('aria-hidden', 'true');
   host.style.cssText = 'position:fixed;left:-100000px;top:0;width:1200px;pointer-events:none';
@@ -63,12 +84,20 @@ export async function captureSheets(sheets: readonly ProjectSheet[], options: { 
         if (useViewDrawings.getState().byView[view.id]?.status !== 'ready') openProjectView(view.id);
         drawn.add(view.id);
       }
-      const ready = await until(() => [...drawn].every((id) => useViewDrawings.getState().byView[id]?.status === 'ready'));
+      // A view that failed will not become ready: stop waiting for it as soon as it says so.
+      const status = (id: string) => useViewDrawings.getState().byView[id]?.status;
+      await until(() => [...drawn].every((id) => status(id) === 'ready' || status(id) === 'error'), waitMs);
+      const stuck = [...drawn].find((id) => status(id) !== 'ready');
+      if (stuck) {
+        const view = useProjectStore.getState().views.find((v) => v.id === stuck);
+        failed.push({ sheet, reason: status(stuck) === 'error' ? 'error' : 'timeout', view: view?.name ?? stuck, message: useViewDrawings.getState().byView[stuck]?.error ?? undefined });
+        continue;
+      }
       root.render(createElement(WallSheet, { sheet, width: 1000 }));
       const found = await until(() => host.querySelector(`svg[data-sheet-id="${CSS.escape(sheet.id)}"]`) !== null, 10_000);
       await sleep(SETTLE_MS);
       const svg = found ? host.querySelector<SVGSVGElement>(`svg[data-sheet-id="${CSS.escape(sheet.id)}"]`) : null;
-      if (!ready || !svg) failed.push(sheet);
+      if (!svg) failed.push({ sheet, reason: 'blank' });
       else {
         svgs.set(sheet.id, sheetSvgText(svg, sheet));
         if (options.dxf) dxfs.set(sheet.id, sheetDxf(svg, sheet));

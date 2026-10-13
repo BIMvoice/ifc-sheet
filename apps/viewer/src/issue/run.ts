@@ -17,7 +17,7 @@ import { freshProjectId } from '@/project/view-defaults';
 import type { ProjectDocument } from '@/project/types';
 import type { TranslationKey } from '@/i18n';
 import { currentFindings } from '@/check/collect';
-import { captureSheets } from './capture';
+import { captureSheets, failureLine } from './capture';
 import { drawingListCsv, issuePrintHtml, uniqueNames, type ListLabels } from './output';
 import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
 
@@ -75,7 +75,7 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   if (missing > 0) lines.unshift({ key: 'check.msg.unfinished', params: { count: missing } });
   if (plan.sheets.length === 0) return { plan, html: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.nothing', params: {} }] };
   const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf' });
-  if (failed.length > 0) return { plan, html: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.noCapture', params: { number: failed[0].number } }] };
+  if (failed.length > 0) return { plan, html: null, csv, zip: null, lines: [...lines, ...failed.map((f) => failureLine(f)), { key: 'issue.msg.notIssued', params: {} }] };
   const project = useProjectStore.getState();
   let html: string | null = null;
   let zip: Uint8Array | null = null;

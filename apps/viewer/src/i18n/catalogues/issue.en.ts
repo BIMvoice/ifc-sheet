@@ -23,5 +23,8 @@ export const issueEn = {
   'issue.msg.working': 'Issuing {count} sheets. Each sheet is opened in turn to draw it.',
   'issue.msg.done': 'Issued "{name}" ({date}): {count} sheets as {format}. The issue is recorded with the project.',
   'issue.msg.line': '{text}',
-  'issue.msg.noCapture': 'Sheet {number} could not be drawn, so nothing was issued and nothing was recorded.',
+  'issue.msg.noCapture': 'Sheet {number} could not be drawn.',
+  'issue.msg.viewError': 'Sheet {number}: the drawing of "{view}" could not be generated ({message}).',
+  'issue.msg.viewTimeout': 'Sheet {number}: "{view}" was not drawn within {seconds} seconds.',
+  'issue.msg.notIssued': 'Nothing was issued and nothing was recorded.',
 } as const satisfies Record<string, TranslationValue>;
