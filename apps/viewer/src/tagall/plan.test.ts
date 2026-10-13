@@ -201,7 +201,7 @@ describe('TAGALL on a detail', () => {
     assert.ok(inCrop(shown(l)), JSON.stringify(shown(l)));
     // 8 x 4 m, not the 4 x 4 m the crop shows of it.
     assert.equal(l.params.computedArea, 32);
-    assert.equal(text(l), 'Flur\n32.00 m²');
+    assert.equal(text(l), 'FLUR\n32.00 m²');
   });
 
   it('says the detail shows no room when none reaches it', () => {
