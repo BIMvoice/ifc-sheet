@@ -31,14 +31,20 @@ export interface SymbolPiece { kind: 'cut' | 'head'; a: Pt; b: Pt; box?: Pt[] }
 
 export function symbolPieces(drafts: readonly DraftEntity[]): SymbolPiece[] {
   const out: SymbolPiece[] = [];
+  const length = (d: DraftEntity): number => (d.shape.type === 'line' ? Math.hypot(d.shape.b.x - d.shape.a.x, d.shape.b.y - d.shape.a.y) : 0);
+  // The longest line of each symbol, found once: asking per line was every line against every line.
+  const longest = new Map<string, number>();
   for (const d of drafts) {
-    if (sectionLink(d) === null) continue;
+    const link = sectionLink(d);
+    if (link !== null && d.shape.type === 'line') longest.set(link, Math.max(longest.get(link) ?? 0, length(d)));
+  }
+  for (const d of drafts) {
+    const link = sectionLink(d);
+    if (link === null) continue;
     const s = d.shape;
     if (s.type === 'line') {
       // A stem is four text heights; the cut line is the one piece longer than any stem or barb of its symbol.
-      const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y);
-      const longest = Math.max(...drafts.filter((e) => sectionLink(e) === sectionLink(d) && e.shape.type === 'line').map((e) => (e.shape.type === 'line' ? Math.hypot(e.shape.b.x - e.shape.a.x, e.shape.b.y - e.shape.a.y) : 0)));
-      out.push({ kind: len >= longest ? 'cut' : 'head', a: s.a, b: s.b });
+      out.push({ kind: length(d) >= longest.get(link)! ? 'cut' : 'head', a: s.a, b: s.b });
     } else if (s.type === 'text') {
       const box = textBox(s.p, s.text, s.height, s.rotation);
       out.push({ kind: 'head', a: box[0], b: box[2], box });
