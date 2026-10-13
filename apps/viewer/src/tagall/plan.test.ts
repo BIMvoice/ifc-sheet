@@ -194,6 +194,13 @@ describe('TAGALL on a detail', () => {
     assert.ok(drafts.every((d) => inCrop(shown(d))), 'every label stands inside the crop');
   });
 
+  it('counts, of the marks, only what the detail shows: its codes and its kinds', () => {
+    // The door D1 (own mark) and the window W2 (a coded kind) are in the crop; the door D2 and the window W1 are not.
+    const { drafts, summary } = run([], { crop, rooms: [] });
+    assert.deepEqual(drafts.map((d) => d.params.labelOf).sort(), ['D1', 'W2']);
+    assert.deepEqual([summary.marks, summary.coded, summary.kinds], [2, 1, 1]);
+  });
+
   it('puts the label of a room the crop cuts inside the crop, and keeps the whole room\'s area', () => {
     const wide = [{ renderId: 12, guid: 'R2', ring: box(2, 1, 10, 5), at: 'cut' as const }];
     const { drafts } = run([], { crop, rooms: wide, targets: [], elements: [] });

@@ -115,6 +115,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   for (const r of linework) index.add(r);
   const doorSpots = layoutLabels(items.filter((i) => doorIds.has(i.id)), scene);
   const spots = new Map([...windowSpots, ...doorSpots]);
+  const shownKinds = new Set<string>();
   for (const t of todo) {
     const spot = spots.get(String(t.renderId));
     const extras = extrasOf.get(t.guid) ?? {};
@@ -122,9 +123,9 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     if (!draft || !spot || !within(input.crop, spot.centre)) continue;
     drafts.push(draft);
     summary.marks++;
-    if (extras.markCode !== undefined) summary.coded++;
+    if (extras.markCode !== undefined) { summary.coded++; shownKinds.add(String(extras.markKey)); }
   }
-  summary.kinds = new Set([...extrasOf.values()].map((e) => e.markKey)).size;
+  summary.kinds = shownKinds.size;
 
   // Rooms: in the middle of the room; a room too small for its label has the label beside it, joined by a leader.
   const roomed = labelledBy(input.existing, ROOM_TYPE_ID);
