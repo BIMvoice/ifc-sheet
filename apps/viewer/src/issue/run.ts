@@ -20,7 +20,7 @@ import { currentFindings } from '@/check/collect';
 import { currentSnapshot } from '@/whatchanged/current';
 import { captureSheets, failureLine } from './capture';
 import { drawingListCsv, issuePrintHtml, uniqueNames, type ListLabels } from './output';
-import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
+import { issueRecord, nextIssueName, planIssue, withLatestIssue, type IssuePlan, type IssueReason } from './plan';
 
 export type IssueFormat = 'pdf' | 'svg' | 'dxf';
 
@@ -93,7 +93,8 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   }
   // The model as it stands is recorded with the issue: a later version is compared with it (WHATCHANGED).
   const model = await currentSnapshot();
-  const issues = [...(project.issues ?? []), { ...issueRecord(plan, freshProjectId('issue'), Date.now()), ...(model ? { model } : {}) }];
+  const record = { ...issueRecord(plan, freshProjectId('issue'), Date.now()), ...(model ? { model } : {}) };
+  const issues = model ? withLatestIssue(project.issues ?? [], record) : [...(project.issues ?? []), record];
   useProjectStore.setState({ issues, dirty: true });
   lines.push({ key: 'issue.msg.done', params: { name: plan.name, date: plan.date, count: plan.sheets.length, format: options.format.toUpperCase() } });
   return { plan, html, csv, zip, lines };

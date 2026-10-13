@@ -71,6 +71,15 @@ export function issueRecord(plan: IssuePlan, id: string, createdAt: number): Pro
   return { id, name: plan.name, date: plan.date, createdAt, sheets: plan.sheets.map((s) => s.row) };
 }
 
+/**
+ * The issues with `latest` added. Only the newest issue keeps the model snapshot it was issued against: a later
+ * version is compared with the last one, and a snapshot is some 130 bytes an element (6.5 MB at 50 000), so one
+ * per issue would grow the project by that much every time.
+ */
+export function withLatestIssue(issues: readonly ProjectIssue[], latest: ProjectIssue): ProjectIssue[] {
+  return [...issues.map(({ model: _model, ...rest }): ProjectIssue => rest), latest];
+}
+
 /** The default name of the next issue: `Issue 1`, `Issue 2`… */
 export function nextIssueName(existing: readonly Pick<ProjectIssue, 'name'>[]): string {
   const taken = new Set(existing.map((i) => i.name));

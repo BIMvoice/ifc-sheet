@@ -20,6 +20,7 @@ import { loadProjectDocument, projectDocument, resetProject, syncProjectWithMode
 import type { StoreyInput } from './view-defaults';
 import type { ProjectDocument, ProjectModelRef } from './types';
 import { parseProjectFile, serializeProject } from './project-file';
+import { readSnapshots, withoutSnapshots, withSnapshots, writeSnapshots } from './autosave-snapshots';
 
 const AUTOSAVE_PREFIX = 'ifc-lite:project:v1:';
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -59,11 +60,23 @@ function readAutosave(key: string): ProjectDocument | null {
 }
 
 function writeAutosave(key: string, doc: ProjectDocument): void {
+  // The model snapshots are far larger than the drawings: they are kept apart, so they cannot fill the slot.
+  const { slim, snapshots } = withoutSnapshots(doc);
   try {
-    localStorage.setItem(key, serializeProject(doc));
+    localStorage.setItem(key, serializeProject(slim));
   } catch (err) {
     console.warn('[project] autosave failed', err);
   }
+  void writeSnapshots(key, snapshots);
+}
+
+/** Puts the snapshots kept for `key` back into the project the slot restored, if it is still the one in front. */
+async function restoreSnapshots(key: string, current: () => string | null): Promise<void> {
+  const snapshots = await readSnapshots(key);
+  if (!snapshots || current() !== key) return;
+  const { modelState, issues } = useProjectStore.getState();
+  const restored = withSnapshots({ modelState, issues } as ProjectDocument, snapshots);
+  useProjectStore.setState({ modelState: restored.modelState, issues: restored.issues });
 }
 
 function loadedModels(): { refs: ProjectModelRef[]; storeys: StoreyInput[] } {
@@ -97,7 +110,10 @@ export function useProjectSync(): void {
         const saved = readAutosave(key);
         const current = useProjectStore.getState();
         const overlaps = current.models.some((m) => refs.some((r) => r.key === m.key));
-        if (saved) loadProjectDocument(saved);
+        if (saved) {
+          loadProjectDocument(saved);
+          void restoreSnapshots(key, () => slot);
+        }
         else if (!overlaps) resetProject();
       }
       syncProjectWithModels(refs, storeys);
@@ -109,7 +125,7 @@ export function useProjectSync(): void {
     });
     const unsubProject = useProjectStore.subscribe((state, prev) => {
       if (!slot || (state.views === prev.views && state.sheets === prev.sheets && state.name === prev.name
-        && state.drafts === prev.drafts && state.draftLayers === prev.draftLayers && state.hatchPatterns === prev.hatchPatterns && state.titleBlockDefaults === prev.titleBlockDefaults && state.modelState === prev.modelState)) return;
+        && state.drafts === prev.drafts && state.draftLayers === prev.draftLayers && state.hatchPatterns === prev.hatchPatterns && state.titleBlockDefaults === prev.titleBlockDefaults && state.modelState === prev.modelState && state.issues === prev.issues)) return;
       const key = slot;
       clearTimeout(timer);
       timer = setTimeout(() => writeAutosave(key, projectDocument()), AUTOSAVE_DEBOUNCE_MS);
