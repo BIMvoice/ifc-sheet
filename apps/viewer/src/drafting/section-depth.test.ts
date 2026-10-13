@@ -62,6 +62,7 @@ describe('section depth band', () => {
 });
 
 import { selectedSectionBand } from './section-depth';
+import { automaticViewDepth } from '@/lib/section/automatic-depth';
 
 describe('the band of the selected section', () => {
   const views = [{ id: 'sec1', viewDepth: 6 }];
@@ -74,6 +75,20 @@ describe('the band of the selected section', () => {
   it('falls back to the default for a view with no depth', () => {
     const list = parts();
     assert.equal(selectedSectionBand(new Set([list[0].id]), list, [{ id: 'sec1', viewDepth: null }])?.depth, 3);
+  });
+  it('shows the depth the drawing uses when the view has none of its own, and a drag starts there', () => {
+    const list = parts();
+    // A model 30 x 4 x 40 m: a plane that is not along an axis looks half the diagonal (25.1 m), not 3 m.
+    const bounds = { min: { x: 0, y: 0, z: 0 }, max: { x: 30, y: 4, z: 40 } };
+    const custom = { axis: 'front' as const, custom: { normal: [0, 0, 1] } };
+    const band = selectedSectionBand(new Set([list[0].id]), list, [{ id: 'sec1', viewDepth: null, plane: custom }], bounds);
+    assert.ok(Math.abs((band?.depth ?? 0) - Math.hypot(30, 4, 40) / 2) < 1e-9);
+    assert.equal(band?.depth, automaticViewDepth(custom, bounds));
+    // A cut along an axis looks half the model's depth on that axis.
+    const front = selectedSectionBand(new Set([list[0].id]), list, [{ id: 'sec1', plane: { axis: 'front' as const } }], bounds);
+    assert.equal(front?.depth, 20);
+    // Its own depth always wins.
+    assert.equal(selectedSectionBand(new Set([list[0].id]), list, [{ id: 'sec1', viewDepth: 6, plane: custom }], bounds)?.depth, 6);
   });
   it('shows nothing for no selection, a stray drawing or a section whose view is gone', () => {
     const list = parts();

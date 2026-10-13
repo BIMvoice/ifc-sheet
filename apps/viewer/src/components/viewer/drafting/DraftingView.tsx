@@ -92,6 +92,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
   const models = useViewerStore((s) => s.models);
   const legacyGeometry = useViewerStore((s) => s.geometryResult);
   // The drawing's own plane; without a drawing (an empty project) the view's work plane.
+  const modelBounds = useMemo(() => mergedSectionBounds(models, legacyGeometry), [models, legacyGeometry]);
   const fallbackPlane = useMemo(() => viewPlaneConfig(view, levels, mergedSectionBounds(models, legacyGeometry)), [view, levels, models, legacyGeometry]);
   const plane = drawing?.config.plane ?? fallbackPlane ?? undefined;
   const axis: SectionAxisName = plane ? AXIS_NAME[plane.axis] : 'down';
@@ -188,7 +189,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
   // The selection's grips (a handful of entities at most) and the on-canvas editing bar.
   const selected = useMemo(() => entities.filter((e) => selection.has(e.id)), [entities, selection]);
   // A selected section symbol is locked to its section; it shows the depth band and its one handle instead.
-  const sectionBand = useMemo(() => selectedSectionBand(selection, entities, views), [selection, entities, views]);
+  const sectionBand = useMemo(() => selectedSectionBand(selection, entities, views, modelBounds), [selection, entities, views, modelBounds]);
   const grips = useMemo(() => {
     const own = selected.length <= 20 ? selected.filter((e) => !isSectionSymbol(e, views)).flatMap((e) => gripsOf(e.id, e.shape)) : [];
     return sectionBand ? [...own, sectionBand.grip] : own;

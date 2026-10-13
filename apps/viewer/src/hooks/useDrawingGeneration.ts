@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
 import type { IfcSourceBytes } from '@ifc-lite/parser';
 
 /**
@@ -82,7 +83,7 @@ export const ANNOTATION_VIEW_DEPTH = 1.2;
 // occluded/far dashed (hidden-line pass) — and culls the cut-away front half
 // and anything past this depth. Half the model depth is a sensible default;
 // tune here if sections feel too deep or too shallow.
-export const SECTION_VIEW_DEPTH_FRACTION = 0.5;
+export { SECTION_VIEW_DEPTH_FRACTION };
 
 interface UseDrawingGenerationParams {
   geometryResult: GeometryResult | null | undefined;
@@ -450,12 +451,8 @@ export function useDrawingGeneration({
       }
 
       if (projectionOn && (sectionPlane.custom || sectionPlane.axis !== 'down')) {
-        // A custom plane's normal is not a model axis, so size the default
-        // depth by the model's diagonal rather than one axis range.
-        const span = sectionPlane.custom
-          ? Math.hypot(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y, bounds.max.z - bounds.min.z)
-          : axisMax - axisMin;
-        belowDepth = Math.max(span * SECTION_VIEW_DEPTH_FRACTION, 1e-3);
+        // The automatic depth is shared with the section's depth band on its plan.
+        belowDepth = automaticViewDepth(sectionPlane, bounds) ?? 1e-3;
         aboveDepth = 1e-3;
       }
       if (boundedProjection) {

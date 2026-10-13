@@ -9,6 +9,9 @@
  * depth.
  */
 
+import { automaticViewDepth } from '@/lib/section/automatic-depth';
+import type { AxisBounds } from '@/lib/section/section-distance';
+import type { SectionPlaneAxis } from '@/store/types';
 import type { Grip } from './grips';
 import { sectionLink, sectionNormal, withSectionParts } from './section-symbol';
 import type { DraftEntity, Pt } from './types';
@@ -23,7 +26,7 @@ export interface SectionCut {
   side: Pt;
 }
 
-/** Shown for a section that has no depth of its own, metres. */
+/** Shown for a section that has no depth of its own when the model's bounds are not known, metres. */
 export const DEFAULT_BAND_DEPTH_M = 3;
 /** The shallowest depth a drag sets, and the step it snaps to, metres. */
 export const MIN_BAND_DEPTH_M = 0.1;
@@ -84,7 +87,9 @@ export function depthGrip(cut: SectionCut, depth: number): Grip | null {
 export function selectedSectionBand(
   selection: ReadonlySet<string>,
   entities: readonly DraftEntity[],
-  views: readonly { id: string; viewDepth?: number | null }[],
+  views: readonly { id: string; viewDepth?: number | null; plane?: { axis: SectionPlaneAxis; custom?: unknown } }[],
+  /** The model's bounds, to size the depth a section with none of its own really looks. */
+  bounds: AxisBounds | null = null,
 ): { cut: SectionCut; depth: number; grip: Grip } | null {
   const touched = new Set(entities.filter((e) => selection.has(e.id)).map((e) => sectionLink(e)));
   if (touched.size !== 1) return null;
@@ -95,7 +100,9 @@ export function selectedSectionBand(
   const parts = entities.filter((e) => withSectionParts(selection, entities).has(e.id) && sectionLink(e) === viewId);
   const cut = sectionCutOf(parts);
   if (!cut) return null;
-  const depth = typeof view.viewDepth === 'number' && view.viewDepth > 0 ? view.viewDepth : DEFAULT_BAND_DEPTH_M;
+  const own = typeof view.viewDepth === 'number' && view.viewDepth > 0 ? view.viewDepth : null;
+  // With no depth of its own the drawing uses the automatic one: the band shows that, and a drag starts from it.
+  const depth = own ?? (view.plane ? automaticViewDepth(view.plane, bounds) : null) ?? DEFAULT_BAND_DEPTH_M;
   const grip = depthGrip(cut, depth);
   return grip ? { cut, depth, grip } : null;
 }
