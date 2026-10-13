@@ -21,4 +21,10 @@ export const annotateAllEn = {
   'drafting.msg.tagAllAreas': 'Room areas: {model} read from the model quantities, {footprint} computed from the room footprint.',
   'drafting.msg.tagAllTooSmall': '{count} rooms are smaller than their label; the label sits at the deepest point and runs over the walls.',
   'drafting.msg.tagAllNoRooms': 'This plan shows no room: the model has no space cut at this level, so only doors and windows were tagged.',
+  'drafting.cmd.levelAll': 'LEVELALL',
+  'drafting.tool.levelAll': 'Level marks for the view',
+  'drafting.msg.levelAllViewOnly': 'LEVELALL works on a section or an elevation.',
+  'drafting.msg.levelAllEmpty': 'Nothing to mark: this view shows no model elements.',
+  'drafting.msg.levelAllHave': 'This view has all its level marks already ({count}).',
+  'drafting.msg.levelAllDone': 'Added {count} level marks on the {side} of the building, in line. Already there: {already}.',
 } as const satisfies Record<string, TranslationValue>;
