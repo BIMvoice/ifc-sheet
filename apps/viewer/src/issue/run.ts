@@ -17,6 +17,7 @@ import { freshProjectId } from '@/project/view-defaults';
 import type { ProjectDocument } from '@/project/types';
 import type { TranslationKey } from '@/i18n';
 import { currentFindings } from '@/check/collect';
+import { currentSnapshot } from '@/whatchanged/current';
 import { captureSheets } from './capture';
 import { drawingListCsv, issuePrintHtml, uniqueNames, type ListLabels } from './output';
 import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
@@ -92,7 +93,9 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
     });
     zip = zipSync(files);
   }
-  const issues = [...(project.issues ?? []), issueRecord(plan, freshProjectId('issue'), Date.now())];
+  // The model as it stands is recorded with the issue: a later version is compared with it (WHATCHANGED).
+  const model = await currentSnapshot();
+  const issues = [...(project.issues ?? []), { ...issueRecord(plan, freshProjectId('issue'), Date.now()), ...(model ? { model } : {}) }];
   useProjectStore.setState({ issues, dirty: true });
   lines.push({ key: 'issue.msg.done', params: { name: plan.name, date: plan.date, count: plan.sheets.length, format: options.format.toUpperCase() } });
   return { plan, html, csv, zip, lines };

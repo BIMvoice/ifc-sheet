@@ -26,7 +26,7 @@ export function fillTitleBlock(sheets: readonly ProjectSheet[], defaults: Readon
   const next = sheets.map((s) => {
     if ((s.titleBlock?.[field] ?? '').trim() !== '') return s;
     filled++;
-    return { ...s, titleBlock: { ...(s.titleBlock ?? {}), [field]: v } };
+    return { ...s, titleBlock: { ...s.titleBlock, [field]: v } };
   });
   return { sheets: next, defaults: { ...defaults, [field]: v }, filled };
 }

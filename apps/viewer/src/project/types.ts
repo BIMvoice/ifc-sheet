@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
@@ -323,6 +324,8 @@ export interface ProjectDocument {
   issues?: ProjectIssue[];
   /** Title-block values every new sheet starts with (project, drawn by, date), set from What is missing (`check/fill.ts`). */
   titleBlockDefaults?: Record<string, string>;
+  /** The model as the project last knew it: what a new version is compared with when no issue recorded one (`whatchanged/`). */
+  modelState?: ModelSnapshot;
 }
 
 /** One sheet as it stood when a set was issued. */
@@ -346,4 +349,6 @@ export interface ProjectIssue {
   date: string;
   createdAt: number;
   sheets: IssuedSheet[];
+  /** The model as it was when the set was issued: what a later version is compared with. */
+  model?: ModelSnapshot;
 }

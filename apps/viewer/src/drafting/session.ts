@@ -12,6 +12,7 @@
  * and command-line keywords, and drives the command state machine.
  */
 
+import { tryWhatChangedCommand } from '@/whatchanged/run';
 import { create } from 'zustand';
 import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
@@ -339,6 +340,7 @@ export function submitCommandLine(text: string, cursor: Pt | null): void {
   }
   if (!command && !get().selecting) {
     if (tryIssueCommand(trimmed, say)) return;
+    if (tryWhatChangedCommand(trimmed, say)) return;
     if (trimmed.toUpperCase() === 'CHECKSET') {
       say({ key: 'drafting.msg.typed', typed: trimmed, params: { text: trimmed } });
       for (const text of checkLines(currentFindings(), useProjectStore.getState().sheets)) say({ key: 'check.msg.line', params: { text } });
