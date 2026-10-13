@@ -20,7 +20,8 @@ import { ringToRef } from './label-leader';
 import { layoutLabels, type LayoutElement } from './label-layout';
 import { rectsOf } from './label-annotations';
 import { textBlock } from '@/drafting/text-block';
-import { resolveTemplate } from './label-resolve';
+import { resolveWithExtras, type LabelExtras } from './label-extras';
+import type { LabelElement } from './label-resolve';
 import { parseTemplate } from './label-template';
 import type { ViewElement } from './view-elements';
 
@@ -44,26 +45,29 @@ export function labelTargets(elements: readonly ViewElement[]): LabelTarget[] {
 }
 
 /** What the label of `type` for the element `guid` says; null when the element is not loaded or the type is no label type. */
-function labelText(type: AnnotationType, guid: string): string | null {
+/** How a label finds its element by GlobalId: the loaded models'. */
+export type ElementReader = (globalId: string) => LabelElement | null;
+
+function labelText(type: AnnotationType, guid: string, extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): string | null {
   const spec = type.label;
-  const element = labelElementByGlobalId(guid);
-  return spec && element ? resolveTemplate(parseTemplate(spec.template), element, spec.missing) : null;
+  const element = read(guid);
+  return spec && element ? resolveWithExtras(parseTemplate(spec.template), element, spec.missing, extras) : null;
 }
 
 /** The label of `type` for the element `guid`, centred on `centre`; `ring` is the element's outline, which a leader runs to. Null when the element is not loaded or the type is no label type. */
-export function labelDraft(type: AnnotationType, guid: string, centre: Pt, at: LabelPlacement, ring?: readonly Pt[]): DraftEntity | null {
+export function labelDraft(type: AnnotationType, guid: string, centre: Pt, at: LabelPlacement, ring?: readonly Pt[], extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): DraftEntity | null {
   const spec = type.label;
-  const text = labelText(type, guid);
+  const text = labelText(type, guid, extras, read);
   if (!spec || text === null) return null;
   const plain = { type: 'text' as const, p: centredAnchor(centre, text, at.textHeight, spec.frame, annotationScreenUp()), text, height: at.textHeight, rotation: 0, ...(spec.frame ? { frame: spec.frame } : {}) };
   const shape = withLeader(plain, ring ?? null, spec.leader, at.paperUnit);
   const styled = styledParams(at.viewId, shape, { textStyle: at.textStyle, dimStyle: at.dimStyle });
-  return newDraft(at.viewId, at.layerId, shape, { ...styled, labelOf: guid, atype: type.id, ...(ring ? { labelRef: ringToRef(ring) } : {}) });
+  return newDraft(at.viewId, at.layerId, shape, { ...styled, labelOf: guid, atype: type.id, ...extras, ...(ring ? { labelRef: ringToRef(ring) } : {}) });
 }
 
 /** The size a label of `type` for `guid` fills; null as for `labelDraft`. */
-export function labelSize(type: AnnotationType, guid: string, textHeight: number): { w: number; h: number } | null {
-  const text = labelText(type, guid);
+export function labelSize(type: AnnotationType, guid: string, textHeight: number, extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): { w: number; h: number } | null {
+  const text = labelText(type, guid, extras, read);
   if (text === null) return null;
   const { outer } = textBlock(text, textHeight, type.label?.frame);
   return { w: outer.x1 - outer.x0, h: outer.y1 - outer.y0 };

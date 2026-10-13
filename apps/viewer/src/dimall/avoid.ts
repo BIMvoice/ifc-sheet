@@ -13,6 +13,7 @@
 import { textBox } from '@/drafting/annotation';
 import type { FigureBox } from '@/drafting/figure-layout';
 import { sectionLink } from '@/drafting/section-symbol';
+import type { Rect } from '@/labels/label-geometry';
 import type { DraftEntity, Pt } from '@/drafting/types';
 import type { PlannedString } from './types';
 
@@ -76,4 +77,20 @@ export function stringsThroughHeads(strings: readonly PlannedString[], pieces: r
     const u1 = last.x * f.along.x + last.y * f.along.y;
     return avoidBoxes(heads, f, height).some((b) => b.u1 > Math.min(u0, u1) && b.u0 < Math.max(u0, u1) && b.v0 <= s.offset + height && b.v1 >= s.offset - height);
   }).length;
+}
+
+/** The pieces as boxes small enough to test a label against: a line as a run of boxes along it, a letter as its box. */
+export function pieceRects(pieces: readonly SymbolPiece[], step: number): Rect[] {
+  const half = step / 2;
+  return pieces.flatMap((p): Rect[] => {
+    if (p.box) {
+      const xs = p.box.map((q) => q.x), ys = p.box.map((q) => q.y);
+      return [{ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }];
+    }
+    const n = Math.max(1, Math.ceil(Math.hypot(p.b.x - p.a.x, p.b.y - p.a.y) / step));
+    return Array.from({ length: n + 1 }, (_, i) => {
+      const x = p.a.x + ((p.b.x - p.a.x) * i) / n, y = p.a.y + ((p.b.y - p.a.y) * i) / n;
+      return { x0: x - half, y0: y - half, x1: x + half, y1: y + half };
+    });
+  });
 }

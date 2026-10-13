@@ -46,7 +46,7 @@ function cornersOf(r: Rect): Pt[] {
   return [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }];
 }
 
-function pointInRing(ring: readonly Pt[], p: Pt): boolean {
+export function pointInRing(ring: readonly Pt[], p: Pt): boolean {
   let in_ = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     if ((ring[i].y > p.y) !== (ring[j].y > p.y) && p.x < ((ring[j].x - ring[i].x) * (p.y - ring[i].y)) / (ring[j].y - ring[i].y) + ring[i].x) in_ = !in_;
@@ -65,6 +65,18 @@ export function rectHitsRing(r: Rect, ring: readonly Pt[]): boolean {
     for (let k = 0; k < 4; k++) if (segmentsCross(a, b, corners[k], corners[(k + 1) % 4])) return true;
   }
   return pointInRing(ring, rectCentre(r)) || corners.some((c) => pointInRing(ring, c));
+}
+
+/** Whether the rectangle lies wholly inside the area of the ring: its corners do, no outline corner pokes into it, no edge crosses it. */
+export function rectInsideRing(r: Rect, ring: readonly Pt[]): boolean {
+  if (ring.length < 3) return false;
+  const corners = cornersOf(r);
+  if (!corners.every((c) => pointInRing(ring, c)) || ring.some((p) => inside(r, p))) return false;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    for (let k = 0; k < 4; k++) if (segmentsCross(a, b, corners[k], corners[(k + 1) % 4])) return false;
+  }
+  return true;
 }
 
 /** The point of the rectangle nearest `p` (`p` itself when inside). */

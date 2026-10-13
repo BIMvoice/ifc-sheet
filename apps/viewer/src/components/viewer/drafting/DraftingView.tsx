@@ -31,6 +31,8 @@ import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import type { ProjectView } from '@/project/types';
 import { viewElements } from '@/labels/view-elements';
 import { planParts } from '@/dimall/parts';
+import { roomFootprints } from '@/tagall/footprint';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { pickModelElement, referenceSet, referencesIn } from '@/drafting/references';
 import { selectFromPlan } from '@/components/viewer/plan/PlanPointer';
 import { draftsOfView } from '@/drafting/draft-store';
@@ -38,7 +40,7 @@ import { syncLevelMarks } from '@/drafting/level-sync';
 import { levelResolverFor, storeyOf } from '@/drafting/level-resolver';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
-  attachDraftingView, currentLayerId, setElementPicker, setViewElementsProvider, setPlanPartsProvider, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
+  attachDraftingView, currentLayerId, setElementPicker, setViewElementsProvider, setPlanPartsProvider, setRoomsProvider, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
   toggleOrtho, toggleSnap, useDraftingSession, pickEntity, setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
@@ -169,6 +171,18 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
     setPlanPartsProvider(() => planParts(drawing));
     return () => setPlanPartsProvider(null);
   }, [drawing]);
+  // TAGALL: the rooms of this plan, each space cut at the plan's height.
+  useEffect(() => {
+    setRoomsProvider(() => {
+      const level = view.kind === 'plan' ? resolvePlanLevel(view, levels) ?? view.level : null;
+      if (!level || view.kind !== 'plan') return [];
+      return roomFootprints(runtimeGeometry?.meshes ?? [], level.elevation + view.cutHeight, level.elevation).flatMap((r) => {
+        const guid = renderIdGlobalId(r.renderId);
+        return guid ? [{ ...r, guid }] : [];
+      });
+    });
+    return () => setRoomsProvider(null);
+  }, [view, levels, runtimeGeometry]);
   // Hatch boundaries: drafted closed shapes and the drawing's cut outlines. Level marks: the
   // plan's level, or the point's height on a section / elevation.
   useEffect(() => {
