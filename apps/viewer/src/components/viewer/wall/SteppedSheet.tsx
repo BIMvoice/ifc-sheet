@@ -11,14 +11,13 @@
  * once more hangs the sheet back on the wall.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { runningCommand, useDraftingSession } from '@/drafting/session';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
 import { useProjectStore } from '@/project/project-store';
 import type { SectionProposal } from '@/project/section-proposals';
-import { paperOf } from '@/project/sheets';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { DraftingView } from '../drafting/DraftingView';
 import { exportSheetDxf } from '../sheets/sheet-dxf';
@@ -28,9 +27,9 @@ import { AddDrawing } from './AddDrawing';
 import { InfoCard } from './InfoCard';
 import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
-import { WallSheet } from './WallSheet';
 import { ScaleChips } from './WallGrid';
-import { SheetDrawingSurface } from './SheetDrawingSurface';
+import { SheetCanvas } from './SheetCanvas';
+import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 
 /** The sheet's way out: printed or saved, at true paper size. */
@@ -51,37 +50,19 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const sheetContent = useSheetContent(sheet);
-  const host = useRef<HTMLDivElement>(null);
   const paperRef = useRef<SVGSVGElement>(null);
-  const [width, setWidth] = useState(800);
+  const [fitKey, setFitKey] = useState(0);
   const viewports = useMemo(() => sheet.viewports ?? [], [sheet.viewports]);
   const [chosen, setChosen] = useState<string | null>(null);
   const [tool, setTool] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
-  /** Drawing on the sheet's own paper (lines, text, hatched zones). */
-  const [paper, setPaper] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
-  const slot = viewports.find((v) => v.id === chosen) ?? viewports[0] ?? null;
+  const slot = viewports.find((v) => v.id === chosen) ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
   const focus = views.find((v) => v.id === focusId);
   const focusView = focus && focus.kind !== '3d' ? focus : null;
   const group = sheetGroup(sheet);
-
-  // The sheet as large as the space allows.
-  useLayoutEffect(() => {
-    const el = host.current;
-    if (!el) return;
-    const fit = () => {
-      const { width: w, height: h } = el.getBoundingClientRect();
-      const paper = paperOf(sheet);
-      setWidth(Math.max(200, Math.min(w - 32, ((h - 32) * paper.w) / paper.h)));
-    };
-    fit();
-    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit);
-    ro?.observe(el);
-    return () => ro?.disconnect();
-  }, [sheet, focusId]);
 
   // A tool ends (Esc, or it finished): the rail lets go of it; the drawing stays forward.
   const commandId = useDraftingSession((s) => s.commandId);
@@ -111,19 +92,18 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if ((focusId || paper) && (runningCommand() || useDraftingSession.getState().selection.size > 0)) return;
+      // A running tool or a drafted selection lets go first (the drafting keys' own Esc).
+      if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       if (adding) setAdding(false);
       else if (focusId) {
         setFocusId(null);
         setTool(null);
-      } else if (paper) {
-        setPaper(false);
-        setTool(null);
-      } else onBack();
+      } else if (chosen) setChosen(null);
+      else onBack();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onBack, focusId, paper, adding]);
+  }, [onBack, focusId, chosen, adding]);
 
   const startTool = (command: string): void => {
     cancelStart.current();
@@ -132,11 +112,9 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     // Plain drawing goes on the drawing in front, else on the sheet's paper.
     if (DRAW_TOOLS.some((d) => d.command === command)) {
       setTool(command);
-      if (!focusView) setPaper(true);
       cancelStart.current = startWhenAttached(focusView?.id ?? sheet.id, command);
       return;
     }
-    setPaper(false);
     // A section line is drawn on a plan: the chosen one, else the lowest.
     // A detail marks its area on the drawing in front.
     const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : command === 'detail' ? focusView ?? view : view;
@@ -151,7 +129,6 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     cancelStart.current();
     ran.current = null;
     setAdding(false);
-    setPaper(false);
     const target = focusView ?? view;
     if (!target || target.kind === '3d') return;
     setTool(null);
@@ -159,34 +136,15 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     cancelStart.current = startWhenAttached(target.id, command);
   };
 
-  const viewportAt = (clientX: number, clientY: number): SheetViewport | null => {
-    const rect = paperRef.current?.getBoundingClientRect();
-    if (!rect) return null;
-    const k = rect.width / paperOf(sheet).w;
-    const p = { x: (clientX - rect.left) / k, y: (clientY - rect.top) / k };
-    return [...viewports].reverse().find((vp) => {
-      const box = sheetContent.boxOf(vp);
-      return Math.abs(p.x - vp.x) <= box.width / 2 && Math.abs(p.y - vp.y) <= box.height / 2;
-    }) ?? null;
-  };
-
-  // The wheel inside a drawing on the sheet moves its cut or its depth; a notch is one step.
-  useEffect(() => {
-    const el = paperRef.current?.parentElement;
-    if (!el || focusId) return;
-    const onWheel = (e: WheelEvent) => {
-      const vp = viewportAt(e.clientX, e.clientY);
-      const target = vp ? useProjectStore.getState().views.find((v) => v.id === vp.viewId) : null;
-      if (!vp || !target) return;
-      e.preventDefault();
-      setChosen(vp.id);
-      const steps = e.deltaY < 0 ? 1 : -1;
-      if (target.kind === 'plan') nudgeCutHeight(target.id, steps);
-      else if (target.kind === 'section' || target.kind === 'elevation') nudgeViewDepth(target.id, steps);
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  });
+  const open = useCallback((vp: SheetViewport): void => {
+    const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
+    if (v && v.kind !== '3d') setFocusId(v.id);
+  }, []);
+  const nudge = useCallback((vp: SheetViewport, steps: number): void => {
+    const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
+    if (v?.kind === 'plan') nudgeCutHeight(v.id, steps);
+    else if (v?.kind === 'section' || v?.kind === 'elevation') nudgeViewDepth(v.id, steps);
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -200,6 +158,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {group === 'plans' && !focusView ? <ScaleChips group="plans" extent={extent} /> : null}
         {!focusView ? (
           <>
+            <button type="button" className={issue} onClick={() => setFitKey((k) => k + 1)}>{t('wall.fit')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && printSheet(paperRef.current, sheet)}>{t('wall.export.pdf')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
           </>
@@ -212,33 +171,14 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
             <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">
               <DraftingView key={focusView.id} view={focusView} bare />
             </div>
-          ) : paper ? (
-            <div className="absolute inset-0">
-              <SheetDrawingSurface sheet={sheet} sheetContent={sheetContent} />
-            </div>
           ) : (
-            <div ref={host} className="flex h-full items-center justify-start">
-              <button
-                type="button"
-                aria-label={t('wall.chooseDrawing')}
-                className="cursor-pointer border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-                onClick={(e) => {
-                  const vp = viewportAt(e.clientX, e.clientY);
-                  if (vp) setChosen(vp.id);
-                }}
-                onKeyDown={(e) => {
-                  // Arrows walk the drawings on the sheet.
-                  if ((e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') || viewports.length === 0) return;
-                  const at = Math.max(0, viewports.findIndex((v) => v.id === slot?.id));
-                  setChosen(viewports[(at + (e.key === 'ArrowRight' ? 1 : viewports.length - 1)) % viewports.length].id);
-                }}
-              >
-                <WallSheet ref={paperRef} sheet={sheet} width={width} selectedViewportId={slot?.id ?? null} sheetContent={sheetContent} />
-              </button>
+            <div className="absolute inset-0 overflow-hidden rounded-md">
+              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={setChosen} onOpen={open} onNudge={nudge} fitKey={fitKey} />
             </div>
           )}
           <div className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
-            <InfoCard tool={tool} view={focusView || paper ? null : view} drawingOn={focusView?.name ?? null} />
+            {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
+              : focusView ? null : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} />}
           </div>
           {adding ? (
             <div className="absolute inset-x-3 bottom-3 flex justify-center">
@@ -256,12 +196,12 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
           ) : null}
         </main>
       </div>
-      {!focusView && !paper && group === 'sections' ? (
+      {!focusView && group === 'sections' ? (
         <div className="flex shrink-0 justify-center px-6 pb-3">
           <SectionTray sheet={sheet} slotId={slot?.id ?? null} proposals={proposals} />
         </div>
       ) : null}
-      {!focusView && !paper ? (
+      {!focusView && !tool ? (
         <footer className="flex shrink-0 items-baseline gap-3 border-t border-zinc-200 bg-white px-6 py-3 text-sm text-zinc-700">
           <strong className="text-zinc-900">{t('wall.sheetHint.title')}</strong>
           <span>{t('wall.sheetHint.body')}</span>

@@ -24,11 +24,13 @@ interface WallSheetProps {
   selectedViewportId?: string | null;
   /** What its viewports show, when the caller already has it (it hit-tests them too). */
   sheetContent?: SheetContent;
+  /** The pin at the top, as on the wall; off where the sheet is worked on. */
+  pinned?: boolean;
 }
 
 const NO_DRAFTS: DraftEntity[] = [];
 
-export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function WallSheet({ sheet, width, selectedViewportId = null, sheetContent }, ref) {
+export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function WallSheet({ sheet, width, selectedViewportId = null, sheetContent, pinned = true }, ref) {
   // What is drawn on the paper itself hangs with it.
   const drafts = useProjectStore((s) => s.drafts);
   const sheetDrafts = useMemo(() => (drafts.some((d) => d.viewId === sheet.id) ? draftsOfView(sheet.id, drafts) : NO_DRAFTS), [drafts, sheet.id]);
@@ -41,7 +43,7 @@ export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function Wall
   const pxPerMm = width / paperOf(sheet).w;
   return (
     <div className="relative">
-      <span aria-hidden className="absolute left-1/2 -top-2 z-10 size-4 -translate-x-1/2 rounded-full bg-sky-500 shadow-[0_2px_6px_rgba(0,0,0,0.45)] ring-2 ring-sky-300/60" />
+      {pinned ? <span aria-hidden className="absolute left-1/2 -top-2 z-10 size-4 -translate-x-1/2 rounded-full bg-sky-500 shadow-[0_2px_6px_rgba(0,0,0,0.45)] ring-2 ring-sky-300/60" /> : null}
       <SheetPaper
         ref={ref}
         sheet={sheet}
