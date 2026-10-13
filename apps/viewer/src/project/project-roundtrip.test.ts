@@ -121,7 +121,7 @@ const viewport: Required<SheetViewport> = {
   id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'],
 };
 const sheet: Required<ProjectSheet> = {
-  id: 'sh1', number: 'A-201', name: 'Plans', createdAt: 9, paper: 'A2', orientation: 'portrait', viewports: [viewport],
+  id: 'sh1', number: 'A-201', autoNumber: true, name: 'Plans', createdAt: 9, paper: 'A2', orientation: 'portrait', viewports: [viewport],
   titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12', revision: 'B' },
 };
 const schedule: Required<ProjectSchedule> = { id: 'sc1', name: 'Doors', kind: 'door', createdAt: 5, scale: 25 };

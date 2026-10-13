@@ -17,6 +17,7 @@ import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { create } from 'zustand';
+import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
 
@@ -216,18 +217,12 @@ export function removeProjectItem(id: string): void {
   });
 }
 
-/** The next free sheet number in the `A-101`, `A-102`… series. */
-export function nextSheetNumber(sheets: readonly ProjectSheet[]): string {
-  const taken = new Set(sheets.map((s) => s.number));
-  for (let n = 101; ; n++) {
-    const number = `A-${n}`;
-    if (!taken.has(number)) return number;
-  }
-}
+export { nextSheetNumber };
 
+/** A new sheet takes the next plan number until a view is placed on it; then it is numbered by what it holds. */
 export function addProjectSheet(name = 'Unnamed'): string {
   const state = useProjectStore.getState();
-  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), name, createdAt: Date.now() };
+  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), autoNumber: true, name, createdAt: Date.now() };
   useProjectStore.setState({ sheets: [...state.sheets, sheet], dirty: true });
   return sheet.id;
 }
@@ -237,7 +232,8 @@ export function duplicateProjectSheet(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;
-  const copy: ProjectSheet = { ...source, id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), name: `${source.name} Copy`, createdAt: Date.now() };
+  const held = state.views.find((v) => v.id === source.viewports?.[0]?.viewId);
+  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held?.kind)), name: `${source.name} Copy`, createdAt: Date.now() };
   const at = state.sheets.indexOf(source) + 1;
   useProjectStore.setState({ sheets: [...state.sheets.slice(0, at), copy, ...state.sheets.slice(at)], dirty: true });
   return copy.id;
@@ -246,7 +242,7 @@ export function duplicateProjectSheet(id: string): string | null {
 export function setSheetNumber(id: string, number: string): void {
   const trimmed = number.trim();
   if (!trimmed) return;
-  useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...sh, number: trimmed } : sh)), dirty: true }));
+  useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed } : sh)), dirty: true }));
 }
 
 /** Whether every loaded model is already in the project's model list. */

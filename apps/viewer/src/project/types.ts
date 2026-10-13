@@ -149,6 +149,13 @@ export interface ProjectSheet {
   id: string;
   /** Sheet number as printed in the title block, e.g. "A-101". */
   number: string;
+  /**
+   * The number was chosen by the program, not typed: it is replaced by the
+   * group's next number when the first view is placed. Cleared by then, and
+   * by typing a number. Absent on sheets from older files, which are never
+   * renumbered.
+   */
+  autoNumber?: boolean;
   name: string;
   createdAt: number;
   paper?: PaperSize;
