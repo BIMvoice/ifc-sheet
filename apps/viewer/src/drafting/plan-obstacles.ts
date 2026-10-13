@@ -16,8 +16,8 @@ import { textBox } from '@/drafting/annotation';
 import { shapePrims } from '@/drafting/curves';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { PlanOverlay } from '@/project/plan-overlays';
-import { symbolPieces, type SymbolPiece } from '@/dimall/avoid';
-import type { DraftEntity, DraftShape, Pt } from './types';
+import type { SymbolPiece } from '@/dimall/avoid';
+import type { DraftShape, Pt } from './types';
 
 /** An arc or circle is read as a run of chords this long at most (radians). */
 const CHORD = Math.PI / 12;
@@ -60,9 +60,4 @@ export function overlayPieces(overlays: readonly PlanOverlay[], textHeight: numb
     }
   }
   return out;
-}
-
-/** Everything annotation of the plan in front keeps clear of besides the model's own outlines. */
-export function planObstacles(drafts: readonly DraftEntity[], overlays: readonly PlanOverlay[], textHeight: number): SymbolPiece[] {
-  return [...symbolPieces(drafts), ...overlayPieces(overlays, textHeight)];
 }
