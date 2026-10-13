@@ -25,6 +25,10 @@ export function AnnotationsTab() {
         <RibbonCommandLargeButton commandId="annotate:text" icon={AnnoText} active={on('text')} />
         <RibbonCommandLargeButton commandId="annotate:leader" icon={AnnoLeader} active={on('leader')} />
         <RibbonCommandLargeButton commandId="annotate:tag" icon={AnnoTag} active={on('tag')} />
+        <RibbonSmallStack>
+          <RibbonCommandSmallButton commandId="annotate:label" icon={AnnoTag} active={on('label')} />
+          <RibbonCommandSmallButton commandId="annotate:label-all" icon={AnnoTag} active={on('labelall')} />
+        </RibbonSmallStack>
       </RibbonGroup>
       <RibbonGroupDivider />
       <RibbonGroup label={t('drafting.group.dimensions')}>

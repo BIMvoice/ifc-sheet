@@ -15,6 +15,8 @@ import { mirrorShape, rotateShape, translateShape } from './transform';
 import { findSymbol, missingSymbolMark, placeSymbol } from './symbols';
 import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
 import { leaderTextRight } from './leader-segments';
+import { leaderStart } from '@/labels/label-leader';
+import { textBlock, type TextFrame } from './text-block';
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
 
 export interface DimensionLayout {
@@ -141,12 +143,20 @@ export function setAnnotationScreenRight(sign: 1 | -1): void {
 /** Model metres per hatch-pattern unit at scale 1: patterns are drawn in paper millimetres, views default to 1:100. */
 export const HATCH_UNIT_M = 0.1;
 
-/** A text box's corners: `width` approximated from the character count. */
-export function textBox(p: Pt, text: string, height: number, rotation: number): Pt[] {
-  const width = Math.max(1, text.length) * height * 0.62;
-  const h = height * screenUp;
-  const corners = [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: h }, { x: 0, y: h }];
-  return corners.map((c) => rotatePt(add(p, c), p, rotation));
+/** The leader a text carries, drawing coordinates: from the edge of its frame to the tip on the element. */
+export function textLeader(shape: Extract<AnnotationShape, { type: 'text' }>): { from: Pt; tip: Pt } | null {
+  if (!shape.leader) return null;
+  const pts = textBox(shape.p, shape.text, shape.height, shape.rotation, shape.frame);
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const from = leaderStart({ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }, shape.frame === 'bubble', shape.leader);
+  return from ? { from, tip: shape.leader } : null;
+}
+
+/** A text box's corners (frame included), as the text block lays it out. */
+export function textBox(p: Pt, text: string, height: number, rotation: number, frame?: TextFrame): Pt[] {
+  const { outer } = textBlock(text, height, frame);
+  const at = (x: number, y: number): Pt => ({ x: p.x + x, y: p.y - y * screenUp });
+  return [at(outer.x0, outer.y1), at(outer.x1, outer.y1), at(outer.x1, outer.y0), at(outer.x0, outer.y0)].map((c) => rotatePt(c, p, rotation));
 }
 
 /** Where an axis's bubbles sit: centres just past its ends (along the line), and their radius / half side. */
@@ -183,13 +193,16 @@ export function nextAxisLabel(label: string): string {
 export function entitySkeleton(shape: EntityShape): DraftShape[] {
   if (isGeometry(shape)) return [shape];
   switch (shape.type) {
-    case 'text':
-      return [{ type: 'polyline', pts: textBox(shape.p, shape.text, shape.height, shape.rotation), closed: true }];
+    case 'text': {
+      const box: DraftShape = { type: 'polyline', pts: textBox(shape.p, shape.text, shape.height, shape.rotation, shape.frame), closed: true };
+      const line = textLeader(shape);
+      return line ? [box, { type: 'polyline', pts: [line.from, line.tip], closed: false }] : [box];
+    }
     case 'leader': {
       const end = shape.pts[shape.pts.length - 1];
       // The text sits beyond the end of the last segment, on whichever side of the screen that is.
       const toPlusX = (leaderTextRight(shape.pts, screenRight) ? screenRight : -screenRight) > 0;
-      const width = Math.max(1, shape.text.length) * shape.height * 0.62;
+      const width = textBlock(shape.text, shape.height).box.x1;
       const anchor = toPlusX ? end : { x: end.x - width, y: end.y };
       return [{ type: 'polyline', pts: shape.pts, closed: false }, { type: 'polyline', pts: textBox(anchor, shape.text, shape.height, 0), closed: true }];
     }

@@ -9,6 +9,7 @@
  * elements. The session reads them back through the getters here.
  */
 
+import type { ViewElement } from '@/labels/view-elements';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
 import type { LevelResolver } from './level-mark';
@@ -80,3 +81,10 @@ export function setElementPicker(picker: ((p: Pt) => number | null) | null): voi
   elementPicker = picker ?? (() => null);
 }
 export const modelElementAt = (p: Pt): number | null => elementPicker(p);
+
+/** The model elements the view in front draws, with a point each to label them at. */
+let viewElementsProvider: () => ViewElement[] = () => [];
+export function setViewElementsProvider(provider: (() => ViewElement[]) | null): void {
+  viewElementsProvider = provider ?? (() => []);
+}
+export const viewElementsOf = (): ViewElement[] => viewElementsProvider();

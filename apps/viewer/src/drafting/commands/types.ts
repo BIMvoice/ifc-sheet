@@ -10,6 +10,7 @@
 
 import type { TranslationKey } from '@/i18n';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import type { ViewElement } from '@/labels/view-elements';
 import type { ProjectView } from '@/project/types';
 import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
 
@@ -18,6 +19,8 @@ export type StepResult = 'continue' | 'done';
 export interface Prompt {
   key: TranslationKey;
   params?: Record<string, string | number>;
+  /** Answers the step offers to click, besides typing: each is submitted as typed, with a count shown beside it. */
+  choices?: readonly { value: string; count: number }[];
 }
 
 /** What a click on the drawing means at the current step. */
@@ -47,6 +50,8 @@ export interface DraftContext {
   view(): ProjectView | null;
   /** The model element (renderer id) drawn under a drawing point, or null. */
   elementAt(p: Pt): number | null;
+  /** Every model element the view draws, with a point to label it at. */
+  viewElements(): ViewElement[];
   /** +1, or −1 when the drawing is mirrored on screen (a user CCW angle is CW in drawing space). */
   orientation: 1 | -1;
   settings: DraftSettings;

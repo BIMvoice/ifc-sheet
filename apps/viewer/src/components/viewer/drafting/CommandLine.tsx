@@ -10,7 +10,7 @@
 
 import { forwardRef } from 'react';
 import { useTranslation } from '@/i18n';
-import { useDraftingSession } from '@/drafting/session';
+import { submitCommandLine, useDraftingSession } from '@/drafting/session';
 
 interface CommandLineProps {
   value: string;
@@ -35,6 +35,20 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
           </div>
         ))}
       </div>
+      {prompt?.choices?.length ? (
+        <div className="flex flex-wrap gap-1 px-3 pb-1" role="group" aria-label={promptText}>
+          {prompt.choices.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              className="rounded border border-zinc-300 dark:border-zinc-700 px-1.5 py-0.5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+              onClick={() => submitCommandLine(c.value, null)}
+            >
+              {c.value} <span className="text-zinc-500 dark:text-zinc-400">{c.count}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
       <label className="flex items-center gap-2 px-3 py-1.5">
         {/* A long prompt truncates (whole in its tooltip): it must never widen the drawing above. */}
         <span className="min-w-0 truncate text-zinc-800 dark:text-zinc-200" title={promptText}>{promptText}</span>

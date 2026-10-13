@@ -14,11 +14,12 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
 import { addAnnotationTypeFromCurrent, duplicateAnnotationType, removeAnnotationType, updateAnnotationType, useAnnotationType } from '@/catalogue/annotation-type-actions';
-import { ANNOTATION_TOOLS, TAG_FIELDS, type AnnotationTool, type AnnotationType } from '@/catalogue/types';
+import { ANNOTATION_TOOLS, DEFAULT_LABEL, TAG_FIELDS, type AnnotationTool, type AnnotationType } from '@/catalogue/types';
 import { builtInPatterns } from '@/drafting/hatch/library';
 import { parsePat } from '@/drafting/hatch/pattern';
 import { useProjectStore } from '@/project/project-store';
 import { closeStandards } from '@/project/standards-dialog-store';
+import { LabelTypeFields } from './LabelTypeFields';
 
 const INPUT = 'h-7 w-40 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1 text-xs';
 
@@ -118,6 +119,7 @@ function Editor({ type }: { type: AnnotationType }) {
           </select>
         </Row>
       ) : null}
+      {type.tool === 'label' ? <LabelTypeFields label={type.label ?? DEFAULT_LABEL} onChange={(label) => set({ label })} /> : null}
       <Button size="sm" onClick={() => { closeStandards(); useAnnotationType(type.id); }}><Pencil className="mr-1 size-3" />{t('atype.use')}</Button>
     </div>
   );

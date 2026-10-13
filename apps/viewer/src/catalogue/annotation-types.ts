@@ -11,7 +11,7 @@
 import type { DraftSettings } from '@/drafting/commands/types';
 import { dimStyleOf, textStyleOf, type StyleBook } from '@/drafting/styles';
 import type { DraftLayer } from '@/drafting/types';
-import type { AnnotationTool, AnnotationType } from './types';
+import { DEFAULT_LABEL, type AnnotationTool, type AnnotationType } from './types';
 
 export interface TypeEffect {
   textStyle: string;
@@ -53,5 +53,6 @@ export function captureType(
   if (tool === 'axis') type.axis = { bubble: settings.axisBubble, ends: settings.axisEnds, size: settings.axisSize, lineType: settings.axisLineType };
   if (tool === 'hatch') type.hatch = { pattern: settings.hatchPattern, scale: settings.hatchScale, angle: settings.hatchAngle };
   if (tool === 'tag') type.tagField = settings.tagField;
+  if (tool === 'label') type.label = { ...DEFAULT_LABEL };
   return type;
 }

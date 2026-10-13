@@ -16,6 +16,8 @@
  * An arc runs counter-clockwise from `start` to `end`.
  */
 
+import type { TextFrame } from './text-block';
+
 export interface Pt {
   x: number;
   y: number;
@@ -33,7 +35,7 @@ export type DraftShape =
  * 0.25). A dimension measures between its points; `at` places its line.
  */
 export type AnnotationShape =
-  | { type: 'text'; p: Pt; text: string; height: number; rotation: number }
+  | { type: 'text'; p: Pt; text: string; height: number; rotation: number; frame?: TextFrame; leader?: Pt }
   | { type: 'leader'; pts: Pt[]; text: string; height: number }
   | { type: 'dimension'; variant: 'aligned' | 'linear'; a: Pt; b: Pt; at: Pt; height: number; text?: string; textAt?: Pt }
   | { type: 'radial'; c: Pt; r: number; at: Pt; diameter: boolean; height: number }

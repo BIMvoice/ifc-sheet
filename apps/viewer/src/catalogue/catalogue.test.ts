@@ -28,6 +28,7 @@ const full: Catalogue = {
   annotationTypes: [
     { id: 'a1', name: 'Grid axis', tool: 'axis', textStyle: 'big', layer: 'l1', axis: { bubble: 'square', ends: 'start', size: 0.8, lineType: 'dashed' } },
     { id: 'a2', name: 'Door tag', tool: 'tag', textStyle: 'big', tagField: 'mark' },
+    { id: 'a4', name: 'Wall label', tool: 'label', textStyle: 'big', label: { template: '{Name}\n{Qto_WallBaseQuantities.Length:0.00 m|?}', frame: 'bubble', missing: 'field' } },
     { id: 'a3', name: 'Section fill', tool: 'hatch', hatch: { pattern: 'MY-LINES', scale: 2, angle: 45 } },
   ],
   symbols: [{
@@ -87,7 +88,8 @@ describe('catalogue merge', () => {
     for (const policy of ['mine', 'theirs', 'both'] as const) {
       const { catalogue, report } = mergeCatalogues(mine, full, policy, fresh);
       assert.ok(catalogue.annotationTypes.some((a) => a.name === 'Door tag'), policy);
-      assert.equal(report.annotationTypes.added, 3);
+      assert.equal(report.annotationTypes.added, 4);
+      assert.deepEqual(catalogue.annotationTypes.find((a) => a.name === 'Wall label')?.label, full.annotationTypes.find((a) => a.name === 'Wall label')?.label, `${policy}: the label travels with its type`);
       // 's1' is taken by a different symbol of mine: the incoming Arrow gets a new id.
       const arrow = catalogue.symbols.find((s) => s.name === 'Arrow');
       assert.ok(arrow && arrow.id !== 's1', policy);

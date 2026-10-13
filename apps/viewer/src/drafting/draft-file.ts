@@ -7,6 +7,7 @@
  * malformed entry fails with its path, like the rest of `project-file.ts`.
  */
 
+import { asTextFrame } from './text-block';
 import type { AnnotationShape, DraftEntity, DraftLayer, LevelRef, DraftParamValue, DraftShape, EntityShape, Pt } from './types';
 
 type Json = Record<string, unknown>;
@@ -39,7 +40,11 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
   switch (v.type) {
     case 'text':
       if (!isString(v.text)) fail(`${path}.text`, 'must be a string');
-      return { type: 'text', p: pt('p'), text: v.text, height: readHeight(v, path), rotation: isNumber(v.rotation) ? v.rotation : 0 };
+      {
+      const frame = asTextFrame(v.frame);
+      if (v.frame !== undefined && !frame) fail(`${path}.frame`, 'must be box, rounded or bubble');
+      return { type: 'text', p: pt('p'), text: v.text, height: readHeight(v, path), rotation: isNumber(v.rotation) ? v.rotation : 0, ...(frame ? { frame } : {}), ...(isObject(v.leader) ? { leader: readPt(v.leader, `${path}.leader`) } : {}) };
+    }
     case 'leader':
       if (!Array.isArray(v.pts) || v.pts.length < 2 || !isString(v.text)) fail(path, 'must be a leader { pts, text }');
       return { type: 'leader', pts: v.pts.map((p, i) => readPt(p, `${path}.pts/${i}`)), text: v.text, height: readHeight(v, path) };
