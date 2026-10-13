@@ -8,6 +8,7 @@
  */
 
 import { ViewportLayers } from './ViewportLayers';
+import { IssuePanel } from './IssuePanel';
 import { Download, Printer, Trash2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui/button';
@@ -92,6 +93,7 @@ export function SheetPanel({ sheet, viewport, box, viewportName, onExportSvg, on
         <Button variant="outline" size="sm" className="flex-1" onClick={onExportDxf}><Download className="size-3.5 mr-1" />{t('sheets.dxf')}</Button>
         <Button variant="outline" size="sm" className="w-full" onClick={onPrint}><Printer className="size-3.5 mr-1" />{t('sheets.pdf')}</Button>
       </div>
+      <IssuePanel />
     </aside>
   );
 }

@@ -317,4 +317,29 @@ export interface ProjectDocument {
   symbols?: DraftSymbol[];
   /** Legends: generated tables of what the drawings use, placeable on sheets. */
   legends?: ProjectLegend[];
+  /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */
+  issues?: ProjectIssue[];
+}
+
+/** One sheet as it stood when a set was issued. */
+export interface IssuedSheet {
+  number: string;
+  title: string;
+  /** The scales of its viewports, as drawn on the list: `1:50`, or `1:50, 1:100`; empty when it holds none. */
+  scale: string;
+  paper: PaperSize;
+  orientation: 'landscape' | 'portrait';
+  revision: string;
+  /** What the sheet held (`issue/fingerprint.ts`): equal fingerprints mean an unchanged sheet. */
+  fingerprint: string;
+}
+
+/** A set of sheets sent out together, recorded with the project so a later issue can say what changed. */
+export interface ProjectIssue {
+  id: string;
+  name: string;
+  /** `YYYY-MM-DD`. */
+  date: string;
+  createdAt: number;
+  sheets: IssuedSheet[];
 }

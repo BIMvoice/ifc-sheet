@@ -160,6 +160,10 @@ const FULL: Required<ProjectDocument> = {
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],
+  issues: [{
+    id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
+    sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
+  }],
   savedSectionCuts: [{
     id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,
     plane: { axis: 'side', position: 4.2, flipped: true, capStyle: { fillColor: [1, 0.5, 0, 1], strokeColor: [0, 0, 0, 1], pattern: 'brick', spacingPx: 6, angleRad: 0.5, widthPx: 2, secondaryAngleRad: -0.5 }, showCap: false, showOutlines: false },

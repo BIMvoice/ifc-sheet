@@ -37,7 +37,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [],
+  annotationTypes: [], symbols: [], legends: [], issues: [],
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -70,6 +70,7 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
     annotationTypes: state.annotationTypes ?? [],
     symbols: state.symbols ?? [],
     legends: state.legends ?? [],
+    issues: state.issues ?? [],
   };
 }
 
@@ -97,6 +98,7 @@ export function loadProjectDocument(doc: ProjectDocument, options: { dirty?: boo
     annotationTypes: doc.annotationTypes ?? [],
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
+    issues: doc.issues ?? [],
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,

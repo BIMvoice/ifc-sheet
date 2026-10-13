@@ -14,6 +14,7 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
 import { readSheetLayout } from './sheet-file';
+import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
 import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
@@ -156,6 +157,7 @@ export function parseProjectFile(text: string): ProjectDocument {
     annotationTypes: readList(raw, 'annotationTypes', readAnnotationType),
     symbols: readList(raw, 'symbols', readSymbol),
     legends: readList(raw, 'legends', readLegend),
+    issues: readIssues(raw.issues),
   };
 }
 

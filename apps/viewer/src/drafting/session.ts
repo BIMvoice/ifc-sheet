@@ -17,6 +17,7 @@ import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { draftCommandById, draftCommandByName } from './commands/registry';
 import { DRAFTSET_NAMES, makeDraftSet } from '@/draft-set/run';
+import { tryIssueCommand } from '@/issue/run';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
 import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
@@ -336,6 +337,7 @@ export function submitCommandLine(text: string, cursor: Pt | null): void {
     return;
   }
   if (!command && !get().selecting) {
+    if (tryIssueCommand(trimmed, say)) return;
     if (DRAFTSET_NAMES.includes(trimmed.toUpperCase())) {
       say({ key: 'drafting.msg.typed', typed: trimmed, params: { text: trimmed } });
       for (const l of makeDraftSet().lines) say(l);
