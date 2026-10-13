@@ -72,34 +72,102 @@ function yAt(l: DrawingLine, x: number): number | null {
   return a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x);
 }
 
+/** A straight stretch of the envelope, over x0 < x1. */
+interface Piece { x0: number; y0: number; x1: number; y1: number }
+
+const pieceY = (p: Piece, x: number) => p.y0 + ((p.y1 - p.y0) * (x - p.x0)) / (p.x1 - p.x0);
+
+/** Appends `p` to `out`, joining it to the last piece when they are one straight line. */
+function push(out: Piece[], p: Piece): void {
+  if (p.x1 - p.x0 < 1e-12) return;
+  const last = out[out.length - 1];
+  if (last && Math.abs(last.x1 - p.x0) < 1e-12 && Math.abs(last.y1 - p.y0) < 1e-12 && Math.abs(pieceY(last, p.x1) - p.y1) < 1e-12) last.x1 = p.x1, last.y1 = p.y1;
+  else out.push(p);
+}
+
+/** The higher of two envelopes, piece by piece over the breakpoints of both (crossings add one). */
+function higher(a: readonly Piece[], b: readonly Piece[]): Piece[] {
+  const xs = [...new Set([...a.flatMap((p) => [p.x0, p.x1]), ...b.flatMap((p) => [p.x0, p.x1])])].sort((u, v) => u - v);
+  const out: Piece[] = [];
+  let i = 0; let j = 0;
+  for (let k = 0; k + 1 < xs.length; k++) {
+    const u = xs[k]; const v = xs[k + 1];
+    while (i < a.length && a[i].x1 <= u) i++;
+    while (j < b.length && b[j].x1 <= u) j++;
+    const pa = i < a.length && a[i].x0 <= u ? a[i] : null;
+    const pb = j < b.length && b[j].x0 <= u ? b[j] : null;
+    if (!pa && !pb) continue;
+    if (!pa || !pb) {
+      const p = (pa ?? pb) as Piece;
+      push(out, { x0: u, y0: pieceY(p, u), x1: v, y1: pieceY(p, v) });
+      continue;
+    }
+    const au = pieceY(pa, u); const av = pieceY(pa, v); const bu = pieceY(pb, u); const bv = pieceY(pb, v);
+    if (au >= bu && av >= bv) push(out, { x0: u, y0: au, x1: v, y1: av });
+    else if (bu >= au && bv >= av) push(out, { x0: u, y0: bu, x1: v, y1: bv });
+    else {
+      // They cross inside (u, v): the one that is higher at u first, the other after.
+      const t = (au - bu) / (au - bu - (av - bv));
+      const xc = u + (v - u) * t;
+      const yc = au + (av - au) * t;
+      const aFirst = au > bu;
+      push(out, { x0: u, y0: aFirst ? au : bu, x1: xc, y1: yc });
+      push(out, { x0: xc, y0: yc, x1: v, y1: aFirst ? bv : av });
+    }
+  }
+  return out;
+}
+
+/** The upper envelope of the non-vertical segments of `lines`: the height of the highest one at every x, as sorted straight pieces; built once, queried in log time. */
+function envelopeOf(lines: readonly DrawingLine[]): Piece[] {
+  const pieces = lines.flatMap((l): Piece[] => {
+    const a = l.line.start.x <= l.line.end.x ? l.line.start : l.line.end;
+    const b = a === l.line.start ? l.line.end : l.line.start;
+    return b.x - a.x < EPS ? [] : [{ x0: a.x, y0: a.y, x1: b.x, y1: b.y }];
+  });
+  const merge = (lo: number, hi: number): Piece[] => {
+    if (hi - lo === 1) return [pieces[lo]];
+    const mid = (lo + hi) >> 1;
+    return higher(merge(lo, mid), merge(mid, hi));
+  };
+  return pieces.length === 0 ? [] : merge(0, pieces.length);
+}
+
+/** The height of the envelope at x (a hair of tolerance at its ends, as `yAt`), or null where there is none. */
+function heightAt(envelope: readonly Piece[], x: number): number | null {
+  let lo = 0; let hi = envelope.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (envelope[mid].x1 < x - EPS) lo = mid + 1; else hi = mid;
+  }
+  let top: number | null = null;
+  for (let k = lo; k < envelope.length && envelope[k].x0 <= x + EPS; k++) {
+    const p = envelope[k];
+    const y = pieceY(p, Math.min(Math.max(x, p.x0), p.x1));
+    if (top === null || y > top) top = y;
+  }
+  return top;
+}
+
 /** The segments of `lines` that nothing else in `lines` lies above: the top profile. */
 function topProfile(lines: DrawingLine[]): DrawingLine[] {
-  const open = lines.filter((l) => Math.abs(l.line.end.x - l.line.start.x) > EPS);
-  return open.filter((l) => {
+  const envelope = envelopeOf(lines);
+  return lines.filter((l) => {
     const a = l.line.start; const b = l.line.end;
+    if (Math.abs(b.x - a.x) <= EPS) return false;
     for (const t of [0.25, 0.5, 0.75]) {
       const x = a.x + (b.x - a.x) * t;
       const y = yAt(l, x) as number;
-      if (open.some((o) => o !== l && (yAt(o, x) ?? -Infinity) > y + 1e-4)) return false;
+      if ((heightAt(envelope, x) ?? -Infinity) > y + 1e-4) return false;
     }
     return true;
   });
 }
 
-/** The height of the ground's top profile at x, or null where there is no ground. */
-function groundAt(profile: readonly DrawingLine[], x: number): number | null {
-  let top: number | null = null;
-  for (const l of profile) {
-    const y = yAt(l, x);
-    if (y !== null && (top === null || y > top)) top = y;
-  }
-  return top;
-}
-
-/** `l` without the part of it that lies below the ground; null when none of it is above. */
-function aboveGround(l: DrawingLine, profile: readonly DrawingLine[]): DrawingLine | null {
+/** `l` without the part of it that lies below the ground (the envelope of the top profile); null when none of it is above. */
+function aboveGround(l: DrawingLine, ground: readonly Piece[]): DrawingLine | null {
   const { start: a, end: b } = l.line;
-  const gap = (p: Point2D) => { const g = groundAt(profile, p.x); return g === null ? 1 : p.y - g; };
+  const gap = (p: Point2D) => { const g = heightAt(ground, p.x); return g === null ? 1 : p.y - g; };
   const ga = gap(a); const gb = gap(b);
   if (ga >= -1e-4 && gb >= -1e-4) return l;
   if (ga < -1e-4 && gb < -1e-4) return null;
@@ -116,16 +184,17 @@ function aboveGround(l: DrawingLine, profile: readonly DrawingLine[]): DrawingLi
 }
 
 /** An elevation: the ground's top profile as heavy lines, no ground below it and nothing of the building drawn below it. */
-function groundLineOnly(drawing: Drawing2D, ground: Set<string>): Drawing2D {
-  const isGround = (e: { entityId: number; modelIndex: number }) => ground.has(keyOf(e));
+function groundLineOnly(drawing: Drawing2D, groundIds: Set<string>): Drawing2D {
+  const isGround = (e: { entityId: number; modelIndex: number }) => groundIds.has(keyOf(e));
   const mine = drawing.lines.filter((l) => isGround(l) && l.visibility !== 'hidden' && l.category !== 'hidden');
   const profile = topProfile(mine);
   const heavy = new Set(profile);
+  const ground = envelopeOf(profile);
   const lines: DrawingLine[] = [];
   for (const l of drawing.lines) {
     if (heavy.has(l)) lines.push({ ...l, category: 'silhouette' as const });
     else if (!isGround(l)) {
-      const kept = aboveGround(l, profile);
+      const kept = aboveGround(l, ground);
       if (kept) lines.push(kept);
     }
   }
