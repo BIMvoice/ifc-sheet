@@ -10,6 +10,7 @@
  */
 
 import type { ViewElement } from '@/labels/view-elements';
+import type { PlanPart } from '@/dimall/types';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
 import type { LevelResolver } from './level-mark';
@@ -88,3 +89,10 @@ export function setViewElementsProvider(provider: (() => ViewElement[]) | null):
   viewElementsProvider = provider ?? (() => []);
 }
 export const viewElementsOf = (): ViewElement[] => viewElementsProvider();
+
+/** The walls, doors and windows the plan in front is cut through (`dimall/parts.ts`). */
+let planPartsProvider: () => PlanPart[] = () => [];
+export function setPlanPartsProvider(provider: (() => PlanPart[]) | null): void {
+  planPartsProvider = provider ?? (() => []);
+}
+export const planPartsOf = (): PlanPart[] => planPartsProvider();

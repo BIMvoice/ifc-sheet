@@ -30,6 +30,7 @@ import { useProjectStore } from '@/project/project-store';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import type { ProjectView } from '@/project/types';
 import { viewElements } from '@/labels/view-elements';
+import { planParts } from '@/dimall/parts';
 import { pickModelElement, referenceSet, referencesIn } from '@/drafting/references';
 import { selectFromPlan } from '@/components/viewer/plan/PlanPointer';
 import { draftsOfView } from '@/drafting/draft-store';
@@ -37,7 +38,7 @@ import { syncLevelMarks } from '@/drafting/level-sync';
 import { levelResolverFor, storeyOf } from '@/drafting/level-resolver';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
-  attachDraftingView, currentLayerId, setElementPicker, setViewElementsProvider, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
+  attachDraftingView, currentLayerId, setElementPicker, setViewElementsProvider, setPlanPartsProvider, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
   toggleOrtho, toggleSnap, useDraftingSession, pickEntity, setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
@@ -162,6 +163,11 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
   useEffect(() => {
     setViewElementsProvider(() => (drawing ? viewElements(drawing) : []));
     return () => setViewElementsProvider(null);
+  }, [drawing]);
+  // DIMALL: the walls, doors and windows this plan is cut through.
+  useEffect(() => {
+    setPlanPartsProvider(() => planParts(drawing));
+    return () => setPlanPartsProvider(null);
   }, [drawing]);
   // Hatch boundaries: drafted closed shapes and the drawing's cut outlines. Level marks: the
   // plan's level, or the point's height on a section / elevation.

@@ -26,13 +26,13 @@ import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
 import {
-  closedLoopsOfView, hasModelPicker, levelAtPoint, levelRefAt, modelElementAt, pickModel, referenceShapesIn, resolveLevelRef, setReferenceProvider, viewElementsOf, viewKindOf, activeWorkPlane,
+  closedLoopsOfView, hasModelPicker, levelAtPoint, levelRefAt, modelElementAt, pickModel, planPartsOf, referenceShapesIn, resolveLevelRef, setReferenceProvider, viewElementsOf, viewKindOf, activeWorkPlane,
 } from './session-providers';
 import type { DraftEntity, DraftShape, Pt } from './types';
 
 // What the view in front installs (providers, pickers) lives in `session-providers.ts`; callers keep importing it from here.
 export {
-  activeWorkPlane, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setViewElementsProvider, setWorkPlaneProvider,
+  activeWorkPlane, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanPartsProvider, setViewElementsProvider, setWorkPlaneProvider,
 } from './session-providers';
 
 export interface HistoryLine {
@@ -130,6 +130,7 @@ function context(viewId: string): DraftContext {
     view: () => activeWorkPlane().view,
     elementAt: modelElementAt,
     viewElements: viewElementsOf,
+    planParts: planPartsOf,
     selection: () => get().selection,
     setSelection: (ids) => set({ selection: ids }),
     // userToDrawing is diag(kx, −ky): orientation-reversing when its determinant is negative.
@@ -203,6 +204,7 @@ export function startDraftCommand(id: string): void {
     refresh();
     return;
   }
+  if (def.run) return (def.run(context(viewId)), refresh());
   begin(def, viewId);
 }
 
