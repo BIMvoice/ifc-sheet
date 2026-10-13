@@ -8,6 +8,7 @@
  * the depth in metres is written large beside the handle.
  */
 
+import { useTranslation } from '@/i18n';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { depthBandPolygon, depthFromPoint, depthHandle, type SectionCut } from '@/drafting/section-depth';
 import type { Grip } from '@/drafting/grips';
@@ -19,6 +20,7 @@ export function SectionDepthBand({ band, gripDrag, t, axis }: {
   t: ViewTransform;
   axis: SectionAxisName;
 }) {
+  const { t: say } = useTranslation();
   const dragging = gripDrag?.grip.key === 'depth' && gripDrag.grip.id === band.cut.id;
   const depth = (dragging ? depthFromPoint(band.cut, gripDrag.at) : null) ?? band.depth;
   const poly = depthBandPolygon(band.cut, depth).map((p) => drawingToScreen(p, t, axis));
@@ -31,7 +33,7 @@ export function SectionDepthBand({ band, gripDrag, t, axis }: {
       <rect x={h.x - 5} y={h.y - 5} width={10} height={10} fill={dragging ? '#2563eb' : '#fff'} stroke="#2563eb" strokeWidth={2} />
       {dragging ? (
         <text x={h.x + 14} y={h.y - 12} fontSize={24} fontWeight={600} fill="#1d4ed8" stroke="#fff" strokeWidth={4} paintOrder="stroke">
-          {`${depth.toFixed(2)} m`}
+          {say('drafting.sectionDepth', { depth: depth.toFixed(2) })}
         </text>
       ) : null}
     </g>

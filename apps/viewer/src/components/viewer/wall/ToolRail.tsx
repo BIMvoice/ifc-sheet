@@ -53,7 +53,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
               {t(tool.labelKey)}
             </button>
             {all && viewKind && all.kinds.includes(viewKind) ? (
-              <button type="button" onClick={() => onAll(all.command)} className="px-2 text-center text-[12px] leading-tight text-cyan-300 underline-offset-4 hover:underline">
+              <button type="button" onClick={() => onAll(all.command)} className="px-2 text-center text-xs leading-tight text-cyan-300 underline-offset-4 hover:underline">
                 {t(all.labelKey)}
               </button>
             ) : null}

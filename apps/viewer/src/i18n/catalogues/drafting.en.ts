@@ -52,6 +52,7 @@ export const draftingEn = {
   'drafting.msg.erased': '{count} object(s) erased.',
   'drafting.msg.unknownCommand': 'Unknown command "{name}".',
   'drafting.msg.typed': '> {text}',
+  'drafting.sectionDepth': '{depth} m',
   'drafting.msg.invalidInput': 'Invalid input. Use x,y  @dx,dy  @distance<angle  or a number.',
   'drafting.msg.nothingToTrim': 'Nothing to trim: no cutting edge crosses that object.',
   'drafting.msg.noBoundary': 'No boundary found to extend to.',
