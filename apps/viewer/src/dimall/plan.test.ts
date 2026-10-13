@@ -50,7 +50,9 @@ describe('planDimensions', () => {
   });
 
   it('is deterministic', () => {
-    assert.deepEqual(planDimensions(house(), settings), planDimensions(house(), settings));
+    // The same parts (part ids are the elements' own, so a fresh house would be other elements).
+    const parts = house();
+    assert.deepEqual(planDimensions(parts, settings), planDimensions(parts, settings));
   });
 
   it('dimensions each straight run of an L-shaped outline', () => {

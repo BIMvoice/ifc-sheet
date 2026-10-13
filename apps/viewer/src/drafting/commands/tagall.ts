@@ -18,7 +18,13 @@ import { useProjectStore } from '@/project/project-store';
 import { planTagAll } from '@/tagall/plan';
 import { MARK_TYPE_ID, ROOM_TYPE_ID, TAGALL_TYPES } from '@/tagall/types';
 import { editDrafts } from '../draft-store';
+import type { DraftEntity } from '../types';
 import type { DraftCommandDef, DraftContext } from './types';
+
+/** The kind and code of every door and window mark in the project, so one kind has one code on every plan. */
+function knownCodes(drafts: readonly DraftEntity[]): Map<string, string> {
+  return new Map(drafts.flatMap((d): [string, string][] => (typeof d.params.markKey === 'string' && typeof d.params.markCode === 'string' ? [[d.params.markKey, d.params.markCode]] : [])));
+}
 
 /** The types TAGALL draws with, adding any that the project does not have. */
 function tagAllTypes() {
@@ -50,10 +56,12 @@ export function tagAll(ctx: DraftContext, read: ElementReader): void {
     types: { mark: types.mark, room: types.room },
     read,
     crop: ctx.view()?.detail,
+    obstacles: ctx.obstacles(ctx.settings.textHeight),
+    knownCodes: knownCodes(useProjectStore.getState().drafts),
   });
   if (drafts.length) editDrafts({ add: drafts });
   ctx.say(drafts.length ? 'drafting.msg.tagAllDone' : 'drafting.msg.tagAllHave', { marks: summary.marks, rooms: summary.rooms, already: summary.already });
-  if (summary.numbered > 0) ctx.say('drafting.msg.tagAllNumbered', { count: summary.numbered });
+  if (summary.coded > 0) ctx.say('drafting.msg.tagAllCoded', { count: summary.coded, kinds: summary.kinds });
   if (summary.rooms > 0) ctx.say('drafting.msg.tagAllAreas', { model: summary.areaFromModel, footprint: summary.areaFromFootprint });
   if (summary.roomsTooSmall > 0) ctx.say('drafting.msg.tagAllTooSmall', { count: summary.roomsTooSmall });
   if (summary.noRooms) ctx.say('drafting.msg.tagAllNoRooms');

@@ -5,7 +5,7 @@
 /**
  * The commands of the whole drawing set, not of one drawing: CHECKSET (what is
  * missing), DRAFTSET (make the set whole for the model) and ISSUE (draw the
- * sheets and hand them over). They say what they did to the command history.
+ * sheets and hand them over) and WHATCHANGED (what a new model version changed). They say what they did to the command history.
  * ISSUE draws sheets with the Wall's own paper, so it is loaded when it is
  * asked for: the drafting session does not carry the sheet UI, the printer and
  * the zipper with it.
@@ -53,6 +53,22 @@ export const issueCommand: DraftCommandDef = {
     void import('@/issue/run').then(
       ({ runIssueCommand }) => runIssueCommand(args, ctx.say),
       (err: unknown) => ctx.say('issue.msg.line', { text: err instanceof Error ? err.message : String(err) }),
+    );
+  },
+};
+
+export const whatChangedCommand: DraftCommandDef = {
+  id: 'whatchanged',
+  aliases: ['WHATCHANGED'],
+  labelKey: 'whatchanged.cmd',
+  projectWide: true,
+  takesArgs: true,
+  create: noCreate,
+  run(ctx, args) {
+    // Reading the model is heavy and asynchronous: loaded when asked for, lines arrive as it is read.
+    void import('@/whatchanged/run').then(
+      ({ runWhatChangedCommand }) => runWhatChangedCommand(args, ctx.say),
+      (err: unknown) => ctx.say('whatchanged.msg.line', { text: err instanceof Error ? err.message : String(err) }),
     );
   },
 };

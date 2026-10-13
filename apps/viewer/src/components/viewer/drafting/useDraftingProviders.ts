@@ -11,10 +11,12 @@ import { pickModelElement, type ReferenceSet } from '@/drafting/references';
 import { syncLevelMarks } from '@/drafting/level-sync';
 import { levelResolverFor, storeyOf } from '@/drafting/level-resolver';
 import {
-  setElementPicker, setViewElementsProvider, setPlanPartsProvider, setRoomsProvider, setAnnotationProviders, setLevelReferenceProviders, setModelPicker, setWorkPlaneProvider,
+  setElementPicker, setViewElementsProvider, setPlanPartsProvider, setRoomsProvider, setAnnotationProviders, setLevelReferenceProviders, setModelPicker, setObstaclesProvider, setWorkPlaneProvider,
 } from '@/drafting/session';
 import type { DraftEntity } from '@/drafting/types';
 import { viewElements } from '@/labels/view-elements';
+import { drawingPieces, overlayPieces } from '@/drafting/plan-obstacles';
+import type { PlanOverlay } from '@/project/plan-overlays';
 import { planParts } from '@/dimall/parts';
 import { roomsOfPlan } from '@/tagall/rooms';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
@@ -34,9 +36,11 @@ interface Providers {
   levels: readonly ProjectLevel[];
   /** Screen pixels per drawing unit (the pick tolerance is in pixels). */
   scale: number;
+  /** What the plan draws over its cut (door swings, glazing, roofs). */
+  overlays: () => PlanOverlay[];
 }
 
-export function useDraftingProviders({ view, drawing, references, entities, plane, levels, scale }: Providers): void {
+export function useDraftingProviders({ view, drawing, references, entities, plane, levels, scale, overlays }: Providers): void {
   // An idle click on the drawing selects the model element under it (both selection channels, as the plan view does).
   useEffect(() => {
     setModelPicker((p, tolerance, additive) => {
@@ -61,6 +65,11 @@ export function useDraftingProviders({ view, drawing, references, entities, plan
     setPlanPartsProvider(() => planParts(drawing));
     return () => setPlanPartsProvider(null);
   }, [drawing]);
+  // TAGALL, DIMALL: what this plan draws is kept clear of, from the same lines the drawing shows.
+  useEffect(() => {
+    setObstaclesProvider((textHeight) => ({ drawn: overlayPieces(overlays(), textHeight), linework: drawingPieces(drawing) }));
+    return () => setObstaclesProvider(null);
+  }, [drawing, overlays]);
   // TAGALL: the rooms of this plan, each space cut at the plan's height (read as the check reads them).
   useEffect(() => {
     setRoomsProvider(() => roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult));

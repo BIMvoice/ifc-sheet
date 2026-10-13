@@ -18,6 +18,7 @@ import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
 import { create } from 'zustand';
+import { withDefaults } from './title-block-defaults';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
@@ -37,7 +38,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], issues: [],
+  annotationTypes: [], symbols: [], legends: [], issues: [], titleBlockDefaults: {}, modelState: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -71,6 +72,8 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
     symbols: state.symbols ?? [],
     legends: state.legends ?? [],
     issues: state.issues ?? [],
+    titleBlockDefaults: state.titleBlockDefaults ?? {},
+    ...(state.modelState ? { modelState: state.modelState } : {}),
   };
 }
 
@@ -99,6 +102,8 @@ export function loadProjectDocument(doc: ProjectDocument, options: { dirty?: boo
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
     issues: doc.issues ?? [],
+    titleBlockDefaults: doc.titleBlockDefaults ?? {},
+    modelState: doc.modelState,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
@@ -225,7 +230,8 @@ export { nextSheetNumber };
 /** A new sheet takes the next plan number until a view is placed on it; then it is numbered by what it holds. */
 export function addProjectSheet(name = 'Unnamed'): string {
   const state = useProjectStore.getState();
-  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), autoNumber: true, name, createdAt: Date.now() };
+  const defaults = withDefaults({}, state.titleBlockDefaults);
+  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), autoNumber: true, name, createdAt: Date.now(), ...(Object.keys(defaults).length ? { titleBlock: defaults } : {}) };
   useProjectStore.setState({ sheets: [...state.sheets, sheet], dirty: true });
   return sheet.id;
 }

@@ -11,7 +11,7 @@
 import { sectionLink } from '@/drafting/section-symbol';
 import type { DraftEntity } from '@/drafting/types';
 import type { ProjectSheet } from '@/project/types';
-import type { CheckInput, Finding } from './types';
+import { PROJECT_WIDE_FIELDS, type CheckInput, type Finding, type ProjectWideField } from './types';
 
 type View = CheckInput['views'][number];
 
@@ -59,9 +59,17 @@ export function emptySheets(input: CheckInput): Finding[] {
 
 /** The title-block fields a sheet leaves empty: project, title, drawn by, date. */
 export function emptyTitleBlocks(input: CheckInput): Finding[] {
-  return input.sheets.flatMap((s) => (['project', 'title', 'drawnBy', 'date'] as const)
-    .filter((field) => !((field === 'title' ? s.name : s.titleBlock?.[field]) ?? '').trim())
+  const empty = (s: ProjectSheet, field: 'title' | ProjectWideField) => !((field === 'title' ? s.name : s.titleBlock?.[field]) ?? '').trim();
+  // A project-wide field empty on several sheets is one finding with one fix, not one finding per sheet.
+  const grouped = PROJECT_WIDE_FIELDS.flatMap((field): Finding[] => {
+    const sheets = input.sheets.filter((s) => empty(s, field));
+    return sheets.length < 2 ? [] : [{ kind: 'titleBlockEmptyOnSheets', key: 'check.titleBlockEmptyOnSheets', setWide: true, params: { field, count: sheets.length }, fill: { field, sheetIds: sheets.map((s) => s.id) } }];
+  });
+  const filled = new Set(grouped.map((f) => f.fill!.field));
+  const single = input.sheets.flatMap((s) => (['project', 'title', 'drawnBy', 'date'] as const)
+    .filter((field) => !filled.has(field as ProjectWideField) && empty(s, field))
     .map((field): Finding => ({ kind: 'titleBlockEmpty', key: 'check.titleBlockEmpty', sheetId: s.id, params: { field, sheet: s.number } })));
+  return [...grouped, ...single];
 }
 
 /** Sheets that share a number (compared without case or surrounding space): one finding per number. */
@@ -85,17 +93,20 @@ export function detailsOnNoSheet(input: CheckInput): Finding[] {
   return input.views.filter((v) => isDetail(v) && !onSheet(input, v)).map((v): Finding => ({ kind: 'detailOffSheet', key: 'check.detailOffSheet', viewId: v.id, params: { view: v.name } }));
 }
 
-/** A tag or label whose element is no longer in the model. (A dimension is measured from drawn points and names no element.) */
+/**
+ * A tag or label whose element is no longer in the model, and a dimension DIMALL placed to measure a door or window that is gone
+ * (it is stamped with what it measures: `params.measures`). A dimension drawn by hand names no element.
+ */
 export function danglingAnnotations(input: CheckInput): Finding[] {
   return input.drafts.flatMap((d): Finding[] => {
-    const guid = [d.params.labelOf, d.params.tagOf].find((g): g is string => typeof g === 'string');
+    const guid = [d.params.labelOf, d.params.tagOf, d.params.measures].find((g): g is string => typeof g === 'string');
     if (!guid || input.elementExists(guid)) return [];
     const view = input.views.find((v) => v.id === d.viewId);
     return [{ kind: 'danglingAnnotation', key: 'check.danglingAnnotation', viewId: d.viewId, sheetId: view ? onSheet(input, view)?.id : undefined, draftId: d.id, guids: [guid], params: { view: view?.name ?? '' } }];
   });
 }
 
-const sheetRank = (input: CheckInput, f: Finding) => (f.sheetId ? input.sheets.findIndex((s) => s.id === f.sheetId) : Number.MAX_SAFE_INTEGER);
+const sheetRank = (input: CheckInput, f: Finding) => (f.setWide ? -1 : f.sheetId ? input.sheets.findIndex((s) => s.id === f.sheetId) : Number.MAX_SAFE_INTEGER);
 
 export function checkSet(input: CheckInput): Finding[] {
   const all = [

@@ -20,13 +20,17 @@ import { labelDraft, labelSize, type ElementReader, type LabelPlacement } from '
 import { rectsOf } from '@/labels/label-annotations';
 import type { LabelExtras } from '@/labels/label-extras';
 import { growRect, rectAround, ringBounds, type Rect } from '@/labels/label-geometry';
+import { candidateCentres, orientedBox } from '@/labels/label-candidates';
 import { layoutLabels, LABEL_CLEAR_MM, LABEL_GAP_MM, type LayoutElement } from '@/labels/label-layout';
+import { DISPLACED_MM } from '@/labels/label-leader';
 import type { LabelTarget } from '@/labels/label-place';
 import { readFieldValue } from '@/labels/label-resolve';
 import { parseFieldRef } from '@/labels/label-template';
 import type { ViewElement } from '@/labels/view-elements';
 import { clipLoop } from '@/project/drawing-crop';
-import { pieceRects, symbolPieces } from '@/dimall/avoid';
+import { pieceRects, symbolPieces, type SymbolPiece } from '@/dimall/avoid';
+import type { LabelElement } from '@/labels/label-resolve';
+import { assignMarkCodes, type MarkSubject } from './mark-codes';
 import { ringArea, type RoomFootprint } from './footprint';
 import { roomLabelPoint } from './room-point';
 import { AREA_FIELDS, MARK_TYPE_ID, ROOM_TYPE_ID, type TagAllSummary } from './types';
@@ -43,6 +47,10 @@ export interface TagAllInput {
   read: ElementReader;
   /** A detail's area, drawing metres: only what is seen in it is labelled, and every label stands inside it. */
   crop?: { min: Pt; max: Pt };
+  /** What the plan draws that labels keep clear of (`drafting/plan-obstacles.ts`). */
+  obstacles?: { drawn: readonly SymbolPiece[]; linework: readonly SymbolPiece[] };
+  /** The codes the project's door and window marks already carry, by kind. */
+  knownCodes?: ReadonlyMap<string, string>;
 }
 
 const within = (r: { min: Pt; max: Pt } | undefined, p: Pt) => !r || (p.x >= r.min.x && p.x <= r.max.x && p.y >= r.min.y && p.y <= r.max.y);
@@ -69,32 +77,38 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     const shown = input.crop ? clipLoop(room.ring, input.crop) : room.ring;
     return shown.length >= 3 ? [{ room, shown }] : [];
   });
-  const summary: TagAllSummary = { marks: 0, numbered: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: rooms.length === 0 };
+  const summary: TagAllSummary = { marks: 0, coded: 0, kinds: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: rooms.length === 0 };
   const drafts: DraftEntity[] = [];
   const clear = LABEL_CLEAR_MM * at.paperUnit;
+  const gap = LABEL_GAP_MM * at.paperUnit;
 
-  // Doors and windows.
+  // Doors and windows: each shows the model's short mark, else the code of its kind.
   const marked = labelledBy(input.existing, MARK_TYPE_ID);
   const openings = input.targets.filter((t) => isOpening(t.className));
   const todo = openings.filter((t, i) => !marked.has(t.guid) && openings.findIndex((o) => o.guid === t.guid) === i);
   summary.already += openings.length - todo.length;
-  let counter = Math.max(0, ...input.existing.map((d) => (typeof d.params.numbered === 'number' ? d.params.numbered : 0)));
+  const codes = assignMarkCodes(todo.flatMap((t) => { const el = read(t.guid); return el ? [subjectOf(t, el)] : []; }), input.knownCodes);
   const extrasOf = new Map<string, LabelExtras>();
-  for (const t of todo) {
-    const el = read(t.guid);
-    if (!el) continue;
-    if (el.attribute('Mark') === '' && el.attribute('Name') === '') extrasOf.set(t.guid, { numbered: ++counter });
-  }
-  const gap = LABEL_GAP_MM * at.paperUnit;
+  for (const [guid, c] of codes) if (c.key !== null) extrasOf.set(guid, { markCode: c.code, markKey: c.key });
+  const centre = viewCentre(input.elements);
   const items = todo.flatMap((t) => {
     const size = labelSize(input.types.mark, t.guid, at.textHeight, extrasOf.get(t.guid), read);
-    return size ? [{ id: String(t.renderId), ring: t.ring, ...size, ...(/^ifcdoor/i.test(t.className) ? { preferred: beyondSwing(t.ring, size.w, size.h, gap) } : { fallback: beyondSwing(t.ring, size.w, size.h, gap).slice(2) }) }] : [];
+    return size ? [{ id: String(t.renderId), ring: t.ring, ...size, ...(/^ifcdoor/i.test(t.className) ? { preferred: besideDoor(t.ring, size.w, size.h, gap, centre) } : {}) }] : [];
   });
-  // What a label keeps clear of besides the elements' outlines: the room a door swings through, and the section symbols on the plan.
+  // What a label keeps clear of besides the elements' outlines: the room a door swings through, and what the plan draws over its cut.
   const swings = input.targets.filter((t) => /^ifcdoor/i.test(t.className)).map((t): LayoutElement => ({ id: String(t.renderId), ring: swingOf(t.ring) }));
-  const sections = pieceRects(symbolPieces(input.existing), 0.2 * at.textHeight);
-  const scene = { elements: [...input.elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })), ...swings], annotations: [...rectsOf(input.existing), ...sections], paperUnit: at.paperUnit };
-  const spots = layoutLabels(items, scene);
+  // The drawing's own lines are obstacles too (a partition wall a door mark would lie on), except an opening's own,
+  // and for a window mark: outside the building the drawing has lines (roof edges seen from the plan) that are no reason to go inside.
+  const own = openings.map((t) => growRect(ringBounds(t.ring), 2 * gap));
+  const inRect = (b: Rect, p: Pt) => p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1;
+  const linework = pieceRects((input.obstacles?.linework ?? []).filter((p) => !own.some((b) => inRect(b, p.a) && inRect(b, p.b))), 0.2 * at.textHeight);
+  const drawn = pieceRects([...symbolPieces(input.existing), ...(input.obstacles?.drawn ?? [])], 0.2 * at.textHeight);
+  const scene = { elements: [...input.elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })), ...swings], annotations: [...rectsOf(input.existing), ...drawn], paperUnit: at.paperUnit };
+  const isDoor = (id: string) => items.find((i) => i.id === id) !== undefined && openings.some((t) => String(t.renderId) === id && /^ifcdoor/i.test(t.className));
+  const windowSpots = layoutLabels(items.filter((i) => !isDoor(i.id)), scene);
+  const placedWindows = items.filter((i) => windowSpots.has(i.id)).map((i) => rectAround(windowSpots.get(i.id)!.centre, i.w, i.h));
+  const doorSpots = layoutLabels(items.filter((i) => isDoor(i.id)), { ...scene, annotations: [...scene.annotations, ...linework, ...placedWindows] });
+  const spots = new Map([...windowSpots, ...doorSpots]);
   const taken: Rect[] = [];
   for (const t of todo) {
     const spot = spots.get(String(t.renderId));
@@ -104,13 +118,14 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     drafts.push(draft);
     taken.push(rectAround(spot.centre, ...sizeOf(items, t)));
     summary.marks++;
-    if (extras.numbered !== undefined) summary.numbered++;
+    if (extras.markCode !== undefined) summary.coded++;
   }
+  summary.kinds = new Set([...extrasOf.values()].map((e) => e.markKey)).size;
 
-  // Rooms.
+  // Rooms: in the middle of the room; a room too small for its label has the label beside it, joined by a leader.
   const roomed = labelledBy(input.existing, ROOM_TYPE_ID);
   const rings = [...input.elements.map((e) => e.ring), ...swings.map((s) => s.ring)];
-  const rects = [...rectsOf(input.existing), ...sections, ...taken];
+  const rects = [...rectsOf(input.existing), ...drawn, ...linework, ...taken];
   const seen = new Set<string>();
   for (const { room, shown } of rooms) {
     if (seen.has(room.guid)) continue;
@@ -121,10 +136,19 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     const size = labelSize(input.types.room, room.guid, at.textHeight, extras, read);
     if (!size) continue;
     const spot = roomLabelPoint(shown, size.w, size.h, { rects, rings }, clear);
-    const draft = labelDraft(input.types.room, room.guid, spot.centre, at, undefined, extras, read);
+    let place = spot.centre;
+    if (!spot.fits) {
+      // Outside the room, at the nearest free place round it.
+      // Far enough from the room to count as displaced, so the label carries its leader.
+      const box = orientedBox(shown);
+      const preferred = candidateCentres({ box, ...size, gap: (DISPLACED_MM + LABEL_GAP_MM) * at.paperUnit, away: { x: box.c.x - centre.x, y: box.c.y - centre.y } });
+      const outside = layoutLabels([{ id: `room:${room.guid}`, ring: shown, ...size, preferred }], { ...scene, annotations: [...scene.annotations, ...rects] });
+      place = outside.get(`room:${room.guid}`)?.centre ?? place;
+    }
+    const draft = labelDraft(input.types.room, room.guid, place, at, shown, extras, read);
     if (!draft) continue;
     drafts.push(draft);
-    rects.push(growRect(rectAround(spot.centre, size.w, size.h), 0));
+    rects.push(growRect(rectAround(place, size.w, size.h), 0));
     summary.rooms++;
     if (fromModel) summary.areaFromModel++; else summary.areaFromFootprint++;
     if (!spot.fits) summary.roomsTooSmall++;
@@ -132,21 +156,32 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   return { drafts, summary };
 }
 
+const subjectOf = (t: LabelTarget, el: LabelElement): MarkSubject => {
+  const b = ringBounds(t.ring);
+  return { guid: t.guid, className: t.className, mark: String(el.attribute('Mark') ?? ''), typeName: el.typeName(), name: String(el.attribute('Name') ?? ''), width: Math.max(b.x1 - b.x0, b.y1 - b.y0) };
+};
+
+const viewCentre = (elements: readonly ViewElement[]): Pt => {
+  const bs = elements.map((e) => ringBounds(e.ring));
+  return bs.length ? { x: (Math.min(...bs.map((b) => b.x0)) + Math.max(...bs.map((b) => b.x1))) / 2, y: (Math.min(...bs.map((b) => b.y0)) + Math.max(...bs.map((b) => b.y1))) / 2 } : { x: 0, y: 0 };
+};
+
 /**
- * Where a door's tag goes, in order: on the door's axis beyond the leaf's reach, on either side; then at growing
- * distances all round it. The first free one is taken; the tag then carries a leader to the door.
+ * Where a door's mark goes, in order: on the room side of the wall (the side facing the middle of the building),
+ * level with the door's jamb at either end, just clear of the leaf's reach; then the same on the far side. No leader needed.
+ * The leaf sweeps only the width of the door along the wall, so beside the jamb is always clear of it.
  */
-function beyondSwing(ring: readonly Pt[], w: number, h: number, gap: number): Pt[] {
-  const b = ringBounds(ring);
-  const bw = b.x1 - b.x0, bh = b.y1 - b.y0, c = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
-  const along = bw >= bh;
-  const reach = Math.max(bw, bh) + Math.min(bw, bh) / 2 + gap + (along ? h : w) / 2;
-  const axis = [1, -1].map((s) => (along ? { x: c.x, y: c.y + s * reach } : { x: c.x + s * reach, y: c.y }));
-  const round = [1, 1.5, 2, 2.5].flatMap((k) => Array.from({ length: 8 }, (_, i): Pt => {
-    const a = (i * Math.PI) / 4;
-    return { x: c.x + Math.cos(a) * k * (reach + w / 2), y: c.y + Math.sin(a) * k * (reach + h / 2) };
-  }));
-  return [...axis, ...round];
+function besideDoor(ring: readonly Pt[], w: number, h: number, gap: number, centre: Pt): Pt[] {
+  const box = orientedBox(ring);
+  const inward = (box.c.x - centre.x) * box.v.x + (box.c.y - centre.y) * box.v.y > 0 ? -1 : 1;
+  const out: Pt[] = [];
+  for (const side of [inward, -inward]) {
+    for (const end of [1, -1]) {
+      const along = box.hu + gap + w / 2, across = side * (box.hv + gap + h / 2);
+      out.push({ x: box.c.x + box.u.x * end * along + box.v.x * across, y: box.c.y + box.u.y * end * along + box.v.y * across });
+    }
+  }
+  return out;
 }
 
 /** The ground a door leaf may sweep: its outline grown by its own length, to both sides of it. */

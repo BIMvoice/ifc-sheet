@@ -8,7 +8,7 @@
  * drafted entities and command previews over it, and the command line.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { GraphicOverrideEngine } from '@ifc-lite/drawing-2d';
 import { isGeometry } from '@/drafting/types';
@@ -68,6 +68,8 @@ import { DraftOverlay } from './DraftOverlay';
 import { modelHighlight } from './drafting-shapes';
 
 import { useDraftingProviders } from './useDraftingProviders';
+
+import { useFocusView } from './useFocusView';
 
 import { CommandLine } from './CommandLine';
 
@@ -201,7 +203,9 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     // Annotation sizes are paper sizes at the view's scale (the settings read as at 1:100).
     attachDraftingView(view.id, axis, (min, max) => (references ? referencesIn(references, min, max) : []), (view.scale ?? 100) / 100);
   }, [view.id, axis, references, view.scale]);
-  useDraftingProviders({ view, drawing, references, entities, plane, levels, scale: viewTransform.scale });
+  const overlays = useCallback(() => (plane ? planOverlays(view, plane, runtimeGeometry?.meshes, useProjectStore.getState().symbolFlips, hidden, shown) : []), [view, plane, runtimeGeometry, hidden, shown]);
+  useDraftingProviders({ view, drawing, references, entities, plane, levels, scale: viewTransform.scale, overlays });
+  useFocusView(view.id, drawing, axis, containerRef, setViewTransform);
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
   const selectedModelIds = useViewerStore((s) => s.selectedEntityIds);
@@ -251,7 +255,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
 
   const exportDxf = () => exportViewDxf({
     view, drawing: shown, axis, drafts: entities, layers, extraPatterns,
-    overlays: [...(plane ? planOverlays(view, plane, runtimeGeometry?.meshes, useProjectStore.getState().symbolFlips, hidden, shown) : []), ...membraneOverlays(shown)],
+    overlays: [...overlays(), ...membraneOverlays(shown)],
   });
 
   const command = runningCommand();

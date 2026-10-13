@@ -11,7 +11,7 @@ export type FindingKind =
   | 'untaggedOpenings' | 'unlabelledRooms' | 'planNotDrawn'
   | 'planNoDimensions' | 'viewNoLevelMarks'
   | 'viewOffSheet' | 'emptySheet' | 'titleBlockEmpty' | 'duplicateNumber'
-  | 'sectionMarkOffSheet' | 'detailOffSheet' | 'danglingAnnotation';
+  | 'titleBlockEmptyOnSheets' | 'sectionMarkOffSheet' | 'detailOffSheet' | 'danglingAnnotation';
 
 /** The one-action commands a finding can be fixed with. */
 export type FixCommand = 'TAGALL' | 'DIMALL' | 'LEVELALL';
@@ -30,7 +30,15 @@ export interface Finding {
   params: Record<string, string | number>;
   /** The command that fixes it in one action, run on `viewId`. */
   fix?: FixCommand;
+  /** A finding about the whole set, not one sheet: listed first, under its own heading. */
+  setWide?: boolean;
+  /** A title-block field empty on several sheets: the one value that fills it on all of them (`fill.ts`). */
+  fill?: { field: ProjectWideField; sheetIds: string[] };
 }
+
+/** The title-block fields that are the same on every sheet of a set. */
+export const PROJECT_WIDE_FIELDS = ['project', 'drawnBy', 'date'] as const;
+export type ProjectWideField = (typeof PROJECT_WIDE_FIELDS)[number];
 
 /** An element a plan shows: its GlobalId and IFC class. */
 export interface PlanElement { guid: string; className: string }

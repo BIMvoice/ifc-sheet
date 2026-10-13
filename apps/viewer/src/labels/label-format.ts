@@ -5,7 +5,7 @@
 /**
  * How one value of a label field is written: a number pattern (`0`, `0.00`,
  * `#,##0.0`) and an optional unit that follows the value, so a missing value
- * never leaves a unit standing alone.
+ * never leaves a unit standing alone. `:upper` writes a text in capitals.
  */
 
 export interface FormatSpec {
@@ -15,6 +15,8 @@ export interface FormatSpec {
   thousands: boolean;
   /** Written after the value, separated by a space. */
   unit: string;
+  /** Write text in capitals (`:upper`). */
+  upper?: boolean;
 }
 
 const PATTERN = /^([#,]*0(?:\.0+)?)$/;
@@ -22,6 +24,7 @@ const PATTERN = /^([#,]*0(?:\.0+)?)$/;
 /** The spec a `:…` suffix of a field names: an optional number pattern, then an optional unit (a text that is no pattern is all unit). */
 export function parseFormatSpec(text: string): FormatSpec {
   const trimmed = text.trim();
+  if (trimmed === 'upper') return { decimals: null, thousands: false, unit: '', upper: true };
   const space = trimmed.search(/\s/);
   const head = space < 0 ? trimmed : trimmed.slice(0, space);
   const match = PATTERN.exec(head);
@@ -34,6 +37,7 @@ export function parseFormatSpec(text: string): FormatSpec {
 
 /** The text of a spec, the inverse of {@link parseFormatSpec}. */
 export function formatSpecText(spec: FormatSpec): string {
+  if (spec.upper) return 'upper';
   const digits = spec.decimals === null ? '' : `${spec.thousands ? '#,##' : ''}0${spec.decimals > 0 ? `.${'0'.repeat(spec.decimals)}` : ''}`;
   return [digits, spec.unit].filter(Boolean).join(' ');
 }
@@ -72,7 +76,7 @@ export function formatValue(value: unknown, spec?: FormatSpec): string | null {
   } else {
     const raw = String(value).trim();
     if (raw === '') return null;
-    text = spec && spec.decimals !== null && NUMERIC.test(raw) ? writeNumber(Number(raw), spec) : raw;
+    text = spec && spec.decimals !== null && NUMERIC.test(raw) ? writeNumber(Number(raw), spec) : spec?.upper ? raw.toUpperCase() : raw;
   }
   return withUnit(text, spec);
 }

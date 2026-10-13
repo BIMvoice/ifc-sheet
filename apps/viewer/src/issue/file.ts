@@ -8,6 +8,7 @@
  * place of the problem rather than silently repaired.
  */
 
+import { readSnapshot } from '@/whatchanged/snapshot-file';
 import type { IssuedSheet, PaperSize, ProjectIssue } from '@/project/types';
 
 const PAPERS: readonly PaperSize[] = ['A0', 'A1', 'A2', 'A3', 'A4'];
@@ -48,6 +49,6 @@ export function readIssues(raw: unknown): ProjectIssue[] {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail(`${path}/date`, 'must be YYYY-MM-DD');
     if (typeof v.createdAt !== 'number' || !Number.isFinite(v.createdAt)) fail(`${path}/createdAt`, 'must be a number');
     if (!Array.isArray(v.sheets)) fail(`${path}/sheets`, 'must be an array');
-    return { id, name: text(v, 'name', path), date, createdAt: v.createdAt, sheets: v.sheets.map((s, j) => readSheet(s, `${path}/sheets/${j}`)) };
+    return { id, name: text(v, 'name', path), date, createdAt: v.createdAt, sheets: v.sheets.map((s, j) => readSheet(s, `${path}/sheets/${j}`)), ...(v.model !== undefined ? { model: readSnapshot(v.model, `${path}/model`) } : {}) };
   });
 }

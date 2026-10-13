@@ -10,6 +10,7 @@
  * annotation it is about, or start the one-action command that fixes it.
  */
 
+import { requestFocus } from './focus';
 import { draftCommandByName } from '@/drafting/commands/registry';
 import { startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { activateDocumentTab } from '@/project/open-view';
@@ -58,6 +59,7 @@ export async function whenInView(viewId: string, drawing: boolean): Promise<bool
 export function goToFinding(f: Finding, nav: FindingNav): boolean {
   if (!nav.open(f)) return false;
   const { viewId, draftId } = f;
+  if (viewId && !draftId && f.guids?.length) requestFocus(viewId, f.guids);
   if (viewId && draftId) void whenInView(viewId, false).then((ok) => ok && useDraftingSession.setState({ selection: new Set([draftId]) }));
   return true;
 }

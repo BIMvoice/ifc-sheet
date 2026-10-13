@@ -18,10 +18,10 @@ import { tagAllCommand } from './tagall';
 import { levelAllCommand } from './level-all';
 import { levelAlignCommand } from './level-align';
 import { SYMBOL_COMMANDS } from './symbol';
-import { checkSetCommand, draftSetCommand, issueCommand } from './set';
+import { checkSetCommand, draftSetCommand, issueCommand, whatChangedCommand } from './set';
 import type { DraftCommandDef } from './types';
 
-export const DRAFT_COMMANDS: readonly DraftCommandDef[] = [...DRAW_COMMANDS, ...MODIFY_COMMANDS, ...EDIT_COMMANDS, ...ANNOTATE_COMMANDS, sectionLineCommand, detailCommand, tagCommand, labelCommand, labelAllCommand, tagAllCommand, dimAllCommand, levelAlignCommand, levelAllCommand, checkSetCommand, draftSetCommand, issueCommand, ...SYMBOL_COMMANDS];
+export const DRAFT_COMMANDS: readonly DraftCommandDef[] = [...DRAW_COMMANDS, ...MODIFY_COMMANDS, ...EDIT_COMMANDS, ...ANNOTATE_COMMANDS, sectionLineCommand, detailCommand, tagCommand, labelCommand, labelAllCommand, tagAllCommand, dimAllCommand, levelAlignCommand, levelAllCommand, checkSetCommand, draftSetCommand, issueCommand, whatChangedCommand, ...SYMBOL_COMMANDS];
 
 const BY_ID = new Map(DRAFT_COMMANDS.map((c) => [c.id, c]));
 const BY_ALIAS = new Map(DRAFT_COMMANDS.flatMap((c) => c.aliases.map((a) => [a, c] as const)));

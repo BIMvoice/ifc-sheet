@@ -31,6 +31,7 @@ const doc: ProjectDocument = {
   draftLayers: [{ id: '0', name: '0', color: '#18181b', visible: true, locked: false }],
   hatchPatterns: '*MY-LINES, test\n0, 0,0, 0,2\n',
   symbolFlips: { '2O2Fr$t4X7Zf8NOew3FLOH': 3 },
+  titleBlockDefaults: { drawnBy: 'P. Conduraru' },
   textStyles: [{ ...DEFAULT_TEXT_STYLE }, { ...DEFAULT_TEXT_STYLE, id: 'big', name: 'Big', height: 5, bold: true, color: '#aa0000' }],
   dimStyles: [{ ...DEFAULT_DIM_STYLE }, { ...DEFAULT_DIM_STYLE, id: 'arch', name: 'Arch', arrow: 'arrow', placement: 'below', unit: 'mm', precision: 0 }],
   layerGroups: [{ id: 'g1', name: 'Annotation', visible: false, locked: true }],

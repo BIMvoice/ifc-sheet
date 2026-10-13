@@ -52,3 +52,11 @@ describe('formatValue', () => {
     assert.equal(formatValue({ type: 'IfcLabel', value: 'A' }), 'A');
   });
 });
+
+describe(':upper', () => {
+  it('writes a text in capitals and reads back as it was written', () => {
+    assert.equal(formatValue('Küche', parseFormatSpec('upper')), 'KÜCHE');
+    assert.equal(formatSpecText(parseFormatSpec('upper')), 'upper');
+    assert.equal(formatValue(12.5, parseFormatSpec('upper')), '12.5');
+  });
+});

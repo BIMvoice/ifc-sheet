@@ -25,13 +25,13 @@ import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
 import {
-  closedLoopsOfView, hasModelPicker, levelAtPoint, levelRefAt, modelElementAt, pickModel, planPartsOf, referenceShapesIn, roomsOf, resolveLevelRef, setReferenceProvider, viewElementsOf, viewKindOf, activeWorkPlane,
+  closedLoopsOfView, hasModelPicker, levelAtPoint, levelRefAt, modelElementAt, obstaclesOf, pickModel, planPartsOf, referenceShapesIn, roomsOf, resolveLevelRef, setReferenceProvider, viewElementsOf, viewKindOf, activeWorkPlane,
 } from './session-providers';
 import type { DraftEntity, DraftShape, Pt } from './types';
 
 // What the view in front installs (providers, pickers) lives in `session-providers.ts`; callers keep importing it from here.
 export {
-  activeWorkPlane, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
+  activeWorkPlane, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
 } from './session-providers';
 
 export interface HistoryLine {
@@ -132,6 +132,7 @@ function context(viewId: string): DraftContext {
     elementAt: modelElementAt,
     viewElements: viewElementsOf,
     planParts: planPartsOf,
+    obstacles: obstaclesOf,
     rooms: roomsOf,
     selection: () => get().selection,
     setSelection: (ids) => set({ selection: ids }),

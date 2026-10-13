@@ -24,6 +24,8 @@ export interface DimensionTarget {
   textHeight: number;
   textStyle: string;
   dimStyle: string;
+  /** The GlobalId of a plan part (a door or window), to stamp on the dimension that measures it. */
+  guidOf?: (partId: number) => string | null;
 }
 
 /** The stamp of one dimension of a string: the string's place and where it starts and ends, to the centimetre. */
@@ -73,18 +75,20 @@ function stringShapes(plan: DimensionPlan, height: number, avoid: readonly Symbo
   return out;
 }
 
-/** The dimensions of `plan` that the view does not carry yet. */
-export function dimensionDrafts(plan: DimensionPlan, target: DimensionTarget, existing: readonly DraftEntity[], viewDrafts: readonly DraftEntity[] = []): DraftEntity[] {
+/** The dimensions of `plan` that the view does not carry yet; figures keep clear of the section symbols among `viewDrafts` and of `drawn` (what the plan draws over its cut). */
+export function dimensionDrafts(plan: DimensionPlan, target: DimensionTarget, existing: readonly DraftEntity[], viewDrafts: readonly DraftEntity[] = [], drawn: readonly SymbolPiece[] = []): DraftEntity[] {
   const done = new Set(existing.flatMap((d) => (typeof d.params.dimAll === 'string' ? [d.params.dimAll] : [])));
   const out: DraftEntity[] = [];
-  const shapes = stringShapes(plan, target.textHeight, symbolPieces(viewDrafts));
+  const shapes = stringShapes(plan, target.textHeight, [...symbolPieces(viewDrafts), ...drawn]);
   for (const s of plan.strings) {
-    (shapes.get(s) ?? []).forEach((shape) => {
+    (shapes.get(s) ?? []).forEach((shape, k) => {
       const stamp = stampOf(s, shape.a, shape.b);
+      const part = s.measures[k];
+      const measures = part !== null && part !== undefined ? target.guidOf?.(part) : null;
       if (done.has(stamp)) return;
       done.add(stamp);
       const styled = styledParams(target.viewId, shape, { textStyle: target.textStyle, dimStyle: target.dimStyle });
-      out.push(newDraft(target.viewId, target.layerId, shape, { ...styled, dimAll: stamp }));
+      out.push(newDraft(target.viewId, target.layerId, shape, { ...styled, dimAll: stamp, ...(measures ? { measures } : {}) }));
     });
   }
   return out;

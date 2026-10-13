@@ -16,6 +16,7 @@ import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogu
 import { readSheetLayout } from './sheet-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
+import { readSnapshot } from '@/whatchanged/snapshot-file';
 import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
@@ -159,6 +160,8 @@ export function parseProjectFile(text: string): ProjectDocument {
     symbols: readList(raw, 'symbols', readSymbol),
     legends: readList(raw, 'legends', readLegend),
     issues: readIssues(raw.issues),
+    ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
+    titleBlockDefaults: isObject(raw.titleBlockDefaults) ? Object.fromEntries(Object.entries(raw.titleBlockDefaults).filter((e): e is [string, string] => isString(e[1]))) : {},
   };
 }
 

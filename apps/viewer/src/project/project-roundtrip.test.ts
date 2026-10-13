@@ -161,9 +161,12 @@ const FULL: Required<ProjectDocument> = {
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],
+  titleBlockDefaults: { drawnBy: 'P. Conduraru', date: '2026-10-13' },
+  modelState: { takenAt: 1760000000000, elements: [{ k: '2O2Fr$t4X7Zf8NOew3FLOH', t: 'IfcWall', n: 'Wall 1', d: 'abc', c: { 'attr:core': '1', 'pset:Pset_WallCommon': '2' }, g: '77', a: [0, 0, 0, 4, 0.2, 3], p: 'Project/Building/Level 1' }] },
   issues: [{
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
     sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
+    model: { takenAt: 1759999999000, elements: [{ k: 'G1', t: 'IfcDoor', d: 'x' }] },
   }],
   savedSectionCuts: [{
     id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,

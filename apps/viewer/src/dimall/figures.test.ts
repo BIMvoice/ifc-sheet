@@ -15,7 +15,7 @@ import { newDraft } from '@/drafting/draft-store.js';
 import { sectionSymbolShapes } from '@/drafting/section-symbol.js';
 import type { DraftEntity, EntityShape, Pt } from '@/drafting/types';
 import { dimensionDrafts } from './apply.js';
-import { stringsThroughHeads, symbolPieces } from './avoid.js';
+import { stringsThroughHeads, symbolPieces, type SymbolPiece } from './avoid.js';
 import { house, lShape, mitred, turned } from './fixture.js';
 import { planDimensions } from './plan.js';
 import type { PlanPart } from './types';
@@ -98,5 +98,21 @@ describe('DIMALL and section marks', () => {
     const plan = planDimensions(house(), { paperUnit: 0.1, textHeight: H });
     assert.ok(stringsThroughHeads(plan.strings, symbolPieces(view), H) > 0);
     assert.equal(stringsThroughHeads(plan.strings, symbolPieces([]), H), 0);
+  });
+});
+
+describe('DIMALL and what the plan draws over its cut', () => {
+  const target = { viewId: 'v', layerId: 'l', textHeight: H, textStyle: 'Standard', dimStyle: 'Standard' };
+  const run = (drawn: SymbolPiece[]) => dimensionDrafts(planDimensions(house(), { paperUnit: 0.1, textHeight: H }), target, [], [], drawn);
+  it('moves a figure off a door swing drawn where it would sit', () => {
+    const before = boxes(run([]));
+    // A swing line right across the figure of the first dimension, where the planner would put it.
+    const f = before.figures[0].pts;
+    const piece: SymbolPiece = { kind: 'cut', a: { x: (f[0].x + f[3].x) / 2, y: (f[0].y + f[3].y) / 2 }, b: { x: (f[1].x + f[2].x) / 2, y: (f[1].y + f[2].y) / 2 } };
+    const line: Shape = { pts: [piece.a, piece.b], what: 'swing' };
+    assert.ok(overlap(before.figures[0], line), 'the swing crosses the figure without the obstacle');
+    const after = boxes(run([piece]));
+    assert.equal(after.figures.length, before.figures.length);
+    assert.ok(!after.figures.some((g) => overlap(g, line)), 'no figure stands on the swing');
   });
 });

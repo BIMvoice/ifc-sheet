@@ -13,6 +13,7 @@ import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ViewElement } from '@/labels/view-elements';
 import type { PlanPart } from '@/dimall/types';
 import type { RoomOfPlan } from '@/tagall/footprint';
+import type { PlanObstacles } from '../plan-obstacles';
 import type { ProjectView } from '@/project/types';
 import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
 
@@ -56,6 +57,8 @@ export interface DraftContext {
   viewElements(): ViewElement[];
   /** The walls, doors and windows the plan is cut through, for DIMALL. */
   planParts(): PlanPart[];
+  /** What the plan draws that annotation keeps clear of, for a text of the given height (`drafting/plan-obstacles.ts`). */
+  obstacles(textHeight: number): PlanObstacles;
   /** The rooms of the plan in front. */
   rooms(): RoomOfPlan[];
   /** +1, or −1 when the drawing is mirrored on screen (a user CCW angle is CW in drawing space). */
