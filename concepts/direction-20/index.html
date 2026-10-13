@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IfcSheet: three ways to meet a draft set</title>
+<style>
+*{box-sizing:border-box}
+:root{--navy:#071B3B;--deep:#0751B9;--blue:#087DFA;--cyan:#2CCEF0;--light:#F4F8FC}
+body{margin:0;background:var(--light);color:var(--navy);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.55}
+.wrap{max-width:1360px;margin:0 auto;padding:56px 40px 80px}
+.k{font-size:12.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--deep);font-weight:600}
+h1{font-weight:300;font-size:56px;letter-spacing:-.025em;line-height:1.05;margin:14px 0 18px;max-width:900px}
+.lead{font-size:20px;color:#3f5578;max-width:820px;margin:0 0 14px}
+.rule{font-size:16px;color:#5b7191;max-width:820px;margin:0 0 52px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:32px}
+.card{background:#fff;box-shadow:0 30px 50px -36px rgba(7,27,59,.45),0 0 0 1px rgba(7,27,59,.08);display:flex;flex-direction:column}
+.card .shot{display:block;line-height:0;border-bottom:1px solid #dbe5f1;overflow:hidden}
+.card .shot img{width:100%;height:auto;transition:transform .4s}
+.card .shot:hover img{transform:scale(1.02)}
+.card .b{padding:28px 30px 32px;display:flex;flex-direction:column;flex:1}
+.card .tag{font-size:12px;letter-spacing:.2em;font-weight:700;color:var(--deep)}
+.card h2{font-weight:300;font-size:36px;letter-spacing:-.02em;margin:6px 0 10px;line-height:1.1}
+.card .idea{font-size:18px;line-height:1.5;margin:0 0 22px;color:var(--navy)}
+.card h3{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#6b7e9a;margin:20px 0 6px;font-weight:600}
+.card p,.card li{font-size:15.5px;color:#3f5578;margin:0}
+.card ul{padding-left:18px;margin:0}
+.card li{margin:0 0 6px}
+.card .go{margin-top:auto;padding-top:28px}
+.card a.btn{display:inline-block;background:var(--navy);color:#fff;text-decoration:none;font-size:16px;padding:14px 22px;border-radius:6px}
+.card a.btn:hover{background:var(--blue)}
+.cmp{margin-top:64px;border-top:2px solid var(--navy);padding-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:48px}
+.cmp h2{font-weight:300;font-size:30px;letter-spacing:-.02em;margin:0 0 12px}
+.cmp p{font-size:16.5px;color:#3f5578;margin:0 0 12px}
+.how{font-size:14px;color:#6b7e9a;margin-top:44px}
+@media(max-width:1100px){.grid,.cmp{grid-template-columns:1fr}}
+</style></head><body><div class="wrap">
+<div class="k">IfcSheet &middot; direction 20 &middot; a draft set is there when the model opens</div>
+<h1>Three ways to meet, and correct, a set that already exists.</h1>
+<p class="lead">The model is open and a draft set is already drawn: one plan per storey, four elevations, two sections, each on a sheet with a fitting scale and a filled title block. All three concepts start there. They differ in how you look at it and where you put your hand to change it.</p>
+<p class="rule">You correct a set. You do not build one. Every mock below is a small story you can step through with the arrow keys or the buttons at the bottom. The drawings are the same Sample House in all three.</p>
+
+<div class="grid">
+ <div class="card"><a class="shot" href="concept-a.html#2"><img src="concept-a-2-whole-set-on-the-wall.png" alt="Concept A, the wall"></a><div class="b">
+  <div class="tag">CONCEPT A</div><h2>The Wall</h2>
+  <p class="idea">The whole set hangs on one endless wall, and you correct a sheet by leaning in to it where it hangs.</p>
+  <h3>What is different</h3><ul><li>No tabs, no tree, no sheet list. You see every sheet at once, like a wall of pinned drawings.</li><li>The controls (scale, cut height) appear beside the sheet you lean into, and go away again.</li><li>Opening a sheet is just moving closer; Esc steps back.</li></ul>
+  <h3>What it costs</h3><ul><li>A smooth zoomable surface that stays fast with forty or sixty sheets is real engineering. Sheets far away have to be drawn cheaply.</li><li>A big set needs a way to find things on the wall (search, a small map). Without it the wall turns into a mess.</li><li>You give up the plain list of sheets that every office checks against.</li></ul>
+  <div class="go"><a class="btn" href="concept-a.html">Open concept A</a></div></div></div>
+
+ <div class="card"><a class="shot" href="concept-b.html#2"><img src="concept-b-2-check-a-sheet.png" alt="Concept B, the proof"></a><div class="b">
+  <div class="tag">CONCEPT B</div><h2>The Proof</h2>
+  <p class="idea">You read the set the way you read a printer's proof: one sheet at a time, each telling you why it looks that way, and you keep it, change it or strike it.</p>
+  <h3>What is different</h3><ul><li>It starts as a drawing register you already know, then walks you through the sheets.</li><li>Every sheet says why it is as it is ("1 : 50 is the largest scale at which both plans fit on A2").</li><li>At the end, a list shows what you changed, sheet by sheet. Nothing you did not touch moves.</li></ul>
+  <h3>What it costs</h3><ul><li>It is a guided path. People who want to jump straight to sheet 14 will find it slow, and sixty sheets mean sixty steps unless there is a "keep the rest" key.</li><li>The reasons and the picture alternatives must be good for every decision; one weak suggestion and the idea falls apart.</li><li>Feels the closest to tools you know, so it is the least surprising and the least memorable.</li></ul>
+  <div class="go"><a class="btn" href="concept-b.html">Open concept B</a></div></div></div>
+
+ <div class="card"><a class="shot" href="concept-c.html#3"><img src="concept-c-3-move-the-cuts.png" alt="Concept C, through the building"></a><div class="b">
+  <div class="tag">CONCEPT C</div><h2>Through the Building</h2>
+  <p class="idea">You correct the set by touching the building: every plan, section and elevation is a mark on the model, and moving the mark moves every sheet that shows it.</p>
+  <h3>What is different</h3><ul><li>Drag a section line across the plan and the section redraws. Drag the plan's cut up or down inside the section.</li><li>Hover a mark and its sheet lights up; hover a sheet and its marks light up.</li><li>A new view is made by dragging a storey or a room from the model onto a sheet.</li></ul>
+  <h3>What it costs</h3><ul><li>Plans and sections must be re-cut live while you drag. That needs a fast geometry engine and gets heavy on large models.</li><li>It fits cuts, plans and elevations well. Schedules, notes and details have no place on the building, so a sheet view is still needed.</li><li>It asks architects to think "marks on a building" rather than "views on a sheet". That is a new habit.</li></ul>
+  <div class="go"><a class="btn" href="concept-c.html">Open concept C</a></div></div></div>
+</div>
+
+<div class="cmp">
+ <div><h2>Our suggestion</h2>
+  <p>Take <b>A, the Wall</b> as the frame: it is the only one that answers "show me the whole set" and "go in and come back" without any list, and it is the furthest from the tools people know.</p>
+  <p>Borrow <b>C's linked cuts</b> for the moment you step into a sheet: the section line on the plan and the cut handle on the section are the corrections architects make most, and they feel like drawing, not like settings.</p>
+  <p>Borrow one small thing from B: the one-line reason under a sheet ("1 : 50, the largest that fits A2"). It costs almost nothing and makes the draft trustworthy.</p></div>
+ <div><h2>Which two combine well</h2>
+  <p><b>A with C.</b> The wall is how you see and move through the set. The linked marks are how you correct what is on a sheet once you are close to it.</p>
+  <p><b>B alone</b> is the safest choice if the first release must feel familiar to a cautious office. It combines poorly with A, because both want to own the order you look at sheets in.</p></div>
+</div>
+<div class="how">Keys in every mock: left and right arrows step through the story. In A: hover a sheet and press the cross, scroll over the ground floor plan in state 3, double-click a sheet, Esc to step back. In B: Enter keeps, Delete removes. In C: drag the section lines and the blue dot in state 3, drag the chips in state 4.</div>
+</div></body></html>
