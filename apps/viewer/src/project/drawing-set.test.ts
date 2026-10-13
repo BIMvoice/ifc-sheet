@@ -13,7 +13,7 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject, useProjectStore } from './project-store.js';
 import { defaultViews } from './view-defaults.js';
-import { buildDrawingSet, drawingArea, fittingScale, sheetGroup, type ModelExtent } from './drawing-set.js';
+import { buildDrawingSet, drawingArea, fittingScale, sheetGroup, withViewHung, type ModelExtent } from './drawing-set.js';
 import { groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
 import { PAPER_MM } from './sheets.js';
 import type { ProjectLevel, ProjectView } from './types';
@@ -109,5 +109,34 @@ describe('the Wall actions', () => {
     const after = useProjectStore.getState().sheets[1].viewports?.[0];
     assert.equal(after?.viewId, other.id);
     assert.equal(after?.x, slot.x);
+  });
+});
+
+describe('withViewHung (a drawing added from inside a sheet)', () => {
+  const section = (id: string): ProjectView => ({ id, kind: 'section', name: id, createdAt: 0, plane: { axis: 'front', offset: 0, flipped: false } });
+
+  it('goes beside the other one on a sheet with room', () => {
+    const views = [section('a'), section('b')];
+    const [sheet] = buildDrawingSet({ views: [views[0]], extent: HOUSE, titleBlock: {} });
+    const hung = withViewHung([sheet], views, views[1], HOUSE, {});
+    assert.ok(hung);
+    assert.equal(hung.sheetId, sheet.id);
+    assert.deepEqual(hung.sheets[0].viewports?.map((v) => v.viewId), ['a', 'b']);
+  });
+
+  it('starts the next sheet of its series when the last one is full (#20 step 10: A-302)', () => {
+    const views = [section('a'), section('b'), section('c')];
+    const set = buildDrawingSet({ views: views.slice(0, 2), extent: HOUSE, titleBlock: { project: 'P' } });
+    const hung = withViewHung(set, views, views[2], HOUSE, { project: 'P' });
+    assert.ok(hung);
+    assert.deepEqual(hung.sheets.map((s) => s.number), ['A-301', 'A-302']);
+    assert.equal(hung.sheets[1].titleBlock?.project, 'P');
+  });
+
+  it('does not hang a view twice, nor a 3D view', () => {
+    const views = [section('a')];
+    const set = buildDrawingSet({ views, extent: HOUSE, titleBlock: {} });
+    assert.equal(withViewHung(set, views, views[0], HOUSE, {}), null);
+    assert.equal(withViewHung(set, views, { id: '3', kind: '3d', name: '3D', createdAt: 0, viewpoint: null }, HOUSE, {}), null);
   });
 });

@@ -3,37 +3,44 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * One sheet stepped into, in place on the Wall. Click a drawing to choose it;
- * the wheel inside a plan raises or lowers its cut, inside a section or an
- * elevation it sees further or less far. Beside the sheet: the chosen
- * drawing's control, the scale of a plan sheet, the few large tools for
- * adding information, and for a sheet of sections the tray of others to swap
- * in. Esc hangs it back.
+ * One sheet stepped into, in place on the Wall (concept A, direction #20).
+ * The rail at the left holds six large tools that only add information; the
+ * card at the right says what the chosen tool does, or holds the chosen
+ * drawing's one control. Picking a tool brings that drawing forward on white
+ * paper to work on; Esc ends the tool, Esc again goes back to the sheet, and
+ * once more hangs the sheet back on the wall.
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
+import { runningCommand, useDraftingSession } from '@/drafting/session';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
-import { activateDocumentTab } from '@/project/open-view';
+import { groundPlan, hangView } from '@/project/drawing-set-actions';
 import { useProjectStore } from '@/project/project-store';
 import type { SectionProposal } from '@/project/section-proposals';
 import { paperOf } from '@/project/sheets';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
+import { DraftingView } from '../drafting/DraftingView';
 import { useSheetContent } from '../sheets/useSheetContent';
+import { AddDrawing } from './AddDrawing';
+import { InfoCard } from './InfoCard';
 import { SectionTray } from './SectionTray';
-import { CutHeightControl, DepthControl } from './ViewControls';
+import { ToolRail } from './ToolRail';
 import { WallSheet } from './WallSheet';
 import { ScaleChips } from './WallGrid';
-import { drawOnView, nudgeCutHeight, nudgeViewDepth, WALL_TOOLS } from './wall-actions';
+import { nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 
 interface SteppedSheetProps {
   sheet: ProjectSheet;
   extent: ModelExtent | null;
   proposals: readonly SectionProposal[];
   onBack: () => void;
+  /** Step into another sheet (a drawing just added landed there). */
+  onStep: (sheetId: string) => void;
+  onMore: () => void;
 }
 
-export function SteppedSheet({ sheet, extent, proposals, onBack }: SteppedSheetProps) {
+export function SteppedSheet({ sheet, extent, proposals, onBack, onStep, onMore }: SteppedSheetProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const sheetContent = useSheetContent(sheet);
@@ -42,8 +49,14 @@ export function SteppedSheet({ sheet, extent, proposals, onBack }: SteppedSheetP
   const [width, setWidth] = useState(800);
   const viewports = useMemo(() => sheet.viewports ?? [], [sheet.viewports]);
   const [chosen, setChosen] = useState<string | null>(null);
+  const [tool, setTool] = useState<string | null>(null);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? viewports[0] ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
+  const focus = views.find((v) => v.id === focusId);
+  const focusView = focus && focus.kind !== '3d' ? focus : null;
   const group = sheetGroup(sheet);
 
   // The sheet as large as the space allows.
@@ -59,15 +72,58 @@ export function SteppedSheet({ sheet, extent, proposals, onBack }: SteppedSheetP
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit);
     ro?.observe(el);
     return () => ro?.disconnect();
-  }, [sheet]);
+  }, [sheet, focusId]);
 
+  // A tool ends (Esc, or it finished): the rail lets go of it; the drawing stays forward.
+  const commandId = useDraftingSession((s) => s.commandId);
+  const ran = useRef<string | null>(null);
+  useEffect(() => {
+    // Only a command that ran and ended lets go; before it starts there is none either.
+    if (commandId !== null) ran.current = commandId;
+    else if (ran.current !== null) {
+      ran.current = null;
+      setTool(null);
+    }
+  }, [commandId]);
+  useEffect(() => () => cancelStart.current(), []);
+
+  // Drawings made while inside (a section line drawn) hang on the set at once.
+  const known = useRef(new Set(views.map((v) => v.id)));
+  useEffect(() => {
+    if (!extent) return;
+    for (const v of views) {
+      if (known.current.has(v.id)) continue;
+      known.current.add(v.id);
+      if (v.kind === 'section') hangView(v.id, extent);
+    }
+  }, [views, extent]);
+
+  // Esc, outermost first to let go: the running tool or selection (the drawing's own), the chooser, the drawing, the sheet.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onBack();
+      if (e.key !== 'Escape') return;
+      if (focusId && (runningCommand() || useDraftingSession.getState().selection.size > 0)) return;
+      if (adding) setAdding(false);
+      else if (focusId) {
+        setFocusId(null);
+        setTool(null);
+      } else onBack();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onBack]);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onBack, focusId, adding]);
+
+  const startTool = (command: string): void => {
+    // A section line is drawn on a plan: the chosen one, else the lowest.
+    const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : view;
+    if (!target || target.kind === '3d') return;
+    cancelStart.current();
+    ran.current = null;
+    setAdding(false);
+    setTool(command);
+    setFocusId(target.id);
+    cancelStart.current = startWhenAttached(target.id, command);
+  };
 
   const viewportAt = (clientX: number, clientY: number): SheetViewport | null => {
     const rect = paperRef.current?.getBoundingClientRect();
@@ -80,10 +136,10 @@ export function SteppedSheet({ sheet, extent, proposals, onBack }: SteppedSheetP
     }) ?? null;
   };
 
-  // The wheel inside a drawing moves its cut or its depth; a notch is one step.
+  // The wheel inside a drawing on the sheet moves its cut or its depth; a notch is one step.
   useEffect(() => {
     const el = paperRef.current?.parentElement;
-    if (!el) return;
+    if (!el || focusId) return;
     const onWheel = (e: WheelEvent) => {
       const vp = viewportAt(e.clientX, e.clientY);
       const target = vp ? useProjectStore.getState().views.find((v) => v.id === vp.viewId) : null;
@@ -100,56 +156,71 @@ export function SteppedSheet({ sheet, extent, proposals, onBack }: SteppedSheetP
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-3 px-8 pt-5 text-sky-100">
-        <button type="button" className="text-sky-400 hover:text-sky-300" onClick={onBack}>{t('wall.back')}</button>
+      <div className="flex shrink-0 items-center gap-3 px-6 pb-2 pt-4 text-sky-100">
+        <button type="button" className="text-cyan-400 hover:text-cyan-300" onClick={onBack}>{t('wall.back')}</button>
         <span className="text-sky-200/50">/</span>
         <span className="font-semibold text-white">{sheet.number} {sheet.name}</span>
+        {focusView ? <><span className="text-sky-200/50">/</span><span className="text-white">{focusView.name}</span></> : null}
         <kbd className="rounded border border-sky-300/40 px-1.5 text-xs text-sky-200/80">Esc</kbd>
         <span className="flex-1" />
-        {group === 'plans' ? <ScaleChips group="plans" extent={extent} /> : null}
+        {group === 'plans' && !focusView ? <ScaleChips group="plans" extent={extent} /> : null}
       </div>
-      <div className="flex min-h-0 flex-1 gap-6 px-8 py-4">
-        <aside className="flex w-56 shrink-0 flex-col gap-8">
-          {view?.kind === 'plan' ? <CutHeightControl view={view} /> : null}
-          {view?.kind === 'section' || view?.kind === 'elevation' ? <DepthControl view={view} /> : null}
-          {view ? (
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.tools', { name: view.name })}</span>
-              <div className="grid grid-cols-2 gap-2">
-                {WALL_TOOLS.map((tool) => (
-                  <button key={tool.command} type="button" onClick={() => drawOnView(view.id, tool.command)} className="rounded-lg border border-sky-300/30 px-3 py-3 text-sm text-sky-50 hover:border-sky-300 hover:bg-sky-500/10">
-                    {t(tool.labelKey)}
-                  </button>
-                ))}
-              </div>
+      <div className="flex min-h-0 flex-1 gap-4 px-6 pb-4">
+        <ToolRail active={tool} onTool={startTool} adding={adding} onAdd={() => setAdding((a) => !a)} onMore={onMore} />
+        <main className="relative min-w-0 flex-1">
+          {focusView ? (
+            <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">
+              <DraftingView key={focusView.id} view={focusView} bare />
+            </div>
+          ) : (
+            <div ref={host} className="flex h-full items-center justify-start">
+              <button
+                type="button"
+                aria-label={t('wall.chooseDrawing')}
+                className="cursor-pointer border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                onClick={(e) => {
+                  const vp = viewportAt(e.clientX, e.clientY);
+                  if (vp) setChosen(vp.id);
+                }}
+                onKeyDown={(e) => {
+                  // Arrows walk the drawings on the sheet.
+                  if ((e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') || viewports.length === 0) return;
+                  const at = Math.max(0, viewports.findIndex((v) => v.id === slot?.id));
+                  setChosen(viewports[(at + (e.key === 'ArrowRight' ? 1 : viewports.length - 1)) % viewports.length].id);
+                }}
+              >
+                <WallSheet ref={paperRef} sheet={sheet} width={width} selectedViewportId={slot?.id ?? null} sheetContent={sheetContent} />
+              </button>
+            </div>
+          )}
+          <div className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
+            <InfoCard tool={tool} view={focusView ? null : view} />
+          </div>
+          {adding ? (
+            <div className="absolute inset-x-3 bottom-3 flex justify-center">
+              <AddDrawing
+                onClose={() => setAdding(false)}
+                onSection={() => startTool('sectionline')}
+                onView={(viewId) => {
+                  setAdding(false);
+                  const landed = extent ? hangView(viewId, extent) : null;
+                  if (landed && landed !== sheet.id) onStep(landed);
+                }}
+              />
             </div>
           ) : null}
-          <button type="button" className="mt-auto self-start text-sm text-sky-300 underline-offset-4 hover:underline" onClick={() => activateDocumentTab(sheet.id)}>{t('wall.editSheet')}</button>
-        </aside>
-        <div ref={host} className="flex min-w-0 flex-1 items-center justify-center">
-          <button
-            type="button"
-            aria-label={t('wall.chooseDrawing')}
-            className="cursor-pointer border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-            onClick={(e) => {
-              const vp = viewportAt(e.clientX, e.clientY);
-              if (vp) setChosen(vp.id);
-            }}
-            onKeyDown={(e) => {
-              // Arrows walk the drawings on the sheet.
-              if ((e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') || viewports.length === 0) return;
-              const at = Math.max(0, viewports.findIndex((v) => v.id === slot?.id));
-              setChosen(viewports[(at + (e.key === 'ArrowRight' ? 1 : viewports.length - 1)) % viewports.length].id);
-            }}
-          >
-            <WallSheet ref={paperRef} sheet={sheet} width={width} selectedViewportId={slot?.id ?? null} sheetContent={sheetContent} />
-          </button>
-        </div>
+        </main>
       </div>
-      {group === 'sections' ? (
-        <div className="flex shrink-0 justify-center px-8 pb-6">
+      {!focusView && group === 'sections' ? (
+        <div className="flex shrink-0 justify-center px-6 pb-3">
           <SectionTray sheet={sheet} slotId={slot?.id ?? null} proposals={proposals} />
         </div>
+      ) : null}
+      {!focusView ? (
+        <footer className="flex shrink-0 items-baseline gap-3 border-t border-zinc-200 bg-white px-6 py-3 text-sm text-zinc-700">
+          <strong className="text-zinc-900">{t('wall.sheetHint.title')}</strong>
+          <span>{t('wall.sheetHint.body')}</span>
+        </footer>
       ) : null}
     </div>
   );

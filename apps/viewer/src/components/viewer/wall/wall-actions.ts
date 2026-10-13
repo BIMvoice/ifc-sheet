@@ -8,10 +8,10 @@
  * tools it offers for adding information to a drawing.
  */
 
-import { activateDocumentTab } from '@/project/open-view';
 import { updateProjectView, useProjectStore } from '@/project/project-store';
 import { startDraftCommand, useDraftingSession } from '@/drafting/session';
 import type { TranslationKey } from '@/i18n';
+import type { ToolIconName } from '../ifcsheet/ToolIcon';
 
 /** Cut heights the Wall offers, metres above the floor, and its step. */
 export const CUT_HEIGHT_RANGE = { min: 0.3, max: 2.8, step: 0.05 } as const;
@@ -46,34 +46,40 @@ export function nudgeViewDepth(viewId: string, steps: number): void {
 
 export interface WallTool {
   command: string;
+  icon: ToolIconName;
   labelKey: TranslationKey;
+  titleKey: TranslationKey;
+  bodyKey: TranslationKey;
 }
 
-/** The only tools a sheet offers: dimension, tag, text note, level mark, section mark, symbol. */
+/** The only tools a sheet offers: dimension, tag, note, level mark, section mark, symbol. */
 export const WALL_TOOLS: readonly WallTool[] = [
-  { command: 'dimaligned', labelKey: 'wall.tool.dimension' },
-  { command: 'tag', labelKey: 'wall.tool.tag' },
-  { command: 'text', labelKey: 'wall.tool.text' },
-  { command: 'level', labelKey: 'wall.tool.level' },
-  { command: 'sectionline', labelKey: 'wall.tool.section' },
-  { command: 'symbol', labelKey: 'wall.tool.symbol' },
+  { command: 'dimaligned', icon: 'dimension', labelKey: 'wall.tool.dimension', titleKey: 'wall.tool.dimension.title', bodyKey: 'wall.tool.dimension.body' },
+  { command: 'tag', icon: 'tag', labelKey: 'wall.tool.tag', titleKey: 'wall.tool.tag.title', bodyKey: 'wall.tool.tag.body' },
+  { command: 'leader', icon: 'note', labelKey: 'wall.tool.text', titleKey: 'wall.tool.text.title', bodyKey: 'wall.tool.text.body' },
+  { command: 'level', icon: 'level', labelKey: 'wall.tool.level', titleKey: 'wall.tool.level.title', bodyKey: 'wall.tool.level.body' },
+  { command: 'sectionline', icon: 'section', labelKey: 'wall.tool.section', titleKey: 'wall.tool.section.title', bodyKey: 'wall.tool.section.body' },
+  { command: 'symbol', icon: 'symbol', labelKey: 'wall.tool.symbol', titleKey: 'wall.tool.symbol.title', bodyKey: 'wall.tool.symbol.body' },
 ];
 
 /**
- * Open `viewId` to draw on and start `command` there once its drafting view
- * is attached (it mounts after the tab comes forward).
+ * Start `command` on `viewId` as soon as its drafting view is attached (it
+ * mounts in the sheet after this call). Returns the cancel of the wait.
  */
-export function drawOnView(viewId: string, command: string): void {
-  if (activateDocumentTab(viewId) !== 'opened') return;
+export function startWhenAttached(viewId: string, command: string): () => void {
   if (useDraftingSession.getState().viewId === viewId) {
     startDraftCommand(command);
-    return;
+    return () => {};
   }
   const unsubscribe = useDraftingSession.subscribe((s) => {
     if (s.viewId !== viewId) return;
     unsubscribe();
     startDraftCommand(command);
   });
-  // A view that never attaches (no drawing to draft on) must not leave the listener behind.
-  setTimeout(unsubscribe, 10_000);
+  // A view that never attaches (nothing to draft on) must not leave the listener behind.
+  const timer = setTimeout(unsubscribe, 10_000);
+  return () => {
+    clearTimeout(timer);
+    unsubscribe();
+  };
 }

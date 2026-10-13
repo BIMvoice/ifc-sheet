@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils';
 import { useProjectStore } from '@/project/project-store';
 import { MODEL_TAB_ID, useDocumentTabs, WALL_TAB_ID } from '@/project/document-tabs';
 import { activateDocumentTab, closeProjectTab } from '@/project/open-view';
+import { setShellMode } from '@/project/shell-mode';
+import { isDocsEdition } from '@/edition';
 import type { ProjectViewKind } from '@/project/types';
 
 const ICONS: Record<ProjectViewKind, ReactNode> = {
@@ -48,7 +50,11 @@ export function DocumentTabBar() {
 
   return (
     <div role="tablist" aria-label={t('projectNavigator.documentTabs')} className="flex shrink-0 items-end gap-px overflow-x-auto h-8 px-1 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-950">
-      <Tab active={activeId === WALL_TAB_ID} icon={<LayoutGrid className="size-3.5" />} label={t('wall.tab')} onSelect={() => activateDocumentTab(WALL_TAB_ID)} />
+      <Tab active={activeId === WALL_TAB_ID} icon={<LayoutGrid className="size-3.5" />} label={t('wall.tab')} onSelect={() => {
+        // In IfcSheet the Wall is its own face, not a tab of the engine's interface.
+        if (isDocsEdition()) setShellMode('sheet');
+        activateDocumentTab(WALL_TAB_ID);
+      }} />
       <Tab active={activeId === MODEL_TAB_ID} icon={ICONS['3d']} label={t('projectNavigator.tab.model3d')} onSelect={() => activateDocumentTab(MODEL_TAB_ID)} />
       {tabs.map((tab) => (
         <Tab

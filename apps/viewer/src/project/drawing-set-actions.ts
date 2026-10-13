@@ -13,7 +13,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
-import { buildDrawingSet, rowOfViewports, sheetGroup, viewExtent, type ModelExtent, type SetGroup } from './drawing-set';
+import { buildDrawingSet, rowOfViewports, sheetGroup, viewExtent, withViewHung, type ModelExtent, type SetGroup } from './drawing-set';
 import { proposalInputForLevel } from './model-rooms';
 import { useProjectStore } from './project-store';
 import { proposeSections, type SectionProposal } from './section-proposals';
@@ -102,4 +102,14 @@ export function swapViewportView(sheetId: string, viewportId: string, viewId: st
     sheets: sheets.map((s) => (s.id !== sheetId ? s : { ...s, viewports: (s.viewports ?? []).map((v) => (v.id === viewportId ? { ...v, viewId, width: 0, height: 0, center: null } : v)) })),
     dirty: true,
   });
+}
+
+/** Hang `viewId` on the set (`withViewHung`); returns the sheet it went on, or null when it already hangs or cannot. */
+export function hangView(viewId: string, extent: ModelExtent): string | null {
+  const { sheets, views } = useProjectStore.getState();
+  const view = views.find((v) => v.id === viewId);
+  const hung = view ? withViewHung(sheets, views, view, extent, sheets[0]?.titleBlock ?? modelTitleBlock()) : null;
+  if (!hung) return null;
+  useProjectStore.setState({ sheets: hung.sheets, dirty: true });
+  return hung.sheetId;
 }

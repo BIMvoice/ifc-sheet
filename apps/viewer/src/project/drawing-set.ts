@@ -139,3 +139,59 @@ export function sheetGroup(sheet: Pick<ProjectSheet, 'number'>): SetGroup | null
   const m = /^A-(\d)\d\d$/.exec(sheet.number);
   return m ? ({ '1': 'plans', '2': 'elevations', '3': 'sections' } as Record<string, SetGroup>)[m[1]] ?? null : null;
 }
+
+/** The group a view's sheet belongs to, and its number series' first number. */
+export function groupOfView(view: ProjectView): SetGroup | null {
+  if (view.kind === 'plan') return 'plans';
+  if (view.kind === 'elevation') return 'elevations';
+  if (view.kind === 'section') return 'sections';
+  return null;
+}
+
+const SERIES_START: Record<SetGroup, number> = { plans: 101, elevations: 201, sections: 301 };
+const GROUP_NAMES: Record<SetGroup, string> = { plans: 'Floor plans', elevations: 'Elevations', sections: 'Sections' };
+/** Drawings a set sheet holds before a new one is started. */
+export const PER_SHEET = 2;
+
+/**
+ * `sheets` with `view` hung where it belongs: beside the others on the last
+ * sheet of its group while that has room, else on a new sheet numbered next
+ * in the group's series. The sheet it lands on is laid out again at the scale
+ * that fits. `null` for a view that has no group (3D) or is already hung.
+ */
+export function withViewHung(sheets: readonly ProjectSheet[], views: readonly ProjectView[], view: ProjectView, extent: ModelExtent, titleBlock: Record<string, string>, now = Date.now()): { sheets: ProjectSheet[]; sheetId: string } | null {
+  const group = groupOfView(view);
+  if (!group || sheets.some((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id))) return null;
+  const area = drawingArea();
+  const layOut = (sheet: ProjectSheet, members: ProjectView[]): ProjectSheet => {
+    const sizes = members.map((v) => viewExtent(v, extent));
+    return { ...sheet, viewports: rowOfViewports(members, sizes, fittingScale(sizes, area), sheet.paper ?? SET_PAPER) };
+  };
+  const inGroup = sheets.filter((s) => sheetGroup(s) === group);
+  const last = inGroup.at(-1);
+  if (last && (last.viewports?.length ?? 0) < PER_SHEET) {
+    const members = [...(last.viewports ?? []).flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []), view];
+    return { sheets: sheets.map((s) => (s.id === last.id ? layOut(s, members) : s)), sheetId: last.id };
+  }
+  const taken = new Set(sheets.map((s) => s.number));
+  let n = SERIES_START[group];
+  while (taken.has(`A-${n}`)) n++;
+  const sheet = layOut({
+    id: freshProjectId('sheet'), number: `A-${n}`, name: GROUP_NAMES[group], createdAt: now, paper: SET_PAPER, orientation: 'landscape', titleBlock: { ...titleBlock },
+  }, [view]);
+  return { sheets: [...sheets, sheet], sheetId: sheet.id };
+}
+
+/**
+ * Why a sheet is at its scale, in one line (concept B's reason, #20): the
+ * largest set scale its drawings fit at, or one somebody chose. `null` for a
+ * sheet whose drawings do not share one scale.
+ */
+export function sheetScaleReason(sheet: ProjectSheet, views: readonly ProjectView[], extent: ModelExtent): { scale: number; fits: boolean } | null {
+  const vps = sheet.viewports ?? [];
+  const scales = new Set(vps.map((v) => v.scale));
+  if (scales.size !== 1) return null;
+  const [scale] = scales;
+  const members = vps.flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []);
+  return { scale, fits: fittingScale(members.map((v) => viewExtent(v, extent)), drawingArea(sheet.paper ?? SET_PAPER)) === scale };
+}

@@ -72,7 +72,11 @@ import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
 const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
 const NO_SHEET_TRANSFORM = { current: null };
 
-export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d' }> }) {
+/**
+ * `bare`: the drawing alone, as IfcSheet shows it inside a sheet: no toolbar,
+ * no property grid; only the prompt line stays, it carries the tools' choices.
+ */
+export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView, { kind: '3d' }>; bare?: boolean }) {
   const { t } = useTranslation();
   const entry = useViewDrawings((s) => s.byView[view.id]) ?? EMPTY_VIEW_DRAWING;
   const { drawing, status } = entry;
@@ -230,7 +234,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex shrink-0 items-center gap-1 h-9 px-2 border-b border-zinc-200 dark:border-zinc-800 text-xs">
+      {bare ? null : <div className="flex shrink-0 items-center gap-1 h-9 px-2 border-b border-zinc-200 dark:border-zinc-800 text-xs">
         <span className="font-semibold truncate">{view.name}</span>
         <span className="flex-1" />
         <Toggle active={snap} label={t('drafting.snap')} onClick={toggleSnap} />
@@ -248,7 +252,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
         <IconButton label={t('drafting.redo')} className="size-7" onClick={redoEarliest}><Redo2 className="size-4" /></IconButton>
         <IconButton label={t('drafting.fit')} className="size-7" onClick={fitToView}><Maximize2 className="size-4" /></IconButton>
         <IconButton label={t('drafting.exportDxf')} className="size-7" onClick={exportDxf}><FileDown className="size-4" /></IconButton>
-      </div>
+      </div>}
       <div
         ref={containerRef}
         data-drafting-canvas
@@ -317,7 +321,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}
-        <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />
+        {bare ? null : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
       <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
     </div>

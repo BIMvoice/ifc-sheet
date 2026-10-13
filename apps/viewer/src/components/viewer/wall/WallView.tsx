@@ -21,7 +21,7 @@ import { SteppedSheet } from './SteppedSheet';
 import { WallGrid } from './WallGrid';
 import { WallIntro } from './WallIntro';
 
-export function WallView() {
+export function WallView({ onMore }: { onMore: (sheetId: string | null) => void }) {
   const { t } = useTranslation();
   const models = useViewerStore((s) => s.models);
   const legacy = useViewerStore((s) => s.geometryResult);
@@ -56,7 +56,7 @@ export function WallView() {
       ) : intro && extent ? (
         <WallIntro modelName={modelName} extent={extent} onHang={hang} />
       ) : steppedSheet ? (
-        <SteppedSheet sheet={steppedSheet} extent={extent} proposals={proposals} onBack={back} />
+        <SteppedSheet sheet={steppedSheet} extent={extent} proposals={proposals} onBack={back} onStep={setStepped} onMore={() => onMore(steppedSheet.id)} />
       ) : (
         <WallGrid extent={extent} onStep={setStepped} />
       )}

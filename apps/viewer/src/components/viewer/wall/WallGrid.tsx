@@ -12,7 +12,7 @@
 import { X } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
-import { SET_SCALES, sheetGroup, type ModelExtent, type SetGroup } from '@/project/drawing-set';
+import { SET_PAPER, SET_SCALES, sheetGroup, sheetScaleReason, type ModelExtent, type SetGroup } from '@/project/drawing-set';
 import { groupScale, setGroupScale } from '@/project/drawing-set-actions';
 import { removeProjectItem, useProjectStore } from '@/project/project-store';
 import type { ProjectSheet } from '@/project/types';
@@ -53,8 +53,10 @@ export function ScaleChips({ group, extent }: { group: SetGroup; extent: ModelEx
   );
 }
 
-function SheetOnWall({ sheet, onStep }: { sheet: ProjectSheet; onStep: (id: string) => void }) {
+function SheetOnWall({ sheet, extent, onStep }: { sheet: ProjectSheet; extent: ModelExtent | null; onStep: (id: string) => void }) {
   const { t } = useTranslation();
+  const views = useProjectStore((s) => s.views);
+  const reason = extent ? sheetScaleReason(sheet, views, extent) : null;
   const name = `${sheet.number} ${sheet.name}`;
   return (
     <figure className="group relative m-0">
@@ -80,6 +82,11 @@ function SheetOnWall({ sheet, onStep }: { sheet: ProjectSheet; onStep: (id: stri
       </button>
       <figcaption className="mt-2 text-sm text-sky-100">
         <span className="font-semibold text-white">{sheet.number}</span> <span className="text-sky-200/80">{sheet.name}</span>
+        {reason ? (
+          <span className="mt-0.5 block text-xs text-sky-300/70">
+            {reason.fits ? t('wall.reason.fits', { scale: reason.scale, paper: sheet.paper ?? SET_PAPER }) : t('wall.reason.chosen', { scale: reason.scale })}
+          </span>
+        ) : null}
       </figcaption>
     </figure>
   );
@@ -88,20 +95,18 @@ function SheetOnWall({ sheet, onStep }: { sheet: ProjectSheet; onStep: (id: stri
 export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onStep: (sheetId: string) => void }) {
   const { t } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
-  const viewCount = sheets.reduce((n, s) => n + (s.viewports?.length ?? 0), 0);
   const columns = GROUPS.map((g) => ({ ...g, sheets: sheets.filter((s) => sheetGroup(s) === g.group) })).filter((g) => g.sheets.length > 0);
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 px-8 pt-6">
         {sheets.some((s) => sheetGroup(s) === 'plans') ? <ScaleChips group="plans" extent={extent} /> : <span />}
-        <span className="text-sm text-sky-200/70">{t('wall.summary', { sheets: sheets.length, views: viewCount })}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-8 pb-10 pt-6">
         <div className="flex flex-wrap items-start gap-10">
           {columns.map((col) => (
             <section key={col.labelKey} aria-label={t(col.labelKey)} className="flex flex-col gap-8">
               <h2 className="m-0 border-b border-sky-300/20 pb-2 text-xs font-medium uppercase tracking-[0.25em] text-sky-400">{t(col.labelKey)}</h2>
-              {col.sheets.map((sheet) => <SheetOnWall key={sheet.id} sheet={sheet} onStep={onStep} />)}
+              {col.sheets.map((sheet) => <SheetOnWall key={sheet.id} sheet={sheet} extent={extent} onStep={onStep} />)}
             </section>
           ))}
         </div>

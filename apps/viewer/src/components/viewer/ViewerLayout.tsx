@@ -8,6 +8,8 @@ import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useTranslation } from '@/i18n';
 import { styleInterpolatedValues } from '@/i18n/richInterpolate';
+import { useShellMode } from '@/project/shell-mode';
+import { IfcSheetShell } from './ifcsheet/IfcSheetShell';
 import { MobileToolbar } from './MobileToolbar';
 import { RibbonToolbar } from './ribbon/RibbonToolbar';
 import { HierarchyPanel } from './HierarchyPanel';
@@ -70,6 +72,7 @@ import { registerKeyboardCommand } from '@/lib/commands/dispatcher';
 const SAFE_MODE_QUERY_FLAG = '?safe=0';
 
 export function ViewerLayout() {
+  const sheetShell = useShellMode((s) => s.mode === 'sheet');
   const { t } = useTranslation();
   // Initialize keyboard shortcuts
   useKeyboardShortcuts();
@@ -446,6 +449,10 @@ export function ViewerLayout() {
         {/* Panels popped out into OS / PiP windows (#1208) — portalled into the
             child documents; live-synced via the shared store. */}
         <PanelWindowHost />
+
+        {/* IfcSheet's own face over the engine's interface, which stays mounted underneath (#20).
+            Last in the tree so it stacks over the ribbon; dialogs portal after it and stay on top. */}
+        {sheetShell && !isMobile ? <IfcSheetShell /> : null}
       </div>
     </TooltipProvider>
   );

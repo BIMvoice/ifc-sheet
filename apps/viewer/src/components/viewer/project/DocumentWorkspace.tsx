@@ -29,6 +29,7 @@ import { ScheduleView } from '../joinery/ScheduleView';
 import { CivilDrawingView } from '../civil/CivilDrawingView';
 import { LegendView } from '../legend/LegendView';
 import { WallView } from '../wall/WallView';
+import { useShellMode } from '@/project/shell-mode';
 import { scopeViews } from '@/legend/legend-data';
 
 
@@ -62,8 +63,9 @@ export function DocumentWorkspace({ children }: { children: ReactNode }) {
   useMirrorFrontDrawing(activeId);
   // Views that need their own drawing: open as a tab, or placed on a sheet that is open as a tab.
   const drawn = new Set(openIds);
-  // The Wall hangs every sheet, so every placed view is drawn while it is in front.
-  const wall = activeId === WALL_TAB_ID;
+  // The Wall hangs every sheet, so every placed view is drawn while it is in front, or while IfcSheet's own face shows it.
+  const sheetShell = useShellMode((s) => s.mode === 'sheet');
+  const wall = activeId === WALL_TAB_ID || sheetShell;
   for (const sheet of sheets) {
     if (wall || openIds.includes(sheet.id)) for (const vp of sheet.viewports ?? []) drawn.add(vp.viewId);
   }
@@ -123,9 +125,9 @@ export function DocumentWorkspace({ children }: { children: ReactNode }) {
             <CivilDrawingView key={frontCivil.id} drawing={frontCivil} />
           </div>
         ) : null}
-        {wall ? (
+        {activeId === WALL_TAB_ID && !sheetShell ? (
           <div className="absolute inset-0 z-30 flex flex-col">
-            <WallView />
+            <WallView onMore={(sheetId) => activateDocumentTab(sheetId ?? WALL_TAB_ID)} />
           </div>
         ) : null}
         {frontSheet ? (
