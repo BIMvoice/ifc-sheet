@@ -94,6 +94,8 @@ export interface SectionProjectPlane {
 export interface SectionProjectView extends ProjectViewBase {
   kind: 'section';
   plane: SectionProjectPlane;
+  /** What the cut passes through, for people ("Through the stair"); set on proposed sections. */
+  through?: string;
 }
 
 export interface ElevationProjectView extends ProjectViewBase {

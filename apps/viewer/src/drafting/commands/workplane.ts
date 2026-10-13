@@ -14,44 +14,9 @@
  * unflipped cut keeps `dot(p, n) − d < 0`, so `n` points away from it.
  */
 
-import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import type { CustomSectionPlane } from '@/store/section-types';
-import { addProjectView, useProjectStore } from '@/project/project-store';
-import { styledParams } from '@/project/drafting-standards';
-import { editDrafts, newDraft } from '../draft-store';
-import { nextSectionMark, sectionMarkOf, sectionSymbolShapes, sectionViewName } from '../section-symbol';
-import { drawingToWorld, type Vec3 } from '../frame';
+import { createSectionOnPlan } from '../section-create';
 import type { Pt } from '../types';
 import type { DraftCommandDef } from './types';
-
-const cross = (a: Vec3, b: Vec3): Vec3 => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
-const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
-const tuple = (v: Vec3): [number, number, number] => [v.x, v.y, v.z];
-
-/** The vertical section plane through a plan line, looking toward `side`. `null` for a degenerate line. */
-export function sectionPlaneFromLine(plan: SectionPlaneConfig, a: Pt, b: Pt, side: Pt): CustomSectionPlane | null {
-  const p = drawingToWorld(plan, a);
-  const q = drawingToWorld(plan, b);
-  const s = drawingToWorld(plan, side);
-  // Horizontal direction along the line (viewer frame is Y-up).
-  const dx = q.x - p.x;
-  const dz = q.z - p.z;
-  const len = Math.hypot(dx, dz);
-  if (len < 1e-9) return null;
-  let normal: Vec3 = { x: dz / len, y: 0, z: -dx / len };
-  // Keep the picked side: the normal points away from it.
-  if ((s.x - p.x) * normal.x + (s.z - p.z) * normal.z > 0) normal = { x: -normal.x, y: 0, z: -normal.z };
-  const up: Vec3 = { x: 0, y: 1, z: 0 };
-  // Looking along −normal with world up, screen right is (−normal) × up.
-  const tangent = cross({ x: -normal.x, y: 0, z: -normal.z }, up);
-  return {
-    normal: tuple(normal),
-    distance: dot(p, normal),
-    pickedAt: tuple(p),
-    tangent: tuple(tangent),
-    bitangent: tuple(up),
-  };
-}
 
 export const sectionLineCommand: DraftCommandDef = {
   id: 'sectionline',
@@ -73,19 +38,16 @@ export const sectionLineCommand: DraftCommandDef = {
           return 'continue';
         }
         const plan = ctx.plane();
-        const custom = plan ? sectionPlaneFromLine(plan, pts[0], pts[1], p) : null;
-        if (!custom) {
+        const viewId = plan
+          ? createSectionOnPlan({
+            planViewId: ctx.viewId, plan, a: pts[0], b: pts[1], side: p, layerId: ctx.layerId, textHeight: ctx.settings.textHeight,
+            styles: { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle },
+          })
+          : null;
+        if (!viewId) {
           ctx.say('drafting.msg.sectionFailed');
           return 'done';
         }
-        const viewId = addProjectView({ kind: 'section', name: sectionViewName(nextSectionMark(useProjectStore.getState().views)), plane: { axis: 'front', offset: custom.distance, flipped: false, custom } });
-        // The line must stay on the plan: the new view alone leaves nothing drawn there.
-        const mark = sectionMarkOf(useProjectStore.getState().views.find((v) => v.id === viewId)?.name ?? 'Section');
-        const current = { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle };
-        editDrafts({
-          add: sectionSymbolShapes(pts[0], pts[1], p, mark, ctx.settings.textHeight).map((shape) =>
-            newDraft(ctx.viewId, ctx.layerId, shape, { ...styledParams(ctx.viewId, shape, current), sectionOf: viewId })),
-        });
         ctx.say('drafting.msg.sectionCreated');
         return 'done';
       },

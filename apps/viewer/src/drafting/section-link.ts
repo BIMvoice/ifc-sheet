@@ -19,7 +19,7 @@ import type { CustomSectionPlane } from '@/store/section-types';
 import { useProjectStore } from '@/project/project-store';
 import { viewPlaneConfig } from '@/project/view-plane-config';
 import type { PlanProjectView, ProjectLevel, ProjectView, SectionProjectView } from '@/project/types';
-import { sectionPlaneFromLine } from './commands/workplane';
+import { sectionPlaneFromLine } from './section-create';
 import { drawingToWorld, worldToDrawing, type Vec3 } from './frame';
 import { sectionLink, sectionMarkOf, sectionSymbolShapes } from './section-symbol';
 import type { DraftEntity, EntityShape, Pt } from './types';
