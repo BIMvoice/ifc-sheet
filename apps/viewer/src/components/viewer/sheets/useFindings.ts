@@ -6,6 +6,7 @@
 
 import { useState } from 'react';
 import { currentFindings } from '@/check/collect';
+import { fixFinding, type FindingNav } from '@/check/go';
 import type { Finding } from '@/check/types';
 
 export interface FindingsState {
@@ -13,18 +14,18 @@ export interface FindingsState {
   findings: Finding[] | null;
   busy: boolean;
   refresh: () => void;
-  /** Run `fix` (which opens the place and runs the finding's command), then read again. */
-  fix: (finding: Finding, fix: (finding: Finding) => Promise<boolean>) => Promise<void>;
+  /** Open the finding's place and run its command there, then read again. */
+  fix: (finding: Finding, nav: FindingNav) => Promise<void>;
 }
 
 export function useFindings(): FindingsState {
   const [findings, setFindings] = useState<Finding[] | null>(null);
   const [busy, setBusy] = useState(false);
   const refresh = () => setFindings(currentFindings());
-  const fix = async (finding: Finding, run: (finding: Finding) => Promise<boolean>) => {
+  const fix = async (finding: Finding, nav: FindingNav) => {
     setBusy(true);
     try {
-      await run(finding);
+      await fixFinding(finding, nav);
     } finally {
       setBusy(false);
       refresh();

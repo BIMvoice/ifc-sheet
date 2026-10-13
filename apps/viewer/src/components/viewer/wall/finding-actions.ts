@@ -3,13 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * Going to a finding and fixing it from the Wall: step into the sheet that
- * holds its drawing and bring the drawing forward (the Wall has no tabs), then
- * select the annotation it is about, or run the one-action command that fixes it.
+ * How the Wall opens the place a finding is about: step into the sheet that
+ * holds its drawing and bring the drawing forward (the Wall has no tabs). Going
+ * there and fixing are `check/go.ts`, the same as on the sheet panel.
  */
 
-import { draftCommandByName } from '@/drafting/commands/registry';
-import { startDraftCommand, useDraftingSession } from '@/drafting/session';
+import type { FindingNav } from '@/check/go';
 import type { Finding } from '@/check/types';
 import { useProjectStore } from '@/project/project-store';
 import { sheetsShowing } from '@/project/sheets';
@@ -22,36 +21,11 @@ function sheetOf(f: Finding): string | null {
   return f.viewId ? sheetsShowing(f.viewId)[0]?.id ?? null : null;
 }
 
-/** Resolves once the drafting session is on `viewId` (its drawing is in front), or false after `ms`. */
-function whenAttached(viewId: string, ms = 20_000): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (useDraftingSession.getState().viewId === viewId) return resolve(true);
-    const timer = setTimeout(() => { unsubscribe(); resolve(false); }, ms);
-    const unsubscribe = useDraftingSession.subscribe((s) => {
-      if (s.viewId !== viewId) return;
-      clearTimeout(timer);
-      unsubscribe();
-      resolve(true);
-    });
-  });
-}
-
-/** Step to the place a finding is about. False when there is nothing to open. */
-export function goToFinding(f: Finding): boolean {
-  const sheet = sheetOf(f);
-  if (!sheet) return false;
-  stepInto(sheet, f.viewId ?? null);
-  const { viewId, draftId } = f;
-  if (viewId && draftId) void whenAttached(viewId).then((ok) => ok && useDraftingSession.setState({ selection: new Set([draftId]) }));
-  return true;
-}
-
-/** Open the finding's drawing and run its fix command there. */
-export async function fixFinding(f: Finding): Promise<boolean> {
-  const { viewId, fix } = f;
-  if (!fix || !viewId || !goToFinding({ ...f, draftId: undefined })) return false;
-  if (!(await whenAttached(viewId))) return false;
-  // Started, not typed: a typed name is read by the running command (LINE takes it as a coordinate), a start cancels it first.
-  const def = draftCommandByName(fix);
-  return def !== undefined && startDraftCommand(def.id);
-}
+export const wallNav: FindingNav = {
+  open(f) {
+    const sheet = sheetOf(f);
+    if (!sheet) return false;
+    stepInto(sheet, f.viewId ?? null);
+    return true;
+  },
+};

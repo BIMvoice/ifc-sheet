@@ -8,8 +8,10 @@
  */
 
 import { ViewportLayers } from './ViewportLayers';
-import { CheckPanel } from './CheckPanel';
-import { IssuePanel } from './IssuePanel';
+import { tabsNav } from '@/check/go';
+import { FindingList } from './FindingList';
+import { IssueForm } from './IssueForm';
+import { PANEL_SKIN } from './set-skin';
 import { Download, Printer, Trash2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui/button';
@@ -94,8 +96,10 @@ export function SheetPanel({ sheet, viewport, box, viewportName, onExportSvg, on
         <Button variant="outline" size="sm" className="flex-1" onClick={onExportDxf}><Download className="size-3.5 mr-1" />{t('sheets.dxf')}</Button>
         <Button variant="outline" size="sm" className="w-full" onClick={onPrint}><Printer className="size-3.5 mr-1" />{t('sheets.pdf')}</Button>
       </div>
-      <CheckPanel />
-      <IssuePanel />
+      <h3 className="pt-2 font-bold uppercase tracking-wider">{t('check.section')}</h3>
+      <FindingList nav={tabsNav} skin={PANEL_SKIN} />
+      <h3 className="pt-2 font-bold uppercase tracking-wider">{t('issue.section')}</h3>
+      <IssueForm skin={PANEL_SKIN} />
     </aside>
   );
 }
