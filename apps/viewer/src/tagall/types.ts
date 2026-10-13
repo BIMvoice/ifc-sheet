@@ -14,17 +14,19 @@ export const AREA_FIELDS = ['Qto_SpaceBaseQuantities.NetFloorArea', 'BaseQuantit
 
 /**
  * The label types of TAGALL, ordinary label types the Standards dialog lists and edits: a door or window shows its
- * Tag (unless that is only the element's unique id), else its Name; a room shows its long name (else its Name) and its area.
+ * Tag when that is short (unless it is only the element's unique id), else the code of its kind (`mark-codes.ts`), in a
+ * small bubble; a room shows its long name (else its Name) in capitals and its area.
  */
 export const TAGALL_TYPES: readonly AnnotationType[] = [
-  { id: MARK_TYPE_ID, name: 'Door and window mark', tool: 'label', label: { template: '{Mark ?? Name}', frame: 'box', missing: 'empty' } },
-  { id: ROOM_TYPE_ID, name: 'Room name and area', tool: 'label', label: { template: `{LongName ?? Name}\\n{${[...AREA_FIELDS, 'Computed.Area'].join(' ?? ')}:0.00} m²`, missing: 'empty', leader: 'never' } },
+  { id: MARK_TYPE_ID, name: 'Door and window mark', tool: 'label', label: { template: '{Mark}', frame: 'bubble', missing: 'empty', leader: 'displaced' } },
+  { id: ROOM_TYPE_ID, name: 'Room name and area', tool: 'label', label: { template: `{LongName ?? Name:upper}\\n{${[...AREA_FIELDS, 'Computed.Area'].join(' ?? ')}:0.00} m²`, missing: 'empty', leader: 'displaced' } },
 ];
 
 export interface TagAllSummary {
-  /** Marks added to doors and windows, and how many of those the tool numbered because the model gives neither Tag nor Name. */
+  /** Marks added to doors and windows, how many of them show the code of their kind (the model gives no short mark), and how many kinds those are. */
   marks: number;
-  numbered: number;
+  coded: number;
+  kinds: number;
   /** Rooms labelled, and where each one's area came from. */
   rooms: number;
   areaFromModel: number;

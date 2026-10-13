@@ -32,7 +32,7 @@ export const dimAllCommand: DraftCommandDef = {
       return;
     }
     const here = draftsOfView(ctx.viewId, useProjectStore.getState().drafts);
-    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }, here.filter(isDimAll), here);
+    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }, here.filter(isDimAll), here, ctx.obstacles(ctx.settings.textHeight).drawn);
     if (drafts.length === 0) {
       ctx.say('drafting.msg.dimAllHave');
       return;

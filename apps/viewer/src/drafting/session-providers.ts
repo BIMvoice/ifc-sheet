@@ -12,6 +12,7 @@
 import type { ViewElement } from '@/labels/view-elements';
 import type { PlanPart } from '@/dimall/types';
 import type { RoomOfPlan } from '@/tagall/footprint';
+import type { PlanObstacles } from './plan-obstacles';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
 import type { LevelResolver } from './level-mark';
@@ -104,3 +105,10 @@ export function setRoomsProvider(provider: (() => RoomOfPlan[]) | null): void {
   roomsProvider = provider ?? (() => []);
 }
 export const roomsOf = (): RoomOfPlan[] => roomsProvider();
+
+/** What the plan in front draws that annotation keeps clear of, for a text of the given height: its drawing's own lines, door swings, glazing, roofs (`plan-obstacles.ts`). */
+let obstaclesProvider: (textHeight: number) => PlanObstacles = () => ({ drawn: [], linework: [] });
+export function setObstaclesProvider(provider: ((textHeight: number) => PlanObstacles) | null): void {
+  obstaclesProvider = provider ?? (() => ({ drawn: [], linework: [] }));
+}
+export const obstaclesOf = (textHeight: number): PlanObstacles => obstaclesProvider(textHeight);

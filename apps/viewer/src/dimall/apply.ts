@@ -73,11 +73,11 @@ function stringShapes(plan: DimensionPlan, height: number, avoid: readonly Symbo
   return out;
 }
 
-/** The dimensions of `plan` that the view does not carry yet. */
-export function dimensionDrafts(plan: DimensionPlan, target: DimensionTarget, existing: readonly DraftEntity[], viewDrafts: readonly DraftEntity[] = []): DraftEntity[] {
+/** The dimensions of `plan` that the view does not carry yet; figures keep clear of the section symbols among `viewDrafts` and of `drawn` (what the plan draws over its cut). */
+export function dimensionDrafts(plan: DimensionPlan, target: DimensionTarget, existing: readonly DraftEntity[], viewDrafts: readonly DraftEntity[] = [], drawn: readonly SymbolPiece[] = []): DraftEntity[] {
   const done = new Set(existing.flatMap((d) => (typeof d.params.dimAll === 'string' ? [d.params.dimAll] : [])));
   const out: DraftEntity[] = [];
-  const shapes = stringShapes(plan, target.textHeight, symbolPieces(viewDrafts));
+  const shapes = stringShapes(plan, target.textHeight, [...symbolPieces(viewDrafts), ...drawn]);
   for (const s of plan.strings) {
     (shapes.get(s) ?? []).forEach((shape) => {
       const stamp = stampOf(s, shape.a, shape.b);

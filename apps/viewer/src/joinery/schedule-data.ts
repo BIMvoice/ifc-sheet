@@ -21,6 +21,8 @@ import { entityName } from '@/lib/commands/modeling/authored-kinds';
 import { getModelLengthUnitScale } from '@/lib/length-unit-scale';
 import { catalogue } from './catalog';
 import { drawnJoinery } from './mapped-joinery';
+import { drawnCodes, withDrawnMarks } from './drawn-marks';
+import { useProjectStore } from '@/project/project-store';
 
 export type ScheduleKind = 'door' | 'window' | 'all';
 
@@ -163,5 +165,5 @@ export function scheduleData(kind: ScheduleKind): ScheduleData {
     e.occurrences.sort((a, b) => (order.get(a.level) ?? 99) - (order.get(b.level) ?? 99) || a.modelId.localeCompare(b.modelId) || a.expressId - b.expressId);
     e.occurrences.forEach((o, i) => { o.number = i + 1; });
   }
-  return { entries, levels };
+  return { entries: withDrawnMarks(entries, drawnCodes(useProjectStore.getState().drafts)), levels };
 }

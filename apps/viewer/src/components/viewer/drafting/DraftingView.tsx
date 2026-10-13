@@ -40,7 +40,7 @@ import { syncLevelMarks } from '@/drafting/level-sync';
 import { levelResolverFor, storeyOf } from '@/drafting/level-resolver';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
-  attachDraftingView, currentLayerId, setElementPicker, setViewElementsProvider, setPlanPartsProvider, setRoomsProvider, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
+  attachDraftingView, currentLayerId, setElementPicker, setViewElementsProvider, setObstaclesProvider, setPlanPartsProvider, setRoomsProvider, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
   toggleOrtho, toggleSnap, useDraftingSession, pickEntity, setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
@@ -67,6 +67,7 @@ import { useRoofDialog } from '@/project/roof-dialog-store';
 import { exportViewDxf } from './view-dxf';
 import { drawnBySymbol } from '@/project/view-symbols';
 import { planOverlays } from '@/project/plan-overlays';
+import { drawingPieces, overlayPieces } from '@/drafting/plan-obstacles';
 import { viewMaterials } from '@/project/material-resolver';
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { partHostType } from '@/project/part-host';
@@ -175,6 +176,14 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     setPlanPartsProvider(() => planParts(drawing));
     return () => setPlanPartsProvider(null);
   }, [drawing]);
+  // TAGALL, DIMALL: what this plan draws over its cut (door swings, glazing, roofs) is kept clear of.
+  useEffect(() => {
+    setObstaclesProvider((textHeight) => ({
+      drawn: overlayPieces(plane ? planOverlays(view, plane, runtimeGeometry?.meshes, useProjectStore.getState().symbolFlips, hidden, shown) : [], textHeight),
+      linework: drawingPieces(drawing),
+    }));
+    return () => setObstaclesProvider(null);
+  }, [drawing, plane, view, runtimeGeometry, hidden, shown]);
   // TAGALL: the rooms of this plan, each space cut at the plan's height.
   useEffect(() => {
     setRoomsProvider(() => {
