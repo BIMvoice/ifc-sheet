@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectLevel, ProjectSheet, ProjectView } from '@/project/types';
 import { viewBands } from './bands.js';
-import { CLOUD_LIMIT } from './run.js';
+import { CLOUD_LIMIT, compareInRenderFrame } from './run.js';
 import { groupBoxes } from './cloud.js';
 import { compareStates, type ModelChange } from './compare.js';
 import { sheetChanges, viewportRegion } from './report.js';
@@ -34,6 +34,11 @@ describe('the frame of the boxes', () => {
     const plan = planBand('p', 0, 1.1);
     assert.deepEqual(changesInView(changes, plan), [], 'absolute against a render-frame band: never in view');
     assert.deepEqual(changesInView(toRenderFrame(changes, offset), plan).map((c) => c.guid), ['W']);
+  });
+  it('is how WHATCHANGED compares two versions of a model', () => {
+    const base = snapshotFromElements([el('W', absolute([0, 0, 0, 4, 2.7, 0.3]))], 0);
+    const head = snapshotFromElements([{ ...el('W', absolute([1, 0, 0, 5, 2.7, 0.3])), g: 'g2' }], 0);
+    assert.deepEqual(changesInView(compareInRenderFrame(base, head, offset), planBand('p', 0, 1.1)).map((c) => c.guid), ['W']);
   });
   it('shifts where it was as well as where it is, and leaves a model with no offset as it is', () => {
     const [c] = toRenderFrame(changes, offset);

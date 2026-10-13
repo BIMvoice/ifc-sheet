@@ -69,6 +69,11 @@ export function baselineOf(): { snapshot: ModelSnapshot; line: (count: number) =
   return modelState ? { snapshot: modelState, line: (count) => t('against.loaded', { count }) } : null;
 }
 
+/** What changed between two snapshots, boxes in the render frame the views are drawn in (the snapshots' own are absolute). */
+export function compareInRenderFrame(base: ModelSnapshot, head: ModelSnapshot, offset = renderFrameOffset()): ModelChange[] {
+  return toRenderFrame(compareStates(base, head), offset);
+}
+
 /** At most this many clouds in one view: past it, changes that lie near each other share one. */
 export const CLOUD_LIMIT = 100;
 
@@ -108,8 +113,7 @@ export async function runWhatChanged(mode: Mode, say: (text: string) => void): P
     say(t('noBaseline'));
     return;
   }
-  // The snapshots' boxes are absolute; the views are drawn in the render frame.
-  const changes = toRenderFrame(compareStates(baseline.snapshot, current), renderFrameOffset());
+  const changes = compareInRenderFrame(baseline.snapshot, current);
   say(baseline.line(changes.length));
   const { sheets, views, levels, drafts } = useProjectStore.getState();
   const s = useViewerStore.getState();

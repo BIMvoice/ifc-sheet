@@ -70,6 +70,19 @@ describe('project file', () => {
     assert.deepEqual(parseProjectFile(serializeProject(withMarks)).drafts.map((d) => d.shape), marks);
   });
 
+  it('opens a file saved before the model state, the issues\' snapshots and the title block defaults existed', () => {
+    const old = JSON.parse(serializeProject(doc));
+    delete old.modelState; delete old.titleBlockDefaults; delete old.issues;
+    const opened = parseProjectFile(JSON.stringify(old));
+    assert.equal(opened.modelState, undefined);
+    assert.deepEqual(opened.titleBlockDefaults, {});
+    assert.equal(opened.name, 'House');
+  });
+  it('refuses a model state in the first, pretty-printed form with the place of the problem, and opens nothing of it', () => {
+    const file = JSON.parse(serializeProject(doc));
+    file.modelState = { takenAt: 1, elements: [{ k: 'G', t: 'IfcWall', d: 'x' }] };
+    assert.throws(() => parseProjectFile(JSON.stringify(file)), /\/modelState\/count must be a whole number/);
+  });
   it('rejects a file of another format', () => {
     assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-document', version: 1 })), /\/format/);
   });
