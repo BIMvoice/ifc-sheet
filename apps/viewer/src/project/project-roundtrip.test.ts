@@ -161,6 +161,7 @@ const FULL: Required<ProjectDocument> = {
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],
+  titleBlockDefaults: { drawnBy: 'P. Conduraru', date: '2026-10-13' },
   issues: [{
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
     sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],

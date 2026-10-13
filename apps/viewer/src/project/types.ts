@@ -321,6 +321,8 @@ export interface ProjectDocument {
   legends?: ProjectLegend[];
   /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */
   issues?: ProjectIssue[];
+  /** Title-block values every new sheet starts with (project, drawn by, date), set from What is missing (`check/fill.ts`). */
+  titleBlockDefaults?: Record<string, string>;
 }
 
 /** One sheet as it stood when a set was issued. */

@@ -11,7 +11,10 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from '@/i18n';
+import { fillTitleBlockEverywhere } from '@/check/fill-actions';
 import { describeFinding, groupBySheet } from '@/check/say';
+import type { Finding } from '@/check/types';
+import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { useFindings } from '../sheets/useFindings';
 import { useIssue } from '../sheets/useIssue';
@@ -28,6 +31,22 @@ function Header({ title }: { title: string }) {
       <p className="m-0 min-w-0 flex-1 truncate text-lg text-white">{title}</p>
       <button type="button" aria-label={t('wall.add.close')} onClick={() => setPanel(null)} className="rounded p-1 text-sky-200 hover:bg-sky-400/20"><X className="size-4" /></button>
     </header>
+  );
+}
+
+/** The one value that fills a title-block field on every sheet that lacks it; new sheets take it too. */
+function FillField({ finding, onFilled }: { finding: Finding; onFilled: () => void }) {
+  const { t } = useTranslation();
+  const [value, setValue] = useState('');
+  const field = t(`sheets.tb.${finding.fill!.field}` as TranslationKey);
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <p className="m-0 text-sky-100">{describeFinding(finding)}</p>
+      <div className="flex gap-2">
+        <input value={value} onChange={(e) => setValue(e.target.value)} aria-label={t('check.fillValue', { field })} placeholder={field} className="min-w-0 flex-1 rounded border border-sky-300/30 bg-transparent px-2 py-1 text-sky-50 placeholder:text-sky-300/50" />
+        <button type="button" className={`${action} shrink-0`} disabled={value.trim() === ''} onClick={() => { fillTitleBlockEverywhere(finding.fill!.field, value); onFilled(); }}>{t('check.fillWith', { field, count: finding.fill!.sheetIds.length })}</button>
+      </div>
+    </div>
   );
 }
 
@@ -51,7 +70,7 @@ export function MissingPanel() {
                 <ul className="m-0 list-none p-0">
                   {g.findings.map((f, i) => (
                     <li key={`${f.kind}-${f.viewId ?? ''}-${f.draftId ?? ''}-${i}`} className="flex items-start justify-between gap-2 py-1">
-                      <button type="button" className="text-left text-sky-100 underline-offset-2 hover:underline" onClick={() => { if (goToFinding(f)) setPanel(null); }}>{describeFinding(f)}</button>
+                      {f.fill ? <FillField finding={f} onFilled={refresh} /> : <button type="button" className="text-left text-sky-100 underline-offset-2 hover:underline" onClick={() => { if (goToFinding(f)) setPanel(null); }}>{describeFinding(f)}</button>}
                       {f.fix ? <button type="button" className={`${action} shrink-0 px-2 py-0 text-xs`} disabled={busy} onClick={() => { setPanel(null); void fix(f, fixFinding); }}>{t('check.fix')} {f.fix}</button> : null}
                     </li>
                   ))}

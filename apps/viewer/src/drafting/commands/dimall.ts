@@ -11,6 +11,7 @@
 import { dimensionDrafts, isDimAll } from '@/dimall/apply';
 import { stringsThroughHeads, symbolPieces } from '@/dimall/avoid';
 import { planDimensions } from '@/dimall/plan';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
 import { draftsOfView, editDrafts } from '../draft-store';
@@ -32,7 +33,7 @@ export const dimAllCommand: DraftCommandDef = {
       return;
     }
     const here = draftsOfView(ctx.viewId, useProjectStore.getState().drafts);
-    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }, here.filter(isDimAll), here, ctx.obstacles(ctx.settings.textHeight).drawn);
+    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, guidOf: renderIdGlobalId }, here.filter(isDimAll), here, ctx.obstacles(ctx.settings.textHeight).drawn);
     if (drafts.length === 0) {
       ctx.say('drafting.msg.dimAllHave');
       return;

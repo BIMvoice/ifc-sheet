@@ -11,7 +11,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GraphicOverrideEngine, type Drawing2D } from '@ifc-lite/drawing-2d';
 import { isGeometry, type DraftEntity, type DraftShape, type Pt } from '@/drafting/types';
-import { drawingToWorld, type SectionAxisName } from '@/drafting/frame';
+import { drawingToScreen, drawingToWorld, type SectionAxisName } from '@/drafting/frame';
+import { clearFocus, focusBox, useFocusRequest } from '@/check/focus';
+import { roomsOf } from '@/drafting/session-providers';
+import { selectPickedGlobalId, toggleGlobalIdInSelection } from '@/components/viewer/viewport-selection';
 import { parsePat } from '@/drafting/hatch/pattern';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import { viewPlaneConfig, viewWorkPlane } from '@/project/view-plane-config';
@@ -176,6 +179,31 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     setPlanPartsProvider(() => planParts(drawing));
     return () => setPlanPartsProvider(null);
   }, [drawing]);
+  // What is missing: a finding about model elements brings the view here, zoomed to them and with them highlighted.
+  const focusRequest = useFocusRequest((s) => s.request);
+  useEffect(() => {
+    if (!focusRequest || focusRequest.viewId !== view.id || !drawing) return;
+    // The drawing's own first fit comes a moment after it is ready; look after it.
+    const timer = setTimeout(() => {
+      const el = containerRef.current;
+      if (!el) return;
+      const wanted = new Set(focusRequest.guids);
+      const found = [
+        ...viewElements(drawing).filter((e) => wanted.has(renderIdGlobalId(e.renderId) ?? '')).map((e) => ({ id: e.renderId, ring: e.ring })),
+        ...roomsOf().filter((r) => wanted.has(r.guid)).map((r) => ({ id: r.renderId, ring: r.ring })),
+      ];
+      clearFocus();
+      const box = focusBox(found.map((f) => f.ring));
+      if (!box) return;
+      selectPickedGlobalId(found[0].id);
+      for (const f of found.slice(1)) toggleGlobalIdInSelection(f.id);
+      const rect = el.getBoundingClientRect();
+      const scale = 0.85 * Math.min(rect.width / (box.max.x - box.min.x), rect.height / (box.max.y - box.min.y));
+      const at = drawingToScreen({ x: (box.min.x + box.max.x) / 2, y: (box.min.y + box.max.y) / 2 }, { scale, x: 0, y: 0 }, axis);
+      setViewTransform({ scale, x: rect.width / 2 - at.x, y: rect.height / 2 - at.y });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [focusRequest, drawing, view.id, axis, setViewTransform]);
   // TAGALL, DIMALL: what this plan draws over its cut (door swings, glazing, roofs) is kept clear of.
   useEffect(() => {
     setObstaclesProvider((textHeight) => ({

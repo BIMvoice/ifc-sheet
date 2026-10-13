@@ -19,13 +19,13 @@ export function describeFinding(f: Finding): string {
 
 export interface FindingGroup { sheetId?: string; title: string; findings: Finding[] }
 
-/** The findings of each sheet together, in the order of the set; those that belong to no sheet last. */
+/** The findings of each sheet together, in the order of the set; those about the whole set first, those that belong to no sheet last. */
 export function groupBySheet(findings: readonly Finding[], sheets: readonly ProjectSheet[]): FindingGroup[] {
   const groups: FindingGroup[] = [];
   for (const f of findings) {
     const sheet = sheets.find((s) => s.id === f.sheetId);
-    const title = sheet ? `${sheet.number} ${sheet.name}` : resolve('check.noSheet' as TranslationKey);
-    const g = groups.find((x) => x.sheetId === sheet?.id);
+    const title = f.setWide ? resolve('check.wholeSet' as TranslationKey) : sheet ? `${sheet.number} ${sheet.name}` : resolve('check.noSheet' as TranslationKey);
+    const g = groups.find((x) => x.sheetId === sheet?.id && x.title === title);
     if (g) g.findings.push(f);
     else groups.push({ sheetId: sheet?.id, title, findings: [f] });
   }

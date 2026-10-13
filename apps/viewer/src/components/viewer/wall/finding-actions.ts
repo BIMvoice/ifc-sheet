@@ -9,6 +9,7 @@
  */
 
 import { submitCommandLine, useDraftingSession } from '@/drafting/session';
+import { requestFocus } from '@/check/focus';
 import type { Finding } from '@/check/types';
 import { useProjectStore } from '@/project/project-store';
 import { sheetsShowing } from '@/project/sheets';
@@ -41,6 +42,7 @@ export function goToFinding(f: Finding): boolean {
   if (!sheet) return false;
   stepInto(sheet, f.viewId ?? null);
   const { viewId, draftId } = f;
+  if (viewId && !draftId && f.guids?.length) requestFocus(viewId, f.guids);
   if (viewId && draftId) void whenAttached(viewId).then((ok) => ok && useDraftingSession.setState({ selection: new Set([draftId]) }));
   return true;
 }

@@ -159,6 +159,7 @@ export function parseProjectFile(text: string): ProjectDocument {
     symbols: readList(raw, 'symbols', readSymbol),
     legends: readList(raw, 'legends', readLegend),
     issues: readIssues(raw.issues),
+    titleBlockDefaults: isObject(raw.titleBlockDefaults) ? Object.fromEntries(Object.entries(raw.titleBlockDefaults).filter((e): e is [string, string] => isString(e[1]))) : {},
   };
 }
 
