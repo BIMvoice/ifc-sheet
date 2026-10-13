@@ -37,3 +37,22 @@ export function cloudRing(box: Rect, radius: number): Pt[] {
   }
   return out;
 }
+
+/**
+ * At most `max` boxes covering `boxes`: all of them when they are few; else the boxes are sorted into a grid of
+ * about `max` cells by their centres and each cell gets the box round its members. A new version that moves
+ * most of a model would otherwise ask for a cloud per element per view, thousands of drawn shapes.
+ */
+export function groupBoxes(boxes: readonly Rect[], max: number): Rect[] {
+  if (boxes.length <= max) return [...boxes];
+  const all = boxes.reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) }));
+  const side = Math.max(1, Math.floor(Math.sqrt(max)));
+  const w = (all.x1 - all.x0) / side || 1, h = (all.y1 - all.y0) / side || 1;
+  const cells = new Map<number, Rect>();
+  for (const b of boxes) {
+    const ix = Math.min(side - 1, Math.floor(((b.x0 + b.x1) / 2 - all.x0) / w)), iy = Math.min(side - 1, Math.floor(((b.y0 + b.y1) / 2 - all.y0) / h));
+    const k = ix * side + iy, c = cells.get(k);
+    cells.set(k, c ? { x0: Math.min(c.x0, b.x0), y0: Math.min(c.y0, b.y0), x1: Math.max(c.x1, b.x1), y1: Math.max(c.y1, b.y1) } : b);
+  }
+  return [...cells.values()];
+}

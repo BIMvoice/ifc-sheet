@@ -17,24 +17,23 @@
  */
 
 import { newDraft, editDrafts } from '@/drafting/draft-store';
-import { worldToDrawing } from '@/drafting/frame';
 import type { DraftEntity } from '@/drafting/types';
 import { resolve } from '@/i18n/registry';
 import type { TranslationKey } from '@/i18n';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
-import { viewPlaneConfig } from '@/project/view-plane-config';
 import { useViewerStore } from '@/store';
 import { viewBands } from './bands';
-import { cloudRing } from './cloud';
+import { cloudRing, groupBoxes } from './cloud';
 import { compareStates, type ModelChange } from './compare';
 import { currentSnapshot } from './current';
 import { annotationImpacts } from './impact';
 import { sheetChanges } from './report';
 import { sheetLines } from './say';
 import type { ModelSnapshot } from './snapshot';
-import { changesInView } from './visibility';
+import { changesInView, drawingRect, toRenderFrame, type ViewBand } from './visibility';
+import { renderFrameOffset } from '@/draft-set/body';
 
 export const REVISION_STAMP = 'whatchanged';
 export const REVISIONS_LAYER = 'revisions';
@@ -70,24 +69,24 @@ export function baselineOf(): { snapshot: ModelSnapshot; line: (count: number) =
   return modelState ? { snapshot: modelState, line: (count) => t('against.loaded', { count }) } : null;
 }
 
+/** At most this many clouds in one view: past it, changes that lie near each other share one. */
+export const CLOUD_LIMIT = 100;
+
 /** Revision clouds round each changed element in each view that shows it. */
-function cloudsFor(changes: readonly ModelChange[]): DraftEntity[] {
-  const s = useViewerStore.getState();
-  const { views, levels } = useProjectStore.getState();
-  const bounds = mergedSectionBounds(s.models, s.geometryResult);
+function cloudsFor(changes: readonly ModelChange[], bands: readonly ViewBand[]): DraftEntity[] {
   const out: DraftEntity[] = [];
-  for (const band of viewBands(views, levels, bounds)) {
-    const view = views.find((v) => v.id === band.viewId);
-    const plane = view ? viewPlaneConfig(view.detail ? views.find((o) => o.id === view.detail!.of) ?? view : view, levels, bounds) : null;
-    if (!view || !plane) continue;
-    const unit = paperUnitOf(view.id);
-    for (const c of changesInView(changes, band)) {
+  for (const band of bands) {
+    if (!band.plane) continue;
+    const unit = paperUnitOf(band.viewId);
+    const pad = 1.5 * unit;
+    const boxes = changesInView(changes, band).flatMap((c) => {
       const box = c.after ?? c.before;
-      if (!box) continue;
-      const pts = [0, 3].flatMap((x) => [1, 4].flatMap((y) => [2, 5].map((z) => worldToDrawing(plane, { x: box[x], y: box[y], z: box[z] }))));
-      const pad = 1.5 * unit;
-      const rect = { x0: Math.min(...pts.map((p) => p.x)) - pad, y0: Math.min(...pts.map((p) => p.y)) - pad, x1: Math.max(...pts.map((p) => p.x)) + pad, y1: Math.max(...pts.map((p) => p.y)) + pad };
-      out.push(newDraft(view.id, REVISIONS_LAYER, { type: 'polyline', pts: cloudRing(rect, 2 * unit), closed: true }, { revision: REVISION_STAMP, revisionOf: c.guid }));
+      if (!box) return [];
+      const r = drawingRect(box, band.plane!);
+      return [{ x0: r.x0 - pad, y0: r.y0 - pad, x1: r.x1 + pad, y1: r.y1 + pad }];
+    });
+    for (const rect of groupBoxes(boxes, CLOUD_LIMIT)) {
+      out.push(newDraft(band.viewId, REVISIONS_LAYER, { type: 'polyline', pts: cloudRing(rect, 2 * unit), closed: true }, { revision: REVISION_STAMP }));
     }
   }
   return out;
@@ -109,20 +108,22 @@ export async function runWhatChanged(mode: Mode, say: (text: string) => void): P
     say(t('noBaseline'));
     return;
   }
-  const changes = compareStates(baseline.snapshot, current);
+  // The snapshots' boxes are absolute; the views are drawn in the render frame.
+  const changes = toRenderFrame(compareStates(baseline.snapshot, current), renderFrameOffset());
   say(baseline.line(changes.length));
   const { sheets, views, levels, drafts } = useProjectStore.getState();
   const s = useViewerStore.getState();
-  const bands = viewBands(views, levels, mergedSectionBounds(s.models, s.geometryResult));
+  const { bands, unread } = viewBands(views, levels, mergedSectionBounds(s.models, s.geometryResult));
   const report = sheetChanges(sheets, bands, changes, annotationImpacts(drafts.filter((d) => !isCloud(d)), changes));
   const byGuid = new Map(changes.map((c) => [c.guid, c]));
   for (const line of sheetLines(report, (id) => views.find((v) => v.id === id)?.name ?? '', (g) => byGuid.get(g))) say(line);
   // Clouds replace the last run's.
   ensureLayer();
-  const clouds = cloudsFor(changes);
+  const clouds = cloudsFor(changes, bands);
   const old = new Set(useProjectStore.getState().drafts.filter(isCloud).map((d) => d.id));
   editDrafts({ remove: old, add: clouds });
   say(t('clouds', { count: clouds.length }));
+  if (unread.length > 0) say(t('unread', { count: unread.length }));
 }
 
 /** WHATCHANGED with the text after its name: nothing, CLEAR or ACCEPT. The lines arrive as the model is read. */

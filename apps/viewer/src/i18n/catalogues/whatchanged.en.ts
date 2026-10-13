@@ -24,6 +24,7 @@ export const whatChangedEn = {
   'whatchanged.kind.propertyUnnamed': 'properties changed',
   'whatchanged.kind.type': 'type changed',
   'whatchanged.clouds': '{count} revision clouds are on the Revisions layer. WHATCHANGED CLEAR removes them; WHATCHANGED ACCEPT takes this version as the model to compare with next time.',
+  'whatchanged.unread': { one: '{count} view is cut along a plane that is not along an axis; its changes are not listed.', other: '{count} views are cut along a plane that is not along an axis; their changes are not listed.' },
   'whatchanged.cleared': '{count} revision clouds removed.',
   'whatchanged.accepted': 'The model as it is now is the state later versions are compared with. {count} revision clouds removed.',
   'whatchanged.usage': 'WHATCHANGED takes nothing, CLEAR or ACCEPT, not "{arg}".',

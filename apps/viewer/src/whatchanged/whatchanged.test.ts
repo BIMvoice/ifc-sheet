@@ -62,9 +62,10 @@ describe('what a view shows', () => {
   it('a plan shows from its floor to its cut, and where an element was as well as where it is: not the roof above it', () => {
     assert.deepEqual(names(planBand('p', 0, 1.1)), ['Wall back', 'Wall floor', 'Wall lifted', 'Wall new', 'Wall wall']);
   });
-  it('a section shows either side of its cut as far as its depth', () => {
-    assert.deepEqual(names(cutBand('s', 'z', 0, 3)), ['Wall floor', 'Wall lifted', 'Wall new', 'Wall roof', 'Wall wall']);
-    assert.deepEqual(names(cutBand('s', 'z', 0, 30)).length, 6);
+  it('a section shows the side of its cut it keeps, as far as its depth', () => {
+    assert.deepEqual(names(cutBand('s', 'z', 0, 3)), ['Wall floor', 'Wall roof', 'Wall wall']);
+    assert.deepEqual(names(cutBand('s', 'z', 0, 3, true)), ['Wall floor', 'Wall lifted', 'Wall new', 'Wall roof', 'Wall wall']);
+    assert.deepEqual(names(cutBand('s', 'z', 0, 30, true)).length, 6);
   });
   it('an element with no box is in no view', () => {
     const c = compareStates(state(el('S', { a: undefined, g: undefined })), state(el('S', { a: undefined, g: undefined, d: 'x', c: { 'attr:core': 'n' } })));
