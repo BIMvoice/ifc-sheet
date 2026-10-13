@@ -29,8 +29,8 @@ function clipSegment(a: P, b: P, r: Bounds2D): [P, P] | null {
   return [{ x: a.x + dx * t0, y: a.y + dy * t0 }, { x: a.x + dx * t1, y: a.y + dy * t1 }];
 }
 
-/** A closed loop clipped to `r` (Sutherland-Hodgman); fewer than three points left means nothing is inside. */
-function clipLoop(loop: readonly P[], r: Bounds2D): P[] {
+/** A closed loop clipped to `r` (Sutherland-Hodgman); fewer than three points left means nothing is inside (an empty loop is returned). */
+export function clipLoop(loop: readonly P[], r: Bounds2D): P[] {
   const edges: [(p: P) => boolean, (a: P, b: P) => P][] = [
     [(p) => p.x >= r.min.x, (a, b) => ({ x: r.min.x, y: a.y + ((b.y - a.y) * (r.min.x - a.x)) / (b.x - a.x) })],
     [(p) => p.x <= r.max.x, (a, b) => ({ x: r.max.x, y: a.y + ((b.y - a.y) * (r.max.x - a.x)) / (b.x - a.x) })],

@@ -26,6 +26,11 @@ export const dimAllCommand: DraftCommandDef = {
       ctx.say('drafting.msg.dimAllPlanOnly');
       return;
     }
+    // The strings are drawn round the building's outline from the walls the plan cuts; a detail cuts those walls at its crop, so its outline is the crop's edge, not a facade.
+    if (ctx.view()?.detail) {
+      ctx.say('drafting.msg.dimAllNotOnDetail');
+      return;
+    }
     const plan = planDimensions(ctx.planParts(), { paperUnit: paperUnitOf(ctx.viewId), textHeight: ctx.settings.textHeight });
     if (plan.strings.length === 0) {
       ctx.say('drafting.msg.dimAllNone');

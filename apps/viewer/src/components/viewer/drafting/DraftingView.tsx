@@ -346,6 +346,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           grips={grips}
           gripDrag={state.gripDrag}
           sectionBand={sectionBand}
+          crop={view.detail}
         />
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />

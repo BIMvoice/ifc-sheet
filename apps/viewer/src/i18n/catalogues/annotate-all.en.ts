@@ -7,6 +7,7 @@ export const annotateAllEn = {
   'drafting.cmd.dimAll': 'DIMALL',
   'drafting.tool.dimAll': 'Dimension the plan',
   'drafting.msg.dimAllPlanOnly': 'DIMALL works on a plan.',
+  'drafting.msg.dimAllNotOnDetail': 'DIMALL works on a whole plan: a detail shows only part of the building, so its edges are not facades. Run it on the source plan, or dimension the detail by hand.',
   'drafting.msg.dimAllNone': 'Nothing to dimension: no walls cut in this plan, or no facade with an opening or a cross wall.',
   'drafting.msg.dimAllHave': 'This plan has all its dimension strings already.',
   'drafting.msg.dimAllDone': 'Added {count} dimensions in {strings} strings. Facades with nothing to dimension: {skipped}.',

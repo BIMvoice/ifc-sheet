@@ -25,6 +25,7 @@ import type { LabelTarget } from '@/labels/label-place';
 import { readFieldValue } from '@/labels/label-resolve';
 import { parseFieldRef } from '@/labels/label-template';
 import type { ViewElement } from '@/labels/view-elements';
+import { clipLoop } from '@/project/drawing-crop';
 import { pieceRects, symbolPieces } from '@/dimall/avoid';
 import { ringArea, type RoomFootprint } from './footprint';
 import { roomLabelPoint } from './room-point';
@@ -40,8 +41,11 @@ export interface TagAllInput {
   placement: LabelPlacement;
   types: { mark: AnnotationType; room: AnnotationType };
   read: ElementReader;
+  /** A detail's area, drawing metres: only what is seen in it is labelled, and every label stands inside it. */
+  crop?: { min: Pt; max: Pt };
 }
 
+const within = (r: { min: Pt; max: Pt } | undefined, p: Pt) => !r || (p.x >= r.min.x && p.x <= r.max.x && p.y >= r.min.y && p.y <= r.max.y);
 const isOpening = (className: string) => /^ifc(door|window)/i.test(className);
 const labelledBy = (drafts: readonly DraftEntity[], typeId: string) => new Set(drafts.filter((d) => d.params.atype === typeId && typeof d.params.labelOf === 'string').map((d) => String(d.params.labelOf)));
 
@@ -60,7 +64,12 @@ export function modelArea(read: ElementReader, guid: string): number | undefined
 
 export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary: TagAllSummary } {
   const { placement: at, read } = input;
-  const summary: TagAllSummary = { marks: 0, numbered: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: input.rooms.length === 0 };
+  // On a detail a room is labelled where it shows: inside the crop (its area stays the whole room's).
+  const rooms = input.rooms.flatMap((room) => {
+    const shown = input.crop ? clipLoop(room.ring, input.crop) : room.ring;
+    return shown.length >= 3 ? [{ room, shown }] : [];
+  });
+  const summary: TagAllSummary = { marks: 0, numbered: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: rooms.length === 0 };
   const drafts: DraftEntity[] = [];
   const clear = LABEL_CLEAR_MM * at.paperUnit;
 
@@ -91,7 +100,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     const spot = spots.get(String(t.renderId));
     const extras = extrasOf.get(t.guid) ?? {};
     const draft = spot ? labelDraft(input.types.mark, t.guid, spot.centre, at, t.ring, extras, read) : null;
-    if (!draft || !spot) continue;
+    if (!draft || !spot || !within(input.crop, spot.centre)) continue;
     drafts.push(draft);
     taken.push(rectAround(spot.centre, ...sizeOf(items, t)));
     summary.marks++;
@@ -103,7 +112,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   const rings = [...input.elements.map((e) => e.ring), ...swings.map((s) => s.ring)];
   const rects = [...rectsOf(input.existing), ...sections, ...taken];
   const seen = new Set<string>();
-  for (const room of input.rooms) {
+  for (const { room, shown } of rooms) {
     if (seen.has(room.guid)) continue;
     seen.add(room.guid);
     if (roomed.has(room.guid)) { summary.already++; continue; }
@@ -111,7 +120,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     const extras: LabelExtras = fromModel ? {} : { computedArea: ringArea(room.ring) };
     const size = labelSize(input.types.room, room.guid, at.textHeight, extras, read);
     if (!size) continue;
-    const spot = roomLabelPoint(room.ring, size.w, size.h, { rects, rings }, clear);
+    const spot = roomLabelPoint(shown, size.w, size.h, { rects, rings }, clear);
     const draft = labelDraft(input.types.room, room.guid, spot.centre, at, undefined, extras, read);
     if (!draft) continue;
     drafts.push(draft);

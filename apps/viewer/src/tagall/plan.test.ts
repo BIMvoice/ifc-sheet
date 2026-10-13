@@ -150,3 +150,40 @@ describe('TAGALL rooms', () => {
   });
 });
 
+
+describe('TAGALL on a detail', () => {
+  // The detail shows x 0..6, y 0..6 of a plan that holds more.
+  const crop = { min: { x: 0, y: 0 }, max: { x: 6, y: 6 } };
+  const shown = (d: DraftEntity) => (d.shape.type === 'text' ? d.shape.p : null)!;
+  const inCrop = (p: Pt) => p.x >= crop.min.x && p.x <= crop.max.x && p.y >= crop.min.y && p.y <= crop.max.y;
+
+  it('labels the rooms inside the crop and none outside it', () => {
+    // R1 is the L (it runs into the crop), R2 stands at x 12..15, far outside.
+    const { drafts, summary } = run([], { crop, targets: targets.slice(0, 1), elements: els.slice(0, 1) });
+    assert.ok(drafts.some((d) => d.params.labelOf === 'R1'), 'the room in the crop is labelled');
+    assert.ok(!drafts.some((d) => d.params.labelOf === 'R2'), 'the room outside the crop is not');
+    assert.equal(summary.rooms, 1);
+    assert.ok(drafts.every((d) => inCrop(shown(d))), 'every label stands inside the crop');
+  });
+
+  it('puts the label of a room the crop cuts inside the crop, and keeps the whole room\'s area', () => {
+    const wide = [{ renderId: 12, guid: 'R2', ring: box(2, 1, 10, 5), at: 'cut' as const }];
+    const { drafts } = run([], { crop, rooms: wide, targets: [], elements: [] });
+    const l = byGuid(drafts, 'R2');
+    assert.ok(inCrop(shown(l)), JSON.stringify(shown(l)));
+    // 8 x 4 m, not the 4 x 4 m the crop shows of it.
+    assert.equal(l.params.computedArea, 32);
+    assert.equal(text(l), 'Flur\n32.00 m²');
+  });
+
+  it('says the detail shows no room when none reaches it', () => {
+    const { drafts, summary } = run([], { crop: { min: { x: 20, y: 20 }, max: { x: 22, y: 22 } }, targets: [], elements: [] });
+    assert.equal(summary.noRooms, true);
+    assert.equal(drafts.length, 0);
+  });
+
+  it('does not make a mark whose place falls outside the crop', () => {
+    const { drafts } = run([], { crop: { min: { x: 4.4, y: 0.1 }, max: { x: 5.6, y: 0.9 } }, rooms: [], targets: targets.slice(0, 1), elements: els.slice(0, 1) });
+    assert.equal(drafts.length, 0);
+  });
+});
