@@ -3,16 +3,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The card at the right of a stepped-into sheet: what the chosen tool does,
- * or with no tool, the chosen drawing's one control (a plan's cut height, a
- * section's depth) and what was left out on purpose.
+ * The card at the right of a stepped-into sheet while a tool is chosen: what
+ * it does, and for a hatched zone, its pattern. Without a tool the chosen
+ * drawing's own card shows instead (`ViewportCard`).
  */
 
 import type { ReactNode } from 'react';
 import { useTranslation } from '@/i18n';
-import type { ProjectView } from '@/project/types';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
-import { CutHeightControl, DepthControl } from './ViewControls';
 import { HatchSettings } from './HatchSettings';
 import { DRAW_TOOLS, WALL_TOOLS } from './wall-actions';
 
@@ -27,7 +25,7 @@ function Card({ eyebrow, title, children }: { eyebrow: string; title: string; ch
 }
 
 /** `drawingOn`: where a draw tool draws, the drawing's name, or null for the sheet's paper. */
-export function InfoCard({ tool, view, drawingOn }: { tool: string | null; view: ProjectView | null; drawingOn?: string | null }) {
+export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string | null }) {
   const { t } = useTranslation();
   const chosen = WALL_TOOLS.find((x) => x.command === tool);
   const draw = DRAW_TOOLS.find((x) => x.command === tool);
@@ -48,19 +46,5 @@ export function InfoCard({ tool, view, drawingOn }: { tool: string | null; view:
       </Card>
     );
   }
-  if (view?.kind === 'plan' || view?.kind === 'section' || view?.kind === 'elevation') {
-    return (
-      <Card eyebrow={view.name} title={view.kind === 'plan' ? t('wall.cutHeight') : t('wall.depth')}>
-        {view.kind === 'plan' ? <CutHeightControl view={view} /> : <DepthControl view={view} />}
-      </Card>
-    );
-  }
-  return (
-    <Card eyebrow={t('wall.leftOut.eyebrow')} title={t('wall.leftOut.title')}>
-      <ul className="m-0 list-none divide-y divide-sky-300/20 border-y border-sky-300/20 p-0 text-lg text-sky-300">
-        {(['wall.leftOut.lines', 'wall.leftOut.layers', 'wall.leftOut.grid'] as const).map((k) => <li key={k} className="py-2.5">{t(k)}</li>)}
-      </ul>
-      <p className="mb-0 mt-4 text-lg leading-relaxed">{t('wall.leftOut.body')}</p>
-    </Card>
-  );
+  return null;
 }

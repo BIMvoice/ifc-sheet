@@ -21,7 +21,8 @@ export const PAPER_MM: Record<PaperSize, { w: number; h: number }> = {
   A4: { w: 297, h: 210 },
 };
 
-export const SHEET_SCALES = [1, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000] as const;
+/** The scales a viewport offers, most detailed first: details, buildings, sites. */
+export const SHEET_SCALES = [1, 2, 5, 10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 10000] as const;
 
 /** Frame margin and title block size on the paper, mm. */
 export const FRAME_MARGIN_MM = 10;
