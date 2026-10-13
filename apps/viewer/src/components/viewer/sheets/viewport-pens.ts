@@ -32,7 +32,7 @@ export interface Pen {
 }
 
 /** Default pens, paper millimetres. */
-export const PEN = { cut: 0.5, seen: 0.25, hidden: 0.18, hatch: 0.13 };
+export const PEN = { cut: 0.5, outline: 0.5, seen: 0.25, hidden: 0.18, hatch: 0.13 };
 const WEIGHT_MM: Record<CategoryLineWeight, number> = { heavy: 0.7, medium: 0.5, light: 0.25, hairline: 0.13 };
 const DEFAULT_FILL = '#d4d4d8';
 
@@ -70,7 +70,7 @@ export function viewportPens(
       continue;
     }
     const cut = line.category === 'cut';
-    const weight = g?.lineWeight ? WEIGHT_MM[g.lineWeight] * (cut ? 1 : 0.5) : cut ? PEN.cut : PEN.seen;
+    const weight = g?.lineWeight ? WEIGHT_MM[g.lineWeight] * (cut ? 1 : 0.5) : cut ? PEN.cut : line.category === 'silhouette' ? PEN.outline : PEN.seen;
     add(`${cut ? 'cut' : 'seen'}:${color}:${weight}`, { stroke: color, width: weight, fill: null, layer: cut ? 'CUT' : 'SEEN' }, d);
   }
   for (const h of cutHatches(drawing, graphics)) {

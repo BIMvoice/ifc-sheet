@@ -46,6 +46,12 @@ interface ProjectViewBase {
    * section / elevation projects with the automatic depth bands.
    */
   viewDepth?: number | null;
+  /**
+   * Draw the lines that are hidden behind other geometry, dashed. Absent:
+   * an elevation does not (it shows what is seen from outside), every other
+   * view does.
+   */
+  showHidden?: boolean;
   /** The view's own graphics (Visibility / Graphics): a preset and per-category overrides. */
   graphics?: ViewGraphics;
   /** Drawing scale denominator (100 = 1:100). Annotation sizes follow it; absent = 1:100. */

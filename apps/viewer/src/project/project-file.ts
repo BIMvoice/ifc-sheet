@@ -66,6 +66,7 @@ function readView(v: unknown, path: string): ProjectView {
   const base = {
     id: v.id, name: v.name, auto: v.auto === true, createdAt: isNumber(v.createdAt) ? v.createdAt : 0,
     ...(isNumber(v.viewDepth) && v.viewDepth >= 0 ? { viewDepth: v.viewDepth } : {}),
+    ...(typeof v.showHidden === 'boolean' ? { showHidden: v.showHidden } : {}),
     ...(isObject(v.graphics) ? { graphics: readGraphics(v.graphics) } : {}),
     ...(isNumber(v.scale) && v.scale > 0 ? { scale: v.scale } : {}),
     ...(Array.isArray(v.hiddenLayers) ? { hiddenLayers: v.hiddenLayers.filter(isString) } : {}),
