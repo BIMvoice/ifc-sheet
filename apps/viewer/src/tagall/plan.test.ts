@@ -75,6 +75,11 @@ describe('TAGALL marks', () => {
       assert.equal(d.shape.leader, undefined);
     }
   });
+  it('keeps the code of a kind off the marks of the catalogue\'s types', () => {
+    const { drafts } = run([], { reservedMarks: ['W1', 'D1'] });
+    assert.equal(text(byGuid(drafts, 'W1')), 'W2');
+    assert.equal(text(byGuid(drafts, 'D2')), 'D2');
+  });
   it('puts a window mark on the outside of the wall and a door mark on the room side', () => {
     // A wall along y = 0 with the building above it (the middle of the view is at +y): outside is -y.
     const wallEl: ViewElement = { renderId: 20, anchor: { x: 8, y: 0.5 }, ring: box(0, 0.2, 16, 0.8) };

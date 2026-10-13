@@ -43,4 +43,9 @@ describe('mark codes', () => {
     const codes = assignMarkCodes([s('a', 'IfcWindow', { mark: 'W1' }), s('b', 'IfcWindow', { typeName: 'X' })]);
     assert.equal(codes.get('b')?.code, 'W2');
   });
+  it('does not give a kind a mark that stands for something else: a catalogue type\'s, or another element\'s own', () => {
+    const codes = assignMarkCodes([s('a', 'IfcWindow', { typeName: 'X' }), s('b', 'IfcDoor', { typeName: 'Y' })], new Map(), ['W1', 'W2', 'D1']);
+    assert.equal(codes.get('a')?.code, 'W3');
+    assert.equal(codes.get('b')?.code, 'D2');
+  });
 });

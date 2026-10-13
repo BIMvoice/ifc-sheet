@@ -31,7 +31,7 @@ import { clipLoop } from '@/project/drawing-crop';
 import { RectIndex } from '@/labels/rect-index';
 import { pieceRects, symbolPieces, type SymbolPiece } from '@/dimall/avoid';
 import type { LabelElement } from '@/labels/label-resolve';
-import { assignMarkCodes, type MarkSubject } from './mark-codes';
+import { assignMarkCodes, hasOwnMark, type MarkSubject } from './mark-codes';
 import { ringArea, type RoomFootprint } from './footprint';
 import { roomLabelPoint } from './room-point';
 import { AREA_FIELDS, MARK_TYPE_ID, ROOM_TYPE_ID, type TagAllSummary } from './types';
@@ -52,6 +52,8 @@ export interface TagAllInput {
   obstacles?: { drawn: readonly SymbolPiece[]; linework: readonly SymbolPiece[] };
   /** The codes the project's door and window marks already carry, by kind. */
   knownCodes?: ReadonlyMap<string, string>;
+  /** Marks that mean something else: the catalogue's door and window types. A code made for a kind never repeats one. */
+  reservedMarks?: Iterable<string>;
 }
 
 const within = (r: { min: Pt; max: Pt } | undefined, p: Pt) => !r || (p.x >= r.min.x && p.x <= r.max.x && p.y >= r.min.y && p.y <= r.max.y);
@@ -89,7 +91,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   const firstSeen = new Set<string>();
   const todo = openings.filter((t) => !marked.has(t.guid) && !firstSeen.has(t.guid) && !!firstSeen.add(t.guid));
   summary.already += openings.length - todo.length;
-  const codes = assignMarkCodes(todo.flatMap((t) => { const el = read(t.guid); return el ? [subjectOf(t, el)] : []; }), input.knownCodes);
+  const codes = assignMarkCodes(todo.flatMap((t) => { const el = read(t.guid); return el ? [subjectOf(t, el)] : []; }), input.knownCodes, [...(input.reservedMarks ?? []), ...openings.flatMap((t) => { const m = String(read(t.guid)?.attribute('Mark') ?? '').trim(); return hasOwnMark(m) ? [m] : []; })]);
   const extrasOf = new Map<string, LabelExtras>();
   for (const [guid, c] of codes) if (c.key !== null) extrasOf.set(guid, { markCode: c.code, markKey: c.key });
   const centre = viewCentre(input.elements);

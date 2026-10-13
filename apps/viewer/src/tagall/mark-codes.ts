@@ -44,10 +44,10 @@ export function kindKey(s: MarkSubject): string {
 
 export const hasOwnMark = (mark: string): boolean => mark.trim() !== '' && mark.trim().length <= MAX_MARK_LENGTH;
 
-/** `known`: kind key to the code a kind already has. */
-export function assignMarkCodes(subjects: readonly MarkSubject[], known: ReadonlyMap<string, string> = new Map()): Map<string, MarkCode> {
+/** `known`: kind key to the code a kind already has. `reserved`: marks that stand for something else (a catalogue type's, another element's own) and are not given to a kind. */
+export function assignMarkCodes(subjects: readonly MarkSubject[], known: ReadonlyMap<string, string> = new Map(), reserved: Iterable<string> = []): Map<string, MarkCode> {
   const out = new Map<string, MarkCode>();
-  const used = new Set<string>(known.values());
+  const used = new Set<string>([...known.values(), ...reserved]);
   const kinds = new Map<string, string>(known);
   const keys = new Set<string>();
   for (const s of subjects) {

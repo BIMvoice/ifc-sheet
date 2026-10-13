@@ -58,6 +58,7 @@ export function tagAll(ctx: DraftContext, read: ElementReader): void {
     crop: ctx.view()?.detail,
     obstacles: ctx.obstacles(ctx.settings.textHeight),
     knownCodes: knownCodes(useProjectStore.getState().drafts),
+    reservedMarks: (useProjectStore.getState().joineryTypes ?? []).map((t) => t.mark),
   });
   if (drafts.length) editDrafts({ add: drafts });
   ctx.say(drafts.length ? 'drafting.msg.tagAllDone' : 'drafting.msg.tagAllHave', { marks: summary.marks, rooms: summary.rooms, already: summary.already });
