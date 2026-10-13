@@ -10,6 +10,7 @@
 
 import { zipSync } from 'fflate';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
+import { printHtml } from '@/components/viewer/sheets/sheet-export';
 import { resolve } from '@/i18n/registry';
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
@@ -105,25 +106,6 @@ export function deliver(result: IssueResult, format: IssueFormat): void {
   if (result.html) printHtml(result.html);
 }
 
-/** The document in a hidden frame handed to the browser's print dialog ("Save as PDF"). */
-export function printHtml(html: string): void {
-  const frame = document.createElement('iframe');
-  frame.style.cssText = 'position:fixed;width:0;height:0;border:0';
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument;
-  const win = frame.contentWindow;
-  if (!doc || !win) {
-    frame.remove();
-    return;
-  }
-  doc.open();
-  doc.write(html);
-  doc.close();
-  win.addEventListener('afterprint', () => setTimeout(() => frame.remove(), 1000), { once: true });
-  setTimeout(() => { win.focus(); win.print(); }, 200);
-}
-
-/** `ISSUE [PDF|SVG|DXF] [name]`: the words after the command, or null when `text` is not the command. */
 export function parseIssueCommand(text: string): IssueOptions | null {
   const m = /^(\S+)(?:\s+(.*))?$/.exec(text.trim());
   if (!m || !ISSUE_NAMES.includes(m[1].toUpperCase())) return null;

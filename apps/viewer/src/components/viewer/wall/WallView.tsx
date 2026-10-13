@@ -21,6 +21,7 @@ import { SteppedSheet } from './SteppedSheet';
 import { WallGrid } from './WallGrid';
 import { WallIntro } from './WallIntro';
 import { ProjectDrawer } from './ProjectDrawer';
+import { IssuePanel, MissingPanel } from './SetPanels';
 import { setDrawer, stepInto, useWallNav } from './wall-nav';
 
 export function WallView() {
@@ -35,7 +36,7 @@ export function WallView() {
   // Measured on the building, not on the site around it; the main body of the model when no storey holds geometry.
   const extent = useMemo(() => setExtent(levels, meshes, mergedSectionBounds(models, legacy)).extent, [levels, meshes, models, legacy]);
   const [intro, setIntro] = useState(false);
-  const { stepped, focus, visit, drawer } = useWallNav();
+  const { stepped, focus, visit, drawer, panel } = useWallNav();
 
   // A model on a project with no sheets: lay the set out as soon as the geometry is in.
   useEffect(() => {
@@ -63,6 +64,7 @@ export function WallView() {
         <WallGrid extent={extent} onStep={(id) => stepInto(id)} />
       )}
       {drawer ? <ProjectDrawer extent={extent} onClose={() => setDrawer(false)} /> : null}
+      {panel === 'missing' ? <MissingPanel /> : panel === 'issue' ? <IssuePanel /> : null}
     </div>
   );
 }

@@ -42,6 +42,8 @@ export type SetGroup = 'plans' | 'elevations' | 'sections' | 'schedules';
 
 /** Width and height a view's drawing takes, metres, estimated from the model's extent. */
 export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number; h: number } {
+  // A detail shows its rectangle only.
+  if (view.detail) return { w: view.detail.max.x - view.detail.min.x, h: view.detail.max.y - view.detail.min.y };
   const dx = extent.max.x - extent.min.x;
   const dy = extent.max.y - extent.min.y;
   const dz = extent.max.z - extent.min.z;
@@ -225,8 +227,10 @@ export const PER_SHEET = 2;
  * that fits. `null` for a view that has no group (3D) or is already hung.
  */
 export function withViewHung(sheets: readonly ProjectSheet[], views: readonly ProjectView[], view: ProjectView, extent: ModelExtent, titleBlock: Record<string, string>, now = Date.now()): { sheets: ProjectSheet[]; sheetId: string } | null {
+  if (sheets.some((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id))) return null;
+  if (view.detail) return withDetailHung(sheets, view, extent, titleBlock, now);
   const group = groupOfView(view);
-  if (!group || sheets.some((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id))) return null;
+  if (!group) return null;
   const area = drawingArea();
   const layOut = (sheet: ProjectSheet, members: ProjectView[]): ProjectSheet => {
     const sizes = members.map((v) => viewExtent(v, extent));
@@ -243,6 +247,25 @@ export function withViewHung(sheets: readonly ProjectSheet[], views: readonly Pr
   const sheet = layOut({
     id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: GROUP_NAMES[group], createdAt: now, paper, orientation: 'landscape', titleBlock: { ...titleBlock },
   }, [view]);
+  return { sheets: [...sheets, sheet], sheetId: sheet.id };
+}
+
+/**
+ * A detail hangs on a sheet of its own in the "other" series (A-901…), on the
+ * smallest paper it fits, at the scale it was made for when that fits, else at
+ * the most detailed set scale that does.
+ */
+function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, titleBlock: Record<string, string>, now: number): { sheets: ProjectSheet[]; sheetId: string } {
+  const sizes = [viewExtent(view, extent)];
+  const { paper } = choosePaper([sizes]);
+  const scale = view.scale && fitsScale(sizes, drawingArea(paper), view.scale) ? view.scale : fittingScale(sizes, drawingArea(paper));
+  const taken = new Set(sheets.map((s) => s.number));
+  let n = 901;
+  while (taken.has(`A-${n}`)) n++;
+  const sheet: ProjectSheet = {
+    id: freshProjectId('sheet'), number: `A-${n}`, name: view.name, createdAt: now, paper, orientation: 'landscape',
+    viewports: rowOfViewports([view], sizes, scale, paper), titleBlock: { ...titleBlock },
+  };
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
 

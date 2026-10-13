@@ -9,31 +9,19 @@
  * fix, so it shrinks as the set is finished.
  */
 
-import { useState } from 'react';
 import { ListChecks } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui/button';
-import { currentFindings } from '@/check/collect';
 import { goTo, runFix } from '@/check/go';
 import { describeFinding, groupBySheet } from '@/check/say';
 import type { Finding } from '@/check/types';
 import { useProjectStore } from '@/project/project-store';
+import { useFindings } from './useFindings';
 
 export function CheckPanel() {
   const { t } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
-  const [findings, setFindings] = useState<Finding[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const refresh = () => setFindings(currentFindings());
-  const fix = async (f: Finding) => {
-    setBusy(true);
-    try {
-      await runFix(f);
-    } finally {
-      setBusy(false);
-      refresh();
-    }
-  };
+  const { findings, busy, refresh, fix } = useFindings();
   return (
     <>
       <h3 className="pt-2 font-bold uppercase tracking-wider">{t('check.section')}</h3>
@@ -48,7 +36,7 @@ export function CheckPanel() {
                 {g.findings.map((f, i) => (
                   <li key={`${f.kind}-${f.viewId ?? ''}-${f.draftId ?? ''}-${i}`} className="flex items-start justify-between gap-2 py-0.5">
                     <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => goTo(f)}>{describeFinding(f)}</button>
-                    {f.fix && <Button variant="outline" size="sm" className="h-5 shrink-0 px-1" disabled={busy} onClick={() => void fix(f)}>{t('check.fix')} {f.fix}</Button>}
+                    {f.fix && <Button variant="outline" size="sm" className="h-5 shrink-0 px-1" disabled={busy} onClick={() => void fix(f, runFix)}>{t('check.fix')} {f.fix}</Button>}
                   </li>
                 ))}
               </ul>

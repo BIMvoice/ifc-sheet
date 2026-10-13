@@ -165,6 +165,22 @@ describe('withViewHung (a drawing added from inside a sheet)', () => {
   });
 });
 
+describe('a detail on the set', () => {
+  const detail: ProjectView = { ...defaultViews(LEVELS).find((v) => v.kind === 'plan') as ProjectView, id: 'det', name: 'Detail 1 - Ground Floor', detail: { of: 'src', min: { x: 1, y: 1 }, max: { x: 3, y: 2.5 }, number: 1 }, scale: 25 };
+
+  it('hangs on a sheet of its own in the A-9xx series, at the scale it was made for, and not in the starting set', () => {
+    const views = [...defaultViews(LEVELS), detail];
+    assert.equal(buildDrawingSet({ views, extent: HOUSE, titleBlock: {} }).some((s) => s.viewports?.some((vp) => vp.viewId === 'det')), false);
+    const hung = withViewHung([], views, detail, HOUSE, { project: 'P' });
+    assert.ok(hung);
+    const [sheet] = hung.sheets;
+    assert.deepEqual([sheet.number, sheet.name, sheet.paper, sheet.viewports?.[0].scale], ['A-901', detail.name, 'A3', 25]);
+    assert.equal(sheetGroup(sheet), null);
+    assert.equal(withViewHung(hung.sheets, views, detail, HOUSE, {}), null, 'not twice');
+    assert.equal(withViewHung(hung.sheets, views, { ...detail, id: 'det2' }, HOUSE, {})?.sheets.at(-1)?.number, 'A-902');
+  });
+});
+
 describe('schedules on the set', () => {
   beforeEach(() => {
     resetProject();
