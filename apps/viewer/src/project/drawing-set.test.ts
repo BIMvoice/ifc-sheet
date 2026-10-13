@@ -13,8 +13,8 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject, useProjectStore } from './project-store.js';
 import { defaultViews } from './view-defaults.js';
-import { buildDrawingSet, drawingArea, fittingScale, sheetGroup, withViewHung, type ModelExtent } from './drawing-set.js';
-import { groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
+import { buildDrawingSet, drawingArea, fittingScale, sheetGroup, sheetScaleReason, withViewHung, type ModelExtent } from './drawing-set.js';
+import { addScheduleToSet, groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
 import { PAPER_MM } from './sheets.js';
 import type { ProjectLevel, ProjectView } from './types';
 
@@ -138,5 +138,31 @@ describe('withViewHung (a drawing added from inside a sheet)', () => {
     const set = buildDrawingSet({ views, extent: HOUSE, titleBlock: {} });
     assert.equal(withViewHung(set, views, views[0], HOUSE, {}), null);
     assert.equal(withViewHung(set, views, { id: '3', kind: '3d', name: '3D', createdAt: 0, viewpoint: null }, HOUSE, {}), null);
+  });
+});
+
+describe('schedules on the set', () => {
+  beforeEach(() => {
+    resetProject();
+    useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
+    startDrawingSet(null, HOUSE);
+  });
+
+  it('hang one to a sheet in the A-6xx series, with the set\'s title block', () => {
+    const doors = addScheduleToSet('all', 'Door and window schedule');
+    const takeoff = addScheduleToSet('materials', 'Material takeoff');
+    const { sheets, schedules } = useProjectStore.getState();
+    const placed = [doors, takeoff].map((id) => sheets.find((s) => s.id === id));
+    assert.deepEqual(placed.map((s) => s?.number), ['A-601', 'A-602']);
+    assert.deepEqual(placed.map((s) => sheetGroup(s ?? { number: '' })), ['schedules', 'schedules']);
+    assert.deepEqual(placed.map((s) => schedules?.find((x) => x.id === s?.viewports?.[0]?.viewId)?.kind), ['all', 'materials']);
+    assert.equal(placed[0]?.titleBlock?.date, sheets[0].titleBlock?.date);
+  });
+
+  it('give no scale reason for a schedule sheet', () => {
+    const id = addScheduleToSet('materials', 'Material takeoff');
+    const sheet = useProjectStore.getState().sheets.find((s) => s.id === id);
+    assert.ok(sheet);
+    assert.equal(sheetScaleReason(sheet, useProjectStore.getState().views, HOUSE), null);
   });
 });

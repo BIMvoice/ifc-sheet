@@ -81,6 +81,8 @@ const settings: DraftSettings = { filletRadius: 0, offsetDistance: null, textHei
 let command: DraftCommand | null = null;
 let pending: DraftCommandDef | null = null;
 export const draftSettings = (): Readonly<DraftSettings> => scaledSettings;
+/** The settings as set, before the view's units scale them (what `patchDraftSettings` writes). */
+export const baseDraftSettings = (): Readonly<DraftSettings> => settings;
 
 /** The styles new annotations take; the text height setting follows the current text style (paper mm → metres at 1:100). */
 export function setCurrentStyles(patch: { textStyle?: string; dimStyle?: string; textHeightMm?: number }): void {

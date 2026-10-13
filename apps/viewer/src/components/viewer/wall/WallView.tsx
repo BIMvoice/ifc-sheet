@@ -20,6 +20,8 @@ import { useViewerStore } from '@/store';
 import { SteppedSheet } from './SteppedSheet';
 import { WallGrid } from './WallGrid';
 import { WallIntro } from './WallIntro';
+import { ProjectDrawer } from './ProjectDrawer';
+import { setDrawer, stepInto, useWallNav } from './wall-nav';
 
 export function WallView() {
   const { t } = useTranslation();
@@ -33,7 +35,7 @@ export function WallView() {
   // Measured on the building, not on the site around it; the whole model when it has no storeys.
   const extent = useMemo(() => buildingExtent(levels, meshes) ?? mergedSectionBounds(models, legacy), [levels, meshes, models, legacy]);
   const [intro, setIntro] = useState(false);
-  const [stepped, setStepped] = useState<string | null>(null);
+  const { stepped, focus, visit, drawer } = useWallNav();
 
   // A model on a project with no sheets: lay the set out as soon as the geometry is in.
   useEffect(() => {
@@ -42,13 +44,13 @@ export function WallView() {
 
   // The proposals read the lowest plan's rooms; they change only with the model or the plans.
   const proposals = useMemo(() => sectionProposals(meshes, extent), [meshes, extent, views]);
-  const back = useCallback(() => setStepped(null), []);
+  const back = useCallback(() => stepInto(null), []);
   const hang = useCallback(() => setIntro(false), []);
   const steppedSheet = sheets.find((s) => s.id === stepped) ?? null;
   const modelName = [...models.values()][0]?.name ?? '';
 
   return (
-    <div className="h-full w-full overflow-hidden bg-[radial-gradient(ellipse_at_top,#0c2a52,#061a36_60%)] text-sky-50">
+    <div className="relative h-full w-full overflow-hidden bg-[radial-gradient(ellipse_at_top,#0c2a52,#061a36_60%)] text-sky-50">
       {models.size === 0 && !legacy ? (
         <div className="flex h-full items-center justify-center text-lg text-sky-200/80">{t('wall.empty')}</div>
       ) : sheets.length === 0 ? (
@@ -56,10 +58,11 @@ export function WallView() {
       ) : intro && extent ? (
         <WallIntro modelName={modelName} extent={extent} onHang={hang} />
       ) : steppedSheet ? (
-        <SteppedSheet sheet={steppedSheet} extent={extent} proposals={proposals} onBack={back} onStep={setStepped} />
+        <SteppedSheet key={`${steppedSheet.id}:${visit}`} sheet={steppedSheet} extent={extent} proposals={proposals} initialFocus={focus} onBack={back} onStep={(id) => stepInto(id)} />
       ) : (
-        <WallGrid extent={extent} onStep={setStepped} />
+        <WallGrid extent={extent} onStep={(id) => stepInto(id)} />
       )}
+      {drawer ? <ProjectDrawer extent={extent} onClose={() => setDrawer(false)} /> : null}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { projectDocument, useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { useFileCommands } from '../toolbar/useFileCommands';
 import { WallView } from '../wall/WallView';
+import { setDrawer, useWallNav } from '../wall/wall-nav';
 
 const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
 
@@ -25,12 +26,14 @@ export function IfcSheetShell() {
   const sheets = useProjectStore((s) => s.sheets);
   const dirty = useProjectStore((s) => s.dirty);
   const modelName = useViewerStore((s) => [...s.models.values()][0]?.name ?? null);
+  const drawer = useWallNav((s) => s.drawer);
   const views = new Set(sheets.flatMap((s) => (s.viewports ?? []).map((v) => v.viewId))).size;
 
   return (
     <div data-ifcsheet-shell className="fixed inset-0 z-50 flex flex-col bg-[#061a36] text-sky-50">
       {files.fileInputs}
       <header className="flex h-14 shrink-0 items-center gap-4 border-b border-sky-300/10 px-6">
+        <button type="button" aria-pressed={drawer} className={quiet} onClick={() => setDrawer(!drawer)}>{t('wall.shell.project')}</button>
         <img src="/logo.png" alt="" className="size-7" />
         <span className="text-lg font-semibold text-white">IfcSheet</span>
         <span className="h-5 w-px bg-sky-300/20" />

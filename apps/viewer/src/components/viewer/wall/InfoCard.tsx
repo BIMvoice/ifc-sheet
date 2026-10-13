@@ -13,7 +13,8 @@ import { useTranslation } from '@/i18n';
 import type { ProjectView } from '@/project/types';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
 import { CutHeightControl, DepthControl } from './ViewControls';
-import { WALL_TOOLS } from './wall-actions';
+import { HatchSettings } from './HatchSettings';
+import { DRAW_TOOLS, WALL_TOOLS } from './wall-actions';
 
 function Card({ eyebrow, title, children }: { eyebrow: string; title: string; children: ReactNode }) {
   return (
@@ -25,9 +26,20 @@ function Card({ eyebrow, title, children }: { eyebrow: string; title: string; ch
   );
 }
 
-export function InfoCard({ tool, view }: { tool: string | null; view: ProjectView | null }) {
+/** `drawingOn`: where a draw tool draws, the drawing's name, or null for the sheet's paper. */
+export function InfoCard({ tool, view, drawingOn }: { tool: string | null; view: ProjectView | null; drawingOn?: string | null }) {
   const { t } = useTranslation();
   const chosen = WALL_TOOLS.find((x) => x.command === tool);
+  const draw = DRAW_TOOLS.find((x) => x.command === tool);
+  if (draw) {
+    return (
+      <Card eyebrow={drawingOn ? t('wall.draw.onDrawing', { name: drawingOn }) : t('wall.draw.onSheet')} title={t(draw.labelKey)}>
+        <p className="m-0 text-lg leading-relaxed">{t(draw.bodyKey)}</p>
+        {draw.command === 'hatch' ? <HatchSettings /> : null}
+        <p className="mb-0 mt-4 text-sm text-cyan-300">{t('wall.drawHint')}</p>
+      </Card>
+    );
+  }
   if (chosen) {
     return (
       <Card eyebrow={t(chosen.labelKey)} title={t(chosen.titleKey)}>

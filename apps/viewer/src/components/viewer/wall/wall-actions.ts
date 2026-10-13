@@ -62,6 +62,24 @@ export const WALL_TOOLS: readonly WallTool[] = [
   { command: 'symbol', icon: 'symbol', labelKey: 'wall.tool.symbol', titleKey: 'wall.tool.symbol.title', bodyKey: 'wall.tool.symbol.body' },
 ];
 
+export interface DrawTool {
+  command: string;
+  labelKey: TranslationKey;
+  bodyKey: TranslationKey;
+}
+
+/**
+ * Plain drawing, on the sheet's paper (or on the drawing in front): lines,
+ * polylines, circles, text, and a hatched zone inside a closed polyline.
+ */
+export const DRAW_TOOLS: readonly DrawTool[] = [
+  { command: 'line', labelKey: 'wall.draw.line', bodyKey: 'wall.draw.line.body' },
+  { command: 'polyline', labelKey: 'wall.draw.polyline', bodyKey: 'wall.draw.polyline.body' },
+  { command: 'circle', labelKey: 'wall.draw.circle', bodyKey: 'wall.draw.circle.body' },
+  { command: 'text', labelKey: 'wall.draw.text', bodyKey: 'wall.draw.text.body' },
+  { command: 'hatch', labelKey: 'wall.draw.hatch', bodyKey: 'wall.draw.hatch.body' },
+];
+
 /**
  * Start `command` on `viewId` as soon as its drafting view is attached (it
  * mounts in the sheet after this call). Returns the cancel of the wait.

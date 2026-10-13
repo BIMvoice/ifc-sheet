@@ -8,7 +8,9 @@
  */
 
 import { forwardRef, useMemo } from 'react';
+import { draftsOfView } from '@/drafting/draft-store';
 import { parsePat } from '@/drafting/hatch/pattern';
+import type { DraftEntity } from '@/drafting/types';
 import { useProjectStore } from '@/project/project-store';
 import { paperOf } from '@/project/sheets';
 import type { ProjectSheet } from '@/project/types';
@@ -24,7 +26,12 @@ interface WallSheetProps {
   sheetContent?: SheetContent;
 }
 
+const NO_DRAFTS: DraftEntity[] = [];
+
 export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function WallSheet({ sheet, width, selectedViewportId = null, sheetContent }, ref) {
+  // What is drawn on the paper itself hangs with it.
+  const drafts = useProjectStore((s) => s.drafts);
+  const sheetDrafts = useMemo(() => (drafts.some((d) => d.viewId === sheet.id) ? draftsOfView(sheet.id, drafts) : NO_DRAFTS), [drafts, sheet.id]);
   const layers = useProjectStore((s) => s.draftLayers);
   const projectName = useProjectStore((s) => s.name);
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
@@ -44,6 +51,7 @@ export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function Wall
         extraPatterns={extraPatterns}
         selectedViewportId={selectedViewportId}
         pxPerMm={pxPerMm}
+        sheetDrafts={sheetDrafts}
       />
     </div>
   );

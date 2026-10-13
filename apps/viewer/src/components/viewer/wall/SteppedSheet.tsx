@@ -30,7 +30,8 @@ import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
 import { WallSheet } from './WallSheet';
 import { ScaleChips } from './WallGrid';
-import { nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
+import { SheetDrawingSurface } from './SheetDrawingSurface';
+import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 
 /** The sheet's way out: printed or saved, at true paper size. */
 const issue = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
@@ -40,11 +41,13 @@ interface SteppedSheetProps {
   extent: ModelExtent | null;
   proposals: readonly SectionProposal[];
   onBack: () => void;
+  /** The drawing to bring forward on arrival (from the project drawer). */
+  initialFocus?: string | null;
   /** Step into another sheet (a drawing just added landed there). */
   onStep: (sheetId: string) => void;
 }
 
-export function SteppedSheet({ sheet, extent, proposals, onBack, onStep }: SteppedSheetProps) {
+export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, onBack, onStep }: SteppedSheetProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const sheetContent = useSheetContent(sheet);
@@ -54,8 +57,10 @@ export function SteppedSheet({ sheet, extent, proposals, onBack, onStep }: Stepp
   const viewports = useMemo(() => sheet.viewports ?? [], [sheet.viewports]);
   const [chosen, setChosen] = useState<string | null>(null);
   const [tool, setTool] = useState<string | null>(null);
-  const [focusId, setFocusId] = useState<string | null>(null);
+  const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
+  /** Drawing on the sheet's own paper (lines, text, hatched zones). */
+  const [paper, setPaper] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? viewports[0] ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
@@ -106,24 +111,35 @@ export function SteppedSheet({ sheet, extent, proposals, onBack, onStep }: Stepp
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (focusId && (runningCommand() || useDraftingSession.getState().selection.size > 0)) return;
+      if ((focusId || paper) && (runningCommand() || useDraftingSession.getState().selection.size > 0)) return;
       if (adding) setAdding(false);
       else if (focusId) {
         setFocusId(null);
+        setTool(null);
+      } else if (paper) {
+        setPaper(false);
         setTool(null);
       } else onBack();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onBack, focusId, adding]);
+  }, [onBack, focusId, paper, adding]);
 
   const startTool = (command: string): void => {
-    // A section line is drawn on a plan: the chosen one, else the lowest.
-    const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : view;
-    if (!target || target.kind === '3d') return;
     cancelStart.current();
     ran.current = null;
     setAdding(false);
+    // Plain drawing goes on the drawing in front, else on the sheet's paper.
+    if (DRAW_TOOLS.some((d) => d.command === command)) {
+      setTool(command);
+      if (!focusView) setPaper(true);
+      cancelStart.current = startWhenAttached(focusView?.id ?? sheet.id, command);
+      return;
+    }
+    setPaper(false);
+    // A section line is drawn on a plan: the chosen one, else the lowest.
+    const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : view;
+    if (!target || target.kind === '3d') return;
     setTool(command);
     setFocusId(target.id);
     cancelStart.current = startWhenAttached(target.id, command);
@@ -182,6 +198,10 @@ export function SteppedSheet({ sheet, extent, proposals, onBack, onStep }: Stepp
             <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">
               <DraftingView key={focusView.id} view={focusView} bare />
             </div>
+          ) : paper ? (
+            <div className="absolute inset-0">
+              <SheetDrawingSurface sheet={sheet} sheetContent={sheetContent} />
+            </div>
           ) : (
             <div ref={host} className="flex h-full items-center justify-start">
               <button
@@ -204,7 +224,7 @@ export function SteppedSheet({ sheet, extent, proposals, onBack, onStep }: Stepp
             </div>
           )}
           <div className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
-            <InfoCard tool={tool} view={focusView ? null : view} />
+            <InfoCard tool={tool} view={focusView || paper ? null : view} drawingOn={focusView?.name ?? null} />
           </div>
           {adding ? (
             <div className="absolute inset-x-3 bottom-3 flex justify-center">
@@ -221,12 +241,12 @@ export function SteppedSheet({ sheet, extent, proposals, onBack, onStep }: Stepp
           ) : null}
         </main>
       </div>
-      {!focusView && group === 'sections' ? (
+      {!focusView && !paper && group === 'sections' ? (
         <div className="flex shrink-0 justify-center px-6 pb-3">
           <SectionTray sheet={sheet} slotId={slot?.id ?? null} proposals={proposals} />
         </div>
       ) : null}
-      {!focusView ? (
+      {!focusView && !paper ? (
         <footer className="flex shrink-0 items-baseline gap-3 border-t border-zinc-200 bg-white px-6 py-3 text-sm text-zinc-700">
           <strong className="text-zinc-900">{t('wall.sheetHint.title')}</strong>
           <span>{t('wall.sheetHint.body')}</span>

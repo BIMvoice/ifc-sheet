@@ -32,7 +32,7 @@ export interface ModelExtent {
   max: { x: number; y: number; z: number };
 }
 
-export type SetGroup = 'plans' | 'elevations' | 'sections';
+export type SetGroup = 'plans' | 'elevations' | 'sections' | 'schedules';
 
 /** Width and height a view's drawing takes, metres, estimated from the model's extent. */
 export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number; h: number } {
@@ -134,10 +134,18 @@ export function buildDrawingSet({ views, extent, titleBlock, now = Date.now() }:
   return sheets;
 }
 
-/** Which group a sheet of the set belongs to, by its number series (A-1xx plans, A-2xx elevations, A-3xx sections). */
+/** Which group a sheet of the set belongs to, by its number series (A-1xx plans, A-2xx elevations, A-3xx sections, A-6xx schedules). */
 export function sheetGroup(sheet: Pick<ProjectSheet, 'number'>): SetGroup | null {
   const m = /^A-(\d)\d\d$/.exec(sheet.number);
-  return m ? ({ '1': 'plans', '2': 'elevations', '3': 'sections' } as Record<string, SetGroup>)[m[1]] ?? null : null;
+  return m ? ({ '1': 'plans', '2': 'elevations', '3': 'sections', '6': 'schedules' } as Record<string, SetGroup>)[m[1]] ?? null : null;
+}
+
+/** The next free number of a group's series: A-101…, A-201…, A-301…, A-601…. */
+export function nextInSeries(sheets: readonly Pick<ProjectSheet, 'number'>[], group: SetGroup): string {
+  const taken = new Set(sheets.map((s) => s.number));
+  let n = SERIES_START[group];
+  while (taken.has(`A-${n}`)) n++;
+  return `A-${n}`;
 }
 
 /** The group a view's sheet belongs to, and its number series' first number. */
@@ -148,8 +156,8 @@ export function groupOfView(view: ProjectView): SetGroup | null {
   return null;
 }
 
-const SERIES_START: Record<SetGroup, number> = { plans: 101, elevations: 201, sections: 301 };
-const GROUP_NAMES: Record<SetGroup, string> = { plans: 'Floor plans', elevations: 'Elevations', sections: 'Sections' };
+const SERIES_START: Record<SetGroup, number> = { plans: 101, elevations: 201, sections: 301, schedules: 601 };
+const GROUP_NAMES: Record<SetGroup, string> = { plans: 'Floor plans', elevations: 'Elevations', sections: 'Sections', schedules: 'Schedules' };
 /** Drawings a set sheet holds before a new one is started. */
 export const PER_SHEET = 2;
 
@@ -173,11 +181,8 @@ export function withViewHung(sheets: readonly ProjectSheet[], views: readonly Pr
     const members = [...(last.viewports ?? []).flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []), view];
     return { sheets: sheets.map((s) => (s.id === last.id ? layOut(s, members) : s)), sheetId: last.id };
   }
-  const taken = new Set(sheets.map((s) => s.number));
-  let n = SERIES_START[group];
-  while (taken.has(`A-${n}`)) n++;
   const sheet = layOut({
-    id: freshProjectId('sheet'), number: `A-${n}`, name: GROUP_NAMES[group], createdAt: now, paper: SET_PAPER, orientation: 'landscape', titleBlock: { ...titleBlock },
+    id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: GROUP_NAMES[group], createdAt: now, paper: SET_PAPER, orientation: 'landscape', titleBlock: { ...titleBlock },
   }, [view]);
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
@@ -193,5 +198,7 @@ export function sheetScaleReason(sheet: ProjectSheet, views: readonly ProjectVie
   if (scales.size !== 1) return null;
   const [scale] = scales;
   const members = vps.flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []);
+  // A schedule or legend sets its own size: there is no scale to explain.
+  if (members.length !== vps.length) return null;
   return { scale, fits: fittingScale(members.map((v) => viewExtent(v, extent)), drawingArea(sheet.paper ?? SET_PAPER)) === scale };
 }
