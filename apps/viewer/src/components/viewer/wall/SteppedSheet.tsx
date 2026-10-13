@@ -21,6 +21,8 @@ import type { SectionProposal } from '@/project/section-proposals';
 import { paperOf } from '@/project/sheets';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { DraftingView } from '../drafting/DraftingView';
+import { exportSheetDxf } from '../sheets/sheet-dxf';
+import { printSheet } from '../sheets/sheet-export';
 import { useSheetContent } from '../sheets/useSheetContent';
 import { AddDrawing } from './AddDrawing';
 import { InfoCard } from './InfoCard';
@@ -30,6 +32,9 @@ import { WallSheet } from './WallSheet';
 import { ScaleChips } from './WallGrid';
 import { nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 
+/** The sheet's way out: printed or saved, at true paper size. */
+const issue = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
+
 interface SteppedSheetProps {
   sheet: ProjectSheet;
   extent: ModelExtent | null;
@@ -37,10 +42,9 @@ interface SteppedSheetProps {
   onBack: () => void;
   /** Step into another sheet (a drawing just added landed there). */
   onStep: (sheetId: string) => void;
-  onMore: () => void;
 }
 
-export function SteppedSheet({ sheet, extent, proposals, onBack, onStep, onMore }: SteppedSheetProps) {
+export function SteppedSheet({ sheet, extent, proposals, onBack, onStep }: SteppedSheetProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const sheetContent = useSheetContent(sheet);
@@ -164,9 +168,15 @@ export function SteppedSheet({ sheet, extent, proposals, onBack, onStep, onMore 
         <kbd className="rounded border border-sky-300/40 px-1.5 text-xs text-sky-200/80">Esc</kbd>
         <span className="flex-1" />
         {group === 'plans' && !focusView ? <ScaleChips group="plans" extent={extent} /> : null}
+        {!focusView ? (
+          <>
+            <button type="button" className={issue} onClick={() => paperRef.current && printSheet(paperRef.current, sheet)}>{t('wall.export.pdf')}</button>
+            <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
+          </>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 gap-4 px-6 pb-4">
-        <ToolRail active={tool} onTool={startTool} adding={adding} onAdd={() => setAdding((a) => !a)} onMore={onMore} />
+        <ToolRail active={tool} onTool={startTool} adding={adding} onAdd={() => setAdding((a) => !a)} />
         <main className="relative min-w-0 flex-1">
           {focusView ? (
             <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">

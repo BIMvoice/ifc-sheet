@@ -8,7 +8,6 @@ import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useTranslation } from '@/i18n';
 import { styleInterpolatedValues } from '@/i18n/richInterpolate';
-import { useShellMode } from '@/project/shell-mode';
 import { IfcSheetShell } from './ifcsheet/IfcSheetShell';
 import { MobileToolbar } from './MobileToolbar';
 import { RibbonToolbar } from './ribbon/RibbonToolbar';
@@ -46,7 +45,7 @@ import { LEFT_PANEL_DEFAULT_SIZE } from '@/store/layoutReset';
 import { useOverlayCompositor } from './schedule/useOverlayCompositor';
 import { CommandPalette } from './CommandPalette';
 import { SearchModal } from './SearchModal';
-import { can } from '@/edition';
+import { can, isDocsEdition } from '@/edition';
 import { TourHost } from '@/components/tours/TourHost';
 import { SidebarDock } from './sidebar/SidebarDock';
 import { FloatingPanelHost } from './dock/FloatingPanelHost';
@@ -72,7 +71,6 @@ import { registerKeyboardCommand } from '@/lib/commands/dispatcher';
 const SAFE_MODE_QUERY_FLAG = '?safe=0';
 
 export function ViewerLayout() {
-  const sheetShell = useShellMode((s) => s.mode === 'sheet');
   const { t } = useTranslation();
   // Initialize keyboard shortcuts
   useKeyboardShortcuts();
@@ -450,9 +448,10 @@ export function ViewerLayout() {
             child documents; live-synced via the shared store. */}
         <PanelWindowHost />
 
-        {/* IfcSheet's own face over the engine's interface, which stays mounted underneath (#20).
+        {/* IfcSheet's own face over the engine's interface, which stays mounted underneath for its
+            drawing runtime (#20).
             Last in the tree so it stacks over the ribbon; dialogs portal after it and stay on top. */}
-        {sheetShell && !isMobile ? <IfcSheetShell /> : null}
+        {isDocsEdition() && !isMobile ? <IfcSheetShell /> : null}
       </div>
     </TooltipProvider>
   );

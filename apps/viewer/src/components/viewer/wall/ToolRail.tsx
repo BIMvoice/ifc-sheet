@@ -4,7 +4,7 @@
 
 /**
  * The rail beside a stepped-into sheet: six large tools that only add
- * information, "Add a drawing", and "More" for the engine's full interface.
+ * information, and "Add a drawing".
  */
 
 import { useTranslation } from '@/i18n';
@@ -17,10 +17,9 @@ interface ToolRailProps {
   onTool: (command: string) => void;
   adding: boolean;
   onAdd: () => void;
-  onMore: () => void;
 }
 
-export function ToolRail({ active, onTool, adding, onAdd, onMore }: ToolRailProps) {
+export function ToolRail({ active, onTool, adding, onAdd }: ToolRailProps) {
   const { t } = useTranslation();
   return (
     <nav aria-label={t('wall.tools.rail')} className="flex w-[132px] shrink-0 flex-col gap-2 overflow-y-auto py-2">
@@ -53,10 +52,6 @@ export function ToolRail({ active, onTool, adding, onAdd, onMore }: ToolRailProp
       >
         <ToolIcon name="plus" size={22} accent="currentColor" />
         {t('wall.addDrawing')}
-      </button>
-      <button type="button" onClick={onMore} title={t('wall.moreTitle')} className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-sky-300/40 px-3 py-2 text-sm text-sky-200 hover:border-sky-300">
-        <ToolIcon name="dots" size={18} accent="currentColor" />
-        {t('wall.more')}
       </button>
     </nav>
   );
