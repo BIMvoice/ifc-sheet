@@ -16,8 +16,9 @@ import { capturePointer } from '@/lib/pointer-capture';
 import { referencesIn, type ReferenceSet } from '@/drafting/references';
 import type { DraftShape, Pt, SnapHit, SnapMode } from '@/drafting/types';
 import { gripAt, moveGrip, type Grip } from '@/drafting/grips';
-import { editDrafts } from '@/drafting/draft-store';
-import { useProjectStore } from '@/project/project-store';
+import { editDrafts, runAsOneUndoStep } from '@/drafting/draft-store';
+import { depthFromPoint } from '@/drafting/section-depth';
+import { updateProjectView, useProjectStore } from '@/project/project-store';
 
 const SNAP_PX = 10;
 const PICK_PX = 6;
@@ -139,6 +140,13 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     if (!d || d.kind === 'pan') return;
     if (d.kind === 'grip' && d.grip) {
       const target = state.gripDrag;
+      if (d.grip.section) {
+        // The depth handle sets the section view's depth: one undo step per drag.
+        const depth = target ? depthFromPoint(d.grip.section, target.at) : null;
+        if (depth !== null) runAsOneUndoStep(() => updateProjectView(d.grip!.section!.viewId, { viewDepth: depth }));
+        setState((prev) => ({ ...prev, gripDrag: null }));
+        return;
+      }
       const entity = useProjectStore.getState().drafts.find((x) => x.id === d.grip?.id);
       if (target && entity) editDrafts({ update: new Map([[entity.id, moveGrip(entity.shape, d.grip.key, target.at, resolveLevelRef)]]) });
       setState((prev) => ({ ...prev, gripDrag: null }));

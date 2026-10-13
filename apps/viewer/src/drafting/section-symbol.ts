@@ -18,18 +18,20 @@ const STEM = 4;
 const BARB = 0.8;
 const BARB_HALF_ANGLE = Math.PI / 7;
 
-export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height: number): (DraftShape | AnnotationShape)[] {
+/** The unit normal of the cut line a-b on the side `side` is on (the way the section looks); `null` for a line of no length. */
+export function sectionNormal(a: Pt, b: Pt, side: Pt): Pt | null {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const len = Math.hypot(dx, dy);
-  if (len < 1e-9) return [];
-  // The unit normal on the picked side of the line.
-  let nx = -dy / len;
-  let ny = dx / len;
-  if ((side.x - a.x) * nx + (side.y - a.y) * ny < 0) {
-    nx = -nx;
-    ny = -ny;
-  }
+  if (len < 1e-9) return null;
+  const n = { x: -dy / len, y: dx / len };
+  return (side.x - a.x) * n.x + (side.y - a.y) * n.y < 0 ? { x: -n.x, y: -n.y } : n;
+}
+
+export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height: number): (DraftShape | AnnotationShape)[] {
+  const normal = sectionNormal(a, b, side);
+  if (!normal) return [];
+  const { x: nx, y: ny } = normal;
   const stem = STEM * height;
   const tip = (p: Pt): Pt => ({ x: p.x + nx * stem, y: p.y + ny * stem });
   // The name sits clear of the arrowhead, its box centred on the stem's line: a text's anchor is a corner of its box.

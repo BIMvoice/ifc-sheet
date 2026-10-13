@@ -24,6 +24,8 @@ export interface Grip {
   id: string;
   key: string;
   at: Pt;
+  /** The depth handle of a section's band: the section it sets the depth of (see `section-depth`). */
+  section?: { viewId: string; a: Pt; b: Pt; side: Pt };
 }
 
 export function gripsOf(id: string, shape: EntityShape): Grip[] {
