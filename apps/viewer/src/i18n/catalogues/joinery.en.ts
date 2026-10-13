@@ -162,4 +162,12 @@ export const joineryEn = {
   'joinerySymbol.mapSelection': 'Use for the selected elements',
   'joinerySymbol.nothingSelected': 'Select one or more {kind}s in the model first.',
   'joinerySymbol.mapped': '{count} element(s) now drawn as {name}.',
+  'takeoff.newName': 'Material takeoff',
+  'takeoff.material': 'Material',
+  'takeoff.elements': 'Elements',
+  'takeoff.volume': 'Volume m³',
+  'takeoff.area': 'Area m²',
+  'takeoff.usedIn': 'Used in',
+  'takeoff.total': 'Total',
+  'takeoff.empty': 'No element of the loaded models has a material.',
 } as const satisfies Record<string, TranslationValue>;

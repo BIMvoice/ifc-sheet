@@ -164,8 +164,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** Which elements it lists. */
-  kind: 'door' | 'window' | 'all';
+  /** What it lists: doors and windows (joinery), or the materials with their quantities (a takeoff). */
+  kind: 'door' | 'window' | 'all' | 'materials';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
