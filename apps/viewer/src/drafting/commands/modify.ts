@@ -7,12 +7,12 @@
  * (Pick-driven edits — OFFSET, TRIM, EXTEND, FILLET — are in `edit.ts`.)
  */
 
-import { editDrafts, newDraft } from '../draft-store';
+import { editDrafts, newDraft, runAsOneUndoStep } from '../draft-store';
 import { entitySkeleton, mirrorEntity, rotateEntity, translateEntity } from '../annotation';
 import { sub } from '../vec';
-import { useProjectStore } from '@/project/project-store';
-import { isDetailMark } from '../detail-mark';
-import { withSectionParts, withoutSectionLink } from '../section-symbol';
+import { removeProjectItem, useProjectStore } from '@/project/project-store';
+import { detailLink, isDetailMark } from '../detail-mark';
+import { isLockedToView, withSectionParts, withoutSectionLink } from '../section-symbol';
 import type { DraftEntity, DraftShape, Pt } from '../types';
 import type { DraftCommandDef, DraftContext } from './types';
 
@@ -51,7 +51,12 @@ export const eraseCommand: DraftCommandDef = {
         // The parts of a section symbol go together.
         const ids = withSectionParts(new Set(selected(ctx).map((e) => e.id)), ctx.entities());
         if (ids.size) {
-          editDrafts({ remove: ids });
+          // Erasing a detail's mark removes the detail, as removing the detail removes its mark.
+          const details = new Set(ctx.entities().flatMap((e) => (ids.has(e.id) ? [detailLink(e)] : [])).filter((d): d is string => d !== null));
+          runAsOneUndoStep(() => {
+            editDrafts({ remove: ids });
+            for (const id of details) removeProjectItem(id);
+          });
           ctx.say('drafting.msg.erased', { count: ids.size });
         }
         ctx.setSelection(new Set());
@@ -150,8 +155,10 @@ export const mirrorCommand: DraftCommandDef = {
           return 'continue';
         }
         const mirrored = items.map((e) => newDraft(ctx.viewId, e.layerId, mirrorEntity(e.shape, first as Pt, p), withoutSectionLink(e.params)));
-        // Erasing the source takes a whole section symbol with it, as ERASE does.
-        editDrafts({ add: mirrored, remove: eraseSource ? withSectionParts(new Set(items.map((e) => e.id)), ctx.entities()) : undefined });
+        // Erasing the source cannot take a section symbol (or a detail's mark) with it: that would be moving it.
+        const sources = items.filter((e) => !isLockedToView(e, useProjectStore.getState().views));
+        if (eraseSource && sources.length < items.length) ctx.say('drafting.msg.sectionSymbolLocked');
+        editDrafts({ add: mirrored, remove: eraseSource ? new Set(sources.map((e) => e.id)) : undefined });
         return 'done';
       },
       onKeyword(word) {

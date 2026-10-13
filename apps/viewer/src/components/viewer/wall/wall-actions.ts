@@ -9,7 +9,11 @@
  */
 
 import { updateProjectView, useProjectStore } from '@/project/project-store';
+import type { ProjectView } from '@/project/types';
 import { startDraftCommand, useDraftingSession } from '@/drafting/session';
+import { automaticViewDepth } from '@/lib/section/automatic-depth';
+import { mergedSectionBounds } from '@/lib/section/section-distance';
+import { useViewerStore } from '@/store';
 import type { TranslationKey } from '@/i18n';
 import type { ToolIconName } from '../ifcsheet/ToolIcon';
 
@@ -36,11 +40,21 @@ export function setCutHeight(viewId: string, metres: number): void {
   if (next !== view.cutHeight) updateProjectView(viewId, { cutHeight: next });
 }
 
-/** A section's or elevation's view depth moved by `steps`; an automatic depth starts from a fixed one. */
+/**
+ * The depth a view with none of its own really looks: the one the drawing and
+ * the section's depth band on its plan both start from, so the wheel and the
+ * band move one stored depth from the same place.
+ */
+function automaticDepth(view: Extract<ProjectView, { kind: 'section' | 'elevation' }>): number {
+  const viewer = useViewerStore.getState();
+  return (view.kind === 'section' ? automaticViewDepth(view.plane, mergedSectionBounds(viewer.models, viewer.geometryResult)) : null) ?? DEPTH_RANGE.start;
+}
+
+/** A section's or elevation's view depth moved by `steps`; an automatic depth starts from what it really looks. */
 export function nudgeViewDepth(viewId: string, steps: number): void {
   const view = useProjectStore.getState().views.find((v) => v.id === viewId);
   if (view?.kind !== 'section' && view?.kind !== 'elevation') return;
-  const current = view.viewDepth ?? DEPTH_RANGE.start;
+  const current = view.viewDepth ?? automaticDepth(view);
   updateProjectView(viewId, { viewDepth: Number(clampStep(current + steps * DEPTH_RANGE.step, DEPTH_RANGE).toFixed(2)) });
 }
 

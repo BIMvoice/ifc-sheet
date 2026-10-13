@@ -219,7 +219,7 @@ export const draftingEn = {
   'drafting.msg.sectionOnPlan': 'Draw a section line on a floor plan.',
   'drafting.msg.sectionFailed': 'The section line needs two different points.',
   'drafting.msg.sectionCreated': 'Section created — it is in the Project Navigator under Sections.',
-  'drafting.msg.sectionSymbolLocked': 'A section symbol is moved, turned or stretched as a whole, and its name follows the view; it is not trimmed or offset part by part. A detail mark cannot be moved or turned: it has grips for its area. Erase either to remove it.',
+  'drafting.msg.sectionSymbolLocked': 'A section symbol is moved, turned or stretched as a whole and is not trimmed, offset or erased by mirroring; a detail mark cannot be moved or turned, it has grips for its area. Erase either to remove it.',
   'drafting.cmd.detail': 'DETAIL',
   'drafting.tool.detail': 'Detail',
   'drafting.prompt.detailFirst': 'Specify the first corner of the area to show in detail:',

@@ -11,7 +11,7 @@ import { addViewport } from '@/project/sheets';
 import { detailRect, detailScale, nextDetailNumber } from '@/project/detail';
 import { clearDraftHistory, undoDrafts } from './draft-store';
 import { addDetail, setDetailRect } from './commands/detail';
-import { eraseCommand } from './commands/modify';
+import { eraseCommand, moveCommand, rotateCommand } from './commands/modify';
 import { detailGrips, markParts, moveDetailGrip, selectedDetailGrips } from './detail-mark';
 import { isLockedToView } from './section-symbol';
 import type { DraftContext } from './commands/types';
@@ -115,6 +115,20 @@ describe('a detail of an area', () => {
     undoDrafts();
     assert.equal(details().length, 1);
     assert.equal(markOf(id).length, 9);
+  });
+
+  it('stays put under MOVE and ROTATE, and says why: it has grips for its area instead', () => {
+    const id = addDetail(planView().id, A, B, cur) as string;
+    const before = JSON.stringify(markOf(id).map((d) => d.shape));
+    for (const def of [moveCommand, rotateCommand]) {
+      const said: string[] = [];
+      const ctx = { entities: () => state().drafts, selection: () => new Set([markOf(id)[0].id]), setSelection: () => undefined, say: (key: string) => said.push(key), viewId: planView().id, orientation: 1 } as unknown as DraftContext;
+      const command = def.create(ctx);
+      command.onPoint?.({ x: 0, y: 0 });
+      command.onPoint?.({ x: 3, y: 3 });
+      assert.deepEqual(said, ['drafting.msg.sectionSymbolLocked']);
+    }
+    assert.equal(JSON.stringify(markOf(id).map((d) => d.shape)), before);
   });
 
   it('changes its area from the mark\'s grips: the crop and the mark move together, in one undo step', () => {
