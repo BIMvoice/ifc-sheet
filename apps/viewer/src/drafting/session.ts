@@ -22,8 +22,9 @@ import { checkLines } from '@/check/say';
 import { tryIssueCommand } from '@/issue/run';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
 import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
-import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
-import { drawingToUserPoint, userToDrawingPoint, type SectionAxisName } from './frame';
+import { applyTypedLine } from './command-line';
+import { applyOrtho } from './input';
+import type { SectionAxisName } from './frame';
 import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
@@ -355,38 +356,9 @@ export function submitCommandLine(text: string, cursor: Pt | null): void {
   }
   say({ key: 'drafting.msg.typed', typed: trimmed, params: { text: trimmed } });
   if (!command) return;
-  if (command.wantsText?.() && command.onText) {
-    finish(command.onText(text.trim()));
-    return;
-  }
-  const word = trimmed.toUpperCase();
-  if (/^[A-Z][A-Z0-9_.-]*$/.test(word) && command.onKeyword) {
-    const result = command.onKeyword(word);
-    if (result) {
-      finish(result);
-      return;
-    }
-  }
-  const { axis } = get();
-  const base = command.basePoint();
-  const parsed = parseCoordinateInput(trimmed, { last: base ? drawingToUserPoint(base, axis, userOrigin) : null });
-  if (!parsed) {
-    say({ key: 'drafting.msg.invalidInput' });
-    return;
-  }
-  if (parsed.kind === 'point') {
-    if (command.onPoint) finish(command.onPoint(userToDrawingPoint(parsed.pt, axis, userOrigin)));
-    return;
-  }
-  if (command.wantsValue?.() && command.onValue) {
-    finish(command.onValue(parsed.d));
-    return;
-  }
-  if (base && cursor && command.onPoint) {
-    finish(command.onPoint(pointAlong(base, constrainPoint(cursor), parsed.d)));
-    return;
-  }
-  say({ key: 'drafting.msg.invalidInput' });
+  const result = applyTypedLine(command, trimmed, cursor, { axis: get().axis, origin: userOrigin, constrain: constrainPoint });
+  if (result === 'invalid') say({ key: 'drafting.msg.invalidInput' });
+  else if (result) finish(result);
 }
 
 export function toggleOrtho(): void {
