@@ -9,8 +9,7 @@
  */
 
 import { updateProjectView, useProjectStore } from '@/project/project-store';
-import { startDraftCommand, useDraftingSession, type HistoryLine } from '@/drafting/session';
-import { draftCommandById } from '@/drafting/commands/registry';
+import { startDraftCommand, useDraftingSession } from '@/drafting/session';
 import type { ProjectView } from '@/project/types';
 import { automaticViewDepth } from '@/lib/section/automatic-depth';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
@@ -112,32 +111,19 @@ export const WALL_ALL: Readonly<Record<string, WallAll>> = {
   level: { command: 'levelall', labelKey: 'wall.tool.level.all', kinds: ['section', 'elevation'] },
 };
 
-/** What a command said while it ran, as the catalogue keys it said them with (the Wall has no command line to show them in). */
-export function sayingOf(command: string): HistoryLine[] {
-  const label = draftCommandById(command)?.labelKey;
-  const { history } = useDraftingSession.getState();
-  let from = history.length;
-  while (from > 0 && history[from - 1].key !== label) from--;
-  return history.slice(from);
-}
-
 /**
  * Start `command` on `viewId` as soon as its drafting view is attached (it
  * mounts in the sheet after this call). Returns the cancel of the wait.
  */
-export function startWhenAttached(viewId: string, command: string, after?: () => void): () => void {
-  const start = (): void => {
-    startDraftCommand(command);
-    after?.();
-  };
+export function startWhenAttached(viewId: string, command: string): () => void {
   if (useDraftingSession.getState().viewId === viewId) {
-    start();
+    startDraftCommand(command);
     return () => {};
   }
   const unsubscribe = useDraftingSession.subscribe((s) => {
     if (s.viewId !== viewId) return;
     unsubscribe();
-    start();
+    startDraftCommand(command);
   });
   // A view that never attaches (nothing to draft on) must not leave the listener behind.
   const timer = setTimeout(unsubscribe, 10_000);

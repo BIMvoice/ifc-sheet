@@ -225,7 +225,7 @@ export const draftingEn = {
   'drafting.prompt.detailFirst': 'Specify the first corner of the area to show in detail:',
   'drafting.prompt.detailOpposite': 'Specify the opposite corner:',
   'drafting.msg.detailOnView': 'Open a plan, section or elevation to mark a detail on it.',
-  'drafting.msg.detailCreated': 'Detail created — it is in the Project Navigator, and its mark is on this view.',
+  'drafting.msg.detailCreated': 'Detail created: it is a drawing of its own, and its mark is on this view.',
   'drafting.msg.detailTooSmall': 'The area is too small for a detail: pick two corners further apart.',
   'drafting.cmd.extrude': 'EXTRUDE',
   'drafting.prompt.extrude': 'Click a closed contour or inside a region [class {ifcClass} · depth {depth} m] — type WALL / SLAB / COLUMN / BEAM / PROXY… or IfcXxx, or a depth; Enter to finish:',

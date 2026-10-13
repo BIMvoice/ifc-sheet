@@ -13,7 +13,6 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
-import { toast } from '@/components/ui/toast';
 import { runningCommand, useDraftingSession } from '@/drafting/session';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
@@ -32,7 +31,7 @@ import { ToolRail } from './ToolRail';
 import { WallSheet } from './WallSheet';
 import { ScaleChips } from './WallGrid';
 import { SheetDrawingSurface } from './SheetDrawingSurface';
-import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, sayingOf, startWhenAttached } from './wall-actions';
+import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 
 /** The sheet's way out: printed or saved, at true paper size. */
 const issue = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
@@ -147,7 +146,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     cancelStart.current = startWhenAttached(target.id, command);
   };
 
-  /** A tool's one-action twin: run it on the drawing in front (or the chosen one), then say what it did, as the Wall has no command line. */
+  /** A tool's one-action twin: run it on the drawing in front (or the chosen one), its note appears in the drawing's command line. */
   const runAll = (command: string): void => {
     cancelStart.current();
     ran.current = null;
@@ -157,10 +156,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     if (!target || target.kind === '3d') return;
     setTool(null);
     setFocusId(target.id);
-    cancelStart.current = startWhenAttached(target.id, command, () => {
-      const lines = sayingOf(command).map((l) => t(l.key, l.params));
-      if (lines.length > 0) toast.info(lines.join('\n'));
-    });
+    cancelStart.current = startWhenAttached(target.id, command);
   };
 
   const viewportAt = (clientX: number, clientY: number): SheetViewport | null => {

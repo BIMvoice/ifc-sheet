@@ -18,7 +18,7 @@ import { useIssue } from '../sheets/useIssue';
 import { fixFinding, goToFinding } from './finding-actions';
 import { setPanel } from './wall-nav';
 
-const frame = 'absolute inset-y-0 right-0 z-20 flex w-96 flex-col border-l border-sky-300/20 bg-[#08214a]/98 text-sky-50 shadow-2xl';
+const frame = 'absolute inset-y-0 right-0 z-20 flex w-96 flex-col border-l border-sky-300/20 bg-[#08214a] text-sky-50 shadow-2xl';
 const action = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70 disabled:opacity-40';
 
 function Header({ title }: { title: string }) {
