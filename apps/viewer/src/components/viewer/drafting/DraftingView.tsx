@@ -46,7 +46,8 @@ import { useDraftingKeys } from './useDraftingKeys';
 import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 import { SelectionBar } from './SelectionBar';
 import { gripsOf } from '@/drafting/grips';
-import { isSectionSymbol } from '@/drafting/section-symbol';
+import { cropClipPath, selectedDetailGrips } from '@/drafting/detail-mark';
+import { isLockedToView } from '@/drafting/section-symbol';
 import { selectedSectionBand } from '@/drafting/section-depth';
 import { arrangementLoops, type Segment } from '@/drafting/arrangement';
 import { shapeSegments } from '@/hooks/useDraftingLines3D';
@@ -190,10 +191,12 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
   const selected = useMemo(() => entities.filter((e) => selection.has(e.id)), [entities, selection]);
   // A selected section symbol is locked to its section; it shows the depth band and its one handle instead.
   const sectionBand = useMemo(() => selectedSectionBand(selection, entities, views, modelBounds), [selection, entities, views, modelBounds]);
+  // A selected detail mark shows the grips of its area.
+  const detailMark = useMemo(() => selectedDetailGrips(selection, entities, views), [selection, entities, views]);
   const grips = useMemo(() => {
-    const own = selected.length <= 20 ? selected.filter((e) => !isSectionSymbol(e, views)).flatMap((e) => gripsOf(e.id, e.shape)) : [];
-    return sectionBand ? [...own, sectionBand.grip] : own;
-  }, [selected, views, sectionBand]);
+    const own = selected.length <= 20 ? selected.filter((e) => !isLockedToView(e, views)).flatMap((e) => gripsOf(e.id, e.shape)) : [];
+    return [...own, ...(sectionBand ? [sectionBand.grip] : []), ...(detailMark?.grips ?? [])];
+  }, [selected, views, sectionBand, detailMark]);
   const [editingText, setEditingText] = useState(false);
   useEffect(() => setEditingText(false), [selection]);
   const { state, handlers } = useDraftingPointer({ containerRef, transform: viewTransform, setTransform: setViewTransform, axis, entityShapes, references, grips });
@@ -271,6 +274,8 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
           if (roof !== null && !useRoofDialog.getState().editing) editRoofBlock(roof);
         }}
       >
+        {/* A detail shows only its area of the drawing and of the symbols derived from the model. */}
+        <div className="absolute inset-0" style={view.detail ? { clipPath: cropClipPath({ min: view.detail.min, max: view.detail.max }, viewTransform, axis) } : undefined}>
         {shown ? (
           <Drawing2DCanvas
             drawing={shown}
@@ -297,6 +302,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
         ) : null}
         <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
+        </div>
         <DraftOverlay
           entities={entities}
           layers={layers}

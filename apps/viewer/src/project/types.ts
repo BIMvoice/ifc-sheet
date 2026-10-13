@@ -52,12 +52,29 @@ interface ProjectViewBase {
    * view does.
    */
   showHidden?: boolean;
+  /**
+   * Set on a detail view: the area of its source view it shows, in the source's
+   * drawing metres. The detail is otherwise a copy of its source (same cut,
+   * same depth), shown at a larger scale and cropped to `min`..`max`.
+   */
+  detail?: ViewDetail;
   /** The view's own graphics (Visibility / Graphics): a preset and per-category overrides. */
   graphics?: ViewGraphics;
   /** Drawing scale denominator (100 = 1:100). Annotation sizes follow it; absent = 1:100. */
   scale?: number;
   /** Drafting layers this view hides (by id), over their own switches. */
   hiddenLayers?: string[];
+}
+
+/** The area a detail view shows of its source view. */
+export interface ViewDetail {
+  /** The view the area was marked on. */
+  of: string;
+  /** Corners of the area, drawing metres, `min` below and left of `max`. */
+  min: { x: number; y: number };
+  max: { x: number; y: number };
+  /** The detail's number (1, 2, …), unique among the project's details. */
+  number: number;
 }
 
 export type CategoryLineWeight = 'heavy' | 'medium' | 'light' | 'hairline';

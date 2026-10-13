@@ -19,7 +19,7 @@ import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, ViewGraphics } from './types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, ViewDetail, ViewGraphics } from './types';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -60,6 +60,18 @@ function readLevel(v: unknown, path: string): ProjectLevel {
   return { name: v.name, elevation: v.elevation, storeyGlobalIds: ids };
 }
 
+function readDetail(v: unknown, path: string): ViewDetail {
+  const corner = (c: unknown, at: string) => {
+    if (!isObject(c) || !isNumber(c.x) || !isNumber(c.y)) fail(at, 'must be { x, y }');
+    return { x: c.x, y: c.y };
+  };
+  if (!isObject(v) || !isString(v.of) || !isNumber(v.number)) fail(path, 'must be { of, min, max, number }');
+  const min = corner(v.min, `${path}.min`);
+  const max = corner(v.max, `${path}.max`);
+  if (max.x <= min.x || max.y <= min.y) fail(path, 'must have min below and left of max');
+  return { of: v.of, min, max, number: v.number };
+}
+
 function readView(v: unknown, path: string): ProjectView {
   if (!isObject(v) || !isString(v.id) || !isString(v.name)) fail(path, 'must have a string id and name');
   if (!VIEW_KINDS.includes(v.kind as ProjectViewKind)) fail(`${path}.kind`, `must be one of ${VIEW_KINDS.join(', ')}`);
@@ -67,6 +79,7 @@ function readView(v: unknown, path: string): ProjectView {
     id: v.id, name: v.name, auto: v.auto === true, createdAt: isNumber(v.createdAt) ? v.createdAt : 0,
     ...(isNumber(v.viewDepth) && v.viewDepth >= 0 ? { viewDepth: v.viewDepth } : {}),
     ...(typeof v.showHidden === 'boolean' ? { showHidden: v.showHidden } : {}),
+    ...(v.detail !== undefined ? { detail: readDetail(v.detail, `${path}.detail`) } : {}),
     ...(isObject(v.graphics) ? { graphics: readGraphics(v.graphics) } : {}),
     ...(isNumber(v.scale) && v.scale > 0 ? { scale: v.scale } : {}),
     ...(Array.isArray(v.hiddenLayers) ? { hiddenLayers: v.hiddenLayers.filter(isString) } : {}),

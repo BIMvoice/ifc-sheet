@@ -60,11 +60,11 @@ export function ViewDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '
   const generated = useRef<Drawing2D | null>(null);
   const setDrawing = useCallback((d: Drawing2D | null) => {
     generated.current = d;
-    patchViewDrawing(viewId, { drawing: d ? drawingAsViewShows(d, { kind: view.kind, showHidden: view.showHidden }) : null });
-  }, [viewId, view.kind, view.showHidden]);
+    patchViewDrawing(viewId, { drawing: d ? drawingAsViewShows(d, { kind: view.kind, showHidden: view.showHidden, detail: view.detail }) : null });
+  }, [viewId, view.kind, view.showHidden, view.detail]);
   useEffect(() => {
-    if (generated.current) patchViewDrawing(viewId, { drawing: drawingAsViewShows(generated.current, { kind: view.kind, showHidden: view.showHidden }) });
-  }, [viewId, view.kind, view.showHidden]);
+    if (generated.current) patchViewDrawing(viewId, { drawing: drawingAsViewShows(generated.current, { kind: view.kind, showHidden: view.showHidden, detail: view.detail }) });
+  }, [viewId, view.kind, view.showHidden, view.detail]);
   const setDrawingStatus = useCallback((status: 'idle' | 'generating' | 'ready' | 'error') => patchViewDrawing(viewId, { status }), [viewId]);
   const setDrawingProgress = useCallback((progress: number, phase: string) => patchViewDrawing(viewId, { progress, phase }), [viewId]);
   const setDrawingError = useCallback((error: string | null) => patchViewDrawing(viewId, { error, ...(error ? { status: 'error' as const } : {}) }), [viewId]);

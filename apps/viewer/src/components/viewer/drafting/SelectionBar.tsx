@@ -16,7 +16,7 @@ import { Bold, Italic, Minus, Pencil, Plus, RotateCcw, SlidersHorizontal } from 
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { IconButton } from '@/components/ui/icon-button';
 import { editDrafts } from '@/drafting/draft-store';
-import { isSectionSymbol } from '@/drafting/section-symbol';
+import { isLockedToView } from '@/drafting/section-symbol';
 import { useProjectStore } from '@/project/project-store';
 import { entityBounds } from '@/drafting/annotation';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
@@ -78,7 +78,7 @@ export function SelectionBar({ entity, transform, axis, editing, onEditingChange
   // Centred over the element, but never past the drawing area's edges (half the bar is ~240 px).
   const left = Math.min(Math.max(centre, BAR_HALF), Math.max(BAR_HALF, areaWidth - BAR_HALF));
   // A section symbol's name is the section view's: rename the view to change it.
-  const editable = isSectionSymbol(entity, useProjectStore.getState().views) ? null : editableText(shape);
+  const editable = isLockedToView(entity, useProjectStore.getState().views) ? null : editableText(shape);
   const label = (placement: TextPlacement) => t(`standards.dim.placement.${placement}` as TranslationKey);
 
   return (

@@ -16,6 +16,7 @@ import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
+import { settleDetailMarks } from '@/drafting/detail-mark';
 import { create } from 'zustand';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
@@ -210,8 +211,8 @@ export function removeProjectItem(id: string): void {
     schedules: (state.schedules ?? []).filter((s) => s.id !== id),
     civilDrawings: (state.civilDrawings ?? []).filter((d) => d.id !== id),
     legends: (state.legends ?? []).filter((l) => l.id !== id),
-    // A deleted view takes its own drawing with it, and a section's symbol on its plans.
-    drafts: state.drafts.some((d) => d.viewId === id || d.params.sectionOf === id) ? state.drafts.filter((d) => d.viewId !== id && d.params.sectionOf !== id) : state.drafts,
+    // A deleted view takes its own drawing with it, a section's symbol on its plans and a detail's mark on its source.
+    drafts: state.drafts.some((d) => d.viewId === id || d.params.sectionOf === id || d.params.detailOf === id) ? state.drafts.filter((d) => d.viewId !== id && d.params.sectionOf !== id && d.params.detailOf !== id) : state.drafts,
     activeItemId: state.activeItemId === id ? null : state.activeItemId,
     dirty: true,
   });
@@ -260,3 +261,11 @@ function mergeModels(known: readonly ProjectModelRef[], loaded: readonly Project
 function sameLevels(a: readonly ProjectLevel[], b: readonly ProjectLevel[]): boolean {
   return a.length === b.length && a.every((l, i) => l.name === b[i].name && l.elevation === b[i].elevation);
 }
+
+// A detail mark's label is the detail's number and the number of the sheet it is on: derived, so it follows
+// a sheet's renumbering or the detail's placement without anyone editing the text.
+useProjectStore.subscribe((state, previous) => {
+  if (state.sheets === previous.sheets && state.views === previous.views && state.drafts === previous.drafts) return;
+  const settled = settleDetailMarks(state.drafts, state.views, state.sheets);
+  if (settled !== state.drafts) useProjectStore.setState({ drafts: settled });
+});

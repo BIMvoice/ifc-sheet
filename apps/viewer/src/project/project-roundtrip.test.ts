@@ -56,7 +56,7 @@ const category: Required<CategoryGraphics> = {
 };
 const graphics: Required<ViewGraphics> = { presetId: 'structure', categories: { walls: category, doors: { visible: false } } };
 
-const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, graphics, scale: 50, hiddenLayers: ['L-hidden'] };
+const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'] };
 
 const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').ProjectView, { kind: K }>> } = {
   plan: {
@@ -99,7 +99,7 @@ const SHAPES: EntityShape[] = [...Object.values(GEOMETRY), ...Object.values(ANNO
 // Ordered by view: a package keeps a view's drafts in drawing order (that is the stacking), views in path order.
 const drafts: DraftEntity[] = SHAPES.map((shape, i) => ({
   id: `d${i}`, viewId: i < SHAPES.length / 2 ? 'v-plan' : 'v-sec', layerId: i % 2 ? 'L-pen' : '0', shape,
-  params: { ifcClass: 'IfcWall', depth: 2.7, flag: true, textStyle: 'big', dimStyle: 'arch', tagOf: '2O2Fr$t4X7Zf8NOew3FLOH', sectionOf: 'v-sec', atype: 'at1' },
+  params: { ifcClass: 'IfcWall', depth: 2.7, flag: true, textStyle: 'big', dimStyle: 'arch', tagOf: '2O2Fr$t4X7Zf8NOew3FLOH', sectionOf: 'v-sec', detailOf: 'v-det', detailPart: 8, atype: 'at1' },
 }));
 
 const annotationType: Required<AnnotationType> = {

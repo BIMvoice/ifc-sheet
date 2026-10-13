@@ -66,6 +66,7 @@ export function DesignTab() {
       <RibbonGroupDivider />
       <RibbonGroup label={t('drafting.group.workplane')}>
         <RibbonCommandLargeButton commandId="design:section-line" icon={DraftSectionLine} active={on('sectionline')} />
+        <RibbonCommandLargeButton commandId="design:detail" icon={DraftRectangle} active={on('detail')} />
         <RibbonCommandLargeButton commandId="design:workplane-face" icon={DraftWorkplane} />
       </RibbonGroup>
       <RibbonGroupDivider />

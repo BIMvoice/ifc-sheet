@@ -11,6 +11,7 @@
 
 import type { AnnotationShape, DraftEntity, DraftParamValue, DraftShape, Pt } from './types';
 import { nextAxisLabel, textBox } from './annotation';
+import { DETAIL_LINK, detailLink, isDetailMark, PART } from './detail-mark';
 
 /** Stem length in text heights. */
 const STEM = 4;
@@ -100,25 +101,36 @@ export function isSectionSymbol(e: Pick<DraftEntity, 'params'>, views: readonly 
   return id !== null && views.some((v) => v.id === id);
 }
 
+/**
+ * A shape locked to a view it belongs to: a section's symbol, or a detail's
+ * mark. Such shapes cannot be moved, reshaped or edited (a detail's mark has
+ * grips that change the detail's area instead).
+ */
+export function isLockedToView(e: Pick<DraftEntity, 'params'>, views: readonly { id: string }[]): boolean {
+  return isSectionSymbol(e, views) || isDetailMark(e, views);
+}
+
 /** `ids` plus every other part of any section symbol they touch: the parts act as one thing. */
 export function withSectionParts(ids: ReadonlySet<string>, entities: readonly DraftEntity[]): Set<string> {
   const sections = new Set<string>();
   for (const e of entities) {
-    const link = sectionLink(e);
+    const link = sectionLink(e) ?? detailLink(e);
     if (link && ids.has(e.id)) sections.add(link);
   }
   const out = new Set(ids);
   for (const e of entities) {
-    const link = sectionLink(e);
+    const link = sectionLink(e) ?? detailLink(e);
     if (link && sections.has(link)) out.add(e.id);
   }
   return out;
 }
 
-/** The parameters of a copy: the same, minus the claim to be a section's symbol. */
+/** The parameters of a copy: the same, minus the claim to be a section's symbol or a detail's mark. */
 export function withoutSectionLink(params: Readonly<Record<string, DraftParamValue>>): Record<string, DraftParamValue> {
   const rest = { ...params };
   delete rest[LINK];
+  delete rest[DETAIL_LINK];
+  delete rest[PART];
   return rest;
 }
 

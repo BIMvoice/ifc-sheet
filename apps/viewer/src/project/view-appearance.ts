@@ -11,6 +11,7 @@
  */
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import { cropDrawing } from './drawing-crop';
 import { outlineLines } from './elevation-outline';
 import type { ProjectView } from './types';
 
@@ -21,10 +22,17 @@ export function viewShowsHidden(view: Pick<ProjectView, 'kind' | 'showHidden'>):
 
 const occluded = (l: Drawing2D['lines'][number]) => l.visibility === 'hidden' || l.category === 'hidden';
 
-/** The drawing as `view` shows it. The generated drawing is not changed. */
-export function drawingAsViewShows(drawing: Drawing2D, view: Pick<ProjectView, 'kind' | 'showHidden'>): Drawing2D {
+type Shown = Pick<ProjectView, 'kind' | 'showHidden' | 'detail'>;
+
+function withoutOverlays(drawing: Drawing2D, view: Shown): Drawing2D {
   if (view.kind !== 'elevation') return viewShowsHidden(view) ? drawing : { ...drawing, lines: drawing.lines.filter((l) => !occluded(l)) };
   const kept = viewShowsHidden(view) ? drawing.lines : drawing.lines.filter((l) => !occluded(l));
   const outline = outlineLines({ ...drawing, lines: kept });
   return { ...drawing, lines: kept.map((l) => (outline.has(l) ? { ...l, category: 'silhouette' as const } : l)) };
+}
+
+/** The drawing as `view` shows it: hidden lines and outline as above, and a detail cropped to its area. The generated drawing is not changed. */
+export function drawingAsViewShows(drawing: Drawing2D, view: Shown): Drawing2D {
+  const shown = withoutOverlays(drawing, view);
+  return view.detail ? cropDrawing(shown, { min: view.detail.min, max: view.detail.max }) : shown;
 }

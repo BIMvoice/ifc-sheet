@@ -13,6 +13,7 @@ import { layerPen, layerShows, lookOf, type LayerGroup } from '@/drafting/styles
 import { moveGrip, type Grip } from '@/drafting/grips';
 import type { SectionCut } from '@/drafting/section-depth';
 import { SectionDepthBand } from './SectionDepthBand';
+import { DetailCropPreview } from './DetailCropPreview';
 import { resolveLevelRef } from '@/drafting/session';
 import { useProjectStore } from '@/project/project-store';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
@@ -159,7 +160,8 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
           />
         );
       })}
-      {gripDrag && gripDrag.grip.key !== 'depth' ? <GripPreview gripDrag={gripDrag} entities={entities} t={t} axis={axis} look={(e) => lookOf(book, e.params)} paperUnit={paperUnit} extraPatterns={extraPatterns} /> : null}
+      {gripDrag?.grip.detail ? <DetailCropPreview gripDrag={gripDrag as { grip: Grip & { detail: NonNullable<Grip['detail']> }; at: Pt }} t={t} axis={axis} /> : null}
+      {gripDrag && gripDrag.grip.key !== 'depth' && !gripDrag.grip.detail ? <GripPreview gripDrag={gripDrag} entities={entities} t={t} axis={axis} look={(e) => lookOf(book, e.params)} paperUnit={paperUnit} extraPatterns={extraPatterns} /> : null}
       {sectionBand ? <SectionDepthBand band={sectionBand} gripDrag={gripDrag} t={t} axis={axis} /> : null}
       {grips.filter((g) => g.key !== 'depth').map((g) => {
         const p = drawingToScreen(g.at, t, axis);
