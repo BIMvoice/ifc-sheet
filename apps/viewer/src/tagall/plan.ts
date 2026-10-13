@@ -28,6 +28,7 @@ import { readFieldValue } from '@/labels/label-resolve';
 import { parseFieldRef } from '@/labels/label-template';
 import type { ViewElement } from '@/labels/view-elements';
 import { clipLoop } from '@/project/drawing-crop';
+import { RectIndex } from '@/labels/rect-index';
 import { pieceRects, symbolPieces, type SymbolPiece } from '@/dimall/avoid';
 import type { LabelElement } from '@/labels/label-resolve';
 import { assignMarkCodes, type MarkSubject } from './mark-codes';
@@ -85,7 +86,8 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   // Doors and windows: each shows the model's short mark, else the code of its kind.
   const marked = labelledBy(input.existing, MARK_TYPE_ID);
   const openings = input.targets.filter((t) => isOpening(t.className));
-  const todo = openings.filter((t, i) => !marked.has(t.guid) && openings.findIndex((o) => o.guid === t.guid) === i);
+  const firstSeen = new Set<string>();
+  const todo = openings.filter((t) => !marked.has(t.guid) && !firstSeen.has(t.guid) && !!firstSeen.add(t.guid));
   summary.already += openings.length - todo.length;
   const codes = assignMarkCodes(todo.flatMap((t) => { const el = read(t.guid); return el ? [subjectOf(t, el)] : []; }), input.knownCodes);
   const extrasOf = new Map<string, LabelExtras>();
@@ -103,20 +105,22 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   const inRect = (b: Rect, p: Pt) => p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1;
   const linework = pieceRects((input.obstacles?.linework ?? []).filter((p) => !own.some((b) => inRect(b, p.a) && inRect(b, p.b))), 0.2 * at.textHeight);
   const drawn = pieceRects([...symbolPieces(input.existing), ...(input.obstacles?.drawn ?? [])], 0.2 * at.textHeight);
-  const scene = { elements: [...input.elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })), ...swings], annotations: [...rectsOf(input.existing), ...drawn], paperUnit: at.paperUnit };
-  const isDoor = (id: string) => items.find((i) => i.id === id) !== undefined && openings.some((t) => String(t.renderId) === id && /^ifcdoor/i.test(t.className));
-  const windowSpots = layoutLabels(items.filter((i) => !isDoor(i.id)), scene);
-  const placedWindows = items.filter((i) => windowSpots.has(i.id)).map((i) => rectAround(windowSpots.get(i.id)!.centre, i.w, i.h));
-  const doorSpots = layoutLabels(items.filter((i) => isDoor(i.id)), { ...scene, annotations: [...scene.annotations, ...linework, ...placedWindows] });
+  // Everything a label keeps clear of sits on one grid (`labels/rect-index.ts`): a place is tested against the boxes near it, not against every line the plan draws.
+  const index = new RectIndex(4 * at.textHeight);
+  for (const r of [...rectsOf(input.existing), ...drawn]) index.add(r);
+  const scene = { elements: [...input.elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })), ...swings], annotations: index, paperUnit: at.paperUnit };
+  const doorIds = new Set(openings.filter((t) => /^ifcdoor/i.test(t.className)).map((t) => String(t.renderId)));
+  // Windows first, on what the plan draws; the doors then also keep clear of the drawing's lines and of the windows' marks (placed ones join the grid).
+  const windowSpots = layoutLabels(items.filter((i) => !doorIds.has(i.id)), scene);
+  for (const r of linework) index.add(r);
+  const doorSpots = layoutLabels(items.filter((i) => doorIds.has(i.id)), scene);
   const spots = new Map([...windowSpots, ...doorSpots]);
-  const taken: Rect[] = [];
   for (const t of todo) {
     const spot = spots.get(String(t.renderId));
     const extras = extrasOf.get(t.guid) ?? {};
     const draft = spot ? labelDraft(input.types.mark, t.guid, spot.centre, at, t.ring, extras, read) : null;
     if (!draft || !spot || !within(input.crop, spot.centre)) continue;
     drafts.push(draft);
-    taken.push(rectAround(spot.centre, ...sizeOf(items, t)));
     summary.marks++;
     if (extras.markCode !== undefined) summary.coded++;
   }
@@ -125,7 +129,8 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   // Rooms: in the middle of the room; a room too small for its label has the label beside it, joined by a leader.
   const roomed = labelledBy(input.existing, ROOM_TYPE_ID);
   const rings = [...input.elements.map((e) => e.ring), ...swings.map((s) => s.ring)];
-  const rects = [...rectsOf(input.existing), ...drawn, ...linework, ...taken];
+  const ringIndex = new RectIndex<readonly Pt[]>(4 * at.textHeight);
+  for (const ring of rings) ringIndex.add(ringBounds(ring), ring);
   const seen = new Set<string>();
   for (const { room, shown } of rooms) {
     if (seen.has(room.guid)) continue;
@@ -135,20 +140,20 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     const extras: LabelExtras = fromModel ? {} : { computedArea: ringArea(room.ring) };
     const size = labelSize(input.types.room, room.guid, at.textHeight, extras, read);
     if (!size) continue;
-    const spot = roomLabelPoint(shown, size.w, size.h, { rects, rings }, clear);
+    const spot = roomLabelPoint(shown, size.w, size.h, { rects: [], rings: [], rectIndex: index, ringIndex }, clear);
     let place = spot.centre;
     if (!spot.fits) {
       // Outside the room, at the nearest free place round it.
       // Far enough from the room to count as displaced, so the label carries its leader.
       const box = orientedBox(shown);
       const preferred = candidateCentres({ box, ...size, gap: (DISPLACED_MM + LABEL_GAP_MM) * at.paperUnit, away: { x: box.c.x - centre.x, y: box.c.y - centre.y } });
-      const outside = layoutLabels([{ id: `room:${room.guid}`, ring: shown, ...size, preferred }], { ...scene, annotations: [...scene.annotations, ...rects] });
+      const outside = layoutLabels([{ id: `room:${room.guid}`, ring: shown, ...size, preferred }], scene);
       place = outside.get(`room:${room.guid}`)?.centre ?? place;
     }
     const draft = labelDraft(input.types.room, room.guid, place, at, shown, extras, read);
     if (!draft) continue;
     drafts.push(draft);
-    rects.push(growRect(rectAround(place, size.w, size.h), 0));
+    if (spot.fits) index.add(growRect(rectAround(place, size.w, size.h), 0));
     summary.rooms++;
     if (fromModel) summary.areaFromModel++; else summary.areaFromFootprint++;
     if (!spot.fits) summary.roomsTooSmall++;
@@ -192,8 +197,4 @@ function swingOf(ring: readonly Pt[]): Pt[] {
   return [{ x: b.x0 - gx, y: b.y0 - gy }, { x: b.x1 + gx, y: b.y0 - gy }, { x: b.x1 + gx, y: b.y1 + gy }, { x: b.x0 - gx, y: b.y1 + gy }];
 }
 
-const sizeOf = (items: readonly { id: string; w: number; h: number }[], t: LabelTarget): [number, number] => {
-  const i = items.find((x) => x.id === String(t.renderId));
-  return [i?.w ?? 0, i?.h ?? 0];
-};
 

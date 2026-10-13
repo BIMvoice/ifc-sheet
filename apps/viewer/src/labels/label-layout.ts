@@ -12,7 +12,8 @@
 
 import type { Pt } from '@/drafting/types';
 import { candidateCentres, orientedBox } from './label-candidates';
-import { growRect, rectAround, rectHitsRing, rectsOverlap, ringBounds, type Rect } from './label-geometry';
+import { RectIndex } from './rect-index';
+import { growRect, rectAround, rectHitsRing, ringBounds, type Rect } from './label-geometry';
 
 /** Clear space between a label and its element, paper millimetres. */
 export const LABEL_GAP_MM = 1.5;
@@ -39,8 +40,8 @@ export interface LayoutItem {
 export interface LayoutScene {
   /** Every element the view draws, the labelled ones included. */
   elements: readonly LayoutElement[];
-  /** Boxes of annotations already on the view. */
-  annotations: readonly Rect[];
+  /** Boxes of annotations already on the view: a list, or a grid (`rect-index.ts`) the caller keeps for a view with many; the labels placed are added to a grid. */
+  annotations: readonly Rect[] | RectIndex;
   /** Drawing units per paper millimetre. */
   paperUnit: number;
 }
@@ -66,16 +67,20 @@ export function layoutLabels(items: readonly LayoutItem[], scene: LayoutScene): 
     return l < 1e-9 ? { x: 0, y: 0 } : { x: d.x / l, y: d.y / l };
   };
   const solid = bounds.filter((x) => !all || area(x.b) <= BACKDROP_SHARE * area(all));
-  const taken: Rect[] = [...scene.annotations];
+  // What a place is tested against sits on a grid as coarse as the biggest label: a place meets the few boxes near it, not all of them.
+  const cell = Math.max(1e-6, ...items.map((i) => Math.max(i.w, i.h)));
+  const taken = scene.annotations instanceof RectIndex ? scene.annotations : new RectIndex(cell);
+  if (!(scene.annotations instanceof RectIndex)) for (const a of scene.annotations) taken.add(a);
+  const solidIndex = new RectIndex<(typeof solid)[number]>(cell);
+  for (const o of solid) solidIndex.add(o.b, o);
   const out = new Map<string, Placed>();
   for (const item of items) {
     const box = orientedBox(item.ring);
     const centres = [...(item.preferred ?? []), ...candidateCentres({ box, w: item.w, h: item.h, gap, away: away(box.c) }), ...(item.fallback ?? [])];
     const hits = (c: Pt): number => {
       const r = growRect(rectAround(c, item.w, item.h), clear);
-      let n = 0;
-      for (const t of taken) if (rectsOverlap(r, t)) n++;
-      for (const o of solid) if (o.e.id !== item.id && rectsOverlap(r, o.b) && rectHitsRing(r, o.e.ring)) n++;
+      let n = taken.count(r);
+      solidIndex.query(r, (_, o) => { if (o.e.id !== item.id && rectHitsRing(r, o.e.ring)) n++; });
       return n;
     };
     let pick: Placed | null = null;
@@ -87,7 +92,7 @@ export function layoutLabels(items: readonly LayoutItem[], scene: LayoutScene): 
     }
     const placed = pick ?? { centre: least.c, free: false };
     out.set(item.id, placed);
-    taken.push(growRect(rectAround(placed.centre, item.w, item.h), 0));
+    taken.add(growRect(rectAround(placed.centre, item.w, item.h), 0));
   }
   return out;
 }
