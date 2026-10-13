@@ -62,7 +62,7 @@ import { useRoofDialog } from '@/project/roof-dialog-store';
 import { exportViewDxf } from './view-dxf';
 import { drawnBySymbol } from '@/project/view-symbols';
 import { planOverlays } from '@/project/plan-overlays';
-import { viewMaterials } from '@/project/material-resolver';
+import { cutMaterialKey, viewMaterials } from '@/project/material-resolver';
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { partHostType } from '@/project/part-host';
 import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOverrideRules } from '@/project/view-graphics';
@@ -127,7 +127,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
-    return drawing ? styledDrawing(drawing, graphics, partHostType, view.kind === 'plan' ? drawnBySymbol : undefined, viewMaterials(drawing)) : null;
+    return drawing ? styledDrawing(drawing, graphics, partHostType, view.kind === 'plan' ? drawnBySymbol : undefined, viewMaterials(drawing), cutMaterialKey) : null;
   }, [drawing, graphics, view.kind, materialsTable, mutationVersionForMaterials]);
   const overrideRules = useMemo(() => viewOverrideRules(graphics), [graphics]);
   const overrideEngine = useMemo(() => new GraphicOverrideEngine(overrideRules), [overrideRules]);

@@ -54,7 +54,7 @@ const pt = (x: number, y: number) => ({ x, y });
 const category: Required<CategoryGraphics> = {
   visible: false, lineColor: '#112233', fillColor: '#445566', lineWeight: 'heavy', cutHatch: 'ANSI31', hatchScale: 2.5,
 };
-const graphics: Required<ViewGraphics> = { presetId: 'structure', categories: { walls: category, doors: { visible: false } } };
+const graphics: Required<ViewGraphics> = { presetId: 'structure', categories: { walls: category, doors: { visible: false } }, joinCuts: false };
 
 const base = { auto: false, createdAt: 11, viewDepth: 4.5, graphics, scale: 50, hiddenLayers: ['L-hidden'] };
 

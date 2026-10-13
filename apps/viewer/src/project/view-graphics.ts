@@ -16,6 +16,7 @@ import { BUILT_IN_PRESETS, ifcTypeCriterion, type Drawing2D, type GraphicOverrid
 import type { Pt } from '@/drafting/types';
 import type { CategoryGraphics, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
+import { joinCuts, type MaterialKeyOf } from './cut-join-drawing';
 import type { DraftShape } from '@/drafting/types';
 
 /** A drawing as a view shows it, with its building materials' hatches and membrane lines. */
@@ -101,7 +102,18 @@ function rgba(hex: string): [number, number, number, number] | null {
  * it (so it wins over IFC material colours too). The same object when the
  * view changes nothing.
  */
-export function styledDrawing(
+/**
+ * The drawing as the view shows it (`styleDrawing`), with like cut faces
+ * joined where they meet unless the view turns that off (`joinCuts`): like
+ * by category and by what `materialOf` says they are made of.
+ */
+export function styledDrawing(...args: [...Parameters<typeof styleDrawing>, materialOf?: MaterialKeyOf]): StyledDrawing {
+  const [drawing, graphics, hostTypeOf, replaced, materials, materialOf] = args;
+  const styled = styleDrawing(drawing, graphics, hostTypeOf, replaced, materials);
+  return graphics?.joinCuts === false ? styled : joinCuts(styled, categoryOf, materialOf);
+}
+
+function styleDrawing(
   drawing: Drawing2D,
   graphics: ViewGraphics | undefined,
   hostTypeOf: (entityId: number, ifcType: string | undefined) => string | null = () => null,

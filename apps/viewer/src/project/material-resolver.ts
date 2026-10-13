@@ -10,7 +10,9 @@
  * table change.
  */
 
-import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import type { Drawing2D, DrawingPolygon } from '@ifc-lite/drawing-2d';
+import { extractAllMaterialsOnDemand } from '@ifc-lite/parser';
+import { materialNamesOf } from '@/lib/lists/list-material-names';
 import { useViewerStore } from '@/store';
 import { layerSetOf } from '@/lib/commands/modeling/authored-kinds';
 import { useProjectStore } from './project-store';
@@ -70,4 +72,29 @@ export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null
   });
   cache.set(drawing, { key, value });
   return value;
+}
+
+let elementCache: { version: number; byEntity: Map<number, string> } = { version: -1, byEntity: new Map() };
+
+/**
+ * What a cut face is made of, as a key: its band's IfcMaterial name, else its
+ * element's material association(s). Like faces join only when this matches
+ * (`cut-join-drawing.ts`). Read on demand once per element until the models change.
+ */
+export function cutMaterialKey(p: DrawingPolygon): string {
+  const m = modelOf(p.entityId);
+  if (!m) return '';
+  if (p.materialId !== undefined) return (materialName(m, p.materialId) ?? '').trim().toLowerCase();
+  const version = useViewerStore.getState().mutationVersion;
+  if (elementCache.version !== version) elementCache = { version, byEntity: new Map() };
+  const hit = elementCache.byEntity.get(p.entityId);
+  if (hit !== undefined) return hit;
+  let key = '';
+  try {
+    key = [...new Set(extractAllMaterialsOnDemand(m.dataStore, m.expressId).flatMap((info) => materialNamesOf(info)).map((n) => n.trim().toLowerCase()))].sort().join('|');
+  } catch (err) {
+    console.warn('[cut-join] could not read the material of an element', err);
+  }
+  elementCache.byEntity.set(p.entityId, key);
+  return key;
 }

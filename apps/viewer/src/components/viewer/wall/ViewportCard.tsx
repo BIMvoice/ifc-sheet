@@ -68,6 +68,12 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose }: ViewportCardProp
               {SHEET_SCALES.map((s) => <option key={s} value={s}>{`1 : ${s}`}</option>)}
             </select>
           </label>
+          {view ? (
+            <label className="mt-3 flex items-center gap-2 text-sm text-sky-200">
+              <input type="checkbox" checked={view.graphics?.joinCuts !== false} onChange={(e) => updateProjectView(view.id, { graphics: { ...view.graphics, joinCuts: e.target.checked } })} />
+              {t('wall.vp.joinCuts')}
+            </label>
+          ) : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
           <div className="mt-4 flex flex-wrap gap-2">

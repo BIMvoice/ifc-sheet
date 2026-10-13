@@ -101,6 +101,7 @@ export const wallEn = {
   'wall.vp.scale': 'Scale',
   'wall.vp.open': 'Open to draw in',
   'wall.vp.remove': 'Remove from sheet',
+  'wall.vp.joinCuts': 'Join walls, slabs and other like elements where they meet',
   'wall.vp.none': 'Click a drawing to choose it; drag to move it, double-click to draw in it, Delete to take it off.',
   'wall.vp.place': 'Place on this sheet',
   'wall.vp.placePick': 'Choose a drawing or schedule…',

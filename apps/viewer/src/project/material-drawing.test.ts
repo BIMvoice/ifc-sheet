@@ -76,12 +76,19 @@ describe('building materials in a cut', () => {
 
   it('flows through the view styling: dropped lines go, material hatches join the cut hatches unless the category overrides', () => {
     const { drawing, resolver } = scene();
-    const styled = styledDrawing(drawing, undefined, () => null, undefined, materialDrawing(drawing, resolver));
+    // Each wall's own bands (joining like walls is `cut-join-drawing.test.ts`'s).
+    const styled = styledDrawing(drawing, { joinCuts: false }, () => null, undefined, materialDrawing(drawing, resolver));
     assert.equal(styled.lines.length, drawing.lines.length - 4);
     assert.equal(styled.membranes?.length, 2);
     assert.equal(cutHatches(styled, undefined).length, 4);
     assert.equal(cutHatches(styled, { categories: { walls: { cutHatch: 'CROSS' } } }).filter((h) => h.pattern === 'CROSS').length, 4);
     assert.equal(cutHatches(styled, { categories: { walls: { cutHatch: 'CROSS' } } }).length, 4);
+    // Joined, the two walls' concrete and wool bands are one face each; the lines the materials dropped stay dropped.
+    const joined = styledDrawing(drawing, undefined, () => null, undefined, materialDrawing(drawing, resolver));
+    assert.equal(joined.cutPolygons.length, 2);
+    assert.equal(cutHatches(joined, { categories: { walls: { cutHatch: 'CROSS' } } }).length, 2);
+    assert.ok(!joined.lines.some((l) => l.category === 'cut' && Math.abs(l.line.start.y - 0.2) < 1e-9 && Math.abs(l.line.end.y - 0.2) < 1e-9), 'the foil stays a membrane, not a line');
+    assert.ok(!joined.lines.some((l) => l.category === 'cut' && l.line.start.x === 4 && l.line.end.x === 4), 'no line where the walls meet');
   });
 
   it('segments coincide when collinear and mostly overlapping', () => {

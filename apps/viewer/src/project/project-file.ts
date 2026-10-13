@@ -152,6 +152,7 @@ const HEX = /^#[0-9a-f]{6}$/i;
 function readGraphics(raw: Record<string, unknown>): ViewGraphics {
   const out: ViewGraphics = {};
   if (raw.presetId === null || isString(raw.presetId)) out.presetId = raw.presetId;
+  if (raw.joinCuts === false || raw.joinCuts === true) out.joinCuts = raw.joinCuts;
   if (isObject(raw.categories)) {
     const categories: Record<string, CategoryGraphics> = {};
     for (const [id, value] of Object.entries(raw.categories)) {

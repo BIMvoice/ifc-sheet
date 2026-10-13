@@ -73,6 +73,8 @@ export interface ViewGraphics {
   presetId?: string | null;
   /** By category id (`VIEW_CATEGORIES`). */
   categories?: Record<string, CategoryGraphics>;
+  /** Join the cut faces of like elements where they meet (no line between two walls); absent = on. */
+  joinCuts?: boolean;
 }
 
 export interface PlanProjectView extends ProjectViewBase {

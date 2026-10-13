@@ -15,6 +15,7 @@ import type { ProjectView, SectionProjectView } from '@/project/types';
 import { clearDraftHistory, editDrafts, undoDrafts } from './draft-store.js';
 import { attachDraftingView, cancelCommand, clickDrawing, setWorkPlaneProvider, startDraftCommand, useDraftingSession } from './session.js';
 import { grippable, installSectionLink, placementOf, symbolParts } from './section-link.js';
+import { createProposedSection } from './section-create.js';
 
 const TOL = 0.05;
 const planView: ProjectView = { id: 'plan-1', name: 'L0', createdAt: 0, kind: 'plan', level: { name: 'L0', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 };
@@ -124,6 +125,43 @@ describe('the section moves the symbol', () => {
     near(placement.a.y, placement.b.y, 'still straight across');
     near(Math.sign(lookingBefore.side.y - lookingBefore.a.y), Math.sign(placement.side.y - placement.a.y), 'looking the same way');
     near(custom().distance, before.distance + 3, 'and the plane is not pulled back');
+  });
+});
+
+describe('other changes leave the symbol alone', () => {
+  it('a graphics change on the plan does not redraw it', () => {
+    drawSection();
+    const before = useProjectStore.getState().drafts;
+    updateProjectView('plan-1', { graphics: { joinCuts: false } });
+    assert.equal(useProjectStore.getState().drafts, before);
+  });
+});
+
+describe('a symbol nobody touched', () => {
+  it('is not redrawn by another view\'s change, even when it no longer matches a fresh drawing of it', () => {
+    drawSection();
+    // A label a little off where a fresh symbol would put it (text measured differently when it was drawn).
+    const label = parts().find((d) => d.shape.type === 'text');
+    assert.ok(label && label.shape.type === 'text');
+    uninstall();
+    useProjectStore.setState({ drafts: useProjectStore.getState().drafts.map((d) => (d.id === label.id && d.shape.type === 'text' ? { ...d, shape: { ...d.shape, p: { x: d.shape.p.x, y: d.shape.p.y + 0.25 } } } : d)) });
+    uninstall = installSectionLink();
+    const before = useProjectStore.getState().drafts;
+    updateProjectView('plan-1', { graphics: { joinCuts: false } });
+    assert.equal(useProjectStore.getState().drafts, before);
+  });
+});
+
+describe('a proposed section', () => {
+  it('keeps its symbol through a graphics change on its plan', () => {
+    const plan = { ...planView, kind: 'plan' as const };
+    useProjectStore.setState({ views: [plan], levels: [plan.level] });
+    createProposedSection(plan, [plan.level], { key: 'k', label: 'Through the stair', through: 'stair', a: { x: 0, z: -1 }, b: { x: 0, z: 8 }, side: { x: 1, z: 3 } });
+    const before = useProjectStore.getState().drafts;
+    assert.ok(before.length > 0);
+    updateProjectView('plan-1', { graphics: { joinCuts: false } });
+    const after = useProjectStore.getState().drafts;
+    assert.deepEqual(after.map((d) => d.shape), before.map((d) => d.shape));
   });
 });
 

@@ -172,8 +172,11 @@ export function reconcileSectionLinks(previous: SectionLinkState, next: SectionL
     const placement = placementOf(parts);
     if (!plan || !placement) continue;
     const before = previous.views.find((v): v is SectionProjectView => v.id === view.id && v.kind === 'section');
+    const partsBefore = symbolParts(previous.drafts, view.id);
+    const symbolMoved = partsBefore.length !== parts.length || partsBefore.some((p, i) => p !== parts[i]);
+    // Only a section or a symbol that changed is brought into line: anything else leaves both as they are.
+    if (before === view && !symbolMoved && previous.levels === next.levels) continue;
     const planeMoved = before?.plane.custom !== undefined && before.plane !== view.plane && !samePlane(before.plane.custom, view.plane.custom);
-    const symbolMoved = symbolParts(previous.drafts, view.id).some((p, i) => p !== parts[i]);
     const mark = sectionMarkOf(view.name);
     if (planeMoved && !symbolMoved) {
       const redrawn = redrawSymbol(parts, placementForPlane(plan, placement, view.plane.custom), mark);
