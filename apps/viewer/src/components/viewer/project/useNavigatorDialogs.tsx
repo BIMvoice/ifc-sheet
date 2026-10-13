@@ -14,6 +14,7 @@ import { useViewerStore } from '@/store';
 import { addProjectView, useProjectStore } from '@/project/project-store';
 import { addModelLevel } from '@/project/model-levels';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS } from '@/project/view-defaults';
+import { bodyElevationOffset } from '@/draft-set/body';
 import { openProjectView } from '@/project/open-view';
 import type { ElevationDirection } from '@/project/types';
 import { NewItemDialog, type DialogField, type DialogValues } from './NewItemDialog';
@@ -75,7 +76,7 @@ export function useNavigatorDialogs() {
     fields.push({ key: 'name', label: t('projectNavigator.dialog.name'), type: 'text', initial: '' });
     onSubmit = (v) => {
       const direction = (v.direction ?? 'north') as ElevationDirection;
-      const id = addProjectView({ kind: 'elevation', name: v.name?.trim() || t('projectNavigator.dialog.elevationName', { direction: t(DIRECTION_KEYS[direction]) }), direction });
+      const id = addProjectView({ kind: 'elevation', name: v.name?.trim() || t('projectNavigator.dialog.elevationName', { direction: t(DIRECTION_KEYS[direction]) }), direction, planeOffset: bodyElevationOffset(direction) });
       openProjectView(id);
       return null;
     };

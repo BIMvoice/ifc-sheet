@@ -38,7 +38,7 @@ import { sectionViewName } from '@/drafting/section-symbol';
 import type { ElevationDirection, PaperSize } from '@/project/types';
 import { ELEVATION_INSET_M } from '@/project/view-plane';
 import type {
-  DraftSetInput, DraftSetPlan, PlannedElevation, PlannedPlan, PlannedSection, PlannedSheet, PlannedView, PlannedViewport,
+  Box3, DraftSetInput, DraftSetPlan, PlannedElevation, PlannedPlan, PlannedSection, PlannedSheet, PlannedView, PlannedViewport,
   Reason, SheetGroup, SheetSpec,
 } from './types';
 
@@ -199,6 +199,11 @@ function storeyLevels(input: DraftSetInput): { name: string; elevation: number }
   return out;
 }
 
+/** Where an elevation's plane stands, metres on its axis: just inside the facade of `bounds` (z for north and south, x for east and west). */
+export function elevationPlaneOffset(direction: ElevationDirection, bounds: Box3): number {
+  return { north: bounds.min.z + ELEVATION_INSET_M, south: bounds.max.z - ELEVATION_INSET_M, east: bounds.max.x - ELEVATION_INSET_M, west: bounds.min.x + ELEVATION_INSET_M }[direction];
+}
+
 /** The draft drawing set for a model. */
 export function planDraftSet(input: DraftSetInput): DraftSetPlan {
   const { bounds } = input;
@@ -231,7 +236,7 @@ export function planDraftSet(input: DraftSetInput): DraftSetPlan {
     const across = direction === 'north' || direction === 'south' ? dx : dz;
     const through = direction === 'north' || direction === 'south' ? dz : dx;
     const depth = up(through + DEPTH_MARGIN_M);
-    const planeOffset = { north: bounds.min.z + ELEVATION_INSET_M, south: bounds.max.z - ELEVATION_INSET_M, east: bounds.max.x - ELEVATION_INSET_M, west: bounds.min.x + ELEVATION_INSET_M }[direction];
+    const planeOffset = elevationPlaneOffset(direction, bounds);
     const view: PlannedElevation = {
       key: `elevation:${direction}`, kind: 'elevation', name: ELEVATION_NAMES[direction], direction, planeOffset, depth,
       depthReason: reason('draftSet.depth.elevation', { depth, margin: DEPTH_MARGIN_M }),
