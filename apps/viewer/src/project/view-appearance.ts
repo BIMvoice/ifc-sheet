@@ -13,6 +13,7 @@
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { cropDrawing } from './drawing-crop';
 import { outlineLines } from './elevation-outline';
+import { drawingWithGround } from './ground';
 import type { ProjectView } from './types';
 
 /** Whether a view draws the lines the hidden-line pass found occluded (dashed). */
@@ -24,7 +25,8 @@ const occluded = (l: Drawing2D['lines'][number]) => l.visibility === 'hidden' ||
 
 type Shown = Pick<ProjectView, 'kind' | 'showHidden' | 'detail'>;
 
-function withoutOverlays(drawing: Drawing2D, view: Shown): Drawing2D {
+function withoutOverlays(source: Drawing2D, view: Shown): Drawing2D {
+  const drawing = view.kind === 'elevation' || view.kind === 'section' ? drawingWithGround(source, view.kind) : source;
   if (view.kind !== 'elevation') return viewShowsHidden(view) ? drawing : { ...drawing, lines: drawing.lines.filter((l) => !occluded(l)) };
   const kept = viewShowsHidden(view) ? drawing.lines : drawing.lines.filter((l) => !occluded(l));
   const outline = outlineLines({ ...drawing, lines: kept });

@@ -17,7 +17,7 @@ function house(): Drawing2D {
   const walls = [line(0, 0, 4, 0), line(4, 0, 4, 3), line(4, 3, 0, 3), line(0, 3, 0, 0)];
   const window = [line(1, 1, 2, 1), line(2, 1, 2, 2), line(2, 2, 1, 2), line(1, 2, 1, 1)];
   const hidden = line(2.5, 0.5, 3.5, 0.5, { visibility: 'hidden' });
-  const ground = line(-3, 0, 7, 0, { ifcType: 'IfcSite' });
+  const ground = line(-3, 0, 7, 0, { ifcType: 'IfcSite', entityId: 99 });
   return { lines: [...walls, ...window, hidden, ground], cutPolygons: [] } as unknown as Drawing2D;
 }
 
@@ -31,16 +31,17 @@ describe('what an elevation shows', () => {
 
   it('leaves a section as it was generated', () => {
     const drawing = house();
+    drawing.lines = drawing.lines.filter((l) => l.ifcType !== 'IfcSite');
     assert.equal(drawingAsViewShows(drawing, { kind: 'section' }), drawing);
   });
 
   it('makes the building outline heavier than the lines inside it', () => {
     const lines = drawingAsViewShows(house(), { kind: 'elevation' }).lines;
-    const heavy = lines.filter((l) => l.category === 'silhouette');
+    const heavy = lines.filter((l) => l.category === 'silhouette' && l.ifcType !== 'IfcSite');
     assert.equal(heavy.length, 4);
     assert.equal(heavy.every((l) => l.ifcType === 'IfcWall' && l.line.start.x >= 0 && l.line.start.x <= 4 && (l.line.start.y === 0 || l.line.start.y === 3 || l.line.start.x === 0 || l.line.start.x === 4)), true);
-    // The window frame is inside the walls, the ground is not the building.
-    assert.equal(lines.filter((l) => l.ifcType === 'IfcSite').every((l) => l.category === 'projection'), true);
+    // The window frame is inside the walls; the ground is drawn as its own line, not as part of the building.
+    assert.equal(lines.filter((l) => l.ifcType === 'IfcSite').every((l) => l.category === 'silhouette'), true);
     assert.equal(lines.filter((l) => l.line.start.x >= 1 && l.line.start.x <= 2 && l.line.start.y >= 1 && l.line.end.y <= 2).every((l) => l.category === 'projection'), true);
   });
 });
