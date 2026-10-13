@@ -45,9 +45,10 @@ const ELEVATION_PLANES: Record<ElevationDirection, { axis: SectionPlaneAxis; atM
  */
 export const ELEVATION_INSET_M = 0.05;
 
-function elevationPlane(direction: ElevationDirection, bounds: AxisBounds | null): ViewSectionPlane {
+function elevationPlane(direction: ElevationDirection, bounds: AxisBounds | null, planeOffset?: number): ViewSectionPlane {
   const { axis, atMax, flipped } = ELEVATION_PLANES[direction];
   const range = sectionAxisRange(bounds, axis);
+  if (range && planeOffset !== undefined && Number.isFinite(planeOffset)) return { axis, position: worldToPercent(planeOffset, range), flipped };
   const inset = range ? Math.min(50, (ELEVATION_INSET_M / (range.max - range.min)) * 100) : 0.1;
   return { axis, position: atMax ? 100 - inset : inset, flipped };
 }
@@ -63,7 +64,7 @@ export function sectionPlaneForView(
 ): ViewSectionPlane | null {
   switch (view.kind) {
     case 'elevation':
-      return elevationPlane(view.direction, bounds);
+      return elevationPlane(view.direction, bounds, view.planeOffset);
     case 'plan': {
       const range = sectionAxisRange(bounds, 'down');
       const level = resolvePlanLevel(view, levels) ?? (levels.length === 0 ? view.level : undefined);

@@ -89,8 +89,10 @@ export function applyDraftSet(plan: DraftSetPlan, options: ApplyOptions): ApplyR
           report.viewsExisting++;
           // The person's own depth stays.
           if (found.viewDepth === undefined || found.viewDepth === null) updateProjectView(found.id, { viewDepth: planned.depth });
+          // An elevation the model's default made stands at the whole box; one the person placed keeps its plane.
+          if (found.kind === 'elevation' && found.planeOffset === undefined) updateProjectView(found.id, { planeOffset: planned.planeOffset });
         } else {
-          ids.set(planned.key, addProjectView({ kind: 'elevation', name: planned.name, direction: planned.direction, viewDepth: planned.depth }));
+          ids.set(planned.key, addProjectView({ kind: 'elevation', name: planned.name, direction: planned.direction, planeOffset: planned.planeOffset, viewDepth: planned.depth }));
           report.viewsAdded++;
         }
       }

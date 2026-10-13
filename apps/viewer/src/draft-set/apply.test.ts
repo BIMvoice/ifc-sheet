@@ -32,6 +32,17 @@ beforeEach(() => {
 });
 
 describe('applyDraftSet', () => {
+  it('stands the elevation planes at the extents it was given, and keeps one the person placed', () => {
+    const north = state().views.find((v) => v.kind === 'elevation' && v.direction === 'north');
+    const south = state().views.find((v) => v.kind === 'elevation' && v.direction === 'south');
+    assert.ok(north && south);
+    updateProjectView(south.id, { planeOffset: 150 });
+    apply();
+    const off = (d: string) => state().views.find((v) => v.kind === 'elevation' && v.direction === d);
+    assert.ok(Math.abs(((off('north') as { planeOffset: number }).planeOffset) - 200.05) < 1e-9);
+    assert.equal((off('south') as { planeOffset: number }).planeOffset, 150);
+  });
+
   it('adds the missing sections and the sheets with their viewports, reusing the plans and elevations that exist', () => {
     const before = state().views.length;
     const report = apply();

@@ -35,6 +35,16 @@ function assertInside(s: PlannedSheet): void {
 }
 
 describe('planDraftSet', () => {
+  it('stands each elevation plane just inside the facade of the extents it was given', () => {
+    const p = planDraftSet(input({ bounds: box(12, 10, 6, 100, 200) }));
+    const at = (name: string) => (p.views.find((v) => v.name === name) as { planeOffset: number }).planeOffset;
+    assert.ok(Math.abs(at('North Elevation') - 200.05) < 1e-9);
+    assert.ok(Math.abs(at('South Elevation') - 209.95) < 1e-9);
+    assert.ok(Math.abs(at('West Elevation') - 100.05) < 1e-9);
+    assert.ok(Math.abs(at('East Elevation') - 111.95) < 1e-9);
+  });
+
+
   it('makes a plan per storey, four elevations and two sections, on gap-free sheets A-1xx / A-2xx / A-3xx', () => {
     const p = planDraftSet(input({ storeys: storeys(3) }));
     assert.deepEqual(p.views.map((v) => v.kind), ['plan', 'plan', 'plan', 'elevation', 'elevation', 'elevation', 'elevation', 'section', 'section']);

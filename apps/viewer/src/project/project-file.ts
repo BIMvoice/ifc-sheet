@@ -84,7 +84,8 @@ function readView(v: unknown, path: string): ProjectView {
     }
     case 'elevation':
       if (!DIRECTIONS.includes(v.direction as ElevationDirection)) fail(`${path}.direction`, `must be one of ${DIRECTIONS.join(', ')}`);
-      return { ...base, kind: 'elevation', direction: v.direction as ElevationDirection };
+      if (v.planeOffset !== undefined && !isNumber(v.planeOffset)) fail(`${path}.planeOffset`, 'must be a number');
+      return { ...base, kind: 'elevation', direction: v.direction as ElevationDirection, ...(v.planeOffset !== undefined ? { planeOffset: v.planeOffset } : {}) };
     default:
       return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null };
   }

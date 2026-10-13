@@ -71,6 +71,8 @@ export interface PlannedElevation {
   kind: 'elevation';
   name: string;
   direction: ElevationDirection;
+  /** Where the plane stands on its axis, metres: just inside the facade of the main body. */
+  planeOffset: number;
   /** View depth, metres. */
   depth: number;
   depthReason: Reason;

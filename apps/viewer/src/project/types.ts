@@ -99,6 +99,12 @@ export interface SectionProjectView extends ProjectViewBase {
 export interface ElevationProjectView extends ProjectViewBase {
   kind: 'elevation';
   direction: ElevationDirection;
+  /**
+   * World coordinate, metres, of the plane on its axis (z for north and
+   * south, x for east and west). Absent: the plane sits just inside the whole
+   * model's box on that facade.
+   */
+  planeOffset?: number;
 }
 
 export interface ThreeDProjectView extends ProjectViewBase {

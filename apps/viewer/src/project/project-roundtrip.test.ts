@@ -70,7 +70,7 @@ const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').Pro
       custom: { normal: [0, 0, 1], distance: 1.5, pickedAt: [1, 2, 3], tangent: [1, 0, 0], bitangent: [0, 1, 0] },
     },
   } satisfies Required<SectionProjectView>,
-  elevation: { ...base, id: 'v-el', name: 'East', kind: 'elevation', direction: 'east' } satisfies Required<ElevationProjectView>,
+  elevation: { ...base, id: 'v-el', name: 'East', kind: 'elevation', direction: 'east', planeOffset: 7.25 } satisfies Required<ElevationProjectView>,
   '3d': {
     ...base, id: 'v-3d', name: 'Axo', kind: '3d',
     viewpoint: { position: { x: 1, y: 2, z: 3 }, target: { x: 0, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 }, fov: 50, projectionMode: 'orthographic', orthoSize: 12 },
