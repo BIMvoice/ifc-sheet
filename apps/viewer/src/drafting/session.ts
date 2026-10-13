@@ -22,6 +22,7 @@ import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt
 import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
 import { drawingToUserPoint, userToDrawingPoint, type SectionAxisName } from './frame';
+import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
 import {
@@ -75,11 +76,7 @@ export const useDraftingSession = create<SessionState>()(() => ({
 }));
 
 const HISTORY_LINES = 50;
-const settings: DraftSettings = { filletRadius: 0, offsetDistance: null, textHeight: 0.25, hatchPattern: 'LINES45', hatchScale: 1, hatchAngle: 0, extrudeClass: 'IfcBuildingElementProxy', extrudeDepth: 1,
-  roofKind: 'gable', roofSystem: true, roofPick: false, roofSlope: 30, roofThickness: 0.25, roofOverhang: 0.5,
-  axisLabel: '1', axisBubble: 'circle', axisEnds: 'both', axisSize: null, axisLineType: 'dashdot',
-  dimContinuous: true, currentTextStyle: 'standard', currentDimStyle: 'standard', tagField: 'mark', annotationType: null,
-  symbolId: null, symbolScale: 1, symbolRotation: 0, symbolTarget: null };
+const settings: DraftSettings = defaultDraftSettings();
 let command: DraftCommand | null = null;
 let pending: DraftCommandDef | null = null;
 export const draftSettings = (): Readonly<DraftSettings> => scaledSettings;
@@ -171,16 +168,8 @@ function finish(result: StepResult): void {
  */
 let sizeScale = 1;
 
-const SCALED = new Set<keyof DraftSettings>(['textHeight', 'hatchScale']);
-
 /** The settings as commands see them on the current target. */
-const scaledSettings = new Proxy(settings, {
-  get: (target, key) => (SCALED.has(key as keyof DraftSettings) ? (target[key as keyof DraftSettings] as number) * sizeScale : target[key as keyof DraftSettings]),
-  set: (target, key, value) => {
-    (target as unknown as Record<string, unknown>)[key as string] = SCALED.has(key as keyof DraftSettings) ? Number(value) / sizeScale : value;
-    return true;
-  },
-});
+const scaledSettings = scaledDraftSettings(settings, () => sizeScale);
 
 /** Where typed absolute coordinates count from, in drawing space (`frame.ts`). */
 let userOrigin: Pt = { x: 0, y: 0 };
