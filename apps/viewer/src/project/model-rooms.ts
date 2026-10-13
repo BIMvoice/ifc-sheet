@@ -14,7 +14,7 @@ import { IfcTypeEnum, type SpatialNode } from '@ifc-lite/data';
 import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
 import { useViewerStore } from '@/store';
 import { storeyOfElement } from '@/project/effective-storey';
-import { createEntityBoundsLookup, type BoundingBox3D } from '@/utils/viewportUtils';
+import { createEntityBoundsLookup, unionEntityBounds, type BoundingBox3D } from '@/utils/viewportUtils';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals';
 import type { ProjectLevel } from './types';
@@ -68,4 +68,26 @@ export function proposalInputForLevel(level: ProjectLevel, meshes: MeshData[] | 
     }
   }
   return { building: { min: { x: bounds.min.x, z: bounds.min.z }, max: { x: bounds.max.x, z: bounds.max.z } }, rooms, stairs };
+}
+
+/**
+ * The extent of the building itself: what the storeys of `levels` contain,
+ * without the site, terrain or anything else around it. The set's scales and
+ * the sections' cuts are measured on it; `null` when no storey element has
+ * geometry yet.
+ */
+export function buildingExtent(levels: readonly ProjectLevel[], meshes: MeshData[] | null): AxisBounds | null {
+  const s = useViewerStore.getState();
+  const wanted = new Set(levels.flatMap((l) => l.storeyGlobalIds));
+  const ids: number[] = [];
+  for (const model of s.models.values()) {
+    const store = model.ifcDataStore;
+    const hierarchy = store?.spatialHierarchy;
+    if (!store || !hierarchy || model.visible === false) continue;
+    const offset = model.idOffset ?? 0;
+    for (const storey of findStoreys(hierarchy.project, (id) => wanted.has(store.entities.getGlobalId(id) ?? ''))) {
+      for (const id of hierarchy.byStorey.get(storey.expressId) ?? []) ids.push(id + offset);
+    }
+  }
+  return ids.length ? unionEntityBounds(meshes, ids, () => null) : null;
 }
