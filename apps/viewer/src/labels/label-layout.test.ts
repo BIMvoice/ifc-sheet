@@ -119,4 +119,11 @@ describe('layoutLabels', () => {
     const out = layoutLabels([item(w)], scene([w, col, wallAt('far', 100, 100, 101, 101)], [], 0.1)).get('1')!;
     assert.ok(!rectHitsRing(rectOf(out.centre), col.ring), 'a column beside the wall is not covered');
   });
+
+  it('lays out a plan of 200 000 elements: the extent is folded, not spread into one call (a RangeError at about 120 000)', () => {
+    const w = wallAt('1', 0, 0, 10, 0.2);
+    const filler = Array.from({ length: 200_000 }, (_, n) => wallAt(`f${n}`, 100 + (n % 500), 100 + Math.floor(n / 500), 100.5 + (n % 500), 100.2 + Math.floor(n / 500)));
+    const p = layoutLabels([item(w)], scene([w, ...filler])).get('1')!;
+    assert.ok(p.free);
+  });
 });
