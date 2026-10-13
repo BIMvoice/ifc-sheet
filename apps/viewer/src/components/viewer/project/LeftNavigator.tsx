@@ -24,11 +24,13 @@ import { DraftingStandardsDialog } from '../drafting/standards/DraftingStandards
 import { JoineryDialog } from '../joinery/JoineryDialog';
 import { installGroupBehaviour } from '@/project/element-groups';
 import { installRoofBlocks } from '@/project/roof-block';
+import { installSectionLink } from '@/drafting/section-link';
 import '@/element-types/model-sync';
 import '@/project/cut-priorities';
 
 // Clicking a member selects its group; a group in edit mode keeps the rest locked.
 installGroupBehaviour();
+installSectionLink();
 installRoofBlocks();
 
 type LeftTab = 'model' | 'project';

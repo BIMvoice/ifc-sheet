@@ -4,9 +4,9 @@
 
 /**
  * The section symbol under edits: its parts select, erase and stay together
- * as one thing; it is locked to its section (the cut plane is stored on the
- * view, so moving, rotating or mirroring the symbol would leave the two out
- * of step); a copy is plain drawing and does not claim to be the section.
+ * as one thing; it moves and turns whole, and its section's cut plane follows
+ * it (`section-link.ts`); a copy is plain drawing and does not claim to be
+ * the section.
  */
 
 import { beforeEach, describe, it } from 'node:test';
@@ -72,48 +72,47 @@ describe('section symbol as one thing', () => {
   });
 });
 
-describe('section symbol is locked to its section', () => {
-  const before = () => JSON.stringify(drafts().map((d) => d.shape));
+describe('section symbol moves whole, its section with it (section-link.ts)', () => {
+  const symbol = () => drafts().filter((d) => d.params.sectionOf);
 
-  it('does not move, rotate or mirror-and-erase', () => {
+  it('moves and rotates every part together; mirror-and-erase keeps the original', () => {
     drawSection();
-    const snapshot = before();
+    const count = symbol().length;
     clickDrawing({ x: 5, y: 0 }, TOL, false);
     startDraftCommand('move');
     clickDrawing({ x: 0, y: 0 }, TOL, false);
-    clickDrawing({ x: 3, y: 4 }, TOL, false);
-    assert.equal(before(), snapshot, 'move');
-    startDraftCommand('rotate');
-    clickDrawing({ x: 0, y: 0 }, TOL, false);
-    clickDrawing({ x: 0, y: 5 }, TOL, false);
-    assert.equal(before(), snapshot, 'rotate');
+    clickDrawing({ x: 0, y: 4 }, TOL, false);
+    const cut = symbol()[0].shape;
+    assert.ok(cut.type === 'line' && cut.a.y === 4 && cut.b.y === 4, 'the cut line moved');
+    assert.equal(symbol().length, count, 'no part left behind');
+    const snapshot = JSON.stringify(symbol().map((d) => d.shape));
+    clickDrawing({ x: 5, y: 4 }, TOL, false);
     startDraftCommand('mirror');
     submitCommandLine('E', null);
     clickDrawing({ x: 0, y: 10 }, TOL, false);
     clickDrawing({ x: 1, y: 10 }, TOL, false);
-    assert.equal(before().slice(0, snapshot.length - 1), snapshot.slice(0, snapshot.length - 1), 'mirror with erase keeps the original');
-    assert.ok(drafts().length > JSON.parse(snapshot).length, 'the mirrored copy is still made');
+    assert.equal(JSON.stringify(symbol().map((d) => d.shape)), snapshot, 'mirror with erase keeps the original');
   });
 
-  it('moves the free shapes of a mixed selection and leaves the symbol', () => {
+  it('moves the free shapes of a mixed selection together with the symbol', () => {
     drawSection();
     startDraftCommand('line');
     clickDrawing({ x: 0, y: 50 }, TOL, false);
     clickDrawing({ x: 4, y: 50 }, TOL, false);
     cancelCommand();
-    const symbol = drafts().filter((d) => d.params.sectionOf).map((d) => JSON.stringify(d.shape));
     const free = drafts().find((d) => !d.params.sectionOf);
     assert.ok(free);
     useDraftingSession.setState({ selection: new Set(drafts().map((d) => d.id)) });
     startDraftCommand('move');
     clickDrawing({ x: 0, y: 0 }, TOL, false);
     clickDrawing({ x: 1, y: 0 }, TOL, false);
-    assert.deepEqual(drafts().filter((d) => d.params.sectionOf).map((d) => JSON.stringify(d.shape)), symbol);
     const moved = drafts().find((d) => d.id === free.id)?.shape;
     assert.ok(moved?.type === 'line' && moved.a.x === 1);
+    const cut = symbol()[0].shape;
+    assert.ok(cut.type === 'line' && cut.a.x === 1);
   });
 
-  it('is recognised as a symbol of a live section, and not once the link is gone', () => {
+  it('is recognised as a symbol of a live section', () => {
     drawSection();
     assert.ok(drafts().every((d) => isSectionSymbol(d, useProjectStore.getState().views)));
   });

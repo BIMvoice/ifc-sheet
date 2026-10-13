@@ -21,16 +21,13 @@ function selected(ctx: DraftContext): DraftEntity[] {
 }
 
 /**
- * The part of the selection that may change shape or place. A section symbol
- * is locked to its section (the cut plane lives on the section view and would
- * be left behind), so it is left out and the user is told.
+ * The part of the selection that may move or turn: all of it, a section
+ * symbol whole. Its section's cut plane follows the symbol
+ * (`section-link.ts`), so moving it is how a section is moved.
  */
 function editable(ctx: DraftContext): DraftEntity[] {
-  const views = useProjectStore.getState().views;
-  const items = selected(ctx);
-  const free = items.filter((e) => !isSectionSymbol(e, views));
-  if (free.length < items.length) ctx.say('drafting.msg.sectionSymbolLocked');
-  return free;
+  const ids = withSectionParts(new Set(selected(ctx).map((e) => e.id)), ctx.entities());
+  return ctx.entities().filter((e) => ids.has(e.id));
 }
 
 export const eraseCommand: DraftCommandDef = {

@@ -47,7 +47,7 @@ import { useDraftingKeys } from './useDraftingKeys';
 import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 import { SelectionBar } from './SelectionBar';
 import { gripsOf } from '@/drafting/grips';
-import { isSectionSymbol } from '@/drafting/section-symbol';
+import { grippable } from '@/drafting/section-link';
 import { arrangementLoops, type Segment } from '@/drafting/arrangement';
 import { shapeSegments } from '@/hooks/useDraftingLines3D';
 import { screenToDrawing } from '@/drafting/frame';
@@ -192,7 +192,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
 
   // The selection's grips (a handful of entities at most) and the on-canvas editing bar.
   const selected = useMemo(() => entities.filter((e) => selection.has(e.id)), [entities, selection]);
-  const grips = useMemo(() => (selected.length <= 20 ? selected.filter((e) => !isSectionSymbol(e, views)).flatMap((e) => gripsOf(e.id, e.shape)) : []), [selected, views]);
+  const grips = useMemo(() => (selected.length <= 20 ? grippable(selected, entities, views).flatMap((e) => gripsOf(e.id, e.shape)) : []), [selected, entities, views]);
   const [editingText, setEditingText] = useState(false);
   useEffect(() => setEditingText(false), [selection]);
   const { state, handlers } = useDraftingPointer({ containerRef, transform: viewTransform, setTransform: setViewTransform, axis, entityShapes, references, grips });
