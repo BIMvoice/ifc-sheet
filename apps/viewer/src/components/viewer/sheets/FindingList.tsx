@@ -49,11 +49,12 @@ function FillField({ finding, skin, onFilled }: { finding: Finding; skin: SetSki
 export function FindingList({ nav, skin, readOnMount = false, onLeave }: Props) {
   const { t } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
-  const { findings, busy, refresh, fix } = useFindings();
+  const { findings, busy, failure, refresh, fix } = useFindings();
   useEffect(() => { if (readOnMount) refresh(); }, []);
   return (
     <>
       <div><button type="button" className={skin.button} disabled={busy} onClick={refresh}>{t('check.refresh')}</button></div>
+      {failure ? <p role="alert" className={skin.note}>{t(`check.fix.${failure}` as TranslationKey)}</p> : null}
       {findings === null ? null : findings.length === 0 ? <p className={skin.note}>{t('check.none')}</p> : (
         <>
           <p className={skin.note}>{t('check.count', { count: findings.length })}</p>
