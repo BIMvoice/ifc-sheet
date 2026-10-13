@@ -6,7 +6,7 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { clearDraftHistory, redoDrafts, undoDrafts } from '@/drafting/draft-store';
 import { addSectionFromLine } from '@/drafting/commands/workplane';
-import { addProjectSheet, projectDocument, removeProjectItem, resetProject, syncProjectWithModels, updateProjectView, useProjectStore } from '@/project/project-store';
+import { addProjectSheet, addProjectView, projectDocument, removeProjectItem, resetProject, syncProjectWithModels, updateProjectView, useProjectStore } from '@/project/project-store';
 import { parseProjectFile, serializeProject } from '@/project/project-file';
 import { applyDraftSet } from './apply.js';
 import { planDraftSet } from './plan.js';
@@ -96,12 +96,39 @@ describe('applyDraftSet', () => {
     apply();
     const after = projectDocument();
     assert.equal(undoDrafts(), true);
-    assert.equal(state().views, views);
-    assert.equal(state().sheets, sheets);
-    assert.equal(state().drafts, drafts);
+    assert.deepEqual(state().views, views);
+    assert.deepEqual(state().sheets, sheets);
+    assert.deepEqual(state().drafts, drafts);
     assert.equal(undoDrafts(), false, 'nothing else on the stack');
     assert.equal(redoDrafts(), true);
     assert.deepEqual(projectDocument(), after);
+  });
+
+  it('undoing the set removes only what it added; what came after stays, and Redo puts the set back', () => {
+    apply();
+    const ground = state().views.find((v) => v.kind === 'plan' && v.level.elevation === 0);
+    if (!ground) throw new Error('ground plan');
+    const mine = addSectionFromLine({ axis: 'y', position: 1.2, flipped: false }, ground.id, { x: 103, y: 201 }, { x: 103, y: 209 }, { x: 104, y: 205 }, { layerId: '0', textHeight: 0.25, current: { textStyle: 'standard', dimStyle: 'standard' } });
+    const sheet = addProjectSheet('Details');
+    assert.equal(undoDrafts(), true, 'the section');
+    assert.equal(undoDrafts(), true, 'the set');
+    assert.deepEqual(sections().map((v) => v.id), [mine], 'the set\'s sections are gone, the person\'s own stays');
+    assert.ok(state().sheets.some((s) => s.id === sheet), 'the sheet added later is still there');
+    assert.deepEqual(state().sheets.filter((s) => s.number.startsWith('A-2') || s.number === 'A-301').map((s) => s.number), []);
+    assert.equal(redoDrafts(), true);
+    assert.deepEqual(sections().map((v) => v.name).sort(), ['Section A-A', 'Section B-B', 'Section C-C']);
+    assert.ok(state().sheets.some((s) => s.id === sheet));
+  });
+
+  it('a view added after the set survives undoing the set', () => {
+    apply();
+    const id = addProjectView({ kind: 'elevation', name: 'Courtyard', direction: 'north', viewDepth: 5 });
+    assert.equal(undoDrafts(), true);
+    assert.ok(state().views.some((v) => v.id === id), 'the later view stays');
+    assert.equal(sections().length, 0);
+    assert.equal(redoDrafts(), true);
+    assert.equal(sections().length, 2);
+    assert.ok(state().views.some((v) => v.id === id));
   });
 
   it('running it again adds nothing and changes nothing', () => {
