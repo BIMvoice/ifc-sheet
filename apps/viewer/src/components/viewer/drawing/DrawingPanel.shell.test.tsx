@@ -78,12 +78,12 @@ it('the display chips write drawing2DDisplayOptions', () => {
   assert.equal(byLabel(ui, 'Print preview').getAttribute('aria-pressed'), String(!before.showPrintPreview));
 });
 
-it('IFC annotations are offered on plan cuts only, and projection never on a custom plane', () => {
+it('IFC annotations are offered on plan cuts only, and projection also on a custom plane', () => {
   const s = useViewerStore.getState();
   seed({ sectionPlane: { ...s.sectionPlane, axis: 'front', enabled: true, custom: { normal: [1, 0, 0], distance: 1, pickedAt: [1, 0, 0], tangent: [0, 1, 0], bitangent: [0, 0, 1] } } });
   const ui = render(<DrawingPanel />);
   assert.ok((byLabel(ui, 'Annotations') as HTMLButtonElement).disabled, 'annotations chip is disabled on a Front cut');
-  assert.ok((byLabel(ui, 'Projection') as HTMLButtonElement).disabled, 'projection chip is disabled on a custom plane');
+  assert.ok(!(byLabel(ui, 'Projection') as HTMLButtonElement).disabled, 'projection chip is offered on a custom plane');
   const before = useViewerStore.getState().drawing2DDisplayOptions;
   click(byLabel(ui, 'Annotations'));
   assert.equal(useViewerStore.getState().drawing2DDisplayOptions.showIfcAnnotations, before.showIfcAnnotations, 'a disabled chip writes nothing');

@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
 import type { IfcSourceBytes } from '@ifc-lite/parser';
 
 /**
@@ -82,7 +83,7 @@ export const ANNOTATION_VIEW_DEPTH = 1.2;
 // occluded/far dashed (hidden-line pass) — and culls the cut-away front half
 // and anything past this depth. Half the model depth is a sensible default;
 // tune here if sections feel too deep or too shallow.
-export const SECTION_VIEW_DEPTH_FRACTION = 0.5;
+export { SECTION_VIEW_DEPTH_FRACTION };
 
 interface UseDrawingGenerationParams {
   geometryResult: GeometryResult | null | undefined;
@@ -291,14 +292,16 @@ export function useDrawingGeneration({
       }
     }
 
-    // Construction projection runs on any CARDINAL cut (plan 'down' + vertical
-    // 'front'/'side'), but NOT a face-picked custom plane (the band classifier
-    // and outline binding are cardinal-only). Plan and section use different
+    // Construction projection runs on every cut: plan 'down', vertical
+    // 'front'/'side', and a face-picked or plan-line custom plane. The engine
+    // takes the custom basis end to end (cutter, band clip, silhouette path,
+    // depth raster; it bypasses the cardinal-only outline binding itself), so
+    // a section made from a line on a plan shows what lies beyond the cut to
+    // the view depth, like an elevation. Plan and section use different
     // boundaries: plan scopes to the current storey; a vertical section has no
     // "storey", so it projects a bounded view depth behind the cut (see the
-    // band computation below). The UI gates the toggle to the same set; the
-    // persisted flag can survive a switch to a custom plane, so gate here too.
-    const projectionSupported = !sectionPlane.custom;
+    // band computation below).
+    const projectionSupported = true;
     const manualDepth = displayOptions.constructionProjectionDepth;
     const boundedProjection = typeof manualDepth === 'number' && Number.isFinite(manualDepth) && manualDepth >= 0;
     const projectionOn = projectionSupported && displayOptions.showConstructionProjection && (!boundedProjection || manualDepth > 0);
@@ -311,7 +314,7 @@ export function useDrawingGeneration({
     // (profiles stay empty → every mesh silhouettes). Cached per model since
     // they don't move with the section. Single-model (modelIndex 0) for now,
     // mirroring the symbolic path's federation limitation.
-    const profilesNeeded = projectionOn && !boundedProjection && sectionPlane.axis === 'down';
+    const profilesNeeded = projectionOn && !boundedProjection && sectionPlane.axis === 'down' && !sectionPlane.custom;
     let profiles: ProfileEntry[] = [];
     if (profilesNeeded && ifcDataStore?.source && modelCacheKey !== null) {
       const pcache = profileCacheRef.current;
@@ -447,8 +450,9 @@ export function useDrawingGeneration({
         }
       }
 
-      if (projectionOn && !sectionPlane.custom && sectionPlane.axis !== 'down') {
-        belowDepth = Math.max((axisMax - axisMin) * SECTION_VIEW_DEPTH_FRACTION, 1e-3);
+      if (projectionOn && (sectionPlane.custom || sectionPlane.axis !== 'down')) {
+        // The automatic depth is shared with the section's depth band on its plan.
+        belowDepth = automaticViewDepth(sectionPlane, bounds) ?? 1e-3;
         aboveDepth = 1e-3;
       }
       if (boundedProjection) {

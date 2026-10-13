@@ -14,6 +14,7 @@ import { placeSymbol as placeLevelMark } from './level-mark';
 import { mirrorShape, rotateShape, translateShape } from './transform';
 import { findSymbol, missingSymbolMark, placeSymbol } from './symbols';
 import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
+import { figureUp, leaderOf } from './figure-layout';
 import { leaderTextRight } from './leader-segments';
 import { leaderStart } from '@/labels/label-leader';
 import { textBlock, type TextFrame } from './text-block';
@@ -45,6 +46,17 @@ export function formatLevel(m: number): string {
 function unit(v: Pt): Pt {
   const l = Math.hypot(v.x, v.y);
   return l > 1e-12 ? { x: v.x / l, y: v.y / l } : { x: 1, y: 0 };
+}
+
+/**
+ * The short leader a figure carries when it was moved off its dimension line (above, below, or past the end of
+ * the string): from the middle of the line to the figure's near edge. Nothing for a figure left on the line.
+ */
+function figureLeader(layout: DimensionLayout, textAt: Pt, height: number): { a: Pt; b: Pt }[] {
+  const line = layout.lines[2];
+  const along = { x: Math.cos(layout.textAngle), y: Math.sin(layout.textAngle) };
+  const l = leaderOf(add(line.a, scale(sub(line.b, line.a), 0.5)), textAt, height, figureUp(along, screenUp, screenRight), along, textBlock(layout.label, height).outer.x1);
+  return l ? [l] : [];
 }
 
 /** Drawing-unit sizes and the number format a dimension style gives its layout. */
@@ -87,7 +99,7 @@ export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimensi
   const format = o.format ?? formatLength;
   if (shape.type === 'dimension') {
     const layout = linearLayout(shape.a, shape.b, shape.at, shape.variant, shape.text, o);
-    return shape.textAt ? { ...layout, textAt: shape.textAt } : layout;
+    return shape.textAt ? { ...layout, lines: [...layout.lines, ...figureLeader(layout, shape.textAt, shape.height)], textAt: shape.textAt } : layout;
   }
   if (shape.type === 'radial') {
     const dir = unit(sub(shape.at, shape.c));

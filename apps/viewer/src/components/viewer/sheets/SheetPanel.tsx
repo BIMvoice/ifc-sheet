@@ -8,9 +8,12 @@
  */
 
 import { ViewportLayers } from './ViewportLayers';
+import { CheckPanel } from './CheckPanel';
+import { IssuePanel } from './IssuePanel';
 import { Download, Printer, Trash2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui/button';
+import { setSheetNumber } from '@/project/project-store';
 import { removeViewport, setTitleBlockField, SHEET_SCALES, updateSheet, updateViewport } from '@/project/sheets';
 import type { PaperSize, ProjectSheet, SheetViewport } from '@/project/types';
 
@@ -63,7 +66,7 @@ export function SheetPanel({ sheet, viewport, box, viewportName, onExportSvg, on
         </select>
       </Row>
       <h3 className="pt-2 font-bold uppercase tracking-wider">{t('sheets.titleBlock')}</h3>
-      <TextField label={t('sheets.tb.number')} value={sheet.number} onCommit={(v) => v.trim() && updateSheet(sheet.id, { number: v.trim() })} />
+      <TextField label={t('sheets.tb.number')} value={sheet.number} onCommit={(v) => v.trim() && setSheetNumber(sheet.id, v)} />
       <TextField label={t('sheets.tb.title')} value={sheet.name} onCommit={(v) => v.trim() && updateSheet(sheet.id, { name: v.trim() })} />
       <TextField label={t('sheets.tb.project')} value={tb.project ?? ''} onCommit={(v) => setTitleBlockField(sheet.id, 'project', v)} />
       <TextField label={t('sheets.tb.drawnBy')} value={tb.drawnBy ?? ''} onCommit={(v) => setTitleBlockField(sheet.id, 'drawnBy', v)} />
@@ -91,6 +94,8 @@ export function SheetPanel({ sheet, viewport, box, viewportName, onExportSvg, on
         <Button variant="outline" size="sm" className="flex-1" onClick={onExportDxf}><Download className="size-3.5 mr-1" />{t('sheets.dxf')}</Button>
         <Button variant="outline" size="sm" className="w-full" onClick={onPrint}><Printer className="size-3.5 mr-1" />{t('sheets.pdf')}</Button>
       </div>
+      <CheckPanel />
+      <IssuePanel />
     </aside>
   );
 }

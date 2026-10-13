@@ -11,6 +11,8 @@
 import type { TranslationKey } from '@/i18n';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ViewElement } from '@/labels/view-elements';
+import type { PlanPart } from '@/dimall/types';
+import type { RoomOfPlan } from '@/tagall/footprint';
 import type { ProjectView } from '@/project/types';
 import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
 
@@ -52,6 +54,10 @@ export interface DraftContext {
   elementAt(p: Pt): number | null;
   /** Every model element the view draws, with a point to label it at. */
   viewElements(): ViewElement[];
+  /** The walls, doors and windows the plan is cut through, for DIMALL. */
+  planParts(): PlanPart[];
+  /** The rooms of the plan in front. */
+  rooms(): RoomOfPlan[];
   /** +1, or −1 when the drawing is mirrored on screen (a user CCW angle is CW in drawing space). */
   orientation: 1 | -1;
   settings: DraftSettings;
@@ -128,4 +134,6 @@ export interface DraftCommandDef {
   /** Modify commands act on a selection, gathered first when empty. */
   needsSelection?: boolean;
   create(ctx: DraftContext): DraftCommand;
+  /** A command that needs no further input: it does its work when named, instead of `create`. */
+  run?(ctx: DraftContext): void;
 }

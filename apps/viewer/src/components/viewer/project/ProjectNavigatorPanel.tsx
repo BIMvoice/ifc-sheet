@@ -12,7 +12,7 @@
 
 import { can } from '@/edition';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { Spline, Box, Building2, Camera, FileBox, FilePlus2, FolderOpen, LayoutTemplate, Plus, Rows3, Save, Scissors, Search, SquareDashed, Table2 } from 'lucide-react';
+import { Spline, Box, Files, Building2, Camera, FileBox, FilePlus2, FolderOpen, LayoutTemplate, Plus, Rows3, Save, Scissors, Search, SquareDashed, Table2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,8 @@ import { exportProjectFile, importProjectFile, PROJECT_FILE_SUFFIX } from '@/pro
 import { activateDocumentTab, openProjectView, saveLiveCameraAsView, saveLiveSectionAsView } from '@/project/open-view';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import { addSchedule } from '@/joinery/schedules';
+import { makeDraftSet } from '@/draft-set/run';
+import { resolve } from '@/i18n/registry';
 import { addLegend, duplicateLegend } from '@/legend/legend-actions';
 import { AnnoLegend } from '@/icons';
 import { duplicateCivilDrawing } from '@/civil/civil-drawings';
@@ -140,6 +142,10 @@ export function ProjectNavigatorPanel() {
     else setRenamingId(id);
   };
   const newSheet = () => setRenamingId(addProjectSheet());
+  const draftSet = () => {
+    const { lines } = makeDraftSet();
+    toast.success(lines.map((l) => resolve(l.key, l.params)).join('\n'));
+  };
   const onImport = async (file: File | undefined) => {
     if (!file) return;
     try {
@@ -154,7 +160,12 @@ export function ProjectNavigatorPanel() {
   const folderAction: Partial<Record<FolderId, ReactNode>> = {
     section: <AddButton label={t('projectNavigator.action.saveSection')} onClick={saveSection} />,
     '3d': <AddButton label={t('projectNavigator.action.save3d')} onClick={save3d} icon={<Camera className="size-3.5" />} />,
-    sheets: <AddButton label={t('projectNavigator.action.newSheet')} onClick={newSheet} />,
+    sheets: (
+      <>
+        <AddButton label={t('draftSet.action')} onClick={draftSet} icon={<Files className="size-3.5" />} />
+        <AddButton label={t('projectNavigator.action.newSheet')} onClick={newSheet} />
+      </>
+    ),
     legends: <AddButton label={t('legend.new')} onClick={() => setRenamingId(addLegend(t('legend.newName')))} />,
     schedules: <AddButton label={t('schedule.new')} onClick={() => setRenamingId(addSchedule('all', t('schedule.newName')))} />,
     plan: <AddButton label={t('projectNavigator.action.newPlan')} onClick={() => dialogs.open('plan')} />,

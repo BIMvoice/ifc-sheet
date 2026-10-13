@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useProjectStore } from '@/project/project-store';
+import { paperOf } from '@/project/sheets';
 import { draftsOfView } from '@/drafting/draft-store';
 import { findSnap } from '@/drafting/snaps';
 import {
@@ -39,18 +40,20 @@ export function useSheetDrafting(sheetId: string, pan: Pan, extraPatterns: reado
   const selection = useDraftingSession((s) => s.selection);
   const snapOn = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
+  const paperHeight = useProjectStore((s) => { const sheet = s.sheets.find((o) => o.id === sheetId); return sheet ? paperOf(sheet).h : 0; });
   const entities = useMemo(() => draftsOfView(sheetId, drafts), [drafts, sheetId]);
   const shapes = useMemo(() => entities.flatMap((e) => (isGeometry(e.shape) ? [e.shape] : [])), [entities]);
   const [cursor, setCursor] = useState<{ p: Pt; snap: SnapHit | null } | null>(null);
 
   useEffect(() => {
-    attachDraftingView(sheetId, 'down', () => [], SHEET_UNITS);
+    // Typed absolute coordinates count from the lower-left corner of the paper.
+    attachDraftingView(sheetId, 'down', () => [], SHEET_UNITS, { x: 0, y: paperHeight });
     setWorkPlaneProvider(() => null, () => null);
     setAnnotationProviders(
       () => entities.flatMap((e) => (e.shape.type === 'polyline' && e.shape.closed ? [e.shape.pts] : [])),
       () => 0,
     );
-  }, [sheetId, entities]);
+  }, [sheetId, entities, paperHeight]);
 
   const resolve = useCallback((raw: Pt): { p: Pt; snap: SnapHit | null } => {
     const command = runningCommand();

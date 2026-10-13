@@ -30,6 +30,9 @@ import { useProjectStore } from '@/project/project-store';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import type { ProjectView } from '@/project/types';
 import { viewElements } from '@/labels/view-elements';
+import { planParts } from '@/dimall/parts';
+import { roomFootprints } from '@/tagall/footprint';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { pickModelElement, referenceSet, referencesIn } from '@/drafting/references';
 import { selectFromPlan } from '@/components/viewer/plan/PlanPointer';
 import { draftsOfView } from '@/drafting/draft-store';
@@ -37,7 +40,7 @@ import { syncLevelMarks } from '@/drafting/level-sync';
 import { levelResolverFor, storeyOf } from '@/drafting/level-resolver';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
-  attachDraftingView, currentLayerId, setElementPicker, setViewElementsProvider, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
+  attachDraftingView, currentLayerId, setElementPicker, setViewElementsProvider, setPlanPartsProvider, setRoomsProvider, pressEscape, runningCommand, setAnnotationProviders, setLevelReferenceProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
   toggleOrtho, toggleSnap, useDraftingSession, pickEntity, setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
@@ -48,6 +51,8 @@ import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 import { SelectionBar } from './SelectionBar';
 import { gripsOf } from '@/drafting/grips';
 import { grippable } from '@/drafting/section-link';
+import { cropClipPath, isDetailMark, selectedDetailGrips } from '@/drafting/detail-mark';
+import { selectedSectionBand } from '@/drafting/section-depth';
 import { arrangementLoops, type Segment } from '@/drafting/arrangement';
 import { shapeSegments } from '@/hooks/useDraftingLines3D';
 import { screenToDrawing } from '@/drafting/frame';
@@ -96,6 +101,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const models = useViewerStore((s) => s.models);
   const legacyGeometry = useViewerStore((s) => s.geometryResult);
   // The drawing's own plane; without a drawing (an empty project) the view's work plane.
+  const modelBounds = useMemo(() => mergedSectionBounds(models, legacyGeometry), [models, legacyGeometry]);
   const fallbackPlane = useMemo(() => viewPlaneConfig(view, levels, mergedSectionBounds(models, legacyGeometry)), [view, levels, models, legacyGeometry]);
   const plane = drawing?.config.plane ?? fallbackPlane ?? undefined;
   const axis: SectionAxisName = plane ? AXIS_NAME[plane.axis] : 'down';
@@ -164,6 +170,23 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     setViewElementsProvider(() => (drawing ? viewElements(drawing) : []));
     return () => setViewElementsProvider(null);
   }, [drawing]);
+  // DIMALL: the walls, doors and windows this plan is cut through.
+  useEffect(() => {
+    setPlanPartsProvider(() => planParts(drawing));
+    return () => setPlanPartsProvider(null);
+  }, [drawing]);
+  // TAGALL: the rooms of this plan, each space cut at the plan's height.
+  useEffect(() => {
+    setRoomsProvider(() => {
+      const level = view.kind === 'plan' ? resolvePlanLevel(view, levels) ?? view.level : null;
+      if (!level || view.kind !== 'plan') return [];
+      return roomFootprints(runtimeGeometry?.meshes ?? [], level.elevation + view.cutHeight, level.elevation).flatMap((r) => {
+        const guid = renderIdGlobalId(r.renderId);
+        return guid ? [{ ...r, guid }] : [];
+      });
+    });
+    return () => setRoomsProvider(null);
+  }, [view, levels, runtimeGeometry]);
   // Hatch boundaries: drafted closed shapes and the drawing's cut outlines. Level marks: the
   // plan's level, or the point's height on a section / elevation.
   useEffect(() => {
@@ -196,7 +219,14 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
 
   // The selection's grips (a handful of entities at most) and the on-canvas editing bar.
   const selected = useMemo(() => entities.filter((e) => selection.has(e.id)), [entities, selection]);
-  const grips = useMemo(() => (selected.length <= 20 ? grippable(selected, entities, views).flatMap((e) => gripsOf(e.id, e.shape)) : []), [selected, entities, views]);
+  // A selected section symbol also shows the depth band, with its one handle on the viewing side.
+  const sectionBand = useMemo(() => selectedSectionBand(selection, entities, views, modelBounds), [selection, entities, views, modelBounds]);
+  // A selected detail mark shows the grips of its area.
+  const detailMark = useMemo(() => selectedDetailGrips(selection, entities, views), [selection, entities, views]);
+  const grips = useMemo(() => {
+    const own = selected.length <= 20 ? grippable(selected.filter((e) => !isDetailMark(e, views)), entities, views).flatMap((e) => gripsOf(e.id, e.shape)) : [];
+    return [...own, ...(sectionBand ? [sectionBand.grip] : []), ...(detailMark?.grips ?? [])];
+  }, [selected, entities, views, sectionBand, detailMark]);
   const [editingText, setEditingText] = useState(false);
   useEffect(() => setEditingText(false), [selection]);
   const { state, handlers } = useDraftingPointer({ containerRef, transform: viewTransform, setTransform: setViewTransform, axis, entityShapes, references, grips });
@@ -274,6 +304,8 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           if (roof !== null && !useRoofDialog.getState().editing) editRoofBlock(roof);
         }}
       >
+        {/* A detail shows only its area of the drawing and of the symbols derived from the model. */}
+        <div className="absolute inset-0" style={view.detail ? { clipPath: cropClipPath({ min: view.detail.min, max: view.detail.max }, viewTransform, axis) } : undefined}>
         {shown ? (
           <Drawing2DCanvas
             drawing={shown}
@@ -300,6 +332,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         ) : null}
         <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
+        </div>
         <DraftOverlay
           entities={entities}
           layers={layers}
@@ -317,6 +350,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           hiddenLayers={view.hiddenLayers}
           grips={grips}
           gripDrag={state.gripDrag}
+          sectionBand={sectionBand}
         />
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />

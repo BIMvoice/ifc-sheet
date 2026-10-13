@@ -94,7 +94,8 @@ export const readField = (ref: FieldRef, el: LabelElement): unknown => readField
 const LENGTH_UNITS: Record<string, number> = { mm: 0.001, cm: 0.01, m: 1, km: 1000 };
 
 function readFormatted(field: TemplateField, el: LabelElement): string | null {
-  const { value, length } = readFieldValue(field.ref, el);
+  const refs = [field.ref, ...(field.alternatives ?? [])];
+  const { value, length } = refs.map((r) => readFieldValue(r, el)).find((v) => present(v.value)) ?? readFieldValue(field.ref, el);
   const factor = length && field.format ? LENGTH_UNITS[field.format.unit] : undefined;
   return formatValue(factor !== undefined && typeof value === 'number' ? value / factor : value, field.format);
 }

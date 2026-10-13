@@ -56,7 +56,7 @@ const category: Required<CategoryGraphics> = {
 };
 const graphics: Required<ViewGraphics> = { presetId: 'structure', categories: { walls: category, doors: { visible: false } } };
 
-const base = { auto: false, createdAt: 11, viewDepth: 4.5, graphics, scale: 50, hiddenLayers: ['L-hidden'] };
+const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'] };
 
 const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').ProjectView, { kind: K }>> } = {
   plan: {
@@ -70,7 +70,7 @@ const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').Pro
       custom: { normal: [0, 0, 1], distance: 1.5, pickedAt: [1, 2, 3], tangent: [1, 0, 0], bitangent: [0, 1, 0] },
     },
   } satisfies Required<SectionProjectView>,
-  elevation: { ...base, id: 'v-el', name: 'East', kind: 'elevation', direction: 'east' } satisfies Required<ElevationProjectView>,
+  elevation: { ...base, showHidden: true, id: 'v-el', name: 'East', kind: 'elevation', direction: 'east', planeOffset: 7.25 } satisfies Required<ElevationProjectView>,
   '3d': {
     ...base, id: 'v-3d', name: 'Axo', kind: '3d',
     viewpoint: { position: { x: 1, y: 2, z: 3 }, target: { x: 0, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 }, fov: 50, projectionMode: 'orthographic', orthoSize: 12 },
@@ -99,7 +99,7 @@ const SHAPES: EntityShape[] = [...Object.values(GEOMETRY), ...Object.values(ANNO
 // Ordered by view: a package keeps a view's drafts in drawing order (that is the stacking), views in path order.
 const drafts: DraftEntity[] = SHAPES.map((shape, i) => ({
   id: `d${i}`, viewId: i < SHAPES.length / 2 ? 'v-plan' : 'v-sec', layerId: i % 2 ? 'L-pen' : '0', shape,
-  params: { ifcClass: 'IfcWall', depth: 2.7, flag: true, textStyle: 'big', dimStyle: 'arch', tagOf: '2O2Fr$t4X7Zf8NOew3FLOH', sectionOf: 'v-sec', atype: 'at1', labelOf: '3cUkl32yn9qRSPvBJVyWYp' },
+  params: { ifcClass: 'IfcWall', depth: 2.7, flag: true, textStyle: 'big', dimStyle: 'arch', tagOf: '2O2Fr$t4X7Zf8NOew3FLOH', sectionOf: 'v-sec', detailOf: 'v-det', detailPart: 8, atype: 'at1', labelOf: '3cUkl32yn9qRSPvBJVyWYp' },
 }));
 
 const annotationType: Required<AnnotationType> = {
@@ -122,7 +122,7 @@ const viewport: Required<SheetViewport> = {
   id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'],
 };
 const sheet: Required<ProjectSheet> = {
-  id: 'sh1', number: 'A-201', name: 'Plans', createdAt: 9, paper: 'A2', orientation: 'portrait', viewports: [viewport],
+  id: 'sh1', number: 'A-201', autoNumber: true, name: 'Plans', createdAt: 9, paper: 'A2', orientation: 'portrait', viewports: [viewport],
   titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12', revision: 'B' },
 };
 const schedule: Required<ProjectSchedule> = { id: 'sc1', name: 'Doors', kind: 'door', createdAt: 5, scale: 25 };
@@ -161,6 +161,10 @@ const FULL: Required<ProjectDocument> = {
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],
+  issues: [{
+    id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
+    sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
+  }],
   savedSectionCuts: [{
     id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,
     plane: { axis: 'side', position: 4.2, flipped: true, capStyle: { fillColor: [1, 0.5, 0, 1], strokeColor: [0, 0, 0, 1], pattern: 'brick', spacingPx: 6, angleRad: 0.5, widthPx: 2, secondaryAngleRad: -0.5 }, showCap: false, showOutlines: false },
