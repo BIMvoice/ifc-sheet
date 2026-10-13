@@ -4,7 +4,8 @@
 
 /** Click-to-go for a finding: open the sheet or the view, select the annotation; and run the one-action fix on the view. */
 
-import { submitCommandLine, useDraftingSession } from '@/drafting/session';
+import { draftCommandByName } from '@/drafting/commands/registry';
+import { startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { activateDocumentTab } from '@/project/open-view';
 import { useViewDrawings } from '@/project/view-drawings';
 import type { Finding } from './types';
@@ -26,8 +27,9 @@ export async function runFix(f: Finding): Promise<boolean> {
     const ready = useViewDrawings.getState().byView[f.viewId]?.status === 'ready';
     if (ready && useDraftingSession.getState().viewId === f.viewId) {
       await wait(500);
-      submitCommandLine(f.fix, null);
-      return true;
+      // Started, not typed: a typed name is read by the running command (LINE takes it as a coordinate), a start cancels it first.
+      const def = draftCommandByName(f.fix);
+      return def !== undefined && startDraftCommand(def.id);
     }
     await wait(250);
   }

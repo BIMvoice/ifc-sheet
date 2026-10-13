@@ -8,7 +8,8 @@
  * select the annotation it is about, or run the one-action command that fixes it.
  */
 
-import { submitCommandLine, useDraftingSession } from '@/drafting/session';
+import { draftCommandByName } from '@/drafting/commands/registry';
+import { startDraftCommand, useDraftingSession } from '@/drafting/session';
 import type { Finding } from '@/check/types';
 import { useProjectStore } from '@/project/project-store';
 import { sheetsShowing } from '@/project/sheets';
@@ -50,6 +51,7 @@ export async function fixFinding(f: Finding): Promise<boolean> {
   const { viewId, fix } = f;
   if (!fix || !viewId || !goToFinding({ ...f, draftId: undefined })) return false;
   if (!(await whenAttached(viewId))) return false;
-  submitCommandLine(fix, null);
-  return true;
+  // Started, not typed: a typed name is read by the running command (LINE takes it as a coordinate), a start cancels it first.
+  const def = draftCommandByName(fix);
+  return def !== undefined && startDraftCommand(def.id);
 }

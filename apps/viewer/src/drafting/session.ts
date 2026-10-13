@@ -197,10 +197,11 @@ export function runningCommand(): DraftCommand | null {
   return command;
 }
 
-export function startDraftCommand(id: string): void {
+/** Start (or, for a one-action command, run) a command, cancelling the one that is running. False when there is no such command here or no view in front. */
+export function startDraftCommand(id: string): boolean {
   const def = draftCommandById(id);
   const { viewId } = get();
-  if (!def || !viewId) return;
+  if (!def || !viewId) return false;
   cancelCommand();
   say({ key: def.labelKey });
   set({ lastCommandId: def.id });
@@ -208,10 +209,12 @@ export function startDraftCommand(id: string): void {
     pending = def;
     set({ selecting: true, commandId: def.id });
     refresh();
-    return;
+    return true;
   }
-  if (def.run) return (def.run(context(viewId)), refresh());
-  begin(def, viewId);
+  if (def.run) def.run(context(viewId));
+  else begin(def, viewId);
+  refresh();
+  return true;
 }
 
 function begin(def: DraftCommandDef, viewId: string): void {
