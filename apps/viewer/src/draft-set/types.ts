@@ -101,6 +101,8 @@ export interface PlannedViewport {
   /** The drawing's box on the paper at this scale, mm. */
   width: number;
   height: number;
+  /** The box is set on the viewport; otherwise it is left to fit the drawing, as for any viewport placed by hand. */
+  fixedBox: boolean;
 }
 
 export type SheetGroup = 'plans' | 'elevations' | 'sections';

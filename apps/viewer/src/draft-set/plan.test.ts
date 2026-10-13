@@ -70,10 +70,22 @@ describe('planDraftSet', () => {
 
   it('puts a viewport box that equals the auto-fit box of the viewer', () => {
     const p = planDraftSet(input());
-    const v = sheetsOf(p, 'plans')[0].viewports[0];
+    // The second plan carries no section marks, so its box is the plain one.
+    const v = sheetsOf(p, 'plans')[0].viewports[1];
+    assert.equal(v.fixedBox, false);
     const fit = fitViewportBox({ min: { x: 0, y: 0 }, max: { x: 12, y: 10 } }, v.scale);
     assert.equal(v.width, fit.width);
     assert.equal(v.height, fit.height);
+  });
+
+  it('the plan with the section marks gets a fixed box that reaches past the line ends', () => {
+    const p = planDraftSet(input());
+    const [ground, upper] = sheetsOf(p, 'plans')[0].viewports;
+    assert.equal(ground.fixedBox, true);
+    assert.equal(upper.fixedBox, false);
+    // 12 x 10 m plus a 1 m overhang each side at 1:100 is 140 x 120 mm, plus 10 + 25 mm of room each side.
+    assert.deepEqual([ground.width, ground.height], [140 + 70, 120 + 70]);
+    assert.ok(sheetsOf(p, 'elevations').every((s) => s.viewports.every((v) => !v.fixedBox)));
   });
 
   it('one storey: one plan on one sheet, which says it is the only one', () => {
@@ -97,8 +109,8 @@ describe('planDraftSet', () => {
   });
 
   it('a wide building that cannot sit two side by side gets one per sheet and says so', () => {
-    // 30 m wide at 1:100 is 320 mm: one fits A3 (380), two do not.
-    const p = planDraftSet(input({ bounds: box(30, 8, 6), storeys: storeys(2) }));
+    // 28 m wide at 1:100 is 280 mm (370 with the room for the section marks on the ground plan): one fits A3 (380), two do not.
+    const p = planDraftSet(input({ bounds: box(28, 8, 6), storeys: storeys(2) }));
     const plans = sheetsOf(p, 'plans');
     assert.deepEqual(plans.map((s) => s.viewports.length), [1, 1]);
     assert.equal(plans[0].paper, 'A3');
@@ -115,8 +127,8 @@ describe('planDraftSet', () => {
   });
 
   it('turns the sheet to portrait when that gives the larger scale', () => {
-    // 20 m by 30 m: 220 x 320 mm at 1:100 fits A3 portrait; landscape A3 is only 207 mm high and would need 1:200.
-    const p = planDraftSet(input({ bounds: box(20, 30, 6), storeys: storeys(1) }));
+    // 15 m by 22 m: 240 x 310 mm at 1:100 (marks included) fits A3 portrait; landscape A3 is only 207 mm high and would need 1:200.
+    const p = planDraftSet(input({ bounds: box(15, 22, 6), storeys: storeys(1) }));
     const s = sheetsOf(p, 'plans')[0];
     assert.deepEqual([s.paper, s.orientation, s.viewports[0].scale], ['A3', 'portrait', 100]);
     assertInside(s);

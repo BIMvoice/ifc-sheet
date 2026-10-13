@@ -20,7 +20,7 @@ import { addSectionFromLine, addSectionSymbol, sectionPlaneFromLine } from '@/dr
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { addProjectSheet, addProjectView, setSheetNumber, updateProjectView, useProjectStore } from '@/project/project-store';
-import { addViewport, setTitleBlockField, updateSheet } from '@/project/sheets';
+import { addViewport, setTitleBlockField, updateSheet, updateViewport } from '@/project/sheets';
 import { sameElevation } from '@/project/view-defaults';
 import { viewPlaneConfig } from '@/project/view-plane-config';
 import type { ProjectLevel, ProjectView } from '@/project/types';
@@ -142,7 +142,10 @@ function addSheet(planned: PlannedSheet, ids: ReadonlyMap<string, string>, optio
   setSheetNumber(sheetId, number);
   updateSheet(sheetId, { paper: planned.paper, orientation: planned.orientation });
   for (const [key, value] of Object.entries(planned.titleBlock)) setTitleBlockField(sheetId, key, value);
-  for (const vp of missing) addViewport(sheetId, ids.get(vp.viewKey) as string, { x: vp.x, y: vp.y }, vp.scale);
+  for (const vp of missing) {
+    const viewportId = addViewport(sheetId, ids.get(vp.viewKey) as string, { x: vp.x, y: vp.y }, vp.scale);
+    if (vp.fixedBox) updateViewport(sheetId, viewportId, { width: vp.width, height: vp.height });
+  }
   report.sheetsAdded++;
   report.addedSheetNumbers.push(number);
 }

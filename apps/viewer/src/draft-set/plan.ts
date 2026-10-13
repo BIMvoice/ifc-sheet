@@ -20,6 +20,9 @@
  *    the smallest scale, reported (`fits: false`).
  *  - Scale: the largest offered scale (no larger than 1:20) at which the
  *    biggest drawing fits alone.
+ *  - The plan that carries the section marks gets a fixed box reaching past the
+ *    line ends by `SECTION_OVERHANG_M` and `MARK_ROOM_MM`, so arrows and names
+ *    are not clipped; every other viewport fits its drawing by itself.
  *  - Two drawings go side by side when the two biggest fit that way at that
  *    scale, otherwise one per sheet.
  *  - Sheet numbers run on without gaps in each group.
@@ -50,6 +53,8 @@ export const LARGEST_SCALE = 20;
 export const DEPTH_MARGIN_M = 1;
 /** How far a section line runs past the box, metres. */
 export const SECTION_OVERHANG_M = 1;
+/** Room beyond a section line's end for its arrow and name, paper mm. */
+export const MARK_ROOM_MM = 25;
 /** Plan cut height above a floor, metres (as `DEFAULT_PLAN_CUT_HEIGHT_M`). */
 const PLAN_CUT_M = 1.2;
 const LEVEL_MATCH_M = 0.25;
@@ -64,13 +69,15 @@ const reason = (key: Reason['key'], params: Reason['params'] = {}): Reason => ({
 const up = (v: number) => Math.ceil(v * 10 - 1e-9) / 10;
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
-interface Extent { w: number; h: number }
+/** A drawing's extent in metres; `marginMm` replaces the usual room around it (a plan that carries section marks needs more). */
+interface Extent { w: number; h: number; marginMm?: number }
 interface Candidate { paper: PaperSize; orientation: 'landscape' | 'portrait'; scale: number; fits: boolean; area: Area }
 interface Area { x: number; y: number; w: number; h: number }
 
 function boxAt(ext: Extent, scale: number, spec: SheetSpec): Extent {
   const k = 1000 / scale;
-  return { w: Math.max(MIN_BOX_MM.w, ext.w * k + spec.viewportMarginMm * 2), h: Math.max(MIN_BOX_MM.h, ext.h * k + spec.viewportMarginMm * 2) };
+  const margin = ext.marginMm ?? spec.viewportMarginMm;
+  return { w: Math.max(MIN_BOX_MM.w, ext.w * k + margin * 2), h: Math.max(MIN_BOX_MM.h, ext.h * k + margin * 2) };
 }
 
 /** The part of a sheet drawings may use: inside the frame and clear of the title block. */
@@ -131,7 +138,7 @@ function chooseCandidate(extents: readonly Extent[], spec: SheetSpec): Candidate
   return last as Candidate;
 }
 
-interface GroupDrawing { view: PlannedView; extent: Extent; plan?: PlannedPlan }
+interface GroupDrawing { view: PlannedView; extent: Extent; plan?: PlannedPlan; /** The viewport box is set, not left to fit the drawing. */ fixedBox?: boolean }
 
 interface Packed { sheets: PlannedSheet[]; note: Reason | null }
 
@@ -153,14 +160,14 @@ function packGroup(group: SheetGroup, drawings: readonly GroupDrawing[], titleKe
     let left = cand.area.x + (cand.area.w - total) / 2;
     const viewports: PlannedViewport[] = chunk.map((d, j) => {
       const box = chunkBoxes[j];
-      const vp = { viewKey: d.view.key, scale, x: round1(left + box.w / 2), y: round1(cand.area.y + cand.area.h / 2), width: round1(box.w), height: round1(box.h) };
+      const vp = { viewKey: d.view.key, scale, x: round1(left + box.w / 2), y: round1(cand.area.y + cand.area.h / 2), width: round1(box.w), height: round1(box.h), fixedBox: d.fixedBox === true };
       left += box.w + GAP_MM;
       return vp;
     });
     const params = { scale, paper: cand.paper, kind };
     const why = !cand.fits ? reason('draftSet.reason.noFit', params)
       : chunk.length === 2 ? reason('draftSet.reason.both', params)
-      : drawings.length === 1 ? reason('draftSet.reason.only', params)
+      : drawings.length === 1 ? reason('draftSet.reason.only', { ...params, kind: kind.replace(/s$/, '') })
       : paired ? reason('draftSet.reason.last', params)
       : reason('draftSet.reason.single', params);
     sheets.push({
@@ -215,6 +222,9 @@ export function planDraftSet(input: DraftSetInput): DraftSetPlan {
     return { view, extent: { w: dx, h: dz }, plan: view };
   });
   const ground = plans.reduce((a, b) => (Math.abs(b.plan!.level.elevation) < Math.abs(a.plan!.level.elevation) ? b : a));
+  // The plan with the section marks must show them whole: its box reaches past the line ends.
+  ground.extent = { w: dx + 2 * SECTION_OVERHANG_M, h: dz + 2 * SECTION_OVERHANG_M, marginMm: input.spec.viewportMarginMm + MARK_ROOM_MM };
+  ground.fixedBox = true;
 
   const elevations: GroupDrawing[] = ELEVATIONS.map((direction) => {
     const across = direction === 'north' || direction === 'south' ? dx : dz;

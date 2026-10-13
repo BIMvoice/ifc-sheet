@@ -43,7 +43,8 @@ describe('applyDraftSet', () => {
     assert.equal(sheet.name, 'draftSet.title.plans|Ground Floor / Level 1');
     assert.deepEqual([sheet.paper, sheet.orientation], ['A3', 'landscape']);
     assert.deepEqual(sheet.titleBlock, { project: 'Casa - Corp A', date: '2026-10-13' });
-    assert.deepEqual((sheet.viewports ?? []).map((v) => [v.scale, v.width, v.height, v.center]), [[100, 0, 0, null], [100, 0, 0, null]]);
+    assert.deepEqual((sheet.viewports ?? []).map((v) => [v.scale, v.width, v.height, v.center]), [[100, 210, 190, null], [100, 0, 0, null]]);
+    // The plan with the section marks has a box of its own; the others fit their drawing.
     // Every view is on exactly one sheet, except the 3D view.
     const placed = state().sheets.flatMap((s) => (s.viewports ?? []).map((v) => v.viewId));
     assert.equal(new Set(placed).size, placed.length);
