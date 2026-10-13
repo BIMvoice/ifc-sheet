@@ -12,11 +12,11 @@ import type { ProjectSheet } from '@/project/types';
 import { compareStates } from './compare.js';
 import { annotationImpacts } from './impact.js';
 import { sheetChanges } from './report.js';
-import type { ModelSnapshot, SnapElement } from './snapshot.js';
+import { snapshotFromElements, type ModelSnapshot, type SnapElement } from './snapshot.js';
 import { changesInView, cutBand, planBand } from './visibility.js';
 
-const el = (k: string, over: Partial<SnapElement> = {}): SnapElement => ({ k, t: 'IfcWall', n: `Wall ${k}`, d: `d-${k}`, c: { 'attr:core': `a-${k}`, 'pset:Pset_WallCommon': `p-${k}`, 'type-assignment': 't0' }, g: `g-${k}`, a: [0, 0, 0, 4, 0.2, 3], ...over });
-const state = (...elements: SnapElement[]): ModelSnapshot => ({ takenAt: 0, elements });
+const el = (k: string, over: Partial<SnapElement> = {}): SnapElement => ({ k, t: 'IfcWall', n: `Wall ${k}`, d: `d-${k}`, c: { 'attr:core': `a-${k}`, 'type-assignment': 't0' }, g: `g-${k}`, a: [0, 0, 0, 4, 0.2, 3], ...over });
+const state = (...elements: SnapElement[]): ModelSnapshot => snapshotFromElements(elements, 0);
 const only = (a: ModelSnapshot, b: ModelSnapshot) => compareStates(a, b).map((c) => [c.guid, c.kinds.join('+'), c.sets.join(',')]);
 
 describe('compareStates', () => {
@@ -36,11 +36,11 @@ describe('compareStates', () => {
     assert.equal(compareStates(state(el('A')), state(nudged), 0.01)[0].kinds.includes('moved'), false);
     assert.equal(compareStates(state(el('A')), state(nudged), 0.001)[0].kinds.includes('moved'), true);
   });
-  it('names the property sets that changed, and a changed type', () => {
-    const edited = el('A', { d: 'd2', c: { 'attr:core': 'a-A', 'pset:Pset_WallCommon': 'changed', 'qset:Qto_WallBaseQuantities': 'new', 'type-assignment': 't0' } });
-    const retyped = el('B', { d: 'd2', c: { 'attr:core': 'a-B', 'pset:Pset_WallCommon': 'p-B', 'type-assignment': 't1' } });
-    const renamed = el('C', { d: 'd2', c: { 'attr:core': 'changed', 'pset:Pset_WallCommon': 'p-C', 'type-assignment': 't0' } });
-    assert.deepEqual(only(state(el('A'), el('B'), el('C')), state(edited, retyped, renamed)), [['A', 'property', 'Pset_WallCommon,Qto_WallBaseQuantities'], ['B', 'type', ''], ['C', 'property', 'attributes']]);
+  it('tells a changed property set (not named: the state keeps no hash per set) from changed attributes and a changed type', () => {
+    const edited = el('A', { d: 'd2' });
+    const retyped = el('B', { d: 'd2', c: { 'attr:core': 'a-B', 'type-assignment': 't1' } });
+    const renamed = el('C', { d: 'd2', c: { 'attr:core': 'changed', 'type-assignment': 't0' } });
+    assert.deepEqual(only(state(el('A'), el('B'), el('C')), state(edited, retyped, renamed)), [['A', 'property', ''], ['B', 'type', ''], ['C', 'property', 'attributes']]);
   });
   it('carries where an element was and where it is, and its name', () => {
     const [c] = compareStates(state(el('A')), state(el('A', { g: 'g2', a: [1, 0, 0, 5, 0.2, 3] })));
@@ -56,7 +56,7 @@ describe('compareStates', () => {
 describe('what a view shows', () => {
   const changes = compareStates(
     state(el('floor', { a: [0, -0.3, 0, 8, 0, 6] }), el('roof', { a: [0, 5, 0, 8, 6, 6] }), el('wall', { a: [0, 0, 0, 8, 2.7, 0.3] }), el('back', { a: [0, 0, 20, 8, 2.7, 20.3] }), el('lifted', { a: [0, 0, 3, 1, 2, 4] })),
-    state(el('lifted', { g: 'x', a: [0, 6, 3, 1, 8, 4] }), el('floor', { g: 'x', a: [1, -0.3, 0, 9, 0, 6] }), el('roof', { g: 'x', a: [1, 5, 0, 9, 6, 6] }), el('wall', { d: 'x', c: { 'attr:core': 'n', 'pset:Pset_WallCommon': 'p-wall', 'type-assignment': 't0' }, a: [0, 0, 0, 8, 2.7, 0.3] }), el('back', { g: 'x', a: [0, 0, 20, 8, 2.7, 20.3] }), el('new', { a: [2, 0, 2, 3, 2.7, 3] })),
+    state(el('lifted', { g: 'x', a: [0, 6, 3, 1, 8, 4] }), el('floor', { g: 'x', a: [1, -0.3, 0, 9, 0, 6] }), el('roof', { g: 'x', a: [1, 5, 0, 9, 6, 6] }), el('wall', { d: 'x', c: { 'attr:core': 'n', 'type-assignment': 't0' }, a: [0, 0, 0, 8, 2.7, 0.3] }), el('back', { g: 'x', a: [0, 0, 20, 8, 2.7, 20.3] }), el('new', { a: [2, 0, 2, 3, 2.7, 3] })),
   );
   const names = (band: ReturnType<typeof planBand>) => changesInView(changes, band).map((c) => c.name);
   it('a plan shows from its floor to its cut, and where an element was as well as where it is: not the roof above it', () => {

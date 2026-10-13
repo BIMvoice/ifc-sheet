@@ -12,7 +12,7 @@
  */
 
 import { diffModels } from '@ifc-lite/diff';
-import { fingerprintsOf, type ModelSnapshot } from './snapshot';
+import { fingerprintsOf, snapshotElements, type ModelSnapshot } from './snapshot';
 
 export const CHANGE_KINDS = ['added', 'removed', 'moved', 'reshaped', 'property', 'type'] as const;
 export type ChangeKind = (typeof CHANGE_KINDS)[number];
@@ -52,7 +52,7 @@ function geometryKinds(before: Box | undefined, after: Box | undefined, toleranc
 const setName = (component: string): string => (component === 'attr:core' ? 'attributes' : component.replace(/^(pset|qset):/, ''));
 
 export function compareStates(base: ModelSnapshot, head: ModelSnapshot, tolerance = DEFAULT_TOLERANCE_M): ModelChange[] {
-  const names = new Map([...base.elements, ...head.elements].map((e) => [e.k, e.n ?? ''] as const));
+  const names = new Map([...snapshotElements(base), ...snapshotElements(head)].map((e) => [e.k, e.n ?? ''] as const));
   const diff = diffModels(fingerprintsOf(base), fingerprintsOf(head), { scope: 'both' });
   const out: ModelChange[] = [];
   for (const e of diff.entries) {
@@ -65,15 +65,17 @@ export function compareStates(base: ModelSnapshot, head: ModelSnapshot, toleranc
     if (e.state === 'deleted') { out.push({ ...common, kinds: ['removed'], sets: [], ...(before ? { before } : {}) }); continue; }
     const kinds = new Set<ChangeKind>();
     const sets: string[] = [];
-    const components = e.changedComponents ?? (e.changeKinds.includes('data') ? ['attr:core'] : []);
+    const components = e.changedComponents ?? [];
     for (const c of components) {
       if (c === 'type-assignment') kinds.add('type');
       else { kinds.add('property'); sets.push(setName(c)); }
     }
+    // The data differs and neither its attributes nor its type say so: a property set did (a saved state keeps no hash per set, so which one is not known).
+    if (e.changeKinds.includes('data') && components.length === 0) kinds.add('property');
     if (e.changeKinds.includes('container')) kinds.add('moved');
     if (e.changeKinds.includes('geometry')) for (const k of geometryKinds(before, after, tolerance)) kinds.add(k);
     if (kinds.size === 0) continue;
     out.push({ ...common, kinds: CHANGE_KINDS.filter((k) => kinds.has(k)), sets: [...new Set(sets)].sort(), ...(before ? { before } : {}), ...(after ? { after } : {}) });
   }
-  return out.sort((a, b) => a.guid.localeCompare(b.guid));
+  return out.sort((a, b) => (a.guid < b.guid ? -1 : a.guid > b.guid ? 1 : 0));
 }

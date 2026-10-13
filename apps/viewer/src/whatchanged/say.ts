@@ -13,7 +13,7 @@ const t = (key: string, params: Record<string, string | number> = {}) => resolve
 
 /** How an element changed, in words: `moved, changed in Pset_WallCommon`. */
 export function describeChange(c: Pick<ModelChange, 'kinds' | 'sets'>): string {
-  return c.kinds.map((k) => t(`kind.${k}`, { sets: c.sets.join(', ') })).join(', ');
+  return c.kinds.map((k) => (k === 'property' && c.sets.length === 0 ? t('kind.propertyUnnamed') : t(`kind.${k}`, { sets: c.sets.join(', ') }))).join(', ');
 }
 
 const labelOf = (c: Pick<ModelChange, 'name' | 'className'>) => c.name || c.className;

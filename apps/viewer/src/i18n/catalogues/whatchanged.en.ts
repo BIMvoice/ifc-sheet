@@ -21,6 +21,7 @@ export const whatChangedEn = {
   'whatchanged.kind.moved': 'moved',
   'whatchanged.kind.reshaped': 'reshaped',
   'whatchanged.kind.property': 'changed in {sets}',
+  'whatchanged.kind.propertyUnnamed': 'properties changed',
   'whatchanged.kind.type': 'type changed',
   'whatchanged.clouds': '{count} revision clouds are on the Revisions layer. WHATCHANGED CLEAR removes them; WHATCHANGED ACCEPT takes this version as the model to compare with next time.',
   'whatchanged.cleared': '{count} revision clouds removed.',

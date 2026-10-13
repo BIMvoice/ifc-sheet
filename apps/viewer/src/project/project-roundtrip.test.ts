@@ -23,6 +23,7 @@ import { defaultTypeSpec } from '@/element-types/spec';
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import type { AnnotationShape, DraftEntity, DraftLayer, DraftShape, EntityShape } from '@/drafting/types';
 import { loadProjectDocument, projectDocument, resetProject, useProjectStore, type ProjectState } from './project-store.js';
+import { snapshotFromElements } from '@/whatchanged/snapshot.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package/package-io.js';
 import type {
@@ -162,11 +163,11 @@ const FULL: Required<ProjectDocument> = {
   symbols,
   legends: [legend],
   titleBlockDefaults: { drawnBy: 'P. Conduraru', date: '2026-10-13' },
-  modelState: { takenAt: 1760000000000, elements: [{ k: '2O2Fr$t4X7Zf8NOew3FLOH', t: 'IfcWall', n: 'Wall 1', d: 'abc', c: { 'attr:core': '1', 'pset:Pset_WallCommon': '2' }, g: '77', a: [0, 0, 0, 4, 0.2, 3], p: 'Project/Building/Level 1' }] },
+  modelState: snapshotFromElements([{ k: '2O2Fr$t4X7Zf8NOew3FLOH', t: 'IfcWall', n: 'Wall 1', d: 'abcdef0123', c: { 'attr:core': '123456' }, g: 'a1b2c3d4e', a: [0, 0, 0, 4, 0.2, 3], p: 'Project/Building/Level 1' }], 1760000000000),
   issues: [{
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
     sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
-    model: { takenAt: 1759999999000, elements: [{ k: 'G1', t: 'IfcDoor', d: 'x' }] },
+    model: snapshotFromElements([{ k: 'G1', t: 'IfcDoor', d: 'x' }], 1759999999000),
   }],
   savedSectionCuts: [{
     id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,
