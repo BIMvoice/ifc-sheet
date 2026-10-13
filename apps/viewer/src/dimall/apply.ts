@@ -13,8 +13,9 @@ import { dimensionLayout } from '@/drafting/annotation';
 import { newDraft } from '@/drafting/draft-store';
 import type { AnnotationShape, DraftEntity, Pt } from '@/drafting/types';
 import { textBlock } from '@/drafting/text-block';
-import { readableDeg } from '@/drafting/styles';
+import { figureUp, layoutFacade } from '@/drafting/figure-layout';
 import { styledParams } from '@/project/drafting-standards';
+import { avoidBoxes, frameOf, symbolPieces, type SymbolPiece } from './avoid';
 import type { DimensionPlan, PlannedString } from './types';
 
 export interface DimensionTarget {
@@ -35,60 +36,50 @@ export const isDimAll = (d: DraftEntity): boolean => typeof d.params.dimAll === 
 
 type DimShape = Extract<AnnotationShape, { type: 'dimension' }>;
 
-/** How far across the line a figure moves, in text heights, per place: on the line, above it, below it. */
-const LIFTS = [0, 1.3, -1.5];
+type Fig = { lift: number; du: number };
+
+/** The facade a string belongs to: every string of a facade shares what follows the kind in its key. */
+const facadeOf = (s: PlannedString) => s.key.slice(s.key.indexOf(':') + 1);
 
 /**
- * The side of a dimension line its figures sit on is the screen-up (horizontal line) or screen-left
- * (vertical line) one, whichever way the line was drawn. Plans draw with screen = drawing axes.
+ * The dimensions of every string, one per span, each with its figure placed (`drafting/figure-layout.ts`):
+ * the strings of a facade are laid out together, so a figure keeps clear of the lines of all of them.
  */
-function textUp(along: Pt): Pt {
-  const turn = readableDeg((Math.atan2(along.y, along.x) * 180) / Math.PI);
-  const phi = (turn * Math.PI) / 180;
-  return { x: Math.sin(phi), y: -Math.cos(phi) };
-}
-
-/**
- * Where each span's figure goes: on the line when it fits in its span, otherwise lifted beside the
- * line (first up, then down) to the first place where it does not run into another figure there.
- * Returns the lift per span in multiples of the text height (0: on the line).
- */
-export function figureLifts(spans: readonly { start: number; end: number; width: number }[], height: number): number[] {
-  const placed: { from: number; to: number }[][] = LIFTS.map(() => []);
-  const pad = height * 0.3;
-  return spans.map((sp) => {
-    const mid = (sp.start + sp.end) / 2;
-    const from = mid - sp.width / 2 - pad, to = mid + sp.width / 2 + pad;
-    const free = (level: number) => !placed[level].some((q) => from < q.to && q.from < to);
-    const fits = sp.width * 1.15 <= sp.end - sp.start;
-    const level = LIFTS.findIndex((_, i) => (i > 0 || fits) && free(i));
-    const at = level < 0 ? 1 : level;
-    placed[at].push({ from, to });
-    return LIFTS[at];
-  });
-}
-
-/** The dimensions of a string, one per span, each with its figure placed. */
-function stringShapes(s: PlannedString, height: number): DimShape[] {
-  const up = textUp(s.along);
-  const base = s.points.slice(1).map((b, i): DimShape => {
-    const a = s.points[i];
-    const mid = { x: (a.x + b.x) / 2 + s.outward.x * s.offset, y: (a.y + b.y) / 2 + s.outward.y * s.offset };
-    return { type: 'dimension', variant: 'aligned', a, b, at: mid, height };
-  });
-  const origin = s.points[0];
-  const pos = (p: Pt) => (p.x - origin.x) * s.along.x + (p.y - origin.y) * s.along.y;
-  const spans = base.map((d) => ({ start: Math.min(pos(d.a), pos(d.b)), end: Math.max(pos(d.a), pos(d.b)), width: ((r) => r.x1 - r.x0)(textBlock(dimensionLayout(d).label, height).outer) }));
-  const lifts = figureLifts(spans, height);
-  return base.map((d, i) => (lifts[i] === 0 ? d : { ...d, textAt: { x: d.at.x + up.x * lifts[i] * height, y: d.at.y + up.y * lifts[i] * height } }));
+function stringShapes(plan: DimensionPlan, height: number, avoid: readonly SymbolPiece[]): Map<PlannedString, DimShape[]> {
+  const out = new Map<PlannedString, DimShape[]>();
+  const groups = new Map<string, PlannedString[]>();
+  for (const s of plan.strings) groups.set(facadeOf(s), [...(groups.get(facadeOf(s)) ?? []), s]);
+  for (const group of groups.values()) {
+    group.sort((x, y) => x.offset - y.offset);
+    const frame = frameOf(group[0]);
+    // A plan draws with screen = drawing axes; extension lines run 1.5 mm past the line, 0.6 of a 2.5 mm text.
+    const up = figureUp(group[0].along, -1, 1);
+    const spans = group.map((s) => s.points.slice(1).map((b, i): DimShape => {
+      const a = s.points[i];
+      const mid = { x: (a.x + b.x) / 2 + s.outward.x * s.offset, y: (a.y + b.y) / 2 + s.outward.y * s.offset };
+      return { type: 'dimension', variant: 'aligned', a, b, at: mid, height };
+    }));
+    const u = (p: Pt) => p.x * frame.along.x + p.y * frame.along.y;
+    const places = layoutFacade(
+      group.map((s, i) => ({ points: s.points.map(u), offset: s.offset, widths: spans[i].map((d) => textBlock(dimensionLayout(d).label, height).outer.x1) })),
+      { height, sigma: up.x * frame.outward.x + up.y * frame.outward.y > 0 ? 1 : -1, over: height * 0.6, obstacles: avoidBoxes(avoid, frame, height) },
+    );
+    group.forEach((s, i) => out.set(s, spans[i].map((d, k): DimShape => {
+      const p: Fig = places[i][k];
+      if (p.lift === 0 && p.du === 0) return d;
+      return { ...d, textAt: { x: d.at.x + frame.along.x * p.du + up.x * p.lift * height, y: d.at.y + frame.along.y * p.du + up.y * p.lift * height } };
+    })));
+  }
+  return out;
 }
 
 /** The dimensions of `plan` that the view does not carry yet. */
-export function dimensionDrafts(plan: DimensionPlan, target: DimensionTarget, existing: readonly DraftEntity[]): DraftEntity[] {
+export function dimensionDrafts(plan: DimensionPlan, target: DimensionTarget, existing: readonly DraftEntity[], viewDrafts: readonly DraftEntity[] = []): DraftEntity[] {
   const done = new Set(existing.flatMap((d) => (typeof d.params.dimAll === 'string' ? [d.params.dimAll] : [])));
   const out: DraftEntity[] = [];
+  const shapes = stringShapes(plan, target.textHeight, symbolPieces(viewDrafts));
   for (const s of plan.strings) {
-    stringShapes(s, target.textHeight).forEach((shape) => {
+    (shapes.get(s) ?? []).forEach((shape) => {
       const stamp = stampOf(s, shape.a, shape.b);
       if (done.has(stamp)) return;
       done.add(stamp);

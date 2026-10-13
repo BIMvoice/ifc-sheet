@@ -10,7 +10,6 @@ import { resetProject, useProjectStore } from '@/project/project-store';
 import { clearDraftHistory, undoDrafts } from '@/drafting/draft-store.js';
 import { attachDraftingView, cancelCommand, setPlanPartsProvider, setWorkPlaneProvider, submitCommandLine, useDraftingSession } from '@/drafting/session.js';
 import type { ProjectView } from '@/project/types';
-import { figureLifts } from './apply.js';
 import { house } from './fixture.js';
 
 const view = { id: 'view-1', kind: 'plan', scale: 100 } as unknown as ProjectView;
@@ -56,12 +55,5 @@ describe('DIMALL', () => {
     setWorkPlaneProvider(() => null, () => ({ ...view, kind: 'section' }) as unknown as ProjectView);
     submitCommandLine('DIMALL', null);
     assert.equal(dims().length, 0);
-  });
-});
-
-describe('figureLifts', () => {
-  it('leaves a figure that fits on the line and lifts the ones that do not, apart from each other', () => {
-    const lifts = figureLifts([{ start: 0, end: 4, width: 1 }, { start: 4, end: 4.3, width: 1 }, { start: 4.3, end: 4.6, width: 1 }, { start: 4.6, end: 8, width: 1 }], 0.25);
-    assert.deepEqual(lifts, [0, 1.3, -1.5, 0]);
   });
 });

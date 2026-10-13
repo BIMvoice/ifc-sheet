@@ -9,6 +9,7 @@
  */
 
 import { dimensionDrafts, isDimAll } from '@/dimall/apply';
+import { stringsThroughHeads, symbolPieces } from '@/dimall/avoid';
 import { planDimensions } from '@/dimall/plan';
 import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
@@ -30,13 +31,15 @@ export const dimAllCommand: DraftCommandDef = {
       ctx.say('drafting.msg.dimAllNone');
       return;
     }
-    const existing = draftsOfView(ctx.viewId, useProjectStore.getState().drafts).filter(isDimAll);
-    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }, existing);
+    const here = draftsOfView(ctx.viewId, useProjectStore.getState().drafts);
+    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }, here.filter(isDimAll), here);
     if (drafts.length === 0) {
       ctx.say('drafting.msg.dimAllHave');
       return;
     }
     editDrafts({ add: drafts });
+    const crossed = stringsThroughHeads(plan.strings, symbolPieces(here), ctx.settings.textHeight);
     ctx.say('drafting.msg.dimAllDone', { count: drafts.length, strings: plan.strings.length, skipped: plan.skippedFacades });
+    if (crossed > 0) ctx.say('drafting.msg.dimAllHeads', { count: crossed });
   },
 };
