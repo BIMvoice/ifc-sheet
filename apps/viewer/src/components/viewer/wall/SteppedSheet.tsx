@@ -116,8 +116,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       return;
     }
     // A section line is drawn on a plan: the chosen one, else the lowest.
-    // A detail marks its area on the drawing in front.
-    const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : command === 'detail' ? focusView ?? view : view;
+    // A detail marks its area on the drawing in front, else the chosen one, else the lowest plan.
+    const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : command === 'detail' ? focusView ?? view ?? groundPlan(views) : view;
     if (!target || target.kind === '3d') return;
     setTool(command);
     setFocusId(target.id);
