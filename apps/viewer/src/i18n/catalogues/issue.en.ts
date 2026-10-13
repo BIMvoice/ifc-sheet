@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import type { TranslationValue } from '../types';
 export const issueEn = {
+  'issue.cmd': 'ISSUE',
   'issue.section': 'Issue the set',
   'issue.name': 'Issue name',
   'issue.pdf': 'Issue as PDF',

@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import type { TranslationValue } from '../types';
 export const draftSetEn = {
+  'draftSet.cmd': 'DRAFTSET',
   'draftSet.action': 'Draft set',
   'draftSet.kind.plan': 'plan',
   'draftSet.kind.section': 'section',

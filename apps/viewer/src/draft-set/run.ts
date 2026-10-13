@@ -17,8 +17,6 @@ import { sheetGroup, sheetScaleReason, type Reason } from '@/project/drawing-set
 import { ensureDrawingSet, type EnsureReport } from '@/project/drawing-set-actions';
 import { modelMeshes, setExtent } from './body';
 
-export const DRAFTSET_NAMES = ['DRAFTSET', 'DRAFT-SET'];
-
 export interface SummaryLine {
   key: TranslationKey;
   params: Record<string, string | number>;

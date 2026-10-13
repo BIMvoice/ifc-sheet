@@ -16,10 +16,6 @@ import { create } from 'zustand';
 import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { draftCommandById, draftCommandByName } from './commands/registry';
-import { DRAFTSET_NAMES, makeDraftSet } from '@/draft-set/run';
-import { currentFindings } from '@/check/collect';
-import { checkLines } from '@/check/say';
-import { tryIssueCommand } from '@/issue/run';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
 import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyTypedLine } from './command-line';
@@ -198,20 +194,21 @@ export function runningCommand(): DraftCommand | null {
 }
 
 /** Start (or, for a one-action command, run) a command, cancelling the one that is running. False when there is no such command here or no view in front. */
-export function startDraftCommand(id: string): boolean {
+export function startDraftCommand(id: string, args = ''): boolean {
   const def = draftCommandById(id);
-  const { viewId } = get();
-  if (!def || !viewId) return false;
+  const viewId = get().viewId ?? (def?.projectWide ? '' : null);
+  if (!def || viewId === null) return false;
   cancelCommand();
   say({ key: def.labelKey });
-  set({ lastCommandId: def.id });
+  // Enter repeats a drawing command; it must not issue the set again.
+  if (!def.projectWide) set({ lastCommandId: def.id });
   if (def.needsSelection && get().selection.size === 0) {
     pending = def;
     set({ selecting: true, commandId: def.id });
     refresh();
     return true;
   }
-  if (def.run) def.run(context(viewId));
+  if (def.run) def.run(context(viewId), args);
   else begin(def, viewId);
   refresh();
   return true;
@@ -341,19 +338,10 @@ export function submitCommandLine(text: string, cursor: Pt | null): void {
     return;
   }
   if (!command && !get().selecting) {
-    if (tryIssueCommand(trimmed, say)) return;
-    if (trimmed.toUpperCase() === 'CHECKSET') {
-      say({ key: 'drafting.msg.typed', typed: trimmed, params: { text: trimmed } });
-      for (const text of checkLines(currentFindings(), useProjectStore.getState().sheets)) say({ key: 'check.msg.line', params: { text } });
-      return;
-    }
-    if (DRAFTSET_NAMES.includes(trimmed.toUpperCase())) {
-      say({ key: 'drafting.msg.typed', typed: trimmed, params: { text: trimmed } });
-      for (const l of makeDraftSet().lines) say(l);
-      return;
-    }
-    const def = draftCommandByName(trimmed);
-    if (def) startDraftCommand(def.id);
+    // A command that takes text after its name (`ISSUE svg P02`) is named by the first word.
+    const head = trimmed.split(/\s+/)[0];
+    const def = draftCommandByName(trimmed) ?? (draftCommandByName(head)?.takesArgs ? draftCommandByName(head) : undefined);
+    if (def) startDraftCommand(def.id, trimmed.slice(head.length).trim());
     else say({ key: 'drafting.msg.unknownCommand', params: { name: trimmed } });
     return;
   }

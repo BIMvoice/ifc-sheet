@@ -21,7 +21,6 @@ import { captureSheets, failureLine } from './capture';
 import { drawingListCsv, issuePrintHtml, uniqueNames, type ListLabels } from './output';
 import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
 
-export const ISSUE_NAMES = ['ISSUE'];
 export type IssueFormat = 'pdf' | 'svg' | 'dxf';
 
 export interface IssueOptions {
@@ -44,7 +43,6 @@ export interface IssueResult {
 }
 
 const say = (r: IssueReason) => ({ key: r.key, params: r.params });
-const line = (text: string) => ({ key: 'issue.msg.line' as TranslationKey, params: { text } });
 
 export function listLabels(): ListLabels {
   const t = (k: string) => resolve(`issue.list.${k}` as TranslationKey);
@@ -106,28 +104,25 @@ export function deliver(result: IssueResult, format: IssueFormat): void {
   if (result.html) printHtml(result.html);
 }
 
-export function parseIssueCommand(text: string): IssueOptions | null {
-  const m = /^(\S+)(?:\s+(.*))?$/.exec(text.trim());
-  if (!m || !ISSUE_NAMES.includes(m[1].toUpperCase())) return null;
-  const rest = (m[2] ?? '').trim();
+/** What `ISSUE` was given after its name: an optional format, then the issue's name. */
+export function parseIssueArgs(args: string): IssueOptions {
+  const rest = args.trim();
   const f = /^(pdf|svg|dxf)\b\s*(.*)$/i.exec(rest);
   return f ? { format: f[1].toLowerCase() as IssueFormat, name: f[2].trim() || undefined } : { format: 'pdf', name: rest || undefined };
 }
 
+type Say = (key: TranslationKey, params?: Record<string, string | number>) => void;
+
 /**
- * Run `text` when it is the ISSUE command, saying each step to `say`; false
- * when it is something else. The work is asynchronous: the command returns at
+ * Run ISSUE with what was typed after its name, saying each step to `say`. The work is asynchronous: this returns at
  * once and the lines arrive as the sheets are drawn.
  */
-export function tryIssueCommand(text: string, say: (line: { key: TranslationKey; params: Record<string, string | number>; typed?: string }) => void): boolean {
-  const options = parseIssueCommand(text);
-  if (!options) return false;
-  say({ key: 'drafting.msg.typed' as TranslationKey, typed: text, params: { text } });
+export function runIssueCommand(args: string, say: Say): void {
+  const options = parseIssueArgs(args);
   const plan = planFor(options);
-  if (plan.sheets.length > 0) say({ key: 'issue.msg.working', params: { count: plan.sheets.length } });
+  if (plan.sheets.length > 0) say('issue.msg.working', { count: plan.sheets.length });
   void runIssue(options).then((result) => {
-    for (const l of result.lines) say(l);
+    for (const l of result.lines) say(l.key, l.params);
     if (result.plan.sheets.length > 0 && result.lines.at(-1)?.key === 'issue.msg.done') deliver(result, options.format);
-  }, (err: unknown) => say(line(err instanceof Error ? err.message : String(err))));
-  return true;
+  }, (err: unknown) => say('issue.msg.line', { text: err instanceof Error ? err.message : String(err) }));
 }
