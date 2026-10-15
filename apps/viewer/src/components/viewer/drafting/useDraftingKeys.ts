@@ -21,9 +21,14 @@ interface Params {
   submit: () => void;
 }
 
-/** Whether a key event belongs to another text field than the command line. */
+/**
+ * Whether a key event belongs to another text field than the command line,
+ * or to a panel that keeps its own keys (`data-owns-keys`: Enter and Space
+ * press its buttons, and nothing it is given reaches a running tool).
+ */
 function inOtherField(target: EventTarget | null, input: HTMLInputElement | null): boolean {
   if (!(target instanceof HTMLElement) || target === input) return false;
+  if (target.closest('[data-owns-keys]')) return true;
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 

@@ -35,13 +35,26 @@ export function applyCatalogue(c: Catalogue): void {
 
 export function exportCatalogue(kinds: ReadonlySet<CatalogueKind>, name = useProjectStore.getState().name): void {
   const text = serializeCatalogue(selectKinds(projectCatalogue(), kinds), name);
-  downloadFile(text, `${sanitizeFilename(name, { fallback: 'catalogue' })}${CATALOGUE_FILE_SUFFIX}`, 'application/json');
+  downloadFile(text, catalogueFileName(name), 'application/json');
+}
+
+/** The file a library exported as `name` is saved under: `<name>.bvlib`. */
+export const catalogueFileName = (name: string): string => `${sanitizeFilename(name, { fallback: 'catalogue' })}${CATALOGUE_FILE_SUFFIX}`;
+
+/** What importing `incoming` under `policy` would do to the project, without doing it. */
+export function previewCatalogueImport(incoming: Catalogue, policy: ClashPolicy): MergeReport {
+  return mergeCatalogues(projectCatalogue(), incoming, policy).report;
+}
+
+/** Merge an already-read catalogue into the project under `policy` and say what changed. */
+export function applyCatalogueImport(incoming: Catalogue, policy: ClashPolicy): MergeReport {
+  const { catalogue: merged, report } = mergeCatalogues(projectCatalogue(), incoming, policy);
+  applyCatalogue(merged);
+  return report;
 }
 
 /** Import a catalogue file's text into the project. Throws, changing nothing, when the file is not a readable catalogue. */
 export function importCatalogueText(text: string, policy: ClashPolicy): { name: string; report: MergeReport } {
   const { name, catalogue } = parseCatalogue(text);
-  const { catalogue: merged, report } = mergeCatalogues(projectCatalogue(), catalogue, policy);
-  applyCatalogue(merged);
-  return { name, report };
+  return { name, report: applyCatalogueImport(catalogue, policy) };
 }

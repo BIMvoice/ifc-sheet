@@ -37,6 +37,12 @@ const button = (ui: HTMLElement, text: string | RegExp) => {
 };
 
 describe('ProjectDrawer', () => {
+  it('offers the library file beside new, open and save', () => {
+    const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    button(ui, 'Import library');
+    button(ui, 'Export library');
+  });
+
   it('steps into a sheet and closes', () => {
     let closed = 0;
     const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => { closed++; }} />);

@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from '@/i18n';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
 import { HatchSettings } from './HatchSettings';
+import { ToolTypes } from './ToolTypes';
 import { DRAW_TOOLS, WALL_TOOLS } from './wall-actions';
 
 function Card({ eyebrow, title, children }: { eyebrow: string; title: string; children: ReactNode }) {
@@ -33,7 +34,7 @@ export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string
     return (
       <Card eyebrow={drawingOn ? t('wall.draw.onDrawing', { name: drawingOn }) : t('wall.draw.onSheet')} title={t(draw.labelKey)}>
         <p className="m-0 text-lg leading-relaxed">{t(draw.bodyKey)}</p>
-        {draw.command === 'hatch' ? <HatchSettings /> : null}
+        {draw.command === 'hatch' ? <><ToolTypes tool="hatch" /><HatchSettings /></> : null}
         <p className="mb-0 mt-4 text-sm text-cyan-300">{t('wall.drawHint')}</p>
       </Card>
     );
@@ -42,6 +43,7 @@ export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string
     return (
       <Card eyebrow={t(chosen.labelKey)} title={t(chosen.titleKey)}>
         <p className="m-0 text-lg leading-relaxed">{t(chosen.bodyKey)}</p>
+        <ToolTypes tool={chosen.command} />
         <p className="mb-0 mt-4 flex items-start gap-2 text-cyan-300"><ToolIcon name="cube" size={22} accent="currentColor" />{t('wall.drawHint')}</p>
       </Card>
     );
