@@ -17,6 +17,7 @@ import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { create } from 'zustand';
+import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
 
@@ -32,7 +33,7 @@ export interface ProjectState extends ProjectDocument {
 export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visible: true, locked: false } as const;
 
 export const EMPTY_PROJECT: ProjectDocument = {
-  name: 'Untitled project', models: [], views: [], sheets: [], drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
+  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
   annotationTypes: [], symbols: [], legends: [],
@@ -53,7 +54,7 @@ useProjectStore.subscribe((s, previous) => {
 /** The persisted part of the store. */
 export function projectDocument(state: ProjectState = useProjectStore.getState()): ProjectDocument {
   return {
-    name: state.name, models: state.models, views: state.views, sheets: state.sheets,
+    name: state.name, models: state.models, views: state.views, sheets: state.sheets, titleBlock: state.titleBlock ?? {},
     drafts: state.drafts, draftLayers: state.draftLayers, hatchPatterns: state.hatchPatterns ?? '',
     symbolFlips: state.symbolFlips ?? {}, openingLines: state.openingLines ?? 'handle',
     textStyles: state.textStyles ?? [], dimStyles: state.dimStyles ?? [], layerGroups: state.layerGroups ?? [],
@@ -72,8 +73,10 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
 }
 
 /** Replace the document (file import, autosave restore). */
-export function loadProjectDocument(doc: ProjectDocument, options: { dirty?: boolean } = {}): void {
+export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
+  // Saved before the title block was the project's: each sheet's copy becomes the project's.
+  const doc = liftSheetTitleBlocks(saved);
   useProjectStore.setState({
     ...doc,
     symbolFlips: doc.symbolFlips ?? {},
@@ -132,7 +135,7 @@ export function setProjectName(name: string): void {
 /** Toggle plan symbol flips (`ProjectDocument.symbolFlips` bits) on the elements `globalIds` name. */
 export function toggleSymbolFlips(globalIds: readonly string[], bit: 1 | 2): void {
   if (globalIds.length === 0) return;
-  const flips = { ...(useProjectStore.getState().symbolFlips ?? {}) };
+  const flips = { ...useProjectStore.getState().symbolFlips };
   for (const id of globalIds) {
     const next = (flips[id] ?? 0) ^ bit;
     if (next) flips[id] = next;

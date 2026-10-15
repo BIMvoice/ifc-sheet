@@ -150,7 +150,7 @@ export interface ProjectSheet {
   paper?: PaperSize;
   orientation?: 'landscape' | 'portrait';
   viewports?: SheetViewport[];
-  /** Free title-block fields (project, drawn by, date, revision…). */
+  /** Title block fields this sheet says otherwise than the project's (`ProjectDocument.titleBlock`); a key present wins, even empty. */
   titleBlock?: Record<string, string>;
 }
 
@@ -243,6 +243,8 @@ export interface ProjectDocument {
   models: ProjectModelRef[];
   views: ProjectView[];
   sheets: ProjectSheet[];
+  /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
+  titleBlock?: Record<string, string>;
   /** Drafted geometry, each entity on one view (phase 4). */
   drafts: DraftEntity[];
   draftLayers: DraftLayer[];
