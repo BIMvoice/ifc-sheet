@@ -15,7 +15,8 @@
 import { create } from 'zustand';
 import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
-import { draftCommandById, draftCommandByName } from './commands/registry';
+import { draftCommandById } from './commands/registry';
+import { namedCommand } from './command-name';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
 import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
@@ -198,10 +199,11 @@ export function runningCommand(): DraftCommand | null {
   return command;
 }
 
-export function startDraftCommand(id: string): void {
+/** Start (or, for a one-action command, run) a command, cancelling the one that is running. */
+export function startDraftCommand(id: string, args = ''): void {
   const def = draftCommandById(id);
-  const { viewId } = get();
-  if (!def || !viewId) return;
+  const viewId = get().viewId ?? (def?.projectWide ? '' : null);
+  if (!def || viewId === null) return;
   cancelCommand();
   say({ key: def.labelKey });
   set({ lastCommandId: def.id });
@@ -211,7 +213,8 @@ export function startDraftCommand(id: string): void {
     refresh();
     return;
   }
-  begin(def, viewId);
+  if (def.run) def.run(context(viewId), args);
+  else begin(def, viewId);
 }
 
 function begin(def: DraftCommandDef, viewId: string): void {
@@ -337,12 +340,11 @@ export function submitCommandLine(text: string, cursor: Pt | null): void {
     pressEnter();
     return;
   }
-  if (!command && !get().selecting) {
-    const def = draftCommandByName(trimmed);
-    if (def) startDraftCommand(def.id);
-    else say({ key: 'drafting.msg.unknownCommand', params: { name: trimmed } });
-    return;
-  }
+  const idle = !command && !get().selecting;
+  const named = namedCommand(trimmed);
+  // A project-wide command named while a tool waits for input runs, unless that tool is taking free text.
+  if (named && (idle || (named.def.projectWide && !command?.wantsText?.()))) return startDraftCommand(named.def.id, named.args);
+  if (idle) return say({ key: 'drafting.msg.unknownCommand', params: { name: trimmed } });
   say({ key: 'drafting.msg.typed', typed: trimmed, params: { text: trimmed } });
   if (!command) return;
   if (command.wantsText?.() && command.onText) {

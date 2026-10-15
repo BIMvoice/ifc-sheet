@@ -17,6 +17,7 @@ import { useViewerStore } from '@/store';
 import { useFileCommands } from '../toolbar/useFileCommands';
 import { WallView } from '../wall/WallView';
 import { setDrawer, useWallNav } from '../wall/wall-nav';
+import { WhatChanged } from '../whatchanged/WhatChanged';
 
 const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
 
@@ -39,6 +40,7 @@ export function IfcSheetShell() {
         <span className="h-5 w-px bg-sky-300/20" />
         <span className="truncate text-sky-200/80">{modelName ?? t('wall.shell.untitled')}</span>
         <span className="flex-1" />
+        {sheets.length > 0 ? <WhatChanged /> : null}
         {sheets.length > 0 ? <span className="text-sm text-sky-200/80">{t('wall.shell.sheetsViews', { sheets: sheets.length, views })}</span> : null}
         <button type="button" className={quiet} onClick={() => void files.handleOpenClick()}>{t('wall.shell.open')}</button>
         {sheets.length > 0 ? (

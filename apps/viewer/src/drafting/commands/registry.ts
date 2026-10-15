@@ -14,9 +14,10 @@ import { tagCommand } from './tag';
 import { labelAllCommand, labelCommand } from './label';
 import { levelAlignCommand } from './level-align';
 import { SYMBOL_COMMANDS } from './symbol';
+import { whatChangedCommand } from './whatchanged';
 import type { DraftCommandDef } from './types';
 
-export const DRAFT_COMMANDS: readonly DraftCommandDef[] = [...DRAW_COMMANDS, ...MODIFY_COMMANDS, ...EDIT_COMMANDS, ...ANNOTATE_COMMANDS, sectionLineCommand, tagCommand, labelCommand, labelAllCommand, levelAlignCommand, ...SYMBOL_COMMANDS];
+export const DRAFT_COMMANDS: readonly DraftCommandDef[] = [...DRAW_COMMANDS, ...MODIFY_COMMANDS, ...EDIT_COMMANDS, ...ANNOTATE_COMMANDS, sectionLineCommand, tagCommand, labelCommand, labelAllCommand, levelAlignCommand, whatChangedCommand, ...SYMBOL_COMMANDS];
 
 const BY_ID = new Map(DRAFT_COMMANDS.map((c) => [c.id, c]));
 const BY_ALIAS = new Map(DRAFT_COMMANDS.flatMap((c) => c.aliases.map((a) => [a, c] as const)));

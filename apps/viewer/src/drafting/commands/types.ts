@@ -128,4 +128,10 @@ export interface DraftCommandDef {
   /** Modify commands act on a selection, gathered first when empty. */
   needsSelection?: boolean;
   create(ctx: DraftContext): DraftCommand;
+  /** A command that needs no further input: it does its work when named, instead of `create`. `args` is what was typed after its name (only for a command that `takesArgs`). */
+  run?(ctx: DraftContext, args: string): void;
+  /** The command line may carry text after the name (`WHATCHANGED ACCEPT`). */
+  takesArgs?: boolean;
+  /** The command works on the project, not on the drawing in front: it runs with no view attached, and when typed it runs even while another tool is waiting for input. */
+  projectWide?: boolean;
 }

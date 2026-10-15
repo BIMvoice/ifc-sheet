@@ -221,3 +221,31 @@ describe('annotation commands', () => {
     if (hatch.type === 'hatch') { assert.equal(hatch.pattern, 'CROSS'); assert.equal(hatch.loops.length, 2); }
   });
 });
+
+describe('WHATCHANGED on the command line', () => {
+  const said = () => useDraftingSession.getState().history.map((h) => JSON.stringify(h)).join('\n');
+  const settled = async (needle: RegExp) => { for (let i = 0; i < 100 && !needle.test(said()); i++) await new Promise((r) => setTimeout(r, 10)); };
+
+  it('runs while LINE is waiting for a point, ends LINE, and does not take its name for a coordinate', async () => {
+    submitCommandLine('L', null);
+    clickDrawing({ x: 0, y: 0 }, TOL, false);
+    assert.equal(useDraftingSession.getState().commandId, 'line');
+    submitCommandLine('whatchanged', null);
+    assert.equal(useDraftingSession.getState().commandId, null);
+    await settled(/No model is loaded/);
+    assert.match(said(), /No model is loaded/);
+    assert.doesNotMatch(said(), /invalidInput|unknownCommand/);
+  });
+  it('takes CLEAR after its name, with no view in front', async () => {
+    attachDraftingView(null, 'down', () => []);
+    submitCommandLine('WHATCHANGED CLEAR', null);
+    await settled(/revision clouds removed/);
+    assert.match(said(), /0 revision clouds removed/);
+  });
+  it('is only text to a tool that is taking text', () => {
+    startDraftCommand('text');
+    clickDrawing({ x: 0, y: 0 }, TOL, false);
+    submitCommandLine('WHATCHANGED', null);
+    assert.equal(shapes().some((s) => s.type === 'text' && s.text === 'WHATCHANGED'), true);
+  });
+});
