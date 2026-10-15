@@ -14,7 +14,7 @@
  * drawing is generated; a viewport fits its drawing once that exists.
  */
 
-import { FRAME_MARGIN_MM, PAPER_MM, TITLE_BLOCK_MM } from './sheets';
+import { fitViewportBox, FRAME_MARGIN_MM, PAPER_MM, SHEET_SCALES, TITLE_BLOCK_MM } from './sheets';
 import { freshProjectId } from './view-defaults';
 import type { ElevationDirection, PaperSize, ProjectSheet, ProjectView, SheetViewport } from './types';
 
@@ -59,6 +59,19 @@ export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number;
 export function drawingArea(paper: PaperSize = SET_PAPER): { x: number; y: number; w: number; h: number } {
   const { w, h } = PAPER_MM[paper];
   return { x: FRAME_MARGIN_MM, y: FRAME_MARGIN_MM, w: w - FRAME_MARGIN_MM * 2, h: h - FRAME_MARGIN_MM * 2 - TITLE_BLOCK_MM.h };
+}
+
+type Bounds = { min: { x: number; y: number }; max: { x: number; y: number } };
+
+/** The drawing area of `paper` (mm) when a viewport box is larger than it; null when the box fits. */
+export function overrun(box: { width: number; height: number }, paper: PaperSize = SET_PAPER): { w: number; h: number } | null {
+  const area = drawingArea(paper);
+  return box.width > area.w || box.height > area.h ? { w: area.w, h: area.h } : null;
+}
+
+/** The most detailed offered scale (`SHEET_SCALES`) at which a drawing of `bounds` fits on `paper`; null when none does. */
+export function detailedScaleThatFits(bounds: Bounds, paper: PaperSize = SET_PAPER): number | null {
+  return SHEET_SCALES.find((scale) => !overrun(fitViewportBox(bounds, scale), paper)) ?? null;
 }
 
 /** The most detailed set scale at which `sizes` (metres) fit side by side in `area`; the least detailed when none does. */

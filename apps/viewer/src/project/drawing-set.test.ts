@@ -13,9 +13,9 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject, useProjectStore } from './project-store.js';
 import { defaultViews } from './view-defaults.js';
-import { buildDrawingSet, drawingArea, fittingScale, sheetGroup, sheetScaleReason, withViewHung, type ModelExtent } from './drawing-set.js';
+import { buildDrawingSet, detailedScaleThatFits, drawingArea, fittingScale, overrun, sheetGroup, sheetScaleReason, withViewHung, type ModelExtent } from './drawing-set.js';
 import { addScheduleToSet, groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
-import { PAPER_MM } from './sheets.js';
+import { fitViewportBox, PAPER_MM } from './sheets.js';
 import type { ProjectLevel, ProjectView } from './types';
 
 /** A 10 × 7 m two-storey house, 6 m tall: long along X. */
@@ -165,5 +165,21 @@ describe('schedules on the set', () => {
     const sheet = useProjectStore.getState().sheets.find((s) => s.id === id);
     assert.ok(sheet);
     assert.equal(sheetScaleReason(sheet, useProjectStore.getState().views, HOUSE), null);
+  });
+});
+
+describe('a drawing larger than its sheet', () => {
+  // A 10 × 6 m plan on A2: the drawing area is 574 × 350 mm.
+  const plan = { min: { x: 0, y: 0 }, max: { x: 10, y: 6 } };
+
+  it('is caught at the scale that overruns the drawing area, and not at the one that fits', () => {
+    assert.deepEqual(overrun(fitViewportBox(plan, 10), 'A2'), { w: 574, h: 350 });
+    assert.equal(overrun(fitViewportBox(plan, 20), 'A2'), null);
+  });
+
+  it('is offered the most detailed scale at which it fits, on its own paper', () => {
+    assert.equal(detailedScaleThatFits(plan, 'A2'), 20);
+    assert.equal(detailedScaleThatFits(plan, 'A4'), 50);
+    assert.equal(detailedScaleThatFits({ min: { x: 0, y: 0 }, max: { x: 100_000, y: 100_000 } }, 'A4'), null);
   });
 });
