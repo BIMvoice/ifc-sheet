@@ -71,4 +71,15 @@ describe('WallGrid', () => {
     assert.deepEqual(useProjectStore.getState().sheets.filter((x) => x.number.startsWith('A-2')).map((x) => x.viewports?.map((v) => v.scale)), [[100, 100], [50, 50]], 'the elevations stay as the set made them');
     assert.equal(chip.getAttribute('aria-pressed'), 'true');
   });
+
+  it('sets the scale of the elevations from their own row, leaving the plans', () => {
+    const ui = render(<WallGrid extent={HOUSE} onStep={() => {}} />);
+    const row = [...ui.querySelectorAll('fieldset')].find((f) => f.querySelector('legend')?.textContent === 'Scale of the elevations');
+    assert.ok(row, 'a scale row for the elevations');
+    const chip = [...row.querySelectorAll('button')].find((b) => b.textContent === '1 : 200');
+    assert.ok(chip);
+    click(chip);
+    assert.equal(groupScale('elevations'), 200);
+    assert.equal(groupScale('plans'), 50);
+  });
 });
