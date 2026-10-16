@@ -24,6 +24,7 @@ import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
 import { TitleBlockForm } from './TitleBlockForm';
 import { stepInto } from './wall-nav';
+import { LibraryPanel } from './LibraryPanel';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
   { kind: 'plan', labelKey: 'wall.group.plans' },
@@ -131,6 +132,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           if (file) void importProjectFile(file).then((doc) => loadProjectDocument(doc, { dirty: false })).catch((err: unknown) => console.warn('[ifcsheet] could not open the project file', err));
         }} />
       </div>
+      <LibraryPanel />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         <Group title={t('wall.project.sheets')} add={<button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>}>
           {series.flatMap(({ group }) => sheets.filter((s) => sheetGroup(s) === group)).map((s) => (

@@ -12,20 +12,16 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { toast } from '@/components/ui/toast';
-import { CATALOGUE_KINDS, selectKinds, type CatalogueKind } from '@/catalogue/catalogue-file';
+import { CATALOGUE_KINDS, type CatalogueKind } from '@/catalogue/catalogue-file';
+import { kindCounts } from '@/catalogue/catalogue-counts';
 import type { ClashPolicy, MergeReport } from '@/catalogue/catalogue-merge';
 import { exportCatalogue, importCatalogueText, projectCatalogue } from '@/catalogue/catalogue-store';
 import { useProjectStore } from '@/project/project-store';
 
-function count(kind: CatalogueKind, state: ReturnType<typeof useProjectStore.getState>): number {
-  const c = selectKinds(projectCatalogue(state), new Set([kind]));
-  return kind === 'hatchPatterns' ? (c.hatchPatterns.match(/^\*/gm) ?? []).length : (c[kind] as unknown[]).length;
-}
-
 function ExportSection() {
   const { t } = useTranslation();
   // The counts as one string: stable while they do not change, and live while the dialog is open.
-  const counts = useProjectStore((s) => CATALOGUE_KINDS.map((k) => count(k, s)).join(',')).split(',').map(Number);
+  const counts = useProjectStore((s) => kindCounts(projectCatalogue(s)).join(',')).split(',').map(Number);
   const [kinds, setKinds] = useState<ReadonlySet<CatalogueKind>>(new Set(CATALOGUE_KINDS));
   const toggle = (k: CatalogueKind) => setKinds((prev) => {
     const next = new Set(prev);

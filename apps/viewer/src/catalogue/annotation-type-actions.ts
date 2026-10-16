@@ -38,13 +38,19 @@ export function removeAnnotationType(id: string): void {
   useProjectStore.setState({ annotationTypes: annotationTypes().filter((t) => t.id !== id), dirty: true });
 }
 
-/** Draw with a type: its styles, layer and options become the current ones, and (on a drawing tab) its tool starts. */
-export function useAnnotationType(id: string): void {
+/** Make a type the one new annotations draw with: its styles, layer and options become the current ones. Returns the type, or nothing when there is none by that id. */
+export function applyAnnotationType(id: string): AnnotationType | undefined {
   const type = annotationTypes().find((t) => t.id === id);
-  if (!type) return;
+  if (!type) return undefined;
   const effect = typeEffect(type, styleBook(), useProjectStore.getState().draftLayers, currentStyles());
   setCurrentStyles({ textStyle: effect.textStyle, dimStyle: effect.dimStyle, textHeightMm: effect.textHeightMm });
   if (effect.layer) setCurrentLayer(effect.layer);
   patchDraftSettings(effect.settings);
-  if (isDrawingTabActive()) startDraftCommand(type.tool);
+  return type;
+}
+
+/** Draw with a type: it becomes the current one and (on a drawing tab) its tool starts. */
+export function useAnnotationType(id: string): void {
+  const type = applyAnnotationType(id);
+  if (type && isDrawingTabActive()) startDraftCommand(type.tool);
 }
