@@ -15,7 +15,8 @@
 import { create } from 'zustand';
 import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
-import { draftCommandById, draftCommandByName } from './commands/registry';
+import { draftCommandById } from './commands/registry';
+import { namedCommand } from './command-name';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
 import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyTypedLine } from './command-line';
@@ -337,12 +338,15 @@ export function submitCommandLine(text: string, cursor: Pt | null): void {
     pressEnter();
     return;
   }
-  if (!command && !get().selecting) {
-    // A command that takes text after its name (`ISSUE svg P02`) is named by the first word.
-    const head = trimmed.split(/\s+/)[0];
-    const def = draftCommandByName(trimmed) ?? (draftCommandByName(head)?.takesArgs ? draftCommandByName(head) : undefined);
-    if (def) startDraftCommand(def.id, trimmed.slice(head.length).trim());
-    else say({ key: 'drafting.msg.unknownCommand', params: { name: trimmed } });
+  const idle = !command && !get().selecting;
+  const named = namedCommand(trimmed);
+  // A project-wide command named while a tool waits for input runs, unless that tool is taking free text.
+  if (named && (idle || (named.def.projectWide && !command?.wantsText?.()))) {
+    startDraftCommand(named.def.id, named.args);
+    return;
+  }
+  if (idle) {
+    say({ key: 'drafting.msg.unknownCommand', params: { name: trimmed } });
     return;
   }
   say({ key: 'drafting.msg.typed', typed: trimmed, params: { text: trimmed } });

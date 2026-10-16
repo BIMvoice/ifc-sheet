@@ -75,6 +75,7 @@ import { flowPanelEn } from './catalogues/flow-panel.en';
 import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
 import { wallEn } from './catalogues/wall.en';
+import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
 import { landXmlEn } from './catalogues/landxml.en';
 import { terrainImageryEn } from './catalogues/terrain-imagery.en';
@@ -250,6 +251,7 @@ export const en = {
   ...keyboardShortcutsEn,
   ...settingsEn,
   ...wallEn,
+  ...whatChangedEn,
   ...hierarchyEn,
   ...propertiesEn,
   ...georeferencingEn,

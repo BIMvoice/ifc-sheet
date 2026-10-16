@@ -20,6 +20,8 @@ import { loadProjectDocument, projectDocument, resetProject, syncProjectWithMode
 import type { StoreyInput } from './view-defaults';
 import type { ProjectDocument, ProjectModelRef } from './types';
 import { parseProjectFile, serializeProject } from './project-file';
+import { readModelState, withoutModelState, writeModelState } from './autosave-snapshots';
+import { keepProjectForNewVersion, modelVersionSwapActive } from './model-version';
 
 const AUTOSAVE_PREFIX = 'ifc-lite:project:v1:';
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -59,11 +61,21 @@ function readAutosave(key: string): ProjectDocument | null {
 }
 
 function writeAutosave(key: string, doc: ProjectDocument): void {
+  // The model state is far larger than the drawings: it is kept apart, so it cannot fill the slot.
+  const { slim, modelState } = withoutModelState(doc);
   try {
-    localStorage.setItem(key, serializeProject(doc));
+    localStorage.setItem(key, serializeProject(slim));
   } catch (err) {
     console.warn('[project] autosave failed', err);
   }
+  // Never written empty: a slot restored before its state has been read back must not erase it.
+  if (modelState) void writeModelState(key, modelState);
+}
+
+/** Puts the model state kept for `key` into the project the slot restored, if it is still the one in front and has none. */
+async function restoreModelState(key: string, current: () => string | null): Promise<void> {
+  const kept = await readModelState(key);
+  if (kept && current() === key && !useProjectStore.getState().modelState) useProjectStore.setState({ modelState: kept });
 }
 
 function loadedModels(): { refs: ProjectModelRef[]; storeys: StoreyInput[] } {
@@ -97,8 +109,11 @@ export function useProjectSync(): void {
         const saved = readAutosave(key);
         const current = useProjectStore.getState();
         const overlaps = current.models.some((m) => refs.some((r) => r.key === m.key));
-        if (saved) loadProjectDocument(saved);
-        else if (!overlaps) resetProject();
+        if (modelVersionSwapActive()) keepProjectForNewVersion(refs);
+        else if (saved) {
+          loadProjectDocument(saved);
+          void restoreModelState(key, () => slot);
+        } else if (!overlaps) resetProject();
       }
       syncProjectWithModels(refs, storeys);
     };
@@ -109,7 +124,7 @@ export function useProjectSync(): void {
     });
     const unsubProject = useProjectStore.subscribe((state, prev) => {
       if (!slot || (state.views === prev.views && state.sheets === prev.sheets && state.name === prev.name
-        && state.drafts === prev.drafts && state.draftLayers === prev.draftLayers && state.hatchPatterns === prev.hatchPatterns)) return;
+        && state.drafts === prev.drafts && state.draftLayers === prev.draftLayers && state.hatchPatterns === prev.hatchPatterns && state.modelState === prev.modelState)) return;
       const key = slot;
       clearTimeout(timer);
       timer = setTimeout(() => writeAutosave(key, projectDocument()), AUTOSAVE_DEBOUNCE_MS);

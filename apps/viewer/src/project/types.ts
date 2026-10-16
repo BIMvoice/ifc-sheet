@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
@@ -323,6 +324,8 @@ export interface ProjectDocument {
   legends?: ProjectLegend[];
   /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */
   issues?: ProjectIssue[];
+  /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
+  modelState?: ModelSnapshot;
 }
 
 /** One sheet as it stood when a set was issued. */
