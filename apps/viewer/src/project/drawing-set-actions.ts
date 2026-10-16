@@ -17,6 +17,7 @@ import { buildDrawingSet, drawingArea, nextInSeries, rowOfViewports, SET_PAPER, 
 import { addSchedule } from '@/joinery/schedules';
 import { freshProjectId } from './view-defaults';
 import { proposalInputForLevel } from './model-rooms';
+import { seedProjectTitleBlock } from './sheets';
 import { useProjectStore } from './project-store';
 import { proposeSections, type SectionProposal } from './section-proposals';
 import type { PlanProjectView, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView } from './types';
@@ -71,9 +72,10 @@ export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | 
     for (const proposal of sectionProposals(meshes, bounds).slice(0, SET_SECTIONS)) sectionForProposal(proposal);
   }
   const { views } = useProjectStore.getState();
-  const sheets = buildDrawingSet({ views, extent: bounds, titleBlock: modelTitleBlock() });
+  const sheets = buildDrawingSet({ views, extent: bounds });
   if (sheets.length === 0) return false;
   useProjectStore.setState({ sheets, dirty: true });
+  seedProjectTitleBlock(modelTitleBlock());
   return true;
 }
 
@@ -110,7 +112,7 @@ export function swapViewportView(sheetId: string, viewportId: string, viewId: st
 export function hangView(viewId: string, extent: ModelExtent): string | null {
   const { sheets, views } = useProjectStore.getState();
   const view = views.find((v) => v.id === viewId);
-  const hung = view ? withViewHung(sheets, views, view, extent, sheets[0]?.titleBlock ?? modelTitleBlock()) : null;
+  const hung = view ? withViewHung(sheets, views, view, extent) : null;
   if (!hung) return null;
   useProjectStore.setState({ sheets: hung.sheets, dirty: true });
   return hung.sheetId;
@@ -131,7 +133,6 @@ export function hangSchedule(scheduleId: string): string | null {
   const area = drawingArea(SET_PAPER);
   const sheet: ProjectSheet = {
     id: freshProjectId('sheet'), number: nextInSeries(sheets, 'schedules'), name: schedule.name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
-    titleBlock: { ...(sheets[0]?.titleBlock ?? modelTitleBlock()) },
     viewports: [{ id: freshProjectId('viewport'), viewId: scheduleId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 50, width: 0, height: 0, center: null }],
   };
   useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });

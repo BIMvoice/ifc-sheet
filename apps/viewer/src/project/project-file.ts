@@ -13,7 +13,7 @@ import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
-import { readSheetLayout } from './sheet-file';
+import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readStandards } from './standards-file';
 import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
@@ -122,6 +122,8 @@ export function parseProjectFile(text: string): ProjectDocument {
     models: list('models').map((m, i) => readModel(m, `/models/${i}`)),
     views: list('views').map((v, i) => readView(v, `/views/${i}`)),
     sheets: list('sheets').map((s, i) => readSheet(s, `/sheets/${i}`)),
+    // Absent in a file saved before the title block was the project's (`liftSheetTitleBlocks` fills it on load).
+    ...(raw.titleBlock !== undefined ? { titleBlock: readTitleBlock(raw.titleBlock) ?? {} } : {}),
     drafts: list('drafts').map((d, i) => readDraft(d, `/drafts/${i}`)),
     draftLayers: list('draftLayers').map((l, i) => readDraftLayer(l, `/draftLayers/${i}`)),
     hatchPatterns: isString(raw.hatchPatterns) ? raw.hatchPatterns : '',
