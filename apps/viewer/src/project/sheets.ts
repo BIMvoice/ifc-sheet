@@ -10,6 +10,7 @@
  */
 
 import { useProjectStore } from './project-store';
+import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { freshProjectId } from './view-defaults';
 import type { PaperSize, ProjectSheet, SheetViewport } from './types';
 
@@ -83,7 +84,13 @@ export function addViewport(sheetId: string, viewId: string, at: { x: number; y:
   const id = freshProjectId('viewport');
   // 0 × 0: the box fits the drawing once it is generated (see `viewportBox`).
   const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, width: 0, height: 0, center: null };
-  patchSheet(sheetId, (s) => ({ ...s, viewports: [...(s.viewports ?? []), viewport] }));
+  const kind = useProjectStore.getState().views.find((v) => v.id === viewId)?.kind;
+  patchSheet(sheetId, (s) => {
+    // A number the program chose follows what the sheet comes to hold, once.
+    const renumber = s.autoNumber && (s.viewports ?? []).length === 0;
+    const number = renumber ? nextSheetNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), sheetGroupOfView(kind)) : s.number;
+    return { ...withoutAutoNumber(s), number, viewports: [...(s.viewports ?? []), viewport] };
+  });
   return id;
 }
 

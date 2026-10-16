@@ -13,7 +13,7 @@ import { offsetShape } from '../offset';
 import { extendShape, trimShape } from '../trim';
 import { filletLines } from '../fillet';
 import { useProjectStore } from '@/project/project-store';
-import { isSectionSymbol, withoutSectionLink } from '../section-symbol';
+import { isLockedToView, withoutSectionLink } from '../section-symbol';
 import { isGeometry, type DraftEntity, type DraftShape, type Pt } from '../types';
 import type { DraftCommandDef, DraftContext } from './types';
 
@@ -28,9 +28,9 @@ function boundariesFor(ctx: DraftContext, entity: DraftEntity, margin: number): 
   return [...others, ...ctx.referenceShapes(min, max)];
 }
 
-/** A section symbol keeps its shape: its cut plane lives on the section view. Says so when `entity` is one. */
+/** A section symbol's parts are not trimmed, offset or filleted one by one (the symbol is moved, turned or stretched whole), nor is a detail mark. Says so when `entity` is one. */
 function lockedSymbol(ctx: DraftContext, entity: DraftEntity): boolean {
-  const locked = isSectionSymbol(entity, useProjectStore.getState().views);
+  const locked = isLockedToView(entity, useProjectStore.getState().views);
   if (locked) ctx.say('drafting.msg.sectionSymbolLocked');
   return locked;
 }

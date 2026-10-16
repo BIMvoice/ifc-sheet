@@ -93,6 +93,14 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const left = vp.x - box.width / 2;
   const top = vp.y - box.height / 2;
   const clipId = `vp-${vp.id}`;
+  // A detail shows exactly its area (the drawing is centred on it); every other view, its box.
+  const clip = view?.detail
+    ? (() => {
+        const w = ((view.detail.max.x - view.detail.min.x) * 1000) / vp.scale;
+        const h = ((view.detail.max.y - view.detail.min.y) * 1000) / vp.scale;
+        return { x: vp.x - w / 2, y: vp.y - h / 2, width: w, height: h };
+      })()
+    : { x: left, y: top, width: box.width, height: box.height };
   const { book, groups } = useDraftingStandards();
   // A layer shows in a viewport by its own switch, its group's, its view's and the viewport's.
   const layerColor = new Map(layers.map((l) => [l.id, layerShows(l, groups, { view: view?.hiddenLayers, viewport: vp.hiddenLayers }) ? l.color : null]));
@@ -102,7 +110,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const factor = annotationFactor(vp.scale, view?.scale);
   return (
     <g data-viewport-id={vp.id}>
-      <clipPath id={clipId}><rect x={left} y={top} width={box.width} height={box.height} /></clipPath>
+      <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
       <g clipPath={`url(#${clipId})`}>
         {pens.map((p, i) => (
           <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000')} d={p.d} fill={p.fill ?? 'none'} fillRule="evenodd" stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
@@ -260,7 +268,7 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
 ) {
   const { w, h } = paperOf(sheet);
   return (
-    <svg ref={ref} xmlns="http://www.w3.org/2000/svg" width={w * pxPerMm} height={h * pxPerMm} viewBox={`0 0 ${w} ${h}`} className="block bg-white shadow-lg">
+    <svg ref={ref} data-sheet-id={sheet.id} xmlns="http://www.w3.org/2000/svg" width={w * pxPerMm} height={h * pxPerMm} viewBox={`0 0 ${w} ${h}`} className="block bg-white shadow-lg">
       <rect data-export-ignore-dxf="true" x={0} y={0} width={w} height={h} fill="#fff" />
       <rect {...penTags('FRAME', 0.7)} x={FRAME_MARGIN_MM} y={FRAME_MARGIN_MM} width={w - FRAME_MARGIN_MM * 2} height={h - FRAME_MARGIN_MM * 2} fill="none" stroke="#000" strokeWidth={0.7} />
       {(sheet.viewports ?? []).map((vp) => {

@@ -16,7 +16,7 @@ import { projectDocument, useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { useFileCommands } from '../toolbar/useFileCommands';
 import { WallView } from '../wall/WallView';
-import { setDrawer, useWallNav } from '../wall/wall-nav';
+import { setDrawer, setPanel, useWallNav } from '../wall/wall-nav';
 import { WhatChanged } from '../whatchanged/WhatChanged';
 
 const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
@@ -28,6 +28,7 @@ export function IfcSheetShell() {
   const dirty = useProjectStore((s) => s.dirty);
   const modelName = useViewerStore((s) => [...s.models.values()][0]?.name ?? null);
   const drawer = useWallNav((s) => s.drawer);
+  const panel = useWallNav((s) => s.panel);
   const views = new Set(sheets.flatMap((s) => (s.viewports ?? []).map((v) => v.viewId))).size;
 
   return (
@@ -42,6 +43,12 @@ export function IfcSheetShell() {
         <span className="flex-1" />
         {sheets.length > 0 ? <WhatChanged /> : null}
         {sheets.length > 0 ? <span className="text-sm text-sky-200/80">{t('wall.shell.sheetsViews', { sheets: sheets.length, views })}</span> : null}
+        {sheets.length > 0 ? (
+          <>
+            <button type="button" aria-pressed={panel === 'missing'} className={quiet} onClick={() => setPanel(panel === 'missing' ? null : 'missing')}>{t('check.section')}</button>
+            <button type="button" aria-pressed={panel === 'issue'} className={quiet} onClick={() => setPanel(panel === 'issue' ? null : 'issue')}>{t('issue.section')}</button>
+          </>
+        ) : null}
         <button type="button" className={quiet} onClick={() => void files.handleOpenClick()}>{t('wall.shell.open')}</button>
         {sheets.length > 0 ? (
           <button

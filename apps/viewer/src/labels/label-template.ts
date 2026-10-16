@@ -14,6 +14,8 @@
  *   {Type.Name}                     the element's type; {Type.Pset.Prop} reads the type only
  *   {Material}  {Storey}            the material names, the storey name
  *   {Pset.Prop|n/a}                 text to show when there is no value
+ *   {Tag ?? Name}                   the first of these that has a value
+ *   {Mark}                          the Tag when it is a mark (D-01), not a machine identifier (a GUID)
  *
  * `\{`, `\}`, `\|` and `\\` write the character; `\n` and a real line break both
  * break the line. A brace that is not closed stays literal and is reported.
@@ -21,7 +23,7 @@
 
 import { parseFormatSpec, type FormatSpec } from './label-format';
 
-export const ATTRIBUTE_FIELDS = ['Name', 'Tag', 'ObjectType', 'Description', 'PredefinedType', 'GlobalId'] as const;
+export const ATTRIBUTE_FIELDS = ['Name', 'LongName', 'Tag', 'Mark', 'ObjectType', 'Description', 'PredefinedType', 'GlobalId'] as const;
 export type AttributeField = (typeof ATTRIBUTE_FIELDS)[number];
 
 export type FieldRef =
@@ -38,6 +40,8 @@ export interface TemplateField {
   /** The path as written, without format and fallback. */
   source: string;
   ref: FieldRef;
+  /** Read when `ref` has no value, in order (`{Tag ?? Name}`). */
+  alternatives?: FieldRef[];
   format?: FormatSpec;
   /** Shown instead of the placeholder when there is no value. */
   fallback?: string;
@@ -133,7 +137,8 @@ export function parseTemplate(text: string): ParsedTemplate {
       }
       const body = text.slice(i + 1, end);
       const { path, spec, fallback } = splitField(body);
-      const ref = path.trim() === '' ? null : parseFieldRef(unescape(path));
+      const refs = path.trim() === '' ? [] : unescape(path).split('??').map(parseFieldRef);
+      const ref = refs.length > 0 && refs.every((r) => r !== null) ? refs[0] : null;
       if (!ref) {
         issues.push({ at: i, kind: path.trim() === '' ? 'empty' : 'unknown', text: `{${body}}` });
         literal += `{${unescape(body)}}`;
@@ -141,6 +146,7 @@ export function parseTemplate(text: string): ParsedTemplate {
         flush();
         segments.push({
           type: 'field', source: fieldPath(ref), ref,
+          ...(refs.length > 1 ? { alternatives: refs.slice(1) as FieldRef[] } : {}),
           ...(spec !== null && spec.trim() !== '' ? { format: parseFormatSpec(unescape(spec)) } : {}),
           ...(fallback !== null ? { fallback: unescape(fallback) } : {}),
         });

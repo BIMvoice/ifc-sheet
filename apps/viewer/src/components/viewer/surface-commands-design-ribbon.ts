@@ -156,6 +156,7 @@ export const RIBBON_DESIGN_SURFACE_COMMANDS = [
   { id: 'design:trim', labelKey: 'drafting.tool.trim', keywords: 'trim cut drafting TR', category: 'Tools', icon: DraftTrim, surfaces: ribbonOnly, enabled: always, run: draft('trim') },
   { id: 'design:extend', labelKey: 'drafting.tool.extend', keywords: 'extend lengthen boundary drafting EX', category: 'Tools', icon: DraftExtend, surfaces: ribbonOnly, enabled: always, run: draft('extend') },
   { id: 'design:fillet', labelKey: 'drafting.tool.fillet', keywords: 'fillet round corner radius drafting F', category: 'Tools', icon: DraftFillet, surfaces: ribbonOnly, enabled: always, run: draft('fillet') },
+  { id: 'design:detail', labelKey: 'drafting.tool.detail', keywords: 'detail area enlarge zoom crop', category: 'Tools', icon: DraftRectangle, surfaces: ribbonOnly, enabled: always, run: draft('detail') },
   { id: 'design:section-line', labelKey: 'drafting.tool.sectionLine', keywords: 'section line cut work plane vertical', category: 'Tools', icon: DraftSectionLine, surfaces: ribbonOnly, enabled: always, run: draft('sectionline') },
   { id: 'design:workplane-face', labelKey: 'drafting.tool.workplaneFace', keywords: 'work plane face pick any orientation', category: 'Tools', icon: DraftWorkplane, surfaces: ribbonOnly, enabled: always, run: () => startWorkPlaneFromFace() },
   { id: 'design:extrude', labelKey: 'drafting.tool.extrude', keywords: 'extrude contour profile ifc element solid', category: 'Tools', icon: DraftExtrude, surfaces: ribbonOnly, enabled: always, run: draft('extrude') },

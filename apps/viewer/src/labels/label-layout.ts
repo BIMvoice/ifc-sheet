@@ -30,6 +30,10 @@ export interface LayoutItem {
   /** The label's outer size. */
   w: number;
   h: number;
+  /** Places to try before the ones beside the element, in this order (a door tag clear of the door's swing). */
+  preferred?: readonly Pt[];
+  /** Places to try after all the others, in this order, before settling for the least bad. */
+  fallback?: readonly Pt[];
 }
 
 export interface LayoutScene {
@@ -66,7 +70,7 @@ export function layoutLabels(items: readonly LayoutItem[], scene: LayoutScene): 
   const out = new Map<string, Placed>();
   for (const item of items) {
     const box = orientedBox(item.ring);
-    const centres = candidateCentres({ box, w: item.w, h: item.h, gap, away: away(box.c) });
+    const centres = [...(item.preferred ?? []), ...candidateCentres({ box, w: item.w, h: item.h, gap, away: away(box.c) }), ...(item.fallback ?? [])];
     const hits = (c: Pt): number => {
       const r = growRect(rectAround(c, item.w, item.h), clear);
       let n = 0;

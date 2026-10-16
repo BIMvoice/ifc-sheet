@@ -11,40 +11,95 @@
 
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
+import type { ProjectSheet, ProjectView } from '@/project/types';
+import { diffById, isEmptyDelta, redoDelta, undoDelta, type Delta } from './step-delta';
 import type { DraftEntity, DraftParamValue, EntityShape } from './types';
 
 const HISTORY_LIMIT = 200;
 
-let past: DraftEntity[][] = [];
-let future: DraftEntity[][] = [];
+/**
+ * One undo step: the drafts as they were, or, for a grouped step that also
+ * changed the project's views and sheets (a draft set), what it added,
+ * removed and changed. A grouped step is undone by taking back just that, so
+ * whatever was added after it stays.
+ */
+type Step =
+  | { drafts: DraftEntity[] }
+  | { group: { drafts: Delta<DraftEntity>; views: Delta<ProjectView>; sheets: Delta<ProjectSheet> } };
+
+let past: Step[] = [];
+let future: Step[] = [];
 /** When each step was made (ms), so a plan's undo can interleave drafting and model steps in the order they happened. */
 let pastAt: number[] = [];
 let futureAt: number[] = [];
+/** While a grouped step runs, individual commits do not make steps of their own. */
+let grouping = false;
 
 /** When the step Undo would revert was made, or null when there is none. */
 export const lastDraftStepAt = (): number | null => pastAt.at(-1) ?? null;
 /** When the step Redo would restore was made, or null when there is none. */
 export const nextDraftRedoAt = (): number | null => futureAt.at(-1) ?? null;
 
+function pushStep(step: Step): void {
+  past = [...past.slice(-(HISTORY_LIMIT - 1)), step];
+  pastAt = [...pastAt.slice(-(HISTORY_LIMIT - 1)), Date.now()];
+  future = [];
+  futureAt = [];
+}
+
 /** Replace the drafts with `next`, as one undoable step. */
 export function commitDrafts(next: DraftEntity[]): void {
   const current = useProjectStore.getState().drafts;
   if (next === current) return;
-  past = [...past.slice(-(HISTORY_LIMIT - 1)), current];
-  pastAt = [...pastAt.slice(-(HISTORY_LIMIT - 1)), Date.now()];
-  future = [];
-  futureAt = [];
+  if (!grouping) pushStep({ drafts: current });
   useProjectStore.setState({ drafts: next, dirty: true });
+}
+
+/**
+ * Run `change`, which may add views, sheets and drafts through the ordinary
+ * functions, and make everything it did ONE undo step: Undo puts the views,
+ * sheets and drafts back as they were.
+ */
+export function runAsOneUndoStep(change: () => void): void {
+  const before = useProjectStore.getState();
+  const wasGrouping = grouping;
+  grouping = true;
+  try {
+    change();
+  } finally {
+    grouping = wasGrouping;
+  }
+  const after = useProjectStore.getState();
+  if (wasGrouping) return;
+  const group = { drafts: diffById(before.drafts, after.drafts), views: diffById(before.views, after.views), sheets: diffById(before.sheets, after.sheets) };
+  if (!isEmptyDelta(group.drafts) || !isEmptyDelta(group.views) || !isEmptyDelta(group.sheets)) pushStep({ group });
+}
+
+/** The step Redo needs when `step` is undone: a snapshot step records the state it replaced; a grouped step is its own inverse. */
+function currentLike(step: Step): Step {
+  return 'group' in step ? step : { drafts: useProjectStore.getState().drafts };
+}
+
+function revert(step: Step): void {
+  if (!('group' in step)) { useProjectStore.setState({ drafts: step.drafts, dirty: true }); return; }
+  const { group } = step;
+  useProjectStore.setState((s) => ({ drafts: undoDelta(s.drafts, group.drafts), views: undoDelta(s.views, group.views), sheets: undoDelta(s.sheets, group.sheets), dirty: true }));
+}
+
+function reapply(step: Step): void {
+  if (!('group' in step)) { useProjectStore.setState({ drafts: step.drafts, dirty: true }); return; }
+  const { group } = step;
+  useProjectStore.setState((s) => ({ drafts: redoDelta(s.drafts, group.drafts), views: redoDelta(s.views, group.views), sheets: redoDelta(s.sheets, group.sheets), dirty: true }));
 }
 
 export function undoDrafts(): boolean {
   const previous = past.at(-1);
   if (!previous) return false;
   past = past.slice(0, -1);
-  future = [...future, useProjectStore.getState().drafts];
+  future = [...future, currentLike(previous)];
   futureAt = [...futureAt, pastAt.at(-1) ?? Date.now()];
   pastAt = pastAt.slice(0, -1);
-  useProjectStore.setState({ drafts: previous, dirty: true });
+  revert(previous);
   return true;
 }
 
@@ -52,10 +107,10 @@ export function redoDrafts(): boolean {
   const next = future.at(-1);
   if (!next) return false;
   future = future.slice(0, -1);
-  past = [...past, useProjectStore.getState().drafts];
+  past = [...past, currentLike(next)];
   pastAt = [...pastAt, futureAt.at(-1) ?? Date.now()];
   futureAt = futureAt.slice(0, -1);
-  useProjectStore.setState({ drafts: next, dirty: true });
+  reapply(next);
   return true;
 }
 

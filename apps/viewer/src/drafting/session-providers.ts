@@ -10,6 +10,8 @@
  */
 
 import type { ViewElement } from '@/labels/view-elements';
+import type { PlanPart } from '@/dimall/types';
+import type { RoomOfPlan } from '@/tagall/footprint';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
 import type { LevelResolver } from './level-mark';
@@ -88,3 +90,17 @@ export function setViewElementsProvider(provider: (() => ViewElement[]) | null):
   viewElementsProvider = provider ?? (() => []);
 }
 export const viewElementsOf = (): ViewElement[] => viewElementsProvider();
+
+/** The walls, doors and windows the plan in front is cut through (`dimall/parts.ts`). */
+let planPartsProvider: () => PlanPart[] = () => [];
+export function setPlanPartsProvider(provider: (() => PlanPart[]) | null): void {
+  planPartsProvider = provider ?? (() => []);
+}
+export const planPartsOf = (): PlanPart[] => planPartsProvider();
+
+/** The rooms the plan in front shows: each space's footprint at the cut and its GlobalId (`tagall/footprint.ts`). */
+let roomsProvider: () => RoomOfPlan[] = () => [];
+export function setRoomsProvider(provider: (() => RoomOfPlan[]) | null): void {
+  roomsProvider = provider ?? (() => []);
+}
+export const roomsOf = (): RoomOfPlan[] => roomsProvider();

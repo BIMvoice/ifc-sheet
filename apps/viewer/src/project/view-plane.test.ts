@@ -41,6 +41,13 @@ describe('sectionPlaneForView', () => {
     assert.deepEqual(sectionPlaneForView(elevation('west'), bounds, []), { axis: 'side', position: 0.25, flipped: true });
   });
 
+  it('puts an elevation with a stored plane offset where it says, not at the bounds', () => {
+    const north: ProjectView = { ...base, kind: 'elevation', direction: 'north', planeOffset: 2.05 };
+    assert.deepEqual(sectionPlaneForView(north, bounds, []), { axis: 'front', position: 20.5, flipped: true });
+    const east: ProjectView = { ...base, kind: 'elevation', direction: 'east', planeOffset: 14.95 };
+    assert.deepEqual(sectionPlaneForView(east, bounds, []), { axis: 'side', position: 74.75, flipped: false });
+  });
+
   it('has no plane for a 3D view', () => {
     assert.equal(sectionPlaneForView({ ...base, kind: '3d', viewpoint: null }, bounds, []), null);
   });

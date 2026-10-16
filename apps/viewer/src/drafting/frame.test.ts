@@ -11,7 +11,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { projectTo2D, projectTo2DBasis, type SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { drawingToScreen, drawingToWorld, screenToDrawing, userToDrawingVec, drawingToUserVec, worldToDrawing } from './frame.js';
+import { drawingToUserPoint, userToDrawingPoint, drawingToScreen, drawingToWorld, screenToDrawing, userToDrawingVec, drawingToUserVec, worldToDrawing } from './frame.js';
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≉ ${b}`);
 
@@ -72,4 +72,14 @@ describe('screen mapping', () => {
       near(roundTrip.y, 1);
     });
   }
+});
+
+describe('typed absolute points', () => {
+  it('count from the origin given, and come back', () => {
+    const origin = { x: 0, y: 297 };
+    const p = userToDrawingPoint({ x: 20, y: 30 }, 'down', origin);
+    near(p.x, 20); near(p.y, 267);
+    const back = drawingToUserPoint(p, 'down', origin);
+    near(back.x, 20); near(back.y, 30);
+  });
 });

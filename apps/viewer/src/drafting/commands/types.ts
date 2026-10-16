@@ -11,6 +11,8 @@
 import type { TranslationKey } from '@/i18n';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ViewElement } from '@/labels/view-elements';
+import type { PlanPart } from '@/dimall/types';
+import type { RoomOfPlan } from '@/tagall/footprint';
 import type { ProjectView } from '@/project/types';
 import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
 
@@ -52,6 +54,10 @@ export interface DraftContext {
   elementAt(p: Pt): number | null;
   /** Every model element the view draws, with a point to label it at. */
   viewElements(): ViewElement[];
+  /** The walls, doors and windows the plan is cut through, for DIMALL. */
+  planParts(): PlanPart[];
+  /** The rooms of the plan in front. */
+  rooms(): RoomOfPlan[];
   /** +1, or −1 when the drawing is mirrored on screen (a user CCW angle is CW in drawing space). */
   orientation: 1 | -1;
   settings: DraftSettings;
@@ -130,7 +136,7 @@ export interface DraftCommandDef {
   create(ctx: DraftContext): DraftCommand;
   /** A command that needs no further input: it does its work when named, instead of `create`. `args` is what was typed after its name (only for a command that `takesArgs`). */
   run?(ctx: DraftContext, args: string): void;
-  /** The command line may carry text after the name (`WHATCHANGED ACCEPT`). */
+  /** The command line may carry text after the name (`ISSUE svg P02`, `WHATCHANGED ACCEPT`). */
   takesArgs?: boolean;
   /** The command works on the project, not on the drawing in front: it runs with no view attached, and when typed it runs even while another tool is waiting for input. */
   projectWide?: boolean;

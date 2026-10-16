@@ -86,7 +86,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     for (const v of views) {
       if (known.current.has(v.id)) continue;
       known.current.add(v.id);
-      if (v.kind === 'section') hangView(v.id, extent);
+      if (v.kind === 'section' || v.detail) hangView(v.id, extent);
     }
   }, [views, extent]);
 
@@ -119,9 +119,22 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       return;
     }
     // A section line is drawn on a plan: the chosen one, else the lowest.
-    const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : view;
+    // A detail marks its area on the drawing in front, else the chosen one, else the lowest plan.
+    const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : command === 'detail' ? focusView ?? view ?? groundPlan(views) : view;
     if (!target || target.kind === '3d') return;
     setTool(command);
+    setFocusId(target.id);
+    cancelStart.current = startWhenAttached(target.id, command);
+  };
+
+  /** A tool's one-action twin: run it on the drawing in front (or the chosen one), its note appears in the drawing's command line. */
+  const runAll = (command: string): void => {
+    cancelStart.current();
+    ran.current = null;
+    setAdding(false);
+    const target = focusView ?? view;
+    if (!target || target.kind === '3d') return;
+    setTool(null);
     setFocusId(target.id);
     cancelStart.current = startWhenAttached(target.id, command);
   };
@@ -161,7 +174,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 gap-4 px-6 pb-4">
-        <ToolRail active={tool} onTool={startTool} adding={adding} onAdd={() => setAdding((a) => !a)} />
+        <ToolRail active={tool} onTool={startTool} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
         <main className="relative min-w-0 flex-1">
           {focusView ? (
             <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">
@@ -183,6 +196,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
               <AddDrawing
                 onClose={() => setAdding(false)}
                 onSection={() => startTool('sectionline')}
+                onDetail={() => startTool('detail')}
                 onView={(viewId) => {
                   setAdding(false);
                   const landed = extent ? hangView(viewId, extent) : null;

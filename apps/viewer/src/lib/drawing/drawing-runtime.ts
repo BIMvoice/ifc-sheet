@@ -48,6 +48,11 @@ function getRuntime(): DrawingRuntime {
   return runtime;
 }
 
+/** The runtime as it stands, for code that is not a component (the checks, the commands). The same object `useDrawingRuntime` hands a view. */
+export function currentDrawingRuntime(): DrawingRuntime {
+  return runtime;
+}
+
 export function useDrawingRuntime(): DrawingRuntime {
   return useSyncExternalStore(subscribe, getRuntime, getRuntime);
 }

@@ -185,7 +185,7 @@ export function DrawingPanel(): React.ReactElement {
           printPreview: displayOptions.showPrintPreview,
         }}
         ifcAnnotationsAvailable={sectionPlane.axis === 'down'}
-        projectionAvailable={sectionPlane.custom === undefined}
+        projectionAvailable
         onToggleSymbolic={vm.toggleSymbolicRepresentations}
         onToggleIfcAnnotations={vm.toggleIfcAnnotations}
         onToggleProjection={vm.toggleConstructionProjection}

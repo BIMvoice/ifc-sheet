@@ -16,7 +16,9 @@ import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
+import { settleDetailMarks } from '@/drafting/detail-mark';
 import { create } from 'zustand';
+import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
@@ -36,7 +38,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], modelState: undefined,
+  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -69,6 +71,7 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
     annotationTypes: state.annotationTypes ?? [],
     symbols: state.symbols ?? [],
     legends: state.legends ?? [],
+    issues: state.issues ?? [],
     ...(state.modelState ? { modelState: state.modelState } : {}),
   };
 }
@@ -99,6 +102,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     annotationTypes: doc.annotationTypes ?? [],
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
+    issues: doc.issues ?? [],
     modelState: doc.modelState,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
@@ -214,25 +218,19 @@ export function removeProjectItem(id: string): void {
     schedules: (state.schedules ?? []).filter((s) => s.id !== id),
     civilDrawings: (state.civilDrawings ?? []).filter((d) => d.id !== id),
     legends: (state.legends ?? []).filter((l) => l.id !== id),
-    // A deleted view takes its own drawing with it, and a section's symbol on its plans.
-    drafts: state.drafts.some((d) => d.viewId === id || d.params.sectionOf === id) ? state.drafts.filter((d) => d.viewId !== id && d.params.sectionOf !== id) : state.drafts,
+    // A deleted view takes its own drawing with it, a section's symbol on its plans and a detail's mark on its source.
+    drafts: state.drafts.some((d) => d.viewId === id || d.params.sectionOf === id || d.params.detailOf === id) ? state.drafts.filter((d) => d.viewId !== id && d.params.sectionOf !== id && d.params.detailOf !== id) : state.drafts,
     activeItemId: state.activeItemId === id ? null : state.activeItemId,
     dirty: true,
   });
 }
 
-/** The next free sheet number in the `A-101`, `A-102`… series. */
-export function nextSheetNumber(sheets: readonly ProjectSheet[]): string {
-  const taken = new Set(sheets.map((s) => s.number));
-  for (let n = 101; ; n++) {
-    const number = `A-${n}`;
-    if (!taken.has(number)) return number;
-  }
-}
+export { nextSheetNumber };
 
+/** A new sheet takes the next plan number until a view is placed on it; then it is numbered by what it holds. */
 export function addProjectSheet(name = 'Unnamed'): string {
   const state = useProjectStore.getState();
-  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), name, createdAt: Date.now() };
+  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), autoNumber: true, name, createdAt: Date.now() };
   useProjectStore.setState({ sheets: [...state.sheets, sheet], dirty: true });
   return sheet.id;
 }
@@ -242,7 +240,8 @@ export function duplicateProjectSheet(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;
-  const copy: ProjectSheet = { ...source, id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), name: `${source.name} Copy`, createdAt: Date.now() };
+  const held = state.views.find((v) => v.id === source.viewports?.[0]?.viewId);
+  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held?.kind)), name: `${source.name} Copy`, createdAt: Date.now() };
   const at = state.sheets.indexOf(source) + 1;
   useProjectStore.setState({ sheets: [...state.sheets.slice(0, at), copy, ...state.sheets.slice(at)], dirty: true });
   return copy.id;
@@ -251,7 +250,7 @@ export function duplicateProjectSheet(id: string): string | null {
 export function setSheetNumber(id: string, number: string): void {
   const trimmed = number.trim();
   if (!trimmed) return;
-  useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...sh, number: trimmed } : sh)), dirty: true }));
+  useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed } : sh)), dirty: true }));
 }
 
 /** Whether every loaded model is already in the project's model list. */
@@ -269,3 +268,11 @@ function mergeModels(known: readonly ProjectModelRef[], loaded: readonly Project
 function sameLevels(a: readonly ProjectLevel[], b: readonly ProjectLevel[]): boolean {
   return a.length === b.length && a.every((l, i) => l.name === b[i].name && l.elevation === b[i].elevation);
 }
+
+// A detail mark's label is the detail's number and the number of the sheet it is on: derived, so it follows
+// a sheet's renumbering or the detail's placement without anyone editing the text.
+useProjectStore.subscribe((state, previous) => {
+  if (state.sheets === previous.sheets && state.views === previous.views && state.drafts === previous.drafts) return;
+  const settled = settleDetailMarks(state.drafts, state.views, state.sheets);
+  if (settled !== state.drafts) useProjectStore.setState({ drafts: settled });
+});
