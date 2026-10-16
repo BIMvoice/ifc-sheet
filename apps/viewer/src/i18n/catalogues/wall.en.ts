@@ -7,6 +7,7 @@ import type { TranslationValue } from '../types';
 export const wallEn = {
   'wall.tab': 'Wall',
   'wall.empty': 'Open an IFC model and its drawing set hangs here.',
+  'wall.demo': 'Or try the demo project: a block of flats, ground floor plus four',
   'wall.intro.read': '{name} read',
   'wall.intro.titleStart': 'Your drawing set',
   'wall.intro.titleEnd': 'is already drawn.',
@@ -96,6 +97,7 @@ export const wallEn = {
   'wall.reason.chosen': '1 : {scale}, chosen',
   'wall.shell.sheetsViews': '{sheets} sheets · {views} views',
   'wall.shell.open': 'Open a model',
+  'wall.shell.demo': 'Demo project',
   'wall.shell.saveProject': 'Save the project',
   'wall.shell.untitled': 'No model open',
   'wall.shell.project': 'Project',
