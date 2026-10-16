@@ -27,7 +27,7 @@ const LEVELS: ProjectLevel[] = [
 
 describe('buildDrawingSet', () => {
   const views = defaultViews(LEVELS);
-  const sheets = buildDrawingSet({ views, extent: HOUSE, titleBlock: { project: 'Sample House', date: '2026-10-13' } });
+  const sheets = buildDrawingSet({ views, extent: HOUSE });
 
   it('puts plans, then elevations in pairs, on numbered sheets', () => {
     assert.deepEqual(sheets.map((s) => [s.number, s.name]), [
@@ -54,13 +54,13 @@ describe('buildDrawingSet', () => {
     assert.equal(sheets[0].paper, 'A2');
   });
 
-  it('fills the title block from the model on every sheet', () => {
-    assert.ok(sheets.every((s) => s.titleBlock?.project === 'Sample House' && s.titleBlock.date === '2026-10-13'));
+  it('leaves the title block to the project: no sheet carries a copy of its own', () => {
+    assert.ok(sheets.every((s) => s.titleBlock === undefined));
   });
 
   it('makes no sheet for a group with nothing in it, and pairs sections on A-301', () => {
     const sections: ProjectView[] = ['A', 'B', 'C'].map((m, i) => ({ id: `s${i}`, kind: 'section', name: `Section ${m}-${m}`, createdAt: 0, plane: { axis: 'front', offset: 0, flipped: false } }));
-    const set = buildDrawingSet({ views: sections, extent: HOUSE, titleBlock: {} });
+    const set = buildDrawingSet({ views: sections, extent: HOUSE });
     assert.deepEqual(set.map((s) => [s.number, s.viewports?.length]), [['A-301', 2], ['A-302', 1]]);
   });
 });
@@ -117,8 +117,8 @@ describe('withViewHung (a drawing added from inside a sheet)', () => {
 
   it('goes beside the other one on a sheet with room', () => {
     const views = [section('a'), section('b')];
-    const [sheet] = buildDrawingSet({ views: [views[0]], extent: HOUSE, titleBlock: {} });
-    const hung = withViewHung([sheet], views, views[1], HOUSE, {});
+    const [sheet] = buildDrawingSet({ views: [views[0]], extent: HOUSE });
+    const hung = withViewHung([sheet], views, views[1], HOUSE);
     assert.ok(hung);
     assert.equal(hung.sheetId, sheet.id);
     assert.deepEqual(hung.sheets[0].viewports?.map((v) => v.viewId), ['a', 'b']);
@@ -126,18 +126,17 @@ describe('withViewHung (a drawing added from inside a sheet)', () => {
 
   it('starts the next sheet of its series when the last one is full (#20 step 10: A-302)', () => {
     const views = [section('a'), section('b'), section('c')];
-    const set = buildDrawingSet({ views: views.slice(0, 2), extent: HOUSE, titleBlock: { project: 'P' } });
-    const hung = withViewHung(set, views, views[2], HOUSE, { project: 'P' });
+    const set = buildDrawingSet({ views: views.slice(0, 2), extent: HOUSE });
+    const hung = withViewHung(set, views, views[2], HOUSE);
     assert.ok(hung);
     assert.deepEqual(hung.sheets.map((s) => s.number), ['A-301', 'A-302']);
-    assert.equal(hung.sheets[1].titleBlock?.project, 'P');
   });
 
   it('does not hang a view twice, nor a 3D view', () => {
     const views = [section('a')];
-    const set = buildDrawingSet({ views, extent: HOUSE, titleBlock: {} });
-    assert.equal(withViewHung(set, views, views[0], HOUSE, {}), null);
-    assert.equal(withViewHung(set, views, { id: '3', kind: '3d', name: '3D', createdAt: 0, viewpoint: null }, HOUSE, {}), null);
+    const set = buildDrawingSet({ views, extent: HOUSE });
+    assert.equal(withViewHung(set, views, views[0], HOUSE), null);
+    assert.equal(withViewHung(set, views, { id: '3', kind: '3d', name: '3D', createdAt: 0, viewpoint: null }, HOUSE), null);
   });
 });
 
@@ -148,7 +147,7 @@ describe('schedules on the set', () => {
     startDrawingSet(null, HOUSE);
   });
 
-  it('hang one to a sheet in the A-6xx series, with the set\'s title block', () => {
+  it('hang one to a sheet in the A-6xx series, printing the project\'s title block', () => {
     const doors = addScheduleToSet('all', 'Door and window schedule');
     const takeoff = addScheduleToSet('materials', 'Material takeoff');
     const { sheets, schedules } = useProjectStore.getState();
@@ -156,7 +155,9 @@ describe('schedules on the set', () => {
     assert.deepEqual(placed.map((s) => s?.number), ['A-601', 'A-602']);
     assert.deepEqual(placed.map((s) => sheetGroup(s ?? { number: '' })), ['schedules', 'schedules']);
     assert.deepEqual(placed.map((s) => schedules?.find((x) => x.id === s?.viewports?.[0]?.viewId)?.kind), ['all', 'materials']);
-    assert.equal(placed[0]?.titleBlock?.date, sheets[0].titleBlock?.date);
+    // The set filled the project's date from the model; the schedule sheet keeps no copy and prints it.
+    assert.match(useProjectStore.getState().titleBlock?.date ?? '', /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(placed[0]?.titleBlock, undefined);
   });
 
   it('give no scale reason for a schedule sheet', () => {
