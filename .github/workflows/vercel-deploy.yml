@@ -52,6 +52,16 @@ jobs:
           corepack enable
           npm install --global vercel@63
 
+      # The engine is compiled from source when its Rust sources differ from the
+      # last release (scripts/vercel-install.sh decides). That script installs
+      # wasm-pack with its own installer, which on GitHub's runner tries to write
+      # to /etc/skel and fails; installed here first, the script finds it and
+      # skips that step.
+      - name: wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
       - name: Production or preview
         id: target
         run: |
