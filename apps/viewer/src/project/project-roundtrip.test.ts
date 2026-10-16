@@ -139,6 +139,7 @@ const FULL: Required<ProjectDocument> = {
   models: [{ key: 'hash-arch', name: 'arch.ifc' }],
   views: Object.values(VIEWS),
   sheets: [sheet],
+  titleBlock: { project: 'Full house', client: 'Owner', checkedBy: 'PC', logo: 'data:image/png;base64,iVBORw0KGgo=' },
   drafts,
   draftLayers: [{ id: '0', name: '0', color: '#18181b', visible: true, locked: false }, layer],
   hatchPatterns: '*MY-LINES, test\n0, 0,0, 0,2\n',

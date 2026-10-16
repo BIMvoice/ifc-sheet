@@ -101,8 +101,6 @@ function pairs<T>(items: readonly T[]): T[][] {
 export interface SetInput {
   views: readonly ProjectView[];
   extent: ModelExtent;
-  /** Title block fields every sheet starts with (from the model). */
-  titleBlock: Record<string, string>;
   now?: number;
 }
 
@@ -111,7 +109,7 @@ export interface SetInput {
  * read; a group with nothing to show makes no sheet. The group a sheet
  * belongs to is read back from its number (`sheetGroup`).
  */
-export function buildDrawingSet({ views, extent, titleBlock, now = Date.now() }: SetInput): ProjectSheet[] {
+export function buildDrawingSet({ views, extent, now = Date.now() }: SetInput): ProjectSheet[] {
   const sheets: ProjectSheet[] = [];
   const area = drawingArea();
   const sheet = (number: string, name: string, members: readonly ProjectView[]): void => {
@@ -120,7 +118,7 @@ export function buildDrawingSet({ views, extent, titleBlock, now = Date.now() }:
     const scale = fittingScale(sizes, area);
     sheets.push({
       id: freshProjectId('sheet'), number, name, createdAt: now, paper: SET_PAPER, orientation: 'landscape',
-      viewports: rowOfViewports(members, sizes, scale), titleBlock: { ...titleBlock },
+      viewports: rowOfViewports(members, sizes, scale),
     });
   };
   const plans = views.filter((v) => v.kind === 'plan').sort((a, b) => (a.kind === 'plan' && b.kind === 'plan' ? a.level.elevation - b.level.elevation : 0));
@@ -167,7 +165,7 @@ export const PER_SHEET = 2;
  * in the group's series. The sheet it lands on is laid out again at the scale
  * that fits. `null` for a view that has no group (3D) or is already hung.
  */
-export function withViewHung(sheets: readonly ProjectSheet[], views: readonly ProjectView[], view: ProjectView, extent: ModelExtent, titleBlock: Record<string, string>, now = Date.now()): { sheets: ProjectSheet[]; sheetId: string } | null {
+export function withViewHung(sheets: readonly ProjectSheet[], views: readonly ProjectView[], view: ProjectView, extent: ModelExtent, now = Date.now()): { sheets: ProjectSheet[]; sheetId: string } | null {
   const group = groupOfView(view);
   if (!group || sheets.some((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id))) return null;
   const area = drawingArea();
@@ -182,7 +180,7 @@ export function withViewHung(sheets: readonly ProjectSheet[], views: readonly Pr
     return { sheets: sheets.map((s) => (s.id === last.id ? layOut(s, members) : s)), sheetId: last.id };
   }
   const sheet = layOut({
-    id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: GROUP_NAMES[group], createdAt: now, paper: SET_PAPER, orientation: 'landscape', titleBlock: { ...titleBlock },
+    id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: GROUP_NAMES[group], createdAt: now, paper: SET_PAPER, orientation: 'landscape',
   }, [view]);
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
