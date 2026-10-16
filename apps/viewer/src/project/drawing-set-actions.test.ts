@@ -93,6 +93,15 @@ describe('ensureDrawingSet', () => {
     assert.equal(state().views.find((v) => v.kind === 'plan')?.scale, 100);
   });
 
+  it('fills the project title block once, keeps what the project already says, and gives the sheets none of their own', () => {
+    useProjectStore.setState({ titleBlock: { drawnBy: 'PC' } });
+    run();
+    assert.equal(state().titleBlock?.drawnBy, 'PC');
+    assert.match(state().titleBlock?.date ?? '', /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(state().sheets.length > 0);
+    assert.ok(state().sheets.every((s) => s.titleBlock === undefined));
+  });
+
   it('keeps a depth the person set, and recognises a section by what it passes through, not its name', () => {
     run();
     const [s] = sections();

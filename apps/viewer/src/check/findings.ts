@@ -10,6 +10,7 @@
 
 import { sectionLink } from '@/drafting/section-symbol';
 import type { DraftEntity } from '@/drafting/types';
+import { titleBlockOf } from '@/project/title-block';
 import type { ProjectSheet } from '@/project/types';
 import type { CheckInput, Finding } from './types';
 
@@ -57,10 +58,10 @@ export function emptySheets(input: CheckInput): Finding[] {
   return input.sheets.filter((s) => (s.viewports ?? []).length === 0).map((s): Finding => ({ kind: 'emptySheet', key: 'check.emptySheet', sheetId: s.id, params: { sheet: s.number } }));
 }
 
-/** The title-block fields a sheet leaves empty: project, title, drawn by, date. */
+/** The title-block fields a sheet prints empty: project, title, drawn by, date. A sheet prints the project's title block (filled once) unless it says otherwise. */
 export function emptyTitleBlocks(input: CheckInput): Finding[] {
   return input.sheets.flatMap((s) => (['project', 'title', 'drawnBy', 'date'] as const)
-    .filter((field) => !((field === 'title' ? s.name : s.titleBlock?.[field]) ?? '').trim())
+    .filter((field) => !((field === 'title' ? s.name : titleBlockOf(s, input.titleBlock, input.projectName)[field]) ?? '').trim())
     .map((field): Finding => ({ kind: 'titleBlockEmpty', key: 'check.titleBlockEmpty', sheetId: s.id, params: { field, sheet: s.number } })));
 }
 

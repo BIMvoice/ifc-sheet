@@ -16,7 +16,7 @@ import {
 import type { CheckInput, PlanElement } from './types.js';
 
 const vp = (viewId: string) => ({ id: `vp-${viewId}`, viewId, x: 0, y: 0, scale: 100, width: 0, height: 0, center: null });
-const sheet = (id: string, number: string, views: string[], over: Partial<ProjectSheet> = {}): ProjectSheet => ({ id, number, name: `Sheet ${number}`, createdAt: 0, viewports: views.map(vp), titleBlock: { project: 'P', drawnBy: 'X', date: '2026-10-13' }, ...over });
+const sheet = (id: string, number: string, views: string[], over: Partial<ProjectSheet> = {}): ProjectSheet => ({ id, number, name: `Sheet ${number}`, createdAt: 0, viewports: views.map(vp), ...over });
 const text = (viewId: string, params: Record<string, string | number | boolean> = {}): DraftEntity => newDraft(viewId, 'l', { type: 'text', p: { x: 0, y: 0 }, text: 't', height: 0.25, rotation: 0 }, params);
 const dim = (viewId: string) => newDraft(viewId, 'l', { type: 'dimension', variant: 'aligned', a: { x: 0, y: 0 }, b: { x: 1, y: 0 }, at: { x: 0, y: 1 }, height: 0.25 });
 const level = (viewId: string) => newDraft(viewId, 'l', { type: 'level', p: { x: 0, y: 0 }, value: 0, height: 0.25 });
@@ -27,7 +27,7 @@ const elev = { id: 'elev', name: 'North Elevation', kind: 'elevation' };
 const detail = { id: 'det', name: 'Detail 1', kind: 'plan', detail: { n: 1 } };
 const els: PlanElement[] = [{ guid: 'D1', className: 'IfcDoor' }, { guid: 'D2', className: 'IfcDoor' }, { guid: 'W1', className: 'IfcWindow' }, { guid: 'R1', className: 'IfcSpace' }, { guid: 'S1', className: 'IfcWall' }];
 const base = (over: Partial<CheckInput> = {}): CheckInput => ({
-  views: [plan, sec, elev], sheets: [sheet('s1', 'A-101', ['plan']), sheet('s2', 'A-301', ['sec', 'elev'])], drafts: [],
+  views: [plan, sec, elev], projectName: 'House', titleBlock: { project: 'P', drawnBy: 'X', date: '2026-10-13' }, sheets: [sheet('s1', 'A-101', ['plan']), sheet('s2', 'A-301', ['sec', 'elev'])], drafts: [],
   planElements: (id) => (id === 'plan' ? els : []), elementExists: () => true, ...over,
 });
 
@@ -78,9 +78,22 @@ describe('viewsOnNoSheet and emptySheets', () => {
 
 describe('emptyTitleBlocks', () => {
   it('names each empty field: project, title, drawn by, date', () => {
-    const f = emptyTitleBlocks(base({ sheets: [sheet('s1', 'A-101', ['plan'], { name: ' ', titleBlock: { project: '', drawnBy: '  ' } })] }));
+    const f = emptyTitleBlocks(base({ projectName: '', sheets: [sheet('s1', 'A-101', ['plan'], { name: ' ', titleBlock: { project: '', drawnBy: '  ', date: '' } })] }));
     assert.deepEqual(f.map((x) => x.params.field), ['project', 'title', 'drawnBy', 'date']);
     assert.deepEqual(emptyTitleBlocks(base()), []);
+  });
+  it('reads the project title block: a field it fills is not missing on a sheet that says nothing of its own', () => {
+    assert.deepEqual(emptyTitleBlocks(base({ titleBlock: { drawnBy: 'PC', date: '2026-10-13' }, sheets: [sheet('s1', 'A-101', ['plan'])] })), []);
+    const f = emptyTitleBlocks(base({ titleBlock: { date: '2026-10-13' }, sheets: [sheet('s1', 'A-101', ['plan'])] }));
+    assert.deepEqual(f.map((x) => x.params.field), ['drawnBy']);
+  });
+  it('takes the project name for the project field when the title block has none', () => {
+    assert.deepEqual(emptyTitleBlocks(base({ titleBlock: { drawnBy: 'PC', date: 'd' }, projectName: 'House', sheets: [sheet('s1', 'A-101', ['plan'])] })), []);
+    assert.deepEqual(emptyTitleBlocks(base({ titleBlock: { drawnBy: 'PC', date: 'd' }, projectName: '', sheets: [sheet('s1', 'A-101', ['plan'])] })).map((x) => x.params.field), ['project']);
+  });
+  it('lets a sheet say otherwise: its empty field wins over the project value', () => {
+    const f = emptyTitleBlocks(base({ sheets: [sheet('s1', 'A-101', ['plan'], { titleBlock: { drawnBy: '' } })] }));
+    assert.deepEqual(f.map((x) => x.params.field), ['drawnBy']);
   });
 });
 

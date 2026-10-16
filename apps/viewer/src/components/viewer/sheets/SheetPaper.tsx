@@ -17,7 +17,7 @@ import { forwardRef, memo, useMemo } from 'react';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useTranslation } from '@/i18n';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
-import { isGeometry, type DraftEntity, type DraftLayer, type DraftShape } from '@/drafting/types';
+import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { FRAME_MARGIN_MM, mmPerMetre, paperOf, TITLE_BLOCK_MM, viewportBox } from '@/project/sheets';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
@@ -27,6 +27,7 @@ import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
 import { layerTags, penTags } from './dxf-tags';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
 import { useProjectStore } from '@/project/project-store';
+import { LOGO_FIELD, titleBlockOf } from '@/project/title-block';
 import { viewportPens } from './viewport-pens';
 import { OverlayPaths } from './OverlayPaths';
 import type { PlanOverlay } from '@/project/plan-overlays';
@@ -206,36 +207,58 @@ function SheetDrafts({ entities, layers, extraPatterns }: { entities: readonly D
   );
 }
 
+/**
+ * The title block, bottom right (180 × 50 mm): project, client and sheet
+ * title across, drawn / checked by and date / revision in halves; at the
+ * right the logo, the sheet number and its scale. Fields are the project's
+ * with the sheet's own on top (`title-block.ts`).
+ */
 function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; projectName: string; w: number; h: number }) {
   const { t } = useTranslation();
+  const projectFields = useProjectStore((s) => s.titleBlock);
   const x = w - FRAME_MARGIN_MM - TITLE_BLOCK_MM.w;
   const y = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h;
-  const fields = sheet.titleBlock ?? {};
+  const fields = titleBlockOf(sheet, projectFields, projectName);
+  const logo = projectFields?.[LOGO_FIELD];
   const scales = [...new Set((sheet.viewports ?? []).map((v) => v.scale))];
   const scaleText = scales.length === 1 ? `1:${scales[0]}` : scales.length === 0 ? '—' : t('sheets.asIndicated');
-  const rows: [string, string][] = [
-    [t('sheets.tb.project'), fields.project || projectName],
-    [t('sheets.tb.title'), sheet.name],
-    [t('sheets.tb.drawnBy'), fields.drawnBy ?? ''],
-    [t('sheets.tb.date'), fields.date ?? ''],
-  ];
+  const side = 50;
+  const left = TITLE_BLOCK_MM.w - side;
   const rowH = TITLE_BLOCK_MM.h / 5;
+  // [label, value, column 0 or 1 of 2, or -1 across]
+  const cells: [string, string, number, number][] = [
+    [t('sheets.tb.project'), fields.project ?? '', 0, -1],
+    [t('sheets.tb.client'), fields.client ?? '', 1, -1],
+    [t('sheets.tb.title'), sheet.name, 2, -1],
+    [t('sheets.tb.drawnBy'), fields.drawnBy ?? '', 3, 0],
+    [t('sheets.tb.checkedBy'), fields.checkedBy ?? '', 3, 1],
+    [t('sheets.tb.date'), fields.date ?? '', 4, 0],
+    [t('sheets.tb.revision'), fields.revision ?? '', 4, 1],
+  ];
   const font = 'ui-sans-serif, system-ui, sans-serif';
+  const sx = x + left;
   return (
     <g {...penTags('TITLEBLOCK', 0.35)}>
       <rect x={x} y={y} width={TITLE_BLOCK_MM.w} height={TITLE_BLOCK_MM.h} fill="#fff" stroke="#000" strokeWidth={0.5} />
-      {rows.map(([label, value], i) => (
-        <g key={label}>
-          <line x1={x} y1={y + rowH * (i + 1)} x2={x + TITLE_BLOCK_MM.w - 50} y2={y + rowH * (i + 1)} stroke="#000" strokeWidth={0.18} />
-          <text x={x + 2} y={y + rowH * i + 3.2} fontSize={2} fontFamily={font} fill="#52525b">{label}</text>
-          <text x={x + 2} y={y + rowH * i + 8} fontSize={3.5} fontFamily={font} fill="#000">{value}</text>
-        </g>
-      ))}
-      <line x1={x + TITLE_BLOCK_MM.w - 50} y1={y} x2={x + TITLE_BLOCK_MM.w - 50} y2={y + TITLE_BLOCK_MM.h} stroke="#000" strokeWidth={0.35} />
-      <text x={x + TITLE_BLOCK_MM.w - 48} y={y + 4} fontSize={2} fontFamily={font} fill="#52525b">{t('sheets.tb.number')}</text>
-      <text x={x + TITLE_BLOCK_MM.w - 48} y={y + 18} fontSize={10} fontWeight={700} fontFamily={font} fill="#000">{sheet.number}</text>
-      <text x={x + TITLE_BLOCK_MM.w - 48} y={y + 32} fontSize={2} fontFamily={font} fill="#52525b">{t('sheets.tb.scale')}</text>
-      <text x={x + TITLE_BLOCK_MM.w - 48} y={y + 40} fontSize={4.5} fontFamily={font} fill="#000">{scaleText}</text>
+      {[1, 2, 3, 4].map((i) => <line key={i} x1={x} y1={y + rowH * i} x2={sx} y2={y + rowH * i} stroke="#000" strokeWidth={0.18} />)}
+      <line x1={x + left / 2} y1={y + rowH * 3} x2={x + left / 2} y2={y + TITLE_BLOCK_MM.h} stroke="#000" strokeWidth={0.18} />
+      {cells.map(([label, value, row, col]) => {
+        const cx = x + (col === 1 ? left / 2 : 0);
+        return (
+          <g key={label}>
+            <text x={cx + 2} y={y + rowH * row + 3.2} fontSize={2} fontFamily={font} fill="#52525b">{label}</text>
+            <text x={cx + 2} y={y + rowH * row + 8} fontSize={3.5} fontFamily={font} fill="#000">{value}</text>
+          </g>
+        );
+      })}
+      <line x1={sx} y1={y} x2={sx} y2={y + TITLE_BLOCK_MM.h} stroke="#000" strokeWidth={0.35} />
+      <line x1={sx} y1={y + 14} x2={x + TITLE_BLOCK_MM.w} y2={y + 14} stroke="#000" strokeWidth={0.18} />
+      <line x1={sx} y1={y + 34} x2={x + TITLE_BLOCK_MM.w} y2={y + 34} stroke="#000" strokeWidth={0.18} />
+      {logo ? <image data-export-ignore-dxf="true" href={logo} x={sx + 2} y={y + 1.5} width={side - 4} height={11} preserveAspectRatio="xMidYMid meet" /> : null}
+      <text x={sx + 2} y={y + 17.2} fontSize={2} fontFamily={font} fill="#52525b">{t('sheets.tb.number')}</text>
+      <text x={sx + 2} y={y + 29.5} fontSize={9} fontWeight={700} fontFamily={font} fill="#000">{sheet.number}</text>
+      <text x={sx + 2} y={y + 37.2} fontSize={2} fontFamily={font} fill="#52525b">{t('sheets.tb.scale')}</text>
+      <text x={sx + 2} y={y + 45.5} fontSize={4.5} fontFamily={font} fill="#000">{scaleText}</text>
     </g>
   );
 }

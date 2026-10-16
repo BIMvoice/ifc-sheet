@@ -29,6 +29,7 @@ import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
 import { SheetCanvas } from './SheetCanvas';
+import { TitleBlockCard } from './TitleBlockForm';
 import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 
@@ -57,6 +58,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [tool, setTool] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
+  const [titling, setTitling] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
@@ -95,6 +97,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       // A running tool or a drafted selection lets go first (the drafting keys' own Esc).
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       if (adding) setAdding(false);
+      else if (titling) setTitling(false);
       else if (focusId) {
         setFocusId(null);
         setTool(null);
@@ -103,7 +106,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onBack, focusId, chosen, adding]);
+  }, [onBack, focusId, chosen, adding, titling]);
 
   const startTool = (command: string): void => {
     cancelStart.current();
@@ -136,6 +139,11 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     cancelStart.current = startWhenAttached(target.id, command);
   };
 
+  // Choosing a drawing brings its card back in place of the title block's.
+  const choose = useCallback((viewportId: string | null): void => {
+    setChosen(viewportId);
+    if (viewportId) setTitling(false);
+  }, []);
   const open = useCallback((vp: SheetViewport): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
     if (v && v.kind !== '3d') setFocusId(v.id);
@@ -158,6 +166,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {group === 'plans' && !focusView ? <ScaleChips group="plans" extent={extent} /> : null}
         {!focusView ? (
           <>
+            <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
             <button type="button" className={issue} onClick={() => setFitKey((k) => k + 1)}>{t('wall.fit')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && printSheet(paperRef.current, sheet)}>{t('wall.export.pdf')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
@@ -173,12 +182,14 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
             </div>
           ) : (
             <div className="absolute inset-0 overflow-hidden rounded-md">
-              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={setChosen} onOpen={open} onNudge={nudge} fitKey={fitKey} />
+              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} />
             </div>
           )}
           <div className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
-              : focusView ? null : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} />}
+              : focusView ? null
+                : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
+                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} />}
           </div>
           {adding ? (
             <div className="absolute inset-x-3 bottom-3 flex justify-center">

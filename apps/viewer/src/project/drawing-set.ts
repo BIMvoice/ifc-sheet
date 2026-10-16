@@ -128,8 +128,6 @@ function pairs<T>(items: readonly T[]): T[][] {
 export interface SetInput {
   views: readonly ProjectView[];
   extent: ModelExtent;
-  /** Title block fields every sheet starts with (from the model). */
-  titleBlock: Record<string, string>;
   now?: number;
 }
 
@@ -180,7 +178,7 @@ export function groupsThatDoNotFit(views: readonly ProjectView[], extent: ModelE
  * sheet. The group a sheet belongs to is read back from its number
  * (`sheetGroup`).
  */
-export function buildDrawingSet({ views, extent, titleBlock, now = Date.now() }: SetInput): ProjectSheet[] {
+export function buildDrawingSet({ views, extent, now = Date.now() }: SetInput): ProjectSheet[] {
   const rows = setRows(views);
   const papers = papersOf(rows, extent);
   return rows.map(({ group, number, name, members }) => {
@@ -188,7 +186,7 @@ export function buildDrawingSet({ views, extent, titleBlock, now = Date.now() }:
     const sizes = members.map((v) => viewExtent(v, extent));
     return {
       id: freshProjectId('sheet'), number, name, createdAt: now, paper, orientation: 'landscape' as const,
-      viewports: rowOfViewports(members, sizes, fittingScale(sizes, drawingArea(paper)), paper), titleBlock: { ...titleBlock },
+      viewports: rowOfViewports(members, sizes, fittingScale(sizes, drawingArea(paper)), paper),
     };
   });
 }
@@ -226,9 +224,9 @@ export const PER_SHEET = 2;
  * in the group's series. The sheet it lands on is laid out again at the scale
  * that fits. `null` for a view that has no group (3D) or is already hung.
  */
-export function withViewHung(sheets: readonly ProjectSheet[], views: readonly ProjectView[], view: ProjectView, extent: ModelExtent, titleBlock: Record<string, string>, now = Date.now()): { sheets: ProjectSheet[]; sheetId: string } | null {
+export function withViewHung(sheets: readonly ProjectSheet[], views: readonly ProjectView[], view: ProjectView, extent: ModelExtent, now = Date.now()): { sheets: ProjectSheet[]; sheetId: string } | null {
   if (sheets.some((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id))) return null;
-  if (view.detail) return withDetailHung(sheets, view, extent, titleBlock, now);
+  if (view.detail) return withDetailHung(sheets, view, extent, now);
   const group = groupOfView(view);
   if (!group) return null;
   const area = drawingArea();
@@ -245,7 +243,7 @@ export function withViewHung(sheets: readonly ProjectSheet[], views: readonly Pr
   // The new sheet is made on the paper of its group, else on the smallest that suits it.
   const paper = last?.paper ?? choosePaper([[viewExtent(view, extent)]]).paper;
   const sheet = layOut({
-    id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: GROUP_NAMES[group], createdAt: now, paper, orientation: 'landscape', titleBlock: { ...titleBlock },
+    id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: GROUP_NAMES[group], createdAt: now, paper, orientation: 'landscape',
   }, [view]);
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
@@ -255,7 +253,7 @@ export function withViewHung(sheets: readonly ProjectSheet[], views: readonly Pr
  * smallest paper it fits, at the scale it was made for when that fits, else at
  * the most detailed set scale that does.
  */
-function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, titleBlock: Record<string, string>, now: number): { sheets: ProjectSheet[]; sheetId: string } {
+function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, now: number): { sheets: ProjectSheet[]; sheetId: string } {
   const sizes = [viewExtent(view, extent)];
   const { paper } = choosePaper([sizes]);
   const scale = view.scale && fitsScale(sizes, drawingArea(paper), view.scale) ? view.scale : fittingScale(sizes, drawingArea(paper));
@@ -264,7 +262,7 @@ function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, exte
   while (taken.has(`A-${n}`)) n++;
   const sheet: ProjectSheet = {
     id: freshProjectId('sheet'), number: `A-${n}`, name: view.name, createdAt: now, paper, orientation: 'landscape',
-    viewports: rowOfViewports([view], sizes, scale, paper), titleBlock: { ...titleBlock },
+    viewports: rowOfViewports([view], sizes, scale, paper),
   };
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }

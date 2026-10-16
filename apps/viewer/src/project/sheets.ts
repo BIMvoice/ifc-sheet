@@ -49,8 +49,34 @@ export function updateSheet(id: string, patch: Partial<Omit<ProjectSheet, 'id' |
   patchSheet(id, (s) => ({ ...s, ...patch }));
 }
 
+/** `sheet` says otherwise for `key` than the project's title block (`title-block.ts`). */
 export function setTitleBlockField(id: string, key: string, value: string): void {
-  patchSheet(id, (s) => ({ ...s, titleBlock: { ...(s.titleBlock ?? {}), [key]: value } }));
+  patchSheet(id, (s) => ({ ...s, titleBlock: { ...s.titleBlock, [key]: value } }));
+}
+
+/** Stop `sheet` saying otherwise for `key`: it prints the project's value again. */
+export function clearTitleBlockField(id: string, key: string): void {
+  patchSheet(id, (s) => {
+    if (!s.titleBlock || !(key in s.titleBlock)) return s;
+    const titleBlock = { ...s.titleBlock };
+    delete titleBlock[key];
+    return { ...s, titleBlock };
+  });
+}
+
+/** Set a title block field on every sheet: the project's value. Empty clears it. */
+export function setProjectTitleBlockField(key: string, value: string): void {
+  const titleBlock = { ...useProjectStore.getState().titleBlock };
+  if (value) titleBlock[key] = value;
+  else delete titleBlock[key];
+  useProjectStore.setState({ titleBlock, dirty: true });
+}
+
+/** Fill the project title block fields not set yet (from the model when a set is laid out); set ones stay. */
+export function seedProjectTitleBlock(fields: Record<string, string>): void {
+  const current = useProjectStore.getState().titleBlock ?? {};
+  const missing = Object.entries(fields).filter(([key, value]) => value && !current[key]);
+  if (missing.length > 0) useProjectStore.setState({ titleBlock: { ...current, ...Object.fromEntries(missing) }, dirty: true });
 }
 
 /** Place a view on a sheet, centred at a paper point. Returns the viewport id. */

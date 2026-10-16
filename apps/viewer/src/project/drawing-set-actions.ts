@@ -20,6 +20,7 @@ import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
 import { addProjectView, updateProjectView, useProjectStore } from './project-store';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
+import { seedProjectTitleBlock } from './sheets';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
 import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView } from './types';
@@ -152,7 +153,7 @@ function ensureSections(meshes: MeshData[] | null, extent: AxisBounds, options: 
 function ensurePlanScales(extent: AxisBounds): void {
   const plans = state().views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.detail);
   const onSheet = new Map(state().sheets.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
-  const planned = state().sheets.length === 0 ? buildDrawingSet({ views: plans, extent, titleBlock: {} }) : [];
+  const planned = state().sheets.length === 0 ? buildDrawingSet({ views: plans, extent }) : [];
   const plannedScale = new Map(planned.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
   for (const plan of plans) {
     const scale = onSheet.get(plan.id) ?? plannedScale.get(plan.id);
@@ -168,15 +169,17 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
   report.sheetsExisting = before.length;
   let sheets = before;
   if (before.length === 0) {
-    sheets = buildDrawingSet({ views: loose, extent, titleBlock: modelTitleBlock() });
+    sheets = buildDrawingSet({ views: loose, extent });
   } else {
     for (const view of loose) {
-      const next = withViewHung(sheets, state().views, view, extent, sheets[0]?.titleBlock ?? modelTitleBlock());
+      const next = withViewHung(sheets, state().views, view, extent);
       if (next) sheets = next.sheets;
     }
   }
   if (sheets === before) return;
   useProjectStore.setState({ sheets, dirty: true });
+  // The title block is the project's, filled once: the model's name and today's date where the project has none.
+  seedProjectTitleBlock(modelTitleBlock());
   const known = new Set(before.map((s) => s.id));
   const added = sheets.filter((s) => !known.has(s.id));
   report.sheetsAdded = added.length;
@@ -233,7 +236,7 @@ export function swapViewportView(sheetId: string, viewportId: string, viewId: st
 export function hangView(viewId: string, extent: ModelExtent): string | null {
   const { sheets, views } = useProjectStore.getState();
   const view = views.find((v) => v.id === viewId);
-  const hung = view ? withViewHung(sheets, views, view, extent, sheets[0]?.titleBlock ?? modelTitleBlock()) : null;
+  const hung = view ? withViewHung(sheets, views, view, extent) : null;
   if (!hung) return null;
   useProjectStore.setState({ sheets: hung.sheets, dirty: true });
   return hung.sheetId;
@@ -254,7 +257,6 @@ export function hangSchedule(scheduleId: string): string | null {
   const area = drawingArea(SET_PAPER);
   const sheet: ProjectSheet = {
     id: freshProjectId('sheet'), number: nextInSeries(sheets, 'schedules'), name: schedule.name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
-    titleBlock: { ...(sheets[0]?.titleBlock ?? modelTitleBlock()) },
     viewports: [{ id: freshProjectId('viewport'), viewId: scheduleId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 50, width: 0, height: 0, center: null }],
   };
   useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });

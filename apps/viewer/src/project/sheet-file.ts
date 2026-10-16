@@ -42,8 +42,12 @@ export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'pape
     if (!Array.isArray(v.viewports)) fail(`${path}.viewports`, 'must be an array');
     out.viewports = v.viewports.map((vp, i) => readViewport(vp, `${path}.viewports/${i}`));
   }
-  if (isObject(v.titleBlock)) {
-    out.titleBlock = Object.fromEntries(Object.entries(v.titleBlock).filter((e): e is [string, string] => isString(e[1])));
-  }
+  const titleBlock = readTitleBlock(v.titleBlock);
+  if (titleBlock) out.titleBlock = titleBlock;
   return out;
+}
+
+/** A title block's fields (a sheet's or the project's): its string values; `undefined` when absent. */
+export function readTitleBlock(v: unknown): Record<string, string> | undefined {
+  return isObject(v) ? Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => isString(e[1]))) : undefined;
 }

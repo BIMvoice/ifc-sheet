@@ -39,6 +39,9 @@ export interface PlanElement { guid: string; className: string }
 export interface CheckInput {
   views: readonly { id: string; name: string; kind: string; detail?: unknown }[];
   sheets: readonly ProjectSheet[];
+  /** The project's title block and name: what a sheet prints where it does not say otherwise (`titleBlockOf`). */
+  titleBlock?: Record<string, string>;
+  projectName: string;
   drafts: readonly DraftEntity[];
   /** The doors, windows and rooms a plan shows; null when the plan has not been drawn (it is open in no tab yet). */
   planElements(viewId: string): PlanElement[] | null;

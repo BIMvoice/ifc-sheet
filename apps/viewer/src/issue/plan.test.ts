@@ -33,6 +33,11 @@ describe('planning an issue', () => {
     assert.equal(scaleText({ viewports: [] }), '');
   });
 
+  it('reads the revision from the project title block unless the sheet says its own', () => {
+    const plan = planIssue([sheet('a', 'A-101', 'Plan', { titleBlock: { revision: 'C' } }), sheet('b', 'A-102', 'Other')], none, input, { revision: 'B' });
+    assert.deepEqual(plan.sheets.map((s) => s.row.revision), ['C', 'B']);
+  });
+
   it('keeps a sheet that only has something drawn on its paper', () => {
     const drafts = [{ id: 'd', viewId: 'b', layerId: '0', shape: { type: 'line' }, params: {} }] as never;
     const plan = planIssue([sheet('b', 'A-102', 'Notes', { viewports: [] })], { ...none, drafts }, input);

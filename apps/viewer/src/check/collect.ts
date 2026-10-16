@@ -27,8 +27,8 @@ function planElements(viewId: string): PlanElement[] | null {
 }
 
 export function collectInput(): CheckInput {
-  const { views, sheets, drafts } = useProjectStore.getState();
-  return { views, sheets, drafts, planElements, elementExists: (guid) => elementByGlobalId(guid) !== null };
+  const { views, sheets, drafts, titleBlock, name } = useProjectStore.getState();
+  return { views, sheets, drafts, titleBlock, projectName: name, planElements, elementExists: (guid) => elementByGlobalId(guid) !== null };
 }
 
 /** What is missing from the project as it stands. */

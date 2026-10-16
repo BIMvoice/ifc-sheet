@@ -19,6 +19,7 @@ import type { TranslationKey } from '@/i18n';
 import { currentFindings } from '@/check/collect';
 import { captureSheets, failureLine } from './capture';
 import { drawingListCsv, issuePrintHtml, uniqueNames, type ListLabels } from './output';
+import { titleBlockOf } from '@/project/title-block';
 import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
 
 export type IssueFormat = 'pdf' | 'svg' | 'dxf';
@@ -60,7 +61,7 @@ export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst
     name: options.name?.trim() || nextIssueName(project.issues ?? []),
     date: options.date ?? new Date().toISOString().slice(0, 10),
     listFirst: options.listFirst ?? true,
-  });
+  }, project.titleBlock);
 }
 
 /** Draw the sheets, build the files and record the issue. Nothing is recorded when a sheet could not be drawn. */
@@ -78,7 +79,7 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   let html: string | null = null;
   let zip: Uint8Array | null = null;
   if (options.format === 'pdf') {
-    html = issuePrintHtml(plan, svgs, plan.sheets.map((s) => s.sheet.titleBlock?.project).find((n) => n) || project.name, listLabels());
+    html = issuePrintHtml(plan, svgs, plan.sheets.map((s) => titleBlockOf(s.sheet, project.titleBlock, project.name).project).find((n) => n) || project.name, listLabels());
   } else {
     const ext = options.format;
     const names = uniqueNames(plan.sheets.map(({ sheet }) => `${sanitizeFilename(`${sheet.number} ${sheet.name}`, { fallback: 'sheet' })}.${ext}`));
