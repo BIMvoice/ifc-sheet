@@ -20,7 +20,8 @@ import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { settleLeader } from './label-attach';
 import { labelElementByGlobalId } from './label-element';
-import { resolveTemplate, type LabelElement } from './label-resolve';
+import { extrasOf, resolveWithExtras } from './label-extras';
+import type { LabelElement } from './label-resolve';
 import { parseTemplate, type ParsedTemplate } from './label-template';
 
 export const isParametricLabel = (d: DraftEntity): boolean => d.shape.type === 'text' && typeof d.params.labelOf === 'string' && typeof d.params.atype === 'string';
@@ -46,7 +47,7 @@ export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationTy
     if (!spec) return d;
     let out = d;
     if (el) {
-      const text = resolveTemplate(templateOf(spec.template), el, spec.missing);
+      const text = resolveWithExtras(templateOf(spec.template), el, spec.missing, extrasOf(d.params));
       if (text !== d.shape.text || spec.frame !== d.shape.frame) {
         const { frame: _old, ...rest } = d.shape;
         out = { ...d, shape: { ...rest, text, ...(spec.frame ? { frame: spec.frame } : {}) } };

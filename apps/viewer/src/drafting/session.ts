@@ -18,18 +18,20 @@ import { useProjectStore } from '@/project/project-store';
 import { draftCommandById, draftCommandByName } from './commands/registry';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
 import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
-import { applyOrtho, parseCoordinateInput, pointAlong } from './input';
-import { drawingToUserVec, userToDrawingVec, type SectionAxisName } from './frame';
+import { applyTypedLine } from './command-line';
+import { applyOrtho } from './input';
+import type { SectionAxisName } from './frame';
+import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
 import {
-  closedLoopsOfView, hasModelPicker, levelAtPoint, levelRefAt, modelElementAt, pickModel, referenceShapesIn, resolveLevelRef, setReferenceProvider, viewElementsOf, viewKindOf, activeWorkPlane,
+  closedLoopsOfView, hasModelPicker, levelAtPoint, levelRefAt, modelElementAt, pickModel, planPartsOf, referenceShapesIn, roomsOf, resolveLevelRef, setReferenceProvider, viewElementsOf, viewKindOf, activeWorkPlane,
 } from './session-providers';
 import type { DraftEntity, DraftShape, Pt } from './types';
 
 // What the view in front installs (providers, pickers) lives in `session-providers.ts`; callers keep importing it from here.
 export {
-  activeWorkPlane, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setViewElementsProvider, setWorkPlaneProvider,
+  activeWorkPlane, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
 } from './session-providers';
 
 export interface HistoryLine {
@@ -73,11 +75,7 @@ export const useDraftingSession = create<SessionState>()(() => ({
 }));
 
 const HISTORY_LINES = 50;
-const settings: DraftSettings = { filletRadius: 0, offsetDistance: null, textHeight: 0.25, hatchPattern: 'LINES45', hatchScale: 1, hatchAngle: 0, extrudeClass: 'IfcBuildingElementProxy', extrudeDepth: 1,
-  roofKind: 'gable', roofSystem: true, roofPick: false, roofSlope: 30, roofThickness: 0.25, roofOverhang: 0.5,
-  axisLabel: '1', axisBubble: 'circle', axisEnds: 'both', axisSize: null, axisLineType: 'dashdot',
-  dimContinuous: true, currentTextStyle: 'standard', currentDimStyle: 'standard', tagField: 'mark', annotationType: null,
-  symbolId: null, symbolScale: 1, symbolRotation: 0, symbolTarget: null };
+const settings: DraftSettings = defaultDraftSettings();
 let command: DraftCommand | null = null;
 let pending: DraftCommandDef | null = null;
 export const draftSettings = (): Readonly<DraftSettings> => scaledSettings;
@@ -133,6 +131,8 @@ function context(viewId: string): DraftContext {
     view: () => activeWorkPlane().view,
     elementAt: modelElementAt,
     viewElements: viewElementsOf,
+    planParts: planPartsOf,
+    rooms: roomsOf,
     selection: () => get().selection,
     setSelection: (ids) => set({ selection: ids }),
     // userToDrawing is diag(kx, −ky): orientation-reversing when its determinant is negative.
@@ -172,18 +172,13 @@ function finish(result: StepResult): void {
  */
 let sizeScale = 1;
 
-const SCALED = new Set<keyof DraftSettings>(['textHeight', 'hatchScale']);
-
 /** The settings as commands see them on the current target. */
-const scaledSettings = new Proxy(settings, {
-  get: (target, key) => (SCALED.has(key as keyof DraftSettings) ? (target[key as keyof DraftSettings] as number) * sizeScale : target[key as keyof DraftSettings]),
-  set: (target, key, value) => {
-    (target as unknown as Record<string, unknown>)[key as string] = SCALED.has(key as keyof DraftSettings) ? Number(value) / sizeScale : value;
-    return true;
-  },
-});
+const scaledSettings = scaledDraftSettings(settings, () => sizeScale);
 
-export function attachDraftingView(viewId: string | null, axis: SectionAxisName, references: (min: Pt, max: Pt) => DraftShape[], unitsScale = 1): void {
+/** Where typed absolute coordinates count from, in drawing space (`frame.ts`). */
+let userOrigin: Pt = { x: 0, y: 0 };
+export function attachDraftingView(viewId: string | null, axis: SectionAxisName, references: (min: Pt, max: Pt) => DraftShape[], unitsScale = 1, origin: Pt = { x: 0, y: 0 }): void {
+  userOrigin = origin;
   setReferenceProvider(references);
   sizeScale = unitsScale;
   // Plans draw drawing-y downward on screen; text and marks grow up on screen.
@@ -198,20 +193,25 @@ export function runningCommand(): DraftCommand | null {
   return command;
 }
 
-export function startDraftCommand(id: string): void {
+/** Start (or, for a one-action command, run) a command, cancelling the one that is running. False when there is no such command here or no view in front. */
+export function startDraftCommand(id: string, args = ''): boolean {
   const def = draftCommandById(id);
-  const { viewId } = get();
-  if (!def || !viewId) return;
+  const viewId = get().viewId ?? (def?.projectWide ? '' : null);
+  if (!def || viewId === null) return false;
   cancelCommand();
   say({ key: def.labelKey });
-  set({ lastCommandId: def.id });
+  // Enter repeats a drawing command; it must not issue the set again.
+  if (!def.projectWide) set({ lastCommandId: def.id });
   if (def.needsSelection && get().selection.size === 0) {
     pending = def;
     set({ selecting: true, commandId: def.id });
     refresh();
-    return;
+    return true;
   }
-  begin(def, viewId);
+  if (def.run) def.run(context(viewId), args);
+  else begin(def, viewId);
+  refresh();
+  return true;
 }
 
 function begin(def: DraftCommandDef, viewId: string): void {
@@ -338,45 +338,18 @@ export function submitCommandLine(text: string, cursor: Pt | null): void {
     return;
   }
   if (!command && !get().selecting) {
-    const def = draftCommandByName(trimmed);
-    if (def) startDraftCommand(def.id);
+    // A command that takes text after its name (`ISSUE svg P02`) is named by the first word.
+    const head = trimmed.split(/\s+/)[0];
+    const def = draftCommandByName(trimmed) ?? (draftCommandByName(head)?.takesArgs ? draftCommandByName(head) : undefined);
+    if (def) startDraftCommand(def.id, trimmed.slice(head.length).trim());
     else say({ key: 'drafting.msg.unknownCommand', params: { name: trimmed } });
     return;
   }
   say({ key: 'drafting.msg.typed', typed: trimmed, params: { text: trimmed } });
   if (!command) return;
-  if (command.wantsText?.() && command.onText) {
-    finish(command.onText(text.trim()));
-    return;
-  }
-  const word = trimmed.toUpperCase();
-  if (/^[A-Z][A-Z0-9_.-]*$/.test(word) && command.onKeyword) {
-    const result = command.onKeyword(word);
-    if (result) {
-      finish(result);
-      return;
-    }
-  }
-  const { axis } = get();
-  const base = command.basePoint();
-  const parsed = parseCoordinateInput(trimmed, { last: base ? drawingToUserVec(base, axis) : null });
-  if (!parsed) {
-    say({ key: 'drafting.msg.invalidInput' });
-    return;
-  }
-  if (parsed.kind === 'point') {
-    if (command.onPoint) finish(command.onPoint(userToDrawingVec(parsed.pt, axis)));
-    return;
-  }
-  if (command.wantsValue?.() && command.onValue) {
-    finish(command.onValue(parsed.d));
-    return;
-  }
-  if (base && cursor && command.onPoint) {
-    finish(command.onPoint(pointAlong(base, constrainPoint(cursor), parsed.d)));
-    return;
-  }
-  say({ key: 'drafting.msg.invalidInput' });
+  const result = applyTypedLine(command, trimmed, cursor, { axis: get().axis, origin: userOrigin, constrain: constrainPoint });
+  if (result === 'invalid') say({ key: 'drafting.msg.invalidInput' });
+  else if (result) finish(result);
 }
 
 export function toggleOrtho(): void {

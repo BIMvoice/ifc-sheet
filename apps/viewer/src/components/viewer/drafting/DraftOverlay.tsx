@@ -8,9 +8,12 @@
  * all in screen space through the canvas's own transform (`drafting/frame`).
  */
 
-import { memo, useMemo } from 'react';
+import { memo, useId, useMemo } from 'react';
 import { layerPen, layerShows, lookOf, type LayerGroup } from '@/drafting/styles';
 import { moveGrip, type Grip } from '@/drafting/grips';
+import type { SectionCut } from '@/drafting/section-depth';
+import { SectionDepthBand } from './SectionDepthBand';
+import { DetailCropPreview } from './DetailCropPreview';
 import { resolveLevelRef } from '@/drafting/session';
 import { useProjectStore } from '@/project/project-store';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
@@ -71,6 +74,10 @@ interface DraftOverlayProps {
   /** The selected entities' grips, and the one being dragged. */
   grips?: readonly Grip[];
   gripDrag?: { grip: Grip; at: Pt } | null;
+  /** The depth band of the selected section, drawn with its own handle. */
+  sectionBand?: { cut: SectionCut; depth: number } | null;
+  /** A detail's area (drawing metres): the drawn annotations and the highlight show inside it only, as the drawing does. */
+  crop?: { min: Pt; max: Pt };
 }
 
 function SnapMarker({ snap, t, axis }: { snap: SnapHit; t: ViewTransform; axis: SectionAxisName }) {
@@ -112,7 +119,9 @@ function GripPreview({ gripDrag, entities, t, axis, look, paperUnit, extraPatter
 }
 
 export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps) {
-  const { entities, layers, selection, hoverId, preview, snap, cursor, window, highlight, extraPatterns, transform: t, axis, paperUnit = 0.1, hiddenLayers, grips = NO_GRIPS, gripDrag = null } = props;
+  const { entities, layers, selection, hoverId, preview, snap, cursor, window, highlight, extraPatterns, transform: t, axis, paperUnit = 0.1, hiddenLayers, grips = NO_GRIPS, gripDrag = null, sectionBand = null, crop } = props;
+  const clipId = useId().replace(/:/g, '');
+  const clipPoints = crop ? [crop.min, { x: crop.max.x, y: crop.min.y }, crop.max, { x: crop.min.x, y: crop.max.y }].map((p) => drawingToScreen(p, t, axis)).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') : null;
   const layerById = new Map(layers.map((l) => [l.id, l]));
   const textStyles = useProjectStore((s) => s.textStyles);
   const dimStyles = useProjectStore((s) => s.dimStyles);
@@ -122,6 +131,8 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
   const mm = paperUnit * t.scale;
   return (
     <svg className="absolute inset-0 h-full w-full pointer-events-none" aria-hidden="true">
+      {clipPoints ? <clipPath id={clipId}><polygon points={clipPoints} /></clipPath> : null}
+      <g clipPath={clipPoints ? `url(#${clipId})` : undefined}>
       {highlight.length > 0 ? (
         <path d={highlight.map((s) => shapePath(s, t, axis)).join('')} fill="rgba(37,99,235,0.12)" fillRule="evenodd" stroke="#2563eb" strokeWidth={2} />
       ) : null}
@@ -155,8 +166,11 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
           />
         );
       })}
-      {gripDrag ? <GripPreview gripDrag={gripDrag} entities={entities} t={t} axis={axis} look={(e) => lookOf(book, e.params)} paperUnit={paperUnit} extraPatterns={extraPatterns} /> : null}
-      {grips.map((g) => {
+      </g>
+      {gripDrag?.grip.detail ? <DetailCropPreview gripDrag={gripDrag as { grip: Grip & { detail: NonNullable<Grip['detail']> }; at: Pt }} t={t} axis={axis} /> : null}
+      {gripDrag && gripDrag.grip.key !== 'depth' && !gripDrag.grip.detail ? <GripPreview gripDrag={gripDrag} entities={entities} t={t} axis={axis} look={(e) => lookOf(book, e.params)} paperUnit={paperUnit} extraPatterns={extraPatterns} /> : null}
+      {sectionBand ? <SectionDepthBand band={sectionBand} gripDrag={gripDrag} t={t} axis={axis} /> : null}
+      {grips.filter((g) => g.key !== 'depth').map((g) => {
         const p = drawingToScreen(g.at, t, axis);
         const active = gripDrag?.grip.id === g.id && gripDrag.grip.key === g.key;
         return <rect key={`${g.id}:${g.key}`} x={p.x - 4} y={p.y - 4} width={8} height={8} fill={active ? '#2563eb' : '#fff'} stroke="#2563eb" strokeWidth={1.5} />;

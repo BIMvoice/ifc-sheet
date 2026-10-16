@@ -5,7 +5,7 @@
 /**
  * "Add a drawing", in four big choices: a plan of a storey (pick the storey),
  * a section (draw a line on a plan), an elevation (pick a side), a detail of
- * an area (not yet). A new drawing hangs on the set where its kind belongs.
+ * an area (mark it on the drawing in front). A new drawing hangs on the set where its kind belongs.
  */
 
 import { useState, type ReactNode } from 'react';
@@ -20,6 +20,8 @@ interface AddDrawingProps {
   onView: (viewId: string) => void;
   /** Start drawing a section line on a plan. */
   onSection: () => void;
+  /** Start marking the area of a detail on the drawing in front. */
+  onDetail: () => void;
   onClose: () => void;
 }
 
@@ -41,7 +43,7 @@ function Picks({ children }: { children: ReactNode }) {
 
 const pick = 'rounded-full border border-sky-300/40 px-4 py-2 text-sky-50 hover:border-sky-300 hover:bg-sky-500/10';
 
-export function AddDrawing({ onView, onSection, onClose }: AddDrawingProps) {
+export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingProps) {
   const { t } = useTranslation();
   const levels = useProjectStore((s) => s.levels);
   const [step, setStep] = useState<'kinds' | 'storey' | 'side'>('kinds');
@@ -73,7 +75,7 @@ export function AddDrawing({ onView, onSection, onClose }: AddDrawingProps) {
           <Choice icon="level" title={t('wall.add.plan')} hint={t('wall.add.planHint')} onClick={() => setStep('storey')} disabled={levels.length === 0} />
           <Choice icon="section" title={t('wall.add.section')} hint={t('wall.add.sectionHint')} onClick={onSection} />
           <Choice icon="symbol" title={t('wall.add.elevation')} hint={t('wall.add.elevationHint')} onClick={() => setStep('side')} />
-          <Choice icon="plus" title={t('wall.add.detail')} hint={t('wall.add.detailHint')} disabled />
+          <Choice icon="plus" title={t('wall.add.detail')} hint={t('wall.add.detailHint')} onClick={onDetail} />
         </div>
       ) : step === 'storey' ? (
         <Picks>{levels.map((level, i) => <button key={level.name + level.elevation} type="button" className={pick} onClick={() => planOf(i)}>{level.name}</button>)}</Picks>

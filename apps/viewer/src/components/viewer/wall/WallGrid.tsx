@@ -12,7 +12,7 @@
 import { X } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
-import { SET_PAPER, SET_SCALES, sheetGroup, sheetScaleReason, type ModelExtent, type SetGroup } from '@/project/drawing-set';
+import { SET_SCALES, sheetGroup, sheetScaleReason, type ModelExtent, type SetGroup } from '@/project/drawing-set';
 import { groupScale, setGroupScale } from '@/project/drawing-set-actions';
 import { removeProjectItem, useProjectStore } from '@/project/project-store';
 import type { ProjectSheet } from '@/project/types';
@@ -85,7 +85,7 @@ function SheetOnWall({ sheet, extent, onStep }: { sheet: ProjectSheet; extent: M
         <span className="font-semibold text-white">{sheet.number}</span> <span className="text-sky-200/80">{sheet.name}</span>
         {reason ? (
           <span className="mt-0.5 block text-xs text-sky-300/70">
-            {reason.fits ? t('wall.reason.fits', { scale: reason.scale, paper: sheet.paper ?? SET_PAPER }) : t('wall.reason.chosen', { scale: reason.scale })}
+            {t(reason.reason.key, reason.reason.params)}
           </span>
         ) : null}
       </figcaption>

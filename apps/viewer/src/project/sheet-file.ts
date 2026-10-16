@@ -33,8 +33,9 @@ function readViewport(v: unknown, path: string): SheetViewport {
 }
 
 /** The optional sheet layout fields, read from `v` (already known to be an object). */
-export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock'> {
-  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock'> = {};
+export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber'> {
+  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber'> = {};
+  if (v.autoNumber === true) out.autoNumber = true;
   if (PAPERS.includes(v.paper as PaperSize)) out.paper = v.paper as PaperSize;
   if (v.orientation === 'portrait' || v.orientation === 'landscape') out.orientation = v.orientation;
   if (v.viewports !== undefined) {

@@ -10,7 +10,7 @@
  * at its element whatever the session's ids.
  */
 
-import type { IfcDataStore } from '@ifc-lite/parser';
+import { extractAllEntityAttributes, type IfcDataStore } from '@ifc-lite/parser';
 import type { ListDataProvider } from '@ifc-lite/lists';
 import { createListDataProvider } from '@/lib/lists/adapter';
 import { elementByGlobalId } from '@/project/element-label';
@@ -42,6 +42,30 @@ const withLengths = (set: QuantitySet): QuantitySetLike => ({
   quantities: set.quantities.map((q) => ({ name: q.name, value: q.value, length: q.type === QuantityType.Length })),
 });
 
+/** An element's own LongName (rooms carry their name there), read from the source record; '' without one. */
+function longNameOf(modelId: string, expressId: number): string {
+  const store = useViewerStore.getState().models.get(modelId)?.ifcDataStore;
+  if (!store?.source?.length || !store.entityIndex) return '';
+  const known = longNames.get(store) ?? new Map<number, string>();
+  longNames.set(store, known);
+  const cached = known.get(expressId);
+  if (cached !== undefined) return cached;
+  const value = extractAllEntityAttributes(store, expressId).find((a) => a.name === 'LongName')?.value;
+  const name = typeof value === 'string' ? value : '';
+  known.set(expressId, name);
+  return name;
+}
+const longNames = new WeakMap<IfcDataStore, Map<number, string>>();
+
+/**
+ * A Tag a draughtsman would write on a drawing: tools that fill Tag with the element's unique id (a GUID, or an
+ * identifier of hex groups joined by hyphens) leave nothing to show, and the element is then marked by its Name.
+ */
+export function markOf(tag: string): string {
+  const t = tag.trim();
+  return /^[0-9A-Fa-f]{6,}(?:-[0-9A-Fa-f]{2,}){3,}$/.test(t) || /^[0-9A-Za-z_$]{22}$/.test(t) && /\d/.test(t) && /[a-z]/.test(t) && /[A-Z]/.test(t) ? '' : t;
+}
+
 export function labelElementOf(modelId: string, expressId: number): LabelElement | null {
   const p = providerOf(modelId);
   if (!p) return null;
@@ -51,6 +75,8 @@ export function labelElementOf(modelId: string, expressId: number): LabelElement
       switch (name) {
         case 'Name': return p.getEntityName(expressId);
         case 'Tag': return p.getEntityTag(expressId);
+        case 'LongName': return longNameOf(modelId, expressId);
+        case 'Mark': return markOf(p.getEntityTag(expressId));
         case 'ObjectType': return p.getEntityObjectType(expressId);
         case 'Description': return p.getEntityDescription(expressId);
         case 'PredefinedType': return p.getEntityPredefinedType?.(expressId) ?? '';

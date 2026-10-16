@@ -13,7 +13,8 @@ import { cn } from '@/lib/utils';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
 import { Circle, PaintBucket, Slash, Spline, Type } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { DRAW_TOOLS, WALL_TOOLS } from './wall-actions';
+import type { ProjectView } from '@/project/types';
+import { DRAW_TOOLS, WALL_ALL, WALL_TOOLS } from './wall-actions';
 
 const DRAW_ICONS: Record<string, ReactNode> = {
   line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, circle: <Circle className="size-5" />,
@@ -25,28 +26,38 @@ interface ToolRailProps {
   onTool: (command: string) => void;
   adding: boolean;
   onAdd: () => void;
+  /** The kind of the drawing the tools would work on, for the one-action offers under them. */
+  viewKind: ProjectView['kind'] | null;
+  onAll: (command: string) => void;
 }
 
-export function ToolRail({ active, onTool, adding, onAdd }: ToolRailProps) {
+export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: ToolRailProps) {
   const { t } = useTranslation();
   return (
     <nav aria-label={t('wall.tools.rail')} className="flex w-[132px] shrink-0 flex-col gap-2 overflow-y-auto py-2">
       {WALL_TOOLS.map((tool) => {
         const on = active === tool.command;
+        const all = WALL_ALL[tool.command];
         return (
-          <button
-            key={tool.command}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onTool(tool.command)}
-            className={cn(
-              'flex flex-col items-center gap-0.5 rounded-2xl border px-2 py-1.5 text-[14px] transition-colors',
-              on ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 bg-[#0d2a55] text-sky-50 hover:border-sky-300/60',
-            )}
-          >
-            <ToolIcon name={tool.icon} size={34} accent={on ? '#0b1f3d' : '#22d3ee'} />
-            {t(tool.labelKey)}
-          </button>
+          <div key={tool.command} className="flex flex-col gap-1">
+            <button
+              type="button"
+              aria-pressed={on}
+              onClick={() => onTool(tool.command)}
+              className={cn(
+                'flex flex-col items-center gap-0.5 rounded-2xl border px-2 py-1.5 text-[14px] transition-colors',
+                on ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 bg-[#0d2a55] text-sky-50 hover:border-sky-300/60',
+              )}
+            >
+              <ToolIcon name={tool.icon} size={34} accent={on ? '#0b1f3d' : '#22d3ee'} />
+              {t(tool.labelKey)}
+            </button>
+            {all && viewKind && all.kinds.includes(viewKind) ? (
+              <button type="button" onClick={() => onAll(all.command)} className="px-2 text-center text-xs leading-tight text-cyan-300 underline-offset-4 hover:underline">
+                {t(all.labelKey)}
+              </button>
+            ) : null}
+          </div>
         );
       })}
       <button

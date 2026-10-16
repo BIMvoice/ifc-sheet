@@ -95,7 +95,7 @@ function classNamed(text: string, classes: readonly string[]): string | undefine
 
 export const labelAllCommand: DraftCommandDef = {
   id: 'labelall',
-  aliases: ['LABELALL', 'TAGALL', 'LBA'],
+  aliases: ['LABELALL', 'LBA'],
   labelKey: 'drafting.cmd.labelAll',
   create(ctx) {
     const elements = ctx.viewElements();
