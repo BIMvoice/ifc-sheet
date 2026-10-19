@@ -29,10 +29,16 @@ export type ElevationDirection = 'north' | 'south' | 'east' | 'west';
 /** A building level, merged across federated models at the same elevation. */
 export interface ProjectLevel {
   name: string;
-  /** Floor elevation, metres, in the same frame the section bar uses. */
+  /** Floor elevation, metres: the storeys' IfcBuildingStorey.Elevation, what levels are matched and named by. */
   elevation: number;
   /** IfcBuildingStorey GlobalIds (one per model that has this level). */
   storeyGlobalIds: string[];
+  /**
+   * The floor in the drawing frame (render Y: the storey's placement-chain Z less the RTC offset and origin
+   * shift the meshes were moved by), derived from the loaded models and never saved. Absent: `elevation`.
+   * Read through `levelFloorY`.
+   */
+  floorY?: number;
 }
 
 interface ProjectViewBase {

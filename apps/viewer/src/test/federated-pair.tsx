@@ -59,9 +59,31 @@ export interface LoadedPair {
 
 interface Parsed { store: IfcDataStore; geometry: GeometryResult }
 
-async function parse(file: string, processor: GeometryProcessor): Promise<Parsed> {
-  const bytes = readFileSync(join(FIXTURES, file));
-  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+/**
+ * The pair moved to a real elevation (#96 review): the architecture's site at +250 m, the structure's at
+ * +260 m with its building at -10 m (cancelling to 250 m), and every IfcBuildingStorey.Elevation written as
+ * the absolute height (250 m, 253 m), as survey-coordinate exports do. Each file then meshes with an RTC
+ * offset whose Z is 250 m, so a plan cut taken from `Elevation` alone lands 250 m above the meshes.
+ */
+const ELEVATED: Record<string, Array<[string, string]>> = {
+  'arch.ifc': [['(2600000.,1200000.,0.)', '(2600000.,1200000.,250.)'], ["'Level 0',$,$,#24,$,$,.ELEMENT.,0.)", "'Level 0',$,$,#24,$,$,.ELEMENT.,250.)"], ["'Level 1',$,$,#27,$,$,.ELEMENT.,3.)", "'Level 1',$,$,#27,$,$,.ELEMENT.,253.)"]],
+  'str.ifc': [['(2600100.,1200050.,0.)', '(2600100.,1200050.,260.)'], ['(-100.,-50.,0.)', '(-100.,-50.,-10.)'], ["'Structure L0',$,$,#24,$,$,.ELEMENT.,0.)", "'Structure L0',$,$,#24,$,$,.ELEMENT.,250.)"]],
+};
+
+function fixtureBytes(file: string, elevated: boolean): Uint8Array {
+  let text = readFileSync(join(FIXTURES, file), 'utf8');
+  if (elevated) {
+    for (const [from, to] of ELEVATED[file]) {
+      if (!text.includes(from)) throw new Error(`${file}: elevation edit anchor missing: ${from}`);
+      text = text.replace(from, to);
+    }
+  }
+  return new TextEncoder().encode(text);
+}
+
+async function parse(file: string, processor: GeometryProcessor, elevated: boolean): Promise<Parsed> {
+  const bytes = fixtureBytes(file, elevated);
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   const store = await new IfcParser().parseColumnar(buffer, { disableWorkerScan: true });
   const geometry = await processor.process(new Uint8Array(bytes));
   return { store, geometry };
@@ -82,14 +104,14 @@ function federated(id: string, name: string, parsed: Parsed, idOffset: number): 
  * RTC convergence, leaving each model in the frame it was meshed in: the
  * negative control that shows the fixture can tell a frame bug apart.
  */
-export async function loadFederatedPair(options: { converge?: boolean } = {}): Promise<LoadedPair> {
+export async function loadFederatedPair(options: { converge?: boolean; elevated?: boolean } = {}): Promise<LoadedPair> {
   initSync({ module: readFileSync(WASM) });
   const processor = new GeometryProcessor();
   let archParsed: Parsed, strParsed: Parsed;
   try {
     await processor.init();
-    archParsed = await parse('arch.ifc', processor);
-    strParsed = await parse('str.ifc', processor);
+    archParsed = await parse('arch.ifc', processor, options.elevated === true);
+    strParsed = await parse('str.ifc', processor, options.elevated === true);
   } finally {
     processor.dispose();
   }

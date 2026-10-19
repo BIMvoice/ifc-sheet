@@ -123,3 +123,40 @@ describe('federated models on the Wall (#96)', { skip }, () => {
     assert.ok(level1.cutPolygons.some((p) => p.entityId === pair.strId(STR.column)), 'the column is cut on Level 1');
   });
 });
+
+describe('federated models at a real elevation: the plan cut follows the meshes\' frame (#96)', { skip }, () => {
+  let pair: LoadedPair;
+  let level0: Drawing2D;
+  let level1: Drawing2D;
+  before(async () => {
+    // Sites at +250 / +260 m (the latter's building at -10 m), Elevation written as 250 / 253 m: each file
+    // meshes with an RTC offset whose Z is 250 m, so `Elevation + cutHeight` alone would cut 250 m too high.
+    pair = await loadFederatedPair({ elevated: true });
+    level0 = await drawView(planOf('Level 0'));
+    level1 = await drawView(planOf('Level 1'));
+  });
+
+  it('levels keep the authored elevations and gain their floor in the drawing frame', () => {
+    const levels = useProjectStore.getState().levels;
+    assert.deepEqual(levels.map((l) => [l.name, l.elevation]), [['Level 1', 253], ['Level 0', 250]]);
+    const frameZ = useViewerStore.getState().models.get('arch')?.geometryResult?.coordinateInfo.wasmRtcOffset?.z;
+    assert.equal(frameZ, 250, 'the fixture meshes against a 250 m vertical RTC offset');
+    assert.ok(Math.abs((levels.find((l) => l.name === 'Level 0')?.floorY ?? NaN) - 0) < MM);
+    assert.ok(Math.abs((levels.find((l) => l.name === 'Level 1')?.floorY ?? NaN) - 3) < MM);
+  });
+
+  it('Level 0 cuts the walls, the door and the column, in the walls\' corner', () => {
+    const drawn = new Set(level0.cutPolygons.map((p) => p.entityId));
+    for (const id of [ARCH.wallA, ARCH.wallB, ARCH.door, pair.strId(STR.column)]) assert.ok(drawn.has(id), `entity ${id} is cut on Level 0`);
+    const column = cutBox(level0, pair.strId(STR.column));
+    assert.ok(Math.abs(column.minX - cutBox(level0, ARCH.wallB).maxX) < MM);
+    assert.ok(Math.abs(column.maxY - cutBox(level0, ARCH.wallA).minY) < MM);
+  });
+
+  it('Level 1 cuts its own wall and the structure\'s column, which has no storey there', () => {
+    const drawn = new Set(level1.cutPolygons.map((p) => p.entityId));
+    assert.ok(drawn.has(ARCH.wallC));
+    assert.ok(drawn.has(pair.strId(STR.column)));
+    assert.ok(!drawn.has(ARCH.wallA), 'Level 0\'s wall is below the cut');
+  });
+});

@@ -18,7 +18,7 @@
 import { percentToWorld, sectionAxisRange, worldToPercent, type AxisBounds } from '@/lib/section/section-distance';
 import type { SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
-import { resolvePlanLevel } from './view-defaults';
+import { levelFloorY, resolvePlanLevel } from './view-defaults';
 import type { ElevationDirection, ProjectLevel, ProjectView, SectionProjectPlane } from './types';
 
 export interface ViewSectionPlane {
@@ -69,7 +69,7 @@ export function sectionPlaneForView(
       const range = sectionAxisRange(bounds, 'down');
       const level = resolvePlanLevel(view, levels) ?? (levels.length === 0 ? view.level : undefined);
       if (!range || !level) return null;
-      return { axis: 'down', position: worldToPercent(level.elevation + view.cutHeight, range), flipped: false };
+      return { axis: 'down', position: worldToPercent(levelFloorY(level) + view.cutHeight, range), flipped: false };
     }
     case 'section': {
       const { axis, offset, flipped, custom } = view.plane;
