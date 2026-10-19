@@ -115,6 +115,7 @@ import { projectPackageEn } from './catalogues/project-package.en';
 import { projectVersionsEn } from './catalogues/project-versions.en';
 import { roofBlockEn } from './catalogues/roof-block.en';
 import { viewGraphicsEn } from './catalogues/view-graphics.en';
+import { phasesEn } from './catalogues/phases.en';
 import { catalogueEn } from './catalogues/catalogue.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
@@ -191,6 +192,7 @@ export const en = {
   ...projectVersionsEn,
   ...roofBlockEn,
   ...viewGraphicsEn,
+  ...phasesEn,
   ...catalogueEn,
   ...draftingStandardsEn,
   ...joineryEn,

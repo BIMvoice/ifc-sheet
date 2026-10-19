@@ -12,14 +12,48 @@
  * drawing and hatch regions.
  */
 
-import { BUILT_IN_PRESETS, ifcTypeCriterion, type Drawing2D, type GraphicOverrideRule } from '@ifc-lite/drawing-2d';
+import { BUILT_IN_PRESETS, ifcTypeCriterion, type Drawing2D, type DrawingLine, type DrawingPolygon, type GraphicOverrideRule } from '@ifc-lite/drawing-2d';
 import type { Pt } from '@/drafting/types';
-import type { CategoryGraphics, ViewGraphics } from './types';
+import type { CategoryGraphics, PhaseId, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
 import type { DraftShape } from '@/drafting/types';
 
-/** A drawing as a view shows it, with its building materials' hatches and membrane lines. */
-export type StyledDrawing = Drawing2D & { materialHatches?: (MaterialHatch & { ifcType?: string })[]; membranes?: DraftShape[] };
+/** A drawing as a view shows it, with its building materials' hatches and membrane lines, and (a view that draws by phase) the phase of each line and cut face. */
+export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
+  lines: (DrawingLine & { phase?: PhaseId })[];
+  cutPolygons: (DrawingPolygon & { phase?: PhaseId })[];
+  materialHatches?: (MaterialHatch & { ifcType?: string })[];
+  membranes?: DraftShape[];
+};
+
+/** The phases a view shows and the phase of an element (by the drawing's entity id; null: not a model element, always shown). */
+export interface PhaseView {
+  show: ReadonlySet<PhaseId>;
+  phaseOf: (entityId: number) => PhaseId | null;
+}
+
+/** The drawing with the elements of the phases the view does not show left out, the others marked with their phase. */
+function phased(drawing: StyledDrawing, phases: PhaseView): StyledDrawing {
+  const keep = (id: number): { phase?: PhaseId } | null => {
+    const phase = phases.phaseOf(id);
+    return phase === null ? {} : phases.show.has(phase) ? { phase } : null;
+  };
+  const droppedOuters = new Set<unknown>();
+  const cutPolygons = drawing.cutPolygons.flatMap((p) => {
+    const k = keep(p.entityId);
+    if (!k) droppedOuters.add(p.polygon.outer);
+    return k ? [{ ...p, ...k }] : [];
+  });
+  return {
+    ...drawing,
+    cutPolygons,
+    lines: drawing.lines.flatMap((l) => {
+      const k = keep(l.entityId);
+      return k ? [{ ...l, ...k }] : [];
+    }),
+    ...(drawing.materialHatches ? { materialHatches: drawing.materialHatches.filter((h) => !droppedOuters.has(h.loops[0])) } : {}),
+  };
+}
 
 /** The Drawing panel's default preset (IFC material colours). */
 export const DEFAULT_VIEW_PRESET = 'preset-3d-colors';
@@ -109,6 +143,8 @@ export function styledDrawing(
   replaced?: (entityId: number, ifcType: string | undefined) => boolean,
   /** The cut by building materials (`material-drawing.ts`), computed on this same drawing. */
   materials?: MaterialDrawing | null,
+  /** A view that draws by phase (`phases.ts`): the other phases are left out and each element carries its phase. */
+  phases?: PhaseView | null,
 ): StyledDrawing {
   if (materials) {
     const hatchOf = new Map<unknown, string | undefined>(drawing.cutPolygons.map((p) => [p.polygon.outer, p.ifcType]));
@@ -130,6 +166,7 @@ export function styledDrawing(
       lines: drawing.lines.filter((l) => !replaced(l.entityId, l.ifcType)),
     };
   }
+  if (phases) drawing = phased(drawing as StyledDrawing, phases);
   const hidden = hiddenClasses(graphics);
   const fills = new Map<string, [number, number, number, number]>();
   for (const category of VIEW_CATEGORIES) {
