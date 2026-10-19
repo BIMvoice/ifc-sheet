@@ -107,6 +107,12 @@ export interface PlanProjectView extends ProjectViewBase {
   level: ProjectLevel;
   /** Cut height above the level's floor, metres. */
   cutHeight: number;
+  /**
+   * A reflected ceiling plan: the same plan, looking up from the cut. It keeps
+   * the floor plan's x/y (a point sits where it does in the plan below) and
+   * draws what is above the cut: ceilings, soffits, lights, beams.
+   */
+  reflected?: boolean;
 }
 
 /** A section cut stored in world metres, independent of the model bounds. */
