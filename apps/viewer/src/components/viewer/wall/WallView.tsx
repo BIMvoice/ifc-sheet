@@ -21,6 +21,7 @@ import { useViewerStore } from '@/store';
 import { SteppedSheet } from './SteppedSheet';
 import { WallGrid } from './WallGrid';
 import { WallIntro } from './WallIntro';
+import { openDemoModel } from '../ifcsheet/demo-model';
 import { ProjectDrawer } from './ProjectDrawer';
 import { IssuePanel, MissingPanel } from './SetPanels';
 import { setDrawer, stepInto, useWallNav } from './wall-nav';
@@ -57,7 +58,12 @@ export function WallView() {
   return (
     <div className="relative h-full w-full overflow-hidden bg-[radial-gradient(ellipse_at_top,#0c2a52,#061a36_60%)] text-sky-50">
       {models.size === 0 && !legacy ? (
-        <div className="flex h-full items-center justify-center text-lg text-sky-200/80">{t('wall.empty')}</div>
+        <div className="flex h-full flex-col items-center justify-center gap-6 text-lg text-sky-200/80">
+          <p className="m-0">{t('wall.empty')}</p>
+          <button type="button" className="rounded-md bg-sky-600 px-5 py-2.5 text-base text-white hover:bg-sky-500" onClick={() => void openDemoModel().catch((err: unknown) => console.warn('[ifcsheet] could not open the demo project', err))}>
+            {t('wall.demo')}
+          </button>
+        </div>
       ) : sheets.length === 0 ? (
         <div className="flex h-full items-center justify-center text-lg text-sky-200/80">{t('wall.intro.waiting')}</div>
       ) : intro && extent ? (
