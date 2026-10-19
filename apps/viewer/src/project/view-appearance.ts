@@ -12,6 +12,7 @@
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { cropDrawing } from './drawing-crop';
+import { interiorCropRect } from './interior-crop';
 import { outlineLines } from './elevation-outline';
 import { drawingWithGround } from './ground';
 import type { InteriorElevation, ProjectView } from './types';
@@ -33,9 +34,9 @@ function withoutOverlays(source: Drawing2D, view: Shown): Drawing2D {
   return { ...drawing, lines: kept.map((l) => (outline.has(l) ? { ...l, category: 'silhouette' as const } : l)) };
 }
 
-/** The drawing as `view` shows it: hidden lines and outline as above, a detail cropped to its area and an interior elevation to its wall. The generated drawing is not changed. */
+/** The drawing as `view` shows it: hidden lines and outline as above, a detail cropped to its area and an interior elevation to its wall and the side walls cut at its ends. The generated drawing is not changed. */
 export function drawingAsViewShows(drawing: Drawing2D, view: Shown): Drawing2D {
   const shown = withoutOverlays(drawing, view);
-  const crop = view.detail ?? view.interior?.crop;
-  return crop ? cropDrawing(shown, { min: crop.min, max: crop.max }) : shown;
+  if (view.interior) return cropDrawing(shown, interiorCropRect(drawing, view.interior));
+  return view.detail ? cropDrawing(shown, { min: view.detail.min, max: view.detail.max }) : shown;
 }

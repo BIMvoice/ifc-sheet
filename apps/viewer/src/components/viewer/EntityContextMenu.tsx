@@ -35,8 +35,7 @@ import { runSurfaceCommand } from './surface-command-run';
 import { deleteElements, selectedRenderIds } from '@/project/element-delete';
 import { reportDelete } from '@/project/element-delete-report';
 import { flipElements } from '@/project/element-flip';
-import { createInteriorElevations } from '@/project/interior-elevation-actions';
-import { activateDocumentTab } from '@/project/open-view';
+import { runInteriorElevations } from './interior-elevations-command';
 
 export function EntityContextMenu() {
   const { t } = useTranslation();
@@ -278,15 +277,8 @@ export function EntityContextMenu() {
   const handleInteriorElevations = useCallback(() => {
     const id = contextMenu.entityId;
     closeContextMenu();
-    if (id === null) return;
-    const made = createInteriorElevations(id);
-    if ('error' in made) {
-      toast.info(t(made.error === 'noRoom' ? 'entityContextMenu.interiorElevationsNoRoom' : 'entityContextMenu.interiorElevationsNoFaces'));
-      return;
-    }
-    activateDocumentTab(made.sheetId);
-    toast.success(t('entityContextMenu.interiorElevationsMade', { count: made.count, sheet: made.sheetNumber }));
-  }, [contextMenu.entityId, closeContextMenu, t]);
+    runInteriorElevations(id);
+  }, [contextMenu.entityId, closeContextMenu]);
 
   const handleFlip = useCallback((axis: 'x' | 'y') => {
     const id = contextMenu.entityId;

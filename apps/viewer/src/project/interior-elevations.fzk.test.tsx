@@ -15,7 +15,7 @@ import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { GeometryResult, MeshData } from '@ifc-lite/geometry';
-import { meshFile, viewDrawing } from '@/test/view-drawing-harness';
+import { closedEnds, meshFile, viewDrawing } from '@/test/view-drawing-harness';
 import { interiorElevationSheet, interiorElevationViews, type InteriorElevationView } from './interior-elevations';
 import { roomGeometry } from './interior-room';
 import type { ElevationDirection, ProjectView } from './types';
@@ -81,10 +81,13 @@ describe('interior elevations of an FZK-Haus room', () => {
       const d = await viewDrawing(asView(v), g);
       assert.ok(d && d.lines.length > 0, `${v.name} draws`);
       const { crop } = v.interior;
-      assert.deepEqual(d.bounds, crop, `${v.name}: the drawing is its wall`);
+      // The drawing is its wall, floor to top, and the side walls cut at either end: no wider than a wall's thickness past each end.
+      const b = d.bounds;
+      assert.deepEqual([b.min.y, b.max.y], [crop.min.y, crop.max.y], `${v.name}: floor to top`);
+      assert.ok(b.min.x <= crop.min.x && b.min.x > crop.min.x - 0.5 && b.max.x >= crop.max.x && b.max.x < crop.max.x + 0.5, `${v.name}: ${b.min.x}..${b.max.x} for a wall ${crop.min.x}..${crop.max.x}`);
       for (const l of d.lines) {
         for (const p of [l.line.start, l.line.end]) {
-          assert.ok(p.x >= crop.min.x - 1e-9 && p.x <= crop.max.x + 1e-9 && p.y >= crop.min.y - 1e-9 && p.y <= crop.max.y + 1e-9, `${v.name}: a line leaves the wall`);
+          assert.ok(p.x >= b.min.x - 1e-9 && p.x <= b.max.x + 1e-9 && p.y >= b.min.y - 1e-9 && p.y <= b.max.y + 1e-9, `${v.name}: a line leaves the drawing`);
         }
       }
       for (const e of entities(d)) {
@@ -98,6 +101,17 @@ describe('interior elevations of an FZK-Haus room', () => {
     assert.ok(drawn.has(BUERO_DOOR), 'the room\'s own door is drawn');
     assert.ok(!drawn.has(BAD_DOOR), 'the neighbouring room\'s door is not');
   });
+
+  for (const id of [BUERO, BAD]) {
+    it(`room ${id}: every elevation is closed at both ends by the side walls, cut`, async (t) => {
+      if (!geometry) { t.skip('needs the wasm runtime (pnpm build:wasm:fetch)'); return; }
+      for (const v of viewsOf(geometry, id)) {
+        const d = await viewDrawing(asView(v), geometry);
+        assert.ok(d, `${v.name} draws`);
+        assert.deepEqual(closedEnds(d, v.interior.crop), { left: true, right: true }, `${v.name} is closed at both ends`);
+      }
+    });
+  }
 
   it('hangs all of a room\'s elevations on one sheet', (t) => {
     if (!geometry) { t.skip('needs the wasm runtime (pnpm build:wasm:fetch)'); return; }

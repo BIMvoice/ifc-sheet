@@ -7,6 +7,7 @@ import { Building2, Copy, CopyPlus, FlipHorizontal2, FlipVertical2, Layers, Pane
 import { ACTION_NAME_KEYS } from '@/lib/commands/action-names';
 import type { DuplicateDirection } from '@/store/slices/mutationSlice';
 import type { SurfaceCommandDefinition, SurfaceCommandContext, SurfaceCommandState } from './surface-commands';
+import { runInteriorElevations, selectedRoom } from './interior-elevations-command';
 
 const contextOnly = ['context'] as const;
 const contextAndRibbon = ['context', 'ribbon'] as const;
@@ -36,9 +37,12 @@ export const CONTEXT_SURFACE_COMMANDS = [
     surfaces: contextOnly, enabled: alwaysEnabled, run: runContextAction,
   },
   {
-    id: 'context:interior-elevations', labelKey: 'entityContextMenu.interiorElevations',
-    keywords: 'interior elevations room walls sheet', category: 'Tools', icon: PanelsTopLeft,
-    surfaces: contextOnly, enabled: (state: SurfaceCommandState) => state.contextEntityType === 'IfcSpace', run: runContextAction,
+    id: 'context:interior-elevations', labelKey: 'entityContextMenu.interiorElevationsOfSelected', contextLabelKey: 'entityContextMenu.interiorElevations',
+    keywords: 'interior elevations room space walls sheet', category: 'Tools', icon: PanelsTopLeft,
+    surfaces: ['context', 'palette'] as const,
+    // The palette offers it always and asks for a room when none is selected; the context menu, on a room.
+    enabled: (state: SurfaceCommandState) => state.contextEntityType === undefined || state.contextEntityType === 'IfcSpace',
+    run: (context: SurfaceCommandContext) => runContextOr(context, () => runInteriorElevations(selectedRoom())),
   },
   {
     id: 'context:copy-global-id', labelKey: ACTION_NAME_KEYS.copyGlobalId, ribbonTooltipKey: ACTION_NAME_KEYS.copyGlobalId,

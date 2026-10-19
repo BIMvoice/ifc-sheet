@@ -20,7 +20,7 @@
 import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { GeometryResult } from '@ifc-lite/geometry';
-import { meshFile, viewDrawing } from '@/test/view-drawing-harness';
+import { closedEnds, meshFile, viewDrawing } from '@/test/view-drawing-harness';
 import { AXIS_NAME, viewportTransform } from '@/components/viewer/sheets/SheetPaper';
 import { drawingToScreen } from '@/drafting/frame';
 import { interiorElevationSheet, interiorElevationViews, type InteriorElevationView } from './interior-elevations';
@@ -39,7 +39,7 @@ function views(g: GeometryResult): InteriorElevationView[] {
   return interiorElevationViews({ guid: 'G-ROOM', label: '1 Rotated room', ...room });
 }
 
-/** Where a window is drawn across its elevation on the sheet, as fractions of the drawing's width from its left edge. */
+/** Where a window is drawn across its elevation on the sheet, as fractions of its wall's width from the wall's left end. */
 async function windowOnSheet(g: GeometryResult, made: InteriorElevationView[], side: 'north' | 'east', windowName: string): Promise<{ from: number; to: number; axis: string }> {
   const view = made.find((v) => v.direction === side)!;
   const drawing = await viewDrawing({ ...view, createdAt: 0 }, g);
@@ -55,7 +55,7 @@ async function windowOnSheet(g: GeometryResult, made: InteriorElevationView[], s
   const t = viewportTransform(vp, drawing, axis);
   const paperX = (x: number) => drawingToScreen({ x, y: 0 }, t, axis).x;
   const xs = lines.flatMap((l) => [paperX(l.line.start.x), paperX(l.line.end.x)]);
-  const edges = [paperX(drawing.bounds.min.x), paperX(drawing.bounds.max.x)];
+  const edges = [paperX(view.interior.crop.min.x), paperX(view.interior.crop.max.x)];
   const left = Math.min(...edges), width = Math.abs(edges[1] - edges[0]);
   return { from: (Math.min(...xs) - left) / width, to: (Math.max(...xs) - left) / width, axis };
 }
@@ -67,6 +67,15 @@ describe('interior elevations of a room turned 30 degrees', () => {
     assert.deepEqual(made.map((v) => v.name), ['1 Rotated room – North', '1 Rotated room – East', '1 Rotated room – South', '1 Rotated room – West']);
     const widths = made.map((v) => v.interior.crop.max.x - v.interior.crop.min.x);
     for (const [w, want] of widths.map((w, i) => [w, i % 2 === 0 ? 4 : 3])) assert.ok(Math.abs(w - want) < 0.01, `wall ${want} m drawn ${w} m wide`);
+  });
+
+  it('closes every elevation at both ends with the side walls, cut', async (t) => {
+    if (!geometry) { t.skip('needs the wasm runtime (pnpm build:wasm:fetch)'); return; }
+    for (const v of views(geometry)) {
+      const d = await viewDrawing({ ...v, createdAt: 0 }, geometry);
+      assert.ok(d, `${v.name} draws`);
+      assert.deepEqual(closedEnds(d, v.interior.crop), { left: true, right: true }, `${v.name} is closed at both ends`);
+    }
   });
 
   it('draws W1, near the left end of the north wall, at the left of that elevation on the sheet (a front cut)', async (t) => {

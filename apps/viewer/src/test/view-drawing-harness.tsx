@@ -88,3 +88,21 @@ export async function viewDrawing(view: Exclude<ProjectView, { kind: '3d' }>, ge
   const generated = drawing as Drawing2D | null;
   return generated ? drawingAsViewShows(generated, view) : null;
 }
+
+/**
+ * Whether an interior elevation is closed at both ends of its wall: a vertical
+ * cut line at each end of `crop` (within 1 cm of the wall face) covering the
+ * room's height from floor to top (within 1 cm).
+ */
+export function closedEnds(drawing: Drawing2D, crop: { min: { x: number; y: number }; max: { x: number; y: number } }): { left: boolean; right: boolean } {
+  const covered = (x: number) => {
+    const spans = drawing.lines
+      .filter((l) => l.category === 'cut' && Math.abs(l.line.start.x - x) < 0.01 && Math.abs(l.line.end.x - x) < 0.01)
+      .map((l) => [Math.min(l.line.start.y, l.line.end.y), Math.max(l.line.start.y, l.line.end.y)] as const)
+      .sort((a, b) => a[0] - b[0]);
+    let reach = crop.min.y + 0.01;
+    for (const [lo, hi] of spans) if (lo <= reach + 0.01) reach = Math.max(reach, hi);
+    return reach >= crop.max.y - 0.01;
+  };
+  return { left: covered(crop.min.x), right: covered(crop.max.x) };
+}
