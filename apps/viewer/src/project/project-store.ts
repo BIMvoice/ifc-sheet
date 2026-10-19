@@ -38,7 +38,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined,
+  annotationTypes: [], symbols: [], legends: [], issues: [], comments: [], modelState: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -72,6 +72,7 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
     symbols: state.symbols ?? [],
     legends: state.legends ?? [],
     issues: state.issues ?? [],
+    comments: state.comments ?? [],
     ...(state.modelState ? { modelState: state.modelState } : {}),
   };
 }
@@ -103,6 +104,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
     issues: doc.issues ?? [],
+    comments: doc.comments ?? [],
     modelState: doc.modelState,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
@@ -218,6 +220,8 @@ export function removeProjectItem(id: string): void {
     schedules: (state.schedules ?? []).filter((s) => s.id !== id),
     civilDrawings: (state.civilDrawings ?? []).filter((d) => d.id !== id),
     legends: (state.legends ?? []).filter((l) => l.id !== id),
+    // A deleted sheet takes the comments pinned on it.
+    comments: (state.comments ?? []).some((c) => c.sheetId === id) ? (state.comments ?? []).filter((c) => c.sheetId !== id) : state.comments,
     // A deleted view takes its own drawing with it, a section's symbol on its plans and a detail's mark on its source.
     drafts: state.drafts.some((d) => d.viewId === id || d.params.sectionOf === id || d.params.detailOf === id) ? state.drafts.filter((d) => d.viewId !== id && d.params.sectionOf !== id && d.params.detailOf !== id) : state.drafts,
     activeItemId: state.activeItemId === id ? null : state.activeItemId,

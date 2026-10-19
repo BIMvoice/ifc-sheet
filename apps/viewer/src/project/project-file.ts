@@ -15,6 +15,7 @@ import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readIssues } from '@/issue/file';
+import { readComments } from '@/review/file';
 import { readStandards } from './standards-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
 import { readSavedSectionCuts } from './saved-cuts-file';
@@ -162,6 +163,7 @@ export function parseProjectFile(text: string): ProjectDocument {
     symbols: readList(raw, 'symbols', readSymbol),
     legends: readList(raw, 'legends', readLegend),
     issues: readIssues(raw.issues),
+    ...(raw.comments !== undefined ? { comments: readComments(raw.comments) } : {}),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
   };
 }

@@ -167,6 +167,10 @@ const FULL: Required<ProjectDocument> = {
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
     sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
   }],
+  comments: [{
+    id: 'comment-1', sheetId: 'sh1', x: 120.5, y: 80.25, viewportId: 'vp1', viewId: 'v-plan', point: { x: 3.5, y: -2 }, elementGuid: '2O2Fr$t4X7Zf8NOew3FLOH',
+    author: 'Ana Ionescu', createdAt: 1760000000000, status: 'done', text: 'Cota lipsă la ușă', replies: [{ id: 'reply-1', author: 'PC', createdAt: 1760000001000, text: 'Adăugată' }],
+  }],
   modelState: snapshotFromElements([{ k: '2O2Fr$t4X7Zf8NOew3FLOH', t: 'IfcWall', n: 'Wall', d: 'abcdef0123', g: 'a1b2c3d4e', a: [0, 0, 0, 4, 0.2, 3], p: 'Site/Building/Level 0' }], 7),
   savedSectionCuts: [{
     id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,

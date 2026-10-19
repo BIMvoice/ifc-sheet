@@ -16,6 +16,7 @@ import { SET_SCALES, sheetGroup, sheetScaleReason, type ModelExtent, type SetGro
 import { groupScale, setGroupScale } from '@/project/drawing-set-actions';
 import { removeProjectItem, useProjectStore } from '@/project/project-store';
 import type { ProjectSheet } from '@/project/types';
+import { CardMarks } from './CardMarks';
 import { WallSheet } from './WallSheet';
 
 const GROUPS: { group: SetGroup | null; labelKey: TranslationKey }[] = [
@@ -81,6 +82,7 @@ function SheetOnWall({ sheet, extent, onStep }: { sheet: ProjectSheet; extent: M
       >
         <WallSheet sheet={sheet} width={SHEET_PX} />
       </button>
+      <CardMarks sheet={sheet} width={SHEET_PX} />
       <button
         type="button"
         aria-label={t('wall.remove', { name })}

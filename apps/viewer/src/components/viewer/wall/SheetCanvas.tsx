@@ -24,6 +24,7 @@ import { CommandLine } from '../drafting/CommandLine';
 import { useDraftingKeys } from '../drafting/useDraftingKeys';
 import { useSheetDrafting } from '../sheets/useSheetDrafting';
 import type { SheetContent } from '../sheets/useSheetContent';
+import { CommentLayer } from './CommentLayer';
 import { WallSheet } from './WallSheet';
 
 interface Pan { x: number; y: number; k: number }
@@ -155,6 +156,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           <WallSheet ref={paperRef} sheet={sheet} width={paper.w * pan.k} selectedViewportId={chosenId} sheetContent={sheetContent} pinned={false} />
         </div>
         {drafting.overlay}
+        <CommentLayer sheet={sheet} pan={pan} toPaper={toPaper} />
       </div>
       {showPrompt ? (
         <div className="bg-white text-zinc-900">

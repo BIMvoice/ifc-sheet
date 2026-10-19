@@ -20,6 +20,7 @@ import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/typ
 import type { CameraViewpoint, SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
+import type { ReviewComment } from '@/review/types';
 
 export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d';
 
@@ -326,6 +327,8 @@ export interface ProjectDocument {
   issues?: ProjectIssue[];
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
+  /** Review comments pinned on sheets (`review/`). */
+  comments?: ReviewComment[];
 }
 
 /** One sheet as it stood when a set was issued. */
