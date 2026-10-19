@@ -16,6 +16,7 @@ import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogu
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
+import { isDisciplineId } from './discipline-views';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
 import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
@@ -89,7 +90,7 @@ function readView(v: unknown, path: string): ProjectView {
   switch (v.kind) {
     case 'plan':
       if (!isNumber(v.cutHeight)) fail(`${path}.cutHeight`, 'must be a number');
-      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight };
+      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(isDisciplineId(v.discipline) ? { discipline: v.discipline } : {}) };
     case 'section': {
       const p = v.plane;
       if (!isObject(p) || !AXES.includes(p.axis as (typeof AXES)[number]) || !isNumber(p.offset)) {
