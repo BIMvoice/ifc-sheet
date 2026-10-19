@@ -24,12 +24,15 @@ import { exportProjectFile, importProjectFile, PROJECT_FILE_SUFFIX } from '@/pro
 import { addProjectSheet, loadProjectDocument, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
+import { useViewDrawings } from '@/project/view-drawings';
+import { viewportState, type ViewportState as ViewportStateValue } from '@/project/viewport-state';
 import { ReadinessList } from '../sheets/ReadinessList';
 import { WALL_SKIN } from '../sheets/set-skin';
 import { TitleBlockForm } from './TitleBlockForm';
 import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
 import { LegendsAdd } from './LegendsAdd';
+import { ViewportState } from './ViewportState';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
   { kind: 'plan', labelKey: 'wall.group.plans' },
@@ -49,7 +52,7 @@ function Group({ title, children, add }: { title: string; children: ReactNode; a
   );
 }
 
-function Row({ id, label, sub, onOpen }: { id: string; label: string; sub?: string; onOpen: () => void }) {
+function Row({ id, label, sub, state, onOpen }: { id: string; label: string; sub?: string; state?: ViewportStateValue; onOpen: () => void }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   return (
@@ -77,6 +80,7 @@ function Row({ id, label, sub, onOpen }: { id: string; label: string; sub?: stri
           {label}
         </button>
       )}
+      {state ? <ViewportState state={state} compact /> : null}
       <button type="button" aria-label={t('wall.remove', { name: label })} onClick={() => removeProjectItem(id)} className="mr-1 rounded p-1 text-sky-200 opacity-0 hover:bg-sky-400/20 group-hover:opacity-100 focus-visible:opacity-100">
         <X className="size-3.5" />
       </button>
@@ -91,6 +95,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
   const legends = useProjectStore((s) => s.legends ?? []);
+  const byView = useViewDrawings((s) => s.byView);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const go = (sheetId: string | null, focus: string | null = null): void => {
@@ -156,7 +161,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
         </details>
         {DRAWING_KINDS.map(({ kind, labelKey }) => (
           <Group key={kind} title={t(labelKey)}>
-            {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} onOpen={() => openDrawing(v.id)} />)}
+            {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} state={viewportState(byView[v.id])} onOpen={() => openDrawing(v.id)} />)}
           </Group>
         ))}
         <Group
