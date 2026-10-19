@@ -23,6 +23,7 @@
 import type { TranslationKey } from '@/i18n';
 import { ACTION_NAME_KEYS } from './action-names';
 import type { KeyChord } from './chord';
+import { WALL_KEY_COMMANDS } from './wall-key-commands';
 
 /**
  * Where a binding is live. Two commands may share a chord only in different
@@ -34,6 +35,8 @@ export type KeyContext =
   | 'overlay'
   | 'tool.walk'
   | 'tool.measure'
+  /** While a sheet is stepped into on the Wall. */
+  | 'wall'
   /** While a modeling command runs (Model workspace, charter #6232). */
   | 'command'
   /** One modeling command's own keys, e.g. `command.wall.place`. */
@@ -58,11 +61,11 @@ export type KeyContext =
   | 'schedule.drag';
 
 export type KeyCommandCategory =
-  | 'editing' | 'tools' | 'selection' | 'visibility' | 'camera' | 'search' | 'ui' | 'help';
+  | 'editing' | 'tools' | 'selection' | 'visibility' | 'camera' | 'search' | 'wall' | 'ui' | 'help';
 
 /** Dialog order: categories render in this order, commands in table order. */
 export const KEY_COMMAND_CATEGORIES: readonly KeyCommandCategory[] = [
-  'editing', 'tools', 'selection', 'visibility', 'camera', 'search', 'ui', 'help',
+  'editing', 'tools', 'selection', 'visibility', 'camera', 'search', 'wall', 'ui', 'help',
 ];
 
 export interface KeyCommandDefinition {
@@ -206,6 +209,9 @@ export const KEY_COMMANDS = [
 
   // ── Help ──────────────────────────────────────────────────────────────
   { id: 'help.shortcuts', labelKey: 'commands.help.shortcuts', category: 'help', when: 'global', keys: [k('?')] },
+
+  // ── The Wall ── (its own file: `wall-key-commands.ts`)
+  ...WALL_KEY_COMMANDS,
 ] as const satisfies readonly KeyCommandDefinition[];
 
 export type KeyCommandId = (typeof KEY_COMMANDS)[number]['id'];

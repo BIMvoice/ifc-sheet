@@ -68,6 +68,7 @@ function keyGlyph(key: string, apple: boolean): string {
   if (key.startsWith('code:')) {
     const code = key.slice('code:'.length);
     if (code.startsWith('Digit')) return code.slice('Digit'.length);
+    if (/^Key[A-Z]$/.test(code)) return code.slice('Key'.length);
     if (code === 'Backslash') return '\\';
     return code;
   }
