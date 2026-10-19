@@ -20,7 +20,7 @@ import { SheetPaper } from '@/components/viewer/sheets/SheetPaper.js';
 import { sheetSvgText } from '@/components/viewer/sheets/sheet-export.js';
 import { viewportPens, type Pen } from '@/components/viewer/sheets/viewport-pens.js';
 import { svgToDxf } from '@/components/viewer/sheets/sheet-dxf.js';
-import { phaseOfRenderId, phaseViewOf } from './phase-view.js';
+import { phaseHiddenIds, phaseOfRenderId, phaseViewOf } from './phase-view.js';
 import { PHASE_VIEW_PRESETS } from './phases.js';
 import { styledDrawing, type StyledDrawing } from './view-graphics.js';
 import type { ProjectSheet, ProjectView, ViewGraphics } from './types.js';
@@ -30,9 +30,15 @@ const PROPOSED: ViewGraphics = { phases: { show: [...PHASE_VIEW_PRESETS.proposed
 
 let model: PhaseModel;
 let plan: Drawing2D;
+let demolitionPlan: Drawing2D;
+let proposedPlan: Drawing2D;
+/** The view's drawing as the viewer makes it: the phases it does not show are left out of the generator's input. */
+const generate = (kind: 'plan' | 'section' | 'elevation', graphics: ViewGraphics | undefined) => model.draw(kind, phaseHiddenIds(model.meshes, phaseViewOf(graphics, undefined)));
 before(async () => {
   model = await loadPhaseModel();
   plan = await model.draw('plan');
+  demolitionPlan = await generate('plan', DEMOLITION);
+  proposedPlan = await generate('plan', PROPOSED);
 });
 afterEach(() => cleanup());
 
@@ -59,9 +65,28 @@ describe('phase of the fixture walls, read from the model', () => {
   });
 });
 
+describe('the phases a view leaves out of the generator', () => {
+  it('are the elements of the other phases, none for a view without phases', () => {
+    assert.deepEqual([...phaseHiddenIds(model.meshes, phaseViewOf(PROPOSED, undefined))!], [WALL.demolish]);
+    assert.deepEqual([...phaseHiddenIds(model.meshes, phaseViewOf(DEMOLITION, undefined))!], [WALL.new]);
+    assert.equal(phaseHiddenIds(model.meshes, phaseViewOf(undefined, undefined)), null);
+    assert.equal(phaseHiddenIds(model.meshes, phaseViewOf({ phases: { show: ['existing', 'demolish', 'new'] } }, undefined)), null);
+  });
+
+  it('draw nothing of them in a plan, a section or an elevation, and the others as the model without them', async () => {
+    for (const kind of ['plan', 'section', 'elevation'] as const) {
+      const d = await generate(kind, PROPOSED);
+      assert.ok(!entities(d).has(WALL.demolish), `${kind}: no demolished wall`);
+      const without = await model.draw(kind, new Set([WALL.demolish]));
+      assert.equal(d.lines.length, without.lines.length, `${kind}: the same lines as the model without that wall`);
+      assert.equal(d.cutPolygons.length, without.cutPolygons.length);
+    }
+  });
+});
+
 describe('the demolition plan', () => {
   it('draws the existing walls grey, the demolished wall dashed, and not the new wall', () => {
-    const d = styled(plan, DEMOLITION);
+    const d = styled(demolitionPlan, DEMOLITION);
     assert.ok(!entities(d).has(WALL.new), 'the new wall is not drawn');
     for (const id of [...WALL.existing, WALL.none]) {
       const cut = outline(pens(only(d, id), DEMOLITION));
@@ -83,7 +108,7 @@ describe('the demolition plan', () => {
     assert.ok(existing.length > 0 && existing.every((e) => e.lineType === 'Continuous'), 'an existing wall exports continuous');
     // The whole demolition plan: the layer holds dashed and continuous lines, and the dashed ones
     // are exactly the demolished wall's, each carrying its own line type.
-    const whole = dxfEntities(sheetOf(styled(plan, DEMOLITION), DEMOLITION).dxf).filter((e) => e.layer === 'CUT');
+    const whole = dxfEntities(sheetOf(styled(demolitionPlan, DEMOLITION), DEMOLITION).dxf).filter((e) => e.layer === 'CUT');
     assert.equal(whole.filter((e) => e.lineType === 'DASHED').length, dashed.length);
     assert.ok(whole.some((e) => e.lineType === 'Continuous'));
   });
@@ -91,7 +116,7 @@ describe('the demolition plan', () => {
 
 describe('the proposed plan', () => {
   it('draws the existing walls and the new wall heavy, and not the demolished wall', () => {
-    const d = styled(plan, PROPOSED);
+    const d = styled(proposedPlan, PROPOSED);
     assert.ok(!entities(d).has(WALL.demolish), 'the demolished wall is not drawn');
     for (const id of WALL.existing) assert.ok(outline(pens(only(d, id), PROPOSED)).every((p) => p.stroke === '#808080' && p.width === 0.25), `existing wall ${id} stays thin grey`);
     const cut = outline(pens(only(d, WALL.new), PROPOSED));
@@ -100,7 +125,7 @@ describe('the proposed plan', () => {
   });
 
   it('has no dashed outline on the sheet at all', () => {
-    const sheet = sheetOf(styled(plan, PROPOSED), PROPOSED);
+    const sheet = sheetOf(styled(proposedPlan, PROPOSED), PROPOSED);
     assert.doesNotMatch(sheet.svg, /stroke-dasharray="3 1.5"/);
     assert.ok(dxfEntities(sheet.dxf).filter((e) => e.layer === 'CUT').every((e) => e.lineType === 'Continuous'));
     assert.match(sheet.svg, /stroke-width="0.7"/);

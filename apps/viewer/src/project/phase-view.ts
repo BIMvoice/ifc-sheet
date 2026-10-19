@@ -47,3 +47,14 @@ export function phaseMeshes<T extends Pick<MeshData, 'expressId'>>(meshes: reado
     return phase === null || phases.show.has(phase);
   });
 }
+
+/** Express ids of the meshes the view does not show: left out of the drawing's input, so a hidden phase occludes, hatches and symbolizes nothing. */
+export function phaseHiddenIds(meshes: readonly Pick<MeshData, 'expressId'>[] | undefined, phases: PhaseView | null): Set<number> | null {
+  if (!meshes || !phases) return null;
+  const hidden = new Set<number>();
+  for (const m of meshes) {
+    const phase = phases.phaseOf(m.expressId);
+    if (phase !== null && !phases.show.has(phase)) hidden.add(m.expressId);
+  }
+  return hidden.size ? hidden : null;
+}

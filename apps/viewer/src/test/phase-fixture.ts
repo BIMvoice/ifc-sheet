@@ -30,7 +30,8 @@ export interface PhaseModel {
   meshes: MeshData[];
   /** Plane position of a plan cut 1.2 m above the ground floor (viewer frame, Y up). */
   cutY: number;
-  draw: (kind: 'plan' | 'section' | 'elevation') => Promise<Drawing2D>;
+  /** `hidden`: express ids left out of the generator's input, as a view's phases do (`phaseHiddenIds`). */
+  draw: (kind: 'plan' | 'section' | 'elevation', hidden?: ReadonlySet<number> | null) => Promise<Drawing2D>;
 }
 
 let loaded: Promise<PhaseModel> | null = null;
@@ -46,7 +47,8 @@ export function loadPhaseModel(file = 'AC20-FZK-Haus-phases.ifc'): Promise<Phase
     wasm.initSync({ module: readFileSync(createRequire(import.meta.url).resolve('@ifc-lite/wasm/ifc-lite_bg.wasm')) });
     const processor = new GeometryProcessor();
     await processor.init();
-    const { meshes } = await processor.process(bytes);
+    // Type-library geometry (IfcSpaceType…) is no part of a model view, as the viewer's drawing hook also drops it.
+    const meshes = (await processor.process(bytes)).meshes.filter((m) => !/Type$/.test(m.ifcType ?? ''));
     const ground = meshes.find((m) => m.expressId === WALL.none)!;
     const ys = ground.positions.filter((_, i) => i % 3 === 1);
     const floor = Math.min(...ys) + (ground.origin?.[1] ?? 0);
@@ -67,7 +69,7 @@ export function loadPhaseModel(file = 'AC20-FZK-Haus-phases.ifc'): Promise<Phase
     };
     return {
       meshes, cutY,
-      draw: (kind) => generator.generate(meshes, config(kind), { useGPU: false, mergeLines: true, includeProjection: kind !== 'plan', includeEdges: kind !== 'plan', includeHiddenLines: false }),
+      draw: (kind, hidden) => generator.generate(hidden ? meshes.filter((m) => !hidden.has(m.expressId)) : meshes, config(kind), { useGPU: false, mergeLines: true, includeProjection: kind !== 'plan', includeEdges: kind !== 'plan', includeHiddenLines: false }),
     };
   })());
 }

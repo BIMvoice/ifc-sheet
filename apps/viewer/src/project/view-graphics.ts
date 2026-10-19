@@ -32,26 +32,16 @@ export interface PhaseView {
   phaseOf: (entityId: number) => PhaseId | null;
 }
 
-/** The drawing with the elements of the phases the view does not show left out, the others marked with their phase. */
+/** The drawing with each element's lines and cut faces marked with its phase (the other phases never reach it: `phaseHiddenIds` leaves them out of the generator's input). */
 function phased(drawing: StyledDrawing, phases: PhaseView): StyledDrawing {
-  const keep = (id: number): { phase?: PhaseId } | null => {
+  const mark = (id: number): { phase?: PhaseId } => {
     const phase = phases.phaseOf(id);
-    return phase === null ? {} : phases.show.has(phase) ? { phase } : null;
+    return phase === null ? {} : { phase };
   };
-  const droppedOuters = new Set<unknown>();
-  const cutPolygons = drawing.cutPolygons.flatMap((p) => {
-    const k = keep(p.entityId);
-    if (!k) droppedOuters.add(p.polygon.outer);
-    return k ? [{ ...p, ...k }] : [];
-  });
   return {
     ...drawing,
-    cutPolygons,
-    lines: drawing.lines.flatMap((l) => {
-      const k = keep(l.entityId);
-      return k ? [{ ...l, ...k }] : [];
-    }),
-    ...(drawing.materialHatches ? { materialHatches: drawing.materialHatches.filter((h) => !droppedOuters.has(h.loops[0])) } : {}),
+    cutPolygons: drawing.cutPolygons.map((p) => ({ ...p, ...mark(p.entityId) })),
+    lines: drawing.lines.map((l) => ({ ...l, ...mark(l.entityId) })),
   };
 }
 
@@ -143,7 +133,7 @@ export function styledDrawing(
   replaced?: (entityId: number, ifcType: string | undefined) => boolean,
   /** The cut by building materials (`material-drawing.ts`), computed on this same drawing. */
   materials?: MaterialDrawing | null,
-  /** A view that draws by phase (`phases.ts`): the other phases are left out and each element carries its phase. */
+  /** A view that draws by phase (`phases.ts`): each element's lines and cut faces carry its phase. */
   phases?: PhaseView | null,
 ): StyledDrawing {
   if (materials) {
