@@ -73,8 +73,10 @@ describe('project file', () => {
     assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-document', version: 1 })), /\/format/);
   });
 
-  it('rejects an unsupported version', () => {
-    assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-project', version: 2 })), /\/version 2 is not supported/);
+  it('rejects a version that is not a whole number from 1', () => {
+    for (const version of [0, -1, 1.5, '1', null]) {
+      assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-project', version })), /\/version must be a whole number/, String(version));
+    }
   });
 
   it('names the view that is malformed', () => {

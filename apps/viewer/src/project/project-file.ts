@@ -17,6 +17,9 @@ import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
+import { declaredVersion, migrateProject, PROJECT_FILE_VERSION } from './project-migrations';
+import { withoutModelState } from './autosave-snapshots';
+import { markProjectSaved } from './project-saved';
 import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
@@ -25,7 +28,7 @@ import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, Categ
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
-export const PROJECT_FILE_VERSION = 1;
+export { PROJECT_FILE_VERSION };
 
 export interface ProjectFile extends ProjectDocument {
   format: typeof PROJECT_FILE_FORMAT;
@@ -41,6 +44,15 @@ export function serializeProject(doc: ProjectDocument, now = new Date()): string
 export function exportProjectFile(doc: ProjectDocument): void {
   const stem = sanitizeFilename(doc.name, { fallback: 'project' });
   downloadFile(serializeProject(doc), `${stem}${PROJECT_FILE_SUFFIX}`, 'application/json');
+  noteProjectFile(doc);
+}
+
+/**
+ * Notes `doc` as what a project file holds now (`project-saved.ts`). The autosave is compared to it in the
+ * form a file is read back in, so it is noted in that form: the reader fills defaults a live project lacks.
+ */
+export function noteProjectFile(doc: ProjectDocument, now?: number, storage?: Parameters<typeof markProjectSaved>[2]): void {
+  markProjectSaved(parseProjectFile(serializeProject(withoutModelState(doc).slim)), now, storage);
 }
 
 const VIEW_KINDS: readonly ProjectViewKind[] = ['plan', 'section', 'elevation', '3d'];
@@ -120,14 +132,17 @@ function readModel(v: unknown, path: string): ProjectModelRef {
 
 /** Parse and validate a project file's text. Throws with the first problem found. */
 export function parseProjectFile(text: string): ProjectDocument {
-  let raw: unknown;
+  let parsed: unknown;
   try {
-    raw = JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch (err) {
     throw new Error(`Not a project file: invalid JSON (${err instanceof Error ? err.message : String(err)})`);
   }
-  if (!isObject(raw) || raw.format !== PROJECT_FILE_FORMAT) fail('/format', `must be "${PROJECT_FILE_FORMAT}"`);
-  if (raw.version !== PROJECT_FILE_VERSION) fail('/version', `${String(raw.version)} is not supported (expected ${PROJECT_FILE_VERSION})`);
+  if (!isObject(parsed) || parsed.format !== PROJECT_FILE_FORMAT) fail('/format', `must be "${PROJECT_FILE_FORMAT}"`);
+  const version = declaredVersion(parsed);
+  if (version === null) fail('/version', 'must be a whole number from 1');
+  // Older files are brought up to this build's shape first; a newer one throws here, before anything is read.
+  const raw = migrateProject(parsed, version);
   const list = (key: string): unknown[] => {
     const value = raw[key];
     if (value === undefined) return [];

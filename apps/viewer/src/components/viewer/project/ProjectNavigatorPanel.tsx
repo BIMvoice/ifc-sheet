@@ -30,6 +30,7 @@ import {
   renameProjectItem,
   useProjectStore,
 } from '@/project/project-store';
+import { projectOpenErrorText } from '@/project/open-error';
 import { exportProjectFile, importProjectFile, PROJECT_FILE_SUFFIX } from '@/project/project-file';
 import { activateDocumentTab, openProjectView, saveLiveCameraAsView, saveLiveSectionAsView } from '@/project/open-view';
 import { resolvePlanLevel } from '@/project/view-defaults';
@@ -153,7 +154,7 @@ export function ProjectNavigatorPanel() {
       loadProjectDocument(doc);
       toast.success(t('projectNavigator.imported', { name: doc.name }));
     } catch (err) {
-      toast.error(t('projectNavigator.error.import', { detail: err instanceof Error ? err.message : String(err) }));
+      toast.error(projectOpenErrorText(err, t));
     }
   };
 
