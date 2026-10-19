@@ -189,6 +189,8 @@ export interface ProjectSheet {
   viewports?: SheetViewport[];
   /** Title block fields this sheet says otherwise than the project's (`ProjectDocument.titleBlock`); a key present wins, even empty. */
   titleBlock?: Record<string, string>;
+  /** Revisions this sheet lists besides the ones its clouds name: a manual choice (`ProjectRevision.id`; `revisions.ts`). */
+  revisionIds?: string[];
 }
 
 /** The identity of a model a project refers to (content hash, else its name). */
@@ -282,6 +284,8 @@ export interface ProjectDocument {
   sheets: ProjectSheet[];
   /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
   titleBlock?: Record<string, string>;
+  /** The project's revisions, oldest first (`revisions.ts`); a sheet's table lists the ones it is named by. */
+  revisions?: ProjectRevision[];
   /** Drafted geometry, each entity on one view (phase 4). */
   drafts: DraftEntity[];
   draftLayers: DraftLayer[];
@@ -326,6 +330,17 @@ export interface ProjectDocument {
   issues?: ProjectIssue[];
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
+}
+
+/** One revision of the set: a letter or number, when, what changed, who made it. */
+export interface ProjectRevision {
+  id: string;
+  /** `A`, `B`, `01`: what the title block reads. */
+  code: string;
+  /** `YYYY-MM-DD`, or empty. */
+  date: string;
+  description: string;
+  by: string;
 }
 
 /** One sheet as it stood when a set was issued. */

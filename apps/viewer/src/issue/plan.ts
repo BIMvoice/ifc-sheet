@@ -9,8 +9,9 @@
  */
 
 import type { TranslationKey } from '@/i18n';
-import type { IssuedSheet, ProjectIssue, ProjectSheet } from '@/project/types';
-import { titleBlockOf } from '@/project/title-block';
+import type { DraftEntity } from '@/drafting/types';
+import type { IssuedSheet, ProjectIssue, ProjectRevision, ProjectSheet } from '@/project/types';
+import { currentRevisionOf } from '@/project/revisions';
 import { sheetFingerprint, type FingerprintSources } from './fingerprint';
 
 export interface IssueReason {
@@ -49,8 +50,8 @@ export function sheetIsEmpty(sheet: ProjectSheet, sources: FingerprintSources): 
   return (sheet.viewports ?? []).length === 0 && !sources.drafts.some((d) => d.viewId === sheet.id);
 }
 
-/** `projectTitleBlock` is the project's title block (`ProjectDocument.titleBlock`): a sheet's revision is its own, else the project's. */
-export function planIssue(sheets: readonly ProjectSheet[], sources: FingerprintSources, input: IssueInput, projectTitleBlock?: Record<string, string>): IssuePlan {
+/** `revisions` are the project's records: a sheet's revision is the latest it has (`currentRevisionOf`), as its title block reads. */
+export function planIssue(sheets: readonly ProjectSheet[], sources: FingerprintSources, input: IssueInput, revisions?: readonly ProjectRevision[]): IssuePlan {
   const out: IssuePlan = { ...input, sheets: [], leftOut: [] };
   for (const sheet of [...sheets].sort(bySheetNumber)) {
     if (sheetIsEmpty(sheet, sources)) {
@@ -61,7 +62,7 @@ export function planIssue(sheets: readonly ProjectSheet[], sources: FingerprintS
       sheet,
       row: {
         number: sheet.number, title: sheet.name, scale: scaleText(sheet), paper: sheet.paper ?? 'A1', orientation: sheet.orientation ?? 'landscape',
-        revision: titleBlockOf(sheet, projectTitleBlock, '').revision ?? '', fingerprint: sheetFingerprint(sheet, sources),
+        revision: currentRevisionOf(sheet, { revisions, drafts: sources.drafts as DraftEntity[] })?.code ?? '', fingerprint: sheetFingerprint(sheet, sources),
       },
     });
   }

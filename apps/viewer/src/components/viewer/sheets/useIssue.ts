@@ -12,7 +12,7 @@ export interface IssueState {
   busy: boolean;
   /** What was said, in words. */
   lines: string[];
-  issue: (format: IssueFormat, options: { name: string; listFirst: boolean }) => Promise<void>;
+  issue: (format: IssueFormat, options: { name: string; listFirst: boolean; currentCloudsOnly?: boolean }) => Promise<void>;
 }
 
 export function useIssue(): IssueState {

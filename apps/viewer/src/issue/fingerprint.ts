@@ -12,13 +12,16 @@
  */
 
 import type { DraftEntity } from '@/drafting/types';
-import type { ProjectSheet } from '@/project/types';
+import { sheetRevisions } from '@/project/revisions';
+import type { ProjectRevision, ProjectSheet } from '@/project/types';
 
 /** What a sheet's content is looked up in. */
 export interface FingerprintSources {
   /** Views, schedules, legends and road drawings: anything a viewport's `viewId` can name. */
   documents: readonly { id: string; createdAt?: unknown }[];
   drafts: readonly DraftEntity[];
+  /** The project's revisions: what the sheet's table and title block print comes from them. */
+  revisions?: readonly ProjectRevision[];
 }
 
 /** JSON with object keys in order, so equal values give equal text. */
@@ -49,5 +52,7 @@ export function sheetFingerprint(sheet: ProjectSheet, sources: FingerprintSource
   const drafts = sources.drafts.filter((d) => ids.has(d.viewId)).sort((a, b) => a.id.localeCompare(b.id));
   // When a sheet was made is not what it holds.
   const { createdAt: _created, ...held } = sheet;
-  return cyrb53(canonicalJson({ sheet: held, documents, drafts }));
+  // A sheet in a project with no revisions hashes as it always did.
+  const revisions = sheetRevisions(sheet, { revisions: sources.revisions, drafts: sources.drafts as DraftEntity[] });
+  return cyrb53(canonicalJson({ sheet: held, documents, drafts, ...(revisions.length > 0 ? { revisions } : {}) }));
 }

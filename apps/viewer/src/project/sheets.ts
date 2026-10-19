@@ -122,3 +122,18 @@ export function fitViewportBox(bounds: { min: { x: number; y: number }; max: { x
     height: Math.max(30, (bounds.max.y - bounds.min.y) * k + margin * 2),
   };
 }
+
+/** Add `revisionId` to the revisions a sheet lists by choice (it lists the ones its clouds name regardless). */
+export function addSheetRevision(sheetId: string, revisionId: string): void {
+  patchSheet(sheetId, (s) => ((s.revisionIds ?? []).includes(revisionId) ? s : { ...s, revisionIds: [...(s.revisionIds ?? []), revisionId] }));
+}
+
+/** Take `revisionId` off the revisions chosen for a sheet; a cloud of it on the sheet still names it. */
+export function removeSheetRevision(sheetId: string, revisionId: string): void {
+  patchSheet(sheetId, (s) => {
+    if (!(s.revisionIds ?? []).includes(revisionId)) return s;
+    const { revisionIds: _all, ...rest } = s;
+    const left = (s.revisionIds ?? []).filter((id) => id !== revisionId);
+    return left.length > 0 ? { ...rest, revisionIds: left } : rest;
+  });
+}

@@ -29,6 +29,7 @@ import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
 import { SheetCanvas } from './SheetCanvas';
+import { RevisionsCard } from './RevisionsCard';
 import { TitleBlockCard } from './TitleBlockForm';
 import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
@@ -59,6 +60,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
+  const [revising, setRevising] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
@@ -98,6 +100,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       if (adding) setAdding(false);
       else if (titling) setTitling(false);
+      else if (revising) setRevising(false);
       else if (focusId) {
         setFocusId(null);
         setTool(null);
@@ -106,7 +109,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onBack, focusId, chosen, adding, titling]);
+  }, [onBack, focusId, chosen, adding, titling, revising]);
 
   const startTool = (command: string): void => {
     cancelStart.current();
@@ -142,7 +145,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   // Choosing a drawing brings its card back in place of the title block's.
   const choose = useCallback((viewportId: string | null): void => {
     setChosen(viewportId);
-    if (viewportId) setTitling(false);
+    if (viewportId) { setTitling(false); setRevising(false); }
   }, []);
   const open = useCallback((vp: SheetViewport): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
@@ -166,7 +169,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
         {!focusView ? (
           <>
-            <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setRevising(false); setTitling((x) => !x); }}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={revising} onClick={() => { setTitling(false); setRevising((x) => !x); }}>{t('revision.title')}</button>
             <button type="button" className={issue} onClick={() => setFitKey((k) => k + 1)}>{t('wall.fit')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && printSheet(paperRef.current, sheet)}>{t('wall.export.pdf')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
@@ -189,6 +193,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
               : focusView ? null
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
+                  : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
                   : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
           </div>
           {adding ? (

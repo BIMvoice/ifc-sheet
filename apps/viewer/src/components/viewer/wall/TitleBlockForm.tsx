@@ -22,7 +22,6 @@ const LABELS: Record<TitleBlockField, TranslationKey> = {
   drawnBy: 'sheets.tb.drawnBy',
   checkedBy: 'sheets.tb.checkedBy',
   date: 'sheets.tb.date',
-  revision: 'sheets.tb.revision',
 };
 
 const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-sm text-white';
@@ -110,7 +109,7 @@ export function TitleBlockForm({ sheet }: { sheet?: ProjectSheet }) {
           </label>
         );
       })}
-      {sheet ? null : <Logo />}
+      {sheet ? <p className="m-0 mt-3 text-xs text-sky-300/80">{t('revision.tbDerived')}</p> : <Logo />}
     </div>
   );
 }

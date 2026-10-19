@@ -29,6 +29,8 @@ export interface IssueOptions {
   name?: string;
   date?: string;
   listFirst?: boolean;
+  /** Draw only the clouds of each sheet's current revision; those of older revisions are left off the paper. */
+  currentCloudsOnly?: boolean;
 }
 
 export interface IssueResult {
@@ -51,7 +53,7 @@ export function listLabels(): ListLabels {
 }
 
 function sources(project: ProjectDocument) {
-  return { documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])], drafts: project.drafts };
+  return { documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])], drafts: project.drafts, revisions: project.revisions };
 }
 
 /** The plan for the project as it stands (nothing is drawn or recorded). */
@@ -61,7 +63,7 @@ export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst
     name: options.name?.trim() || nextIssueName(project.issues ?? []),
     date: options.date ?? new Date().toISOString().slice(0, 10),
     listFirst: options.listFirst ?? true,
-  }, project.titleBlock);
+  }, project.revisions);
 }
 
 /** Draw the sheets, build the files and record the issue. Nothing is recorded when a sheet could not be drawn. */
@@ -73,7 +75,7 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   const missing = currentFindings().length;
   if (missing > 0) lines.unshift({ key: 'check.msg.unfinished', params: { count: missing } });
   if (plan.sheets.length === 0) return { plan, html: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.nothing', params: {} }] };
-  const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf' });
+  const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf', currentCloudsOnly: options.currentCloudsOnly });
   if (failed.length > 0) return { plan, html: null, csv, zip: null, lines: [...lines, ...failed.map((f) => failureLine(f)), { key: 'issue.msg.notIssued', params: {} }] };
   const project = useProjectStore.getState();
   let html: string | null = null;

@@ -108,6 +108,7 @@ import { draftingEn } from './catalogues/drafting.en';
 import { sheetsEn } from './catalogues/sheets.en';
 import { draftSetEn } from './catalogues/draft-set.en';
 import { issueEn } from './catalogues/issue.en';
+import { revisionsEn } from './catalogues/revisions.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
 import { checkEn } from './catalogues/check.en';
 import { newProjectEn } from './catalogues/new-project.en';
@@ -184,6 +185,7 @@ export const en = {
   ...sheetsEn,
   ...draftSetEn,
   ...issueEn,
+  ...revisionsEn,
   ...annotateAllEn,
   ...checkEn,
   ...newProjectEn,

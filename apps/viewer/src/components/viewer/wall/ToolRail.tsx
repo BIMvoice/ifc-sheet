@@ -11,14 +11,14 @@
 import { useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
-import { Circle, PaintBucket, Slash, Spline, Type } from 'lucide-react';
+import { Circle, Cloud, PaintBucket, Slash, Spline, Type } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProjectView } from '@/project/types';
 import { DRAW_TOOLS, WALL_ALL, WALL_TOOLS } from './wall-actions';
 
 const DRAW_ICONS: Record<string, ReactNode> = {
   line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, circle: <Circle className="size-5" />,
-  text: <Type className="size-5" />, hatch: <PaintBucket className="size-5" />,
+  text: <Type className="size-5" />, hatch: <PaintBucket className="size-5" />, revcloud: <Cloud className="size-5" />,
 };
 
 interface ToolRailProps {
