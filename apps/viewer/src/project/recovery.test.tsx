@@ -235,7 +235,12 @@ describe('what the autosave watches', () => {
   });
 
   it('is the same list the saved document is built from', () => {
-    assert.deepEqual(Object.keys(projectDocument()).sort(), PROJECT_DOCUMENT_KEYS.filter((k) => k !== 'modelState').sort());
+    // Fields that exist only once set (a PR's optional additions): absent from a fresh project's document, present once the store holds them.
+    const OPTIONAL = new Set<string>(['modelState', 'siteArea', 'tagFields', 'titleBlockSources', 'sheetNumbering', 'phaseSource']);
+    const cleared = Object.fromEntries([...OPTIONAL].map((k) => [k, undefined]));
+    assert.deepEqual(Object.keys(projectDocument({ ...useProjectStore.getState(), ...cleared })).sort(), PROJECT_DOCUMENT_KEYS.filter((k) => !OPTIONAL.has(k)).sort());
+    const set = Object.fromEntries([...OPTIONAL].map((k) => [k, k === 'siteArea' ? 1 : {}]));
+    assert.deepEqual(Object.keys(projectDocument({ ...useProjectStore.getState(), ...set })).sort(), [...PROJECT_DOCUMENT_KEYS].sort());
     assert.ok(Object.keys(projectDocument({ ...useProjectStore.getState(), modelState: undefined })).length > 20);
   });
 });

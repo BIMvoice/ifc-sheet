@@ -6,7 +6,7 @@ import type { TitleSource } from './title-block-sources';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
-import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
+import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
@@ -22,9 +22,12 @@ import type { DisciplineId } from './discipline-views';
  * file kept next to the IFC files (`project-file.ts`).
  */
 
-import type { CameraViewpoint, SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
+import type { CameraViewpoint, SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './document-parts';
+
+export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './document-parts';
 
 export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d';
 
@@ -278,72 +281,6 @@ export interface ProjectSchedule {
   scale?: number;
 }
 
-/** A road drawing (longitudinal profile or cross-section set) of a corridor: a project document of its own, placeable on sheets or drawn on a plan. */
-export interface ProjectCivilDrawing {
-  id: string;
-  name: string;
-  kind: 'profile' | 'sections';
-  createdAt: number;
-  /** The corridor it draws, by GlobalId (in whichever loaded model has it). */
-  corridorGlobalId: string;
-  /** Drawing scale denominator (profile: horizontal). */
-  scale: number;
-  /** Profile: vertical exaggeration, grid steps. */
-  vExaggeration?: number;
-  stationStep?: number;
-  elevationStep?: number;
-  /** Sections: sample spacing or explicit stations, layout columns, half width shown (0: automatic). */
-  every?: number;
-  stations?: number[];
-  columns?: number;
-  halfWidth?: number;
-}
-
-/**
- * How a building material draws where a view cuts it (ArchiCAD's Building
- * Materials): matched by IfcMaterial name. `hatch` null draws no hatch,
- * absent takes the default its name suggests; a membrane (or any layer under
- * 2 mm) draws as a heavy dashed line instead of a band.
- */
-export interface ProjectMaterial {
-  id: string;
-  name: string;
-  hatch?: string | null;
-  /** 1 = the pattern's own size. */
-  hatchScale?: number;
-  /** Cut fill colour; null: none (white), absent: the material's IFC colour. */
-  fill?: string | null;
-  /** Pen of the hatch lines. */
-  hatchPen?: CategoryLineWeight;
-  membrane?: boolean;
-}
-
-/** The subset of a section plane that defines the cut itself, not its on-screen lifecycle. */
-export interface SavedSectionCutPlane {
-  axis: SectionPlaneAxis;
-  position: number;
-  flipped: boolean;
-  custom?: SectionPlane['custom'];
-  capStyle: SectionCapStyle;
-  showCap: boolean;
-  showOutlines: boolean;
-}
-
-/** A named section cut kept in the project, to put back on screen later. */
-export interface SavedSectionCut {
-  id: string;
-  name: string;
-  plane: SavedSectionCutPlane;
-  createdAt: number;
-  updatedAt: number;
-}
-
-/** A typical road cross-section (assembly) kept in the project's library. */
-export interface ProjectTypicalSection {
-  id: string;
-  name: string;
-  assembly: AssemblySpec;
-}
 
 export interface ProjectDocument {
   name: string;

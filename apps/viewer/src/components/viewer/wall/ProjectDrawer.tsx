@@ -158,7 +158,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <div className="mt-2 text-xs leading-relaxed"><ReadinessList skin={WALL_SKIN} /></div>
         </details>
         <details className="border-t border-sky-300/10 px-4 py-3">
-          <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.num.title')}</summary>
+          <summary className="cursor-pointer text-xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.num.title')}</summary>
           <SheetNumberingForm />
         </details>
         <details className="border-t border-sky-300/10 px-4 py-3">
