@@ -8,10 +8,11 @@
  */
 
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
+import { DEFAULT_GRAPHIC_STANDARD, graphicStandardOf } from '@/drafting/graphic-standard';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { commitStandards } from '@/project/drafting-standards';
 import { useProjectStore, type ProjectState } from '@/project/project-store';
-import { CATALOGUE_FILE_SUFFIX, parseCatalogue, selectKinds, serializeCatalogue, type Catalogue, type CatalogueKind } from './catalogue-file';
+import { CATALOGUE_FILE_SUFFIX, emptyCatalogue, parseCatalogue, selectKinds, serializeCatalogue, type Catalogue, type CatalogueKind } from './catalogue-file';
 import { mergeCatalogues, type ClashPolicy, type MergeReport } from './catalogue-merge';
 
 /** The reusable definitions the project holds right now. */
@@ -38,6 +39,18 @@ export function exportCatalogue(kinds: ReadonlySet<CatalogueKind>, name = usePro
   downloadFile(text, catalogueFileName(name), 'application/json');
 }
 
+/** A built-in graphic standard as a library: its text and dimension styles, and the standard itself (pens and sizes). */
+export function builtInLibrary(id: string): { name: string; catalogue: Catalogue } {
+  const standard = graphicStandardOf(id);
+  return { name: standard.name, catalogue: { ...emptyCatalogue(), textStyles: [...standard.textStyles], dimStyles: [...standard.dimStyles], graphicStandard: standard.id } };
+}
+
+/** Save a built-in graphic standard as a `.bvlib` file. */
+export function exportBuiltInLibrary(id: string): void {
+  const { name, catalogue } = builtInLibrary(id);
+  downloadFile(serializeCatalogue(catalogue, name), catalogueFileName(name), 'application/json');
+}
+
 /** The file a library exported as `name` is saved under: `<name>.bvlib`. */
 export const catalogueFileName = (name: string): string => `${sanitizeFilename(name, { fallback: 'catalogue' })}${CATALOGUE_FILE_SUFFIX}`;
 
@@ -50,6 +63,10 @@ export function previewCatalogueImport(incoming: Catalogue, policy: ClashPolicy)
 export function applyCatalogueImport(incoming: Catalogue, policy: ClashPolicy): MergeReport {
   const { catalogue: merged, report } = mergeCatalogues(projectCatalogue(), incoming, policy);
   applyCatalogue(merged);
+  // The pens of a graphic standard follow the clash policy like any definition: "keep mine" keeps a standard the project already chose.
+  if (incoming.graphicStandard && (policy !== 'mine' || !useProjectStore.getState().graphicStandard)) {
+    useProjectStore.setState({ graphicStandard: incoming.graphicStandard === DEFAULT_GRAPHIC_STANDARD.id ? undefined : incoming.graphicStandard, dirty: true });
+  }
   return report;
 }
 

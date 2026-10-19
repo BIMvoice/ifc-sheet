@@ -30,6 +30,7 @@ import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { useSheetSchedules } from '../joinery/ScheduleGraphic';
 import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
 import { useSheetLegends } from '../legend/LegendGraphic';
+import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import type { ViewportContent } from './SheetPaper';
 
 export interface SheetContent {
@@ -44,6 +45,7 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const byView = useViewDrawings((s) => s.byView);
   // Each placed view as its own graphics style it: styled drawing and (plans) door / window symbols and roofs.
   const flips = useProjectStore((s) => s.symbolFlips);
+  const standard = useGraphicStandard();
   // Door and window symbols follow the catalogue and the symbol mapping.
   const joineryTypes = useProjectStore((s) => s.joineryTypes);
   const joineryMapping = useProjectStore((s) => s.joineryMapping);
@@ -57,11 +59,11 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
       const view = views.find((v) => v.id === vp.viewId);
       const raw = (byView[vp.viewId] ?? EMPTY_VIEW_DRAWING).drawing;
       const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, view?.kind === 'plan' ? drawnBySymbol : undefined, viewMaterials(raw)) : null;
-      const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, geometryResult?.meshes, flips, hiddenClasses(view.graphics), raw) : []), ...membraneOverlays(drawing)];
+      const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, geometryResult?.meshes, flips, hiddenClasses(view.graphics), raw, standard.pens) : []), ...membraneOverlays(drawing)];
       out.set(vp.viewId, { drawing, overlays });
     }
     return out;
-  }, [sheet.viewports, views, byView, geometryResult, flips, mutationVersion, materialsTable, joineryTypes, joineryMapping]);
+  }, [sheet.viewports, views, byView, geometryResult, flips, mutationVersion, materialsTable, joineryTypes, joineryMapping, standard]);
   const placedSchedules = useSheetSchedules(sheet);
   const placedCivil = useSheetCivilDrawings(sheet);
   // A mark prints the number its reference reads now, not the one cached when the view was last open.

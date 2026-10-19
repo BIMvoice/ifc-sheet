@@ -29,6 +29,7 @@ import { layerTags, penTags } from '../sheets/dxf-tags';
 import { shapePath } from './DraftOverlay';
 import { AnnotationGraphics } from './AnnotationGraphics';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
+import { graphicStandardOf } from '@/drafting/graphic-standard';
 import { useProjectStore } from '@/project/project-store';
 
 /** Drawing metres → DXF millimetres. */
@@ -46,8 +47,8 @@ interface ViewDxfInput {
 }
 
 function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays }: ViewDxfInput) {
-  const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns) : [];
   const s = useProjectStore.getState();
+  const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns, graphicStandardOf(s.graphicStandard)) : [];
   const book = { textStyles: s.textStyles ?? [], dimStyles: s.dimStyles ?? [] };
   const colour = new Map(layers.map((l) => [l.id, layerShows(l, s.layerGroups ?? [], { view: view.hiddenLayers }) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));

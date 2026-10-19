@@ -13,6 +13,7 @@
 
 import { readDraftLayer } from '@/drafting/draft-file';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
+import { GRAPHIC_STANDARDS } from '@/drafting/graphic-standard';
 import type { DraftLayer } from '@/drafting/types';
 import { readMaterial } from '@/project/project-file';
 import { readStandards } from '@/project/standards-file';
@@ -40,6 +41,8 @@ export interface Catalogue {
   symbols: DraftSymbol[];
   /** Legend configurations; a legend's `scopeId` is project-specific and never travels. */
   legends: ProjectLegend[];
+  /** A built-in graphic standard (pens and text sizes) the library ships with, by id (`drafting/graphic-standard.ts`). Only built-in library entries carry one. */
+  graphicStandard?: string;
 }
 
 export interface CatalogueFile extends Catalogue {
@@ -114,8 +117,14 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       annotationTypes: readList(file, 'annotationTypes', (v, p) => readAnnotationType(v, p, WHAT), WHAT),
       symbols: readList(file, 'symbols', (v, p) => readSymbol(v, p, WHAT), WHAT),
       legends: readList(file, 'legends', (v, p) => readLegend(v, p, WHAT), WHAT),
+      ...(file.graphicStandard === undefined ? {} : { graphicStandard: knownStandard(file.graphicStandard) }),
     },
   };
+}
+
+function knownStandard(v: unknown): string {
+  const known = GRAPHIC_STANDARDS.find((g) => g.id === v);
+  return known ? known.id : fail('/graphicStandard', `must be one of ${GRAPHIC_STANDARDS.map((g) => g.id).join(', ')}`, WHAT);
 }
 
 function readMaterialStrict(v: unknown, path: string): ProjectMaterial {

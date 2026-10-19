@@ -110,6 +110,7 @@ import { exportViewDxf } from './view-dxf';
 import { drawnBySymbol } from '@/project/view-symbols';
 
 import { planOverlays } from '@/project/plan-overlays';
+import { graphicStandardOf } from '@/drafting/graphic-standard';
 
 import { viewMaterials } from '@/project/material-resolver';
 
@@ -251,7 +252,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
 
   const exportDxf = () => exportViewDxf({
     view, drawing: shown, axis, drafts: entities, layers, extraPatterns,
-    overlays: [...(plane ? planOverlays(view, plane, runtimeGeometry?.meshes, useProjectStore.getState().symbolFlips, hidden, shown) : []), ...membraneOverlays(shown)],
+    overlays: [...(plane ? planOverlays(view, plane, runtimeGeometry?.meshes, useProjectStore.getState().symbolFlips, hidden, shown, graphicStandardOf(useProjectStore.getState().graphicStandard).pens) : []), ...membraneOverlays(shown)],
   });
 
   const command = runningCommand();
