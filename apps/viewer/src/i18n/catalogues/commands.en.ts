@@ -19,6 +19,7 @@ export const commandsEn = {
   'commands.category.visibility': 'Visibility',
   'commands.category.camera': 'Camera',
   'commands.category.search': 'Search',
+  'commands.category.wall': 'The Wall',
   'commands.category.ui': 'UI',
   'commands.category.help': 'Help',
 
@@ -119,6 +120,8 @@ export const commandsEn = {
   'commands.chat.close': 'Close chat when the input is empty',
 
   // Help
+  'commands.wall.prevSheet': 'Previous sheet',
+  'commands.wall.nextSheet': 'Next sheet',
   'commands.help.shortcuts': 'Show keyboard shortcuts',
 
   // Pointer gestures
