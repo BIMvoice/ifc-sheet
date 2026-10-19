@@ -13,7 +13,8 @@ import { cleanup, render } from '@/test/render.js';
 import { RecoveryOffer } from '@/components/viewer/wall/RecoveryOffer';
 import { watchProjectForAutosave } from './autosave-watch.js';
 import assert from 'node:assert/strict';
-import { addProjectSheet, loadProjectDocument, projectDocument, resetProject, useProjectStore } from './project-store.js';
+import { snapshotFromElements } from '@/whatchanged/snapshot.js';
+import { addProjectSheet, loadProjectDocument, PROJECT_DOCUMENT_KEYS, projectDocument, resetProject, useProjectStore } from './project-store.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { noteProjectFile, parseProjectFile } from './project-file.js';
@@ -197,5 +198,34 @@ describe('an offer left open while the user works', () => {
     addProjectSheet('Drawn');
     await wait();
     assert.deepEqual(written, [KEY]);
+  });
+});
+
+describe('what the autosave watches', () => {
+  const written: string[] = [];
+  let stop = () => {};
+  beforeEach(() => {
+    resetProject();
+    discardRecovery();
+    written.length = 0;
+    stop = watchProjectForAutosave(() => KEY, (key) => written.push(key), 5);
+  });
+  afterEach(() => stop());
+
+  it('is every field the project file saves: changing any one of them alone is autosaved', async () => {
+    for (const key of PROJECT_DOCUMENT_KEYS) {
+      written.length = 0;
+      const old: unknown = useProjectStore.getState()[key];
+      const next = key === 'modelState' ? snapshotFromElements([{ k: 'G1'.padEnd(22, 'x'), t: 'IfcWall', n: 'W', d: 'abcdef0123', g: 'a1b2c3d4e', a: [0, 0, 0, 1, 1, 1] }], 1)
+        : typeof old === 'string' ? `${old}x` : Array.isArray(old) ? [...old] : { ...(old as object | undefined) };
+      useProjectStore.setState({ [key]: next });
+      await new Promise((r) => setTimeout(r, 25));
+      assert.deepEqual(written, [KEY], `a change to ${key} alone`);
+    }
+  });
+
+  it('is the same list the saved document is built from', () => {
+    assert.deepEqual(Object.keys(projectDocument()).sort(), PROJECT_DOCUMENT_KEYS.filter((k) => k !== 'modelState').sort());
+    assert.ok(Object.keys(projectDocument({ ...useProjectStore.getState(), modelState: undefined })).length > 20);
   });
 });

@@ -11,7 +11,7 @@
 
 import { create } from 'zustand';
 import { readModelState } from './autosave-snapshots';
-import { loadProjectDocument, useProjectStore } from './project-store';
+import { loadProjectDocument, PROJECT_DOCUMENT_KEYS, useProjectStore } from './project-store';
 import type { ProjectDocument } from './types';
 
 export interface RecoveryOffer {
@@ -73,6 +73,5 @@ export function startSetUnderOffer(start: () => boolean): boolean {
 // ahead of the autosave watcher, so the change that ends the offer is the first one written.
 useProjectStore.subscribe((state, prev) => {
   if (systemDepth > 0 || !useRecoveryStore.getState().offer) return;
-  if (state.views !== prev.views || state.sheets !== prev.sheets || state.name !== prev.name || state.drafts !== prev.drafts
-    || state.draftLayers !== prev.draftLayers || state.hatchPatterns !== prev.hatchPatterns) discardRecovery();
+  if (PROJECT_DOCUMENT_KEYS.some((k) => k !== 'modelState' && state[k] !== prev[k])) discardRecovery();
 });

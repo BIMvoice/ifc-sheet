@@ -10,7 +10,7 @@
  */
 
 import { writeAutosave } from './recovery';
-import { projectDocument, useProjectStore } from './project-store';
+import { PROJECT_DOCUMENT_KEYS, projectDocument, useProjectStore } from './project-store';
 import { recoveryOpenFor } from './recovery-store';
 
 export const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -20,8 +20,7 @@ export function watchProjectForAutosave(slot: () => string | null, write: (key: 
   let timer: ReturnType<typeof setTimeout> | undefined;
   const unsubscribe = useProjectStore.subscribe((state, prev) => {
     const key = slot();
-    if (!key || recoveryOpenFor(key) || (state.views === prev.views && state.sheets === prev.sheets && state.name === prev.name
-      && state.drafts === prev.drafts && state.draftLayers === prev.draftLayers && state.hatchPatterns === prev.hatchPatterns && state.modelState === prev.modelState)) return;
+    if (!key || recoveryOpenFor(key) || PROJECT_DOCUMENT_KEYS.every((k) => state[k] === prev[k])) return;
     clearTimeout(timer);
     timer = setTimeout(() => write(key), debounceMs);
   });
