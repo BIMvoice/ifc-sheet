@@ -12,9 +12,12 @@
  *            title, producer, creation date that agrees with the document
  *            information), a file identifier, an sRGB output intent with its
  *            ICC profile embedded.
- *   not written (jsPDF cannot, or this has not been done): embedded fonts
- *            (text uses the 14 standard fonts, which PDF/A forbids leaving
- *            unembedded), /ModDate in the document information, a validated
+ *            The text font (Inter) is embedded in full (`pdf-fonts.ts`), so no
+ *            font is left unembedded; whether jsPDF's font dictionaries meet
+ *            every PDF/A font rule has not been checked.
+ *   not written (jsPDF cannot, or this has not been done): /ModDate in the
+ *            document information, accented text in the Info dictionary
+ *            (folded to ASCII there; the XMP keeps it exact), a validated
  *            ICC profile (the profile below is generated from the sRGB
  *            primaries and transfer curve, not taken from the ICC's file).
  */

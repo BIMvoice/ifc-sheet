@@ -16,8 +16,9 @@ import { paperOf } from '@/project/sheets';
 import type { IssuePlan } from './plan';
 import type { ListLabels } from './output';
 import { archival } from './pdf-archival';
+import { embedFonts, FONT_FAMILY, useEmbeddedFont, type FontLoader } from './pdf-fonts';
 import { layerRuns, type LayerGroup, type LayerRef } from './pdf-layers';
-import { optionalContent, type LayerName, type OptionalContent } from './pdf-ocg';
+import { optionalContent, pdfText, type LayerName, type OptionalContent } from './pdf-ocg';
 
 export interface PdfLabels extends ListLabels {
   /** Headings of the layers panel. */
@@ -33,6 +34,8 @@ export interface PdfOptions {
   archival?: boolean;
   /** The creation date; now when omitted. */
   created?: Date;
+  /** How the embedded font files are read (the browser fetches them from `public/fonts/`). */
+  loadFont?: FontLoader;
 }
 
 const LIST_ROW_MM = 7;
@@ -46,14 +49,14 @@ function listPage(doc: jsPDF, plan: IssuePlan, projectName: string, labels: PdfL
   const head = [labels.sheet, labels.sheetTitle, labels.scale, labels.paper, labels.revision];
   const cols = [20, 60, 25, 35, 30];
   const rows = plan.sheets.map(({ row }) => [row.number, row.title, row.scale, `${row.paper} ${row.orientation}`, row.revision]);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT_FAMILY, 'bold');
   doc.setFontSize(18);
   doc.text(labels.title, 20, 28);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(FONT_FAMILY, 'normal');
   doc.setFontSize(11);
   doc.text([projectName, `${labels.issue}: ${plan.name}`, `${labels.date}: ${plan.date}`], 20, 38);
   const draw = (cells: string[], y: number, bold: boolean) => {
-    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFont(FONT_FAMILY, bold ? 'bold' : 'normal');
     doc.setFontSize(10);
     let x = 20;
     cells.forEach((c, i) => {
@@ -92,6 +95,7 @@ async function sheetPage(doc: jsPDF, oc: OptionalContent, svgText: string, w: nu
   const parsed = new DOMParser().parseFromString(svgText, 'image/svg+xml');
   if (parsed.querySelector('parsererror')) throw new Error('The sheet drawing did not parse as SVG.');
   const root = parsed.documentElement as unknown as SVGSVGElement;
+  useEmbeddedFont(root);
   for (const run of layerRuns(root)) await oc.inLayer(layerName(run.layer, labels), () => drawRun(doc, run.svg, w, h));
 }
 
@@ -103,7 +107,12 @@ export async function buildIssuePdf(plan: IssuePlan, svgs: ReadonlyMap<string, s
   const first = plan.listFirst || sheets.length === 0 ? { w: 210, h: 297 } : paperOf(sheets[0].sheet);
   const created = options.created ?? new Date();
   const doc = new jsPDF({ unit: 'mm', format: [first.w, first.h], orientation: first.w > first.h ? 'landscape' : 'portrait', compress: true });
-  doc.setProperties({ title: `${projectName} ${plan.name}`.trim(), subject: `${labels.issue}: ${plan.name} (${plan.date})`, creator: 'IfcSheet' });
+  await embedFonts(doc, options.loadFont);
+  // The outline's titles are PDF text strings: UTF-16 when they are not plain ASCII (jsPDF writes them as Latin-1).
+  (doc.outline as unknown as { makeString(v: string): string }).makeString = pdfText;
+  // The document information is written by jsPDF as Latin-1 too: accents are folded there (the archival XMP keeps the exact text).
+  const fold = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7e]/g, '?');
+  doc.setProperties({ title: fold(`${projectName} ${plan.name}`.trim()), subject: fold(`${labels.issue}: ${plan.name} (${plan.date})`), creator: 'IfcSheet' });
   if (options.archival) archival(doc, jsPDF.version, `${projectName} ${plan.name}`.trim(), created);
   else doc.setCreationDate(created);
   doc.setDisplayMode('fullwidth', 'continuous', 'UseOutlines');

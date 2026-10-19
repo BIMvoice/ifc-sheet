@@ -10,6 +10,7 @@
 import '@/test/setup-dom.js';
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import * as jspdf from 'jspdf';
 import { addProjectView, resetProject, useProjectStore } from '@/project/project-store';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
@@ -34,11 +35,18 @@ function reference(): string {
   return view;
 }
 
-async function issued(options: { archival?: boolean } = {}) {
+/** The fonts as the browser fetches them from `public/`. */
+const loadFont = async (url: string) => new Uint8Array(readFileSync(new URL(`../../public${url}`, import.meta.url)));
+
+async function issued(options: { archival?: boolean; romanian?: boolean } = {}) {
   const view = reference();
+  if (options.romanian) {
+    useProjectStore.setState({ titleBlock: { drawnBy: 'Proiectant: Ștefan Țepeș' } });
+    useProjectStore.setState({ views: useProjectStore.getState().views.map((v) => ({ ...v, name: 'Cameră înaltă â' })) });
+  }
   const sheets = [
     sheet('s2', 'A-102', 'Second floor plan', [vp('p3', view, 100, 100)]),
-    sheet('s1', 'A-101', 'Ground floor plan', [vp('p1', view, 50, 100), vp('p2', view, 100, 200)]),
+    sheet('s1', 'A-101', options.romanian ? 'Secțiune longitudinală' : 'Ground floor plan', [vp('p1', view, 50, 100), vp('p2', view, 100, 200)]),
   ];
   useProjectStore.setState({ sheets });
   const plan = planFor({ name: 'P01', date: '2026-10-19', listFirst: true });
@@ -48,7 +56,7 @@ async function issued(options: { archival?: boolean } = {}) {
   const prior = window.jspdf;
   window.jspdf = jspdf;
   try {
-    return await buildIssuePdf(plan, drawn.svgs, 'House', pdfLabels(), { archival: options.archival, created: new Date(2026, 9, 19, 12, 0, 0) });
+    return await buildIssuePdf(plan, drawn.svgs, 'House', pdfLabels(), { loadFont, archival: options.archival, created: new Date(2026, 9, 19, 12, 0, 0) });
   } finally {
     window.jspdf = prior;
   }
@@ -59,7 +67,26 @@ beforeEach(() => {
   useViewDrawings.setState({ byView: {} });
 });
 
+async function pageText(bytes: Uint8Array, n: number): Promise<string> {
+  const { pdf, close } = await openPdf(bytes);
+  try {
+    const page = await pdf.getPage(n);
+    return (await page.getTextContent()).items.map((i) => ('str' in i ? i.str : '')).join(' ');
+  } finally { await close(); }
+}
+
 describe('the issued PDF', () => {
+  it('keeps Romanian diacritics in the drawing list, the sheet text and the bookmarks', async () => {
+    const bytes = await issued({ romanian: true });
+    assert.ok((await pageText(bytes, 1)).includes('Secțiune longitudinală'), 'drawing list');
+    const sheetText = await pageText(bytes, 2);
+    for (const expected of ['Proiectant: Ștefan Țepeș', 'Secțiune longitudinală', 'Cameră înaltă â']) assert.ok(sheetText.includes(expected), `${expected} in: ${sheetText}`);
+    const { pdf, close } = await openPdf(bytes);
+    try {
+      assert.deepEqual(((await pdf.getOutline()) ?? []).map((o) => o.title), ['Drawing list', 'A-101 Secțiune longitudinală', 'A-102 Second floor plan']);
+    } finally { await close(); }
+  });
+
   it('has a bookmark per sheet, number and name, in set order after the drawing list', async () => {
     const { pdf, close } = await openPdf(await issued());
     try {
