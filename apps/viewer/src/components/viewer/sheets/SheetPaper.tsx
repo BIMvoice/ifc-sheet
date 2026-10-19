@@ -17,7 +17,7 @@ import { forwardRef, memo, useMemo } from 'react';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useTranslation } from '@/i18n';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
-import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types';
+import { isGeometry, type DraftEntity, type DraftLayer, type SymbolInstanceShape } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { FRAME_MARGIN_MM, mmPerMetre, paperOf, TITLE_BLOCK_MM, viewportBox } from '@/project/sheets';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
@@ -39,7 +39,7 @@ import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
 import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { keyPlanHighlight, viewportExtent, type Rect } from '@/siteplan/key-plan';
-import { KeyPlanHighlight, SiteBalance, SiteOverlay } from '../siteplan/SiteGraphics';
+import { KeyPlanHighlight, SiteBalance, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
 import type { SiteContent } from '../siteplan/useSheetSite';
 
 const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
@@ -147,6 +147,11 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
         {keyPlan ? tr('site.keyPlan.label') : tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale })}
       </text>
       {content.site ? <SiteBalance site={content.site} x={left} y={top + box.height + LABEL_MM + 4} /> : null}
+      {content.site ? <SiteSymbols site={content.site} transform={t} axis={axis} scale={vp.scale} box={{ x: left, y: top, width: box.width, height: box.height }} live={live}
+        symbols={drafts.flatMap((e): SymbolInstanceShape[] => {
+          const shown = e.shape.type === 'symbol' && layerColor.get(e.layerId) !== null ? annotationAtFactor(e.shape, factor) : null;
+          return shown?.type === 'symbol' ? [shown] : [];
+        })} /> : null}
     </g>
   );
 });
