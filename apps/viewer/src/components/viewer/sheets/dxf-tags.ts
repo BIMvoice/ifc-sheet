@@ -11,6 +11,7 @@
  */
 
 import type { DraftLayer } from '@/drafting/types';
+import type { LineType } from '@/drafting/styles';
 
 export type DxfTags = Record<`data-dxf-${'layer' | 'color' | 'lw' | 'ltype'}`, string | undefined>;
 
@@ -25,6 +26,7 @@ export function layerTags(layer: DraftLayer | undefined): DxfTags {
 }
 
 /** A role layer's tags (the generated drawing's pens). */
-export function penTags(layer: string, widthMm: number, dashed = false, color = '#000000'): DxfTags {
-  return { 'data-dxf-layer': layer, 'data-dxf-color': color, 'data-dxf-lw': String(widthMm), 'data-dxf-ltype': dashed ? 'dashed' : 'continuous' };
+export function penTags(layer: string, widthMm: number, dashed: boolean | LineType = false, color = '#000000'): DxfTags {
+  const lineType = typeof dashed === 'string' ? dashed : dashed ? 'dashed' : 'continuous';
+  return { 'data-dxf-layer': layer, 'data-dxf-color': color, 'data-dxf-lw': String(widthMm), 'data-dxf-ltype': lineType };
 }

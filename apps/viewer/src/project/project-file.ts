@@ -21,7 +21,7 @@ import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, ViewDetail, ViewGraphics } from './types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, ViewDetail, ViewGraphics, ViewGridGraphics } from './types';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -187,6 +187,12 @@ function readGraphics(raw: Record<string, unknown>): ViewGraphics {
       if (Object.keys(g).length > 0) categories[id] = g;
     }
     out.categories = categories;
+  }
+  if (isObject(raw.grid)) {
+    const grid: ViewGridGraphics = {};
+    if (typeof raw.grid.visible === 'boolean') grid.visible = raw.grid.visible;
+    if (raw.grid.ends === 'start' || raw.grid.ends === 'end' || raw.grid.ends === 'both') grid.ends = raw.grid.ends;
+    if (Object.keys(grid).length > 0) out.grid = grid;
   }
   return out;
 }
