@@ -18,7 +18,7 @@ import { snapshotFromElements } from '@/whatchanged/snapshot.js';
 import { addProjectSheet, loadProjectDocument, PROJECT_DOCUMENT_KEYS, projectDocument, resetProject, useProjectStore } from './project-store.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { noteProjectFile, parseProjectFile } from './project-file.js';
+import { noteProjectFile, openProjectDocument, parseProjectFile } from './project-file.js';
 import { autosaveKey } from './project-saved.js';
 import { planAutosave, writeAutosave } from './recovery.js';
 import { discardRecovery, duringSystemChange, offerRecovery, recoveryOpenFor, restoreRecovery, startSetUnderOffer, useRecoveryStore } from './recovery-store.js';
@@ -118,7 +118,7 @@ describe('after a crash', () => {
     localStorage.clear();
     try {
       const file = readFileSync(fileURLToPath(new URL('./fixtures/v1.ifclite-project.json', import.meta.url)), 'utf8');
-      loadProjectDocument(parseProjectFile(file));
+      openProjectDocument(parseProjectFile(file));
       // The open is stamped with the real clock, so the autosaves come after it on that clock too.
       const afterOpen = Date.now() + 60_000;
       const key = autosaveKey(useProjectStore.getState().models);
