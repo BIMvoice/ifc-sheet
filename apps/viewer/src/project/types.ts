@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import type { TitleSource } from './title-block-sources';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
@@ -282,6 +283,8 @@ export interface ProjectDocument {
   sheets: ProjectSheet[];
   /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
   titleBlock?: Record<string, string>;
+  /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
+  titleBlockSources?: Record<string, TitleSource[]>;
   /** Drafted geometry, each entity on one view (phase 4). */
   drafts: DraftEntity[];
   draftLayers: DraftLayer[];

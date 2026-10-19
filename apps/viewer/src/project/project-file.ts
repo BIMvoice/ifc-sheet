@@ -15,6 +15,7 @@ import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readIssues } from '@/issue/file';
+import { readTitleSources } from './title-block-sources';
 import { readStandards } from './standards-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
 import { readSavedSectionCuts } from './saved-cuts-file';
@@ -119,6 +120,11 @@ function readModel(v: unknown, path: string): ProjectModelRef {
 }
 
 /** Parse and validate a project file's text. Throws with the first problem found. */
+const readSources = (raw: Record<string, unknown>): Pick<ProjectDocument, 'titleBlockSources'> => {
+  const titleBlockSources = readTitleSources(raw.titleBlockSources);
+  return titleBlockSources ? { titleBlockSources } : {};
+};
+
 export function parseProjectFile(text: string): ProjectDocument {
   let raw: unknown;
   try {
@@ -141,6 +147,7 @@ export function parseProjectFile(text: string): ProjectDocument {
     sheets: list('sheets').map((s, i) => readSheet(s, `/sheets/${i}`)),
     // Absent in a file saved before the title block was the project's (`liftSheetTitleBlocks` fills it on load).
     ...(raw.titleBlock !== undefined ? { titleBlock: readTitleBlock(raw.titleBlock) ?? {} } : {}),
+    ...readSources(raw),
     drafts: list('drafts').map((d, i) => readDraft(d, `/drafts/${i}`)),
     draftLayers: list('draftLayers').map((l, i) => readDraftLayer(l, `/draftLayers/${i}`)),
     hatchPatterns: isString(raw.hatchPatterns) ? raw.hatchPatterns : '',

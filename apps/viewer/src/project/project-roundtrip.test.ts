@@ -140,6 +140,7 @@ const FULL: Required<ProjectDocument> = {
   views: Object.values(VIEWS),
   sheets: [sheet],
   titleBlock: { project: 'Full house', client: 'Owner', checkedBy: 'PC', logo: 'data:image/png;base64,iVBORw0KGgo=' },
+  titleBlockSources: { address: [{ kind: 'attribute', on: 'IfcBuilding', name: 'BuildingAddress' }], organisation: [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Office' }, { kind: 'owner', part: 'developer' }] },
   drafts,
   draftLayers: [{ id: '0', name: '0', color: '#18181b', visible: true, locked: false }, layer],
   hatchPatterns: '*MY-LINES, test\n0, 0,0, 0,2\n',
