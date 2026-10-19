@@ -12,6 +12,7 @@ import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
 import type { CadLayerRule } from './cad-layers';
 import type { TagFieldConfig } from '@/tagfields/tag-fields';
+import type { DisciplineId } from './discipline-views';
 
 /**
  * The project document: the views and sheets a user organises over the
@@ -133,6 +134,8 @@ export interface PlanProjectView extends ProjectViewBase {
    * draws what is above the cut: ceilings, soffits, lights, beams.
    */
   reflected?: boolean;
+  /** A discipline plan (structural, foundation, roof): it draws only the elements its discipline keeps (`discipline-views.ts`). */
+  discipline?: DisciplineId;
 }
 
 /** A section cut stored in world metres, independent of the model bounds. */

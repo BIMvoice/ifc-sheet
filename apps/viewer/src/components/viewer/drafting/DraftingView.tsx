@@ -108,7 +108,7 @@ import { useRoofDialog } from '@/project/roof-dialog-store';
 
 import { exportViewDxf } from './view-dxf';
 
-import { drawnBySymbol } from '@/project/view-symbols';
+import { viewOmits } from '@/project/discipline-facts';
 
 import { planOverlays } from '@/project/plan-overlays';
 
@@ -183,6 +183,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const graphics = view.graphics;
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
+  const discipline = view.kind === 'plan' ? view.discipline : undefined;
   const phaseSource = useProjectStore((st) => st.phaseSource);
   // The view's phases (a Status edit counts): which elements it shows, and each one's phase.
   const phases = useMemo(() => {
@@ -191,8 +192,8 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   }, [graphics, phaseSource, mutationVersionForMaterials]);
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
-    return drawing ? styledDrawing(drawing, graphics, partHostType, view.kind === 'plan' ? drawnBySymbol : undefined, viewMaterials(drawing), phases) : null;
-  }, [drawing, graphics, view.kind, materialsTable, mutationVersionForMaterials, phases]);
+    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing), phases) : null;
+  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases]);
   const overrideRules = useMemo(() => viewOverrideRules(graphics), [graphics]);
   const overrideEngine = useMemo(() => new GraphicOverrideEngine(overrideRules), [overrideRules]);
   const useIfcMaterials = (graphics?.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId) === DEFAULT_VIEW_PRESET;
