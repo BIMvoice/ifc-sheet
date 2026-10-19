@@ -6,8 +6,8 @@
  * The structural grid as a view's overlay, against a real mesh pipeline.
  * `public/_fixtures/structural-grid.ifc` (millimetres) has a four-column
  * building on a 2 x 2 grid (A, B at 6 m; 1, 2 at 5 m) whose IfcGrid is placed
- * under the IfcBuilding at (10 m, 20 m), rotated 15 degrees, while the columns
- * sit under the storey at their world positions. Every axis must pass through
+ * under the IfcBuilding at (10 m, 20 m) in a storey that is itself offset (5 m, -2 m) and
+ * raised 3 m, rotated 15 degrees, while the columns sit under the same storey. Every axis must pass through
  * the centres of the two columns it names, to the millimetre: a frame error in
  * the grid's placement chain, its rotation or the unit scale moves them apart.
  */
@@ -38,8 +38,8 @@ const plan = (grid?: { visible?: boolean; ends?: GridEnds }): PlanProjectView =>
 const section = (grid?: { visible?: boolean; ends?: GridEnds }): SectionProjectView => ({
   ...base, kind: 'section', plane: { axis: 'side', offset: 0, flipped: false }, ...(grid ? { graphics: { grid } } : {}),
 });
-const BOUNDS_Z = { bounds: { min: { x: 5, y: -0.5 }, max: { x: 20, y: 3.5 } } } as unknown as Drawing2D;
-const BOUNDS = { bounds: { min: { x: -30, y: -0.5 }, max: { x: -5, y: 3.5 } } } as unknown as Drawing2D;
+const BOUNDS_Z = { bounds: { min: { x: 10, y: -0.5 }, max: { x: 30, y: 3.5 } } } as unknown as Drawing2D;
+const BOUNDS = { bounds: { min: { x: -32, y: 2.5 }, max: { x: -12, y: 6.5 } } } as unknown as Drawing2D;
 
 let wasmReady = false;
 async function loadModel(bytes: Uint8Array): Promise<{ store: IfcDataStore; meshes: MeshData[]; coordinateInfo: unknown }> {
@@ -152,6 +152,14 @@ describe('structural grid on a plan', () => {
     assert.ok(await frameError(broken) > 10);
   });
 
+  it('mutation: a storey placement dropped from the chain leaves the axes at the wrong place', async () => {
+    const storeyPlacement = /#\d+= IFCBUILDINGSTOREY\([^,]*,[^,]*,[^,]*,[^,]*,[^,]*,#(\d+),/.exec(fixture)![1];
+    const broken = fixture.replace(new RegExp(`(#\\d+= IFCBUILDINGSTOREY\\([^,]*,[^,]*,[^,]*,[^,]*,[^,]*,)#${storeyPlacement},`), '$1$,');
+    assert.notEqual(broken, fixture);
+    const error = await frameError(broken).catch(() => Infinity);
+    assert.ok(error > 1, `off by ${error} m`);
+  });
+
   it('mutation: a grid without an ObjectPlacement in a placed storey is not drawn at a guessed place', async () => {
     const { placement } = gridPlacement(fixture);
     const broken = fixture.replace(new RegExp(`(#\\d+= IFCGRID\\([^,]*,[^,]*,[^,]*,[^,]*,[^,]*,)#${placement},`), '$1$,');
@@ -187,9 +195,14 @@ describe('structural grid on a plan', () => {
   });
 
   it('runs each axis across the drawing and no further than its bubble fits in the auto-fit margin', async () => {
-    await seed(new TextEncoder().encode(fixture));
-    // The building's box in the plan's drawing coordinates (x = render x, y = render z).
-    const box = { min: { x: 8.46, y: -26.63 }, max: { x: 16.04, y: -19.76 } };
+    const { meshes } = await seed(new TextEncoder().encode(fixture));
+    // The building's box in the plan's drawing coordinates (x = render x, y = render z), from its meshes.
+    const box = { min: { x: Infinity, y: Infinity }, max: { x: -Infinity, y: -Infinity } };
+    for (const m of meshes) for (let i = 0; i < m.positions.length; i += 3) {
+      const o = m.origin ?? [0, 0, 0], x = m.positions[i] + o[0], z = m.positions[i + 2] + o[2];
+      box.min.x = Math.min(box.min.x, x); box.max.x = Math.max(box.max.x, x);
+      box.min.y = Math.min(box.min.y, z); box.max.y = Math.max(box.max.y, z);
+    }
     const overlays = gridOverlays(plan(), PLAN_PLANE, { bounds: box } as unknown as Drawing2D);
     const unit = 0.1; // 1:100, metres per paper millimetre
     const lines = linesOf(overlays);
@@ -235,9 +248,9 @@ describe('structural grid on a section', () => {
   let fixture = '';
   before(async () => { fixture = await readFile(FIXTURE, 'utf8'); });
 
-  // The fixture's axes in IFC metres, from the file's own numbers: grid frame = (10, 20) + R(15 deg).
+  // The fixture's axes in IFC metres, from the file's own numbers: grid frame = storey (5, -2) + (10, 20) + R(15 deg).
   const c = Math.cos(Math.PI / 12), s = Math.sin(Math.PI / 12);
-  const world = (x: number, y: number): [number, number] => [10 + c * x - s * y, 20 + s * x + c * y];
+  const world = (x: number, y: number): [number, number] => [15 + c * x - s * y, 18 + s * x + c * y];
   const AXES: Record<string, [[number, number], [number, number]]> = {
     A: [world(0, -2), world(0, 7)], B: [world(6, -2), world(6, 7)], 1: [world(-2, 0), world(8, 0)], 2: [world(-2, 5), world(8, 5)],
   };
@@ -254,9 +267,9 @@ describe('structural grid on a section', () => {
 
   it('shows the axes a cut across x crosses, at their positions along the section', async () => {
     await seed(new TextEncoder().encode(fixture));
-    // Render frame: x = IFC x, z = -IFC y. A side cut at x = 12 m looks along x; drawing x = render z.
-    const plane: SectionPlaneConfig = { axis: 'x', position: 12, flipped: false };
-    const expected = crossingsAtX(12);
+    // Render frame: x = IFC x, z = -IFC y. A side cut at x = 17 m looks along x; drawing x = render z.
+    const plane: SectionPlaneConfig = { axis: 'x', position: 17, flipped: false };
+    const expected = crossingsAtX(17);
     assert.deepEqual(expected.map(([tag]) => tag).sort(), ['1', '2'], 'the cut crosses the two axes that run along x');
     const overlays = gridOverlays(section(), plane, BOUNDS);
     const lines = linesOf(overlays);
@@ -277,10 +290,10 @@ describe('structural grid on a section', () => {
 
   it('shows the axes of a cut across z, and none for a cut beside the building', async () => {
     await seed(new TextEncoder().encode(fixture));
-    // A front cut at render z = -22 is IFC y = 22; drawing x = render x = IFC x.
-    const plane: SectionPlaneConfig = { axis: 'z', position: -22, flipped: false };
-    const expected = crossingsAtY(22);
-    assert.deepEqual(expected.map(([tag]) => tag).sort(), ['1', 'A', 'B'], 'the cut crosses both axes along y, and the near end of axis 1');
+    // A front cut at render z = -22 is IFC y = 23; drawing x = render x = IFC x.
+    const plane: SectionPlaneConfig = { axis: 'z', position: -23, flipped: false };
+    const expected = crossingsAtY(23);
+    assert.deepEqual(expected.map(([tag]) => tag).sort(), ['2', 'A', 'B'], 'the cut crosses both axes along y, and the near end of axis 2');
     const lines = linesOf(gridOverlays(section(), plane, BOUNDS_Z));
     assert.equal(lines.length, 3);
     expected.forEach(([tag, x], i) => assert.ok(Math.abs(lines[i].a.x - x) < 0.001, `axis ${tag} at ${x}, drawn at ${lines[i].a.x}`));
@@ -290,10 +303,10 @@ describe('structural grid on a section', () => {
   it('works through a custom plane the same way', async () => {
     await seed(new TextEncoder().encode(fixture));
     const plane: SectionPlaneConfig = {
-      axis: 'x', position: 12, flipped: false,
-      customPlane: { normal: { x: 1, y: 0, z: 0 }, distance: 12, origin: { x: 12, y: 0, z: 0 }, tangent: { x: 0, y: 0, z: 1 }, bitangent: { x: 0, y: 1, z: 0 } },
+      axis: 'x', position: 17, flipped: false,
+      customPlane: { normal: { x: 1, y: 0, z: 0 }, distance: 17, origin: { x: 17, y: 0, z: 0 }, tangent: { x: 0, y: 0, z: 1 }, bitangent: { x: 0, y: 1, z: 0 } },
     } as SectionPlaneConfig;
-    const cardinal = linesOf(gridOverlays(section(), { axis: 'x', position: 12, flipped: false }, BOUNDS));
+    const cardinal = linesOf(gridOverlays(section(), { axis: 'x', position: 17, flipped: false }, BOUNDS));
     const custom = linesOf(gridOverlays(section(), plane, BOUNDS));
     assert.equal(cardinal.length, 2);
     assert.deepEqual(custom.map((l) => l.a.x), cardinal.map((l) => l.a.x));
@@ -311,7 +324,8 @@ describe('a model without a grid', () => {
     assert.ok(p.every((o) => o.layer !== 'GRID'));
     const sec = planOverlays(section(), sectionPlane, meshes, undefined, hidden, BOUNDS);
     assert.ok(sec.every((o) => o.layer !== 'GRID'));
-    // The plan overlays are the symbols alone, as on main: a model with no grid adds no overlay and no shape.
-    assert.deepEqual(p.map((o) => [o.layer, o.shapes.length]), planOverlays(plan({ visible: false }), PLAN_PLANE, meshes, undefined, hidden).map((o) => [o.layer, o.shapes.length]));
+    // Shape counts as origin/main produces them for this model (measured on main): the symbols alone, nothing added.
+    assert.deepEqual(p.map((o) => [o.layer, o.shapes.length]), [['SYMBOLS', 33], ['SYMBOLS', 6]]);
+    assert.deepEqual(sec, []);
   });
 });
