@@ -119,6 +119,7 @@ import { roofBlockEn } from './catalogues/roof-block.en';
 import { viewGraphicsEn } from './catalogues/view-graphics.en';
 import { cadLayersEn } from './catalogues/cad-layers.en';
 import { catalogueEn } from './catalogues/catalogue.en';
+import { tagFieldsEn } from './catalogues/tag-fields.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
 import { roomFinishesEn } from './catalogues/room-finishes.en';
@@ -199,6 +200,7 @@ export const en = {
   ...viewGraphicsEn,
   ...catalogueEn,
   ...cadLayersEn,
+  ...tagFieldsEn,
   ...draftingStandardsEn,
   ...joineryEn,
   ...roomFinishesEn,

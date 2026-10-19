@@ -19,6 +19,8 @@ import type { CadLayerRule } from '@/project/cad-layers';
 import { readMaterial } from '@/project/project-file';
 import { readStandards } from '@/project/standards-file';
 import type { ProjectMaterial } from '@/project/types';
+import { readTagFields } from '@/tagfields/tag-fields-file';
+import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import { fail, readAnnotationType, readLegend, readList, readSymbol } from './readers';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from './types';
 
@@ -27,7 +29,7 @@ export const CATALOGUE_FILE_FORMAT = 'bvlib';
 export const CATALOGUE_FILE_VERSION = 1;
 
 /** The kinds of definition a catalogue carries, in the order the dialog lists them. */
-export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers'] as const;
+export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields'] as const;
 export type CatalogueKind = (typeof CATALOGUE_KINDS)[number];
 
 export interface Catalogue {
@@ -44,6 +46,8 @@ export interface Catalogue {
   legends: ProjectLegend[];
   /** The CAD layer standard: an ordered rule table, carried and merged as a whole. */
   cadLayers: CadLayerRule[];
+  /** Which IFC property feeds each field of a tag; absent: the defaults. */
+  tagFields?: TagFieldConfig;
 }
 
 export interface CatalogueFile extends Catalogue {
@@ -69,6 +73,7 @@ export function selectKinds(catalogue: Catalogue, kinds: ReadonlySet<CatalogueKi
   if (kinds.has('symbols')) out.symbols = catalogue.symbols;
   if (kinds.has('legends')) out.legends = catalogue.legends.map(({ scopeId: _scopeId, ...rest }) => rest);
   if (kinds.has('cadLayers')) out.cadLayers = catalogue.cadLayers;
+  if (kinds.has('tagFields') && catalogue.tagFields) out.tagFields = catalogue.tagFields;
   return out;
 }
 
@@ -120,6 +125,7 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       symbols: readList(file, 'symbols', (v, p) => readSymbol(v, p, WHAT), WHAT),
       legends: readList(file, 'legends', (v, p) => readLegend(v, p, WHAT), WHAT),
       cadLayers: readList(file, 'cadLayers', (v, p) => readCadLayerRule(v, p, WHAT), WHAT),
+      ...readTagFieldsEntry(file),
     },
   };
 }
@@ -127,4 +133,10 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
 function readMaterialStrict(v: unknown, path: string): ProjectMaterial {
   const [m] = readMaterial(v);
   return m ?? fail(path, 'must be a material { id, name }', WHAT);
+}
+
+/** `tagFields` as an entry of the catalogue, or nothing when the file holds none. */
+function readTagFieldsEntry(file: Record<string, unknown>): { tagFields?: TagFieldConfig } {
+  const tagFields = readTagFields(file.tagFields, '/tagFields', WHAT);
+  return tagFields ? { tagFields } : {};
 }

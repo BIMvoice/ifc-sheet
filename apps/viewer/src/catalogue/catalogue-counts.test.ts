@@ -13,6 +13,7 @@ describe('catalogue counts', () => {
     hatchPatterns: '*ONE, a\n0, 0,0, 0,2\n*TWO, b\n90, 0,0, 0,2\n',
     annotationTypes: [{ id: 'a', name: 'A', tool: 'tag' as const }],
     symbols: [],
+    tagFields: { door: { mark: [{ kind: 'attribute' as const, name: 'Name' as const }], name: [] }, room: { name: [] } },
   };
 
   it('counts a hatch file by its patterns, not its lines', () => {
@@ -23,7 +24,7 @@ describe('catalogue counts', () => {
     const counts = kindCounts(c);
     assert.equal(counts.length, CATALOGUE_KINDS.length);
     assert.deepEqual(Object.fromEntries(CATALOGUE_KINDS.map((k, i) => [k, counts[i]])), {
-      layers: 0, textStyles: 0, dimStyles: 0, hatchPatterns: 2, materials: 0, annotationTypes: 1, symbols: 0, legends: 0, cadLayers: 0,
+      layers: 0, textStyles: 0, dimStyles: 0, hatchPatterns: 2, materials: 0, annotationTypes: 1, symbols: 0, legends: 0, cadLayers: 0, tagFields: 3,
     });
   });
 });

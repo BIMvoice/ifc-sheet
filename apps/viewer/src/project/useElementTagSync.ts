@@ -12,7 +12,7 @@
 import { useEffect } from 'react';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from './project-store';
-import { elementLabel, TAG_FIELDS, type TagField } from './element-label';
+import { elementLabel, TAG_FIELDS, type TagField } from '@/tagfields/element-tag';
 
 export function refreshElementTags(): void {
   const { drafts } = useProjectStore.getState();
@@ -32,8 +32,10 @@ export function refreshElementTags(): void {
 export function useElementTagSync(): void {
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
+  // The sources of the tag fields too: a tag takes the text the new sources give.
+  const tagFields = useProjectStore((s) => s.tagFields);
   const tagCount = useProjectStore((s) => s.drafts.filter((d) => d.params.tagOf !== undefined).length);
   useEffect(() => {
     if (tagCount > 0) refreshElementTags();
-  }, [mutationVersion, models, tagCount]);
+  }, [mutationVersion, models, tagCount, tagFields]);
 }
