@@ -1,0 +1,68 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The permit's areas and urban indicators, live: the footprints and rooms are
+ * read again when the models or the levels change, and the indicators when
+ * the site area does. The site area is the project's (`siteArea`), else the
+ * model's; every table showing the indicators reads it from here, so a new
+ * site area reaches all of them.
+ */
+
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from '@/i18n';
+import { useViewerStore } from '@/store';
+import { useProjectStore } from '@/project/project-store';
+import { ensureWasm, wasmLoaded } from '@/lib/wasm/ensure-wasm';
+import { collectUrbanAreas, type UrbanAreas } from '@/urban/urban-models';
+import { urbanIndicators, type UrbanIndicators } from '@/urban/indicators';
+import type { UrbanLabels } from '@/urban/urban-layout';
+
+/** The footprints, rooms and model site area; null until they can be measured. `enabled` false skips the work. */
+export function useUrbanAreas(enabled = true): UrbanAreas | null {
+  const models = useViewerStore((s) => s.models);
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const levels = useProjectStore((s) => s.levels);
+  const [wasmTick, setWasmTick] = useState(0);
+  const areas = useMemo(() => {
+    if (!enabled) return null;
+    try {
+      return collectUrbanAreas();
+    } catch (err) {
+      // Not yet initialised in this realm: the effect below initialises it and measures again.
+      if (!wasmLoaded()) return null;
+      console.warn('[urban] could not measure the storeys', err);
+      return null;
+    }
+    // models / mutationVersion / levels: what `collectUrbanAreas` reads; wasmTick: the module came up.
+  }, [enabled, models, mutationVersion, levels, wasmTick]);
+  const waiting = enabled && areas === null && !wasmLoaded();
+  useEffect(() => {
+    if (!waiting) return;
+    let live = true;
+    ensureWasm().then(() => { if (live) setWasmTick((n) => n + 1); }, (err: unknown) => console.warn('[urban] the geometry module did not load', err));
+    return () => { live = false; };
+  }, [waiting]);
+  return areas;
+}
+
+/** The indicators, on the project's site area, else the model's. */
+export function useUrbanIndicators(enabled = true): { areas: UrbanAreas; result: UrbanIndicators } | null {
+  const areas = useUrbanAreas(enabled);
+  const siteArea = useProjectStore((s) => s.siteArea);
+  return useMemo(() => (areas ? { areas, result: urbanIndicators({ ...areas, siteArea: siteArea ?? areas.modelSiteArea }) } : null), [areas, siteArea]);
+}
+
+export function useUrbanLabels(title: string, areas: UrbanAreas | null): UrbanLabels {
+  const { t } = useTranslation();
+  const assumed = areas?.assumedInterior.join(', ') ?? '';
+  return useMemo(() => ({
+    title,
+    level: t('urban.level'), elevation: t('urban.elevation'), built: t('urban.built'), useful: t('urban.useful'),
+    belowGround: (name: string) => t('urban.belowGround', { name }),
+    category: t('urban.category'), area: t('urban.area'),
+    ac: t('urban.ac'), ad: t('urban.ad'), au: t('urban.au'), site: t('urban.site'), pot: t('urban.pot'), cut: t('urban.cut'),
+    note: assumed ? t('urban.assumedInterior', { levels: assumed }) : '',
+  }), [t, title, assumed]);
+}

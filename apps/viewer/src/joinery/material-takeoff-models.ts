@@ -15,7 +15,7 @@ import { useViewerStore } from '@/store';
 import { elementQuantities, materialShares, type TakeoffElement } from './material-takeoff';
 
 /** SI scales of a model's area and volume units (undeclared: the length unit squared, cubed). */
-function quantityScales(units: ProjectUnits): { volume: number; area: number } {
+export function quantityScales(units: ProjectUnits): { volume: number; area: number } {
   const length = units.unitForMeasure('IfcLengthMeasure')?.siScale ?? 1;
   return {
     volume: units.resolvedForUnitType('VOLUMEUNIT')?.siScale ?? length ** 3,
