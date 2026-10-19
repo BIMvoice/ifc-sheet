@@ -18,12 +18,13 @@ import { useViewerStore } from '@/store';
 import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
-import { addProjectView, updateProjectView, useProjectStore } from './project-store';
+import { addProjectView, EMPTY_PROJECT, updateProjectView, useProjectStore } from './project-store';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
-import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, freshProjectId, sameElevation } from './view-defaults';
+import { resolve } from '@/i18n/registry';
+import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, elevationName, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
-import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView } from './types';
+import type { PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView } from './types';
 
 /** How many proposed sections the starting set draws; the rest wait in the tray. */
 export const SET_SECTIONS = 2;
@@ -70,6 +71,10 @@ export function sectionForProposal(proposal: SectionProposal): string | null {
  */
 export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | null): boolean {
   if (!bounds || useProjectStore.getState().sheets.length > 0) return false;
+  // A project still carrying the untouched English default name takes the active language's, once, as it is started.
+  const { name, dirty } = useProjectStore.getState();
+  const untitled = resolve('names.project.untitled');
+  if (!dirty && name === EMPTY_PROJECT.name && untitled !== name) useProjectStore.setState({ name: untitled });
   return ensureDrawingSet(meshes, bounds, { onOpen: true }).sheetsAdded > 0;
 }
 
@@ -93,8 +98,6 @@ export interface EnsureOptions {
   onOpen?: boolean;
 }
 
-const ELEVATION_NAMES: Record<ElevationDirection, string> = { north: 'North Elevation', east: 'East Elevation', south: 'South Elevation', west: 'West Elevation' };
-
 
 /** One plan per storey that has none yet; a model with no storeys gets one cut at mid-height. */
 function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
@@ -106,7 +109,7 @@ function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
     if (state().views.some((v) => v.kind === 'plan')) return;
     const height = Math.round(((extent.max.y - extent.min.y) / 2) * 10) / 10;
     report.notes.push({ key: 'draftSet.note.noStoreys', params: { height } });
-    addProjectView({ kind: 'plan', name: 'Plan', cutHeight: height, level: { name: 'Plan', elevation: extent.min.y, storeyGlobalIds: [] } });
+    addProjectView({ kind: 'plan', name: resolve('names.view.plan'), cutHeight: height, level: { name: resolve('names.view.plan'), elevation: extent.min.y, storeyGlobalIds: [] } });
     report.viewsAdded++;
     return;
   }
@@ -125,7 +128,7 @@ function ensureElevations(extent: AxisBounds, report: EnsureReport): void {
   for (const direction of ELEVATION_DIRECTIONS) {
     const found = state().views.find((v) => v.kind === 'elevation' && v.direction === direction);
     if (!found) {
-      addProjectView({ kind: 'elevation', name: ELEVATION_NAMES[direction], direction, planeOffset: elevationPlaneOffset(direction, extent), viewDepth: elevationDepth(direction, extent) });
+      addProjectView({ kind: 'elevation', name: elevationName(direction), direction, planeOffset: elevationPlaneOffset(direction, extent), viewDepth: elevationDepth(direction, extent) });
       report.viewsAdded++;
       continue;
     }

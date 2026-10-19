@@ -42,6 +42,9 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET) stay as
 | Revision cloud | Nor de revizie | |
 | What is missing | Ce lipsește | |
 | Client | Beneficiar | Title block |
+| Title (of a sheet, in the title block) | Titlu planșă | |
+| Untitled project | Proiect fără titlu | |
+| Generated names | Planuri, Fațade sud și nord, Fațade est și vest, Secțiuni, Tabele; Fațada nord/est/sud/vest; Secțiunea A-A; Detaliu 1 - … | Resolved once at creation (`names.*`), stored as plain text, never re-translated |
 | Drawn by / Checked by | Desenat / Verificat | As printed in Romanian title blocks |
 | Sheet no. | Nr. planșă | |
 | Paper | Hârtie | Paper format: "Format" |
@@ -56,5 +59,6 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET) stay as
 The 3D viewer around the Wall (ribbon, panels, dialogs), the drafting tools you
 use inside a sheet (`drafting.*`), the PDF export dialogs (`sheetsPdf.*`) and the
 drafting standards stay English; a missing key falls back to English one by one.
-Title block field labels that come from a preset or that a person types are model
-content and are never translated.
+The "Detail marks" drafting layer name, the sheet name of a new blank schedule
+sheet made before this change, and anything a person typed are stored text and stay
+as they were. Storey names come from the IFC and are never translated.

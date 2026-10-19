@@ -15,7 +15,7 @@ export const sheetsRo = {
   'sheets.portrait': 'Vertical',
   'sheets.titleBlock': 'Cartuș',
   'sheets.tb.number': 'Nr. planșă',
-  'sheets.tb.title': 'Titlu',
+  'sheets.tb.title': 'Titlu planșă',
   'sheets.tb.project': 'Proiect',
   'sheets.tb.drawnBy': 'Desenat',
   'sheets.tb.client': 'Beneficiar',

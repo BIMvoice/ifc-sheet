@@ -17,7 +17,7 @@ import ro from './ro';
  * what changed, libraries, the takeoff and door and window schedule as they
  * print on a sheet, the draft set report).
  */
-const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.'];
+const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'settings.privacy.toast', 'viewerShell.toast.dismiss'];
 const keys = (Object.keys(en) as TranslationKey[]).filter((k) => IN_SCOPE.some((p) => k.startsWith(p)));
 const catalogue = ro as Readonly<Record<string, TranslationValue>>;
 

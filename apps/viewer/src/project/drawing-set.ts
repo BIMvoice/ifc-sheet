@@ -15,6 +15,7 @@
  */
 
 import type { TranslationKey } from '@/i18n';
+import { resolve } from '@/i18n/registry';
 import { FRAME_MARGIN_MM, PAPER_MM, TITLE_BLOCK_MM } from './sheets';
 import { freshProjectId } from './view-defaults';
 import type { ElevationDirection, PaperSize, ProjectSheet, ProjectView, SheetViewport } from './types';
@@ -114,9 +115,9 @@ export function rowOfViewports(views: readonly ProjectView[], sizes: readonly { 
   });
 }
 
-const ELEVATION_PAIRS: { directions: ElevationDirection[]; name: string }[] = [
-  { directions: ['south', 'north'], name: 'Elevations, south and north' },
-  { directions: ['east', 'west'], name: 'Elevations, east and west' },
+const ELEVATION_PAIRS: { directions: ElevationDirection[]; name: TranslationKey }[] = [
+  { directions: ['south', 'north'], name: 'names.sheet.elevationsSouthNorth' },
+  { directions: ['east', 'west'], name: 'names.sheet.elevationsEastWest' },
 ];
 
 function pairs<T>(items: readonly T[]): T[][] {
@@ -148,12 +149,12 @@ function setRows(allViews: readonly ProjectView[]): SetRow[] {
     if (members.length > 0) rows.push({ group, number, name, members });
   };
   const plans = views.filter((v) => v.kind === 'plan').sort((a, b) => (a.kind === 'plan' && b.kind === 'plan' ? a.level.elevation - b.level.elevation : 0));
-  pairs(plans).forEach((pair, i) => add('plans', `A-${101 + i}`, plans.length > 2 ? `Floor plans ${i + 1}` : 'Floor plans', pair));
+  pairs(plans).forEach((pair, i) => add('plans', `A-${101 + i}`, plans.length > 2 ? resolve('names.sheet.plansN', { n: i + 1 }) : resolve('names.sheet.plans'), pair));
   ELEVATION_PAIRS.forEach(({ directions, name }, i) => {
-    add('elevations', `A-${201 + i}`, name, directions.flatMap((d) => views.filter((v) => v.kind === 'elevation' && v.direction === d)));
+    add('elevations', `A-${201 + i}`, resolve(name), directions.flatMap((d) => views.filter((v) => v.kind === 'elevation' && v.direction === d)));
   });
   const sections = views.filter((v) => v.kind === 'section');
-  pairs(sections).forEach((pair, i) => add('sections', `A-${301 + i}`, sections.length > 2 ? `Sections ${i + 1}` : 'Sections', pair));
+  pairs(sections).forEach((pair, i) => add('sections', `A-${301 + i}`, sections.length > 2 ? resolve('names.sheet.sectionsN', { n: i + 1 }) : resolve('names.sheet.sections'), pair));
   return rows;
 }
 
@@ -214,7 +215,7 @@ export function groupOfView(view: ProjectView): SetGroup | null {
 }
 
 const SERIES_START: Record<SetGroup, number> = { plans: 101, elevations: 201, sections: 301, schedules: 601 };
-const GROUP_NAMES: Record<SetGroup, string> = { plans: 'Floor plans', elevations: 'Elevations', sections: 'Sections', schedules: 'Schedules' };
+const GROUP_NAMES: Record<SetGroup, TranslationKey> = { plans: 'names.sheet.plans', elevations: 'names.sheet.elevations', sections: 'names.sheet.sections', schedules: 'names.sheet.schedules' };
 /** Drawings a set sheet holds before a new one is started. */
 export const PER_SHEET = 2;
 
@@ -243,7 +244,7 @@ export function withViewHung(sheets: readonly ProjectSheet[], views: readonly Pr
   // The new sheet is made on the paper of its group, else on the smallest that suits it.
   const paper = last?.paper ?? choosePaper([[viewExtent(view, extent)]]).paper;
   const sheet = layOut({
-    id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: GROUP_NAMES[group], createdAt: now, paper, orientation: 'landscape',
+    id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: resolve(GROUP_NAMES[group]), createdAt: now, paper, orientation: 'landscape',
   }, [view]);
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
