@@ -26,7 +26,9 @@ import { layoutTypeQuantities, type TypeQuantityLabels } from '@/joinery/type-qu
 import { roomFinishes, type RoomFinishes } from '@/joinery/room-finishes';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
 import { layoutRoomFinishes, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
+import { layoutUrban } from '@/urban/urban-layout';
 import { penTags } from '../sheets/dxf-tags';
+import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
 
@@ -97,7 +99,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels(schedule?.name ?? '');
   return useMemo(() => {
-    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'types' || schedule.kind === 'finishes') return null;
+    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'types' || schedule.kind === 'finishes' || schedule.kind === 'urban') return null;
     const data = scheduleData(schedule.kind);
     return { data, layout: layoutSchedule(data, labels, { scale: schedule.scale ?? 50 }) };
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
@@ -114,10 +116,14 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const labels = useScheduleLabels('');
   const takeoffLabels = useTakeoffLabels('');
   const typeLabels = useTypeQuantityLabels('');
-  const placesTypes = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'types'));
   const finishLabels = useRoomFinishLabels('');
-  const placesFinishes = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'finishes'));
-  const placesTakeoff = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'materials'));
+  const places = (kind: ProjectSchedule['kind']) => (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === kind));
+  const placesTakeoff = places('materials');
+  const placesTypes = places('types');
+  const placesFinishes = places('finishes');
+  // The indicators measure footprints: only when the sheet shows them.
+  const urban = useUrbanIndicators(places('urban'));
+  const urbanLabels = useUrbanLabels('', urban?.areas ?? null);
   return useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
     // The takeoff parses materials on demand: read once per change, and only when a sheet shows one.
@@ -127,6 +133,10 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || out.has(schedule.id)) continue;
+      if (schedule.kind === 'urban') {
+        if (urban) out.set(schedule.id, layoutUrban(urban.result, { ...urbanLabels, title: schedule.name }));
+        continue;
+      }
       out.set(schedule.id, schedule.kind === 'materials'
         ? layoutMaterialTakeoff(rows, { ...takeoffLabels, title: schedule.name })
         : schedule.kind === 'types'
@@ -137,7 +147,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet.viewports, schedules, labels, takeoffLabels, typeLabels, finishLabels, placesTakeoff, placesTypes, placesFinishes, mutationVersion, models, catalogue, mapping]);
+  }, [sheet.viewports, schedules, labels, takeoffLabels, typeLabels, finishLabels, placesTakeoff, placesTypes, placesFinishes, urban, urbanLabels, mutationVersion, models, catalogue, mapping]);
 }
 
 function Prim({ p }: { p: SchedulePrim }) {

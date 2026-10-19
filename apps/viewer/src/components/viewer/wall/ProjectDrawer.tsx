@@ -12,7 +12,7 @@
  * is filled under the sheets.
  */
 
-import { useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -33,6 +33,9 @@ import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
 import { LegendsAdd } from './LegendsAdd';
 import { ViewportState } from './ViewportState';
+import { useViewerStore } from '@/store';
+import { modelSiteArea } from '@/urban/urban-models';
+import { SiteAreaField } from '../urban/SiteAreaField';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
   { kind: 'plan', labelKey: 'wall.group.plans' },
@@ -96,6 +99,9 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
   const schedules = useProjectStore((s) => s.schedules ?? []);
   const legends = useProjectStore((s) => s.legends ?? []);
   const byView = useViewDrawings((s) => s.byView);
+  const models = useViewerStore((s) => s.models);
+  // models: what `modelSiteArea` reads.
+  const siteFromModel = useMemo(() => modelSiteArea(), [models]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const go = (sheetId: string | null, focus: string | null = null): void => {
@@ -172,6 +178,12 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
               <button type="button" className={action} onClick={() => go(addScheduleToSet('materials', t('takeoff.newName')))}>{t('wall.project.addTakeoff')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('types', t('typeQty.newName')))}>{t('wall.project.addTypeQuantities')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('finishes', t('finishes.newName')))}>{t('wall.project.addFinishes')}</button>
+              <button type="button" className={action} onClick={() => go(addScheduleToSet('urban', t('urban.newName')))}>{t('urban.add')}</button>
+              <SiteAreaField
+                modelSiteArea={siteFromModel}
+                className="mt-1 flex w-full items-center justify-between gap-2 text-xs text-sky-200"
+                inputClassName="w-36 rounded border border-sky-300/40 bg-[#061a36] px-1.5 py-1 text-xs text-white"
+              />
             </>
           )}
         >

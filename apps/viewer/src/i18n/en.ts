@@ -121,6 +121,7 @@ import { catalogueEn } from './catalogues/catalogue.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
 import { roomFinishesEn } from './catalogues/room-finishes.en';
+import { urbanEn } from './catalogues/urban.en';
 import { elementTypesEn } from './catalogues/element-types.en';
 import { roofEn } from './catalogues/roof.en';
 import { civilEn } from './catalogues/civil.en';
@@ -199,6 +200,7 @@ export const en = {
   ...draftingStandardsEn,
   ...joineryEn,
   ...roomFinishesEn,
+  ...urbanEn,
   ...elementTypesEn,
   ...roofEn,
   ...civilEn,

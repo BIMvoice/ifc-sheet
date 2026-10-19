@@ -28,16 +28,19 @@ import { ScheduleGraphic, useScheduleLabels, useScheduleLayout } from './Schedul
 import { RoomFinishesView } from './RoomFinishesView';
 import { TakeoffView } from './TakeoffView';
 import { TypeQuantitiesView } from './TypeQuantitiesView';
+import { UrbanView } from '../urban/UrbanView';
 
 const SELECT = 'h-7 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1 text-xs';
 const SCALES = [10, 20, 25, 50, 100];
 const MARGIN = 10;
 
-/** A schedule tab: the quantities by type, the room finishes, a material takeoff, or a joinery schedule. */
+/** A schedule tab: the quantities by type, the room finishes, a material takeoff, the urban indicators, or a joinery schedule. */
 export function ScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   if (schedule.kind === 'types') return <TypeQuantitiesView schedule={schedule} />;
   if (schedule.kind === 'finishes') return <RoomFinishesView schedule={schedule} />;
-  return schedule.kind === 'materials' ? <TakeoffView schedule={schedule} /> : <JoineryScheduleView schedule={schedule} />;
+  if (schedule.kind === 'materials') return <TakeoffView schedule={schedule} />;
+  if (schedule.kind === 'urban') return <UrbanView schedule={schedule} />;
+  return <JoineryScheduleView schedule={schedule} />;
 }
 
 function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {

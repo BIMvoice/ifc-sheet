@@ -39,7 +39,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined,
+  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined, siteArea: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -60,7 +60,7 @@ const DOCUMENT_FIELDS = {
   symbolFlips: true, openingLines: true, textStyles: true, dimStyles: true, layerGroups: true, joineryTypes: true, currentJoinery: true,
   schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
   typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
-  modelState: true,
+  modelState: true, siteArea: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -119,6 +119,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     legends: doc.legends ?? [],
     issues: doc.issues ?? [],
     modelState: doc.modelState,
+    siteArea: doc.siteArea,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
@@ -143,6 +144,12 @@ export function syncProjectWithModels(models: ProjectModelRef[], storeys: readon
     views: views === state.views ? state.views : [...views],
     dirty: state.dirty || views !== state.views || modelsChanged,
   });
+}
+
+/** The site area in m², or null to fall back to the model's. */
+export function setProjectSiteArea(area: number | null): void {
+  const siteArea = area !== null && Number.isFinite(area) && area > 0 ? area : undefined;
+  if (siteArea !== useProjectStore.getState().siteArea) useProjectStore.setState({ siteArea, dirty: true });
 }
 
 export function resetProject(): void {

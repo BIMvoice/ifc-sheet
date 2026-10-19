@@ -201,8 +201,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, or the finishes of each room. */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, or the permit's areas and urban indicators (`urban/`). */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'urban';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
@@ -306,6 +306,8 @@ export interface ProjectDocument {
   /** The entry each Design tool builds with, per kind. */
   currentTypes?: Partial<Record<ElementTypeKind, string>>;
   schedules?: ProjectSchedule[];
+  /** The site (plot) area in m² the user entered; absent: the model's IfcSite area, if it states one (`urban/`). */
+  siteArea?: number;
   /** The project's structure profile library (retaining walls, tunnels, decks, barriers… and drawn shapes). */
   structureProfiles?: StructureProfile[];
   /** Road drawings: longitudinal profiles and cross-section sets. */

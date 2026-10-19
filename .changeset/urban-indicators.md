@@ -1,0 +1,5 @@
+---
+"@ifc-lite/viewer": minor
+---
+
+Urban indicators for the building permit: a schedule of kind `urban` lists each level's built area (its footprint to the outer face of the walls, courtyards left out) and useful area, the useful area by room category, then Ac, Ad, Au, the site area, POT and CUT. Footprints are united in plan from the rendered meshes of the walls, columns and curtain walls with the kernel's 2D booleans; slabs and rooms only decide which enclosed spaces are inside. Basements (more than half below ±0.00) are left out of Ad. The site area is entered in the project drawer or the table's tab, saved with the project, and falls back to the IfcSite's GrossArea; without one POT and CUT print as a dash. GPU-instanced walls are measured from their instanced pieces; a wall, column, curtain wall or slab that still yields no outline is counted per level, and the table marks Ac, Ad, POT and CUT as lower bounds (≥) with a footnote. It places on a sheet, prints and exports to DXF like the other schedules.
