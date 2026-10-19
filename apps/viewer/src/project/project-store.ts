@@ -20,7 +20,6 @@ import { settleDetailMarks } from '@/drafting/detail-mark';
 import { create } from 'zustand';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
-import { noteProjectFile } from './project-file';
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
@@ -134,7 +133,6 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     activeItemId: null,
     dirty: options.dirty ?? false,
   });
-  if (!options.fromAutosave) noteProjectFile(projectDocument());
 }
 
 /**

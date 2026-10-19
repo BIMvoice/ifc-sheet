@@ -24,6 +24,7 @@ import { readSnapshot } from '@/whatchanged/snapshot-file';
 import { declaredVersion, migrateProject, PROJECT_FILE_VERSION } from './project-migrations';
 import { withoutModelState } from './autosave-snapshots';
 import { markProjectSaved } from './project-saved';
+import { loadProjectDocument, projectDocument } from './project-store';
 import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
@@ -45,6 +46,16 @@ export interface ProjectFile extends ProjectDocument {
 export function serializeProject(doc: ProjectDocument, now = new Date()): string {
   const file: ProjectFile = { format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, savedAt: now.toISOString(), ...doc };
   return JSON.stringify(file, null, 2);
+}
+
+/**
+ * Open a project file the person chose: load it and note it as the last file opened, so its own
+ * autosave is not offered back next session. Autosave restores load with `loadProjectDocument`
+ * directly. Kept out of the store so the drafting session does not reach the file reader.
+ */
+export function openProjectDocument(doc: ProjectDocument, options: { dirty?: boolean } = {}): void {
+  loadProjectDocument(doc, options);
+  noteProjectFile(projectDocument());
 }
 
 export function exportProjectFile(doc: ProjectDocument): void {
