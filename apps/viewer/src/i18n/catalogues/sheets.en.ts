@@ -22,6 +22,7 @@ export const sheetsEn = {
   'sheets.asIndicated': 'As indicated',
   'sheets.viewport': 'Viewport · {name}',
   'sheets.viewportLabel': '{name}  1:{scale}',
+  'sheets.viewportLabelNoScale': '{name}  (no scale)',
   'sheets.scale': 'Scale',
   'sheets.width': 'Width (mm)',
   'sheets.height': 'Height (mm)',

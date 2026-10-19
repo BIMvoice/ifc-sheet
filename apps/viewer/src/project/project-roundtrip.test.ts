@@ -75,6 +75,8 @@ const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').Pro
   '3d': {
     ...base, id: 'v-3d', name: 'Axo', kind: '3d',
     viewpoint: { position: { x: 1, y: 2, z: 3 }, target: { x: 0, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 }, fov: 50, projectionMode: 'orthographic', orthoSize: 12 },
+    projection: 'axonometric', preset: 'sw', shaded: true,
+    raster: { href: 'data:image/png;base64,AAAA', widthPx: 1772, heightPx: 1182, widthMm: 150, heightMm: 100 },
   } satisfies Required<ThreeDProjectView>,
 };
 

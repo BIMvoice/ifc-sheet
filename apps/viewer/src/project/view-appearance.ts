@@ -5,8 +5,9 @@
 /**
  * What a view shows of its generated drawing. An elevation shows what is
  * visible from outside, in solid lines, with the building's outline heavier:
- * nothing hidden unless the view asks for it (`showHidden`). Every other view
- * keeps the hidden lines it always had. Pure; the view's host applies it to
+ * nothing hidden unless the view asks for it (`showHidden`); so does an
+ * axonometric (a 3D view), which is also seen from outside. Plans and sections
+ * keep the hidden lines they always had. Pure; the view's host applies it to
  * every drawing it generates, so tabs, sheets and exports all see the same.
  */
 
@@ -18,7 +19,7 @@ import type { ProjectView } from './types';
 
 /** Whether a view draws the lines the hidden-line pass found occluded (dashed). */
 export function viewShowsHidden(view: Pick<ProjectView, 'kind' | 'showHidden'>): boolean {
-  return view.showHidden ?? view.kind !== 'elevation';
+  return view.showHidden ?? (view.kind !== 'elevation' && view.kind !== '3d');
 }
 
 const occluded = (l: Drawing2D['lines'][number]) => l.visibility === 'hidden' || l.category === 'hidden';

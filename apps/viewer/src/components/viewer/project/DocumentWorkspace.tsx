@@ -22,6 +22,8 @@ import { closeProjectTab } from '@/project/open-view';
 import { isDocsEdition } from '@/edition';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import { DocumentTabBar } from './DocumentTabBar';
+import { isVectorAxonometric } from '@/project/axonometric';
+import { AxonometricDrawingHost } from './AxonometricDrawingHost';
 import { ViewDrawingHost } from './ViewDrawingHost';
 import { DraftingView } from '../drafting/DraftingView';
 import { SheetView } from '../sheets/SheetView';
@@ -89,7 +91,8 @@ export function DocumentWorkspace({ children }: { children: ReactNode }) {
       <DocumentTabBar />
       {[...drawn].map((id) => {
         const view = views.find((v) => v.id === id);
-        return view && view.kind !== '3d' ? <ViewDrawingHost key={id} view={view} /> : null;
+        if (view?.kind === '3d') return isVectorAxonometric(view) ? <AxonometricDrawingHost key={id} view={view} /> : null;
+        return view ? <ViewDrawingHost key={id} view={view} /> : null;
       })}
       <div data-floating-snap-bounds className="relative flex-1 min-h-0 w-full overflow-hidden flex">
         {children}

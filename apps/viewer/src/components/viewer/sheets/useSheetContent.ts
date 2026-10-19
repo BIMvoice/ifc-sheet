@@ -19,7 +19,8 @@ import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
-import type { ProjectSheet, SheetViewport } from '@/project/types';
+import { isRasterView } from '@/project/axonometric';
+import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { partHostType } from '@/project/part-host';
 import { drawnBySymbol } from '@/project/view-symbols';
@@ -31,6 +32,11 @@ import { useSheetSchedules } from '../joinery/ScheduleGraphic';
 import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
 import { useSheetLegends } from '../legend/LegendGraphic';
 import type { ViewportContent } from './SheetPaper';
+
+/** The raster capture a 3D view prints as, when it prints as one and has been captured. */
+function rasterOf(view: ProjectView | undefined): ViewRaster | undefined {
+  return view && isRasterView(view) ? view.raster ?? undefined : undefined;
+}
 
 export interface SheetContent {
   content: (vp: SheetViewport) => ViewportContent;
@@ -77,6 +83,7 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
     civil: placedCivil.get(vp.viewId),
     legend: placedLegends.get(vp.viewId),
     view: views.find((v) => v.id === vp.viewId),
+    raster: rasterOf(views.find((v) => v.id === vp.viewId)),
     drawing: styled.get(vp.viewId)?.drawing ?? null,
     drafts: settledDrafts(vp.viewId),
     overlays: styled.get(vp.viewId)?.overlays,

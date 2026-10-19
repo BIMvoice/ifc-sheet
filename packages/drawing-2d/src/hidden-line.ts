@@ -46,6 +46,19 @@ export interface VisibilityResult {
   overallVisibility: VisibilityState;
 }
 
+/** What a view seen from outside (an axonometric) asks of the generator on top of the defaults every cardinal view has. */
+export interface ExteriorViewOptions {
+  /** Pixels of tolerance for an edge lying on its occluder's outline (`HiddenLineOptions.edgeTolerancePx`). Absent: none. */
+  hiddenLineEdgeTolerancePx?: number;
+  /**
+   * Also draw the creases facing the viewer, not only the silhouette
+   * (`EdgeExtractor.extractExteriorEdges`): the corners of a wall or a slab seen
+   * from outside. Absent: the silhouette only, which plans, sections and
+   * elevations draw.
+   */
+  includeFeatureEdges?: boolean;
+}
+
 export interface HiddenLineOptions {
   /** Resolution of depth buffer (pixels on longest axis) */
   resolution: number;
@@ -53,12 +66,26 @@ export interface HiddenLineOptions {
   samplesPerLine: number;
   /** Depth bias to avoid z-fighting */
   depthBias: number;
+  /**
+   * Whole pixels around a sample whose depth is also consulted: the sample is
+   * visible when ANY pixel in that neighbourhood lets it through. 0 (the
+   * default) reads the one pixel under the sample. A line lying exactly on the
+   * outline of its own occluder (a silhouette edge) is on the boundary of the
+   * occluder's covered pixels, so a point sample flips between "inside" and
+   * "outside" along it and the edge prints with gaps; one pixel of tolerance
+   * keeps it whole, and the depth test allows that many pixels of model as
+   * slack. The cost is that a truly hidden line within that many pixels of an
+   * uncovered one, or behind a surface by less than the slack, reads visible,
+   * which under-hides and never erases real geometry.
+   */
+  edgeTolerancePx: number;
 }
 
 const DEFAULT_OPTIONS: HiddenLineOptions = {
   resolution: 1024,
   samplesPerLine: 10,
   depthBias: 0.001,
+  edgeTolerancePx: 0,
 };
 
 /**
@@ -84,6 +111,8 @@ export class HiddenLineClassifier {
   /** Null after build when no occluder rasterized: everything is visible. */
   private raster: DepthRaster | null = null;
   private built = false;
+  /** The tolerance of the depth buffer last built (`buildDepthBuffer`'s argument, else the constructor's option). */
+  private edgeTolerancePx = 0;
 
   constructor(options: Partial<HiddenLineOptions> = {}) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
@@ -103,13 +132,16 @@ export class HiddenLineClassifier {
    * @param plane Section plane (cardinal fields, plus optional customPlane)
    * @param occluderDepth How far into the kept half occluders rasterize
    * @param bounds Optional pre-computed 2D bounds
+   * @param edgeTolerancePx See `HiddenLineOptions.edgeTolerancePx`; defaults to the constructor's option
    */
   buildDepthBuffer(
     meshes: MeshData[],
     plane: SectionPlaneConfig,
     occluderDepth: number,
-    bounds?: Bounds2D
+    bounds?: Bounds2D,
+    edgeTolerancePx = this.options.edgeTolerancePx,
   ): void {
+    this.edgeTolerancePx = edgeTolerancePx;
     this.raster = buildDepthRaster(
       meshes,
       plane,
@@ -302,9 +334,23 @@ export class HiddenLineClassifier {
     const ix = Math.max(0, Math.min(width - 1, Math.floor(px)));
     const iy = Math.max(0, Math.min(height - 1, Math.floor(py)));
 
-    const bufferDepth = buffer[iy * width + ix];
-
-    // Line is visible if it's at or in front of the depth buffer
-    return lineDepth <= bufferDepth + depthBias;
+    // Line is visible if it's at or in front of the depth buffer at the sample's
+    // pixel. With a tolerance, the pixels within `reach` of it are consulted too
+    // (one outside the raster counts as uncovered), and the depth may exceed the
+    // buffer's by up to `reach` pixels' worth of model: a pixel's centre sits up
+    // to half a pixel off the edge that was sampled, and across a sloped face
+    // that is a depth step larger than the bias, which would hide the inner
+    // corner of a wall and a slab.
+    const reach = this.edgeTolerancePx;
+    if (reach === 0) return lineDepth <= buffer[iy * width + ix] + depthBias;
+    const pixel = Math.max((bounds.max.x - bounds.min.x) / (width - 1), (bounds.max.y - bounds.min.y) / (height - 1));
+    const slack = depthBias + reach * pixel;
+    for (let y = iy - reach; y <= iy + reach; y++) {
+      for (let x = ix - reach; x <= ix + reach; x++) {
+        if (x < 0 || y < 0 || x >= width || y >= height) return true;
+        if (lineDepth <= buffer[y * width + x] + slack) return true;
+      }
+    }
+    return false;
   }
 }

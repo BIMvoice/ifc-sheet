@@ -13,7 +13,9 @@ import { renameProjectItem, useProjectStore } from '@/project/project-store';
 import { addViewport, removeViewport } from '@/project/sheets';
 import { drawingArea } from '@/project/drawing-set';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
+import { hasTrueScale } from '@/project/axonometric';
 import { ScaleField } from './ScaleField';
+import { ThreeDControls } from './ThreeDControls';
 import { CutHeightControl, DepthControl } from './ViewControls';
 
 const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
@@ -37,7 +39,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
   const name = view?.name ?? schedule?.name ?? '';
   const placed = new Set((sheet.viewports ?? []).map((vp) => vp.viewId));
   const placeable = [
-    ...views.filter((v) => v.kind !== '3d' && !placed.has(v.id)).map((v) => ({ id: v.id, name: v.name })),
+    ...views.filter((v) => !placed.has(v.id)).map((v) => ({ id: v.id, name: v.name })),
     ...schedules.filter((s) => !placed.has(s.id)).map((s) => ({ id: s.id, name: s.name })),
   ];
 
@@ -56,7 +58,8 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
             {t('wall.project.rename')}
             <input key={slot.viewId} className={field} defaultValue={name} onBlur={(e) => renameProjectItem(slot.viewId, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           </label>
-          <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} />
+          {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} /> : null}
+          {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
           <div className="mt-4 flex flex-wrap gap-2">

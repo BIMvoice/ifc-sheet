@@ -14,6 +14,7 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
+import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
@@ -104,7 +105,7 @@ function readView(v: unknown, path: string): ProjectView {
       if (v.planeOffset !== undefined && !isNumber(v.planeOffset)) fail(`${path}.planeOffset`, 'must be a number');
       return { ...base, kind: 'elevation', direction: v.direction as ElevationDirection, ...(v.planeOffset !== undefined ? { planeOffset: v.planeOffset } : {}) };
     default:
-      return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null };
+      return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null, ...read3dPrint(v) };
   }
 }
 

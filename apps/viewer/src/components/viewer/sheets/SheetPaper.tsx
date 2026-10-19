@@ -21,7 +21,8 @@ import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types'
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { FRAME_MARGIN_MM, mmPerMetre, paperOf, TITLE_BLOCK_MM, viewportBox } from '@/project/sheets';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
-import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
+import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
+import { hasTrueScale } from '@/project/axonometric';
 import { shapePath } from '../drafting/DraftOverlay';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
 import { layerTags, penTags } from './dxf-tags';
@@ -53,6 +54,8 @@ export interface ViewportContent {
   civil?: CivilLayout;
   /** A legend placed here instead of a view (paper millimetres). */
   legend?: LegendLayout;
+  /** A 3D view printed as a raster capture of the viewport, instead of drawn lines. */
+  raster?: ViewRaster;
 }
 
 interface SheetPaperProps {
@@ -112,6 +115,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
     <g data-viewport-id={vp.id}>
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
       <g clipPath={`url(#${clipId})`}>
+        {content.raster ? <image data-raster-px={`${content.raster.widthPx}x${content.raster.heightPx}`} href={content.raster.href} x={left} y={top} width={box.width} height={box.height} preserveAspectRatio="xMidYMid slice" /> : null}
         {pens.map((p, i) => (
           <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000')} d={p.d} fill={p.fill ?? 'none'} fillRule="evenodd" stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
         ))}
@@ -130,7 +134,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
         data-export-ignore={selected ? 'true' : undefined}
       />
       <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left} y={top + box.height + LABEL_MM + 1.5} fontSize={LABEL_MM} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
-        {tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale })}
+        {hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
       </text>
     </g>
   );
@@ -220,7 +224,9 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
   const y = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h;
   const fields = titleBlockOf(sheet, projectFields, projectName);
   const logo = projectFields?.[LOGO_FIELD];
-  const scales = [...new Set((sheet.viewports ?? []).map((v) => v.scale))];
+  const views = useProjectStore((s) => s.views);
+  // A perspective has no scale to state.
+  const scales = [...new Set((sheet.viewports ?? []).filter((v) => hasTrueScale(views.find((x) => x.id === v.viewId))).map((v) => v.scale))];
   const scaleText = scales.length === 1 ? `1:${scales[0]}` : scales.length === 0 ? '—' : t('sheets.asIndicated');
   const side = 50;
   const left = TITLE_BLOCK_MM.w - side;
