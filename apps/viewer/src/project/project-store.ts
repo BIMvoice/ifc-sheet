@@ -38,7 +38,7 @@ export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visib
 export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
-  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
+  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
   annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined, siteArea: undefined,
 };
 
@@ -60,7 +60,7 @@ const DOCUMENT_FIELDS = {
   symbolFlips: true, openingLines: true, textStyles: true, dimStyles: true, layerGroups: true, joineryTypes: true, currentJoinery: true,
   schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
   typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
-  modelState: true, siteArea: true,
+  modelState: true, siteArea: true, cadLayers: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -74,7 +74,7 @@ const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[
   titleBlock: () => ({}), hatchPatterns: () => '', symbolFlips: () => ({}), openingLines: () => 'handle',
   textStyles: () => [], dimStyles: () => [], layerGroups: () => [], joineryTypes: () => [], currentJoinery: () => ({}),
   schedules: () => [], joineryMapping: () => ({ ...DEFAULT_JOINERY_MAPPING }), elementTypes: () => [], currentTypes: () => ({}),
-  structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], savedSectionCuts: () => [],
+  structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], cadLayers: () => [], savedSectionCuts: () => [],
   annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [],
 };
 
@@ -113,6 +113,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     civilDrawings: doc.civilDrawings ?? [],
     typicalSections: doc.typicalSections ?? [],
     materials: doc.materials ?? [],
+    cadLayers: doc.cadLayers ?? [],
     savedSectionCuts: doc.savedSectionCuts ?? [],
     annotationTypes: doc.annotationTypes ?? [],
     symbols: doc.symbols ?? [],

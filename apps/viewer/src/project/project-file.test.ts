@@ -46,6 +46,7 @@ const doc: ProjectDocument = {
   structureProfiles: [],
   savedSectionCuts: [],
   materials: [{ id: 'm1', name: 'Mineral wool', hatch: 'INSULATION', hatchScale: 1.5, fill: null, hatchPen: 'light' }, { id: 'm2', name: 'PE foil', membrane: true }],
+  cadLayers: [{ id: 'c1', source: 'CUT', layer: 'A-WALL-CUT', color: '#7f1d1d' }],
   annotationTypes: [{ id: 'a1', name: 'Door tag', tool: 'tag', textStyle: 'big', tagField: 'name' }],
   symbols: [{ id: 'sy1', name: 'Mark', unit: 'paper', shapes: [{ type: 'circle', c: { x: 0, y: 0 }, r: 4 }] }],
   legends: [{ id: 'lg1', name: 'Key', createdAt: 1, title: 'Key', showTitle: true, scope: 'project', categories: ['materials', 'symbols'], columns: 1, rowHeight: 7, swatchWidth: 18, textStyle: 'standard', headings: true }],

@@ -17,7 +17,7 @@ import { useProjectStore } from './project-store';
 import { materialDrawing, type LayerRef, type MaterialDrawing } from './material-drawing';
 import { MEMBRANE_THICKNESS_M, ifcMaterialName, materialGraphics } from './materials';
 
-function modelOf(entityId: number) {
+export function modelOf(entityId: number) {
   const s = useViewerStore.getState();
   const ref = s.resolveGlobalIdFromModels(entityId);
   const model = ref ? s.models.get(ref.modelId) : undefined;
