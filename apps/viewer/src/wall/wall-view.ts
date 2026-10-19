@@ -10,7 +10,8 @@
  */
 
 import { create } from 'zustand';
-import type { ProjectSheet } from '@/project/types';
+import type { ProjectSheet, ProjectView } from '@/project/types';
+import type { ViewDrawingEntry } from '@/project/view-drawings';
 import { drawnQueue, sameIds, visibleSheets, type PlacedSheet, type Rect, type Size } from './wall-geometry';
 
 export interface WallLayout {
@@ -39,12 +40,51 @@ export function nearMargin(viewport: Size): number {
   return Math.max(viewport.w, viewport.h) / 2;
 }
 
+/** When the screen last moved, ms; the background fill waits for the Wall to hold still. */
+let lastMoved = 0;
+export const wallMovedAgo = (): number => Date.now() - lastMoved;
+
 export function setWallLayout(layout: WallLayout | null): void {
+  lastMoved = Date.now();
   useWallView.setState((s) => {
     const near = layout ? visibleSheets(layout.sheets, layout.viewport, nearMargin(layout.viewport)) : [];
     const queue = drawnQueue(s.queue, near);
     return { layout, near: sameIds(near, s.near) ? s.near : near, queue: sameIds(queue, s.queue) ? s.queue : queue };
   });
+}
+
+/** Every sheet, nearest the screen first: the order the background fill draws the far ones in. */
+export function fillOrder(layout: WallLayout): string[] {
+  return visibleSheets(layout.sheets, layout.viewport, Infinity);
+}
+
+/** The first sheet in `order` not yet in `queue`, or null when every sheet is queued. */
+export function nextToFill(order: readonly string[], queue: readonly string[]): string | null {
+  const queued = new Set(queue);
+  return order.find((id) => !queued.has(id)) ?? null;
+}
+
+/** Queue the next far sheet for drawing; null when there is none. */
+export function fillNext(): string | null {
+  const { layout, queue } = useWallView.getState();
+  const id = layout ? nextToFill(fillOrder(layout), queue) : null;
+  if (id) useWallView.setState({ queue: [...queue, id] });
+  return id;
+}
+
+/** The drawable views of queued sheets that have not finished generating (ready or failed). */
+export function pendingViews(
+  queue: readonly string[],
+  sheets: readonly ProjectSheet[],
+  views: readonly ProjectView[],
+  byView: Record<string, Pick<ViewDrawingEntry, 'status'> | undefined>,
+): string[] {
+  const drawable = new Set(views.filter((v) => v.kind !== '3d').map((v) => v.id));
+  const queued = new Set(queue);
+  return sheets
+    .filter((s) => queued.has(s.id))
+    .flatMap((s) => (s.viewports ?? []).map((vp) => vp.viewId))
+    .filter((id) => drawable.has(id) && byView[id]?.status !== 'ready' && byView[id]?.status !== 'error');
 }
 
 export function scrollWallTo(to: { x: number; y: number }): void {

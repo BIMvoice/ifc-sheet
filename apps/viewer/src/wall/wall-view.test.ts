@@ -5,7 +5,7 @@
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ProjectSheet } from '@/project/types';
-import { resetWallView, revealSheet, setWallLayout, sheetsToDraw, useWallView, type WallLayout } from './wall-view.js';
+import { fillNext, fillOrder, nextToFill, pendingViews, resetWallView, revealSheet, setWallLayout, sheetsToDraw, useWallView, type WallLayout } from './wall-view.js';
 
 const sheet = (id: string): ProjectSheet => ({ id, number: id, name: id, viewports: [] }) as unknown as ProjectSheet;
 const SHEETS = ['a', 'b', 'c', 'd'].map(sheet);
@@ -58,5 +58,36 @@ describe('the Wall view', () => {
     const s = useWallView.getState();
     assert.deepEqual(s.scroll?.to, { x: 5050, y: 50 });
     assert.equal(s.highlight, 'b');
+  });
+});
+
+describe('the background fill', () => {
+  const sheets = ['a', 'b', 'c', 'd'].map((id, i) => ({ id, rect: { x: i * 1000, y: 0, w: 100, h: 100 } }));
+  const layout: WallLayout = { sheets, viewport: { x: 1900, y: 0, w: 400, h: 300 }, content: { w: 4000, h: 300 } };
+
+  it('orders every sheet, nearest the screen first', () => {
+    assert.deepEqual(fillOrder(layout), ['c', 'd', 'b', 'a']);
+  });
+
+  it('drains to every sheet, one at a time, and then ends', () => {
+    setWallLayout(layout);
+    assert.deepEqual(useWallView.getState().queue, ['c'], 'only the near sheet at first');
+    const taken: (string | null)[] = [];
+    for (let i = 0; i < 6; i++) taken.push(fillNext());
+    assert.deepEqual(taken, ['d', 'b', 'a', null, null, null]);
+    assert.deepEqual(useWallView.getState().queue, ['c', 'd', 'b', 'a']);
+  });
+
+  it('skips sheets already queued', () => {
+    assert.equal(nextToFill(['c', 'd', 'b'], ['c', 'b']), 'd');
+    assert.equal(nextToFill(['c'], ['c']), null);
+  });
+
+  it('waits on queued sheets whose drawable views are not yet ready or failed', () => {
+    const ss = [{ id: 's', number: 's', name: 's', viewports: [{ viewId: 'v1' }, { viewId: 'v2' }, { viewId: 'v3' }, { viewId: 'sched' }] }] as unknown as ProjectSheet[];
+    const views = [{ id: 'v1', kind: 'plan' }, { id: 'v2', kind: 'plan' }, { id: 'v3', kind: 'plan' }] as never;
+    const by = { v1: { status: 'ready' }, v2: { status: 'generating' } } as never;
+    assert.deepEqual(pendingViews(['s'], ss, views, by), ['v2', 'v3']);
+    assert.deepEqual(pendingViews([], ss, views, by), [], 'a sheet not queued is not waited for');
   });
 });
