@@ -19,6 +19,7 @@ import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
 import { create } from 'zustand';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { noteProjectFile } from './project-file';
 import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
@@ -76,8 +77,11 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
   };
 }
 
-/** Replace the document (file import, autosave restore). */
-export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean } = {}): void {
+/**
+ * Replace the document (file import, autosave restore). A file being opened is noted as the last
+ * project file for these models (`project-saved.ts`); an autosave being put back is not a file.
+ */
+export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean; fromAutosave?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
   const doc = liftSheetTitleBlocks(saved);
@@ -109,6 +113,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     activeItemId: null,
     dirty: options.dirty ?? false,
   });
+  if (!options.fromAutosave) noteProjectFile(projectDocument());
 }
 
 /**

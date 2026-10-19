@@ -15,6 +15,7 @@ import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { sectionProposals, startDrawingSet } from '@/project/drawing-set-actions';
 import { setExtent } from '@/draft-set/body';
+import { discardRecovery } from '@/project/recovery-store';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { SteppedSheet } from './SteppedSheet';
@@ -46,7 +47,8 @@ export function WallView() {
   // The proposals read the lowest plan's rooms; they change only with the model or the plans.
   const proposals = useMemo(() => sectionProposals(meshes, extent), [meshes, extent, views]);
   const back = useCallback(() => stepInto(null), []);
-  const hang = useCallback(() => setIntro(false), []);
+  // Going on without answering the offer of an autosave declines it.
+  const hang = useCallback(() => { discardRecovery(); setIntro(false); }, []);
   const steppedSheet = sheets.find((s) => s.id === stepped) ?? null;
   const modelName = [...models.values()][0]?.name ?? '';
 
