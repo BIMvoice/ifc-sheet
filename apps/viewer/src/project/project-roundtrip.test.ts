@@ -18,6 +18,7 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import type { CadLayerRule } from './cad-layers.js';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
 import { snapshotFromElements } from '@/whatchanged/snapshot.js';
 import { defaultTypeSpec } from '@/element-types/spec';
@@ -133,6 +134,10 @@ const civil: Required<ProjectCivilDrawing> = {
 };
 const material: Required<ProjectMaterial> = { id: 'm1', name: 'Mineral wool', hatch: 'INSULATION', hatchScale: 1.5, fill: '#ffeeaa', hatchPen: 'light', membrane: true };
 
+const cadRule: Required<CadLayerRule> = {
+  id: 'cad1', source: 'CUT', kind: 'text', ifcClasses: ['IfcWall', 'IfcWallStandardCase'], material: 'Beton armat', layer: 'A-WALL-CUT', color: '#7f1d1d', lineWeight: 0.5, lineType: 'dashed',
+};
+
 /** Every field of the project document set to something that is not its default. */
 const FULL: Required<ProjectDocument> = {
   name: 'Full house',
@@ -160,6 +165,7 @@ const FULL: Required<ProjectDocument> = {
   civilDrawings: [civil],
   typicalSections: [{ id: 'ts1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: { width: 1, slope: -4 }, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 }, nominalDepth: 0.6 } }],
   materials: [material],
+  cadLayers: [cadRule],
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],

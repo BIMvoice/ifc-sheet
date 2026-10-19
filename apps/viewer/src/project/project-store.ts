@@ -37,7 +37,7 @@ export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visib
 export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
-  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
+  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
   annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined,
 };
 
@@ -67,6 +67,7 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
     civilDrawings: state.civilDrawings ?? [],
     typicalSections: state.typicalSections ?? [],
     materials: state.materials ?? [],
+    cadLayers: state.cadLayers ?? [],
     savedSectionCuts: state.savedSectionCuts ?? [],
     annotationTypes: state.annotationTypes ?? [],
     symbols: state.symbols ?? [],
@@ -98,6 +99,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     civilDrawings: doc.civilDrawings ?? [],
     typicalSections: doc.typicalSections ?? [],
     materials: doc.materials ?? [],
+    cadLayers: doc.cadLayers ?? [],
     savedSectionCuts: doc.savedSectionCuts ?? [],
     annotationTypes: doc.annotationTypes ?? [],
     symbols: doc.symbols ?? [],
