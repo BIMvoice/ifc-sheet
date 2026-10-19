@@ -5,13 +5,15 @@
 /**
  * "Add a drawing", in four big choices: a plan of a storey (pick the storey),
  * a section (draw a line on a plan), an elevation (pick a side), a detail of
- * an area (mark it on the drawing in front). A new drawing hangs on the set where its kind belongs.
+ * an area (mark it on the drawing in front), a drafting view (blank, or a library detail). A new drawing hangs on the set where its kind belongs.
  */
 
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from '@/i18n';
 import { ELEVATION_DIRECTIONS, planViewFor, resolvePlanLevel } from '@/project/view-defaults';
 import { addProjectView, useProjectStore } from '@/project/project-store';
+import { draftingViewOf } from '@/drafting/drafting-view';
+import { placeLibraryDetail } from '@/catalogue/detail-actions';
 import type { ElevationDirection, PlanProjectView } from '@/project/types';
 import { ToolIcon, type ToolIconName } from '../ifcsheet/ToolIcon';
 
@@ -46,7 +48,8 @@ const pick = 'rounded-full border border-sky-300/40 px-4 py-2 text-sky-50 hover:
 export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingProps) {
   const { t } = useTranslation();
   const levels = useProjectStore((s) => s.levels);
-  const [step, setStep] = useState<'kinds' | 'storey' | 'side'>('kinds');
+  const [step, setStep] = useState<'kinds' | 'storey' | 'side' | 'drafting'>('kinds');
+  const details = useProjectStore((s) => s.details);
 
   const planOf = (index: number): void => {
     const { views } = useProjectStore.getState();
@@ -63,6 +66,12 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
     onView(existing?.id ?? addProjectView({ kind: 'elevation', name: SIDE_NAMES[direction], direction }));
   };
 
+  const draftingBlank = (): void => onView(addProjectView(draftingViewOf(t('wall.add.draftingName'))));
+  const draftingFromLibrary = (entryId: string): void => {
+    const id = placeLibraryDetail(entryId);
+    if (id) onView(id);
+  };
+
   return (
     <section aria-label={t('wall.add.title')} className="flex items-center gap-8 rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 shadow-2xl backdrop-blur">
       <div className="w-44 shrink-0">
@@ -76,9 +85,15 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
           <Choice icon="section" title={t('wall.add.section')} hint={t('wall.add.sectionHint')} onClick={onSection} />
           <Choice icon="symbol" title={t('wall.add.elevation')} hint={t('wall.add.elevationHint')} onClick={() => setStep('side')} />
           <Choice icon="plus" title={t('wall.add.detail')} hint={t('wall.add.detailHint')} onClick={onDetail} />
+          <Choice icon="symbol" title={t('wall.add.drafting')} hint={t('wall.add.draftingHint')} onClick={() => setStep('drafting')} />
         </div>
       ) : step === 'storey' ? (
         <Picks>{levels.map((level, i) => <button key={level.name + level.elevation} type="button" className={pick} onClick={() => planOf(i)}>{level.name}</button>)}</Picks>
+      ) : step === 'drafting' ? (
+        <Picks>
+          <button type="button" className={pick} onClick={draftingBlank}>{t('wall.add.draftingBlank')}</button>
+          {(details ?? []).map((d) => <button key={d.id} type="button" className={pick} onClick={() => draftingFromLibrary(d.id)}>{d.name}</button>)}
+        </Picks>
       ) : (
         <Picks>{ELEVATION_DIRECTIONS.map((d) => <button key={d} type="button" className={pick} onClick={() => sideOf(d)}>{SIDE_NAMES[d]}</button>)}</Picks>
       )}

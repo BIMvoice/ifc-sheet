@@ -7,7 +7,7 @@ import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
-import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
+import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from '@/catalogue/types';
 
 /**
  * The project document: the views and sheets a user organises over the
@@ -21,7 +21,7 @@ import type { CameraViewpoint, SectionCapStyle, SectionPlane, SectionPlaneAxis }
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 
-export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d';
+export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d' | 'drafting';
 
 /** The facade an elevation looks at (project north = IFC +Y). */
 export type ElevationDirection = 'north' | 'south' | 'east' | 'west';
@@ -139,7 +139,18 @@ export interface ThreeDProjectView extends ProjectViewBase {
   viewpoint: CameraViewpoint | null;
 }
 
-export type ProjectView = PlanProjectView | SectionProjectView | ElevationProjectView | ThreeDProjectView;
+/**
+ * A drawing with no model behind it: a scale, a name and the drafts drawn on
+ * it (a typical parapet, a threshold). It generates no model geometry, is
+ * placed on sheets like any view and can be the target of a detail mark.
+ */
+export interface DraftingProjectView extends ProjectViewBase {
+  kind: 'drafting';
+  /** The number a detail mark shows for it (1, 2, …), set when a mark is made; shared with the numbers of the project's details. */
+  number?: number;
+}
+
+export type ProjectView = PlanProjectView | SectionProjectView | ElevationProjectView | ThreeDProjectView | DraftingProjectView;
 
 /** A view as handed to `addProjectView`: the store assigns `createdAt` (and `id` unless given). */
 export type NewProjectView = ProjectView extends infer V
@@ -320,6 +331,8 @@ export interface ProjectDocument {
   annotationTypes?: AnnotationType[];
   /** The project's own symbols (the built-in ones are in code). */
   symbols?: DraftSymbol[];
+  /** Details drawn once and kept for reuse: drafting views saved to the library, placed again with `placeLibraryDetail`. */
+  details?: LibraryDetail[];
   /** Legends: generated tables of what the drawings use, placeable on sheets. */
   legends?: ProjectLegend[];
   /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */

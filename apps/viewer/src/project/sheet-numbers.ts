@@ -9,9 +9,9 @@
 
 import type { ProjectSheet, ProjectViewKind } from './types';
 
-export type SheetNumberGroup = 'plans' | 'elevations' | 'sections' | 'other';
+export type SheetNumberGroup = 'plans' | 'elevations' | 'sections' | 'details' | 'other';
 
-const BASE: Record<SheetNumberGroup, number> = { plans: 100, elevations: 200, sections: 300, other: 900 };
+const BASE: Record<SheetNumberGroup, number> = { plans: 100, elevations: 200, sections: 300, details: 500, other: 900 };
 
 /** The sheet as a person's own: no longer numbered by the program. */
 export function withoutAutoNumber(sheet: ProjectSheet): ProjectSheet {
@@ -21,7 +21,7 @@ export function withoutAutoNumber(sheet: ProjectSheet): ProjectSheet {
 
 /** The group of sheets a view of this kind belongs to; `undefined` (a schedule, a legend) is `other`. */
 export function sheetGroupOfView(kind: ProjectViewKind | undefined): SheetNumberGroup {
-  return kind === 'plan' ? 'plans' : kind === 'elevation' ? 'elevations' : kind === 'section' ? 'sections' : 'other';
+  return kind === 'plan' ? 'plans' : kind === 'elevation' ? 'elevations' : kind === 'section' ? 'sections' : kind === 'drafting' ? 'details' : 'other';
 }
 
 /** The next free number in the group's hundred: `A-101`, `A-201`, `A-301`, `A-901`. */

@@ -15,11 +15,12 @@ import { addProjectView, useProjectStore } from '@/project/project-store';
 import { addModelLevel } from '@/project/model-levels';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS } from '@/project/view-defaults';
 import { bodyElevationOffset } from '@/draft-set/body';
+import { placeLibraryDetail } from '@/catalogue/detail-actions';
 import { openProjectView } from '@/project/open-view';
 import type { ElevationDirection } from '@/project/types';
 import { NewItemDialog, type DialogField, type DialogValues } from './NewItemDialog';
 
-type Kind = 'level' | 'plan' | 'elevation';
+type Kind = 'level' | 'plan' | 'elevation' | 'placeDetail';
 
 const DIRECTION_KEYS = {
   north: 'projectNavigator.props.north',
@@ -33,6 +34,7 @@ export function useNavigatorDialogs() {
   const [kind, setKind] = useState<Kind | null>(null);
   const models = useViewerStore((s) => s.models);
   const levels = useProjectStore((s) => s.levels);
+  const details = useProjectStore((s) => s.details);
 
   const loaded = [...models.values()].filter((m) => m.ifcDataStore);
   const top = levels[0];
@@ -67,6 +69,15 @@ export function useNavigatorDialogs() {
       if (!level) return t('projectNavigator.dialog.noLevel');
       if (!Number.isFinite(cut)) return t('projectNavigator.dialog.badNumber');
       const id = addProjectView({ kind: 'plan', name: v.name?.trim() || level.name, level: { ...level, storeyGlobalIds: [...level.storeyGlobalIds] }, cutHeight: cut });
+      openProjectView(id);
+      return null;
+    };
+  } else if (kind === 'placeDetail') {
+    title = t('projectNavigator.dialog.placeDetail');
+    fields.push({ key: 'detail', label: t('projectNavigator.dialog.detail'), type: 'select', initial: details?.[0]?.id ?? '', options: (details ?? []).map((d) => ({ value: d.id, label: d.name })) });
+    onSubmit = (v) => {
+      const id = placeLibraryDetail(v.detail ?? '');
+      if (!id) return t('projectNavigator.dialog.noDetails');
       openProjectView(id);
       return null;
     };

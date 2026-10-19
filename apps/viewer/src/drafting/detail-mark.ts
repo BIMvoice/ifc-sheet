@@ -10,7 +10,7 @@
  * has grips that change the detail's crop. Pure.
  */
 
-import { detailRect } from '@/project/detail';
+import { detailNumberOf, detailRect } from '@/project/detail';
 import type { ProjectSheet, ProjectView, ViewDetail } from '@/project/types';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from './frame';
 import type { Grip } from './grips';
@@ -78,9 +78,9 @@ export function settleDetailMarks(drafts: DraftEntity[], views: readonly Project
   const next = drafts.map((d) => {
     const id = detailLink(d);
     if (!id || d.shape.type !== 'text') return d;
-    const detail = views.find((v) => v.id === id)?.detail;
-    if (!detail) return d;
-    const text = detailLabel(detail.number, sheetNumberOf(id, sheets));
+    const number = detailNumberOf(views.find((v) => v.id === id));
+    if (number === undefined) return d;
+    const text = detailLabel(number, sheetNumberOf(id, sheets));
     if (d.shape.text === text) return d;
     changed = true;
     return { ...d, shape: { ...d.shape, text } };

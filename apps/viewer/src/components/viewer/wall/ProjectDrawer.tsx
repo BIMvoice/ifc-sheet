@@ -30,6 +30,7 @@ const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: Translati
   { kind: 'plan', labelKey: 'wall.group.plans' },
   { kind: 'section', labelKey: 'wall.group.sections' },
   { kind: 'elevation', labelKey: 'wall.group.elevations' },
+  { kind: 'drafting', labelKey: 'wall.group.drafting' },
 ];
 
 const action = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';

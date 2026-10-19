@@ -38,6 +38,13 @@ export interface KindReport {
   renamed: number;
 }
 
+/** Which definition stands for each incoming one, by incoming id (layers, symbols) or upper-cased name (hatch patterns renamed). */
+export interface MergeMaps {
+  layers: Map<string, string>;
+  symbols: Map<string, string>;
+  patterns: Map<string, string>;
+}
+
 export type MergeReport = Record<CatalogueKind, KindReport>;
 
 const noReport = (): KindReport => ({ added: 0, kept: 0, replaced: 0, renamed: 0 });
@@ -131,7 +138,7 @@ function mergePatterns(mine: string, theirs: string, policy: ClashPolicy): { tex
 /** The incoming catalogue merged into `mine`. Neither argument is changed. */
 export function mergeCatalogues(
   mine: Catalogue, incoming: Catalogue, policy: ClashPolicy, fresh: (prefix: string) => string = freshProjectId,
-): { catalogue: Catalogue; report: MergeReport } {
+): { catalogue: Catalogue; report: MergeReport; maps: MergeMaps } {
   const groups = mergeNamed(mine.layerGroups, incoming.layerGroups, policy, 'group', fresh);
   const layers = mergeNamed(mine.layers, incoming.layers, policy, 'layer', fresh, (l) => {
     if (!l.group) return l;
@@ -156,14 +163,16 @@ export function mergeCatalogues(
   }));
   const symbols = mergeNamed(mine.symbols, incoming.symbols, policy, 'symbol', fresh);
   const legends = mergeNamed(mine.legends, incoming.legends.map(({ scopeId: _scopeId, ...rest }) => rest), policy, 'legend', fresh, (l) => ({ ...l, textStyle: textId(l.textStyle) }));
+  const details = mergeNamed(mine.details, incoming.details, policy, 'detail', fresh);
   return {
+    maps: { layers: layers.ids, symbols: symbols.ids, patterns: patterns.names },
     catalogue: {
       layers: layers.list, layerGroups: groups.list, textStyles: texts.list, dimStyles: dims.list, hatchPatterns: patterns.text,
-      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list,
+      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, details: details.list,
     },
     report: {
       layers: layers.report, textStyles: texts.report, dimStyles: dims.report, hatchPatterns: patterns.report,
-      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report,
+      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, details: details.report,
     },
   };
 }

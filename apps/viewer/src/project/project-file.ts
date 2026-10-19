@@ -13,6 +13,7 @@ import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
+import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
@@ -43,7 +44,7 @@ export function exportProjectFile(doc: ProjectDocument): void {
   downloadFile(serializeProject(doc), `${stem}${PROJECT_FILE_SUFFIX}`, 'application/json');
 }
 
-const VIEW_KINDS: readonly ProjectViewKind[] = ['plan', 'section', 'elevation', '3d'];
+const VIEW_KINDS: readonly ProjectViewKind[] = ['plan', 'section', 'elevation', '3d', 'drafting'];
 const DIRECTIONS: readonly ElevationDirection[] = ['north', 'south', 'east', 'west'];
 const AXES = ['down', 'front', 'side'] as const;
 
@@ -103,6 +104,8 @@ function readView(v: unknown, path: string): ProjectView {
       if (!DIRECTIONS.includes(v.direction as ElevationDirection)) fail(`${path}.direction`, `must be one of ${DIRECTIONS.join(', ')}`);
       if (v.planeOffset !== undefined && !isNumber(v.planeOffset)) fail(`${path}.planeOffset`, 'must be a number');
       return { ...base, kind: 'elevation', direction: v.direction as ElevationDirection, ...(v.planeOffset !== undefined ? { planeOffset: v.planeOffset } : {}) };
+    case 'drafting':
+      return { ...base, kind: 'drafting', ...(isNumber(v.number) && v.number > 0 ? { number: v.number } : {}) };
     default:
       return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null };
   }
@@ -161,6 +164,7 @@ export function parseProjectFile(text: string): ProjectDocument {
     annotationTypes: readList(raw, 'annotationTypes', readAnnotationType),
     symbols: readList(raw, 'symbols', readSymbol),
     legends: readList(raw, 'legends', readLegend),
+    details: readList(raw, 'details', readLibraryDetail),
     issues: readIssues(raw.issues),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
   };
