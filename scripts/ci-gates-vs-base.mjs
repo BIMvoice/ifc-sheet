@@ -52,13 +52,21 @@ export function normalise(text) {
     .filter((line) => line !== '');
 }
 
+/**
+ * The module-size allowlist summary when the head only lowered or deleted
+ * budgets ("+0 added, ^0 raised"): an improvement, so it is not a new failure.
+ */
+export function isImprovementOnly(line) {
+  return /:\s*\+0 added, \^0 raised, v\d+ lowered, -\d+ deleted$/.test(line);
+}
+
 /** Lines in `head` that are not in `base`, in head order, without repeats. */
 export function newLines(head, base) {
   const known = new Set(base);
   const seen = new Set();
   const out = [];
   for (const line of head) {
-    if (known.has(line) || seen.has(line)) continue;
+    if (known.has(line) || seen.has(line) || isImprovementOnly(line)) continue;
     seen.add(line);
     out.push(line);
   }
