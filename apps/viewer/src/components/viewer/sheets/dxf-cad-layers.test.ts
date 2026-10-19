@@ -47,7 +47,7 @@ const get = (r: { pairs: [string, string][] }, code: string) => r.pairs.find(([c
 /** The drawing as the DXF walker writes it: pens → tags → layer and pens → writer. */
 function write(rules: readonly CadLayerRule[], withCad = rules.length > 0): { layers: Map<string, { aci: string; true: string; weight: string; ltype: string }>; entities: { type: string; layer: string }[]; text: string } {
   const w = new DxfR2000();
-  for (const p of viewportPens(drawing, undefined, { scale: 1000, ...T }, 'down', [], withCad ? cad : undefined)) {
+  for (const p of viewportPens(drawing, undefined, { scale: 1000, ...T }, 'down', [], undefined, withCad ? cad : undefined)) {
     if (!p.stroke) continue;
     const tags = penTags(p.layer, p.width, !!p.dash, p.stroke, p);
     const pens = layerAndPens(rules, (n) => tags[`data-dxf-${n}` as keyof typeof tags], p.layer, p.stroke);

@@ -13,6 +13,7 @@
 
 import { readDraftLayer } from '@/drafting/draft-file';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
+import { GRAPHIC_STANDARDS } from '@/drafting/graphic-standard';
 import type { DraftLayer } from '@/drafting/types';
 import { readCadLayerRule } from '@/project/cad-layers-file';
 import type { CadLayerRule } from '@/project/cad-layers';
@@ -48,6 +49,8 @@ export interface Catalogue {
   cadLayers: CadLayerRule[];
   /** Which IFC property feeds each field of a tag; absent: the defaults. */
   tagFields?: TagFieldConfig;
+  /** A built-in graphic standard (pens and text sizes) the library ships with, by id (`drafting/graphic-standard.ts`). Only built-in library entries carry one. */
+  graphicStandard?: string;
 }
 
 export interface CatalogueFile extends Catalogue {
@@ -126,8 +129,14 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       legends: readList(file, 'legends', (v, p) => readLegend(v, p, WHAT), WHAT),
       cadLayers: readList(file, 'cadLayers', (v, p) => readCadLayerRule(v, p, WHAT), WHAT),
       ...readTagFieldsEntry(file),
+      ...(file.graphicStandard === undefined ? {} : { graphicStandard: knownStandard(file.graphicStandard) }),
     },
   };
+}
+
+function knownStandard(v: unknown): string {
+  const known = GRAPHIC_STANDARDS.find((g) => g.id === v);
+  return known ? known.id : fail('/graphicStandard', `must be one of ${GRAPHIC_STANDARDS.map((g) => g.id).join(', ')}`, WHAT);
 }
 
 function readMaterialStrict(v: unknown, path: string): ProjectMaterial {

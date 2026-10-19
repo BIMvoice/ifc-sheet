@@ -165,6 +165,7 @@ const FULL: Required<ProjectDocument> = {
     id: 'arch', name: 'Arch', textStyle: 'big', arrow: 'arrow', arrowSize: 2, extGap: 0.5, extOver: 2, placement: 'below', textGap: 0.8, precision: 0, unit: 'mm', color: '#0000aa',
   }],
   layerGroups: [{ id: 'g1', name: 'Annotation', visible: false, locked: true }],
+  graphicStandard: 'ro-practice',
   openingLines: 'hinge',
   symbolFlips: { '2O2Fr$t4X7Zf8NOew3FLOH': 3 },
   joineryTypes: [{ ...defaultDoorSpec('D-1'), id: 'j1' }, { ...defaultWindowSpec('W-1'), id: 'j2', columns: [2, 1], panels: [{ col: 0, row: 0, operation: 'tilt-turn-right' }] }],

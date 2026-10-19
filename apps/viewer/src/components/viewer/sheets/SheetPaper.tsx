@@ -31,6 +31,7 @@ import { LOGO_FIELD, titleBlockOf } from '@/project/title-block';
 import { useEffectiveTitleBlock } from '@/project/title-block-model';
 import { viewportPens } from './viewport-pens';
 import { cadPenContext } from '@/project/cad-layer-material';
+import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { OverlayPaths } from './OverlayPaths';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
@@ -86,12 +87,13 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
 }) {
   const { t: tr } = useTranslation();
   const { view, drawing, drafts } = content;
+  const standard = useGraphicStandard();
   const axis: SectionAxisName = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
   const t = viewportTransform(vp, drawing, axis);
   const cadLayers = useProjectStore((s) => s.cadLayers);
   const pens = useMemo(
-    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers)) : []),
-    [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers],
+    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, standard, cadPenContext(cadLayers)) : []),
+    [drawing, view?.graphics, vp, axis, extraPatterns, standard, cadLayers],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);
   const left = vp.x - box.width / 2;
@@ -133,7 +135,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined}
         data-export-ignore={selected ? 'true' : undefined}
       />
-      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left} y={top + box.height + LABEL_MM + 1.5} fontSize={LABEL_MM} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
+      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left} y={top + box.height + standard.type.viewTitle + 1.5} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
         {tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale })}
       </text>
     </g>
@@ -218,10 +220,11 @@ function SheetDrafts({ entities, layers, extraPatterns }: { entities: readonly D
  * with the sheet's own on top (`title-block.ts`).
  */
 /** The size of a value in a half-width cell (about 61 mm of text): 3.5 mm, smaller for a longer value so that all of it prints inside its cell. */
-const valueSize = (value: string): number => Math.max(1.6, Math.min(3.5, 61 / (0.55 * Math.max(1, value.length))));
+const valueSize = (value: string, max = 3.5): number => Math.max(1.6, Math.min(max, 61 / (0.55 * Math.max(1, value.length))));
 
 function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; projectName: string; w: number; h: number }) {
   const { t } = useTranslation();
+  const { sheet: line, type } = useGraphicStandard();
   const projectFields = useEffectiveTitleBlock();
   const x = w - FRAME_MARGIN_MM - TITLE_BLOCK_MM.w;
   const y = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h;
@@ -247,27 +250,27 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
   const font = 'ui-sans-serif, system-ui, sans-serif';
   const sx = x + left;
   return (
-    <g {...penTags('TITLEBLOCK', 0.35)}>
-      <rect x={x} y={y} width={TITLE_BLOCK_MM.w} height={TITLE_BLOCK_MM.h} fill="#fff" stroke="#000" strokeWidth={0.5} />
-      {[1, 2, 3, 4].map((i) => <line key={i} x1={x} y1={y + rowH * i} x2={sx} y2={y + rowH * i} stroke="#000" strokeWidth={0.18} />)}
-      {[[0, 2], [3, 5]].map(([from, to]) => <line key={from} x1={x + left / 2} y1={y + rowH * from} x2={x + left / 2} y2={y + rowH * to} stroke="#000" strokeWidth={0.18} />)}
+    <g {...penTags('TITLEBLOCK', line.titleDivider)}>
+      <rect x={x} y={y} width={TITLE_BLOCK_MM.w} height={TITLE_BLOCK_MM.h} fill="#fff" stroke="#000" strokeWidth={line.titleOuter} />
+      {[1, 2, 3, 4].map((i) => <line key={i} x1={x} y1={y + rowH * i} x2={sx} y2={y + rowH * i} stroke="#000" strokeWidth={line.titleRule} />)}
+      {[[0, 2], [3, 5]].map(([from, to]) => <line key={from} x1={x + left / 2} y1={y + rowH * from} x2={x + left / 2} y2={y + rowH * to} stroke="#000" strokeWidth={line.titleRule} />)}
       {cells.map(([label, value, row, col]) => {
         const cx = x + (col === 1 ? left / 2 : 0);
         return (
           <g key={label}>
-            <text x={cx + 2} y={y + rowH * row + 3.2} fontSize={2} fontFamily={font} fill="#52525b">{label}</text>
-            <text x={cx + 2} y={y + rowH * row + 8} fontSize={col < 0 ? 3.5 : valueSize(value)} fontFamily={font} fill="#000">{value}</text>
+            <text x={cx + 2} y={y + rowH * row + 3.2} fontSize={type.caption} fontFamily={font} fill="#52525b">{label}</text>
+            <text x={cx + 2} y={y + rowH * row + 8} fontSize={col < 0 ? type.value : valueSize(value, type.value)} fontFamily={font} fill="#000">{value}</text>
           </g>
         );
       })}
-      <line x1={sx} y1={y} x2={sx} y2={y + TITLE_BLOCK_MM.h} stroke="#000" strokeWidth={0.35} />
-      <line x1={sx} y1={y + 14} x2={x + TITLE_BLOCK_MM.w} y2={y + 14} stroke="#000" strokeWidth={0.18} />
-      <line x1={sx} y1={y + 34} x2={x + TITLE_BLOCK_MM.w} y2={y + 34} stroke="#000" strokeWidth={0.18} />
+      <line x1={sx} y1={y} x2={sx} y2={y + TITLE_BLOCK_MM.h} stroke="#000" strokeWidth={line.titleDivider} />
+      <line x1={sx} y1={y + 14} x2={x + TITLE_BLOCK_MM.w} y2={y + 14} stroke="#000" strokeWidth={line.titleRule} />
+      <line x1={sx} y1={y + 34} x2={x + TITLE_BLOCK_MM.w} y2={y + 34} stroke="#000" strokeWidth={line.titleRule} />
       {logo ? <image data-export-ignore-dxf="true" href={logo} x={sx + 2} y={y + 1.5} width={side - 4} height={11} preserveAspectRatio="xMidYMid meet" /> : null}
-      <text x={sx + 2} y={y + 17.2} fontSize={2} fontFamily={font} fill="#52525b">{t('sheets.tb.number')}</text>
-      <text x={sx + 2} y={y + 29.5} fontSize={9} fontWeight={700} fontFamily={font} fill="#000">{sheet.number}</text>
-      <text x={sx + 2} y={y + 37.2} fontSize={2} fontFamily={font} fill="#52525b">{t('sheets.tb.scale')}</text>
-      <text x={sx + 2} y={y + 45.5} fontSize={4.5} fontFamily={font} fill="#000">{scaleText}</text>
+      <text x={sx + 2} y={y + 17.2} fontSize={type.caption} fontFamily={font} fill="#52525b">{t('sheets.tb.number')}</text>
+      <text x={sx + 2} y={y + 29.5} fontSize={type.number} fontWeight={700} fontFamily={font} fill="#000">{sheet.number}</text>
+      <text x={sx + 2} y={y + 37.2} fontSize={type.caption} fontFamily={font} fill="#52525b">{t('sheets.tb.scale')}</text>
+      <text x={sx + 2} y={y + 45.5} fontSize={type.scale} fontFamily={font} fill="#000">{scaleText}</text>
     </g>
   );
 }
@@ -276,10 +279,11 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
   { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [] }, ref,
 ) {
   const { w, h } = paperOf(sheet);
+  const frame = useGraphicStandard().sheet.frame;
   return (
     <svg ref={ref} data-sheet-id={sheet.id} xmlns="http://www.w3.org/2000/svg" width={w * pxPerMm} height={h * pxPerMm} viewBox={`0 0 ${w} ${h}`} className="block bg-white shadow-lg">
       <rect data-export-ignore-dxf="true" x={0} y={0} width={w} height={h} fill="#fff" />
-      <rect {...penTags('FRAME', 0.7)} x={FRAME_MARGIN_MM} y={FRAME_MARGIN_MM} width={w - FRAME_MARGIN_MM * 2} height={h - FRAME_MARGIN_MM * 2} fill="none" stroke="#000" strokeWidth={0.7} />
+      <rect {...penTags('FRAME', frame)} x={FRAME_MARGIN_MM} y={FRAME_MARGIN_MM} width={w - FRAME_MARGIN_MM * 2} height={h - FRAME_MARGIN_MM * 2} fill="none" stroke="#000" strokeWidth={frame} />
       {(sheet.viewports ?? []).map((vp) => {
         const c = content(vp);
         if (c.civil) return <CivilViewport key={vp.id} vp={vp} layout={c.civil} selected={vp.id === selectedViewportId} />;

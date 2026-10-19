@@ -41,7 +41,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined, siteArea: undefined, tagFields: undefined,
+  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined, siteArea: undefined, tagFields: undefined, graphicStandard: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -62,7 +62,7 @@ const DOCUMENT_FIELDS = {
   symbolFlips: true, openingLines: true, textStyles: true, dimStyles: true, layerGroups: true, joineryTypes: true, currentJoinery: true,
   schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
   typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
-  modelState: true, siteArea: true, cadLayers: true, tagFields: true, titleBlockSources: true, sheetNumbering: true, phaseSource: true,
+  modelState: true, siteArea: true, cadLayers: true, tagFields: true, titleBlockSources: true, sheetNumbering: true, phaseSource: true, graphicStandard: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -128,6 +128,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     modelState: doc.modelState,
     siteArea: doc.siteArea,
     titleBlockSources: doc.titleBlockSources,
+    graphicStandard: doc.graphicStandard,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
