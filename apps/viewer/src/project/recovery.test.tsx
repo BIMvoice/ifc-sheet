@@ -119,13 +119,15 @@ describe('after a crash', () => {
     try {
       const file = readFileSync(fileURLToPath(new URL('./fixtures/v1.ifclite-project.json', import.meta.url)), 'utf8');
       loadProjectDocument(parseProjectFile(file));
+      // The open is stamped with the real clock, so the autosaves come after it on that clock too.
+      const afterOpen = Date.now() + 60_000;
       const key = autosaveKey(useProjectStore.getState().models);
       for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i) as string; storage.setItem(k, localStorage.getItem(k) as string); }
-      writeAutosave(key, projectDocument(), storage, new Date(AFTER));
+      writeAutosave(key, projectDocument(), storage, new Date(afterOpen));
       resetProject();
       assert.equal(planAutosave(key, storage).kind, 'restore');
       addProjectSheet('A sheet after the open');
-      writeAutosave(key, projectDocument(), storage, new Date(AFTER + 1000));
+      writeAutosave(key, projectDocument(), storage, new Date(afterOpen + 1000));
       assert.equal(planAutosave(key, storage).kind, 'offer', 'but one drawn after the open is');
     } finally {
       localStorage.clear();
