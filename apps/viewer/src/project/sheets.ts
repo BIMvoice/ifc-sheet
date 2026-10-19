@@ -10,6 +10,7 @@
  */
 
 import { useProjectStore } from './project-store';
+import { withSources, type TitleSource } from './title-block-sources';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { freshProjectId } from './view-defaults';
 import type { PaperSize, ProjectSheet, SheetViewport } from './types';
@@ -70,6 +71,18 @@ export function setProjectTitleBlockField(key: string, value: string): void {
   if (value) titleBlock[key] = value;
   else delete titleBlock[key];
   useProjectStore.setState({ titleBlock, dirty: true });
+}
+
+/** Choose the model sources a title block field reads (the order is the priority); `undefined` puts back the default. */
+export function setTitleBlockSources(key: string, sources: readonly TitleSource[] | undefined): void {
+  useProjectStore.setState({ titleBlockSources: withSources(useProjectStore.getState().titleBlockSources, key, sources), dirty: true });
+}
+
+/** Put a field back to the model: the typed value is dropped and its sources are the default. */
+export function resetTitleBlockField(key: string): void {
+  const titleBlock = { ...useProjectStore.getState().titleBlock };
+  delete titleBlock[key];
+  useProjectStore.setState({ titleBlock, titleBlockSources: withSources(useProjectStore.getState().titleBlockSources, key, undefined), dirty: true });
 }
 
 /** Fill the project title block fields not set yet (from the model when a set is laid out); set ones stay. */

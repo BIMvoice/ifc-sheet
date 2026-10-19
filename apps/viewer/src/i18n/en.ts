@@ -107,6 +107,7 @@ import { alignmentSectionEn } from './catalogues/alignment-section.en';
 import { projectNavigatorEn } from './catalogues/project-navigator.en';
 import { draftingEn } from './catalogues/drafting.en';
 import { sheetsEn } from './catalogues/sheets.en';
+import { titleBlockSourcesEn } from './catalogues/title-block-sources.en';
 import { draftSetEn } from './catalogues/draft-set.en';
 import { issueEn } from './catalogues/issue.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
@@ -188,6 +189,7 @@ export const en = {
   ...projectNavigatorEn,
   ...draftingEn,
   ...sheetsEn,
+  ...titleBlockSourcesEn,
   ...draftSetEn,
   ...issueEn,
   ...annotateAllEn,
