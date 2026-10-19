@@ -12,14 +12,14 @@
  * drawing and hatch regions.
  */
 
-import { BUILT_IN_PRESETS, ifcTypeCriterion, type Drawing2D, type GraphicOverrideRule } from '@ifc-lite/drawing-2d';
+import { BUILT_IN_PRESETS, ifcTypeCriterion, type Drawing2D, type DrawingPolygon, type GraphicOverrideRule } from '@ifc-lite/drawing-2d';
 import type { Pt } from '@/drafting/types';
 import type { CategoryGraphics, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
 import type { DraftShape } from '@/drafting/types';
 
 /** A drawing as a view shows it, with its building materials' hatches and membrane lines. */
-export type StyledDrawing = Drawing2D & { materialHatches?: (MaterialHatch & { ifcType?: string })[]; membranes?: DraftShape[] };
+export type StyledDrawing = Drawing2D & { materialHatches?: (MaterialHatch & { ifcType?: string; entityId?: number })[]; membranes?: DraftShape[] };
 
 /** The Drawing panel's default preset (IFC material colours). */
 export const DEFAULT_VIEW_PRESET = 'preset-3d-colors';
@@ -111,7 +111,7 @@ export function styledDrawing(
   materials?: MaterialDrawing | null,
 ): StyledDrawing {
   if (materials) {
-    const hatchOf = new Map<unknown, string | undefined>(drawing.cutPolygons.map((p) => [p.polygon.outer, p.ifcType]));
+    const hatchOf = new Map<unknown, DrawingPolygon>(drawing.cutPolygons.map((p) => [p.polygon.outer, p]));
     drawing = {
       ...drawing,
       cutPolygons: drawing.cutPolygons.filter((p) => !materials.hidePolygons.has(p)).map((p) => {
@@ -119,7 +119,7 @@ export function styledDrawing(
         return fill === undefined ? p : { ...p, color: fill === null ? [1, 1, 1, 1] as [number, number, number, number] : rgba(fill) ?? p.color };
       }),
       lines: materials.dropLines.size ? drawing.lines.filter((l) => !materials.dropLines.has(l)) : drawing.lines,
-      materialHatches: materials.hatches.map((h) => ({ ...h, ifcType: hatchOf.get(h.loops[0]) ?? undefined })),
+      materialHatches: materials.hatches.map((h) => ({ ...h, ifcType: hatchOf.get(h.loops[0])?.ifcType ?? undefined, entityId: hatchOf.get(h.loops[0])?.entityId })),
       membranes: materials.membranes,
     } as StyledDrawing;
   }
@@ -161,6 +161,8 @@ export interface CutHatch {
   color: string;
   /** Pen of the hatch lines, paper millimetres (absent: the hatch pen). */
   width?: number;
+  /** The element whose cut face it hatches (its model's style applies). */
+  entityId?: number;
 }
 
 const HATCH_PEN_MM = { heavy: 0.35, medium: 0.25, light: 0.18, hairline: 0.13 } as const;
@@ -177,7 +179,7 @@ export function cutHatches(drawing: StyledDrawing, graphics: ViewGraphics | unde
   };
   for (const h of drawing.materialHatches ?? []) {
     if (overridden(h.ifcType)) continue;
-    out.push({ loops: h.loops, pattern: h.pattern, scale: h.scale, color: '#000000', width: HATCH_PEN_MM[h.pen] });
+    out.push({ loops: h.loops, pattern: h.pattern, scale: h.scale, color: '#000000', width: HATCH_PEN_MM[h.pen], entityId: h.entityId });
   }
   if (!categories) return out;
   for (const polygon of drawing.cutPolygons) {
@@ -189,6 +191,7 @@ export function cutHatches(drawing: StyledDrawing, graphics: ViewGraphics | unde
       pattern: g.cutHatch,
       scale: g.hatchScale ?? 1,
       color: g.lineColor ?? '#000000',
+      entityId: polygon.entityId,
     });
   }
   return out;

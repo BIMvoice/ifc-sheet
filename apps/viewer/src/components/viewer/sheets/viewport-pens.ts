@@ -9,6 +9,10 @@
  * each category's line colour and weight pick the pen, cut fills keep their
  * colour, and category cut hatches are laid out in drawing units. Paths are
  * grouped by pen, so a sheet stays a handful of SVG paths.
+ *
+ * A linked model's style (`project/model-styles.ts`, #96) comes last: after
+ * the category picked a pen, a halftone element's stroke, fill and hatch go
+ * lighter, keeping their weights.
  */
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
@@ -19,6 +23,7 @@ import { hatchSegments } from '@/drafting/hatch/fill';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { categoryOf, cutHatches } from '@/project/view-graphics';
 import type { CategoryLineWeight, ViewGraphics } from '@/project/types';
+import { halftoneColor, type EntityStyleOf } from '@/project/model-styles';
 
 export interface Pen {
   d: string;
@@ -40,6 +45,8 @@ const hex = (c: readonly number[]) => `#${c.slice(0, 3).map((v) => Math.round(v 
 
 export function viewportPens(
   drawing: Drawing2D, graphics: ViewGraphics | undefined, t: ViewTransform, axis: SectionAxisName, extraPatterns: readonly HatchPattern[],
+  /** Each entity's model style; absent: every model draws normally. */
+  styleOf?: EntityStyleOf,
 ): Pen[] {
   const pens = new Map<string, Pen>();
   const add = (key: string, base: Omit<Pen, 'd'>, d: string) => {
@@ -56,15 +63,16 @@ export function viewportPens(
     const id = ifcType ? categoryOf(ifcType) : null;
     return id ? graphics?.categories?.[id] : undefined;
   };
+  const ink = (colour: string, entityId: number | undefined) => (entityId !== undefined && styleOf?.(entityId) === 'halftone' ? halftoneColor(colour) : colour);
 
   for (const polygon of drawing.cutPolygons) {
-    const fill = polygon.color && style(polygon.ifcType)?.fillColor ? hex(polygon.color) : DEFAULT_FILL;
+    const fill = ink(polygon.color && style(polygon.ifcType)?.fillColor ? hex(polygon.color) : DEFAULT_FILL, polygon.entityId);
     add(`fill:${fill}`, { stroke: null, width: 0, fill, layer: 'FILL' }, [polygon.polygon.outer, ...polygon.polygon.holes].map(loop).join(''));
   }
   for (const line of drawing.lines) {
     const g = style(line.ifcType);
     const d = `M${pt(line.line.start)}L${pt(line.line.end)}`;
-    const color = g?.lineColor ?? '#000000';
+    const color = ink(g?.lineColor ?? '#000000', line.entityId);
     if (line.visibility === 'hidden' || line.category === 'hidden') {
       add(`hidden:${color}`, { stroke: color, width: PEN.hidden, fill: null, dash: '1.5 1', layer: 'HIDDEN' }, d);
       continue;
@@ -76,13 +84,14 @@ export function viewportPens(
   for (const h of cutHatches(drawing, graphics)) {
     const pattern = findPattern(h.pattern, extraPatterns);
     if (!pattern) continue;
+    const color = ink(h.color, h.entityId);
     if (pattern.solid) {
-      add(`solid:${h.color}`, { stroke: null, width: 0, fill: h.color, layer: 'HATCH' }, h.loops.map(loop).join(''));
+      add(`solid:${color}`, { stroke: null, width: 0, fill: color, layer: 'HATCH' }, h.loops.map(loop).join(''));
       continue;
     }
     const segments = hatchSegments(h.loops, pattern, { scale: h.scale * HATCH_UNIT_M, angleDeg: 0, maxSegments: 20000 }).segments;
     const width = h.width ?? PEN.hatch;
-    add(`hatch:${h.color}:${width}`, { stroke: h.color, width, fill: null, layer: 'HATCH' }, segments.map((s) => `M${pt(s.a)}L${pt(s.b)}`).join(''));
+    add(`hatch:${color}:${width}`, { stroke: color, width, fill: null, layer: 'HATCH' }, segments.map((s) => `M${pt(s.a)}L${pt(s.b)}`).join(''));
   }
   // Fills first, then hatches, then lines (hidden, seen, cut).
   const order = (p: Pen) => (p.fill ? 0 : p.layer === 'HATCH' ? 1 : p.dash ? 2 : p.width < PEN.cut ? 3 : 4);

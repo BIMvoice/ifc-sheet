@@ -195,6 +195,10 @@ export interface ProjectSheet {
 export interface ProjectModelRef {
   key: string;
   name: string;
+  /** How views draw it (`model-styles.ts`): the host draws as itself, a linked model in its own style. Absent: the first model is the host. */
+  role?: 'host' | 'linked';
+  /** Absent: the host draws normally, a linked model in halftone. */
+  drawStyle?: 'normal' | 'halftone';
 }
 
 /** A joinery schedule (door / window list): a project document of its own, placeable on sheets. */

@@ -123,7 +123,7 @@ export function useProjectSync(): void {
       if (state.models !== prev.models || state.ifcDataStore !== prev.ifcDataStore || state.mutationVersion !== prev.mutationVersion) onModels();
     });
     const unsubProject = useProjectStore.subscribe((state, prev) => {
-      if (!slot || (state.views === prev.views && state.sheets === prev.sheets && state.name === prev.name
+      if (!slot || (state.views === prev.views && state.sheets === prev.sheets && state.name === prev.name && state.models === prev.models
         && state.drafts === prev.drafts && state.draftLayers === prev.draftLayers && state.hatchPatterns === prev.hatchPatterns && state.modelState === prev.modelState)) return;
       const key = slot;
       clearTimeout(timer);

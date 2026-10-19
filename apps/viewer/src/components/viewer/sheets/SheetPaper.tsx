@@ -37,6 +37,7 @@ import { CivilDrawingGraphic } from '../civil/CivilDrawingGraphic';
 import { LegendGraphic } from '../legend/LegendGraphic';
 import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
+import type { EntityStyleOf } from '@/project/model-styles';
 
 const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
 const LABEL_MM = 3.5;
@@ -53,6 +54,8 @@ export interface ViewportContent {
   civil?: CivilLayout;
   /** A legend placed here instead of a view (paper millimetres). */
   legend?: LegendLayout;
+  /** Each drawing entity's model style (`project/model-styles.ts`); absent: every model draws normally. */
+  styleOf?: EntityStyleOf;
 }
 
 interface SheetPaperProps {
@@ -86,8 +89,8 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const axis: SectionAxisName = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
   const t = viewportTransform(vp, drawing, axis);
   const pens = useMemo(
-    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns) : []),
-    [drawing, view?.graphics, vp, axis, extraPatterns],
+    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, content.styleOf) : []),
+    [drawing, view?.graphics, vp, axis, extraPatterns, content.styleOf],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);
   const left = vp.x - box.width / 2;

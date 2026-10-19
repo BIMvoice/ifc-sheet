@@ -115,7 +115,12 @@ function readSheet(v: unknown, path: string): ProjectSheet {
 
 function readModel(v: unknown, path: string): ProjectModelRef {
   if (!isObject(v) || !isString(v.key) || !isString(v.name)) fail(path, 'must be a model { key, name }');
-  return { key: v.key, name: v.name };
+  const model: ProjectModelRef = { key: v.key, name: v.name };
+  if (v.role === 'host' || v.role === 'linked') model.role = v.role;
+  else if (v.role !== undefined) fail(`${path}.role`, 'must be host or linked');
+  if (v.drawStyle === 'normal' || v.drawStyle === 'halftone') model.drawStyle = v.drawStyle;
+  else if (v.drawStyle !== undefined) fail(`${path}.drawStyle`, 'must be normal or halftone');
+  return model;
 }
 
 /** Parse and validate a project file's text. Throws with the first problem found. */
