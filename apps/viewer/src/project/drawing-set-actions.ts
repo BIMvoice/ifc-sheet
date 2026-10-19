@@ -269,3 +269,31 @@ export function addScheduleToSet(kind: ProjectSchedule['kind'], name: string): s
   if (!id) throw new Error('a schedule just added was not found');
   return id;
 }
+
+/** The register's number: A-000, else the first free number of the general series A-001… */
+export function registerNumber(sheets: readonly Pick<ProjectSheet, 'number'>[]): string {
+  const taken = new Set(sheets.map((s) => s.number));
+  let n = 0;
+  while (taken.has(`A-${String(n).padStart(3, '0')}`)) n++;
+  return `A-${String(n).padStart(3, '0')}`;
+}
+
+/**
+ * The drawing register on a sheet of its own, numbered A-000 (`registerNumber`), its table at the top left of the
+ * drawing area. It holds no rows: they are read from the sheets whenever it is drawn. A register already on a
+ * sheet returns that sheet.
+ */
+export function addRegisterToSet(name: string): string {
+  const { sheets, schedules } = useProjectStore.getState();
+  const existing = schedules?.find((s) => s.kind === 'register');
+  const placed = existing && sheets.find((sh) => (sh.viewports ?? []).some((vp) => vp.viewId === existing.id));
+  if (placed) return placed.id;
+  const scheduleId = existing?.id ?? addSchedule('register', name);
+  const area = drawingArea(SET_PAPER);
+  const sheet: ProjectSheet = {
+    id: freshProjectId('sheet'), number: registerNumber(sheets), name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
+    viewports: [{ id: freshProjectId('viewport'), viewId: scheduleId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 1, width: 0, height: 0, center: null }],
+  };
+  useProjectStore.setState({ sheets: [...useProjectStore.getState().sheets, sheet], dirty: true });
+  return sheet.id;
+}

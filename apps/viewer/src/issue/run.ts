@@ -61,7 +61,8 @@ export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst
     name: options.name?.trim() || nextIssueName(project.issues ?? []),
     date: options.date ?? new Date().toISOString().slice(0, 10),
     listFirst: options.listFirst ?? true,
-  }, project.titleBlock);
+    asIndicated: resolve('register.asIndicated'),
+  }, project.titleBlock, { issues: project.issues, notDrawings: new Set((project.schedules ?? []).map((s) => s.id)) });
 }
 
 /** Draw the sheets, build the files and record the issue. Nothing is recorded when a sheet could not be drawn. */

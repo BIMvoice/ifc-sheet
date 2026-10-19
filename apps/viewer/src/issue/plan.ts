@@ -10,7 +10,7 @@
 
 import type { TranslationKey } from '@/i18n';
 import type { IssuedSheet, ProjectIssue, ProjectSheet } from '@/project/types';
-import { titleBlockOf } from '@/project/title-block';
+import { registerRow, sheetScaleText, type RegisterInput, type RegisterRow } from '@/project/drawing-register';
 import { sheetFingerprint, type FingerprintSources } from './fingerprint';
 
 export interface IssueReason {
@@ -24,11 +24,13 @@ export interface IssueInput {
   date: string;
   /** Put the drawing list on a first page of the PDF. */
   listFirst: boolean;
+  /** What the scale column says of a sheet with several scales (translated by the caller). */
+  asIndicated?: string;
 }
 
 export interface IssuePlan extends IssueInput {
   /** What goes out, in sheet-number order. */
-  sheets: { sheet: ProjectSheet; row: IssuedSheet }[];
+  sheets: { sheet: ProjectSheet; row: IssuedSheet; /** The same sheet's line in the drawing register (`project/drawing-register.ts`). */ register: RegisterRow }[];
   /** Sheets that do not go out, with the reason. */
   leftOut: { number: string; title: string; reason: IssueReason }[];
 }
@@ -38,30 +40,32 @@ export function bySheetNumber(a: ProjectSheet, b: ProjectSheet): number {
   return a.number.localeCompare(b.number, 'en', { numeric: true, sensitivity: 'base' }) || a.number.localeCompare(b.number, 'en') || a.id.localeCompare(b.id);
 }
 
-/** `1:50`, or `1:50, 1:100` when a sheet carries drawings at several scales; empty when it carries none. */
-export function scaleText(sheet: Pick<ProjectSheet, 'viewports'>): string {
-  const scales = [...new Set((sheet.viewports ?? []).map((v) => v.scale))].sort((a, b) => a - b);
-  return scales.map((s) => `1:${s}`).join(', ');
-}
+/** The scale text of a sheet: `1:50`, `As indicated` when its drawings differ, empty when it carries none. */
+export const scaleText = sheetScaleText;
 
 /** A sheet holds something when a view is placed on it or something is drawn on the paper itself. */
 export function sheetIsEmpty(sheet: ProjectSheet, sources: FingerprintSources): boolean {
   return (sheet.viewports ?? []).length === 0 && !sources.drafts.some((d) => d.viewId === sheet.id);
 }
 
-/** `projectTitleBlock` is the project's title block (`ProjectDocument.titleBlock`): a sheet's revision is its own, else the project's. */
-export function planIssue(sheets: readonly ProjectSheet[], sources: FingerprintSources, input: IssueInput, projectTitleBlock?: Record<string, string>): IssuePlan {
+/** `projectTitleBlock` is the project's title block (`ProjectDocument.titleBlock`): a sheet's revision is its own, else the project's. `context` is what the register also reads: the issues so far and which documents are not drawings. */
+export function planIssue(
+  sheets: readonly ProjectSheet[], sources: FingerprintSources, input: IssueInput, projectTitleBlock?: Record<string, string>,
+  context: { issues?: RegisterInput['issues']; notDrawings?: ReadonlySet<string> } = {},
+): IssuePlan {
   const out: IssuePlan = { ...input, sheets: [], leftOut: [] };
   for (const sheet of [...sheets].sort(bySheetNumber)) {
     if (sheetIsEmpty(sheet, sources)) {
       out.leftOut.push({ number: sheet.number, title: sheet.name, reason: { key: 'issue.reason.empty', params: { number: sheet.number } } });
       continue;
     }
+    const register = registerRow(sheet, { titleBlock: projectTitleBlock, asIndicated: input.asIndicated, ...context });
     out.sheets.push({
       sheet,
+      register,
       row: {
-        number: sheet.number, title: sheet.name, scale: scaleText(sheet), paper: sheet.paper ?? 'A1', orientation: sheet.orientation ?? 'landscape',
-        revision: titleBlockOf(sheet, projectTitleBlock, '').revision ?? '', fingerprint: sheetFingerprint(sheet, sources),
+        number: register.number, title: register.title, scale: register.scale, paper: sheet.paper ?? 'A1', orientation: sheet.orientation ?? 'landscape',
+        revision: register.revision, fingerprint: sheetFingerprint(sheet, sources),
       },
     });
   }
