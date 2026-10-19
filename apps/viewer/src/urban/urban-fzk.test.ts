@@ -31,7 +31,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { extractQuantitiesOnDemand } from '@ifc-lite/parser';
 import { useViewerStore } from '@/store';
-import { loadUrbanModel, urbanWasm } from '@/test/urban-fixture';
+import type { MeshData } from '@ifc-lite/geometry';
+import { loadUrbanModel, urbanWasm, wasmMeshes } from '@/test/urban-fixture';
+import { layoutUrban, type UrbanLabels } from './urban-layout';
 import { QuantityType } from '@ifc-lite/data';
 import { collectUrbanAreas, pickArea } from './urban-models';
 import { urbanIndicators } from './indicators';
@@ -75,6 +77,60 @@ describe('urban indicators on AC20-FZK-Haus (#76)', () => {
     const store = useViewerStore.getState().models.get('fzk')!.ifcDataStore!;
     const gross = extractQuantitiesOnDemand(store, 34509).flatMap((s) => s.quantities).find((q) => q.name === 'GrossArea');
     assert.equal(gross?.value, AC_BY_HAND);
+  });
+});
+
+/** `Wand-Ext-ERDG-1`, one of the four ground-floor external walls. */
+const EXT_WALL = 21966;
+
+/** World-space copies of meshes, origin folded in, as the renderer hands out GPU-instanced pieces. */
+const asPieces = (meshes: readonly MeshData[]): MeshData[] => meshes.map((m) => {
+  const o = m.origin ?? [0, 0, 0];
+  const positions = m.positions.map((v, i) => v + o[i % 3]);
+  return { ...m, positions, origin: undefined };
+});
+
+const LABELS: UrbanLabels = {
+  title: 'T', level: 'Level', elevation: 'Elevation', built: 'Built', useful: 'Useful', belowGround: (n) => n, category: 'Category', area: 'Area',
+  ac: 'Ac', ad: 'Ad', au: 'Au', site: 'Site', pot: 'POT', cut: 'CUT', note: '',
+  atLeast: (v) => `>= ${v}`, unmeasured: (count, level) => `${count} unmeasured on ${level}`,
+};
+const texts = (r: ReturnType<typeof urbanIndicators>) => layoutUrban(r, LABELS).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
+const after = (all: string[], label: string) => all[all.indexOf(label) + 1];
+
+describe('footprint elements that are not in the flat meshes (#76)', () => {
+  beforeEach(() => useViewerStore.setState({ models: new Map() }));
+
+  it('a wall drawn by GPU instancing is measured from its instanced pieces', async (t) => {
+    if (!urbanWasm(t)) return;
+    const bytes = new Uint8Array(readFileSync(FZK));
+    const all = wasmMeshes(bytes);
+    await loadUrbanModel('fzk', bytes, all.filter((m) => m.expressId !== EXT_WALL));
+    const pieces = asPieces(all.filter((m) => m.expressId === EXT_WALL));
+    assert.ok(pieces.length > 0);
+    const areas = collectUrbanAreas((id) => (id === EXT_WALL ? pieces : undefined));
+    const result = urbanIndicators({ ...areas, siteArea: null });
+    near(result.ac, AC_BY_HAND, 'Ac');
+    assert.equal(result.acAtLeast, false);
+    assert.deepEqual(areas.storeys.map((s) => s.unmeasured), [0, 0]);
+  });
+
+  it('a wall with no mesh anywhere is counted, and Ac / Ad print as lower bounds with a footnote', async (t) => {
+    if (!urbanWasm(t)) return;
+    const bytes = new Uint8Array(readFileSync(FZK));
+    await loadUrbanModel('fzk', bytes, wasmMeshes(bytes).filter((m) => m.expressId !== EXT_WALL));
+    const areas = collectUrbanAreas(() => undefined);
+    const erdgeschoss = areas.storeys.find((s) => s.name === 'Erdgeschoss')!;
+    assert.equal(erdgeschoss.unmeasured, 1);
+    const result = urbanIndicators({ ...areas, siteArea: 600 });
+    assert.equal(result.acAtLeast, true);
+    assert.equal(result.adAtLeast, true);
+    const printed = texts(result);
+    assert.ok(printed.includes('1 unmeasured on Erdgeschoss'), printed.join(' | '));
+    for (const label of ['Ac', 'Ad', 'POT', 'CUT']) assert.match(after(printed, label), /^>= /, label);
+    assert.match(after(printed, 'Erdgeschoss'), /^0\.00$/, 'the elevation is a plain figure');
+    assert.match(printed[printed.indexOf('Erdgeschoss') + 2], /^>= /, 'the level\'s built area is marked');
+    assert.doesNotMatch(printed[printed.indexOf('Dachgeschoss') + 2], /^>= /, 'the attic was measured whole');
   });
 });
 

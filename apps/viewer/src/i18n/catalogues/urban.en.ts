@@ -24,5 +24,7 @@ export const urbanEn = {
   'urban.siteArea.fromModel': 'model: {area} m²',
   'urban.siteArea.none': 'not stated by the model',
   'urban.assumedInterior': 'No slab or room on {levels}: every enclosed space there was counted as built.',
+  'urban.atLeast': '≥ {value}',
+  'urban.unmeasured': 'Ac/Ad may be low: {count} element(s) on {level} could not be measured.',
   'urban.empty': 'No storey of the loaded models has walls, columns or slabs to measure.',
 } as const satisfies Record<string, TranslationValue>;

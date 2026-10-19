@@ -24,6 +24,7 @@ import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { storeyOfElement } from '@/project/effective-storey';
 import { quantityScales } from '@/joinery/material-takeoff-models';
+import { getGlobalRenderer } from '@/hooks/useBCF';
 import { storeyFootprint, type PlanMesh } from './footprint';
 import type { SpaceInput, StoreyInput } from './indicators';
 
@@ -77,10 +78,21 @@ export function modelSiteArea(): number | null {
   return null;
 }
 
-export function collectUrbanAreas(): UrbanAreas {
+/** World-space meshes of a GPU-instanced element, by global id; absent from `geometryResult.meshes`. */
+export type InstancedPieces = (globalId: number) => readonly PlanMesh[] | undefined;
+
+const rendererPieces: InstancedPieces = (globalId) => getGlobalRenderer()?.getScene().getInstancedMeshDataPieces(globalId);
+
+/**
+ * `instanced` resolves the elements drawn by GPU instancing (default: the live
+ * renderer's scene). A footprint element (wall, column, curtain wall, non-roof
+ * slab) that still has no mesh, or whose outline fails, is counted per level
+ * as unmeasured: the level's area is then a lower bound, and says so.
+ */
+export function collectUrbanAreas(instanced: InstancedPieces = rendererPieces): UrbanAreas {
   const s = useViewerStore.getState();
   const levels = useProjectStore.getState().levels;
-  const buckets = levels.map(() => ({ enclosure: [] as PlanMesh[], floor: [] as PlanMesh[] }));
+  const buckets = levels.map(() => ({ enclosure: [] as PlanMesh[][], floor: [] as PlanMesh[][], slabs: new Set<number>(), missing: 0 }));
   const spaces: SpaceInput[] = [];
   for (const [modelId, model] of s.models) {
     const store = model.ifcDataStore;
@@ -99,14 +111,29 @@ export function collectUrbanAreas(): UrbanAreas {
       const storey = storeyOfElement(modelId, id);
       return storey === null ? null : levelOfStorey.get(storey) ?? null;
     };
+    const flat = new Map<number, PlanMesh[]>();
     for (const mesh of model.geometryResult?.meshes ?? []) {
-      const id = mesh.expressId - offset;
-      if (view?.isDeleted(id)) continue;
-      const type = (mesh.ifcType ?? provider.getEntityTypeName(id)).toUpperCase();
-      const floor = type === 'IFCSPACE' || (type === 'IFCSLAB' && provider.getEntityPredefinedType?.(id).replace(/\./g, '') !== 'ROOF');
-      if (!floor && !ENCLOSURE.has(type)) continue;
+      const list = flat.get(mesh.expressId);
+      if (list) list.push(mesh); else flat.set(mesh.expressId, [mesh]);
+    }
+    for (const { expressId: id, type } of iterateEffectiveEntityIds(store, view ?? null, [...ENCLOSURE, 'IFCSLAB', 'IFCSPACE'])) {
+      const upper = type.toUpperCase();
+      const room = upper === 'IFCSPACE';
+      if (upper === 'IFCSLAB' && provider.getEntityPredefinedType?.(id).replace(/\./g, '') === 'ROOF') continue;
       const level = levelOf(id);
-      if (level !== null) buckets[level][floor ? 'floor' : 'enclosure'].push(mesh);
+      if (level === null) continue;
+      const bucket = buckets[level];
+      const meshes = flat.get(id + offset) ?? instanced(id + offset);
+      if (!meshes?.length) {
+        // A room without a body only helps tell rooms from courtyards; a wall or slab without one is area not measured.
+        if (!room) bucket.missing++;
+        continue;
+      }
+      if (ENCLOSURE.has(upper)) bucket.enclosure.push([...meshes]);
+      else {
+        if (!room) bucket.slabs.add(bucket.floor.length);
+        bucket.floor.push([...meshes]);
+      }
     }
     const scales = scalesOf(store);
     for (const { expressId: id } of iterateEffectiveEntityIds(store, view ?? null, ['IFCSPACE'])) {
@@ -116,9 +143,11 @@ export function collectUrbanAreas(): UrbanAreas {
   }
   const assumedInterior: string[] = [];
   const storeys = levels.map((level, i) => {
-    const footprint = storeyFootprint(buckets[i].enclosure, buckets[i].floor);
-    if (footprint?.assumedInterior) assumedInterior.push(level.name);
-    return { name: level.name, elevation: level.elevation, footprint: footprint?.shapes ?? null };
+    const b = buckets[i];
+    const footprint = storeyFootprint(b.enclosure, b.floor);
+    if (footprint.assumedInterior) assumedInterior.push(level.name);
+    const failed = footprint.unmeasured.enclosure.length + footprint.unmeasured.floor.filter((k) => b.slabs.has(k)).length;
+    return { name: level.name, elevation: level.elevation, footprint: footprint.shapes.length ? footprint.shapes : null, unmeasured: b.missing + failed };
   });
   return { storeys, spaces, modelSiteArea: modelSiteArea(), assumedInterior };
 }

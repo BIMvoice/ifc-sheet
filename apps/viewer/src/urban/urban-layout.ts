@@ -30,6 +30,10 @@ export interface UrbanLabels {
   cut: string;
   /** A remark printed under the table (levels whose holes were all counted), or empty. */
   note: string;
+  /** A figure that is a lower bound: `≥ 120.00`. */
+  atLeast: (value: string) => string;
+  /** The footnote for a level with elements that could not be measured. */
+  unmeasured: (count: number, level: string) => string;
 }
 
 const ROW = 6;
@@ -65,25 +69,28 @@ function table(prims: SchedulePrim[], top: number, columns: readonly number[], r
 }
 
 export function layoutUrban(r: UrbanIndicators, labels: UrbanLabels): ScheduleLayout {
+  const low = (text: string, atLeast: boolean) => (atLeast && text !== NONE ? labels.atLeast(text) : text);
   const prims: SchedulePrim[] = [{ kind: 'text', x: 0, y: TITLE_H - 3, text: labels.title, size: 4, anchor: 'start', bold: true }];
   let y = table(prims, TITLE_H, STOREY_COLUMNS, [
     [labels.level, labels.elevation, labels.built, labels.useful],
-    ...r.storeys.map((s) => [s.inAd ? s.name : labels.belowGround(s.name), s.elevation.toFixed(2), m2(s.builtArea), m2(s.usefulArea)]),
+    ...r.storeys.map((s) => [s.inAd ? s.name : labels.belowGround(s.name), s.elevation.toFixed(2), low(m2(s.builtArea), s.unmeasured > 0), m2(s.usefulArea)]),
   ], true);
   if (r.auByCategory.length) {
     y = table(prims, y + GAP, PAIR_COLUMNS, [[labels.category, labels.area], ...r.auByCategory.map((c) => [c.category, m2(c.area)])], true);
   }
   y = table(prims, y + GAP, PAIR_COLUMNS, [
-    [labels.ac, m2(r.ac)],
-    [labels.ad, m2(r.ad)],
+    [labels.ac, low(m2(r.ac), r.acAtLeast)],
+    [labels.ad, low(m2(r.ad), r.adAtLeast)],
     [labels.au, m2(r.au)],
     [labels.site, m2(r.siteArea)],
-    [labels.pot, r.pot === null ? NONE : `${r.pot.toFixed(2)} %`],
-    [labels.cut, r.cut === null ? NONE : r.cut.toFixed(2)],
+    [labels.pot, low(r.pot === null ? NONE : `${r.pot.toFixed(2)} %`, r.acAtLeast)],
+    [labels.cut, low(r.cut === null ? NONE : r.cut.toFixed(2), r.adAtLeast)],
   ], false);
-  if (labels.note) {
-    prims.push({ kind: 'text', x: 0, y: y + GAP, text: labels.note, size: 2, anchor: 'start' });
-    y += GAP + 1;
+  const notes = [...r.storeys.filter((s) => s.unmeasured > 0).map((s) => labels.unmeasured(s.unmeasured, s.name)), ...(labels.note ? [labels.note] : [])];
+  for (const note of notes) {
+    y += GAP;
+    prims.push({ kind: 'text', x: 0, y, text: note, size: 2, anchor: 'start' });
   }
+  if (notes.length) y += 1;
   return { width: WIDTH, height: y, prims };
 }

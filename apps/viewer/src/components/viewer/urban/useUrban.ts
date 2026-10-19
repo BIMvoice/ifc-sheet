@@ -64,5 +64,7 @@ export function useUrbanLabels(title: string, areas: UrbanAreas | null): UrbanLa
     category: t('urban.category'), area: t('urban.area'),
     ac: t('urban.ac'), ad: t('urban.ad'), au: t('urban.au'), site: t('urban.site'), pot: t('urban.pot'), cut: t('urban.cut'),
     note: assumed ? t('urban.assumedInterior', { levels: assumed }) : '',
+    atLeast: (value: string) => t('urban.atLeast', { value }),
+    unmeasured: (count: number, level: string) => t('urban.unmeasured', { count, level }),
   }), [t, title, assumed]);
 }

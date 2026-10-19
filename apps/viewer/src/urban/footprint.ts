@@ -43,8 +43,8 @@ export interface StoreyFootprint {
   source: 'walls' | 'floor';
   /** Walls without floor: every hole was taken as inside the building. */
   assumedInterior: boolean;
-  /** Elements whose outline could not be computed (over the kernel's triangle budget); left out. */
-  skipped: number;
+  /** Indices of the elements, per group, that gave no outline (left out: the area is a lower bound). */
+  unmeasured: { enclosure: number[]; floor: number[] };
 }
 
 /** A hole is inside the building when at least this share of it is floor. */
@@ -55,35 +55,45 @@ const PLAN_AXIS = 1;
 
 type Box = [number, number, number, number];
 
-/** Every element's plan outline rings, in world plan coordinates (f64, origin added after projection). */
-function outlines(meshes: readonly PlanMesh[]): { rings: Pt[][]; skipped: number } {
+/**
+ * Every element's plan outline rings, in world plan coordinates (f64, origin
+ * added after projection), and the elements (by index) left without one: no
+ * ring at all, or a mesh whose outline failed (over the kernel's triangle budget).
+ */
+function outlines(elements: readonly (readonly PlanMesh[])[]): { rings: Pt[][]; failed: number[] } {
   const rings: Pt[][] = [];
-  let skipped = 0;
-  for (const mesh of meshes) {
-    let outline;
-    try {
-      outline = meshOutline2d(mesh.positions, mesh.indices, PLAN_AXIS, false);
-    } catch (err) {
-      if (skipped === 0) console.warn('[urban] an element has no plan outline (over the kernel triangle budget); it is left out of the footprint', err);
-      skipped++;
-      continue;
-    }
-    if (!outline) continue;
-    try {
-      // The Y axis projects to (u, v) = (x, z).
-      const ox = mesh.origin?.[0] ?? 0, oz = mesh.origin?.[2] ?? 0;
-      for (let c = 0; c < outline.contourCount; c++) {
-        const flat = outline.contour(c);
-        if (!flat || flat.length < 6) continue;
-        const ring: Pt[] = [];
-        for (let i = 0; i < flat.length; i += 2) ring.push([flat[i] + ox, flat[i + 1] + oz]);
-        rings.push(ring);
+  const failed: number[] = [];
+  elements.forEach((meshes, index) => {
+    let own = 0;
+    let broken = false;
+    for (const mesh of meshes) {
+      let outline;
+      try {
+        outline = meshOutline2d(mesh.positions, mesh.indices, PLAN_AXIS, false);
+      } catch (err) {
+        if (!failed.length) console.warn('[urban] an element has no plan outline; it is counted as unmeasured', err);
+        broken = true;
+        continue;
       }
-    } finally {
-      outline.free();
+      if (!outline) continue;
+      try {
+        // The Y axis projects to (u, v) = (x, z).
+        const ox = mesh.origin?.[0] ?? 0, oz = mesh.origin?.[2] ?? 0;
+        for (let c = 0; c < outline.contourCount; c++) {
+          const flat = outline.contour(c);
+          if (!flat || flat.length < 6) continue;
+          const ring: Pt[] = [];
+          for (let i = 0; i < flat.length; i += 2) ring.push([flat[i] + ox, flat[i + 1] + oz]);
+          rings.push(ring);
+          own++;
+        }
+      } finally {
+        outline.free();
+      }
     }
-  }
-  return { rings, skipped };
+    if (broken || own === 0) failed.push(index);
+  });
+  return { rings, failed };
 }
 
 function contours(rings: readonly (readonly Pt[])[]): Contours2D {
@@ -166,14 +176,14 @@ function floorCover(hole: readonly Pt[], floor: readonly Pt[][], floorBoxes: rea
   } finally { a.free(); b.free(); }
 }
 
-/** The footprint of one storey; null when nothing on it has a plan outline. */
-export function storeyFootprint(enclosure: readonly PlanMesh[], floor: readonly PlanMesh[]): StoreyFootprint | null {
+/** The footprint of one storey, from its elements' meshes (one list per element); no shapes when nothing on it has a plan outline. */
+export function storeyFootprint(enclosure: readonly (readonly PlanMesh[])[], floor: readonly (readonly PlanMesh[])[]): StoreyFootprint {
   const walls = outlines(enclosure);
   const floors = outlines(floor);
-  const skipped = walls.skipped + floors.skipped;
+  const unmeasured = { enclosure: walls.failed, floor: floors.failed };
   if (!walls.rings.length) {
     const shapes = unite(floors.rings);
-    return shapes.length ? { shapes, source: 'floor', assumedInterior: false, skipped } : null;
+    return { shapes, source: 'floor', assumedInterior: false, unmeasured };
   }
   const assumedInterior = floors.rings.length === 0;
   const floorBoxes = floors.rings.map(boxOf);
@@ -193,5 +203,5 @@ export function storeyFootprint(enclosure: readonly PlanMesh[], floor: readonly 
     }
   }
   const rooms = courtyards.length ? subtract(fill, courtyards) : fill;
-  return { shapes: unite([...walls.rings, ...rooms]), source: 'walls', assumedInterior, skipped };
+  return { shapes: unite([...walls.rings, ...rooms]), source: 'walls', assumedInterior, unmeasured };
 }

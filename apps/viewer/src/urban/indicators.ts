@@ -35,6 +35,8 @@ export interface StoreyInput {
   elevation: number;
   /** Null when nothing on the storey has a plan outline. */
   footprint: readonly FootprintShape[] | null;
+  /** Footprint elements (walls, columns, curtain walls, slabs) on the storey that gave no outline: its area is then a lower bound. */
+  unmeasured?: number;
 }
 
 export interface SpaceInput {
@@ -65,6 +67,8 @@ export interface UrbanStoreyRow {
   ground: boolean;
   /** Counted in Ad. */
   inAd: boolean;
+  /** Footprint elements left unmeasured: `builtArea` is at least, not exactly, the figure. */
+  unmeasured: number;
 }
 
 export interface UrbanIndicators {
@@ -72,6 +76,9 @@ export interface UrbanIndicators {
   storeys: UrbanStoreyRow[];
   ac: number | null;
   ad: number | null;
+  /** Ac / Ad (and so POT / CUT) are lower bounds: a storey they sum left elements unmeasured. */
+  acAtLeast: boolean;
+  adAtLeast: boolean;
   au: number | null;
   auByCategory: { category: string; area: number }[];
   siteArea: number | null;
@@ -146,15 +153,20 @@ export function urbanIndicators(input: UrbanInput): UrbanIndicators {
     belowGround: below[i],
     ground: i === groundIndex,
     inAd: !below[i] || !!input.includeBelowGround,
+    unmeasured: s.unmeasured ?? 0,
   }));
   const ac = groundIndex >= 0 ? rows[groundIndex].builtArea : null;
   const counted = rows.filter((r) => r.inAd && r.builtArea !== null);
   const ad = counted.length ? counted.reduce((sum, r) => sum + (r.builtArea ?? 0), 0) : null;
   const siteArea = positive(input.siteArea);
+  const acAtLeast = groundIndex >= 0 && rows[groundIndex].unmeasured > 0;
+  const adAtLeast = rows.some((r) => r.inAd && r.unmeasured > 0);
   return {
     storeys: rows.sort((a, b) => b.elevation - a.elevation),
     ac,
     ad,
+    acAtLeast,
+    adAtLeast,
     au,
     auByCategory: [...byCategory].map(([category, area]) => ({ category, area })).sort((a, b) => a.category.localeCompare(b.category)),
     siteArea,

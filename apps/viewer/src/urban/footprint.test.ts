@@ -10,7 +10,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { urbanWasm } from '@/test/urban-fixture';
-import { storeyFootprint, type PlanMesh } from './footprint';
+import { storeyFootprint as footprintOfElements, type PlanMesh } from './footprint';
 import { footprintArea } from './indicators';
 import { offsetRing } from './ring-offset';
 
@@ -32,7 +32,9 @@ function slabWithOpening(x0: number, y0: number, x1: number, y1: number, hx0: nu
   return [box(x0, y0, x1, hy0), box(x0, hy1, x1, y1), box(x0, hy0, hx0, hy1), box(hx1, hy0, x1, hy1)];
 }
 
-const area = (f: ReturnType<typeof storeyFootprint>) => (f ? footprintArea(f.shapes) : null);
+/** One element per mesh. */
+const storeyFootprint = (enclosure: PlanMesh[], floor: PlanMesh[]) => footprintOfElements(enclosure.map((m) => [m]), floor.map((m) => [m]));
+const area = (f: ReturnType<typeof storeyFootprint>) => (f.shapes.length ? footprintArea(f.shapes) : null);
 const near = (a: number | null, b: number, what: string) => assert.ok(a !== null && Math.abs(a - b) < 1e-3, `${what}: ${a} vs ${b}`);
 
 describe('storey footprint (#76)', () => {
@@ -86,7 +88,14 @@ describe('storey footprint (#76)', () => {
     const f = storeyFootprint([], [box(0, 0, 5, 4)]);
     near(area(f), 20, 'built area');
     assert.equal(f?.source, 'floor');
-    assert.equal(storeyFootprint([], []), null);
+    assert.equal(storeyFootprint([], []).shapes.length, 0);
+  });
+  it('counts an element that gives no outline instead of leaving it out silently', (t) => {
+    if (!urbanWasm(t)) return;
+    const empty: PlanMesh = { positions: new Float32Array(0), indices: new Uint32Array(0) };
+    const f = footprintOfElements([...wallRing(0, 0, 10, 8).map((m) => [m]), [empty]], [[box(0, 0, 10, 8)], [empty]]);
+    near(area(f), 80, 'built area');
+    assert.deepEqual(f.unmeasured, { enclosure: [4], floor: [1] });
   });
 });
 
