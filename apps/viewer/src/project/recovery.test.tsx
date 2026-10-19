@@ -8,6 +8,7 @@
  */
 
 import '@/test/setup-dom.js';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { cleanup, render } from '@/test/render.js';
 import { RecoveryOffer } from '@/components/viewer/wall/RecoveryOffer';
@@ -188,12 +189,21 @@ describe('an offer left open while the user works', () => {
     assert.deepEqual(written, [KEY]);
   });
 
+  it('survives React\'s development double-mount, which unmounts and mounts again at once', async () => {
+    open();
+    render(<StrictMode><RecoveryOffer onRestored={() => {}} /></StrictMode>);
+    await wait();
+    assert.notEqual(useRecoveryStore.getState().offer, null);
+    cleanup();
+  });
+
   it('ends when the intro showing it goes away unanswered, and autosave resumes', async () => {
     open();
     const ui = render(<RecoveryOffer onRestored={() => {}} />);
     assert.notEqual(useRecoveryStore.getState().offer, null);
     ui.remove();
     cleanup();
+    await wait();
     assert.equal(useRecoveryStore.getState().offer, null);
     addProjectSheet('Drawn');
     await wait();

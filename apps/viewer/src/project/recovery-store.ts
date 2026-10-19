@@ -50,6 +50,21 @@ export function restoreRecovery(): void {
   void restoreModelState(offer.key, () => offer.key);
 }
 
+let onScreen = 0;
+
+/**
+ * The intro is showing the offer; the returned function says it no longer is. Going away unanswered
+ * is declining, but React's development double-mount unmounts and mounts again within one commit, so
+ * the decision waits a tick to see whether it came back.
+ */
+export function offerOnScreen(): () => void {
+  onScreen++;
+  return () => {
+    onScreen--;
+    setTimeout(() => { if (onScreen === 0) discardRecovery(); }, 0);
+  };
+}
+
 let systemDepth = 0;
 
 /** Runs `fn`, whose changes to the project are the app's own (laying out the set, following the models), not the user's. */
