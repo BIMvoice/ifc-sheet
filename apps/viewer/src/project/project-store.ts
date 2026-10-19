@@ -19,6 +19,7 @@ import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
 import { create } from 'zustand';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { findTemplate, templateFields } from './sheet-templates';
 import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
@@ -37,7 +38,7 @@ export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visib
 export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
-  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
+  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
   annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined,
 };
 
@@ -68,6 +69,8 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
     typicalSections: state.typicalSections ?? [],
     materials: state.materials ?? [],
     savedSectionCuts: state.savedSectionCuts ?? [],
+    sheetTemplates: state.sheetTemplates ?? [],
+    seriesTemplates: state.seriesTemplates ?? {},
     annotationTypes: state.annotationTypes ?? [],
     symbols: state.symbols ?? [],
     legends: state.legends ?? [],
@@ -99,6 +102,8 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     typicalSections: doc.typicalSections ?? [],
     materials: doc.materials ?? [],
     savedSectionCuts: doc.savedSectionCuts ?? [],
+    sheetTemplates: doc.sheetTemplates ?? [],
+    seriesTemplates: doc.seriesTemplates ?? {},
     annotationTypes: doc.annotationTypes ?? [],
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
@@ -227,10 +232,11 @@ export function removeProjectItem(id: string): void {
 
 export { nextSheetNumber };
 
-/** A new sheet takes the next plan number until a view is placed on it; then it is numbered by what it holds. */
-export function addProjectSheet(name = 'Unnamed'): string {
+/** A new sheet takes the next plan number until a view is placed on it; then it is numbered by what it holds. It starts from the template if one is named. */
+export function addProjectSheet(name = 'Unnamed', templateId?: string): string {
   const state = useProjectStore.getState();
-  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), autoNumber: true, name, createdAt: Date.now() };
+  const template = findTemplate(templateId, state.sheetTemplates);
+  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), autoNumber: true, name, createdAt: Date.now(), ...(template ? templateFields(template) : {}) };
   useProjectStore.setState({ sheets: [...state.sheets, sheet], dirty: true });
   return sheet.id;
 }

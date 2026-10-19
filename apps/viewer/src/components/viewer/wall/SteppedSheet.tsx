@@ -30,6 +30,7 @@ import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
 import { SheetCanvas } from './SheetCanvas';
 import { TitleBlockCard } from './TitleBlockForm';
+import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 
@@ -59,6 +60,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
+  const [papering, setPapering] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
@@ -98,6 +100,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       if (adding) setAdding(false);
       else if (titling) setTitling(false);
+      else if (papering) setPapering(false);
       else if (focusId) {
         setFocusId(null);
         setTool(null);
@@ -106,7 +109,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onBack, focusId, chosen, adding, titling]);
+  }, [onBack, focusId, chosen, adding, titling, papering]);
 
   const startTool = (command: string): void => {
     cancelStart.current();
@@ -142,7 +145,10 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   // Choosing a drawing brings its card back in place of the title block's.
   const choose = useCallback((viewportId: string | null): void => {
     setChosen(viewportId);
-    if (viewportId) setTitling(false);
+    if (viewportId) {
+      setTitling(false);
+      setPapering(false);
+    }
   }, []);
   const open = useCallback((vp: SheetViewport): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
@@ -166,7 +172,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
         {!focusView ? (
           <>
-            <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); }}>{t('wall.paper.button')}</button>
+            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); }}>{t('wall.tb.title')}</button>
             <button type="button" className={issue} onClick={() => setFitKey((k) => k + 1)}>{t('wall.fit')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && printSheet(paperRef.current, sheet)}>{t('wall.export.pdf')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
@@ -188,6 +195,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
           <div className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
               : focusView ? null
+                : papering ? <PaperCard sheet={sheet} extent={extent} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
                   : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
           </div>

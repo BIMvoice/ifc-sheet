@@ -15,9 +15,12 @@
  */
 
 import type { TranslationKey } from '@/i18n';
-import { fitViewportBox, FRAME_MARGIN_MM, PAPER_MM, SHEET_SCALES, TITLE_BLOCK_MM } from './sheets';
+import { paperLabel, paperMm } from './paper';
+import { drawingAreaIn, frameOf, type Rect } from './sheet-frame';
+import { templateFields } from './sheet-templates';
+import { fitViewportBox, SHEET_SCALES } from './sheets';
 import { freshProjectId } from './view-defaults';
-import type { ElevationDirection, PaperSize, ProjectSheet, ProjectView, SheetViewport } from './types';
+import type { ElevationDirection, Paper, PaperSize, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './types';
 
 /** The scales a set chooses among, most detailed first. */
 export const SET_SCALES = [50, 100, 200] as const;
@@ -39,6 +42,16 @@ export interface ModelExtent {
 }
 
 export type SetGroup = 'plans' | 'elevations' | 'sections' | 'schedules';
+
+/** What the drawing area depends on: a paper (landscape, the default frame), or a sheet's own paper, orientation and frame. */
+export type SheetLayout = Paper | Pick<ProjectSheet, 'paper' | 'orientation' | 'frame'>;
+
+const isSheetLike = (l: SheetLayout): l is Pick<ProjectSheet, 'paper' | 'orientation' | 'frame'> => typeof l === 'object' && !('kind' in l);
+
+/** The paper, orientation and frame a new sheet starts with: the template's, else `paper` in landscape. */
+function startOf(template: SheetTemplate | undefined, paper: PaperSize): Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId'> {
+  return template ? templateFields(template) : { paper, orientation: 'landscape' };
+}
 
 /** Width and height a view's drawing takes, metres, estimated from the model's extent. */
 export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number; h: number } {
@@ -63,15 +76,28 @@ export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number;
   }
 }
 
-/** The drawing area of a sheet, paper mm: inside the frame, above the title block. */
-export function drawingArea(paper: PaperSize = SET_PAPER): { x: number; y: number; w: number; h: number } {
-  const { w, h } = PAPER_MM[paper];
-  return { x: FRAME_MARGIN_MM, y: FRAME_MARGIN_MM, w: w - FRAME_MARGIN_MM * 2, h: h - FRAME_MARGIN_MM * 2 - TITLE_BLOCK_MM.h };
+/**
+ * The drawing area of a sheet, paper mm: inside the frame, clear of the title
+ * block. The one place "what fits on this paper" starts; a sheet passes itself.
+ */
+export function drawingArea(layout: SheetLayout = SET_PAPER): Rect {
+  // A sheet that names no paper is drawn on A1 (`paperOf`), so its area is A1's.
+  const l = isSheetLike(layout) ? { ...layout, paper: layout.paper ?? 'A1' } : { paper: layout };
+  return drawingAreaIn(paperMm(l.paper, 'orientation' in l ? l.orientation : undefined), frameOf(l));
 }
 
-/** Whether `sizes` (metres) fit side by side in `area` at 1:`scale`. */
+/** Drawings sit side by side on a landscape area and one above the other on a portrait one. */
+export type Arrangement = 'row' | 'column';
+const arrangementOf = (area: { w: number; h: number }): Arrangement => (area.h > area.w ? 'column' : 'row');
+
+/** Whether `sizes` (metres) fit in `area` at 1:`scale`, side by side or stacked as the area's shape asks. */
 export function fitsScale(sizes: readonly { w: number; h: number }[], area: { w: number; h: number }, scale: number): boolean {
   const k = 1000 / scale;
+  if (arrangementOf(area) === 'column') {
+    const width = Math.max(0, ...sizes.map((s) => s.w * k)) + GAP_MM * 2;
+    const height = sizes.reduce((sum, s) => sum + s.h * k + TITLE_ROOM_MM, 0) + GAP_MM * (sizes.length + 1);
+    return width <= area.w && height <= area.h;
+  }
   const width = sizes.reduce((sum, s) => sum + s.w * k, 0) + GAP_MM * (sizes.length + 1);
   const height = Math.max(0, ...sizes.map((s) => s.h * k)) + TITLE_ROOM_MM + GAP_MM * 2;
   return width <= area.w && height <= area.h;
@@ -79,15 +105,15 @@ export function fitsScale(sizes: readonly { w: number; h: number }[], area: { w:
 
 type Bounds = { min: { x: number; y: number }; max: { x: number; y: number } };
 
-/** The drawing area of `paper` (mm) when a viewport box is larger than it; null when the box fits. */
-export function overrun(box: { width: number; height: number }, paper: PaperSize = SET_PAPER): { w: number; h: number } | null {
-  const area = drawingArea(paper);
+/** The drawing area of `layout` (mm) when a viewport box is larger than it; null when the box fits. */
+export function overrun(box: { width: number; height: number }, layout: SheetLayout = SET_PAPER): { w: number; h: number } | null {
+  const area = drawingArea(layout);
   return box.width > area.w || box.height > area.h ? { w: area.w, h: area.h } : null;
 }
 
-/** The most detailed offered scale (`SHEET_SCALES`) at which a drawing of `bounds` fits on `paper`; null when none does. */
-export function detailedScaleThatFits(bounds: Bounds, paper: PaperSize = SET_PAPER): number | null {
-  return SHEET_SCALES.find((scale) => !overrun(fitViewportBox(bounds, scale), paper)) ?? null;
+/** The most detailed offered scale (`SHEET_SCALES`) at which a drawing of `bounds` fits on `layout`; null when none does. */
+export function detailedScaleThatFits(bounds: Bounds, layout: SheetLayout = SET_PAPER): number | null {
+  return SHEET_SCALES.find((scale) => !overrun(fitViewportBox(bounds, scale), layout)) ?? null;
 }
 
 /** The most detailed set scale at which `sizes` (metres) fit side by side in `area`; the least detailed when none does. */
@@ -112,19 +138,69 @@ export function choosePaper(rows: readonly (readonly { w: number; h: number }[])
   return { paper, fits: rows.every((sizes) => fitsScale(sizes, area, fittingScale(sizes, area))) };
 }
 
-/** Viewports for `views` in one row across the drawing area at `scale`, centred, each centred on its drawing. */
-export function rowOfViewports(views: readonly ProjectView[], sizes: readonly { w: number; h: number }[], scale: number, paper: PaperSize = SET_PAPER): SheetViewport[] {
-  const area = drawingArea(paper);
+/**
+ * Viewports for `views` across the drawing area of `layout` at `scale`: in one
+ * row on a landscape area, one above the other on a portrait one, centred,
+ * each centred on its drawing.
+ */
+export function placeViewports(views: readonly ProjectView[], sizes: readonly { w: number; h: number }[], scale: number, layout: SheetLayout = SET_PAPER): SheetViewport[] {
+  const area = drawingArea(layout);
   const k = 1000 / scale;
+  const make = (view: ProjectView, x: number, y: number): SheetViewport => ({ id: freshProjectId('viewport'), viewId: view.id, x, y, scale, width: 0, height: 0, center: null });
+  if (arrangementOf(area) === 'column') {
+    const heights = sizes.map((s) => s.h * k + TITLE_ROOM_MM);
+    const total = heights.reduce((a, b) => a + b, 0) + GAP_MM * Math.max(0, views.length - 1);
+    let top = area.y + (area.h - total) / 2;
+    return views.map((view, i) => {
+      const vp = make(view, area.x + area.w / 2, top + (sizes[i].h * k) / 2);
+      top += heights[i] + GAP_MM;
+      return vp;
+    });
+  }
   const widths = sizes.map((s) => s.w * k);
   const total = widths.reduce((a, b) => a + b, 0) + GAP_MM * Math.max(0, views.length - 1);
   let x = area.x + (area.w - total) / 2;
   const y = area.y + area.h / 2;
   return views.map((view, i) => {
-    const vp: SheetViewport = { id: freshProjectId('viewport'), viewId: view.id, x: x + widths[i] / 2, y, scale, width: 0, height: 0, center: null };
+    const vp = make(view, x + widths[i] / 2, y);
     x += widths[i] + GAP_MM;
     return vp;
   });
+}
+
+/**
+ * The scale `sizes` are drawn at on `layout`: `preferred` (the scale a detail
+ * was made for) when it fits, else the most detailed set scale that does.
+ * The one answer to "what scale fits these on this paper", for the starting
+ * set, a view hung later and a sheet whose paper changed.
+ */
+export function scaleOn(sizes: readonly { w: number; h: number }[], layout: SheetLayout, preferred?: number): number {
+  const area = drawingArea(layout);
+  return preferred && fitsScale(sizes, area, preferred) ? preferred : fittingScale(sizes, area);
+}
+
+/**
+ * `sheet` with its drawings laid out again for its (new) paper, orientation
+ * and frame: the drawings the model has go to the scale that fits
+ * (`scaleOn`), a viewport keeps its id and what is set on it; a schedule or
+ * legend keeps its scale and is brought inside the drawing area.
+ */
+export function relaidOnPaper(sheet: ProjectSheet, views: readonly ProjectView[], extent: ModelExtent): ProjectSheet {
+  const area = drawingArea(sheet);
+  const vps = sheet.viewports ?? [];
+  const drawn = vps.flatMap((vp) => { const view = views.find((v) => v.id === vp.viewId); return view ? [{ vp, view }] : []; });
+  const sizes = drawn.map(({ view }) => viewExtent(view, extent));
+  const first = drawn[0]?.view;
+  const scale = scaleOn(sizes, sheet, drawn.length === 1 && first?.detail ? first.scale : undefined);
+  const placed = new Map(placeViewports(drawn.map((d) => d.view), sizes, scale, sheet).map((p, i) => [drawn[i].vp.id, p] as const));
+  const clamp = (v: number, min: number, size: number) => Math.min(Math.max(v, min), min + size);
+  return {
+    ...sheet,
+    viewports: vps.map((vp) => {
+      const p = placed.get(vp.id);
+      return p ? { ...vp, x: p.x, y: p.y, scale, width: 0, height: 0 } : { ...vp, x: clamp(vp.x, area.x, area.w), y: clamp(vp.y, area.y, area.h) };
+    }),
+  };
 }
 
 const ELEVATION_PAIRS: { directions: ElevationDirection[]; name: string }[] = [
@@ -142,6 +218,8 @@ export interface SetInput {
   views: readonly ProjectView[];
   extent: ModelExtent;
   now?: number;
+  /** The template a group's sheets start from; a group without one is made on the smallest paper that fits. */
+  templates?: Partial<Record<TemplateSeries, SheetTemplate>>;
 }
 
 /** One sheet of the set to be: its number, name and the drawings it holds. */
@@ -191,17 +269,19 @@ export function groupsThatDoNotFit(views: readonly ProjectView[], extent: ModelE
  * sheet. The group a sheet belongs to is read back from its number
  * (`sheetGroup`).
  */
-export function buildDrawingSet({ views, extent, now = Date.now() }: SetInput): ProjectSheet[] {
+export function buildDrawingSet({ views, extent, now = Date.now(), templates = {} }: SetInput): ProjectSheet[] {
   const rows = setRows(views);
   const papers = papersOf(rows, extent);
   return rows.map(({ group, number, name, members }) => {
-    const paper = papers.get(group)?.paper ?? SET_PAPER;
+    const start = startOf(templates[group], papers.get(group)?.paper ?? SET_PAPER);
     const sizes = members.map((v) => viewExtent(v, extent));
-    return {
-      id: freshProjectId('sheet'), number, name, createdAt: now, paper, orientation: 'landscape' as const,
-      viewports: rowOfViewports(members, sizes, fittingScale(sizes, drawingArea(paper)), paper),
-    };
+    return { id: freshProjectId('sheet'), number, name, createdAt: now, ...start, viewports: placeViewports(members, sizes, scaleOn(sizes, start), start) };
   });
+}
+
+/** The series a sheet is in: its group, or `details` for the A-9xx sheets details hang on. */
+export function sheetSeries(sheet: Pick<ProjectSheet, 'number'>): TemplateSeries | null {
+  return sheetGroup(sheet) ?? (/^A-9\d\d$/.test(sheet.number) ? 'details' : null);
 }
 
 /** Which group a sheet of the set belongs to, by its number series (A-1xx plans, A-2xx elevations, A-3xx sections, A-6xx schedules). */
@@ -237,15 +317,17 @@ export const PER_SHEET = 2;
  * in the group's series. The sheet it lands on is laid out again at the scale
  * that fits. `null` for a view that has no group (3D) or is already hung.
  */
-export function withViewHung(sheets: readonly ProjectSheet[], views: readonly ProjectView[], view: ProjectView, extent: ModelExtent, now = Date.now()): { sheets: ProjectSheet[]; sheetId: string } | null {
+export function withViewHung(
+  sheets: readonly ProjectSheet[], views: readonly ProjectView[], view: ProjectView, extent: ModelExtent, now = Date.now(),
+  templates: Partial<Record<TemplateSeries, SheetTemplate>> = {},
+): { sheets: ProjectSheet[]; sheetId: string } | null {
   if (sheets.some((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id))) return null;
-  if (view.detail) return withDetailHung(sheets, view, extent, now);
+  if (view.detail) return withDetailHung(sheets, view, extent, now, templates.details);
   const group = groupOfView(view);
   if (!group) return null;
-  const area = drawingArea();
   const layOut = (sheet: ProjectSheet, members: ProjectView[]): ProjectSheet => {
     const sizes = members.map((v) => viewExtent(v, extent));
-    return { ...sheet, viewports: rowOfViewports(members, sizes, fittingScale(sizes, area), sheet.paper ?? SET_PAPER) };
+    return { ...sheet, viewports: placeViewports(members, sizes, scaleOn(sizes, sheet), sheet) };
   };
   const inGroup = sheets.filter((s) => sheetGroup(s) === group);
   const last = inGroup.at(-1);
@@ -253,29 +335,28 @@ export function withViewHung(sheets: readonly ProjectSheet[], views: readonly Pr
     const members = [...(last.viewports ?? []).flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []), view];
     return { sheets: sheets.map((s) => (s.id === last.id ? layOut(s, members) : s)), sheetId: last.id };
   }
-  // The new sheet is made on the paper of its group, else on the smallest that suits it.
-  const paper = last?.paper ?? choosePaper([[viewExtent(view, extent)]]).paper;
-  const sheet = layOut({
-    id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: GROUP_NAMES[group], createdAt: now, paper, orientation: 'landscape',
-  }, [view]);
+  // The new sheet starts from its series' template, else is made like the group's last sheet, else on the smallest paper that suits it.
+  const start = templates[group] ? startOf(templates[group], SET_PAPER)
+    : last ? { paper: last.paper ?? SET_PAPER, orientation: last.orientation ?? 'landscape', ...(last.frame ? { frame: last.frame } : {}), ...(last.templateId ? { templateId: last.templateId } : {}) }
+      : startOf(undefined, choosePaper([[viewExtent(view, extent)]]).paper);
+  const sheet = layOut({ id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: GROUP_NAMES[group], createdAt: now, ...start }, [view]);
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
 
 /**
  * A detail hangs on a sheet of its own in the "other" series (A-901…), on the
- * smallest paper it fits, at the scale it was made for when that fits, else at
- * the most detailed set scale that does.
+ * template's paper or else the smallest paper it fits, at the scale it was
+ * made for when that fits, else the most detailed set scale that does.
  */
-function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, now: number): { sheets: ProjectSheet[]; sheetId: string } {
+function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, now: number, template?: SheetTemplate): { sheets: ProjectSheet[]; sheetId: string } {
   const sizes = [viewExtent(view, extent)];
-  const { paper } = choosePaper([sizes]);
-  const scale = view.scale && fitsScale(sizes, drawingArea(paper), view.scale) ? view.scale : fittingScale(sizes, drawingArea(paper));
+  const start = startOf(template, choosePaper([sizes]).paper);
   const taken = new Set(sheets.map((s) => s.number));
   let n = 901;
   while (taken.has(`A-${n}`)) n++;
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: `A-${n}`, name: view.name, createdAt: now, paper, orientation: 'landscape',
-    viewports: rowOfViewports([view], sizes, scale, paper),
+    id: freshProjectId('sheet'), number: `A-${n}`, name: view.name, createdAt: now, ...start,
+    viewports: placeViewports([view], sizes, scaleOn(sizes, start, view.scale), start),
   };
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
@@ -301,9 +382,9 @@ export function sheetScaleReason(sheet: ProjectSheet, views: readonly ProjectVie
   const members = vps.flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []);
   // A schedule or legend sets its own size: there is no scale to explain.
   if (members.length !== vps.length) return null;
-  const paper = sheet.paper ?? SET_PAPER;
+  const paper = paperLabel(sheet.paper ?? SET_PAPER);
   const sizes = members.map((v) => viewExtent(v, extent));
-  const area = drawingArea(paper);
+  const area = drawingArea(sheet);
   const fits = fittingScale(sizes, area) === scale;
   const reason: Reason = !fitsScale(sizes, area, scale) && scale === SET_SCALES[SET_SCALES.length - 1]
     ? { key: 'wall.reason.noFit', params: { scale, paper } }

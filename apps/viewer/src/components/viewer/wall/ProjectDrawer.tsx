@@ -20,6 +20,8 @@ import { addScheduleToSet, hangSchedule, hangView } from '@/project/drawing-set-
 import { requestNewProject } from '@/project/new-project';
 import { exportProjectFile, importProjectFile, PROJECT_FILE_SUFFIX } from '@/project/project-file';
 import { addProjectSheet, loadProjectDocument, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
+import { paperLabel } from '@/project/paper';
+import { allTemplates } from '@/project/sheet-templates';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
 import { TitleBlockForm } from './TitleBlockForm';
@@ -85,6 +87,8 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
   const sheets = useProjectStore((s) => s.sheets);
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
+  const ownTemplates = useProjectStore((s) => s.sheetTemplates);
+  const [template, setTemplate] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
 
   const go = (sheetId: string | null, focus: string | null = null): void => {
@@ -97,7 +101,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
     const taken = new Set(sheets.map((s) => s.number));
     let n = 901;
     while (taken.has(`A-${n}`)) n++;
-    const id = addProjectSheet(t('wall.project.newSheet'));
+    const id = addProjectSheet(t('wall.project.newSheet'), template || undefined);
     setSheetNumber(id, `A-${n}`);
     go(id);
   };
@@ -134,7 +138,15 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
       </div>
       <LibraryPanel />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
-        <Group title={t('wall.project.sheets')} add={<button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>}>
+        <Group title={t('wall.project.sheets')} add={(
+          <>
+            <select aria-label={t('wall.paper.newSheetTemplate')} className={`${action} max-w-[9rem] bg-transparent`} value={template} onChange={(e) => setTemplate(e.target.value)}>
+              <option value="">{t('wall.paper.noTemplate')}</option>
+              {allTemplates(ownTemplates).map((tpl) => <option key={tpl.id} value={tpl.id}>{`${tpl.name} (${paperLabel(tpl.paper)})`}</option>)}
+            </select>
+            <button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>
+          </>
+        )}>
           {series.flatMap(({ group }) => sheets.filter((s) => sheetGroup(s) === group)).map((s) => (
             <Row key={s.id} id={s.id} sub={s.number} label={s.name} onOpen={() => go(s.id)} />
           ))}

@@ -156,14 +156,15 @@ export function mergeCatalogues(
   }));
   const symbols = mergeNamed(mine.symbols, incoming.symbols, policy, 'symbol', fresh);
   const legends = mergeNamed(mine.legends, incoming.legends.map(({ scopeId: _scopeId, ...rest }) => rest), policy, 'legend', fresh, (l) => ({ ...l, textStyle: textId(l.textStyle) }));
+  const templates = mergeNamed(mine.sheetTemplates, incoming.sheetTemplates, policy, 'template', fresh);
   return {
     catalogue: {
       layers: layers.list, layerGroups: groups.list, textStyles: texts.list, dimStyles: dims.list, hatchPatterns: patterns.text,
-      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list,
+      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, sheetTemplates: templates.list,
     },
     report: {
       layers: layers.report, textStyles: texts.report, dimStyles: dims.report, hatchPatterns: patterns.report,
-      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report,
+      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, sheetTemplates: templates.report,
     },
   };
 }

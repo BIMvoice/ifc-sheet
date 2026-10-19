@@ -9,6 +9,7 @@
  */
 
 import type { TranslationKey } from '@/i18n';
+import { paperLabel } from '@/project/paper';
 import type { IssuedSheet, ProjectIssue, ProjectSheet } from '@/project/types';
 import { titleBlockOf } from '@/project/title-block';
 import { sheetFingerprint, type FingerprintSources } from './fingerprint';
@@ -60,7 +61,7 @@ export function planIssue(sheets: readonly ProjectSheet[], sources: FingerprintS
     out.sheets.push({
       sheet,
       row: {
-        number: sheet.number, title: sheet.name, scale: scaleText(sheet), paper: sheet.paper ?? 'A1', orientation: sheet.orientation ?? 'landscape',
+        number: sheet.number, title: sheet.name, scale: scaleText(sheet), paper: paperLabel(sheet.paper ?? 'A1'), orientation: sheet.orientation ?? 'landscape',
         revision: titleBlockOf(sheet, projectTitleBlock, '').revision ?? '', fingerprint: sheetFingerprint(sheet, sources),
       },
     });

@@ -16,7 +16,8 @@ import { resetProject, useProjectStore } from './project-store.js';
 import { defaultViews } from './view-defaults.js';
 import { buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fittingScale, groupsThatDoNotFit, overrun, sheetGroup, sheetScaleReason, withViewHung, type ModelExtent } from './drawing-set.js';
 import { addScheduleToSet, groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
-import { fitViewportBox, PAPER_MM } from './sheets.js';
+import { PAPER_MM } from './paper.js';
+import { fitViewportBox } from './sheets.js';
 import type { ProjectLevel, ProjectView } from './types';
 
 /** A 10 × 7 m two-storey house, 6 m tall: long along X. */

@@ -16,7 +16,8 @@ import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { DraftLayer } from '@/drafting/types';
 import { readMaterial } from '@/project/project-file';
 import { readStandards } from '@/project/standards-file';
-import type { ProjectMaterial } from '@/project/types';
+import { readTemplate } from '@/project/sheet-templates';
+import type { ProjectMaterial, SheetTemplate } from '@/project/types';
 import { fail, readAnnotationType, readLegend, readList, readSymbol } from './readers';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from './types';
 
@@ -25,7 +26,7 @@ export const CATALOGUE_FILE_FORMAT = 'bvlib';
 export const CATALOGUE_FILE_VERSION = 1;
 
 /** The kinds of definition a catalogue carries, in the order the dialog lists them. */
-export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends'] as const;
+export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'sheetTemplates'] as const;
 export type CatalogueKind = (typeof CATALOGUE_KINDS)[number];
 
 export interface Catalogue {
@@ -40,6 +41,8 @@ export interface Catalogue {
   symbols: DraftSymbol[];
   /** Legend configurations; a legend's `scopeId` is project-specific and never travels. */
   legends: ProjectLegend[];
+  /** The project's own sheet templates (the built-in ones are in every project). */
+  sheetTemplates: SheetTemplate[];
 }
 
 export interface CatalogueFile extends Catalogue {
@@ -50,7 +53,7 @@ export interface CatalogueFile extends Catalogue {
 }
 
 export const emptyCatalogue = (): Catalogue => ({
-  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [],
+  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], sheetTemplates: [],
 });
 
 /** `catalogue` cut down to the chosen kinds (layer groups travel with their layers, text styles with the dimension styles that need them). */
@@ -64,6 +67,7 @@ export function selectKinds(catalogue: Catalogue, kinds: ReadonlySet<CatalogueKi
   if (kinds.has('annotationTypes')) out.annotationTypes = catalogue.annotationTypes;
   if (kinds.has('symbols')) out.symbols = catalogue.symbols;
   if (kinds.has('legends')) out.legends = catalogue.legends.map(({ scopeId: _scopeId, ...rest }) => rest);
+  if (kinds.has('sheetTemplates')) out.sheetTemplates = catalogue.sheetTemplates;
   return out;
 }
 
@@ -114,6 +118,7 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       annotationTypes: readList(file, 'annotationTypes', (v, p) => readAnnotationType(v, p, WHAT), WHAT),
       symbols: readList(file, 'symbols', (v, p) => readSymbol(v, p, WHAT), WHAT),
       legends: readList(file, 'legends', (v, p) => readLegend(v, p, WHAT), WHAT),
+      sheetTemplates: readList(file, 'sheetTemplates', (v, p) => readTemplate(v) ?? fail(p, 'must be a sheet template { id, name, paper }', WHAT), WHAT),
     },
   };
 }

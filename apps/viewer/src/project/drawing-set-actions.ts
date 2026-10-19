@@ -15,7 +15,8 @@ import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, placeViewports, relaidOnPaper, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { findTemplate, templateFields } from './sheet-templates';
 import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
 import { addProjectView, updateProjectView, useProjectStore } from './project-store';
@@ -23,7 +24,7 @@ import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defau
 import { seedProjectTitleBlock } from './sheets';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
-import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView } from './types';
+import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
 
 /** How many proposed sections the starting set draws; the rest wait in the tray. */
 export const SET_SECTIONS = 2;
@@ -76,6 +77,12 @@ export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | 
 // ---- Make the set whole (the one planner behind the Wall's start and DRAFTSET) ----
 
 const state = () => useProjectStore.getState();
+
+/** The template each series of the set starts its new sheets from, as the project chose; a series without one is absent. */
+export function seriesTemplates(): Partial<Record<TemplateSeries, SheetTemplate>> {
+  const { seriesTemplates: chosen = {}, sheetTemplates = [] } = state();
+  return Object.fromEntries(Object.entries(chosen).flatMap(([series, id]) => { const t = findTemplate(id, sheetTemplates); return t ? [[series, t]] : []; }));
+}
 
 export interface EnsureReport {
   viewsAdded: number;
@@ -153,7 +160,7 @@ function ensureSections(meshes: MeshData[] | null, extent: AxisBounds, options: 
 function ensurePlanScales(extent: AxisBounds): void {
   const plans = state().views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.detail);
   const onSheet = new Map(state().sheets.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
-  const planned = state().sheets.length === 0 ? buildDrawingSet({ views: plans, extent }) : [];
+  const planned = state().sheets.length === 0 ? buildDrawingSet({ views: plans, extent, templates: seriesTemplates() }) : [];
   const plannedScale = new Map(planned.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
   for (const plan of plans) {
     const scale = onSheet.get(plan.id) ?? plannedScale.get(plan.id);
@@ -169,10 +176,10 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
   report.sheetsExisting = before.length;
   let sheets = before;
   if (before.length === 0) {
-    sheets = buildDrawingSet({ views: loose, extent });
+    sheets = buildDrawingSet({ views: loose, extent, templates: seriesTemplates() });
   } else {
     for (const view of loose) {
-      const next = withViewHung(sheets, state().views, view, extent);
+      const next = withViewHung(sheets, state().views, view, extent, Date.now(), seriesTemplates());
       if (next) sheets = next.sheets;
     }
   }
@@ -211,7 +218,7 @@ export function setGroupScale(group: SetGroup, scale: number, extent: ModelExten
       if (sheetGroup(sheet) !== group) return sheet;
       const members = (sheet.viewports ?? []).flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []);
       const sizes = members.map((v) => viewExtent(v, extent));
-      return { ...sheet, viewports: rowOfViewports(members, sizes, scale, sheet.paper) };
+      return { ...sheet, viewports: placeViewports(members, sizes, scale, sheet) };
     }),
     dirty: true,
   });
@@ -236,7 +243,7 @@ export function swapViewportView(sheetId: string, viewportId: string, viewId: st
 export function hangView(viewId: string, extent: ModelExtent): string | null {
   const { sheets, views } = useProjectStore.getState();
   const view = views.find((v) => v.id === viewId);
-  const hung = view ? withViewHung(sheets, views, view, extent) : null;
+  const hung = view ? withViewHung(sheets, views, view, extent, Date.now(), seriesTemplates()) : null;
   if (!hung) return null;
   useProjectStore.setState({ sheets: hung.sheets, dirty: true });
   return hung.sheetId;
@@ -254,9 +261,11 @@ export function hangSchedule(scheduleId: string): string | null {
   if (!schedule) return null;
   const placed = sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === scheduleId));
   if (placed) return placed.id;
-  const area = drawingArea(SET_PAPER);
+  const template = seriesTemplates().schedules;
+  const start = template ? templateFields(template) : { paper: SET_PAPER, orientation: 'landscape' as const };
+  const area = drawingArea(start);
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: nextInSeries(sheets, 'schedules'), name: schedule.name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
+    id: freshProjectId('sheet'), number: nextInSeries(sheets, 'schedules'), name: schedule.name, createdAt: Date.now(), ...start,
     viewports: [{ id: freshProjectId('viewport'), viewId: scheduleId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 50, width: 0, height: 0, center: null }],
   };
   useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });
@@ -268,4 +277,33 @@ export function addScheduleToSet(kind: ProjectSchedule['kind'], name: string): s
   const id = hangSchedule(addSchedule(kind, name));
   if (!id) throw new Error('a schedule just added was not found');
   return id;
+}
+
+/** What a sheet's paper, orientation and frame can be changed to. A `templateId` of `null` says the sheet no longer follows a template. */
+export type SheetFormatPatch = Partial<Pick<ProjectSheet, 'paper' | 'orientation' | 'frame'>> & { templateId?: string | null };
+
+/**
+ * Change a sheet's paper, orientation or frame, and lay its drawings out again
+ * for it at the scale that fits (`relaidOnPaper`): the one path for "fit the
+ * drawings on this paper", the starting set's own. One undo step. Without
+ * the model's extent the drawings stay where they were.
+ */
+export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent: ModelExtent | null): void {
+  const { sheets, views } = state();
+  const sheet = sheets.find((s) => s.id === sheetId);
+  if (!sheet) return;
+  const { templateId: patched, ...fields } = patch;
+  const { templateId: kept, ...rest } = sheet;
+  const templateId = patched === undefined ? kept : patched ?? undefined;
+  const changed: ProjectSheet = { ...rest, ...fields, ...(templateId ? { templateId } : {}) };
+  const relaid = extent ? relaidOnPaper(changed, views, extent) : changed;
+  runAsOneUndoStep(() => {
+    useProjectStore.setState({ sheets: sheets.map((s) => (s.id === sheetId ? relaid : s)), dirty: true });
+    // A view's annotation sizes follow the scale it is drawn at (as when the scale is typed on the Wall).
+    for (const vp of relaid.viewports ?? []) {
+      const view = views.find((v) => v.id === vp.viewId);
+      const was = sheet.viewports?.find((o) => o.id === vp.id)?.scale;
+      if (view && was !== vp.scale) updateProjectView(view.id, { scale: vp.scale });
+    }
+  });
 }

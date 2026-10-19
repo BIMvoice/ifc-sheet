@@ -8,13 +8,14 @@
  * value is malformed (a viewport without a view or a positive scale).
  */
 
-import type { PaperSize, ProjectSheet, SheetViewport } from './types';
+import { readPaper } from './paper';
+import { readFrame } from './sheet-frame';
+import type { ProjectSheet, SheetViewport } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isString = (v: unknown): v is string => typeof v === 'string';
-const PAPERS: readonly PaperSize[] = ['A0', 'A1', 'A2', 'A3', 'A4'];
 
 function fail(path: string, message: string): never {
   throw new Error(`Not a project file: ${path} ${message}`);
@@ -33,10 +34,15 @@ function readViewport(v: unknown, path: string): SheetViewport {
 }
 
 /** The optional sheet layout fields, read from `v` (already known to be an object). */
-export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber'> {
-  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber'> = {};
+export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'autoNumber'> {
+  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'autoNumber'> = {};
   if (v.autoNumber === true) out.autoNumber = true;
-  if (PAPERS.includes(v.paper as PaperSize)) out.paper = v.paper as PaperSize;
+  // A plain `'A1'` (every file saved before elongated and custom sizes) is ISO A1; a paper that is none is left unnamed.
+  const paper = readPaper(v.paper);
+  if (paper) out.paper = paper;
+  const frame = readFrame(v.frame);
+  if (frame) out.frame = frame;
+  if (isString(v.templateId)) out.templateId = v.templateId;
   if (v.orientation === 'portrait' || v.orientation === 'landscape') out.orientation = v.orientation;
   if (v.viewports !== undefined) {
     if (!Array.isArray(v.viewports)) fail(`${path}.viewports`, 'must be an array');
