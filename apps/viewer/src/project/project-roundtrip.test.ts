@@ -163,6 +163,7 @@ const FULL: Required<ProjectDocument> = {
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],
+  tagFields: { door: { mark: [{ kind: 'pset', pset: 'Pset_DoorCommon', property: 'Reference' }, { kind: 'attribute', name: 'Mark' }] }, room: { name: [{ kind: 'quantity', qto: 'Qto_SpaceBaseQuantities', name: 'NetFloorArea' }, { kind: 'type-pset', pset: 'Pset_X', property: 'Y' }] } },
   issues: [{
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
     sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
