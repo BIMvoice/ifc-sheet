@@ -174,6 +174,27 @@ export interface SheetViewport {
   hiddenLayers?: string[];
 }
 
+/** The groups of sheets a numbering scheme numbers apart: `other` is details and whatever fits no series. */
+export type NumberGroup = 'plans' | 'elevations' | 'sections' | 'schedules' | 'other';
+
+/** How one group's numbers are written: `<discipline><prefix><separator><n padded to digits>`, `n` running from `start` by `step`. */
+export interface GroupPattern {
+  prefix: string;
+  separator: string;
+  start: number;
+  digits: number;
+  step: number;
+}
+
+/** The project's sheet numbering (`numbering.ts`). */
+export interface NumberingScheme {
+  /** Printed first on every number: `A` for architecture. */
+  discipline: string;
+  /** One running sequence through the whole set (A01, A02, …) instead of one per group; the plans pattern then numbers every sheet. */
+  continuous: boolean;
+  groups: Record<NumberGroup, GroupPattern>;
+}
+
 export interface ProjectSheet {
   id: string;
   /** Sheet number as printed in the title block, e.g. "A-101". */
@@ -185,6 +206,10 @@ export interface ProjectSheet {
    * renumbered.
    */
   autoNumber?: boolean;
+  /** The number was typed by hand: a renumbering keeps it unless asked to renumber those too (`numbering.ts`). */
+  numberOverride?: boolean;
+  /** The number series the sheet belongs to, what it is renumbered by. Absent on older sheets, read back from the number (`numberGroupOf`). */
+  series?: NumberGroup;
   name: string;
   createdAt: number;
   paper?: PaperSize;
@@ -335,6 +360,8 @@ export interface ProjectDocument {
   tagFields?: TagFieldConfig;
   /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */
   issues?: ProjectIssue[];
+  /** How sheets are numbered (`numbering.ts`); absent is the default A-101 style. Document key: `sheetNumbering`. */
+  sheetNumbering?: NumberingScheme;
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
 }

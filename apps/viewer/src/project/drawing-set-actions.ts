@@ -14,10 +14,11 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groupsThatDoNotFit, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
-import { addProjectView, updateProjectView, useProjectStore } from './project-store';
+import { nextNumber } from './numbering';
+import { addProjectView, numberingScheme, updateProjectView, useProjectStore } from './project-store';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, freshProjectId, sameElevation } from './view-defaults';
@@ -163,10 +164,10 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
   report.sheetsExisting = before.length;
   let sheets = before;
   if (before.length === 0) {
-    sheets = buildDrawingSet({ views: loose, extent });
+    sheets = buildDrawingSet({ views: loose, extent, scheme: numberingScheme() });
   } else {
     for (const view of loose) {
-      const next = withViewHung(sheets, state().views, view, extent);
+      const next = withViewHung(sheets, state().views, view, extent, undefined, numberingScheme());
       if (next) sheets = next.sheets;
     }
   }
@@ -230,7 +231,7 @@ export function swapViewportView(sheetId: string, viewportId: string, viewId: st
 export function hangView(viewId: string, extent: ModelExtent): string | null {
   const { sheets, views } = useProjectStore.getState();
   const view = views.find((v) => v.id === viewId);
-  const hung = view ? withViewHung(sheets, views, view, extent) : null;
+  const hung = view ? withViewHung(sheets, views, view, extent, undefined, numberingScheme()) : null;
   if (!hung) return null;
   useProjectStore.setState({ sheets: hung.sheets, dirty: true });
   return hung.sheetId;
@@ -243,7 +244,7 @@ function hangOnSheetOfItsOwn(itemId: string, name: string): string {
   if (placed) return placed.id;
   const area = drawingArea(SET_PAPER);
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: nextInSeries(sheets, 'schedules'), name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
+    id: freshProjectId('sheet'), number: nextNumber(sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
     viewports: [{ id: freshProjectId('viewport'), viewId: itemId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 50, width: 0, height: 0, center: null }],
   };
   useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });
@@ -252,7 +253,7 @@ function hangOnSheetOfItsOwn(itemId: string, name: string): string {
 
 /**
  * Hang a schedule (doors and windows, or the material takeoff) on a sheet of
- * its own in the A-6xx series, its table centred in the drawing area, named
+ * its own in the schedules series (A-6xx by default), its table centred in the drawing area, named
  * after it. Returns the sheet's id; a schedule already on a sheet returns
  * that sheet.
  */

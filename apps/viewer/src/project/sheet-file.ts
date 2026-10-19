@@ -8,7 +8,8 @@
  * value is malformed (a viewport without a view or a positive scale).
  */
 
-import type { PaperSize, ProjectSheet, SheetViewport } from './types';
+import { NUMBER_GROUPS } from './numbering';
+import type { NumberGroup, PaperSize, ProjectSheet, SheetViewport } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -33,9 +34,11 @@ function readViewport(v: unknown, path: string): SheetViewport {
 }
 
 /** The optional sheet layout fields, read from `v` (already known to be an object). */
-export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber'> {
-  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber'> = {};
+export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber' | 'numberOverride' | 'series'> {
+  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber' | 'numberOverride' | 'series'> = {};
   if (v.autoNumber === true) out.autoNumber = true;
+  if (v.numberOverride === true) out.numberOverride = true;
+  if (NUMBER_GROUPS.includes(v.series as NumberGroup)) out.series = v.series as NumberGroup;
   if (PAPERS.includes(v.paper as PaperSize)) out.paper = v.paper as PaperSize;
   if (v.orientation === 'portrait' || v.orientation === 'landscape') out.orientation = v.orientation;
   if (v.viewports !== undefined) {
