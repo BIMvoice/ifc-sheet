@@ -43,8 +43,9 @@ export type SetGroup = 'plans' | 'elevations' | 'sections' | 'schedules';
 
 /** Width and height a view's drawing takes, metres, estimated from the model's extent. */
 export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number; h: number } {
-  // A detail shows its rectangle only.
-  if (view.detail) return { w: view.detail.max.x - view.detail.min.x, h: view.detail.max.y - view.detail.min.y };
+  // A detail shows its rectangle only, an interior elevation its wall.
+  const crop = view.detail ?? (view.kind === 'elevation' ? view.interior?.crop : undefined);
+  if (crop) return { w: crop.max.x - crop.min.x, h: crop.max.y - crop.min.y };
   const dx = extent.max.x - extent.min.x;
   const dy = extent.max.y - extent.min.y;
   const dz = extent.max.z - extent.min.z;
@@ -101,7 +102,7 @@ export function choosePaper(rows: readonly (readonly { w: number; h: number }[])
 }
 
 /** Viewports for `views` in one row across the drawing area at `scale`, centred, each centred on its drawing. */
-export function rowOfViewports(views: readonly ProjectView[], sizes: readonly { w: number; h: number }[], scale: number, paper: PaperSize = SET_PAPER): SheetViewport[] {
+export function rowOfViewports(views: readonly Pick<ProjectView, 'id'>[], sizes: readonly { w: number; h: number }[], scale: number, paper: PaperSize = SET_PAPER): SheetViewport[] {
   const area = drawingArea(paper);
   const k = 1000 / scale;
   const widths = sizes.map((s) => s.w * k);
@@ -152,7 +153,7 @@ function setRows(allViews: readonly ProjectView[]): SetRow[] {
   const plans = views.filter((v) => v.kind === 'plan').sort((a, b) => (a.kind === 'plan' && b.kind === 'plan' ? a.level.elevation - b.level.elevation : 0));
   pairs(plans).forEach((pair, i) => add('plans', plans.length > 2 ? `Floor plans ${i + 1}` : 'Floor plans', pair));
   ELEVATION_PAIRS.forEach(({ directions, name }) => {
-    add('elevations', name, directions.flatMap((d) => views.filter((v) => v.kind === 'elevation' && v.direction === d)));
+    add('elevations', name, directions.flatMap((d) => views.filter((v) => v.kind === 'elevation' && v.direction === d && !v.interior)));
   });
   const sections = views.filter((v) => v.kind === 'section');
   pairs(sections).forEach((pair, i) => add('sections', sections.length > 2 ? `Sections ${i + 1}` : 'Sections', pair));

@@ -41,6 +41,8 @@ import { StoreyDisplayControls } from './hierarchy/StoreyDisplayControls';
 import { HierarchySortControl } from './hierarchy/HierarchySortControl';
 import { hierarchyRowSelection } from './hierarchy/rowSelection';
 import type { HierarchyRowAction } from './hierarchy/HierarchyRowActions';
+import { hierarchyRowActions, spaceRowRenderId } from './hierarchy/rowActions';
+import { runInteriorElevations } from './interior-elevations-command';
 import { applyLevelDisplayMode } from '@/store/levelDisplay';
 import { createHierarchyModelsSelector, selectLegacyHierarchyGeometry } from './hierarchy/hierarchy-models-selector';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
@@ -328,6 +330,7 @@ export function HierarchyPanel() {
       if (storeyRefs.length > 0) applyLevelDisplayMode('solo', storeyRefs);
       return;
     }
+    if (action === 'interiorElevations') return runInteriorElevations(spaceRowRenderId(node));
     if (action === 'isolate') {
       const elements = getNodeElements(node);
       if (elements.length === 0) return;
@@ -368,17 +371,7 @@ export function HierarchyPanel() {
     }
   }, [getNodeElements, models, ifcDataStore, typeVisibility, toggleTypeVisibility, isolateEntities, setClassFilter, upsertSearchRule]);
 
-  const rowActions = useCallback((node: TreeNode): HierarchyRowAction[] => {
-    if (node.type === 'model-header' || node.type === 'model-tag-group') return [];
-    if (node.type === 'unified-storey' || node.type === 'IfcBuildingStorey') {
-      return ['solo', 'filter'];
-    }
-    const actions: HierarchyRowAction[] = [];
-    if (getNodeElements(node).length > 0) actions.push('isolate');
-    if (node.type === 'type-group' || node.type === 'ifc-type' ||
-        node.type === 'material-group' || node.type === 'group') actions.push('filter');
-    return actions;
-  }, [getNodeElements]);
+  const rowActions = useCallback((node: TreeNode): HierarchyRowAction[] => hierarchyRowActions(node, getNodeElements(node).length > 0), [getNodeElements]);
 
   // ARIA tree semantics + roving-tabIndex keyboard nav (#5883), see `useHierarchyTreeKeyboard.ts`.
   const {

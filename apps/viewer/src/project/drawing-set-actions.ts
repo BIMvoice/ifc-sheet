@@ -118,7 +118,7 @@ function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
 /** The four elevations, each plane just inside its facade and each seeing through the building; a depth or plane already set stays. */
 function ensureElevations(extent: AxisBounds, report: EnsureReport): void {
   for (const direction of ELEVATION_DIRECTIONS) {
-    const found = state().views.find((v) => v.kind === 'elevation' && v.direction === direction);
+    const found = state().views.find((v) => v.kind === 'elevation' && v.direction === direction && !v.interior);
     if (!found) {
       addProjectView({ kind: 'elevation', name: ELEVATION_NAMES[direction], direction, planeOffset: elevationPlaneOffset(direction, extent), viewDepth: elevationDepth(direction, extent) });
       report.viewsAdded++;
