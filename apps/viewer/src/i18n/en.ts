@@ -74,6 +74,7 @@ import { manualValidationEn } from './catalogues/manual-validation.en';
 import { flowPanelEn } from './catalogues/flow-panel.en';
 import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
+import { printPreviewEn } from './catalogues/print-preview.en';
 import { wallEn } from './catalogues/wall.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
@@ -250,6 +251,7 @@ export const en = {
   ...drawingUnderlayEn,
   ...keyboardShortcutsEn,
   ...settingsEn,
+  ...printPreviewEn,
   ...wallEn,
   ...whatChangedEn,
   ...hierarchyEn,
