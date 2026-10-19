@@ -38,7 +38,7 @@
  * painted over an opaque surface.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postcss from 'postcss';
@@ -90,6 +90,21 @@ export function compileAppCss(): Promise<string> {
   return compiledCssPromise;
 }
 
+/** Where Playwright looks for `channel: 'chrome'` on each platform. */
+const CHROME_PATHS: Record<string, string[]> = {
+  darwin: ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'],
+  linux: ['/opt/google/chrome/chrome'],
+  win32: ['Program Files', 'Program Files (x86)'].map((root) => `C:\\${root}\\Google\\Chrome\\Application\\chrome.exe`),
+};
+
+/** A skip reason when the real Google Chrome these tests drive is not
+ *  installed (#67), else `false`. Under `CI` it is always `false`, so a runner
+ *  that lost Chrome fails loudly instead of skipping the whole suite. */
+export const CHROME_SKIP: string | false =
+  process.env.CI || (CHROME_PATHS[process.platform] ?? []).some((path) => existsSync(path))
+    ? false
+    : 'Google Chrome is not installed here (channel: chrome); run `pnpm exec playwright install chrome` (#67)';
+
 let browserPromise: Promise<Browser> | undefined;
 
 function getBrowser(): Promise<Browser> {
@@ -115,6 +130,7 @@ function getBrowser(): Promise<Browser> {
  *  hook so that one-off cost (tens of seconds on a loaded runner) is not
  *  charged to the first test against the suite's per-test timeout. */
 export async function warmContrastBrowser(): Promise<void> {
+  if (CHROME_SKIP) return;
   await Promise.all([compileAppCss(), getBrowser()]);
 }
 
