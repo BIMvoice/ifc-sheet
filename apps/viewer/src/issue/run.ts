@@ -10,7 +10,6 @@
 
 import { zipSync } from 'fflate';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
-import { printHtml } from '@/components/viewer/sheets/sheet-export';
 import { resolve } from '@/i18n/registry';
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
@@ -18,7 +17,8 @@ import type { ProjectDocument } from '@/project/types';
 import type { TranslationKey } from '@/i18n';
 import { currentFindings } from '@/check/collect';
 import { captureSheets, failureLine } from './capture';
-import { drawingListCsv, issuePrintHtml, uniqueNames, type ListLabels } from './output';
+import { drawingListCsv, uniqueNames, type ListLabels } from './output';
+import { buildIssuePdf, type PdfLabels } from './pdf-build';
 import { titleBlockOf } from '@/project/title-block';
 import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
 
@@ -29,12 +29,14 @@ export interface IssueOptions {
   name?: string;
   date?: string;
   listFirst?: boolean;
+  /** PDF: write the archival description (PDF/A-2b identification and sRGB output intent; not validated). */
+  archival?: boolean;
 }
 
 export interface IssueResult {
   plan: IssuePlan;
-  /** The print document (PDF format). */
-  html: string | null;
+  /** The issued PDF (PDF format). */
+  pdf: Uint8Array | null;
   /** The drawing list as CSV, always. */
   csv: string;
   /** The zipped set (SVG and DXF formats). */
@@ -48,6 +50,13 @@ const say = (r: IssueReason) => ({ key: r.key, params: r.params });
 export function listLabels(): ListLabels {
   const t = (k: string) => resolve(`issue.list.${k}` as TranslationKey);
   return { title: t('title'), issue: t('issue'), date: t('date'), sheet: t('sheet'), sheetTitle: t('sheetTitle'), scale: t('scale'), paper: t('paper'), revision: t('revision') };
+}
+
+export function pdfLabels(): PdfLabels {
+  const t = (k: string) => resolve(`issue.layer.${k}` as TranslationKey);
+  const roles: Record<string, string> = {};
+  for (const role of ['SHEET', 'FRAME', 'TITLEBLOCK', 'VIEWPORT-LABELS', 'FILL', 'HATCH', 'HIDDEN', 'SEEN', 'CUT', 'SYMBOLS', 'ROOF', 'MEMBRANE', 'ROAD', 'SCHEDULE', 'SCHEDULE-SYMBOLS', 'LEGEND']) roles[role] = t(role);
+  return { ...listLabels(), groups: { sheet: t('group.sheet'), drawing: t('group.drawing'), schedules: t('group.schedules'), drafting: t('group.drafting') }, roles, drafting: t('drafting') };
 }
 
 function sources(project: ProjectDocument) {
@@ -72,14 +81,15 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   // What is missing is said before issuing; it does not stop the issue.
   const missing = currentFindings().length;
   if (missing > 0) lines.unshift({ key: 'check.msg.unfinished', params: { count: missing } });
-  if (plan.sheets.length === 0) return { plan, html: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.nothing', params: {} }] };
+  if (plan.sheets.length === 0) return { plan, pdf: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.nothing', params: {} }] };
   const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf' });
-  if (failed.length > 0) return { plan, html: null, csv, zip: null, lines: [...lines, ...failed.map((f) => failureLine(f)), { key: 'issue.msg.notIssued', params: {} }] };
+  if (failed.length > 0) return { plan, pdf: null, csv, zip: null, lines: [...lines, ...failed.map((f) => failureLine(f)), { key: 'issue.msg.notIssued', params: {} }] };
   const project = useProjectStore.getState();
-  let html: string | null = null;
+  let pdf: Uint8Array | null = null;
   let zip: Uint8Array | null = null;
   if (options.format === 'pdf') {
-    html = issuePrintHtml(plan, svgs, plan.sheets.map((s) => titleBlockOf(s.sheet, project.titleBlock, project.name).project).find((n) => n) || project.name, listLabels());
+    const projectName = plan.sheets.map((s) => titleBlockOf(s.sheet, project.titleBlock, project.name).project).find((n) => n) || project.name;
+    pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival });
   } else {
     const ext = options.format;
     const names = uniqueNames(plan.sheets.map(({ sheet }) => `${sanitizeFilename(`${sheet.number} ${sheet.name}`, { fallback: 'sheet' })}.${ext}`));
@@ -94,15 +104,15 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   const issues = [...(project.issues ?? []), issueRecord(plan, freshProjectId('issue'), Date.now())];
   useProjectStore.setState({ issues, dirty: true });
   lines.push({ key: 'issue.msg.done', params: { name: plan.name, date: plan.date, count: plan.sheets.length, format: options.format.toUpperCase() } });
-  return { plan, html, csv, zip, lines };
+  return { plan, pdf, csv, zip, lines };
 }
 
-/** Hand the result to the person: the print dialog for a PDF (with the CSV beside it), the zip for the others. */
+/** Hand the result to the person: the PDF (with the CSV beside it), or the zip for the others. */
 export function deliver(result: IssueResult, format: IssueFormat): void {
   const stem = sanitizeFilename(result.plan.name, { fallback: 'issue' });
   downloadFile(`﻿${result.csv}`, `${stem} drawing list.csv`, 'text/csv;charset=utf-8');
   if (result.zip) downloadFile(result.zip, `${stem} ${format}.zip`, 'application/zip');
-  if (result.html) printHtml(result.html);
+  if (result.pdf) downloadFile(result.pdf, `${stem}.pdf`, 'application/pdf');
 }
 
 /** What `ISSUE` was given after its name: an optional format, then the issue's name. */
