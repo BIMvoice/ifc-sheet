@@ -15,7 +15,7 @@ import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { sectionProposals, startDrawingSet } from '@/project/drawing-set-actions';
 import { setExtent } from '@/draft-set/body';
-import { discardRecovery } from '@/project/recovery-store';
+import { discardRecovery, startSetUnderOffer } from '@/project/recovery-store';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { SteppedSheet } from './SteppedSheet';
@@ -41,7 +41,9 @@ export function WallView() {
 
   // A model on a project with no sheets: lay the set out as soon as the geometry is in.
   useEffect(() => {
-    if (sheets.length === 0 && meshes && meshes.length > 0 && startDrawingSet(meshes, extent)) setIntro(true);
+    if (sheets.length !== 0 || !meshes) return;
+    if (meshes.length > 0 && startSetUnderOffer(() => startDrawingSet(meshes, extent))) setIntro(true);
+    else if (meshes.length === 0) discardRecovery();
   }, [sheets.length, meshes, extent]);
 
   // The proposals read the lowest plan's rooms; they change only with the model or the plans.

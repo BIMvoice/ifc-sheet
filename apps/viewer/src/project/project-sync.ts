@@ -16,15 +16,14 @@ import { useEffect } from 'react';
 import { useViewerStore } from '@/store';
 import type { FederatedModel } from '@/store/types';
 import { modelLevels } from './model-levels';
-import { loadProjectDocument, projectDocument, resetProject, syncProjectWithModels, useProjectStore } from './project-store';
+import { loadProjectDocument, resetProject, syncProjectWithModels, useProjectStore } from './project-store';
 import type { StoreyInput } from './view-defaults';
 import type { ProjectModelRef } from './types';
 import { autosaveKey } from './project-saved';
-import { planAutosave, writeAutosave } from './recovery';
-import { discardRecovery, offerRecovery, recoveryOpenFor, restoreModelState } from './recovery-store';
+import { watchProjectForAutosave } from './autosave-watch';
+import { planAutosave } from './recovery';
+import { discardRecovery, duringSystemChange, offerRecovery, restoreModelState } from './recovery-store';
 import { keepProjectForNewVersion, modelVersionSwapActive } from './model-version';
-
-const AUTOSAVE_DEBOUNCE_MS = 500;
 
 interface StoreySource {
   spatialHierarchy?: { byStorey: ReadonlyMap<number, unknown>; storeyElevations: ReadonlyMap<number, number> } | null;
@@ -65,7 +64,6 @@ function loadedModels(): { refs: ProjectModelRef[]; storeys: StoreyInput[] } {
 export function useProjectSync(): void {
   useEffect(() => {
     let slot: string | null = null;
-    let timer: ReturnType<typeof setTimeout> | undefined;
 
     const onModels = () => {
       const { refs, storeys } = loadedModels();
@@ -80,31 +78,24 @@ export function useProjectSync(): void {
         if (modelVersionSwapActive()) keepProjectForNewVersion(refs);
         else if (plan.kind === 'offer' && !overlaps) {
           // Newer than the last file and holding something it does not: the intro offers it back.
-          offerRecovery({ key, doc: plan.autosave.doc, savedAt: plan.autosave.savedAt, modelName: refs.map((r) => r.name).join(', ') });
           resetProject();
+          offerRecovery({ key, doc: plan.autosave.doc, savedAt: plan.autosave.savedAt, modelName: refs.map((r) => r.name).join(', ') });
         } else if (plan.kind !== 'none') {
           loadProjectDocument(plan.autosave.doc, { fromAutosave: true });
           void restoreModelState(key, () => slot);
         } else if (!overlaps) resetProject();
       }
-      syncProjectWithModels(refs, storeys);
+      duringSystemChange(() => syncProjectWithModels(refs, storeys));
     };
 
     onModels();
     const unsubModels = useViewerStore.subscribe((state, prev) => {
       if (state.models !== prev.models || state.ifcDataStore !== prev.ifcDataStore || state.mutationVersion !== prev.mutationVersion) onModels();
     });
-    const unsubProject = useProjectStore.subscribe((state, prev) => {
-      if (!slot || recoveryOpenFor(slot) || (state.views === prev.views && state.sheets === prev.sheets && state.name === prev.name
-        && state.drafts === prev.drafts && state.draftLayers === prev.draftLayers && state.hatchPatterns === prev.hatchPatterns && state.modelState === prev.modelState)) return;
-      const key = slot;
-      clearTimeout(timer);
-      timer = setTimeout(() => writeAutosave(key, projectDocument()), AUTOSAVE_DEBOUNCE_MS);
-    });
+    const stopAutosave = watchProjectForAutosave(() => slot);
     return () => {
-      clearTimeout(timer);
       unsubModels();
-      unsubProject();
+      stopAutosave();
     };
   }, []);
 }

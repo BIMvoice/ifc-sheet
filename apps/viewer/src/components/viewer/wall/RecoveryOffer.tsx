@@ -8,6 +8,7 @@
  * not also hang the set.
  */
 
+import { useEffect } from 'react';
 import { useTranslation } from '@/i18n';
 import { formatLocaleDate } from '@/i18n/intlFormat';
 import { discardRecovery, restoreRecovery, useRecoveryStore } from '@/project/recovery-store';
@@ -15,6 +16,8 @@ import { discardRecovery, restoreRecovery, useRecoveryStore } from '@/project/re
 export function RecoveryOffer({ onRestored }: { onRestored: () => void }) {
   const { t, locale } = useTranslation();
   const offer = useRecoveryStore((s) => s.offer);
+  // Going away unanswered is declining: nothing else would ever end the offer.
+  useEffect(() => discardRecovery, []);
   if (!offer) return null;
   const time = formatLocaleDate(locale, offer.savedAt, { dateStyle: 'medium', timeStyle: 'short' });
   return (

@@ -49,3 +49,30 @@ export function restoreRecovery(): void {
   loadProjectDocument(offer.doc, { dirty: true, fromAutosave: true });
   void restoreModelState(offer.key, () => offer.key);
 }
+
+let systemDepth = 0;
+
+/** Runs `fn`, whose changes to the project are the app's own (laying out the set, following the models), not the user's. */
+export function duringSystemChange<T>(fn: () => T): T {
+  systemDepth++;
+  try {
+    return fn();
+  } finally {
+    systemDepth--;
+  }
+}
+
+/** Lays out the drawing set under an open offer; if there is no set to lay out there is no intro to show the offer on, so it ends. */
+export function startSetUnderOffer(start: () => boolean): boolean {
+  const started = duringSystemChange(start);
+  if (!started) discardRecovery();
+  return started;
+}
+
+// The first change the user makes to an open project answers the offer with Discard. Registered here,
+// ahead of the autosave watcher, so the change that ends the offer is the first one written.
+useProjectStore.subscribe((state, prev) => {
+  if (systemDepth > 0 || !useRecoveryStore.getState().offer) return;
+  if (state.views !== prev.views || state.sheets !== prev.sheets || state.name !== prev.name || state.drafts !== prev.drafts
+    || state.draftLayers !== prev.draftLayers || state.hatchPatterns !== prev.hatchPatterns) discardRecovery();
+});

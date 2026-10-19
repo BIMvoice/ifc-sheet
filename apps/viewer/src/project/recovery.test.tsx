@@ -7,7 +7,11 @@
  * written, the project store is emptied (a new session), and the same models load again.
  */
 
-import { beforeEach, describe, it } from 'node:test';
+import '@/test/setup-dom.js';
+import { afterEach, beforeEach, describe, it } from 'node:test';
+import { cleanup, render } from '@/test/render.js';
+import { RecoveryOffer } from '@/components/viewer/wall/RecoveryOffer';
+import { watchProjectForAutosave } from './autosave-watch.js';
 import assert from 'node:assert/strict';
 import { addProjectSheet, loadProjectDocument, projectDocument, resetProject, useProjectStore } from './project-store.js';
 import { readFileSync } from 'node:fs';
@@ -15,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { noteProjectFile, parseProjectFile } from './project-file.js';
 import { autosaveKey } from './project-saved.js';
 import { planAutosave, writeAutosave } from './recovery.js';
-import { discardRecovery, offerRecovery, recoveryOpenFor, restoreRecovery, useRecoveryStore } from './recovery-store.js';
+import { discardRecovery, duringSystemChange, offerRecovery, recoveryOpenFor, restoreRecovery, startSetUnderOffer, useRecoveryStore } from './recovery-store.js';
 import type { ProjectModelRef } from './types.js';
 
 const MODELS: ProjectModelRef[] = [{ key: 'hash-house', name: 'house.ifc' }];
@@ -109,13 +113,12 @@ describe('after a crash', () => {
 
   it('does not offer, in a new session, the autosave of a project file that was opened and then left as it was', () => {
     const storage = fakeStorage();
-    const g = globalThis as { localStorage?: unknown };
-    const had = g.localStorage;
-    g.localStorage = storage;
+    localStorage.clear();
     try {
       const file = readFileSync(fileURLToPath(new URL('./fixtures/v1.ifclite-project.json', import.meta.url)), 'utf8');
       loadProjectDocument(parseProjectFile(file));
       const key = autosaveKey(useProjectStore.getState().models);
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i) as string; storage.setItem(k, localStorage.getItem(k) as string); }
       writeAutosave(key, projectDocument(), storage, new Date(AFTER));
       resetProject();
       assert.equal(planAutosave(key, storage).kind, 'restore');
@@ -123,7 +126,7 @@ describe('after a crash', () => {
       writeAutosave(key, projectDocument(), storage, new Date(AFTER + 1000));
       assert.equal(planAutosave(key, storage).kind, 'offer', 'but one drawn after the open is');
     } finally {
-      g.localStorage = had;
+      localStorage.clear();
     }
   });
 
@@ -143,5 +146,56 @@ describe('after a crash', () => {
     assert.equal(recoveryOpenFor(autosaveKey([{ key: 'other', name: 'other.ifc' }])), false);
     loadProjectDocument(projectDocument());
     discardRecovery();
+  });
+});
+
+describe('an offer left open while the user works', () => {
+  const written: string[] = [];
+  let stop = () => {};
+  beforeEach(() => {
+    resetProject();
+    discardRecovery();
+    written.length = 0;
+    stop = watchProjectForAutosave(() => KEY, (key) => written.push(key), 5);
+  });
+  afterEach(() => stop());
+  const wait = () => new Promise((r) => setTimeout(r, 30));
+  const open = () => offerRecovery({ key: KEY, doc: projectDocument(), savedAt: 1, modelName: 'house.ifc' });
+
+  it('ends at the first edit, which is then autosaved', async () => {
+    open();
+    addProjectSheet('Drawn while the offer was open');
+    assert.equal(useRecoveryStore.getState().offer, null);
+    await wait();
+    assert.deepEqual(written, [KEY]);
+  });
+
+  it('is not ended, and nothing is written, by the app laying out the set itself', async () => {
+    open();
+    duringSystemChange(() => addProjectSheet('Laid out'));
+    await wait();
+    assert.notEqual(useRecoveryStore.getState().offer, null);
+    assert.deepEqual(written, []);
+  });
+
+  it('ends when there is no set to lay out an intro for, and autosave is not suppressed', async () => {
+    open();
+    assert.equal(startSetUnderOffer(() => false), false);
+    assert.equal(useRecoveryStore.getState().offer, null);
+    addProjectSheet('Drawn');
+    await wait();
+    assert.deepEqual(written, [KEY]);
+  });
+
+  it('ends when the intro showing it goes away unanswered, and autosave resumes', async () => {
+    open();
+    const ui = render(<RecoveryOffer onRestored={() => {}} />);
+    assert.notEqual(useRecoveryStore.getState().offer, null);
+    ui.remove();
+    cleanup();
+    assert.equal(useRecoveryStore.getState().offer, null);
+    addProjectSheet('Drawn');
+    await wait();
+    assert.deepEqual(written, [KEY]);
   });
 });
