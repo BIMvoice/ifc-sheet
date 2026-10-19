@@ -13,7 +13,7 @@
  */
 
 import type { ElevationDirection, ProjectView } from '@/project/types';
-import { textBox } from './annotation';
+import { axisLayout, textBox } from './annotation';
 import { referenceLabel, viewReference } from './cross-ref';
 import { placementOf, symbolParts } from './section-link';
 import { sectionLink, sectionNormal, withoutSectionLink } from './section-symbol';
@@ -87,6 +87,35 @@ const SIDES: Record<ElevationDirection, { out: Pt }> = {
   west: { out: { x: -1, y: 0 } },
 };
 
+/** An axis-aligned box in drawing metres. */
+export interface Box {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+const boxOf = (pts: readonly Pt[]): Box => ({
+  x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)),
+  x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)),
+});
+const overlaps = (a: Box, b: Box, m: number): boolean => a.x0 - m < b.x1 && a.x1 + m > b.x0 && a.y0 - m < b.y1 && a.y1 + m > b.y0;
+
+/** The boxes of what an elevation mark must keep clear of on a plan: section lines and their labels, grid axes and their bubbles, any other line or text. */
+export function obstacleBoxes(drafts: readonly DraftEntity[]): Box[] {
+  const out: Box[] = [];
+  for (const d of drafts) {
+    const sh = d.shape;
+    if (sh.type === 'line') out.push(boxOf([sh.a, sh.b]));
+    else if (sh.type === 'text') out.push(boxOf(textBox(sh.p, sh.text, sh.height, sh.rotation)));
+    else if (sh.type === 'axis') {
+      const { bubbles, r } = axisLayout(sh);
+      out.push(boxOf([sh.a, sh.b, ...bubbles.flatMap((c) => [{ x: c.x - r, y: c.y - r }, { x: c.x + r, y: c.y + r }])]));
+    }
+  }
+  return out;
+}
+
 export interface ElevationMarkInput {
   planViewId: string;
   layerId: string;
@@ -98,40 +127,69 @@ export interface ElevationMarkInput {
   paperUnit: number;
   /** The viewport's scale over the plan's own: annotation text is multiplied by it when drawn. */
   factor: number;
+  /** What is already on the plan (`obstacleBoxes`): a mark slides along its side until it is clear of these. */
+  obstacles?: readonly Box[];
 }
+
+/** Clear space kept round an elevation mark, paper millimetres. */
+export const MARK_MARGIN_MM = 3;
 
 /**
  * An elevation mark on each side of the building that has an elevation on a
  * sheet: an arrowhead outside the extent pointing at the building, and the
  * target "n / sheet" beyond it (turned along the facade on east and west, where
- * there is no room beside it). North is the top of the plan.
+ * there is no room beside it). North is the top of the plan. A mark starts at
+ * the middle of its side and, when its box meets an obstacle or a mark placed
+ * before it, slides along the side to the nearest place that is clear.
  */
 export function elevationMarkDrafts(input: ElevationMarkInput): DraftEntity[] {
   const { planViewId, layerId, views, sheets, bounds, paperUnit, factor } = input;
   const viewIds = new Set(views.map((v) => v.id));
   const mid = { x: (bounds.min.x + bounds.max.x) / 2, y: (bounds.min.y + bounds.max.y) / 2 };
   const textH = ELEVATION_TEXT_MM * paperUnit;
+  const margin = MARK_MARGIN_MM * paperUnit;
+  const taken: Box[] = [...(input.obstacles ?? [])];
   const out: DraftEntity[] = [];
   for (const view of views) {
     if (view.kind !== 'elevation' || view.detail) continue;
     const ref = viewReference(view.id, viewIds, sheets);
     if (!ref) continue;
     const { out: o } = SIDES[view.direction];
+    const horizontal = o.y !== 0; // north / south: the side runs along x
     const edge = o.x !== 0 ? (o.x > 0 ? bounds.max.x : bounds.min.x) : o.y > 0 ? bounds.max.y : bounds.min.y;
-    // Along the outward axis: the arrow's tip, its base, then the label's middle. Across it: the middle of the facade.
+    // Along the outward axis: the arrow's tip, its base, then the label's middle. Across it: the middle of the facade, plus `shift`.
     const tip = edge + (o.x + o.y) * GAP_MM * paperUnit;
     const base = tip + (o.x + o.y) * ARROW_MM * paperUnit;
-    const at = (along: number, across: number): Pt => (o.x !== 0 ? { x: along, y: mid.y + across } : { x: mid.x + across, y: along });
     const half = (ARROW_MM / 2) * paperUnit;
-    const lines: [Pt, Pt][] = [[at(tip, 0), at(base, -half)], [at(tip, 0), at(base, half)], [at(base, -half), at(base, half)]];
     const label = referenceLabel(ref);
     const rotation = o.x !== 0 ? Math.PI / 2 : 0;
-    const box = textBox({ x: 0, y: 0 }, label, textH, rotation);
-    const labelMid = base + (o.x + o.y) * (GAP_MM * paperUnit + halfAlong(box, o));
-    const p = anchorFor(at(labelMid, 0), label, textH, rotation);
-    const id = `${planViewId}:elevation:${view.id}${XREF}`;
-    lines.forEach(([a, b], i) => out.push({ id: `${id}:${i}`, viewId: planViewId, layerId, shape: { type: 'line', a, b }, params: {} }));
-    out.push({ id: `${id}:label`, viewId: planViewId, layerId, shape: { type: 'text', p, text: label, height: textH / factor, rotation }, params: {} });
+    const labelBox = textBox({ x: 0, y: 0 }, label, textH, rotation);
+    const labelMid = base + (o.x + o.y) * (GAP_MM * paperUnit + halfAlong(labelBox, o));
+    const at = (along: number, across: number): Pt => (o.x !== 0 ? { x: along, y: across } : { x: across, y: along });
+    const centre = horizontal ? mid.x : mid.y;
+    const build = (shift: number): { drafts: DraftEntity[]; box: Box } => {
+      const c = centre + shift;
+      const lines: [Pt, Pt][] = [[at(tip, c), at(base, c - half)], [at(tip, c), at(base, c + half)], [at(base, c - half), at(base, c + half)]];
+      const p = anchorFor(at(labelMid, c), label, textH, rotation);
+      const id = `${planViewId}:elevation:${view.id}${XREF}`;
+      const drafts: DraftEntity[] = lines.map(([a, b], i) => ({ id: `${id}:${i}`, viewId: planViewId, layerId, shape: { type: 'line', a, b }, params: {} }));
+      drafts.push({ id: `${id}:label`, viewId: planViewId, layerId, shape: { type: 'text', p, text: label, height: textH / factor, rotation }, params: {} });
+      const box = boxOf([...lines.flat(), ...textBox(p, label, textH, rotation)]);
+      return { drafts, box };
+    };
+    const start = build(0);
+    const clear = (shift: number): boolean => {
+      const b = horizontal ? { ...start.box, x0: start.box.x0 + shift, x1: start.box.x1 + shift } : { ...start.box, y0: start.box.y0 + shift, y1: start.box.y1 + shift };
+      return taken.every((t) => !overlaps(b, t, margin));
+    };
+    // The nearest shift that clears every box in the way: just past one of their edges, either side.
+    const lo = horizontal ? start.box.x0 : start.box.y0;
+    const hi = horizontal ? start.box.x1 : start.box.y1;
+    const candidates = taken.flatMap((t) => (horizontal ? [t.x0 - margin - hi, t.x1 + margin - lo] : [t.y0 - margin - hi, t.y1 + margin - lo]));
+    const shift = [0, ...candidates].filter(clear).sort((a, b) => Math.abs(a) - Math.abs(b))[0] ?? 0;
+    const placed = shift === 0 ? start : build(shift);
+    taken.push(placed.box);
+    out.push(...placed.drafts);
   }
   return out;
 }

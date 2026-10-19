@@ -6,7 +6,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ElevationDirection, ProjectSheet, ProjectView } from '@/project/types';
 import { textBox } from './annotation';
-import { elevationMarkDrafts } from './cross-ref-marks';
+import { elevationMarkDrafts, obstacleBoxes, type Box } from './cross-ref-marks';
+import { sectionSymbolShapes } from './section-symbol';
 import type { DraftEntity, Pt } from './types';
 
 /** Where the elevation marks stand on a plan: outside the building, on the side each elevation looks at. */
@@ -80,5 +81,28 @@ describe('elevationMarkDrafts', () => {
     assert.equal(text(at50).type, 'text');
     // Stored height times the factor drawing multiplies it by: 2.5 mm of paper at 1:50 is 0.125 m.
     assert.ok(Math.abs((text(at50) as { height: number }).height * 0.5 - 0.125) < 1e-9);
+  });
+
+  it('slides a mark clear of a section line through the middle of its side, and stays outside the building', () => {
+    // The demo case: section A cuts the building at x = 106, its symbol reaching past both the north and the south facade.
+    const symbol: DraftEntity[] = sectionSymbolShapes({ x: 106, y: 198 }, { x: 106, y: 212 }, { x: 108, y: 205 }, 'A', 0.35).map((shape, i) => ({ id: `sym${i}`, viewId: 'plan', layerId: '0', shape, params: { sectionOf: 'sec' } }));
+    const obstacles = obstacleBoxes(symbol);
+    const at = (list: Box[]) => elevationMarkDrafts({ planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1, obstacles: list });
+    const boxOfMark = (marks: DraftEntity[], direction: ElevationDirection): Box => {
+      const pts = marks.filter((m) => m.id.includes(`e-${direction}`)).flatMap((m) => (m.shape.type === 'line' ? [m.shape.a, m.shape.b] : m.shape.type === 'text' ? textBox(m.shape.p, m.shape.text, m.shape.height, m.shape.rotation) : []));
+      return { x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)) };
+    };
+    const hits = (a: Box, b: Box) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+    const marks = at(obstacles);
+    for (const d of ['north', 'south'] as const) {
+      const box = boxOfMark(marks, d);
+      assert.equal(obstacles.some((o) => hits(box, o)), false, `${d} mark clear of the section symbol and its labels`);
+      assert.ok(box.x1 < 106 || box.x0 > 106, `${d} mark is off the section line`);
+    }
+    assert.ok(boxOfMark(marks, 'north').y1 < FOOTPRINT.min.y, 'north stays above the building');
+    assert.ok(boxOfMark(marks, 'south').y0 > FOOTPRINT.max.y, 'south stays below the building');
+    // Without the symbol the marks sit on the middle, so the slide is what moved them.
+    const free = boxOfMark(at([]), 'south');
+    assert.ok(free.x0 < 106 && free.x1 > 106);
   });
 });

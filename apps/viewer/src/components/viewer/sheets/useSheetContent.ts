@@ -22,7 +22,7 @@ import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
 import { drawingNumbers } from '@/drafting/cross-ref';
-import { elevationMarkDrafts, sectionReferenceDrafts } from '@/drafting/cross-ref-marks';
+import { elevationMarkDrafts, obstacleBoxes, sectionReferenceDrafts } from '@/drafting/cross-ref-marks';
 import { groundPlan } from '@/project/drawing-set-actions';
 import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
@@ -88,10 +88,11 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
     const view = views.find((v) => v.id === vp.viewId);
     const sections = view?.kind === 'plan' ? sectionReferenceDrafts(own, views, sheets) : [];
     const bounds = byView[vp.viewId]?.drawing?.bounds;
+    const withSections = sections.length ? [...own, ...sections] : own;
     const elevations = view && view.id === ground?.id && bounds
-      ? elevationMarkDrafts({ planViewId: view.id, layerId: '0', views, sheets, bounds, paperUnit: viewportPaperUnit(vp.scale), factor: annotationFactor(vp.scale, view.scale) })
+      ? elevationMarkDrafts({ planViewId: view.id, layerId: '0', views, sheets, bounds, paperUnit: viewportPaperUnit(vp.scale), factor: annotationFactor(vp.scale, view.scale), obstacles: obstacleBoxes(withSections) })
       : [];
-    return sections.length || elevations.length ? [...own, ...sections, ...elevations] : own;
+    return elevations.length ? [...withSections, ...elevations] : withSections;
   }, [settledDrafts, views, sheets, byView, ground]);
   const content = useCallback((vp: SheetViewport): ViewportContent => ({
     schedule: placedSchedules.get(vp.viewId),
