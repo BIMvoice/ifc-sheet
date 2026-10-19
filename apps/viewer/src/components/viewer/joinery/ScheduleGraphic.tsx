@@ -66,9 +66,9 @@ export function useRegisterRows(): RegisterRow[] {
   const titleBlock = useProjectStore((s) => s.titleBlock);
   const issues = useProjectStore((s) => s.issues);
   const schedules = useProjectStore((s) => s.schedules);
-  const asIndicated = t('register.asIndicated');
+  const asIndicated = t('sheets.asIndicated');
   return useMemo(
-    () => drawingRegisterRows({ sheets, titleBlock, issues, asIndicated, notDrawings: new Set((schedules ?? []).map((s) => s.id)) }),
+    () => drawingRegisterRows({ sheets, titleBlock, issues, asIndicated, schedules }),
     [sheets, titleBlock, issues, schedules, asIndicated],
   );
 }

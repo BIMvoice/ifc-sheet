@@ -14,7 +14,8 @@ import { planIssue } from '@/issue/plan.js';
 import { drawingListCsv } from '@/issue/output.js';
 import { drawingRegisterRows, inSetOrder, type RegisterRow } from './drawing-register.js';
 import { buildDrawingSet, type ModelExtent } from './drawing-set.js';
-import { addRegisterToSet, registerNumber } from './drawing-set-actions.js';
+import { addSchedule } from '@/joinery/schedules.js';
+import { addRegisterToSet, hangSchedule, registerNumber } from './drawing-set-actions.js';
 import { addProjectSheet, resetProject, setSheetNumber, useProjectStore } from './project-store.js';
 import { renameProjectItem } from './project-store.js';
 import { setTitleBlockField } from './sheets.js';
@@ -34,7 +35,7 @@ function demoSet(): void {
 }
 const rows = (): RegisterRow[] => {
   const s = useProjectStore.getState();
-  return drawingRegisterRows({ sheets: s.sheets, titleBlock: s.titleBlock, issues: s.issues, asIndicated: AS_INDICATED, notDrawings: new Set((s.schedules ?? []).map((x) => x.id)) });
+  return drawingRegisterRows({ sheets: s.sheets, titleBlock: s.titleBlock, issues: s.issues, asIndicated: AS_INDICATED, schedules: s.schedules });
 };
 const sheetNamed = (name: string): ProjectSheet => {
   const found = useProjectStore.getState().sheets.find((s) => s.name === name);
@@ -48,17 +49,29 @@ describe('the drawing register on the demo set', () => {
   it('lists every sheet in the order the drawer lists them, with number, title and scale', () => {
     const { sheets } = useProjectStore.getState();
     const out = rows();
-    assert.deepEqual(out.map((r) => r.number), inSetOrder(sheets).map((s) => s.number));
+    assert.deepEqual(out.map((r) => r.number), inSetOrder(sheets, useProjectStore.getState().schedules).map((s) => s.number));
     assert.equal(out.length, sheets.length);
-    assert.deepEqual(out.map((r) => r.number), ['A-101', 'A-102', 'A-103', 'A-201', 'A-202', 'A-000']);
-    for (const r of out.slice(0, -1)) assert.match(r.scale, /^1:\d+$/, `${r.number} ${r.scale}`);
-    assert.deepEqual(out.map((r) => r.title), sheets.length === 6 ? ['Floor plans 1', 'Floor plans 2', 'Floor plans 3', 'Elevations, south and north', 'Elevations, east and west', 'Drawing register'] : []);
+    assert.deepEqual(out.map((r) => r.number), ['A-000', 'A-101', 'A-102', 'A-103', 'A-201', 'A-202']);
+    for (const r of out.slice(1)) assert.match(r.scale, /^1:\d+$/, `${r.number} ${r.scale}`);
+    assert.deepEqual(out.map((r) => r.title), sheets.length === 6 ? ['Drawing register', 'Floor plans 1', 'Floor plans 2', 'Floor plans 3', 'Elevations, south and north', 'Elevations, east and west'] : []);
   });
 
   it('is numbered A-000, or the first free number past it', () => {
     assert.equal(useProjectStore.getState().sheets.at(-1)?.number, 'A-000');
     assert.equal(registerNumber(useProjectStore.getState().sheets), 'A-001');
     assert.equal(addRegisterToSet('Drawing register'), useProjectStore.getState().sheets.at(-1)?.id, 'a second register is not made');
+  });
+
+  it('opens the set by its kind: renumbering cannot move it', () => {
+    const reg = useProjectStore.getState().sheets.find((x) => x.number === 'A-000');
+    assert.ok(reg);
+    setSheetNumber(reg.id, 'A-999');
+    const st = useProjectStore.getState();
+    assert.equal(inSetOrder(st.sheets, st.schedules)[0].id, reg.id);
+    assert.equal(rows()[0].number, 'A-999');
+    const plan = planIssue(st.sheets, { documents: [...st.views, ...(st.schedules ?? [])], drafts: [] }, { name: 'P', date: '2026-10-19', listFirst: false }, st.titleBlock, { schedules: st.schedules });
+    assert.equal(plan.sheets[0].sheet.id, reg.id);
+    assert.deepEqual(plan.sheets.slice(1).map((p) => p.row.number), ['A-101', 'A-102', 'A-103', 'A-201', 'A-202']);
   });
 
   it('holds no rows: the schedule that draws it stores none', () => {
@@ -97,7 +110,7 @@ describe('the register follows the set', () => {
     setTitleBlockField(target.id, 'date', '2026-10-19');
     const after = rows();
     const diff = after.filter((r, i) => JSON.stringify(r) !== JSON.stringify(before[i]));
-    assert.deepEqual(diff, [{ number: 'A-202', title: 'Elevations, east and west', scale: before[4].scale, revision: 'B', date: '2026-10-19' }]);
+    assert.deepEqual(diff, [{ number: 'A-202', title: 'Elevations, east and west', scale: before.find((r) => r.number === 'A-202')?.scale ?? '', revision: 'B', date: '2026-10-19' }]);
   });
 
   it('dates a sheet by the last issue that held it when it has no revision date', () => {
@@ -127,13 +140,35 @@ describe('the register follows the set', () => {
   });
 });
 
+describe('the title block scale', () => {
+  const tbScale = async (sheet: ProjectSheet) => {
+    const out = await captureSheets([sheet], { waitMs: 2000 });
+    return out.svgs.get(sheet.id) ?? '';
+  };
+  it('is blank for a sheet of schedules only, and kept for a drawing sheet', async () => {
+    const st = useProjectStore.getState();
+    const reg = st.sheets.find((x) => x.number === 'A-000');
+    assert.ok(reg);
+    const svgReg = await tbScale(reg);
+    assert.ok(!/>1:1</.test(svgReg) && svgReg.includes('>—<'), 'register');
+    const takeoffId = hangSchedule(addSchedule('materials', 'Takeoff'));
+    const sched = useProjectStore.getState().sheets.find((x) => x.id === takeoffId);
+    assert.ok(sched);
+    const svgSched = await tbScale(sched);
+    assert.ok(!/>1:1</.test(svgSched) && svgSched.includes('>—<'), 'schedule sheet');
+    assert.ok(!svgSched.includes('>1:50<'), 'the schedule viewport scale is not shown');
+    const drawn: ProjectSheet = { id: 'drawn', number: 'A-401', name: 'Drawn', createdAt: 0, viewports: [{ id: 'vp', viewId: 'no-such-view', x: 100, y: 100, scale: 100, width: 0, height: 0, center: null }] };
+    assert.ok((await tbScale(drawn)).includes('>1:100<'), 'a drawing sheet keeps its scale');
+  });
+});
+
 describe('the register is the drawing list', () => {
   it('comes from the same rows the issue lists', () => {
     const s = useProjectStore.getState();
     setTitleBlockField(sheetNamed('Floor plans 3').id, 'revision', 'C');
     renameProjectItem(sheetNamed('Floor plans 1').id, 'Parter și Etaj ț');
     const st = useProjectStore.getState();
-    const context = { issues: st.issues, notDrawings: new Set((st.schedules ?? []).map((x) => x.id)) };
+    const context = { issues: st.issues, schedules: st.schedules };
     const plan = planIssue(st.sheets, { documents: [...st.views, ...(st.schedules ?? [])], drafts: [] }, { name: 'P01', date: '2026-10-19', listFirst: true, asIndicated: AS_INDICATED }, st.titleBlock, context);
     const byNumber = (a: RegisterRow, b: RegisterRow) => a.number.localeCompare(b.number, 'en', { numeric: true });
     assert.deepEqual(plan.sheets.map((p) => p.register).sort(byNumber), rows().sort(byNumber));

@@ -11,7 +11,7 @@
 
 import { sheetGroup, type SetGroup } from './drawing-set';
 import { titleBlockOf } from './title-block';
-import type { ProjectIssue, ProjectSheet } from './types';
+import type { ProjectIssue, ProjectSchedule, ProjectSheet } from './types';
 
 export interface RegisterRow {
   number: string;
@@ -29,17 +29,29 @@ export interface RegisterInput {
   /** `ProjectDocument.titleBlock`. */
   titleBlock?: Record<string, string>;
   issues?: readonly Pick<ProjectIssue, 'date' | 'createdAt' | 'sheets'>[];
-  /** Ids of documents that are not drawings (schedules, the register): their viewports carry no drawing scale. */
-  notDrawings?: ReadonlySet<string>;
+  /** The project's schedules (the register among them): their viewports carry no drawing scale, and a sheet holding the register comes first. */
+  schedules?: readonly Pick<ProjectSchedule, 'id' | 'kind'>[];
   /** What the scale column says of a sheet with several scales. */
   asIndicated?: string;
 }
 
-/** The order the drawer lists sheets in: by series, plans first, sheets of no series last; creation order within a series. */
+/** The order the drawer lists sheets in: the register first, then by series, plans first, sheets of no series last; creation order within a series. */
 export const SET_ORDER: readonly (SetGroup | null)[] = ['plans', 'elevations', 'sections', 'schedules', null];
 
-export function inSetOrder<S extends Pick<ProjectSheet, 'number'>>(sheets: readonly S[]): S[] {
-  return SET_ORDER.flatMap((group) => sheets.filter((s) => sheetGroup(s) === group));
+/** Ids of the documents whose viewports are not drawings: every schedule, the register included. */
+export const notDrawingIds = (schedules: RegisterInput['schedules']): ReadonlySet<string> => new Set((schedules ?? []).map((s) => s.id));
+
+/** Whether the sheet holds the register: decided by its kind, not by its number, so renumbering cannot move it. */
+export function holdsRegister(sheet: Pick<ProjectSheet, 'viewports'>, schedules: RegisterInput['schedules']): boolean {
+  const ids = new Set((schedules ?? []).filter((s) => s.kind === 'register').map((s) => s.id));
+  return (sheet.viewports ?? []).some((v) => ids.has(v.viewId));
+}
+
+export function inSetOrder<S extends Pick<ProjectSheet, 'number' | 'viewports'>>(sheets: readonly S[], schedules?: RegisterInput['schedules']): S[] {
+  return [
+    ...sheets.filter((s) => holdsRegister(s, schedules)),
+    ...SET_ORDER.flatMap((group) => sheets.filter((s) => !holdsRegister(s, schedules) && sheetGroup(s) === group)),
+  ];
 }
 
 /** The scale text of one sheet. */
@@ -60,12 +72,12 @@ export function registerRow(sheet: ProjectSheet, input: Omit<RegisterInput, 'she
   const block = titleBlockOf(sheet, input.titleBlock, '');
   const revision = block.revision ?? '';
   return {
-    number: sheet.number, title: sheet.name, scale: sheetScaleText(sheet, input.notDrawings, input.asIndicated), revision,
+    number: sheet.number, title: sheet.name, scale: sheetScaleText(sheet, notDrawingIds(input.schedules), input.asIndicated), revision,
     date: (revision && block.date) || lastIssueDate(sheet.number, input.issues),
   };
 }
 
 /** The register: a row for every sheet, in set order. */
 export function drawingRegisterRows(input: RegisterInput): RegisterRow[] {
-  return inSetOrder(input.sheets).map((sheet) => registerRow(sheet, input));
+  return inSetOrder(input.sheets, input.schedules).map((sheet) => registerRow(sheet, input));
 }

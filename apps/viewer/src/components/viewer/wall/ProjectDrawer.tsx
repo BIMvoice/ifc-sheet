@@ -128,7 +128,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
       <LibraryPanel />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         <Group title={t('wall.project.sheets')} add={<button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>}>
-          {inSetOrder(sheets).map((s) => (
+          {inSetOrder(sheets, schedules).map((s) => (
             <Row key={s.id} id={s.id} sub={s.number} label={s.name} onOpen={() => go(s.id)} />
           ))}
         </Group>

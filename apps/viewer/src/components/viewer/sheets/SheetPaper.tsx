@@ -26,6 +26,7 @@ import { shapePath } from '../drafting/DraftOverlay';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
 import { layerTags, penTags } from './dxf-tags';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
+import { notDrawingIds, sheetScaleText } from '@/project/drawing-register';
 import { useProjectStore } from '@/project/project-store';
 import { LOGO_FIELD, titleBlockOf } from '@/project/title-block';
 import { viewportPens } from './viewport-pens';
@@ -220,8 +221,9 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
   const y = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h;
   const fields = titleBlockOf(sheet, projectFields, projectName);
   const logo = projectFields?.[LOGO_FIELD];
-  const scales = [...new Set((sheet.viewports ?? []).map((v) => v.scale))];
-  const scaleText = scales.length === 1 ? `1:${scales[0]}` : scales.length === 0 ? '—' : t('sheets.asIndicated');
+  const schedules = useProjectStore((s) => s.schedules);
+  // A sheet of schedules and tables only has no drawing scale.
+  const scaleText = sheetScaleText(sheet, notDrawingIds(schedules), t('sheets.asIndicated')) || '—';
   const side = 50;
   const left = TITLE_BLOCK_MM.w - side;
   const rowH = TITLE_BLOCK_MM.h / 5;

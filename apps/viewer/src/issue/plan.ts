@@ -10,7 +10,7 @@
 
 import type { TranslationKey } from '@/i18n';
 import type { IssuedSheet, ProjectIssue, ProjectSheet } from '@/project/types';
-import { registerRow, sheetScaleText, type RegisterInput, type RegisterRow } from '@/project/drawing-register';
+import { holdsRegister, registerRow, sheetScaleText, type RegisterInput, type RegisterRow } from '@/project/drawing-register';
 import { sheetFingerprint, type FingerprintSources } from './fingerprint';
 
 export interface IssueReason {
@@ -51,10 +51,12 @@ export function sheetIsEmpty(sheet: ProjectSheet, sources: FingerprintSources): 
 /** `projectTitleBlock` is the project's title block (`ProjectDocument.titleBlock`): a sheet's revision is its own, else the project's. `context` is what the register also reads: the issues so far and which documents are not drawings. */
 export function planIssue(
   sheets: readonly ProjectSheet[], sources: FingerprintSources, input: IssueInput, projectTitleBlock?: Record<string, string>,
-  context: { issues?: RegisterInput['issues']; notDrawings?: ReadonlySet<string> } = {},
+  context: { issues?: RegisterInput['issues']; schedules?: RegisterInput['schedules'] } = {},
 ): IssuePlan {
   const out: IssuePlan = { ...input, sheets: [], leftOut: [] };
-  for (const sheet of [...sheets].sort(bySheetNumber)) {
+  // The register opens the set, then the sheets by number.
+  const first = (s: ProjectSheet) => (holdsRegister(s, context.schedules) ? 0 : 1);
+  for (const sheet of [...sheets].sort((a, b) => first(a) - first(b) || bySheetNumber(a, b))) {
     if (sheetIsEmpty(sheet, sources)) {
       out.leftOut.push({ number: sheet.number, title: sheet.name, reason: { key: 'issue.reason.empty', params: { number: sheet.number } } });
       continue;

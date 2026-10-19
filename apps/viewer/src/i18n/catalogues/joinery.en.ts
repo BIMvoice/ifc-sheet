@@ -170,7 +170,6 @@ export const joineryEn = {
   'takeoff.usedIn': 'Used in',
   'takeoff.total': 'Total',
   'register.name': 'Drawing register',
-  'register.asIndicated': 'As indicated',
   'register.empty': 'The set has no sheets yet.',
   'takeoff.empty': 'No element of the loaded models has a material.',
 } as const satisfies Record<string, TranslationValue>;
