@@ -99,7 +99,7 @@ export const wallEn = {
   'wall.sheetHint.body': 'Wheel zooms, drag the paper to pan. Click a drawing to choose it, drag to move it, double-click to draw in it. Alt + wheel inside a plan moves its cut, inside a section its depth. Esc steps back to the wall.',
   'wall.drawHint': 'Esc ends the tool, Esc again steps back to the sheet.',
   'wall.add.title': 'Add a drawing',
-  'wall.add.kinds': 'Four kinds make sense here.',
+  'wall.add.kinds': 'Five kinds make sense here.',
   'wall.add.plan': 'Plan of a storey',
   'wall.add.planHint': 'Pick the storey',
   'wall.add.section': 'Section',

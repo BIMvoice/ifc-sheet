@@ -104,6 +104,8 @@ export interface PlanProjectView extends ProjectViewBase {
   level: ProjectLevel;
   /** Cut height above the level's floor, metres. */
   cutHeight: number;
+  /** The site plan: the ground storey's cut with the plot, setbacks and coordinates on it (`siteplan/`). */
+  site?: true;
 }
 
 /** A section cut stored in world metres, independent of the model bounds. */
@@ -169,6 +171,8 @@ export interface SheetViewport {
   center: { x: number; y: number } | null;
   /** Drafting layers this viewport hides, on top of its view's. */
   hiddenLayers?: string[];
+  /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
+  keyPlanOf?: string;
 }
 
 export interface ProjectSheet {

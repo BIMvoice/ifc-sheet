@@ -122,6 +122,8 @@ import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOver
 import { capturePointer } from '@/lib/pointer-capture';
 
 import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
+import { useLiveSymbolContext } from '@/siteplan/site-frame';
+import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
 
 
 const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
@@ -155,6 +157,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const fallbackPlane = useMemo(() => viewPlaneConfig(view, levels, mergedSectionBounds(models, legacyGeometry)), [view, levels, models, legacyGeometry]);
   const plane = drawing?.config.plane ?? fallbackPlane ?? undefined;
   const axis: SectionAxisName = plane ? AXIS_NAME[plane.axis] : 'down';
+  const liveSymbols = useLiveSymbolContext(plane, axis, view.scale ?? DEFAULT_VIEW_SCALE);
   const sectionPlane = useMemo(() => ({ axis, position: plane?.position ?? 0, flipped: plane?.flipped ?? false }), [axis, plane]);
   // Pinned: a regenerated drawing (an element added, edited) keeps the user's framing. No
   // automatic fit while a BIM tool is drawing — the clicks would land somewhere else.
@@ -347,6 +350,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           gripDrag={state.gripDrag}
           sectionBand={sectionBand}
           crop={view.detail}
+          symbols={liveSymbols}
         />
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />

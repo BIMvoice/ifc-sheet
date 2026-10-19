@@ -3,9 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * "Add a drawing", in four big choices: a plan of a storey (pick the storey),
+ * "Add a drawing", in five big choices: a plan of a storey (pick the storey),
  * a section (draw a line on a plan), an elevation (pick a side), a detail of
- * an area (mark it on the drawing in front). A new drawing hangs on the set where its kind belongs.
+ * an area (mark it on the drawing in front), the site plan (`siteplan/`). A new drawing hangs on the set where its kind belongs.
  */
 
 import { useState, type ReactNode } from 'react';
@@ -14,6 +14,7 @@ import { ELEVATION_DIRECTIONS, planViewFor, resolvePlanLevel } from '@/project/v
 import { addProjectView, useProjectStore } from '@/project/project-store';
 import type { ElevationDirection, PlanProjectView } from '@/project/types';
 import { ToolIcon, type ToolIconName } from '../ifcsheet/ToolIcon';
+import { ensureSitePlan } from '@/siteplan/site-actions';
 
 interface AddDrawingProps {
   /** Hang a view made or found here; the sheet it lands on is stepped into. */
@@ -51,7 +52,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
   const planOf = (index: number): void => {
     const { views } = useProjectStore.getState();
     const level = levels[index];
-    const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && resolvePlanLevel(v, [level]) !== undefined);
+    const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && !v.site && resolvePlanLevel(v, [level]) !== undefined);
     if (existing) {
       onView(existing.id);
       return;
@@ -76,6 +77,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
           <Choice icon="section" title={t('wall.add.section')} hint={t('wall.add.sectionHint')} onClick={onSection} />
           <Choice icon="symbol" title={t('wall.add.elevation')} hint={t('wall.add.elevationHint')} onClick={() => setStep('side')} />
           <Choice icon="plus" title={t('wall.add.detail')} hint={t('wall.add.detailHint')} onClick={onDetail} />
+          <Choice icon="cube" title={t('site.add')} hint={t('site.addHint')} disabled={levels.length === 0} onClick={() => { const id = ensureSitePlan(t('site.viewName')); if (id) onView(id); }} />
         </div>
       ) : step === 'storey' ? (
         <Picks>{levels.map((level, i) => <button key={level.name + level.elevation} type="button" className={pick} onClick={() => planOf(i)}>{level.name}</button>)}</Picks>
