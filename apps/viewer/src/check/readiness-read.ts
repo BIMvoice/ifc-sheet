@@ -4,7 +4,7 @@
 
 /** The loaded models counted into `ModelFacts`: one pass over each entity table, no geometry and no STEP decoding. */
 
-import { resolveAllMaterialDefIds, type IfcDataStore } from '@ifc-lite/parser';
+import { getInheritanceChainAcrossSchemas, resolveAllMaterialDefIds, type IfcDataStore } from '@ifc-lite/parser';
 import { useViewerStore } from '@/store';
 import { modelLevels } from '@/project/model-levels';
 import type { ModelFacts } from './readiness';
@@ -16,6 +16,25 @@ import type { ModelFacts } from './readiness';
  */
 export const IFC_GUID = /^[0-3][0-9A-Za-z_$]{21}$/;
 
+/** Not physical things a drawing shows or a takeoff counts: openings and other features of an element, virtual elements. */
+const NOT_PHYSICAL = ['IfcFeatureElement', 'IfcVirtualElement'];
+
+const physicalByType = new Map<string, boolean>();
+/**
+ * A physical element: an IfcElement that is not a feature of another (IfcOpeningElement, IfcVoidingFeature, ...)
+ * nor virtual. Spatial entities (site, storey, space, spatial zone) and annotations are not IfcElement at all.
+ * Read from the schema's inheritance, once per class.
+ */
+export function isPhysicalElement(typeName: string): boolean {
+  let known = physicalByType.get(typeName);
+  if (known === undefined) {
+    const chain = getInheritanceChainAcrossSchemas(typeName);
+    known = chain.includes('IfcElement') && !NOT_PHYSICAL.some((n) => chain.includes(n));
+    physicalByType.set(typeName, known);
+  }
+  return known;
+}
+
 export interface FactSource { store: IfcDataStore; storeys: number }
 
 /** Counts over the stores; GlobalIds are compared across all of them, as a tag finds its element in whichever model holds it. */
@@ -24,14 +43,13 @@ export function readModelFacts(sources: Iterable<FactSource>): ModelFacts {
   const seen = new Map<string, number>();
   for (const { store, storeys } of sources) {
     const { entities, entityIndex, spatialHierarchy } = store;
-    const spaces = new Set(entityIndex.byType.get('IFCSPACE') ?? []);
     facts.storeys += storeys;
-    facts.spaces += spaces.size;
+    facts.spaces += entityIndex.byType.get('IFCSPACE')?.length ?? 0;
     for (let i = 0; i < entities.count; i++) {
       const id = entities.expressId[i];
       const guid = entities.getGlobalId(id);
       if (IFC_GUID.test(guid)) seen.set(guid, (seen.get(guid) ?? 0) + 1);
-      if (spaces.has(id) || !entities.hasGeometry(id)) continue;
+      if (!entities.hasGeometry(id) || !isPhysicalElement(entities.getTypeName(id))) continue;
       facts.elements++;
       // On a storey directly, or in a room (IfcSpace) that is on one.
       const onStorey = (k: number | undefined): boolean => k !== undefined && (spatialHierarchy?.elementToStorey.has(k) ?? false);
