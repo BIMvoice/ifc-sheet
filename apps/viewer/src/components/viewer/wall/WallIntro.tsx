@@ -12,6 +12,7 @@ import { useEffect } from 'react';
 import { useTranslation } from '@/i18n';
 import type { ModelExtent } from '@/project/drawing-set';
 import { useProjectStore } from '@/project/project-store';
+import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 
 function Chip({ children }: { children: string }) {
   return <span className="rounded-full border border-sky-300/30 px-4 py-1.5 text-sm text-sky-100">{children}</span>;
@@ -27,6 +28,8 @@ export function WallIntro({ modelName, extent, onHang }: { modelName: string; ex
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Enter on a button of a panel that keeps its own keys (the tour card) is that button's.
+      if (e.target instanceof Element && e.target.closest('[data-owns-keys]')) return;
       if (e.key === 'ArrowRight' || e.key === 'Enter') onHang();
     };
     window.addEventListener('keydown', onKey);
@@ -49,7 +52,7 @@ export function WallIntro({ modelName, extent, onHang }: { modelName: string; ex
           <Chip>{t('wall.intro.sheets', { count: sheets.length })}</Chip>
           <Chip>{t('wall.intro.views', { count: views })}</Chip>
         </div>
-        <button type="button" onClick={onHang} className="mt-10 inline-flex items-center gap-3 rounded-md bg-sky-600 px-6 py-3 text-lg text-white hover:bg-sky-500">
+        <button type="button" {...tourAnchor(TOUR_ANCHORS.wallHang)} onClick={onHang} className="mt-10 inline-flex items-center gap-3 rounded-md bg-sky-600 px-6 py-3 text-lg text-white hover:bg-sky-500">
           {t('wall.intro.hang')} <ArrowRight className="size-5" />
         </button>
       </div>
