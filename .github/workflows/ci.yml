@@ -13,8 +13,8 @@
 # request should fail only for what it adds.
 #
 # To make these required, add the check names to the `main` ruleset (repository
-# setting, not code): Typecheck, Package tests, Viewer tests (shard 0..3),
-# Gates vs base, Rust.
+# setting, not code): Build wasm, Typecheck, Package tests, Viewer tests
+# (shard 0..3), Gates vs base, Rust.
 
 name: CI
 
@@ -31,8 +31,43 @@ permissions:
   contents: read
 
 jobs:
+  # The engine (packages/wasm/pkg) is not committed and IfcSheet's Rust differs
+  # from the published @ifc-lite/wasm, so it is built from source once here and
+  # handed to the jobs below as an artifact.
+  wasm:
+    name: Build wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-wasm-build
+        with:
+          cache-prefix: ci-wasm
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ifc-lite/wasm build
+
+      - name: The build produced the runtime and its types
+        run: test -f packages/wasm/pkg/ifc-lite_bg.wasm && test -f packages/wasm/pkg/ifc-lite.d.ts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+          retention-days: 3
+
   typecheck:
     name: Typecheck
+    needs: wasm
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -47,12 +82,16 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build:wasm:fetch
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
       - run: pnpm turbo run build --filter='./packages/*'
       - run: pnpm typecheck
 
   package-tests:
     name: Package tests
+    needs: wasm
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -67,7 +106,10 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build:wasm:fetch
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
       - run: pnpm turbo run build --filter='./packages/*'
       - run: pnpm turbo run test --filter='./packages/*'
 
@@ -75,6 +117,7 @@ jobs:
   # four runners (TEST_SHARD / TEST_SHARDS, see apps/viewer/package.json).
   viewer-tests:
     name: Viewer tests (shard ${{ matrix.shard }})
+    needs: wasm
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -96,7 +139,10 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build:wasm:fetch
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
       - run: pnpm turbo run build --filter='./packages/*'
       - name: Viewer tests
         working-directory: apps/viewer
