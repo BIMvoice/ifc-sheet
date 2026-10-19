@@ -28,7 +28,8 @@ import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readTagFields } from '@/tagfields/tag-fields-file';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, ViewDetail, ViewGraphics } from './types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, ViewDetail, ViewGraphics, PhaseId, PhaseStyle } from './types';
+import { PHASES, type PhaseSource } from './phases';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -184,6 +185,7 @@ export function parseProjectFile(text: string): ProjectDocument {
     materials: list('materials').flatMap((v) => readMaterial(v)),
     cadLayers: list('cadLayers').map((v, i) => readCadLayerRule(v, `/cadLayers/${i}`)),
     savedSectionCuts: list('savedSectionCuts').flatMap((v) => readSavedSectionCuts(v)),
+    ...(readPhaseSource(raw.phaseSource) ? { phaseSource: readPhaseSource(raw.phaseSource) } : {}),
     annotationTypes: readList(raw, 'annotationTypes', readAnnotationType),
     symbols: readList(raw, 'symbols', readSymbol),
     legends: readList(raw, 'legends', readLegend),
@@ -217,7 +219,38 @@ function readGraphics(raw: Record<string, unknown>): ViewGraphics {
     }
     out.categories = categories;
   }
+  if (isObject(raw.phases) && Array.isArray(raw.phases.show)) {
+    const styles: NonNullable<ViewGraphics['phases']>['styles'] = {};
+    if (isObject(raw.phases.styles)) {
+      for (const id of PHASES) {
+        const value = raw.phases.styles[id];
+        if (!isObject(value)) continue;
+        const g: Partial<PhaseStyle> = {};
+        if (isString(value.lineColor) && HEX.test(value.lineColor)) g.lineColor = value.lineColor;
+        if (isString(value.fillColor) && HEX.test(value.fillColor)) g.fillColor = value.fillColor;
+        if (isString(value.lineWeight) && WEIGHTS.has(value.lineWeight)) g.lineWeight = value.lineWeight as PhaseStyle['lineWeight'];
+        if (typeof value.dashed === 'boolean') g.dashed = value.dashed;
+        if (Object.keys(g).length > 0) styles[id] = g;
+      }
+    }
+    out.phases = { show: PHASES.filter((id) => (raw.phases as { show: unknown[] }).show.includes(id)), ...(Object.keys(styles).length ? { styles } : {}) };
+  }
   return out;
+}
+
+/** The project's phase source: a malformed mapping or phase is dropped, never fatal. */
+function readPhaseSource(value: unknown): PhaseSource | undefined {
+  if (!isObject(value)) return undefined;
+  const out: PhaseSource = {};
+  const phase = (v: unknown): PhaseId | undefined => PHASES.find((id) => id === v);
+  if (phase(value.unmarked)) out.unmarked = phase(value.unmarked);
+  const m = value.mapping;
+  if (isObject(m) && isString(m.set) && m.set && isString(m.property) && m.property && isObject(m.values)) {
+    const values: Record<string, PhaseId> = {};
+    for (const [k, v] of Object.entries(m.values)) if (phase(v)) values[k] = phase(v)!;
+    out.mapping = { set: m.set, property: m.property, values };
+  }
+  return out.mapping || out.unmarked ? out : undefined;
 }
 
 /** `symbolFlips`: GlobalId → 1..3; anything else is dropped. */

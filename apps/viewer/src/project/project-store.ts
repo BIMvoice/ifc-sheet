@@ -62,7 +62,7 @@ const DOCUMENT_FIELDS = {
   symbolFlips: true, openingLines: true, textStyles: true, dimStyles: true, layerGroups: true, joineryTypes: true, currentJoinery: true,
   schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
   typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
-  modelState: true, siteArea: true, cadLayers: true, tagFields: true, titleBlockSources: true, sheetNumbering: true,
+  modelState: true, siteArea: true, cadLayers: true, tagFields: true, titleBlockSources: true, sheetNumbering: true, phaseSource: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -119,6 +119,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     savedSectionCuts: doc.savedSectionCuts ?? [],
     // A project made before the room label read the tag name takes the new template (`tagall/types.ts`).
     annotationTypes: upgradeTagAllTypes(doc.annotationTypes ?? []),
+    phaseSource: doc.phaseSource,
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
     issues: doc.issues ?? [],

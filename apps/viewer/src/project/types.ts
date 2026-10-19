@@ -4,6 +4,7 @@
 
 import type { TitleSource } from './title-block-sources';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
+import type { PhaseSource } from './phases';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
@@ -95,9 +96,28 @@ export interface CategoryGraphics {
   hatchScale?: number;
 }
 
+/** The phase of an element (`phases.ts`): IFC Status NEW, EXISTING, DEMOLISH, TEMPORARY. */
+export type PhaseId = 'existing' | 'demolish' | 'new' | 'temporary';
+
+/** How a phase draws: its line (colour, pen, dashed) and the fill of its cut faces. */
+export interface PhaseStyle {
+  lineColor: string;
+  lineWeight: CategoryLineWeight;
+  dashed: boolean;
+  fillColor: string;
+}
+
+/** A view that draws by phase: which phases it shows, and the styles it changes from the default look. */
+export interface ViewPhases {
+  show: PhaseId[];
+  styles?: Partial<Record<PhaseId, Partial<PhaseStyle>>>;
+}
+
 export interface ViewGraphics {
   /** A built-in graphic override preset id; absent = the default, null = none. */
   presetId?: string | null;
+  /** Absent: the view draws every element alike, whatever its phase. */
+  phases?: ViewPhases;
   /** By category id (`VIEW_CATEGORIES`). */
   categories?: Record<string, CategoryGraphics>;
 }
@@ -356,6 +376,8 @@ export interface ProjectDocument {
   cadLayers?: CadLayerRule[];
   /** Named section cuts of the Drawing panel. */
   savedSectionCuts?: SavedSectionCut[];
+  /** Where an element's phase is read from besides its IFC Status (`phases.ts`). */
+  phaseSource?: PhaseSource;
   /** Named presets of the annotation tools. */
   annotationTypes?: AnnotationType[];
   /** The project's own symbols (the built-in ones are in code). */
