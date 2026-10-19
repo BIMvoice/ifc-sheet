@@ -22,6 +22,8 @@ import { exportProjectFile, importProjectFile, PROJECT_FILE_SUFFIX } from '@/pro
 import { addProjectSheet, loadProjectDocument, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
+import { ReadinessList } from '../sheets/ReadinessList';
+import { WALL_SKIN } from '../sheets/set-skin';
 import { TitleBlockForm } from './TitleBlockForm';
 import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
@@ -139,6 +141,10 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
             <Row key={s.id} id={s.id} sub={s.number} label={s.name} onOpen={() => go(s.id)} />
           ))}
         </Group>
+        <details className="border-t border-sky-300/10 px-4 py-3">
+          <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('ready.title')}</summary>
+          <div className="mt-2 text-xs leading-relaxed"><ReadinessList skin={WALL_SKIN} /></div>
+        </details>
         <details className="border-t border-sky-300/10 px-4 py-3">
           <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.tb.title')}</summary>
           <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('wall.tb.everySheet')}</p>

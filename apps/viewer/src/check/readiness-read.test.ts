@@ -1,0 +1,77 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/** Counting the models: the two sample IFCs as the viewer parses them, and GlobalIds compared across models. */
+
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import type { IfcDataStore } from '@ifc-lite/parser';
+import { parseStep } from '@/test/properties-panel-harness.js';
+import { IFC_GUID, readModelFacts } from './readiness-read.js';
+import { modelReadiness } from './readiness.js';
+
+const sample = async (path: string) => {
+  const store = await parseStep(new Uint8Array(readFileSync(new URL(path, import.meta.url))));
+  return { store, storeys: store.spatialHierarchy?.byStorey.size ?? 0 };
+};
+
+describe('readModelFacts on the sample models', () => {
+  it('building-architecture.ifc: one storey, two rooms; six elements are on no storey, five have no quantities', async () => {
+    const facts = readModelFacts([await sample('../../public/samples/building-architecture.ifc')]);
+    assert.deepEqual(facts, { storeys: 1, spaces: 2, elements: 12, elementsWithoutStorey: 6, elementsWithoutMaterial: 1, elementsWithoutQuantities: 5, duplicateGlobalIds: 0, duplicatedEntities: 0 });
+    assert.deepEqual(modelReadiness(facts).map((f) => f.kind), ['noStorey', 'noMaterials', 'noQuantities']);
+  });
+
+  it('AC20-FZK-Haus.ifc: two storeys, seven rooms; some elements lack a storey, material and quantities', async () => {
+    const facts = readModelFacts([await sample('../../public/_fixtures/AC20-FZK-Haus.ifc')]);
+    assert.deepEqual(facts, { storeys: 2, spaces: 7, elements: 114, elementsWithoutStorey: 18, elementsWithoutMaterial: 36, elementsWithoutQuantities: 15, duplicateGlobalIds: 0, duplicatedEntities: 0 });
+  });
+});
+
+/** A store with the few columns the count reads. */
+function fakeStore(rows: { id: number; guid: string; geometry?: boolean }[], opts: { spaces?: number[]; storey?: number[]; material?: number[]; qto?: number[] } = {}): IfcDataStore {
+  return {
+    entities: { count: rows.length, expressId: Uint32Array.from(rows.map((r) => r.id)), getGlobalId: (id: number) => rows.find((r) => r.id === id)?.guid ?? '', hasGeometry: (id: number) => rows.find((r) => r.id === id)?.geometry ?? false },
+    entityIndex: { byType: new Map([['IFCSPACE', opts.spaces ?? []]]) },
+    spatialHierarchy: { elementToStorey: new Map((opts.storey ?? []).map((id) => [id, 1])) },
+    onDemandMaterialMap: new Map((opts.material ?? []).map((id) => [id, [900]])),
+    onDemandQuantityMap: new Map((opts.qto ?? []).map((id) => [id, [901]])),
+    quantities: { entityIndex: new Map() },
+  } as unknown as IfcDataStore;
+}
+const G = (n: string) => `1${n.padEnd(21, 'x')}`;
+
+describe('readModelFacts on synthetic stores', () => {
+  it('counts a GlobalId shared inside one model, and across two', () => {
+    const a = fakeStore([{ id: 1, guid: G('a') }, { id: 2, guid: G('a') }, { id: 3, guid: G('b') }]);
+    const b = fakeStore([{ id: 1, guid: G('b') }, { id: 2, guid: G('c') }]);
+    const facts = readModelFacts([{ store: a, storeys: 0 }, { store: b, storeys: 0 }]);
+    assert.equal(facts.duplicateGlobalIds, 2);
+    assert.equal(facts.duplicatedEntities, 4);
+  });
+
+  it('does not take a name that is not a GlobalId for one', () => {
+    assert.equal(IFC_GUID.test('0xY$LvXaDEswJDk_VU74C_'), true);
+    assert.equal(IFC_GUID.test('composite_element_roof'), false);
+    const store = fakeStore([{ id: 1, guid: 'concrete' }, { id: 2, guid: 'concrete' }, { id: 3, guid: '' }, { id: 4, guid: '' }]);
+    assert.equal(readModelFacts([{ store, storeys: 0 }]).duplicateGlobalIds, 0);
+  });
+
+  it('counts only elements with geometry, rooms apart, against storey, material and quantity set', () => {
+    const store = fakeStore(
+      [{ id: 1, guid: G('1'), geometry: true }, { id: 2, guid: G('2'), geometry: true }, { id: 3, guid: G('3'), geometry: true }, { id: 4, guid: G('4'), geometry: false }, { id: 5, guid: G('5'), geometry: true }],
+      { spaces: [5], storey: [1, 2], material: [1], qto: [1, 2] },
+    );
+    const facts = readModelFacts([{ store, storeys: 1 }]);
+    assert.deepEqual([facts.storeys, facts.spaces, facts.elements, facts.elementsWithoutStorey, facts.elementsWithoutMaterial, facts.elementsWithoutQuantities], [1, 1, 3, 1, 2, 1]);
+  });
+
+  it('counts an element in a room that is on a storey as on that storey', () => {
+    const store = fakeStore([{ id: 1, guid: G('1'), geometry: true }], { storey: [] });
+    (store.spatialHierarchy as unknown as { elementToContainer: Map<number, number> }).elementToContainer = new Map([[1, 77]]);
+    (store.spatialHierarchy as unknown as { elementToStorey: Map<number, number> }).elementToStorey.set(77, 1);
+    assert.equal(readModelFacts([{ store, storeys: 1 }]).elementsWithoutStorey, 0);
+  });
+});
