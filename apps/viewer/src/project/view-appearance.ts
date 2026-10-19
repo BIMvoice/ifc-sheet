@@ -14,7 +14,7 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { cropDrawing } from './drawing-crop';
 import { outlineLines } from './elevation-outline';
 import { drawingWithGround } from './ground';
-import type { ProjectView } from './types';
+import type { InteriorElevation, ProjectView } from './types';
 
 /** Whether a view draws the lines the hidden-line pass found occluded (dashed). */
 export function viewShowsHidden(view: Pick<ProjectView, 'kind' | 'showHidden'>): boolean {
@@ -23,7 +23,7 @@ export function viewShowsHidden(view: Pick<ProjectView, 'kind' | 'showHidden'>):
 
 const occluded = (l: Drawing2D['lines'][number]) => l.visibility === 'hidden' || l.category === 'hidden';
 
-type Shown = Pick<ProjectView, 'kind' | 'showHidden' | 'detail'>;
+type Shown = Pick<ProjectView, 'kind' | 'showHidden' | 'detail'> & { interior?: InteriorElevation };
 
 function withoutOverlays(source: Drawing2D, view: Shown): Drawing2D {
   const drawing = view.kind === 'elevation' || view.kind === 'section' ? drawingWithGround(source, view.kind) : source;
@@ -33,8 +33,9 @@ function withoutOverlays(source: Drawing2D, view: Shown): Drawing2D {
   return { ...drawing, lines: kept.map((l) => (outline.has(l) ? { ...l, category: 'silhouette' as const } : l)) };
 }
 
-/** The drawing as `view` shows it: hidden lines and outline as above, and a detail cropped to its area. The generated drawing is not changed. */
+/** The drawing as `view` shows it: hidden lines and outline as above, a detail cropped to its area and an interior elevation to its wall. The generated drawing is not changed. */
 export function drawingAsViewShows(drawing: Drawing2D, view: Shown): Drawing2D {
   const shown = withoutOverlays(drawing, view);
-  return view.detail ? cropDrawing(shown, { min: view.detail.min, max: view.detail.max }) : shown;
+  const crop = view.detail ?? view.interior?.crop;
+  return crop ? cropDrawing(shown, { min: crop.min, max: crop.max }) : shown;
 }

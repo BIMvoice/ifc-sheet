@@ -35,6 +35,8 @@ import { runSurfaceCommand } from './surface-command-run';
 import { deleteElements, selectedRenderIds } from '@/project/element-delete';
 import { reportDelete } from '@/project/element-delete-report';
 import { flipElements } from '@/project/element-flip';
+import { createInteriorElevations } from '@/project/interior-elevation-actions';
+import { activateDocumentTab } from '@/project/open-view';
 
 export function EntityContextMenu() {
   const { t } = useTranslation();
@@ -272,6 +274,20 @@ export function EntityContextMenu() {
     reportDelete(deleteElements(selection.includes(contextMenu.entityId) ? selection : [contextMenu.entityId]));
   }, [contextEntityRef, canEdit, entityType, contextMenu.entityId, hideEntity, setSelectedEntityId, closeContextMenu]);
 
+  // A room's walls, each as an elevation from inside, hung on one new sheet that is then shown.
+  const handleInteriorElevations = useCallback(() => {
+    const id = contextMenu.entityId;
+    closeContextMenu();
+    if (id === null) return;
+    const made = createInteriorElevations(id);
+    if ('error' in made) {
+      toast.info(t(made.error === 'noRoom' ? 'entityContextMenu.interiorElevationsNoRoom' : 'entityContextMenu.interiorElevationsNoFaces'));
+      return;
+    }
+    activateDocumentTab(made.sheetId);
+    toast.success(t('entityContextMenu.interiorElevationsMade', { count: made.count, sheet: made.sheetNumber }));
+  }, [contextMenu.entityId, closeContextMenu, t]);
+
   const handleFlip = useCallback((axis: 'x' | 'y') => {
     const id = contextMenu.entityId;
     closeContextMenu();
@@ -337,6 +353,7 @@ export function EntityContextMenu() {
 
           {contextItem('context:select-all-type', handleSelectSimilar)}
           {contextItem('context:select-same-storey', handleSelectSameStorey)}
+          {entityType === 'IfcSpace' && contextItem('context:interior-elevations', handleInteriorElevations)}
 
           <ContextMenuSeparator />
 

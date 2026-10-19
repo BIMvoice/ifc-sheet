@@ -64,23 +64,27 @@ export function sectionPlaneForView(
 ): ViewSectionPlane | null {
   switch (view.kind) {
     case 'elevation':
-      return elevationPlane(view.direction, bounds, view.planeOffset);
+      // An interior elevation is cut like a section, on its own plane.
+      return view.interior ? storedPlane(view.interior.plane, bounds) : elevationPlane(view.direction, bounds, view.planeOffset);
     case 'plan': {
       const range = sectionAxisRange(bounds, 'down');
       const level = resolvePlanLevel(view, levels) ?? (levels.length === 0 ? view.level : undefined);
       if (!range || !level) return null;
       return { axis: 'down', position: worldToPercent(level.elevation + view.cutHeight, range), flipped: false };
     }
-    case 'section': {
-      const { axis, offset, flipped, custom } = view.plane;
-      const range = sectionAxisRange(bounds, axis);
-      if (!range) return null;
-      const plane: ViewSectionPlane = { axis, position: worldToPercent(offset, range), flipped };
-      return custom ? { ...plane, custom } : plane;
-    }
+    case 'section':
+      return storedPlane(view.plane, bounds);
     default:
       return null;
   }
+}
+
+/** A plane stored in world metres (a section's, an interior elevation's) against the live bounds. */
+function storedPlane({ axis, offset, flipped, custom }: SectionProjectPlane, bounds: AxisBounds | null): ViewSectionPlane | null {
+  const range = sectionAxisRange(bounds, axis);
+  if (!range) return null;
+  const plane: ViewSectionPlane = { axis, position: worldToPercent(offset, range), flipped };
+  return custom ? { ...plane, custom } : plane;
 }
 
 /** Capture a live cardinal/custom section plane as a bounds-independent view plane. */

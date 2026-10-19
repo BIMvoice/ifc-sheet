@@ -21,7 +21,7 @@ import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, ViewDetail, ViewGraphics } from './types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics } from './types';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -62,16 +62,34 @@ function readLevel(v: unknown, path: string): ProjectLevel {
   return { name: v.name, elevation: v.elevation, storeyGlobalIds: ids };
 }
 
-function readDetail(v: unknown, path: string): ViewDetail {
+function readRect(v: Json, path: string): Pick<ViewDetail, 'min' | 'max'> {
   const corner = (c: unknown, at: string) => {
     if (!isObject(c) || !isNumber(c.x) || !isNumber(c.y)) fail(at, 'must be { x, y }');
     return { x: c.x, y: c.y };
   };
-  if (!isObject(v) || !isString(v.of) || !isNumber(v.number)) fail(path, 'must be { of, min, max, number }');
   const min = corner(v.min, `${path}.min`);
   const max = corner(v.max, `${path}.max`);
   if (max.x <= min.x || max.y <= min.y) fail(path, 'must have min below and left of max');
-  return { of: v.of, min, max, number: v.number };
+  return { min, max };
+}
+
+function readDetail(v: unknown, path: string): ViewDetail {
+  if (!isObject(v) || !isString(v.of) || !isNumber(v.number)) fail(path, 'must be { of, min, max, number }');
+  return { of: v.of, ...readRect(v, path), number: v.number };
+}
+
+function readPlane(p: unknown, path: string): SectionProjectPlane {
+  if (!isObject(p) || !AXES.includes(p.axis as (typeof AXES)[number]) || !isNumber(p.offset)) {
+    fail(path, 'must be { axis, offset, flipped }');
+  }
+  const plane = { axis: p.axis as (typeof AXES)[number], offset: p.offset, flipped: p.flipped === true };
+  return isObject(p.custom) ? { ...plane, custom: p.custom as never } : plane;
+}
+
+function readInterior(v: unknown, path: string): InteriorElevation {
+  if (!isObject(v) || !isString(v.room)) fail(path, 'must be { room, plane, crop }');
+  if (!isObject(v.crop)) fail(`${path}.crop`, 'must be { min, max }');
+  return { room: v.room, plane: readPlane(v.plane, `${path}.plane`), crop: readRect(v.crop, `${path}.crop`) };
 }
 
 function readView(v: unknown, path: string): ProjectView {
@@ -91,18 +109,16 @@ function readView(v: unknown, path: string): ProjectView {
       if (!isNumber(v.cutHeight)) fail(`${path}.cutHeight`, 'must be a number');
       return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight };
     case 'section': {
-      const p = v.plane;
-      if (!isObject(p) || !AXES.includes(p.axis as (typeof AXES)[number]) || !isNumber(p.offset)) {
-        fail(`${path}.plane`, 'must be { axis, offset, flipped }');
-      }
-      const plane = { axis: p.axis as (typeof AXES)[number], offset: p.offset, flipped: p.flipped === true };
-      const section = { ...base, kind: 'section' as const, plane: isObject(p.custom) ? { ...plane, custom: p.custom as never } : plane };
+      const section = { ...base, kind: 'section' as const, plane: readPlane(v.plane, `${path}.plane`) };
       return isString(v.through) && v.through ? { ...section, through: v.through } : section;
     }
     case 'elevation':
       if (!DIRECTIONS.includes(v.direction as ElevationDirection)) fail(`${path}.direction`, `must be one of ${DIRECTIONS.join(', ')}`);
       if (v.planeOffset !== undefined && !isNumber(v.planeOffset)) fail(`${path}.planeOffset`, 'must be a number');
-      return { ...base, kind: 'elevation', direction: v.direction as ElevationDirection, ...(v.planeOffset !== undefined ? { planeOffset: v.planeOffset } : {}) };
+      return {
+        ...base, kind: 'elevation', direction: v.direction as ElevationDirection, ...(v.planeOffset !== undefined ? { planeOffset: v.planeOffset } : {}),
+        ...(v.interior !== undefined ? { interior: readInterior(v.interior, `${path}.interior`) } : {}),
+      };
     default:
       return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null };
   }

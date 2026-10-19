@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /** Entity-menu-only command metadata. The mounted menu supplies its active target action. */
-import { Building2, Copy, CopyPlus, FlipHorizontal2, FlipVertical2, Layers, ShieldQuestion, Trash2 } from 'lucide-react';
+import { Building2, Copy, CopyPlus, FlipHorizontal2, FlipVertical2, Layers, PanelsTopLeft, ShieldQuestion, Trash2 } from 'lucide-react';
 import { ACTION_NAME_KEYS } from '@/lib/commands/action-names';
 import type { DuplicateDirection } from '@/store/slices/mutationSlice';
 import type { SurfaceCommandDefinition, SurfaceCommandContext, SurfaceCommandState } from './surface-commands';
@@ -34,6 +34,11 @@ export const CONTEXT_SURFACE_COMMANDS = [
     id: 'context:select-same-storey', labelKey: 'entityContextMenu.selectSameStorey',
     keywords: 'select storey floor', category: 'Tools', icon: Building2,
     surfaces: contextOnly, enabled: alwaysEnabled, run: runContextAction,
+  },
+  {
+    id: 'context:interior-elevations', labelKey: 'entityContextMenu.interiorElevations',
+    keywords: 'interior elevations room walls sheet', category: 'Tools', icon: PanelsTopLeft,
+    surfaces: contextOnly, enabled: (state: SurfaceCommandState) => state.contextEntityType === 'IfcSpace', run: runContextAction,
   },
   {
     id: 'context:copy-global-id', labelKey: ACTION_NAME_KEYS.copyGlobalId, ribbonTooltipKey: ACTION_NAME_KEYS.copyGlobalId,
