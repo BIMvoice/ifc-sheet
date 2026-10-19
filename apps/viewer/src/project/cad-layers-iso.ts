@@ -3,59 +3,70 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The ISO 13567 starter table for the CAD layer standard (`cad-layers.ts`).
+ * An ISO 13567-style starter for the CAD layer standard (`cad-layers.ts`),
+ * with CI/SfB element codes. Field structure per ISO 13567-2; the codes are
+ * NOT checked against the standard's tables (the standard is paywalled), and
+ * this is not a claim of conformance.
  *
- * A STARTER, not a certified standard. ISO 13567 (Organization and naming of
- * layers for CAD) builds a layer name from fields: agent responsible for the
- * information, element, presentation. This table uses the common short form
- * of that structure, hyphen separated:
+ * A layer name is fixed-length fields, unused positions filled with `-`:
  *
- *     A - WALL - CUT
- *     agent (A = architect) - element (four letters) - presentation
+ *     A-  21----  E-   _CUT
+ *     |   |       |    optional field (see below)
+ *     |   |       presentation (2): E- element graphics, H- hatching, D- dimensions, T- text
+ *     |   element (6): a classification code, here CI/SfB table 1, padded with `-`
+ *     agent responsible (2): A- architect
  *
- * The element letters (WALL, SLAB, COLM…) and the presentation codes
- * (CUT section cut, SEEN projection beyond the cut, HIDD hidden, PATT
- * hatch, DIMS dimensions, TEXT text) are this table's own choices in the
- * spirit of that structure, written from the field layout of ISO 13567-2;
- * they were not checked against the standard's published code lists. An
- * office that must certify against ISO 13567 or its national annex edits
- * the codes here.
+ * The mandatory ten characters are agent + element + presentation. Cut, seen
+ * and hidden are not presentation codes, so they go in an optional field after
+ * them, as the user-defined suffix `_CUT`, `_SEEN`, `_HIDD` (`_` begins an
+ * optional field). The width and position of that suffix among the standard's
+ * optional fields were not checked.
  *
- * Every row sets the pen: cut 0.5 mm, seen 0.25, hidden 0.18 dashed, hatch
- * 0.13, annotation 0.18.
+ * CI/SfB mapping used (IfcSheet does not tell internal from external, so
+ * walls are all 21 and doors and windows both 31):
+ *   21 walls, 23 floors and slabs, 24 stairs, ramps and railings, 27 roofs,
+ *   28 columns and beams (frames), 31 doors and windows (openings),
+ *   8- loose furniture; spaces and annotations have no element (`------`).
+ *
+ * Pens: cut 0.5 mm, seen 0.25, hidden 0.18 dashed, hatch 0.13, annotation 0.18.
  */
 
 import type { LineType } from '@/drafting/styles';
 import type { CadKind, CadLayerRule } from './cad-layers';
 
-interface Family { code: string; classes: string[]; color: string }
+interface Family { key: string; element: string; classes: string[]; color: string }
 
 /** The classes IfcSheet draws, grouped as the Visibility / Graphics categories group them. */
 const FAMILIES: readonly Family[] = [
-  { code: 'WALL', classes: ['IfcWall', 'IfcWallStandardCase', 'IfcCurtainWall'], color: '#7f1d1d' },
-  { code: 'SLAB', classes: ['IfcSlab'], color: '#78350f' },
-  { code: 'ROOF', classes: ['IfcRoof'], color: '#b45309' },
-  { code: 'COLM', classes: ['IfcColumn'], color: '#1e3a8a' },
-  { code: 'BEAM', classes: ['IfcBeam', 'IfcMember'], color: '#1d4ed8' },
-  { code: 'DOOR', classes: ['IfcDoor'], color: '#166534' },
-  { code: 'WDWS', classes: ['IfcWindow'], color: '#0e7490' },
-  { code: 'STRS', classes: ['IfcStair', 'IfcStairFlight', 'IfcRamp', 'IfcRampFlight'], color: '#6d28d9' },
-  { code: 'RAIL', classes: ['IfcRailing'], color: '#a21caf' },
-  { code: 'SPCE', classes: ['IfcSpace'], color: '#475569' },
-  { code: 'FURN', classes: ['IfcFurnishingElement', 'IfcFurniture'], color: '#9a3412' },
+  { key: 'wall', element: '21', classes: ['IfcWall', 'IfcWallStandardCase', 'IfcCurtainWall'], color: '#7f1d1d' },
+  { key: 'slab', element: '23', classes: ['IfcSlab'], color: '#78350f' },
+  { key: 'roof', element: '27', classes: ['IfcRoof'], color: '#b45309' },
+  { key: 'frame', element: '28', classes: ['IfcColumn', 'IfcBeam', 'IfcMember'], color: '#1e3a8a' },
+  { key: 'door', element: '31', classes: ['IfcDoor'], color: '#166534' },
+  { key: 'window', element: '31', classes: ['IfcWindow'], color: '#0e7490' },
+  { key: 'stair', element: '24', classes: ['IfcStair', 'IfcStairFlight', 'IfcRamp', 'IfcRampFlight', 'IfcRailing'], color: '#6d28d9' },
+  { key: 'space', element: '', classes: ['IfcSpace'], color: '#475569' },
+  { key: 'furniture', element: '8', classes: ['IfcFurnishingElement', 'IfcFurniture'], color: '#9a3412' },
 ];
 
-const PRESENTATIONS: readonly { source: string; code: string; weight: number; type?: LineType }[] = [
-  { source: 'CUT', code: 'CUT', weight: 0.5 },
-  { source: 'SEEN', code: 'SEEN', weight: 0.25 },
-  { source: 'HIDDEN', code: 'HIDD', weight: 0.18, type: 'dashed' },
-  { source: 'HATCH', code: 'PATT', weight: 0.13 },
+const AGENT = 'A-';
+
+/** A layer name: agent (2) + element (6, `-` padded) + presentation (2) + optional suffix. */
+export function isoLayerName(element: string, presentation: string, suffix = ''): string {
+  return `${AGENT}${element.padEnd(6, '-')}${presentation}${suffix}`;
+}
+
+const PRESENTATIONS: readonly { source: string; id: string; presentation: string; suffix: string; weight: number; type?: LineType }[] = [
+  { source: 'CUT', id: 'cut', presentation: 'E-', suffix: '_CUT', weight: 0.5 },
+  { source: 'SEEN', id: 'seen', presentation: 'E-', suffix: '_SEEN', weight: 0.25 },
+  { source: 'HIDDEN', id: 'hidd', presentation: 'E-', suffix: '_HIDD', weight: 0.18, type: 'dashed' },
+  { source: 'HATCH', id: 'hatch', presentation: 'H-', suffix: '', weight: 0.13 },
 ];
 
-const ANNOTATIONS: readonly { kind: CadKind; layer: string }[] = [
-  { kind: 'dimension', layer: 'A-ANNO-DIMS' },
-  { kind: 'text', layer: 'A-ANNO-TEXT' },
-  { kind: 'hatch', layer: 'A-ANNO-PATT' },
+const ANNOTATIONS: readonly { kind: CadKind; presentation: string }[] = [
+  { kind: 'dimension', presentation: 'D-' },
+  { kind: 'text', presentation: 'T-' },
+  { kind: 'hatch', presentation: 'H-' },
 ];
 
 /** Fresh rows each call: ids are stable (`iso-wall-cut`), so the table can be diffed and merged. */
@@ -64,13 +75,13 @@ export function isoStarterRules(): CadLayerRule[] {
   for (const f of FAMILIES) {
     for (const p of PRESENTATIONS) {
       rules.push({
-        id: `iso-${f.code.toLowerCase()}-${p.code.toLowerCase()}`, source: p.source, ifcClasses: [...f.classes],
-        layer: `A-${f.code}-${p.code}`, color: f.color, lineWeight: p.weight, ...(p.type ? { lineType: p.type } : {}),
+        id: `iso-${f.key}-${p.id}`, source: p.source, ifcClasses: [...f.classes],
+        layer: isoLayerName(f.element, p.presentation, p.suffix), color: f.color, lineWeight: p.weight, ...(p.type ? { lineType: p.type } : {}),
       });
     }
   }
   for (const a of ANNOTATIONS) {
-    rules.push({ id: `iso-anno-${a.kind}`, kind: a.kind, layer: a.layer, color: '#000000', lineWeight: 0.18 });
+    rules.push({ id: `iso-anno-${a.kind}`, kind: a.kind, layer: isoLayerName('', a.presentation), color: '#000000', lineWeight: 0.18 });
   }
   return rules;
 }

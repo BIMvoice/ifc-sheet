@@ -16,7 +16,7 @@ import { IconButton } from '@/components/ui/icon-button';
 import { useProjectStore } from '@/project/project-store';
 import { materialNamesInModels } from '@/project/materials';
 import { CAD_KINDS, type CadKind, type CadLayerRule } from '@/project/cad-layers';
-import { addCadRule, clearCadRules, moveCadRule, removeCadRule, resetCadRulesToIso, updateCadRule } from '@/project/cad-layers-edit';
+import { addCadRule, clearCadRules, moveCadRule, resetCadRulesToAia, removeCadRule, resetCadRulesToIso, updateCadRule } from '@/project/cad-layers-edit';
 import type { LineType } from '@/drafting/styles';
 
 const TYPES: readonly LineType[] = ['continuous', 'dashed', 'dotted', 'dashdot'];
@@ -84,6 +84,7 @@ export function CadLayersTab() {
       <div className="flex items-center gap-2">
         <Button size="sm" variant="outline" onClick={() => addCadRule(t('cad.newLayer'))}><Plus className="mr-1 size-3.5" />{t('cad.add')}</Button>
         <Button size="sm" variant="outline" onClick={resetCadRulesToIso}><RotateCcw className="mr-1 size-3.5" />{t('cad.reset')}</Button>
+        <Button size="sm" variant="outline" onClick={resetCadRulesToAia}><RotateCcw className="mr-1 size-3.5" />{t('cad.resetAia')}</Button>
         <Button size="sm" variant="outline" disabled={rules.length === 0} onClick={clearCadRules}><Trash2 className="mr-1 size-3.5" />{t('cad.clear')}</Button>
         <p className="flex-1 text-right text-zinc-500">{t('cad.starter')}</p>
       </div>

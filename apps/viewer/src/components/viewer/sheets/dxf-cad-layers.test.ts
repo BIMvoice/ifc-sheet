@@ -115,9 +115,9 @@ describe('CAD layer standard in the DXF', () => {
     for (const p of pens) assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)))).sort(), ['data-dxf-color', 'data-dxf-layer', 'data-dxf-ltype', 'data-dxf-lw']);
   });
 
-  it('writes the ISO starter: cut and seen walls on their own layers', () => {
+  it('writes the ISO-style starter: cut and seen walls on their own layers', () => {
     const { layers } = write(isoStarterRules());
-    assert.ok(layers.has('A-WALL-CUT') && layers.has('A-WALL-SEEN') && layers.has('A-DOOR-CUT'), [...layers.keys()].join('|'));
-    assert.equal(layers.get('A-WALL-CUT')?.weight, '50');
+    assert.ok(layers.has('A-21----E-_CUT') && layers.has('A-21----E-_SEEN') && layers.has('A-31----E-_CUT'), [...layers.keys()].join('|'));
+    assert.equal(layers.get('A-21----E-_CUT')?.weight, '50');
   });
 });

@@ -7,6 +7,7 @@
  * the store actions the configurator calls.
  */
 
+import { aiaStarterRules } from './cad-layers-aia';
 import { isoStarterRules } from './cad-layers-iso';
 import type { CadLayerRule } from './cad-layers';
 import { useProjectStore } from './project-store';
@@ -44,6 +45,8 @@ export function addCadRule(layer: string): string {
 export const removeCadRule = (id: string) => set(current().filter((r) => r.id !== id));
 export const moveCadRule = (id: string, delta: number) => set(moveRule(current(), id, delta));
 export const updateCadRule = (id: string, patch: Partial<CadLayerRule>) => set(patchRule(current(), id, patch));
-/** Replace the table with the ISO 13567 starter. */
+/** Replace the table with the ISO 13567-style starter. */
 export const resetCadRulesToIso = () => set(isoStarterRules());
+/** Replace the table with the AIA / NCS-style preset. */
+export const resetCadRulesToAia = () => set(aiaStarterRules());
 export const clearCadRules = () => set([]);

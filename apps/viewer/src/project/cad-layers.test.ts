@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { cadLayerName, cadRuleOrder, matchCadRule, resolveCadLayer, type CadLayerRule } from './cad-layers.js';
 import { isoStarterRules } from './cad-layers-iso.js';
+import { aiaStarterRules } from './cad-layers-aia.js';
 import { moveRule, patchRule } from './cad-layers-edit.js';
 import { VIEW_CATEGORIES } from './view-graphics.js';
 
@@ -70,15 +71,19 @@ describe('CAD layer names', () => {
   });
 });
 
-describe('ISO 13567 starter', () => {
+describe('ISO 13567-style starter', () => {
   const rules = isoStarterRules();
 
-  it('has unique rule ids, ASCII layer names of the form A-ELEM-PRES, and a criterion on every rule', () => {
+  it('has unique rule ids, a criterion on every rule, and names in the mandatory 2+6+2 structure', () => {
     assert.equal(new Set(rules.map((r) => r.id)).size, rules.length);
     for (const r of rules) {
       assert.equal(cadLayerName(r.layer), r.layer, r.layer);
-      assert.match(r.layer, /^A-[A-Z]{4}-[A-Z]{3,4}$/);
       assert.ok(r.source || r.kind, r.id);
+      // Agent (2) + element (6, `-` filled) + presentation (2), then an optional `_` field.
+      assert.match(r.layer, /^A-[0-9-]{6}[EHDT]-(_[A-Z]{3,4})?$/, r.layer);
+      const element = r.layer.slice(2, 8);
+      assert.match(element, /^([0-9]+-*|-+)$/, 'digits first, then fill');
+      assert.equal(r.layer.slice(0, 10).length, 10);
     }
   });
 
@@ -87,17 +92,27 @@ describe('ISO 13567 starter', () => {
     const drawn = VIEW_CATEGORIES.filter((c) => c.id !== 'other').flatMap((c) => c.classes.map((k) => k.toUpperCase()));
     assert.deepEqual(drawn.filter((c) => !covered.has(c)), []);
     for (const source of ['CUT', 'SEEN', 'HIDDEN', 'HATCH']) {
-      assert.equal(resolveCadLayer(rules, { source, ifcClass: 'IfcWallStandardCase' })?.name.startsWith('A-WALL-'), true, source);
+      assert.equal(resolveCadLayer(rules, { source, ifcClass: 'IfcWallStandardCase' })?.name.startsWith('A-21----'), true, source);
     }
   });
 
   it('puts a wall cut and a wall seen on different layers, and annotations on theirs', () => {
-    assert.equal(resolveCadLayer(rules, { source: 'CUT', ifcClass: 'IfcWall' })?.name, 'A-WALL-CUT');
-    assert.equal(resolveCadLayer(rules, { source: 'SEEN', ifcClass: 'IfcWall' })?.name, 'A-WALL-SEEN');
-    assert.equal(resolveCadLayer(rules, { source: 'Notes', kind: 'dimension' })?.name, 'A-ANNO-DIMS');
-    assert.equal(resolveCadLayer(rules, { source: 'Notes', kind: 'text' })?.name, 'A-ANNO-TEXT');
-    assert.equal(resolveCadLayer(rules, { source: 'Notes', kind: 'hatch' })?.name, 'A-ANNO-PATT');
+    assert.equal(resolveCadLayer(rules, { source: 'CUT', ifcClass: 'IfcWall' })?.name, 'A-21----E-_CUT');
+    assert.equal(resolveCadLayer(rules, { source: 'SEEN', ifcClass: 'IfcWall' })?.name, 'A-21----E-_SEEN');
+    assert.equal(resolveCadLayer(rules, { source: 'HATCH', ifcClass: 'IfcWall' })?.name, 'A-21----H-');
+    assert.equal(resolveCadLayer(rules, { source: 'CUT', ifcClass: 'IfcWindow' })?.name, 'A-31----E-_CUT');
+    assert.equal(resolveCadLayer(rules, { source: 'Notes', kind: 'dimension' })?.name, 'A-------D-');
+    assert.equal(resolveCadLayer(rules, { source: 'Notes', kind: 'text' })?.name, 'A-------T-');
     assert.equal(resolveCadLayer(rules, { source: 'FRAME' }), null, 'the sheet frame keeps its fixed layer');
+  });
+});
+
+describe('AIA/NCS-style preset', () => {
+  it('names walls A-WALL-CUT and A-WALL-SEEN, with unique ids', () => {
+    const rules = aiaStarterRules();
+    assert.equal(new Set(rules.map((r) => r.id)).size, rules.length);
+    assert.equal(resolveCadLayer(rules, { source: 'CUT', ifcClass: 'IfcWall' })?.name, 'A-WALL-CUT');
+    assert.equal(resolveCadLayer(rules, { source: 'Notes', kind: 'dimension' })?.name, 'A-ANNO-DIMS');
   });
 });
 
