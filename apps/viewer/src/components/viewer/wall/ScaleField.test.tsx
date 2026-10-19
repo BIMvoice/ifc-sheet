@@ -10,7 +10,7 @@ import { cleanup, click, press, render, type } from '@/test/render.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet } from '@/project/drawing-set-actions';
-import type { ModelExtent } from '@/project/drawing-set';
+import { detailedScaleThatFits, drawingArea, type ModelExtent } from '@/project/drawing-set';
 import type { ProjectLevel } from '@/project/types';
 import { parseScale } from './ScaleField.js';
 import { ViewportCard } from './ViewportCard.js';
@@ -23,7 +23,7 @@ import { ViewportCard } from './ViewportCard.js';
 
 const HOUSE: ModelExtent = { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 7 } };
 const LEVELS: ProjectLevel[] = [{ name: 'Ground Floor', elevation: 0, storeyGlobalIds: ['L0'] }];
-/** The ground plan's drawing: 10 × 6 m. On A2 it fits at 1:20, not at 1:10. */
+/** The ground plan's drawing: 10 × 6 m; at 1:10 it is larger than any sheet the set picks for it. */
 const PLAN = { min: { x: 0, y: 0 }, max: { x: 10, y: 6 } };
 
 beforeEach(() => {
@@ -72,12 +72,16 @@ describe('ScaleField (in the drawing card)', () => {
     choose(ui.querySelector('select')!, '10');
     cleanup();
     const again = card();
+    // The sheet's own paper (the set picks the smallest that fits) gives the area and the scale offered.
+    const area = drawingArea(plans().paper);
+    const fits = detailedScaleThatFits(PLAN, plans().paper);
+    assert.ok(fits && fits > 10);
     const warning = again.querySelector('output');
-    assert.match(warning?.textContent ?? '', /larger than the sheet's drawing area \(574 × 350 mm\)/);
-    const fix = [...again.querySelectorAll('button')].find((b) => b.textContent === 'Use 1 : 20, it fits');
+    assert.ok((warning?.textContent ?? '').includes(`larger than the sheet's drawing area (${Math.round(area.w)} × ${Math.round(area.h)} mm)`));
+    const fix = [...again.querySelectorAll('button')].find((b) => b.textContent === `Use 1 : ${fits}, it fits`);
     assert.ok(fix);
     click(fix);
-    assert.equal(slot().scale, 20);
+    assert.equal(slot().scale, fits);
   });
 
   it('says nothing while the drawing fits', () => {

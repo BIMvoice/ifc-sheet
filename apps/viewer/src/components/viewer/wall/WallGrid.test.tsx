@@ -73,6 +73,7 @@ describe('WallGrid', () => {
   });
 
   it('sets the scale of the elevations from their own row, leaving the plans', () => {
+    const plansBefore = groupScale('plans');
     const ui = render(<WallGrid extent={HOUSE} onStep={() => {}} />);
     const row = [...ui.querySelectorAll('fieldset')].find((f) => f.querySelector('legend')?.textContent === 'Scale of the elevations');
     assert.ok(row, 'a scale row for the elevations');
@@ -80,6 +81,6 @@ describe('WallGrid', () => {
     assert.ok(chip);
     click(chip);
     assert.equal(groupScale('elevations'), 200);
-    assert.equal(groupScale('plans'), 50);
+    assert.equal(groupScale('plans'), plansBefore);
   });
 });
