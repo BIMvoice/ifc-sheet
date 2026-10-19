@@ -114,6 +114,7 @@ export const wallEn = {
   'wall.shell.saveProject': 'Save the project',
   'wall.shell.untitled': 'No model open',
   'wall.shell.project': 'Project',
+  'wall.shell.language': 'Language',
   'wall.vp.eyebrow': 'Drawing on this sheet',
   'wall.vp.scale': 'Scale',
   'wall.vp.open': 'Open to draw in',

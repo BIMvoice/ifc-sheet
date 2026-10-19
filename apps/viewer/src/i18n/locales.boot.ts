@@ -10,6 +10,7 @@
  * (`import.meta.glob` is a Vite transform and cannot run there).
  */
 import { activateStartupLocale, createLocaleActivator, type CatalogueLoader } from './locale-activation';
+import { provideLocaleActivator } from './locale-service';
 
 const modules = import.meta.glob<unknown>(['./locales/*.ts', '!./locales/*.test.ts'], { import: 'default' });
 
@@ -28,7 +29,10 @@ function localStorageOrNull(): Storage | null {
   }
 }
 
-activateStartupLocale(createLocaleActivator(loaders, document.documentElement), {
+const activator = createLocaleActivator(loaders, document.documentElement);
+provideLocaleActivator(activator, localStorageOrNull());
+
+activateStartupLocale(activator, {
   search: window.location.search,
   storage: localStorageOrNull(),
   languages: navigator.languages ?? [navigator.language],

@@ -1,0 +1,87 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { checkCatalogue } from '../catalogue-problems';
+import { en, type TranslationKey } from '../en';
+import type { TranslationValue } from '../types';
+import ro from './ro';
+
+/**
+ * Romanian (#53). The key list comes from the English catalogue, not from a
+ * hand-kept list: a new English key under one of these prefixes fails here
+ * until it has a Romanian entry. `wall.` is every text on the Wall, its
+ * drawer, sheet cards, title block, scales and tool rail; the rest are the
+ * catalogues the Wall opens (sheet settings, what is missing, issue the set,
+ * what changed, libraries, the takeoff and door and window schedule as they
+ * print on a sheet, the draft set report).
+ */
+const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.'];
+const keys = (Object.keys(en) as TranslationKey[]).filter((k) => IN_SCOPE.some((p) => k.startsWith(p)));
+const catalogue = ro as Readonly<Record<string, TranslationValue>>;
+
+const PLACEHOLDER = /\{([A-Za-z][A-Za-z0-9_]*)\}/g;
+const forms = (v: TranslationValue): Record<string, string> => (typeof v === 'string' ? { other: v } : { ...v });
+const names = (text: string): Set<string> => new Set([...text.matchAll(PLACEHOLDER)].map((m) => m[1]));
+const union = (v: TranslationValue): Set<string> => new Set(Object.values(forms(v)).flatMap((f) => [...names(f)]));
+
+/** Keys whose Romanian drops or invents a placeholder; Romanian `one` may say "un"/"o" instead of the count. */
+function placeholderProblems(cat: Readonly<Record<string, TranslationValue>>): string[] {
+  const problems: string[] = [];
+  for (const key of keys) {
+    const value = cat[key];
+    if (value === undefined) continue;
+    const expected = union(en[key]);
+    for (const [form, text] of Object.entries(forms(value))) {
+      const actual = names(text);
+      for (const n of actual) if (!expected.has(n)) problems.push(`${key}.${form}: unknown {${n}}`);
+      if (form !== 'one') for (const n of expected) if (!actual.has(n)) problems.push(`${key}.${form}: missing {${n}}`);
+    }
+  }
+  return problems;
+}
+
+/** Every string of the catalogue that carries a cedilla ş ţ (U+015F, U+0163 and capitals) instead of the comma-below ș ț. */
+function cedillaProblems(cat: Readonly<Record<string, TranslationValue>>): string[] {
+  return Object.entries(cat).flatMap(([key, value]) =>
+    Object.entries(forms(value)).filter(([, text]) => /[ŞşŢţ]/.test(text)).map(([form]) => `${key}.${form}`));
+}
+
+describe('Romanian catalogue (#53)', () => {
+  it('has an entry for every in-scope English key, and none for a key that does not exist', () => {
+    assert.ok(keys.length > 300, `the scope found ${keys.length} English keys`);
+    assert.deepEqual(keys.filter((k) => !Object.hasOwn(catalogue, k)), []);
+    assert.deepEqual(Object.keys(catalogue).filter((k) => !Object.hasOwn(en, k)), []);
+  });
+
+  it('keeps every placeholder of the English message', () => {
+    assert.deepEqual(placeholderProblems(catalogue), []);
+    assert.deepEqual(checkCatalogue(catalogue).problems, []);
+  });
+
+  it('writes ș and ț with a comma below, never the cedilla forms', () => {
+    assert.deepEqual(cedillaProblems(catalogue), []);
+    const joined = Object.values(catalogue).flatMap((v) => Object.values(forms(v))).join('');
+    assert.ok(joined.includes('ș') && joined.includes('ț'), 'the comma-below forms are in use');
+  });
+
+  it('gives a plural message the forms Romanian counts with', () => {
+    for (const key of keys) {
+      const value = catalogue[key];
+      if (typeof value === 'string' || value === undefined) continue;
+      assert.ok(value.one !== undefined && value.few !== undefined, `${key} needs one, few and other`);
+    }
+  });
+
+  it('keeps product and command names as they are', () => {
+    for (const key of ['check.cmd', 'issue.cmd', 'whatchanged.cmd', 'draftSet.cmd', 'wall.export.dxf'] as const) assert.equal(catalogue[key], en[key]);
+  });
+
+  it('the checks catch a cedilla and a dropped placeholder', () => {
+    assert.deepEqual(cedillaProblems({ ...catalogue, 'wall.tb.done': 'Gaţa' }), ['wall.tb.done.other']);
+    assert.deepEqual(cedillaProblems({ ...catalogue, 'wall.fit': 'Încadrează ş' }), ['wall.fit.other']);
+    assert.deepEqual(placeholderProblems({ ...catalogue, 'wall.remove': 'Elimină' }), ['wall.remove.other: missing {name}']);
+    assert.deepEqual(placeholderProblems({ ...catalogue, 'wall.remove': 'Elimină {nume}' }), ['wall.remove.other: unknown {nume}', 'wall.remove.other: missing {name}']);
+  });
+});
