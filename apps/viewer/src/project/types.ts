@@ -226,6 +226,8 @@ export interface SheetViewport {
   center: { x: number; y: number } | null;
   /** Drafting layers this viewport hides, on top of its view's. */
   hiddenLayers?: string[];
+  /** The page of a document split over several sheets (the drawing register's continuation sheets), from 0; absent is 0. */
+  page?: number;
   /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
   keyPlanOf?: string;
   /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
@@ -291,8 +293,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, or the finishes of each room. */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, or the set's own sheets (the drawing register, derived from the sheets on every draw). */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;

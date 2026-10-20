@@ -27,6 +27,7 @@ import { shapePath } from '../drafting/DraftOverlay';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
 import { cadKindOf, layerTags, penTags } from './dxf-tags';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
+import { notDrawingIds, sheetScaleText } from '@/project/drawing-register';
 import { useProjectStore } from '@/project/project-store';
 import { LOGO_FIELD, titleBlockOf } from '@/project/title-block';
 import { useEffectiveTitleBlock } from '@/project/title-block-model';
@@ -283,10 +284,12 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
   const y = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h;
   const fields = titleBlockOf(sheet, projectFields, projectName);
   const logo = projectFields?.[LOGO_FIELD];
+  const schedules = useProjectStore((s) => s.schedules);
   const views = useProjectStore((s) => s.views);
-  // A perspective has no scale to state.
-  const scales = [...new Set((sheet.viewports ?? []).filter((v) => hasTrueScale(views.find((x) => x.id === v.viewId))).map((v) => v.scale))];
-  const scaleText = scales.length === 1 ? `1:${scales[0]}` : scales.length === 0 ? '—' : t('sheets.asIndicated');
+  // A sheet of schedules and tables only has no drawing scale, and a perspective has none to state.
+  const unscaled = new Set(notDrawingIds(schedules));
+  for (const v of sheet.viewports ?? []) if (!hasTrueScale(views.find((x) => x.id === v.viewId))) unscaled.add(v.viewId);
+  const scaleText = sheetScaleText(sheet, unscaled, t('sheets.asIndicated')) || '—';
   const side = 50;
   const left = TITLE_BLOCK_MM.w - side;
   const rowH = TITLE_BLOCK_MM.h / 5;

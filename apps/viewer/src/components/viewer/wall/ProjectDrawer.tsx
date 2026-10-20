@@ -16,8 +16,9 @@ import { useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { inSetOrder } from '@/project/drawing-register';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
-import { addScheduleToSet, hangLegend, hangSchedule, hangView } from '@/project/drawing-set-actions';
+import { addRegisterToSet, addScheduleToSet, hangLegend, hangSchedule, hangView } from '@/project/drawing-set-actions';
 import { projectOpenErrorText } from '@/project/open-error';
 import { requestNewProject } from '@/project/new-project';
 import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
@@ -116,14 +117,6 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
     const hung = sheetsShowing(viewId)[0]?.id ?? (extent ? hangView(viewId, extent) : null);
     go(hung, viewId);
   };
-  const series: { group: ReturnType<typeof sheetGroup>; labelKey: TranslationKey }[] = [
-    { group: 'plans', labelKey: 'wall.group.plans' },
-    { group: 'elevations', labelKey: 'wall.group.elevations' },
-    { group: 'sections', labelKey: 'wall.group.sections' },
-    { group: 'schedules', labelKey: 'wall.group.schedules' },
-    { group: null, labelKey: 'wall.group.other' },
-  ];
-
   return (
     <aside aria-label={t('wall.project.title')} className="absolute inset-y-0 left-0 z-20 flex w-80 flex-col border-r border-sky-300/20 bg-[#08214a]/98 text-sky-50 shadow-2xl">
       <header className="flex items-center gap-2 px-4 pb-2 pt-4">
@@ -147,7 +140,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
       <LibraryPanel />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         <Group title={t('wall.project.sheets')} add={<button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>}>
-          {series.flatMap(({ group }) => sheets.filter((s) => sheetGroup(s) === group)).map((s) => (
+          {inSetOrder(sheets, schedules).map((s) => (
             <Row key={s.id} id={s.id} sub={s.number} label={s.name} onOpen={() => go(s.id)} />
           ))}
         </Group>
@@ -177,6 +170,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
             <>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('all', t('wall.project.joinerySchedule')))}>{t('wall.project.addJoinery')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('materials', t('takeoff.newName')))}>{t('wall.project.addTakeoff')}</button>
+              <button type="button" className={action} onClick={() => go(addRegisterToSet(t('register.name')))}>{t('wall.project.addRegister')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('types', t('typeQty.newName')))}>{t('wall.project.addTypeQuantities')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('finishes', t('finishes.newName')))}>{t('wall.project.addFinishes')}</button>
             </>
