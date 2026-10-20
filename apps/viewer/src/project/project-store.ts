@@ -43,7 +43,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
-  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined,
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -72,6 +72,7 @@ const DOCUMENT_FIELDS = {
   seriesTemplates: true,
   titleBlockSources: true,
   sheetNumbering: true,
+  phaseSource: true,
   comments: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
@@ -134,6 +135,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     savedSectionCuts: doc.savedSectionCuts ?? [],
     sheetTemplates: doc.sheetTemplates ?? [],
     seriesTemplates: doc.seriesTemplates ?? {},
+    phaseSource: doc.phaseSource,
     // A project made before the room label read the tag name takes the new template (`tagall/types.ts`).
     annotationTypes: upgradeTagAllTypes(doc.annotationTypes ?? []),
     symbols: doc.symbols ?? [],

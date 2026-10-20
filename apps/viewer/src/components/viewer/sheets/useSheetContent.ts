@@ -28,6 +28,7 @@ import { elevationMarkDrafts, elevationMarkPlan, obstacleBoxes, sectionReference
 import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
+import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { partHostType } from '@/project/part-host';
 import { viewOmits } from '@/project/discipline-facts';
 import { viewMaterials } from '@/project/material-resolver';
@@ -63,6 +64,7 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const joineryTypes = useProjectStore((s) => s.joineryTypes);
   const joineryMapping = useProjectStore((s) => s.joineryMapping);
   const materialsTable = useProjectStore((s) => s.materials);
+  const phaseSource = useProjectStore((s) => s.phaseSource);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const { geometryResult } = useDrawingRuntime();
   // Linked models in their own style (#96): follows the loaded models and the project's model list.
@@ -75,12 +77,13 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
       if (out.has(vp.viewId)) continue;
       const view = views.find((v) => v.id === vp.viewId);
       const raw = (byView[vp.viewId] ?? EMPTY_VIEW_DRAWING).drawing;
-      const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, viewOmits(view), viewMaterials(raw)) : null;
-      const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, geometryResult?.meshes, flips, hiddenClasses(view.graphics), raw, vp.scale) : []), ...membraneOverlays(drawing)];
+      const phases = phaseViewOf(view?.graphics, phaseSource);
+      const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, viewOmits(view), viewMaterials(raw), phases) : null;
+      const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, phaseMeshes(geometryResult?.meshes, phases), flips, hiddenClasses(view.graphics), raw, vp.scale) : []), ...membraneOverlays(drawing)];
       out.set(vp.viewId, { drawing, overlays });
     }
     return out;
-  }, [sheet.viewports, views, byView, geometryResult, flips, mutationVersion, materialsTable, joineryTypes, joineryMapping]);
+  }, [sheet.viewports, views, byView, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping]);
   const placedSchedules = useSheetSchedules(sheet);
   const placedCivil = useSheetCivilDrawings(sheet);
   // A mark prints the number its reference reads now, not the one cached when the view was last open.
