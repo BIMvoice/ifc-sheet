@@ -16,6 +16,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { DraftShape, Pt } from '@/drafting/types';
 import { PEN } from '@/components/viewer/sheets/viewport-pens';
+import type { GraphicStandard } from '@/drafting/graphic-standard';
 import type { ProjectView } from './types';
 import { planRoofs } from './roof-plan';
 import { viewElevationSymbols, viewOpeningSymbols, visibleEntities } from './view-symbols';
@@ -37,12 +38,18 @@ export interface PlanOverlay {
   texts?: { at: Pt; text: string }[];
 }
 
-const ROOF_PEN: Record<string, { width: number; dashed?: boolean }> = {
-  ridge: { width: PEN.cut }, hip: { width: PEN.seen }, valley: { width: PEN.seen, dashed: true }, eave: { width: PEN.seen }, verge: { width: PEN.seen },
+type Pens = GraphicStandard['pens'];
+
+const roofPen = (pens: Pens, kind: string): { width: number; dashed?: boolean } => {
+  switch (kind) {
+    case 'ridge': return { width: pens.cut };
+    case 'valley': return { width: pens.seen, dashed: true };
+    default: return { width: pens.seen };
+  }
 };
 
 /** The roofs of a plan as overlays (none when the view hides roofs). */
-export function roofOverlays(view: ProjectView, plane: SectionPlaneConfig, hidden: ReadonlySet<string>): PlanOverlay[] {
+export function roofOverlays(view: ProjectView, plane: SectionPlaneConfig, hidden: ReadonlySet<string>, pens: Pens = PEN): PlanOverlay[] {
   if (view.kind !== 'plan' || hidden.has('IFCROOF')) return [];
   const byPen = new Map<string, PlanOverlay>();
   const pen = (key: string, width: number, dashed?: boolean) => {
@@ -52,10 +59,10 @@ export function roofOverlays(view: ProjectView, plane: SectionPlaneConfig, hidde
   };
   for (const roof of planRoofs(view, plane)) {
     for (const l of roof.lines) {
-      const p = ROOF_PEN[l.kind] ?? ROOF_PEN.eave;
+      const p = roofPen(pens, l.kind);
       pen(`${p.width}:${p.dashed ? 1 : 0}`, p.width, p.dashed).shapes.push({ type: 'line', a: l.a, b: l.b });
     }
-    const arrows = pen('arrows', PEN.hatch);
+    const arrows = pen('arrows', pens.hatch);
     for (const a of roof.arrows) {
       const dx = a.to.x - a.from.x, dy = a.to.y - a.from.y;
       const len = Math.hypot(dx, dy) || 1;
@@ -73,7 +80,7 @@ export function roofOverlays(view: ProjectView, plane: SectionPlaneConfig, hidde
 
 /** The door and window symbols of a plan (or, given its drawing, an elevation / section) as overlays, by weight. */
 export function symbolOverlays(
-  meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, drawing?: Drawing2D | null,
+  meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, drawing?: Drawing2D | null, pens: Pens = PEN,
 ): PlanOverlay[] {
   const thin: DraftShape[] = [], heavy: DraftShape[] = [], dashed: DraftShape[] = [];
   const symbols = plane.axis === 'y' ? viewOpeningSymbols(meshes, plane, flips, hidden) : viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden);
@@ -83,9 +90,9 @@ export function symbolOverlays(
     if (s.dashed) dashed.push(...s.dashed);
   }
   return [
-    { layer: 'SYMBOLS', width: PEN.hatch, shapes: thin },
-    { layer: 'SYMBOLS', width: PEN.cut, shapes: heavy },
-    { layer: 'SYMBOLS', width: PEN.hatch, dashed: true, shapes: dashed },
+    { layer: 'SYMBOLS', width: pens.hatch, shapes: thin },
+    { layer: 'SYMBOLS', width: pens.cut, shapes: heavy },
+    { layer: 'SYMBOLS', width: pens.hatch, dashed: true, shapes: dashed },
   ].filter((o) => o.shapes.length);
 }
 
@@ -95,8 +102,9 @@ export function planOverlays(
   drawing?: Drawing2D | null,
   /** The scale denominator the overlays are shown at (a sheet viewport's); absent, the view's own. */
   scale?: number,
+  pens: Pens = PEN,
 ): PlanOverlay[] {
-  if (view.kind === 'elevation' || view.kind === 'section') return [...(meshes && drawing ? symbolOverlays(meshes, plane, flips, hidden, drawing) : []), ...gridOverlays(view, plane, drawing, scale)];
+  if (view.kind === 'elevation' || view.kind === 'section') return [...(meshes && drawing ? symbolOverlays(meshes, plane, flips, hidden, drawing, pens) : []), ...gridOverlays(view, plane, drawing, scale)];
   if (view.kind !== 'plan') return [];
-  return [...(meshes ? symbolOverlays(meshes, plane, flips, hidden) : []), ...roofOverlays(view, plane, hidden), ...corridorOverlays(view, plane, hidden), ...gridOverlays(view, plane, drawing, scale)];
+  return [...(meshes ? symbolOverlays(meshes, plane, flips, hidden, undefined, pens) : []), ...roofOverlays(view, plane, hidden, pens), ...corridorOverlays(view, plane, hidden), ...gridOverlays(view, plane, drawing, scale)];
 }
