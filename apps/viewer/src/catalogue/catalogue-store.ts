@@ -21,6 +21,7 @@ export function projectCatalogue(s: ProjectState = useProjectStore.getState()): 
     textStyles: s.textStyles?.length ? s.textStyles : [DEFAULT_TEXT_STYLE], dimStyles: s.dimStyles?.length ? s.dimStyles : [DEFAULT_DIM_STYLE],
     hatchPatterns: s.hatchPatterns ?? '', materials: s.materials ?? [],
     annotationTypes: s.annotationTypes ?? [], symbols: s.symbols ?? [], legends: s.legends ?? [], cadLayers: s.cadLayers ?? [],
+    ...(s.tagFields ? { tagFields: s.tagFields } : {}),
   };
 }
 
@@ -31,6 +32,8 @@ export function applyCatalogue(c: Catalogue): void {
     layerGroups: c.layerGroups, textStyles: c.textStyles, dimStyles: c.dimStyles, hatchPatterns: c.hatchPatterns,
     materials: c.materials, annotationTypes: c.annotationTypes, symbols: c.symbols, legends: c.legends, cadLayers: c.cadLayers,
   });
+  // The tags follow at once: the labels re-read their elements when the configuration changes (`labels/label-sync.ts`).
+  if (c.tagFields !== useProjectStore.getState().tagFields) useProjectStore.setState({ tagFields: c.tagFields, dirty: true });
 }
 
 export function exportCatalogue(kinds: ReadonlySet<CatalogueKind>, name = useProjectStore.getState().name): void {
