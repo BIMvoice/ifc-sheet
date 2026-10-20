@@ -60,7 +60,7 @@ describe('a session that crashed, at the next start', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => { cleanup(); localStorage.clear(); });
 
-  it('is offered; going on (an edit, its autosave, another start) does not lose it; Restore brings it back', async () => {
+  it('is offered; going on (an edit, its autosave, another start) does not lose it; Restore brings it back and keeps the newer work on offer', async () => {
     start();
     addProjectSheet('Before the crash');
     await wait();
@@ -77,15 +77,18 @@ describe('a session that crashed, at the next start', () => {
 
     start();
     assert.deepEqual(offerSheets(), ['Before the crash'], 'still on offer in a later session');
+    assert.deepEqual(sheetNames(), ['Drawn in the new session'], 'the newer work is in front');
     restoreRecovery();
     assert.deepEqual(sheetNames(), ['Before the crash']);
-    assert.equal(useRecoveryStore.getState().offer, null);
+    assert.deepEqual(offerSheets(), ['Drawn in the new session'], 'the newer work it replaced is on offer in its place');
     await wait();
     closeCleanly();
 
     start();
-    assert.equal(useRecoveryStore.getState().offer, null, 'a restored session is not offered again');
-    assert.deepEqual(sheetNames(), ['Before the crash'], 'and is the project the autosave holds now');
+    assert.deepEqual(sheetNames(), ['Before the crash'], 'the restored session is the project the autosave holds now');
+    assert.deepEqual(offerSheets(), ['Drawn in the new session'], 'and the newer work is still recoverable');
+    restoreRecovery();
+    assert.deepEqual(sheetNames(), ['Drawn in the new session'], 'restoring again brings it back');
   });
 
   it('Discard removes it for good', async () => {

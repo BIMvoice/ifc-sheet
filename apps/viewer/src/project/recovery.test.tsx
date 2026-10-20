@@ -76,7 +76,7 @@ describe('after a crash', () => {
     assert.deepEqual(plan.restore?.doc.sheets.map((s) => s.name), ['Plans']);
   });
 
-  it('restoring puts the sheets back through the load path, as work not yet saved to a file, and removes the slot', () => {
+  it('restoring puts the sheets back through the load path, as work not yet saved to a file', () => {
     const storage = fakeStorage();
     session(storage);
     const plan = planAutosave(KEY, storage);
@@ -86,8 +86,44 @@ describe('after a crash', () => {
     const s = useProjectStore.getState();
     assert.deepEqual(s.sheets.map((x) => x.name), ['Plans']);
     assert.equal(s.dirty, true);
-    assert.equal(useRecoveryStore.getState().offer, null);
-    assert.equal(storage.get(recoverableKey(KEY)), undefined);
+    discardRecovery(storage);
+  });
+
+  it('restoring after working on keeps the newer work in the slot: Restore is a swap, undone by restoring again', () => {
+    const storage = fakeStorage();
+    session(storage);
+    const plan = planAutosave(KEY, storage);
+    assert.ok(plan.recoverable);
+    offerRecovery({ key: KEY, doc: plan.recoverable.doc, savedAt: plan.recoverable.savedAt, modelName: 'house.ifc' });
+    useProjectStore.setState({ models: MODELS });
+    addProjectSheet('After the crash');
+    restoreRecovery(storage, new Date(AFTER));
+    assert.deepEqual(useProjectStore.getState().sheets.map((x) => x.name), ['Plans'], 'the kept session is in front');
+    const slot = storage.get(recoverableKey(KEY));
+    assert.ok(slot, 'the work it replaced is in the recoverable slot');
+    assert.deepEqual(parseProjectFile(slot).sheets.map((x) => x.name), ['After the crash']);
+    assert.equal(useRecoveryStore.getState().offer?.savedAt, AFTER, 'and on offer');
+    assert.deepEqual(planAutosave(KEY, storage).recoverable?.doc.sheets.map((x) => x.name), ['After the crash'], 'at the next start too');
+    restoreRecovery(storage, new Date(AFTER + 1));
+    assert.deepEqual(useProjectStore.getState().sheets.map((x) => x.name), ['After the crash'], 'restoring again swaps back');
+    assert.deepEqual(parseProjectFile(storage.get(recoverableKey(KEY)) as string).sheets.map((x) => x.name), ['Plans']);
+    discardRecovery(storage);
+  });
+
+  it('does not restore when the project in front cannot be kept first, and says so', async () => {
+    const ui = render(<Toaster />);
+    const storage = fakeStorage();
+    session(storage);
+    const plan = planAutosave(KEY, storage);
+    assert.ok(plan.recoverable);
+    offerRecovery({ key: KEY, doc: plan.recoverable.doc, savedAt: plan.recoverable.savedAt, modelName: 'house.ifc' });
+    addProjectSheet('After the crash');
+    restoreRecovery({ setItem: () => { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); } });
+    assert.deepEqual(useProjectStore.getState().sheets.map((x) => x.name), ['After the crash'], 'the work in front stays');
+    assert.deepEqual(useRecoveryStore.getState().offer?.doc.sheets.map((x) => x.name), ['Plans'], 'and the offer with it');
+    await waitFor(() => /Not restored/.test(latestToast(ui.ownerDocument.body)), 'a notice to show');
+    forgetRecoveryOffer();
+    cleanup();
   });
 
   it('an autosave in the new session does not touch the kept one; Discard removes it', () => {
@@ -192,7 +228,7 @@ describe('after a crash', () => {
     const full = { setItem: () => { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); } };
     useProjectStore.setState({ models: MODELS });
     writeAutosave(KEY, projectDocument(), full, SAVED_AT);
-    await waitFor(() => latestToast(ui.ownerDocument.body) !== '', 'a notice to show');
+    await waitFor(() => /not being autosaved/.test(latestToast(ui.ownerDocument.body)), 'a notice to show');
     assert.match(latestToast(ui.ownerDocument.body), /not being autosaved.*quota has been exceeded/);
     cleanup();
   });

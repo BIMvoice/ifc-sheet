@@ -6,12 +6,18 @@
  * The session on offer (`recovery.ts` keeps it in its own slot): held here from the models loading
  * until the user answers. Nothing short of an answer ends it: hanging the set, editing, or closing
  * the page leaves it on offer, on the intro screen and in the project drawer, at the next start too.
- * Restoring goes through `loadProjectDocument`, as opening a file does.
+ * Restoring goes through `loadProjectDocument`, as opening a file does, and is a swap: the project
+ * in front is first written to the recoverable slot and put on offer in its place, so work done after
+ * the crash is never lost to a Restore, and restoring again brings it back.
  */
 
 import { create } from 'zustand';
-import { deleteModelState, readModelState } from './autosave-snapshots';
-import { loadProjectDocument, useProjectStore } from './project-store';
+import { deleteModelState, readModelState, withoutModelState, writeModelState } from './autosave-snapshots';
+import { toast } from '@/components/ui/toast';
+import { resolve } from '@/i18n/registry';
+import { serializeProject } from './project-file';
+import { loadProjectDocument, projectDocument, useProjectStore } from './project-store';
+import { safeStorage } from './project-saved';
 import { dropRecoverable, recoverableKey } from './recovery';
 import type { ProjectDocument } from './types';
 
@@ -50,13 +56,30 @@ export async function restoreModelState(key: string, current: () => string | nul
   if (kept && current() === key && !useProjectStore.getState().modelState) useProjectStore.setState({ modelState: kept });
 }
 
-/** Puts the offered session in place, as work not yet saved to a file; its slot is removed once it is loaded. */
-export function restoreRecovery(storage?: Pick<Storage, 'removeItem'>): void {
+/**
+ * Puts the offered session in place, as work not yet saved to a file. The project it replaces takes
+ * its slot and its place on offer, written at `now`. When that copy cannot be written, nothing is
+ * loaded: the person is told, and the project in front stays.
+ */
+export function restoreRecovery(storage: Pick<Storage, 'setItem'> | undefined = safeStorage(), now = new Date()): void {
   const { offer } = useRecoveryStore.getState();
   if (!offer) return;
-  loadProjectDocument(offer.doc, { dirty: true, fromAutosave: true });
-  useRecoveryStore.setState({ offer: null });
-  dropRecoverable(offer.key, storage);
   const stateKey = recoverableKey(offer.key);
-  void restoreModelState(offer.key, () => offer.key, stateKey).then(() => deleteModelState(stateKey));
+  const { slim, modelState: replacedState } = withoutModelState(projectDocument());
+  try {
+    if (!storage) throw new Error('localStorage is not available');
+    storage.setItem(stateKey, serializeProject(slim, now));
+  } catch (err) {
+    console.warn('[project] could not keep the project in front before restoring; not restoring', err);
+    toast.error(resolve('wall.recovery.notKept', { detail: err instanceof Error ? err.message : String(err) }));
+    return;
+  }
+  loadProjectDocument(offer.doc, { dirty: true });
+  useRecoveryStore.setState({ offer: { ...offer, doc: slim, savedAt: now.getTime() } });
+  // The offered session's state is read before the replaced project's is written over it.
+  void readModelState(stateKey).then(async (kept) => {
+    if (replacedState) await writeModelState(stateKey, replacedState);
+    else await deleteModelState(stateKey);
+    if (kept && !useProjectStore.getState().modelState) useProjectStore.setState({ modelState: kept });
+  });
 }

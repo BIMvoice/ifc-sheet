@@ -88,10 +88,10 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
 }
 
 /**
- * Replace the document (file import, autosave restore). A file being opened is noted as the last
- * project file for these models (`project-saved.ts`); an autosave being put back is not a file.
+ * Replace the document (file import, autosave restore). Only the document: noting a file as the last
+ * one opened for these models is the caller's (`openProjectDocument` in `project-file.ts`).
  */
-export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean; fromAutosave?: boolean } = {}): void {
+export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
   const doc = liftSheetTitleBlocks(saved);

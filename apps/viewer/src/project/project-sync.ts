@@ -85,7 +85,7 @@ export function useProjectSync(): void {
         const overlaps = current.models.some((m) => refs.some((r) => r.key === m.key));
         if (modelVersionSwapActive()) keepProjectForNewVersion(refs);
         else if (plan.restore) {
-          loadProjectDocument(plan.restore.doc, { fromAutosave: true });
+          loadProjectDocument(plan.restore.doc);
           void restoreModelState(key, () => slot);
         } else if (!overlaps) resetProject();
         // The last session on these models died with work no project file holds: the intro and the drawer offer it back.
