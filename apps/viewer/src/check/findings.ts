@@ -45,8 +45,9 @@ export function plansWithoutDimensions(input: CheckInput): Finding[] {
     .map(({ v, sheet }): Finding => ({ kind: 'planNoDimensions', key: 'check.planNoDimensions', sheetId: sheet.id, viewId: v.id, params: { view: v.name, sheet: sheet.number }, fix: 'DIMALL' }));
 }
 
+/** A section or facade elevation on a sheet with no level mark; an interior elevation (one room's wall) is not asked for one. */
 export function viewsWithoutLevelMarks(input: CheckInput): Finding[] {
-  return input.views.filter((v) => (v.kind === 'section' || v.kind === 'elevation') && !isDetail(v) && onSheet(input, v) && !draftsIn(input.drafts, v.id).some((d) => d.shape.type === 'level'))
+  return input.views.filter((v) => (v.kind === 'section' || (v.kind === 'elevation' && !v.interior)) && !isDetail(v) && onSheet(input, v) && !draftsIn(input.drafts, v.id).some((d) => d.shape.type === 'level'))
     .map((v): Finding => ({ kind: 'viewNoLevelMarks', key: 'check.viewNoLevelMarks', sheetId: onSheet(input, v)!.id, viewId: v.id, params: { view: v.name, sheet: onSheet(input, v)!.number }, fix: 'LEVELALL' }));
 }
 

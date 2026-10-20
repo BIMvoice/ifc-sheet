@@ -39,7 +39,8 @@ import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
 import type { EntityStyleOf } from '@/project/model-styles';
 
-const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
+/** The cut axis a drawing is put on paper by (`viewportTransform`), from its plane's axis. */
+export const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
 const LABEL_MM = 3.5;
 
 export interface ViewportContent {
