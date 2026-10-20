@@ -9,7 +9,7 @@
 
 import { ArrowRight } from 'lucide-react';
 import { useEffect } from 'react';
-import { useTranslation } from '@/i18n';
+import { formatLocaleFixed, useTranslation } from '@/i18n';
 import type { ModelExtent } from '@/project/drawing-set';
 import { useProjectStore } from '@/project/project-store';
 import { ReadinessList } from '../sheets/ReadinessList';
@@ -21,12 +21,12 @@ function Chip({ children }: { children: string }) {
 }
 
 export function WallIntro({ modelName, extent, onHang }: { modelName: string; extent: ModelExtent; onHang: () => void }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
   const levels = useProjectStore((s) => s.levels);
   const views = new Set(sheets.flatMap((s) => (s.viewports ?? []).map((v) => v.viewId))).size;
-  const w = (extent.max.x - extent.min.x).toFixed(1);
-  const d = (extent.max.z - extent.min.z).toFixed(1);
+  const w = formatLocaleFixed(locale, extent.max.x - extent.min.x, 1);
+  const d = formatLocaleFixed(locale, extent.max.z - extent.min.z, 1);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
