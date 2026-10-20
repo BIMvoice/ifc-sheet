@@ -24,13 +24,13 @@ import {
   addProjectSheet,
   duplicateProjectSheet,
   duplicateProjectView,
-  loadProjectDocument,
   projectDocument,
   removeProjectItem,
   renameProjectItem,
   useProjectStore,
 } from '@/project/project-store';
-import { exportProjectFile, importProjectFile, PROJECT_FILE_SUFFIX } from '@/project/project-file';
+import { projectOpenErrorText } from '@/project/open-error';
+import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
 import { activateDocumentTab, openProjectView, saveLiveCameraAsView, saveLiveSectionAsView } from '@/project/open-view';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import { addSchedule } from '@/joinery/schedules';
@@ -150,10 +150,10 @@ export function ProjectNavigatorPanel() {
     if (!file) return;
     try {
       const doc = await importProjectFile(file);
-      loadProjectDocument(doc);
+      openProjectDocument(doc);
       toast.success(t('projectNavigator.imported', { name: doc.name }));
     } catch (err) {
-      toast.error(t('projectNavigator.error.import', { detail: err instanceof Error ? err.message : String(err) }));
+      toast.error(projectOpenErrorText(err, t));
     }
   };
 

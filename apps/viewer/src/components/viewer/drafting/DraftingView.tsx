@@ -107,7 +107,7 @@ import { useRoofDialog } from '@/project/roof-dialog-store';
 
 import { exportViewDxf } from './view-dxf';
 
-import { drawnBySymbol } from '@/project/view-symbols';
+import { viewOmits } from '@/project/discipline-facts';
 
 import { planOverlays } from '@/project/plan-overlays';
 import { graphicStandardOf } from '@/drafting/graphic-standard';
@@ -182,10 +182,11 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const graphics = view.graphics;
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
+  const discipline = view.kind === 'plan' ? view.discipline : undefined;
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
-    return drawing ? styledDrawing(drawing, graphics, partHostType, view.kind === 'plan' ? drawnBySymbol : undefined, viewMaterials(drawing)) : null;
-  }, [drawing, graphics, view.kind, materialsTable, mutationVersionForMaterials]);
+    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing)) : null;
+  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials]);
   const overrideRules = useMemo(() => viewOverrideRules(graphics), [graphics]);
   const overrideEngine = useMemo(() => new GraphicOverrideEngine(overrideRules), [overrideRules]);
   const useIfcMaterials = (graphics?.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId) === DEFAULT_VIEW_PRESET;

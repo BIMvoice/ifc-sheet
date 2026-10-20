@@ -22,7 +22,7 @@ import { levelResolverFor } from '@/drafting/level-resolver';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { partHostType } from '@/project/part-host';
-import { drawnBySymbol } from '@/project/view-symbols';
+import { viewOmits } from '@/project/discipline-facts';
 import { viewMaterials } from '@/project/material-resolver';
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { planOverlays, type PlanOverlay } from '@/project/plan-overlays';
@@ -58,7 +58,7 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
       if (out.has(vp.viewId)) continue;
       const view = views.find((v) => v.id === vp.viewId);
       const raw = (byView[vp.viewId] ?? EMPTY_VIEW_DRAWING).drawing;
-      const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, view?.kind === 'plan' ? drawnBySymbol : undefined, viewMaterials(raw)) : null;
+      const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, viewOmits(view), viewMaterials(raw)) : null;
       const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, geometryResult?.meshes, flips, hiddenClasses(view.graphics), raw, standard.pens) : []), ...membraneOverlays(drawing)];
       out.set(vp.viewId, { drawing, overlays });
     }

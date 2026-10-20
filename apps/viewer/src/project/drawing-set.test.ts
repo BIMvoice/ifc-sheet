@@ -89,6 +89,14 @@ describe('buildDrawingSet', () => {
   });
 });
 
+describe('drawingArea', () => {
+  it('turns the paper for portrait: the frame and the title block come off the turned sheet', () => {
+    assert.deepEqual(drawingArea('A3'), { x: 10, y: 10, w: 400, h: 227 });
+    assert.deepEqual(drawingArea('A3', 'landscape'), drawingArea('A3'));
+    assert.deepEqual(drawingArea('A3', 'portrait'), { x: 10, y: 10, w: 277, h: 350 });
+  });
+});
+
 describe('fittingScale', () => {
   const area = drawingArea();
   it('steps down to 1:100 and 1:200 as the building grows', () => {
