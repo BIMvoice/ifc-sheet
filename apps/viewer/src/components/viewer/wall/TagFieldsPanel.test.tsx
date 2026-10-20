@@ -59,10 +59,13 @@ describe('the tag fields panel', () => {
     assert.equal(useProjectStore.getState().dirty, true);
     // The Mark of these doors is a unique id, so it reads nothing and the property is the one taken.
     assert.equal(preview(ui), 'The tag reads: 1');
-    // Moved first, it is taken first; removed, the default is back and the entry is gone.
+    // Moved first, it is taken first; removed, the list left is still a choice (it opts the TAG tool in), and
+    // only "Back to the default" removes the entry.
     click(named(ui, 'Move ArchiCADProperties.Raumnummer up'));
     assert.equal(useProjectStore.getState().tagFields?.door?.mark?.[0].kind, 'pset');
     click(named(ui, 'Remove ArchiCADProperties.Raumnummer'));
+    assert.deepEqual(useProjectStore.getState().tagFields, { door: { mark: [{ kind: 'attribute', name: 'Mark' }] } });
+    click(button(ui, 'Back to the default'));
     assert.equal(useProjectStore.getState().tagFields, undefined);
     assert.equal(preview(ui), 'No value, so the tag falls back to the name: Innentuer-1');
   });

@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 export const tagFieldsEn = {
   'tagFields.title': 'Tag fields',
-  'tagFields.hint': 'Which IFC property feeds each field of a tag. The first source with a value is taken; tags and labels follow at once.',
+  'tagFields.hint': 'Which IFC property feeds each field of a tag. The first source with a value is taken; labels follow at once. Element tags placed with TAG keep the Tag and the Name as written until their field is set here.',
   'tagFields.kind': 'Tag kind',
   'tagFields.kind.door': 'Doors',
   'tagFields.kind.window': 'Windows',

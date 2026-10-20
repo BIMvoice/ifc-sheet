@@ -20,6 +20,7 @@ import { readMaterial } from '@/project/project-file';
 import { readStandards } from '@/project/standards-file';
 import { readTemplate } from '@/project/sheet-templates';
 import type { ProjectMaterial, SheetTemplate } from '@/project/types';
+import { upgradeTagAllTypes } from '@/tagall/types';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import { fail, readAnnotationType, readLegend, readList, readSymbol } from './readers';
@@ -131,7 +132,8 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       dimStyles: standards.dimStyles.filter((d) => dimIds.has(d.id)),
       hatchPatterns: typeof file.hatchPatterns === 'string' ? file.hatchPatterns : '',
       materials: readList(file, 'materials', (v, p) => readMaterialStrict(v, p), WHAT),
-      annotationTypes: readList(file, 'annotationTypes', (v, p) => readAnnotationType(v, p, WHAT), WHAT),
+      // A library written before the room label read the tag name takes the new template, as a project does on load.
+      annotationTypes: upgradeTagAllTypes(readList(file, 'annotationTypes', (v, p) => readAnnotationType(v, p, WHAT), WHAT)),
       symbols: readList(file, 'symbols', (v, p) => readSymbol(v, p, WHAT), WHAT),
       legends: readList(file, 'legends', (v, p) => readLegend(v, p, WHAT), WHAT),
       cadLayers: readList(file, 'cadLayers', (v, p) => readCadLayerRule(v, p, WHAT), WHAT),

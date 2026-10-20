@@ -9,7 +9,7 @@
  */
 
 import { readStored, type LabelElement } from '@/labels/label-resolve';
-import { sourceRef, sourcesOf, tagKindOf, type TagFieldConfig, type TagFieldId, type TagSource } from './tag-fields';
+import { sourceRef, sourcesOf, sourceText, tagKindOf, type TagFieldConfig, type TagFieldId, type TagSource } from './tag-fields';
 
 export interface SourcePreview {
   source: TagSource;
@@ -44,11 +44,36 @@ export function sourceCandidates(el: LabelElement): TagSource[] {
   ];
 }
 
-/** `Set.Property` as a source of the given kind; null when it is not two names. */
-export function parseSourcePath(kind: 'pset' | 'quantity' | 'type-pset', path: string): TagSource | null {
-  const at = path.indexOf('.');
-  const set = path.slice(0, at).trim(), name = path.slice(at + 1).trim();
-  if (at <= 0 || !set || !name) return null;
+const escapeName = (name: string): string => name.replace(/[\\.]/g, (c) => `\\${c}`);
+
+/** A source as it is typed: `Set.Property`, a dot or backslash inside a name written `\.` or `\\` (`Office\.v2.Nr`); an attribute is its name. */
+export function sourcePath(s: TagSource): string {
+  switch (s.kind) {
+    case 'attribute': return s.name;
+    case 'quantity': return `${escapeName(s.qto)}.${escapeName(s.name)}`;
+    default: return `${escapeName(s.pset)}.${escapeName(s.property)}`;
+  }
+}
+
+/**
+ * `Set.Property` as a source of the given kind; null when it is not two names. The set and the name part at the first
+ * dot that is not escaped (`\.`); typed plainly, a path that is exactly a set and a name of `known` (what the element
+ * carries) is that source, so `Office.v2.Nr` finds the set `Office.v2`.
+ */
+export function parseSourcePath(kind: 'pset' | 'quantity' | 'type-pset', path: string, known: readonly TagSource[] = []): TagSource | null {
+  const typed = path.trim();
+  const match = known.find((s) => s.kind === kind && sourceText(s) === typed);
+  if (match) return match;
+  const parts: string[] = [''];
+  for (let i = 0; i < typed.length; i++) {
+    const c = typed[i];
+    if (c === '\\' && i + 1 < typed.length) parts[parts.length - 1] += typed[++i];
+    else if (c === '.' && parts.length === 1) parts.push('');
+    else parts[parts.length - 1] += c;
+  }
+  if (parts.length !== 2) return null;
+  const set = parts[0].trim(), name = parts[1].trim();
+  if (!set || !name) return null;
   if (kind === 'quantity') return { kind, qto: set, name };
   return { kind, pset: set, property: name };
 }
