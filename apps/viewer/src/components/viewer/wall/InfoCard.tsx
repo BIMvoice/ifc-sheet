@@ -10,6 +10,7 @@
 
 import type { ReactNode } from 'react';
 import { useTranslation } from '@/i18n';
+import { useDraftingSession } from '@/drafting/session';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
 import { HatchSettings } from './HatchSettings';
 import { ToolTypes } from './ToolTypes';
@@ -29,7 +30,9 @@ function Card({ eyebrow, title, children }: { eyebrow: string; title: string; ch
 /** `drawingOn`: where a draw tool draws, the drawing's name, or null for the sheet's paper. */
 export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string | null }) {
   const { t } = useTranslation();
+  const ortho = useDraftingSession((o) => o.ortho || o.orthoHeld);
   const chosen = WALL_TOOLS.find((x) => x.command === tool);
+  const orthoNote = ortho ? <p role="status" className="mb-0 mt-2 text-sm font-medium text-white">{t('wall.ortho.on')}</p> : null;
   const draw = DRAW_TOOLS.find((x) => x.command === tool);
   if (draw) {
     return (
@@ -37,6 +40,7 @@ export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string
         <p className="m-0 text-lg leading-relaxed">{t(toolHelpKey(draw.command))}</p>
         {draw.command === 'hatch' ? <><ToolTypes tool="hatch" /><HatchSettings /></> : null}
         <p className="mb-0 mt-4 text-sm text-cyan-300">{t('wall.drawHint')}</p>
+        {orthoNote}
       </Card>
     );
   }
@@ -46,6 +50,7 @@ export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string
         <p className="m-0 text-lg leading-relaxed">{t(toolHelpKey(chosen.command))}</p>
         <ToolTypes tool={chosen.command} />
         <p className="mb-0 mt-4 flex items-start gap-2 text-cyan-300"><ToolIcon name="cube" size={22} accent="currentColor" />{t('wall.drawHint')}</p>
+        {orthoNote}
       </Card>
     );
   }
