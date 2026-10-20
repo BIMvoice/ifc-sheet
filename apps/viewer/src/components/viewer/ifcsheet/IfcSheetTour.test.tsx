@@ -16,6 +16,10 @@ import { abortTour } from '@/lib/tours/controller';
 import { resetTourState, useTourStore } from '@/lib/tours/tour-store';
 import { TourHost } from '@/components/tours/TourHost.js';
 import { useDraftingKeys } from '../drafting/useDraftingKeys.js';
+import { getTour } from '@/lib/tours/registry';
+import { TourStepCard } from '@/components/tours/TourStepCard.js';
+import { SteppedSheet } from '../wall/SteppedSheet.js';
+import { WallIntro } from '../wall/WallIntro.js';
 import { IfcSheetShell } from './IfcSheetShell.js';
 import { IFCSHEET_TOUR_SEEN } from './useIfcSheetTour.js';
 
@@ -131,5 +135,43 @@ describe('IfcSheet tour: keys', () => {
     for (const key of ['l', 'i', 'n', 'e', 'Enter']) press(document.body, key);
     assert.equal(useDraftingSession.getState().commandId, 'line');
     act(() => { useDraftingSession.setState({ viewId: null, commandId: null }); });
+  });
+});
+
+describe('IfcSheet tour: the Wall keys leave the card alone', () => {
+  const HOUSE = { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 7 } };
+  /** The tour's card over another surface, focused as it is when a step shows. */
+  const tourCard = () => {
+    const tour = getTour('ifcsheet');
+    assert.ok(tour);
+    return <TourStepCard tour={tour} step={tour.steps[0]} stepIndex={0} targetEl={null} />;
+  };
+
+  it('Esc on the card does not also step out of the sheet (the sheet listens first, in capture)', () => {
+    const sheet = useProjectStore.getState().sheets[0];
+    assert.ok(sheet, 'a sheet to step into');
+    let backs = 0;
+    render(<><SteppedSheet sheet={sheet} extent={HOUSE} proposals={[]} onBack={() => { backs += 1; }} onStep={() => {}} />{tourCard()}</>);
+    const c = card();
+    assert.ok(c);
+    press(c, 'Escape');
+    assert.equal(backs, 0, 'the sheet stays open');
+
+    // Control: Esc from the page does step out, so the check above can fail.
+    press(document.body, 'Escape');
+    assert.equal(backs, 1);
+  });
+
+  it('Enter on the card does not hang the set from the intro', () => {
+    let hung = 0;
+    render(<><WallIntro modelName="House" extent={HOUSE} onHang={() => { hung += 1; }} />{tourCard()}</>);
+    const c = card();
+    assert.ok(c);
+    press(c, 'Enter');
+    assert.equal(hung, 0, 'the intro stays');
+
+    // Control: Enter from the page hangs it.
+    press(document.body, 'Enter');
+    assert.equal(hung, 1);
   });
 });
