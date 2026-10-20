@@ -7,7 +7,7 @@
 import { neutralizeSpreadsheetFormula } from '@/lib/lists/export/model';
 import { XLSX_MIME } from './schedule-xlsx';
 import { finishHeader, finishRows, type RoomFinishLabels } from './room-finishes-layout';
-import type { RoomFinishes } from './room-finishes';
+import { hasSharedFinish, type RoomFinishes } from './room-finishes';
 
 const text = (v: string) => neutralizeSpreadsheetFormula(v);
 
@@ -29,5 +29,6 @@ export async function roomFinishesXlsx(rooms: readonly RoomFinishes[], labels: R
     if (i >= 3 && i % 2 === 0) col.alignment = { horizontal: 'right' };
   });
   for (const r of finishRows(rooms)) ws.addRow(r.map((v) => (typeof v === 'string' ? text(v) : v)));
+  if (hasSharedFinish(rooms)) ws.addRow([text(labels.sharedNote.replace(/^\*\s*/, ''))]);
   return new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME });
 }

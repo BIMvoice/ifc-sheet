@@ -14,10 +14,16 @@
  *   3. IfcRelContainedInSpatialStructure with the space as the structure,
  *   4. the room's Pset_SpaceCoveringRequirements (FloorCovering, WallCovering,
  *      CeilingCovering): a name only, no area.
- * The surface comes from the covering's PredefinedType: FLOORING is floor;
- * CLADDING, SKIRTINGBOARD and MOLDING are wall; CEILING is ceiling. Any other
- * value (ROOFING, INSULATION, MEMBRANE, SLEEVING, WRAPPING, COPING, USERDEFINED,
+ * The surface comes from the covering's PredefinedType, or its IfcCoveringType's
+ * when the covering's own is NOTDEFINED or unset: FLOORING is floor; CLADDING,
+ * SKIRTINGBOARD and MOLDING are wall; CEILING is ceiling. Any other value
+ * (ROOFING, INSULATION, MEMBRANE, SLEEVING, WRAPPING, COPING, USERDEFINED,
  * NOTDEFINED) is not a room finish and is left out.
+ *
+ * A covering that more than one room uses for a surface has its area split
+ * equally between those rooms: the relations above say which rooms a covering
+ * finishes, never how much of it each room has, so an equal share is the only
+ * split they support. The schedule marks such areas and says so in a note.
  *
  * Pure: rooms in, rows out. `collectRoomInputs` reads the loaded models into
  * that input.
@@ -42,11 +48,11 @@ export function surfaceOf(predefinedType: string): Surface | null {
 }
 
 export interface CoveringInput {
-  /** Express id, to count a covering once however many times a relation lists it. */
-  id: number;
+  /** The covering's identity across the loaded models (model and express id), to count it once however many times relations list it. */
+  id: string;
   name: string;
   predefinedType: string;
-  /** Square metres: Qto_CoveringBaseQuantities NetArea, else GrossArea; null when the model gives neither. */
+  /** Square metres, the covering's whole area (`coveringArea`); null when the model gives none. */
   area: number | null;
 }
 
@@ -69,9 +75,11 @@ export type FinishSource = 'coversSpaces' | 'spaceBoundary' | 'containment' | 'p
 
 export interface Finish {
   name: string;
-  /** m²; null when the model gives none. */
+  /** m², this room's share of the covering's area; null when the model gives none. */
   area: number | null;
   source: FinishSource;
+  /** How many rooms the covering's area is split between equally: 1 when only this room uses it (and for a property finish). */
+  sharedBy: number;
 }
 
 export interface RoomFinishes {
@@ -99,33 +107,49 @@ const SOURCES: readonly { key: 'covers' | 'boundary' | 'contained'; source: Fini
   { key: 'contained', source: 'containment' },
 ];
 
-function finishesOf(room: RoomInput, surface: Surface): Finish[] {
+/** A room's finishes of one surface, each with the covering it came from (null for a property). */
+function finishesOf(room: RoomInput, surface: Surface): { finish: Finish; covering: string | null }[] {
   for (const { key, source } of SOURCES) {
-    const seen = new Set<number>();
-    const found: Finish[] = [];
+    const seen = new Set<string>();
+    const found: { finish: Finish; covering: string | null }[] = [];
     for (const c of room[key]) {
       if (surfaceOf(c.predefinedType) !== surface || seen.has(c.id)) continue;
       seen.add(c.id);
-      found.push({ name: c.name, area: c.area, source });
+      found.push({ finish: { name: c.name, area: c.area, source, sharedBy: 1 }, covering: c.id });
     }
     if (found.length) return found;
   }
   const named = room.properties[surface]?.trim();
-  return named ? [{ name: named, area: null, source: 'property' }] : [];
+  return named ? [{ finish: { name: named, area: null, source: 'property', sharedBy: 1 }, covering: null }] : [];
 }
 
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 /** The rooms with their finishes: by storey elevation (unknown last), then number, then name. */
 export function roomFinishes(rooms: readonly RoomInput[]): RoomFinishes[] {
-  return [...rooms]
+  const found = [...rooms]
     .sort((a, b) => (a.elevation ?? Infinity) - (b.elevation ?? Infinity) || collator.compare(a.level, b.level) || collator.compare(a.number, b.number) || collator.compare(a.name, b.name))
-    .map((r) => ({
-      number: r.number,
-      name: r.name,
-      level: r.level,
-      finishes: { floor: finishesOf(r, 'floor'), wall: finishesOf(r, 'wall'), ceiling: finishesOf(r, 'ceiling') },
-    }));
+    .map((r) => ({ room: r, bySurface: SURFACES.map((s) => finishesOf(r, s)) }));
+  // The rooms each covering finishes: its area is split equally between them.
+  const roomsOf = new Map<string, Set<number>>();
+  found.forEach(({ bySurface }, i) => {
+    for (const { covering } of bySurface.flat()) if (covering !== null) roomsOf.set(covering, (roomsOf.get(covering) ?? new Set()).add(i));
+  });
+  const share = ({ finish, covering }: { finish: Finish; covering: string | null }): Finish => {
+    const sharedBy = covering === null ? 1 : roomsOf.get(covering)?.size ?? 1;
+    return sharedBy > 1 ? { ...finish, sharedBy, area: finish.area === null ? null : finish.area / sharedBy } : finish;
+  };
+  return found.map(({ room: r, bySurface: [floor, wall, ceiling] }) => ({
+    number: r.number,
+    name: r.name,
+    level: r.level,
+    finishes: { floor: floor.map(share), wall: wall.map(share), ceiling: ceiling.map(share) },
+  }));
+}
+
+/** Whether any finish's area is a share of a covering several rooms use. */
+export function hasSharedFinish(rooms: readonly RoomFinishes[]): boolean {
+  return rooms.some((r) => SURFACES.some((s) => r.finishes[s].some((f) => f.sharedBy > 1)));
 }
 
 /** The table's lines, in print order. */
@@ -144,12 +168,29 @@ export function finishLines(rooms: readonly RoomFinishes[]): FinishLine[] {
   });
 }
 
-/** A covering's area in m² from Qto_CoveringBaseQuantities: NetArea, else GrossArea; null when it has neither. */
-export function coveringArea(qsets: readonly QuantitySet[], areaScale: number): number | null {
-  const areas = qsets.filter((s) => s.name === 'Qto_CoveringBaseQuantities').flatMap((s) => s.quantities).filter((q) => q.type === QuantityType.Area && Number.isFinite(q.value));
+const QTO = 'Qto_CoveringBaseQuantities';
+
+/** NetArea, else GrossArea, among these sets' area quantities, scaled to m²; null when they have neither. */
+function areaIn(sets: readonly QuantitySet[], areaScale: number): number | null {
+  const areas = sets.flatMap((s) => s.quantities).filter((q) => q.type === QuantityType.Area && Number.isFinite(q.value));
   for (const name of ['NetArea', 'GrossArea']) {
     const q = areas.find((x) => x.name === name);
     if (q) return q.value * areaScale;
   }
   return null;
+}
+
+/**
+ * A covering's area in m²: NetArea, else GrossArea, of Qto_CoveringBaseQuantities;
+ * when that set gives neither, the same from any other quantity set (IFC2x3
+ * exports write them to `BaseQuantities`); null when no set has either.
+ */
+export function coveringArea(qsets: readonly QuantitySet[], areaScale: number): number | null {
+  return areaIn(qsets.filter((s) => s.name === QTO), areaScale) ?? areaIn(qsets.filter((s) => s.name !== QTO), areaScale);
+}
+
+/** The PredefinedType a covering is read by: its own, or its IfcCoveringType's when its own is NOTDEFINED or unset. */
+export function coveringPredefinedType(own: string, ofType: string): string {
+  const mine = own.trim();
+  return (mine === '' || mine.toUpperCase() === 'NOTDEFINED') && ofType.trim() ? ofType : own;
 }

@@ -110,7 +110,7 @@ describe('room finishes of the rooms-with-finishes fixture (#77)', () => {
     assert.deepEqual(expected.get('103')!, [['floor', 'Concrete, sealed', null], ['ceiling', 'Acoustic tile', null]]);
     assert.equal(rooms[1].finishes.wall[0].source, 'containment');
     assert.equal(finishLines(rooms).length, 3);
-    assert.equal(roomFinishesCsv(rooms, { title: 'T', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'm²' }).split('\n')[1], '101,Living room,Level 1,Oak parquet,24.5,"Plaster, painted white",52,Suspended plasterboard,24.8');
+    assert.equal(roomFinishesCsv(rooms, { title: 'T', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'm²', sharedNote: '*' }).split('\n')[1], '101,Living room,Level 1,Oak parquet,24.5,"Plaster, painted white",52,Suspended plasterboard,24.8');
   });
 
   it('prints the table into the sheet SVG and the DXF', async () => {
