@@ -74,7 +74,7 @@ describe('the drawing register on the demo set', () => {
     const st = useProjectStore.getState();
     assert.equal(inSetOrder(st.sheets, st.schedules)[0].id, reg.id);
     assert.equal(rows()[0].number, 'A-999');
-    const plan = planIssue(st.sheets, { documents: [...st.views, ...(st.schedules ?? [])], drafts: [] }, { name: 'P', date: '2026-10-19', listFirst: false }, st.titleBlock, { schedules: st.schedules });
+    const plan = planIssue(st.sheets, { documents: [...st.views, ...(st.schedules ?? [])], drafts: [], views: st.views, sheets: st.sheets }, { name: 'P', date: '2026-10-19', listFirst: false }, st.titleBlock, { schedules: st.schedules });
     assert.equal(plan.sheets[0].sheet.id, reg.id);
     assert.deepEqual(plan.sheets.slice(1).map((p) => p.row.number), ['A-101', 'A-102', 'A-103', 'A-201', 'A-202']);
   });
@@ -193,7 +193,7 @@ describe('the register is the drawing list', () => {
     renameProjectItem(sheetNamed('Floor plans 1').id, 'Parter și Etaj ț');
     const st = useProjectStore.getState();
     const context = { issues: st.issues, schedules: st.schedules };
-    const plan = planIssue(st.sheets, { documents: [...st.views, ...(st.schedules ?? [])], drafts: [] }, { name: 'P01', date: '2026-10-19', listFirst: true, asIndicated: AS_INDICATED }, st.titleBlock, context);
+    const plan = planIssue(st.sheets, { documents: [...st.views, ...(st.schedules ?? [])], drafts: [], views: st.views, sheets: st.sheets }, { name: 'P01', date: '2026-10-19', listFirst: true, asIndicated: AS_INDICATED }, st.titleBlock, context);
     const byNumber = (a: RegisterRow, b: RegisterRow) => a.number.localeCompare(b.number, 'en', { numeric: true });
     assert.deepEqual(plan.sheets.map((p) => p.register).sort(byNumber), rows().sort(byNumber));
     assert.equal(s.sheets.length, plan.sheets.length);
@@ -207,7 +207,7 @@ describe('the register is the drawing list', () => {
     const st = useProjectStore.getState();
     const register = st.sheets.find((x) => x.number === 'A-000');
     assert.ok(register);
-    const plan = planIssue(st.sheets, { documents: [...st.views, ...(st.schedules ?? [])], drafts: [] }, { name: 'P01', date: '2026-10-19', listFirst: false }, st.titleBlock);
+    const plan = planIssue(st.sheets, { documents: [...st.views, ...(st.schedules ?? [])], drafts: [], views: st.views, sheets: st.sheets }, { name: 'P01', date: '2026-10-19', listFirst: false }, st.titleBlock);
     assert.ok(plan.sheets.some((p) => p.sheet.id === register.id), 'in the issued set');
     const out = await captureSheets([register], { dxf: true, waitMs: 2000 });
     assert.deepEqual(out.failed, []);
