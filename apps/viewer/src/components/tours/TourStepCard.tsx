@@ -78,11 +78,31 @@ export function TourStepCard({ tour, step, stepIndex, targetEl }: TourStepCardPr
 
   // Move keyboard focus onto the card when the step changes so Tab lands on
   // the card controls, without stealing focus from an input mid-typing.
+  // An anchored card is `invisible` until its position is computed, and an
+  // invisible element cannot take focus, so the effect also waits for `shown`.
   const cardRef = useRef<HTMLDivElement>(null);
+  const shown = !anchored || docked || pos !== null;
   useEffect(() => {
-    if (isTextEntryElement(document.activeElement)) return;
+    if (!shown || isTextEntryElement(document.activeElement)) return;
     cardRef.current?.focus({ preventScroll: true });
-  }, [stepIndex]);
+  }, [stepIndex, shown]);
+
+  // Esc with the card focused ends the tour, and is the card's alone: the
+  // card keeps its keys (`data-owns-keys`), so drafting and the Wall's own Esc
+  // chain leave it be. A listener on the card (not the window) keeps Esc
+  // elsewhere - clearing a selection, ending a tool - as it was.
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      abortTour('close');
+    };
+    card.addEventListener('keydown', onKey);
+    return () => card.removeEventListener('keydown', onKey);
+  }, []);
 
   const showNext = !step.gate || gateBroken;
   const total = tour.steps.length;
@@ -103,11 +123,13 @@ export function TourStepCard({ tour, step, stepIndex, targetEl }: TourStepCardPr
         cardRef.current = el;
       }}
       aria-labelledby={titleId}
+      data-owns-keys
       tabIndex={-1}
       className={cn(
         'pointer-events-auto w-80 rounded-lg border bg-popover p-4 text-popover-foreground shadow-lg outline-none',
+        // The IfcSheet face keeps its notices bottom-right: its docked card sits bottom-left.
         docked
-          ? 'fixed bottom-12 left-1/2 -translate-x-1/2'
+          ? tour.face === 'ifcsheet' ? 'fixed bottom-12 left-6' : 'fixed bottom-12 left-1/2 -translate-x-1/2'
           : 'fixed',
         anchored && !docked && pos === null && 'invisible',
       )}

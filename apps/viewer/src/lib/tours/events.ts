@@ -57,3 +57,22 @@ export function emitFileDownloaded(filename: string): void {
   const kind = filename.includes('.') ? filename.slice(filename.lastIndexOf('.') + 1).toLowerCase() : 'file';
   window.dispatchEvent(new CustomEvent(EVENT_FILE_DOWNLOADED, { detail: { kind } }));
 }
+
+/**
+ * IfcSheet face: the intro was left for the Wall (also the way to skip it).
+ * Both sides import the name: `WallView` emits and listens, the tour gates on it.
+ */
+export const EVENT_WALL_HUNG = 'ifc-lite:wall-hung';
+
+/** IfcSheet face: a sheet was stepped into (detail: { sheetId }). Emitted by `stepInto`. */
+export const EVENT_WALL_STEPPED = 'ifc-lite:wall-stepped';
+
+export function emitWallHung(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(EVENT_WALL_HUNG));
+}
+
+export function emitWallStepped(sheetId: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(EVENT_WALL_STEPPED, { detail: { sheetId } }));
+}

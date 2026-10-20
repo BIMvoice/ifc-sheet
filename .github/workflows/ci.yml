@@ -119,7 +119,12 @@ jobs:
           name: wasm-pkg
           path: packages/wasm/pkg
       - run: pnpm turbo run build --filter='./packages/*'
-      - run: pnpm turbo run test --filter='./packages/*'
+      # Two packages at a time: each vitest run already starts a worker per CPU,
+      # and turbo's default of ten packages at once on a 4-CPU runner pushed
+      # heavy tests past vitest's 5 s limit in whichever package was unlucky
+      # (packages/mcp, packages/cache and in-store, on pull requests that did
+      # not touch them).
+      - run: pnpm turbo run test --filter='./packages/*' --concurrency=2
 
   # The viewer suite is about 15k tests, so it is split by test file across
   # eight runners (TEST_SHARD / TEST_SHARDS, see apps/viewer/package.json).

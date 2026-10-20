@@ -14,7 +14,8 @@ import assert from 'node:assert/strict';
 import { strFromU8, strToU8 } from 'fflate';
 import { defaultWindowSpec } from '@ifc-lite/create';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
-import { parseProjectFile, serializeProject } from '../project-file.js';
+import { parseProjectFile, PROJECT_FILE_VERSION, serializeProject } from '../project-file.js';
+import { ProjectFileTooNewError, type ProjectMigration } from '../project-migrations.js';
 import type { ProjectDocument } from '../types.js';
 import { MANIFEST_PATH, PACKAGE_VERSION } from './format.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package-io.js';
@@ -133,5 +134,35 @@ describe('project package', () => {
     const { files } = await buildPackage({ projectId: 'p', doc: extra, models: [] });
     const core = JSON.parse(strFromU8(files.get('project/document.json')!)) as Record<string, unknown>;
     assert.deepEqual(core.futureThing, { a: 1 });
+  });
+});
+
+describe('the project file version of a package', () => {
+  /** `files` with the manifest's `projectFileVersion` set to `v`, or removed (a package written before it was recorded). */
+  const withVersion = (files: Map<string, Uint8Array>, v: number | undefined) => {
+    const { projectFileVersion: _v, ...manifest } = JSON.parse(strFromU8(files.get(MANIFEST_PATH)!)) as Record<string, unknown>;
+    return new Map(files).set(MANIFEST_PATH, strToU8(JSON.stringify(v === undefined ? manifest : { ...manifest, projectFileVersion: v })));
+  };
+  /** A later build that reads version 2 and has the step from 1. */
+  const step: ProjectMigration = (raw) => ({ ...raw, name: `${String(raw.name)} (from v1)` });
+  const v2Build = { migrations: { 1: step }, current: 2 };
+
+  it('is recorded in the manifest when a package is written', async () => {
+    const { manifest, files } = await packaged();
+    assert.equal(manifest.projectFileVersion, PROJECT_FILE_VERSION);
+    assert.equal(JSON.parse(strFromU8(files.get(MANIFEST_PATH)!)).projectFileVersion, PROJECT_FILE_VERSION);
+  });
+
+  it('is what the parts are read as: a v1 package (none recorded) is migrated by a v2 reader, a v2 one is not', async () => {
+    const { files } = await packaged();
+    assert.equal((await readPackage(withVersion(files, undefined), v2Build)).doc.name, 'House (from v1)');
+    assert.equal((await readPackage(withVersion(files, 1), v2Build)).doc.name, 'House (from v1)');
+    assert.equal((await readPackage(withVersion(files, 2), v2Build)).doc.name, 'House', 'already at v2: not migrated again');
+  });
+
+  it('refuses a package whose parts are newer than this build reads, as a project file is', async () => {
+    const { files } = await packaged();
+    await assert.rejects(readPackage(withVersion(files, PROJECT_FILE_VERSION + 1)), ProjectFileTooNewError);
+    await assert.rejects(readPackage(withVersion(files, 0)), /projectFileVersion must be a whole number from 1/);
   });
 });

@@ -36,6 +36,7 @@ const full: Catalogue = {
     shapes: [{ type: 'polyline', pts: [{ x: 0, y: 0 }, { x: 2, y: 6 }, { x: -2, y: 6 }], closed: true }, { type: 'text', p: { x: 0, y: 8 }, text: 'N', height: 2.5, rotation: 0 }],
   }],
   legends: [{ ...DEFAULT_LEGEND, id: 'lg1', name: 'Plan legend', createdAt: 5, title: 'Key', textStyle: 'big', categories: ['materials', 'symbols'], columns: 2 }],
+  cadLayers: [{ id: 'cad1', source: 'CUT', ifcClasses: ['IfcWall'], layer: 'A-WALL-CUT', color: '#7f1d1d', lineWeight: 0.5 }],
 };
 
 describe('catalogue file', () => {

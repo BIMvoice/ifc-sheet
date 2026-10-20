@@ -257,3 +257,29 @@ describe('EdgeExtractor winding robustness (issue #2682)', () => {
     expect(inward.map(lineKey).sort()).toEqual(outward.map(lineKey).sort());
   });
 });
+
+describe('EdgeExtractor.extractExteriorEdges (axonometric line work, issue #49)', () => {
+  // The unit cube [0,2]^3 seen from +x+y+z (looking along -1,-1,-1): the six outline edges are
+  // silhouette, the three creases meeting at the near corner face the viewer, and the three
+  // creases meeting at the far corner have only back faces.
+  const extractor = new EdgeExtractor(30);
+  const view = { x: -1, y: -1, z: -1 };
+  const cube = boxMesh(1, 0, 2);
+
+  it('keeps the silhouette and the creases that face the viewer, and leaves out the far side', () => {
+    const edges = extractor.extractEdges(cube);
+    const silhouette = extractor.extractSilhouettes(edges, view);
+    const visible = extractor.extractExteriorEdges(edges, view, true);
+    expect(edges).toHaveLength(12);
+    expect(silhouette).toHaveLength(6);
+    expect(visible).toHaveLength(9);
+    const touchesFarCorner = (e: { v0: { x: number; y: number; z: number }; v1: { x: number; y: number; z: number } }) =>
+      [e.v0, e.v1].some((v) => v.x === 0 && v.y === 0 && v.z === 0);
+    expect(visible.some(touchesFarCorner)).toBe(false);
+    expect(edges.filter(touchesFarCorner)).toHaveLength(3);
+  });
+
+  it('draws nothing more than the silhouette for a surface with no creases', () => {
+    expect(extractor.extractExteriorEdges([], view, true)).toEqual([]);
+  });
+});

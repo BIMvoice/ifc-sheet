@@ -13,10 +13,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
+import { isSetSheet } from '@/project/drawing-set';
 import { sectionProposals, startDrawingSet } from '@/project/drawing-set-actions';
 import { setExtent } from '@/draft-set/body';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
+import { EVENT_WALL_HUNG, emitWallHung } from '@/lib/tours/events';
 import { SteppedSheet } from './SteppedSheet';
 import { WallGrid } from './WallGrid';
 import { WallIntro } from './WallIntro';
@@ -39,15 +41,22 @@ export function WallView() {
   const [intro, setIntro] = useState(false);
   const { stepped, focus, visit, drawer, panel } = useWallNav();
 
-  // A model on a project with no sheets: lay the set out as soon as the geometry is in.
+  // A model on a project with no set sheets (interior elevations alone do not count): lay the set out as soon as the geometry is in.
+  const hasSet = sheets.some(isSetSheet);
   useEffect(() => {
-    if (sheets.length === 0 && meshes && meshes.length > 0 && startDrawingSet(meshes, extent)) setIntro(true);
-  }, [sheets.length, meshes, extent]);
+    if (!hasSet && meshes && meshes.length > 0 && startDrawingSet(meshes, extent)) setIntro(true);
+  }, [hasSet, meshes, extent]);
 
   // The proposals read the lowest plan's rooms; they change only with the model or the plans.
   const proposals = useMemo(() => sectionProposals(meshes, extent), [meshes, extent, views]);
   const back = useCallback(() => stepInto(null), []);
-  const hang = useCallback(() => setIntro(false), []);
+  // Hanging goes by the event, so the tour can hang the set too (its steps skip the intro the same way).
+  const hang = useCallback(() => emitWallHung(), []);
+  useEffect(() => {
+    const onHung = () => setIntro(false);
+    window.addEventListener(EVENT_WALL_HUNG, onHung);
+    return () => window.removeEventListener(EVENT_WALL_HUNG, onHung);
+  }, []);
   const steppedSheet = sheets.find((s) => s.id === stepped) ?? null;
   const modelName = [...models.values()][0]?.name ?? '';
 

@@ -42,29 +42,22 @@
  */
 
 import {
-  Drawing2DGenerator,
   addScaleStamp,
-  buildCameraSectionPlane,
   clipMeshesToHalfSpace,
   computePdfScaleLayout,
-  createSectionConfig,
   formatScaleFactorLabel,
-  projectWorldLineSeeds,
-  worldBoundsOfMeshes,
   worldPointToPdfMm,
   type CameraFrame,
-  type Drawing2D,
   type DrawingLine,
   type PdfPage,
   type PdfScaleTransform,
   type Point2D,
-  type SectionConfig,
-  type WorldBounds3D,
   type WorldLineSeed,
 } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
+import { generateCameraDrawing } from './camera-drawing';
 import { collectViewMeshes, type ViewMeshInput } from './collect-view-meshes';
 import { VIEW_PDF_MARGIN_MM } from './view-pdf-page-estimate';
 import {
@@ -159,16 +152,6 @@ export interface ViewPdfDeps {
 // ORCHESTRATION
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Depth of the "everything is solid" band in front of the camera plane. The
- * projection classifier reads `below` as the kept window and `above` as the
- * sliver on the far side of the plane; a synthetic plane placed in front of
- * the whole model therefore wants the full view depth below and (almost)
- * nothing above, which is the same trick the plan-view drawing uses to mean
- * "project everything behind the plane, solid".
- */
-const ABOVE_PLANE_DEPTH_M = 1e-3;
-
 export async function generateViewPdf(
   input: ViewPdfExportInput,
   deps: ViewPdfDeps = {},
@@ -184,7 +167,6 @@ export async function generateViewPdf(
   // stage, so the triangles themselves have to be clipped or the PDF shows a
   // whole model the screen is showing halved.
   let drawnMeshes: MeshData[] = meshes;
-  let extraLines: DrawingLine[] = [];
   // `WorldSegment` already IS a `WorldLineSeed` (start/end plus the source
   // element), so the rim goes straight into the projector with no re-shaping —
   // one fewer place for a field to be dropped on the way.
@@ -199,51 +181,15 @@ export async function generateViewPdf(
     }
   }
 
-  // ── 2. Synthetic camera plane ───────────────────────────────────────────
-  const worldBounds: WorldBounds3D | null = worldBoundsOfMeshes(drawnMeshes);
-  if (!worldBounds) {
-    throw new Error('Nothing to export: the visible geometry has no usable coordinates.');
-  }
-  const { plane, viewDepth } = buildCameraSectionPlane(input.camera, worldBounds);
-
-  // Rim segments are world-space, so they project through the SAME plane the
-  // meshes do and carry real view depths — which is what lets the hidden-line
-  // pass dash the far side of a cut object on an oblique view.
-  if (rimSeeds.length > 0) {
-    extraLines = projectWorldLineSeeds(rimSeeds, plane);
-  }
-
-  const config: SectionConfig = createSectionConfig(plane.axis, plane.position, {
-    projectionDepth: viewDepth,
-    projectionBelowDepth: viewDepth,
-    projectionAboveDepth: ABOVE_PLANE_DEPTH_M,
-    // ALWAYS classify, whatever the user asked for. See the note at the
-    // `writeDrawing` call: "off" must mean omitted, not undetected.
-    includeHiddenLines: true,
-    scale: input.scaleFactor,
+  // ── 2. + 3. Synthetic camera plane and the line work, in the one place a
+  // camera becomes a drawing (`camera-drawing.ts`).
+  const { drawing, plane, viewDepth } = await generateCameraDrawing({
+    meshes: drawnMeshes,
+    camera: input.camera,
+    scaleFactor: input.scaleFactor,
+    rimSeeds,
+    onProgress: input.onProgress,
   });
-  config.plane = plane;
-
-  // ── 3. Line work ────────────────────────────────────────────────────────
-  const generator = new Drawing2DGenerator();
-  let drawing: Drawing2D;
-  try {
-    // No GPU device is passed, so `useGPU` has nothing to select even before
-    // the custom plane forces the CPU cutter. Stated explicitly so a future
-    // GPU-capable caller cannot silently take the cardinal-only path.
-    await generator.initialize();
-    drawing = await generator.generate(drawnMeshes, config, {
-      useGPU: false,
-      includeHiddenLines: true,
-      includeProjection: true,
-      includeEdges: true,
-      mergeLines: true,
-      extraLines,
-      onProgress: input.onProgress,
-    });
-  } finally {
-    generator.dispose();
-  }
 
   // ── 4. Page + write ─────────────────────────────────────────────────────
   // IDENTITY flip: the camera basis already delivers x-right / y-up, and

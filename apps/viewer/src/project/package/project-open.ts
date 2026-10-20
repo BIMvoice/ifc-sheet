@@ -12,7 +12,8 @@
  */
 
 import { useViewerStore } from '@/store';
-import { loadProjectDocument, resetProject } from '../project-store';
+import { resetProject } from '../project-store';
+import { openProjectDocument } from '../project-file';
 import type { PackageModel } from './format';
 import { readPackage, unzipPackage, type OpenedPackage } from './package-io';
 
@@ -44,7 +45,7 @@ export async function openPackageBytes(bytes: Uint8Array, loader: ModelLoader, o
     const id = await loader.addModel(new File([ifc as BlobPart], name), { name });
     if (!id) failed.push(model.name);
   }
-  loadProjectDocument(opened.doc);
+  openProjectDocument(opened.doc);
   return { opened, failed, linked: opened.models.filter((m) => m.model.role === 'linked').map((m) => m.model) };
 }
 
