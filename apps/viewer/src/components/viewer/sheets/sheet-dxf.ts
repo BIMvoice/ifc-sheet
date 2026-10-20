@@ -12,14 +12,22 @@
  * tagged ancestor names (`dxf-tags.ts`): drafted lines and annotations on
  * their drafting layer — with its colour, line weight and line type — the
  * generated drawing on CUT / SEEN / HIDDEN / HATCH / SYMBOLS with its pens,
- * the sheet on FRAME / TITLEBLOCK / VIEWPORT-LABELS. Fills are left out.
+ * the sheet on FRAME / TITLEBLOCK / VIEWPORT-LABELS. Fills are left out,
+ * and so are raster images (a 3D view captured as one): `exportSheetDxf` and
+ * the issue say which.
  */
 
-import { DxfR2000, type PenSpec } from './dxf-r2000';
-import type { LineType } from '@/drafting/styles';
+import { DxfR2000 } from './dxf-r2000';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 import { paperOf } from '@/project/sheets';
+import { useProjectStore } from '@/project/project-store';
+import { rasterViewNames } from '@/project/view-raster';
+import { toast } from '@/components/ui/toast';
+import { resolve } from '@/i18n/registry';
 import type { ProjectSheet } from '@/project/types';
+import type { CadLayerRule } from '@/project/cad-layers';
+import { useProjectStore } from '@/project/project-store';
+import { layerAndPens } from './dxf-cad-layers';
 
 type P = { x: number; y: number };
 type Rect = { x0: number; y0: number; x1: number; y1: number };
@@ -32,16 +40,6 @@ function layerOf(el: Element): string {
 }
 
 const tag = (el: Element, name: string) => el.closest(`[data-dxf-${name}]`)?.getAttribute(`data-dxf-${name}`) ?? undefined;
-const LINE_TYPES = new Set<LineType>(['continuous', 'dashed', 'dotted', 'dashdot']);
-
-/** The pen of the layer an element is on (from its tags), and the element's own colour. */
-function pensOf(el: Element, colour: string): { layer: PenSpec; own: PenSpec } {
-  const lt = tag(el, 'ltype');
-  const lineType = LINE_TYPES.has(lt as LineType) ? (lt as LineType) : 'continuous';
-  const lw = Number(tag(el, 'lw'));
-  const lineWeight = Number.isFinite(lw) && lw > 0 ? lw : 0.25;
-  return { layer: { color: tag(el, 'color') ?? colour, lineType, lineWeight }, own: { color: colour, lineType, lineWeight } };
-}
 
 function strokeOf(el: Element): string | null {
   const stroke = getComputedStyle(el).stroke;
@@ -164,9 +162,12 @@ export function sheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): Uint8Array {
 
 /**
  * Any drawn SVG as DXF: its user units become DXF units, y flipped about
- * `h` (y_dxf = h − y_svg) so the drawing reads the same way up.
+ * `h` (y_dxf = h − y_svg) so the drawing reads the same way up. `cad` is the
+ * project's CAD layer standard (default: the open
+ * project's): the layer, colour, pen and line type an element goes on
+ * (`layerAndPens`); empty, the layers its tags name.
  */
-export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, patternScale = 1): Uint8Array {
+export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, patternScale = 1, cad: readonly CadLayerRule[] = useProjectStore.getState().cadLayers ?? []): Uint8Array {
   const root = svg.getScreenCTM()?.inverse();
   const writer = new DxfR2000(patternScale);
   if (!root) return writer.bytes(comment);
@@ -193,8 +194,8 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
     const stroke = strokeOf(el);
     if (!stroke) return;
     const map = mapper(el);
-    const pens = pensOf(el, stroke);
-    const layer = writer.layer(layerOf(el), pens.layer);
+    const pens = layerAndPens(cad, (n) => tag(el, n), layerOf(el), stroke);
+    const layer = writer.layer(pens.name, pens.layer);
     const clip = clipOf(el);
     const inside = (p: P) => !clip || (p.x >= clip.x0 && p.x <= clip.x1 && p.y >= clip.y0 && p.y <= clip.y1);
     for (const sub of subpaths) {
@@ -224,8 +225,8 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
       const at = map({ x: el.x.baseVal[0]?.value ?? 0, y: el.y.baseVal[0]?.value ?? 0 });
       const anchor = getComputedStyle(el).textAnchor;
       const fill = getComputedStyle(el).fill || '#000';
-      const pens = pensOf(el, fill);
-      writer.text(at, text, size * scale * 0.72, writer.layer(layerOf(el), pens.layer), {
+      const pens = layerAndPens(cad, (n) => tag(el, n), layerOf(el), fill);
+      writer.text(at, text, size * scale * 0.72, writer.layer(pens.name, pens.layer), {
         rotationDeg: (-Math.atan2(m.b, m.a) * 180) / Math.PI,
         align: anchor === 'middle' ? 'center' : anchor === 'end' ? 'right' : 'left',
         pen: pens.own,
@@ -261,4 +262,7 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
 export function exportSheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): void {
   const name = sanitizeFilename(`${sheet.number} ${sheet.name}`, { fallback: 'sheet' });
   downloadFile(sheetDxf(svg, sheet), `${name}.dxf`, 'application/dxf');
+  // A raster viewport comes out as an empty frame: say so, and where the image is.
+  const rasters = rasterViewNames(sheet, useProjectStore.getState().views);
+  if (rasters.length > 0) toast.error(resolve('sheets.dxf.rasterOmitted', { views: rasters.join(', ') }), `dxf-raster-${sheet.id}`);
 }

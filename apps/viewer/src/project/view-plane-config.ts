@@ -11,7 +11,8 @@
  *
  * Plans: horizontal at level + cut height. Sections: their stored world
  * offset or custom plane (anchored like the generator anchors it).
- * Elevations: just inside the model bounds (needs bounds).
+ * Elevations: just inside the model bounds (needs bounds); an interior
+ * elevation, its stored plane like a section.
  */
 
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
@@ -19,7 +20,7 @@ import { customPlaneCenter } from '@/store/slices/section-plane-center';
 import { percentToWorld, sectionAxisRange, type AxisBounds } from '@/lib/section/section-distance';
 import { resolvePlanLevel } from './view-defaults';
 import { sectionPlaneForView } from './view-plane';
-import type { ProjectLevel, ProjectView } from './types';
+import type { ProjectLevel, ProjectView, SectionProjectPlane } from './types';
 
 const AXIS = { down: 'y', front: 'z', side: 'x' } as const;
 
@@ -41,23 +42,10 @@ export function viewPlaneConfig(view: ProjectView, levels: readonly ProjectLevel
       const level = resolvePlanLevel(view, levels) ?? view.level;
       return { axis: 'y', position: level.elevation + view.cutHeight, flipped: false, ...(view.reflected ? { reflected: true } : {}) };
     }
-    case 'section': {
-      const { axis, offset, flipped, custom } = view.plane;
-      const config: SectionPlaneConfig = { axis: AXIS[axis], position: offset, flipped };
-      if (!custom) return config;
-      const origin = customPlaneCenter(custom);
-      return {
-        ...config,
-        customPlane: {
-          normal: { x: custom.normal[0], y: custom.normal[1], z: custom.normal[2] },
-          distance: custom.distance,
-          origin: { x: origin[0], y: origin[1], z: origin[2] },
-          tangent: { x: custom.tangent[0], y: custom.tangent[1], z: custom.tangent[2] },
-          bitangent: { x: custom.bitangent[0], y: custom.bitangent[1], z: custom.bitangent[2] },
-        },
-      };
-    }
+    case 'section':
+      return storedPlaneConfig(view.plane);
     case 'elevation': {
+      if (view.interior) return storedPlaneConfig(view.interior.plane);
       const plane = sectionPlaneForView(view, bounds, levels);
       const range = plane ? sectionAxisRange(bounds, plane.axis) : null;
       if (!plane || !range) return null;
@@ -66,4 +54,21 @@ export function viewPlaneConfig(view: ProjectView, levels: readonly ProjectLevel
     default:
       return null;
   }
+}
+
+/** A plane stored in world metres (a section's, an interior elevation's), anchored like the generator anchors it. */
+function storedPlaneConfig({ axis, offset, flipped, custom }: SectionProjectPlane): SectionPlaneConfig {
+  const config: SectionPlaneConfig = { axis: AXIS[axis], position: offset, flipped };
+  if (!custom) return config;
+  const origin = customPlaneCenter(custom);
+  return {
+    ...config,
+    customPlane: {
+      normal: { x: custom.normal[0], y: custom.normal[1], z: custom.normal[2] },
+      distance: custom.distance,
+      origin: { x: origin[0], y: origin[1], z: origin[2] },
+      tangent: { x: custom.tangent[0], y: custom.tangent[1], z: custom.tangent[2] },
+      bitangent: { x: custom.bitangent[0], y: custom.bitangent[1], z: custom.bitangent[2] },
+    },
+  };
 }

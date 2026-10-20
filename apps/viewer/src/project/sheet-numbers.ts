@@ -4,14 +4,14 @@
 
 /**
  * Sheet numbers by what a sheet holds: plans A-1xx, elevations A-2xx,
- * sections A-3xx, everything else A-9xx.
+ * sections A-3xx, a room's interior elevations A-4xx, everything else A-9xx.
  */
 
-import type { ProjectSheet, ProjectViewKind } from './types';
+import type { ProjectSheet, ProjectView } from './types';
 
-export type SheetNumberGroup = 'plans' | 'elevations' | 'sections' | 'details' | 'other';
+export type SheetNumberGroup = 'plans' | 'elevations' | 'sections' | 'interiors' | 'details' | 'other';
 
-const BASE: Record<SheetNumberGroup, number> = { plans: 100, elevations: 200, sections: 300, details: 500, other: 900 };
+const BASE: Record<SheetNumberGroup, number> = { plans: 100, elevations: 200, sections: 300, interiors: 400, details: 500, other: 900 };
 
 /** The sheet as a person's own: no longer numbered by the program. */
 export function withoutAutoNumber(sheet: ProjectSheet): ProjectSheet {
@@ -19,12 +19,13 @@ export function withoutAutoNumber(sheet: ProjectSheet): ProjectSheet {
   return rest;
 }
 
-/** The group of sheets a view of this kind belongs to; `undefined` (a schedule, a legend) is `other`. */
-export function sheetGroupOfView(kind: ProjectViewKind | undefined): SheetNumberGroup {
-  return kind === 'plan' ? 'plans' : kind === 'elevation' ? 'elevations' : kind === 'section' ? 'sections' : kind === 'drafting' ? 'details' : 'other';
+/** The group of sheets a view belongs to: an interior elevation its own, apart from the facades; a drafting view the details; none (a schedule, a legend) is `other`. */
+export function sheetGroupOfView(view: ProjectView | undefined): SheetNumberGroup {
+  if (view?.kind === 'elevation') return view.interior ? 'interiors' : 'elevations';
+  return view?.kind === 'plan' ? 'plans' : view?.kind === 'section' ? 'sections' : view?.kind === 'drafting' ? 'details' : 'other';
 }
 
-/** The next free number in the group's hundred: `A-101`, `A-201`, `A-301`, `A-901`. */
+/** The next free number in the group's hundred: `A-101`, `A-201`, `A-301`, `A-401`, `A-901`. */
 export function nextSheetNumber(sheets: readonly Pick<ProjectSheet, 'number'>[], group: SheetNumberGroup = 'plans'): string {
   const taken = new Set(sheets.map((s) => s.number));
   for (let n = BASE[group] + 1; ; n++) {

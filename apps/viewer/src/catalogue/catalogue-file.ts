@@ -14,6 +14,8 @@
 import { readDraftLayer } from '@/drafting/draft-file';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { DraftLayer } from '@/drafting/types';
+import { readCadLayerRule } from '@/project/cad-layers-file';
+import type { CadLayerRule } from '@/project/cad-layers';
 import { readMaterial } from '@/project/project-file';
 import { readStandards } from '@/project/standards-file';
 import type { ProjectMaterial } from '@/project/types';
@@ -26,7 +28,7 @@ export const CATALOGUE_FILE_FORMAT = 'bvlib';
 export const CATALOGUE_FILE_VERSION = 1;
 
 /** The kinds of definition a catalogue carries, in the order the dialog lists them. */
-export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'details'] as const;
+export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'details'] as const;
 export type CatalogueKind = (typeof CATALOGUE_KINDS)[number];
 
 export interface Catalogue {
@@ -41,6 +43,8 @@ export interface Catalogue {
   symbols: DraftSymbol[];
   /** Legend configurations; a legend's `scopeId` is project-specific and never travels. */
   legends: ProjectLegend[];
+  /** The CAD layer standard: an ordered rule table, carried and merged as a whole. */
+  cadLayers: CadLayerRule[];
   /** Details drawn once, placed in any project as a drafting view (`detail-library.ts`). */
   details: LibraryDetail[];
 }
@@ -53,7 +57,7 @@ export interface CatalogueFile extends Catalogue {
 }
 
 export const emptyCatalogue = (): Catalogue => ({
-  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], details: [],
+  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], cadLayers: [], details: [],
 });
 
 /** `catalogue` cut down to the chosen kinds (layer groups travel with their layers, text styles with the dimension styles that need them). */
@@ -67,6 +71,7 @@ export function selectKinds(catalogue: Catalogue, kinds: ReadonlySet<CatalogueKi
   if (kinds.has('annotationTypes')) out.annotationTypes = catalogue.annotationTypes;
   if (kinds.has('symbols')) out.symbols = catalogue.symbols;
   if (kinds.has('legends')) out.legends = catalogue.legends.map(({ scopeId: _scopeId, ...rest }) => rest);
+  if (kinds.has('cadLayers')) out.cadLayers = catalogue.cadLayers;
   if (kinds.has('details')) out.details = catalogue.details;
   return out;
 }
@@ -118,6 +123,7 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       annotationTypes: readList(file, 'annotationTypes', (v, p) => readAnnotationType(v, p, WHAT), WHAT),
       symbols: readList(file, 'symbols', (v, p) => readSymbol(v, p, WHAT), WHAT),
       legends: readList(file, 'legends', (v, p) => readLegend(v, p, WHAT), WHAT),
+      cadLayers: readList(file, 'cadLayers', (v, p) => readCadLayerRule(v, p, WHAT), WHAT),
       details: readList(file, 'details', (v, p) => readLibraryDetail(v, p, WHAT), WHAT),
     },
   };

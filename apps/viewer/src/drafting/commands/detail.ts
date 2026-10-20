@@ -14,7 +14,7 @@ import { SHEET_SCALES } from '@/project/sheets';
 import { styledParams } from '@/project/drafting-standards';
 import type { ViewDetail } from '@/project/types';
 import { runAsOneUndoStep, editDrafts, newDraft } from '../draft-store';
-import { DETAIL_LINK, detailLabel, detailMarkShapes, markParts, PART, sheetNumberOf } from '../detail-mark';
+import { DETAIL_LINK, detailLabel, detailMarkLabel, detailMarkShapes, markParts, PART } from '../detail-mark';
 import type { DraftLayer, DraftShape, EntityShape, Pt } from '../types';
 import type { DraftCommandDef } from './types';
 
@@ -75,7 +75,7 @@ export function addDraftingMark(sourceId: string, draftingViewId: string, a: Pt,
   runAsOneUndoStep(() => {
     updateProjectView(draftingViewId, { number });
     const layerId = ensureDetailLayer();
-    const shapes = detailMarkShapes(rect, detailLabel(number, sheetNumberOf(draftingViewId, state.sheets)), paperMetres(source.scale), source.kind === 'plan');
+    const shapes = detailMarkShapes(rect, detailMarkLabel(draftingViewId, number, state.views, state.sheets), paperMetres(source.scale), source.kind === 'plan');
     editDrafts({
       add: shapes.map((shape, i) => newDraft(sourceId, layerId, shape, { ...styledParams(sourceId, shape, current), [DETAIL_LINK]: draftingViewId, [PART]: i })),
     });
@@ -89,7 +89,7 @@ export function setDetailRect(detailViewId: string, rect: Rect): void {
   const view = views.find((v) => v.id === detailViewId);
   const source = view?.detail ? views.find((v) => v.id === view.detail?.of) : undefined;
   if (!view?.detail || !source) return;
-  const shapes = detailMarkShapes(rect, detailLabel(view.detail.number, sheetNumberOf(detailViewId, sheets)), paperMetres(source.scale), source.kind === 'plan');
+  const shapes = detailMarkShapes(rect, detailMarkLabel(detailViewId, view.detail.number, views, sheets), paperMetres(source.scale), source.kind === 'plan');
   const parts = markParts(drafts, detailViewId);
   runAsOneUndoStep(() => {
     updateProjectView(detailViewId, { detail: { ...view.detail as ViewDetail, ...rect } });

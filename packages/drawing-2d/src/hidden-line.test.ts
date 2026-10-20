@@ -479,3 +479,51 @@ describe('HiddenLineClassifier with a non-zero MeshData.origin (PR #2621)', () =
     expect(result.overallVisibility).toBe('hidden');
   });
 });
+
+describe('HiddenLineClassifier edge tolerance (axonometric outlines, issue #49)', () => {
+  // A line lying ON the boundary of its own occluder, at the occluder's own depth: the outline
+  // of a solid. Bounds are the line's own extent, as the generator gives them, so the line is on
+  // the raster's border pixel, the occluder tilted so a pixel centre half a pixel inside is nearer.
+  function tiltedOccluder(): MeshData {
+    return {
+      expressId: 1,
+      // x/y in [0, 10], view depth 5 + 0.5 * x: the plane tilts away from the viewer along x.
+      positions: new Float32Array([0, 0, -5, 10, 0, -10, 10, 10, -10, 0, 10, -5]),
+      normals: new Float32Array(12),
+      indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
+      color: [1, 1, 1, 1],
+    };
+  }
+  const edgeAtX0: DrawingLine = {
+    line: { start: { x: 0, y: 1 }, end: { x: 0, y: 9 } },
+    category: 'projection', visibility: 'visible', entityId: 1, ifcType: 'IfcWall', modelIndex: 0, depth: 5,
+  };
+  const bounds = { min: { x: 0, y: 0 }, max: { x: 10, y: 10 } };
+  const plane = { axis: 'z', position: 0, flipped: false } as const;
+
+  it('without a tolerance the outline edge of a tilted face is partly read as hidden (the default, unchanged)', () => {
+    const classifier = new HiddenLineClassifier({ resolution: 16, samplesPerLine: 20, depthBias: 0.001 });
+    classifier.buildDepthBuffer([tiltedOccluder()], plane, 20, bounds);
+    // Pixel centres sit 0.5 px in; the face is farther there, so this edge is not hidden by it.
+    const [result] = classifier.classifyLines([edgeAtX0]);
+    expect(result.overallVisibility).toBe('visible');
+    // Mirror the plane so the face comes NEARER away from the edge: the point sample reads hidden.
+    const nearer: MeshData = { ...tiltedOccluder(), positions: new Float32Array([0, 0, -10, 10, 0, -5, 10, 10, -5, 0, 10, -10]) };
+    const flat = new HiddenLineClassifier({ resolution: 16, samplesPerLine: 20, depthBias: 0.001 });
+    flat.buildDepthBuffer([nearer], plane, 20, bounds);
+    expect(flat.classifyLines([{ ...edgeAtX0, depth: 10 }])[0].overallVisibility).not.toBe('visible');
+  });
+
+  it('with one pixel of tolerance the same edge stays whole', () => {
+    const nearer: MeshData = { ...tiltedOccluder(), positions: new Float32Array([0, 0, -10, 10, 0, -5, 10, 10, -5, 0, 10, -10]) };
+    const tolerant = new HiddenLineClassifier({ resolution: 16, samplesPerLine: 20, depthBias: 0.001, edgeTolerancePx: 1 });
+    tolerant.buildDepthBuffer([nearer], plane, 20, bounds);
+    expect(tolerant.classifyLines([{ ...edgeAtX0, depth: 10 }])[0].overallVisibility).toBe('visible');
+  });
+
+  it('with a tolerance a line well behind a surface in the middle of the raster is still hidden', () => {
+    const tolerant = new HiddenLineClassifier({ resolution: 64, depthBias: 0.001, edgeTolerancePx: 1 });
+    tolerant.buildDepthBuffer([occluderMesh()], plane, 10, { min: { x: -5, y: -5 }, max: { x: 15, y: 15 } });
+    expect(tolerant.classifyLines([makeLine(7)])[0].overallVisibility).toBe('hidden');
+  });
+});

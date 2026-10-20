@@ -25,6 +25,7 @@ import { parsePat, serializePat, type HatchPattern } from '@/drafting/hatch/patt
 import { STANDARD } from '@/drafting/styles';
 import { freshProjectId } from '@/project/view-defaults';
 import type { Catalogue, CatalogueKind } from './catalogue-file';
+import { mergeCadLayers } from './cad-layers-merge';
 
 export type ClashPolicy = 'mine' | 'theirs' | 'both';
 
@@ -163,16 +164,17 @@ export function mergeCatalogues(
   }));
   const symbols = mergeNamed(mine.symbols, incoming.symbols, policy, 'symbol', fresh);
   const legends = mergeNamed(mine.legends, incoming.legends.map(({ scopeId: _scopeId, ...rest }) => rest), policy, 'legend', fresh, (l) => ({ ...l, textStyle: textId(l.textStyle) }));
+  const cad = mergeCadLayers(mine.cadLayers, incoming.cadLayers, policy, fresh);
   const details = mergeNamed(mine.details, incoming.details, policy, 'detail', fresh);
   return {
     maps: { layers: layers.ids, symbols: symbols.ids, patterns: patterns.names },
     catalogue: {
       layers: layers.list, layerGroups: groups.list, textStyles: texts.list, dimStyles: dims.list, hatchPatterns: patterns.text,
-      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, details: details.list,
+      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, cadLayers: cad.list, details: details.list,
     },
     report: {
       layers: layers.report, textStyles: texts.report, dimStyles: dims.report, hatchPatterns: patterns.report,
-      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, details: details.report,
+      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, cadLayers: cad.report, details: details.report,
     },
   };
 }
