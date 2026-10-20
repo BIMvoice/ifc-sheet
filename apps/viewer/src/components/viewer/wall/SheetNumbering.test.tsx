@@ -11,7 +11,10 @@ import { addProjectView } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet, hangView } from '@/project/drawing-set-actions';
 import type { ModelExtent } from '@/project/drawing-set';
-import { serializeProject } from '@/project/project-file';
+import { parseProjectFile, serializeProject } from '@/project/project-file';
+import { clearDraftHistory, redoDrafts, undoDrafts } from '@/drafting/draft-store';
+import { SEQUENTIAL_SCHEME, planRenumber } from '@/project/numbering';
+import { renumberAll } from '@/project/sheet-renumber';
 import { addDetail } from '@/drafting/commands/detail';
 import { emptySheets } from '@/check/findings';
 import { issueRecord, planIssue } from '@/issue/plan';
@@ -41,6 +44,7 @@ beforeEach(() => {
   useWallNav.setState({ stepped: null, focus: null, visit: 0, drawer: true });
   useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
   startDrawingSet(null, HOUSE);
+  clearDraftHistory();
 });
 afterEach(() => cleanup());
 
@@ -48,6 +52,13 @@ function button(ui: HTMLElement, text: string): HTMLButtonElement {
   const found = [...ui.querySelectorAll('button')].find((b) => b.textContent === text);
   assert.ok(found, `a button ${text}`);
   return found;
+}
+
+/** The checkbox that confirms renumbering issued sheets. */
+function confirmIssued(ui: HTMLElement): HTMLInputElement {
+  const label = [...ui.querySelectorAll('label')].find((l) => l.textContent?.includes('issued sheets new numbers anyway'));
+  assert.ok(label, 'a confirmation for the issued sheets');
+  return label.querySelector('input')!;
 }
 
 /** The sheet as the title block prints and exports it. */
@@ -74,6 +85,9 @@ describe('switching to A01, A02', () => {
     const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
     click(button(ui, 'A01, A02 style'));
     assert.match(ui.textContent ?? '', /Renumbering changes \d+ sheets/);
+    // Issued numbers change: Renumber all waits for the confirmation.
+    assert.equal(button(ui, 'Renumber all').disabled, true);
+    click(confirmIssued(ui));
     click(button(ui, 'Renumber all'));
 
     const after = numbers();
@@ -140,5 +154,72 @@ describe('switching to A01, A02', () => {
     const controls = [...form.querySelectorAll('input, button')];
     assert.ok(controls.length > 8);
     for (const c of controls) assert.ok(c.closest('[data-owns-keys]'), `${c.outerHTML.slice(0, 60)} owns its keys`);
+  });
+});
+
+describe('renumber all is one undo step', () => {
+  it('Undo puts every number back, the typed one included, and Redo applies it again', () => {
+    const id = addProjectSheet('Cover', 'other');
+    setSheetNumber(id, 'COVER');
+    clearDraftHistory();
+    const before = state().sheets;
+    const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    click(button(ui, 'A01, A02 style'));
+    click([...ui.querySelectorAll('label')].find((l) => l.textContent?.includes('typed by hand too'))!.querySelector('input')!);
+    click(button(ui, 'Renumber all'));
+    const after = state().sheets;
+    assert.match(after.find((s) => s.id === id)!.number, /^A\d\d$/, 'the typed number was renumbered');
+
+    assert.equal(undoDrafts(), true);
+    assert.deepEqual(state().sheets, before, 'one Undo restores every sheet, COVER and its override mark included');
+    assert.equal(state().sheets.find((s) => s.id === id)?.numberOverride, true);
+    assert.equal(undoDrafts(), false, 'the renumbering was a single step');
+
+    assert.equal(redoDrafts(), true);
+    assert.deepEqual(state().sheets, after, 'Redo renumbers again');
+  });
+});
+
+describe('numbers typed before numbering schemes', () => {
+  it('a number outside the old A-nnn series, read from an older file, is kept like a typed one', () => {
+    const doc = JSON.parse(serializeProject(projectDocument())) as { sheets: Record<string, unknown>[] };
+    // As saved before this change: no series, no override mark.
+    doc.sheets = [
+      { id: 's1', number: 'A-101', name: 'Plan', createdAt: 0 },
+      { id: 's2', number: 'S-01', name: 'Structure', createdAt: 0 },
+      { id: 's3', number: 'A-901', name: 'Detail', createdAt: 0 },
+    ];
+    const sheets = parseProjectFile(JSON.stringify(doc)).sheets;
+    assert.deepEqual(sheets.map((s) => s.numberOverride === true), [false, true, false]);
+    const rows = planRenumber(sheets, SEQUENTIAL_SCHEME, 'keep');
+    assert.deepEqual(rows.map((r) => [r.from, r.to, r.kept]), [['A-101', 'A01', false], ['S-01', 'S-01', true], ['A-901', 'A02', false]]);
+    // A sheet from a newer file carries its series, so its number is not guessed at.
+    doc.sheets = [{ id: 's4', number: 'S-01', name: 'S', createdAt: 0, series: 'other' }];
+    assert.equal(parseProjectFile(JSON.stringify(doc)).sheets[0].numberOverride, undefined);
+  });
+});
+
+describe('renumbering issued sheets', () => {
+  it('needs a confirmation: without one nothing changes', () => {
+    const issue = issueRecord(planIssue(state().sheets, { documents: [], drafts: state().drafts }, { name: 'Planning', date: '2026-10-19', listFirst: true }), 'iss1', 1);
+    useProjectStore.setState({ issues: [issue] });
+    const before = numbers();
+    assert.equal(renumberAll(SEQUENTIAL_SCHEME, 'keep'), null);
+    assert.deepEqual(numbers(), before, 'unconfirmed: no number changed');
+    assert.equal(state().sheetNumbering, undefined, 'and the scheme was not saved');
+
+    const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    click(button(ui, 'A01, A02 style'));
+    assert.equal(button(ui, 'Renumber all').disabled, true);
+    click(button(ui, 'Renumber all'));
+    assert.deepEqual(numbers(), before);
+    click(confirmIssued(ui));
+    click(button(ui, 'Renumber all'));
+    assert.ok(numbers().every((n) => /^A\d\d$/.test(n)), 'confirmed: renumbered');
+  });
+
+  it('needs none when no issued number changes', () => {
+    assert.equal(typeof renumberAll(SEQUENTIAL_SCHEME, 'keep'), 'number');
+    assert.ok(numbers().every((n) => /^A\d\d$/.test(n)));
   });
 });

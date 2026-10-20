@@ -52,10 +52,12 @@ export function SheetNumberingForm() {
   const [draft, setDraft] = useState<NumberingScheme>(() => numberingScheme({ sheetNumbering: saved }));
   const [overrides, setOverrides] = useState<OverrideMode>('keep');
   const [applied, setApplied] = useState<number | null>(null);
+  const [issuedOk, setIssuedOk] = useState(false);
   const rows = useMemo(() => previewRenumber(draft, overrides), [draft, overrides, sheets]);
   const changing = rows.filter((r) => r.from !== r.to);
+  const issued = issuedAmong(changing);
   const first = draft.groups.plans;
-  const edit = (next: NumberingScheme): void => { setDraft(next); setApplied(null); };
+  const edit = (next: NumberingScheme): void => { setDraft(next); setApplied(null); setIssuedOk(false); };
   const setGroup = (g: NumberGroup, patch: Partial<GroupPattern>): void => edit({ ...draft, groups: { ...draft.groups, [g]: { ...draft.groups[g], ...patch } } });
 
   return (
@@ -83,7 +85,7 @@ export function SheetNumberingForm() {
       ))}
       <p className="m-0 mt-2 text-xs text-sky-200">{t('wall.num.example', { example: numberAt(draft, 'plans', 0) })}</p>
       <label className="mt-2 flex items-center gap-2 text-xs text-sky-200">
-        <input data-owns-keys type="checkbox" checked={overrides === 'renumber'} onChange={(e) => { setOverrides(e.target.checked ? 'renumber' : 'keep'); setApplied(null); }} />
+        <input data-owns-keys type="checkbox" checked={overrides === 'renumber'} onChange={(e) => { setOverrides(e.target.checked ? 'renumber' : 'keep'); setApplied(null); setIssuedOk(false); }} />
         {t('wall.num.overridesToo')}
       </label>
       <h4 className="m-0 mt-3 text-xs font-medium text-sky-100">{t('wall.num.preview', { count: changing.length })}</h4>
@@ -91,9 +93,17 @@ export function SheetNumberingForm() {
         {changing.map((r) => <li key={r.id} className="tabular-nums">{r.from} → <span className="font-semibold text-white">{r.to}</span></li>)}
         {rows.filter((r) => r.kept).map((r) => <li key={r.id} className="tabular-nums text-sky-300">{r.from} {t('wall.num.kept')}</li>)}
       </ul>
-      {issuedAmong(changing) > 0 ? <output className="m-0 mt-1 block text-xs text-amber-300">{t('wall.num.issuedNote', { count: issuedAmong(changing) })}</output> : null}
+      {issued > 0 ? (
+        <>
+          <output className="m-0 mt-1 block text-xs text-amber-300">{t('wall.num.issuedNote', { count: issued })}</output>
+          <label className="mt-1 flex items-center gap-2 text-xs text-amber-200">
+            <input data-owns-keys type="checkbox" checked={issuedOk} onChange={(e) => setIssuedOk(e.target.checked)} />
+            {t('wall.num.confirmIssued', { count: issued })}
+          </label>
+        </>
+      ) : null}
       <div className="mt-2 flex flex-wrap gap-1.5">
-        <button type="button" className={quiet} disabled={changing.length === 0} onClick={() => setApplied(renumberAll(draft, overrides))}>{t('wall.num.apply')}</button>
+        <button type="button" className={quiet} disabled={changing.length === 0 || (issued > 0 && !issuedOk)} onClick={() => { setApplied(renumberAll(draft, overrides, issuedOk)); setIssuedOk(false); }}>{t('wall.num.apply')}</button>
         <button type="button" className={quiet} onClick={() => setSchemeForNewSheets(draft)}>{t('wall.num.forNew')}</button>
       </div>
       {applied !== null ? <output className="m-0 mt-1 block text-xs text-sky-200">{t('wall.num.done', { count: applied })}</output> : null}

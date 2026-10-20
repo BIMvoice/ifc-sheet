@@ -8,7 +8,7 @@
  * value is malformed (a viewport without a view or a positive scale).
  */
 
-import { NUMBER_GROUPS } from './numbering';
+import { NUMBER_GROUPS, typedBeforeSchemes } from './numbering';
 import type { NumberGroup, PaperSize, ProjectSheet, SheetViewport } from './types';
 
 type Json = Record<string, unknown>;
@@ -38,6 +38,8 @@ export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'pape
   const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber' | 'numberOverride' | 'series'> = {};
   if (v.autoNumber === true) out.autoNumber = true;
   if (v.numberOverride === true) out.numberOverride = true;
+  // Saved before schemes: no series, no override mark. A number outside the old A-nnn series was typed by hand and keeps that protection.
+  else if (v.series === undefined && v.autoNumber !== true && typeof v.number === 'string' && typedBeforeSchemes(v.number)) out.numberOverride = true;
   if (NUMBER_GROUPS.includes(v.series as NumberGroup)) out.series = v.series as NumberGroup;
   if (PAPERS.includes(v.paper as PaperSize)) out.paper = v.paper as PaperSize;
   if (v.orientation === 'portrait' || v.orientation === 'landscape') out.orientation = v.orientation;

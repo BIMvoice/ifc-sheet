@@ -4,11 +4,13 @@
 
 /**
  * Renumbering the set: the old to new table to look at first, then one store
- * update that saves the scheme and every sheet's number together. Detail
+ * update that saves the scheme and every sheet's number together, as one
+ * undo step (Undo puts every sheet's number back; the scheme stays). Detail
  * marks, the title blocks, the drawing list and the file names read the
  * sheet's number, so they follow without being edited here.
  */
 
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { planRenumber, renumbered, type OverrideMode, type RenumberRow } from './numbering';
 import { useProjectStore } from './project-store';
 import type { NumberingScheme, ProjectIssue } from './types';
@@ -24,11 +26,19 @@ export function issuedAmong(rows: readonly RenumberRow[], issues: readonly Proje
   return rows.filter((r) => r.from !== r.to && issued.has(r.from)).length;
 }
 
-/** Save `scheme` and renumber every sheet by it in one update; returns how many numbers changed. */
-export function renumberAll(scheme: NumberingScheme, overrides: OverrideMode): number {
+/**
+ * Save `scheme` and renumber every sheet by it in one update, one undo step;
+ * returns how many numbers changed. A renumbering that changes a number which
+ * went out in an issue needs `confirmIssued`: without it nothing changes and
+ * the result is `null`.
+ */
+export function renumberAll(scheme: NumberingScheme, overrides: OverrideMode, confirmIssued = false): number | null {
   const { sheets } = useProjectStore.getState();
   const rows = planRenumber(sheets, scheme, overrides);
-  useProjectStore.setState({ sheetNumbering: scheme, sheets: renumbered(sheets, rows, overrides), dirty: true });
+  if (!confirmIssued && issuedAmong(rows) > 0) return null;
+  runAsOneUndoStep(() => {
+    useProjectStore.setState({ sheetNumbering: scheme, sheets: renumbered(sheets, rows, overrides), dirty: true });
+  });
   return rows.filter((r) => r.from !== r.to).length;
 }
 

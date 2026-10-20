@@ -138,6 +138,7 @@ export const wallEn = {
   'wall.num.preview': 'Renumbering changes {count} sheets',
   'wall.num.kept': '(typed by hand, kept)',
   'wall.num.issuedNote': '{count} of these numbers went out in an issue; the issue keeps them as they were issued.',
+  'wall.num.confirmIssued': 'Give the {count} issued sheets new numbers anyway',
   'wall.num.apply': 'Renumber all',
   'wall.num.forNew': 'Use for new sheets only',
   'wall.num.done': '{count} sheets renumbered.',

@@ -50,9 +50,21 @@ export function numberAt(scheme: NumberingScheme, group: NumberGroup, ordinal: n
   return formatNumber(scheme.discipline, p, p.start + ordinal * p.step);
 }
 
+/** The one series numbers were made in before schemes: A-nnn. */
+const LEGACY_SERIES = /^A-(\d)\d\d$/;
+
+/**
+ * A sheet from a file saved before schemes (it stores no `series`) whose
+ * number is outside the A-nnn series the app made: that number was typed by
+ * hand, so it is kept like one (`readSheetLayout`).
+ */
+export function typedBeforeSchemes(number: string): boolean {
+  return !LEGACY_SERIES.test(number.trim());
+}
+
 /** Sheets from files before groups were stored: the series is read back from the number (A-1xx plans, A-2xx elevations, A-3xx sections, A-6xx schedules). */
 function legacyGroup(number: string): NumberGroup {
-  const m = /^A-(\d)\d\d$/.exec(number);
+  const m = LEGACY_SERIES.exec(number);
   return m ? ({ '1': 'plans', '2': 'elevations', '3': 'sections', '6': 'schedules' } as Record<string, NumberGroup>)[m[1]] ?? 'other' : 'other';
 }
 
