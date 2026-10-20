@@ -25,6 +25,7 @@ import { writeOccurrenceNumbers } from '@/joinery/schedule-numbering';
 import { toast } from '@/components/ui/toast';
 import { svgToDxf } from '../sheets/sheet-dxf';
 import { ScheduleGraphic, useScheduleLabels, useScheduleLayout } from './ScheduleGraphic';
+import { RegisterView } from './RegisterView';
 import { RoomFinishesView } from './RoomFinishesView';
 import { TakeoffView } from './TakeoffView';
 import { TypeQuantitiesView } from './TypeQuantitiesView';
@@ -37,7 +38,7 @@ const MARGIN = 10;
 export function ScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   if (schedule.kind === 'types') return <TypeQuantitiesView schedule={schedule} />;
   if (schedule.kind === 'finishes') return <RoomFinishesView schedule={schedule} />;
-  return schedule.kind === 'materials' ? <TakeoffView schedule={schedule} /> : <JoineryScheduleView schedule={schedule} />;
+  return schedule.kind === 'materials' ? <TakeoffView schedule={schedule} /> : schedule.kind === 'register' ? <RegisterView schedule={schedule} /> : <JoineryScheduleView schedule={schedule} />;
 }
 
 function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {

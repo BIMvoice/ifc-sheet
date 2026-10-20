@@ -9,7 +9,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanup, click, press, render } from '@/test/render.js';
-import { cancelCommand, clickDrawing, patchDraftSettings, runningCommand, useDraftingSession } from '@/drafting/session';
+import { cancelCommand, clickDrawing, patchDraftSettings, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import { paperOf } from '@/project/sheets';
@@ -142,5 +142,41 @@ describe('the Wall\'s dimension tool (#141)', () => {
     assert.equal(runningCommand(), null);
     assert.ok(![...ui.querySelectorAll('button[aria-pressed="true"]')].some((b) => b.textContent?.trim() === 'Dimension'), 'Esc let go of the tool');
     assert.equal(backs, 0);
+  });
+
+  it('lets go of the tool when another command ends: only a finished dimension chain restarts', () => {
+    const ui = stepIn();
+    pickDimension(ui);
+    act(() => { assert.ok(startDraftCommand('line'), 'a different command takes over from the dimension'); });
+    act(() => cancelCommand());
+    assert.equal(runningCommand(), null, 'the dimension did not restart after a line ended');
+    assert.ok(![...ui.querySelectorAll('button[aria-pressed="true"]')].some((b) => b.textContent?.trim() === 'Dimension'), 'the rail let go of the tool');
+  });
+
+  it('takes Esc before the drafting keys even when the drawing arrives with the sheet: one Esc ends only the tool', () => {
+    // The drawing's key listener mounts in the same commit as the sheet's. A child's passive effect runs before its parent's, so
+    // only a layout effect keeps the sheet's listener first: it must see the tool still running.
+    const plan = useProjectStore.getState().views.find((v) => v.kind === 'plan');
+    const sheet = useProjectStore.getState().sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === plan?.id));
+    assert.ok(plan && sheet);
+    const ui = render(<SteppedSheet sheet={sheet} extent={HOUSE} proposals={[]} initialFocus={plan.id} onBack={() => { backs += 1; }} onStep={() => {}} />);
+    act(() => { assert.ok(startDraftCommand('dimaligned'), 'the dimension tool starts on the drawing in front'); });
+    assert.ok(runningCommand());
+    press(document.body, 'Escape');
+    assert.equal(runningCommand(), null, 'the tool ended');
+    assert.equal(backs, 0, 'the sheet was not left');
+    assert.ok(!ui.querySelector('[data-sheet-canvas]'), 'the drawing is still in front');
+  });
+
+  it('closes the Paper card on Esc, and does not leave the sheet (main\'s papering state in the Esc chain)', () => {
+    const ui = stepIn();
+    // Choosing the drawing in stepIn brings its card; the sheet-level Paper button sits with the sheet's controls.
+    const paper = [...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Paper');
+    assert.ok(paper, 'the sheet offers the Paper button');
+    click(paper);
+    assert.ok(ui.querySelector('aside[aria-label="Paper"]'), 'the Paper card is open');
+    press(document.body, 'Escape');
+    assert.ok(!ui.querySelector('aside[aria-label="Paper"]'), 'Esc closed the Paper card');
+    assert.equal(backs, 0, 'and only that');
   });
 });
