@@ -10,6 +10,7 @@
 
 import type { TranslationKey } from '@/i18n';
 import { paperLabel } from '@/project/paper';
+import type { DraftEntity } from '@/drafting/types';
 import type { IssuedSheet, ProjectIssue, ProjectSheet } from '@/project/types';
 import { holdsRegister, registerRow, sheetScaleText, type RegisterInput, type RegisterRow } from '@/project/drawing-register';
 import { sheetFingerprint, type FingerprintSources } from './fingerprint';
@@ -49,10 +50,14 @@ export function sheetIsEmpty(sheet: ProjectSheet, sources: FingerprintSources): 
   return (sheet.viewports ?? []).length === 0 && !sources.drafts.some((d) => d.viewId === sheet.id);
 }
 
-/** `projectTitleBlock` is the project's title block (`ProjectDocument.titleBlock`): a sheet's revision is its own, else the project's. `context` is what the register also reads: the issues so far and which documents are not drawings. */
+/**
+ * `projectTitleBlock` is the project's title block (`ProjectDocument.titleBlock`). `context` is what the register also
+ * reads: the issues so far, which documents are not drawings, and the project's revision records (a sheet's revision is
+ * the latest it has, `currentRevisionOf`, as its title block reads).
+ */
 export function planIssue(
   sheets: readonly ProjectSheet[], sources: FingerprintSources, input: IssueInput, projectTitleBlock?: Record<string, string>,
-  context: { issues?: RegisterInput['issues']; schedules?: RegisterInput['schedules'] } = {},
+  context: { issues?: RegisterInput['issues']; schedules?: RegisterInput['schedules']; revisions?: RegisterInput['revisions'] } = {},
 ): IssuePlan {
   const out: IssuePlan = { ...input, sheets: [], leftOut: [] };
   // The register opens the set, then the sheets by number.
@@ -62,7 +67,7 @@ export function planIssue(
       out.leftOut.push({ number: sheet.number, title: sheet.name, reason: { key: 'issue.reason.empty', params: { number: sheet.number } } });
       continue;
     }
-    const register = registerRow(sheet, { titleBlock: projectTitleBlock, asIndicated: input.asIndicated, ...context });
+    const register = registerRow(sheet, { titleBlock: projectTitleBlock, asIndicated: input.asIndicated, ...context, drafts: sources.drafts as DraftEntity[] });
     out.sheets.push({
       sheet,
       register,

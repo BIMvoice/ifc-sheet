@@ -33,6 +33,8 @@ export interface IssueOptions {
   listFirst?: boolean;
   /** PDF: write the archival description (PDF/A-2b identification and sRGB output intent; not validated). */
   archival?: boolean;
+  /** Draw only the clouds of each sheet's current revision; those of older revisions are left off the paper. */
+  currentCloudsOnly?: boolean;
 }
 
 export interface IssueResult {
@@ -62,7 +64,7 @@ export function pdfLabels(): PdfLabels {
 }
 
 function sources(project: ProjectDocument) {
-  return { documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])], drafts: project.drafts };
+  return { documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])], drafts: project.drafts, revisions: project.revisions };
 }
 
 /** The plan for the project as it stands (nothing is drawn or recorded). */
@@ -73,7 +75,7 @@ export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst
     date: options.date ?? new Date().toISOString().slice(0, 10),
     listFirst: options.listFirst ?? true,
     asIndicated: resolve('sheets.asIndicated'),
-  }, effectiveTitleBlock(), { issues: project.issues, schedules: project.schedules });
+  }, effectiveTitleBlock(), { issues: project.issues, schedules: project.schedules, revisions: project.revisions });
 }
 
 /** What a DXF issue leaves out: each sheet's views that print as images, which DXF cannot carry. */
@@ -94,7 +96,7 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   if (missing > 0) lines.unshift({ key: 'check.msg.unfinished', params: { count: missing } });
   if (plan.sheets.length === 0) return { plan, pdf: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.nothing', params: {} }] };
   if (options.format === 'dxf') lines.push(...dxfRasterLines(plan.sheets.map((s) => s.sheet), useProjectStore.getState().views));
-  const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf' });
+  const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf', currentCloudsOnly: options.currentCloudsOnly });
   if (failed.length > 0) return { plan, pdf: null, csv, zip: null, lines: [...lines, ...failed.map((f) => failureLine(f)), { key: 'issue.msg.notIssued', params: {} }] };
   const project = useProjectStore.getState();
   let pdf: Uint8Array | null = null;

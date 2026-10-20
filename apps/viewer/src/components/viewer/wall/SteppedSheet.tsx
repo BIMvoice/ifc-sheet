@@ -30,6 +30,7 @@ import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
 import { SheetCanvas } from './SheetCanvas';
+import { RevisionsCard } from './RevisionsCard';
 import { TitleBlockCard } from './TitleBlockForm';
 import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
@@ -66,6 +67,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
   const [papering, setPapering] = useState(false);
+  const [revising, setRevising] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
@@ -114,6 +116,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       if (adding) setAdding(false);
       else if (titling) setTitling(false);
       else if (papering) setPapering(false);
+      else if (revising) setRevising(false);
       else if (focusId) {
         setFocusId(null);
         setTool(null);
@@ -122,7 +125,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onBack, focusId, chosen, adding, titling, papering]);
+  }, [onBack, focusId, chosen, adding, titling, papering, revising]);
 
   const startTool = (command: string): void => {
     cancelStart.current();
@@ -161,6 +164,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     if (viewportId) {
       setTitling(false);
       setPapering(false);
+      setRevising(false);
     }
   }, []);
   const open = useCallback((vp: SheetViewport): void => {
@@ -204,8 +208,9 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {!focusView ? (
           <>
             <button type="button" className={issue} aria-pressed={commenting} title={t('review.tool.hint')} onClick={() => setPlacing(!commenting)}>{t('review.tool')}</button>
-            <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); }}>{t('wall.paper.button')}</button>
-            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); }}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); setRevising(false); }}>{t('wall.paper.button')}</button>
+            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); setRevising(false); }}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={revising} onClick={() => { setRevising((x) => !x); setTitling(false); setPapering(false); }}>{t('revision.title')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
@@ -229,6 +234,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
               : focusView ? null
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
+                  : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
                   : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
           </div>
           {adding ? (

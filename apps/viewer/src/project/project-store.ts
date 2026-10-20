@@ -24,6 +24,7 @@ import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { findTemplate, templateFields } from './sheet-templates';
+import { liftTypedRevisions } from './revisions';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
@@ -41,7 +42,7 @@ export interface ProjectState extends ProjectDocument {
 export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visible: true, locked: false } as const;
 
 export const EMPTY_PROJECT: ProjectDocument = {
-  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
+  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, revisions: [], drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
   annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, siteArea: undefined, tagFields: undefined, graphicStandard: undefined, comments: [],
@@ -65,7 +66,7 @@ const DOCUMENT_FIELDS = {
   symbolFlips: true, openingLines: true, textStyles: true, dimStyles: true, layerGroups: true, joineryTypes: true, currentJoinery: true,
   schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
   typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
-  modelState: true, siteArea: true, cadLayers: true, tagFields: true, titleBlockSources: true, sheetNumbering: true, phaseSource: true, graphicStandard: true, comments: true, details: true, sheetTemplates: true, seriesTemplates: true,
+  modelState: true, siteArea: true, cadLayers: true, tagFields: true, titleBlockSources: true, sheetNumbering: true, phaseSource: true, graphicStandard: true, comments: true, details: true, sheetTemplates: true, seriesTemplates: true, revisions: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -80,7 +81,7 @@ const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[
   textStyles: () => [], dimStyles: () => [], layerGroups: () => [], joineryTypes: () => [], currentJoinery: () => ({}),
   schedules: () => [], joineryMapping: () => ({ ...DEFAULT_JOINERY_MAPPING }), elementTypes: () => [], currentTypes: () => ({}),
   structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], cadLayers: () => [], savedSectionCuts: () => [],
-  annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [], comments: () => [], details: () => [], sheetTemplates: () => [], seriesTemplates: () => ({}),
+  annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [], comments: () => [], details: () => [], sheetTemplates: () => [], seriesTemplates: () => ({}), revisions: () => [],
 };
 
 /** The persisted part of the store. */
@@ -100,7 +101,8 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
 export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean; fromAutosave?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
-  const doc = liftSheetTitleBlocks(saved);
+  // Saved when the title block's revision was typed: it becomes a revision record (`revisions.ts`).
+  const doc = liftTypedRevisions(liftSheetTitleBlocks(saved), () => freshProjectId('revision'));
   const standard = knownGraphicStandard(doc.graphicStandard);
   useProjectStore.setState({
     ...doc,
@@ -133,6 +135,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     tagFields: doc.tagFields,
     sheetNumbering: doc.sheetNumbering,
     comments: doc.comments ?? [],
+    revisions: doc.revisions ?? [],
     modelState: doc.modelState,
     siteArea: doc.siteArea,
     titleBlockSources: doc.titleBlockSources,

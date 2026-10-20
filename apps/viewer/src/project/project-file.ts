@@ -23,6 +23,7 @@ import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
 import { readTitleSources } from './title-block-sources';
 import { readComments } from '@/review/file';
+import { readRevisions } from './revision-file';
 import { readStandards } from './standards-file';
 import { isDisciplineId } from './discipline-views';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
@@ -232,6 +233,7 @@ export function parseProjectFile(text: string): ProjectDocument {
     ...(raw.comments !== undefined ? { comments: readComments(raw.comments) } : {}),
     sheetTemplates: list('sheetTemplates').flatMap((v) => readTemplate(v) ?? []),
     seriesTemplates: readSeriesTemplates(raw.seriesTemplates),
+    revisions: readRevisions(raw.revisions),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
     ...(typeof raw.siteArea === 'number' && Number.isFinite(raw.siteArea) && raw.siteArea > 0 ? { siteArea: raw.siteArea } : {}),
   };

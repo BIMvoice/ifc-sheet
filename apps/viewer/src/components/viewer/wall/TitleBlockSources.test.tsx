@@ -104,7 +104,7 @@ describe('a model that carries an address, an organisation, a client and a prope
     assert.equal(all.address.value, 'Strada Împăcării 12, 400000 Cluj-Napoca, România');
     assert.equal(all.organisation.value, 'Birou de arhitectură Îmbinări');
     // Drawn by and Client read the model only when a source is picked (#114 review).
-    assert.deepEqual([all.drawnBy.from, all.client.from, all.checkedBy.from, all.date.from, all.revision.from], ['none', 'none', 'none', 'none', 'none']);
+    assert.deepEqual([all.drawnBy.from, all.client.from, all.checkedBy.from, all.date.from], ['none', 'none', 'none', 'none']);
   });
 
   it('reads phase, land title number and a property path', () => {
@@ -113,8 +113,9 @@ describe('a model that carries an address, an organisation, a client and a prope
     assert.equal(f.attribute('IfcSite', 'LandTitleNumber'), 'CF 123456');
     assert.equal(f.property(undefined, 'Pset_ProjectCommon', 'Reference'), 'P-2026-014');
     assert.equal(f.property('IfcSite', 'Pset_ProjectCommon', 'Reference'), '');
-    setTitleBlockSources('revision', [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Reference' }]);
-    assert.equal(field('revision').value, 'P-2026-014');
+    // The revision is no longer a typed field (#133: it is the sheet's latest revision record): a property path is shown on Checked by.
+    setTitleBlockSources('checkedBy', [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Reference' }]);
+    assert.equal(field('checkedBy').value, 'P-2026-014');
   });
 
   it('a typed value wins over the mapping, and the badge data says so', () => {
@@ -229,13 +230,13 @@ describe('the Title block form', () => {
 
   it('takes a property path for a field', () => {
     const ui = render(<ProjectDrawer extent={EXTENT} onClose={() => {}} />);
-    change(select(ui, /Take Revision from/), 'pset');
-    const path = [...ui.querySelectorAll('input')].find((i) => /Property of Revision/.test(i.getAttribute('aria-label') ?? ''));
+    change(select(ui, /Take Checked by from/), 'pset');
+    const path = [...ui.querySelectorAll('input')].find((i) => /Property of Checked by/.test(i.getAttribute('aria-label') ?? ''));
     assert.ok(path);
     type(path, 'Pset_ProjectCommon.Reference');
     blur(path);
-    assert.deepEqual(useProjectStore.getState().titleBlockSources, { revision: [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Reference' }] });
-    assert.equal(textInput(ui, 'Revision').value, 'P-2026-014');
+    assert.deepEqual(useProjectStore.getState().titleBlockSources, { checkedBy: [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Reference' }] });
+    assert.equal(textInput(ui, 'Checked by').value, 'P-2026-014');
   });
 
   it('keeps its keys with a tool running and with none: Enter in a field commits it and never confirms the tool', () => {

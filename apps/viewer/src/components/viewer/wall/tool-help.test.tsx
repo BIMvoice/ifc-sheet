@@ -25,7 +25,9 @@ describe('tool help', () => {
     const chosen: string[] = [];
     const rail = render(<ToolRail active={null} onTool={(c) => chosen.push(c)} adding={false} onAdd={() => {}} viewKind={null} onAll={() => {}} />);
     // The tools are the rail's buttons that have help: every one except "Add a drawing".
-    const buttons = [...rail.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].filter((b) => b.hasAttribute('title'));
+    // "Add a drawing" has a title too now, for its key (`wall.withKey`): it is told apart by its name.
+    const addTitle = resolve('wall.addDrawing');
+    const buttons = [...rail.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].filter((b) => b.hasAttribute('title') && !(b.getAttribute('title') ?? '').startsWith(addTitle));
     for (const b of buttons) click(b);
     assert.ok(chosen.length >= WALL_TOOLS.length, 'the rail offers at least the six large tools');
     assert.equal(chosen.filter((c) => WALL_TOOLS.some((w) => w.command === c)).length, 6, 'six large tools');

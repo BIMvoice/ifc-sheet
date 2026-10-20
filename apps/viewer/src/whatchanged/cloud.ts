@@ -10,10 +10,31 @@
  * units. Pure; the same box gives the same cloud.
  */
 
-import type { Pt } from '@/drafting/types';
+import { newDraft } from '@/drafting/draft-store';
+import type { DraftEntity, DraftParamValue, Pt } from '@/drafting/types';
+import { resolve } from '@/i18n/registry';
+import { useProjectStore } from '@/project/project-store';
 import type { Rect } from '@/labels/label-geometry';
 import type { ModelChange } from './compare';
 import { boxInView, drawingRect, type ViewBand } from './visibility';
+
+/** The layer revision clouds are drawn on. */
+export const REVISIONS_LAYER = 'revisions';
+
+/** The Revisions layer, added when the project has none. */
+export function ensureRevisionsLayer(): void {
+  const { draftLayers } = useProjectStore.getState();
+  if (!draftLayers.some((l) => l.id === REVISIONS_LAYER)) useProjectStore.setState({ draftLayers: [...draftLayers, { id: REVISIONS_LAYER, name: resolve('whatchanged.layer'), color: '#dc2626', visible: true, locked: false }], dirty: true });
+}
+
+/**
+ * A revision cloud as a drafted shape, round `box` on `viewId`: the one cloud both the WHATCHANGED run and the
+ * revision cloud tool draw. `unit` is drawing units per paper millimetre where it lives (`paperUnitOf`), so
+ * the scallops are 2 mm on paper whatever the scale.
+ */
+export function cloudDraft(viewId: string, box: Rect, unit: number, params: Record<string, DraftParamValue> = {}): DraftEntity {
+  return newDraft(viewId, REVISIONS_LAYER, { type: 'polyline', pts: cloudRing(box, 2 * unit), closed: true }, params);
+}
 
 /** Points along each half circle. */
 const STEPS = 6;

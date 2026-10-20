@@ -18,7 +18,6 @@ import { addSchedule } from '@/joinery/schedules.js';
 import { addRegisterToSet, hangSchedule, registerNumber } from './drawing-set-actions.js';
 import { addProjectSheet, resetProject, setSheetNumber, useProjectStore } from './project-store.js';
 import { renameProjectItem } from './project-store.js';
-import { setTitleBlockField } from './sheets.js';
 import { defaultViews } from './view-defaults.js';
 import type { ProjectSheet } from './types';
 
@@ -35,7 +34,15 @@ function demoSet(): void {
 }
 const rows = (): RegisterRow[] => {
   const s = useProjectStore.getState();
-  return drawingRegisterRows({ sheets: s.sheets, titleBlock: s.titleBlock, issues: s.issues, asIndicated: AS_INDICATED, schedules: s.schedules });
+  return drawingRegisterRows({ sheets: s.sheets, titleBlock: s.titleBlock, issues: s.issues, asIndicated: AS_INDICATED, schedules: s.schedules, revisions: s.revisions, drafts: s.drafts });
+};
+/** Gives a sheet a revision record (#133: the revision is never typed, it is the sheet's latest record). */
+const revise = (sheetId: string, code: string, date = ''): void => {
+  const id = `rev-${code}`;
+  useProjectStore.setState((st) => ({
+    revisions: [...(st.revisions ?? []), { id, code, date, description: '', by: '' }],
+    sheets: st.sheets.map((sh) => (sh.id === sheetId ? { ...sh, revisionIds: [...(sh.revisionIds ?? []), id] } : sh)),
+  }));
 };
 const sheetNamed = (name: string): ProjectSheet => {
   const found = useProjectStore.getState().sheets.find((s) => s.name === name);
@@ -106,8 +113,7 @@ describe('the register follows the set', () => {
   it('a new revision on one sheet changes that row only; the others are byte-equal', () => {
     const before = rows();
     const target = sheetNamed('Elevations, east and west');
-    setTitleBlockField(target.id, 'revision', 'B');
-    setTitleBlockField(target.id, 'date', '2026-10-19');
+    revise(target.id, 'B', '2026-10-19');
     const after = rows();
     const diff = after.filter((r, i) => JSON.stringify(r) !== JSON.stringify(before[i]));
     assert.deepEqual(diff, [{ number: 'A-202', title: 'Elevations, east and west', scale: before.find((r) => r.number === 'A-202')?.scale ?? '', revision: 'B', date: '2026-10-19' }]);
@@ -165,10 +171,10 @@ describe('the title block scale', () => {
 describe('the register is the drawing list', () => {
   it('comes from the same rows the issue lists', () => {
     const s = useProjectStore.getState();
-    setTitleBlockField(sheetNamed('Floor plans 3').id, 'revision', 'C');
+    revise(sheetNamed('Floor plans 3').id, 'C');
     renameProjectItem(sheetNamed('Floor plans 1').id, 'Parter și Etaj ț');
     const st = useProjectStore.getState();
-    const context = { issues: st.issues, schedules: st.schedules };
+    const context = { issues: st.issues, schedules: st.schedules, revisions: st.revisions };
     const plan = planIssue(st.sheets, { documents: [...st.views, ...(st.schedules ?? [])], drafts: [] }, { name: 'P01', date: '2026-10-19', listFirst: true, asIndicated: AS_INDICATED }, st.titleBlock, context);
     const byNumber = (a: RegisterRow, b: RegisterRow) => a.number.localeCompare(b.number, 'en', { numeric: true });
     assert.deepEqual(plan.sheets.map((p) => p.register).sort(byNumber), rows().sort(byNumber));

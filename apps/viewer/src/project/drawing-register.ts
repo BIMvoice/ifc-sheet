@@ -10,8 +10,9 @@
  */
 
 import { sheetGroup, type SetGroup } from './drawing-set';
-import { titleBlockOf } from './title-block';
-import type { ProjectIssue, ProjectSchedule, ProjectSheet } from './types';
+import { currentRevisionOf } from './revisions';
+import type { DraftEntity } from '@/drafting/types';
+import type { ProjectIssue, ProjectRevision, ProjectSchedule, ProjectSheet } from './types';
 
 export interface RegisterRow {
   number: string;
@@ -33,6 +34,9 @@ export interface RegisterInput {
   schedules?: readonly Pick<ProjectSchedule, 'id' | 'kind'>[];
   /** What the scale column says of a sheet with several scales. */
   asIndicated?: string;
+  /** The project's revision records and the drafts their clouds are in: a sheet's revision is the latest it has (`currentRevisionOf`). */
+  revisions?: readonly ProjectRevision[];
+  drafts?: readonly DraftEntity[];
 }
 
 /** The order the drawer lists sheets in: the register first, then by series, plans first, sheets of no series last; creation order within a series. */
@@ -69,11 +73,12 @@ function lastIssueDate(number: string, issues: RegisterInput['issues']): string 
 
 /** One sheet's row. The number is read from the sheet now, never copied. */
 export function registerRow(sheet: ProjectSheet, input: Omit<RegisterInput, 'sheets'>): RegisterRow {
-  const block = titleBlockOf(sheet, input.titleBlock, '');
-  const revision = block.revision ?? '';
+  // The revision is never typed: it is the latest the sheet has, as its title block reads (`revisions.ts`).
+  const current = currentRevisionOf(sheet, { revisions: input.revisions, drafts: [...(input.drafts ?? [])] });
+  const revision = current?.code ?? '';
   return {
     number: sheet.number, title: sheet.name, scale: sheetScaleText(sheet, notDrawingIds(input.schedules), input.asIndicated), revision,
-    date: (revision && block.date) || lastIssueDate(sheet.number, input.issues),
+    date: (revision && current?.date) || lastIssueDate(sheet.number, input.issues),
   };
 }
 

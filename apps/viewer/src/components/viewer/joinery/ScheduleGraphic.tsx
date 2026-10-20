@@ -109,10 +109,12 @@ export function useRegisterRows(): RegisterRow[] {
   const titleBlock = useProjectStore((s) => s.titleBlock);
   const issues = useProjectStore((s) => s.issues);
   const schedules = useProjectStore((s) => s.schedules);
+  const revisions = useProjectStore((s) => s.revisions);
+  const drafts = useProjectStore((s) => s.drafts);
   const asIndicated = t('sheets.asIndicated');
   return useMemo(
-    () => drawingRegisterRows({ sheets, titleBlock, issues, asIndicated, schedules }),
-    [sheets, titleBlock, issues, schedules, asIndicated],
+    () => drawingRegisterRows({ sheets, titleBlock, issues, asIndicated, schedules, revisions, drafts }),
+    [sheets, titleBlock, issues, schedules, asIndicated, revisions, drafts],
   );
 }
 

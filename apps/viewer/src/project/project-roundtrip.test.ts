@@ -141,7 +141,7 @@ const viewport: Required<SheetViewport> = {
 const sheet: Required<ProjectSheet> = {
   id: 'sh1', number: 'A-201', autoNumber: true, numberOverride: true, series: 'elevations', name: 'Plans', createdAt: 9, paper: { kind: 'elongated', base: 'A2', factor: 3 }, orientation: 'portrait', viewports: [viewport],
   frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' }, templateId: 'tpl1',
-  titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12', revision: 'B' },
+  titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12' }, revisionIds: ['rev-b'],
 };
 const schedule: Required<ProjectSchedule> = { id: 'sc1', name: 'Doors', kind: 'door', createdAt: 5, scale: 25 };
 const civil: Required<ProjectCivilDrawing> = {
@@ -160,6 +160,7 @@ const FULL: Required<ProjectDocument> = {
   models: [{ key: 'hash-arch', name: 'arch.ifc' }],
   views: Object.values(VIEWS),
   sheets: [sheet],
+  revisions: [{ id: 'rev-a', code: 'A', date: '2026-09-01', description: 'Prima emitere: ș ț ă', by: 'PC' }, { id: 'rev-b', code: 'B', date: '2026-10-12', description: 'Pereți noi', by: 'IC' }],
   titleBlock: { project: 'Full house', client: 'Owner', checkedBy: 'PC', logo: 'data:image/png;base64,iVBORw0KGgo=' },
   titleBlockSources: { address: [{ kind: 'attribute', on: 'IfcBuilding', name: 'BuildingAddress' }], organisation: [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Office' }, { kind: 'owner', part: 'developer' }] },
   drafts,

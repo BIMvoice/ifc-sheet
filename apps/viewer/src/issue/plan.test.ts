@@ -24,9 +24,9 @@ describe('planning an issue', () => {
 
   it('lists number, title, scale, paper and revision, and leaves out a sheet with nothing on it', () => {
     const plan = planIssue([
-      sheet('a', 'A-101', 'Ground floor', { paper: 'A2', orientation: 'portrait', titleBlock: { revision: 'C' }, viewports: [vp('v1', 100), vp('v1', 50), vp('v1', 100)] }),
+      sheet('a', 'A-101', 'Ground floor', { paper: 'A2', orientation: 'portrait', revisionIds: ['rc'], viewports: [vp('v1', 100), vp('v1', 50), vp('v1', 100)] }),
       sheet('b', 'A-102', 'Blank', { viewports: [] }),
-    ], none, input);
+    ], none, input, undefined, { revisions: [{ id: 'rc', code: 'C', date: '', description: '', by: '' }] });
     assert.deepEqual(plan.sheets.map((s) => ({ ...s.row, fingerprint: '' })), [{ number: 'A-101', title: 'Ground floor', scale: 'As indicated', paper: 'A2', orientation: 'portrait', revision: 'C', fingerprint: '' }]);
     assert.equal(plan.leftOut.length, 1);
     assert.equal(plan.leftOut[0].reason.key, 'issue.reason.empty');
@@ -34,9 +34,10 @@ describe('planning an issue', () => {
     assert.equal(scaleText({ viewports: [vp('v1', 100), vp('v1', 100)] }), '1:100');
   });
 
-  it('reads the revision from the project title block unless the sheet says its own', () => {
-    const plan = planIssue([sheet('a', 'A-101', 'Plan', { titleBlock: { revision: 'C' } }), sheet('b', 'A-102', 'Other')], none, input, { revision: 'B' });
-    assert.deepEqual(plan.sheets.map((s) => s.row.revision), ['C', 'B']);
+  it('reads each sheet\'s revision as its latest one, and none for a sheet without', () => {
+    const records = ['A', 'B', 'C'].map((code) => ({ id: `r${code}`, code, date: '', description: '', by: '' }));
+    const plan = planIssue([sheet('a', 'A-101', 'Plan', { revisionIds: ['rC', 'rA'] }), sheet('b', 'A-102', 'Other', { revisionIds: ['rB'] }), sheet('c', 'A-103', 'Bare')], none, input, undefined, { revisions: records });
+    assert.deepEqual(plan.sheets.map((s) => s.row.revision), ['C', 'B', '']);
   });
 
   it('keeps a sheet that only has something drawn on its paper', () => {
