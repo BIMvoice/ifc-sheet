@@ -5,7 +5,11 @@
 import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { act } from 'react';
 import { cleanup, click, render } from '@/test/render.js';
+import { checkCatalogue } from '@/i18n/catalogue-problems';
+import ro from '@/i18n/locales/ro';
+import { registerLocale, setLocale } from '@/i18n/registry';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import type { ProjectLevel } from '@/project/types';
@@ -26,7 +30,10 @@ beforeEach(() => {
   resetProject();
   useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS).filter((v) => !(v.kind === 'plan' && v.level.name === 'First Floor')) });
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  act(() => setLocale('en'));
+});
 
 const button = (ui: HTMLElement, text: RegExp) => {
   const b = [...ui.querySelectorAll('button')].find((x) => text.test(x.textContent ?? ''));
@@ -68,5 +75,27 @@ describe('AddDrawing', () => {
     assert.equal(button(ui, /Detail of an area/).disabled, false);
     click(button(ui, /Detail of an area/));
     assert.equal(detail, 1);
+  });
+
+  // PR #124 review: the side buttons and the name of a façade added here
+  // come from `names.view.*`, the same names the starting set uses.
+  const sides = (locale: string, elevationChoice: RegExp) => {
+    useProjectStore.setState({ views: useProjectStore.getState().views.filter((v) => v.kind !== 'elevation') });
+    act(() => setLocale(locale));
+    const ui = render(<AddDrawing onView={() => {}} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    click(button(ui, elevationChoice));
+    const labels = [...ui.querySelectorAll('section > :not(:first-child) button')].map((b) => b.textContent ?? '');
+    click(button(ui, new RegExp(`^${labels[0]}$`)));
+    const added = useProjectStore.getState().views.filter((v) => v.kind === 'elevation').map((v) => v.name);
+    return { labels, added };
+  };
+
+  it('names the sides, and a façade added through it, in Romanian under ro', () => {
+    registerLocale('ro', checkCatalogue(ro).catalogue);
+    assert.deepEqual(sides('ro', /^Fațadă/), { labels: ['Fațada nord', 'Fațada est', 'Fațada sud', 'Fațada vest'], added: ['Fațada nord'] });
+  });
+
+  it('names them exactly as before under en', () => {
+    assert.deepEqual(sides('en', /^Elevation/), { labels: ['North Elevation', 'East Elevation', 'South Elevation', 'West Elevation'], added: ['North Elevation'] });
   });
 });
