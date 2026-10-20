@@ -14,25 +14,13 @@
 import type { DraftSymbol, SymbolShape } from '@/catalogue/types';
 import type { DraftShape, Pt, SymbolInstanceShape } from './types';
 import { polar, rotatePt, sweepOf, TAU } from './vec';
+import { scaleBarShapes } from '@/siteplan/scale-bar';
 
 export type SymbolInstance = SymbolInstanceShape;
 
 const text = (x: number, y: number, t: string, height: number): SymbolShape => ({ type: 'text', p: { x, y }, text: t, height, rotation: 0 });
 const poly = (pts: [number, number][], closed = false): SymbolShape => ({ type: 'polyline', pts: pts.map(([x, y]) => ({ x, y })), closed });
 const line = (x1: number, y1: number, x2: number, y2: number): SymbolShape => ({ type: 'line', a: { x: x1, y: y1 }, b: { x: x2, y: y2 } });
-
-/** A scale bar of `metres` in 1 m divisions along +x, in model metres; alternate divisions are ruled to read as shaded. */
-function scaleBar(metres: number): SymbolShape[] {
-  const h = 0.16;
-  const out: SymbolShape[] = [poly([[0, 0], [metres, 0], [metres, h], [0, h]], true)];
-  for (let m = 0; m <= metres; m++) {
-    out.push(line(m, 0, m, h + 0.06));
-    out.push(text(m - (String(m).length * 0.25 * 0.62) / 2, h + 0.14, String(m), 0.25));
-  }
-  for (let m = 0; m < metres; m += 2) for (let k = 1; k <= 3; k++) out.push(line(m, (h * k) / 4, m + 1, (h * k) / 4));
-  out.push(text(metres + 0.2, 0.02, 'm', 0.25));
-  return out;
-}
 
 /**
  * Insulation batting along +x: the usual detail sign of loops, a prolate
@@ -79,7 +67,13 @@ export const BUILT_IN_SYMBOLS: readonly DraftSymbol[] = [
       text(-1.2, 11, 'N', 3.5),
     ],
   },
-  { id: 'builtin:scale-bar', name: 'Scale bar 5 m', unit: 'model', shapes: scaleBar(5) },
+  // Laid out here for 1:100; wherever it is drawn it is laid out again for that drawing's scale (`siteplan/live-symbols.ts`).
+  { id: 'builtin:scale-bar', name: 'Scale bar', unit: 'model', shapes: scaleBarShapes(100) },
+  // A point whose map coordinates (E / N) are printed beside it where it is drawn (`siteplan/live-symbols.ts`).
+  {
+    id: 'builtin:coordinate-point', name: 'Coordinate point', unit: 'paper',
+    shapes: [line(-2.5, 0, 2.5, 0), line(0, -2.5, 0, 2.5), { type: 'circle', c: { x: 0, y: 0 }, r: 1.2 }],
+  },
   {
     id: 'builtin:centre-line', name: 'Centre line mark', unit: 'paper',
     shapes: [line(-12, 0, -4, 0), line(-2, 0, 2, 0), line(4, 0, 12, 0), line(-4, -3, -4, 3), line(4, -3, 4, 3), text(-2.2, 4.5, 'CL', 3)],

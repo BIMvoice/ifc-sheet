@@ -99,6 +99,7 @@ import { CutHatchLayer } from './CutHatchLayer';
 import { MembraneLayer } from './MembraneLayer';
 
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
+import { GridLayer } from './GridLayer';
 
 import { roofAtPoint } from '@/project/roof-plan';
 
@@ -123,6 +124,8 @@ import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOver
 import { capturePointer } from '@/lib/pointer-capture';
 
 import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
+import { useLiveSymbolContext } from '@/siteplan/site-frame';
+import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
 
 
 const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
@@ -156,6 +159,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const fallbackPlane = useMemo(() => viewPlaneConfig(view, levels, mergedSectionBounds(models, legacyGeometry)), [view, levels, models, legacyGeometry]);
   const plane = drawing?.config.plane ?? fallbackPlane ?? undefined;
   const axis: SectionAxisName = plane ? AXIS_NAME[plane.axis] : 'down';
+  const liveSymbols = useLiveSymbolContext(plane, axis, view.scale ?? DEFAULT_VIEW_SCALE);
   const sectionPlane = useMemo(() => ({ axis, position: plane?.position ?? 0, flipped: plane?.flipped ?? false }), [axis, plane]);
   // Pinned: a regenerated drawing (an element added, edited) keeps the user's framing. No
   // automatic fit while a BIM tool is drawing — the clicks would land somewhere else.
@@ -252,7 +256,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   useDraftingKeys({ inputRef, setText, submit: () => submitCommandLine('', state.cursor) });
 
   const exportDxf = () => exportViewDxf({
-    view, drawing: shown, axis, drafts: entities, layers, extraPatterns,
+    view, drawing: shown, axis, drafts: entities, layers, extraPatterns, symbols: liveSymbols,
     overlays: [...(plane ? planOverlays(view, plane, runtimeGeometry?.meshes, useProjectStore.getState().symbolFlips, hidden, shown) : []), ...membraneOverlays(shown)],
   });
 
@@ -320,6 +324,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         <ViewportState state={viewportState(entry, view.kind)} />
         <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
+        <GridLayer view={view} plane={plane ?? null} drawing={shown} transform={viewTransform} axis={axis} />
         </div>
         <DraftOverlay
           entities={entities}
@@ -340,6 +345,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           gripDrag={state.gripDrag}
           sectionBand={sectionBand}
           crop={view.detail}
+          symbols={liveSymbols}
         />
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
