@@ -5,7 +5,7 @@
 import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanup, render } from '@/test/render.js';
+import { cleanup, click, render } from '@/test/render.js';
 import { parsePat } from '@/drafting/hatch/pattern';
 import { newDraft, commitDrafts, draftsOfView } from '@/drafting/draft-store';
 import { draftingViewOf } from '@/drafting/drafting-view';
@@ -22,6 +22,7 @@ import type { ProjectLevel, ProjectSheet } from '@/project/types';
 import { SheetPaper } from '@/components/viewer/sheets/SheetPaper';
 import { sheetSvgText } from '@/components/viewer/sheets/sheet-export';
 import { useSheetContent } from '@/components/viewer/sheets/useSheetContent';
+import { SaveToLibraryButton } from '@/components/viewer/project/SaveToLibraryButton';
 import { selectKinds, serializeCatalogue, parseCatalogue } from './catalogue-file.js';
 import { importCatalogueText, projectCatalogue } from './catalogue-store.js';
 import { placeLibraryDetail, saveViewAsLibraryDetail } from './detail-actions.js';
@@ -186,6 +187,46 @@ describe('detail library', () => {
     const renamed = useProjectStore.getState().draftLayers.find((l) => l.name === 'A-DETAIL (2)');
     assert.ok(renamed, 'both: the incoming layer is kept under a new name');
     assert.ok(draftsOfView(both).some((d) => d.layerId === renamed!.id));
+  });
+});
+
+describe('saving under a name the library already has (#128 review)', () => {
+  const names = () => (useProjectStore.getState().details ?? []).map((d) => d.name);
+  const button = (ui: HTMLElement, text: string): HTMLButtonElement => {
+    const found = [...ui.querySelectorAll('button')].find((b) => b.textContent === text);
+    assert.ok(found, `a "${text}" button`);
+    return found as HTMLButtonElement;
+  };
+  const panel = (viewId: string) => render(<SaveToLibraryButton view={useProjectStore.getState().views.find((v) => v.id === viewId)!} />);
+
+  it('keeps both by default, the new one renamed, and replaces only when told', () => {
+    const viewId = drawParapet();
+    const first = saveViewAsLibraryDetail(viewId)!;
+    saveViewAsLibraryDetail(viewId);
+    assert.deepEqual(names(), ['Typical parapet', 'Typical parapet (2)']);
+    assert.equal(useProjectStore.getState().details![0].id, first, 'the first entry is untouched');
+    saveViewAsLibraryDetail(viewId, undefined, 'replace');
+    assert.deepEqual(names(), ['Typical parapet (2)', 'Typical parapet']);
+    assert.notEqual(useProjectStore.getState().details![1].id, first);
+  });
+
+  it('asks before saving over a name: keep both (the focused answer), replace, or cancel', () => {
+    const viewId = drawParapet();
+    const first = saveViewAsLibraryDetail(viewId)!;
+    const ui = panel(viewId);
+    click(button(ui, 'Save to the detail library'));
+    assert.match(ui.textContent ?? '', /already has "Typical parapet"/);
+    assert.deepEqual(names(), ['Typical parapet'], 'nothing is saved before the answer');
+    assert.equal(document.activeElement?.textContent, 'Keep both');
+    click(button(ui, 'Cancel'));
+    assert.deepEqual(names(), ['Typical parapet']);
+    click(button(ui, 'Save to the detail library'));
+    click(button(ui, 'Keep both'));
+    assert.deepEqual(names(), ['Typical parapet', 'Typical parapet (2)']);
+    click(button(ui, 'Save to the detail library'));
+    click(button(ui, 'Replace it'));
+    assert.deepEqual(names(), ['Typical parapet (2)', 'Typical parapet']);
+    assert.ok(!useProjectStore.getState().details!.some((d) => d.id === first), 'the old entry was replaced');
   });
 });
 

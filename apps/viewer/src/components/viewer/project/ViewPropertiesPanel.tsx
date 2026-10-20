@@ -19,11 +19,10 @@ import { activateDocumentTab } from '@/project/open-view';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import type { ProjectView } from '@/project/types';
 import { SHEET_SCALES } from '@/project/sheets';
-import { saveViewAsLibraryDetail } from '@/catalogue/detail-actions';
-import { toast } from '@/components/ui/toast';
 import { rescaleViewAnnotations } from '@/project/drafting-standards';
 import { Button } from '@/components/ui/button';
 import { ViewGraphicsDialog } from './ViewGraphicsDialog';
+import { SaveToLibraryButton } from './SaveToLibraryButton';
 
 const AXIS_KEYS = {
   down: 'projectNavigator.props.axisDown',
@@ -117,7 +116,7 @@ export function ViewPropertiesPanel({ view }: { view: ProjectView }) {
         </select>
       </Row>
       {view.kind === 'drafting' ? (
-        <Button variant="outline" size="sm" className="w-full" onClick={() => { if (saveViewAsLibraryDetail(view.id)) toast.success(t('projectNavigator.props.detailSaved')); }}>{t('projectNavigator.action.saveDetail')}</Button>
+        <SaveToLibraryButton view={view} />
       ) : <Button variant="outline" size="sm" className="w-full" onClick={() => setGraphicsOpen(true)}>{t('viewGraphics.open')}</Button>}
       <ViewGraphicsDialog view={view} open={graphicsOpen} onOpenChange={setGraphicsOpen} />
     </section>
