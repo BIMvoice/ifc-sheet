@@ -108,7 +108,20 @@ export interface CategoryGraphics {
   hatchScale?: number;
 }
 
+/** Which ends of a grid axis carry a bubble; on a section, `start` is the foot and `end` the head. */
+export type GridEnds = 'start' | 'end' | 'both';
+
+/** How a view draws the model's structural grid (IfcGrid). */
+export interface ViewGridGraphics {
+  /** Absent: on for plans and sections, off for elevations. */
+  visible?: boolean;
+  /** Absent: both ends. */
+  ends?: GridEnds;
+}
+
 export interface ViewGraphics {
+  /** The structural grid's axes and bubbles. */
+  grid?: ViewGridGraphics;
   /** A built-in graphic override preset id; absent = the default, null = none. */
   presetId?: string | null;
   /** By category id (`VIEW_CATEGORIES`). */
