@@ -10,9 +10,11 @@
  * SVG (`SheetPaper`), its print / PDF (the same SVG) and the DXF exports
  * (which read the pen tags the SVG carries) all take their widths from
  * `viewportPens(…, standard)` and the sheet's own marks from `standard.sheet`
- * / `standard.type`. Text styles and dimension styles of a standard are
- * written into the project's style book (`applyGraphicStandard`), so
- * annotations follow the same choice.
+ * / `standard.type`. A standard's text and dimension styles are added to the
+ * project's style book under their own names and selected for new
+ * annotations (`setGraphicStandard`); the project's own styles, Standard
+ * included, are never overwritten, so going back to the default restores
+ * them exactly.
  *
  * Every value says where it comes from:
  *  - "series":   a member of the ISO 128 line-width series or the ISO 3098
@@ -23,7 +25,7 @@
  */
 
 import type { CategoryLineWeight } from '@/project/types';
-import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, STANDARD, type DimStyle, type TextStyle } from './styles';
+import { DEFAULT_DIM_STYLE, STANDARD, type DimStyle, type TextStyle } from './styles';
 
 /** ISO 128 line widths in paper millimetres (the series 0.13 … 2, ratio of √2 between members). */
 export const ISO_128_LINE_WIDTHS: readonly number[] = [0.13, 0.18, 0.25, 0.35, 0.5, 0.7, 1, 1.4, 2];
@@ -50,9 +52,11 @@ export interface GraphicStandard {
   sheet: { frame: number; titleOuter: number; titleDivider: number; titleRule: number };
   /** The sheet's own text, paper mm: title block captions and values, sheet number, scale, and the view title under a viewport. */
   type: { caption: number; value: number; number: number; scale: number; viewTitle: number };
-  /** Text and dimension styles written into the project when the standard is chosen. */
+  /** Text and dimension styles the standard adds to the project, under ids of its own (never `STANDARD`). */
   textStyles: readonly TextStyle[];
   dimStyles: readonly DimStyle[];
+  /** The text and dimension style new annotations take under this standard. */
+  current: { textStyle: string; dimStyle: string };
 }
 
 /** What IfcSheet drew before standards existed. Choosing it restores exactly that. */
@@ -67,13 +71,14 @@ export const DEFAULT_GRAPHIC_STANDARD: GraphicStandard = {
   materialHatch: { heavy: 0.35, medium: 0.25, light: 0.18, hairline: 0.13 },
   sheet: { frame: 0.7, titleOuter: 0.5, titleDivider: 0.35, titleRule: 0.18 },
   type: { caption: 2, value: 3.5, number: 9, scale: 4.5, viewTitle: 3.5 },
-  textStyles: [DEFAULT_TEXT_STYLE],
-  dimStyles: [DEFAULT_DIM_STYLE],
+  // The default brings no styles: the project's own Standard styles are what it draws with.
+  textStyles: [],
+  dimStyles: [],
+  current: { textStyle: STANDARD, dimStyle: STANDARD },
 };
 
 const RO_TEXT_STYLES: readonly TextStyle[] = [
-  // Standard keeps its id: what has no style of its own falls back to it.
-  { id: STANDARD, name: 'Standard', height: 2.5, font: 'sans', bold: false, italic: false },
+  { id: 'ro-text-25', name: 'Text 2.5', height: 2.5, font: 'sans', bold: false, italic: false },
   { id: 'ro-text-35', name: 'Text 3.5', height: 3.5, font: 'sans', bold: false, italic: false },
   { id: 'ro-title-50', name: 'Title 5', height: 5, font: 'sans', bold: false, italic: false },
   { id: 'ro-title-70', name: 'Title 7', height: 7, font: 'sans', bold: true, italic: false },
@@ -89,7 +94,8 @@ const RO_TEXT_STYLES: readonly TextStyle[] = [
  */
 export const ROMANIAN_PRACTICE: GraphicStandard = {
   id: 'ro-practice',
-  name: 'Romanian practice (ISO 128 / ISO 3098 / STAS)',
+  // STAS is not in the label: no value was checked against a STAS text.
+  name: 'Romanian practice (ISO 128 / ISO 3098)',
   // practice: cut 0.7 (thick); the outline of what is seen beyond the cut is one 2:1 step thinner, 0.35.
   pens: { cut: 0.7, outline: 0.35, seen: 0.25, hidden: 0.18, hatch: 0.13 },
   // series, paired thick : thin at 2:1 or the next step of the series (practice).
@@ -104,7 +110,8 @@ export const ROMANIAN_PRACTICE: GraphicStandard = {
   type: { caption: 2.5, value: 3.5, number: 7, scale: 5, viewTitle: 5 },
   textStyles: RO_TEXT_STYLES,
   // practice: oblique stroke terminators, extension line gap 1 and overshoot 2, value 1 above the line.
-  dimStyles: [{ ...DEFAULT_DIM_STYLE, arrow: 'tick', arrowSize: 2.5, extGap: 1, extOver: 2, textGap: 1 }],
+  dimStyles: [{ ...DEFAULT_DIM_STYLE, id: 'ro-dim', name: 'Dimensions 2.5', textStyle: 'ro-text-25', arrow: 'tick', arrowSize: 2.5, extGap: 1, extOver: 2, textGap: 1 }],
+  current: { textStyle: 'ro-text-25', dimStyle: 'ro-dim' },
 };
 
 export const GRAPHIC_STANDARDS: readonly GraphicStandard[] = [DEFAULT_GRAPHIC_STANDARD, ROMANIAN_PRACTICE];
@@ -128,17 +135,43 @@ export function standardValues(s: GraphicStandard): { kind: 'width' | 'height'; 
   ];
 }
 
-/** The ids of the styles any built-in standard brings. */
-const OWN_IDS = new Set(GRAPHIC_STANDARDS.flatMap((s) => [...s.textStyles, ...s.dimStyles].map((x) => x.id)));
+/**
+ * The id a file names, checked against the built-in standards: a built-in
+ * one other than the default, nothing (absent, or the default), or unknown
+ * (a file from a newer app; the caller falls back to the default and says so).
+ */
+export function knownGraphicStandard(id: unknown): { id?: string; unknown?: string } {
+  if (id === undefined || id === DEFAULT_GRAPHIC_STANDARD.id) return {};
+  const known = GRAPHIC_STANDARDS.find((g) => g.id === id);
+  return known ? { id: known.id } : { unknown: String(id) };
+}
+
+/** A style as comparable text: flat objects, keys sorted, so a file round trip that reorders keys still compares equal. */
+const canonical = (style: object): string => JSON.stringify(style, Object.keys(style).sort());
 
 /**
- * The project's style lists under `standard`: styles a built-in standard brought are replaced by this
- * one's; styles the user made (other ids) stay.
+ * One style list under `own`, the chosen standard's styles. A style another
+ * built-in standard brought and the user left as it came goes; one the user
+ * edited is theirs now and stays. Every other style stays as it is, in its
+ * place. The chosen standard's styles are appended where their id is free:
+ * one already there (edited or not) is never overwritten.
+ */
+function listUnder<T extends { id: string }>(own: readonly T[], brought: readonly T[], list: readonly T[]): T[] {
+  const asBrought = new Map(brought.map((x) => [x.id, canonical(x)]));
+  const ownIds = new Set(own.map((x) => x.id));
+  const kept = list.filter((x) => ownIds.has(x.id) || asBrought.get(x.id) !== canonical(x));
+  const taken = new Set(kept.map((x) => x.id));
+  return [...kept, ...own.filter((x) => !taken.has(x.id)).map((x) => ({ ...x }))];
+}
+
+/**
+ * The project's style lists under `standard` (see `listUnder`). Going from the
+ * default to a standard and back returns the lists the project had, exactly,
+ * as long as the standard's styles were not edited meanwhile.
  */
 export function stylesUnder(standard: GraphicStandard, textStyles: readonly TextStyle[], dimStyles: readonly DimStyle[]): { textStyles: TextStyle[]; dimStyles: DimStyle[] } {
-  const keep = <T extends { id: string }>(list: readonly T[]) => list.filter((x) => !OWN_IDS.has(x.id));
   return {
-    textStyles: [...standard.textStyles.map((t) => ({ ...t })), ...keep(textStyles)],
-    dimStyles: [...standard.dimStyles.map((d) => ({ ...d })), ...keep(dimStyles)],
+    textStyles: listUnder(standard.textStyles, GRAPHIC_STANDARDS.flatMap((g) => g.textStyles), textStyles),
+    dimStyles: listUnder(standard.dimStyles, GRAPHIC_STANDARDS.flatMap((g) => g.dimStyles), dimStyles),
   };
 }

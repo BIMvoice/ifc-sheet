@@ -15,6 +15,7 @@
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
 import { create } from 'zustand';
@@ -22,6 +23,7 @@ import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { liftSheetTitleBlocks } from './title-block';
+import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 
@@ -97,6 +99,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
   const doc = liftSheetTitleBlocks(saved);
+  const standard = knownGraphicStandard(doc.graphicStandard);
   useProjectStore.setState({
     ...doc,
     symbolFlips: doc.symbolFlips ?? {},
@@ -127,12 +130,13 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     modelState: doc.modelState,
     siteArea: doc.siteArea,
     titleBlockSources: doc.titleBlockSources,
-    graphicStandard: doc.graphicStandard,
+    graphicStandard: standard.id,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
     dirty: options.dirty ?? false,
   });
+  if (standard.unknown) warnUnknownGraphicStandard(standard.unknown);
 }
 
 /**
