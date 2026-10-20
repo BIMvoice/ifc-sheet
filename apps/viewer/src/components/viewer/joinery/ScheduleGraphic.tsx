@@ -20,8 +20,9 @@ import { layoutSchedule, type ScheduleLabels, type ScheduleLayout, type Schedule
 import { takeoffRows, type TakeoffRow } from '@/joinery/material-takeoff';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
 import { layoutMaterialTakeoff, type TakeoffLabels } from '@/joinery/material-takeoff-layout';
-import { drawingRegisterRows, type RegisterRow } from '@/project/drawing-register';
-import { layoutRegister, type RegisterLabels } from '@/joinery/register-layout';
+import { sharedRegisterRows, type RegisterRow } from '@/project/drawing-register';
+import { layoutRegisterPage, registerFit, type RegisterLabels } from '@/joinery/register-layout';
+import { drawingArea, SET_PAPER } from '@/project/drawing-set';
 import { penTags } from '../sheets/dxf-tags';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
@@ -59,8 +60,15 @@ export function useRegisterLabels(title: string): RegisterLabels {
   }), [t, title]);
 }
 
-/** The register's rows, read from the sheets, the title block and the issues as they stand: nothing about them is stored. */
-export function useRegisterRows(): RegisterRow[] {
+const NO_ROWS: RegisterRow[] = [];
+
+/**
+ * The register's rows, read from the sheets, the title block and the issues as
+ * they stand: nothing about them is stored. Through the one shared cache, so a
+ * sheet edit builds that sheet's row once however many sheets are on screen;
+ * `false` (a sheet without the register) reads nothing.
+ */
+export function useRegisterRows(wanted = true): RegisterRow[] {
   const { t } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
   const titleBlock = useProjectStore((s) => s.titleBlock);
@@ -68,8 +76,8 @@ export function useRegisterRows(): RegisterRow[] {
   const schedules = useProjectStore((s) => s.schedules);
   const asIndicated = t('sheets.asIndicated');
   return useMemo(
-    () => drawingRegisterRows({ sheets, titleBlock, issues, asIndicated, schedules }),
-    [sheets, titleBlock, issues, schedules, asIndicated],
+    () => (wanted ? sharedRegisterRows({ sheets, titleBlock, issues, asIndicated, schedules }) : NO_ROWS),
+    [wanted, sheets, titleBlock, issues, schedules, asIndicated],
   );
 }
 
@@ -98,7 +106,8 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const labels = useScheduleLabels('');
   const takeoffLabels = useTakeoffLabels('');
   const registerLabels = useRegisterLabels('');
-  const registerRows = useRegisterRows();
+  const placesRegister = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'register'));
+  const registerRows = useRegisterRows(placesRegister);
   const placesTakeoff = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'materials'));
   return useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
@@ -108,14 +117,15 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || out.has(schedule.id)) continue;
       out.set(schedule.id, schedule.kind === 'register'
-        ? layoutRegister(registerRows, { ...registerLabels, title: schedule.name })
+        // Shrunk to the sheet's drawing area, then split into pages: this viewport shows its own (`syncRegisterPages`).
+        ? layoutRegisterPage(registerRows, { ...registerLabels, title: schedule.name }, registerFit(registerRows.length, drawingArea(sheet.paper ?? SET_PAPER).h), vp.page ?? 0)
         : schedule.kind === 'materials'
         ? layoutMaterialTakeoff(rows, { ...takeoffLabels, title: schedule.name })
         : layoutSchedule(scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50 }));
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet.viewports, schedules, labels, takeoffLabels, registerLabels, registerRows, placesTakeoff, mutationVersion, models, catalogue, mapping]);
+  }, [sheet.viewports, sheet.paper, schedules, labels, takeoffLabels, registerLabels, registerRows, placesTakeoff, mutationVersion, models, catalogue, mapping]);
 }
 
 function Prim({ p }: { p: SchedulePrim }) {

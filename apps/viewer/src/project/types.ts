@@ -169,6 +169,8 @@ export interface SheetViewport {
   center: { x: number; y: number } | null;
   /** Drafting layers this viewport hides, on top of its view's. */
   hiddenLayers?: string[];
+  /** The page of a document split over several sheets (the drawing register's continuation sheets), from 0; absent is 0. */
+  page?: number;
 }
 
 export interface ProjectSheet {
