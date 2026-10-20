@@ -281,7 +281,7 @@ export interface SheetViewport {
 }
 
 /** The groups of sheets a numbering scheme numbers apart: `other` is details and whatever fits no series. */
-export type NumberGroup = 'plans' | 'elevations' | 'sections' | 'details' | 'schedules' | 'other';
+export type NumberGroup = 'plans' | 'elevations' | 'sections' | 'interiors' | 'details' | 'schedules' | 'other';
 
 /** How one group's numbers are written: `<discipline><prefix><separator><n padded to digits>`, `n` running from `start` by `step`. */
 export interface GroupPattern {

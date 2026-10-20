@@ -21,6 +21,7 @@ export const wallRo = {
   'wall.intro.waiting': 'Se citește modelul…',
   'wall.group.plans': 'Planuri',
   'wall.group.elevations': 'Fațade',
+  'wall.group.interiors': 'Elevații interioare',
   'wall.group.sections': 'Secțiuni',
   'wall.group.schedules': 'Tabele',
   'wall.group.other': 'Alte planșe',

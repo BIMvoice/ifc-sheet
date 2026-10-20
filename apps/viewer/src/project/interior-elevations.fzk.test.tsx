@@ -116,9 +116,10 @@ describe('interior elevations of an FZK-Haus room', () => {
   it('hangs all of a room\'s elevations on one sheet', (t) => {
     if (!geometry) { t.skip('needs the wasm runtime (pnpm build:wasm:fetch)'); return; }
     const views = viewsOf(geometry, BUERO);
-    const sheet = interiorElevationSheet('2 Buero', views, [{ number: 'A-201' }, { number: 'A-202' }]);
+    // Its own series, after the room sheets already made (PR #120 review): not next to the facade elevations.
+    const sheet = interiorElevationSheet('2 Buero', views, [{ number: 'A-201' }, { number: 'A-202' }, { number: 'A-401' }]);
     assert.deepEqual(sheet.viewports?.map((vp) => vp.viewId), views.map((v) => v.id));
-    assert.equal(sheet.number, 'A-203');
+    assert.equal(sheet.number, 'A-402');
     assert.equal(sheet.name, '2 Buero – Interior elevations');
     assert.deepEqual(new Set(sheet.viewports?.map((vp) => vp.scale)), new Set([50]));
   });

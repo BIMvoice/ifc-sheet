@@ -16,7 +16,7 @@ import { issuedAmong, previewRenumber, renumberAll, setSchemeForNewSheets } from
 import type { GroupPattern, NumberGroup, NumberingScheme } from '@/project/types';
 
 const GROUP_LABELS: Record<NumberGroup, TranslationKey> = {
-  plans: 'wall.group.plans', elevations: 'wall.group.elevations', sections: 'wall.group.sections', details: 'wall.group.drafting', schedules: 'wall.group.schedules', other: 'wall.group.other',
+  plans: 'wall.group.plans', elevations: 'wall.group.elevations', sections: 'wall.group.sections', interiors: 'wall.group.interiors', details: 'wall.group.drafting', schedules: 'wall.group.schedules', other: 'wall.group.other',
 };
 
 const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1 text-sm text-white';

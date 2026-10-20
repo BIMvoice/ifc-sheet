@@ -40,7 +40,7 @@ export interface RegisterInput {
 }
 
 /** The order the drawer lists sheets in: the register first, then by series, plans first, sheets of no series last; creation order within a series. */
-export const SET_ORDER: readonly (SetGroup | null)[] = ['plans', 'elevations', 'sections', 'schedules', null];
+export const SET_ORDER: readonly (SetGroup | null)[] = ['plans', 'elevations', 'sections', 'interiors', 'schedules', null];
 
 /** Ids of the documents whose viewports are not drawings: every schedule, the register included. */
 export const notDrawingIds = (schedules: RegisterInput['schedules']): ReadonlySet<string> => new Set((schedules ?? []).map((s) => s.id));

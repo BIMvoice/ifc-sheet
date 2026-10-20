@@ -26,6 +26,7 @@ export const wallEn = {
   'wall.group.elevations': 'Elevations',
   'wall.group.drafting': 'Drafting views',
   'wall.group.sections': 'Sections',
+  'wall.group.interiors': 'Interior elevations',
   'wall.group.schedules': 'Schedules',
   'wall.group.legends': 'Legends',
   'wall.group.other': 'Other sheets',

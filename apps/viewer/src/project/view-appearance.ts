@@ -28,7 +28,8 @@ const occluded = (l: Drawing2D['lines'][number]) => l.visibility === 'hidden' ||
 type Shown = Pick<ProjectView, 'kind' | 'showHidden' | 'detail'> & { interior?: InteriorElevation };
 
 function withoutOverlays(source: Drawing2D, view: Shown): Drawing2D {
-  const drawing = view.kind === 'elevation' || view.kind === 'section' ? drawingWithGround(source, view.kind) : source;
+  // The ground line is a facade's: an interior elevation looks at a wall from inside the room.
+  const drawing = (view.kind === 'elevation' && !view.interior) || view.kind === 'section' ? drawingWithGround(source, view.kind) : source;
   if (view.kind !== 'elevation') return viewShowsHidden(view) ? drawing : { ...drawing, lines: drawing.lines.filter((l) => !occluded(l)) };
   const kept = viewShowsHidden(view) ? drawing.lines : drawing.lines.filter((l) => !occluded(l));
   const outline = outlineLines({ ...drawing, lines: kept });

@@ -12,7 +12,7 @@ import { useViewerStore } from '@/store';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { renderIdGlobalId } from './element-guid';
-import { interiorElevationSheet, interiorElevationViews } from './interior-elevations';
+import { interiorElevationSheet, interiorElevationViews, type InteriorElevationView } from './interior-elevations';
 import { roomGeometry, roomLabel } from './interior-room';
 import { addProjectView, numberingScheme, useProjectStore } from './project-store';
 
@@ -46,6 +46,11 @@ export function createInteriorElevations(renderId: number): InteriorElevationsRe
   const label = labelOf(renderId);
   const views = interiorElevationViews({ guid, label, ...geometry });
   if (views.length === 0) return { error: 'noFaces' };
+  return addInteriorElevations(label, views);
+}
+
+/** Add a room's interior elevations `views` to the project and hang them on a new sheet of their own, as one undo step. */
+export function addInteriorElevations(label: string, views: readonly InteriorElevationView[]): { sheetId: string; sheetNumber: string; count: number } {
   const sheet = interiorElevationSheet(label, views, useProjectStore.getState().sheets, Date.now(), numberingScheme());
   const scale = sheet.viewports?.[0]?.scale;
   runAsOneUndoStep(() => {

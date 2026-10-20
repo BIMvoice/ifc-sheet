@@ -4,9 +4,10 @@
 
 /**
  * Left and right on an interior elevation of a room whose walls are not on
- * the axes. The fixture `public/_fixtures/rotated-room.ifc` is hand-written
- * IFC4 (made for this test; its FILE_DESCRIPTION says so): one room 4 m by
- * 3 m inside, its storey turned 30 degrees counter-clockwise, a window W1 in
+ * the axes. The fixture `__fixtures__/rotated-room.ifc` (beside this test,
+ * not shipped with the app) is hand-written IFC4 (made for this test; its
+ * FILE_DESCRIPTION says so): one room 4 m by 3 m inside, its storey turned
+ * 30 degrees counter-clockwise, a window W1 in
  * the north wall 0.55 m to 1.25 m from its west end and a window W2 in the
  * east wall 0.4 m to 1.0 m from its north end: each near the end on your left
  * when you stand in the room facing its wall. Each must be drawn at the left
@@ -26,7 +27,7 @@ import { drawingToScreen } from '@/drafting/frame';
 import { interiorElevationSheet, interiorElevationViews, type InteriorElevationView } from './interior-elevations';
 import { roomGeometry } from './interior-room';
 
-const ROTATED = new URL('../../public/_fixtures/rotated-room.ifc', import.meta.url);
+const ROTATED = new URL('./__fixtures__/rotated-room.ifc', import.meta.url);
 
 let geometry: GeometryResult | null = null;
 before(async () => { geometry = await meshFile(ROTATED); });

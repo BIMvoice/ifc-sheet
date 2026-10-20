@@ -14,7 +14,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
 import { refittedOnPaper, type BoxOf } from './sheet-refit';
 import { frameOf, frameProblem, type FrameProblem } from './sheet-frame';
@@ -65,11 +65,12 @@ export function sectionForProposal(proposal: SectionProposal): string | null {
 }
 
 /**
- * Lay out the starting set on a project that has no sheets yet. Returns
- * whether it did; a project with sheets is never touched.
+ * Lay out the starting set on a project that has no set sheets yet (a room's
+ * interior elevations, made first, do not count). Returns whether it did; a
+ * project with set sheets is never touched.
  */
 export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | null): boolean {
-  if (!bounds || useProjectStore.getState().sheets.length > 0) return false;
+  if (!bounds || useProjectStore.getState().sheets.some(isSetSheet)) return false;
   // A project still carrying the untouched English default name takes the active language's, once, as it is started.
   const { name, dirty } = useProjectStore.getState();
   const untitled = resolve('names.project.untitled');
@@ -161,7 +162,7 @@ function ensureSections(meshes: MeshData[] | null, extent: AxisBounds, options: 
 function ensurePlanScales(extent: AxisBounds): void {
   const plans = state().views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.detail);
   const onSheet = new Map(state().sheets.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
-  const planned = state().sheets.length === 0 ? buildDrawingSet({ views: plans, extent, templates: seriesTemplates() }) : [];
+  const planned = state().sheets.some(isSetSheet) ? [] : buildDrawingSet({ views: plans, extent, templates: seriesTemplates() });
   const plannedScale = new Map(planned.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
   for (const plan of plans) {
     const scale = onSheet.get(plan.id) ?? plannedScale.get(plan.id);
@@ -176,8 +177,10 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
   const before = state().sheets;
   report.sheetsExisting = before.length;
   let sheets = before;
-  if (before.length === 0) {
-    sheets = buildDrawingSet({ views: loose, extent, scheme: numberingScheme(), templates: seriesTemplates() });
+  if (!before.some(isSetSheet)) {
+    // No set yet: lay it all out, beside any interior elevation sheets already there.
+    const set = buildDrawingSet({ views: loose, extent, scheme: numberingScheme(), templates: seriesTemplates() });
+    if (set.length > 0) sheets = [...before, ...set];
   } else {
     for (const view of loose) {
       const next = withViewHung(sheets, state().views, view, extent, undefined, numberingScheme(), seriesTemplates());

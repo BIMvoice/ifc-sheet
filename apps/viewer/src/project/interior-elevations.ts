@@ -235,8 +235,9 @@ export const INTERIOR_SCALE = 50;
 /**
  * The sheet a room's interior elevations hang on together, in one row: the
  * smallest paper that takes them at 1:50, else the set's paper and scale
- * choice (`choosePaper`, `fittingScale`). Numbered next in the elevations
- * series.
+ * choice (`choosePaper`, `fittingScale`). Numbered next in the interiors
+ * series (A-4xx), apart from the facade elevations, so rescaling those
+ * leaves it alone.
  */
 export function interiorElevationSheet(label: string, views: readonly InteriorElevationView[], sheets: readonly Pick<ProjectSheet, 'number'>[], now = Date.now(), scheme: NumberingScheme = DEFAULT_SCHEME): ProjectSheet {
   const sizes = views.map(({ interior: { crop } }) => ({ w: crop.max.x - crop.min.x, h: crop.max.y - crop.min.y }));
@@ -244,7 +245,7 @@ export function interiorElevationSheet(label: string, views: readonly InteriorEl
   const area = drawingArea(paper);
   const scale = fitsScale(sizes, area, INTERIOR_SCALE) ? INTERIOR_SCALE : fittingScale(sizes, area);
   return {
-    id: freshProjectId('sheet'), number: nextNumber(sheets, 'elevations', scheme), series: 'elevations', name: `${label} – Interior elevations`, createdAt: now, paper, orientation: 'landscape',
+    id: freshProjectId('sheet'), number: nextNumber(sheets, 'interiors', scheme), series: 'interiors', name: `${label} – Interior elevations`, createdAt: now, paper, orientation: 'landscape',
     viewports: placeViewports(views, sizes, scale, paper),
   };
 }

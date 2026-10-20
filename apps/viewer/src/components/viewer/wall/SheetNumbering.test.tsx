@@ -67,7 +67,7 @@ describe('switching to A01, A02', () => {
     addProjectSheet('Notes');
     const before = numbers();
     const mark = () => state().drafts.flatMap((d) => (d.shape.type === 'text' && d.params.detailOf === detailId ? [d.shape.text] : []));
-    assert.deepEqual(mark(), ['1/A-901']);
+    assert.deepEqual(mark(), ['1/A-501'], 'details hang in the details series');
     const issue = issueRecord(planIssue(state().sheets, { documents: [], drafts: state().drafts }, { name: 'Planning', date: '2026-10-19', listFirst: true }), 'iss1', 1);
     useProjectStore.setState({ issues: [issue] });
 

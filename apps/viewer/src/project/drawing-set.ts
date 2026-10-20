@@ -43,7 +43,8 @@ export interface ModelExtent {
   max: { x: number; y: number; z: number };
 }
 
-export type SetGroup = 'plans' | 'elevations' | 'sections' | 'schedules';
+/** `interiors`: a room's interior elevations (A-4xx), kept apart from the facade elevations so each group is scaled on its own. */
+export type SetGroup = 'plans' | 'elevations' | 'sections' | 'interiors' | 'schedules';
 
 /** What the drawing area depends on: a paper (landscape, the default frame), or a sheet's own paper, orientation and frame. */
 export type SheetLayout = Paper | Pick<ProjectSheet, 'paper' | 'orientation' | 'frame'>;
@@ -54,6 +55,9 @@ const isSheetLike = (l: SheetLayout): l is Pick<ProjectSheet, 'paper' | 'orienta
 function startOf(template: SheetTemplate | undefined, paper: PaperSize): Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId'> {
   return template ? templateFields(template) : { paper, orientation: 'landscape' };
 }
+
+/** A group's template; interior elevations have no template series and are laid out on the paper that fits. */
+const templateOf = (templates: Partial<Record<TemplateSeries, SheetTemplate>>, group: SetGroup): SheetTemplate | undefined => (group === 'interiors' ? undefined : templates[group]);
 
 /** Width and height a view's drawing takes, metres, estimated from the model's extent. */
 export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number; h: number } {
@@ -253,7 +257,7 @@ export function buildDrawingSet({ views, extent, now = Date.now(), scheme = DEFA
   const rows = setRows(views);
   const papers = papersOf(rows, extent);
   const sheets = rows.map(({ group, name, members }) => {
-    const start = startOf(templates[group], papers.get(group)?.paper ?? SET_PAPER);
+    const start = startOf(templateOf(templates, group), papers.get(group)?.paper ?? SET_PAPER);
     const sizes = members.map((v) => viewExtent(v, extent));
     return {
       id: freshProjectId('sheet'), number: '', series: group, name, createdAt: now, ...start,
@@ -264,27 +268,32 @@ export function buildDrawingSet({ views, extent, now = Date.now(), scheme = DEFA
   return sheets.map((s) => ({ ...s, number: numbers.get(s.id) ?? s.number }));
 }
 
-/** Which group a sheet of the set belongs to (`null`: details and other sheets). Sheets from older files are read from their A-1xx / A-2xx / A-3xx / A-6xx number. */
+/** Which group a sheet of the set belongs to (`null`: details and other sheets). Sheets from older files are read from their A-1xx / A-2xx / A-3xx / A-4xx / A-6xx number. */
 export function sheetGroup(sheet: Pick<ProjectSheet, 'number' | 'series'>): SetGroup | null {
   const group = numberGroupOf(sheet);
   return group === 'other' || group === 'details' ? null : group;
 }
 
-/** The series a sheet is in, for its template: its group, or `details` for the sheets details hang on (A-5xx by default). */
+/** Whether a sheet belongs to the drawing set the program lays out: every sheet but a room's interior elevations (A-4xx by default). */
+export function isSetSheet(sheet: Pick<ProjectSheet, 'number' | 'series'>): boolean {
+  return sheetGroup(sheet) !== 'interiors';
+}
+
+/** The series a sheet is in, for its template: its group, or `details` for the sheets details hang on (A-5xx by default); interior elevations have no template series. */
 export function sheetSeries(sheet: Pick<ProjectSheet, 'number' | 'series'>): TemplateSeries | null {
   const group = numberGroupOf(sheet);
-  return group === 'other' ? null : group;
+  return group === 'other' || group === 'interiors' ? null : group;
 }
 
 /** The group a view's sheet belongs to, and its number series' first number. */
 export function groupOfView(view: ProjectView): SetGroup | null {
   if (view.kind === 'plan') return 'plans';
-  if (view.kind === 'elevation') return 'elevations';
+  if (view.kind === 'elevation') return view.interior ? 'interiors' : 'elevations';
   if (view.kind === 'section') return 'sections';
   return null;
 }
 
-const GROUP_NAMES: Record<SetGroup, TranslationKey> = { plans: 'names.sheet.plans', elevations: 'names.sheet.elevations', sections: 'names.sheet.sections', schedules: 'names.sheet.schedules' };
+const GROUP_NAMES: Record<SetGroup, TranslationKey> = { plans: 'names.sheet.plans', elevations: 'names.sheet.elevations', sections: 'names.sheet.sections', interiors: 'names.sheet.interiors', schedules: 'names.sheet.schedules' };
 /** Drawings a set sheet holds before a new one is started. */
 export const PER_SHEET = 2;
 
@@ -313,7 +322,8 @@ export function withViewHung(
     return { sheets: sheets.map((s) => (s.id === last.id ? layOut(s, members) : s)), sheetId: last.id };
   }
   // The new sheet starts from its series' template, else is made like the group's last sheet, else on the smallest paper that suits it.
-  const start = templates[group] ? startOf(templates[group], SET_PAPER)
+  const template = templateOf(templates, group);
+  const start = template ? startOf(template, SET_PAPER)
     : last ? { paper: last.paper ?? SET_PAPER, orientation: last.orientation ?? 'landscape', ...(last.frame ? { frame: last.frame } : {}), ...(last.templateId ? { templateId: last.templateId } : {}) }
       : startOf(undefined, choosePaper([[viewExtent(view, extent)]]).paper);
   const sheet = layOut({ id: freshProjectId('sheet'), number: nextNumber(sheets, group, scheme), series: group, name: resolve(GROUP_NAMES[group]), createdAt: now, ...start }, [view]);

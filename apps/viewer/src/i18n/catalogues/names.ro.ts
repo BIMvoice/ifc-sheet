@@ -15,6 +15,7 @@ export const namesRo = {
   'names.sheet.elevationsEastWest': 'Fațade est și vest',
   'names.sheet.sections': 'Secțiuni',
   'names.sheet.sectionsN': 'Secțiuni {n}',
+  'names.sheet.interiors': 'Elevații interioare',
   'names.sheet.schedules': 'Tabele',
   'names.view.plan': 'Plan',
   'names.view.north': 'Fațada nord',
