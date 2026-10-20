@@ -16,8 +16,7 @@ import { renderIdGlobalId } from '@/project/element-guid';
 import { styledParams } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
 import { resolvePlanLevel } from '@/project/view-defaults';
-import { levelFloorMeshY, loadedDataStores } from '@/rcp/ceiling-floor';
-import { ceilingTags } from '@/rcp/ceiling-tags';
+import { ceilingPlanTags, loadedDataStores } from '@/rcp/ceiling-floor';
 import { editDrafts, newDraft } from '../draft-store';
 import type { DraftCommandDef, DraftContext } from './types';
 
@@ -33,9 +32,11 @@ export function ceilTag(ctx: DraftContext, isCeiling: (renderId: number) => bool
     return;
   }
   const geometry = currentDrawingRuntime().geometryResult;
-  // The soffit is read off the meshes, so the floor is taken in their frame, not from the Elevation attribute.
-  const floor = levelFloorMeshY(resolvePlanLevel(view, useProjectStore.getState().levels) ?? view.level, loadedDataStores(), geometry?.coordinateInfo);
-  const tags = ceilingTags(geometry?.meshes ?? [], floor, isCeiling);
+  const { levels } = useProjectStore.getState();
+  // The soffit is read off the meshes, so the floors are taken in their frame, not from the Elevation attribute;
+  // only this storey's ceilings (above the cut, below the next level) are tagged.
+  const plan = { level: resolvePlanLevel(view, levels) ?? view.level, cutHeight: view.cutHeight };
+  const tags = ceilingPlanTags(geometry?.meshes ?? [], plan, levels, loadedDataStores(), geometry?.coordinateInfo, isCeiling);
   const done = new Set(ctx.entities().flatMap((d) => (typeof d.params.ceilingOf === 'number' ? [d.params.ceilingOf] : [])));
   const todo = tags.filter((t) => !done.has(t.renderId));
   const height = ctx.settings.textHeight;

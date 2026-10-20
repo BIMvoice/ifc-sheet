@@ -4,7 +4,8 @@
 
 /** The reflected-ceiling-room fixture, meshed by the repo's own WASM engine (viewer frame, Y-up). */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import type { TestContext } from 'node:test';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { IfcAPI, initSync } from '@ifc-lite/wasm';
@@ -23,22 +24,38 @@ const FIXTURE = new URL('../project/__fixtures__/reflected-ceiling-room.ifc', im
 /** Level 1's elevation, the soffit and the light's height above it, and the light's footprint centre (IFC x, y), as the fixture states them. */
 export const RCP_FIXTURE = { storeyZ: 3.0, ceilingHeight: 2.7, lightHeight: 2.6, light: { x: 6.0, y: 1.2 }, ceilingEdgeX: 4.0 } as const;
 
-export interface RcpFixtureIds { wall: number[]; slab: number; ceiling: number; light: number }
+export interface RcpFixtureIds { wall: number[]; slab: number; ceiling: number; ceilings: number[]; light: number }
+
+/** Skips the test (and returns false) when the WASM runtime is not built; otherwise loads it once. */
+export function ensureRcpWasm(t: TestContext): boolean {
+  if (!existsSync(WASM)) {
+    t.skip('wasm bundle not built: run `pnpm build:wasm:fetch` (or `bash scripts/build-wasm.sh`) first');
+    return false;
+  }
+  if (!ready) { initSync({ module: readFileSync(WASM) }); ready = true; }
+  return true;
+}
 
 /** The fixture's STEP text. */
 export const rcpFixtureText = (): string => readFileSync(FIXTURE, 'utf8');
 
-/** Meshes the fixture, or the STEP text `text` (a variant of it). */
+/** The express ids of the fixture's elements (or of a variant's), read from the STEP text: no WASM needed. */
+export function rcpFixtureIds(text: string = rcpFixtureText()): RcpFixtureIds {
+  const idsOf = (type: string) => [...text.matchAll(new RegExp(`^#(\\d+)=${type}\\(`, 'gm'))].map((m) => Number(m[1]));
+  const ceilings = idsOf('IFCCOVERING');
+  return { wall: idsOf('IFCWALL'), slab: idsOf('IFCSLAB')[0], ceiling: ceilings[0], ceilings, light: idsOf('IFCLIGHTFIXTURE')[0] };
+}
+
+/** Meshes the fixture, or the STEP text `text` (a variant of it). Call `ensureRcpWasm` first. */
 export function meshRcpFixture(text: string = rcpFixtureText()): { meshes: MeshData[]; ids: RcpFixtureIds } {
   const bytes = new TextEncoder().encode(text);
-  const idsOf = (type: string) => [...text.matchAll(new RegExp(`^#(\\d+)=${type}\\(`, 'gm'))].map((m) => Number(m[1]));
-  const ids: RcpFixtureIds = { wall: idsOf('IFCWALL'), slab: idsOf('IFCSLAB')[0], ceiling: idsOf('IFCCOVERING')[0], light: idsOf('IFCLIGHTFIXTURE')[0] };
+  const ids = rcpFixtureIds(text);
   if (!ready) { initSync({ module: readFileSync(WASM) }); ready = true; }
   const api = new IfcAPI();
   try {
     applyRemeshConfig(api, { mergeLayers: false, tessellationQuality: null, skipSmallCuts: false, rectParamFastPath: true });
     const wire = styleWireOnApi(api, bytes);
-    const targets = Uint32Array.from([...ids.wall, ids.slab, ids.ceiling, ids.light]);
+    const targets = Uint32Array.from([...ids.wall, ids.slab, ...ids.ceilings, ids.light]);
     const { meshes } = remeshOnApi(api, { buffer: bytes, targets, frame: { x: 0, y: 0, z: 0, needsShift: false }, ...wire });
     // The engine emits each element in its own frame (world = origin + position); the drawings take absolute positions.
     const absolute = meshes.map((m): MeshData => {
@@ -62,7 +79,7 @@ export function rcpBounds(meshes: readonly MeshData[]): { min: { x: number; y: n
   return { min, max };
 }
 
-/** What `ViewDrawingHost` does for a view: its plane and display overrides into the real hook; the drawing it publishes. */
+/** What `ViewDrawingHost` does for a view: its plane and display overrides into the real hook; the drawing it publishes. Call `ensureRcpWasm` first. */
 export async function generateRcpView(view: ProjectView): Promise<Drawing2D> {
   const { meshes } = meshed ??= meshRcpFixture();
   const bounds = rcpBounds(meshes);

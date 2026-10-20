@@ -40,11 +40,16 @@ const SOFFIT_TOLERANCE = 1e-4;
 
 export const ceilingHeightText = (height: number): string => `${height >= 0 ? '+' : '-'}${Math.abs(height).toFixed(2)}`;
 
+/** Soffit heights a tag is kept for, in the mesh frame: strictly above `above` and strictly below `below`. */
+export interface SoffitBand { above: number; below: number }
+
+const ANY_HEIGHT: SoffitBand = { above: -Infinity, below: Infinity };
+
 /**
  * The tags of the coverings among `meshes` that `isCeiling` accepts (by renderer id), heights measured from `floor`.
- * One tag per covering, ordered by id; a covering with no lowest face is left out.
+ * One tag per covering, ordered by id; a covering with no lowest face, or whose soffit lies outside `band`, is left out.
  */
-export function ceilingTags(meshes: readonly CeilingMesh[], floor: number, isCeiling: (renderId: number) => boolean): CeilingTag[] {
+export function ceilingTags(meshes: readonly CeilingMesh[], floor: number, isCeiling: (renderId: number) => boolean, band: SoffitBand = ANY_HEIGHT): CeilingTag[] {
   const byId = new Map<number, CeilingMesh[]>();
   for (const m of meshes) {
     if (m.ifcType !== 'IfcCovering' || !isCeiling(m.expressId)) continue;
@@ -69,7 +74,7 @@ export function ceilingTags(meshes: readonly CeilingMesh[], floor: number, isCei
       cx += (a * (t[0] + t[3] + t[6])) / 3;
       cz += (a * (t[2] + t[5] + t[8])) / 3;
     }
-    if (!Number.isFinite(low) || area <= 0) return [];
+    if (!Number.isFinite(low) || area <= 0 || !(low > band.above && low < band.below)) return [];
     const height = low - floor;
     return [{ renderId, at: { x: cx / area, y: cz / area }, height, text: ceilingHeightText(height) }];
   });

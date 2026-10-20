@@ -23,7 +23,7 @@ import { SheetCanvas } from '@/components/viewer/wall/SheetCanvas.js';
 import { sheetDxf } from '@/components/viewer/sheets/sheet-dxf';
 import { sheetSvgText } from '@/components/viewer/sheets/sheet-export';
 import { useSheetContent } from '@/components/viewer/sheets/useSheetContent.js';
-import { generateRcpView, RCP_FIXTURE } from '@/test/rcp-fixture';
+import { ensureRcpWasm, generateRcpView, RCP_FIXTURE } from '@/test/rcp-fixture';
 
 const level = { name: 'Level 1', elevation: RCP_FIXTURE.storeyZ, storeyGlobalIds: [] };
 const base = { name: 'Level 1 ceiling', createdAt: 0, scale: 50 };
@@ -63,7 +63,8 @@ describe('reflected ceiling plan on a sheet', () => {
   beforeEach(() => resetProject());
   afterEach(() => cleanup());
 
-  it('exports as SVG and DXF', async () => {
+  it('exports as SVG and DXF', async (t) => {
+    if (!ensureRcpWasm(t)) return;
     const drawing = await generateRcpView(rcp);
     const sheet: ProjectSheet = { id: 's', number: 'A-201', name: 'Ceiling plans', createdAt: 0, paper: 'A1', orientation: 'landscape', viewports: [vp] };
     useProjectStore.setState({ views: [rcp], sheets: [sheet] });

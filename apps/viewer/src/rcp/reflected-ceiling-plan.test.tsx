@@ -13,15 +13,16 @@
  */
 
 import '@/test/setup-dom.js';
-import { describe, it } from 'node:test';
+import { describe, it, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Drawing2D, DrawingLine } from '@ifc-lite/drawing-2d';
 import { mmPerMetre } from '@/project/sheets';
 import type { ElevationProjectView, PlanProjectView, ProjectLevel, SectionProjectView } from '@/project/types';
 import { ceilingTags } from '@/rcp/ceiling-tags';
-import { generateRcpView, meshRcpFixture, RCP_FIXTURE } from '@/test/rcp-fixture';
+import { ensureRcpWasm, generateRcpView, meshRcpFixture, RCP_FIXTURE, rcpFixtureIds } from '@/test/rcp-fixture';
 
-const { meshes, ids } = meshRcpFixture();
+const ids = rcpFixtureIds();
+
 const level: ProjectLevel = { name: 'Level 1', elevation: RCP_FIXTURE.storeyZ, storeyGlobalIds: [] };
 const base = { name: 'v', createdAt: 0, scale: 50 };
 const plan: PlanProjectView = { ...base, id: 'plan', kind: 'plan', level, cutHeight: 1.2 };
@@ -41,7 +42,8 @@ const sameOnSheet = (a: number, b: number) => assert.ok(Math.abs(a - b) * MM < 0
 const sameExtent = (a: ReturnType<typeof extent>, b: ReturnType<typeof extent>) => (['x0', 'x1', 'y0', 'y1'] as const).forEach((k) => sameOnSheet(a[k], b[k]));
 
 describe('reflected ceiling plan against the floor plan below', () => {
-  it('puts the off-centre light at the same sheet position as its model x/y in the plan frame', async () => {
+  it('puts the off-centre light at the same sheet position as its model x/y in the plan frame', async (t) => {
+    if (!ensureRcpWasm(t)) return;
     const [floorPlan, ceilingPlan] = [await generateRcpView(plan), await generateRcpView(rcp)];
     const light = lineExtent(linesOf(ceilingPlan, ids.light));
     // The model point (6.0, 1.2) is at drawing (6.0, -1.2): the plan's mapping of the same model point.
@@ -55,7 +57,8 @@ describe('reflected ceiling plan against the floor plan below', () => {
     sameExtent(extent(ceilingPlan.cutPolygons.flatMap((p) => p.polygon.outer)), walls);
   });
 
-  it('puts the asymmetric ceiling edge at the same sheet x/y as the plan', async () => {
+  it('puts the asymmetric ceiling edge at the same sheet x/y as the plan', async (t) => {
+    if (!ensureRcpWasm(t)) return;
     const [floorPlan, ceilingPlan] = [await generateRcpView(plan), await generateRcpView(rcp)];
     const ceiling = lineExtent(linesOf(ceilingPlan, ids.ceiling));
     // The L runs x 0.1..7.9 and y 0.1..5.9; its notch edge is at x = 4.0.
@@ -68,7 +71,8 @@ describe('reflected ceiling plan against the floor plan below', () => {
     sameOnSheet(span.y1, -2.5);
   });
 
-  it('draws ceiling and light in the ceiling plan, and overhead (dashed) in the floor plan below', async () => {
+  it('draws ceiling and light in the ceiling plan, and overhead (dashed) in the floor plan below', async (t) => {
+    if (!ensureRcpWasm(t)) return;
     const [floorPlan, ceilingPlan] = [await generateRcpView(plan), await generateRcpView(rcp)];
     for (const id of [ids.ceiling, ids.light]) {
       const below = linesOf(floorPlan, id), above = linesOf(ceilingPlan, id);
@@ -80,7 +84,8 @@ describe('reflected ceiling plan against the floor plan below', () => {
     assert.ok(floorPlan.cutPolygons.every((p) => p.entityId !== ids.ceiling && p.entityId !== ids.light), 'nothing of the ceiling is cut at 1.2 m');
   });
 
-  it('still generates the plan, section and elevation views', async () => {
+  it('still generates the plan, section and elevation views', async (t) => {
+    if (!ensureRcpWasm(t)) return;
     for (const view of [plan, section, elevation]) {
       const d = await generateRcpView(view);
       assert.ok(d.lines.length > 0 || d.cutPolygons.length > 0, `${view.kind} draws something`);
@@ -90,21 +95,33 @@ describe('reflected ceiling plan against the floor plan below', () => {
 });
 
 describe('ceiling height tags', () => {
-  const tags = ceilingTags(meshes, RCP_FIXTURE.storeyZ, (id) => id === ids.ceiling);
+  let meshed: ReturnType<typeof meshRcpFixture> | undefined;
+  /** The fixture meshed once, or null (test skipped) without the WASM runtime. */
+  const fixture = (t: TestContext) => (ensureRcpWasm(t) ? (meshed ??= meshRcpFixture()) : null);
+  const tagsOf = ({ meshes, ids }: NonNullable<ReturnType<typeof fixture>>) => ceilingTags(meshes, RCP_FIXTURE.storeyZ, (id) => id === ids.ceiling);
 
-  it('reads the soffit height above the level: the fixture states 2.70 m', () => {
+  it('reads the soffit height above the level: the fixture states 2.70 m', (t) => {
+    const f = fixture(t);
+    if (!f) return;
+    const tags = tagsOf(f);
     assert.equal(tags.length, 1);
     assert.ok(Math.abs(tags[0].height - RCP_FIXTURE.ceilingHeight) < 1e-3, `${tags[0].height}`);
     assert.equal(tags[0].text, '+2.70');
   });
 
-  it('tags it under the ceiling, at the centroid of the L in the plan frame', () => {
+  it('tags it under the ceiling, at the centroid of the L in the plan frame', (t) => {
+    const f = fixture(t);
+    if (!f) return;
+    const tags = tagsOf(f);
     const cx = (18.72 * 4.0 + 13.26 * 2.05) / 31.98, cy = (18.72 * 1.3 + 13.26 * 4.2) / 31.98;
     sameOnSheet(tags[0].at.x, cx);
     sameOnSheet(tags[0].at.y, -cy);
   });
 
-  it('tags nothing the predicate does not accept, and no light or wall', () => {
+  it('tags nothing the predicate does not accept, and no light or wall', (t) => {
+    const f = fixture(t);
+    if (!f) return;
+    const { meshes, ids } = f;
     assert.deepEqual(ceilingTags(meshes, RCP_FIXTURE.storeyZ, () => false), []);
     assert.deepEqual(ceilingTags(meshes, RCP_FIXTURE.storeyZ, (id) => id === ids.light), []);
   });

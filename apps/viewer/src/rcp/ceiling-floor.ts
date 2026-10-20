@@ -18,7 +18,9 @@ import type { IfcDataStore } from '@ifc-lite/parser';
 import { dxfElevationRenderY } from '@/hooks/dxfUnderlayMath';
 import { resolveStoreyOriginMeters } from '@/lib/geo/storey-elevation';
 import type { ProjectLevel } from '@/project/types';
+import { sameElevation } from '@/project/view-defaults';
 import { useViewerStore } from '@/store';
+import { ceilingTags, type CeilingMesh, type CeilingTag } from './ceiling-tags';
 
 /**
  * The floor of `level` in `frame`: the first storey of `stores` whose GlobalId the level lists and whose
@@ -40,4 +42,28 @@ export function loadedDataStores(): IfcDataStore[] {
   const { models, ifcDataStore } = useViewerStore.getState();
   const stores = [...models.values()].flatMap((m) => (m.ifcDataStore ? [m.ifcDataStore] : []));
   return stores.length > 0 || !ifcDataStore ? stores : [ifcDataStore];
+}
+
+/**
+ * The ceiling tags of a reflected ceiling plan of `level` cut `cutHeight` above its floor: only the coverings whose
+ * soffit lies above the cut and below the floor of the next level up (none above the top level), so a plan never
+ * tags the ceilings of another storey. Heights are measured from `level`'s floor, all in `frame`.
+ */
+export function ceilingPlanTags(
+  meshes: readonly CeilingMesh[],
+  plan: { level: Pick<ProjectLevel, 'elevation' | 'storeyGlobalIds'>; cutHeight: number },
+  levels: readonly Pick<ProjectLevel, 'elevation' | 'storeyGlobalIds'>[],
+  stores: readonly IfcDataStore[],
+  frame: CoordinateInfo | undefined,
+  isCeiling: (renderId: number) => boolean,
+): CeilingTag[] {
+  const { level, cutHeight } = plan;
+  const floor = levelFloorMeshY(level, stores, frame);
+  let next: Pick<ProjectLevel, 'elevation' | 'storeyGlobalIds'> | undefined;
+  for (const l of levels) {
+    if (l.elevation <= level.elevation || sameElevation(l.elevation, level.elevation)) continue;
+    if (!next || l.elevation < next.elevation) next = l;
+  }
+  const below = next ? levelFloorMeshY(next, stores, frame) : Infinity;
+  return ceilingTags(meshes, floor, isCeiling, { above: floor + cutHeight, below });
 }
