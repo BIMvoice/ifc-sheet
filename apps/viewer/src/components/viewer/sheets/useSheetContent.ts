@@ -20,6 +20,7 @@ import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
 import { isRasterView } from '@/project/axonometric';
+import { isAutosaveRasterRef } from '@/project/autosave-rasters';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { partHostType } from '@/project/part-host';
@@ -33,9 +34,10 @@ import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
 import { useSheetLegends } from '../legend/LegendGraphic';
 import type { ViewportContent } from './SheetPaper';
 
-/** The raster capture a 3D view prints as, when it prints as one and has been captured. */
+/** The raster capture a 3D view prints as, when it prints as one and has been captured (and, after an autosave restore, read back). */
 function rasterOf(view: ProjectView | undefined): ViewRaster | undefined {
-  return view && isRasterView(view) ? view.raster ?? undefined : undefined;
+  const raster = view && isRasterView(view) ? view.raster ?? undefined : undefined;
+  return raster && !isAutosaveRasterRef(raster.href) ? raster : undefined;
 }
 
 export interface SheetContent {
