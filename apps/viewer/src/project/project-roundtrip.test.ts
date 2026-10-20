@@ -62,7 +62,7 @@ const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, de
 
 const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').ProjectView, { kind: K }>> } = {
   plan: {
-    ...base, id: 'v-plan', name: 'Level 1', kind: 'plan', cutHeight: 1.4,
+    ...base, id: 'v-plan', name: 'Level 1', kind: 'plan', cutHeight: 1.4, reflected: true,
     level: { name: 'Level 1', elevation: 3.2, storeyGlobalIds: ['G-A', 'G-B'] },
   } satisfies Required<PlanProjectView>,
   section: {
@@ -72,7 +72,14 @@ const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').Pro
       custom: { normal: [0, 0, 1], distance: 1.5, pickedAt: [1, 2, 3], tangent: [1, 0, 0], bitangent: [0, 1, 0] },
     },
   } satisfies Required<SectionProjectView>,
-  elevation: { ...base, showHidden: true, id: 'v-el', name: 'East', kind: 'elevation', direction: 'east', planeOffset: 7.25 } satisfies Required<ElevationProjectView>,
+  elevation: {
+    ...base, showHidden: true, id: 'v-el', name: 'East', kind: 'elevation', direction: 'east', planeOffset: 7.25,
+    interior: {
+      room: 'G-ROOM',
+      plane: { axis: 'side', offset: 4.5, flipped: false, custom: { normal: [-1, 0, 0], distance: -4.5, pickedAt: [4.5, 0, -2], tangent: [0, 0, 1], bitangent: [0, 1, 0] } },
+      crop: { min: { x: -1.75, y: 0 }, max: { x: 1.75, y: 2.5 } },
+    },
+  } satisfies Required<ElevationProjectView>,
   '3d': {
     ...base, id: 'v-3d', name: 'Axo', kind: '3d',
     viewpoint: { position: { x: 1, y: 2, z: 3 }, target: { x: 0, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 }, fov: 50, projectionMode: 'orthographic', orthoSize: 12 },
