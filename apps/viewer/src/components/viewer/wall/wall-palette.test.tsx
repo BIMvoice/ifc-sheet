@@ -96,6 +96,20 @@ describe('the palette and the sheets', () => {
   });
 });
 
+describe('the palette rows that show a key', () => {
+  it('announce it with aria-keyshortcuts, from the same row as the key shown (#119 review)', () => {
+    setPlatform('Win32');
+    renderViewerLayout();
+    press(document.body, 'k', { ctrlKey: true });
+    assert.ok(searchBox(), 'the palette is open');
+    const keyed = rows().filter((r) => r.querySelector('kbd'));
+    assert.ok(keyed.length > 0, 'some rows show a key');
+    for (const r of keyed) assert.ok(r.getAttribute('aria-keyshortcuts'), `${r.textContent} announces ${r.querySelector('kbd')?.textContent}`);
+    const palette = keyed.find((r) => r.querySelector('kbd')?.textContent === 'Ctrl+K');
+    if (palette) assert.equal(palette.getAttribute('aria-keyshortcuts'), 'Control+K');
+  });
+});
+
 describe('the list of keys', () => {
   it('opens on "?" and says what the Wall\'s keys do', () => {
     renderViewerLayout();

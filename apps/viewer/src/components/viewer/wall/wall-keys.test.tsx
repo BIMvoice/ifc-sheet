@@ -11,7 +11,9 @@ import assert from 'node:assert/strict';
 import { cleanup, press, render } from '@/test/render.js';
 import { setPlatform } from '@/test/platform.js';
 import type { KeyChord } from '@/lib/commands/chord';
-import { shortcutLabel } from '@/lib/commands/shortcut-label';
+import { ariaKeyShortcuts, shortcutLabel } from '@/lib/commands/shortcut-label';
+import { DRAFTING_KEY_COMMANDS } from '@/lib/commands/drafting-key-commands';
+import { attachDraftingView, cancelCommand, clickDrawing, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { resolveEnglish as t } from '@/i18n/registry';
 import { WALL_KEY_COMMANDS, wallToolKey, type WallKeyId } from '@/lib/commands/wall-key-commands';
 import { resetProject, useProjectStore } from '@/project/project-store';
@@ -165,6 +167,29 @@ describe('the rail\'s tooltips', () => {
     }
   });
 
+  it('announces the same key with aria-keyshortcuts, from the same row, on every control that shows one (#119 review)', () => {
+    for (const apple of [false, true]) {
+      setPlatform(apple ? 'MacIntel' : 'Win32');
+      const ui = rail();
+      for (const tool of [...WALL_TOOLS, ...DRAW_TOOLS]) {
+        const id = wallToolKey(tool.command)!;
+        const button = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('title') === `${t(tool.labelKey)} (${shortcutLabel(id, apple)})`);
+        assert.equal(button?.getAttribute('aria-keyshortcuts'), ariaKeyShortcuts(id, apple), tool.command);
+      }
+      const add = [...ui.querySelectorAll('button')].find((b) => b.textContent?.includes('Add a drawing'));
+      assert.equal(add?.getAttribute('aria-keyshortcuts'), apple ? 'Alt+A' : 'Alt+A');
+      // Every control with a key in its tooltip announces it.
+      for (const b of ui.querySelectorAll('button[title]')) assert.ok(b.getAttribute('aria-keyshortcuts'), b.getAttribute('title') ?? '');
+      cleanup();
+    }
+    assert.equal(ariaKeyShortcuts('wall.tool.dimaligned', false), 'Alt+1');
+    assert.equal(ariaKeyShortcuts('wall.draw.line', false), 'Alt+Shift+1');
+    assert.equal(ariaKeyShortcuts('wall.print', false), 'Control+P');
+    assert.equal(ariaKeyShortcuts('wall.print', true), 'Meta+P');
+    assert.equal(ariaKeyShortcuts('wall.nextSheet', false), 'PageDown');
+    assert.equal(ariaKeyShortcuts('drafting.redo', false), 'Control+Shift+Z Control+Y');
+  });
+
   it('shows no key that is not in the keymap: every key in a tooltip belongs to a row', () => {
     const ui = rail();
     const shown = new Set(WALL_KEY_COMMANDS.map((c) => shortcutLabel(c.id)));
@@ -195,12 +220,56 @@ describe('a sheet stepped into', () => {
     stroke(document.body, WALL_KEY_COMMANDS.find((c) => c.id === 'wall.addDrawing')!.keys[0]);
     assert.equal(pressed('Add a drawing'), 'true');
 
-    stroke(document.body, WALL_KEY_COMMANDS.find((c) => c.id === 'wall.tool.sectionline')!.keys[0]);
-    assert.equal(pressed('Section mark'), 'true');
-
     stroke(document.body, WALL_KEY_COMMANDS.find((c) => c.id === 'wall.nextSheet')!.keys[0]);
     stroke(document.body, WALL_KEY_COMMANDS.find((c) => c.id === 'wall.prevSheet')!.keys[0]);
     assert.deepEqual(stepped, [sheets[2].id, sheets[0].id]);
+
+    // A tool brings its drawing forward: the sheet keys are then not on offer (below).
+    stroke(document.body, WALL_KEY_COMMANDS.find((c) => c.id === 'wall.tool.sectionline')!.keys[0]);
+    assert.equal(pressed('Section mark'), 'true');
+  });
+
+  it('does not leave the sheet on PageUp / PageDown in the middle of a drafting command or with a drawing in front (#119 review)', () => {
+    const sheets = useProjectStore.getState().sheets;
+    const stepped: string[] = [];
+    render(<SteppedSheet sheet={sheets[1]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={(id) => stepped.push(id)} />);
+    const page = (id: 'wall.nextSheet' | 'wall.prevSheet'): KeyboardEvent => {
+      const event = keydown(WALL_KEY_COMMANDS.find((c) => c.id === id)!.keys[0]);
+      act(() => { document.body.dispatchEvent(event); });
+      return event;
+    };
+    try {
+      // A polyline with two points down and more to come.
+      act(() => {
+        attachDraftingView(sheets[1].id, 'down', () => []);
+        startDraftCommand('polyline');
+      });
+      act(() => {
+        clickDrawing({ x: 1, y: 1 }, 0.05, false);
+        clickDrawing({ x: 4, y: 1 }, 0.05, false);
+      });
+      const polyline = runningCommand();
+      assert.ok(polyline, 'the polyline is waiting for its next point');
+      for (const id of ['wall.nextSheet', 'wall.prevSheet'] as const) {
+        assert.equal(page(id).defaultPrevented, false, `${id} is left to the browser`);
+        assert.equal(availableWallCommands().includes(id), false, `${id} is not on offer in the palette either`);
+      }
+      assert.deepEqual(stepped, [], 'still on the sheet');
+      assert.equal(runningCommand(), polyline, 'the half-drawn polyline is still being drawn');
+      // Done with the command: the keys step again.
+      act(() => cancelCommand());
+      assert.equal(page('wall.nextSheet').defaultPrevented, true);
+      assert.deepEqual(stepped, [sheets[2].id]);
+      // A drawing in front (the section tool brings the plan forward), with no command running: not on offer either.
+      stepped.length = 0;
+      stroke(document.body, WALL_KEY_COMMANDS.find((c) => c.id === 'wall.tool.sectionline')!.keys[0]);
+      act(() => cancelCommand());
+      assert.equal(runningCommand(), null);
+      assert.equal(page('wall.nextSheet').defaultPrevented, false);
+      assert.deepEqual(stepped, []);
+    } finally {
+      act(() => cancelCommand());
+    }
   });
 
   it('performs every row of the keymap on the real sheet: each key is taken, none is left to the browser', () => {
@@ -216,6 +285,17 @@ describe('a sheet stepped into', () => {
         act(() => { document.body.dispatchEvent(event); });
         assert.equal(event.defaultPrevented, true, `${row.id} has a handler on the sheet`);
       }
+    }
+  });
+
+  it('gives the sheet\'s Fit and Print buttons the key of their row as aria-keyshortcuts (#119 review)', () => {
+    setPlatform('Win32');
+    const ui = render(<SteppedSheet sheet={useProjectStore.getState().sheets[1]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} />);
+    const named = (label: string) => [...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
+    assert.equal(named(t('wall.fit'))?.getAttribute('aria-keyshortcuts'), ariaKeyShortcuts('wall.fit', false));
+    assert.equal(named(t('wall.export.pdf'))?.getAttribute('aria-keyshortcuts'), 'Control+P');
+    for (const b of ui.querySelectorAll('button[title]')) {
+      if (/\(([^)]+)\)$/.test(b.getAttribute('title') ?? '')) assert.ok(b.getAttribute('aria-keyshortcuts'), b.getAttribute('title') ?? '');
     }
   });
 
@@ -255,3 +335,32 @@ describe('the palette and the Wall\'s actions', () => {
   });
 });
 
+
+describe('the drafting keys the shortcut list shows (#119 review)', () => {
+  /** The keydown of a row's chord, as the browser sends it. */
+  const draftingKey = (chord: (typeof DRAFTING_KEY_COMMANDS)[number]['keys'][number]): KeyboardEvent => new window.KeyboardEvent('keydown', {
+    key: chord.key === ' ' ? ' ' : chord.key.length === 1 ? chord.key : chord.key.charAt(0).toUpperCase() + chord.key.slice(1).replace(/^(f\d+)$/i, (m) => m.toUpperCase()),
+    ctrlKey: 'mod' in chord, shiftKey: 'shift' in chord, bubbles: true, cancelable: true,
+  });
+
+  it('are the keys the drafting view performs: F3 snap, F8 ortho, Ctrl+Z undo, each read from its row', () => {
+    const typed: string[] = [];
+    const { handlers } = counting();
+    render(<WithCommandLine handlers={handlers} typed={typed} />);
+    const row = (id: string) => DRAFTING_KEY_COMMANDS.find((c) => c.id === id)!;
+    const snap = useDraftingSession.getState().snap;
+    act(() => { document.body.dispatchEvent(draftingKey(row('drafting.snap').keys[0])); });
+    assert.equal(useDraftingSession.getState().snap, !snap, 'F3 toggles snap');
+    const ortho = useDraftingSession.getState().ortho;
+    act(() => { document.body.dispatchEvent(draftingKey(row('drafting.ortho').keys[0])); });
+    assert.equal(useDraftingSession.getState().ortho, !ortho, 'F8 toggles ortho');
+    for (const id of ['drafting.undo', 'drafting.redo', 'drafting.confirm'] as const) {
+      for (const chord of row(id).keys) {
+        const event = draftingKey(chord);
+        act(() => { document.body.dispatchEvent(event); });
+        assert.equal(event.defaultPrevented, true, `${id} ${JSON.stringify(chord)} is taken by the drafting view`);
+      }
+    }
+    assert.deepEqual(typed, [], 'none of them typed into the command line');
+  });
+});

@@ -8,6 +8,7 @@ import { DRAW_TOOLS, WALL_TOOLS } from '@/components/viewer/wall/wall-actions';
 import { en } from '@/i18n/en';
 import { KEY_COMMANDS } from './keyboard-commands.js';
 import { shortcutLabel } from './shortcut-label.js';
+import { DRAFTING_KEY_COMMANDS } from './drafting-key-commands.js';
 import { WALL_KEY_COMMANDS, shownOnTheWall, wallKeyTool, wallToolKey } from './wall-key-commands.js';
 
 /**
@@ -64,7 +65,9 @@ describe('the Wall in the keymap', () => {
 
   it('lists the Wall, the palette and the list itself on IfcSheet\'s face, and nothing of the 3D viewer', () => {
     const ids = shownOnTheWall(KEY_COMMANDS).map((c) => c.id);
-    assert.deepEqual(ids.filter((id) => !id.startsWith('wall.')), ['ui.commandPalette', 'help.shortcuts']);
+    assert.deepEqual(ids.filter((id) => !id.startsWith('wall.') && !id.startsWith('drafting.')), ['ui.commandPalette', 'help.shortcuts']);
+    // The drafting view's keys work on every sheet and drawing of the Wall (#119 review).
+    assert.equal(ids.filter((id) => id.startsWith('drafting.')).length, DRAFTING_KEY_COMMANDS.length);
     assert.equal(ids.filter((id) => id.startsWith('wall.')).length, WALL_KEY_COMMANDS.length);
   });
 });

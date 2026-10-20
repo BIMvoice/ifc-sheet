@@ -34,7 +34,7 @@ import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
-import { keyTitle } from './wall-key-title';
+import { keyProps } from './wall-key-title';
 
 /** The sheet's way out: printed or saved, at true paper size. */
 const issue = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
@@ -162,7 +162,11 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const fit = useCallback(() => setFitKey((k) => k + 1), []);
   const print = useCallback(() => { if (paperRef.current) printSheet(paperRef.current, sheet); }, [sheet]);
   const at = sheets.findIndex((s) => s.id === sheet.id);
-  const neighbour = (to: number): (() => void) | null => (sheets[to] ? () => onStep(sheets[to].id) : null);
+  // Stepping to another sheet unmounts this one: never in the middle of a drafting command (a half-drawn
+  // polyline would be lost) or with a drawing in front. Then PageUp / PageDown are not on offer and stay the browser's.
+  const drafting = commandId !== null || runningCommand() !== null;
+  const canStep = !drafting && !focusView;
+  const neighbour = (to: number): (() => void) | null => (canStep && sheets[to] ? () => onStep(sheets[to].id) : null);
   useWallKeys(steppedHandlers({
     startTool,
     toggleAdd: () => setAdding((a) => !a),
@@ -185,8 +189,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {!focusView ? (
           <>
             <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
-            <button type="button" className={issue} title={keyTitle(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
-            <button type="button" className={issue} title={keyTitle(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
+            <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
+            <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
           </>
         ) : null}
