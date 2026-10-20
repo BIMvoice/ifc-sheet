@@ -59,6 +59,15 @@ describe('a different scheme', () => {
     const scheme: NumberingScheme = { ...DEFAULT_SCHEME, discipline: 'B' };
     assert.deepEqual([...numberSheets(old, scheme)], [['p', 'B-101'], ['e', 'B-201'], ['x', 'B-901']]);
   });
+
+  it('a renumbered sheet stores its series, so an old elevation renumbered A02 stays an elevation', () => {
+    const old = [sheet('p', 'A-101'), sheet('e', 'A-201')];
+    const once = renumbered(old, planRenumber(old, SEQUENTIAL_SCHEME), 'keep');
+    assert.deepEqual(once.map((s) => [s.number, s.series]), [['A01', 'plans'], ['A02', 'elevations']]);
+    // 'A02' no longer says elevation: going back to the default scheme reads the stored series.
+    const back = renumbered(once, planRenumber(once, DEFAULT_SCHEME), 'keep');
+    assert.deepEqual(back.map((s) => s.number), ['A-101', 'A-201']);
+  });
 });
 
 describe('a number typed by hand', () => {
