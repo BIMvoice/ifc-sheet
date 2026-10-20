@@ -65,7 +65,7 @@ describe('runIssue when a sheet cannot be drawn', () => {
     const keys = result.lines.map((l) => l.key);
     assert.ok(keys.includes('issue.msg.viewError'), keys.join());
     assert.equal(keys.at(-1), 'issue.msg.notIssued');
-    assert.equal(result.html, null);
+    assert.equal(result.pdf, null);
     assert.deepEqual(useProjectStore.getState().issues ?? [], []);
   });
 });

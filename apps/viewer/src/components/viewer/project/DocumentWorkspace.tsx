@@ -32,6 +32,8 @@ import { CivilDrawingView } from '../civil/CivilDrawingView';
 import { LegendView } from '../legend/LegendView';
 import { WallView } from '../wall/WallView';
 import { scopeViews } from '@/legend/legend-data';
+import { sheetsToDraw, useWallView } from '@/wall/wall-view';
+import { useWallNav } from '../wall/wall-nav';
 
 
 /**
@@ -61,11 +63,14 @@ export function DocumentWorkspace({ children }: { children: ReactNode }) {
   useMirrorFrontDrawing(activeId);
   // Views that need their own drawing: open as a tab, or placed on a sheet that is open as a tab.
   const drawn = new Set(openIds);
-  // The Wall hangs every sheet, so every placed view is drawn while it is in front, or always in IfcSheet, whose face is the Wall.
+  // The Wall is in front, or always in IfcSheet, whose face is the Wall.
   const sheetShell = isDocsEdition();
   const wall = activeId === WALL_TAB_ID || sheetShell;
-  for (const sheet of sheets) {
-    if (wall || openIds.includes(sheet.id)) for (const vp of sheet.viewports ?? []) drawn.add(vp.viewId);
+  // On the Wall only the sheets near the screen draw, nearest first; the rest hang as outlines until they come near.
+  const queue = useWallView((s) => s.queue);
+  const stepped = useWallNav((s) => s.stepped);
+  for (const sheet of sheetsToDraw(sheets, { wall, queue, stepped, open: openIds })) {
+    for (const vp of sheet.viewports ?? []) drawn.add(vp.viewId);
   }
   // A legend lists the cut materials of the drawings in its scope: open as a tab, those drawings are generated.
   for (const legend of legends ?? []) {
