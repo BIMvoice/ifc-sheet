@@ -10,12 +10,12 @@ export const EVIDENCE_DIR = fileURLToPath(new URL('../../../../docs/architecture
 
 /**
  * A skip reason for a test that replays a recorded evidence file the IfcSheet
- * documentation edition does not ship (#67), else `false`. It un-skips by
+ * documentation edition does not ship (#145), else `false`. It un-skips by
  * itself the day the files are restored.
  */
 export function evidenceSkip(...relativePaths: string[]): string | false {
   const missing = relativePaths.filter((path) => !existsSync(`${EVIDENCE_DIR}${path}`));
   return missing.length === 0
     ? false
-    : `recorded evidence fixture not shipped in the IfcSheet edition: docs/architecture/evidence/${missing[0]} (#67)`;
+    : `recorded evidence fixture not shipped in the IfcSheet edition: docs/architecture/evidence/${missing[0]} (restore it or move the test onto pnpm fixtures, #145)`;
 }

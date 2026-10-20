@@ -90,18 +90,25 @@ export function compileAppCss(): Promise<string> {
   return compiledCssPromise;
 }
 
-/** Where Playwright looks for `channel: 'chrome'` on each platform. */
-const CHROME_PATHS: Record<string, string[]> = {
-  darwin: ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'],
-  linux: ['/opt/google/chrome/chrome'],
-  win32: ['Program Files', 'Program Files (x86)'].map((root) => `C:\\${root}\\Google\\Chrome\\Application\\chrome.exe`),
-};
+/** Where Playwright looks for `channel: 'chrome'` on `platform`. On Windows a
+ *  machine-wide install lives under Program Files, a per-user one (installed
+ *  without admin rights) under %LOCALAPPDATA%. */
+export function chromePaths(platform: string, env: Record<string, string | undefined>): string[] {
+  switch (platform) {
+    case 'darwin': return ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'];
+    case 'linux': return ['/opt/google/chrome/chrome'];
+    case 'win32': return [env.PROGRAMFILES ?? 'C:\\Program Files', env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)', env.LOCALAPPDATA]
+      .filter((root): root is string => Boolean(root))
+      .map((root) => `${root}\\Google\\Chrome\\Application\\chrome.exe`);
+    default: return [];
+  }
+}
 
 /** A skip reason when the real Google Chrome these tests drive is not
  *  installed (#67), else `false`. Under `CI` it is always `false`, so a runner
  *  that lost Chrome fails loudly instead of skipping the whole suite. */
 export const CHROME_SKIP: string | false =
-  process.env.CI || (CHROME_PATHS[process.platform] ?? []).some((path) => existsSync(path))
+  process.env.CI || chromePaths(process.platform, process.env).some((path) => existsSync(path))
     ? false
     : 'Google Chrome is not installed here (channel: chrome); run `pnpm exec playwright install chrome` (#67)';
 

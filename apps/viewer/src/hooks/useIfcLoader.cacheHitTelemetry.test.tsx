@@ -242,11 +242,9 @@ async function captureCacheHitPayload(
 
   // `captureModelLoaded` emits after an on-demand chunk (`loadFieldTelemetry`)
   // resolves, so on the first load of a process the event lands a few ticks
-  // after `loadFile` returns. Wait for it; a load that never emits still
-  // fails below with the count-of-0 diagnostic.
+  // after `loadFile` returns. Wait for it; a load that never emits fails here.
   await waitFor(() => captured.some((p) => p.load_path === 'cache'),
-    'the cache hit never emitted ifc_model_loaded (a count of 0 means the load never reached the cache-hit branch)', 5_000)
-    .catch((error: unknown) => { console.warn(String(error)); });
+    'the cache hit never emitted ifc_model_loaded (a count of 0 means the load never reached the cache-hit branch)', 5_000);
 
   const hits = captured.filter((p) => p.load_path === 'cache');
   assert.equal(
