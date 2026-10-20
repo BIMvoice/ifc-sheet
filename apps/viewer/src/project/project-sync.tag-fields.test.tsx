@@ -10,7 +10,8 @@ import { useViewerStore } from '@/store';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { setFieldSources } from '@/tagfields/tag-fields-actions';
 import { resetProject } from './project-store';
-import { autosaveKey, useProjectSync } from './project-sync';
+import { autosaveKey } from './project-saved';
+import { useProjectSync } from './project-sync';
 
 const SLOT = autosaveKey([{ key: 'legacy', name: 'Model' }]);
 const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 700)));

@@ -30,7 +30,7 @@ interface Row extends ModelLevel {
 function openLevelPlan(level: Row): void {
   const { views, levels } = useProjectStore.getState();
   const projectLevel = levels.find((l) => (level.globalId && l.storeyGlobalIds.includes(level.globalId)) || sameElevation(l.elevation, level.elevation));
-  const plan = views.find((v): v is PlanProjectView => v.kind === 'plan' && !!projectLevel && resolvePlanLevel(v, [projectLevel]) === projectLevel);
+  const plan = views.find((v): v is PlanProjectView => v.kind === 'plan' && !v.discipline && !!projectLevel && resolvePlanLevel(v, [projectLevel]) === projectLevel);
   if (plan) {
     openProjectView(plan.id);
     return;
