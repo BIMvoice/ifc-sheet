@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The FZK-Haus with phases (made from `public/_fixtures/AC20-FZK-Haus.ifc` by
+ * The FZK-Haus with phases (made from `src/test/__fixtures__/AC20-FZK-Haus.ifc` by
  * `phase-fixture-source.ts` as it loads) as a test loads it: parsed into the
  * viewer store (a single model, so a drawing's entity ids are express ids), its real
  * meshes from the wasm geometry pass, and the drawings of a plan, a section and an
@@ -40,7 +40,7 @@ let loaded: Promise<PhaseModel> | null = null;
 /** Parse, seed the store, run the geometry: once per test process. */
 export function loadPhaseModel(): Promise<PhaseModel> {
   return (loaded ??= (async () => {
-    const sample = readFileSync(resolve(process.cwd(), 'public/_fixtures/AC20-FZK-Haus.ifc'), 'latin1');
+    const sample = readFileSync(resolve(process.cwd(), 'src/test/__fixtures__/AC20-FZK-Haus.ifc'), 'latin1');
     const bytes = new Uint8Array(Buffer.from(withPhaseStatus(sample), 'latin1'));
     const store = await parseStep(bytes);
     seedModel('fzk', 0, store, 1);

@@ -74,7 +74,7 @@ describe('discipline plans on the hand-written fixture', () => {
 
 describe('discipline plans on FZK-Haus', () => {
   let m: LoadedPlanModel;
-  before(async () => { m = await loadPlanModel(fileURLToPath(new URL('../../public/_fixtures/AC20-FZK-Haus.ifc', import.meta.url))); });
+  before(async () => { m = await loadPlanModel(fileURLToPath(new URL('../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url))); });
 
   it('a structural plan draws no door, window, furniture or stair, and (no wall has LoadBearing here) no wall', async () => {
     const drawing = await m.planOf(view('structural', level(m, 'Erdgeschoss')));

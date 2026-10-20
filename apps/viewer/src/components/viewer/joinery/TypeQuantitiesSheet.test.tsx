@@ -26,7 +26,7 @@ afterEach(() => cleanup());
 
 describe('quantities by type on a sheet', () => {
   it('prints the FZK-Haus wall types and their volumes into the sheet SVG and the DXF', async () => {
-    const store = await parseStep(new Uint8Array(readFileSync(new URL('../../../../public/_fixtures/AC20-FZK-Haus.ifc', import.meta.url))));
+    const store = await parseStep(new Uint8Array(readFileSync(new URL('../../../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url))));
     useViewerStore.setState({ models: new Map([['fzk', { id: 'fzk', name: 'fzk', ifcDataStore: store, visible: true } as never]]) });
     startDrawingSet(null, { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 7 } });
     const sheetId = addScheduleToSet('types', 'Quantities by type');

@@ -99,7 +99,7 @@ describe('elementTypeQuantities', () => {
 
 describe('FZK-Haus wall types', () => {
   it('total their own Qto sums (computed here from the type -> element relations and the quantity sets)', async () => {
-    const store = await parseStep(new Uint8Array(readFileSync(new URL('../../public/_fixtures/AC20-FZK-Haus.ifc', import.meta.url))));
+    const store = await parseStep(new Uint8Array(readFileSync(new URL('../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url))));
     useViewerStore.setState({ models: new Map([['fzk', { id: 'fzk', name: 'fzk', ifcDataStore: store, visible: true } as never]]) });
     const out = typeQuantities(collectTypeElements());
     const walls = out.rows.filter((r) => r.className === 'IfcWallType');

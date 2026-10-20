@@ -24,7 +24,7 @@
  * this file for it.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createClashEngine } from './engine.js';
@@ -247,13 +247,17 @@ async function bothAgree(elements: ClashElement[], rules: ClashRule[]): Promise<
   return a.clashes.length;
 }
 
+// Built by `pnpm build:wasm`; without it the suite skips instead of failing on ENOENT.
+const WASM_PATH = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
+const HAVE_WASM = existsSync(WASM_PATH);
+
 beforeAll(async () => {
+  if (!HAVE_WASM) return;
   // Load the web-target wasm in Node by feeding the bytes directly.
-  const wasmPath = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
-  await initClashWasm(readFileSync(wasmPath));
+  await initClashWasm(readFileSync(WASM_PATH));
 });
 
-describe('differential: WASM kernel === TS kernel', () => {
+describe.skipIf(!HAVE_WASM)('differential: WASM kernel === TS kernel (needs pnpm build:wasm)', () => {
   it('agrees on a hard clash', async () => {
     const els = [box('A', 'IfcWall', [0, 0, 0]), box('B', 'IfcDuctSegment', [0.5, 0, 0])];
     const n = await bothAgree(els, [{ id: 'r', name: 'r', a: 'IfcWall', b: 'IfcDuct*', mode: 'hard' }]);
