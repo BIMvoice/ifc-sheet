@@ -16,12 +16,7 @@ overrides:
   rollup: ^4.59.0
   esbuild: ^0.28.1
   vite: ^8.1.0
-  vitest: ^4.1.0
-  '@vitest/expect': ^4.1.0
-  '@vitest/runner': ^4.1.0
-  '@vitest/snapshot': ^4.1.0
-  '@vitest/spy': ^4.1.0
-  '@vitest/utils': ^4.1.0
+  vitest: ^5.0.3
   picomatch@<3: ^2.3.2
   picomatch@>=4: ^4.0.4
   uuid@<11.1.1: ^11.1.1
@@ -126,7 +121,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   apps/cloud-service:
@@ -148,7 +143,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   apps/viewer:
@@ -690,7 +685,7 @@ importers:
         specifier: ^3.6.0
         version: 3.6.0(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   examples/babylonjs-viewer:
@@ -809,7 +804,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       xmllint-wasm:
         specifier: 5.3.0
@@ -828,7 +823,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/cache:
@@ -850,7 +845,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/charts:
@@ -875,7 +870,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/clash:
@@ -915,7 +910,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/cli:
@@ -1000,7 +995,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/codegen:
@@ -1019,7 +1014,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/collab:
@@ -1056,7 +1051,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/collab-server:
@@ -1093,7 +1088,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       y-websocket:
         specifier: ^3.1.0
@@ -1127,7 +1122,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/create-ifc-lite:
@@ -1139,7 +1134,7 @@ importers:
         specifier: ^5.3.0
         version: 5.9.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/data:
@@ -1161,7 +1156,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/diff:
@@ -1170,7 +1165,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/documents-api:
@@ -1183,7 +1178,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/drawing-2d:
@@ -1205,7 +1200,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/embed-protocol:
@@ -1214,7 +1209,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/embed-sdk:
@@ -1230,7 +1225,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/encoding:
@@ -1242,7 +1237,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/export:
@@ -1288,7 +1283,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/extensions:
@@ -1313,7 +1308,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/flow:
@@ -1332,7 +1327,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/flow-nodes:
@@ -1378,7 +1373,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/geometry:
@@ -1400,7 +1395,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
     optionalDependencies:
       '@tauri-apps/api':
@@ -1438,7 +1433,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       xmllint-wasm:
         specifier: 5.3.0
@@ -1479,7 +1474,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/lists:
@@ -1504,7 +1499,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/load-trace:
@@ -1516,7 +1511,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/mcp:
@@ -1601,7 +1596,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/merge:
@@ -1617,7 +1612,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/mutations:
@@ -1636,7 +1631,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/oauth-pkce:
@@ -1645,7 +1640,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/opencde-foundation:
@@ -1654,7 +1649,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/parser:
@@ -1691,7 +1686,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/plugin-api:
@@ -1700,7 +1695,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/pointcloud:
@@ -1716,7 +1711,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/provenance:
@@ -1725,7 +1720,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/query:
@@ -1750,7 +1745,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/regex-guard:
@@ -1762,7 +1757,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/renderer:
@@ -1815,7 +1810,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/sandbox:
@@ -1846,7 +1841,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/sdk:
@@ -1901,7 +1896,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/semantic:
@@ -1941,7 +1936,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/server-bin:
@@ -1957,7 +1952,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/server-client:
@@ -1973,7 +1968,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/solar:
@@ -1982,7 +1977,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/source-autodesk:
@@ -1998,7 +1993,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/source-dalux:
@@ -2014,7 +2009,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/source-dropbox:
@@ -2033,7 +2028,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/source-fixture:
@@ -2046,7 +2041,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/source-msgraph:
@@ -2065,7 +2060,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/spatial:
@@ -2078,7 +2073,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/timing-ladder:
@@ -2090,7 +2085,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/viewer:
@@ -2123,7 +2118,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/world-frame-fixtures:
@@ -2136,7 +2131,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^5.0.3
         version: 5.0.3(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
 packages:
@@ -4439,8 +4434,8 @@ packages:
       vite:
         optional: true
 
-  '@vitest/spy@4.1.11':
-    resolution: {integrity: sha512-apNa/prQy2qCeywhnixOHPRCgGNhvg7T4Dapfl1GahLp/R+uhBm5cPyFoNVyqsNd2h1nJxL6BqqdIjiABL60YA==}
+  '@vitest/spy@5.0.3':
+    resolution: {integrity: sha512-XhFysQTB8AZ+P4gMi+Lpo99vg2AZi0qKpaB9yXQl37+CaMEAPO3iH/wGVnSyL5MPERiLezpqTVtrR6UZH5GCXg==}
 
   '@vocabulary/sh@1.1.6':
     resolution: {integrity: sha512-8IfAQoKh57THz8LA2+n1jaY/VC2XaqMNSsJgzBKSSrj20y5PSMAawb6dMsxoLxqDIPBDs1TFRl/9CijUnwbBUA==}
@@ -9008,13 +9003,13 @@ snapshots:
   '@vitest/mocker@5.0.3(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
-      '@vitest/spy': 4.1.11
+      '@vitest/spy': 5.0.3
       estree-walker: 3.0.3
       magic-string: 1.4.3
     optionalDependencies:
       vite: 8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
 
-  '@vitest/spy@4.1.11': {}
+  '@vitest/spy@5.0.3': {}
 
   '@vocabulary/sh@1.1.6(@rdfjs/types@2.0.1)':
     dependencies:
