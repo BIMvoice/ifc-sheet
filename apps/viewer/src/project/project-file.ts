@@ -19,6 +19,7 @@ import { readNumberingScheme } from './numbering';
 import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readSeriesTemplates, readTemplate } from './sheet-templates';
+import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
 import { readTitleSources } from './title-block-sources';
 import { readComments } from '@/review/file';
@@ -27,6 +28,7 @@ import { isDisciplineId } from './discipline-views';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
 import { declaredVersion, migrateProject, PROJECT_FILE_VERSION } from './project-migrations';
 import { withoutModelState } from './autosave-snapshots';
+import { withoutRasters } from './autosave-rasters';
 import { markProjectSaved } from './project-saved';
 import { loadProjectDocument, projectDocument } from './project-store';
 import { readSavedSectionCuts } from './saved-cuts-file';
@@ -73,7 +75,7 @@ export function exportProjectFile(doc: ProjectDocument): void {
  * form a file is read back in, so it is noted in that form: the reader fills defaults a live project lacks.
  */
 export function noteProjectFile(doc: ProjectDocument, now?: number, storage?: Parameters<typeof markProjectSaved>[2]): void {
-  markProjectSaved(parseProjectFile(serializeProject(withoutModelState(doc).slim)), now, storage);
+  markProjectSaved(parseProjectFile(serializeProject(withoutRasters(withoutModelState(doc).slim).slim)), now, storage);
 }
 
 const VIEW_KINDS: readonly ProjectViewKind[] = ['plan', 'section', 'elevation', '3d', 'drafting'];
@@ -155,7 +157,7 @@ function readView(v: unknown, path: string): ProjectView {
     case 'drafting':
       return { ...base, kind: 'drafting', ...(isNumber(v.number) && v.number > 0 ? { number: v.number } : {}) };
     default:
-      return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null };
+      return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null, ...read3dPrint(v) };
   }
 }
 

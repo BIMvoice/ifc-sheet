@@ -11,6 +11,7 @@
 
 import { create } from 'zustand';
 import { readModelState } from './autosave-snapshots';
+import { restoreRasters } from './autosave-rasters';
 import { loadProjectDocument, PROJECT_DOCUMENT_KEYS, useProjectStore } from './project-store';
 import type { ProjectDocument } from './types';
 
@@ -48,6 +49,7 @@ export function restoreRecovery(): void {
   useRecoveryStore.setState({ offer: null });
   loadProjectDocument(offer.doc, { dirty: true, fromAutosave: true });
   void restoreModelState(offer.key, () => offer.key);
+  void restoreRasters(offer.key, () => offer.key);
 }
 
 let onScreen = 0;

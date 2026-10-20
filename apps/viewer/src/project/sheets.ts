@@ -14,6 +14,8 @@ import { numberingScheme, useProjectStore } from './project-store';
 import { withSources, type TitleSource } from './title-block-sources';
 import { nextNumber } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { isRasterView } from './axonometric';
+import { RASTER_BOX_MM } from './view-raster';
 import { freshProjectId } from './view-defaults';
 import { paperMm } from './paper';
 import { templateFromSheet } from './sheet-templates';
@@ -105,11 +107,13 @@ export function seedProjectTitleBlock(fields: Record<string, string>): void {
 /** Place a view on a sheet, centred at a paper point. Returns the viewport id. */
 export function addViewport(sheetId: string, viewId: string, at: { x: number; y: number }, scale = 100): string {
   const id = freshProjectId('viewport');
-  // 0 × 0: the box fits the drawing once it is generated (see `viewportBox`).
   const { views, drafts } = useProjectStore.getState();
-  const kind = views.find((v) => v.id === viewId)?.kind;
-  // A drafting view has no drawing to fit to: it is framed on its drafts.
-  const frame = kind === 'drafting' ? draftingFrame(drafts.filter((d) => d.viewId === viewId), scale) : { center: null, width: 0, height: 0 };
+  const view = views.find((v) => v.id === viewId);
+  const kind = view?.kind;
+  // 0 × 0: the box fits the drawing once it is generated (see `viewportBox`). A drafting view has no drawing to
+  // fit to: it is framed on its drafts; a raster has no drawing either, so it starts at a size.
+  const frame = kind === 'drafting' ? draftingFrame(drafts.filter((d) => d.viewId === viewId), scale)
+    : view && isRasterView(view) ? { center: null, width: RASTER_BOX_MM.width, height: RASTER_BOX_MM.height } : { center: null, width: 0, height: 0 };
   const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, ...frame };
   patchSheet(sheetId, (s) => {
     // A number the program chose follows what the sheet comes to hold, once.

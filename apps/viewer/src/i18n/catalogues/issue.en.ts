@@ -49,5 +49,6 @@ export const issueEn = {
   'issue.msg.noCapture': 'Sheet {number} could not be drawn.',
   'issue.msg.viewError': 'Sheet {number}: the drawing of "{view}" could not be generated ({message}).',
   'issue.msg.viewTimeout': 'Sheet {number}: "{view}" was not drawn within {seconds} seconds.',
+  'issue.msg.dxfRaster': 'Sheet {number}: the DXF has no images, so {views} (printed as an image) is an empty frame. Issue as PDF to keep it.',
   'issue.msg.notIssued': 'Nothing was issued and nothing was recorded.',
 } as const satisfies Record<string, TranslationValue>;

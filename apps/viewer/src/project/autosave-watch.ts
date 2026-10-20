@@ -16,7 +16,7 @@ import { recoveryOpenFor } from './recovery-store';
 export const AUTOSAVE_DEBOUNCE_MS = 500;
 
 /** Starts watching; `slot` is the slot of the models in front. Returns the stop function. */
-export function watchProjectForAutosave(slot: () => string | null, write: (key: string) => void = (key) => writeAutosave(key, projectDocument()), debounceMs = AUTOSAVE_DEBOUNCE_MS): () => void {
+export function watchProjectForAutosave(slot: () => string | null, write: (key: string) => void = (key) => void writeAutosave(key, projectDocument()), debounceMs = AUTOSAVE_DEBOUNCE_MS): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const unsubscribe = useProjectStore.subscribe((state, prev) => {
     const key = slot();

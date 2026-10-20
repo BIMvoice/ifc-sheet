@@ -12,6 +12,9 @@
  */
 
 import { withoutModelState, writeModelState } from './autosave-snapshots';
+import { withoutRasters, writeRasters } from './autosave-rasters';
+import { toast } from '@/components/ui/toast';
+import { resolve } from '@/i18n/registry';
 import { parseProjectFile, serializeProject } from './project-file';
 import { projectFingerprint, readSavedMark } from './project-saved';
 import type { ProjectDocument } from './types';
@@ -40,16 +43,26 @@ export function readAutosave(key: string, storage: Pick<Storage, 'getItem'> = lo
   }
 }
 
-export function writeAutosave(key: string, doc: ProjectDocument, storage: Pick<Storage, 'setItem'> = localStorage, now = new Date()): void {
-  // The model state is far larger than the drawings: it is kept apart, so it cannot fill the slot.
-  const { slim, modelState } = withoutModelState(doc);
+/** One notice for every autosave failure, kept until dismissed: the drawings are not being saved. */
+const AUTOSAVE_FAILED = 'project-autosave-failed';
+
+/**
+ * Writes the slot. The model state and the raster captures are far larger than
+ * the drawings: they are kept apart, in IndexedDB, so they cannot fill it. A
+ * write the browser refuses is said to the person, not only logged.
+ */
+export async function writeAutosave(key: string, doc: ProjectDocument, storage: Pick<Storage, 'setItem'> = localStorage, now = new Date()): Promise<void> {
+  const { slim: noState, modelState } = withoutModelState(doc);
+  const { slim, rasters } = withoutRasters(noState);
   try {
     storage.setItem(key, serializeProject(slim, now));
   } catch (err) {
     console.warn('[project] autosave failed', err);
+    toast.error(resolve('projectPackage.autosaveFailed', { detail: err instanceof Error ? err.message : String(err) }), AUTOSAVE_FAILED);
   }
   // Never written empty: a slot restored before its state has been read back must not erase it.
-  if (modelState) void writeModelState(key, modelState);
+  const kept = await Promise.all([modelState ? writeModelState(key, modelState) : true, writeRasters(key, rasters)]);
+  if (kept.includes(false)) toast.error(resolve('projectPackage.autosaveImagesFailed'), AUTOSAVE_FAILED);
 }
 
 /** Whether a slot written at `savedAt` holding `doc` is work the last project file does not have. */

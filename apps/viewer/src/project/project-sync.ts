@@ -23,6 +23,7 @@ import { autosaveKey } from './project-saved';
 import { watchProjectForAutosave } from './autosave-watch';
 import { planAutosave } from './recovery';
 import { discardRecovery, duringSystemChange, offerRecovery, restoreModelState } from './recovery-store';
+import { restoreRasters } from './autosave-rasters';
 import { keepProjectForNewVersion, modelVersionSwapActive } from './model-version';
 
 interface StoreySource {
@@ -83,6 +84,8 @@ export function useProjectSync(): void {
         } else if (plan.kind !== 'none') {
           loadProjectDocument(plan.autosave.doc, { fromAutosave: true });
           void restoreModelState(key, () => slot);
+          void restoreRasters(key, () => slot);
+          void restoreRasters(key, () => slot);
         } else if (!overlaps) resetProject();
       }
       duringSystemChange(() => syncProjectWithModels(refs, storeys));

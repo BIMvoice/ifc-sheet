@@ -22,7 +22,8 @@ import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { frameOf, frameRect, titleBlockRect, TITLE_BLOCK_MM } from '@/project/sheet-frame';
 import { mmPerMetre, paperOf, viewportBox } from '@/project/sheets';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
-import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
+import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
+import { hasTrueScale } from '@/project/axonometric';
 import { shapePath } from '../drafting/DraftOverlay';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
 import { cadKindOf, layerTags, penTags } from './dxf-tags';
@@ -59,6 +60,8 @@ export interface ViewportContent {
   civil?: CivilLayout;
   /** A legend placed here instead of a view (paper millimetres). */
   legend?: LegendLayout;
+  /** A 3D view printed as a raster capture of the viewport, instead of drawn lines. */
+  raster?: ViewRaster;
 }
 
 interface SheetPaperProps {
@@ -120,6 +123,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
     <g data-viewport-id={vp.id}>
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
       <g clipPath={`url(#${clipId})`}>
+        {content.raster ? <image data-raster-px={`${content.raster.widthPx}x${content.raster.heightPx}`} href={content.raster.href} x={left} y={top} width={box.width} height={box.height} preserveAspectRatio="xMidYMid slice" /> : null}
         {pens.map((p, i) => (
           <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} d={p.d} fill={p.fill ?? 'none'} fillRule="evenodd" stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
         ))}
@@ -138,7 +142,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
         data-export-ignore={selected ? 'true' : undefined}
       />
       <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left} y={top + box.height + standard.type.viewTitle + 1.5} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
-        {tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale })}
+        {hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
       </text>
     </g>
   );
@@ -237,8 +241,10 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
   const fields = titleBlockOf(sheet, projectFields, projectName);
   const logo = projectFields?.[LOGO_FIELD];
   const schedules = useProjectStore((s) => s.schedules);
-  // A sheet of schedules and tables only has no drawing scale.
-  const scaleText = sheetScaleText(sheet, notDrawingIds(schedules), t('sheets.asIndicated')) || '—';
+  const views = useProjectStore((s) => s.views);
+  // A sheet of schedules and tables only has no drawing scale, and a perspective has no scale to state.
+  const notDrawings = new Set([...notDrawingIds(schedules), ...views.filter((v) => !hasTrueScale(v)).map((v) => v.id)]);
+  const scaleText = sheetScaleText(sheet, notDrawings, t('sheets.asIndicated')) || '—';
   const side = 50;
   const left = TITLE_BLOCK_MM.w - side;
   const rowH = TITLE_BLOCK_MM.h / 5;
