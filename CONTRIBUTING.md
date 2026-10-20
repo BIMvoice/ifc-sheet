@@ -43,7 +43,7 @@ Setup, build and test commands are in [AGENTS.md](AGENTS.md).
 
 - Branch from `main`. One pull request per task.
 - The description says what a user can now do, how you checked it, what you did not check, and any choice you made that a maintainer should confirm.
-- Add a changeset for anything a user would notice.
+- A changeset (`pnpm changeset`) goes with a change to a published package under `packages/`, and only there. The app in `apps/viewer` is not published and takes none: say what a user would notice in the pull request description instead.
 - New source files carry the MPL-2.0 header (see `LICENSE_HEADER.md`).
 - Commits are signed by the person who answers for them. No tool signatures and no co-author lines for tools.
 
@@ -62,6 +62,8 @@ IfcSheet is built on [ifc-lite](https://github.com/LTplus-AG/ifc-lite). If you f
 ## This repository is public
 
 Do not commit client names, project names or models you are not allowed to share. Use the sample models in the repository, or a small model you made yourself.
+
+This binds commit messages, pull request titles and descriptions, and changesets as much as file contents. A commit that removes a client name but explains itself by naming the client has published it again.
 
 ## Licence
 

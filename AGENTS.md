@@ -6,7 +6,54 @@ In short: build what is on the list, one purpose per pull request, see it work i
 
 Where the IfcSheet code lives: the drawing and documentation layer is in `apps/viewer/src` (`drafting/`, `project/`, `components/viewer/drafting/`, `components/viewer/sheets/`). The edition that turns modelling off is set in `apps/viewer/src/edition.ts`.
 
-To check a change: in `apps/viewer`, `TEST_PATTERN='<paths you touched>' pnpm test` and `pnpm typecheck`. The whole viewer suite takes over ten minutes, so run the part you touched.
+To check a change: build the packages once (`pnpm turbo run build --filter='./packages/*'`), then in `apps/viewer` run `TEST_PATTERN='<paths you touched>' pnpm test` and `pnpm typecheck`. The whole viewer suite takes over ten minutes, so run the part you touched. This is the one exception to the engine note below that says to run tests only through the root `pnpm test` / `pnpm typecheck`: that note exists because a package-local run reads its siblings' built `dist/`, and the build step above is what makes that safe. If a viewer-local result disagrees with the root `pnpm typecheck` / `pnpm test`, rebuild the packages and trust the root run.
+
+## Claiming work
+
+Several agent sessions push to this repository from one GitHub account. The rules here are how they avoid building the same thing twice. They apply to every agent and every session, including short-lived subagents.
+
+**Respect assignments, and assign yourself before you start.** This is not etiquette, it is the mechanism that stops two people building the same thing.
+
+Before touching an issue:
+
+1. `gh issue view <n> --json assignees,title`: **if someone else is assigned, it is theirs.** See "Helping on someone else's issue" below for the two ways that changes.
+2. Look for an open PR on it. `gh pr list --search "<n>"` is a TEXT search: it matches comment bodies, so it both misses linked PRs that never mention the number and returns unrelated ones that happen to contain it. Treat a hit as a reason to look, not as an answer, and confirm by opening the PR. The linked-PR list on the issue page is authoritative where the two disagree.
+3. If both are clear, `gh issue edit <n> --add-assignee <you>` **before** writing code, not when you open the PR. An assignment made at PR time claims nothing; the window it needed to cover has already closed.
+
+Check again immediately before opening the PR. A claim can appear while you work, and the second check is the cheap one.
+
+### Every agent is the same GitHub account
+
+`gh issue edit --add-assignee` cannot tell two agents apart: they all push and assign as the **same account**. An assignment to that account means *somebody* claimed this. It does not mean *you* did, and the field cannot tell you which. So treat it as a claim by someone else until you can show otherwise, and **leave a claim comment naming the session**, which is the only artifact that can:
+
+    gh issue comment <n> --body "Claiming this. Session <id>, branch <name>."
+
+If the account is assigned with no claim comment, ask on the issue rather than reading the field as your own. This applies to OUR sessions only. An outside contributor has their own account, so for them the field says what it appears to say.
+
+### The contributor check and the session check are different checks
+
+Doing one does not do the other. Run both, every time:
+
+    gh issue view <n> --json assignees      # is one of us on it
+    gh pr list --search "<n>"               # CANDIDATES; confirm on the issue page
+
+The assignee check finds our own sessions. Only the PR search finds an outside contributor, who has no reason to know about an internal assignment: on the engine's repository the shared account was self-assigned and an outside contributor's PR for the same issue appeared 47 minutes later. No assignee field would have helped there.
+
+### When you collide mid-flight
+
+The expensive case is that both of you are already half-built when the claim appears. **The session named in the earliest claim comment decides. The other stops immediately** and hands over what it has as a comment or a patch on that session's PR. "The assignee decides" cannot work here, because the field holds one shared account and cannot name a session.
+
+**An outside contributor's PR takes precedence over any internal claim, however early.** They cannot see our claims and are not bound by them. Stopping mid-build is cheap; two finished implementations of the same thing is not.
+
+### Helping on someone else's issue
+
+Helping is welcome. **Taking over is not.** Two things make it help: they accepted an offer (silence is not a yes), or it has gone quiet (no commits, no word, about a week; even then comment first and wait a couple of days).
+
+Help, no permission needed: reviewing their PR including finding real defects; diagnosing a failing check and posting the cause; answering a question they asked; reporting a defect in shipped code even if their PR introduced it.
+
+Not help, however good the code: building a parallel implementation and announcing it afterwards; carrying an unraised branch that duplicates their work; pushing to their branch; opening a competing PR on their issue.
+
+If you built something before noticing, say so plainly, hand it over, and let them decide. That is recoverable; landing it is not. When you find you have duplicated someone, the owner follows the rules above in order: an outside contributor's PR beats any internal claim; else the earliest claim comment wins; the assignee field decides only when neither applies, since it cannot name a session. Never whoever is further along or noticed first. Do not close the duplicate silently: enumerate what it holds that the survivor does not, and never push to a branch you do not own to "help".
 
 ## Engine notes
 
@@ -17,7 +64,7 @@ The sections below are the technical notes of the engine IfcSheet is built on, [
 - Build: `pnpm build` (turbo). WASM: `pnpm build:wasm` (needs Rust nightly + `wasm-pack`); `pnpm build:wasm:fetch` pulls the prebuilt wasm from npm when Rust is unavailable (e.g. Windows without WSL).
 - Typecheck: `pnpm typecheck` (turbo, wasm-free: no Rust toolchain needed). This covers **test sources too**, which for a long time it did not: the root `tsconfig.json` excludes `**/*.test.ts` so tests never reach `dist/`, every `packages/*` config inherits that through `tsconfig.packages.json`, and `exclude` filters `include` — so a package's `"include": ["src/**/*"]` cannot pull its own tests back and 652 of 960 test files were in no typecheck program at all (#2457). Since vitest and `tsx --test` transpile per file without checking types, an unchecked test still *runs* while everything it asserts at type level (`expectTypeOf`, `@ts-expect-error`, a typed fixture) is silently unverified. Each package's `typecheck` script therefore runs `scripts/typecheck-tests.mjs`, which derives a no-emit test program from that package's own tsconfig and lists the test files under `files` — unlike `include`, `files` is not filtered by `exclude`. The generated `<pkg>/tsconfig.tests.json` is gitignored (rebuilt every run); the shared emit-off overrides live in `tsconfig.tests.base.json`. Do not "fix" a test-only type error by putting tests back into a package's emit tsconfig — that ships them to `dist/`.
 - Test: `pnpm test` (turbo, TS); `cargo test --workspace` (Rust, not `cargo check`); `pnpm test:wasm-contract` (real wasm boundary); `pnpm test:collab` (collab pair).
-- Always run typecheck/test through the root `pnpm typecheck` / `pnpm test` (turbo), never a package-local script (`pnpm --filter <pkg> typecheck`, `cd packages/<pkg> && tsc --noEmit` / `vitest run`) or an editor's TS server in isolation. `turbo.json` makes `typecheck` depend on `^build`, but that dependency graph only fires through turbo; a package-local script or IDE process resolves workspace siblings straight off their `dist/` (root `tsconfig.json` path-maps most packages to `dist/*.d.ts`; the rest, e.g. `@ifc-lite/pointcloud`, resolve via `package.json#types` → `dist/index.d.ts`). An unbuilt or stale sibling `dist/` then throws "Cannot find module" / missing-export errors that name real files and symbols but describe no bug in the source — rebuild (`pnpm build`) before trusting a bypass-turbo result that disagrees with `pnpm typecheck`/`pnpm test`.
+- Always run typecheck/test through the root `pnpm typecheck` / `pnpm test` (turbo) (for IfcSheet, see the one exception at the top of this file), never a package-local script (`pnpm --filter <pkg> typecheck`, `cd packages/<pkg> && tsc --noEmit` / `vitest run`) or an editor's TS server in isolation. `turbo.json` makes `typecheck` depend on `^build`, but that dependency graph only fires through turbo; a package-local script or IDE process resolves workspace siblings straight off their `dist/` (root `tsconfig.json` path-maps most packages to `dist/*.d.ts`; the rest, e.g. `@ifc-lite/pointcloud`, resolve via `package.json#types` → `dist/index.d.ts`). An unbuilt or stale sibling `dist/` then throws "Cannot find module" / missing-export errors that name real files and symbols but describe no bug in the source — rebuild (`pnpm build`) before trusting a bypass-turbo result that disagrees with `pnpm typecheck`/`pnpm test`.
 - Dev viewer: `pnpm dev` (full monorepo build, then `--filter viewer dev`; needs a built `@ifc-lite/wasm`).
 - Fixtures: `pnpm fixtures` (tests skip when absent). Dead code: `pnpm knip` (TS) / `cargo test --workspace` (Rust).
 - Publish: `pnpm changeset`; refresh the API-surface snapshot with `pnpm api-surface:update`.
