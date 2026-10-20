@@ -194,7 +194,7 @@ export function readLayerSet(model: LiveModel, layerSetId: number): LayerRow[] |
 }
 
 /** An associated IfcMaterialLayerSetUsage or IfcMaterialLayerSet, resolved to the set. */
-function layerSetBehind(model: LiveModel, materialId: number | null): number | null {
+export function layerSetBehind(model: LiveModel, materialId: number | null): number | null {
   if (materialId === null) return null;
   if (liveEntityConforms(model.dataStore, materialId, 'IfcMaterialLayerSetUsage', model.view)) {
     return refId(liveAttributes(model, materialId)?.[0]);

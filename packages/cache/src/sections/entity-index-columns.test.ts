@@ -37,6 +37,10 @@ function compact(ids: number[], types: number[], names: string[]) {
     Uint32Array.from(ids.map((_, i) => i + 7)), Uint16Array.from(types), names);
 }
 
+// The two 65536-type boundary tests encode and compare every slot; on a shared
+// CI runner the first took 5.2 s, over vitest's 5 s default, without being stuck.
+const BOUNDARY_TIMEOUT_MS = 30_000;
+
 describe('compact cache columns preserve iterable byte layout (#3985)', () => {
   it('keeps sparse/duplicate IDs, normalized first-row type order and source ownership', () => {
     const index = compact([0, 0, 2, 0xffffffff], [3, 1, 0, 2],
@@ -85,7 +89,7 @@ describe('compact cache columns preserve iterable byte layout (#3985)', () => {
     expect(restored.typeNames.length).toBe(n);
     expect(restored.typeNames[0]).toBe('IFCVENDOR65535');
     expect(restored.typeNames[n - 1]).toBe('IFCVENDOR0');
-  });
+  }, BOUNDARY_TIMEOUT_MS);
 
   it('retains generic iterable overflow rejection at the 65537th unique normalized type', () => {
     const byId: CacheEntityIndex['byId'] = {
@@ -96,7 +100,7 @@ describe('compact cache columns preserve iterable byte layout (#3985)', () => {
       },
     };
     expect(() => encode(byId)).toThrow('more than 65535 unique IFC type names');
-  });
+  }, BOUNDARY_TIMEOUT_MS);
 });
 
 const realFixture = resolve(__dirname, '../../../../tests/models/ara3d/AC20-FZK-Haus.ifc');

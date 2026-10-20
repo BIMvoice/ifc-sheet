@@ -20,6 +20,12 @@ import { layoutSchedule, type ScheduleLabels, type ScheduleLayout, type Schedule
 import { takeoffRows, type TakeoffRow } from '@/joinery/material-takeoff';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
 import { layoutMaterialTakeoff, type TakeoffLabels } from '@/joinery/material-takeoff-layout';
+import { roomFinishes, type RoomFinishes } from '@/joinery/room-finishes';
+import { collectRoomInputs } from '@/joinery/room-finishes-models';
+import { layoutRoomFinishes, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
+import { typeQuantities, type TypeQuantities } from '@/joinery/type-quantities';
+import { collectTypeElements } from '@/joinery/type-quantities-models';
+import { layoutTypeQuantities, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
 import { penTags } from '../sheets/dxf-tags';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
@@ -50,6 +56,40 @@ export function useTakeoffRows(): TakeoffRow[] {
   return useMemo(() => takeoffRows(collectTakeoffElements()), [mutationVersion, models]);
 }
 
+export function useRoomFinishLabels(title: string): RoomFinishLabels {
+  const { t } = useTranslation();
+  return useMemo(() => ({
+    title, number: t('finishes.number'), room: t('finishes.room'), level: t('finishes.level'),
+    floor: t('finishes.floor'), wall: t('finishes.wall'), ceiling: t('finishes.ceiling'), area: t('finishes.area'),
+    sharedNote: t('finishes.sharedNote'),
+  }), [t, title]);
+}
+
+/** The rooms with their finishes, read from the loaded models again only when they change. */
+export function useRoomFinishes(): RoomFinishes[] {
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const models = useViewerStore((s) => s.models);
+  // mutationVersion / models: what `collectRoomInputs` reads.
+  return useMemo(() => roomFinishes(collectRoomInputs()), [mutationVersion, models]);
+}
+
+export function useTypeQuantityLabels(title: string): TypeQuantityLabels {
+  const { t } = useTranslation();
+  return useMemo(() => ({
+    title, type: t('typeQty.type'), class: t('typeQty.class'), level: t('typeQty.level'), count: t('typeQty.count'),
+    length: t('typeQty.length'), area: t('typeQty.area'), volume: t('typeQty.volume'), noQto: t('typeQty.noQto'),
+    total: t('typeQty.total'), noType: t('typeQty.noType'), noLevel: t('typeQty.noLevel'),
+  }), [t, title]);
+}
+
+/** The quantities by type, read from the loaded models again only when they change. */
+export function useTypeQuantities(): TypeQuantities {
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const models = useViewerStore((s) => s.models);
+  // mutationVersion / models: what `collectTypeElements` reads.
+  return useMemo(() => typeQuantities(collectTypeElements()), [mutationVersion, models]);
+}
+
 /** The schedule's data and layout, recomputed when the models or the catalogue change. */
 export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data: ScheduleData; layout: ScheduleLayout } | null {
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
@@ -58,7 +98,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels(schedule?.name ?? '');
   return useMemo(() => {
-    if (!schedule || schedule.kind === 'materials') return null;
+    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types') return null;
     const data = scheduleData(schedule.kind);
     return { data, layout: layoutSchedule(data, labels, { scale: schedule.scale ?? 50 }) };
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
@@ -74,21 +114,31 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels('');
   const takeoffLabels = useTakeoffLabels('');
+  const finishLabels = useRoomFinishLabels('');
+  const placesFinishes = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'finishes'));
+  const typeLabels = useTypeQuantityLabels('');
+  const placesTypes = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'types'));
   const placesTakeoff = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'materials'));
   return useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
     // The takeoff parses materials on demand: read once per change, and only when a sheet shows one.
     const rows = placesTakeoff ? takeoffRows(collectTakeoffElements()) : [];
+    const finishRooms = placesFinishes ? roomFinishes(collectRoomInputs()) : [];
+    const byType = placesTypes ? typeQuantities(collectTypeElements()) : null;
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || out.has(schedule.id)) continue;
       out.set(schedule.id, schedule.kind === 'materials'
         ? layoutMaterialTakeoff(rows, { ...takeoffLabels, title: schedule.name })
-        : layoutSchedule(scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50 }));
+        : schedule.kind === 'finishes'
+          ? layoutRoomFinishes(finishRooms, { ...finishLabels, title: schedule.name })
+        : schedule.kind === 'types'
+          ? layoutTypeQuantities(byType ?? { levels: [], rows: [], classTotals: [] }, { ...typeLabels, title: schedule.name })
+          : layoutSchedule(scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50 }));
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet.viewports, schedules, labels, takeoffLabels, placesTakeoff, mutationVersion, models, catalogue, mapping]);
+  }, [sheet.viewports, schedules, labels, takeoffLabels, finishLabels, typeLabels, placesTakeoff, placesFinishes, placesTypes, mutationVersion, models, catalogue, mapping]);
 }
 
 function Prim({ p }: { p: SchedulePrim }) {

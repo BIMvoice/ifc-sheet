@@ -23,7 +23,7 @@ describe('catalogue counts', () => {
     const counts = kindCounts(c);
     assert.equal(counts.length, CATALOGUE_KINDS.length);
     assert.deepEqual(Object.fromEntries(CATALOGUE_KINDS.map((k, i) => [k, counts[i]])), {
-      layers: 0, textStyles: 0, dimStyles: 0, hatchPatterns: 2, materials: 0, annotationTypes: 1, symbols: 0, legends: 0,
+      layers: 0, textStyles: 0, dimStyles: 0, hatchPatterns: 2, materials: 0, annotationTypes: 1, symbols: 0, legends: 0, cadLayers: 0,
     });
   });
 });

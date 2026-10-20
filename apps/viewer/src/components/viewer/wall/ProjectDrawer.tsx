@@ -4,8 +4,8 @@
 
 /**
  * The project, in IfcSheet's own terms: a drawer over the left of the Wall
- * listing the sheets (by series), the drawings (plans, sections, elevations)
- * and the schedules. A click goes there: a sheet is stepped into, a drawing
+ * listing the sheets (by series), the drawings (plans, sections, elevations),
+ * the schedules and the legends. A click goes there: a sheet is stepped into, a drawing
  * is brought forward on the sheet it hangs on (hung first if it is not), a
  * schedule likewise. Double-click renames, the cross deletes. New, open and
  * save the project file are at the top; the title block every sheet prints
@@ -14,17 +14,23 @@
 
 import { useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { toast } from '@/components/ui/toast';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
-import { addScheduleToSet, hangSchedule, hangView } from '@/project/drawing-set-actions';
+import { addScheduleToSet, hangLegend, hangSchedule, hangView } from '@/project/drawing-set-actions';
+import { projectOpenErrorText } from '@/project/open-error';
 import { requestNewProject } from '@/project/new-project';
-import { exportProjectFile, importProjectFile, PROJECT_FILE_SUFFIX } from '@/project/project-file';
-import { addProjectSheet, loadProjectDocument, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
+import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
+import { addProjectSheet, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
+import { RecoveryOffer } from './RecoveryOffer';
+import { ReadinessList } from '../sheets/ReadinessList';
+import { WALL_SKIN } from '../sheets/set-skin';
 import { TitleBlockForm } from './TitleBlockForm';
 import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
+import { LegendsAdd } from './LegendsAdd';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
   { kind: 'plan', labelKey: 'wall.group.plans' },
@@ -85,7 +91,9 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
   const sheets = useProjectStore((s) => s.sheets);
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
+  const legends = useProjectStore((s) => s.legends ?? []);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [readyOpen, setReadyOpen] = useState(false);
 
   const go = (sheetId: string | null, focus: string | null = null): void => {
     if (!sheetId) return;
@@ -129,9 +137,10 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
         <input ref={fileInput} type="file" accept={`${PROJECT_FILE_SUFFIX},application/json`} className="hidden" onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = '';
-          if (file) void importProjectFile(file).then((doc) => loadProjectDocument(doc, { dirty: false })).catch((err: unknown) => console.warn('[ifcsheet] could not open the project file', err));
+          if (file) void importProjectFile(file).then((doc) => openProjectDocument(doc, { dirty: false })).catch((err: unknown) => { console.warn('[ifcsheet] could not open the project file', err); toast.error(projectOpenErrorText(err, t)); });
         }} />
       </div>
+      <div className="px-4"><RecoveryOffer /></div>
       <LibraryPanel />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         <Group title={t('wall.project.sheets')} add={<button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>}>
@@ -139,6 +148,11 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
             <Row key={s.id} id={s.id} sub={s.number} label={s.name} onOpen={() => go(s.id)} />
           ))}
         </Group>
+        <details className="border-t border-sky-300/10 px-4 py-3" onToggle={(e) => setReadyOpen(e.currentTarget.open)}>
+          <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('ready.title')}</summary>
+          {/* Mounted only while open: reading the facts walks every entity of every model. */}
+          {readyOpen ? <div className="mt-2 text-xs leading-relaxed"><ReadinessList skin={WALL_SKIN} /></div> : null}
+        </details>
         <details className="border-t border-sky-300/10 px-4 py-3">
           <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.tb.title')}</summary>
           <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('wall.tb.everySheet')}</p>
@@ -155,11 +169,18 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
             <>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('all', t('wall.project.joinerySchedule')))}>{t('wall.project.addJoinery')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('materials', t('takeoff.newName')))}>{t('wall.project.addTakeoff')}</button>
+              <button type="button" className={action} onClick={() => go(addScheduleToSet('types', t('typeQty.newName')))}>{t('wall.project.addTypeQuantities')}</button>
+              <button type="button" className={action} onClick={() => go(addScheduleToSet('finishes', t('finishes.newName')))}>{t('wall.project.addFinishes')}</button>
             </>
           )}
         >
           {schedules.map((s) => <Row key={s.id} id={s.id} label={s.name} onOpen={() => go(hangSchedule(s.id))} />)}
         </Group>
+        <div data-owns-keys>
+          <Group title={t('wall.group.legends')} add={<LegendsAdd onClose={onClose} />}>
+            {legends.map((l) => <Row key={l.id} id={l.id} label={l.name} onOpen={() => go(sheetsShowing(l.id)[0]?.id ?? hangLegend(l.id))} />)}
+          </Group>
+        </div>
       </div>
     </aside>
   );

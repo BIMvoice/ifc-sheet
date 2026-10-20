@@ -15,7 +15,7 @@ import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, nextInSeries, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
 import { addProjectView, updateProjectView, useProjectStore } from './project-store';
@@ -65,11 +65,12 @@ export function sectionForProposal(proposal: SectionProposal): string | null {
 }
 
 /**
- * Lay out the starting set on a project that has no sheets yet. Returns
- * whether it did; a project with sheets is never touched.
+ * Lay out the starting set on a project that has no set sheets yet (a room's
+ * interior elevations, made first, do not count). Returns whether it did; a
+ * project with set sheets is never touched.
  */
 export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | null): boolean {
-  if (!bounds || useProjectStore.getState().sheets.length > 0) return false;
+  if (!bounds || useProjectStore.getState().sheets.some(isSetSheet)) return false;
   return ensureDrawingSet(meshes, bounds, { onOpen: true }).sheetsAdded > 0;
 }
 
@@ -123,7 +124,7 @@ function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
 /** The four elevations, each plane just inside its facade and each seeing through the building; a depth or plane already set stays. */
 function ensureElevations(extent: AxisBounds, report: EnsureReport): void {
   for (const direction of ELEVATION_DIRECTIONS) {
-    const found = state().views.find((v) => v.kind === 'elevation' && v.direction === direction);
+    const found = state().views.find((v) => v.kind === 'elevation' && v.direction === direction && !v.interior);
     if (!found) {
       addProjectView({ kind: 'elevation', name: ELEVATION_NAMES[direction], direction, planeOffset: elevationPlaneOffset(direction, extent), viewDepth: elevationDepth(direction, extent) });
       report.viewsAdded++;
@@ -153,7 +154,7 @@ function ensureSections(meshes: MeshData[] | null, extent: AxisBounds, options: 
 function ensurePlanScales(extent: AxisBounds): void {
   const plans = state().views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.detail);
   const onSheet = new Map(state().sheets.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
-  const planned = state().sheets.length === 0 ? buildDrawingSet({ views: plans, extent }) : [];
+  const planned = state().sheets.some(isSetSheet) ? [] : buildDrawingSet({ views: plans, extent });
   const plannedScale = new Map(planned.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
   for (const plan of plans) {
     const scale = onSheet.get(plan.id) ?? plannedScale.get(plan.id);
@@ -168,8 +169,10 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
   const before = state().sheets;
   report.sheetsExisting = before.length;
   let sheets = before;
-  if (before.length === 0) {
-    sheets = buildDrawingSet({ views: loose, extent });
+  if (!before.some(isSetSheet)) {
+    // No set yet: lay it all out, beside any interior elevation sheets already there.
+    const set = buildDrawingSet({ views: loose, extent });
+    if (set.length > 0) sheets = [...before, ...set];
   } else {
     for (const view of loose) {
       const next = withViewHung(sheets, state().views, view, extent);
@@ -242,6 +245,20 @@ export function hangView(viewId: string, extent: ModelExtent): string | null {
   return hung.sheetId;
 }
 
+/** Hang a schedule or a legend on a sheet of its own in the A-6xx series: `itemId` centred in the drawing area, the sheet named `name`. */
+function hangOnSheetOfItsOwn(itemId: string, name: string): string {
+  const { sheets } = useProjectStore.getState();
+  const placed = sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === itemId));
+  if (placed) return placed.id;
+  const area = drawingArea(SET_PAPER);
+  const sheet: ProjectSheet = {
+    id: freshProjectId('sheet'), number: nextInSeries(sheets, 'schedules'), name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
+    viewports: [{ id: freshProjectId('viewport'), viewId: itemId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 50, width: 0, height: 0, center: null }],
+  };
+  useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });
+  return sheet.id;
+}
+
 /**
  * Hang a schedule (doors and windows, or the material takeoff) on a sheet of
  * its own in the A-6xx series, its table centred in the drawing area, named
@@ -249,18 +266,14 @@ export function hangView(viewId: string, extent: ModelExtent): string | null {
  * that sheet.
  */
 export function hangSchedule(scheduleId: string): string | null {
-  const { sheets, schedules } = useProjectStore.getState();
-  const schedule = schedules?.find((s) => s.id === scheduleId);
-  if (!schedule) return null;
-  const placed = sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === scheduleId));
-  if (placed) return placed.id;
-  const area = drawingArea(SET_PAPER);
-  const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: nextInSeries(sheets, 'schedules'), name: schedule.name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
-    viewports: [{ id: freshProjectId('viewport'), viewId: scheduleId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 50, width: 0, height: 0, center: null }],
-  };
-  useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });
-  return sheet.id;
+  const schedule = useProjectStore.getState().schedules?.find((s) => s.id === scheduleId);
+  return schedule ? hangOnSheetOfItsOwn(scheduleId, schedule.name) : null;
+}
+
+/** Hang a legend the same way (`hangSchedule`); a legend already on a sheet returns that sheet. */
+export function hangLegend(legendId: string): string | null {
+  const legend = useProjectStore.getState().legends?.find((l) => l.id === legendId);
+  return legend ? hangOnSheetOfItsOwn(legendId, legend.name) : null;
 }
 
 /** A new schedule hung on the set (`hangSchedule`); returns its sheet. */
