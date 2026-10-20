@@ -20,7 +20,7 @@ import { useViewerStore } from '@/store';
 import { previewElements } from '@/tagfields/preview-elements';
 import { isCustom, SOURCE_ATTRIBUTES, sourceText, TAG_FIELD_IDS, TAG_KINDS, sourcesOf, type TagFieldId, type TagKind, type TagSource } from '@/tagfields/tag-fields';
 import { moved, setFieldSources } from '@/tagfields/tag-fields-actions';
-import { parseSourcePath, previewSources, sourceCandidates } from '@/tagfields/tag-preview';
+import { parseSourcePath, previewSources, sourceCandidates, sourcePath } from '@/tagfields/tag-preview';
 import { libraryAction } from './library-style';
 
 type AddKind = 'attribute' | 'pset' | 'quantity' | 'type-pset';
@@ -36,7 +36,8 @@ function AddSource({ onAdd, suggestions }: { onAdd: (s: TagSource) => void; sugg
   const [kind, setKind] = useState<AddKind>('pset');
   const [path, setPath] = useState('');
   const [attribute, setAttribute] = useState<(typeof SOURCE_ATTRIBUTES)[number]>('Tag');
-  const parsed = kind === 'attribute' ? ({ kind: 'attribute', name: attribute } as const) : parseSourcePath(kind, path);
+  // A set name with a dot is typed escaped (`Office\.v2.Nr`) or plainly when the element carries that set.
+  const parsed = kind === 'attribute' ? ({ kind: 'attribute', name: attribute } as const) : parseSourcePath(kind, path, suggestions);
   const listId = `tag-sources-${kind}`;
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -55,7 +56,7 @@ function AddSource({ onAdd, suggestions }: { onAdd: (s: TagSource) => void; sugg
             onKeyDown={(e) => { if (e.key === 'Enter' && parsed) { onAdd(parsed); setPath(''); } }}
           />
           <datalist id={listId}>
-            {suggestions.filter((s) => s.kind === kind).map((s) => <option key={sourceText(s)} value={sourceText(s)}>{sourceText(s)}</option>)}
+            {suggestions.filter((s) => s.kind === kind).map((s) => <option key={sourcePath(s)} value={sourcePath(s)}>{sourceText(s)}</option>)}
           </datalist>
         </>
       )}
@@ -81,7 +82,7 @@ function FieldEditor({ kind, id, guid }: { kind: TagKind; id: TagFieldId; guid: 
     <fieldset className="m-0 mt-3 border-0 p-0">
       <legend className="flex w-full items-center gap-2 p-0 text-xs font-medium text-sky-50">
         <span>{t(`tagFields.field.${id}` as TranslationKey)}</span>
-        {isCustom(config, kind, id) ? <button type="button" className={`${libraryAction} ml-auto`} onClick={() => setFieldSources(kind, id, sourcesOf(undefined, kind, id))}>{t('tagFields.reset')}</button> : null}
+        {isCustom(config, kind, id) ? <button type="button" className={`${libraryAction} ml-auto`} onClick={() => setFieldSources(kind, id, null)}>{t('tagFields.reset')}</button> : null}
       </legend>
       {sources.length === 0 ? <p className="m-0 mt-1 text-xs text-sky-300">{t('tagFields.noSources')}</p> : null}
       <ol className="m-0 mt-1 list-none space-y-1 p-0">
@@ -89,7 +90,7 @@ function FieldEditor({ kind, id, guid }: { kind: TagKind; id: TagFieldId; guid: 
           const row = rows?.[i];
           const name = sourceText(s);
           return (
-            <li key={`${s.kind}:${name}`} className="flex items-center gap-1 rounded bg-sky-400/5 px-1.5 py-1 text-xs">
+            <li key={JSON.stringify(s)} className="flex items-center gap-1 rounded bg-sky-400/5 px-1.5 py-1 text-xs">
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sky-50">{t(KIND_KEY[s.kind], { path: name })}</span>
                 {row ? <span className={`block truncate ${row.used ? 'text-cyan-300' : 'text-sky-300'}`}>{row.text === '' ? t('tagFields.source.empty') : row.text}</span> : null}

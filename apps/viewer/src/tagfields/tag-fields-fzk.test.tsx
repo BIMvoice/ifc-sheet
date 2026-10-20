@@ -25,7 +25,8 @@ import type { DraftEntity, Pt } from '@/drafting/types';
 import { labelElementByGlobalId, markOf } from '@/labels/label-element.js';
 import { refreshParametricLabels } from '@/labels/label-sync.js';
 import { refreshElementTags } from '@/project/useElementTagSync.js';
-import { resetProject, useProjectStore } from '@/project/project-store.js';
+import { loadProjectDocument, projectDocument, resetProject, useProjectStore } from '@/project/project-store.js';
+import { parseProjectFile, serializeProject } from '@/project/project-file.js';
 import type { ProjectSheet } from '@/project/types.js';
 import { SheetPaper } from '@/components/viewer/sheets/SheetPaper.js';
 import { sheetSvgText } from '@/components/viewer/sheets/sheet-export.js';
@@ -151,7 +152,7 @@ describe('tag fields on FZK-Haus', () => {
     for (const [g, v] of textsOf('view-s1', 'window')) assert.equal(v, el(g).attribute('Name'));
 
     // Back to the default: the tags are what they were.
-    setFieldSources('door', 'mark', [{ kind: 'attribute', name: 'Mark' }]);
+    setFieldSources('door', 'mark', null);
     refreshParametricLabels();
     assert.deepEqual([...textsOf('view-s1', 'door')], [...before[0]]);
     assert.equal(useProjectStore.getState().tagFields, undefined);
@@ -175,5 +176,34 @@ describe('tag fields on FZK-Haus', () => {
     assert.equal(text(tag), ro);
     // The other doors have no such property: they fall back to the Mark, then the Name, as before.
     assert.equal(textsOf('view-s1', 'door').get(guids.door[1]), el(guids.door[1]).attribute('Name'));
+  });
+
+  it('keeps the text of element tags an older project saved, byte for byte, until the office sets the field (#113 review)', () => {
+    // As the TAG tool wrote them before the sources could be changed: the Tag as written, a GUID-like one included,
+    // and a room's Name, not its long name. Literal, from the model file.
+    const door = guids.door.find((g) => el(g).attribute('Name') === 'Innentuer-1')!;
+    const room = guids.room.find((g) => el(g).attribute('LongName') === 'Schlafzimmer')!;
+    const saved: Array<[string, string, string]> = [
+      [door, 'mark', 'E605AACB-6C4E-458D-93-46-5D9D8C7C21D3'],
+      [door, 'name', 'Innentuer-1'],
+      [room, 'name', '4'],
+      [room, 'mark', '4'],
+      [door, 'class', 'Door'],
+    ];
+    useProjectStore.setState({ drafts: saved.map(([g, field, t]) => newDraft('v', '0', { type: 'leader', pts: [{ x: 0, y: 0 }, { x: 1, y: 1 }], text: t, height: 0.25 }, { tagOf: g, tagField: field })) });
+    const file = JSON.parse(serializeProject(projectDocument()));
+    delete file.tagFields;
+    resetProject();
+    loadProjectDocument(parseProjectFile(JSON.stringify(file)));
+    refreshElementTags();
+    const tags = () => useProjectStore.getState().drafts.filter((d) => d.params.tagOf !== undefined).map(text);
+    assert.deepEqual(tags(), saved.map(([, , t]) => t));
+    // Labels keep theirs too: the mark label reads the mark (not the GUID-like Tag), the room label the long name.
+    assert.equal(markOf(el(door).attribute('Tag')), '');
+    // Opting in: once the door mark and the room name are set, the tags follow the sources.
+    setFieldSources('door', 'mark', [{ kind: 'attribute', name: 'Mark' }, { kind: 'attribute', name: 'Name' }]);
+    setFieldSources('room', 'name', [{ kind: 'attribute', name: 'LongName' }, { kind: 'attribute', name: 'Name' }]);
+    refreshElementTags();
+    assert.deepEqual(tags(), ['Innentuer-1', 'Innentuer-1', 'Schlafzimmer', 'Schlafzimmer', 'Door'], 'a room has no Tag: its mark falls back to the name');
   });
 });

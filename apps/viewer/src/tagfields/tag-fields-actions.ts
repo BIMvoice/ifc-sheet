@@ -11,8 +11,8 @@
 import { useProjectStore } from '@/project/project-store';
 import { withSources, type TagFieldId, type TagKind, type TagSource } from './tag-fields';
 
-/** Set the sources `field` of `kind` reads; the default list removes the entry. */
-export function setFieldSources(kind: TagKind, field: TagFieldId, sources: readonly TagSource[]): void {
+/** Set the sources `field` of `kind` reads; `null` takes it back to the default. */
+export function setFieldSources(kind: TagKind, field: TagFieldId, sources: readonly TagSource[] | null): void {
   const current = useProjectStore.getState().tagFields;
   const next = withSources(current, kind, field, sources);
   if (JSON.stringify(next) === JSON.stringify(current)) return;

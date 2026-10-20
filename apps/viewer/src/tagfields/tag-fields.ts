@@ -6,8 +6,9 @@
  * Which IFC property feeds each field of a tag. Per tag kind (door, window,
  * room, wall, any other element) and field (mark, name) the office lists
  * sources in order, and the first that has a value wins. A kind or field the
- * office has not configured reads the default, which is what tags showed
- * before the sources could be changed.
+ * office has not configured reads the default, which is what each showed
+ * before the sources could be changed: the labels `defaultSources`, the TAG
+ * tool `tagToolDefaultSources`.
  *
  * Pure: values come in through `read`, which is the label reader
  * (`labels/label-resolve.ts`), so a source reads exactly like the same path in
@@ -47,6 +48,20 @@ export function defaultSources(kind: TagKind, field: TagFieldId): TagSource[] {
   return kind === 'room' ? [attr('LongName'), attr('Name')] : [attr('Name')];
 }
 
+/**
+ * What the TAG tool showed before the sources could be changed, which it keeps until the office sets the field: the
+ * Tag as written (a GUID-like Tag included) for the mark, the Name for the name (a room's too, not its long name).
+ * The labels keep `defaultSources`, which is what they showed; so tags already on sheets keep their text.
+ */
+export function tagToolDefaultSources(field: TagFieldId): TagSource[] {
+  return field === 'mark' ? [attr('Tag')] : [attr('Name')];
+}
+
+/** The sources the TAG tool reads for a field: the office's list, else its own default (`tagToolDefaultSources`). */
+export function tagToolSourcesOf(config: TagFieldConfig | undefined, kind: TagKind, field: TagFieldId): TagSource[] {
+  return config?.[kind]?.[field] ?? tagToolDefaultSources(field);
+}
+
 /** The sources a field reads: the office's list, else the default. An empty list is an answer too: the field reads nothing. */
 export function sourcesOf(config: TagFieldConfig | undefined, kind: TagKind, field: TagFieldId): TagSource[] {
   return config?.[kind]?.[field] ?? defaultSources(kind, field);
@@ -75,7 +90,12 @@ const present = (v: unknown): boolean => v !== null && v !== undefined && v !== 
 
 /** The first source that has a value; a value-less field reads `undefined`. `read` reads one reference of the element, as stored. */
 export function resolveTagField(config: TagFieldConfig | undefined, kind: TagKind, field: TagFieldId, read: (ref: FieldRef) => FieldValue): FieldValue {
-  for (const source of sourcesOf(config, kind, field)) {
+  return firstValue(sourcesOf(config, kind, field), read);
+}
+
+/** The first of `sources` that has a value; `undefined` when none has. */
+export function firstValue(sources: readonly TagSource[], read: (ref: FieldRef) => FieldValue): FieldValue {
+  for (const source of sources) {
     const v = read(sourceRef(source));
     if (present(v.value)) return v;
   }
@@ -92,14 +112,14 @@ export function sourceText(s: TagSource): string {
   }
 }
 
-export const sameSource = (a: TagSource, b: TagSource): boolean => a.kind === b.kind && sourceText(a) === sourceText(b);
-
-/** `config` with the sources of one field set; setting the default removes the entry, so a configuration holds only what differs. */
-export function withSources(config: TagFieldConfig | undefined, kind: TagKind, field: TagFieldId, sources: readonly TagSource[]): TagFieldConfig | undefined {
-  const dflt = defaultSources(kind, field);
-  const same = sources.length === dflt.length && sources.every((s, i) => sameSource(s, dflt[i]));
+/**
+ * `config` with the sources of one field set; `null` removes the entry (back to the default). A list equal to the
+ * labels' default is kept all the same: setting a field is also what opts the TAG tool in (`tagToolSourcesOf`), whose
+ * own default differs, so `Room name: LongName, Name` is a choice and not a no-op.
+ */
+export function withSources(config: TagFieldConfig | undefined, kind: TagKind, field: TagFieldId, sources: readonly TagSource[] | null): TagFieldConfig | undefined {
   const fields = { ...config?.[kind] };
-  if (same) delete fields[field];
+  if (sources === null) delete fields[field];
   else fields[field] = [...sources];
   const next: TagFieldConfig = { ...config };
   if (Object.keys(fields).length) next[kind] = fields;

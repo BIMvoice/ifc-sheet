@@ -4,8 +4,10 @@
 
 /**
  * The tag-field sources as the project file and the library file keep them.
- * Read strictly: a malformed source fails with its path. A kind or field this
- * version does not know is dropped, so a file from a newer version still opens.
+ * Read strictly: a malformed source fails with its path. A tag kind, a field or
+ * a source kind this version does not know is dropped (a source with a note on
+ * the console), so a file from a newer version still opens. A field whose every
+ * source is dropped reads its default rather than nothing.
  */
 
 import { fail } from '@/catalogue/readers';
@@ -14,6 +16,11 @@ import { SOURCE_ATTRIBUTES, TAG_FIELD_IDS, TAG_KINDS, type TagFieldConfig, type 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
+
+const SOURCE_KINDS: readonly unknown[] = ['attribute', 'pset', 'quantity', 'type-pset'];
+
+/** A source of a kind a newer version writes: dropped, not failed. */
+const unknownKind = (v: unknown): v is Json & { kind: string } => isObject(v) && typeof v.kind === 'string' && !SOURCE_KINDS.includes(v.kind);
 
 function readSource(v: unknown, path: string, what?: string): TagSource {
   const bad = (): never => fail(path, 'must be a source { kind: attribute | pset | quantity | type-pset, … }', what);
@@ -47,7 +54,13 @@ export function readTagFields(raw: unknown, path: string, what?: string): TagFie
       const list = fields[field];
       if (list === undefined) continue;
       if (!Array.isArray(list)) fail(`${path}.${kind}.${field}`, 'must be a list of sources', what);
-      kept[field] = list.map((s, i) => readSource(s, `${path}.${kind}.${field}[${i}]`, what));
+      const sources = list.flatMap((s, i): TagSource[] => {
+        const at = `${path}.${kind}.${field}[${i}]`;
+        if (!unknownKind(s)) return [readSource(s, at, what)];
+        console.warn(`${at}: a source of kind "${s.kind}" is not known to this version and was left out`);
+        return [];
+      });
+      if (sources.length || !list.length) kept[field] = sources;
     }
     if (Object.keys(kept).length) out[kind as TagKind] = kept;
   }

@@ -15,7 +15,10 @@ import { defaultSources, isCustom, sourcesOf, tagKindOf, withSources, type TagFi
 import { readTagFields } from './tag-fields-file.js';
 import { LEGACY_ROOM_TEMPLATE, ROOM_TEMPLATE, ROOM_TYPE_ID, TAGALL_TYPES, upgradeTagAllTypes } from '@/tagall/types.js';
 import { moved } from './tag-fields-actions.js';
-import { parseSourcePath, previewSources } from './tag-preview.js';
+import { parseSourcePath, previewSources, sourcePath } from './tag-preview.js';
+import { importCatalogueText } from '@/catalogue/catalogue-store.js';
+import { parseProjectFile, serializeProject } from '@/project/project-file.js';
+import { projectDocument, resetProject, useProjectStore } from '@/project/project-store.js';
 
 const door = (over: Partial<LabelElement> = {}): LabelElement => wall({
   className: () => 'IfcDoor',
@@ -64,10 +67,11 @@ describe('tag field sources', () => {
     assert.equal(resolveTemplate(parseTemplate('{Mark ?? Name}'), { ...door(), tagFields: { door: { mark: [pset('Office', 'Nr')] } } }), 'ș ț ă î â');
   });
 
-  it('keep only what differs from the default, and an empty list is an answer', () => {
+  it('keep what was set, the default list too, remove on null, and an empty list is an answer', () => {
     const set = withSources(undefined, 'door', 'mark', [pset('A', 'b')]);
     assert.ok(isCustom(set, 'door', 'mark'));
-    assert.equal(withSources(set, 'door', 'mark', defaultSources('door', 'mark')), undefined, 'back to the default removes the entry and the empty configuration');
+    assert.equal(withSources(set, 'door', 'mark', null), undefined, 'back to the default removes the entry and the empty configuration');
+    assert.ok(isCustom(withSources(undefined, 'room', 'name', defaultSources('room', 'name')), 'room', 'name'), 'the default list set by hand opts the TAG tool in');
     assert.deepEqual(sourcesOf(withSources(undefined, 'door', 'mark', []), 'door', 'mark'), []);
     assert.equal(mark(withSources(undefined, 'door', 'mark', []), door()), undefined);
   });
@@ -124,5 +128,52 @@ describe('the room label of a project made before the tag name', () => {
     assert.equal(upgradeTagAllTypes(own), own);
     const current = [...TAGALL_TYPES];
     assert.equal(upgradeTagAllTypes(current), current);
+  });
+});
+
+describe('review round of #113', () => {
+  it('drops a source of a kind this version does not know, with a note, and keeps the rest; a project file with one opens', () => {
+    const notes: unknown[][] = [];
+    const warn = console.warn;
+    console.warn = (...a: unknown[]) => { notes.push(a); };
+    try {
+      const raw = { door: { mark: [{ kind: 'classification', system: 'Uniclass' }, pset('A', 'b')] }, room: { name: [{ kind: 'formula', expr: 'x' }] } };
+      // A field whose every source is dropped reads its default, not nothing; a list empty in the file stays empty.
+      assert.deepEqual(readTagFields(raw, '/tagFields'), { door: { mark: [pset('A', 'b')] } });
+      assert.deepEqual(readTagFields({ room: { name: [] } }, '/tagFields'), { room: { name: [] } });
+      assert.equal(notes.length, 2, 'one note per dropped source');
+      assert.match(String(notes[0][0]), /tagFields\.door\.mark\[0\].*classification/);
+      // A known kind that is malformed still fails: only the unknown kind is forward-compatible.
+      assert.throws(() => readTagFields({ door: { mark: [{ kind: 'pset', pset: 'A' }] } }, '/tagFields'), /tagFields\.door\.mark\[0\]/);
+      const file = JSON.parse(serializeProject(projectDocument()));
+      file.tagFields = raw;
+      const doc = parseProjectFile(JSON.stringify(file));
+      assert.deepEqual(doc.tagFields?.door?.mark, [pset('A', 'b')]);
+    } finally {
+      console.warn = warn;
+    }
+  });
+
+  it('upgrades the room label of an older library file on import, as on project load', () => {
+    resetProject();
+    const old = TAGALL_TYPES.map((t) => (t.id === ROOM_TYPE_ID ? { ...t, label: { ...t.label!, template: LEGACY_ROOM_TEMPLATE } } : t));
+    const text = serializeCatalogue({ ...emptyCatalogue(), annotationTypes: old }, 'Office 2025');
+    assert.equal(parseCatalogue(text).catalogue.annotationTypes.find((t) => t.id === ROOM_TYPE_ID)?.label?.template, ROOM_TEMPLATE);
+    // Into a project that already has the current label: no clash, the label stays the current one.
+    useProjectStore.setState({ annotationTypes: TAGALL_TYPES.map((t) => structuredClone(t)) });
+    const { report } = importCatalogueText(text, 'theirs');
+    assert.equal(useProjectStore.getState().annotationTypes?.find((t) => t.id === ROOM_TYPE_ID)?.label?.template, ROOM_TEMPLATE);
+    assert.equal(report.annotationTypes.replaced, 0);
+  });
+
+  it('takes a property set name with a dot: escaped, or as the set the element carries', () => {
+    assert.deepEqual(parseSourcePath('pset', 'Office\\.v2.Nr'), pset('Office.v2', 'Nr'));
+    assert.deepEqual(parseSourcePath('type-pset', 'A\\\\B.c'), { kind: 'type-pset', pset: 'A\\B', property: 'c' });
+    assert.equal(sourcePath(pset('Office.v2', 'Nr')), 'Office\\.v2.Nr');
+    assert.deepEqual(parseSourcePath('pset', sourcePath(pset('a.b\\c', 'd.e'))), pset('a.b\\c', 'd.e'), 'the path the suggestions list writes reads back');
+    // Typed plainly, it is the set the element carries when one matches.
+    const known = [pset('Office.v2', 'Nr')];
+    assert.deepEqual(parseSourcePath('pset', 'Office.v2.Nr', known), pset('Office.v2', 'Nr'));
+    assert.deepEqual(parseSourcePath('pset', 'Pset_DoorCommon.Reference', known), pset('Pset_DoorCommon', 'Reference'));
   });
 });
