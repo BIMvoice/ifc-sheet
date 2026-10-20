@@ -24,6 +24,7 @@ import { parseDocumentFile } from '@/lib/document/persistence';
 import type { DocumentPdfSeams } from '@/lib/document/generate-document-pdf';
 import { Toaster } from '@/components/ui/toast';
 import { latestToast } from '@/test/toasts';
+import { documentPreviewReady } from '@/test/document-preview';
 import { stampAnalysisReport, captureAnalysisStamp } from '@/hooks/useAnalysisStaleness';
 import { EVENT_FILE_DOWNLOADED } from '@/lib/tours/events.js';
 
@@ -97,7 +98,7 @@ describe('Multiple saved pairs in mounted UI and documentation (#6506)', () => {
     act(() => useViewerStore.setState({ models: new Map(), activeModelId: null, documents: [spec], activeDocumentId: spec.id,
       dashboards: [], bcfProject: null, selectedEntityIds: new Set(), mutationViews: new Map() }));
     const tables: ReportTableArgs[] = [];
-    const ui = render(<DocumentPanel pdfSeams={recordingSeams([], tables)} />); await settle();
+    const ui = render(<DocumentPanel pdfSeams={recordingSeams([], tables)} />); await settle(); await documentPreviewReady();
     const head = [...ui.querySelectorAll('[data-block-table] th')].map((cell) => cell.textContent);
     assert.equal(head.at(-1), 'Authored key');
     const rows = [...ui.querySelectorAll('[data-block-table] tbody tr')];
