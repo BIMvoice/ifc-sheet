@@ -14,7 +14,7 @@
 #
 # To make these required, add the check names to the `main` ruleset (repository
 # setting, not code): Build wasm, Typecheck, Package tests, Viewer tests
-# (shard 0..3), Gates vs base, Rust.
+# (shard 0..7), Gates vs base, Rust.
 #
 # Deliberately out of scope for now (follow-up): the other scripts/check-*
 # gates (`pnpm lint`: changesets, i18n literals, jsx-a11y; check-refwalk-guards,
@@ -122,7 +122,7 @@ jobs:
       - run: pnpm turbo run test --filter='./packages/*'
 
   # The viewer suite is about 15k tests, so it is split by test file across
-  # four runners (TEST_SHARD / TEST_SHARDS, see apps/viewer/package.json).
+  # eight runners (TEST_SHARD / TEST_SHARDS, see apps/viewer/package.json).
   viewer-tests:
     name: Viewer tests (shard ${{ matrix.shard }})
     needs: wasm
@@ -131,10 +131,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
       TEST_SHARD: ${{ matrix.shard }}
-      TEST_SHARDS: 4
+      TEST_SHARDS: 8
     steps:
       - uses: actions/checkout@v4
 
