@@ -165,11 +165,9 @@ export type AxonometricPreset = 'se' | 'sw' | 'ne' | 'nw';
 export interface ViewRaster {
   /** PNG data URL of the capture. */
   href: string;
-  widthPx: number;
-  heightPx: number;
+  widthPx: number; heightPx: number;
   /** The paper box the capture was sized for, millimetres. */
-  widthMm: number;
-  heightMm: number;
+  widthMm: number; heightMm: number;
 }
 
 export interface ThreeDProjectView extends ProjectViewBase {
