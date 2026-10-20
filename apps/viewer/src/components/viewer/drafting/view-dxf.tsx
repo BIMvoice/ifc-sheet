@@ -22,10 +22,11 @@ import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types'
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import type { ProjectView } from '@/project/types';
 import { viewportPens } from '../sheets/viewport-pens';
+import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from '../sheets/OverlayPaths';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import { svgToDxf } from '../sheets/sheet-dxf';
-import { layerTags, penTags } from '../sheets/dxf-tags';
+import { cadKindOf, layerTags, penTags } from '../sheets/dxf-tags';
 import { shapePath } from './DraftOverlay';
 import { AnnotationGraphics } from './AnnotationGraphics';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
@@ -48,8 +49,8 @@ interface ViewDxfInput {
 
 /** The off-screen SVG `viewDxf` walks; exported for tests (the DXF walker needs a browser's path geometry). */
 export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays }: ViewDxfInput) {
-  const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns, currentEntityStyles()) : [];
   const s = useProjectStore.getState();
+  const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns, cadPenContext(s.cadLayers), currentEntityStyles()) : [];
   const book = { textStyles: s.textStyles ?? [], dimStyles: s.dimStyles ?? [] };
   const colour = new Map(layers.map((l) => [l.id, layerShows(l, s.layerGroups ?? [], { view: view.hiddenLayers }) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));
@@ -57,7 +58,7 @@ export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, ov
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={1} height={1} overflow="visible">
       {pens.map((p, i) => (
-        <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000')} d={p.d} fill="none" stroke={p.stroke ?? 'none'} strokeWidth={p.width} />
+        <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} d={p.d} fill="none" stroke={p.stroke ?? 'none'} strokeWidth={p.width} />
       ))}
       <OverlayPaths overlays={overlays} transform={MM} axis={axis} />
       {drafts.map((e) => {
@@ -65,7 +66,7 @@ export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, ov
         if (color === null) return null;
         return isGeometry(e.shape)
           ? <path key={e.id} {...layerTags(layerById.get(e.layerId))} d={shapePath(e.shape, MM, axis)} stroke={color ?? '#000'} strokeWidth={layerPen(layerById.get(e.layerId)).width} fill="none" />
-          : <g key={e.id} {...layerTags(layerById.get(e.layerId))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={MM} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} /></g>;
+          : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={MM} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} /></g>;
       })}
     </svg>
   );

@@ -8,6 +8,7 @@ import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/crea
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
+import type { CadLayerRule } from './cad-layers';
 import type { DisciplineId } from './discipline-views';
 
 /**
@@ -235,8 +236,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), or the quantities by element type. */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, or the finishes of each room. */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
@@ -348,6 +349,8 @@ export interface ProjectDocument {
   typicalSections?: ProjectTypicalSection[];
   /** Building materials: how each IfcMaterial draws where it is cut. */
   materials?: ProjectMaterial[];
+  /** The CAD layer standard: which DXF layer (name, colour, pen, line type) an IFC class or material goes on (`cad-layers.ts`). */
+  cadLayers?: CadLayerRule[];
   /** Named section cuts of the Drawing panel. */
   savedSectionCuts?: SavedSectionCut[];
   /** Named presets of the annotation tools. */

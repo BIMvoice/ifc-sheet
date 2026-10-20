@@ -34,6 +34,15 @@ export interface Pen {
   dash?: string;
   /** The DXF layer it exports on. */
   layer: string;
+  /** With a CAD layer standard: the element class and material the pen is split by (`dxf-tags.ts`). */
+  ifcType?: string;
+  material?: string;
+}
+
+/** The CAD layer standard's view of a drawing: pens are split per element class and material only when it is given. */
+export interface CadPenContext {
+  /** The IfcMaterial name of an element (or of one of its layers when `materialId` is given), or null. */
+  materialOf(entityId: number, materialId?: number): string | null;
 }
 
 /** Default pens, paper millimetres. */
@@ -44,7 +53,7 @@ const DEFAULT_FILL = '#d4d4d8';
 const hex = (c: readonly number[]) => `#${c.slice(0, 3).map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`;
 
 export function viewportPens(
-  drawing: Drawing2D, graphics: ViewGraphics | undefined, t: ViewTransform, axis: SectionAxisName, extraPatterns: readonly HatchPattern[],
+  drawing: Drawing2D, graphics: ViewGraphics | undefined, t: ViewTransform, axis: SectionAxisName, extraPatterns: readonly HatchPattern[], cad?: CadPenContext,
   /** Each entity's model style; absent: every model draws normally. */
   styleOf?: EntityStyleOf,
 ): Pen[] {
@@ -59,6 +68,12 @@ export function viewportPens(
     return `${s.x.toFixed(2)} ${s.y.toFixed(2)}`;
   };
   const loop = (pts: readonly { x: number; y: number }[]) => `M${pts.map(pt).join('L')}Z`;
+  // Under a CAD layer standard a pen also carries the class and material of what it draws, and is split by them.
+  const subject = (ifcType: string | undefined, entityId: number | undefined, materialId?: number): { key: string; tags: Pick<Pen, 'ifcType' | 'material'> } => {
+    if (!cad) return { key: '', tags: {} };
+    const material = entityId === undefined ? null : cad.materialOf(entityId, materialId);
+    return { key: `|${ifcType ?? ''}|${material ?? ''}`, tags: { ...(ifcType ? { ifcType } : {}), ...(material ? { material } : {}) } };
+  };
   const style = (ifcType: string | undefined) => {
     const id = ifcType ? categoryOf(ifcType) : null;
     return id ? graphics?.categories?.[id] : undefined;
@@ -73,25 +88,27 @@ export function viewportPens(
     const g = style(line.ifcType);
     const d = `M${pt(line.line.start)}L${pt(line.line.end)}`;
     const color = ink(g?.lineColor ?? '#000000', line.entityId);
+    const who = subject(line.ifcType, line.entityId);
     if (line.visibility === 'hidden' || line.category === 'hidden') {
-      add(`hidden:${color}`, { stroke: color, width: PEN.hidden, fill: null, dash: '1.5 1', layer: 'HIDDEN' }, d);
+      add(`hidden:${color}${who.key}`, { stroke: color, width: PEN.hidden, fill: null, dash: '1.5 1', layer: 'HIDDEN', ...who.tags }, d);
       continue;
     }
     const cut = line.category === 'cut';
     const weight = g?.lineWeight ? WEIGHT_MM[g.lineWeight] * (cut ? 1 : 0.5) : cut ? PEN.cut : line.category === 'silhouette' ? PEN.outline : PEN.seen;
-    add(`${cut ? 'cut' : 'seen'}:${color}:${weight}`, { stroke: color, width: weight, fill: null, layer: cut ? 'CUT' : 'SEEN' }, d);
+    add(`${cut ? 'cut' : 'seen'}:${color}:${weight}${who.key}`, { stroke: color, width: weight, fill: null, layer: cut ? 'CUT' : 'SEEN', ...who.tags }, d);
   }
   for (const h of cutHatches(drawing, graphics)) {
     const pattern = findPattern(h.pattern, extraPatterns);
     if (!pattern) continue;
-    const color = ink(h.color, h.entityId);
+    const color = ink(h.color, h.source?.entityId);
     if (pattern.solid) {
       add(`solid:${color}`, { stroke: null, width: 0, fill: color, layer: 'HATCH' }, h.loops.map(loop).join(''));
       continue;
     }
     const segments = hatchSegments(h.loops, pattern, { scale: h.scale * HATCH_UNIT_M, angleDeg: 0, maxSegments: 20000 }).segments;
     const width = h.width ?? PEN.hatch;
-    add(`hatch:${color}:${width}`, { stroke: color, width, fill: null, layer: 'HATCH' }, segments.map((s) => `M${pt(s.a)}L${pt(s.b)}`).join(''));
+    const who = subject(h.source?.ifcType, h.source?.entityId, h.source?.materialId);
+    add(`hatch:${color}:${width}${who.key}`, { stroke: color, width, fill: null, layer: 'HATCH', ...who.tags }, segments.map((s) => `M${pt(s.a)}L${pt(s.b)}`).join(''));
   }
   // Fills first, then hatches, then lines (hidden, seen, cut).
   const order = (p: Pen) => (p.fill ? 0 : p.layer === 'HATCH' ? 1 : p.dash ? 2 : p.width < PEN.cut ? 3 : 4);

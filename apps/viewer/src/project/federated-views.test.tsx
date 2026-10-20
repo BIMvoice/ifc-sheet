@@ -67,8 +67,8 @@ describe('federated models on the Wall (#96)', { skip }, () => {
     const styleOf = styleNow();
     assert.ok(styleOf, 'two models loaded: the linked one has a style');
     const column = pair.strId(STR.column);
-    const strPens = viewportPens(only(level0, (id) => id === column), undefined, T, 'down', [], styleOf);
-    const archPens = viewportPens(only(level0, (id) => id === ARCH.wallA || id === ARCH.wallB), undefined, T, 'down', [], styleOf);
+    const strPens = viewportPens(only(level0, (id) => id === column), undefined, T, 'down', [], undefined, styleOf);
+    const archPens = viewportPens(only(level0, (id) => id === ARCH.wallA || id === ARCH.wallB), undefined, T, 'down', [], undefined, styleOf);
     assert.deepEqual([...new Set(strPens.filter((p) => p.stroke).map((p) => p.stroke))], [HALFTONE_INK]);
     assert.deepEqual([...new Set(strPens.filter((p) => p.fill).map((p) => p.fill))], [HALFTONE_FILL]);
     assert.deepEqual([...new Set(archPens.filter((p) => p.stroke).map((p) => p.stroke))], ['#000000']);

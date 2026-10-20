@@ -122,8 +122,8 @@ describe('model roles and styles', () => {
     const plain = viewportPens(drawing, undefined, t, 'down', []);
     assert.deepEqual(plain.map((p) => p.stroke ?? p.fill), ['#d4d4d8', '#000000']);
     const styleOf = entityStyles(viewer([{ id: 'A', key: 'a', from: 0, to: 999 }, { id: 'S', key: 's', from: 1000, to: 1999 }]), refs);
-    assert.deepEqual(viewportPens(drawing, undefined, t, 'down', [], styleOf).map((p) => p.stroke ?? p.fill), ['#eeeeef', '#999999']);
-    assert.deepEqual(viewportPens(drawing, undefined, t, 'down', [], styleOf).map((p) => [p.width, p.layer]), plain.map((p) => [p.width, p.layer]));
+    assert.deepEqual(viewportPens(drawing, undefined, t, 'down', [], undefined, styleOf).map((p) => p.stroke ?? p.fill), ['#eeeeef', '#999999']);
+    assert.deepEqual(viewportPens(drawing, undefined, t, 'down', [], undefined, styleOf).map((p) => [p.width, p.layer]), plain.map((p) => [p.width, p.layer]));
   });
 
   it('a linked model\'s cut hatch goes halftone too, the host\'s stays in full ink', () => {
@@ -137,7 +137,7 @@ describe('model roles and styles', () => {
     } as unknown as Drawing2D;
     const graphics = { categories: { walls: { cutHatch: 'LINES45' } } };
     const styleOf = entityStyles(viewer([{ id: 'A', key: 'a', from: 0, to: 999 }, { id: 'S', key: 's', from: 1000, to: 1999 }]), refs);
-    const hatches = viewportPens(drawing, graphics, { scale: 1, x: 0, y: 0 }, 'down', [], styleOf).filter((p) => p.layer === 'HATCH');
+    const hatches = viewportPens(drawing, graphics, { scale: 1, x: 0, y: 0 }, 'down', [], undefined, styleOf).filter((p) => p.layer === 'HATCH');
     assert.deepEqual(hatches.map((p) => p.stroke).sort(), ['#000000', '#999999']);
   });
 });
