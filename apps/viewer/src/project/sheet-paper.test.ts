@@ -257,7 +257,7 @@ describe('sheet templates', () => {
   });
 
   it('a sheet added with a template starts from it', () => {
-    const id = addProjectSheet('Schedules', 'builtin:a3-schedules');
+    const id = addProjectSheet('Schedules', undefined, 'builtin:a3-schedules');
     const sheet = state().sheets.find((s) => s.id === id)!;
     assert.deepEqual([sheet.paper, sheet.frame?.titleBlock, sheet.templateId], ['A3', 'right', 'builtin:a3-schedules']);
     assert.equal(state().sheets.find((s) => s.id === addProjectSheet('Plain'))?.paper, undefined);

@@ -116,7 +116,7 @@ describe('legends on the paper the sheet has (#129 review)', () => {
       useProjectStore.setState({ sheets: useProjectStore.getState().sheets.map((s) => (s.id === id ? { ...s, paper: 'A3' as const, orientation: 'portrait' as const } : s)) });
       return id;
     }],
-    ['the "A3 schedules" template, title block in a strip at the right', () => addProjectSheet('Schedules', 'builtin:a3-schedules')],
+    ['the "A3 schedules" template, title block in a strip at the right', () => addProjectSheet('Schedules', undefined, 'builtin:a3-schedules')],
   ] as const) {
     it(`places a legend, and keeps it, inside the drawing area of ${what}`, () => {
       const sheetId = make();

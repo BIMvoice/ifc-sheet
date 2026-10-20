@@ -15,14 +15,15 @@ import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, nextInSeries, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
 import { refittedOnPaper, type BoxOf } from './sheet-refit';
 import { frameOf, frameProblem, type FrameProblem } from './sheet-frame';
 import { paperMm } from './paper';
 import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
-import { addProjectView, updateProjectView, useProjectStore } from './project-store';
+import { nextNumber, numberSheets } from './numbering';
+import { addProjectView, numberingScheme, updateProjectView, useProjectStore } from './project-store';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, freshProjectId, sameElevation } from './view-defaults';
@@ -39,6 +40,17 @@ export const SET_SECTIONS = 2;
  */
 export function modelTitleBlock(now = new Date()): Record<string, string> {
   return { date: now.toISOString().slice(0, 10) };
+}
+
+/**
+ * The new set's sheets renumbered around the sheets already there (a room's
+ * interior elevations, made first), so a continuous scheme does not give a
+ * set sheet a number one of them already has.
+ */
+function withoutClashes(existing: readonly ProjectSheet[], set: readonly ProjectSheet[]): ProjectSheet[] {
+  if (existing.length === 0) return [...set];
+  const numbers = numberSheets([...existing.map((s) => ({ ...s, numberOverride: true })), ...set], numberingScheme());
+  return set.map((s) => ({ ...s, number: numbers.get(s.id) ?? s.number }));
 }
 
 /** The lowest plan: the one a set's sections are drawn on. */
@@ -176,11 +188,11 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
   let sheets = before;
   if (!before.some(isSetSheet)) {
     // No set yet: lay it all out, beside any interior elevation sheets already there.
-    const set = buildDrawingSet({ views: loose, extent, templates: seriesTemplates() });
+    const set = withoutClashes(before, buildDrawingSet({ views: loose, extent, templates: seriesTemplates(), scheme: numberingScheme() }));
     if (set.length > 0) sheets = [...before, ...set];
   } else {
     for (const view of loose) {
-      const next = withViewHung(sheets, state().views, view, extent, Date.now(), seriesTemplates());
+      const next = withViewHung(sheets, state().views, view, extent, Date.now(), seriesTemplates(), numberingScheme());
       if (next) sheets = next.sheets;
     }
   }
@@ -244,7 +256,7 @@ export function swapViewportView(sheetId: string, viewportId: string, viewId: st
 export function hangView(viewId: string, extent: ModelExtent): string | null {
   const { sheets, views } = useProjectStore.getState();
   const view = views.find((v) => v.id === viewId);
-  const hung = view ? withViewHung(sheets, views, view, extent, Date.now(), seriesTemplates()) : null;
+  const hung = view ? withViewHung(sheets, views, view, extent, Date.now(), seriesTemplates(), numberingScheme()) : null;
   if (!hung) return null;
   useProjectStore.setState({ sheets: hung.sheets, dirty: true });
   return hung.sheetId;
@@ -259,7 +271,7 @@ function hangOnSheetOfItsOwn(itemId: string, name: string): string {
   const start = template ? templateFields(template) : { paper: SET_PAPER, orientation: 'landscape' as const };
   const area = drawingArea(start);
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: nextInSeries(sheets, 'schedules'), name, createdAt: Date.now(), ...start,
+    id: freshProjectId('sheet'), number: nextNumber(sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), ...start,
     viewports: [{ id: freshProjectId('viewport'), viewId: itemId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 50, width: 0, height: 0, center: null }],
   };
   useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });
@@ -268,7 +280,7 @@ function hangOnSheetOfItsOwn(itemId: string, name: string): string {
 
 /**
  * Hang a schedule (doors and windows, or the material takeoff) on a sheet of
- * its own in the A-6xx series, its table centred in the drawing area, named
+ * its own in the schedules series (A-6xx by default), its table centred in the drawing area, named
  * after it. Returns the sheet's id; a schedule already on a sheet returns
  * that sheet.
  */

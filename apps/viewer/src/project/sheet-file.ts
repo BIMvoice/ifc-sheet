@@ -8,9 +8,10 @@
  * value is malformed (a viewport without a view or a positive scale).
  */
 
+import { NUMBER_GROUPS, typedBeforeSchemes } from './numbering';
 import { readPaper } from './paper';
 import { readFrame } from './sheet-frame';
-import type { ProjectSheet, SheetViewport } from './types';
+import type { NumberGroup, ProjectSheet, SheetViewport } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -36,9 +37,13 @@ function readViewport(v: unknown, path: string): SheetViewport {
 }
 
 /** The optional sheet layout fields, read from `v` (already known to be an object). */
-export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'autoNumber'> {
-  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'autoNumber'> = {};
+export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'autoNumber' | 'numberOverride' | 'series'> {
+  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'autoNumber' | 'numberOverride' | 'series'> = {};
   if (v.autoNumber === true) out.autoNumber = true;
+  if (v.numberOverride === true) out.numberOverride = true;
+  // Saved before schemes: no series, no override mark. A number outside the old A-nnn series was typed by hand and keeps that protection.
+  else if (v.series === undefined && v.autoNumber !== true && typeof v.number === 'string' && typedBeforeSchemes(v.number)) out.numberOverride = true;
+  if (NUMBER_GROUPS.includes(v.series as NumberGroup)) out.series = v.series as NumberGroup;
   // A plain `'A1'` (every file saved before elongated and custom sizes) is ISO A1; a paper that is none is left unnamed.
   const paper = readPaper(v.paper);
   if (paper) out.paper = paper;

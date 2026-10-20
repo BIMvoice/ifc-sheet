@@ -20,8 +20,8 @@ import { drawingAreaIn, frameOf, type Rect } from './sheet-frame';
 import { templateFields } from './sheet-templates';
 import { fitViewportBox, SHEET_SCALES } from './sheets';
 import { freshProjectId } from './view-defaults';
-import { nextSheetNumber } from './sheet-numbers';
-import type { ElevationDirection, Paper, PaperSize, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './types';
+import { DEFAULT_SCHEME, nextNumber, numberGroupOf, numberSheets } from './numbering';
+import type { ElevationDirection, NumberingScheme, Paper, PaperSize, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './types';
 
 /** The scales a set chooses among, most detailed first. */
 export const SET_SCALES = [50, 100, 200] as const;
@@ -199,12 +199,13 @@ export interface SetInput {
   now?: number;
   /** The template a group's sheets start from; a group without one is made on the smallest paper that fits. */
   templates?: Partial<Record<TemplateSeries, SheetTemplate>>;
+  /** The project's numbering; today's A-101 style when absent. */
+  scheme?: NumberingScheme;
 }
 
-/** One sheet of the set to be: its number, name and the drawings it holds. */
+/** One sheet of the set to be: its group, name and the drawings it holds. */
 interface SetRow {
   group: SetGroup;
-  number: string;
   name: string;
   members: ProjectView[];
 }
@@ -214,16 +215,16 @@ function setRows(allViews: readonly ProjectView[]): SetRow[] {
   const rows: SetRow[] = [];
   // A detail, and the site plan, are hung where they are made, not by the starting set.
   const views = allViews.filter((v) => !v.detail && !(v.kind === 'plan' && v.site));
-  const add = (group: SetGroup, number: string, name: string, members: ProjectView[]): void => {
-    if (members.length > 0) rows.push({ group, number, name, members });
+  const add = (group: SetGroup, name: string, members: ProjectView[]): void => {
+    if (members.length > 0) rows.push({ group, name, members });
   };
   const plans = views.filter((v) => v.kind === 'plan').sort((a, b) => (a.kind === 'plan' && b.kind === 'plan' ? a.level.elevation - b.level.elevation : 0));
-  pairs(plans).forEach((pair, i) => add('plans', `A-${101 + i}`, plans.length > 2 ? `Floor plans ${i + 1}` : 'Floor plans', pair));
-  ELEVATION_PAIRS.forEach(({ directions, name }, i) => {
-    add('elevations', `A-${201 + i}`, name, directions.flatMap((d) => views.filter((v) => v.kind === 'elevation' && v.direction === d && !v.interior)));
+  pairs(plans).forEach((pair, i) => add('plans', plans.length > 2 ? `Floor plans ${i + 1}` : 'Floor plans', pair));
+  ELEVATION_PAIRS.forEach(({ directions, name }) => {
+    add('elevations', name, directions.flatMap((d) => views.filter((v) => v.kind === 'elevation' && v.direction === d && !v.interior)));
   });
   const sections = views.filter((v) => v.kind === 'section');
-  pairs(sections).forEach((pair, i) => add('sections', `A-${301 + i}`, sections.length > 2 ? `Sections ${i + 1}` : 'Sections', pair));
+  pairs(sections).forEach((pair, i) => add('sections', sections.length > 2 ? `Sections ${i + 1}` : 'Sections', pair));
   return rows;
 }
 
@@ -245,44 +246,39 @@ export function groupsThatDoNotFit(views: readonly ProjectView[], extent: ModelE
  * The sheets of the starting set. Each group is made on the smallest paper
  * that gives its drawings 1:100 or better, each sheet at the most detailed
  * scale its drawings fit at on it. A group with nothing to show makes no
- * sheet. The group a sheet belongs to is read back from its number
- * (`sheetGroup`).
+ * sheet. Each sheet records the group it belongs to (`series`) and is
+ * numbered by the project's scheme.
  */
-export function buildDrawingSet({ views, extent, now = Date.now(), templates = {} }: SetInput): ProjectSheet[] {
+export function buildDrawingSet({ views, extent, now = Date.now(), templates = {}, scheme = DEFAULT_SCHEME }: SetInput): ProjectSheet[] {
   const rows = setRows(views);
   const papers = papersOf(rows, extent);
-  return rows.map(({ group, number, name, members }) => {
+  const sheets = rows.map(({ group, name, members }) => {
     const start = startOf(templates[group], papers.get(group)?.paper ?? SET_PAPER);
     const sizes = members.map((v) => viewExtent(v, extent));
-    return { id: freshProjectId('sheet'), number, name, createdAt: now, ...start, viewports: placeViewports(members, sizes, scaleOn(sizes, start), start) };
+    return {
+      id: freshProjectId('sheet'), number: '', series: group, name, createdAt: now, ...start,
+      viewports: placeViewports(members, sizes, scaleOn(sizes, start), start),
+    };
   });
+  const numbers = numberSheets(sheets, scheme);
+  return sheets.map((s) => ({ ...s, number: numbers.get(s.id) ?? s.number }));
 }
 
-/** First number of the details series (A-501…): details hang there, as drafting views do. */
-const DETAILS_START = 501;
-
-/** The series a sheet is in: its group, or `details` for the A-5xx sheets details hang on. */
-export function sheetSeries(sheet: Pick<ProjectSheet, 'number'>): TemplateSeries | null {
-  return sheetGroup(sheet) ?? (/^A-5\d\d$/.test(sheet.number) ? 'details' : null);
+/** The series a sheet is in: its group, or `details` (drafting views and details); `null` for general and other sheets. */
+export function sheetSeries(sheet: Pick<ProjectSheet, 'number' | 'series'>): TemplateSeries | null {
+  const group = numberGroupOf(sheet);
+  return group === 'other' || group === 'general' ? null : group;
 }
 
-/** Which group a sheet of the set belongs to, by its number series (A-1xx plans, A-2xx elevations, A-3xx sections, A-6xx schedules). */
-export function sheetGroup(sheet: Pick<ProjectSheet, 'number'>): SetGroup | null {
-  const m = /^A-(\d)\d\d$/.exec(sheet.number);
-  return m ? ({ '1': 'plans', '2': 'elevations', '3': 'sections', '4': 'interiors', '6': 'schedules' } as Record<string, SetGroup>)[m[1]] ?? null : null;
+/** Which group a sheet of the set belongs to (`null`: details and other sheets). Sheets from older files are read from their A-1xx / A-2xx / A-3xx / A-4xx / A-6xx number. */
+export function sheetGroup(sheet: Pick<ProjectSheet, 'number' | 'series'>): SetGroup | null {
+  const group = numberGroupOf(sheet);
+  return group === 'other' || group === 'details' || group === 'general' ? null : group;
 }
 
-/** Whether a sheet belongs to the drawing set the program lays out: every sheet but a room's interior elevations (A-4xx). */
-export function isSetSheet(sheet: Pick<ProjectSheet, 'number'>): boolean {
+/** Whether a sheet belongs to the drawing set the program lays out: every sheet but a room's interior elevations. */
+export function isSetSheet(sheet: Pick<ProjectSheet, 'number' | 'series'>): boolean {
   return sheetGroup(sheet) !== 'interiors';
-}
-
-/** The next free number of a group's series: A-101…, A-201…, A-301…, A-401…, A-601…. */
-export function nextInSeries(sheets: readonly Pick<ProjectSheet, 'number'>[], group: SetGroup): string {
-  const taken = new Set(sheets.map((s) => s.number));
-  let n = SERIES_START[group];
-  while (taken.has(`A-${n}`)) n++;
-  return `A-${n}`;
 }
 
 /** The group a view's sheet belongs to, and its number series' first number. */
@@ -293,7 +289,6 @@ export function groupOfView(view: ProjectView): SetGroup | null {
   return null;
 }
 
-const SERIES_START: Record<SetGroup, number> = { plans: 101, elevations: 201, sections: 301, interiors: 401, schedules: 601 };
 const GROUP_NAMES: Record<SetGroup, string> = { plans: 'Floor plans', elevations: 'Elevations', sections: 'Sections', interiors: 'Interior elevations', schedules: 'Schedules' };
 /** Drawings a set sheet holds before a new one is started. */
 export const PER_SHEET = 2;
@@ -306,11 +301,11 @@ export const PER_SHEET = 2;
  */
 export function withViewHung(
   sheets: readonly ProjectSheet[], views: readonly ProjectView[], view: ProjectView, extent: ModelExtent, now = Date.now(),
-  templates: Partial<Record<TemplateSeries, SheetTemplate>> = {},
+  templates: Partial<Record<TemplateSeries, SheetTemplate>> = {}, scheme: NumberingScheme = DEFAULT_SCHEME,
 ): { sheets: ProjectSheet[]; sheetId: string } | null {
   if (sheets.some((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id))) return null;
-  if (view.detail) return withDetailHung(sheets, view, extent, now, templates.details);
-  if (view.kind === 'plan' && view.site) return withSitePlanHung(sheets, view, extent, now);
+  if (view.detail) return withDetailHung(sheets, view, extent, now, scheme, templates.details);
+  if (view.kind === 'plan' && view.site) return withSitePlanHung(sheets, view, extent, now, scheme);
   const group = groupOfView(view);
   if (!group) return null;
   const layOut = (sheet: ProjectSheet, members: ProjectView[]): ProjectSheet => {
@@ -327,7 +322,7 @@ export function withViewHung(
   const start = templates[group] ? startOf(templates[group], SET_PAPER)
     : last ? { paper: last.paper ?? SET_PAPER, orientation: last.orientation ?? 'landscape', ...(last.frame ? { frame: last.frame } : {}), ...(last.templateId ? { templateId: last.templateId } : {}) }
       : startOf(undefined, choosePaper([[viewExtent(view, extent)]]).paper);
-  const sheet = layOut({ id: freshProjectId('sheet'), number: nextInSeries(sheets, group), name: GROUP_NAMES[group], createdAt: now, ...start }, [view]);
+  const sheet = layOut({ id: freshProjectId('sheet'), number: nextNumber(sheets, group, scheme), series: group, name: GROUP_NAMES[group], createdAt: now, ...start }, [view]);
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
 
@@ -336,7 +331,7 @@ export function withViewHung(
  * its own scale (1:200) on the smallest set paper that holds the building
  * with room around it for the plot, else at the scale that fits.
  */
-function withSitePlanHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, now: number): { sheets: ProjectSheet[]; sheetId: string } {
+function withSitePlanHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, now: number, scheme: NumberingScheme): { sheets: ProjectSheet[]; sheetId: string } {
   const sizes = [{ w: viewExtent(view, extent).w * 2, h: viewExtent(view, extent).h * 2 }]; // the plot needs as much room again as the building
   const scale = view.scale ?? 200;
   const paper = SET_PAPERS.find((p) => fitsScale(sizes, drawingArea(p), scale)) ?? SET_PAPERS[SET_PAPERS.length - 1];
@@ -344,25 +339,22 @@ function withSitePlanHung(sheets: readonly ProjectSheet[], view: ProjectView, ex
   const fitting = fitsScale(sizes, area, scale) ? scale : SHEET_SCALES.find((s) => fitsScale(sizes, area, s)) ?? scale;
   // a little above the middle: the site balance goes under it
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: nextSheetNumber(sheets, 'general'), name: view.name, createdAt: now, paper, orientation: 'landscape',
+    id: freshProjectId('sheet'), number: nextNumber(sheets, 'general', scheme), series: 'general', name: view.name, createdAt: now, paper, orientation: 'landscape',
     viewports: [{ id: freshProjectId('viewport'), viewId: view.id, x: area.x + area.w / 2, y: area.y + area.h / 2 - 15, scale: fitting, width: 0, height: 0, center: null }],
   };
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
 
 /**
- * A detail hangs on a sheet of its own in the details series (A-501…), on the
+ * A detail hangs on a sheet of its own in the details series (A-501… by default), on the
  * template's paper or else the smallest paper it fits, at the scale it was
  * made for when that fits, else the most detailed set scale that does.
  */
-function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, now: number, template?: SheetTemplate): { sheets: ProjectSheet[]; sheetId: string } {
+function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, now: number, scheme: NumberingScheme, template?: SheetTemplate): { sheets: ProjectSheet[]; sheetId: string } {
   const sizes = [viewExtent(view, extent)];
   const start = startOf(template, choosePaper([sizes]).paper);
-  const taken = new Set(sheets.map((s) => s.number));
-  let n = DETAILS_START;
-  while (taken.has(`A-${n}`)) n++;
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: `A-${n}`, name: view.name, createdAt: now, ...start,
+    id: freshProjectId('sheet'), number: nextNumber(sheets, 'details', scheme), series: 'details', name: view.name, createdAt: now, ...start,
     viewports: placeViewports([view], sizes, scaleOn(sizes, start, view.scale), start),
   };
   return { sheets: [...sheets, sheet], sheetId: sheet.id };

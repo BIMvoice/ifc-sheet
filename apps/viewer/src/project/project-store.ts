@@ -19,13 +19,14 @@ import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
 import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
-import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
+import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { findTemplate, templateFields } from './sheet-templates';
 import { nextDetailNumber } from './detail';
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
-import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
+import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 
 export interface ProjectState extends ProjectDocument {
   /** Levels of the currently loaded models (derived, never persisted). */
@@ -42,7 +43,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
-  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, tagFields: undefined,
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -70,6 +71,7 @@ const DOCUMENT_FIELDS = {
   sheetTemplates: true,
   seriesTemplates: true,
   titleBlockSources: true,
+  sheetNumbering: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -137,6 +139,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     details: doc.details ?? [],
     issues: doc.issues ?? [],
     tagFields: doc.tagFields,
+    sheetNumbering: doc.sheetNumbering,
     modelState: doc.modelState,
     titleBlockSources: doc.titleBlockSources,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
@@ -266,13 +269,19 @@ export function removeProjectItem(id: string): void {
   });
 }
 
-export { nextSheetNumber };
+/** The project's numbering scheme: its own, else today's A-101 style. */
+export const numberingScheme = (state: Pick<ProjectDocument, 'sheetNumbering'> = useProjectStore.getState()): NumberingScheme => state.sheetNumbering ?? DEFAULT_SCHEME;
 
-/** A new sheet takes the next plan number until a view is placed on it; then it is numbered by what it holds. It starts from the template if one is named. */
-export function addProjectSheet(name = 'Unnamed', templateId?: string): string {
+/**
+ * A new sheet takes the next number of `group`. Without a group it takes the
+ * next plan number until a view is placed on it, then it is numbered by what
+ * it holds. It starts from the template if one is named.
+ */
+export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateId?: string): string {
   const state = useProjectStore.getState();
+  const series = group ?? 'plans';
   const template = findTemplate(templateId, state.sheetTemplates);
-  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), autoNumber: true, name, createdAt: Date.now(), ...(template ? templateFields(template) : {}) };
+  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextNumber(state.sheets, series, numberingScheme(state)), series, ...(group ? {} : { autoNumber: true }), name, createdAt: Date.now(), ...(template ? templateFields(template) : {}) };
   useProjectStore.setState({ sheets: [...state.sheets, sheet], dirty: true });
   return sheet.id;
 }
@@ -283,7 +292,9 @@ export function duplicateProjectSheet(id: string): string | null {
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;
   const held = state.views.find((v) => v.id === source.viewports?.[0]?.viewId);
-  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held)), name: `${source.name} Copy`, createdAt: Date.now() };
+  const series = sheetGroupOfView(held);
+  const { numberOverride: _typed, ...own } = withoutAutoNumber(source);
+  const copy: ProjectSheet = { ...own, id: freshProjectId('sheet'), number: nextNumber(state.sheets, series, numberingScheme(state)), series, name: `${source.name} Copy`, createdAt: Date.now() };
   const at = state.sheets.indexOf(source) + 1;
   useProjectStore.setState({ sheets: [...state.sheets.slice(0, at), copy, ...state.sheets.slice(at)], dirty: true });
   return copy.id;
@@ -292,7 +303,7 @@ export function duplicateProjectSheet(id: string): string | null {
 export function setSheetNumber(id: string, number: string): void {
   const trimmed = number.trim();
   if (!trimmed) return;
-  useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed } : sh)), dirty: true }));
+  useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed, series: numberGroupOf(sh), numberOverride: true } : sh)), dirty: true }));
 }
 
 /** Whether every loaded model is already in the project's model list. */
