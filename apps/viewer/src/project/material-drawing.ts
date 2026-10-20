@@ -139,9 +139,11 @@ export function materialDrawing(drawing: Drawing2D, r: MaterialResolver): Materi
     if (g.hatch) out.hatches.push({ loops: [p.polygon.outer, ...p.polygon.holes] as Pt[][], pattern: g.hatch, scale: g.hatchScale ?? 1, pen: g.hatchPen ?? 'hairline' });
   }
 
-  // Edges of every band, by material name, to find the boundaries inside one material and between layers.
+  // Edges of every band, by model and material name, to find the boundaries inside one material and between
+  // layers. The model is part of the key: elements of two federated models never join (#96), so a linked
+  // concrete column keeps its outline against a host concrete wall.
   const index = new SegIndex<{ poly: DrawingPolygon; key: string }>();
-  for (const { p, g } of named) if (g && !g.membrane) for (const e of edges(p)) index.add(e, { poly: p, key: g.name.trim().toLowerCase() });
+  for (const { p, g } of named) if (g && !g.membrane) for (const e of edges(p)) index.add(e, { poly: p, key: `${p.modelIndex}|${g.name.trim().toLowerCase()}` });
   const cutLines = drawing.lines.filter((l) => l.category === 'cut');
   for (const line of cutLines) {
     const seg = { a: line.line.start, b: line.line.end };

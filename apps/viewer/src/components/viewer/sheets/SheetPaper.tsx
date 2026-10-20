@@ -40,6 +40,7 @@ import { CivilDrawingGraphic } from '../civil/CivilDrawingGraphic';
 import { LegendGraphic } from '../legend/LegendGraphic';
 import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
+import type { EntityStyleOf } from '@/project/model-styles';
 
 /** The cut axis a drawing is put on paper by (`viewportTransform`), from its plane's axis. */
 export const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
@@ -59,6 +60,8 @@ export interface ViewportContent {
   civil?: CivilLayout;
   /** A legend placed here instead of a view (paper millimetres). */
   legend?: LegendLayout;
+  /** Each drawing entity's model style (`project/model-styles.ts`); absent: every model draws normally. */
+  styleOf?: EntityStyleOf;
   /** A 3D view printed as a raster capture of the viewport, instead of drawn lines. */
   raster?: ViewRaster;
 }
@@ -110,8 +113,8 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const t = viewportTransform(vp, drawing, axis);
   const cadLayers = useProjectStore((s) => s.cadLayers);
   const pens = useMemo(
-    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers)) : []),
-    [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers],
+    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf) : []),
+    [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers, content.styleOf],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);
   const left = vp.x - box.width / 2;

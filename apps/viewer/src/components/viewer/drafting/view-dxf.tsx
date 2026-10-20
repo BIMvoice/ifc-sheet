@@ -31,6 +31,7 @@ import { shapePath } from './DraftOverlay';
 import { AnnotationGraphics } from './AnnotationGraphics';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
 import { useProjectStore } from '@/project/project-store';
+import { currentEntityStyles } from '@/project/model-styles';
 
 /** Drawing metres → DXF millimetres. */
 const MM: ViewTransform = { scale: 1000, x: 0, y: 0 };
@@ -46,9 +47,10 @@ interface ViewDxfInput {
   overlays: readonly PlanOverlay[];
 }
 
-function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays }: ViewDxfInput) {
+/** The off-screen SVG `viewDxf` walks; exported for tests (the DXF walker needs a browser's path geometry). */
+export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays }: ViewDxfInput) {
   const s = useProjectStore.getState();
-  const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns, cadPenContext(s.cadLayers)) : [];
+  const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns, cadPenContext(s.cadLayers), currentEntityStyles()) : [];
   const book = { textStyles: s.textStyles ?? [], dimStyles: s.dimStyles ?? [] };
   const colour = new Map(layers.map((l) => [l.id, layerShows(l, s.layerGroups ?? [], { view: view.hiddenLayers }) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));
