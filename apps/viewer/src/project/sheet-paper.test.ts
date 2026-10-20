@@ -4,7 +4,8 @@
 
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { drawingArea, estimatedBox, fitsScale, scaleOn, viewExtent, type ModelExtent } from './drawing-set.js';
+import { drawingArea, fitsScale, scaleOn, viewExtent, type ModelExtent } from './drawing-set.js';
+import { estimatedBox } from './sheet-refit.js';
 import { hangView, seriesTemplates, setSheetFormat, startDrawingSet } from './drawing-set-actions.js';
 import { addProjectSheet, resetProject, useProjectStore } from './project-store.js';
 import { BUILT_IN_TEMPLATES, findTemplate } from './sheet-templates.js';

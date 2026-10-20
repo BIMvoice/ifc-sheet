@@ -14,7 +14,8 @@
 
 import { useState } from 'react';
 import { useTranslation, type TranslationKey } from '@/i18n';
-import type { BoxOf, ModelExtent } from '@/project/drawing-set';
+import type { ModelExtent } from '@/project/drawing-set';
+import type { BoxOf } from '@/project/sheet-refit';
 import { sheetSeries } from '@/project/drawing-set';
 import { setSheetFormat } from '@/project/drawing-set-actions';
 import { CUSTOM_MM, ELONGATED_PAPERS, ISO_PAPERS, isCustom, paperFromLabel, paperLabel, paperMm } from '@/project/paper';
