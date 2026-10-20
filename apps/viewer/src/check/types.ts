@@ -37,7 +37,7 @@ export interface PlanElement { guid: string; className: string }
 
 /** Everything the checks read; the app fills it from its stores (`collect.ts`). */
 export interface CheckInput {
-  views: readonly { id: string; name: string; kind: string; detail?: unknown }[];
+  views: readonly { id: string; name: string; kind: string; detail?: unknown; interior?: unknown }[];
   sheets: readonly ProjectSheet[];
   /** The project's title block and name: what a sheet prints where it does not say otherwise (`titleBlockOf`). */
   titleBlock?: Record<string, string>;

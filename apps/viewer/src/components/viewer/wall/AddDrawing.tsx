@@ -60,7 +60,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
     onView(addProjectView({ ...planViewFor(level, views), auto: false }));
   };
   const sideOf = (direction: ElevationDirection): void => {
-    const existing = useProjectStore.getState().views.find((v) => v.kind === 'elevation' && v.direction === direction);
+    const existing = useProjectStore.getState().views.find((v) => v.kind === 'elevation' && v.direction === direction && !v.interior);
     onView(existing?.id ?? addProjectView({ kind: 'elevation', name: SIDE_NAMES[direction], direction }));
   };
 

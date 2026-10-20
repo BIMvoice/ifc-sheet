@@ -26,13 +26,15 @@ import { toast } from '@/components/ui/toast';
 import { svgToDxf } from '../sheets/sheet-dxf';
 import { ScheduleGraphic, useScheduleLabels, useScheduleLayout } from './ScheduleGraphic';
 import { TakeoffView } from './TakeoffView';
+import { TypeQuantitiesView } from './TypeQuantitiesView';
 
 const SELECT = 'h-7 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1 text-xs';
 const SCALES = [10, 20, 25, 50, 100];
 const MARGIN = 10;
 
-/** A schedule tab: a material takeoff, or a joinery schedule. */
+/** A schedule tab: the quantities by type, a material takeoff, or a joinery schedule. */
 export function ScheduleView({ schedule }: { schedule: ProjectSchedule }) {
+  if (schedule.kind === 'types') return <TypeQuantitiesView schedule={schedule} />;
   return schedule.kind === 'materials' ? <TakeoffView schedule={schedule} /> : <JoineryScheduleView schedule={schedule} />;
 }
 

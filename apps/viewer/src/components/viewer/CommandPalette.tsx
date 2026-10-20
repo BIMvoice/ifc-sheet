@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Search } from 'lucide-react';
 import { useViewerStore } from '@/store';
+import { useProjectStore } from '@/project/project-store';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useSandbox } from '@/hooks/useSandbox';
 import { useSlotContributions } from '@/hooks/useSlotContributions';
@@ -46,6 +47,8 @@ function activateRightPanel(panel: RightPanel) {
  *  new `Category` value doesn't compile until it has a translation key. */
 const CATEGORY_LABEL_KEY: Record<Category, TranslationKey> = {
   Recent: 'commandPalette.category.recent',
+  Sheets: 'commandPalette.category.sheets',
+  Wall: 'commandPalette.category.wall',
   File: 'commandPalette.category.file',
   View: 'commandPalette.category.view',
   Tools: 'commandPalette.category.tools',
@@ -103,6 +106,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const canEditInSession = collabRole === null || collabRole === 'editor' || collabRole === 'admin';
   // Cesium only has something to show once a model carries georeferencing.
   const cesiumAvailable = useViewerStore((s) => s.cesiumAvailable);
+  const sheets = useProjectStore((s) => s.sheets);
 
   const { t } = useTranslation();
   const { runExport, dialog: exportDialog, extensionExporters } = useExportRunner();
@@ -120,7 +124,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     activateBottomPanel,
     runExport,
     extensionExporters,
-  }), [execute, recentFiles, extensionCommands, extensionHost, canEditInSession, cesiumAvailable, runExport, extensionExporters]);
+    sheets,
+  // `open`: the Wall's actions on offer are read as the palette opens.
+  }), [execute, recentFiles, extensionCommands, extensionHost, canEditInSession, cesiumAvailable, runExport, extensionExporters, sheets, open]);
 
 
   // ── Search: score, filter, sort ──

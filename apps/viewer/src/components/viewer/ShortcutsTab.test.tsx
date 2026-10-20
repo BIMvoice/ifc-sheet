@@ -15,17 +15,21 @@ import '@/test/setup-dom.js';
 (globalThis as unknown as { __PACKAGE_VERSIONS__: unknown[] }).__PACKAGE_VERSIONS__ = [];
 (globalThis as unknown as { __RELEASE_HISTORY__: unknown[] }).__RELEASE_HISTORY__ = [];
 
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanup, render } from '@/test/render.js';
 import { WORKSPACE_PANELS, workspacePanelForShortcutCode } from '@/lib/panels/registry';
 import { en } from '@/i18n/en';
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog.js';
 import { setPlatform } from '@/test/platform.js';
+import { setEditionForTests } from '@/edition';
 
+// The whole keymap is the full edition's list; IfcSheet's face lists the Wall's rows (`ShortcutsTab.wall.test.tsx`).
+beforeEach(() => setEditionForTests('full'));
 afterEach(() => {
   cleanup();
   setPlatform(null);
+  setEditionForTests(null);
 });
 
 function renderShortcuts(platform: string) {

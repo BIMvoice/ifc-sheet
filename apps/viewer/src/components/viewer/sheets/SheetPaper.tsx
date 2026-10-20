@@ -42,7 +42,8 @@ import { keyPlanHighlight, viewportExtent, type Rect } from '@/siteplan/key-plan
 import { KeyPlanHighlight, SiteBalance, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
 import type { SiteContent } from '../siteplan/useSheetSite';
 
-const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
+/** The cut axis a drawing is put on paper by (`viewportTransform`), from its plane's axis. */
+export const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
 const LABEL_MM = 3.5;
 
 export interface ViewportContent {
