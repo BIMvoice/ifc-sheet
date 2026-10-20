@@ -67,7 +67,7 @@ describe('urban indicators on AC20-FZK-Haus (#76)', () => {
     near(result.ad, AD_BY_HAND, 'Ad');
     near(result.adCut, AD_BY_HAND, 'Ad for CUT');
     near(result.au, AU_BY_HAND, 'Au');
-    assert.deepEqual(areas.spacesLeftOut, { external: 0, otherType: 0, parents: 0 });
+    assert.deepEqual(areas.spacesLeftOut, { external: 0, gfa: 0, parents: 0 });
     assert.deepEqual(result.zero, { elevation: 0, source: 'model' });
     assert.deepEqual(areas.assumedInterior, [], 'both storeys have a slab or rooms to tell rooms from courtyards');
     near(result.pot, (AC_BY_HAND / 600) * 100, 'POT');

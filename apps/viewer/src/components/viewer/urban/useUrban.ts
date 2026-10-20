@@ -77,7 +77,7 @@ export function useUrbanLabels(title: string, areas: UrbanAreas | null): UrbanLa
         t('urban.rule.cut', { levels: left.length ? left.join(', ') : t('urban.rule.cutNone') }),
         t('urban.rule.ground', { terrain: signedLevel(r.terrainLevel), zero: r.zero.elevation.toFixed(2), source: t(`urban.rule.zero.${r.zero.source}`) }),
       ];
-      if (leftOut) out.push(t('urban.rule.au', { external: leftOut.external, other: leftOut.otherType, parents: leftOut.parents }));
+      if (leftOut) out.push(t('urban.rule.au', { external: leftOut.external, gfa: leftOut.gfa, parents: leftOut.parents }));
       return out;
     },
     note: assumed ? t('urban.assumedInterior', { levels: assumed }) : '',

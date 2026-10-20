@@ -6,9 +6,9 @@
  * Review of #111, items 3 and 4: which IfcSpace Au counts, read from a parsed
  * model, and the spaces' attributes parsed once.
  *
- * Au counts the spaces marked INTERNAL or NOTDEFINED (or unmarked, which says
- * the same). An EXTERNAL space (a balcony), a GFA area-scheme space, and a
- * space that aggregates spaces of its own (counted by its parts) are left out.
+ * Au counts every space except an EXTERNAL one (a balcony), a GFA area-scheme
+ * space, and a space that aggregates spaces of its own (counted by its parts).
+ * SPACE, PARKING and USERDEFINED count: most tools type ordinary rooms SPACE.
  */
 
 import { beforeEach, describe, it } from 'node:test';
@@ -29,7 +29,7 @@ const space = (id: number, name: string, longName: string, kind: string, area: n
   `#${id + 3}=IFCRELDEFINESBYPROPERTIES('${String(id + 3).padStart(22, '0')}',$,$,$,(#${id}),#${id + 2});`,
 ].join('\n');
 
-/** One storey; its rooms, a balcony, a GFA space, and an apartment split into two rooms. */
+/** One storey; its rooms (one typed SPACE, one PARKING, one USERDEFINED), a balcony, a GFA space, and an apartment split into two rooms. */
 const ROOMS = `ISO-10303-21;
 HEADER;
 FILE_SCHEMA(('IFC4'));
@@ -47,12 +47,15 @@ DATA;
 ${space(100, '1', 'Living', '.INTERNAL.', 20)}
 ${space(110, '2', 'Kitchen', '.NOTDEFINED.', 10)}
 ${space(120, '3', 'Hall', '$', 5)}
+${space(180, '7', 'Study', '.SPACE.', 9)}
+${space(190, '8', 'Garage', '.PARKING.', 15)}
+${space(210, '9', 'Store', '.USERDEFINED.', 3)}
 ${space(130, '4', 'Balcony', '.EXTERNAL.', 6)}
 ${space(140, '5', 'Gross floor area', '.GFA.', 120)}
 ${space(150, '6', 'Apartment', '.INTERNAL.', 30)}
 ${space(160, '6.1', 'Bedroom', '.INTERNAL.', 18)}
 ${space(170, '6.2', 'Bath', '.INTERNAL.', 12)}
-#200=IFCRELAGGREGATES('1Aggr000000000000000001',$,$,$,#40,(#100,#110,#120,#130,#140,#150));
+#200=IFCRELAGGREGATES('1Aggr000000000000000001',$,$,$,#40,(#100,#110,#120,#130,#140,#150,#180,#190,#210));
 #201=IFCRELAGGREGATES('1Aggr000000000000000002',$,$,$,#150,(#160,#170));
 ENDSEC;
 END-ISO-10303-21;
@@ -61,15 +64,15 @@ END-ISO-10303-21;
 describe('which spaces Au counts (review of #111)', () => {
   beforeEach(() => useViewerStore.setState({ models: new Map() }));
 
-  it('counts internal and undefined rooms, and the parts of a split space once; leaves out balconies and area schemes', async (t) => {
+  it('counts SPACE, PARKING, USERDEFINED, internal and undefined rooms, and the parts of a split space once; leaves out balconies and area schemes', async (t) => {
     if (!urbanWasm(t)) return;
     await loadUrbanModel('rooms', new TextEncoder().encode(ROOMS), []);
     const areas = collectUrbanAreas(() => undefined);
-    assert.deepEqual(areas.spaces.map((s) => s.category).sort(), ['Bath', 'Bedroom', 'Hall', 'Kitchen', 'Living']);
-    assert.deepEqual(areas.spacesLeftOut, { external: 1, otherType: 1, parents: 1 });
+    assert.deepEqual(areas.spaces.map((s) => s.category).sort(), ['Bath', 'Bedroom', 'Garage', 'Hall', 'Kitchen', 'Living', 'Store', 'Study']);
+    assert.deepEqual(areas.spacesLeftOut, { external: 1, gfa: 1, parents: 1 });
     const result = urbanIndicators({ ...areas, siteArea: null });
-    // 20 + 10 + 5 + 18 + 12: not the balcony's 6, not the GFA's 120, not the apartment's 30 on top of its rooms.
-    assert.equal(result.au, 65);
+    // 20 + 10 + 5 + 9 + 15 + 3 + 18 + 12: not the balcony's 6, not the GFA's 120, not the apartment's 30 on top of its rooms.
+    assert.equal(result.au, 92);
   });
 
   // Item 4: each space's LongName was parsed off the source again on every edit (`mutationVersion`).

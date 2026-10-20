@@ -32,7 +32,7 @@ export const urbanEn = {
   'urban.rule.zero.model': 'from the storeys',
   'urban.rule.zero.building': 'the building\'s reference elevation',
   'urban.rule.zero.assumed': 'not found in the model: taken at the lowest level, enter it if wrong',
-  'urban.rule.au': 'Au: rooms marked internal or not defined. Left out: {external} external (balconies, terraces), {other} of another type (GFA, area schemes, other), {parents} split into rooms of their own.',
+  'urban.rule.au': 'Au: every room (IfcSpace). Left out: {external} external (balconies, terraces), {gfa} area-scheme (GFA), {parents} split into rooms of their own.',
   'urban.terrain': 'Terrain (m)',
   'urban.terrain.help': 'The terrain level against ±0.00; a level is a basement when more than half its height is below it. Leave empty for ±0.00.',
   'urban.zero': '±0.00 at (m)',

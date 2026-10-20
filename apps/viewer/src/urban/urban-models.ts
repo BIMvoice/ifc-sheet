@@ -9,12 +9,13 @@
  * floor area, and the site area the model states. Reads the stores; the wasm
  * module must be initialised.
  *
- * - Rooms (Au): an IfcSpace whose PredefinedType (IFC2X3: its
- *   InteriorOrExteriorSpace, in the same slot) is INTERNAL or NOTDEFINED, or
- *   unset, which says the same. An EXTERNAL space (balcony, terrace), a GFA
- *   or other area-scheme space, and any other type are left out and counted
- *   in `spacesLeftOut`; so is a space that aggregates spaces of its own: only
- *   the leaves are rooms, so nothing is counted twice.
+ * - Rooms (Au): every IfcSpace except an EXTERNAL one (balcony, terrace), a
+ *   GFA one (an area-scheme space) and a space that aggregates spaces of its
+ *   own (only the leaves are rooms, so nothing is counted twice); those are
+ *   left out and counted in `spacesLeftOut`. INTERNAL, NOTDEFINED, unset,
+ *   SPACE, PARKING and USERDEFINED all count: most tools type an ordinary
+ *   room SPACE. The type is the PredefinedType (IFC2X3: InteriorOrExteriorSpace,
+ *   in the same slot).
  *   The area is NetFloorArea, else GrossFloorArea, from
  *   `Qto_SpaceBaseQuantities` first and then any quantity set (ArchiCAD
  *   writes them to `BaseQuantities`), in SI like the material takeoff. The
@@ -48,8 +49,8 @@ export interface UrbanAreas {
   storeys: StoreyInput[];
   /** The rooms Au sums. */
   spaces: SpaceInput[];
-  /** Spaces that are not rooms: EXTERNAL ones, other types (GFA, area schemes, ...), and spaces split into spaces of their own. */
-  spacesLeftOut: { external: number; otherType: number; parents: number };
+  /** Spaces that are not rooms: EXTERNAL ones, GFA (area-scheme) ones, and spaces split into spaces of their own. */
+  spacesLeftOut: { external: number; gfa: number; parents: number };
   /** m² the model states for its site, or null. */
   modelSiteArea: number | null;
   /** The first building's ElevationOfRefHeight in metres, or null. */
@@ -58,8 +59,6 @@ export interface UrbanAreas {
   assumedInterior: string[];
 }
 
-/** The PredefinedType of a space Au counts; '' is an unset one. */
-const ROOM_TYPES = new Set(['INTERNAL', 'NOTDEFINED', '']);
 
 type SourceAttrs = ReadonlyMap<string, string | number | boolean>;
 const attrsByStore = new WeakMap<IfcDataStore, Map<number, SourceAttrs>>();
@@ -172,7 +171,7 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
   const levels = useProjectStore.getState().levels;
   const buckets = levels.map(() => ({ enclosure: [] as PlanMesh[][], floor: [] as PlanMesh[][], slabs: new Set<number>(), missing: 0 }));
   const spaces: SpaceInput[] = [];
-  const leftOut = { external: 0, otherType: 0, parents: 0 };
+  const leftOut = { external: 0, gfa: 0, parents: 0 };
   for (const [modelId, model] of s.models) {
     const store = model.ifcDataStore;
     const hierarchy = store?.spatialHierarchy;
@@ -219,7 +218,7 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
     for (const { expressId: id } of iterateEffectiveEntityIds(store, view ?? null, ['IFCSPACE'])) {
       const kind = enumAttr(store, view, id, 'PredefinedType');
       if (kind === 'EXTERNAL') { leftOut.external++; continue; }
-      if (!ROOM_TYPES.has(kind)) { leftOut.otherType++; continue; }
+      if (kind === 'GFA') { leftOut.gfa++; continue; }
       if (store.relationships?.getRelated(id, RelationshipType.Aggregates, 'forward').some(isSpace)) { leftOut.parents++; continue; }
       const category = provider.getEntityObjectType(id) || textAttr(store, view, id, 'LongName') || provider.getEntityName(id) || `#${id}`;
       spaces.push({ storey: levelOf(id), category, area: pickArea(provider.getQuantitySets(id), 'Qto_SpaceBaseQuantities', AREA_NAMES, scales.area) });
