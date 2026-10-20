@@ -14,6 +14,7 @@ import { extractAllEntityAttributes, type IfcDataStore } from '@ifc-lite/parser'
 import type { ListDataProvider } from '@ifc-lite/lists';
 import { createListDataProvider } from '@/lib/lists/adapter';
 import { elementByGlobalId } from '@/project/element-label';
+import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
 import type { LabelElement, QuantitySetLike } from './label-resolve';
@@ -77,6 +78,7 @@ export function labelElementOf(modelId: string, expressId: number): LabelElement
         case 'Tag': return p.getEntityTag(expressId);
         case 'LongName': return longNameOf(modelId, expressId);
         case 'Mark': return markOf(p.getEntityTag(expressId));
+        case 'TagName': return '';
         case 'ObjectType': return p.getEntityObjectType(expressId);
         case 'Description': return p.getEntityDescription(expressId);
         case 'PredefinedType': return p.getEntityPredefinedType?.(expressId) ?? '';
@@ -92,6 +94,7 @@ export function labelElementOf(modelId: string, expressId: number): LabelElement
     materials: () => p.getMaterialNames?.(expressId) ?? [],
     storey: () => p.getStoreyName?.(expressId) ?? '',
     lengthUnitScale: () => lengthScale,
+    tagFields: useProjectStore.getState().tagFields,
   };
 }
 

@@ -1,0 +1,67 @@
+ISO-10303-21;
+HEADER;
+/* Hand-written federated pair, structure half (IfcSheet #96). Pairs with
+   arch.ifc and is authored in the same project coordinates, but reaches them
+   another way: its IfcSite sits 100 m east and 50 m north of the project
+   position, and its building is placed back by (-100, -50) inside the site,
+   so the two offsets cancel and every element lands where arch.ifc says.
+   A frame bug (a dropped site, building or RTC offset) shows as the column
+   leaving the walls' inner corner. One storey, 'Structure L0', at elevation 0
+   (the same as arch.ifc's Level 0) and none at 3 m, so arch.ifc's Level 1
+   plan has no structure storey to match. Column 0.3 x 0.3 at x 0.3..0.6,
+   y 0.3..0.6, 6 m tall (it reaches Level 1's cut); slab 6 x 6 x 0.2 under
+   the floor. */
+FILE_DESCRIPTION(('ViewDefinition[DesignTransferView]'),'2;1');
+FILE_NAME('str.ifc','2026-10-19T00:00:00',('IfcSheet'),('IfcSheet'),'hand-written','hand-written','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('2fedStrProject00000010',$,'Federated pair',$,$,$,$,(#14),#9);
+#2=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#3=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);
+#4=IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.);
+#6=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#9=IFCUNITASSIGNMENT((#2,#3,#4,#6));
+#10=IFCCARTESIANPOINT((0.,0.,0.));
+#11=IFCDIRECTION((0.,0.,1.));
+#12=IFCDIRECTION((1.,0.,0.));
+#13=IFCAXIS2PLACEMENT3D(#10,#11,#12);
+#14=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#13,$);
+#15=IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,#14,$,.MODEL_VIEW.,$);
+#20=IFCCARTESIANPOINT((2600100.,1200050.,0.));
+#21=IFCAXIS2PLACEMENT3D(#20,#11,#12);
+#22=IFCLOCALPLACEMENT($,#21);
+#25=IFCCARTESIANPOINT((-100.,-50.,0.));
+#26=IFCAXIS2PLACEMENT3D(#25,#11,#12);
+#23=IFCLOCALPLACEMENT(#22,#26);
+#24=IFCLOCALPLACEMENT(#23,#13);
+#30=IFCSITE('2fedStrSite00000000010',$,'Site',$,$,#22,$,$,.ELEMENT.,$,$,$,$,$);
+#31=IFCBUILDING('2fedStrBuilding0000010',$,'Building',$,$,#23,$,$,.ELEMENT.,$,$,$);
+#32=IFCBUILDINGSTOREY('2fedStrLevel0000000100',$,'Structure L0',$,$,#24,$,$,.ELEMENT.,0.);
+#34=IFCRELAGGREGATES('2fedStrAggProject00010',$,$,$,#1,(#30));
+#35=IFCRELAGGREGATES('2fedStrAggSite00000010',$,$,$,#30,(#31));
+#36=IFCRELAGGREGATES('2fedStrAggBuilding0010',$,$,$,#31,(#32));
+#40=IFCDIRECTION((1.,0.));
+#41=IFCCARTESIANPOINT((0.,0.));
+#42=IFCAXIS2PLACEMENT2D(#41,#40);
+#43=IFCRECTANGLEPROFILEDEF(.AREA.,'C300',#42,0.3,0.3);
+#44=IFCEXTRUDEDAREASOLID(#43,#13,#11,6.);
+#45=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#44));
+#46=IFCPRODUCTDEFINITIONSHAPE($,$,(#45));
+#47=IFCCARTESIANPOINT((0.45,0.45,0.));
+#48=IFCAXIS2PLACEMENT3D(#47,#11,#12);
+#49=IFCLOCALPLACEMENT(#24,#48);
+#50=IFCCOLUMN('2fedStrColumn000000010',$,'Column C1',$,$,#49,#46,$,.COLUMN.);
+#60=IFCCARTESIANPOINT((3.,3.));
+#61=IFCAXIS2PLACEMENT2D(#60,#40);
+#62=IFCRECTANGLEPROFILEDEF(.AREA.,'Slab',#61,6.,6.);
+#63=IFCEXTRUDEDAREASOLID(#62,#13,#11,0.2);
+#64=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#63));
+#65=IFCPRODUCTDEFINITIONSHAPE($,$,(#64));
+#66=IFCCARTESIANPOINT((0.,0.,-0.2));
+#67=IFCAXIS2PLACEMENT3D(#66,#11,#12);
+#68=IFCLOCALPLACEMENT(#24,#67);
+#69=IFCSLAB('2fedStrSlab00000000010',$,'Slab S1',$,$,#68,#65,$,.FLOOR.);
+#80=IFCRELCONTAINEDINSPATIALSTRUCTURE('2fedStrContainL0000010',$,$,$,(#50,#69),#32);
+ENDSEC;
+END-ISO-10303-21;

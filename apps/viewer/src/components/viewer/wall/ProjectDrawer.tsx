@@ -24,6 +24,8 @@ import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE
 import { addProjectSheet, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
+import { useViewDrawings } from '@/project/view-drawings';
+import { viewportState, type ViewportState as ViewportStateValue } from '@/project/viewport-state';
 import { RecoveryOffer } from './RecoveryOffer';
 import { ReadinessList } from '../sheets/ReadinessList';
 import { WALL_SKIN } from '../sheets/set-skin';
@@ -32,11 +34,14 @@ import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
 import { CommentsSection } from './CommentsSection';
 import { LegendsAdd } from './LegendsAdd';
+import { ViewportState } from './ViewportState';
+import { TagFieldsPanel } from './TagFieldsPanel';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
   { kind: 'plan', labelKey: 'wall.group.plans' },
   { kind: 'section', labelKey: 'wall.group.sections' },
   { kind: 'elevation', labelKey: 'wall.group.elevations' },
+  { kind: 'drafting', labelKey: 'wall.group.drafting' },
 ];
 
 const action = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
@@ -51,7 +56,7 @@ function Group({ title, children, add }: { title: string; children: ReactNode; a
   );
 }
 
-function Row({ id, label, sub, onOpen }: { id: string; label: string; sub?: string; onOpen: () => void }) {
+function Row({ id, label, sub, state, onOpen }: { id: string; label: string; sub?: string; state?: ViewportStateValue; onOpen: () => void }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   return (
@@ -79,6 +84,7 @@ function Row({ id, label, sub, onOpen }: { id: string; label: string; sub?: stri
           {label}
         </button>
       )}
+      {state ? <ViewportState state={state} compact /> : null}
       <button type="button" aria-label={t('wall.remove', { name: label })} onClick={() => removeProjectItem(id)} className="mr-1 rounded p-1 text-sky-200 opacity-0 hover:bg-sky-400/20 group-hover:opacity-100 focus-visible:opacity-100">
         <X className="size-3.5" />
       </button>
@@ -93,6 +99,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
   const legends = useProjectStore((s) => s.legends ?? []);
+  const byView = useViewDrawings((s) => s.byView);
   const fileInput = useRef<HTMLInputElement>(null);
   const [readyOpen, setReadyOpen] = useState(false);
 
@@ -160,9 +167,10 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('wall.tb.everySheet')}</p>
           <TitleBlockForm />
         </details>
+        <TagFieldsPanel />
         {DRAWING_KINDS.map(({ kind, labelKey }) => (
           <Group key={kind} title={t(labelKey)}>
-            {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} onOpen={() => openDrawing(v.id)} />)}
+            {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} state={viewportState(byView[v.id], v.kind)} onOpen={() => openDrawing(v.id)} />)}
           </Group>
         ))}
         <Group
@@ -172,6 +180,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
               <button type="button" className={action} onClick={() => go(addScheduleToSet('all', t('wall.project.joinerySchedule')))}>{t('wall.project.addJoinery')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('materials', t('takeoff.newName')))}>{t('wall.project.addTakeoff')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('types', t('typeQty.newName')))}>{t('wall.project.addTypeQuantities')}</button>
+              <button type="button" className={action} onClick={() => go(addScheduleToSet('finishes', t('finishes.newName')))}>{t('wall.project.addFinishes')}</button>
             </>
           )}
         >

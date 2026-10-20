@@ -19,9 +19,9 @@
  * Aborts are X-on-card only, plus two automatic destructive signals: the
  * viewport flipping to mobile (the whole desktop layout - and every anchor -
  * unmounts) and a model the tour was running against disappearing outside a
- * step that expects a load. There is deliberately NO Esc abort:
+ * step that expects a load. There is deliberately NO global Esc abort:
  * useKeyboardShortcuts owns Escape (clear selection / double-Esc close all)
- * and preventDefaults every press.
+ * and preventDefaults every press; Esc on the focused step card ends the tour.
  */
 
 import { getViewerStoreApi } from '@/store';

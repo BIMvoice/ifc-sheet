@@ -9,12 +9,12 @@
  */
 
 import { addProjectView, updateProjectView, useProjectStore } from '@/project/project-store';
-import { detailOf, detailRect } from '@/project/detail';
+import { detailOf, detailRect, nextDetailNumber } from '@/project/detail';
 import { SHEET_SCALES } from '@/project/sheets';
 import { styledParams } from '@/project/drafting-standards';
 import type { ViewDetail } from '@/project/types';
 import { runAsOneUndoStep, editDrafts, newDraft } from '../draft-store';
-import { DETAIL_LINK, detailLabel, detailMarkShapes, markParts, PART, sheetNumberOf } from '../detail-mark';
+import { DETAIL_LINK, detailLabel, detailMarkLabel, detailMarkShapes, markParts, PART } from '../detail-mark';
 import type { DraftLayer, DraftShape, EntityShape, Pt } from '../types';
 import type { DraftCommandDef } from './types';
 
@@ -58,13 +58,38 @@ export function addDetail(sourceId: string, a: Pt, b: Pt, current: { textStyle: 
   return id;
 }
 
+/**
+ * A mark on view `sourceId` that refers to the drafting view `draftingViewId`
+ * (a callout to a typical detail): the same dashed rectangle and label as a
+ * detail's, numbered with the next detail number, showing the sheet the
+ * drafting view is on. Returns the drafting view's number, or `null` when the
+ * area is too small or either view is not what it must be.
+ */
+export function addDraftingMark(sourceId: string, draftingViewId: string, a: Pt, b: Pt, current: { textStyle: string; dimStyle: string }): number | null {
+  const state = useProjectStore.getState();
+  const source = state.views.find((v) => v.id === sourceId);
+  const target = state.views.find((v) => v.id === draftingViewId);
+  const rect = detailRect(a, b);
+  if (!source || source.kind === '3d' || !target || target.kind !== 'drafting' || !rect) return null;
+  const number = target.number ?? nextDetailNumber(state.views);
+  runAsOneUndoStep(() => {
+    updateProjectView(draftingViewId, { number });
+    const layerId = ensureDetailLayer();
+    const shapes = detailMarkShapes(rect, detailMarkLabel(draftingViewId, number, state.views, state.sheets), paperMetres(source.scale), source.kind === 'plan');
+    editDrafts({
+      add: shapes.map((shape, i) => newDraft(sourceId, layerId, shape, { ...styledParams(sourceId, shape, current), [DETAIL_LINK]: draftingViewId, [PART]: i })),
+    });
+  });
+  return number;
+}
+
 /** Change the area a detail shows: its crop and its mark move together. */
 export function setDetailRect(detailViewId: string, rect: Rect): void {
   const { views, drafts, sheets } = useProjectStore.getState();
   const view = views.find((v) => v.id === detailViewId);
   const source = view?.detail ? views.find((v) => v.id === view.detail?.of) : undefined;
   if (!view?.detail || !source) return;
-  const shapes = detailMarkShapes(rect, detailLabel(view.detail.number, sheetNumberOf(detailViewId, sheets)), paperMetres(source.scale), source.kind === 'plan');
+  const shapes = detailMarkShapes(rect, detailMarkLabel(detailViewId, view.detail.number, views, sheets), paperMetres(source.scale), source.kind === 'plan');
   const parts = markParts(drafts, detailViewId);
   runAsOneUndoStep(() => {
     updateProjectView(detailViewId, { detail: { ...view.detail as ViewDetail, ...rect } });

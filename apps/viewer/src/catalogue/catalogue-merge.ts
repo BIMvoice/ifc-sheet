@@ -24,7 +24,9 @@
 import { parsePat, serializePat, type HatchPattern } from '@/drafting/hatch/pattern';
 import { STANDARD } from '@/drafting/styles';
 import { freshProjectId } from '@/project/view-defaults';
+import { TAG_FIELD_IDS, TAG_KINDS, withSources, type TagFieldConfig } from '@/tagfields/tag-fields';
 import type { Catalogue, CatalogueKind } from './catalogue-file';
+import { mergeCadLayers } from './cad-layers-merge';
 
 export type ClashPolicy = 'mine' | 'theirs' | 'both';
 
@@ -36,6 +38,13 @@ export interface KindReport {
   replaced: number;
   /** Clashes where the incoming one was added under a new name. */
   renamed: number;
+}
+
+/** Which definition stands for each incoming one, by incoming id (layers, symbols) or upper-cased name (hatch patterns renamed). */
+export interface MergeMaps {
+  layers: Map<string, string>;
+  symbols: Map<string, string>;
+  patterns: Map<string, string>;
 }
 
 export type MergeReport = Record<CatalogueKind, KindReport>;
@@ -128,10 +137,31 @@ function mergePatterns(mine: string, theirs: string, policy: ClashPolicy): { tex
   return { text: list.length ? serializePat(list) : mine, names, report };
 }
 
+/**
+ * The tag-field sources are one configuration, not a list of named definitions: each field of each tag kind is
+ * a definition of its own. One the project has not set is added; one set the same stays; one set differently
+ * follows the policy (`both` has no second place to put it, so the project's stays and it counts as kept).
+ */
+function mergeTagFields(mine: TagFieldConfig | undefined, theirs: TagFieldConfig | undefined, policy: ClashPolicy): { config: TagFieldConfig | undefined; report: KindReport } {
+  const report = noReport();
+  let config = mine;
+  for (const kind of TAG_KINDS) {
+    for (const field of TAG_FIELD_IDS) {
+      const incoming = theirs?.[kind]?.[field];
+      if (!incoming) continue;
+      const have = config?.[kind]?.[field];
+      if (!have) { config = withSources(config, kind, field, incoming); report.added++; }
+      else if (canonical(have) === canonical(incoming) || policy !== 'theirs') report.kept++;
+      else { config = withSources(config, kind, field, incoming); report.replaced++; }
+    }
+  }
+  return { config, report };
+}
+
 /** The incoming catalogue merged into `mine`. Neither argument is changed. */
 export function mergeCatalogues(
   mine: Catalogue, incoming: Catalogue, policy: ClashPolicy, fresh: (prefix: string) => string = freshProjectId,
-): { catalogue: Catalogue; report: MergeReport } {
+): { catalogue: Catalogue; report: MergeReport; maps: MergeMaps } {
   const groups = mergeNamed(mine.layerGroups, incoming.layerGroups, policy, 'group', fresh);
   const layers = mergeNamed(mine.layers, incoming.layers, policy, 'layer', fresh, (l) => {
     if (!l.group) return l;
@@ -156,14 +186,19 @@ export function mergeCatalogues(
   }));
   const symbols = mergeNamed(mine.symbols, incoming.symbols, policy, 'symbol', fresh);
   const legends = mergeNamed(mine.legends, incoming.legends.map(({ scopeId: _scopeId, ...rest }) => rest), policy, 'legend', fresh, (l) => ({ ...l, textStyle: textId(l.textStyle) }));
+  const cad = mergeCadLayers(mine.cadLayers, incoming.cadLayers, policy, fresh);
+  const tagFields = mergeTagFields(mine.tagFields, incoming.tagFields, policy);
+  const details = mergeNamed(mine.details, incoming.details, policy, 'detail', fresh);
   return {
+    maps: { layers: layers.ids, symbols: symbols.ids, patterns: patterns.names },
     catalogue: {
+      ...(tagFields.config ? { tagFields: tagFields.config } : {}),
       layers: layers.list, layerGroups: groups.list, textStyles: texts.list, dimStyles: dims.list, hatchPatterns: patterns.text,
-      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list,
+      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, cadLayers: cad.list, details: details.list,
     },
     report: {
       layers: layers.report, textStyles: texts.report, dimStyles: dims.report, hatchPatterns: patterns.report,
-      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report,
+      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, cadLayers: cad.report, tagFields: tagFields.report, details: details.report,
     },
   };
 }

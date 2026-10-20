@@ -13,9 +13,12 @@ import { parsePat } from '@/drafting/hatch/pattern';
 import type { DraftEntity } from '@/drafting/types';
 import { useProjectStore } from '@/project/project-store';
 import { paperOf } from '@/project/sheets';
+import { useViewDrawings } from '@/project/view-drawings';
+import { viewportState } from '@/project/viewport-state';
 import type { ProjectSheet } from '@/project/types';
 import { SheetPaper } from '../sheets/SheetPaper';
 import { useSheetContent, type SheetContent } from '../sheets/useSheetContent';
+import { ViewportState } from './ViewportState';
 
 interface WallSheetProps {
   sheet: ProjectSheet;
@@ -39,7 +42,9 @@ export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function Wall
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
   const own = useSheetContent(sheet);
-  const { content } = sheetContent ?? own;
+  const { content, boxOf } = sheetContent ?? own;
+  const byView = useViewDrawings((s) => s.byView);
+  const views = useProjectStore((s) => s.views);
   const pxPerMm = width / paperOf(sheet).w;
   return (
     <div className="relative">
@@ -55,6 +60,17 @@ export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function Wall
         pxPerMm={pxPerMm}
         sheetDrafts={sheetDrafts}
       />
+      {/* Screen only: laid over the paper's SVG, never inside it, so no export reads it. */}
+      {(sheet.viewports ?? []).map((vp) => {
+        const state = viewportState(byView[vp.viewId], views.find((v) => v.id === vp.viewId)?.kind);
+        if (state.kind === 'idle' || state.kind === 'ready') return null;
+        const box = boxOf(vp);
+        return (
+          <div key={vp.id} data-viewport-overlay={vp.id} className="pointer-events-none absolute" style={{ left: (vp.x - box.width / 2) * pxPerMm, top: (vp.y - box.height / 2) * pxPerMm, width: box.width * pxPerMm, height: box.height * pxPerMm }}>
+            <ViewportState state={state} />
+          </div>
+        );
+      })}
     </div>
   );
 });
