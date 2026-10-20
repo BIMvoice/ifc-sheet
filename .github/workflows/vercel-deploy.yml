@@ -84,7 +84,7 @@ jobs:
         run: vercel build ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN"
 
       # One archive instead of thousands of files: the free plan allows 5000
-      # uploaded files a day, and every preview counted each file (2026-10-19).
+      # uploaded files a day (the free-plan file-count limit).
       - name: Publish
         run: |
           url="$(vercel deploy --prebuilt --archive=tgz ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN")"
