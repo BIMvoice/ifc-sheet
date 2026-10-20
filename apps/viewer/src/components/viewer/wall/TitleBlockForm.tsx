@@ -14,11 +14,15 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { clearTitleBlockField, setProjectTitleBlockField, setTitleBlockField } from '@/project/sheets';
 import { LOGO_FIELD, LOGO_MAX_BYTES, TITLE_BLOCK_FIELDS, titleBlockOf, type TitleBlockField } from '@/project/title-block';
+import { useEffectiveTitleBlock, useResolvedTitleBlock } from '@/project/title-block-model';
 import type { ProjectSheet } from '@/project/types';
+import { SourceBadge, SourcePicker } from './TitleBlockSource';
 
 const LABELS: Record<TitleBlockField, TranslationKey> = {
   project: 'sheets.tb.project',
+  address: 'sheets.tb.address',
   client: 'sheets.tb.client',
+  organisation: 'sheets.tb.organisation',
   drawnBy: 'sheets.tb.drawnBy',
   checkedBy: 'sheets.tb.checkedBy',
   date: 'sheets.tb.date',
@@ -73,15 +77,18 @@ function Logo() {
 /** `sheet` absent: the fields every sheet prints. Present: what that sheet prints, and its own fields. */
 export function TitleBlockForm({ sheet }: { sheet?: ProjectSheet }) {
   const { t } = useTranslation();
-  const projectFields = useProjectStore((s) => s.titleBlock);
+  const projectFields = useEffectiveTitleBlock();
+  const resolved = useResolvedTitleBlock();
+  const custom = useProjectStore((s) => s.titleBlockSources);
   const projectName = useProjectStore((s) => s.name);
-  const shown = sheet ? titleBlockOf(sheet, projectFields, projectName) : projectFields ?? {};
+  const shown = sheet ? titleBlockOf(sheet, projectFields, projectName) : projectFields;
   const own = sheet?.titleBlock ?? {};
 
+  // A field takes a typed value only when it says something else than it shows now: leaving a field the model fills must not copy the model's value in as typed.
   const commit = (key: TitleBlockField, value: string): void => {
+    if (value.trim() === (shown[key] ?? '')) return;
     if (!sheet) setProjectTitleBlockField(key, value.trim());
-    // A sheet takes a field as its own only when it says something else than it prints now.
-    else if (value !== (shown[key] ?? '')) setTitleBlockField(sheet.id, key, value.trim());
+    else setTitleBlockField(sheet.id, key, value.trim());
   };
 
   return (
@@ -90,24 +97,28 @@ export function TitleBlockForm({ sheet }: { sheet?: ProjectSheet }) {
         const value = shown[key] ?? '';
         const isOwn = key in own;
         return (
-          <label key={key} className="mt-2 block text-sm text-sky-200">
-            <span className="flex items-baseline gap-2">
-              {t(LABELS[key])}
-              {isOwn ? <span className="text-[11px] text-amber-300">{t('wall.tb.ownField')}</span> : null}
-            </span>
-            <input
-              // Typed elsewhere (the other form, a project opened): show the new value.
-              key={`${key}:${value}`}
-              className={field}
-              defaultValue={value}
-              placeholder={key === 'project' && !sheet ? projectName : undefined}
-              onBlur={(e) => commit(key, e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-            />
+          <div key={key} className="mt-2 text-sm text-sky-200">
+            <label className="block">
+              <span className="flex items-baseline gap-2">
+                {t(LABELS[key])}
+                {isOwn ? <span className="text-[11px] text-amber-300">{t('wall.tb.ownField')}</span> : <SourceBadge resolved={resolved[key]} />}
+              </span>
+              <input
+                // Typed elsewhere (the other form, a project opened): show the new value.
+                key={`${key}:${value}`}
+                className={field}
+                defaultValue={value}
+                placeholder={key === 'project' && !sheet ? projectName : undefined}
+                onBlur={(e) => commit(key, e.target.value)}
+                data-owns-keys
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              />
+            </label>
+            {sheet ? null : <SourcePicker field={key} fieldLabel={t(LABELS[key])} custom={custom} resolved={resolved[key]} />}
             {sheet && isOwn ? (
               <button type="button" className={`${quiet} mt-1`} onClick={() => clearTitleBlockField(sheet.id, key)}>{t('wall.tb.useProject')}</button>
             ) : null}
-          </label>
+          </div>
         );
       })}
       {sheet ? null : <Logo />}

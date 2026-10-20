@@ -4,7 +4,6 @@
 
 /** What an issue records with the project (`ProjectDocument.issues`): the sets sent out, sheet by sheet. */
 
-import type { PaperSize } from '@/project/types';
 
 /** One sheet as it stood when a set was issued. */
 export interface IssuedSheet {
@@ -12,7 +11,8 @@ export interface IssuedSheet {
   title: string;
   /** The scales of its viewports, as drawn on the list: `1:50`, or `1:50, 1:100`; empty when it holds none. */
   scale: string;
-  paper: PaperSize;
+  /** The paper as named on the list (`paperLabel`): `A1`, `A3×3`, `500×700`. */
+  paper: string;
   orientation: 'landscape' | 'portrait';
   revision: string;
   /** What the sheet held (`issue/fingerprint.ts`): equal fingerprints mean an unchanged sheet. */

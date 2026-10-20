@@ -110,6 +110,7 @@ import { alignmentSectionEn } from './catalogues/alignment-section.en';
 import { projectNavigatorEn } from './catalogues/project-navigator.en';
 import { draftingEn } from './catalogues/drafting.en';
 import { sheetsEn } from './catalogues/sheets.en';
+import { titleBlockSourcesEn } from './catalogues/title-block-sources.en';
 import { draftSetEn } from './catalogues/draft-set.en';
 import { issueEn } from './catalogues/issue.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
@@ -121,6 +122,7 @@ import { projectVersionsEn } from './catalogues/project-versions.en';
 import { roofBlockEn } from './catalogues/roof-block.en';
 import { viewGraphicsEn } from './catalogues/view-graphics.en';
 import { cadLayersEn } from './catalogues/cad-layers.en';
+import { phasesEn } from './catalogues/phases.en';
 import { catalogueEn } from './catalogues/catalogue.en';
 import { tagFieldsEn } from './catalogues/tag-fields.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
@@ -190,6 +192,7 @@ export const en = {
   ...projectNavigatorEn,
   ...draftingEn,
   ...sheetsEn,
+  ...titleBlockSourcesEn,
   ...draftSetEn,
   ...issueEn,
   ...annotateAllEn,
@@ -200,6 +203,7 @@ export const en = {
   ...projectVersionsEn,
   ...roofBlockEn,
   ...viewGraphicsEn,
+  ...phasesEn,
   ...catalogueEn,
   ...cadLayersEn,
   ...tagFieldsEn,

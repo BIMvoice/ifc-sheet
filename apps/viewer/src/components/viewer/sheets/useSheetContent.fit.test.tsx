@@ -12,6 +12,8 @@ import { useViewDrawings } from '@/project/view-drawings';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import type { DraftEntity } from '@/drafting/types';
 import { mmPerMetre } from '@/project/sheets';
+import { entityBounds } from '@/drafting/annotation';
+import { annotationAtFactor, annotationFactor } from '@/project/viewport-annotation';
 import { useSheetContent, type SheetContent } from './useSheetContent.js';
 import { viewportTransform } from './SheetPaper.js';
 
@@ -22,7 +24,7 @@ import { viewportTransform } from './SheetPaper.js';
  * crop is for.
  */
 
-const plan: ProjectView = { id: 'p', kind: 'plan', name: 'Ground', createdAt: 0, level: { name: 'Ground', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 };
+const plan: ProjectView = { id: 'p', kind: 'plan', name: 'Ground', createdAt: 0, scale: 100, level: { name: 'Ground', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 };
 const other: ProjectView = { id: 'q', kind: 'plan', name: 'First', createdAt: 0, level: { name: 'First', elevation: 3, storeyGlobalIds: [] }, cutHeight: 1.2 };
 const BOUNDS = { min: { x: 0, y: 0 }, max: { x: 10, y: 8 } };
 const drawing = { lines: [], cutPolygons: [], projectionPolygons: [], bounds: BOUNDS, config: { plane: { axis: 'y', position: 1.2, flipped: false } } } as unknown as Drawing2D;
@@ -72,6 +74,23 @@ describe('an auto-fit viewport holds its view\'s drafts (#140)', () => {
     // The model alone is 10 m wide; the dimension reaches x = 13.
     assert.ok(c.boxOf(auto).width >= 13 * k, `box ${c.boxOf(auto).width} mm holds 13 m at ${k} mm/m`);
     for (const p of [{ x: 0, y: 0 }, { x: 13, y: 0 }, { x: 6.5, y: -2 }]) assert.ok(inside(onPaper(c, auto, p)), `${JSON.stringify(p)} is inside the box`);
+  });
+
+  it('fits a draft to the left of the model: the box and the centring both reach it', () => {
+    const left: DraftEntity = { ...outside('p'), shape: { type: 'line', a: { x: -3, y: 2 }, b: { x: -2, y: 2 } } };
+    const c = setup(auto, [left]);
+    assert.ok(c.boxOf(auto).width >= 13 * mmPerMetre(auto), 'the box holds -3 m to 10 m');
+    for (const p of [{ x: -3, y: 2 }, { x: 10, y: 4 }]) assert.ok(inside(onPaper(c, auto, p)), `${JSON.stringify(p)} is inside the box`);
+  });
+
+  it('measures a text at the size the sheet prints it: drafted at 1:100, shown on a 1:400 viewport', () => {
+    const vp: SheetViewport = { ...auto, scale: 400 };
+    const text: DraftEntity = { ...outside('p'), shape: { type: 'text', p: { x: 9, y: 4 }, text: 'Fire door rated EI 60', height: 0.25, rotation: 0 } };
+    const c = setup(vp, [text]);
+    const printed = annotationAtFactor(text.shape as Parameters<typeof annotationAtFactor>[0], annotationFactor(400, 100));
+    const end = entityBounds(printed);
+    assert.ok(end.max.x > entityBounds(text.shape).max.x + 1, 'the printed text is longer than the stored one');
+    for (const p of [{ x: end.min.x, y: end.min.y }, { x: end.max.x, y: end.max.y }]) assert.ok(inside(onPaper(c, vp, p)), `${JSON.stringify(p)} is inside the box`);
   });
 
   it('leaves a viewport alone when its drafts sit inside the model', () => {

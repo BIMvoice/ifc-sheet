@@ -13,7 +13,8 @@
  */
 
 import { drawingToScreen, screenToDrawing, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
-import { FRAME_MARGIN_MM, SHEET_SCALES, TITLE_BLOCK_MM, paperOf } from '@/project/sheets';
+import { drawingAreaIn, frameOf } from '@/project/sheet-frame';
+import { SHEET_SCALES, paperOf } from '@/project/sheets';
 import type { ProjectSheet } from '@/project/types';
 
 export interface Rect {
@@ -53,8 +54,8 @@ export function keyPlanScale(bounds: Extent | null): number {
   return SHEET_SCALES.find((s) => (w * 1000) / s <= KEY_PLAN_MM.w - 10 && (h * 1000) / s <= KEY_PLAN_MM.h - 10) ?? SHEET_SCALES[SHEET_SCALES.length - 1];
 }
 
-/** Where a key plan goes on a sheet: right, just above the title block. */
+/** Where a key plan goes on a sheet: right, in the corner of the drawing area, just above the title block. */
 export function keyPlanPlace(sheet: ProjectSheet): { x: number; y: number } {
-  const { w, h } = paperOf(sheet);
-  return { x: w - FRAME_MARGIN_MM - KEY_PLAN_MM.w / 2 - 2, y: h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h - KEY_PLAN_MM.h / 2 - 8 };
+  const area = drawingAreaIn(paperOf(sheet), frameOf(sheet));
+  return { x: area.x + area.w - KEY_PLAN_MM.w / 2 - 2, y: area.y + area.h - KEY_PLAN_MM.h / 2 - 8 };
 }
