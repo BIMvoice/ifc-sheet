@@ -74,6 +74,7 @@ import { manualValidationEn } from './catalogues/manual-validation.en';
 import { flowPanelEn } from './catalogues/flow-panel.en';
 import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
+import { printPreviewEn } from './catalogues/print-preview.en';
 import { wallEn } from './catalogues/wall.en';
 import { wallFindEn } from './catalogues/wall-find.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
@@ -111,6 +112,7 @@ import { draftSetEn } from './catalogues/draft-set.en';
 import { issueEn } from './catalogues/issue.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
 import { checkEn } from './catalogues/check.en';
+import { checkReadyEn } from './catalogues/check-ready.en';
 import { newProjectEn } from './catalogues/new-project.en';
 import { projectPackageEn } from './catalogues/project-package.en';
 import { projectVersionsEn } from './catalogues/project-versions.en';
@@ -119,6 +121,7 @@ import { viewGraphicsEn } from './catalogues/view-graphics.en';
 import { catalogueEn } from './catalogues/catalogue.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
+import { roomFinishesEn } from './catalogues/room-finishes.en';
 import { elementTypesEn } from './catalogues/element-types.en';
 import { roofEn } from './catalogues/roof.en';
 import { civilEn } from './catalogues/civil.en';
@@ -187,6 +190,7 @@ export const en = {
   ...issueEn,
   ...annotateAllEn,
   ...checkEn,
+  ...checkReadyEn,
   ...newProjectEn,
   ...projectPackageEn,
   ...projectVersionsEn,
@@ -195,6 +199,7 @@ export const en = {
   ...catalogueEn,
   ...draftingStandardsEn,
   ...joineryEn,
+  ...roomFinishesEn,
   ...elementTypesEn,
   ...roofEn,
   ...civilEn,
@@ -251,6 +256,7 @@ export const en = {
   ...drawingUnderlayEn,
   ...keyboardShortcutsEn,
   ...settingsEn,
+  ...printPreviewEn,
   ...wallEn,
   ...wallFindEn,
   ...whatChangedEn,

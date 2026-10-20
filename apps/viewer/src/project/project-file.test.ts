@@ -73,8 +73,10 @@ describe('project file', () => {
     assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-document', version: 1 })), /\/format/);
   });
 
-  it('rejects an unsupported version', () => {
-    assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-project', version: 2 })), /\/version 2 is not supported/);
+  it('rejects a version that is not a whole number from 1', () => {
+    for (const version of [0, -1, 1.5, '1', null]) {
+      assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-project', version })), /\/version must be a whole number/, String(version));
+    }
   });
 
   it('names the view that is malformed', () => {
@@ -96,7 +98,7 @@ describe('project file', () => {
 
 // Review of #108: a kind the reader does not list reopens as a joinery list ('all') with no error.
 // The record is keyed by the kind union, so a new kind does not compile until it is listed here.
-const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true, register: true };
+const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true, finishes: true, register: true };
 
 describe('schedule kinds', () => {
   for (const kind of Object.keys(SCHEDULE_KINDS) as ProjectSchedule['kind'][]) {
@@ -105,4 +107,12 @@ describe('schedule kinds', () => {
       assert.equal(parseProjectFile(serializeProject(saved)).schedules?.[0]?.kind, kind);
     });
   }
+
+  it('a room finishes schedule on a sheet reopens whole: name, kind, scale and its viewport', () => {
+    const finishes: ProjectSchedule = { id: 'rf', name: 'Room finishes', kind: 'finishes', createdAt: 7, scale: 100 };
+    const saved: ProjectDocument = { ...doc, schedules: [finishes], sheets: [{ ...doc.sheets[0], viewports: [{ id: 'vp-rf', viewId: 'rf', x: 20, y: 20, scale: 100, width: 0, height: 0, center: null }] }] };
+    const reopened = parseProjectFile(serializeProject(saved));
+    assert.deepEqual(reopened.schedules, [finishes]);
+    assert.equal(reopened.sheets[0]?.viewports?.[0]?.viewId, 'rf');
+  });
 });

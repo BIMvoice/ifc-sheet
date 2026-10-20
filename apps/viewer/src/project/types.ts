@@ -8,6 +8,7 @@ import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/crea
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
+import type { DisciplineId } from './discipline-views';
 
 /**
  * The project document: the views and sheets a user organises over the
@@ -104,6 +105,14 @@ export interface PlanProjectView extends ProjectViewBase {
   level: ProjectLevel;
   /** Cut height above the level's floor, metres. */
   cutHeight: number;
+  /** A discipline plan (structural, foundation, roof): it draws only the elements its discipline keeps (`discipline-views.ts`). */
+  discipline?: DisciplineId;
+  /**
+   * A reflected ceiling plan: the same plan, looking up from the cut. It keeps
+   * the floor plan's x/y (a point sits where it does in the plan below) and
+   * draws what is above the cut: ceilings, soffits, lights, beams.
+   */
+  reflected?: boolean;
 }
 
 /** A section cut stored in world metres, independent of the model bounds. */
@@ -124,6 +133,7 @@ export interface SectionProjectView extends ProjectViewBase {
 
 export interface ElevationProjectView extends ProjectViewBase {
   kind: 'elevation';
+  /** The facade it looks at; on an interior elevation, the side of the room its wall is on (it looks that way). */
   direction: ElevationDirection;
   /**
    * World coordinate, metres, of the plane on its axis (z for north and
@@ -131,6 +141,18 @@ export interface ElevationProjectView extends ProjectViewBase {
    * model's box on that facade.
    */
   planeOffset?: number;
+  /** Set on an interior elevation: one wall of a room, seen from inside it. Its plane replaces `direction` / `planeOffset`. */
+  interior?: InteriorElevation;
+}
+
+/** One wall face of a room, looked at from inside the room (`interior-elevations.ts`). */
+export interface InteriorElevation {
+  /** The room's IfcSpace GlobalId. */
+  room: string;
+  /** Parallel to the wall face, inside the room, looking at the face; world metres like a section's plane. */
+  plane: SectionProjectPlane;
+  /** The wall face in drawing metres: its length across, the room's floor to its top up. The drawing is cropped to it. */
+  crop: { min: { x: number; y: number }; max: { x: number; y: number } };
 }
 
 export interface ThreeDProjectView extends ProjectViewBase {
@@ -171,6 +193,8 @@ export interface SheetViewport {
   hiddenLayers?: string[];
   /** The page of a document split over several sheets (the drawing register's continuation sheets), from 0; absent is 0. */
   page?: number;
+  /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
+  drawingNumber?: string;
 }
 
 export interface ProjectSheet {
@@ -203,8 +227,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, or the set's own sheets (the drawing register, derived from the sheets on every draw). */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'register';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, or the set's own sheets (the drawing register, derived from the sheets on every draw). */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
