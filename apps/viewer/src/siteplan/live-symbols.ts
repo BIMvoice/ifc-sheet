@@ -5,8 +5,8 @@
 /**
  * The built-in symbols whose content is not drawn by hand but computed from
  * the drawing they sit on and the model: the scale bar is laid out for the
- * scale the drawing is shown at, the north arrow turns to the model's true
- * north, a coordinate point prints its map coordinates. The one code path
+ * scale the drawing is shown at, a north arrow marked `followsNorth` (the
+ * site plan's own) turns to the model's true north, a coordinate point prints its map coordinates. The one code path
  * every renderer of a symbol instance goes through (`AnnotationGraphics`'s
  * symbol, on a sheet's viewport and on a drawing tab alike).
  */
@@ -51,7 +51,8 @@ export function liveSymbol(
       // Its ticks are metres of the drawing: a user scale on it would make the labels lie.
       return { def: { ...def, shapes: scaleBarShapes(ctx.scale, ctx.format) }, at: { ...shape, scale: 1 } };
     case NORTH_ARROW_ID:
-      return ctx.north === null ? { def, at: shape } : { def, at: { ...shape, rotation: ctx.north } };
+      // Only an arrow marked to follow true north turns; one placed by hand keeps the rotation it was given.
+      return ctx.north === null || !shape.followsNorth ? { def, at: shape } : { def, at: { ...shape, rotation: ctx.north } };
     case COORDINATE_POINT_ID: {
       const lines = ctx.coordinates?.(shape.p) ?? [];
       const texts: SymbolShape[] = lines.map((text, i) => ({

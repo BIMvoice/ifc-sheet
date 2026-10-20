@@ -17,6 +17,7 @@
 import type { TranslationKey } from '@/i18n';
 import { fitViewportBox, FRAME_MARGIN_MM, PAPER_MM, SHEET_SCALES, TITLE_BLOCK_MM } from './sheets';
 import { freshProjectId } from './view-defaults';
+import { nextSheetNumber } from './sheet-numbers';
 import type { ElevationDirection, PaperSize, ProjectSheet, ProjectView, SheetViewport } from './types';
 
 /** The scales a set chooses among, most detailed first. */
@@ -275,15 +276,11 @@ function withSitePlanHung(sheets: readonly ProjectSheet[], view: ProjectView, ex
   const sizes = [{ w: own.w * (1 + SITE_ROOM), h: own.h * (1 + SITE_ROOM) }];
   const scale = view.scale ?? 200;
   const paper = SET_PAPERS.find((p) => fitsScale(sizes, drawingArea(p), scale)) ?? SET_PAPERS[SET_PAPERS.length - 1];
-  const taken = new Set(sheets.map((s) => s.number));
-  const numberOf = (k: number) => `A-${String(k).padStart(3, '0')}`;
-  let n = 1;
-  while (taken.has(numberOf(n))) n++;
   const area = drawingArea(paper);
   const fitting = fitsScale(sizes, area, scale) ? scale : SHEET_SCALES.find((s) => fitsScale(sizes, area, s)) ?? scale;
   // A little above the middle: the site balance goes under it.
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: numberOf(n), name: view.name, createdAt: now, paper, orientation: 'landscape',
+    id: freshProjectId('sheet'), number: nextSheetNumber(sheets, 'general'), name: view.name, createdAt: now, paper, orientation: 'landscape',
     viewports: [{ id: freshProjectId('viewport'), viewId: view.id, x: area.x + area.w / 2, y: area.y + area.h / 2 - 15, scale: fitting, width: 0, height: 0, center: null }],
   };
   return { sheets: [...sheets, sheet], sheetId: sheet.id };

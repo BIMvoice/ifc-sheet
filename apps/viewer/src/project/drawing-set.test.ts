@@ -17,6 +17,7 @@ import { defaultViews } from './view-defaults.js';
 import { buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fittingScale, groupsThatDoNotFit, overrun, sheetGroup, sheetScaleReason, withViewHung, type ModelExtent } from './drawing-set.js';
 import { addScheduleToSet, groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
 import { fitViewportBox, PAPER_MM } from './sheets.js';
+import { nextSheetNumber } from './sheet-numbers.js';
 import type { ProjectLevel, ProjectView } from './types';
 
 /** A 10 × 7 m two-storey house, 6 m tall: long along X. */
@@ -177,6 +178,21 @@ describe('a detail on the set', () => {
     assert.equal(sheetGroup(sheet), null);
     assert.equal(withViewHung(hung.sheets, views, detail, HOUSE), null, 'not twice');
     assert.equal(withViewHung(hung.sheets, views, { ...detail, id: 'det2' }, HOUSE)?.sheets.at(-1)?.number, 'A-902');
+  });
+});
+
+describe('the site plan on the set (#135 review)', () => {
+  const plan = defaultViews(LEVELS).find((v) => v.kind === 'plan');
+  assert.ok(plan?.kind === 'plan');
+  const site: ProjectView = { ...plan, id: 'site', name: 'Site plan', site: true, scale: 200 };
+
+  it('takes the next free number of the general series, A-0xx, through the one numbering helper', () => {
+    const views = [...defaultViews(LEVELS), site];
+    assert.equal(withViewHung([], views, site, HOUSE)?.sheets[0].number, 'A-001');
+    const taken = [{ id: 'g', number: 'A-001', name: 'Cover', createdAt: 0 }, { id: 'h', number: 'A-002', name: 'Notes', createdAt: 0 }];
+    assert.equal(withViewHung(taken, views, site, HOUSE)?.sheets.at(-1)?.number, 'A-003');
+    assert.equal(nextSheetNumber(taken, 'general'), 'A-003');
+    assert.equal(nextSheetNumber([], 'other'), 'A-901');
   });
 });
 
