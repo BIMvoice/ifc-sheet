@@ -107,6 +107,14 @@ export const TOUR_ANCHORS = {
   ribbonCollapse: 'ribbon-collapse',
   /** ViewTab "Follow work" contextual-tabs toggle (View tab open). */
   ribbonFollowWork: 'ribbon-follow-work',
+  /** IfcSheet face: the header's "Demo project" button. */
+  wallDemo: 'wall-demo',
+  /** IfcSheet face: the intro's "Hang it on the wall" button (intro only). */
+  wallHang: 'wall-hang',
+  /** IfcSheet face: the tool rail of a stepped-into sheet. */
+  wallToolRail: 'wall-tool-rail',
+  /** IfcSheet face: the header's Issue button (a set with sheets). */
+  wallIssue: 'wall-issue',
 } as const;
 
 /** Activity-bar rail button for a panel (one templated attribute serves
