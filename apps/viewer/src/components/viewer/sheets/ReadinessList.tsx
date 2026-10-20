@@ -5,8 +5,8 @@
 /**
  * What the model lacks (`check/readiness.ts`), in the look of the set's
  * "What is missing" list (a `SetSkin`): each line says what the IFC is missing
- * and, unless `compact`, which feature is weaker for it. Read when it appears;
- * the model does not change while the set is laid out.
+ * and, unless `compact`, which feature is weaker for it. Read again when a
+ * model opens or closes and after an edit (`mutationVersion`), not on every render.
  */
 
 import { useMemo } from 'react';
@@ -19,7 +19,12 @@ import type { SetSkin } from './set-skin';
 
 /** The findings of the models open now; null while none is open (nothing to say yet). */
 function useModelReadiness() {
-  return useMemo(() => (useViewerStore.getState().models.size === 0 ? null : modelReadiness(currentModelFacts())), []);
+  const models = useViewerStore((s) => s.models);
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  return useMemo(() => {
+    void mutationVersion; // an edit can add or remove what the facts count
+    return models.size === 0 ? null : modelReadiness(currentModelFacts());
+  }, [models, mutationVersion]);
 }
 
 export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compact?: boolean }) {

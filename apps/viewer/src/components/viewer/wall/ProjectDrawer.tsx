@@ -88,6 +88,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [readyOpen, setReadyOpen] = useState(false);
 
   const go = (sheetId: string | null, focus: string | null = null): void => {
     if (!sheetId) return;
@@ -141,9 +142,10 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
             <Row key={s.id} id={s.id} sub={s.number} label={s.name} onOpen={() => go(s.id)} />
           ))}
         </Group>
-        <details className="border-t border-sky-300/10 px-4 py-3">
+        <details className="border-t border-sky-300/10 px-4 py-3" onToggle={(e) => setReadyOpen(e.currentTarget.open)}>
           <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('ready.title')}</summary>
-          <div className="mt-2 text-xs leading-relaxed"><ReadinessList skin={WALL_SKIN} /></div>
+          {/* Mounted only while open: reading the facts walks every entity of every model. */}
+          {readyOpen ? <div className="mt-2 text-xs leading-relaxed"><ReadinessList skin={WALL_SKIN} /></div> : null}
         </details>
         <details className="border-t border-sky-300/10 px-4 py-3">
           <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.tb.title')}</summary>
