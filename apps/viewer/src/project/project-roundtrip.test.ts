@@ -61,7 +61,7 @@ const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, de
 
 const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').ProjectView, { kind: K }>> } = {
   plan: {
-    ...base, id: 'v-plan', name: 'Level 1', kind: 'plan', cutHeight: 1.4,
+    ...base, id: 'v-plan', name: 'Level 1', kind: 'plan', cutHeight: 1.4, reflected: true,
     level: { name: 'Level 1', elevation: 3.2, storeyGlobalIds: ['G-A', 'G-B'] },
   } satisfies Required<PlanProjectView>,
   section: {

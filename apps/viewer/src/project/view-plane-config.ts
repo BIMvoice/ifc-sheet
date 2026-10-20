@@ -39,7 +39,7 @@ export function viewPlaneConfig(view: ProjectView, levels: readonly ProjectLevel
   switch (view.kind) {
     case 'plan': {
       const level = resolvePlanLevel(view, levels) ?? view.level;
-      return { axis: 'y', position: level.elevation + view.cutHeight, flipped: false };
+      return { axis: 'y', position: level.elevation + view.cutHeight, flipped: false, ...(view.reflected ? { reflected: true } : {}) };
     }
     case 'section': {
       const { axis, offset, flipped, custom } = view.plane;

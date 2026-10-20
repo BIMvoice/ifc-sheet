@@ -90,7 +90,7 @@ function readView(v: unknown, path: string): ProjectView {
   switch (v.kind) {
     case 'plan':
       if (!isNumber(v.cutHeight)) fail(`${path}.cutHeight`, 'must be a number');
-      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight };
+      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(v.reflected === true ? { reflected: true } : {}) };
     case 'section': {
       const p = v.plane;
       if (!isObject(p) || !AXES.includes(p.axis as (typeof AXES)[number]) || !isNumber(p.offset)) {
@@ -263,7 +263,7 @@ function readCivilDrawing(raw: unknown): ProjectCivilDrawing[] {
 
 function readSchedule(raw: unknown): ProjectSchedule[] {
   if (!isObject(raw) || !isString(raw.id)) return [];
-  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' ? raw.kind : 'all';
+  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' ? raw.kind : 'all';
   const out: ProjectSchedule = { id: raw.id, name: isString(raw.name) && raw.name ? raw.name : 'Schedule', kind, createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0 };
   if (typeof raw.scale === 'number' && raw.scale > 0) out.scale = raw.scale;
   return [out];

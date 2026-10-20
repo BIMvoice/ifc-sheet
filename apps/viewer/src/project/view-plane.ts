@@ -26,6 +26,8 @@ export interface ViewSectionPlane {
   /** 0..100 of the merged bounds along `axis`. */
   position: number;
   flipped: boolean;
+  /** Looks up from the plane but keeps the plan's x/y (a reflected ceiling plan); never with `flipped`. */
+  reflected?: boolean;
   custom?: CustomSectionPlane;
 }
 
@@ -69,7 +71,8 @@ export function sectionPlaneForView(
       const range = sectionAxisRange(bounds, 'down');
       const level = resolvePlanLevel(view, levels) ?? (levels.length === 0 ? view.level : undefined);
       if (!range || !level) return null;
-      return { axis: 'down', position: worldToPercent(level.elevation + view.cutHeight, range), flipped: false };
+      const at = worldToPercent(level.elevation + view.cutHeight, range);
+      return view.reflected ? { axis: 'down', position: at, flipped: false, reflected: true } : { axis: 'down', position: at, flipped: false };
     }
     case 'section': {
       const { axis, offset, flipped, custom } = view.plane;

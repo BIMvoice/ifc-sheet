@@ -92,7 +92,7 @@ function applyRelativePlacement(
 }
 
 /** Resolve an IfcBuildingStorey placement origin through every PlacementRelTo hop. */
-function resolveStoreyOriginMeters(store: IfcDataStore, storeyId: number): Point3 | null {
+export function resolveStoreyOriginMeters(store: IfcDataStore, storeyId: number): Point3 | null {
   const storey = store.getEntity(storeyId);
   let placementId = entityRef(storey?.attributes?.[5]);
   if (placementId === null) return null;
