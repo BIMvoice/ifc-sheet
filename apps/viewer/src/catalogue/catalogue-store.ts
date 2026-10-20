@@ -8,7 +8,8 @@
  */
 
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
-import { DEFAULT_GRAPHIC_STANDARD, graphicStandardOf } from '@/drafting/graphic-standard';
+import { graphicStandardOf, knownGraphicStandard } from '@/drafting/graphic-standard';
+import { warnUnknownGraphicStandard } from '@/project/graphic-standard-notice';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { commitStandards } from '@/project/drafting-standards';
 import { useProjectStore, type ProjectState } from '@/project/project-store';
@@ -64,8 +65,11 @@ export function applyCatalogueImport(incoming: Catalogue, policy: ClashPolicy): 
   const { catalogue: merged, report } = mergeCatalogues(projectCatalogue(), incoming, policy);
   applyCatalogue(merged);
   // The pens of a graphic standard follow the clash policy like any definition: "keep mine" keeps a standard the project already chose.
-  if (incoming.graphicStandard && (policy !== 'mine' || !useProjectStore.getState().graphicStandard)) {
-    useProjectStore.setState({ graphicStandard: incoming.graphicStandard === DEFAULT_GRAPHIC_STANDARD.id ? undefined : incoming.graphicStandard, dirty: true });
+  // An id this app does not know is the default, as when a project file names one, and a toast says so.
+  if (incoming.graphicStandard !== undefined) {
+    const standard = knownGraphicStandard(incoming.graphicStandard);
+    if (standard.unknown) warnUnknownGraphicStandard(standard.unknown);
+    if (policy !== 'mine' || !useProjectStore.getState().graphicStandard) useProjectStore.setState({ graphicStandard: standard.id, dirty: true });
   }
   return report;
 }

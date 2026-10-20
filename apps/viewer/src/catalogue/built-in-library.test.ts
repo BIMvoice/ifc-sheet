@@ -6,7 +6,6 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { ROMANIAN_PRACTICE } from '@/drafting/graphic-standard';
 import { resetProject, useProjectStore } from '@/project/project-store';
-import { readStandards } from '@/project/standards-file';
 import { parseCatalogue, serializeCatalogue } from './catalogue-file';
 import { builtInLibrary, importCatalogueText } from './catalogue-store';
 
@@ -26,11 +25,6 @@ describe('a built-in graphic standard as a .bvlib', () => {
     assert.deepEqual(catalogue.layers, []);
   });
 
-  it('refuses a standard this app does not have, naming the field', () => {
-    const bad = JSON.stringify({ ...JSON.parse(file()), graphicStandard: 'iso-9999' });
-    assert.throws(() => parseCatalogue(bad), /\/graphicStandard/);
-  });
-
   it('importing it sets the project\'s standard; "keep mine" keeps one already chosen', () => {
     importCatalogueText(file(), 'mine');
     assert.equal(useProjectStore.getState().graphicStandard, 'ro-practice');
@@ -45,10 +39,3 @@ describe('a built-in graphic standard as a .bvlib', () => {
   });
 });
 
-describe('a project file naming a standard', () => {
-  it('keeps a known id and drops an unknown one (the sheets draw with the default)', () => {
-    assert.equal(readStandards({ graphicStandard: 'ro-practice' }).graphicStandard, 'ro-practice');
-    assert.equal('graphicStandard' in readStandards({ graphicStandard: 'from-the-future' }), false);
-    assert.equal('graphicStandard' in readStandards({}), false);
-  });
-});

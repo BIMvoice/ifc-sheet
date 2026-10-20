@@ -10,6 +10,8 @@ import { cleanup, render } from '@/test/render.js';
 import { addProjectSheet, addProjectView, resetProject, useProjectStore } from '@/project/project-store';
 import { setGraphicStandard } from '@/project/graphic-standard-actions';
 import { DEFAULT_GRAPHIC_STANDARD, ROMANIAN_PRACTICE } from '@/drafting/graphic-standard';
+import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, STANDARD } from '@/drafting/styles';
+import { currentStyles } from '@/drafting/session';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { SheetPaper } from './SheetPaper';
 import { sheetPrintHtml, sheetSvgText } from './sheet-export';
@@ -142,15 +144,32 @@ describe('choosing the Romanian-practice standard', () => {
     setGraphicStandard('default');
     const text = useProjectStore.getState();
     assert.equal(text.graphicStandard, undefined);
-    assert.deepEqual(text.textStyles, [DEFAULT_GRAPHIC_STANDARD.textStyles[0]]);
+    assert.deepEqual(text.textStyles, [DEFAULT_TEXT_STYLE]);
     const again = sheets.map((s) => sheetSvgText(drawn(s), s));
     assert.deepEqual(again, first);
   });
 
-  it('sets the annotation heights through the text styles', () => {
+  it('keeps the user\'s edited Standard styles through default -> preset -> default (PR #121 review)', () => {
+    const myText = { ...DEFAULT_TEXT_STYLE, height: 3.5, font: 'serif' as const };
+    const myDim = { ...DEFAULT_DIM_STYLE, arrow: 'dot' as const, arrowSize: 3 };
+    useProjectStore.setState({ textStyles: [myText], dimStyles: [myDim] });
+    setGraphicStandard('ro-practice');
+    let s = useProjectStore.getState();
+    assert.deepEqual(s.textStyles?.find((t) => t.id === STANDARD), myText, 'the preset does not overwrite Standard');
+    assert.deepEqual(s.dimStyles?.find((d) => d.id === STANDARD), myDim);
+    setGraphicStandard('default');
+    s = useProjectStore.getState();
+    assert.deepEqual(s.textStyles, [myText]);
+    assert.deepEqual(s.dimStyles, [myDim]);
+  });
+
+  it('adds the standard\'s styles and selects them for new annotations; the default selects Standard again', () => {
     setGraphicStandard('ro-practice');
     const s = useProjectStore.getState();
-    assert.deepEqual(s.textStyles?.map((t) => [t.id, t.height]), ROMANIAN_PRACTICE.textStyles.map((t) => [t.id, t.height]));
+    assert.deepEqual(s.textStyles?.map((t) => [t.id, t.height]), [[STANDARD, 2.5], ...ROMANIAN_PRACTICE.textStyles.map((t) => [t.id, t.height])]);
     assert.equal(s.graphicStandard, 'ro-practice');
+    assert.deepEqual(currentStyles(), ROMANIAN_PRACTICE.current);
+    setGraphicStandard('default');
+    assert.deepEqual(currentStyles(), { textStyle: STANDARD, dimStyle: STANDARD });
   });
 });

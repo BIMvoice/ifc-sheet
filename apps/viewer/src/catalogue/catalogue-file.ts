@@ -13,7 +13,6 @@
 
 import { readDraftLayer } from '@/drafting/draft-file';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
-import { GRAPHIC_STANDARDS } from '@/drafting/graphic-standard';
 import type { DraftLayer } from '@/drafting/types';
 import { readMaterial } from '@/project/project-file';
 import { readStandards } from '@/project/standards-file';
@@ -41,7 +40,7 @@ export interface Catalogue {
   symbols: DraftSymbol[];
   /** Legend configurations; a legend's `scopeId` is project-specific and never travels. */
   legends: ProjectLegend[];
-  /** A built-in graphic standard (pens and text sizes) the library ships with, by id (`drafting/graphic-standard.ts`). Only built-in library entries carry one. */
+  /** A built-in graphic standard (pens and text sizes) the library ships with, by id (`drafting/graphic-standard.ts`), as the file names it. Only built-in library entries carry one. */
   graphicStandard?: string;
 }
 
@@ -122,9 +121,9 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
   };
 }
 
+/** Kept as named: an id this app does not know is not an error here, it falls back to the default on import (`applyCatalogueImport`). */
 function knownStandard(v: unknown): string {
-  const known = GRAPHIC_STANDARDS.find((g) => g.id === v);
-  return known ? known.id : fail('/graphicStandard', `must be one of ${GRAPHIC_STANDARDS.map((g) => g.id).join(', ')}`, WHAT);
+  return typeof v === 'string' ? v : fail('/graphicStandard', 'must be a graphic standard id', WHAT);
 }
 
 function readMaterialStrict(v: unknown, path: string): ProjectMaterial {

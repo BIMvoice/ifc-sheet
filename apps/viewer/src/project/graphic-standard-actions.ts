@@ -4,13 +4,15 @@
 
 /**
  * Choosing the project's graphic standard (`drafting/graphic-standard.ts`):
- * the id is stored on the project, and the standard's text and dimension
- * styles replace the ones a built-in standard brought before (styles the
- * user made stay), re-fitting the heights of the annotations they govern.
+ * the id is stored on the project, the standard's own text and dimension
+ * styles are added (and those another standard brought, unedited, removed;
+ * the project's own styles are never overwritten), and the standard's styles
+ * become the ones new annotations take.
  */
 
 import { useMemo } from 'react';
 import { DEFAULT_GRAPHIC_STANDARD, graphicStandardOf, stylesUnder, type GraphicStandard } from '@/drafting/graphic-standard';
+import { setCurrentStyles } from '@/drafting/session';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { commitStandards } from './drafting-standards';
 import { useProjectStore } from './project-store';
@@ -27,4 +29,6 @@ export function setGraphicStandard(id: string): void {
   const s = useProjectStore.getState();
   const styles = stylesUnder(standard, s.textStyles?.length ? s.textStyles : [DEFAULT_TEXT_STYLE], s.dimStyles?.length ? s.dimStyles : [DEFAULT_DIM_STYLE]);
   commitStandards({ ...styles, graphicStandard: standard === DEFAULT_GRAPHIC_STANDARD ? undefined : standard.id });
+  const text = styles.textStyles.find((t) => t.id === standard.current.textStyle);
+  setCurrentStyles({ ...standard.current, ...(text ? { textHeightMm: text.height } : {}) });
 }
