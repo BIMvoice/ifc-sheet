@@ -26,6 +26,7 @@ export const wallEn = {
   'wall.group.plans': 'Plans',
   'wall.group.elevations': 'Elevations',
   'wall.group.sections': 'Sections',
+  'wall.group.interiors': 'Interior elevations',
   'wall.group.schedules': 'Schedules',
   'wall.group.legends': 'Legends',
   'wall.group.other': 'Other sheets',
@@ -150,6 +151,7 @@ export const wallEn = {
   'wall.legend.columns': 'Columns',
   'wall.legend.placed': 'Put on {number}.',
   'wall.fit': 'Fit',
+  'wall.withKey': '{name} ({keys})',
   'wall.tb.title': 'Title block',
   'wall.tb.everySheet': 'Filled once, printed on every sheet. A sheet can say otherwise from its own Title block button.',
   'wall.tb.sheetHint': 'What {number} prints. A field typed here is this sheet\'s own; the rest follow the project.',
@@ -173,4 +175,5 @@ export const wallEn = {
   'wall.project.joinerySchedule': 'Door and window schedule',
   'wall.project.addJoinery': '+ Door and window schedule',
   'wall.project.addTakeoff': '+ Material takeoff',
+  'wall.project.addTypeQuantities': '+ Quantities by type',
 } as const satisfies Record<string, TranslationValue>;
