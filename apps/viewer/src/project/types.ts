@@ -2,9 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import type { TitleSource } from './title-block-sources';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
-import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
+import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from '@/catalogue/types';
@@ -22,10 +23,13 @@ export type { AxonometricPreset, ThreeDProjection, ThreeDProjectView, ViewRaster
  * file kept next to the IFC files (`project-file.ts`).
  */
 
-import type { SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
+import type { SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectIssue } from '@/issue/types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
+
+export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './project-records';
 
 export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d' | 'drafting';
 
@@ -116,6 +120,8 @@ export interface PlanProjectView extends ProjectViewBase {
   level: ProjectLevel;
   /** Cut height above the level's floor, metres. */
   cutHeight: number;
+  /** The site plan: the ground storey's cut with the plot, setbacks and coordinates on it (`siteplan/`). */
+  site?: true;
   /** A discipline plan (structural, foundation, roof): it draws only the elements its discipline keeps (`discipline-views.ts`). */
   discipline?: DisciplineId;
   /**
@@ -207,12 +213,14 @@ export interface SheetViewport {
   center: { x: number; y: number } | null;
   /** Drafting layers this viewport hides, on top of its view's. */
   hiddenLayers?: string[];
+  /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
+  keyPlanOf?: string;
   /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
   drawingNumber?: string;
 }
 
 /** The groups of sheets a numbering scheme numbers apart: `other` is details and whatever fits no series. */
-export type NumberGroup = 'plans' | 'elevations' | 'sections' | 'interiors' | 'details' | 'schedules' | 'other';
+export type NumberGroup = 'general' | 'plans' | 'elevations' | 'sections' | 'interiors' | 'details' | 'schedules' | 'other';
 
 /** How one group's numbers are written: `<discipline><prefix><separator><n padded to digits>`, `n` running from `start` by `step`. */
 export interface GroupPattern {
@@ -277,73 +285,6 @@ export interface ProjectSchedule {
   scale?: number;
 }
 
-/** A road drawing (longitudinal profile or cross-section set) of a corridor: a project document of its own, placeable on sheets or drawn on a plan. */
-export interface ProjectCivilDrawing {
-  id: string;
-  name: string;
-  kind: 'profile' | 'sections';
-  createdAt: number;
-  /** The corridor it draws, by GlobalId (in whichever loaded model has it). */
-  corridorGlobalId: string;
-  /** Drawing scale denominator (profile: horizontal). */
-  scale: number;
-  /** Profile: vertical exaggeration, grid steps. */
-  vExaggeration?: number;
-  stationStep?: number;
-  elevationStep?: number;
-  /** Sections: sample spacing or explicit stations, layout columns, half width shown (0: automatic). */
-  every?: number;
-  stations?: number[];
-  columns?: number;
-  halfWidth?: number;
-}
-
-/**
- * How a building material draws where a view cuts it (ArchiCAD's Building
- * Materials): matched by IfcMaterial name. `hatch` null draws no hatch,
- * absent takes the default its name suggests; a membrane (or any layer under
- * 2 mm) draws as a heavy dashed line instead of a band.
- */
-export interface ProjectMaterial {
-  id: string;
-  name: string;
-  hatch?: string | null;
-  /** 1 = the pattern's own size. */
-  hatchScale?: number;
-  /** Cut fill colour; null: none (white), absent: the material's IFC colour. */
-  fill?: string | null;
-  /** Pen of the hatch lines. */
-  hatchPen?: CategoryLineWeight;
-  membrane?: boolean;
-}
-
-/** The subset of a section plane that defines the cut itself, not its on-screen lifecycle. */
-export interface SavedSectionCutPlane {
-  axis: SectionPlaneAxis;
-  position: number;
-  flipped: boolean;
-  custom?: SectionPlane['custom'];
-  capStyle: SectionCapStyle;
-  showCap: boolean;
-  showOutlines: boolean;
-}
-
-/** A named section cut kept in the project, to put back on screen later. */
-export interface SavedSectionCut {
-  id: string;
-  name: string;
-  plane: SavedSectionCutPlane;
-  createdAt: number;
-  updatedAt: number;
-}
-
-/** A typical road cross-section (assembly) kept in the project's library. */
-export interface ProjectTypicalSection {
-  id: string;
-  name: string;
-  assembly: AssemblySpec;
-}
-
 export interface ProjectDocument {
   name: string;
   models: ProjectModelRef[];
@@ -351,6 +292,8 @@ export interface ProjectDocument {
   sheets: ProjectSheet[];
   /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
   titleBlock?: Record<string, string>;
+  /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
+  titleBlockSources?: Record<string, TitleSource[]>;
   /** Drafted geometry, each entity on one view (phase 4). */
   drafts: DraftEntity[];
   draftLayers: DraftLayer[];

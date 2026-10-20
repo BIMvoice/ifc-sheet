@@ -39,7 +39,7 @@ export interface ProjectState extends ProjectDocument {
 export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visible: true, locked: false } as const;
 
 export const EMPTY_PROJECT: ProjectDocument = {
-  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
+  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
   annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined,
@@ -67,6 +67,7 @@ const DOCUMENT_FIELDS = {
   cadLayers: true,
   details: true,
   tagFields: true,
+  titleBlockSources: true,
   sheetNumbering: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
@@ -134,6 +135,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     tagFields: doc.tagFields,
     sheetNumbering: doc.sheetNumbering,
     modelState: doc.modelState,
+    titleBlockSources: doc.titleBlockSources,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
