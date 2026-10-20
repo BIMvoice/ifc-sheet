@@ -1,0 +1,250 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# Checks every pull request gets: typecheck, tests, the gate scripts and, when
+# Rust changed, cargo clippy and cargo test (#66).
+#
+# No secrets are used, so Dependabot and fork pull requests run the same checks.
+# Nothing here is continue-on-error: a failing test is a red check.
+#
+# The gate scripts are compared against the pull request's base commit (see
+# scripts/ci-gates-vs-base.mjs): some of them already fail on main, and a pull
+# request should fail only for what it adds.
+#
+# To make these required, add the check names to the `main` ruleset (repository
+# setting, not code): Build wasm, Typecheck, Package tests, Viewer tests
+# (shard 0..7), Gates vs base, Rust.
+#
+# Deliberately out of scope for now (follow-up): the other scripts/check-*
+# gates (`pnpm lint`: changesets, i18n literals, jsx-a11y; check-refwalk-guards,
+# check-api-surface, the docs checks) and the scripts/*.test.mjs files except
+# the gate comparison's own. Only check-module-size, check-test-wiring and
+# check-source-text-assertions are compared here.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # The merge queue builds a temporary branch per entry; CI must run there too.
+  merge_group:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The engine (packages/wasm/pkg) is not committed and IfcSheet's Rust differs
+  # from the published @ifc-lite/wasm, so it is built from source once here and
+  # handed to the jobs below as an artifact.
+  wasm:
+    name: Build wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-wasm-build
+        with:
+          cache-prefix: ci-wasm
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ifc-lite/wasm build
+
+      - name: The build produced the runtime and its types
+        run: test -f packages/wasm/pkg/ifc-lite_bg.wasm && test -f packages/wasm/pkg/ifc-lite.d.ts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+          retention-days: 3
+
+  typecheck:
+    name: Typecheck
+    needs: wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+      - run: pnpm turbo run build --filter='./packages/*'
+      - run: pnpm typecheck
+
+  package-tests:
+    name: Package tests
+    needs: wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+      - run: pnpm turbo run build --filter='./packages/*'
+      - run: pnpm turbo run test --filter='./packages/*'
+
+  # The viewer suite is about 15k tests, so it is split by test file across
+  # eight runners (TEST_SHARD / TEST_SHARDS, see apps/viewer/package.json).
+  viewer-tests:
+    name: Viewer tests (shard ${{ matrix.shard }})
+    needs: wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      TEST_SHARD: ${{ matrix.shard }}
+      TEST_SHARDS: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+      - run: pnpm turbo run build --filter='./packages/*'
+      - name: Viewer tests
+        working-directory: apps/viewer
+        run: pnpm test
+
+  gates:
+    name: Gates vs base
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # A second checkout of the commit the pull request branched from. The
+      # script runs every gate in both trees and fails only on output lines the
+      # base did not print.
+      - name: Check out the base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+
+      - name: The gate comparison itself
+        run: node --test scripts/ci-gates-vs-base.test.mjs
+
+      - name: Gates, head against base
+        run: node scripts/ci-gates-vs-base.mjs "$RUNNER_TEMP/base"
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Pushes to main always run; a pull request runs only when it touches
+      # Rust, the lockfile, the pinned toolchain, .cargo/, the shared wasm
+      # build action or this workflow.
+      - name: Did Rust change?
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BASE_SHA" HEAD | grep -E '^(rust/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|\.cargo/|\.github/actions/setup-wasm-build/|\.github/workflows/ci\.yml$)'; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "rust=false" >> "$GITHUB_OUTPUT"
+            echo "No Rust changes; skipping."
+          fi
+
+      # rust-toolchain.toml pins the nightly; `rustup show` installs it.
+      - name: Setup Rust (pinned by rust-toolchain.toml)
+        if: steps.changes.outputs.rust == 'true'
+        run: rustup show
+
+      - name: Cargo cache
+        if: steps.changes.outputs.rust == 'true'
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          shared-key: ci
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # On main today the test targets of ifc-lite-processing do not compile:
+      # its sources include docs/architecture/evidence/*.json, which is not
+      # committed (12 errors). So that crate's test targets are left out of both
+      # commands below, and its library and binaries are still linted. Put it
+      # back (drop the --exclude, and fold the first clippy step into the
+      # second) once those files are committed or the includes are removed.
+      - name: cargo clippy (ifc-lite-processing, library and binaries)
+        if: steps.changes.outputs.rust == 'true'
+        run: cargo clippy -p ifc-lite-processing -- -D warnings
+
+      - name: cargo clippy (everything else, all targets)
+        if: steps.changes.outputs.rust == 'true'
+        run: cargo clippy --workspace --exclude ifc-lite-processing --all-targets -- -D warnings
+
+      - name: cargo test
+        if: steps.changes.outputs.rust == 'true'
+        run: cargo test --workspace --exclude ifc-lite-processing
