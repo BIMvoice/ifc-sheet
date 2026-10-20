@@ -21,6 +21,7 @@ import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { upgradeTagAllTypes } from '@/tagall/types';
 import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
@@ -39,8 +40,8 @@ export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visib
 export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
-  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], issues: [], sheetNumbering: undefined, modelState: undefined,
+  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
+  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -62,6 +63,8 @@ const DOCUMENT_FIELDS = {
   schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
   typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
   modelState: true,
+  cadLayers: true,
+  tagFields: true,
   sheetNumbering: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
@@ -78,6 +81,7 @@ const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[
   schedules: () => [], joineryMapping: () => ({ ...DEFAULT_JOINERY_MAPPING }), elementTypes: () => [], currentTypes: () => ({}),
   structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], savedSectionCuts: () => [],
   annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [],
+  cadLayers: () => [],
 };
 
 /** The persisted part of the store. */
@@ -116,11 +120,14 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     civilDrawings: doc.civilDrawings ?? [],
     typicalSections: doc.typicalSections ?? [],
     materials: doc.materials ?? [],
+    cadLayers: doc.cadLayers ?? [],
     savedSectionCuts: doc.savedSectionCuts ?? [],
-    annotationTypes: doc.annotationTypes ?? [],
+    // A project made before the room label read the tag name takes the new template (`tagall/types.ts`).
+    annotationTypes: upgradeTagAllTypes(doc.annotationTypes ?? []),
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
     issues: doc.issues ?? [],
+    tagFields: doc.tagFields,
     sheetNumbering: doc.sheetNumbering,
     modelState: doc.modelState,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
@@ -298,7 +305,7 @@ function sameLevels(a: readonly ProjectLevel[], b: readonly ProjectLevel[]): boo
   return a.length === b.length && a.every((l, i) => l.name === b[i].name && l.elevation === b[i].elevation);
 }
 
-// A detail mark's label is the detail's number and the number of the sheet it is on: derived, so it follows
+// A detail mark's label is the detail's drawing number on its sheet and that sheet's number: derived, so it follows
 // a sheet's renumbering or the detail's placement without anyone editing the text.
 useProjectStore.subscribe((state, previous) => {
   if (state.sheets === previous.sheets && state.views === previous.views && state.drafts === previous.drafts) return;

@@ -67,8 +67,9 @@ export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number;
 }
 
 /** The drawing area of a sheet, paper mm: inside the frame, above the title block. */
-export function drawingArea(paper: PaperSize = SET_PAPER): { x: number; y: number; w: number; h: number } {
-  const { w, h } = PAPER_MM[paper];
+export function drawingArea(paper: PaperSize = SET_PAPER, orientation: 'landscape' | 'portrait' = 'landscape'): { x: number; y: number; w: number; h: number } {
+  const base = PAPER_MM[paper];
+  const { w, h } = orientation === 'landscape' ? base : { w: base.h, h: base.w };
   return { x: FRAME_MARGIN_MM, y: FRAME_MARGIN_MM, w: w - FRAME_MARGIN_MM * 2, h: h - FRAME_MARGIN_MM * 2 - TITLE_BLOCK_MM.h };
 }
 

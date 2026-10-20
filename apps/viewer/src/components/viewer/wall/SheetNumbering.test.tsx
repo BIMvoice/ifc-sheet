@@ -79,7 +79,7 @@ describe('switching to A01, A02', () => {
     const before = numbers();
     const mark = () => state().drafts.flatMap((d) => (d.shape.type === 'text' && d.params.detailOf === detailId ? [d.shape.text] : []));
     assert.deepEqual(mark(), ['1/A-901']);
-    const issue = issueRecord(planIssue(state().sheets, { documents: [], drafts: state().drafts }, { name: 'Planning', date: '2026-10-19', listFirst: true }), 'iss1', 1);
+    const issue = issueRecord(planIssue(state().sheets, { documents: [], drafts: state().drafts, views: state().views, sheets: state().sheets }, { name: 'Planning', date: '2026-10-19', listFirst: true }), 'iss1', 1);
     useProjectStore.setState({ issues: [issue] });
 
     const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
@@ -100,7 +100,7 @@ describe('switching to A01, A02', () => {
       assert.ok(!before.some((old) => svg.includes(`>${old}</text>`)), `${s.number} prints no old number`);
     }
     // the drawing list of a new issue
-    const plan2 = planIssue(state().sheets, { documents: [], drafts: state().drafts }, { name: 'Next', date: '2026-10-20', listFirst: true });
+    const plan2 = planIssue(state().sheets, { documents: [], drafts: state().drafts, views: state().views, sheets: state().sheets }, { name: 'Next', date: '2026-10-20', listFirst: true });
     const list = drawingListCsv(plan2, LABELS);
     for (const s of plan2.sheets) assert.ok(list.includes(s.sheet.number));
     for (const old of before) assert.ok(!list.includes(`${old},`), `the list names no ${old}`);
@@ -201,7 +201,7 @@ describe('numbers typed before numbering schemes', () => {
 
 describe('renumbering issued sheets', () => {
   it('needs a confirmation: without one nothing changes', () => {
-    const issue = issueRecord(planIssue(state().sheets, { documents: [], drafts: state().drafts }, { name: 'Planning', date: '2026-10-19', listFirst: true }), 'iss1', 1);
+    const issue = issueRecord(planIssue(state().sheets, { documents: [], drafts: state().drafts, views: state().views, sheets: state().sheets }, { name: 'Planning', date: '2026-10-19', listFirst: true }), 'iss1', 1);
     useProjectStore.setState({ issues: [issue] });
     const before = numbers();
     assert.equal(renumberAll(SEQUENTIAL_SCHEME, 'keep'), null);

@@ -19,7 +19,8 @@ import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { addProjectView, setActiveProjectItem, useProjectStore } from './project-store';
 import { projectPlaneFromSection, sectionPlaneForView } from './view-plane';
 import { closeDocumentTab, isDrawingTabActive, MODEL_TAB_ID, showDocumentTab, useDocumentTabs, WALL_TAB_ID } from './document-tabs';
-import type { ProjectView } from './types';
+import { DEFAULT_AXONOMETRIC_PRESET } from './axonometric';
+import type { AxonometricPreset, ProjectView } from './types';
 
 export type OpenViewResult = 'opened' | 'unresolved' | 'missing';
 
@@ -140,5 +141,11 @@ export function saveLiveSectionAsView(name = 'Section'): string | null {
 export function saveLiveCameraAsView(name = '3D View'): string | null {
   const viewpoint = useViewerStore.getState().cameraCallbacks.getViewpoint?.() ?? null;
   if (!viewpoint) return null;
-  return addProjectView({ kind: '3d', name, viewpoint });
+  // An orthographic camera is a parallel projection, which has a true scale; a perspective prints as an image.
+  return addProjectView({ kind: '3d', name, viewpoint, projection: viewpoint.projectionMode === 'orthographic' ? 'axonometric' : 'perspective', scale: 200 });
+}
+
+/** A new axonometric seen from a preset corner of the model, at 1:200. Needs no camera. */
+export function saveAxonometricView(name = 'Axonometric', preset: AxonometricPreset = DEFAULT_AXONOMETRIC_PRESET): string {
+  return addProjectView({ kind: '3d', name, viewpoint: null, projection: 'axonometric', preset, scale: 200 });
 }
