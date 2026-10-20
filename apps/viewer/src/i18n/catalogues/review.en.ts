@@ -32,4 +32,5 @@ export const reviewEn = {
   'review.bcf.none': 'No comment sits on a model element, so there is nothing to export.',
   'review.bcf.imported': '{count} topics became comments and {merged} brought replies or a status to comments already here; {unplaced} show no element on any sheet and were left out.',
   'review.bcf.failed': 'Could not read that BCF file.',
+  'review.bcf.exportFailed': 'The BCF file could not be written: {reason}',
 } as const satisfies Record<string, TranslationValue>;

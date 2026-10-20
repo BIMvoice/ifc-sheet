@@ -47,10 +47,16 @@ export function CommentsSection({ onGo }: { onGo: (sheetId: string) => void }) {
     // The GUIDs go out once and are kept in the project, so the next export updates the same topics.
     const guided = withBcfGuids(state.comments ?? []);
     if (guided.changed) useProjectStore.setState({ comments: guided.comments, dirty: true });
-    const viewer = useViewerStore.getState();
-    const project = commentsToBcf(guided.comments, { sheets: state.sheets, drawingOf, worldOffset: bcfWorldOffset(viewer.models, viewer.geometryResult), projectName: state.name });
-    downloadBlob(await writeBCF(project), `${sanitizeFilename(state.name, { fallback: 'project' })}-comments.bcfzip`);
-    setNote(t('review.bcf.exported', { count: onElement.length, total: comments.length }));
+    try {
+      const viewer = useViewerStore.getState();
+      const project = commentsToBcf(guided.comments, { sheets: state.sheets, drawingOf, worldOffset: bcfWorldOffset(viewer.models, viewer.geometryResult), projectName: state.name });
+      downloadBlob(await writeBCF(project), `${sanitizeFilename(state.name, { fallback: 'project' })}-comments.bcfzip`);
+      setNote(t('review.bcf.exported', { count: onElement.length, total: comments.length }));
+    } catch (err) {
+      // The writer refuses what BCF cannot hold (a missing author or date, a number that is not finite) and says which.
+      console.warn('[ifcsheet] could not write the BCF file', err);
+      setNote(t('review.bcf.exportFailed', { reason: err instanceof Error ? err.message : String(err) }));
+    }
   };
   const importBcf = async (file: File): Promise<void> => {
     try {

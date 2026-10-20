@@ -60,6 +60,29 @@ describe('exporting BCF from the drawer', () => {
   });
 });
 
+describe('a BCF file that cannot be written', () => {
+  it('says so in the drawer instead of failing out of sight (item 5)', async () => {
+    // A point the writer refuses: BCF numbers must be finite.
+    useProjectStore.setState({ comments: [{ ...onElement, point: { x: Number.POSITIVE_INFINITY, y: 2 } }] });
+    const failures: unknown[] = [];
+    const onRejection = (err: unknown) => failures.push(err);
+    process.on('unhandledRejection', onRejection);
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      const ui = render(<CommentsSection onGo={() => {}} />);
+      click(button(ui, 'Export BCF'));
+      await waitFor(() => /could not be written/.test(ui.querySelector('output')?.textContent ?? '') || failures.length > 0, 'a word about it');
+      assert.deepEqual(failures, [], 'no unhandled rejection');
+      assert.match(ui.querySelector('output')?.textContent ?? '', /could not be written/);
+      assert.equal(saved.length, 0, 'nothing downloaded');
+    } finally {
+      process.off('unhandledRejection', onRejection);
+      console.warn = warn;
+    }
+  });
+});
+
 const choose = async (ui: HTMLElement, file: Blob) => {
   const input = ui.querySelector<HTMLInputElement>('input[type="file"]');
   assert.ok(input);
