@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import '@/test/setup-dom.js';
 import { afterEach, mock, test } from 'node:test';
+import { evidenceSkip } from '@/test/evidence-fixture.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { act, useState } from 'react';
@@ -56,7 +57,7 @@ async function fixture() {
   setGlobalRendererRef({ current: { hasActiveClipping: () => false } as Renderer });
   return { session, result, assetId: asset.id, restoreCanvas: () => Object.defineProperty(globalThis, 'OffscreenCanvas', { configurable: true, writable: true, value: canvas }) };
 }
-test('mounted transfer keeps expected validation translatable across live locale changes #4918', async () => {
+test('mounted transfer keeps expected validation translatable across live locale changes #4918', { skip: evidenceSkip('scan-alignment-workbench/good.json') }, async () => {
   const f = await fixture(), descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
   Object.defineProperty(globalThis, 'Worker', { configurable: true, writable: true, value: HeldWorker });
   setGlobalRendererRef({ current: null });
@@ -87,7 +88,7 @@ test('mounted transfer keeps expected validation translatable across live locale
   }
 });
 
-for (const reason of ['cancel', 'settings', 'stale', 'removed'] as const) test(`mounted transfer ${reason} stops pending work and ignores late completion #4381`, async () => {
+for (const reason of ['cancel', 'settings', 'stale', 'removed'] as const) test(`mounted transfer ${reason} stops pending work and ignores late completion #4381`, { skip: evidenceSkip('scan-alignment-workbench/good.json') }, async () => {
   const f = await fixture(), workers: HeldWorker[] = [], descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
   Object.defineProperty(globalThis, 'Worker', { configurable: true, writable: true, value: class extends HeldWorker { constructor() { super(); workers.push(this); } } });
   let read: ReturnType<typeof useScanTransfer> | undefined;
