@@ -17,6 +17,7 @@ import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
+import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { liftTypedRevisions } from './revisions';
@@ -86,6 +87,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
   // print what they printed, so a sheet unchanged since the last issue still reads unchanged at the next one.
   const titled = liftSheetTitleBlocks(saved);
   const doc = carryIssueFingerprints(titled, liftTypedRevisions(titled, () => freshProjectId('revision')));
+  resetWallView();
   useProjectStore.setState({
     ...doc,
     symbolFlips: doc.symbolFlips ?? {},
@@ -136,6 +138,7 @@ export function syncProjectWithModels(models: ProjectModelRef[], storeys: readon
 }
 
 export function resetProject(): void {
+  resetWallView();
   useProjectStore.setState({ ...EMPTY_PROJECT, activeItemId: null, dirty: false });
 }
 
@@ -248,7 +251,7 @@ export function duplicateProjectSheet(id: string): string | null {
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;
   const held = state.views.find((v) => v.id === source.viewports?.[0]?.viewId);
-  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held?.kind)), name: `${source.name} Copy`, createdAt: Date.now() };
+  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held)), name: `${source.name} Copy`, createdAt: Date.now() };
   const at = state.sheets.indexOf(source) + 1;
   useProjectStore.setState({ sheets: [...state.sheets.slice(0, at), copy, ...state.sheets.slice(at)], dirty: true });
   return copy.id;

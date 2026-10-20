@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
+import { isSetSheet } from '@/project/drawing-set';
 import { sectionProposals, startDrawingSet } from '@/project/drawing-set-actions';
 import { setExtent } from '@/draft-set/body';
 import { useProjectStore } from '@/project/project-store';
@@ -39,10 +40,11 @@ export function WallView() {
   const [intro, setIntro] = useState(false);
   const { stepped, focus, visit, drawer, panel } = useWallNav();
 
-  // A model on a project with no sheets: lay the set out as soon as the geometry is in.
+  // A model on a project with no set sheets (interior elevations alone do not count): lay the set out as soon as the geometry is in.
+  const hasSet = sheets.some(isSetSheet);
   useEffect(() => {
-    if (sheets.length === 0 && meshes && meshes.length > 0 && startDrawingSet(meshes, extent)) setIntro(true);
-  }, [sheets.length, meshes, extent]);
+    if (!hasSet && meshes && meshes.length > 0 && startDrawingSet(meshes, extent)) setIntro(true);
+  }, [hasSet, meshes, extent]);
 
   // The proposals read the lowest plan's rooms; they change only with the model or the plans.
   const proposals = useMemo(() => sectionProposals(meshes, extent), [meshes, extent, views]);

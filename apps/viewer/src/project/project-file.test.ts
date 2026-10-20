@@ -12,7 +12,7 @@ import { describe, it } from 'node:test';
 import { defaultWindowSpec } from '@ifc-lite/create';
 import assert from 'node:assert/strict';
 import { parseProjectFile, serializeProject } from './project-file.js';
-import type { ProjectDocument } from './types.js';
+import type { ProjectDocument, ProjectSchedule } from './types.js';
 
 const doc: ProjectDocument = {
   name: 'House',
@@ -92,4 +92,17 @@ describe('project file', () => {
   it('reports invalid JSON', () => {
     assert.throws(() => parseProjectFile('{'), /invalid JSON/);
   });
+});
+
+// Review of #108: a kind the reader does not list reopens as a joinery list ('all') with no error.
+// The record is keyed by the kind union, so a new kind does not compile until it is listed here.
+const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true };
+
+describe('schedule kinds', () => {
+  for (const kind of Object.keys(SCHEDULE_KINDS) as ProjectSchedule['kind'][]) {
+    it(`a '${kind}' schedule reopens as '${kind}'`, () => {
+      const saved: ProjectDocument = { ...doc, schedules: [{ id: 'k', name: 'Schedule', kind, createdAt: 1 }] };
+      assert.equal(parseProjectFile(serializeProject(saved)).schedules?.[0]?.kind, kind);
+    });
+  }
 });

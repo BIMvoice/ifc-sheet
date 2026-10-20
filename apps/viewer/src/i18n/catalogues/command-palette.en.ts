@@ -124,6 +124,8 @@ export const commandPaletteEn = {
 
   // ── Category headers (browse mode) ──
   'commandPalette.category.recent': 'Recent',
+  'commandPalette.category.sheets': 'Sheets',
+  'commandPalette.category.wall': 'The Wall',
   'commandPalette.category.file': 'File',
   'commandPalette.category.view': 'View',
   'commandPalette.category.tools': 'Tools',

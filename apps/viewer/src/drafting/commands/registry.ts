@@ -15,6 +15,7 @@ import { tagCommand } from './tag';
 import { labelAllCommand, labelCommand } from './label';
 import { dimAllCommand } from './dimall';
 import { tagAllCommand } from './tagall';
+import { ceilTagCommand } from './ceiltag';
 import { levelAllCommand } from './level-all';
 import { levelAlignCommand } from './level-align';
 import { SYMBOL_COMMANDS } from './symbol';
@@ -23,7 +24,7 @@ import { whatChangedCommand } from './whatchanged';
 import { revCloudCommand } from './revcloud';
 import type { DraftCommandDef } from './types';
 
-export const DRAFT_COMMANDS: readonly DraftCommandDef[] = [...DRAW_COMMANDS, ...MODIFY_COMMANDS, ...EDIT_COMMANDS, ...ANNOTATE_COMMANDS, sectionLineCommand, detailCommand, tagCommand, labelCommand, labelAllCommand, tagAllCommand, dimAllCommand, levelAlignCommand, levelAllCommand, checkSetCommand, draftSetCommand, issueCommand, whatChangedCommand, revCloudCommand, ...SYMBOL_COMMANDS];
+export const DRAFT_COMMANDS: readonly DraftCommandDef[] = [...DRAW_COMMANDS, ...MODIFY_COMMANDS, ...EDIT_COMMANDS, ...ANNOTATE_COMMANDS, sectionLineCommand, detailCommand, tagCommand, labelCommand, labelAllCommand, tagAllCommand, ceilTagCommand, dimAllCommand, levelAlignCommand, levelAllCommand, checkSetCommand, draftSetCommand, issueCommand, whatChangedCommand, revCloudCommand, ...SYMBOL_COMMANDS];
 
 const BY_ID = new Map(DRAFT_COMMANDS.map((c) => [c.id, c]));
 const BY_ALIAS = new Map(DRAFT_COMMANDS.flatMap((c) => c.aliases.map((a) => [a, c] as const)));
