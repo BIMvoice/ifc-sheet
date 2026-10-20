@@ -20,6 +20,7 @@ export const wallEn = {
   'wall.group.plans': 'Plans',
   'wall.group.elevations': 'Elevations',
   'wall.group.sections': 'Sections',
+  'wall.group.interiors': 'Interior elevations',
   'wall.group.schedules': 'Schedules',
   'wall.group.other': 'Other sheets',
   'wall.hint': 'Hover a sheet to remove it. Double-click to step into it. Everything stays in view: there are no tabs and no tree.',
