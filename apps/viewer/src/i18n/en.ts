@@ -76,6 +76,7 @@ import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
 import { printPreviewEn } from './catalogues/print-preview.en';
 import { wallEn } from './catalogues/wall.en';
+import { sitePlanEn } from './catalogues/site-plan.en';
 import { ifcsheetTourEn } from './catalogues/ifcsheet-tour.en';
 import { wallFindEn } from './catalogues/wall-find.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
@@ -263,6 +264,7 @@ export const en = {
   ...settingsEn,
   ...printPreviewEn,
   ...wallEn,
+  ...sitePlanEn,
   ...ifcsheetTourEn,
   ...wallFindEn,
   ...whatChangedEn,
