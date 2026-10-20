@@ -9,9 +9,10 @@
  * time it is wanted.
  */
 
-import { sheetGroup, type SetGroup } from './drawing-set';
+import { drawingArea, SET_PAPER, sheetGroup, type SetGroup } from './drawing-set';
+import { registerFit, type RegisterFit } from '@/joinery/register-layout';
 import { titleBlockOf } from './title-block';
-import type { ProjectIssue, ProjectSchedule, ProjectSheet } from './types';
+import type { PaperSize, ProjectIssue, ProjectSchedule, ProjectSheet } from './types';
 
 export interface RegisterRow {
   number: string;
@@ -45,6 +46,33 @@ export const notDrawingIds = (schedules: RegisterInput['schedules']): ReadonlySe
 export function holdsRegister(sheet: Pick<ProjectSheet, 'viewports'>, schedules: RegisterInput['schedules']): boolean {
   const ids = new Set((schedules ?? []).filter((s) => s.kind === 'register').map((s) => s.id));
   return (sheet.viewports ?? []).some((v) => ids.has(v.viewId));
+}
+
+/** The sheets that hold the register `registerId`, by the page each shows: its own sheet first, then its continuation sheets. */
+export function registerHolders<S extends Pick<ProjectSheet, 'viewports'>>(sheets: readonly S[], registerId: string): S[] {
+  const pageOf = (s: S) => (s.viewports ?? []).find((vp) => vp.viewId === registerId)?.page ?? 0;
+  return sheets.filter((s) => (s.viewports ?? []).some((vp) => vp.viewId === registerId)).sort((a, b) => pageOf(a) - pageOf(b));
+}
+
+/**
+ * The paper every page of the register `registerId` is fitted to: its own
+ * (first) sheet's, never that of the sheet drawing a page. `syncRegisterPages`
+ * counts the pages on it and every sheet draws its page on it
+ * (`registerSheetFit`), so a page can neither repeat nor skip rows when the
+ * sheets' papers differ.
+ */
+export function registerPaper(sheets: readonly Pick<ProjectSheet, 'viewports' | 'paper'>[], registerId: string): PaperSize {
+  return registerHolders(sheets, registerId)[0]?.paper ?? SET_PAPER;
+}
+
+/** How a register of `rows` rows is split into pages: on `registerPaper`, for every one of its sheets. */
+export function registerSheetFit(rows: number, sheets: readonly Pick<ProjectSheet, 'viewports' | 'paper'>[], registerId: string): RegisterFit {
+  return registerFitOn(rows, registerPaper(sheets, registerId));
+}
+
+/** `registerSheetFit` for a caller that already holds `registerPaper(sheets, registerId)`. */
+export function registerFitOn(rows: number, paper: PaperSize): RegisterFit {
+  return registerFit(rows, drawingArea(paper).h);
 }
 
 export function inSetOrder<S extends Pick<ProjectSheet, 'number' | 'viewports'>>(sheets: readonly S[], schedules?: RegisterInput['schedules']): S[] {

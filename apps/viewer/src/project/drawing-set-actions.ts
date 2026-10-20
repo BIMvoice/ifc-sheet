@@ -17,7 +17,7 @@ import type { AxisBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
 import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { addSchedule } from '@/joinery/schedules';
-import { registerFit } from '@/joinery/register-layout';
+import { registerHolders, registerSheetFit } from './drawing-register';
 import { proposalInputForLevel } from './model-rooms';
 import { addProjectView, updateProjectView, useProjectStore } from './project-store';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
@@ -312,7 +312,7 @@ export function addRegisterToSet(name: string): string {
 
 /**
  * The register's sheets, its own first and then its continuation sheets by
- * page: as many as `registerFit` needs for a row per sheet of the set, the
+ * page: as many as `registerSheetFit` needs for a row per sheet of the set, the
  * continuation sheets counted. A continuation sheet is numbered after the
  * register's own (A-000.1, A-000.2…, skipping a number another sheet has) and
  * holds the register's next page; one no longer needed is removed. Runs
@@ -323,15 +323,14 @@ export function syncRegisterPages(): void {
   const register = schedules?.find((s) => s.kind === 'register');
   if (!register) return;
   const pageOf = (s: ProjectSheet) => (s.viewports ?? []).find((vp) => vp.viewId === register.id)?.page ?? 0;
-  const holders = sheets.filter((s) => (s.viewports ?? []).some((vp) => vp.viewId === register.id)).sort((a, b) => pageOf(a) - pageOf(b));
+  const holders = registerHolders(sheets, register.id);
   const first = holders[0];
   if (!first) return;
   const others = sheets.length - holders.length;
-  const areaH = drawingArea(first.paper ?? SET_PAPER).h;
   // Each continuation sheet is a row of the register too: settle on a count that holds itself.
   let pages = 1;
   for (let i = 0; i < 8; i++) {
-    const need = registerFit(others + pages, areaH).pages;
+    const need = registerSheetFit(others + pages, sheets, register.id).pages;
     if (need === pages) break;
     pages = need;
   }
@@ -351,8 +350,10 @@ export function syncRegisterPages(): void {
     });
   }
   // A continuation sheet removed by hand leaves a gap: the ones kept show pages 0, 1, 2… in order.
-  const renumbered = new Map(keep.flatMap((s, i) => (pageOf(s) === i ? [] : [[s.id, {
-    ...s, viewports: (s.viewports ?? []).map((vp) => (vp.viewId !== register.id ? vp : i === 0 ? (({ page: _p, ...rest }) => rest)(vp) : { ...vp, page: i })),
+  // Every page is fitted to the first sheet's paper (`registerSheetFit`): a continuation sheet takes that paper too, so its page stays on it.
+  const renumbered = new Map(keep.flatMap((s, i) => (pageOf(s) === i && (i === 0 || (s.paper === first.paper && s.orientation === first.orientation)) ? [] : [[s.id, {
+    ...s, ...(i === 0 ? {} : { paper: first.paper, orientation: first.orientation }),
+    viewports: (s.viewports ?? []).map((vp) => (vp.viewId !== register.id ? vp : i === 0 ? (({ page: _p, ...rest }) => rest)(vp) : { ...vp, page: i })),
   }] as const])));
   if (added.length === 0 && gone.size === 0 && renumbered.size === 0) return;
   useProjectStore.setState({ sheets: [...sheets.filter((s) => !gone.has(s.id)).map((s) => renumbered.get(s.id) ?? s), ...added], dirty: true });

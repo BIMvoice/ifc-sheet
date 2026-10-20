@@ -22,7 +22,7 @@ import { addSchedule } from '@/joinery/schedules.js';
 import { addRegisterToSet, hangSchedule, registerNumber } from './drawing-set-actions.js';
 import { addProjectSheet, resetProject, setSheetNumber, useProjectStore } from './project-store.js';
 import { renameProjectItem } from './project-store.js';
-import { setTitleBlockField } from './sheets.js';
+import { setTitleBlockField, updateSheet } from './sheets.js';
 import { defaultViews } from './view-defaults.js';
 import type { ProjectSheet } from './types';
 
@@ -125,6 +125,25 @@ describe('the register follows the set', () => {
     ] as never;
     const out = drawingRegisterRows({ sheets: useProjectStore.getState().sheets, issues });
     assert.deepEqual(out.filter((r) => r.date).map((r) => [r.number, r.date]), [['A-101', '2026-10-01'], ['A-201', '2026-10-01']]);
+  });
+
+  it('redraws the dates on the register sheet when an issue is made, through the row cache', () => {
+    const register = useProjectStore.getState().sheets.find((x) => x.number === 'A-000');
+    assert.ok(register);
+    let texts: string[] = [];
+    function Page() {
+      const sheet = useProjectStore((s) => s.sheets.find((x) => x.id === register?.id)) ?? register!;
+      texts = [...useSheetSchedules(sheet).values()].flatMap((l) => l.prims.flatMap((p) => (p.kind === 'text' ? [p.text] : [])));
+      return null;
+    }
+    render(<Page />);
+    assert.ok(texts.includes('A-101') && !texts.includes('2026-09-01'));
+    const issue = (date: string, createdAt: number) => ({ id: `i${createdAt}`, name: 'P', date, createdAt, sheets: [{ number: 'A-101' }] });
+    // The sheets stay the same objects: only the issues change.
+    act(() => useProjectStore.setState({ issues: [issue('2026-09-01', 1)] as never }));
+    assert.ok(texts.includes('2026-09-01'), 'the first issue dates A-101');
+    act(() => useProjectStore.setState({ issues: [issue('2026-09-01', 1), issue('2026-10-01', 2)] as never }));
+    assert.ok(texts.includes('2026-10-01') && !texts.includes('2026-09-01'), 'the next issue dates it again');
   });
 
   it('says "as indicated" for a sheet whose viewports differ in scale, and not for one whose viewports agree', () => {
@@ -258,6 +277,32 @@ describe('a register longer than its paper (#126 review)', () => {
     assert.equal(registerSheets().length, 2);
     useProjectStore.setState((st) => ({ sheets: st.sheets.filter((s) => !/^s([4-9]\d|1\d\d)$/.test(s.id)) }));
     assert.deepEqual(registerSheets().map((s) => s.number), ['A-000']);
+  });
+
+  it('prints every row exactly once after the register sheet changes paper (A2 to A3)', () => {
+    bigSet(120);
+    const own = registerSheets()[0];
+    act(() => updateSheet(own.id, { paper: 'A3' }));
+    const pages = registerSheets();
+    assert.ok(pages.length >= 2, `${pages.length} register sheets`);
+    const all = rows();
+    // Every register sheet drawn the way print, PDF and DXF draw it: through `useSheetSchedules`.
+    const printed: string[] = [];
+    function Page({ sheet }: { sheet: ProjectSheet }) {
+      for (const layout of useSheetSchedules(sheet).values()) {
+        for (const p of layout.prims) if (p.kind === 'text' && all.some((r) => r.number === p.text)) printed.push(p.text);
+      }
+      return null;
+    }
+    render(<>{pages.map((s) => <Page key={s.id} sheet={s} />)}</>);
+    const count = new Map<string, number>();
+    for (const n of printed) count.set(n, (count.get(n) ?? 0) + 1);
+    const missing = all.filter((r) => !count.has(r.number)).map((r) => r.number);
+    const twice = [...count].filter(([, c]) => c > 1).map(([n]) => n);
+    assert.deepEqual({ missing: missing.length, twice: twice.length }, { missing: 0, twice: 0 }, `missing ${missing.join(' ')}; twice ${twice.join(' ')}`);
+    assert.equal(printed.length, all.length);
+    // Every page fits the paper its own sheet is on.
+    for (const s of pages) assert.equal(s.paper, 'A3', `${s.number} on ${s.paper}`);
   });
 
   it('builds one row when one sheet is edited, not a row for every sheet on screen', () => {
