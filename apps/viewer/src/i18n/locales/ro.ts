@@ -19,6 +19,7 @@ import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetsRo } from '../catalogues/sheets.ro';
 import { wallRo } from '../catalogues/wall.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
+import { featuresRo } from '../catalogues/features.ro';
 
 export default {
   ...wallRo,
@@ -29,4 +30,5 @@ export default {
   ...sheetContentRo,
   ...namesRo,
   ...faceRo,
+  ...featuresRo,
 } satisfies Catalogue;

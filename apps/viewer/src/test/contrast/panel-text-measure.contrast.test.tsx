@@ -34,7 +34,7 @@ import { HoverTooltip } from '@/components/viewer/HoverTooltip.js';
 import { ViewportHud } from '@/components/viewport-ui/hud/ViewportHud.js';
 import { cleanup, render } from '@/test/render.js';
 import { fixtureModel } from '@/test/store-fixture.js';
-import { closeContrastBrowser, warmContrastBrowser } from './render-harness.js';
+import { CHROME_SKIP, closeContrastBrowser, warmContrastBrowser } from './render-harness.js';
 import {
   assertRenderedTextClears,
   assertForcedClassReddens,
@@ -134,7 +134,7 @@ function mountSectionToolbar(): void {
 
 const rebasedNote = () => resolve('measure.point.rebasedNote', { name: resolve('measure.point.anchorModelFallback') });
 
-describe('Measure / Section / hover secondary text: rendered contrast (#4792, #6205)', () => {
+describe('Measure / Section / hover secondary text: rendered contrast (#4792, #6205)', { skip: CHROME_SKIP }, () => {
   for (const theme of THEMES) {
     it(`MeasurePointReadout base state (Model row label, "m" unit hint) clears AA in ${theme}`, async () => {
       useViewerStore.setState({
