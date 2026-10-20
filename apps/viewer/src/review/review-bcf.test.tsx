@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readBCF, writeBCF } from '@ifc-lite/bcf';
 import { bcfToComments, commentsToBcf, exportableComments } from './bcf';
 import { placeOfElement, targetAtPaper } from './element-at';
-import { GUID, drawingOf, guidOf, onElement, onPaper, sheet } from '@/test/review-bcf-fixture';
+import { GUID, drawing, drawingOf, guidOf, onElement, onPaper, sheet } from '@/test/review-bcf-fixture';
 
 /** Comments on a model element as BCF topics, and back (#55); the fixture is described in `@/test/review-bcf-fixture`. */
 
@@ -47,6 +47,28 @@ describe('comments as BCF', () => {
     // A plan looks down (-Z in IFC) at the pin's point: the render frame's (3, 1.2, 2) is IFC (3, -2, 1.2).
     assert.ok(Math.abs(camera.cameraDirection.z + 1) < 1e-9);
     assert.ok(Math.abs(camera.cameraViewPoint.x - 3) < 1e-9 && Math.abs(camera.cameraViewPoint.y + 2) < 1e-9);
+  });
+
+  it('looks along a rotated section\'s own normal, not the world axis its cardinal fields name (PR #127, item 4)', async () => {
+    // A section at 45° between +X and +Z (render frame, Y up); its cardinal reading is 'x'.
+    const s = Math.SQRT1_2;
+    const rotated = {
+      ...drawing,
+      config: { plane: { axis: 'x', position: 0, flipped: false, customPlane: {
+        normal: { x: s, y: 0, z: s }, distance: 0, origin: { x: 0, y: 0, z: 0 }, tangent: { x: s, y: 0, z: -s }, bitangent: { x: 0, y: 1, z: 0 },
+      } } },
+    } as unknown as typeof drawing;
+    const project = commentsToBcf([onElement], { sheets: [sheet], drawingOf: (id) => (id === 'p' ? rotated : null) });
+    const camera = [...(await readBCF(await writeBCF(project))).topics.values()][0].viewpoints[0].orthogonalCamera;
+    assert.ok(camera);
+    // It looks along -normal: render (-s, 0, -s) is IFC (-s, s, 0), Z up.
+    const d = camera.cameraDirection;
+    assert.ok(Math.abs(d.x + s) < 1e-9 && Math.abs(d.y - s) < 1e-9 && Math.abs(d.z) < 1e-9, `${d.x}, ${d.y}, ${d.z}`);
+    assert.ok(Math.abs(camera.cameraUpVector.z - 1) < 1e-9, 'the drawing\'s up, IFC +Z');
+    // It stands 10 m out along the normal from the pin's point (3, 2) on that plane: render (3s, 2, -3s), IFC (3s, 3s, 2).
+    const v = camera.cameraViewPoint;
+    const at = { x: v.x + d.x * 10, y: v.y + d.y * 10, z: v.z + d.z * 10 };
+    assert.ok(Math.abs(at.x - 3 * s) < 1e-9 && Math.abs(at.y - 3 * s) < 1e-9 && Math.abs(at.z - 2) < 1e-9, `${at.x}, ${at.y}, ${at.z}`);
   });
 
   it('exports a comment whose author is unknown', async () => {

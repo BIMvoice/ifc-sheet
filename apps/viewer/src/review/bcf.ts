@@ -18,7 +18,7 @@ import {
   cameraToOrthogonal, createBCFComment, createBCFProject, createBCFTopic, generateUuid, translateViewpoint,
   type BCFComment, type BCFPoint, type BCFProject, type BCFTopic, type BCFViewpoint,
 } from '@ifc-lite/bcf';
-import { drawingToWorld } from '@/drafting/frame';
+import { drawingToWorld, viewNormal } from '@/drafting/frame';
 import type { ProjectSheet } from '@/project/types';
 import { placeOfElement, type DrawingOf, type ElementPlace, type GuidOf } from './element-at';
 import type { CommentReply, ReviewComment } from './types';
@@ -70,10 +70,10 @@ function viewpointOf(c: ReviewComment, opts: BcfExportOptions): BCFViewpoint {
   const plane = c.viewId && c.point ? opts.drawingOf(c.viewId)?.config.plane : undefined;
   if (!plane || !c.point) return viewpoint;
   // Look at the pin's point, square on to the view's plane, from the side the view is seen from.
+  // A rotated section is seen along its own plane's normal, with its drawing's up (bitangent) as up.
   const target = drawingToWorld(plane, c.point);
-  const normal = { x: 0, y: 0, z: 0 };
-  normal[plane.axis] = plane.flipped ? -1 : 1;
-  const up = plane.axis === 'y' ? { x: 0, y: 0, z: -1 } : { x: 0, y: 1, z: 0 };
+  const normal = viewNormal(plane);
+  const up = plane.customPlane ? plane.customPlane.bitangent : plane.axis === 'y' ? { x: 0, y: 0, z: -1 } : { x: 0, y: 1, z: 0 };
   const eye = { x: target.x + normal.x * 10, y: target.y + normal.y * 10, z: target.z + normal.z * 10 };
   const camera = cameraToOrthogonal({ position: eye, target, up, fov: 0 }, 10);
   return translateViewpoint({ ...viewpoint, orthogonalCamera: camera }, opts.worldOffset ?? { x: 0, y: 0, z: 0 });
