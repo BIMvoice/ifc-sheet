@@ -64,10 +64,12 @@ export function readSavedMark(key: string, storage: Pick<Storage, 'getItem'> | u
   }
 }
 
-function safeStorage(): Storage | undefined {
+/** localStorage, or none where the browser refuses it (reading the property itself can throw). */
+export function safeStorage(): Storage | undefined {
   try {
     return typeof localStorage === 'undefined' ? undefined : localStorage;
-  } catch {
+  } catch (err) {
+    console.warn('[project] localStorage is not available', err);
     return undefined;
   }
 }

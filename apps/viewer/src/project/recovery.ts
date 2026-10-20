@@ -5,16 +5,23 @@
 /**
  * The autosave slot, and what to do with it when the same models are opened again.
  *
- * A slot newer than the last project file saved or opened for those models, and holding something
- * that file did not, is OFFERED (`planAutosave` → `recovery-store.ts` → the intro screen); anything
- * else is put back as it always was. Either way the slot is read through `parseProjectFile`, the
- * reader every project file goes through, so a slot from an older build is migrated the same way.
+ * Each set of models has an autosave slot, a session marker and, when there is one, a recoverable
+ * slot. The marker is set while the models are open and cleared when the page closes as a page does
+ * (`pagehide`) or other models replace them; finding it set at the next start means that session
+ * died. Its autosave is then moved to the recoverable slot when it holds work the last project file
+ * saved or opened for those models does not (or no file was ever saved), and OFFERED back
+ * (`recovery-store.ts`). The recoverable slot is not written again, and not removed, until the user
+ * answers Discard or a Restore has loaded it: going on without answering keeps it. Any other autosave
+ * is put back as it always was. Every slot is read through `parseProjectFile`, the reader every
+ * project file goes through, so a slot from an older build is migrated the same way.
  */
 
-import { withoutModelState, writeModelState } from './autosave-snapshots';
+import { readModelState, withoutModelState, writeModelState } from './autosave-snapshots';
 import { parseProjectFile, serializeProject } from './project-file';
-import { projectFingerprint, readSavedMark } from './project-saved';
+import { AUTOSAVE_PREFIX, projectFingerprint, readSavedMark, safeStorage } from './project-saved';
 import type { ProjectDocument } from './types';
+
+type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 export interface Autosave {
   doc: ProjectDocument;
@@ -22,14 +29,26 @@ export interface Autosave {
   savedAt: number;
 }
 
-export type AutosavePlan =
-  | { kind: 'none' }
-  | { kind: 'restore'; autosave: Autosave }
-  | { kind: 'offer'; autosave: Autosave };
+export interface AutosavePlan {
+  /** The autosave to put back as the project in front, if any. */
+  restore: Autosave | null;
+  /** The session kept in the recoverable slot, to offer, if any. */
+  recoverable: Autosave | null;
+}
 
-export function readAutosave(key: string, storage: Pick<Storage, 'getItem'> = localStorage): Autosave | null {
+const RECOVERABLE_PREFIX = 'ifc-lite:project-recoverable:v1:';
+const SESSION_PREFIX = 'ifc-lite:project-session-open:v1:';
+
+/** Where the session that died is kept for the autosave slot `key` until it is answered. */
+export function recoverableKey(key: string): string {
+  return RECOVERABLE_PREFIX + key.slice(AUTOSAVE_PREFIX.length);
+}
+
+const sessionKey = (key: string): string => SESSION_PREFIX + key.slice(AUTOSAVE_PREFIX.length);
+
+export function readAutosave(key: string, storage: Pick<Storage, 'getItem'> | undefined = safeStorage()): Autosave | null {
   try {
-    const text = storage.getItem(key);
+    const text = storage?.getItem(key);
     if (!text) return null;
     const doc = parseProjectFile(text);
     const stamp = Date.parse(String((JSON.parse(text) as { savedAt?: unknown }).savedAt));
@@ -40,11 +59,11 @@ export function readAutosave(key: string, storage: Pick<Storage, 'getItem'> = lo
   }
 }
 
-export function writeAutosave(key: string, doc: ProjectDocument, storage: Pick<Storage, 'setItem'> = localStorage, now = new Date()): void {
+export function writeAutosave(key: string, doc: ProjectDocument, storage: Pick<Storage, 'setItem'> | undefined = safeStorage(), now = new Date()): void {
   // The model state is far larger than the drawings: it is kept apart, so it cannot fill the slot.
   const { slim, modelState } = withoutModelState(doc);
   try {
-    storage.setItem(key, serializeProject(slim, now));
+    storage?.setItem(key, serializeProject(slim, now));
   } catch (err) {
     console.warn('[project] autosave failed', err);
   }
@@ -59,8 +78,65 @@ export function isUnsavedWork(key: string, autosave: Autosave, storage?: Pick<St
   return autosave.savedAt > mark.at && projectFingerprint(autosave.doc) !== mark.fingerprint;
 }
 
-export function planAutosave(key: string, storage: Pick<Storage, 'getItem'> = localStorage): AutosavePlan {
+/** Notes that the models of slot `key` are open in this page. */
+export function markSessionOpen(key: string, storage: Pick<Storage, 'setItem'> | undefined = safeStorage()): void {
+  try {
+    storage?.setItem(sessionKey(key), String(Date.now()));
+  } catch (err) {
+    console.warn('[project] could not note the open session', err);
+  }
+}
+
+/** Notes that the session on slot `key` ended as it should (the page closed, or other models replaced these). */
+export function markSessionClosed(key: string, storage: Pick<Storage, 'removeItem'> | undefined = safeStorage()): void {
+  try {
+    storage?.removeItem(sessionKey(key));
+  } catch (err) {
+    console.warn('[project] could not note the session closing', err);
+  }
+}
+
+function lastSessionDied(key: string, storage: Pick<Storage, 'getItem'>): boolean {
+  try {
+    return storage.getItem(sessionKey(key)) !== null;
+  } catch (err) {
+    console.warn('[project] could not read the session marker', err);
+    return false;
+  }
+}
+
+/** Copies the autosave of `key` to its recoverable slot and empties the autosave; false when the copy could not be kept. */
+function keepAsRecoverable(key: string, storage: Store): boolean {
+  try {
+    const text = storage.getItem(key);
+    if (!text) return false;
+    storage.setItem(recoverableKey(key), text);
+    storage.removeItem(key);
+  } catch (err) {
+    console.warn('[project] could not keep the session that ended unexpectedly', err);
+    return false;
+  }
+  void readModelState(key).then((state) => state && writeModelState(recoverableKey(key), state));
+  return true;
+}
+
+/** What the start of a session on slot `key` finds. Read before `markSessionOpen` for this session. */
+export function planAutosave(key: string, storage: Store | undefined = safeStorage()): AutosavePlan {
+  if (!storage) return { restore: null, recoverable: null };
   const autosave = readAutosave(key, storage);
-  if (!autosave) return { kind: 'none' };
-  return { kind: isUnsavedWork(key, autosave, storage) ? 'offer' : 'restore', autosave };
+  const recoverable = readAutosave(recoverableKey(key), storage);
+  if (!recoverable && autosave && lastSessionDied(key, storage) && isUnsavedWork(key, autosave, storage)) {
+    // No copy kept, no offer: the work is put back in front rather than left for the next autosave to replace.
+    if (keepAsRecoverable(key, storage)) return { restore: null, recoverable: autosave };
+  }
+  return { restore: autosave, recoverable };
+}
+
+/** Removes the recoverable slot of `key` (Discard, or a Restore that loaded it); its model state is the caller's to remove. */
+export function dropRecoverable(key: string, storage: Pick<Storage, 'removeItem'> | undefined = safeStorage()): void {
+  try {
+    storage?.removeItem(recoverableKey(key));
+  } catch (err) {
+    console.warn('[project] could not remove the recoverable session', err);
+  }
 }

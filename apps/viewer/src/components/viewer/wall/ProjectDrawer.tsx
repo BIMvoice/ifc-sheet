@@ -24,6 +24,7 @@ import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE
 import { addProjectSheet, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
+import { RecoveryOffer } from './RecoveryOffer';
 import { TitleBlockForm } from './TitleBlockForm';
 import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
@@ -134,6 +135,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           if (file) void importProjectFile(file).then((doc) => openProjectDocument(doc, { dirty: false })).catch((err: unknown) => { console.warn('[ifcsheet] could not open the project file', err); toast.error(projectOpenErrorText(err, t)); });
         }} />
       </div>
+      <div className="px-4"><RecoveryOffer /></div>
       <LibraryPanel />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         <Group title={t('wall.project.sheets')} add={<button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>}>
