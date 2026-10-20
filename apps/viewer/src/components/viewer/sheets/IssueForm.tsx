@@ -17,12 +17,14 @@ export function IssueForm({ skin }: { skin: SetSkin }) {
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const [listFirst, setListFirst] = useState(true);
+  const [archival, setArchival] = useState(false);
   const { busy, lines, issue } = useIssue();
-  const options = { name, listFirst };
+  const options = { name, listFirst, archival };
   return (
     <div className="flex flex-col gap-3">
       <input aria-label={t('issue.name')} placeholder={t('issue.name')} className={skin.input} value={name} onChange={(e) => setName(e.target.value)} />
       <label className={skin.check}><input type="checkbox" checked={listFirst} onChange={(e) => setListFirst(e.target.checked)} />{t('issue.listFirst')}</label>
+      <label className={skin.check}><input type="checkbox" checked={archival} onChange={(e) => setArchival(e.target.checked)} />{t('issue.archival')}</label>
       <div className="flex flex-wrap gap-2">
         <button type="button" className={skin.button} disabled={busy} onClick={() => void issue('pdf', options)}>{t('issue.pdf')}</button>
         <button type="button" className={skin.button} disabled={busy} onClick={() => void issue('svg', options)}>{t('issue.svgZip')}</button>

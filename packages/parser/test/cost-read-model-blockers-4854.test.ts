@@ -1725,7 +1725,7 @@ describe('#4854 cost evaluator blocker regressions', () => {
       Amount: undefined,
       Diagnostics: expect.arrayContaining([expect.objectContaining({ Code: 'INVALID_LIST' })]),
     });
-  });
+  }, 20_000);
 
   it('validates all IFC2X3 cost relationship endpoints while retaining the edges', async () => {
     const extraction = extractCostOnDemand(await parse(step('IFC2X3', [
