@@ -17,6 +17,7 @@ import { readNumberingScheme } from './numbering';
 import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
+import { readSeriesTemplates, readTemplate } from './sheet-templates';
 import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
 import { readTitleSources } from './title-block-sources';
@@ -238,6 +239,8 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     legends: readList(raw, 'legends', readLegend),
     details: readList(raw, 'details', readLibraryDetail),
     issues: readIssues(raw.issues),
+    sheetTemplates: list('sheetTemplates').flatMap((v) => readTemplate(v) ?? []),
+    seriesTemplates: readSeriesTemplates(raw.seriesTemplates),
     ...(raw.sheetNumbering !== undefined ? { sheetNumbering: readNumberingScheme(raw.sheetNumbering) } : {}),
     ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),

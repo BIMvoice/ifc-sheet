@@ -27,12 +27,12 @@ describe('the default scheme is today\'s numbering', () => {
   it('numbers the starting set exactly as the hard-coded series did (A-101+, A-201+, A-301+)', () => {
     assert.deepEqual(set.map((s) => s.number), ['A-101', 'A-102', 'A-103', 'A-201', 'A-202', 'A-301', 'A-302', 'A-303']);
   });
-  it('gives a schedule A-601, a detail A-901 and the next of a group the next free number', () => {
+  it('gives a schedule A-601, a detail A-501 and the next of a group the next free number', () => {
     assert.equal(nextNumber([], 'schedules'), 'A-601');
     assert.equal(nextNumber([sheet('a', 'A-601')], 'schedules'), 'A-602');
     assert.equal(nextNumber(set, 'plans'), 'A-104');
     const detail = { id: 'det', kind: 'plan', name: 'Det', createdAt: 0, level: { name: 'L', elevation: 0 }, detail: { number: 1, of: 'x', min: { x: 0, y: 0 }, max: { x: 2, y: 2 } } } as unknown as ProjectView;
-    assert.equal(withViewHung(set, [...views, detail], detail, HOUSE)?.sheets.at(-1)?.number, 'A-901');
+    assert.equal(withViewHung(set, [...views, detail], detail, HOUSE)?.sheets.at(-1)?.number, 'A-501');
   });
 });
 

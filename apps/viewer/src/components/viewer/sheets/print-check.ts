@@ -12,8 +12,8 @@
 import { entityBounds } from '@/drafting/annotation';
 import type { DraftEntity } from '@/drafting/types';
 import { drawingArea } from '@/project/drawing-set';
-import { FRAME_MARGIN_MM, TITLE_BLOCK_MM } from '@/project/sheets';
-import type { PaperSize, SheetViewport } from '@/project/types';
+import { frameOf, frameRect, titleBlockRect } from '@/project/sheet-frame';
+import type { ProjectSheet, SheetViewport } from '@/project/types';
 
 export interface Rect { x: number; y: number; w: number; h: number }
 
@@ -41,13 +41,10 @@ export interface ReferenceBar {
   lengthMm: number;
 }
 
-/** The paper's frame (inside the margin) and its title block, mm. */
-export function sheetRegions(paper: PaperSize, orientation: 'landscape' | 'portrait', size: { w: number; h: number }): { area: Rect; frame: Rect; titleBlock: Rect } {
-  return {
-    area: drawingArea(paper, orientation),
-    frame: { x: FRAME_MARGIN_MM, y: FRAME_MARGIN_MM, w: size.w - FRAME_MARGIN_MM * 2, h: size.h - FRAME_MARGIN_MM * 2 },
-    titleBlock: { x: size.w - FRAME_MARGIN_MM - TITLE_BLOCK_MM.w, y: size.h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h, w: TITLE_BLOCK_MM.w, h: TITLE_BLOCK_MM.h },
-  };
+/** The sheet's drawing area, its frame (inside the margins) and its title block where its frame puts it, mm. */
+export function sheetRegions(sheet: Pick<ProjectSheet, 'paper' | 'orientation' | 'frame'>, size: { w: number; h: number }): { area: Rect; frame: Rect; titleBlock: Rect } {
+  const frame = frameOf(sheet);
+  return { area: drawingArea(sheet), frame: frameRect(size, frame), titleBlock: titleBlockRect(size, frame) };
 }
 
 const EPS = 1e-6;

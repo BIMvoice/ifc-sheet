@@ -209,6 +209,8 @@ export type ProjectViewPatch = ProjectView extends infer V
   : never;
 
 export type PaperSize = 'A0' | 'A1' | 'A2' | 'A3' | 'A4';
+export type { CustomPaper, ElongatedPaper, Paper, SheetFrame, SheetTemplate, TemplateSeries, TitleBlockPosition } from './sheet-types';
+import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types';
 
 /** A view placed on a sheet. Positions and sizes are paper millimetres from the sheet's top-left. */
 export interface SheetViewport {
@@ -272,8 +274,12 @@ export interface ProjectSheet {
   series?: NumberGroup;
   name: string;
   createdAt: number;
-  paper?: PaperSize;
+  paper?: Paper;
   orientation?: 'landscape' | 'portrait';
+  /** Frame margins and title block position; absent: 10 mm all round, title block bottom right (`sheet-frame.ts`). */
+  frame?: SheetFrame;
+  /** The template the sheet was started from (a record of where it came from; the sheet's own paper and frame rule). */
+  templateId?: string;
   viewports?: SheetViewport[];
   /** Title block fields this sheet says otherwise than the project's (`ProjectDocument.titleBlock`); a key present wins, even empty. */
   titleBlock?: Record<string, string>;
@@ -333,6 +339,10 @@ export interface ProjectDocument {
   /** The entry each Design tool builds with, per kind. */
   currentTypes?: Partial<Record<ElementTypeKind, string>>;
   schedules?: ProjectSchedule[];
+  /** The project's own sheet templates (the built-in ones are in code, `sheet-templates.ts`); they travel in the library file. */
+  sheetTemplates?: SheetTemplate[];
+  /** The template new sheets of a series start from, by template id; a series without one is made on the smallest paper that fits. */
+  seriesTemplates?: Partial<Record<TemplateSeries, string>>;
   /** The project's structure profile library (retaining walls, tunnels, decks, barriers… and drawn shapes). */
   structureProfiles?: StructureProfile[];
   /** Road drawings: longitudinal profiles and cross-section sets. */

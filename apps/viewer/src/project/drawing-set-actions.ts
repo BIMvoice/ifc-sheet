@@ -14,7 +14,10 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { useViewerStore } from '@/store';
+import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { findTemplate, templateFields } from './sheet-templates';
+import { paperLabel } from './paper';
 import { addSchedule } from '@/joinery/schedules';
 import { registerHolders, registerSheetFit } from './drawing-register';
 import { proposalInputForLevel } from './model-rooms';
@@ -24,7 +27,7 @@ import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defau
 import { seedProjectTitleBlock } from './sheets';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
-import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView } from './types';
+import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
 
 /** How many proposed sections the starting set draws; the rest wait in the tray. */
 export const SET_SECTIONS = 2;
@@ -84,6 +87,12 @@ export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | 
 // ---- Make the set whole (the one planner behind the Wall's start and DRAFTSET) ----
 
 const state = () => useProjectStore.getState();
+
+/** The template each series of the set starts its new sheets from, as the project chose; a series without one is absent. */
+export function seriesTemplates(): Partial<Record<TemplateSeries, SheetTemplate>> {
+  const { seriesTemplates: chosen = {}, sheetTemplates = [] } = state();
+  return Object.fromEntries(Object.entries(chosen).flatMap(([series, id]) => { const t = findTemplate(id, sheetTemplates); return t ? [[series, t]] : []; }));
+}
 
 export interface EnsureReport {
   viewsAdded: number;
@@ -161,7 +170,7 @@ function ensureSections(meshes: MeshData[] | null, extent: AxisBounds, options: 
 function ensurePlanScales(extent: AxisBounds): void {
   const plans = state().views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.detail);
   const onSheet = new Map(state().sheets.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
-  const planned = state().sheets.some(isSetSheet) ? [] : buildDrawingSet({ views: plans, extent });
+  const planned = state().sheets.some(isSetSheet) ? [] : buildDrawingSet({ views: plans, extent, templates: seriesTemplates() });
   const plannedScale = new Map(planned.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
   for (const plan of plans) {
     const scale = onSheet.get(plan.id) ?? plannedScale.get(plan.id);
@@ -178,11 +187,11 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
   let sheets = before;
   if (!before.some(isSetSheet)) {
     // No set yet: lay it all out, beside any interior elevation sheets already there.
-    const set = withoutClashes(before, buildDrawingSet({ views: loose, extent, scheme: numberingScheme() }));
+    const set = withoutClashes(before, buildDrawingSet({ views: loose, extent, templates: seriesTemplates(), scheme: numberingScheme() }));
     if (set.length > 0) sheets = [...before, ...set];
   } else {
     for (const view of loose) {
-      const next = withViewHung(sheets, state().views, view, extent, undefined, numberingScheme());
+      const next = withViewHung(sheets, state().views, view, extent, Date.now(), seriesTemplates(), numberingScheme());
       if (next) sheets = next.sheets;
     }
   }
@@ -221,7 +230,7 @@ export function setGroupScale(group: SetGroup, scale: number, extent: ModelExten
       if (sheetGroup(sheet) !== group) return sheet;
       const members = (sheet.viewports ?? []).flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []);
       const sizes = members.map((v) => viewExtent(v, extent));
-      return { ...sheet, viewports: rowOfViewports(members, sizes, scale, sheet.paper) };
+      return { ...sheet, viewports: placeViewports(members, sizes, scale, sheet) };
     }),
     dirty: true,
   });
@@ -246,7 +255,7 @@ export function swapViewportView(sheetId: string, viewportId: string, viewId: st
 export function hangView(viewId: string, extent: ModelExtent): string | null {
   const { sheets, views } = useProjectStore.getState();
   const view = views.find((v) => v.id === viewId);
-  const hung = view ? withViewHung(sheets, views, view, extent, undefined, numberingScheme()) : null;
+  const hung = view ? withViewHung(sheets, views, view, extent, Date.now(), seriesTemplates(), numberingScheme()) : null;
   if (!hung) return null;
   useProjectStore.setState({ sheets: hung.sheets, dirty: true });
   return hung.sheetId;
@@ -257,9 +266,11 @@ function hangOnSheetOfItsOwn(itemId: string, name: string): string {
   const { sheets } = useProjectStore.getState();
   const placed = sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === itemId));
   if (placed) return placed.id;
-  const area = drawingArea(SET_PAPER);
+  const template = seriesTemplates().schedules;
+  const start = template ? templateFields(template) : { paper: SET_PAPER, orientation: 'landscape' as const };
+  const area = drawingArea(start);
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: nextNumber(sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
+    id: freshProjectId('sheet'), number: nextNumber(sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), ...start,
     viewports: [{ id: freshProjectId('viewport'), viewId: itemId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 50, width: 0, height: 0, center: null }],
   };
   useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });
@@ -290,6 +301,7 @@ export function addScheduleToSet(kind: ProjectSchedule['kind'], name: string): s
   return id;
 }
 
+export { setSheetFormat, type SheetFormatPatch } from './sheet-format-actions';
 /** The register's number: A-000, else the first free number of the general series A-001… */
 export function registerNumber(sheets: readonly Pick<ProjectSheet, 'number'>[]): string {
   const taken = new Set(sheets.map((s) => s.number));
@@ -360,7 +372,7 @@ export function syncRegisterPages(): void {
   }
   // A continuation sheet removed by hand leaves a gap: the ones kept show pages 0, 1, 2… in order.
   // Every page is fitted to the first sheet's paper (`registerSheetFit`): a continuation sheet takes that paper too, so its page stays on it.
-  const renumbered = new Map(keep.flatMap((s, i) => (pageOf(s) === i && (i === 0 || (s.paper === first.paper && s.orientation === first.orientation)) ? [] : [[s.id, {
+  const renumbered = new Map(keep.flatMap((s, i) => (pageOf(s) === i && (i === 0 || (paperLabel(s.paper ?? SET_PAPER) === paperLabel(first.paper ?? SET_PAPER) && s.orientation === first.orientation)) ? [] : [[s.id, {
     ...s, ...(i === 0 ? {} : { paper: first.paper, orientation: first.orientation }),
     viewports: (s.viewports ?? []).map((vp) => (vp.viewId !== register.id ? vp : i === 0 ? (({ page: _p, ...rest }) => rest)(vp) : { ...vp, page: i })),
   }] as const])));

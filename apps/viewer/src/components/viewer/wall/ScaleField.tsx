@@ -51,8 +51,8 @@ export function ScaleField({ sheet, slot, view, bounds }: ScaleFieldProps) {
     if (view) updateProjectView(view.id, { scale });
   };
   const box = viewportBox(slot, bounds);
-  const area = bounds ? overrun(box, sheet.paper) : null;
-  const fits = area && bounds ? detailedScaleThatFits(bounds, sheet.paper) : null;
+  const area = bounds ? overrun(box, sheet) : null;
+  const fits = area && bounds ? detailedScaleThatFits(bounds, sheet) : null;
 
   return (
     <div className="mt-3">
