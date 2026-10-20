@@ -102,8 +102,19 @@ describe('merging a CAD layer table', () => {
     assert.equal(report.cadLayers.replaced, 1);
   });
 
-  it('appends it under "both", and a rule identical to one the project has is no clash', () => {
-    assert.deepEqual(mergeCatalogues(mine, theirs, 'both', fresh).catalogue.cadLayers.map((r) => r.layer), ['MINE', 'A-WALL-CUT', 'A-ANNO-DIMS']);
+  it('drops a rule with the same criteria under "both": only the first could ever match (PR #112 review)', () => {
+    const { catalogue, report } = mergeCatalogues(mine, theirs, 'both', fresh);
+    assert.deepEqual(catalogue.cadLayers.map((r) => r.layer), ['MINE', 'A-ANNO-DIMS']);
+    assert.deepEqual(report.cadLayers, { added: 1, kept: 1, replaced: 0, renamed: 0 });
+    // Criteria compare as matching does: class case and order, material spacing and case.
+    const spelled = { ...emptyCatalogue(), cadLayers: [{ id: 't', source: ' cut ', ifcClasses: ['IFCWALLSTANDARDCASE', 'ifcwall'], layer: 'DEAD' }] };
+    assert.deepEqual(mergeCatalogues(mine, spelled, 'both', fresh).catalogue.cadLayers.map((r) => r.layer), ['MINE']);
+    // Two incoming rules with one criterion: the second is as dead as one shadowed by the project.
+    const twice = { ...emptyCatalogue(), cadLayers: [{ id: 'a', kind: 'text' as const, layer: 'T1' }, { id: 'b', kind: 'text' as const, layer: 'T2' }] };
+    assert.deepEqual(mergeCatalogues(emptyCatalogue(), twice, 'both', fresh).catalogue.cadLayers.map((r) => r.layer), ['T1']);
+  });
+
+  it('treats a rule identical to one the project has as no clash', () => {
     const same = mergeCatalogues({ ...mine, cadLayers: theirs.cadLayers }, theirs, 'both', fresh);
     assert.deepEqual(same.catalogue.cadLayers, theirs.cadLayers);
     assert.equal(same.report.cadLayers.kept, 2);

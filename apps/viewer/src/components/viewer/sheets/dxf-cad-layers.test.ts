@@ -61,10 +61,10 @@ function write(rules: readonly CadLayerRule[], withCad = rules.length > 0): { la
 }
 
 describe('CAD layer standard in the DXF', () => {
-  // The class rule comes first in the table: the material rule must still win for concrete.
+  // Table order is the precedence: the material rule sits above the class rule, so concrete takes it.
   const rules: CadLayerRule[] = [
-    { id: 'c', source: 'CUT', ifcClasses: ['IfcWall'], layer: 'A-WALL-CUT', color: '#7f1d1d', lineWeight: 0.5 },
     { id: 'm', source: 'CUT', ifcClasses: ['IfcWall'], material: 'Beton armat', layer: 'S-BETON', color: '#ff0000', lineWeight: 0.7, lineType: 'dashed' },
+    { id: 'c', source: 'CUT', ifcClasses: ['IfcWall'], layer: 'A-WALL-CUT', color: '#7f1d1d', lineWeight: 0.5 },
   ];
 
   it('puts a wall of a mapped material on the configured layer with its colour, pen and line type', () => {
@@ -78,6 +78,13 @@ describe('CAD layer standard in the DXF', () => {
     assert.ok(names.includes('CUT'), 'the door matches no rule and keeps its fixed layer');
     assert.ok(names.includes('SEEN'), 'so does the concrete wall seen beyond the cut, which no rule names');
     assert.equal(layers.get('A-WALL-CUT')?.true, String(0x7f1d1d));
+  });
+
+  it('puts the concrete wall on the class rule\'s layer when that rule is above the material rule (PR #112 review)', () => {
+    const { layers, entities } = write([rules[1], rules[0]]);
+    assert.equal(layers.has('S-BETON'), false, 'the material rule below the class rule never matches');
+    assert.ok(entities.some((e) => e.layer === 'A-WALL-CUT'));
+    assert.equal(entities.some((e) => e.layer === 'S-BETON'), false);
   });
 
   it('writes a layer name with ș ț ă as deterministic ASCII, and the same DXF every time', () => {
@@ -117,7 +124,7 @@ describe('CAD layer standard in the DXF', () => {
 
   it('writes the ISO-style starter: cut and seen walls on their own layers', () => {
     const { layers } = write(isoStarterRules());
-    assert.ok(layers.has('A-21----E-_CUT') && layers.has('A-21----E-_SEEN') && layers.has('A-31----E-_CUT'), [...layers.keys()].join('|'));
-    assert.equal(layers.get('A-21----E-_CUT')?.weight, '50');
+    assert.ok(layers.has('A-21----E-----------CUT') && layers.has('A-21----E-----------SEEN') && layers.has('A-31----E-----------CUT'), [...layers.keys()].join('|'));
+    assert.equal(layers.get('A-21----E-----------CUT')?.weight, '50');
   });
 });

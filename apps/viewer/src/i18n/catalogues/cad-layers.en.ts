@@ -5,7 +5,7 @@ import type { TranslationValue } from '../types';
 export const cadLayersEn = {
   'standards.tab.cad': 'CAD layers',
   'library.kind.cadLayers': 'CAD layer standard',
-  'cad.hint': 'Which CAD layer, colour, pen and line type each IFC class or material goes on when a drawing is exported as DXF. The first matching rule wins: rules with a material first, then rules with a class, then the rest. Nothing matching keeps the fixed layer. An empty table exports the fixed layers.',
+  'cad.hint': 'Which CAD layer, colour, pen and line type each IFC class or material goes on when a drawing is exported as DXF. Rules are tried top to bottom and the first matching rule wins, whatever it matches on: put a material rule above the class rule it overrides. Nothing matching keeps the fixed layer. An empty table exports the fixed layers.',
   'cad.ascii': 'Layer names are written in ASCII: ș ț ă become s t a, other characters _.',
   'cad.add': 'Add rule',
   'cad.reset': 'Reset to ISO 13567-style starter',

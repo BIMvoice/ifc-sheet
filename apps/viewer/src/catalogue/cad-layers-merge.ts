@@ -7,10 +7,12 @@
  * project's. Rules have no names: two rules are the same rule when they
  * match the same things (source, kind, classes, material). The policies are
  * those of `catalogue-merge.ts`: on such a clash `mine` keeps the project's
- * rule, `theirs` replaces it in place (the order is the project's), `both`
- * appends the incoming one after (it only matters when it differs, and it
- * can never win against the earlier rule). Rules that clash with nothing are
- * appended in the file's order.
+ * rule and `theirs` replaces it in place (the order is the project's). `both`
+ * cannot keep two rules with the same criteria: the first matching rule in
+ * table order wins, so the later one could never match. It keeps the
+ * project's, as `mine` does, rather than append a dead rule. Rules that clash
+ * with nothing are appended in the file's order; an incoming rule with the
+ * same criteria as an earlier incoming one clashes with it the same way.
  */
 
 import type { CadLayerRule } from '@/project/cad-layers';
@@ -32,14 +34,11 @@ export function mergeCadLayers(
     if (at < 0) {
       list.push({ ...t, id });
       report.added++;
-    } else if (policy === 'mine' || outcome(list[at]) === outcome(t)) {
+    } else if (policy !== 'theirs' || outcome(list[at]) === outcome(t)) {
       report.kept++;
-    } else if (policy === 'theirs') {
+    } else {
       list[at] = { ...t, id: list[at].id };
       report.replaced++;
-    } else {
-      list.push({ ...t, id });
-      report.renamed++;
     }
   }
   return { list, report };

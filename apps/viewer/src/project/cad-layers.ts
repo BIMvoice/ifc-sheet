@@ -15,10 +15,10 @@
  * - `ifcClasses`: the element's IFC class, any of the list;
  * - `material`: the element's IfcMaterial name.
  *
- * Order: rules that name a material come first, then rules that name a
- * class, then the rest; within each tier the table's own order, and the
- * first match wins. Nothing matching (or an empty table) means the fixed
- * layer the drawing code names, exactly as before.
+ * Order: the table's own order, top to bottom, is the precedence; the first
+ * rule that matches wins, whatever its criterion. A material rule meant to
+ * override a class rule goes above it. Nothing matching (or an empty table)
+ * means the fixed layer the drawing code names, exactly as before.
  */
 
 import type { LineType } from '@/drafting/styles';
@@ -60,15 +60,8 @@ export interface CadLayerChoice {
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
-const tier = (r: CadLayerRule) => (r.material?.trim() ? 0 : r.ifcClasses?.length ? 1 : 2);
-
 /** A rule with no criterion would swallow everything: it never matches. */
 const hasCriterion = (r: CadLayerRule) => !!(r.source?.trim() || r.kind || r.ifcClasses?.length || r.material?.trim());
-
-/** The rules in the order they are tried: material rules, class rules, the rest; table order within each. */
-export function cadRuleOrder(rules: readonly CadLayerRule[]): CadLayerRule[] {
-  return rules.map((r, i) => ({ r, i })).sort((a, b) => tier(a.r) - tier(b.r) || a.i - b.i).map((x) => x.r);
-}
 
 function matches(r: CadLayerRule, s: CadSubject): boolean {
   if (!hasCriterion(r)) return false;
@@ -79,9 +72,9 @@ function matches(r: CadLayerRule, s: CadSubject): boolean {
   return true;
 }
 
-/** The first rule matching `subject`, or null (the fixed layer stands). */
+/** The first rule in table order matching `subject`, or null (the fixed layer stands). */
 export function matchCadRule(rules: readonly CadLayerRule[], subject: CadSubject): CadLayerRule | null {
-  return cadRuleOrder(rules).find((r) => matches(r, subject)) ?? null;
+  return rules.find((r) => matches(r, subject)) ?? null;
 }
 
 /** The layer a thing goes on under `rules`, or null when no rule says. */
