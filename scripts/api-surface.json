@@ -5903,6 +5903,7 @@
     "lineLength: function",
     "lineMidpoint: function",
     "linesCollinear: function",
+    "looksUp: function",
     "makeEntityKey: function",
     "mergeCollinearLines: function",
     "mergeDrawingLines: function",
