@@ -45,7 +45,7 @@ export const VIEW_CATEGORIES = [
   { id: 'railings', labelKey: 'viewGraphics.cat.railings', classes: ['IfcRailing'] },
   { id: 'spaces', labelKey: 'viewGraphics.cat.spaces', classes: ['IfcSpace'] },
   { id: 'furniture', labelKey: 'viewGraphics.cat.furniture', classes: ['IfcFurnishingElement', 'IfcFurniture'] },
-  { id: 'other', labelKey: 'viewGraphics.cat.other', classes: ['IfcBuildingElementProxy', 'IfcCovering', 'IfcPlate', 'IfcFooting'] },
+  { id: 'other', labelKey: 'viewGraphics.cat.other', classes: ['IfcBuildingElementProxy', 'IfcCovering', 'IfcPlate', 'IfcFooting', 'IfcPile'] },
 ] as const satisfies readonly ViewCategory[];
 
 /** Upper-case IFC class → category id. */
