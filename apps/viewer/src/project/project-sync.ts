@@ -16,15 +16,15 @@ import { useEffect } from 'react';
 import { useViewerStore } from '@/store';
 import type { FederatedModel } from '@/store/types';
 import { modelLevels } from './model-levels';
-import { loadProjectDocument, projectDocument, resetProject, syncProjectWithModels, useProjectStore } from './project-store';
+import { loadProjectDocument, resetProject, syncProjectWithModels, useProjectStore } from './project-store';
 import type { StoreyInput } from './view-defaults';
-import type { ProjectDocument, ProjectModelRef } from './types';
-import { parseProjectFile, serializeProject } from './project-file';
-import { readModelState, withoutModelState, writeModelState } from './autosave-snapshots';
+import type { ProjectModelRef } from './types';
+import { autosaveKey } from './project-saved';
+import { watchProjectForAutosave } from './autosave-watch';
+import { markSessionClosed, markSessionOpen, planAutosave } from './recovery';
+import { noticeAutosaveTooNew } from './autosave-notice';
+import { forgetRecoveryOffer, offerRecovery, restoreModelState } from './recovery-store';
 import { keepProjectForNewVersion, modelVersionSwapActive } from './model-version';
-
-const AUTOSAVE_PREFIX = 'ifc-lite:project:v1:';
-const AUTOSAVE_DEBOUNCE_MS = 500;
 
 interface StoreySource {
   spatialHierarchy?: { byStorey: ReadonlyMap<number, unknown>; storeyElevations: ReadonlyMap<number, number> } | null;
@@ -43,39 +43,6 @@ export function storeysOf(ds: StoreySource | null | undefined): StoreyInput[] {
 
 export function modelRef(model: Pick<FederatedModel, 'id' | 'name' | 'sourceContentHash'>): ProjectModelRef {
   return { key: model.sourceContentHash ?? model.name, name: model.name };
-}
-
-/** The autosave slot for a set of loaded models (order-independent). */
-export function autosaveKey(models: readonly ProjectModelRef[]): string {
-  return AUTOSAVE_PREFIX + models.map((m) => m.key).sort().join('|');
-}
-
-function readAutosave(key: string): ProjectDocument | null {
-  try {
-    const text = localStorage.getItem(key);
-    return text ? parseProjectFile(text) : null;
-  } catch (err) {
-    console.warn('[project] ignoring unreadable autosave', err);
-    return null;
-  }
-}
-
-function writeAutosave(key: string, doc: ProjectDocument): void {
-  // The model state is far larger than the drawings: it is kept apart, so it cannot fill the slot.
-  const { slim, modelState } = withoutModelState(doc);
-  try {
-    localStorage.setItem(key, serializeProject(slim));
-  } catch (err) {
-    console.warn('[project] autosave failed', err);
-  }
-  // Never written empty: a slot restored before its state has been read back must not erase it.
-  if (modelState) void writeModelState(key, modelState);
-}
-
-/** Puts the model state kept for `key` into the project the slot restored, if it is still the one in front and has none. */
-async function restoreModelState(key: string, current: () => string | null): Promise<void> {
-  const kept = await readModelState(key);
-  if (kept && current() === key && !useProjectStore.getState().modelState) useProjectStore.setState({ modelState: kept });
 }
 
 function loadedModels(): { refs: ProjectModelRef[]; storeys: StoreyInput[] } {
@@ -98,22 +65,32 @@ function loadedModels(): { refs: ProjectModelRef[]; storeys: StoreyInput[] } {
 export function useProjectSync(): void {
   useEffect(() => {
     let slot: string | null = null;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    // The slot in front holds a newer build's autosave: it is not written for as long as these models are in front.
+    let readOnlySlot = false;
 
     const onModels = () => {
       const { refs, storeys } = loadedModels();
       if (refs.length === 0) return;
       const key = autosaveKey(refs);
       if (key !== slot) {
+        // The models in front before these ended as they should: theirs is not a session that died.
+        if (slot && !readOnlySlot) markSessionClosed(slot);
         slot = key;
-        const saved = readAutosave(key);
+        forgetRecoveryOffer();
+        const plan = planAutosave(key);
+        readOnlySlot = plan.tooNew;
+        // No marker on a slot this session does not write: a crash here leaves nothing of ours to offer.
+        if (!plan.tooNew) markSessionOpen(key);
         const current = useProjectStore.getState();
         const overlaps = current.models.some((m) => refs.some((r) => r.key === m.key));
         if (modelVersionSwapActive()) keepProjectForNewVersion(refs);
-        else if (saved) {
-          loadProjectDocument(saved);
+        else if (plan.restore) {
+          loadProjectDocument(plan.restore.doc);
           void restoreModelState(key, () => slot);
         } else if (!overlaps) resetProject();
+        // The last session on these models died with work no project file holds: the intro and the drawer offer it back.
+        if (plan.recoverable) offerRecovery({ key, doc: plan.recoverable.doc, savedAt: plan.recoverable.savedAt, modelName: refs.map((r) => r.name).join(', ') });
+        if (plan.tooNew) noticeAutosaveTooNew();
       }
       syncProjectWithModels(refs, storeys);
     };
@@ -122,17 +99,18 @@ export function useProjectSync(): void {
     const unsubModels = useViewerStore.subscribe((state, prev) => {
       if (state.models !== prev.models || state.ifcDataStore !== prev.ifcDataStore || state.mutationVersion !== prev.mutationVersion) onModels();
     });
-    const unsubProject = useProjectStore.subscribe((state, prev) => {
-      if (!slot || (state.views === prev.views && state.sheets === prev.sheets && state.name === prev.name
-        && state.drafts === prev.drafts && state.draftLayers === prev.draftLayers && state.hatchPatterns === prev.hatchPatterns && state.modelState === prev.modelState && state.titleBlockSources === prev.titleBlockSources)) return;
-      const key = slot;
-      clearTimeout(timer);
-      timer = setTimeout(() => writeAutosave(key, projectDocument()), AUTOSAVE_DEBOUNCE_MS);
-    });
+    const stopAutosave = watchProjectForAutosave(() => (readOnlySlot ? null : slot));
+    // The page closing as a page does is a clean end; coming back from the back-forward cache reopens it.
+    const closed = () => { if (slot && !readOnlySlot) markSessionClosed(slot); };
+    const reopened = (e: PageTransitionEvent) => { if (e.persisted && slot && !readOnlySlot) markSessionOpen(slot); };
+    window.addEventListener('pagehide', closed);
+    window.addEventListener('pageshow', reopened);
     return () => {
-      clearTimeout(timer);
       unsubModels();
-      unsubProject();
+      stopAutosave();
+      window.removeEventListener('pagehide', closed);
+      window.removeEventListener('pageshow', reopened);
+      closed();
     };
   }, []);
 }

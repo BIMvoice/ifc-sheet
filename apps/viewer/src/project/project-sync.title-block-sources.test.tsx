@@ -9,7 +9,8 @@ import { render, cleanup } from '@/test/render';
 import { useViewerStore } from '@/store';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { resetProject } from './project-store';
-import { autosaveKey, useProjectSync } from './project-sync';
+import { autosaveKey } from './project-saved';
+import { useProjectSync } from './project-sync';
 import { setTitleBlockSources } from './sheets';
 
 const SLOT = autosaveKey([{ key: 'legacy', name: 'Model' }]);
