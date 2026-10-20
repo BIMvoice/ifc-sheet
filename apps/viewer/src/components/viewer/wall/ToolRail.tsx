@@ -116,12 +116,12 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
         {...keyProps(t, t('wall.ortho.help'), 'drafting.ortho')}
         onClick={toggleOrtho}
         className={cn(
-          'flex items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-[13px] leading-tight',
+          'flex items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-sm leading-tight',
           ortho ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
         )}
       >
         {t('drafting.ortho')}
-        <kbd className="rounded border border-current/40 px-1 text-[11px] opacity-80">{shortcutLabel('drafting.ortho')}</kbd>
+        <kbd className="rounded border border-current/40 px-1 text-xs opacity-80">{shortcutLabel('drafting.ortho')}</kbd>
       </button>
     </nav>
   );

@@ -32,7 +32,7 @@ export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string
   const { t } = useTranslation();
   const ortho = useDraftingSession((o) => o.ortho || o.orthoHeld);
   const chosen = WALL_TOOLS.find((x) => x.command === tool);
-  const orthoNote = ortho ? <p role="status" className="mb-0 mt-2 text-sm font-medium text-white">{t('wall.ortho.on')}</p> : null;
+  const orthoNote = ortho ? <output className="mb-0 mt-2 block text-sm font-medium text-white">{t('wall.ortho.on')}</output> : null;
   const draw = DRAW_TOOLS.find((x) => x.command === tool);
   if (draw) {
     return (
