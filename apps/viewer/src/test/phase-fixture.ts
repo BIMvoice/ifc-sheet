@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The FZK-Haus with phases (`public/_fixtures/AC20-FZK-Haus-phases.ifc`, made by
- * `tools/phase-fixture/make-phase-fixture.mjs`) as a test loads it: parsed into the
+ * The FZK-Haus with phases (made from `public/_fixtures/AC20-FZK-Haus.ifc` by
+ * `phase-fixture-source.ts` as it loads) as a test loads it: parsed into the
  * viewer store (a single model, so a drawing's entity ids are express ids), its real
  * meshes from the wasm geometry pass, and the drawings of a plan, a section and an
  * elevation made by the drawing generator on the CPU. Import `@/test/setup-dom.js` first.
@@ -16,6 +16,7 @@ import { resolve } from 'node:path';
 import { GeometryProcessor, type MeshData } from '@ifc-lite/geometry';
 import { Drawing2DGenerator, type Drawing2D, type SectionConfig } from '@ifc-lite/drawing-2d';
 import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
+import { withPhaseStatus } from '@/test/phase-fixture-source.js';
 
 /** Express ids of the fixture's walls, by the Status the generator gave them. */
 export const WALL = {
@@ -37,9 +38,10 @@ export interface PhaseModel {
 let loaded: Promise<PhaseModel> | null = null;
 
 /** Parse, seed the store, run the geometry: once per test process. */
-export function loadPhaseModel(file = 'AC20-FZK-Haus-phases.ifc'): Promise<PhaseModel> {
+export function loadPhaseModel(): Promise<PhaseModel> {
   return (loaded ??= (async () => {
-    const bytes = new Uint8Array(readFileSync(resolve(process.cwd(), 'public/_fixtures', file)));
+    const sample = readFileSync(resolve(process.cwd(), 'public/_fixtures/AC20-FZK-Haus.ifc'), 'latin1');
+    const bytes = new Uint8Array(Buffer.from(withPhaseStatus(sample), 'latin1'));
     const store = await parseStep(bytes);
     seedModel('fzk', 0, store, 1);
     // The DOM shim's fetch cannot read a file: URL, so the wasm is handed over as bytes.

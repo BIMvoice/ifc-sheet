@@ -5,8 +5,11 @@
 /**
  * A view's phases over the loaded models: the phase of a drawing's element
  * (its renderer id → model and express id, read through the label reader so
- * an edited Status counts), looked up once per element per call. A view
- * with no phases set up has none, and nothing here runs for it.
+ * an edited Status counts). Reading it means reading property sets on demand,
+ * so it is looked up once per element for the models as they stand: one lookup
+ * per (loaded models, mutationVersion, phase source), shared by every view and
+ * sheet that draws by phase. A view with no phases set up has none, and nothing
+ * here runs for it.
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
@@ -24,11 +27,29 @@ export function phaseOfRenderId(renderId: number, source: PhaseSource | undefine
   return el ? resolvePhase(el, source) : null;
 }
 
-/** The view's phases, or null when it draws by none. The lookup is cached for this value's life. */
+interface PhaseLookup {
+  models: unknown;
+  version: number;
+  source: PhaseSource | undefined;
+  known: Map<number, PhaseId | null>;
+}
+
+let lookup: PhaseLookup | null = null;
+
+/** The phases read so far for the loaded models as they stand and `source`; a new set once either changes. */
+function knownPhases(source: PhaseSource | undefined): Map<number, PhaseId | null> {
+  const { models, mutationVersion } = useViewerStore.getState();
+  if (!lookup || lookup.models !== models || lookup.version !== mutationVersion || lookup.source !== source) {
+    lookup = { models, version: mutationVersion, source, known: new Map() };
+  }
+  return lookup.known;
+}
+
+/** The view's phases, or null when it draws by none. The lookup is the one shared for the models as they stand. */
 export function phaseViewOf(graphics: ViewGraphics | undefined, source: PhaseSource | undefined): PhaseView | null {
   const show = shownPhases(graphics);
   if (!show) return null;
-  const known = new Map<number, PhaseId | null>();
+  const known = knownPhases(source);
   return {
     show,
     phaseOf: (id) => {
