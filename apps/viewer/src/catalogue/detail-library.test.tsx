@@ -251,6 +251,26 @@ describe('detail marks on a drafting view', () => {
     useProjectStore.setState({ views: s.views.filter((v) => v.id !== viewId) });
   });
 
+  it('print the drawing number its sheet title prints, not the drafting view\'s own number (#128 x #134)', () => {
+    useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
+    const plan = useProjectStore.getState().views.find((v) => v.kind === 'plan')!;
+    const viewId = drawParapet();
+    assert.equal(addDraftingMark(plan.id, viewId, { x: 0, y: 0 }, { x: 2, y: 2 }, { textStyle: 'standard', dimStyle: 'standard' }), 1);
+    const label = () => (useProjectStore.getState().drafts.find((d) => d.viewId === plan.id && d.shape.type === 'text')!.shape as { text: string }).text;
+    // Another drawing first on the sheet: the drafting view is drawing 2 there, while its mark number stays 1.
+    const sheetId = addProjectSheet('Details');
+    const other = useProjectStore.getState().views.find((v) => v.kind === 'elevation')!;
+    addViewport(sheetId, other.id, { x: 100, y: 150 }, 50);
+    addViewport(sheetId, viewId, { x: 300, y: 150 }, 10);
+    const sheetNumber = useProjectStore.getState().sheets[0].number;
+    assert.equal(label(), `2/${sheetNumber}`);
+    // A mark made once the drafting view is already on the sheet reads the same.
+    const second = addProjectView({ kind: 'plan', name: 'Plan 2', cutHeight: 1.2, level: LEVELS[0] } as never);
+    addDraftingMark(second, viewId, { x: 0, y: 0 }, { x: 2, y: 2 }, { textStyle: 'standard', dimStyle: 'standard' });
+    const onSecond = useProjectStore.getState().drafts.find((d) => d.viewId === second && d.shape.type === 'text');
+    assert.equal((onSecond?.shape as { text: string } | undefined)?.text, `2/${sheetNumber}`);
+  });
+
   it('refuses a mark whose target is not a drafting view', () => {
     useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
     const plan = useProjectStore.getState().views.find((v) => v.kind === 'plan')!;
