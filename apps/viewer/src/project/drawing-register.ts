@@ -90,12 +90,14 @@ export function drawingRegisterRows(input: RegisterInput): RegisterRow[] {
 /** The inputs a row reads besides its sheet: a row is reused while every one of them is the same object. */
 type RowContext = Omit<RegisterInput, 'sheets'>;
 const sameContext = (a: RowContext, b: RowContext): boolean =>
-  a.titleBlock === b.titleBlock && a.issues === b.issues && a.schedules === b.schedules && a.asIndicated === b.asIndicated;
+  a.titleBlock === b.titleBlock && a.issues === b.issues && a.schedules === b.schedules && a.asIndicated === b.asIndicated
+  // The revision column reads the revision records and the drafts their clouds are in (`currentRevisionOf`).
+  && a.revisions === b.revisions && a.drafts === b.drafts;
 
 /**
  * `drawingRegisterRows`, remembered: a sheet's row is built again only when
  * that sheet changed (a new object) or the title block, the issues, the
- * schedules or the wording did; the same input twice returns the same rows.
+ * schedules, the revisions, the drafts or the wording did; the same input twice returns the same rows.
  * Every sheet on screen reads the register through one of these, so editing
  * one sheet builds one row, not a row for every sheet on every sheet.
  */

@@ -13,7 +13,10 @@ import { captureSheets } from '@/issue/capture.js';
 import { planIssue } from '@/issue/plan.js';
 import { drawingListCsv } from '@/issue/output.js';
 import { act } from 'react';
-import { drawingRegisterRows, holdsRegister, inSetOrder, registerRowsBuilt, type RegisterRow } from './drawing-register.js';
+import { drawingRegisterRows, holdsRegister, inSetOrder, registerRowCache, registerRowsBuilt, type RegisterRow } from './drawing-register.js';
+import { DEFAULT_SCHEME, SEQUENTIAL_SCHEME } from './numbering.js';
+import { renumberAll } from './sheet-renumber.js';
+import { updateRevision } from './revision-actions.js';
 import { buildDrawingSet, drawingArea, type ModelExtent } from './drawing-set.js';
 import { layoutRegisterPage, registerFit, REGISTER_MIN_TEXT_MM } from '@/joinery/register-layout.js';
 import { useSheetSchedules } from '@/components/viewer/joinery/ScheduleGraphic';
@@ -286,5 +289,53 @@ describe('a register longer than its paper (#126 review)', () => {
     });
     assert.equal(registerRowsBuilt() - before, 1);
     assert.equal(rows().find((r) => r.number === target.number)?.scale, '1:50');
+  });
+});
+
+describe('the register with the numbering scheme and the revision column (integration of #115, #126, #133)', () => {
+  const bigSet = (n: number, sheetNumbering = DEFAULT_SCHEME) => {
+    resetProject();
+    useProjectStore.setState({
+      sheetNumbering,
+      sheets: Array.from({ length: n }, (_, i): ProjectSheet => ({
+        id: `s${i}`, number: `A-${101 + i}`, series: 'plans', name: `Sheet ${i + 1}`, createdAt: i, paper: 'A2', orientation: 'landscape',
+        viewports: [{ id: `vp${i}`, viewId: 'v1', x: 200, y: 150, scale: 100, width: 0, height: 0, center: null }],
+      })),
+    });
+    addRegisterToSet('Drawing register');
+  };
+  const registerSheets = () => {
+    const st = useProjectStore.getState();
+    return inSetOrder(st.sheets, st.schedules).filter((s) => holdsRegister(s, st.schedules));
+  };
+
+  it('a renumbering keeps the register on A-000 and its continuation sheet on A-000.1, never a number of the scheme', () => {
+    bigSet(120);
+    assert.deepEqual(registerSheets().map((s) => s.number), ['A-000', 'A-000.1']);
+    renumberAll(DEFAULT_SCHEME, 'renumber');
+    const numbers = useProjectStore.getState().sheets.map((s) => s.number);
+    assert.deepEqual(registerSheets().map((s) => s.number), ['A-000', 'A-000.1']);
+    assert.equal(new Set(numbers).size, numbers.length, 'no two sheets share a number');
+    assert.deepEqual(numbers.filter((n) => /^A-9/.test(n)), [], 'nothing fell into the other series');
+    assert.deepEqual(registerSheets().map((s) => s.series), ['general', 'general']);
+  });
+
+  it('takes the project\'s scheme: A00 and A00.1 under a sequential one, the drawings A01 onwards', () => {
+    bigSet(120, SEQUENTIAL_SCHEME);
+    assert.deepEqual(registerSheets().map((s) => s.number), ['A00', 'A00.1']);
+    renumberAll(SEQUENTIAL_SCHEME, 'renumber');
+    assert.deepEqual(registerSheets().map((s) => s.number), ['A00', 'A00.1']);
+    const drawings = useProjectStore.getState().sheets.filter((s) => s.series === 'plans').map((s) => s.number);
+    assert.equal(drawings[0], 'A01');
+    assert.equal(drawings.at(-1), 'A120');
+  });
+
+  it('reads a revision record edited after the rows were built: the cached row is not stale', () => {
+    const cached = registerRowCache();
+    const read = () => { const st = useProjectStore.getState(); return cached({ sheets: st.sheets, titleBlock: st.titleBlock, issues: st.issues, asIndicated: AS_INDICATED, schedules: st.schedules, revisions: st.revisions, drafts: st.drafts }); };
+    revise(sheetNamed('Floor plans 1').id, 'P01', '2026-10-01');
+    assert.equal(read().find((r) => r.title === 'Floor plans 1')?.revision, 'P01');
+    updateRevision('rev-P01', { code: 'P02' });
+    assert.equal(read().find((r) => r.title === 'Floor plans 1')?.revision, 'P02');
   });
 });
