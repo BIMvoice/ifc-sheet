@@ -43,6 +43,7 @@ import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { keyPlanHighlight, viewportExtent, type Rect } from '@/siteplan/key-plan';
 import { KeyPlanHighlight, SiteBalance, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
 import type { SiteContent } from '../siteplan/useSheetSite';
+import type { EntityStyleOf } from '@/project/model-styles';
 
 /** The cut axis a drawing is put on paper by (`viewportTransform`), from its plane's axis. */
 export const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
@@ -64,6 +65,8 @@ export interface ViewportContent {
   legend?: LegendLayout;
   /** A site plan's plot, footprint, setbacks and areas (`siteplan/`). */
   site?: SiteContent;
+  /** Each drawing entity's model style (`project/model-styles.ts`); absent: every model draws normally. */
+  styleOf?: EntityStyleOf;
   /** A 3D view printed as a raster capture of the viewport, instead of drawn lines. */
   raster?: ViewRaster;
 }
@@ -117,8 +120,8 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const t = viewportTransform(vp, drawing, axis);
   const cadLayers = useProjectStore((s) => s.cadLayers);
   const pens = useMemo(
-    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers)) : []),
-    [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers],
+    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf) : []),
+    [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers, content.styleOf],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);
   const left = vp.x - box.width / 2;

@@ -14,6 +14,7 @@ import { can } from '@/edition';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Spline, Box, Files, Building2, Camera, FileBox, FilePlus2, FolderOpen, LayoutTemplate, Plus, Rows3, Save, Scissors, Search, SquareDashed, Table2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
+import { useViewerStore } from '@/store';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { requestNewProject } from '@/project/new-project';
@@ -43,6 +44,8 @@ import type { ProjectView, ProjectViewKind } from '@/project/types';
 import { ProjectFolderRow, ProjectItemRow } from './ProjectTreeRow';
 import { ViewPropertiesPanel } from './ViewPropertiesPanel';
 import { LevelsFolder } from './LevelsFolder';
+import { ProjectModelRow } from './ProjectModelRow';
+import { loadedModelKeys, modelDrawings } from '@/project/model-styles';
 import { useNavigatorDialogs } from './useNavigatorDialogs';
 
 type FolderId = ProjectViewKind | 'sheets' | 'schedules' | 'legends' | 'civil' | 'models';
@@ -84,6 +87,8 @@ export function ProjectNavigatorPanel() {
   const legends = useProjectStore((s) => s.legends) ?? [];
   const civilDrawings = useProjectStore((s) => s.civilDrawings) ?? [];
   const models = useProjectStore((s) => s.models);
+  const loadedModels = useViewerStore((s) => s.models);
+  const modelDrawingByKey = useMemo(() => modelDrawings(models, loadedModelKeys(loadedModels)), [models, loadedModels]);
   const levels = useProjectStore((s) => s.levels);
   const activeItemId = useProjectStore((s) => s.activeItemId);
   const dirty = useProjectStore((s) => s.dirty);
@@ -287,12 +292,7 @@ export function ProjectNavigatorPanel() {
     if (id === 'models') {
       return {
         count: models.length,
-        rows: models.map((m) => (
-          <div key={m.key} className="flex items-center gap-1.5 h-7 pl-8 pr-2 text-xs text-zinc-600 dark:text-zinc-400 truncate">
-            {ICONS.models}
-            <span className="truncate">{m.name}</span>
-          </div>
-        )),
+        rows: models.map((m) => <ProjectModelRow key={m.key} model={m} drawing={modelDrawingByKey.get(m.key) ?? { role: 'linked', style: 'halftone' }} />),
       };
     }
     return { count: byKind[id].length, rows: byKind[id].map(viewRow) };

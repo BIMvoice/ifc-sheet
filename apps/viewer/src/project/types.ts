@@ -8,6 +8,7 @@ import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/crea
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
+import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import type { CadLayerRule } from './cad-layers';
 import type { DisciplineId } from './discipline-views';
 
@@ -32,10 +33,16 @@ export type ElevationDirection = 'north' | 'south' | 'east' | 'west';
 /** A building level, merged across federated models at the same elevation. */
 export interface ProjectLevel {
   name: string;
-  /** Floor elevation, metres, in the same frame the section bar uses. */
+  /** Floor elevation, metres: the storeys' IfcBuildingStorey.Elevation, what levels are matched and named by. */
   elevation: number;
   /** IfcBuildingStorey GlobalIds (one per model that has this level). */
   storeyGlobalIds: string[];
+  /**
+   * The floor in the drawing frame (render Y: the storey's placement-chain Z less the RTC offset and origin
+   * shift the meshes were moved by), derived from the loaded models and never saved. Absent: `elevation`.
+   * Read through `levelFloorY`.
+   */
+  floorY?: number;
 }
 
 interface ProjectViewBase {
@@ -248,6 +255,10 @@ export interface ProjectSheet {
 export interface ProjectModelRef {
   key: string;
   name: string;
+  /** How views draw it (`model-styles.ts`): the host draws as itself, a linked model in its own style. Absent: the first model is the host. */
+  role?: 'host' | 'linked';
+  /** Absent: the host draws normally, a linked model in halftone. */
+  drawStyle?: 'normal' | 'halftone';
 }
 
 /** A joinery schedule (door / window list): a project document of its own, placeable on sheets. */
@@ -377,6 +388,8 @@ export interface ProjectDocument {
   symbols?: DraftSymbol[];
   /** Legends: generated tables of what the drawings use, placeable on sheets. */
   legends?: ProjectLegend[];
+  /** Which IFC property feeds each field of a tag, per tag kind (`tagfields/tag-fields.ts`); only what differs from the defaults. */
+  tagFields?: TagFieldConfig;
   /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */
   issues?: ProjectIssue[];
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
