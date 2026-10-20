@@ -7,7 +7,7 @@ import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { loadPlanModel, type LoadedPlanModel } from '@/test/discipline-plan-fixture';
-import { disciplineViewFor, type DisciplineId } from './discipline-views';
+import { defaultDisciplineLevel, disciplineViewFor, type DisciplineId } from './discipline-views';
 import { planViewFor } from './view-defaults';
 import type { ProjectLevel, ProjectView } from './types';
 
@@ -115,5 +115,18 @@ describe('discipline plans on FZK-Haus', () => {
       assert.equal(now.cutPolygons.length, before.cutPolygons.length, `${v.kind} cut polygons`);
       assert.deepEqual([...m.drawnIds(now)].sort(), [...m.drawnIds(before)].sort(), `${v.kind} elements`);
     }
+  });
+});
+
+describe('a roof plan over a lower wing with its own roof', () => {
+  let m: LoadedPlanModel;
+  before(async () => { m = await loadPlanModel(fileURLToPath(new URL('./__fixtures__/roof-two-wings.ifc', import.meta.url))); });
+
+  it('draws the main roof and the wing roof below the top storey floor', async () => {
+    const top = defaultDisciplineLevel('roof', m.levels);
+    assert.equal(top?.name, 'Upper floor', 'the roof plan sits on the top storey');
+    assert.ok(top);
+    const shown = m.drawnNames(await m.planOf(view('roof', top)));
+    has(shown, 'Main roof', 'Wing roof');
   });
 });
