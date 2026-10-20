@@ -18,6 +18,7 @@ import type { SectionPlane } from '@/store/types';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { addProjectView, setActiveProjectItem, useProjectStore } from './project-store';
 import { projectPlaneFromSection, sectionPlaneForView } from './view-plane';
+import { generatesFromModel } from './view-drawings';
 import { closeDocumentTab, isDrawingTabActive, MODEL_TAB_ID, showDocumentTab, useDocumentTabs, WALL_TAB_ID } from './document-tabs';
 import { DEFAULT_AXONOMETRIC_PRESET } from './axonometric';
 import type { AxonometricPreset, ProjectView } from './types';
@@ -95,7 +96,7 @@ export function activateDocumentTab(id: string): OpenViewResult {
   if (view.kind === '3d') return openProjectView(id);
   leaveModelTab();
   // Without geometry there is no section to point at, but the view is still a work plane to draft on.
-  if (!applyDrawingView(view) && liveBounds() !== null) return 'unresolved';
+  if (generatesFromModel(view) && !applyDrawingView(view) && liveBounds() !== null) return 'unresolved';
   setActiveProjectItem(id);
   showDocumentTab(id);
   return 'opened';

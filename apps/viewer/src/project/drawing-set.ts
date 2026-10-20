@@ -214,7 +214,7 @@ export function buildDrawingSet({ views, extent, now = Date.now(), scheme = DEFA
 /** Which group a sheet of the set belongs to (`null`: details and other sheets). Sheets from older files are read from their A-1xx / A-2xx / A-3xx / A-4xx / A-6xx number. */
 export function sheetGroup(sheet: Pick<ProjectSheet, 'number' | 'series'>): SetGroup | null {
   const group = numberGroupOf(sheet);
-  return group === 'other' ? null : group;
+  return group === 'other' || group === 'details' ? null : group;
 }
 
 /** Whether a sheet belongs to the drawing set the program lays out: every sheet but a room's interior elevations. */

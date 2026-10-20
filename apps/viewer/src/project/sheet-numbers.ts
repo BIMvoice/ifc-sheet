@@ -15,8 +15,8 @@ export function withoutAutoNumber(sheet: ProjectSheet): ProjectSheet {
   return rest;
 }
 
-/** The group of sheets a view belongs to: an interior elevation its own, apart from the facades; none (a schedule, a legend) is `other`. */
+/** The group of sheets a view belongs to: an interior elevation its own, apart from the facades; a drafting view the details; none (a schedule, a legend) is `other`. */
 export function sheetGroupOfView(view: ProjectView | undefined): NumberGroup {
   if (view?.kind === 'elevation') return view.interior ? 'interiors' : 'elevations';
-  return view?.kind === 'plan' ? 'plans' : view?.kind === 'section' ? 'sections' : 'other';
+  return view?.kind === 'plan' ? 'plans' : view?.kind === 'section' ? 'sections' : view?.kind === 'drafting' ? 'details' : 'other';
 }

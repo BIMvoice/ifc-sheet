@@ -9,6 +9,7 @@
  * 1000 / N mm).
  */
 
+import { draftingFrame } from '@/drafting/drafting-view';
 import { numberingScheme, useProjectStore } from './project-store';
 import { nextNumber } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
@@ -85,10 +86,13 @@ export function seedProjectTitleBlock(fields: Record<string, string>): void {
 /** Place a view on a sheet, centred at a paper point. Returns the viewport id. */
 export function addViewport(sheetId: string, viewId: string, at: { x: number; y: number }, scale = 100): string {
   const id = freshProjectId('viewport');
-  const view = useProjectStore.getState().views.find((v) => v.id === viewId);
-  // 0 × 0: the box fits the drawing once it is generated (see `viewportBox`); a raster has no drawing to fit, so it starts at a size.
-  const box = view && isRasterView(view) ? { width: RASTER_BOX_MM.width, height: RASTER_BOX_MM.height } : { width: 0, height: 0 };
-  const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, ...box, center: null };
+  const { views, drafts } = useProjectStore.getState();
+  const view = views.find((v) => v.id === viewId);
+  // 0 × 0: the box fits the drawing once it is generated (see `viewportBox`); a raster has no drawing to fit, so it starts at a size;
+  // a drafting view has no drawing to fit to either: it is framed on its drafts.
+  const box = view?.kind === 'drafting' ? draftingFrame(drafts.filter((d) => d.viewId === viewId), scale)
+    : view && isRasterView(view) ? { width: RASTER_BOX_MM.width, height: RASTER_BOX_MM.height, center: null } : { width: 0, height: 0, center: null };
+  const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, ...box };
   patchSheet(sheetId, (s) => {
     // A number the program chose follows what the sheet comes to hold, once.
     const renumber = s.autoNumber && (s.viewports ?? []).length === 0;
