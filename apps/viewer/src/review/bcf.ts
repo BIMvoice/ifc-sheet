@@ -16,7 +16,7 @@
 
 import {
   cameraToOrthogonal, createBCFComment, createBCFProject, createBCFTopic, generateUuid, translateViewpoint,
-  type BCFPoint, type BCFProject, type BCFTopic, type BCFViewpoint,
+  type BCFComment, type BCFPoint, type BCFProject, type BCFTopic, type BCFViewpoint,
 } from '@ifc-lite/bcf';
 import { drawingToWorld } from '@/drafting/frame';
 import type { ProjectSheet } from '@/project/types';
@@ -106,10 +106,15 @@ export function commentsToBcf(comments: readonly ReviewComment[], opts: BcfExpor
 }
 
 export interface BcfImportResult {
+  /** New comments, from topics this project did not have. */
   comments: ReviewComment[];
+  /** Comments already here that the file changed (replies added elsewhere, a status set elsewhere), to replace by id. */
+  updated: ReviewComment[];
+  /** How many of `updated` gained a reply or changed status (the rest only learnt the GUIDs they go out with). */
+  merged: number;
   /** Topics that none of the sheets' drawings shows an element of. */
   unplaced: number;
-  /** Topics that are this project's own comments, already here. */
+  /** Topics already here exactly as the file has them. */
   known: number;
 }
 
@@ -119,18 +124,63 @@ function guidsOf(topic: BCFTopic): string[] {
   return topic.viewpoints.flatMap((v) => (v.components?.selection ?? []).flatMap((c) => (c.ifcGuid ? [c.ifcGuid] : [])));
 }
 
-/** The comments a BCF project's topics make on the sheets (ids are the caller's to give). */
+function replyOf(c: BCFComment, newId: () => string): CommentReply {
+  return { id: newId(), author: c.author ?? '', createdAt: c.date ? Date.parse(c.date) || 0 : 0, text: c.comment, bcfGuid: c.guid };
+}
+
+/**
+ * A comment already here, brought up to date with its topic: replies the
+ * topic has and the comment lacks are added (matched by GUID; a reply kept
+ * from before GUIDs were saved is matched by author and text and learns its
+ * GUID), and the topic's status is taken. Null when nothing changes.
+ */
+function mergeTopic(c: ReviewComment, topic: BCFTopic, newId: () => string): { comment: ReviewComment; merged: boolean } | null {
+  const replies = [...c.replies];
+  let merged = false;
+  let learnt = false;
+  for (const bc of topic.comments) {
+    if (replies.some((r) => r.bcfGuid === bc.guid)) continue;
+    const same = replies.findIndex((r) => !r.bcfGuid && r.text === bc.comment && r.author === (bc.author ?? ''));
+    if (same >= 0) {
+      replies[same] = { ...replies[same], bcfGuid: bc.guid };
+      learnt = true;
+    } else {
+      replies.push(replyOf(bc, newId));
+      merged = true;
+    }
+  }
+  const status = closed(topic.topicStatus) ? 'done' : 'open';
+  if (status !== c.status) merged = true;
+  const bcfGuid = c.bcfGuid || topic.guid;
+  const bcfViewpointGuid = c.bcfViewpointGuid || topic.viewpoints[0]?.guid;
+  if (bcfGuid !== c.bcfGuid || bcfViewpointGuid !== c.bcfViewpointGuid) learnt = true;
+  if (!merged && !learnt) return null;
+  return { comment: { ...c, status, replies, bcfGuid, ...(bcfViewpointGuid ? { bcfViewpointGuid } : {}) }, merged };
+}
+
+/**
+ * The comments a BCF project's topics make on the sheets (ids are the
+ * caller's to give). A topic that is a comment here already, by its GUID or
+ * by the label of a comment exported from here, is merged into that comment;
+ * only a topic that brings nothing new is counted as known.
+ */
 export function bcfToComments(
   project: BCFProject,
   existing: readonly ReviewComment[],
   opts: { sheets: readonly ProjectSheet[]; drawingOf: DrawingOf; guidOf: GuidOf; newId: () => string },
 ): BcfImportResult {
-  const result: BcfImportResult = { comments: [], unplaced: 0, known: 0 };
-  const have = new Set(existing.map((c) => c.id));
+  const result: BcfImportResult = { comments: [], updated: [], merged: 0, unplaced: 0, known: 0 };
   for (const topic of project.topics.values()) {
     const own = topic.labels?.find((l) => l.startsWith(COMMENT_LABEL))?.slice(COMMENT_LABEL.length);
-    if (own && have.has(own)) {
-      result.known++;
+    const here = existing.find((c) => c.bcfGuid === topic.guid) ?? (own ? existing.find((c) => c.id === own) : undefined);
+    if (here) {
+      const change = mergeTopic(here, topic, opts.newId);
+      if (!change) result.known++;
+      else {
+        result.updated.push(change.comment);
+        if (change.merged) result.merged++;
+        else result.known++;
+      }
       continue;
     }
     let placed: { sheet: ProjectSheet; place: ElementPlace } | null = null;

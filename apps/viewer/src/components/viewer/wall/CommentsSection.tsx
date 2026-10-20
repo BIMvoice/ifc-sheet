@@ -56,8 +56,11 @@ export function CommentsSection({ onGo }: { onGo: (sheetId: string) => void }) {
     try {
       const state = useProjectStore.getState();
       const result = bcfToComments(await readBCF(file), state.comments ?? [], { sheets: state.sheets, drawingOf, guidOf: renderIdGlobalId, newId: () => freshProjectId('comment') });
-      if (result.comments.length) useProjectStore.setState({ comments: [...(state.comments ?? []), ...result.comments], dirty: true });
-      setNote(t('review.bcf.imported', { count: result.comments.length, unplaced: result.unplaced }));
+      if (result.comments.length || result.updated.length) {
+        const updated = new Map(result.updated.map((c) => [c.id, c]));
+        useProjectStore.setState({ comments: [...(state.comments ?? []).map((c) => updated.get(c.id) ?? c), ...result.comments], dirty: true });
+      }
+      setNote(t('review.bcf.imported', { count: result.comments.length, merged: result.merged, unplaced: result.unplaced }));
     } catch (err) {
       console.warn('[ifcsheet] could not read the BCF file', err);
       setNote(t('review.bcf.failed'));

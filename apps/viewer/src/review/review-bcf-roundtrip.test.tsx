@@ -5,10 +5,10 @@
 import '@/test/setup-dom.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readBCF, writeBCF } from '@ifc-lite/bcf';
-import { commentsToBcf, withBcfGuids } from './bcf';
+import { createBCFComment, readBCF, writeBCF } from '@ifc-lite/bcf';
+import { bcfToComments, commentsToBcf, withBcfGuids } from './bcf';
 import { readComments } from './file';
-import { drawingOf, onElement, onPaper, sheet } from '@/test/review-bcf-fixture';
+import { drawingOf, guidOf, onElement, onPaper, sheet } from '@/test/review-bcf-fixture';
 
 /**
  * Round trips with other BCF tools (PR #127 review): the same comment goes
@@ -18,6 +18,10 @@ import { drawingOf, onElement, onPaper, sheet } from '@/test/review-bcf-fixture'
 
 const opts = { sheets: [sheet], drawingOf };
 const exported = async (comments: Parameters<typeof commentsToBcf>[0]) => readBCF(await writeBCF(commentsToBcf(comments, opts)));
+const importing = () => {
+  let n = 0;
+  return { sheets: [sheet], drawingOf, guidOf, newId: () => `new-${++n}` };
+};
 const only = <T,>(m: Map<string, T>): T => {
   assert.equal(m.size, 1);
   return [...m.values()][0];
@@ -52,5 +56,42 @@ describe('BCF GUIDs that stay (PR #127, item 1)', () => {
     const twice = withBcfGuids(readComments(JSON.parse(JSON.stringify(once.comments))));
     assert.equal(twice.changed, false, 'nothing new to give');
     assert.deepEqual(twice.comments, once.comments);
+  });
+});
+
+describe('a topic another tool changed, read back (PR #127, item 2)', () => {
+  it('brings its reply and its Closed status into the comment, by GUID; the same file again adds nothing; the next export is the same topic', async () => {
+    const ours = withBcfGuids([onElement]).comments;
+    // The other tool: someone answers and closes the topic.
+    const elsewhere = await exported(ours);
+    const topic = only(elsewhere.topics);
+    topic.comments.push(createBCFComment({ author: 'Mihai Pop', comment: 'Rezolvat în modelul de structură' }));
+    topic.topicStatus = 'Closed';
+    const file = await writeBCF(elsewhere);
+
+    const opts = importing();
+    const first = bcfToComments(await readBCF(file), ours, opts);
+    assert.deepEqual([first.comments.length, first.updated.length, first.merged, first.known], [0, 1, 1, 0]);
+    const merged = first.updated[0];
+    assert.equal(merged.id, 'c1', 'the same comment');
+    assert.equal(merged.status, 'done', 'the status set elsewhere');
+    assert.deepEqual(merged.replies.map((r) => [r.author, r.text]), [['Ioana Pătrașcu', 'Adăugată în plan'], ['Mihai Pop', 'Rezolvat în modelul de structură']]);
+
+    const again = bcfToComments(await readBCF(file), [merged], opts);
+    assert.deepEqual([again.comments.length, again.updated.length, again.known], [0, 0, 1], 'the same file twice: nothing new');
+
+    const next = only((await exported(withBcfGuids([merged]).comments)).topics);
+    assert.equal(next.guid, topic.guid, 'the other tool gets its own topic back');
+    assert.deepEqual(next.comments.map((c) => c.guid), topic.comments.map((c) => c.guid), 'and its own comments, no copies');
+    assert.equal(next.topicStatus, 'Closed');
+  });
+
+  it('matches a topic exported before GUIDs were kept by its comment label, and the comment learns the topic GUID', async () => {
+    // Exported by the first version: fresh GUIDs, none kept.
+    const old = only((await exported([onElement])).topics);
+    const back = bcfToComments({ ...(await exported([onElement])), topics: new Map([[old.guid, old]]) }, [onElement], importing());
+    assert.deepEqual([back.comments.length, back.updated.length, back.merged, back.known], [0, 1, 0, 1]);
+    assert.equal(back.updated[0].bcfGuid, old.guid);
+    assert.deepEqual(back.updated[0].replies.map((r) => r.bcfGuid), [old.comments[0].guid], 'the reply is the same one, not a copy');
   });
 });

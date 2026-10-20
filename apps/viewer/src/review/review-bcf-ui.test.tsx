@@ -5,12 +5,14 @@
 import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readBCF } from '@ifc-lite/bcf';
+import { act } from 'react';
+import { createBCFComment, readBCF, writeBCF } from '@ifc-lite/bcf';
 import { cleanup, click, render, waitFor } from '@/test/render.js';
 import { CommentsSection } from '@/components/viewer/wall/CommentsSection.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
-import { drawing, onElement, sheet } from '@/test/review-bcf-fixture';
+import { commentsToBcf, withBcfGuids } from '@/review/bcf';
+import { drawing, drawingOf, onElement, sheet } from '@/test/review-bcf-fixture';
 
 /**
  * The drawer's BCF export, as a reviewer uses it (PR #127 review): the file it
@@ -55,5 +57,31 @@ describe('exporting BCF from the drawer', () => {
     assert.deepEqual([...a.topics.keys()], [kept.bcfGuid]);
     assert.deepEqual([...b.topics.keys()], [kept.bcfGuid]);
     assert.equal(useProjectStore.getState().comments?.[0].bcfGuid, kept.bcfGuid);
+  });
+});
+
+const choose = async (ui: HTMLElement, file: Blob) => {
+  const input = ui.querySelector<HTMLInputElement>('input[type="file"]');
+  assert.ok(input);
+  Object.defineProperty(input, 'files', { configurable: true, value: [new File([file], 'review.bcfzip')] });
+  await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+};
+
+describe('importing BCF in the drawer', () => {
+  it('puts a reply and a Closed status from another tool into the comment, without a second comment (item 2)', async () => {
+    const ours = withBcfGuids([onElement]).comments;
+    useProjectStore.setState({ comments: ours });
+    const elsewhere = await readBCF(await writeBCF(commentsToBcf(ours, { sheets: [sheet], drawingOf })));
+    const topic = [...elsewhere.topics.values()][0];
+    topic.comments.push(createBCFComment({ author: 'Mihai Pop', comment: 'Rezolvat' }));
+    topic.topicStatus = 'Closed';
+    const file = await writeBCF(elsewhere);
+    const ui = render(<CommentsSection onGo={() => {}} />);
+    await choose(ui, file);
+    await waitFor(() => (useProjectStore.getState().comments?.[0].replies.length ?? 0) === 2, 'the reply from the other tool');
+    const comments = useProjectStore.getState().comments ?? [];
+    assert.equal(comments.length, 1);
+    assert.equal(comments[0].status, 'done');
+    assert.match(ui.querySelector('output')?.textContent ?? '', /0 topics became comments and 1 brought replies/);
   });
 });
