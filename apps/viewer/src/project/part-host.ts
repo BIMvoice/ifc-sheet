@@ -10,23 +10,40 @@
  */
 
 import { RelationshipType } from '@ifc-lite/data';
+import type { IfcDataStore } from '@ifc-lite/parser';
 import { useViewerStore } from '@/store';
 
 const PART = 'IFCBUILDINGELEMENTPART';
-const cache = new WeakMap<object, Map<number, string | null>>();
+const cache = new WeakMap<object, Map<number, number | null>>();
+
+/** The model, its data store and the express id of a renderer id, or null. */
+function located(renderId: number): { modelId: string; expressId: number; ds: IfcDataStore } | null {
+  const s = useViewerStore.getState();
+  const ref = s.resolveGlobalIdFromModels(renderId);
+  const ds = ref ? s.models.get(ref.modelId)?.ifcDataStore : null;
+  return ref && ds ? { modelId: ref.modelId, expressId: ref.expressId, ds } : null;
+}
+
+/** The express id of the element `expressId` is aggregated into (cached per store), or null. */
+function hostOf(ds: IfcDataStore, expressId: number): number | null {
+  let known = cache.get(ds);
+  if (!known) cache.set(ds, (known = new Map()));
+  if (!known.has(expressId)) known.set(expressId, ds.relationships.getRelated(expressId, RelationshipType.Aggregates, 'inverse')[0] ?? null);
+  return known.get(expressId) ?? null;
+}
 
 /** The IFC class of the element a part belongs to, or null (not a part, or no host). */
 export function partHostType(renderId: number, ifcType: string | undefined): string | null {
   if (!ifcType || ifcType.toUpperCase() !== PART) return null;
-  const s = useViewerStore.getState();
-  const ref = s.resolveGlobalIdFromModels(renderId);
-  const ds = ref ? s.models.get(ref.modelId)?.ifcDataStore : null;
-  if (!ref || !ds) return null;
-  let known = cache.get(ds);
-  if (!known) cache.set(ds, (known = new Map()));
-  if (known.has(ref.expressId)) return known.get(ref.expressId) ?? null;
-  const parent = ds.relationships.getRelated(ref.expressId, RelationshipType.Aggregates, 'inverse')[0];
-  const type = parent ? ds.entities.getTypeName(parent) || null : null;
-  known.set(ref.expressId, type);
-  return type;
+  const at = located(renderId);
+  const host = at ? hostOf(at.ds, at.expressId) : null;
+  return at && host ? at.ds.entities.getTypeName(host) || null : null;
+}
+
+/** The element (model and express id) an IfcBuildingElementPart belongs to, or null when `renderId` is no part or has no host. */
+export function partHostRef(renderId: number): { modelId: string; expressId: number } | null {
+  const at = located(renderId);
+  if (!at || at.ds.entities.getTypeName(at.expressId).toUpperCase() !== PART) return null;
+  const host = hostOf(at.ds, at.expressId);
+  return host ? { modelId: at.modelId, expressId: host } : null;
 }
