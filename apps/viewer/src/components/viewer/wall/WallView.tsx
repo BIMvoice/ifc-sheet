@@ -18,6 +18,7 @@ import { setExtent } from '@/draft-set/body';
 import { discardRecovery, startSetUnderOffer } from '@/project/recovery-store';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
+import { EVENT_WALL_HUNG, emitWallHung } from '@/lib/tours/events';
 import { SteppedSheet } from './SteppedSheet';
 import { WallGrid } from './WallGrid';
 import { WallIntro } from './WallIntro';
@@ -50,8 +51,14 @@ export function WallView() {
   // The proposals read the lowest plan's rooms; they change only with the model or the plans.
   const proposals = useMemo(() => sectionProposals(meshes, extent), [meshes, extent, views]);
   const back = useCallback(() => stepInto(null), []);
+  // Hanging goes by the event, so the tour can hang the set too (its steps skip the intro the same way).
   // Going on without answering the offer of an autosave declines it.
-  const hang = useCallback(() => { discardRecovery(); setIntro(false); }, []);
+  const hang = useCallback(() => emitWallHung(), []);
+  useEffect(() => {
+    const onHung = () => { discardRecovery(); setIntro(false); };
+    window.addEventListener(EVENT_WALL_HUNG, onHung);
+    return () => window.removeEventListener(EVENT_WALL_HUNG, onHung);
+  }, []);
   const steppedSheet = sheets.find((s) => s.id === stepped) ?? null;
   const modelName = [...models.values()][0]?.name ?? '';
 

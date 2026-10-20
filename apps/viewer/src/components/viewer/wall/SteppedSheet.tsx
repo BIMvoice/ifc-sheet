@@ -102,6 +102,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // A panel that keeps its own keys (the tour card) has Esc for itself.
+      if (e.target instanceof Element && e.target.closest('[data-owns-keys]')) return;
       // A running tool or a drafted selection lets go first (the drafting keys' own Esc).
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       // The comment tool lets go first of what is not a drawing tool.

@@ -9,12 +9,14 @@
  */
 
 import { useTranslation } from '@/i18n';
+import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 import { cn } from '@/lib/utils';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
 import { Circle, PaintBucket, Slash, Spline, Type } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProjectView } from '@/project/types';
 import { wallToolKey } from '@/lib/commands/wall-key-commands';
+import { toolHelpKey } from './tool-help';
 import { DRAW_TOOLS, WALL_ALL, WALL_TOOLS } from './wall-actions';
 import { keyProps } from './wall-key-title';
 
@@ -41,7 +43,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
     return id ? keyProps(t, name, id) : { title: name };
   };
   return (
-    <nav aria-label={t('wall.tools.rail')} className="flex w-[132px] shrink-0 flex-col gap-2 overflow-y-auto py-2">
+    <nav aria-label={t('wall.tools.rail')} {...tourAnchor(TOUR_ANCHORS.wallToolRail)} className="flex w-[132px] shrink-0 flex-col gap-2 overflow-y-auto py-2">
       {WALL_TOOLS.map((tool) => {
         const on = active === tool.command;
         const all = WALL_ALL[tool.command];
@@ -50,7 +52,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
             <button
               type="button"
               aria-pressed={on}
-              {...keyed(t(tool.labelKey), tool.command)}
+              {...keyed(t(toolHelpKey(tool.command)), tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
                 'flex flex-col items-center gap-0.5 rounded-2xl border px-2 py-1.5 text-[14px] transition-colors',
@@ -90,7 +92,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
               key={tool.command}
               type="button"
               aria-pressed={on}
-              {...keyed(t(tool.labelKey), tool.command)}
+              {...keyed(t(toolHelpKey(tool.command)), tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
                 'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1.5 text-[11px] leading-tight',
