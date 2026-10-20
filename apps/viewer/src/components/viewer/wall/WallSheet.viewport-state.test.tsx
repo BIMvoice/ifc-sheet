@@ -59,6 +59,24 @@ describe('the viewport state on a sheet', () => {
     assert.match(ui.querySelector('[data-viewport-overlay]')?.textContent ?? '', /Nothing is cut at this height/);
   });
 
+  // PR #107 review: elevations and sections have no cut height, so their
+  // empty drawing gets its own wording; a plan keeps the cut-height one.
+  for (const view of [
+    { id: 'e', kind: 'elevation', name: 'East', createdAt: 0, direction: 'east' },
+    { id: 'x', kind: 'section', name: 'Section A', createdAt: 0, plane: { axis: 'front', offset: 0, flipped: false } },
+  ] satisfies ProjectView[]) {
+    it(`says nothing is seen, not nothing is cut, on an empty ${view.kind}`, () => {
+      const onView: ProjectSheet = { ...sheet, viewports: [{ ...vp, viewId: view.id }] };
+      useProjectStore.setState({ views: [plan, view], sheets: [onView] });
+      const ui = render(<WallSheet sheet={onView} width={1000} />);
+      act(() => patchViewDrawing(view.id, { status: 'ready', drawing: null }));
+      const text = ui.querySelector('[data-viewport-overlay]')?.textContent ?? '';
+      assert.match(text, /Nothing is seen in this view/);
+      assert.doesNotMatch(text, /cut at this height/);
+      assert.equal(ui.querySelector('[data-viewport-state]')?.getAttribute('data-viewport-state'), 'emptyView');
+    });
+  }
+
   it('keeps every overlay out of the SVG and out of PDF and DXF', () => {
     const ui = render(<WallSheet sheet={sheet} width={1000} />);
     const before = { svg: sheetSvgText(paper(ui), sheet), dxf: sheetDxf(paper(ui), sheet) };

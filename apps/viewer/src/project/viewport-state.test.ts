@@ -14,33 +14,42 @@ const drawing = (parts: Partial<Pick<Drawing2D, 'lines' | 'cutPolygons' | 'proje
 
 describe('viewportState', () => {
   it('says nothing before a drawing is asked for', () => {
-    assert.deepEqual(viewportState(undefined), { kind: 'idle' });
-    assert.deepEqual(viewportState(EMPTY_VIEW_DRAWING), { kind: 'idle' });
+    assert.deepEqual(viewportState(undefined, 'plan'), { kind: 'idle' });
+    assert.deepEqual(viewportState(EMPTY_VIEW_DRAWING, 'plan'), { kind: 'idle' });
   });
 
   it('is indeterminate while the generator has reported nothing, and invents no percentage', () => {
-    assert.deepEqual(viewportState(entry({ status: 'generating' })), { kind: 'generating', percent: null, phase: '' });
+    assert.deepEqual(viewportState(entry({ status: 'generating' }), 'plan'), { kind: 'generating', percent: null, phase: '' });
   });
 
   it('carries the progress and phase the generator reported', () => {
-    assert.deepEqual(viewportState(entry({ status: 'generating', progress: 41.6, phase: 'Cutting' })), { kind: 'generating', percent: 42, phase: 'Cutting' });
-    assert.deepEqual(viewportState(entry({ status: 'generating', progress: 250, phase: 'x' })), { kind: 'generating', percent: 100, phase: 'x' });
+    assert.deepEqual(viewportState(entry({ status: 'generating', progress: 41.6, phase: 'Cutting' }), 'plan'), { kind: 'generating', percent: 42, phase: 'Cutting' });
+    assert.deepEqual(viewportState(entry({ status: 'generating', progress: 250, phase: 'x' }), 'plan'), { kind: 'generating', percent: 100, phase: 'x' });
   });
 
   it('is failed with the generator\'s own reason', () => {
-    assert.deepEqual(viewportState(entry({ status: 'error', error: 'level not found' })), { kind: 'failed', reason: 'level not found' });
-    assert.deepEqual(viewportState(entry({ status: 'error', error: null })), { kind: 'failed', reason: '' });
+    assert.deepEqual(viewportState(entry({ status: 'error', error: 'level not found' }), 'plan'), { kind: 'failed', reason: 'level not found' });
+    assert.deepEqual(viewportState(entry({ status: 'error', error: null }), 'plan'), { kind: 'failed', reason: '' });
   });
 
-  it('is emptyCut when the drawing is ready and holds nothing at all', () => {
-    assert.deepEqual(viewportState(entry({ status: 'ready', drawing: drawing({}) })), { kind: 'emptyCut' });
-    assert.deepEqual(viewportState(entry({ status: 'ready', drawing: null })), { kind: 'emptyCut' });
+  it('is emptyCut on a plan when the drawing is ready and holds nothing at all', () => {
+    assert.deepEqual(viewportState(entry({ status: 'ready', drawing: drawing({}) }), 'plan'), { kind: 'emptyCut' });
+    assert.deepEqual(viewportState(entry({ status: 'ready', drawing: null }), 'plan'), { kind: 'emptyCut' });
   });
+
+  // PR #107 review: an elevation or a section has no cut height, so its empty
+  // drawing must not say "Nothing is cut at this height".
+  for (const kind of ['elevation', 'section'] as const) {
+    it(`is emptyView, not emptyCut, on an empty ${kind}`, () => {
+      assert.deepEqual(viewportState(entry({ status: 'ready', drawing: drawing({}) }), kind), { kind: 'emptyView' });
+      assert.deepEqual(viewportState(entry({ status: 'ready', drawing: null }), kind), { kind: 'emptyView' });
+    });
+  }
 
   it('is ready when anything was cut or projected', () => {
     const poly = {} as Drawing2D['cutPolygons'][number];
-    assert.deepEqual(viewportState(entry({ status: 'ready', drawing: drawing({ lines: [{} as Drawing2D['lines'][number]] }) })), { kind: 'ready' });
-    assert.deepEqual(viewportState(entry({ status: 'ready', drawing: drawing({ cutPolygons: [poly] }) })), { kind: 'ready' });
-    assert.deepEqual(viewportState(entry({ status: 'ready', drawing: drawing({ projectionPolygons: [poly] }) })), { kind: 'ready' });
+    assert.deepEqual(viewportState(entry({ status: 'ready', drawing: drawing({ lines: [{} as Drawing2D['lines'][number]] }) }), 'plan'), { kind: 'ready' });
+    assert.deepEqual(viewportState(entry({ status: 'ready', drawing: drawing({ cutPolygons: [poly] }) }), 'plan'), { kind: 'ready' });
+    assert.deepEqual(viewportState(entry({ status: 'ready', drawing: drawing({ projectionPolygons: [poly] }) }), 'plan'), { kind: 'ready' });
   });
 });

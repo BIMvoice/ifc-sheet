@@ -126,6 +126,7 @@ export const wallEn = {
   'wall.vpState.failed': 'This drawing could not be made.',
   'wall.vpState.failedWhy': 'This drawing could not be made: {reason}',
   'wall.vpState.emptyCut': 'Nothing is cut at this height.',
+  'wall.vpState.emptyView': 'Nothing is seen in this view.',
   'wall.tb.title': 'Title block',
   'wall.tb.everySheet': 'Filled once, printed on every sheet. A sheet can say otherwise from its own Title block button.',
   'wall.tb.sheetHint': 'What {number} prints. A field typed here is this sheet\'s own; the rest follow the project.',
