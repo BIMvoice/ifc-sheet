@@ -63,10 +63,11 @@ export function wallKeyTool(id: WallKeyId): string | undefined {
 
 /**
  * The rows the shortcut list shows when IfcSheet's own face is up: the Wall's,
- * and the palette and the list itself. The viewer's other keys (walk, measure,
- * basket) act on a 3D view the Wall does not show, so listing them would list
- * keys that do nothing there.
+ * the drafting view's (undo, snap, ortho… on every sheet and drawing), and the
+ * palette and the list itself. The viewer's other keys (walk, measure, basket)
+ * act on a 3D view the Wall does not show, so listing them would list keys
+ * that do nothing there.
  */
 export function shownOnTheWall<T extends { id: string; when: string }>(commands: readonly T[]): T[] {
-  return commands.filter((c) => c.when === 'wall' || c.id === 'ui.commandPalette' || c.id === 'help.shortcuts');
+  return commands.filter((c) => c.when === 'wall' || c.when === 'drafting' || c.id === 'ui.commandPalette' || c.id === 'help.shortcuts');
 }

@@ -16,7 +16,7 @@ import type { ReactNode } from 'react';
 import type { ProjectView } from '@/project/types';
 import { wallToolKey } from '@/lib/commands/wall-key-commands';
 import { DRAW_TOOLS, WALL_ALL, WALL_TOOLS } from './wall-actions';
-import { keyTitle } from './wall-key-title';
+import { keyProps } from './wall-key-title';
 
 const DRAW_ICONS: Record<string, ReactNode> = {
   line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, circle: <Circle className="size-5" />,
@@ -35,10 +35,10 @@ interface ToolRailProps {
 
 export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: ToolRailProps) {
   const { t } = useTranslation();
-  /** The tool's name and its key from the keymap; a tool the keymap does not know keeps its bare name. */
-  const keyedTitle = (name: string, command: string): string => {
+  /** The tool's name and its key from the keymap; a tool the keymap does not know keeps its bare name and announces no key. */
+  const keyed = (name: string, command: string): { title: string; 'aria-keyshortcuts'?: string } => {
     const id = wallToolKey(command);
-    return id ? keyTitle(t, name, id) : name;
+    return id ? keyProps(t, name, id) : { title: name };
   };
   return (
     <nav aria-label={t('wall.tools.rail')} className="flex w-[132px] shrink-0 flex-col gap-2 overflow-y-auto py-2">
@@ -50,7 +50,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
             <button
               type="button"
               aria-pressed={on}
-              title={keyedTitle(t(tool.labelKey), tool.command)}
+              {...keyed(t(tool.labelKey), tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
                 'flex flex-col items-center gap-0.5 rounded-2xl border px-2 py-1.5 text-[14px] transition-colors',
@@ -71,7 +71,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
       <button
         type="button"
         aria-pressed={adding}
-        title={keyTitle(t, t('wall.addDrawing'), 'wall.addDrawing')}
+        {...keyProps(t, t('wall.addDrawing'), 'wall.addDrawing')}
         onClick={onAdd}
         className={cn(
           'flex items-center gap-2 rounded-2xl border px-3 py-2 text-left text-[14px] leading-tight',
@@ -90,7 +90,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
               key={tool.command}
               type="button"
               aria-pressed={on}
-              title={keyedTitle(t(tool.labelKey), tool.command)}
+              {...keyed(t(tool.labelKey), tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
                 'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1.5 text-[11px] leading-tight',

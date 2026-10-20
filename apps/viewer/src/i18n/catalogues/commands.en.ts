@@ -20,6 +20,7 @@ export const commandsEn = {
   'commands.category.camera': 'Camera',
   'commands.category.search': 'Search',
   'commands.category.wall': 'The Wall',
+  'commands.category.drafting': 'Drafting',
   'commands.category.ui': 'UI',
   'commands.category.help': 'Help',
 
@@ -122,6 +123,13 @@ export const commandsEn = {
   // Help
   'commands.wall.prevSheet': 'Previous sheet',
   'commands.wall.nextSheet': 'Next sheet',
+  'commands.drafting.undo': 'Undo',
+  'commands.drafting.redo': 'Redo',
+  'commands.drafting.snap': 'Snap on or off',
+  'commands.drafting.ortho': 'Ortho on or off (or hold Ctrl)',
+  'commands.drafting.cancel': 'Cancel the command',
+  'commands.drafting.erase': 'Erase the selection',
+  'commands.drafting.confirm': 'Confirm, or repeat the last command',
   'commands.help.shortcuts': 'Show keyboard shortcuts',
 
   // Pointer gestures

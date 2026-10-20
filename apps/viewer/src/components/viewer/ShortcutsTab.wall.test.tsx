@@ -10,6 +10,7 @@ import { setEditionForTests } from '@/edition';
 import { KEY_COMMANDS } from '@/lib/commands/keyboard-commands';
 import { shortcutLabel } from '@/lib/commands/shortcut-label';
 import { WALL_KEY_COMMANDS } from '@/lib/commands/wall-key-commands';
+import { DRAFTING_KEY_COMMANDS } from '@/lib/commands/drafting-key-commands';
 import { ShortcutsTab } from './ShortcutsTab.js';
 
 /** The list of keys is generated from the keymap (#99): a row for each entry, with the entry's keys. */
@@ -29,6 +30,15 @@ describe('the shortcut list on IfcSheet\'s face', () => {
     for (const c of WALL_KEY_COMMANDS) assert.equal(rows.get(c.id), shortcutLabel(c.id), c.id);
     assert.ok(rows.has('ui.commandPalette') && rows.has('help.shortcuts'));
     assert.equal(rows.has('walk.move'), false, 'no key of the 3D viewer');
+  });
+
+  it('lists the drafting keys that work on the Wall, read from the drafting keymap (#119 review)', () => {
+    setEditionForTests('docs');
+    const rows = shown(render(<ShortcutsTab />));
+    for (const c of DRAFTING_KEY_COMMANDS) assert.equal(rows.get(c.id), shortcutLabel(c.id, false), c.id);
+    assert.equal(rows.get('drafting.undo'), 'Ctrl+Z');
+    assert.equal(rows.get('drafting.snap'), 'F3');
+    assert.equal(rows.get('drafting.ortho'), 'F8');
   });
 
   it('adds a row when an entry is added to the table', () => {

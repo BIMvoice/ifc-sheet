@@ -23,6 +23,7 @@
 import type { TranslationKey } from '@/i18n';
 import { ACTION_NAME_KEYS } from './action-names';
 import type { KeyChord } from './chord';
+import { DRAFTING_KEY_COMMANDS } from './drafting-key-commands';
 import { WALL_KEY_COMMANDS } from './wall-key-commands';
 
 /**
@@ -37,6 +38,8 @@ export type KeyContext =
   | 'tool.measure'
   /** While a sheet is stepped into on the Wall. */
   | 'wall'
+  /** While a drawing is in front (a sheet, a drawing on the Wall, a 2D view): `useDraftingKeys`. */
+  | 'drafting'
   /** While a modeling command runs (Model workspace, charter #6232). */
   | 'command'
   /** One modeling command's own keys, e.g. `command.wall.place`. */
@@ -61,11 +64,11 @@ export type KeyContext =
   | 'schedule.drag';
 
 export type KeyCommandCategory =
-  | 'editing' | 'tools' | 'selection' | 'visibility' | 'camera' | 'search' | 'wall' | 'ui' | 'help';
+  | 'editing' | 'tools' | 'selection' | 'visibility' | 'camera' | 'search' | 'wall' | 'drafting' | 'ui' | 'help';
 
 /** Dialog order: categories render in this order, commands in table order. */
 export const KEY_COMMAND_CATEGORIES: readonly KeyCommandCategory[] = [
-  'editing', 'tools', 'selection', 'visibility', 'camera', 'search', 'wall', 'ui', 'help',
+  'editing', 'tools', 'selection', 'visibility', 'camera', 'search', 'wall', 'drafting', 'ui', 'help',
 ];
 
 export interface KeyCommandDefinition {
@@ -212,6 +215,9 @@ export const KEY_COMMANDS = [
 
   // ── The Wall ── (its own file: `wall-key-commands.ts`)
   ...WALL_KEY_COMMANDS,
+
+  // ── Drafting ── (its own file: `drafting-key-commands.ts`)
+  ...DRAFTING_KEY_COMMANDS,
 ] as const satisfies readonly KeyCommandDefinition[];
 
 export type KeyCommandId = (typeof KEY_COMMANDS)[number]['id'];
