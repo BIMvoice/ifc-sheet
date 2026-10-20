@@ -124,7 +124,7 @@ export function useProjectSync(): void {
     });
     const unsubProject = useProjectStore.subscribe((state, prev) => {
       if (!slot || (state.views === prev.views && state.sheets === prev.sheets && state.name === prev.name
-        && state.drafts === prev.drafts && state.draftLayers === prev.draftLayers && state.hatchPatterns === prev.hatchPatterns && state.modelState === prev.modelState)) return;
+        && state.drafts === prev.drafts && state.draftLayers === prev.draftLayers && state.hatchPatterns === prev.hatchPatterns && state.modelState === prev.modelState && state.titleBlockSources === prev.titleBlockSources)) return;
       const key = slot;
       clearTimeout(timer);
       timer = setTimeout(() => writeAutosave(key, projectDocument()), AUTOSAVE_DEBOUNCE_MS);
