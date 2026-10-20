@@ -236,20 +236,10 @@ jobs:
           shared-key: ci
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      # On main today the test targets of ifc-lite-processing do not compile:
-      # its sources include docs/architecture/evidence/*.json, which is not
-      # committed (12 errors). So that crate's test targets are left out of both
-      # commands below, and its library and binaries are still linted. Put it
-      # back (drop the --exclude, and fold the first clippy step into the
-      # second) once those files are committed or the includes are removed.
-      - name: cargo clippy (ifc-lite-processing, library and binaries)
+      - name: cargo clippy
         if: steps.changes.outputs.rust == 'true'
-        run: cargo clippy -p ifc-lite-processing -- -D warnings
-
-      - name: cargo clippy (everything else, all targets)
-        if: steps.changes.outputs.rust == 'true'
-        run: cargo clippy --workspace --exclude ifc-lite-processing --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: cargo test
         if: steps.changes.outputs.rust == 'true'
-        run: cargo test --workspace --exclude ifc-lite-processing
+        run: cargo test --workspace

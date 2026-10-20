@@ -18,6 +18,7 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import type { CadLayerRule } from './cad-layers.js';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
 import { snapshotFromElements } from '@/whatchanged/snapshot.js';
 import { defaultTypeSpec } from '@/element-types/spec';
@@ -27,7 +28,7 @@ import { loadProjectDocument, projectDocument, resetProject, useProjectStore, ty
 import { parseProjectFile, serializeProject } from './project-file.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package/package-io.js';
 import type {
-  CategoryGraphics, ElevationProjectView, PlanProjectView, ProjectCivilDrawing, ProjectDocument, ProjectMaterial, ProjectSchedule,
+  CategoryGraphics, DraftingProjectView, ElevationProjectView, PlanProjectView, ProjectCivilDrawing, ProjectDocument, ProjectMaterial, ProjectSchedule,
   ProjectSheet, ProjectViewKind, SectionProjectView, SheetViewport, ThreeDProjectView, ViewGraphics,
 } from './types.js';
 
@@ -85,7 +86,10 @@ const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').Pro
   '3d': {
     ...base, id: 'v-3d', name: 'Axo', kind: '3d',
     viewpoint: { position: { x: 1, y: 2, z: 3 }, target: { x: 0, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 }, fov: 50, projectionMode: 'orthographic', orthoSize: 12 },
+    projection: 'axonometric', preset: 'sw', shaded: true,
+    raster: { href: 'data:image/png;base64,AAAA', widthPx: 1772, heightPx: 1182, widthMm: 150, heightMm: 100 },
   } satisfies Required<ThreeDProjectView>,
+  drafting: { ...base, id: 'v-draft', name: 'Typical parapet', kind: 'drafting', number: 4 } satisfies Required<DraftingProjectView>,
 };
 
 const GEOMETRY: { [K in DraftShape['type']]: Required<Extract<DraftShape, { type: K }>> } = {
@@ -130,7 +134,7 @@ const legend: Required<ProjectLegend> = {
 const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'dashdot', group: 'g1' };
 
 const viewport: Required<SheetViewport> = {
-  id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'],
+  id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], drawingNumber: '7',
 };
 const sheet: Required<ProjectSheet> = {
   id: 'sh1', number: 'A-201', autoNumber: true, name: 'Plans', createdAt: 9, paper: 'A2', orientation: 'portrait', viewports: [viewport],
@@ -142,6 +146,10 @@ const civil: Required<ProjectCivilDrawing> = {
   stationStep: 50, elevationStep: 5, every: 25, stations: [0, 100, 250], columns: 3, halfWidth: 20,
 };
 const material: Required<ProjectMaterial> = { id: 'm1', name: 'Mineral wool', hatch: 'INSULATION', hatchScale: 1.5, fill: '#ffeeaa', hatchPen: 'light', membrane: true };
+
+const cadRule: Required<CadLayerRule> = {
+  id: 'cad1', source: 'CUT', kind: 'text', ifcClasses: ['IfcWall', 'IfcWallStandardCase'], material: 'Beton armat', layer: 'A-WALL-CUT', color: '#7f1d1d', lineWeight: 0.5, lineType: 'dashed',
+};
 
 /** Every field of the project document set to something that is not its default. */
 const FULL: Required<ProjectDocument> = {
@@ -170,10 +178,18 @@ const FULL: Required<ProjectDocument> = {
   civilDrawings: [civil],
   typicalSections: [{ id: 'ts1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: { width: 1, slope: -4 }, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 }, nominalDepth: 0.6 } }],
   materials: [material],
+  cadLayers: [cadRule],
   phaseSource: { mapping: { set: 'Faza', property: 'Stare', values: { Existent: 'existing', Desfiintare: 'demolish', Propus: 'new' } }, unmarked: 'new' },
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],
+  details: [{
+    id: 'dt1', name: 'Typical parapet', scale: 10,
+    drafts: drafts.slice(0, 3).map(({ viewId: _viewId, ...rest }) => rest),
+    layers: [{ id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'dashdot' }],
+    hatchPatterns: '*MY-LINES, test\n0, 0,0, 0,2\n', symbols,
+  }],
+  tagFields: { door: { mark: [{ kind: 'pset', pset: 'Pset_DoorCommon', property: 'Reference' }, { kind: 'attribute', name: 'Mark' }] }, room: { name: [{ kind: 'quantity', qto: 'Qto_SpaceBaseQuantities', name: 'NetFloorArea' }, { kind: 'type-pset', pset: 'Pset_X', property: 'Y' }] } },
   issues: [{
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
     sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
@@ -199,7 +215,7 @@ beforeEach(() => resetProject());
 describe('project round trip, one of everything', () => {
   it('the fixture covers every shape type and view kind', () => {
     assert.deepEqual(new Set(drafts.map((d) => d.shape.type)), new Set([...Object.keys(GEOMETRY), ...Object.keys(ANNOTATION)]));
-    assert.equal(new Set(FULL.views.map((v) => v.kind)).size, 4);
+    assert.equal(new Set(FULL.views.map((v) => v.kind)).size, 5);
   });
 
   it('survives the .ifclite-project.json sidecar', () => {
