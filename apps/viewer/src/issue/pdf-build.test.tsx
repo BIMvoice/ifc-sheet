@@ -16,8 +16,10 @@ import { addProjectView, resetProject, useProjectStore } from '@/project/project
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import type { ProjectSheet } from '@/project/types';
 import { openPdf, strokedSegments } from '@/test/pdf-read.js';
+import { fontFamilyOf } from '@/drafting/text-width';
 import { captureSheets } from './capture.js';
-import { buildIssuePdf } from './pdf-build.js';
+import { buildIssuePdf, type PdfWarning } from './pdf-build.js';
+import type { FontLoader } from './pdf-fonts.js';
 import { pdfLabels, planFor } from './run.js';
 
 const vp = (id: string, viewId: string, scale: number, y: number) => ({ id, viewId, x: 100, y, scale, width: 150, height: 60, center: null });
@@ -38,12 +40,13 @@ function reference(): string {
 /** The fonts as the browser fetches them from `public/`. */
 const loadFont = async (url: string) => new Uint8Array(readFileSync(new URL(`../../public${url}`, import.meta.url)));
 
-async function issued(options: { archival?: boolean; romanian?: boolean } = {}) {
+async function issued(options: { archival?: boolean; romanian?: boolean; drawnBy?: string; extraText?: string; loadFont?: FontLoader; warnings?: PdfWarning[] } = {}) {
   const view = reference();
   if (options.romanian) {
     useProjectStore.setState({ titleBlock: { drawnBy: 'Proiectant: Ștefan Țepeș' } });
     useProjectStore.setState({ views: useProjectStore.getState().views.map((v) => ({ ...v, name: 'Cameră înaltă â' })) });
   }
+  if (options.drawnBy) useProjectStore.setState({ titleBlock: { drawnBy: options.drawnBy } });
   const sheets = [
     sheet('s2', 'A-102', 'Second floor plan', [vp('p3', view, 100, 100)]),
     sheet('s1', 'A-101', options.romanian ? 'Secțiune longitudinală' : 'Ground floor plan', [vp('p1', view, 50, 100), vp('p2', view, 100, 200)]),
@@ -56,7 +59,10 @@ async function issued(options: { archival?: boolean; romanian?: boolean } = {}) 
   const prior = window.jspdf;
   window.jspdf = jspdf;
   try {
-    return await buildIssuePdf(plan, drawn.svgs, 'House', pdfLabels(), { loadFont, archival: options.archival, created: new Date(2026, 9, 19, 12, 0, 0) });
+    if (options.extraText) for (const [k, v] of drawn.svgs) drawn.svgs.set(k, v.replace(/<\/svg>\s*$/, `${options.extraText}</svg>`));
+    return await buildIssuePdf(plan, drawn.svgs, 'House', pdfLabels(), {
+      loadFont: options.loadFont ?? loadFont, archival: options.archival, created: new Date(2026, 9, 19, 12, 0, 0), onWarning: (w) => options.warnings?.push(w),
+    });
   } finally {
     window.jspdf = prior;
   }
@@ -154,5 +160,62 @@ describe('the issued PDF', () => {
       assert.equal(metadata?.get('dc:title'), 'House P01');
       assert.equal(metadata?.get('xmp:createdate'), '2026-10-19T12:00:00' + metadata?.get('xmp:createdate')?.slice(19));
     } finally { await close(); }
+  });
+
+  // Review of #110: a font that failed to load threw out of the builder, so nothing was issued.
+  it('still issues, on the standard font, when the PDF font cannot be loaded, and says so', async () => {
+    const warnings: PdfWarning[] = [];
+    const bytes = await issued({ warnings, loadFont: async (url) => { throw new Error(`404 ${url}`); } });
+    const { pdf, close } = await openPdf(bytes);
+    try { assert.equal(pdf.numPages, 3); } finally { await close(); }
+    assert.ok((await pageText(bytes, 1)).includes('Ground floor plan'), 'the drawing list is written');
+    assert.deepEqual(warnings.map((w) => w.key), ['issue.msg.fontMissing']);
+  });
+
+  // Review of #110: Inter has no CJK glyphs; the characters it cannot show are named, the ones it can are not.
+  it('names the characters the PDF font has no glyph for', async () => {
+    const warnings: PdfWarning[] = [];
+    const bytes = await issued({ warnings, drawnBy: '设计 王 Ștefan' });
+    assert.ok((await pageText(bytes, 2)).includes('Ștefan'), 'the Romanian text is still written');
+    assert.deepEqual(warnings, [{ key: 'issue.msg.missingGlyphs', params: { chars: '设 计 王' } }]);
+  });
+
+  // Review of #110: every text was set in Inter, whatever font its text style asked for.
+  it('draws serif and monospace text in Times and Courier, and sans-serif text in Inter', async () => {
+    const extraText = `<text x="50" y="50" font-size="5" font-family="${fontFamilyOf('serif')}">Facade Nord</text>`
+      + `<text x="50" y="60" font-size="5" font-family="${fontFamilyOf('mono')}">W-01 mono</text>`;
+    const { pdf, close } = await openPdf(await issued({ extraText }));
+    try {
+      const page = await pdf.getPage(2);
+      const items = (await page.getTextContent()).items.filter((i) => 'str' in i);
+      await page.getOperatorList(); // loads the page's fonts into commonObjs
+      const fontOf = (text: string) => {
+        const item = items.find((i) => 'str' in i && i.str === text);
+        assert.ok(item && 'fontName' in item, `${text} is on the page`);
+        return (page.commonObjs.get(item.fontName) as { name: string }).name;
+      };
+      assert.equal(fontOf('Facade Nord'), 'Times-Roman');
+      assert.equal(fontOf('W-01 mono'), 'Courier');
+      assert.equal(fontOf('Ground floor plan'), 'Inter');
+    } finally { await close(); }
+  });
+
+  it('says nothing when every letter has a glyph', async () => {
+    const warnings: PdfWarning[] = [];
+    await issued({ warnings, romanian: true });
+    assert.deepEqual(warnings, []);
+  });
+
+  // Review of #110: the font files were fetched from /fonts/ whatever the app's base path.
+  it('reads the font files from under the app base path', async () => {
+    const env = (globalThis as { __VITE_ENV__?: Record<string, unknown> }).__VITE_ENV__;
+    assert.ok(env, 'the test env object the modules read import.meta.env from');
+    const prior = env.BASE_URL;
+    env.BASE_URL = '/ifcsheet/';
+    const asked: string[] = [];
+    try {
+      await issued({ loadFont: async (url) => { asked.push(url); return loadFont(url.replace('/ifcsheet', '')); } });
+    } finally { env.BASE_URL = prior; }
+    assert.deepEqual(asked.sort(), ['/ifcsheet/fonts/Inter-Bold.ttf', '/ifcsheet/fonts/Inter-Regular.ttf']);
   });
 });

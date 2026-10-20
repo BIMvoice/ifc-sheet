@@ -51,4 +51,7 @@ export const issueEn = {
   'issue.msg.viewTimeout': 'Sheet {number}: "{view}" was not drawn within {seconds} seconds.',
   'issue.msg.dxfRaster': 'Sheet {number}: the DXF has no images, so {views} (printed as an image) is an empty frame. Issue as PDF to keep it.',
   'issue.msg.notIssued': 'Nothing was issued and nothing was recorded.',
+  'issue.msg.fontMissing': 'The PDF font could not be loaded, so the PDF uses a standard font. Letters outside Western European text, such as ș, ț and ă, may be missing from it.',
+  'issue.msg.fontReplaced': 'Some serif or monospace text has letters the standard PDF fonts cannot show, so it is set in Inter.',
+  'issue.msg.missingGlyphs': 'The PDF font has no letters for these characters, so they are missing from the PDF: {chars}',
 } as const satisfies Record<string, TranslationValue>;

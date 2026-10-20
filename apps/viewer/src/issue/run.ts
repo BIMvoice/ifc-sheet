@@ -101,7 +101,7 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   if (options.format === 'pdf') {
     const projectFields = effectiveTitleBlock();
     const projectName = plan.sheets.map((s) => titleBlockOf(s.sheet, projectFields, project.name).project).find((n) => n) || project.name;
-    pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival });
+    pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival, onWarning: (w) => lines.push(w) });
   } else {
     const ext = options.format;
     const names = uniqueNames(plan.sheets.map(({ sheet }) => `${sanitizeFilename(`${sheet.number} ${sheet.name}`, { fallback: 'sheet' })}.${ext}`));

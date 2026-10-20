@@ -16,7 +16,7 @@ import { paperOf } from '@/project/sheets';
 import type { IssuePlan } from './plan';
 import type { ListLabels } from './output';
 import { archival } from './pdf-archival';
-import { embedFonts, FONT_FAMILY, useEmbeddedFont, type FontLoader } from './pdf-fonts';
+import { embedFonts, FALLBACK_FAMILY, FONT_FAMILY, missingGlyphs, useEmbeddedFont, type FontLoader } from './pdf-fonts';
 import { layerRuns, type LayerGroup, type LayerRef } from './pdf-layers';
 import { optionalContent, pdfText, type LayerName, type OptionalContent } from './pdf-ocg';
 
@@ -36,7 +36,18 @@ export interface PdfOptions {
   created?: Date;
   /** How the embedded font files are read (the browser fetches them from `public/fonts/`). */
   loadFont?: FontLoader;
+  /** Told what the PDF could not write as asked; the PDF is made anyway. */
+  onWarning?: (warning: PdfWarning) => void;
 }
+
+/** What the PDF could not write as asked: no embedded font, text moved to it, or letters it has no glyph for. */
+export type PdfWarning =
+  | { key: 'issue.msg.fontMissing'; params: Record<string, never> }
+  | { key: 'issue.msg.fontReplaced'; params: Record<string, never> }
+  | { key: 'issue.msg.missingGlyphs'; params: { chars: string } };
+
+/** How many of the missing characters are quoted in the warning. */
+const QUOTED_GLYPHS = 12;
 
 const LIST_ROW_MM = 7;
 
@@ -45,18 +56,18 @@ export function layerName(layer: LayerRef, labels: Pick<PdfLabels, 'groups' | 'r
   return { group, name: layer.group === 'drafting' ? `${labels.drafting}: ${layer.key}` : (labels.roles[layer.key] ?? layer.key) };
 }
 
-function listPage(doc: jsPDF, plan: IssuePlan, projectName: string, labels: PdfLabels): void {
+function listPage(doc: jsPDF, plan: IssuePlan, projectName: string, labels: PdfLabels, family: string): void {
   const head = [labels.sheet, labels.sheetTitle, labels.scale, labels.paper, labels.revision];
   const cols = [20, 60, 25, 35, 30];
   const rows = plan.sheets.map(({ row }) => [row.number, row.title, row.scale, `${row.paper} ${row.orientation}`, row.revision]);
-  doc.setFont(FONT_FAMILY, 'bold');
+  doc.setFont(family, 'bold');
   doc.setFontSize(18);
   doc.text(labels.title, 20, 28);
-  doc.setFont(FONT_FAMILY, 'normal');
+  doc.setFont(family, 'normal');
   doc.setFontSize(11);
   doc.text([projectName, `${labels.issue}: ${plan.name}`, `${labels.date}: ${plan.date}`], 20, 38);
   const draw = (cells: string[], y: number, bold: boolean) => {
-    doc.setFont(FONT_FAMILY, bold ? 'bold' : 'normal');
+    doc.setFont(family, bold ? 'bold' : 'normal');
     doc.setFontSize(10);
     let x = 20;
     cells.forEach((c, i) => {
@@ -91,12 +102,15 @@ async function drawRun(doc: jsPDF, svg: SVGSVGElement, w: number, h: number): Pr
   }
 }
 
-async function sheetPage(doc: jsPDF, oc: OptionalContent, svgText: string, w: number, h: number, labels: PdfLabels): Promise<void> {
+/** Draw one sheet; returns its text and whether serif or monospace text had to be set in the embedded font. */
+async function sheetPage(doc: jsPDF, oc: OptionalContent, svgText: string, w: number, h: number, labels: PdfLabels, embedded: boolean): Promise<{ text: string; replaced: boolean }> {
   const parsed = new DOMParser().parseFromString(svgText, 'image/svg+xml');
   if (parsed.querySelector('parsererror')) throw new Error('The sheet drawing did not parse as SVG.');
   const root = parsed.documentElement as unknown as SVGSVGElement;
-  useEmbeddedFont(root);
+  const replaced = useEmbeddedFont(root, embedded);
+  const text = root.textContent ?? '';
   for (const run of layerRuns(root)) await oc.inLayer(layerName(run.layer, labels), () => drawRun(doc, run.svg, w, h));
+  return { text, replaced };
 }
 
 /** The issued set as PDF bytes. `svgs` maps a sheet id to its SVG text sized in millimetres. */
@@ -107,7 +121,11 @@ export async function buildIssuePdf(plan: IssuePlan, svgs: ReadonlyMap<string, s
   const first = plan.listFirst || sheets.length === 0 ? { w: 210, h: 297 } : paperOf(sheets[0].sheet);
   const created = options.created ?? new Date();
   const doc = new jsPDF({ unit: 'mm', format: [first.w, first.h], orientation: first.w > first.h ? 'landscape' : 'portrait', compress: true });
-  await embedFonts(doc, options.loadFont);
+  const embedded = await embedFonts(doc, options.loadFont);
+  const warn = options.onWarning ?? (() => {});
+  if (!embedded) warn({ key: 'issue.msg.fontMissing', params: {} });
+  const written: string[] = [];
+  let replaced = false;
   // The outline's titles are PDF text strings: UTF-16 when they are not plain ASCII (jsPDF writes them as Latin-1).
   (doc.outline as unknown as { makeString(v: string): string }).makeString = pdfText;
   // The document information is written by jsPDF as Latin-1 too: accents are folded there (the archival XMP keeps the exact text).
@@ -124,14 +142,20 @@ export async function buildIssuePdf(plan: IssuePlan, svgs: ReadonlyMap<string, s
   };
   if (plan.listFirst) {
     nextPage(210, 297);
-    listPage(doc, plan, projectName, labels);
+    listPage(doc, plan, projectName, labels, embedded ? FONT_FAMILY : FALLBACK_FAMILY);
+    written.push(projectName, plan.name, ...plan.sheets.map(({ row }) => `${row.number} ${row.title} ${row.revision}`));
     doc.outline.add(null, labels.title, { pageNumber: doc.getNumberOfPages() });
   }
   for (const { sheet, row } of sheets) {
     const { w, h } = paperOf(sheet);
     nextPage(w, h);
     doc.outline.add(null, `${row.number} ${row.title}`, { pageNumber: doc.getNumberOfPages() });
-    await sheetPage(doc, oc, svgs.get(sheet.id) ?? '', w, h, labels);
+    const page = await sheetPage(doc, oc, svgs.get(sheet.id) ?? '', w, h, labels, embedded);
+    written.push(page.text);
+    replaced ||= page.replaced;
   }
+  if (replaced) warn({ key: 'issue.msg.fontReplaced', params: {} });
+  const missing = embedded ? missingGlyphs(doc, written.join('\n')) : [];
+  if (missing.length > 0) warn({ key: 'issue.msg.missingGlyphs', params: { chars: missing.slice(0, QUOTED_GLYPHS).join(' ') + (missing.length > QUOTED_GLYPHS ? ' …' : '') } });
   return new Uint8Array(doc.output('arraybuffer'));
 }
