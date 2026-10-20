@@ -27,6 +27,8 @@ export interface UseDrawingGenerationParams {
     axis: 'down' | 'front' | 'side';
     position: number;
     flipped: boolean;
+    /** Reflected ceiling plan: look up from the cut but keep the plan's x/y. */
+    reflected?: boolean;
     custom?: {
       normal:    [number, number, number];
       distance:  number;

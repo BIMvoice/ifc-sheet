@@ -10,9 +10,12 @@
 
 import type { TranslationKey, TranslationParameters } from '@/i18n';
 import type { KeyCommandId } from '@/lib/commands/keyboard-commands';
+import { foldText } from '@/lib/text-fold';
 
 export type Category =
   | 'Recent'
+  | 'Sheets'
+  | 'Wall'
   | 'File'
   | 'View'
   | 'Tools'
@@ -63,7 +66,7 @@ interface CommandBase {
 export type Command = CommandBase & (
   | { registryOwned: true; labelKey: TranslationKey; runtimeSource?: never;
       labelKeyParams?: never; detail?: never; detailKey?: never; detailKeyParams?: never }
-  | { registryOwned?: never; runtimeSource: 'recent-file' | 'script-template' | 'tour' | 'extension-command' | 'extension-export';
+  | { registryOwned?: never; runtimeSource: 'recent-file' | 'script-template' | 'tour' | 'extension-command' | 'extension-export' | 'sheet' | 'wall-action';
       labelKey?: TranslationKey; labelKeyParams?: TranslationParameters }
 );
 
@@ -78,16 +81,18 @@ export const RECENT_KEY = 'ifc-lite:cmd-palette:recent';
 export const MAX_RECENT = 5;
 const CATEGORY_POSITION = {
   Recent: 0,
-  File: 1,
-  View: 2,
-  Tools: 3,
-  Visibility: 4,
-  Panels: 5,
-  Export: 6,
-  Automation: 7,
-  Preferences: 8,
-  Extensions: 9,
-  Learn: 10,
+  Sheets: 1,
+  Wall: 2,
+  File: 3,
+  View: 4,
+  Tools: 5,
+  Visibility: 6,
+  Panels: 7,
+  Export: 8,
+  Automation: 9,
+  Preferences: 10,
+  Extensions: 11,
+  Learn: 12,
 } satisfies Record<Category, number>;
 
 /** Every category must have a browse position, including extension rows. */
@@ -127,8 +132,9 @@ export function browseCommands(commands: readonly Command[], recentIds: readonly
  *   1-25 = tight fuzzy (avg gap ≤ 5)
  */
 export function score(query: string, text: string): number {
-  const q = query.toLowerCase();
-  const t = text.toLowerCase();
+  // Folded, so an accent in the text (or its absence in the query) never hides a match.
+  const q = foldText(query);
+  const t = foldText(text);
 
   // Exact substring
   if (t.includes(q)) return 100;
