@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { runningCommand, useDraftingSession } from '@/drafting/session';
+import { setPlacing, useReviewUi } from '@/review/ui-store';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
 import { useProjectStore } from '@/project/project-store';
@@ -71,6 +72,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const group = sheetGroup(sheet);
 
   // A tool ends (Esc, or it finished): the rail lets go of it; the drawing stays forward.
+  const commenting = useReviewUi((s) => s.placing);
   const commandId = useDraftingSession((s) => s.commandId);
   const ran = useRef<string | null>(null);
   useEffect(() => {
@@ -100,6 +102,11 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       if (e.key !== 'Escape') return;
       // A running tool or a drafted selection lets go first (the drafting keys' own Esc).
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
+      // The comment tool lets go first of what is not a drawing tool.
+      if (useReviewUi.getState().placing) {
+        setPlacing(false);
+        return;
+      }
       if (adding) setAdding(false);
       else if (titling) setTitling(false);
       else if (focusId) {
@@ -184,6 +191,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
         {!focusView ? (
           <>
+            <button type="button" className={issue} aria-pressed={commenting} title={t('review.tool.hint')} onClick={() => setPlacing(!commenting)}>{t('review.tool')}</button>
             <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
             <button type="button" className={issue} title={keyTitle(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
             <button type="button" className={issue} title={keyTitle(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>

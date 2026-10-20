@@ -19,6 +19,7 @@ import { readNumberingScheme } from './numbering';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readIssues } from '@/issue/file';
 import { readTitleSources } from './title-block-sources';
+import { readComments } from '@/review/file';
 import { readStandards } from './standards-file';
 import { isDisciplineId } from './discipline-views';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
@@ -221,6 +222,7 @@ export function parseProjectFile(text: string): ProjectDocument {
     issues: readIssues(raw.issues),
     ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     ...(raw.sheetNumbering !== undefined ? { sheetNumbering: readNumberingScheme(raw.sheetNumbering) } : {}),
+    ...(raw.comments !== undefined ? { comments: readComments(raw.comments) } : {}),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
     ...(typeof raw.siteArea === 'number' && Number.isFinite(raw.siteArea) && raw.siteArea > 0 ? { siteArea: raw.siteArea } : {}),
   };

@@ -23,6 +23,7 @@ import { useWallFill } from './useWallFill';
 import { useWallMeasure, WALL_SHEET_ATTR } from './useWallMeasure';
 import { WallFind } from './WallFind';
 import { WallMiniMap } from './WallMiniMap';
+import { CardMarks } from './CardMarks';
 
 const GROUPS: { group: SetGroup | null; labelKey: TranslationKey }[] = [
   { group: 'plans', labelKey: 'wall.group.plans' },
@@ -89,6 +90,7 @@ const SheetOnWall = memo(function SheetOnWall({ sheet, extent, onStep }: { sheet
       >
         <LazyWallSheet sheet={sheet} width={SHEET_PX} near={near} />
       </button>
+      <CardMarks sheet={sheet} width={SHEET_PX} />
       <button
         type="button"
         aria-label={t('wall.remove', { name })}

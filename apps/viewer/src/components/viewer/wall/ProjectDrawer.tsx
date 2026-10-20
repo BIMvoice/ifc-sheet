@@ -39,6 +39,7 @@ import { useViewerStore } from '@/store';
 import { modelSiteArea } from '@/urban/urban-models';
 import { SiteAreaField } from '../urban/SiteAreaField';
 import { TagFieldsPanel } from './TagFieldsPanel';
+import { CommentsSection } from './CommentsSection';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
   { kind: 'plan', labelKey: 'wall.group.plans' },
@@ -140,6 +141,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
         }} />
       </div>
       <LibraryPanel />
+      <CommentsSection onGo={go} />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         <Group title={t('wall.project.sheets')} add={<button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>}>
           {inSetOrder(sheets, schedules).map((s) => (

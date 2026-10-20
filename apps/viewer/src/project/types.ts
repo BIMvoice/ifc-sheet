@@ -28,6 +28,7 @@ import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './document-parts';
 
 export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './document-parts';
+import type { ReviewComment } from '@/review/types';
 
 export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d';
 
@@ -360,6 +361,8 @@ export interface ProjectDocument {
   sheetNumbering?: NumberingScheme;
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
+  /** Review comments pinned on sheets (`review/`). */
+  comments?: ReviewComment[];
 }
 
 /** One sheet as it stood when a set was issued. */
