@@ -12,8 +12,8 @@ use nom::{
     character::complete::{char, digit1, one_of},
     combinator::{map, map_res, opt, recognize},
     multi::separated_list0,
-    sequence::{delimited, pair, preceded, tuple},
-    IResult,
+    sequence::{delimited, pair, preceded},
+    IResult, Parser,
 };
 
 use crate::error::{Error, Result};
@@ -51,7 +51,8 @@ fn entity_ref(input: &[u8]) -> IResult<&[u8], Token<'_>> {
     map(
         preceded(char('#'), map_res(digit1, lexical_core::parse::<u32>)),
         Token::EntityRef,
-    )(input)
+    )
+    .parse(input)
 }
 
 /// Parse string literal: 'text' or "text"
@@ -92,7 +93,8 @@ fn string_literal(input: &[u8]) -> IResult<&[u8], Token<'_>> {
             delimited(char('"'), |i| parse_string_content(i, b'"'), char('"')),
             Token::String,
         ),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Parse integer: 42, -42, +42
@@ -108,11 +110,12 @@ fn string_literal(input: &[u8]) -> IResult<&[u8], Token<'_>> {
 /// Uses lexical-core for 10x faster parsing
 #[inline]
 fn integer(input: &[u8]) -> IResult<&[u8], Token<'_>> {
-    map_res(recognize(tuple((opt(one_of("+-")), digit1))), |s: &[u8]| {
+    map_res(recognize((opt(one_of("+-")), digit1)), |s: &[u8]| {
         lexical_core::parse::<i64>(s)
             .map(Token::Integer)
             .map_err(|_| "parse error")
-    })(input)
+    })
+    .parse(input)
 }
 
 /// Parse float: 3.14, -3.14, +3.14, 1.5E-10, 0., 1.
@@ -124,19 +127,20 @@ fn integer(input: &[u8]) -> IResult<&[u8], Token<'_>> {
 #[inline]
 fn float(input: &[u8]) -> IResult<&[u8], Token<'_>> {
     map_res(
-        recognize(tuple((
+        recognize((
             opt(one_of("+-")),
             digit1,
             char('.'),
             opt(digit1), // Made optional to support "0." format
-            opt(tuple((one_of("eE"), opt(one_of("+-")), digit1))),
-        ))),
+            opt((one_of("eE"), opt(one_of("+-")), digit1)),
+        )),
         |s: &[u8]| {
             lexical_core::parse::<f64>(s)
                 .map(Token::Float)
                 .map_err(|_| "parse error")
         },
-    )(input)
+    )
+    .parse(input)
 }
 
 /// Parse enum: .TRUE., .FALSE., .UNKNOWN., .ELEMENT.
@@ -148,17 +152,18 @@ fn enum_value(input: &[u8]) -> IResult<&[u8], Token<'_>> {
             char('.'),
         ),
         Token::Enum,
-    )(input)
+    )
+    .parse(input)
 }
 
 /// Parse null: $
 fn null(input: &[u8]) -> IResult<&[u8], Token<'_>> {
-    map(char('$'), |_| Token::Null)(input)
+    map(char('$'), |_| Token::Null).parse(input)
 }
 
 /// Parse derived: *
 fn derived(input: &[u8]) -> IResult<&[u8], Token<'_>> {
-    map(char('*'), |_| Token::Derived)(input)
+    map(char('*'), |_| Token::Derived).parse(input)
 }
 
 /// Maximum nesting depth for token recursion (list and typed-value bodies).
@@ -167,6 +172,51 @@ fn derived(input: &[u8]) -> IResult<&[u8], Token<'_>> {
 /// nest beyond 5-10 levels; 256 leaves comfortable headroom while keeping
 /// the stack bounded against pathological inputs.
 const MAX_NESTING_DEPTH: u32 = 256;
+
+/// Comma-separated tokens at `depth`: `separated_list0(delimited(ws, char(','), ws),
+/// token_at_depth)`, written out as a loop with nom's exact semantics (stop
+/// with the items so far on an `Err::Error` from the separator or an element,
+/// propagate `Failure`, and return `SeparatedList` if a round consumes
+/// nothing).
+///
+/// Written by hand because it sits on the recursive path: with nom 8's
+/// by-value `Parser` structs, the combinator version made every nesting level's
+/// unoptimized frame large enough that `MAX_NESTING_DEPTH` levels overflowed a
+/// 2 MiB test-thread stack, where nom 7 fit.
+fn token_list_at_depth(input: &[u8], depth: u32) -> IResult<&[u8], Vec<Token<'_>>> {
+    let mut items = Vec::new();
+    let mut rest = input;
+    match token_at_depth(rest, depth) {
+        Err(nom::Err::Error(_)) => return Ok((rest, items)),
+        Err(e) => return Err(e),
+        Ok((next, item)) => {
+            items.push(item);
+            rest = next;
+        }
+    }
+    loop {
+        let len = rest.len();
+        let after_sep = match delimited(ws, char(','), ws).parse(rest) {
+            Err(nom::Err::Error(_)) => return Ok((rest, items)),
+            Err(e) => return Err(e),
+            Ok((next, _)) => next,
+        };
+        match token_at_depth(after_sep, depth) {
+            Err(nom::Err::Error(_)) => return Ok((rest, items)),
+            Err(e) => return Err(e),
+            Ok((next, item)) => {
+                if next.len() == len {
+                    return Err(nom::Err::Error(nom::error::Error::new(
+                        rest,
+                        nom::error::ErrorKind::SeparatedList,
+                    )));
+                }
+                items.push(item);
+                rest = next;
+            }
+        }
+    }
+}
 
 /// Parse typed value: IFCPARAMETERVALUE(0.), IFCBOOLEAN(.T.)
 ///
@@ -185,24 +235,23 @@ const MAX_NESTING_DEPTH: u32 = 256;
 /// whitespace or comment before the `)` left it unconsumed and the whole
 /// typed value failed to parse (#3789).
 fn typed_value_at_depth(input: &[u8], depth: u32) -> IResult<&[u8], Token<'_>> {
-    map(
-        pair(
-            // Type name (all caps with optional numbers/underscores)
-            take_while1(|c: u8| c.is_ascii_alphanumeric() || c == b'_'),
-            // Arguments
-            delimited(
-                pair(ws, char('(')),
-                preceded(
-                    ws,
-                    separated_list0(delimited(ws, char(','), ws), move |i| {
-                        token_at_depth(i, depth)
-                    }),
-                ),
-                pair(ws, char(')')),
-            ),
-        ),
-        |(type_name, args)| Token::TypedValue(type_name, args),
-    )(input)
+    // Hand-written sequence (recursive path; see `token_at_depth`).
+    // Type name (all caps with optional numbers/underscores)
+    let (i, type_name) =
+        take_while1(|c: u8| c.is_ascii_alphanumeric() || c == b'_').parse(input)?;
+    // Arguments
+    let (i, _) = ws(i)?;
+    let (i, _) = literal(b'(', i)?;
+    let (i, _) = ws(i)?;
+    let (i, args) = token_list_at_depth(i, depth)?;
+    let (i, _) = ws(i)?;
+    let (i, _) = literal(b')', i)?;
+    Ok((i, Token::TypedValue(type_name, args)))
+}
+
+/// One literal byte, `char(c)` for the byte-slice input of this tokenizer.
+fn literal(c: u8, input: &[u8]) -> IResult<&[u8], char> {
+    char(c as char).parse(input)
 }
 
 /// Skip whitespace AND `/* ... */` comments -- 10303-21 allows a comment
@@ -234,25 +283,54 @@ fn token_at_depth(input: &[u8], depth: u32) -> IResult<&[u8], Token<'_>> {
             nom::error::ErrorKind::TooLarge,
         )));
     }
-    delimited(
-        ws,
-        alt((
-            // Single-char markers first (O(1) check)
-            null,       // $
-            derived,    // *
-            entity_ref, // # + digits
-            // Then by complexity
-            enum_value,     // .XXX.
-            string_literal, // 'xxx'
-            move |i| list_at_depth(i, depth + 1), // (...)
-            // Numbers: float before integer since float includes '.'
-            float,
-            integer,
-            // IFCPARAMETERVALUE(0.) - most expensive, last
-            move |i| typed_value_at_depth(i, depth + 1),
-        )),
-        ws,
-    )(input)
+    // `delimited(ws, alt((...)), ws)`, written out as sequential tries with
+    // nom's `alt` semantics: the next alternative runs only after an
+    // `Err::Error`, `Failure` is returned at once, and the error of the LAST
+    // alternative is the one reported. This function is on the recursive
+    // path; the combinator form (nom 8's by-value `Parser` structs) made each
+    // nesting level's unoptimized frame large enough that `MAX_NESTING_DEPTH`
+    // levels overflowed a 2 MiB test-thread stack, where nom 7 fit.
+    let (i, _) = ws(input)?;
+    macro_rules! or_else {
+        ($r:expr, $next:expr) => {
+            match $r {
+                Err(nom::Err::Error(_)) => $next,
+                other => other,
+            }
+        };
+    }
+    let parsed = or_else!(
+        // Single-char markers first (O(1) check)
+        null(i), // $
+        or_else!(
+            derived(i), // *
+            or_else!(
+                entity_ref(i), // # + digits
+                or_else!(
+                    // Then by complexity
+                    enum_value(i), // .XXX.
+                    or_else!(
+                        string_literal(i), // 'xxx'
+                        or_else!(
+                            list_at_depth(i, depth + 1), // (...)
+                            // Numbers: float before integer since float includes '.'
+                            or_else!(
+                                float(i),
+                                or_else!(
+                                    integer(i),
+                                    // IFCPARAMETERVALUE(0.) - most expensive, last
+                                    typed_value_at_depth(i, depth + 1)
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    );
+    let (rest, token) = parsed?;
+    let (rest, _) = ws(rest)?;
+    Ok((rest, token))
 }
 
 /// Parse list: (1, 2, 3) or nested lists
@@ -268,16 +346,13 @@ fn list(input: &[u8]) -> IResult<&[u8], Token<'_>> {
 /// whitespace or comment left between the parens (#3789, same shape as
 /// `typed_value_at_depth`'s empty-args fix).
 fn list_at_depth(input: &[u8], depth: u32) -> IResult<&[u8], Token<'_>> {
-    map(
-        delimited(
-            pair(char('('), ws),
-            separated_list0(delimited(ws, char(','), ws), move |i| {
-                token_at_depth(i, depth)
-            }),
-            pair(ws, char(')')),
-        ),
-        Token::List,
-    )(input)
+    // Hand-written sequence (recursive path; see `token_at_depth`).
+    let (i, _) = literal(b'(', input)?;
+    let (i, _) = ws(i)?;
+    let (i, items) = token_list_at_depth(i, depth)?;
+    let (i, _) = ws(i)?;
+    let (i, _) = literal(b')', i)?;
+    Ok((i, Token::List(items)))
 }
 
 /// Parse a complete entity line from raw IFC bytes.
@@ -290,7 +365,7 @@ where
     T: AsRef<[u8]> + ?Sized,
 {
     let input = input.as_ref();
-    let result: IResult<&[u8], (u32, &[u8], Vec<Token>)> = tuple((
+    let result: IResult<&[u8], (u32, &[u8], Vec<Token>)> = (
         // Entity ID: #123
         delimited(
             ws,
@@ -316,9 +391,10 @@ where
         delimited(
             pair(char('('), ws),
             separated_list0(delimited(ws, char(','), ws), token),
-            tuple((ws, char(')'), ws, char(';'))),
+            (ws, char(')'), ws, char(';')),
         ),
-    ))(input);
+    )
+        .parse(input);
 
     match result {
         Ok((_, (id, type_str, args))) => {
