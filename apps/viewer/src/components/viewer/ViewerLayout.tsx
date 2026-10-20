@@ -8,6 +8,7 @@ import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useTranslation } from '@/i18n';
 import { styleInterpolatedValues } from '@/i18n/richInterpolate';
+import { IfcSheetShell } from './ifcsheet/IfcSheetShell';
 import { MobileToolbar } from './MobileToolbar';
 import { RibbonToolbar } from './ribbon/RibbonToolbar';
 import { HierarchyPanel } from './HierarchyPanel';
@@ -44,7 +45,7 @@ import { LEFT_PANEL_DEFAULT_SIZE } from '@/store/layoutReset';
 import { useOverlayCompositor } from './schedule/useOverlayCompositor';
 import { CommandPalette } from './CommandPalette';
 import { SearchModal } from './SearchModal';
-import { can } from '@/edition';
+import { can, isDocsEdition } from '@/edition';
 import { TourHost } from '@/components/tours/TourHost';
 import { SidebarDock } from './sidebar/SidebarDock';
 import { FloatingPanelHost } from './dock/FloatingPanelHost';
@@ -446,6 +447,11 @@ export function ViewerLayout() {
         {/* Panels popped out into OS / PiP windows (#1208) — portalled into the
             child documents; live-synced via the shared store. */}
         <PanelWindowHost />
+
+        {/* IfcSheet's own face over the engine's interface, which stays mounted underneath for its
+            drawing runtime (#20).
+            Last in the tree so it stacks over the ribbon; dialogs portal after it and stay on top. */}
+        {isDocsEdition() && !isMobile ? <IfcSheetShell /> : null}
       </div>
     </TooltipProvider>
   );

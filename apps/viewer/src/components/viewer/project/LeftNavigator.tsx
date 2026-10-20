@@ -15,31 +15,33 @@ import { HierarchyPanel } from '@/components/viewer/HierarchyPanel';
 import { useProjectSync } from '@/project/project-sync';
 import { useLinkedElementSync } from '@/project/useLinkedElementSync';
 import { useElementTagSync } from '@/project/useElementTagSync';
+import { useParametricLabelSync } from '@/labels/label-sync';
 import { ProjectNavigatorPanel } from './ProjectNavigatorPanel';
 import { NewProjectHost } from './NewProjectDialog';
+import { leftTabFrom, type LeftTab } from './left-tab';
 import { ProjectPackageHost } from './ProjectPackageHost';
 import { ProjectVersionsHost } from './ProjectVersionsHost';
 import { DraftingStandardsDialog } from '../drafting/standards/DraftingStandardsDialog';
 import { JoineryDialog } from '../joinery/JoineryDialog';
 import { installGroupBehaviour } from '@/project/element-groups';
 import { installRoofBlocks } from '@/project/roof-block';
+import { installSectionLink } from '@/drafting/section-link';
 import '@/element-types/model-sync';
 import '@/project/cut-priorities';
 
 // Clicking a member selects its group; a group in edit mode keeps the rest locked.
 installGroupBehaviour();
+installSectionLink();
 installRoofBlocks();
-
-type LeftTab = 'model' | 'project';
 
 const TAB_STORAGE_KEY = 'ifc-lite:left-navigator-tab';
 
 function readTab(): LeftTab {
   try {
-    return localStorage.getItem(TAB_STORAGE_KEY) === 'project' ? 'project' : 'model';
+    return leftTabFrom(localStorage.getItem(TAB_STORAGE_KEY));
   } catch (err) {
     console.warn('[project] could not read the left panel tab', err);
-    return 'model';
+    return 'project';
   }
 }
 
@@ -48,6 +50,7 @@ export function LeftNavigator() {
   useProjectSync();
   useLinkedElementSync();
   useElementTagSync();
+  useParametricLabelSync();
   const [tab, setTab] = useState<LeftTab>(readTab);
   const select = (next: LeftTab) => {
     setTab(next);

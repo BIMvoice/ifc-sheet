@@ -1,0 +1,58 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/** Small buildings for the DIMALL tests, in plan coordinates (metres). */
+
+import type { Pt } from '@/drafting/types';
+import type { PartKind, PlanPart } from './types';
+
+export const rect = (x0: number, y0: number, x1: number, y1: number): Pt[] => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+
+let next = 1;
+export const part = (kind: PartKind, ...rings: Pt[][]): PlanPart => ({ id: next++, kind, rings });
+
+/**
+ * A 12 x 10 house of 0.3 m walls. South wall (y 0..0.3) has a window 1..3 and a window 5..7;
+ * the east wall (x 11.7..12) has a door 4..5; north and west walls are plain.
+ * One cross wall (0.24 thick) meets the south wall at x 7.4..7.64; one meets the north wall at x 3..3.24.
+ */
+export function house(): PlanPart[] {
+  return [
+    part('wall', rect(0, 0, 1, 0.3)), part('wall', rect(3, 0, 5, 0.3)), part('wall', rect(7, 0, 12, 0.3)),
+    part('wall', rect(0, 9.7, 12, 10)),
+    part('wall', rect(0, 0.3, 0.3, 9.7)),
+    part('wall', rect(11.7, 0.3, 12, 4)), part('wall', rect(11.7, 5, 12, 9.7)),
+    part('wall', rect(7.4, 0.3, 7.64, 6)),
+    part('wall', rect(3, 5, 3.24, 9.7)),
+    part('window', rect(1, 0.1, 3, 0.2)), part('window', rect(5, 0.1, 7, 0.2)),
+    part('door', rect(11.75, 4, 11.95, 5)),
+  ];
+}
+
+/** An L: the 12 x 10 house without its north-east 5 x 4 corner. */
+export function lShape(): PlanPart[] {
+  return [
+    part('wall', rect(0, 0, 12, 0.3)), part('wall', rect(0, 9.7, 7.3, 10)), part('wall', rect(0, 0.3, 0.3, 9.7)),
+    part('wall', rect(11.7, 0.3, 12, 6)), part('wall', rect(7, 5.7, 7.3, 9.7)), part('wall', rect(7.3, 5.7, 11.7, 6)),
+    part('window', rect(2, 0.1, 4, 0.2)), part('window', rect(0.1, 4, 0.2, 5)), part('window', rect(8, 5.8, 9, 5.9)),
+  ];
+}
+
+/** `parts` turned by `angle` radians about the origin. */
+export function turned(parts: readonly PlanPart[], angle: number): PlanPart[] {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  return parts.map((p) => ({ ...p, rings: p.rings.map((r) => r.map((q) => ({ x: q.x * c - q.y * s, y: q.x * s + q.y * c }))) }));
+}
+
+/** An 8 x 6 house whose four 0.3 m walls meet at mitres (each wall a trapezoid), a window in the south wall. */
+export function mitred(): PlanPart[] {
+  const t = 0.3, w = 8, h = 6;
+  const trap = (...c: [number, number][]) => c.map(([x, y]) => ({ x, y }));
+  return [
+    part('wall', trap([0, 0], [3, 0], [3, t], [t, t])), part('wall', trap([5, 0], [w, 0], [w - t, t], [5, t])),
+    part('wall', trap([0, h], [w, h], [w - t, h - t], [t, h - t])),
+    part('wall', trap([0, 0], [t, t], [t, h - t], [0, h])), part('wall', trap([w, 0], [w, h], [w - t, h - t], [w - t, t])),
+    part('window', rect(3, 0.1, 5, 0.2)),
+  ];
+}

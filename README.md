@@ -1,350 +1,149 @@
-# BIMVoice — documentation edition
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/brand/ifcsheet-horizontal-dark.png">
+    <img src=".github/brand/ifcsheet-horizontal-light.png" alt="IfcSheet" width="420">
+  </picture>
+</p>
 
-This repository holds the **documentation edition** of BIMVoice: it opens existing IFC models and
-produces their documentation — plans, sections, elevations and sheets, 2D drafting and annotations
-(dimensions, level marks, grid axes, hatches, tags), door and window schedules with symbols mapped
-from the door & window library, reports and exports (PDF, DXF, IFC with edited properties). It does
-not model: elements are not created, moved or deleted.
+# IfcSheet
 
-It is built on [IFClite](https://github.com/LTplus-AG/ifc-lite) and, like it, is licensed under the
-Mozilla Public License 2.0 (see `LICENSE`).
+**Drawings and documentation from IFC models, in the browser. For architects, engineers and BIM coordinators who deliver openBIM.**
+
+IfcSheet opens an existing IFC model and produces the plans, sections, elevations and sheets that go with it. You dimension, tag, hatch and annotate on the views, lay them out on A0 to A4 sheets, and export to PDF, SVG or DXF. The model itself is never changed structurally. Only its properties can be edited.
+
+## Why it exists
+
+We work in native IFC. We model in Bonsai, and the model is the IFC file itself, with nothing to export and nothing lost on the way. That part works.
+
+Then the project needs drawings. Plans, sections, dimensions, tags, sheets with a title block, a PDF set for the site and for the authority. Getting that out of Bonsai is where our days went. Setting up a drawing takes many steps, annotation is slow, and a small change to the model can mean redoing work on the sheet. Bonsai does a great deal and we contribute to it, but producing a drawing set with it was the most painful part of our job.
+
+So we built the tool we wanted for that one part. IfcSheet opens the IFC you already have and does drawings and nothing else: draw, dimension and tag the way you would in a CAD program, put the views on sheets, print. Tags follow elements by GlobalId, so renaming an element updates every tag that points to it.
+
+It is open source for the same reason we use IFC: the drawings of a building should not depend on a file only one vendor's tool can read.
+
+## What you can do today
+
+**Views**
+- Open an IFC model and work from the Project Navigator.
+- Create floor plans, sections and elevations; add levels to a loaded model.
+- Set visibility and graphics per view: hidden categories, line colours, pen weights, cut fills and CAD cut hatches.
+- Plans draw door swings and window symbols from the model's own geometry. You can flip hinge and swing.
+
+**Drafting**
+- Line, polyline, rectangle, circle and arc; move, copy, rotate, mirror, erase; offset, trim, extend, fillet.
+- A command line with typed coordinates, object snaps, ortho, window and crossing selection, layers, undo and redo.
+
+**Annotation**
+- Text and leaders.
+- Aligned, linear, radius, diameter and angular dimensions.
+- Level marks, read from the plan's level or from the picked height on a section or elevation.
+- Grid axes.
+- Hatches from twelve built-in patterns, or load your own `.pat` files.
+- Element tags that show mark, name or class.
+- Drafting standards: layers and layer groups, text styles and dimension styles.
+
+**Sheets**
+- A0 to A4 paper, either orientation, with a frame and title block (sheet number, title, project, drawn by, date, scale).
+- Drag a plan, section or elevation onto a sheet as a viewport at scales from 1:1 to 1:1000.
+- Draw text, leaders, lines and dimensions directly on the sheet, in paper millimetres.
+- Duplicate sheets.
+
+**Schedules and output**
+- Door and window schedules, read live from the model, with symbols from the door and window library.
+- Export sheets and views to SVG, PDF and DXF (R2000, with layers, colours, line types and weights).
+- Edit element properties and export the model as IFC with those edits. Its geometry and structure stay as delivered.
+
+**Projects**
+- Save a project as one `.bvproj` package: models, views, sheets, drafts and standards, with a hash for every part.
+- Save named versions with a note and see what changed between them.
+
+## Who it is for
+
+- Architects and engineers who produce drawings from a model.
+- BIM coordinators who check and document openBIM deliveries.
+- Teams that hand over IFC and want the drawings to match it.
+
+## What it is not
+
+- Not a modelling tool. This edition does not create, move or delete elements.
+- Not yet a replacement for a full CAD package. Expect gaps.
+
+## How it works
+
+IfcSheet runs in your browser. IFC parsing and geometry run locally in WebAssembly, so your model stays on your machine. Nothing is uploaded to open a model or make a drawing.
+
+Two things are off by default and only exist if whoever builds the app turns them on: a server for IFC parsing, and anonymous usage analytics. Analytics events are scrubbed of file and model names and can be opted out of. Build it yourself and you control both.
+
+## Where it is going
+
+The direction is in [VISION.md](VISION.md): you correct a drawing set, you do not build one. Each direction is an [issue you can comment on](https://github.com/BIMvoice/ifcsheet/issues?q=is%3Aissue+label%3Adirection).
+
+## Status
+
+Early and in active development. Things will change, and some will break. Being worked on now:
+
+- Continuous dimension chains
+- An ortho lock button, and Ctrl held while drawing
+- Snapping dimensions to existing dimension lines
+- Two-segment leaders
+- A fix for section symbols on plans
+- A parametric level mark
+
+## Getting started
+
+You need Node.js with corepack. The WebAssembly engine is built from Rust, or fetched prebuilt.
 
 ```bash
-pnpm install
-pnpm dev     # builds the packages, then runs the app on http://localhost:3000
-pnpm build   # a production build (the app in apps/viewer/dist)
+corepack enable && pnpm install
+pnpm build:wasm:fetch   # prebuilt engine; or pnpm build:wasm with Rust nightly and wasm-pack
+pnpm build              # builds all packages
+pnpm dev                # builds, then runs the app at http://localhost:3000
 ```
 
-The rest of this README is IFClite's own.
+Tests and type checks: `pnpm test` and `pnpm typecheck`. Details are in [AGENTS.md](AGENTS.md).
+
+## Built on ifc-lite
+
+IfcSheet stands on [ifc-lite](https://github.com/LTplus-AG/ifc-lite) by LTplus-AG: the IFC parser, the geometry engine, the renderer, the viewer it grew from and the package that cuts a model into 2D linework are theirs. That is a large body of careful, open work, and without it this product would not exist. Thank you to its authors and contributors.
+
+What BIMvoice adds on top is the documentation layer: drafting, annotation and dimensions, element tags, drafting standards, sheets and viewports, DXF output, joinery schedules, and the project package with versions.
+
+IfcSheet is an independent product of BIMvoice. It is not affiliated with or endorsed by the authors of ifc-lite. All licence notices and file headers from ifc-lite are kept intact.
+
+## Contributing
+
+Issues and pull requests are welcome. Open an issue first for anything large, so we can agree on the approach. New features ship with tests. Files you modify stay under MPL-2.0.
+
+## Licence
+
+[MPL-2.0](LICENSE). Use, modify and redistribute it. Source files you change must stay under the same licence.
+
+## Who is behind it
+
+IfcSheet is built by [BIMvoice](https://github.com/BIMvoice): Ionut Ciuntuc and Petru Conduraru. Petru is an openBIM consultant and trainer.
+
+## Need a tool for your own IFC workflow?
+
+IfcSheet started as one architect's problem. If something in your work with IFC models costs you hours every week and no tool does it well, tell us about it. We build tools around IFC for real workflows, and yours may be the next one.
+
+Write to [petru@bimvoice.com](mailto:petru@bimvoice.com).
 
 ---
 
-<table align="center">
-<tr>
-<td valign="top">
-<h1>
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=48&duration=2000&pause=5000&color=6366F1&vCenter=true&width=300&height=55&lines=IFClite" alt="IFClite">
-</h1>
-Open, view, and work with IFC files. Right in the browser.
-</td>
-<td width="120" align="center" valign="middle">
-<img src="docs/assets/logo.png" alt="" width="100">
-</td>
-</tr>
-</table>
+## For developers: the engine underneath
 
-<p align="center">
-  <a href="https://www.ifclite.com/"><img src="https://img.shields.io/badge/🚀_Try_it_Live-ifclite.com-ff6b6b?style=for-the-badge&labelColor=1a1a2e" alt="Try it Live"></a>
-</p>
+This section describes ifc-lite, the engine IfcSheet is built on. Its own documentation is at [ifclite.dev](https://ifclite.dev/docs/guide/quickstart/).
 
-<p align="center">
-  <a href="https://github.com/LTplus-AG/ifc-lite/actions"><img src="https://img.shields.io/github/actions/workflow/status/LTplus-AG/ifc-lite/release.yml?branch=main&style=flat-square&logo=github" alt="Build Status"></a>
-  <a href="https://github.com/LTplus-AG/ifc-lite/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square" alt="License"></a>
-  <a href="https://www.npmjs.com/package/@ifc-lite/parser"><img src="https://img.shields.io/npm/v/@ifc-lite/parser?style=flat-square&logo=npm&label=parser" alt="npm parser"></a>
-  <a href="https://crates.io/crates/ifc-lite-core"><img src="https://img.shields.io/crates/v/ifc-lite-core?style=flat-square&logo=rust&label=core" alt="crates.io"></a>
-</p>
-
----
-
-# IFClite
-
-Parse, view, query, edit, validate, and export IFC files, entirely client-side. A Rust core compiled to WASM does the parsing and geometry, a WebGPU renderer puts it on screen, and 51 npm packages let you pick exactly the pieces you need. Geometry runs on an exact-arithmetic CSG kernel, verified element-by-element against IfcOpenShell across the public benchmark corpus.
-
-Works with **IFC2X3**, **IFC4 / IFC4X3** and **IFC5 (IFCX)**. Live demo at [ifclite.com](https://www.ifclite.com/) and more info at [ifclite.dev](https://www.ifclite.dev/).
-
-## Get Started
-
-```bash
-npx create-ifc-lite my-viewer --template react
-cd my-viewer && npm install && npm run dev
-```
-
-That gets you a working WebGPU IFC viewer with drag-and-drop loading and orbit/pan/zoom. Other templates: `basic`, `threejs`, `babylonjs`, `server`, `server-native`.
-
-To add IFClite to an existing project:
-
-```bash
-npm install @ifc-lite/parser @ifc-lite/geometry @ifc-lite/renderer
-```
-
-Prefer the terminal? The whole toolkit is also a CLI:
-
-```bash
-npm install -g @ifc-lite/cli
-ifc-lite info model.ifc
-```
-
-## Parse an IFC file
-
-```typescript
-import { IfcParser } from '@ifc-lite/parser';
-
-const parser = new IfcParser();
-const buffer = await fetch('model.ifc').then(r => r.arrayBuffer());
-const t0 = performance.now();
-const store = await parser.parseColumnar(buffer, {
-  onProgress: ({ phase, percent }) => console.log(`${phase}: ${percent}%`),
-});
-
-console.log(`${store.entityCount} entities, schema ${store.schemaVersion}`);
-console.log(`Parsed in ${(performance.now() - t0).toFixed(0)}ms`);
-```
-
-## View in 3D
-
-```typescript
-import { IfcParser } from '@ifc-lite/parser';
-import { GeometryProcessor } from '@ifc-lite/geometry';
-import { Renderer } from '@ifc-lite/renderer';
-
-const parser = new IfcParser();
-const geometry = new GeometryProcessor();
-const renderer = new Renderer(canvas);
-
-await Promise.all([geometry.init(), renderer.init()]);
-
-const arrayBuffer = await file.arrayBuffer();
-const store = await parser.parseColumnar(arrayBuffer);
-const meshes = [];
-for await (const event of geometry.processAdaptive(new Uint8Array(arrayBuffer))) {
-  if (event.type === 'batch') meshes.push(...event.meshes);
-}
-
-renderer.loadGeometry(meshes);
-renderer.requestRender();
-
-// Pick an entity at (x, y) in canvas pixels
-const hit = await renderer.pick(120, 240);
-if (hit) console.log(`Picked expressId ${hit.expressId}`);
-```
-
-For Three.js or Babylon.js, parse and extract geometry the same way and feed `meshes` to your engine. See [Three.js integration](https://ifclite.dev/docs/tutorials/threejs-integration/) and [Babylon.js integration](https://ifclite.dev/docs/tutorials/babylonjs-integration/).
-
-## Query entities
-
-```typescript
-import { IfcQuery } from '@ifc-lite/query';
-
-const query = new IfcQuery(store);
-
-// All external load-bearing walls
-const walls = query
-  .ofType('IfcWall', 'IfcWallStandardCase')
-  .whereProperty('Pset_WallCommon', 'IsExternal', '=', true)
-  .whereProperty('Pset_WallCommon', 'LoadBearing', '=', true)
-  .execute();
-
-console.log(`${walls.length} external load-bearing walls`);
-
-for (const wall of walls) {
-  console.log(wall.name, wall.globalId);
-}
-```
-
-For more complex queries, use SQL via DuckDB-WASM:
-
-```typescript
-const result = await query.sql(`
-  SELECT type, COUNT(*) AS n FROM entities GROUP BY type ORDER BY n DESC LIMIT 10
-`);
-console.table(result.rows);
-```
-
-## Validate against IDS
-
-```typescript
-import { parseIDS, validateIDS, createTranslationService } from '@ifc-lite/ids';
-import { createDataAccessor } from '@ifc-lite/ids/bridge';
-
-const idsSpec = parseIDS(idsXmlContent);
-const accessor = createDataAccessor(store);
-const modelInfo = {
-  modelId: 'my-model',
-  schemaVersion: store.schemaVersion,
-  entityCount: store.entityCount,
-};
-const translator = createTranslationService('en');
-const report = await validateIDS(idsSpec, accessor, modelInfo, { translator });
-
-for (const spec of report.specificationResults) {
-  console.log(`${spec.specification.name}: ${spec.passRate}% passed`);
-}
-```
-
-## Edit properties (with undo)
-
-```typescript
-import { MutablePropertyView } from '@ifc-lite/mutations';
-import { PropertyValueType } from '@ifc-lite/data';
-
-const view = new MutablePropertyView(store.properties, 'my-model');
-
-view.setProperty(
-  wallExpressId,
-  'Pset_WallCommon',
-  'FireRating',
-  'REI 120',
-  PropertyValueType.Label,
-);
-
-console.log(view.getMutations()); // change history for undo / export
-```
-
-## Export
-
-```typescript
-import { exportToStep, ParquetExporter, Ifc5Exporter } from '@ifc-lite/export';
-import { GeometryProcessor } from '@ifc-lite/geometry';
-
-// Assumes the earlier parse/geometry steps: `store` (parsed IfcDataStore),
-// `bytes` (raw IFC Uint8Array), `meshes` + `geometryResult` (from geometry).
-
-// IFC STEP, applies any pending mutations
-const stepText = exportToStep(store, { schema: 'IFC4', applyMutations: true });
-
-// glTF / GLB, CSV and JSON-LD are assembled in Rust (ifc-lite-export)
-// via the GeometryProcessor
-const gp = new GeometryProcessor();
-await gp.init();
-const glb = gp.exportGlbFromMeshes(meshes);  // Uint8Array (no re-mesh)
-const csv = gp.exportCsv(bytes, 'entities', ',', /* includeProperties */ true);
-const jsonld = gp.exportJsonld(bytes);
-
-// Parquet: columnar, queryable from DuckDB / Polars
-const parquet = await new ParquetExporter(store).exportTable('entities');
-
-// IFC5 / IFCX: JSON + USD geometry
-const ifcx = new Ifc5Exporter(store, geometryResult).export({ includeGeometry: true });
-```
-
-## Work from the terminal
-
-The [`ifc-lite` CLI](https://ifclite.dev/docs/guide/cli/) covers the full toolkit: inspect, query, schedule, validate, export, create, diff, clash-check, merge, convert, and script IFC models without writing a line of app code.
-
-```bash
-ifc-lite info model.ifc                                  # schema, entities, storeys
-ifc-lite query model.ifc --type IfcWall --json           # entities with properties
-ifc-lite schedule model.ifc --preset door                # door schedule, csv/json/md/html
-ifc-lite ids model.ifc requirements.ids                  # IDS validation
-ifc-lite clash model.ifc --matrix --bcf clashes.bcfzip   # clash detection to BCF
-ifc-lite diff model-v1.ifc model-v2.ifc                  # model comparison
-ifc-lite merge arch.ifc struct.ifc mep.ifc --out fed.ifc # federation
-ifc-lite convert model.ifc --schema IFC4 --out out.ifc   # schema conversion
-ifc-lite view model.ifc                                  # 3D viewer + REST API
-ifc-lite eval model.ifc "bim.query().byType('IfcWall').count()"
-```
-
-Building AI tooling? `ifc-lite mcp model.ifc` starts a [Model Context Protocol](https://ifclite.dev/docs/guide/cli/) server (stdio or HTTP) so agents can query and edit BIM data directly, and `ifc-lite ask model.ifc "how many walls?"` answers natural-language questions.
-
-## Choose your setup
-
-| Setup | Best for | You get |
-|-------|----------|---------|
-| [**Browser (WebGPU)**](https://ifclite.dev/docs/guide/quickstart/) | Viewing and inspecting models | Full-featured 3D viewer, runs entirely client-side |
-| [**Three.js / Babylon.js**](https://ifclite.dev/docs/tutorials/threejs-integration/) | Adding IFC support to an existing 3D app | IFC parsing + geometry, rendered by your engine |
-| [**CLI**](https://ifclite.dev/docs/guide/cli/) | Scripting, CI pipelines, AI agents | The whole toolkit from the terminal, JSON output everywhere |
-| [**Server**](https://ifclite.dev/docs/guide/server/) | Teams, large files, repeat access | Rust backend with caching, parallel processing, streaming |
-| [**Build for Desktop**](https://ifclite.dev/docs/guide/desktop/) | Your own offline native app, very large files (500 MB+) | Extension points to wrap the packages in Tauri, with an optional native-Rust geometry fast path |
-| [**Python (native wheel)**](https://ifclite.dev/docs/api/python/) | Analysis, scripting, scientific Python | `pip install ifclite-geom` runs the geometry kernel in-process, meshes straight to numpy |
-
-Not sure? Start with the browser setup. You can add a server or switch engines later.
-
-## Pick your packages
+The repository is a monorepo of TypeScript packages and Rust crates. The viewer app lives in `apps/viewer`. Drawing and documentation features are in `apps/viewer/src/drafting`. The edition that turns modelling and analysis off is set in `apps/viewer/src/edition.ts` and `edition-policy.ts`.
 
 | I want to... | Packages |
 |--------------|----------|
 | Parse an IFC file | `@ifc-lite/parser` |
 | View a 3D model (WebGPU) | + `@ifc-lite/geometry` + `@ifc-lite/renderer` |
-| Use Three.js or Babylon.js | + `@ifc-lite/geometry` (you handle the rendering) |
 | Query properties and types | + `@ifc-lite/query` |
 | Edit properties (with undo) | + `@ifc-lite/mutations` |
-| Validate against IDS rules | + `@ifc-lite/ids` |
 | Generate 2D drawings | + `@ifc-lite/drawing-2d` |
-| Create IFC files from scratch | `@ifc-lite/create` |
 | Export to glTF / IFC / Parquet | + `@ifc-lite/export` |
-| Detect clashes | + `@ifc-lite/clash` |
-| Diff two model versions | + `@ifc-lite/diff` |
-| BCF topic tracking | + `@ifc-lite/bcf` |
-| Filter and colorize in 3D by rules | + `@ifc-lite/lens` |
 | Build schedules and property tables | + `@ifc-lite/lists` |
-| Script models with the `bim.*` API | + `@ifc-lite/sdk` |
-| Real-time collaboration (CRDT on IFCX) | + `@ifc-lite/collab` + `@ifc-lite/collab-server` |
-| Embed the viewer in any page (iframe) | + `@ifc-lite/embed-sdk` |
-| Connect to a server backend | + `@ifc-lite/server-client` |
-| Give AI agents BIM access (MCP) | + `@ifc-lite/mcp` |
 
-Full list: [API Reference](https://ifclite.dev/docs/api/typescript/) (51 npm packages, 7 Rust crates on crates.io, and the `ifclite-geom` Python wheel on PyPI).
-
-## Performance
-
-- **Streaming first render:** geometry is processed in batches, so the first triangles are on screen while the rest of the file is still parsing.
-- **Geometry correctness:** exact-arithmetic boolean kernel — every opening is cut exactly, and the output is verified element-by-element against IfcOpenShell (99.9%+ agreement on the public benchmark corpus). Engines with approximate booleans are faster on boolean-heavy models; that trade is deliberate.
-- **Geometry speed:** native (server/CLI, multi-threaded) beats `web-ifc` on most of the benchmark corpus; in the browser the viewer streams geometry across workers so the first triangles render long before the file finishes processing.
-- **Parse speed:** STEP tokenization runs at roughly 1.2 GB/s; a full parse lands around 50 MB/s.
-- **Schema coverage:** 100% of IFC4 (776 entities) and IFC4X3 (876 entities).
-- **Footprint:** one lazily fetched WASM module (~2.6 MB gzipped) plus small per-package JS wrappers.
-
-See [benchmarks](https://ifclite.dev/docs/guide/performance/) for full numbers across model sizes and hardware.
-
-## Examples
-
-Ready-to-run projects in [`examples/`](examples/):
-
-- [**Three.js Viewer**](examples/threejs-viewer/) - IFC viewer using Three.js (WebGL)
-- [**Babylon.js Viewer**](examples/babylonjs-viewer/) - IFC viewer using Babylon.js (WebGL)
-- [**Collab Demo**](examples/collab-demo/) - real-time collaborative editing over websockets
-- [**Three.js Collab**](examples/threejs-collab/) - collaborative 3D viewing in Three.js
-
-## Documentation
-
-| | |
-|---|---|
-| **Start here** | [Quick Start](https://ifclite.dev/docs/guide/quickstart/) · [Installation](https://ifclite.dev/docs/guide/installation/) · [CLI Toolkit](https://ifclite.dev/docs/guide/cli/) · [Browser Requirements](https://ifclite.dev/docs/guide/browser-requirements/) |
-| **Guides** | [Parsing](https://ifclite.dev/docs/guide/parsing/) · [Geometry](https://ifclite.dev/docs/guide/geometry/) · [Rendering](https://ifclite.dev/docs/guide/rendering/) · [Querying](https://ifclite.dev/docs/guide/querying/) · [Exporting](https://ifclite.dev/docs/guide/exporting/) |
-| **BIM features** | [Federation](https://ifclite.dev/docs/guide/federation/) · [BCF](https://ifclite.dev/docs/guide/bcf/) · [IDS Validation](https://ifclite.dev/docs/guide/ids/) · [2D Drawings](https://ifclite.dev/docs/guide/drawing-2d/) · [Property Editing](https://ifclite.dev/docs/guide/mutations/) |
-| **Customization** | [Extensions](https://ifclite.dev/docs/guide/extensions/) · [Authoring Extensions](https://ifclite.dev/docs/guide/extension-authoring/) · [Flavors](https://ifclite.dev/docs/guide/flavors/) |
-| **Tutorials** | [Build a Viewer](https://ifclite.dev/docs/tutorials/building-viewer/) · [Three.js](https://ifclite.dev/docs/tutorials/threejs-integration/) · [Babylon.js](https://ifclite.dev/docs/tutorials/babylonjs-integration/) · [Custom Queries](https://ifclite.dev/docs/tutorials/custom-queries/) · [Extending the Parser](https://ifclite.dev/docs/tutorials/extending-parser/) |
-| **Deep dives** | [Architecture](https://ifclite.dev/docs/architecture/overview/) · [Data Flow](https://ifclite.dev/docs/architecture/data-flow/) · [Performance](https://ifclite.dev/docs/guide/performance/) |
-| **API** | [TypeScript](https://ifclite.dev/docs/api/typescript/) · [Rust](https://ifclite.dev/docs/api/rust/) · [WASM](https://ifclite.dev/docs/api/wasm/) · [Python](https://ifclite.dev/docs/api/python/) |
-
-## Contributing
-
-The WASM bundle is built from `rust/` on every fresh build, so a Rust
-toolchain is required. `rust-toolchain.toml` pins the nightly channel
-and the `wasm32-unknown-unknown` target. `rustup show` (or the
-contributing setup guide) installs everything needed.
-
-```bash
-# 1. Rust toolchain (one-time)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-cargo install wasm-pack   # or: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-# 2. Clone and build
-git clone https://github.com/LTplus-AG/ifc-lite.git
-cd ifc-lite
-pnpm install && pnpm build && pnpm dev   # opens viewer at localhost:3000
-```
-
-If you need IFC fixtures for tests, benchmarks, or stress tests, fetch them with:
-
-```bash
-pnpm fixtures           # download every fixture (idempotent, hash-verified)
-pnpm fixtures:check     # CI-friendly: exit 1 if anything is missing or stale
-```
-
-The fixtures are stored on a GitHub Release and catalogued in
-[`tests/models/manifest.json`](tests/models/manifest.json). See
-[`tests/models/README.md`](tests/models/README.md) for the full design and
-maintainer workflow.
-
-See the [Contributing Guide](https://ifclite.dev/docs/contributing/setup/) and [Release Process](RELEASE.md).
-
-## Community
-
-- [GitHub Discussions](https://github.com/LTplus-AG/ifc-lite/discussions) - questions, ideas, show-and-tell
-- [Issues](https://github.com/LTplus-AG/ifc-lite/issues) - bug reports and feature requests
-- [Releases](https://github.com/LTplus-AG/ifc-lite/releases) - changelog and version notes
-
-## License
-
-[MPL-2.0](LICENSE) - use, modify, redistribute. Source files modified under MPL must remain MPL.
+More: [2D drawings guide](https://ifclite.dev/docs/guide/drawing-2d/), [architecture overview](https://ifclite.dev/docs/architecture/overview/), [API reference](https://ifclite.dev/docs/api/typescript/). The `docs/` folder in this repository holds the engine's documentation sources.

@@ -68,6 +68,7 @@ function keyGlyph(key: string, apple: boolean): string {
   if (key.startsWith('code:')) {
     const code = key.slice('code:'.length);
     if (code.startsWith('Digit')) return code.slice('Digit'.length);
+    if (/^Key[A-Z]$/.test(code)) return code.slice('Key'.length);
     if (code === 'Backslash') return '\\';
     return code;
   }
@@ -95,6 +96,33 @@ export function formatChord(chord: KeyChord, apple: boolean = isApplePlatform())
     single = parts.join('+');
   }
   return chord.double ? `${single} ${single}` : single;
+}
+
+/** `KeyboardEvent.key` names as `aria-keyshortcuts` spells them, for the keys the table writes in lower case. */
+const ARIA_KEYS: Record<string, string> = {
+  ' ': 'Space', escape: 'Escape', enter: 'Enter', delete: 'Delete', backspace: 'Backspace', tab: 'Tab',
+  arrowup: 'ArrowUp', arrowdown: 'ArrowDown', arrowleft: 'ArrowLeft', arrowright: 'ArrowRight',
+  pageup: 'PageUp', pagedown: 'PageDown', home: 'Home', end: 'End', shift: 'Shift',
+};
+
+/**
+ * The chord as `aria-keyshortcuts` writes it (WAI-ARIA 1.2: modifiers then the
+ * key, joined by `+`): `Alt+Shift+1`, `Meta+P` on Apple platforms and
+ * `Control+P` elsewhere, `PageDown`. Null for a double press, which the
+ * attribute cannot express.
+ */
+export function ariaChord(chord: KeyChord, apple: boolean = isApplePlatform()): string | null {
+  if (chord.double) return null;
+  let key: string;
+  if (chord.key.startsWith('code:')) key = keyGlyph(chord.key, apple);
+  else if (ARIA_KEYS[chord.key]) key = ARIA_KEYS[chord.key];
+  else key = chord.key.length === 1 ? chord.key.toUpperCase() : chord.key.charAt(0).toUpperCase() + chord.key.slice(1);
+  const parts: string[] = [];
+  if (chord.mod) parts.push(apple ? 'Meta' : 'Control');
+  if (chord.alt) parts.push('Alt');
+  if (chord.shift) parts.push('Shift');
+  parts.push(key);
+  return parts.join('+');
 }
 
 /** Platform-independent identity of a chord, for collision checks. */

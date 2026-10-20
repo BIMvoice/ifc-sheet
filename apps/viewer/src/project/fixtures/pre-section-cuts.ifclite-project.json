@@ -1,0 +1,175 @@
+{
+  "format": "ifclite-project",
+  "version": 1,
+  "savedAt": "2026-10-12T10:00:00.000Z",
+  "name": "Old house",
+  "models": [
+    {
+      "key": "house-sha",
+      "name": "house.ifc"
+    }
+  ],
+  "views": [
+    {
+      "id": "view-67a692f5-5f25-46f0-822e-141966483e5f",
+      "kind": "plan",
+      "name": "First Floor",
+      "level": {
+        "name": "First Floor",
+        "elevation": 3,
+        "storeyGlobalIds": [
+          "G1"
+        ]
+      },
+      "cutHeight": 1.2,
+      "auto": true,
+      "createdAt": 1792487238763
+    },
+    {
+      "id": "view-6fe6c4a3-3167-4097-8770-e762c8e10a01",
+      "kind": "plan",
+      "name": "Ground Floor",
+      "level": {
+        "name": "Ground Floor",
+        "elevation": 0,
+        "storeyGlobalIds": [
+          "G0"
+        ]
+      },
+      "cutHeight": 1.2,
+      "auto": true,
+      "createdAt": 1792487238763
+    },
+    {
+      "id": "view-9e8e6a20-f910-4fe7-b77b-9e973e6d6e69",
+      "kind": "elevation",
+      "name": "North Elevation",
+      "direction": "north",
+      "auto": true,
+      "createdAt": 1792487238763
+    },
+    {
+      "id": "view-60422526-0bc5-48ed-b3e4-62764d84d771",
+      "kind": "elevation",
+      "name": "East Elevation",
+      "direction": "east",
+      "auto": true,
+      "createdAt": 1792487238763
+    },
+    {
+      "id": "view-05167679-1739-4696-b41d-bac4b19b7507",
+      "kind": "elevation",
+      "name": "South Elevation",
+      "direction": "south",
+      "auto": true,
+      "createdAt": 1792487238763
+    },
+    {
+      "id": "view-4b6d236f-3311-4d74-93ef-c4e689ada910",
+      "kind": "elevation",
+      "name": "West Elevation",
+      "direction": "west",
+      "auto": true,
+      "createdAt": 1792487238763
+    },
+    {
+      "id": "view-59cf6244-75df-424a-afb8-c42ed62a77d0",
+      "kind": "3d",
+      "name": "{3D}",
+      "viewpoint": null,
+      "auto": true,
+      "createdAt": 1792487238763
+    }
+  ],
+  "sheets": [
+    {
+      "id": "sheet-669e37cd-cc48-4ec0-8bf5-c2967e065936",
+      "number": "A-101",
+      "name": "Ground floor plan",
+      "createdAt": 1792487238763,
+      "viewports": [
+        {
+          "id": "viewport-51490989-7d07-4e9d-a257-4bc4fa26097f",
+          "viewId": "view-67a692f5-5f25-46f0-822e-141966483e5f",
+          "x": 200,
+          "y": 150,
+          "scale": 100,
+          "width": 0,
+          "height": 0,
+          "center": null
+        }
+      ],
+      "titleBlock": {
+        "project": "Old house",
+        "drawnBy": "PC",
+        "date": "2026-10-12"
+      }
+    },
+    {
+      "id": "sheet-3d719636-5a05-4767-a37a-9da381d1dcf5",
+      "number": "A-102",
+      "name": "Notes",
+      "createdAt": 1792487238763,
+      "titleBlock": {
+        "project": "Old house",
+        "drawnBy": "IC"
+      }
+    }
+  ],
+  "drafts": [],
+  "draftLayers": [
+    {
+      "id": "0",
+      "name": "0",
+      "color": "#18181b",
+      "visible": true,
+      "locked": false
+    }
+  ],
+  "hatchPatterns": "",
+  "symbolFlips": {},
+  "openingLines": "handle",
+  "textStyles": [
+    {
+      "id": "standard",
+      "name": "Standard",
+      "height": 2.5,
+      "font": "sans",
+      "bold": false,
+      "italic": false
+    }
+  ],
+  "dimStyles": [
+    {
+      "id": "standard",
+      "name": "Standard",
+      "textStyle": "standard",
+      "arrow": "tick",
+      "arrowSize": 1.5,
+      "extGap": 1,
+      "extOver": 1.5,
+      "placement": "above",
+      "textGap": 0.8,
+      "precision": 2,
+      "unit": "m"
+    }
+  ],
+  "layerGroups": [],
+  "joineryTypes": [],
+  "currentJoinery": {},
+  "schedules": [],
+  "joineryMapping": {
+    "byName": true,
+    "byDimensions": true,
+    "tolerance": 0.02,
+    "aliases": {},
+    "types": {},
+    "elements": {}
+  },
+  "elementTypes": [],
+  "currentTypes": {},
+  "structureProfiles": [],
+  "civilDrawings": [],
+  "typicalSections": [],
+  "materials": []
+}

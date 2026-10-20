@@ -18,7 +18,7 @@ import type { SectionPlane } from '@/store/types';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { addProjectView, setActiveProjectItem, useProjectStore } from './project-store';
 import { projectPlaneFromSection, sectionPlaneForView } from './view-plane';
-import { closeDocumentTab, isDrawingTabActive, MODEL_TAB_ID, showDocumentTab, useDocumentTabs } from './document-tabs';
+import { closeDocumentTab, isDrawingTabActive, MODEL_TAB_ID, showDocumentTab, useDocumentTabs, WALL_TAB_ID } from './document-tabs';
 import type { ProjectView } from './types';
 
 export type OpenViewResult = 'opened' | 'unresolved' | 'missing';
@@ -62,7 +62,7 @@ function applyDrawingView(view: Exclude<ProjectView, { kind: '3d' }>): boolean {
   if (!plane) return false;
   const state = useViewerStore.getState();
   useViewerStore.setState({
-    sectionPlane: { ...state.sectionPlane, ...plane, custom: plane.custom, box: undefined, enabled: true, parked: false },
+    sectionPlane: { ...state.sectionPlane, ...plane, reflected: plane.reflected, custom: plane.custom, box: undefined, enabled: true, parked: false },
   });
   return true;
 }
@@ -74,8 +74,15 @@ export function activateDocumentTab(id: string): OpenViewResult {
     showDocumentTab(MODEL_TAB_ID);
     return 'opened';
   }
+  if (id === WALL_TAB_ID) {
+    // The Wall hangs every sheet with its viewports' own drawings; the 3D section state is set aside.
+    leaveModelTab();
+    setActiveProjectItem(null);
+    showDocumentTab(WALL_TAB_ID);
+    return 'opened';
+  }
   const project = useProjectStore.getState();
-  if (project.sheets.some((s) => s.id === id) || project.schedules?.some((s) => s.id === id) || project.civilDrawings?.some((d) => d.id === id)) {
+  if (project.sheets.some((s) => s.id === id) || project.schedules?.some((s) => s.id === id) || project.legends?.some((l) => l.id === id) || project.civilDrawings?.some((d) => d.id === id)) {
     // A sheet shows its viewports' own drawings; the 3D section state is set aside like for a view.
     leaveModelTab();
     setActiveProjectItem(id);

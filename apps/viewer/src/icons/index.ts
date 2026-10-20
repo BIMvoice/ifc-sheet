@@ -166,3 +166,6 @@ export { default as DraftSweep } from '~icons/viewer/draft-sweep';
 export { default as DraftRevolve } from '~icons/viewer/draft-revolve';
 export { default as AnnoTag } from '~icons/viewer/anno-tag';
 export { default as DraftingStandards } from '~icons/viewer/drafting-standards';
+export { default as AnnoSymbol } from '~icons/viewer/anno-symbol';
+export { default as AnnoSymbolMake } from '~icons/viewer/anno-symbol-make';
+export { default as AnnoLegend } from '~icons/viewer/anno-legend';

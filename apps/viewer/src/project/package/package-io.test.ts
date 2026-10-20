@@ -14,7 +14,8 @@ import assert from 'node:assert/strict';
 import { strFromU8, strToU8 } from 'fflate';
 import { defaultWindowSpec } from '@ifc-lite/create';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
-import { parseProjectFile, serializeProject } from '../project-file.js';
+import { parseProjectFile, PROJECT_FILE_VERSION, serializeProject } from '../project-file.js';
+import { ProjectFileTooNewError, type ProjectMigration } from '../project-migrations.js';
 import type { ProjectDocument } from '../types.js';
 import { MANIFEST_PATH, PACKAGE_VERSION } from './format.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package-io.js';
@@ -74,6 +75,18 @@ describe('project package', () => {
     assert.deepEqual(mep, { model: { id: 'mep', name: 'mep.ifc', role: 'linked', source: 'mep.ifc', sha256: 'abc' }, bytes: undefined });
   });
 
+  it('keeps the references of parametric level marks, a slid one and an aligned one, through save and open', async () => {
+    const slid = { type: 'level' as const, p: { x: 8, y: 2.5 }, value: 2.5, height: 0.25, ref: { at: { x: 1, y: 2.5 } } };
+    const aligned = { type: 'level' as const, p: { x: 4, y: 3 }, value: 3, height: 0.25, ref: { at: { x: 4, y: 3 }, storey: 'G1' } };
+    const marks = [slid, aligned].map((shape, i) => ({ id: `m${i}`, viewId: 'e1', layerId: '0', shape, params: {} }));
+    const built = await buildPackage({
+      projectId: 'prj-1', doc: { ...doc, drafts: [...doc.drafts, ...marks] }, app: { name: 'BIMVoice', version: '4.0.0' }, now: new Date('2026-10-09T10:00:00Z'),
+      models: [{ id: 'arch', name: 'arch.ifc', role: 'native', bytes: ifc('architecture') }, { id: 'mep', name: 'mep.ifc', role: 'linked', source: 'mep.ifc', sha256: 'abc' }],
+    });
+    const opened = await readPackage(unzipPackage(zipPackage(built.files)));
+    assert.deepEqual(opened.doc.drafts.filter((d) => d.id.startsWith('m')).map((d) => d.shape), [slid, aligned]);
+  });
+
   it('splits the document into parts, one draft part per view', async () => {
     const { files, manifest } = await packaged();
     const paths = manifest.parts.map((p) => p.path);
@@ -121,5 +134,35 @@ describe('project package', () => {
     const { files } = await buildPackage({ projectId: 'p', doc: extra, models: [] });
     const core = JSON.parse(strFromU8(files.get('project/document.json')!)) as Record<string, unknown>;
     assert.deepEqual(core.futureThing, { a: 1 });
+  });
+});
+
+describe('the project file version of a package', () => {
+  /** `files` with the manifest's `projectFileVersion` set to `v`, or removed (a package written before it was recorded). */
+  const withVersion = (files: Map<string, Uint8Array>, v: number | undefined) => {
+    const { projectFileVersion: _v, ...manifest } = JSON.parse(strFromU8(files.get(MANIFEST_PATH)!)) as Record<string, unknown>;
+    return new Map(files).set(MANIFEST_PATH, strToU8(JSON.stringify(v === undefined ? manifest : { ...manifest, projectFileVersion: v })));
+  };
+  /** A later build that reads version 2 and has the step from 1. */
+  const step: ProjectMigration = (raw) => ({ ...raw, name: `${String(raw.name)} (from v1)` });
+  const v2Build = { migrations: { 1: step }, current: 2 };
+
+  it('is recorded in the manifest when a package is written', async () => {
+    const { manifest, files } = await packaged();
+    assert.equal(manifest.projectFileVersion, PROJECT_FILE_VERSION);
+    assert.equal(JSON.parse(strFromU8(files.get(MANIFEST_PATH)!)).projectFileVersion, PROJECT_FILE_VERSION);
+  });
+
+  it('is what the parts are read as: a v1 package (none recorded) is migrated by a v2 reader, a v2 one is not', async () => {
+    const { files } = await packaged();
+    assert.equal((await readPackage(withVersion(files, undefined), v2Build)).doc.name, 'House (from v1)');
+    assert.equal((await readPackage(withVersion(files, 1), v2Build)).doc.name, 'House (from v1)');
+    assert.equal((await readPackage(withVersion(files, 2), v2Build)).doc.name, 'House', 'already at v2: not migrated again');
+  });
+
+  it('refuses a package whose parts are newer than this build reads, as a project file is', async () => {
+    const { files } = await packaged();
+    await assert.rejects(readPackage(withVersion(files, PROJECT_FILE_VERSION + 1)), ProjectFileTooNewError);
+    await assert.rejects(readPackage(withVersion(files, 0)), /projectFileVersion must be a whole number from 1/);
   });
 });

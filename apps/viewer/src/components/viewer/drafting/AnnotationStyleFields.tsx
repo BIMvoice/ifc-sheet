@@ -51,7 +51,7 @@ export function useStyleBook(): StyleBook {
 export function AnnotationStyleFields({ entity, shape }: { entity: DraftEntity; shape: AnnotationShape }) {
   const { t } = useTranslation();
   const book = useStyleBook();
-  if (shape.type === 'hatch') return null;
+  if (shape.type === 'hatch' || shape.type === 'symbol') return null;
   const ids = new Set([entity.id]);
   const dimensional = isDimensional(shape);
   const kind = dimensional ? 'dimStyle' : 'textStyle';

@@ -12,7 +12,7 @@ import { describe, it } from 'node:test';
 import { defaultWindowSpec } from '@ifc-lite/create';
 import assert from 'node:assert/strict';
 import { parseProjectFile, serializeProject } from './project-file.js';
-import type { ProjectDocument } from './types.js';
+import type { ProjectDocument, ProjectSchedule } from './types.js';
 
 const doc: ProjectDocument = {
   name: 'House',
@@ -44,7 +44,12 @@ const doc: ProjectDocument = {
   currentTypes: { wall: 't1', column: 't2' },
   schedules: [{ id: 's1', name: 'Window schedule', kind: 'window', createdAt: 5, scale: 25 }],
   structureProfiles: [],
+  savedSectionCuts: [],
   materials: [{ id: 'm1', name: 'Mineral wool', hatch: 'INSULATION', hatchScale: 1.5, fill: null, hatchPen: 'light' }, { id: 'm2', name: 'PE foil', membrane: true }],
+  annotationTypes: [{ id: 'a1', name: 'Door tag', tool: 'tag', textStyle: 'big', tagField: 'name' }],
+  symbols: [{ id: 'sy1', name: 'Mark', unit: 'paper', shapes: [{ type: 'circle', c: { x: 0, y: 0 }, r: 4 }] }],
+  legends: [{ id: 'lg1', name: 'Key', createdAt: 1, title: 'Key', showTitle: true, scope: 'project', categories: ['materials', 'symbols'], columns: 1, rowHeight: 7, swatchWidth: 18, textStyle: 'standard', headings: true }],
+  issues: [],
   typicalSections: [{ id: 't1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: null, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 } } }],
   civilDrawings: [{ id: 'c1', name: 'DN1 profile', kind: 'profile', createdAt: 3, corridorGlobalId: '2O2Fr$t4X7Zf8NOew3FLOH', scale: 1000, vExaggeration: 10 }],
 };
@@ -54,12 +59,24 @@ describe('project file', () => {
     assert.deepEqual(parseProjectFile(serializeProject(doc)), doc);
   });
 
+  it('round-trips parametric level marks with their references, and an old mark without one', () => {
+    const marks = [
+      { type: 'level' as const, p: { x: 8, y: 2.5 }, value: 2.5, height: 0.25, ref: { at: { x: 1, y: 2.5 } } },
+      { type: 'level' as const, p: { x: 4, y: 3 }, value: 3, height: 0.25, ref: { at: { x: 4, y: 3 }, storey: 'G1' } },
+      { type: 'level' as const, p: { x: 0, y: 0 }, value: 7.1, height: 0.25 },
+    ];
+    const withMarks = { ...doc, drafts: marks.map((shape, i) => ({ id: `m${i}`, viewId: 'e1', layerId: '0', shape, params: {} })) };
+    assert.deepEqual(parseProjectFile(serializeProject(withMarks)).drafts.map((d) => d.shape), marks);
+  });
+
   it('rejects a file of another format', () => {
     assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-document', version: 1 })), /\/format/);
   });
 
-  it('rejects an unsupported version', () => {
-    assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-project', version: 2 })), /\/version 2 is not supported/);
+  it('rejects a version that is not a whole number from 1', () => {
+    for (const version of [0, -1, 1.5, '1', null]) {
+      assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-project', version })), /\/version must be a whole number/, String(version));
+    }
   });
 
   it('names the view that is malformed', () => {
@@ -77,4 +94,17 @@ describe('project file', () => {
   it('reports invalid JSON', () => {
     assert.throws(() => parseProjectFile('{'), /invalid JSON/);
   });
+});
+
+// Review of #108: a kind the reader does not list reopens as a joinery list ('all') with no error.
+// The record is keyed by the kind union, so a new kind does not compile until it is listed here.
+const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true };
+
+describe('schedule kinds', () => {
+  for (const kind of Object.keys(SCHEDULE_KINDS) as ProjectSchedule['kind'][]) {
+    it(`a '${kind}' schedule reopens as '${kind}'`, () => {
+      const saved: ProjectDocument = { ...doc, schedules: [{ id: 'k', name: 'Schedule', kind, createdAt: 1 }] };
+      assert.equal(parseProjectFile(serializeProject(saved)).schedules?.[0]?.kind, kind);
+    });
+  }
 });

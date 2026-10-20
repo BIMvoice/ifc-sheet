@@ -19,6 +19,12 @@ import { create } from 'zustand';
 /** The permanent 3D model tab. */
 export const MODEL_TAB_ID = 'model-3d';
 
+/** The permanent Wall tab: the whole drawing set at once. */
+export const WALL_TAB_ID = 'wall';
+
+/** A tab that is always there and never closes. */
+const isPermanent = (id: string): boolean => id === MODEL_TAB_ID || id === WALL_TAB_ID;
+
 interface DocumentTabsState {
   /** Opened drawing views (project view ids), in tab order. */
   openIds: string[];
@@ -39,7 +45,7 @@ export function isDrawingTabActive(state: DocumentTabsState = useDocumentTabs.ge
 /** Add `id` as a tab (if not open yet) and put it in front. */
 export function showDocumentTab(id: string): void {
   useDocumentTabs.setState((s) => ({
-    openIds: id === MODEL_TAB_ID || s.openIds.includes(id) ? s.openIds : [...s.openIds, id],
+    openIds: isPermanent(id) || s.openIds.includes(id) ? s.openIds : [...s.openIds, id],
     activeId: id,
   }));
 }
@@ -63,5 +69,5 @@ export function pruneDocumentTabs(viewIds: ReadonlySet<string>): void {
   const { openIds, activeId } = useDocumentTabs.getState();
   const kept = openIds.filter((id) => viewIds.has(id));
   if (kept.length === openIds.length) return;
-  useDocumentTabs.setState({ openIds: kept, activeId: activeId === MODEL_TAB_ID || kept.includes(activeId) ? activeId : MODEL_TAB_ID });
+  useDocumentTabs.setState({ openIds: kept, activeId: isPermanent(activeId) || kept.includes(activeId) ? activeId : MODEL_TAB_ID });
 }

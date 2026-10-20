@@ -2,10 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
+import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
+import type { DisciplineId } from './discipline-views';
 
 /**
  * The project document: the views and sheets a user organises over the
@@ -15,7 +18,7 @@ import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
  * file kept next to the IFC files (`project-file.ts`).
  */
 
-import type { CameraViewpoint, SectionPlaneAxis } from '@/store/types';
+import type { CameraViewpoint, SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 
@@ -45,12 +48,35 @@ interface ProjectViewBase {
    * section / elevation projects with the automatic depth bands.
    */
   viewDepth?: number | null;
+  /**
+   * Draw the lines that are hidden behind other geometry, dashed. Absent:
+   * an elevation does not (it shows what is seen from outside), every other
+   * view does.
+   */
+  showHidden?: boolean;
+  /**
+   * Set on a detail view: the area of its source view it shows, in the source's
+   * drawing metres. The detail is otherwise a copy of its source (same cut,
+   * same depth), shown at a larger scale and cropped to `min`..`max`.
+   */
+  detail?: ViewDetail;
   /** The view's own graphics (Visibility / Graphics): a preset and per-category overrides. */
   graphics?: ViewGraphics;
   /** Drawing scale denominator (100 = 1:100). Annotation sizes follow it; absent = 1:100. */
   scale?: number;
   /** Drafting layers this view hides (by id), over their own switches. */
   hiddenLayers?: string[];
+}
+
+/** The area a detail view shows of its source view. */
+export interface ViewDetail {
+  /** The view the area was marked on. */
+  of: string;
+  /** Corners of the area, drawing metres, `min` below and left of `max`. */
+  min: { x: number; y: number };
+  max: { x: number; y: number };
+  /** The detail's number (1, 2, …), unique among the project's details. */
+  number: number;
 }
 
 export type CategoryLineWeight = 'heavy' | 'medium' | 'light' | 'hairline';
@@ -79,6 +105,14 @@ export interface PlanProjectView extends ProjectViewBase {
   level: ProjectLevel;
   /** Cut height above the level's floor, metres. */
   cutHeight: number;
+  /** A discipline plan (structural, foundation, roof): it draws only the elements its discipline keeps (`discipline-views.ts`). */
+  discipline?: DisciplineId;
+  /**
+   * A reflected ceiling plan: the same plan, looking up from the cut. It keeps
+   * the floor plan's x/y (a point sits where it does in the plan below) and
+   * draws what is above the cut: ceilings, soffits, lights, beams.
+   */
+  reflected?: boolean;
 }
 
 /** A section cut stored in world metres, independent of the model bounds. */
@@ -93,11 +127,32 @@ export interface SectionProjectPlane {
 export interface SectionProjectView extends ProjectViewBase {
   kind: 'section';
   plane: SectionProjectPlane;
+  /** What the cut passes through, for people ("Through the stair"); set on proposed sections. */
+  through?: string;
 }
 
 export interface ElevationProjectView extends ProjectViewBase {
   kind: 'elevation';
+  /** The facade it looks at; on an interior elevation, the side of the room its wall is on (it looks that way). */
   direction: ElevationDirection;
+  /**
+   * World coordinate, metres, of the plane on its axis (z for north and
+   * south, x for east and west). Absent: the plane sits just inside the whole
+   * model's box on that facade.
+   */
+  planeOffset?: number;
+  /** Set on an interior elevation: one wall of a room, seen from inside it. Its plane replaces `direction` / `planeOffset`. */
+  interior?: InteriorElevation;
+}
+
+/** One wall face of a room, looked at from inside the room (`interior-elevations.ts`). */
+export interface InteriorElevation {
+  /** The room's IfcSpace GlobalId. */
+  room: string;
+  /** Parallel to the wall face, inside the room, looking at the face; world metres like a section's plane. */
+  plane: SectionProjectPlane;
+  /** The wall face in drawing metres: its length across, the room's floor to its top up. The drawing is cropped to it. */
+  crop: { min: { x: number; y: number }; max: { x: number; y: number } };
 }
 
 export interface ThreeDProjectView extends ProjectViewBase {
@@ -142,12 +197,19 @@ export interface ProjectSheet {
   id: string;
   /** Sheet number as printed in the title block, e.g. "A-101". */
   number: string;
+  /**
+   * The number was chosen by the program, not typed: it is replaced by the
+   * group's next number when the first view is placed. Cleared by then, and
+   * by typing a number. Absent on sheets from older files, which are never
+   * renumbered.
+   */
+  autoNumber?: boolean;
   name: string;
   createdAt: number;
   paper?: PaperSize;
   orientation?: 'landscape' | 'portrait';
   viewports?: SheetViewport[];
-  /** Free title-block fields (project, drawn by, date, revision…). */
+  /** Title block fields this sheet says otherwise than the project's (`ProjectDocument.titleBlock`); a key present wins, even empty. */
   titleBlock?: Record<string, string>;
 }
 
@@ -161,8 +223,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** Which elements it lists. */
-  kind: 'door' | 'window' | 'all';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), or the quantities by element type. */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
@@ -208,6 +270,26 @@ export interface ProjectMaterial {
   membrane?: boolean;
 }
 
+/** The subset of a section plane that defines the cut itself, not its on-screen lifecycle. */
+export interface SavedSectionCutPlane {
+  axis: SectionPlaneAxis;
+  position: number;
+  flipped: boolean;
+  custom?: SectionPlane['custom'];
+  capStyle: SectionCapStyle;
+  showCap: boolean;
+  showOutlines: boolean;
+}
+
+/** A named section cut kept in the project, to put back on screen later. */
+export interface SavedSectionCut {
+  id: string;
+  name: string;
+  plane: SavedSectionCutPlane;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** A typical road cross-section (assembly) kept in the project's library. */
 export interface ProjectTypicalSection {
   id: string;
@@ -220,6 +302,8 @@ export interface ProjectDocument {
   models: ProjectModelRef[];
   views: ProjectView[];
   sheets: ProjectSheet[];
+  /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
+  titleBlock?: Record<string, string>;
   /** Drafted geometry, each entity on one view (phase 4). */
   drafts: DraftEntity[];
   draftLayers: DraftLayer[];
@@ -252,4 +336,39 @@ export interface ProjectDocument {
   typicalSections?: ProjectTypicalSection[];
   /** Building materials: how each IfcMaterial draws where it is cut. */
   materials?: ProjectMaterial[];
+  /** Named section cuts of the Drawing panel. */
+  savedSectionCuts?: SavedSectionCut[];
+  /** Named presets of the annotation tools. */
+  annotationTypes?: AnnotationType[];
+  /** The project's own symbols (the built-in ones are in code). */
+  symbols?: DraftSymbol[];
+  /** Legends: generated tables of what the drawings use, placeable on sheets. */
+  legends?: ProjectLegend[];
+  /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */
+  issues?: ProjectIssue[];
+  /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
+  modelState?: ModelSnapshot;
+}
+
+/** One sheet as it stood when a set was issued. */
+export interface IssuedSheet {
+  number: string;
+  title: string;
+  /** The scales of its viewports, as drawn on the list: `1:50`, or `1:50, 1:100`; empty when it holds none. */
+  scale: string;
+  paper: PaperSize;
+  orientation: 'landscape' | 'portrait';
+  revision: string;
+  /** What the sheet held (`issue/fingerprint.ts`): equal fingerprints mean an unchanged sheet. */
+  fingerprint: string;
+}
+
+/** A set of sheets sent out together, recorded with the project so a later issue can say what changed. */
+export interface ProjectIssue {
+  id: string;
+  name: string;
+  /** `YYYY-MM-DD`. */
+  date: string;
+  createdAt: number;
+  sheets: IssuedSheet[];
 }

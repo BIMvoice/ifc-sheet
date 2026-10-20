@@ -8,6 +8,7 @@
  * (`ViewDrawingHost`); the front tab follows immediately.
  */
 
+import { viewShowsHidden } from '@/project/view-appearance';
 import { useEffect, useState } from 'react';
 import { FlipHorizontal2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
@@ -87,6 +88,14 @@ export function ViewPropertiesPanel({ view }: { view: ProjectView }) {
       ) : null}
       <Row label={t('projectNavigator.props.viewDepth')}>
         <MetresField value={view.viewDepth ?? null} placeholder={depthHint} label={t('projectNavigator.props.viewDepth')} allowEmpty onCommit={(v) => edit(view, { viewDepth: v })} />
+      </Row>
+      <Row label={t('projectNavigator.props.showHidden')}>
+        <input
+          type="checkbox"
+          aria-label={t('projectNavigator.props.showHidden')}
+          checked={viewShowsHidden(view)}
+          onChange={(e) => edit(view, { showHidden: e.target.checked })}
+        />
       </Row>
       <Row label={t('projectNavigator.props.scale')}>
         <select
