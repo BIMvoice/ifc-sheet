@@ -9,32 +9,19 @@
  * removes it. The side panel edits paper, title block and viewport.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '@/project/project-store';
-import { useViewerStore } from '@/store';
-import { addViewport, paperOf, removeViewport, updateViewport, viewportBox } from '@/project/sheets';
-import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
-import { draftsOfView } from '@/drafting/draft-store';
+import { addViewport, paperOf, removeViewport, updateViewport } from '@/project/sheets';
 import { parsePat } from '@/drafting/hatch/pattern';
 import { capturePointer } from '@/lib/pointer-capture';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
-import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import type { DraftShape } from '@/drafting/types';
-import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
-import { partHostType } from '@/project/part-host';
-import { drawnBySymbol } from '@/project/view-symbols';
-import { viewMaterials } from '@/project/material-resolver';
-import { membraneOverlays } from '@/project/membrane-overlays';
-import { planOverlays, type PlanOverlay } from '@/project/plan-overlays';
-import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { VIEW_DRAG_TYPE } from '../project/ProjectTreeRow';
-import { SheetPaper, type ViewportContent } from './SheetPaper';
+import { SheetPaper } from './SheetPaper';
+import { useSheetContent } from './useSheetContent';
 import { SheetPanel } from './SheetPanel';
 import { exportSheetSvg, printSheet } from './sheet-export';
 import { exportSheetDxf } from './sheet-dxf';
 import { useSheetDrafting } from './useSheetDrafting';
-import { useSheetSchedules } from '../joinery/ScheduleGraphic';
-import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
 import { CommandLine } from '../drafting/CommandLine';
 import { useDraftingKeys } from '../drafting/useDraftingKeys';
 import { pressEscape, submitCommandLine } from '@/drafting/session';
@@ -43,11 +30,9 @@ interface Pan { x: number; y: number; k: number }
 
 export function SheetView({ sheet }: { sheet: ProjectSheet }) {
   const views = useProjectStore((s) => s.views);
-  const drafts = useProjectStore((s) => s.drafts);
   const layers = useProjectStore((s) => s.draftLayers);
   const projectName = useProjectStore((s) => s.name);
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
-  const byView = useViewDrawings((s) => s.byView);
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
   const hostRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -65,44 +50,11 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
     setPan({ k: Math.max(k, 0.05), x: (width - paper.w * k) / 2, y: (height - paper.h * k) / 2 });
   }, [paper.w, paper.h]);
 
-  // Each placed view as its own graphics style it: styled drawing and (plans) door / window symbols and roofs.
-  const flips = useProjectStore((s) => s.symbolFlips);
-  // Door and window symbols follow the catalogue and the symbol mapping.
-  const joineryTypes = useProjectStore((s) => s.joineryTypes);
-  const joineryMapping = useProjectStore((s) => s.joineryMapping);
-  const materialsTable = useProjectStore((s) => s.materials);
-  const mutationVersion = useViewerStore((s) => s.mutationVersion);
-  const { geometryResult } = useDrawingRuntime();
-  const styled = useMemo(() => {
-    const out = new Map<string, { drawing: Drawing2D | null; overlays: PlanOverlay[] }>();
-    for (const vp of sheet.viewports ?? []) {
-      if (out.has(vp.viewId)) continue;
-      const view = views.find((v) => v.id === vp.viewId);
-      const raw = (byView[vp.viewId] ?? EMPTY_VIEW_DRAWING).drawing;
-      const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, view?.kind === 'plan' ? drawnBySymbol : undefined, viewMaterials(raw)) : null;
-      const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, geometryResult?.meshes, flips, hiddenClasses(view.graphics), raw) : []), ...membraneOverlays(drawing)];
-      out.set(vp.viewId, { drawing, overlays });
-    }
-    return out;
-  }, [sheet.viewports, views, byView, geometryResult, flips, mutationVersion, materialsTable, joineryTypes, joineryMapping]);
-  const placedSchedules = useSheetSchedules(sheet);
-  const placedCivil = useSheetCivilDrawings(sheet);
-  const content = useCallback((vp: SheetViewport): ViewportContent => ({
-    schedule: placedSchedules.get(vp.viewId),
-    civil: placedCivil.get(vp.viewId),
-    view: views.find((v) => v.id === vp.viewId),
-    drawing: styled.get(vp.viewId)?.drawing ?? null,
-    drafts: draftsOfView(vp.viewId, drafts),
-    overlays: styled.get(vp.viewId)?.overlays,
-  }), [views, styled, drafts, placedSchedules, placedCivil]);
+  const { content, boxOf } = useSheetContent(sheet);
 
   const toPaper = (clientX: number, clientY: number) => {
     const rect = hostRef.current?.getBoundingClientRect();
     return { x: (clientX - (rect?.left ?? 0) - pan.x) / pan.k, y: (clientY - (rect?.top ?? 0) - pan.y) / pan.k };
-  };
-  const boxOf = (v: SheetViewport) => {
-    const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId);
-    return placed ? { width: placed.width, height: placed.height } : viewportBox(v, byView[v.viewId]?.drawing?.bounds ?? null);
   };
   const viewportAt = (p: { x: number; y: number }) => [...(sheet.viewports ?? [])].reverse()
     .find((v) => Math.abs(p.x - v.x) <= boxOf(v).width / 2 && Math.abs(p.y - v.y) <= boxOf(v).height / 2) ?? null;

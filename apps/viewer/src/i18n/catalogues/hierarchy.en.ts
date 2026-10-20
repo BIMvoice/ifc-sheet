@@ -49,6 +49,7 @@ export const hierarchyEn = {
   'hierarchy.node.action.isolate': 'Isolate',
   'hierarchy.node.action.filter': 'Filter by this',
   'hierarchy.node.action.solo': 'Solo storey',
+  'hierarchy.node.action.interiorElevations': 'Interior elevations',
   'hierarchy.node.actionAriaLabel': '{action} {name}',
   'hierarchy.node.actionsAriaLabel': 'Actions for {name}',
   'hierarchy.node.nameAndSecondaryTitle': '{name} - {secondaryName}',

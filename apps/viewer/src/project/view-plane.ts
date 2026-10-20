@@ -26,6 +26,8 @@ export interface ViewSectionPlane {
   /** 0..100 of the merged bounds along `axis`. */
   position: number;
   flipped: boolean;
+  /** Looks up from the plane but keeps the plan's x/y (a reflected ceiling plan); never with `flipped`. */
+  reflected?: boolean;
   custom?: CustomSectionPlane;
 }
 
@@ -45,9 +47,10 @@ const ELEVATION_PLANES: Record<ElevationDirection, { axis: SectionPlaneAxis; atM
  */
 export const ELEVATION_INSET_M = 0.05;
 
-function elevationPlane(direction: ElevationDirection, bounds: AxisBounds | null): ViewSectionPlane {
+function elevationPlane(direction: ElevationDirection, bounds: AxisBounds | null, planeOffset?: number): ViewSectionPlane {
   const { axis, atMax, flipped } = ELEVATION_PLANES[direction];
   const range = sectionAxisRange(bounds, axis);
+  if (range && planeOffset !== undefined && Number.isFinite(planeOffset)) return { axis, position: worldToPercent(planeOffset, range), flipped };
   const inset = range ? Math.min(50, (ELEVATION_INSET_M / (range.max - range.min)) * 100) : 0.1;
   return { axis, position: atMax ? 100 - inset : inset, flipped };
 }
@@ -63,23 +66,28 @@ export function sectionPlaneForView(
 ): ViewSectionPlane | null {
   switch (view.kind) {
     case 'elevation':
-      return elevationPlane(view.direction, bounds);
+      // An interior elevation is cut like a section, on its own plane.
+      return view.interior ? storedPlane(view.interior.plane, bounds) : elevationPlane(view.direction, bounds, view.planeOffset);
     case 'plan': {
       const range = sectionAxisRange(bounds, 'down');
       const level = resolvePlanLevel(view, levels) ?? (levels.length === 0 ? view.level : undefined);
       if (!range || !level) return null;
-      return { axis: 'down', position: worldToPercent(level.elevation + view.cutHeight, range), flipped: false };
+      const at = worldToPercent(level.elevation + view.cutHeight, range);
+      return view.reflected ? { axis: 'down', position: at, flipped: false, reflected: true } : { axis: 'down', position: at, flipped: false };
     }
-    case 'section': {
-      const { axis, offset, flipped, custom } = view.plane;
-      const range = sectionAxisRange(bounds, axis);
-      if (!range) return null;
-      const plane: ViewSectionPlane = { axis, position: worldToPercent(offset, range), flipped };
-      return custom ? { ...plane, custom } : plane;
-    }
+    case 'section':
+      return storedPlane(view.plane, bounds);
     default:
       return null;
   }
+}
+
+/** A plane stored in world metres (a section's, an interior elevation's) against the live bounds. */
+function storedPlane({ axis, offset, flipped, custom }: SectionProjectPlane, bounds: AxisBounds | null): ViewSectionPlane | null {
+  const range = sectionAxisRange(bounds, axis);
+  if (!range) return null;
+  const plane: ViewSectionPlane = { axis, position: worldToPercent(offset, range), flipped };
+  return custom ? { ...plane, custom } : plane;
 }
 
 /** Capture a live cardinal/custom section plane as a bounds-independent view plane. */

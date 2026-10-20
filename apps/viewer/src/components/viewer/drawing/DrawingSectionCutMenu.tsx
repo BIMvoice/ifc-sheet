@@ -31,6 +31,10 @@ import {
   saveCurrentSectionCut,
   useSavedSectionCuts,
 } from '@/store/savedSectionCutsStore';
+import { useProjectStore } from '@/project/project-store';
+import type { SavedSectionCut } from '@/project/types';
+
+const NO_CUTS: readonly SavedSectionCut[] = [];
 
 export interface DrawingSectionCutMenuProps {
   /** The live cut's label, exactly as the header already formats it. */
@@ -40,7 +44,7 @@ export interface DrawingSectionCutMenuProps {
 export function DrawingSectionCutMenu({ cutLabel }: DrawingSectionCutMenuProps) {
   const { t } = useTranslation();
   const { promptDialog } = useDialogs();
-  const cuts = useSavedSectionCuts((s) => s.cuts);
+  const cuts = useProjectStore((s) => s.savedSectionCuts) ?? NO_CUTS;
   const activeCutId = useSavedSectionCuts((s) => s.activeCutId);
 
   const handleSaveCurrent = async () => {

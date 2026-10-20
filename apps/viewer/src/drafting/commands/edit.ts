@@ -12,6 +12,8 @@ import { shapeBounds } from '../curves';
 import { offsetShape } from '../offset';
 import { extendShape, trimShape } from '../trim';
 import { filletLines } from '../fillet';
+import { useProjectStore } from '@/project/project-store';
+import { isLockedToView, withoutSectionLink } from '../section-symbol';
 import { isGeometry, type DraftEntity, type DraftShape, type Pt } from '../types';
 import type { DraftCommandDef, DraftContext } from './types';
 
@@ -24,6 +26,13 @@ function boundariesFor(ctx: DraftContext, entity: DraftEntity, margin: number): 
   const min = { x: b.min.x - margin, y: b.min.y - margin };
   const max = { x: b.max.x + margin, y: b.max.y + margin };
   return [...others, ...ctx.referenceShapes(min, max)];
+}
+
+/** A section symbol's parts are not trimmed, offset or filleted one by one (the symbol is moved, turned or stretched whole), nor is a detail mark. Says so when `entity` is one. */
+function lockedSymbol(ctx: DraftContext, entity: DraftEntity): boolean {
+  const locked = isLockedToView(entity, useProjectStore.getState().views);
+  if (locked) ctx.say('drafting.msg.sectionSymbolLocked');
+  return locked;
 }
 
 export const offsetCommand: DraftCommandDef = {
@@ -54,7 +63,7 @@ export const offsetCommand: DraftCommandDef = {
       onPoint(p) {
         if (!source || distance === null || !isGeometry(source.shape)) return 'continue';
         const shape = offsetShape(source.shape, distance, p);
-        if (shape) editDrafts({ add: [newDraft(ctx.viewId, source.layerId, shape, { ...source.params })] });
+        if (shape) editDrafts({ add: [newDraft(ctx.viewId, source.layerId, shape, withoutSectionLink(source.params))] });
         source = null;
         return 'continue';
       },
@@ -81,6 +90,7 @@ function cutCommand(id: 'trim' | 'extend'): DraftCommandDef {
         basePoint: () => null,
         onPick(entity, at) {
           if (!isGeometry(entity.shape)) return 'continue';
+          if (lockedSymbol(ctx, entity)) return 'continue';
           // Extend looks far beyond the entity for its boundary; trim only needs its own extent.
           const margin = id === 'trim' ? 0.01 : 1000;
           const boundaries = boundariesFor(ctx, entity, margin);
@@ -92,7 +102,7 @@ function cutCommand(id: 'trim' | 'extend'): DraftCommandDef {
             }
             editDrafts({
               remove: new Set([entity.id]),
-              add: pieces.map((shape) => newDraft(ctx.viewId, entity.layerId, shape, { ...entity.params })),
+              add: pieces.map((shape) => newDraft(ctx.viewId, entity.layerId, shape, withoutSectionLink(entity.params))),
             });
             return 'continue';
           }
@@ -132,6 +142,7 @@ export const filletCommand: DraftCommandDef = {
           ctx.say('drafting.msg.filletLinesOnly');
           return 'continue';
         }
+        if (lockedSymbol(ctx, entity)) return 'continue';
         if (!first) {
           first = { entity, at };
           return 'continue';

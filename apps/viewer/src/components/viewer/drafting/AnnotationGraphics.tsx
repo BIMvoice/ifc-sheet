@@ -16,14 +16,19 @@
  */
 
 import { memo, useId, useMemo } from 'react';
-import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M } from '@/drafting/annotation';
+import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M, textLeader } from '@/drafting/annotation';
+import { witnessLine } from '@/drafting/level-mark';
+import { findSymbol, flattenShape, missingSymbolMark, placeSymbol } from '@/drafting/symbols';
 import { drawingToScreen, screenSigns, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
+import { leaderTextRight } from '@/drafting/leader-segments';
 import { findPattern } from '@/drafting/hatch/library';
 import { hatchSegments } from '@/drafting/hatch/fill';
 import {
   DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, dashOf, fontFamily, formatDimension, readableDeg,
   type DimStyle, type TextStyle,
 } from '@/drafting/styles';
+import { textBlock, type TextFrame } from '@/drafting/text-block';
+import { textWidthEm } from '@/drafting/text-width';
 import type { AnnotationShape, Pt } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 
@@ -67,31 +72,44 @@ interface LabelProps {
   deg: number;
   color: string;
   style: TextStyle;
-  anchor?: 'start' | 'middle';
+  anchor?: 'start' | 'middle' | 'end';
   /** Baseline shift in the text's own frame, px (negative: up, toward the reader's "above"). */
   shift?: number;
   /** Paper behind the text (a dimension value centred on its line). */
   mask?: boolean;
+  /** An outline round the text (a text anchored at its start only). */
+  frame?: TextFrame;
 }
 
-function Label({ at, text, px, deg, color, style, anchor = 'middle', shift = 0, mask = false }: LabelProps) {
+function Label({ at, text, px, deg, color, style, anchor = 'middle', shift = 0, mask = false, frame }: LabelProps) {
   const size = Math.max(px, 1);
-  const width = Math.max(1, text.length) * size * 0.6;
+  const block = textBlock(text, size, frame, style);
+  const width = block.box.x1;
+  const shape = block.frame;
+  const stroke = { fill: 'none', stroke: color, strokeWidth: Math.max(size * 0.06, 0.5) };
   return (
     <g transform={`rotate(${deg.toFixed(2)} ${at.x} ${at.y}) translate(0 ${shift.toFixed(2)})`}>
       {mask ? <rect x={at.x - (anchor === 'middle' ? width / 2 : 0) - size * 0.2} y={at.y - size * 0.85} width={width + size * 0.4} height={size * 1.1} fill="#fff" /> : null}
-      <text
-        x={at.x}
-        y={at.y}
-        fill={color}
-        fontSize={size}
-        fontFamily={fontFamily(style.font)}
-        fontWeight={style.bold ? 700 : 400}
-        fontStyle={style.italic ? 'italic' : 'normal'}
-        textAnchor={anchor}
-      >
-        {text}
-      </text>
+      {shape?.kind === 'rect' ? <rect x={at.x + shape.x} y={at.y + shape.y} width={shape.w} height={shape.h} rx={shape.radius} {...stroke} /> : null}
+      {shape?.kind === 'ellipse' ? <ellipse cx={at.x + shape.cx} cy={at.y + shape.cy} rx={shape.rx} ry={shape.ry} {...stroke} /> : null}
+      {block.lines.map((line, i) => (
+        <text
+          key={i}
+          x={at.x}
+          y={at.y + line.y}
+          fill={color}
+          fontSize={size}
+          fontFamily={fontFamily(style.font)}
+          fontWeight={style.bold ? 700 : 400}
+          fontStyle={style.italic ? 'italic' : 'normal'}
+          textAnchor={anchor}
+          // The width the frame was measured for: a renderer that hints advances at small sizes would otherwise run the text past it.
+          textLength={textWidthEm(line.text, style) * size || undefined}
+          lengthAdjust="spacing"
+        >
+          {line.text}
+        </text>
+      ))}
     </g>
   );
 }
@@ -143,30 +161,65 @@ function Hatch({ shape, color, t, axis, extraPatterns, k }: { shape: Extract<Ann
   );
 }
 
+/** A symbol instance: the definition's shapes at the instance's place, scale and rotation; text in the project's Standard text style. */
+function Symbol({ shape, color, t, axis, k, look }: { shape: Extract<AnnotationShape, { type: 'symbol' }>; color: string; t: ViewTransform; axis: SectionAxisName; k: number; look: AnnotationLook }) {
+  const def = findSymbol(shape.symbolId);
+  const up = axis === 'down' ? -1 : 1;
+  const placed = def ? placeSymbol(def, shape, up) : null;
+  const geometry = placed ? placed.geometry : missingSymbolMark(shape);
+  const d = geometry.map((g) => { const f = flattenShape(g); return polyline(f.pts, t, axis, f.closed); }).join('');
+  return (
+    <g>
+      <path d={d} stroke={color} strokeWidth={k} fill="none" strokeLinejoin="round" strokeDasharray={def ? undefined : `${3 * k} ${2 * k}`} />
+      {placed?.texts.map((x, i) => {
+        const at = drawingToScreen(x.p, t, axis);
+        return <Label key={i} at={at} text={x.text} px={x.height * t.scale} deg={readableAngle(x.rotation, axis)} color={color} style={look.text} anchor="start" />;
+      })}
+    </g>
+  );
+}
+
 export const AnnotationGraphics = memo(function AnnotationGraphics({
   shape, color: base, selected, transform: t, axis, extraPatterns, strokeScale: k = 1, look = DEFAULT_LOOK, paperUnit = 0.1,
 }: Props) {
   const s = (p: Pt) => drawingToScreen(p, t, axis);
   if (shape.type === 'hatch') return <Hatch shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} extraPatterns={extraPatterns} k={k} />;
+  if (shape.type === 'symbol') return <Symbol shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} k={k} look={look} />;
   const textColor = selected ? '#2563eb' : look.text.color ?? base;
   const px = shape.height * t.scale;
   /** Paper millimetres → screen px. */
   const mm = (v: number) => v * paperUnit * t.scale;
   switch (shape.type) {
-    case 'text':
-      return <Label at={s(shape.p)} text={shape.text} px={px} deg={readableAngle(shape.rotation, axis)} color={textColor} style={look.text} anchor="start" />;
+    case 'text': {
+      const line = textLeader(shape);
+      const label = <Label at={s(shape.p)} text={shape.text} px={px} deg={readableAngle(shape.rotation, axis)} color={textColor} style={look.text} anchor="start" frame={shape.frame} />;
+      if (!line) return label;
+      // The same line and arrow an element tag's leader has.
+      const [from, tip] = [s(line.from), s(line.tip)];
+      const head = arrowPath('arrow', tip, { x: tip.x - from.x, y: tip.y - from.y }, Math.max(mm(look.dim.arrowSize) * 1.2, 4 * k));
+      const lineColor = selected ? '#2563eb' : base;
+      return (
+        <g>
+          <path d={`M${from.x} ${from.y}L${tip.x} ${tip.y}`} stroke={lineColor} strokeWidth={k} fill="none" />
+          <path d={head.d} fill={lineColor} />
+          {label}
+        </g>
+      );
+    }
     case 'leader': {
       const [tip, next] = [shape.pts[0], shape.pts[1] ?? shape.pts[0]];
       const a = s(tip);
       const b = s(next);
       const end = s(shape.pts[shape.pts.length - 1]);
+      // The text sits beyond the end of the last segment (the one place this is decided is `leaderTextRight`).
+      const textRight = leaderTextRight(shape.pts, screenSigns(axis).kx);
       const head = arrowPath('arrow', a, { x: a.x - b.x, y: a.y - b.y }, Math.max(mm(look.dim.arrowSize) * 1.2, 4 * k));
       const lineColor = selected ? '#2563eb' : base;
       return (
         <g>
           <path d={polyline(shape.pts, t, axis)} stroke={lineColor} strokeWidth={k} fill="none" />
           <path d={head.d} fill={lineColor} />
-          <Label at={{ x: end.x + 3 * k, y: end.y }} text={shape.text} px={px} deg={0} color={textColor} style={look.text} anchor="start" shift={px * 0.35} />
+          <Label at={{ x: end.x + (textRight ? 3 : -3) * k, y: end.y }} text={shape.text} px={px} deg={0} color={textColor} style={look.text} anchor={textRight ? 'start' : 'end'} shift={px * 0.35} />
         </g>
       );
     }
@@ -174,8 +227,12 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
       const p = s(shape.p);
       const h = Math.max(px, 4 * k);
       const lineColor = selected ? '#2563eb' : base;
+      const witness = witnessLine(shape);
+      const wa = witness ? s(witness.a) : null;
       return (
         <g>
+          {/* The thin line joining the symbol to the point it measures, while they are apart. */}
+          {wa ? <path d={`M${wa.x} ${wa.y}L${p.x} ${p.y}`} stroke={lineColor} strokeWidth={0.5 * k} strokeDasharray={`${3 * k} ${2 * k}`} fill="none" /> : null}
           <g stroke={lineColor} fill="none" strokeWidth={k}>
             <path d={`M${p.x} ${p.y}L${p.x - h} ${p.y - h}L${p.x + h} ${p.y - h}Z`} fill={lineColor} fillOpacity={0.25} />
             <path d={`M${p.x - h} ${p.y}L${p.x + h * 5} ${p.y}`} />

@@ -9,7 +9,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { sectionPlaneFromLine } from './commands/workplane.js';
+import { sectionPlaneFromLine } from './section-create.js';
 import { liftedVertices } from '../hooks/useDraftingLines3D.js';
 import { viewPlaneConfig } from '../project/view-plane-config.js';
 import type { ProjectView } from '../project/types.js';

@@ -10,8 +10,12 @@
 
 import { useTranslation } from '@/i18n';
 import { editDrafts } from '@/drafting/draft-store';
+import { setSymbolPlacement } from '@/catalogue/symbol-actions';
 import { builtInPatterns } from '@/drafting/hatch/library';
+import { allSymbols } from '@/drafting/symbols';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
+import { followReference, isManualLevel, setLevelValue } from '@/drafting/level-mark';
+import { levelRefAt, resolveLevelRef } from '@/drafting/session';
 import type { AnnotationShape, AxisShape, DraftEntity } from '@/drafting/types';
 
 const INPUT = 'w-32 h-6 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1';
@@ -20,9 +24,9 @@ function update(entity: DraftEntity, shape: AnnotationShape): void {
   editDrafts({ update: new Map([[entity.id, shape]]) });
 }
 
-function Field({ label, value, onCommit, numeric }: { label: string; value: string; onCommit: (v: string) => void; numeric?: boolean }) {
+function Field({ label, value, onCommit, numeric, hint }: { label: string; value: string; onCommit: (v: string) => void; numeric?: boolean; hint?: string }) {
   return (
-    <label className="flex items-center justify-between gap-2">
+    <label className="flex items-center justify-between gap-2" title={hint}>
       <span className="shrink-0 text-zinc-500">{label}</span>
       <input
         aria-label={label}
@@ -100,10 +104,46 @@ export function AnnotationFields({ entity, shape, extraPatterns }: { entity: Dra
       );
     case 'axis':
       return <AxisFields entity={entity} shape={shape} />;
+    case 'symbol': {
+      const factor = typeof entity.params.symbolScale === 'number' ? entity.params.symbolScale : 1;
+      const symbols = allSymbols();
+      return (
+        <>
+          <Choice
+            label={t('drafting.props.symbol')} value={shape.symbolId}
+            options={[...(symbols.some((s) => s.id === shape.symbolId) ? [] : [{ value: shape.symbolId, label: shape.symbolId }]), ...symbols.map((s) => ({ value: s.id, label: s.name }))]}
+            onChange={(symbolId) => setSymbolPlacement(entity.id, { symbolId })}
+          />
+          <Field label={t('drafting.props.symbolFactor')} value={String(factor)} numeric onCommit={(v) => setSymbolPlacement(entity.id, { factor: positive(v, factor) })} />
+          <Field label={t('drafting.props.symbolRotation')} value={String(Math.round(((shape.rotation * 180) / Math.PI) * 100) / 100)} numeric
+            onCommit={(v) => setSymbolPlacement(entity.id, { rotationDeg: finite(v, 0) })} />
+        </>
+      );
+    }
     case 'level':
       return (
         <>
-          <Field label={t('drafting.props.value')} value={String(shape.value)} numeric onCommit={(v) => update(entity, { ...shape, value: finite(v, shape.value) })} />
+          {/* A typed number is the draughtsman's own: it replaces the derived one, so the mark leaves its reference. */}
+          <Field
+            label={t('drafting.props.value')}
+            value={String(shape.value)}
+            numeric
+            hint={isManualLevel(shape) ? undefined : t('drafting.props.levelDetached')}
+            onCommit={(v) => update(entity, setLevelValue(shape, finite(v, shape.value)))}
+          />
+          {isManualLevel(shape) ? (
+            <div className="flex items-center justify-between gap-2" data-testid="level-manual">
+              <span className="text-zinc-500">{t('drafting.props.levelManual')}</span>
+              <button
+                type="button"
+                className="h-6 rounded-sm border border-zinc-300 dark:border-zinc-700 px-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                title={t('drafting.props.levelFollowHint')}
+                onClick={() => update(entity, followReference(shape, levelRefAt, resolveLevelRef))}
+              >
+                {t('drafting.props.levelFollow')}
+              </button>
+            </div>
+          ) : null}
           {height}
         </>
       );

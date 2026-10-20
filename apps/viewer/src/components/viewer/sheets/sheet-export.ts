@@ -33,8 +33,8 @@ export function exportSheetSvg(svg: SVGSVGElement, sheet: ProjectSheet): void {
 }
 
 /** Print the sheet at its paper size (the browser offers "Save as PDF"). */
-export function printSheet(svg: SVGSVGElement, sheet: ProjectSheet): void {
-  const { w, h } = paperOf(sheet);
+/** Print a finished document through a hidden frame: the one print path, for a single sheet and for an issued set. */
+export function printHtml(html: string): void {
   const frame = document.createElement('iframe');
   frame.style.position = 'fixed';
   frame.style.width = '0';
@@ -42,18 +42,27 @@ export function printSheet(svg: SVGSVGElement, sheet: ProjectSheet): void {
   frame.style.border = '0';
   document.body.appendChild(frame);
   const doc = frame.contentDocument;
-  if (!doc || !frame.contentWindow) {
+  const win = frame.contentWindow;
+  if (!doc || !win) {
     frame.remove();
     return;
   }
   doc.open();
-  doc.write(`<!doctype html><html><head><title>${stem(sheet)}</title><style>@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0}svg{display:block}</style></head><body>${sheetSvgText(svg, sheet).replace(/^<\?xml[^>]*>\s*/, '')}</body></html>`);
+  doc.write(html);
   doc.close();
-  const win = frame.contentWindow;
-  const cleanup = () => setTimeout(() => frame.remove(), 1000);
-  win.addEventListener('afterprint', cleanup, { once: true });
+  win.addEventListener('afterprint', () => setTimeout(() => frame.remove(), 1000), { once: true });
   setTimeout(() => {
     win.focus();
     win.print();
-  }, 100);
+  }, 200);
+}
+
+/** The print document of one sheet: its paper size as the page, the sheet drawn on it. */
+export function sheetPrintHtml(svg: SVGSVGElement, sheet: ProjectSheet): string {
+  const { w, h } = paperOf(sheet);
+  return `<!doctype html><html><head><title>${stem(sheet)}</title><style>@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0}svg{display:block}</style></head><body>${sheetSvgText(svg, sheet).replace(/^<\?xml[^>]*>\s*/, '')}</body></html>`;
+}
+
+export function printSheet(svg: SVGSVGElement, sheet: ProjectSheet): void {
+  printHtml(sheetPrintHtml(svg, sheet));
 }

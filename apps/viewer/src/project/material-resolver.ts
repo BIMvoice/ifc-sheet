@@ -17,7 +17,7 @@ import { useProjectStore } from './project-store';
 import { materialDrawing, type LayerRef, type MaterialDrawing } from './material-drawing';
 import { MEMBRANE_THICKNESS_M, ifcMaterialName, materialGraphics } from './materials';
 
-function modelOf(entityId: number) {
+export function modelOf(entityId: number) {
   const s = useViewerStore.getState();
   const ref = s.resolveGlobalIdFromModels(entityId);
   const model = ref ? s.models.get(ref.modelId) : undefined;
@@ -26,6 +26,23 @@ function modelOf(entityId: number) {
 
 function materialName(m: NonNullable<ReturnType<typeof modelOf>>, materialId: number): string | null {
   return ifcMaterialName(m.dataStore, m.view, materialId);
+}
+
+/** The distinct IfcMaterial names cut in a drawing (empty when there is none). */
+export function drawingMaterialNames(drawing: Drawing2D | null): string[] {
+  if (!drawing) return [];
+  const names = new Map<string, string>();
+  const seen = new Set<string>();
+  for (const p of drawing.cutPolygons) {
+    if (p.materialId === undefined) continue;
+    const key = `${p.entityId}:${p.materialId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const m = modelOf(p.entityId);
+    const name = m ? materialName(m, p.materialId) : null;
+    if (name) names.set(name.trim().toLowerCase(), name);
+  }
+  return [...names.values()];
 }
 
 const cache = new WeakMap<Drawing2D, { key: string; value: MaterialDrawing }>();

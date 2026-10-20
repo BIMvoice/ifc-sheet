@@ -16,6 +16,8 @@ import { Bold, Italic, Minus, Pencil, Plus, RotateCcw, SlidersHorizontal } from 
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { IconButton } from '@/components/ui/icon-button';
 import { editDrafts } from '@/drafting/draft-store';
+import { isLockedToView } from '@/drafting/section-symbol';
+import { useProjectStore } from '@/project/project-store';
 import { entityBounds } from '@/drafting/annotation';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { overriddenFields, resolveDim, resolveText, type ArrowKind, type TextPlacement } from '@/drafting/styles';
@@ -61,7 +63,8 @@ export function SelectionBar({ entity, transform, axis, editing, onEditingChange
   const { t } = useTranslation();
   const book = useStyleBook();
   const shape = entity.shape;
-  if (isGeometry(shape) || shape.type === 'hatch') return null;
+  // Hatches and symbol instances carry no text style of their own.
+  if (isGeometry(shape) || shape.type === 'hatch' || shape.type === 'symbol') return null;
   const ids = new Set([entity.id]);
   const dimensional = isDimensional(shape);
   const kind = dimensional ? 'dimStyle' : 'textStyle';
@@ -74,7 +77,8 @@ export function SelectionBar({ entity, transform, axis, editing, onEditingChange
   const centre = (Math.min(...corners.map((p) => p.x)) + Math.max(...corners.map((p) => p.x))) / 2;
   // Centred over the element, but never past the drawing area's edges (half the bar is ~240 px).
   const left = Math.min(Math.max(centre, BAR_HALF), Math.max(BAR_HALF, areaWidth - BAR_HALF));
-  const editable = editableText(shape);
+  // A section symbol's name is the section view's: rename the view to change it.
+  const editable = isLockedToView(entity, useProjectStore.getState().views) ? null : editableText(shape);
   const label = (placement: TextPlacement) => t(`standards.dim.placement.${placement}` as TranslationKey);
 
   return (

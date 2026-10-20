@@ -107,3 +107,19 @@ export function drawingToUserVec(v: Pt, axis: SectionAxisName): Pt {
   const { kx, ky } = screenSigns(axis);
   return { x: v.x * kx, y: -v.y * ky };
 }
+
+/**
+ * A typed ABSOLUTE point. The user's (0, 0) is `origin`, a point in drawing
+ * space: the drawing origin on a view, the lower-left corner of the paper on a
+ * sheet (where drawing y runs down from the top-left corner, so a typed
+ * `20,30` is 20 mm from the left and 30 mm up from the bottom edge, on the
+ * paper, not above it).
+ */
+export function userToDrawingPoint(p: Pt, axis: SectionAxisName, origin: Pt): Pt {
+  const v = userToDrawingVec(p, axis);
+  return { x: origin.x + v.x, y: origin.y + v.y };
+}
+
+export function drawingToUserPoint(p: Pt, axis: SectionAxisName, origin: Pt): Pt {
+  return drawingToUserVec({ x: p.x - origin.x, y: p.y - origin.y }, axis);
+}

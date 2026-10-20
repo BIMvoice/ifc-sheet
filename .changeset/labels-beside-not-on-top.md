@@ -1,0 +1,5 @@
+---
+"@ifc-lite/viewer": minor
+---
+
+Parametric labels now read as a drawing. LABELALL puts each label beside its element, never on it: centred along a long thin element (a wall, a beam) and to the outside of the building where that is known, next to a compact one (a door, a column, furniture). Labels of one run do not overlap each other, existing annotations or other elements' outlines; the places tried are in a fixed order, measured in paper millimetres, so a view gives the same result at 1:50 and 1:200. LABEL offers the same default place after you pick the element (Enter takes it, a click puts the label elsewhere). A label further than a few millimetres from its element gets a leader drawn like an element tag's, and a label type can set the leader to never, when displaced or always; dragging a label by hand adds or drops it by the same rule. Text frames are sized from the measured width of the text, with even padding on all four sides, in the app, on sheets and in SVG and DXF export. LABELALL lists the classes present in the view, with counts, to click as well as type.

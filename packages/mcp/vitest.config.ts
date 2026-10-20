@@ -14,6 +14,9 @@ export default defineConfig({
   test: {
     globals: true,
     include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
+    // Many tests here mesh real IFC models through the wasm engine; on a shared
+    // CI runner they take longer than vitest's 5 s default without being stuck.
+    testTimeout: 30_000,
     server: { deps: { external: [BUILT_SIBLING] } },
   },
   resolve: {

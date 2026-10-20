@@ -29,20 +29,26 @@ function readViewport(v: unknown, path: string): SheetViewport {
     id: v.id, viewId: v.viewId, scale: v.scale,
     x: num('x', 100), y: num('y', 100), width: Math.max(0, num('width', 0)), height: Math.max(0, num('height', 0)), center,
     ...(Array.isArray(v.hiddenLayers) ? { hiddenLayers: v.hiddenLayers.filter((x): x is string => typeof x === 'string') } : {}),
+    ...(isString(v.drawingNumber) && v.drawingNumber.trim() ? { drawingNumber: v.drawingNumber.trim() } : {}),
   };
 }
 
 /** The optional sheet layout fields, read from `v` (already known to be an object). */
-export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock'> {
-  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock'> = {};
+export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber'> {
+  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber'> = {};
+  if (v.autoNumber === true) out.autoNumber = true;
   if (PAPERS.includes(v.paper as PaperSize)) out.paper = v.paper as PaperSize;
   if (v.orientation === 'portrait' || v.orientation === 'landscape') out.orientation = v.orientation;
   if (v.viewports !== undefined) {
     if (!Array.isArray(v.viewports)) fail(`${path}.viewports`, 'must be an array');
     out.viewports = v.viewports.map((vp, i) => readViewport(vp, `${path}.viewports/${i}`));
   }
-  if (isObject(v.titleBlock)) {
-    out.titleBlock = Object.fromEntries(Object.entries(v.titleBlock).filter((e): e is [string, string] => isString(e[1])));
-  }
+  const titleBlock = readTitleBlock(v.titleBlock);
+  if (titleBlock) out.titleBlock = titleBlock;
   return out;
+}
+
+/** A title block's fields (a sheet's or the project's): its string values; `undefined` when absent. */
+export function readTitleBlock(v: unknown): Record<string, string> | undefined {
+  return isObject(v) ? Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => isString(e[1]))) : undefined;
 }
