@@ -14,10 +14,12 @@ type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const str = (v: unknown): v is string => typeof v === 'string';
+/** An optional string field, kept only when it is a non-empty string. */
+const opt = <K extends string>(key: K, v: unknown): { [k in K]?: string } => (str(v) && v ? { [key]: v } as { [k in K]: string } : {});
 
 function readReply(v: unknown): CommentReply[] {
   if (!isObject(v) || !str(v.id) || !str(v.text)) return [];
-  return [{ id: v.id, author: str(v.author) ? v.author : '', createdAt: isNumber(v.createdAt) ? v.createdAt : 0, text: v.text }];
+  return [{ id: v.id, author: str(v.author) ? v.author : '', createdAt: isNumber(v.createdAt) ? v.createdAt : 0, text: v.text, ...opt('bcfGuid', v.bcfGuid) }];
 }
 
 function readComment(v: unknown): ReviewComment[] {
@@ -34,6 +36,8 @@ function readComment(v: unknown): ReviewComment[] {
     status: v.status === 'done' ? 'done' : 'open',
     text: v.text,
     replies: Array.isArray(v.replies) ? v.replies.flatMap(readReply) : [],
+    ...opt('bcfGuid', v.bcfGuid),
+    ...opt('bcfViewpointGuid', v.bcfViewpointGuid),
   }];
 }
 

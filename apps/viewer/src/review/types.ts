@@ -17,6 +17,8 @@ export interface CommentReply {
   author: string;
   createdAt: number;
   text: string;
+  /** The GUID this reply has as a BCF comment: given on its first export and kept, so another BCF tool sees the same comment again. */
+  bcfGuid?: string;
 }
 
 export interface ReviewComment {
@@ -37,4 +39,7 @@ export interface ReviewComment {
   status: CommentStatus;
   text: string;
   replies: CommentReply[];
+  /** The GUID of the BCF topic this comment is (given on its first export, or the topic's own when it came from a BCF file), and of its viewpoint; kept so a later export updates that topic instead of adding another. */
+  bcfGuid?: string;
+  bcfViewpointGuid?: string;
 }

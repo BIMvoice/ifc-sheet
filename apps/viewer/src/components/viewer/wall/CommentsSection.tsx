@@ -19,7 +19,7 @@ import { renderIdGlobalId } from '@/project/element-guid';
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
 import { useViewDrawings } from '@/project/view-drawings';
-import { bcfToComments, commentsToBcf, exportableComments } from '@/review/bcf';
+import { bcfToComments, commentsToBcf, exportableComments, withBcfGuids } from '@/review/bcf';
 import { openCount, setCommentStatus } from '@/review/actions';
 import { setHighlight } from '@/review/ui-store';
 import { useViewerStore } from '@/store';
@@ -44,8 +44,11 @@ export function CommentsSection({ onGo }: { onGo: (sheetId: string) => void }) {
       setNote(t('review.bcf.none'));
       return;
     }
+    // The GUIDs go out once and are kept in the project, so the next export updates the same topics.
+    const guided = withBcfGuids(state.comments ?? []);
+    if (guided.changed) useProjectStore.setState({ comments: guided.comments, dirty: true });
     const viewer = useViewerStore.getState();
-    const project = commentsToBcf(comments, { sheets: state.sheets, drawingOf, worldOffset: bcfWorldOffset(viewer.models, viewer.geometryResult), projectName: state.name });
+    const project = commentsToBcf(guided.comments, { sheets: state.sheets, drawingOf, worldOffset: bcfWorldOffset(viewer.models, viewer.geometryResult), projectName: state.name });
     downloadBlob(await writeBCF(project), `${sanitizeFilename(state.name, { fallback: 'project' })}-comments.bcfzip`);
     setNote(t('review.bcf.exported', { count: onElement.length, total: comments.length }));
   };

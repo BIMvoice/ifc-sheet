@@ -39,9 +39,32 @@ export function exportableComments(comments: readonly ReviewComment[]): ReviewCo
   return comments.filter((c) => !!c.elementGuid);
 }
 
+/**
+ * The comments with the BCF GUIDs they go out with. A GUID a comment or reply
+ * already has is kept; one it lacks (never exported, or saved before GUIDs
+ * were kept) is given now. The caller saves the result in the project, so
+ * every later export, here or after the project is reopened, sends the same
+ * topic, viewpoint and comment GUIDs and the other tool updates its topic
+ * instead of adding another.
+ */
+export function withBcfGuids(comments: readonly ReviewComment[]): { comments: ReviewComment[]; changed: boolean } {
+  let changed = false;
+  const out = comments.map((c) => {
+    if (!c.elementGuid) return c;
+    const missing = !c.bcfGuid || !c.bcfViewpointGuid || c.replies.some((r) => !r.bcfGuid);
+    if (!missing) return c;
+    changed = true;
+    return {
+      ...c, bcfGuid: c.bcfGuid || generateUuid(), bcfViewpointGuid: c.bcfViewpointGuid || generateUuid(),
+      replies: c.replies.map((r) => (r.bcfGuid ? r : { ...r, bcfGuid: generateUuid() })),
+    };
+  });
+  return { comments: out, changed };
+}
+
 function viewpointOf(c: ReviewComment, opts: BcfExportOptions): BCFViewpoint {
   const viewpoint: BCFViewpoint = {
-    guid: generateUuid(),
+    guid: c.bcfViewpointGuid || generateUuid(),
     components: { selection: [{ ifcGuid: c.elementGuid, originatingSystem: ORIGIN }] },
   };
   const plane = c.viewId && c.point ? opts.drawingOf(c.viewId)?.config.plane : undefined;
@@ -63,13 +86,16 @@ function topicOf(c: ReviewComment, opts: BcfExportOptions): BCFTopic {
     title, description: c.text, author: c.author, topicStatus: c.status === 'done' ? 'Closed' : 'Open',
     labels: [...(sheet ? [`sheet:${sheet.number}`] : []), `${COMMENT_LABEL}${c.id}`],
   });
+  if (c.bcfGuid) topic.guid = c.bcfGuid;
   topic.creationDate = new Date(c.createdAt).toISOString();
   topic.viewpoints.push(viewpointOf(c, opts));
-  topic.comments = c.replies.map((r) => ({ ...createBCFComment({ author: r.author, comment: r.text }), date: new Date(r.createdAt).toISOString() }));
+  topic.comments = c.replies.map((r) => ({
+    ...createBCFComment({ author: r.author, comment: r.text }), ...(r.bcfGuid ? { guid: r.bcfGuid } : {}), date: new Date(r.createdAt).toISOString(),
+  }));
   return topic;
 }
 
-/** The BCF project of the comments that lie on a model element. */
+/** The BCF project of the comments that lie on a model element (pass them through `withBcfGuids` first, and save that, for GUIDs that stay). */
 export function commentsToBcf(comments: readonly ReviewComment[], opts: BcfExportOptions): BCFProject {
   const project = createBCFProject({ name: opts.projectName });
   for (const c of exportableComments(comments)) {
