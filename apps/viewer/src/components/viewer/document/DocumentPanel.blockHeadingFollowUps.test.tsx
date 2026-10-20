@@ -8,11 +8,13 @@
  * controls, and the strip's extra height is taken out of the chart.
  */
 import '@/test/setup-dom.js';
+import '@/test/content-fixture.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { useViewerStore } from '@/store/index.js';
 import { cleanup, render } from '@/test/render.js';
+import { documentPreviewReady } from '@/test/document-preview';
 import { documentChartSizing } from '@/lib/document/compose';
 import { blockTitleStyle } from '@/lib/document/block-title';
 import { DOCUMENT_VERSION, type DocumentBlock, type DocumentSpec } from '@/lib/document/types.js';
@@ -27,6 +29,7 @@ const mount = async (document: DocumentSpec): Promise<HTMLElement> => {
   useViewerStore.setState({ documents: [document], activeDocumentId: document.id });
   const ui = render(<DocumentPanel />);
   for (let i = 0; i < 6; i++) await act(async () => { await Promise.resolve(); });
+  await documentPreviewReady();
   return ui;
 };
 const spec = (blockList: DocumentBlock[], orientation: 'portrait' | 'landscape' = 'portrait'): DocumentSpec =>
