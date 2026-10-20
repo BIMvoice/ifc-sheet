@@ -112,11 +112,11 @@ describe('scale and units', () => {
 });
 
 describe('the built-in symbols', () => {
-  it('ship five, with unique ids that a project cannot take, nothing outside the shapes a symbol may hold', () => {
-    assert.equal(BUILT_IN_SYMBOLS.length, 5);
-    assert.equal(new Set(BUILT_IN_SYMBOLS.map((s) => s.id)).size, 5);
+  it('ship eight, with unique ids that a project cannot take, nothing outside the shapes a symbol may hold', () => {
+    assert.equal(BUILT_IN_SYMBOLS.length, 8);
+    assert.equal(new Set(BUILT_IN_SYMBOLS.map((s) => s.id)).size, 8);
     assert.ok(BUILT_IN_SYMBOLS.every((s) => s.id.startsWith('builtin:') && s.shapes.length > 0));
-    assert.deepEqual(['north arrow', 'scale bar', 'coordinate point', 'centre line mark', 'tag bubble'], BUILT_IN_SYMBOLS.map((s) => s.name.toLowerCase()));
+    assert.deepEqual(['north arrow', 'scale bar', 'coordinate point', 'centre line mark', 'insulation batting 1 m x 100 mm', 'brick course, 5 stretchers', 'steel section ipe 200', 'tag bubble'], BUILT_IN_SYMBOLS.map((s) => s.name.toLowerCase()));
   });
 
   it('every one has a drawable extent, the scale bar laid out for 1:100 (10 m) where no drawing says otherwise', () => {
@@ -131,7 +131,7 @@ describe('the built-in symbols', () => {
 
   it('are found by id, the project\'s own after them', () => {
     const own: DraftSymbol = { id: 'p1', name: 'Mine', unit: 'paper', shapes: [] };
-    assert.equal(allSymbols([own]).length, 6);
+    assert.equal(allSymbols([own]).length, 9);
     assert.equal(findSymbol('p1', [own])?.name, 'Mine');
     assert.equal(findSymbol('builtin:north-arrow', [])?.name, 'North arrow');
     assert.equal(findSymbol('nope', [own]), undefined);

@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import '@/test/setup-dom.js';
 import { test } from 'node:test';
-import { evidenceSkip } from '@/test/evidence-fixture.js';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { IfcParser } from '@ifc-lite/parser';
@@ -15,7 +14,7 @@ import type { AppearanceWorkerRequest } from '../planner-types';
 import type { PdfFillAnnotationPlan, PdfFillAnnotationRequest } from './fill-plan-types';
 import type { PreparedPdfVectorPage } from './vector-types';
 
-test('actual decoded PDF fill plans survive host export and reject stale/cancelled worker results (#4406)', { skip: evidenceSkip('pdf-fill-annotations/page-1-request.json', 'pdf-fill-annotations/page-2-request.json') }, async t => {
+test('actual decoded PDF fill plans survive host export and reject stale/cancelled worker results (#4406)', async t => {
   const wasm = new URL('../../../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
   let binary: Buffer;
   try { binary = await readFile(wasm); } catch (error) {
