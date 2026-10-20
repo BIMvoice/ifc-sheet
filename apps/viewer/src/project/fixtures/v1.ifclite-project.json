@@ -1,0 +1,112 @@
+{
+  "format": "ifclite-project",
+  "version": 1,
+  "savedAt": "2026-10-19T08:00:00.000Z",
+  "name": "Fixture house",
+  "models": [
+    {
+      "key": "hash-fixture",
+      "name": "fixture-house.ifc"
+    }
+  ],
+  "views": [
+    {
+      "id": "p1",
+      "name": "Level 1",
+      "kind": "plan",
+      "level": {
+        "name": "Level 1",
+        "elevation": 0,
+        "storeyGlobalIds": [
+          "G-L1"
+        ]
+      },
+      "cutHeight": 1.2,
+      "auto": true,
+      "createdAt": 1
+    },
+    {
+      "id": "s1",
+      "name": "Section A",
+      "kind": "section",
+      "plane": {
+        "axis": "front",
+        "offset": 2.5,
+        "flipped": false
+      },
+      "auto": false,
+      "createdAt": 2
+    }
+  ],
+  "sheets": [
+    {
+      "id": "sh1",
+      "number": "A-101",
+      "name": "Plans",
+      "createdAt": 3
+    }
+  ],
+  "titleBlock": {},
+  "drafts": [],
+  "draftLayers": [
+    {
+      "id": "0",
+      "name": "0",
+      "color": "#18181b",
+      "visible": true,
+      "locked": false
+    }
+  ],
+  "hatchPatterns": "",
+  "symbolFlips": {
+    "G-DOOR-1": 1
+  },
+  "textStyles": [
+    {
+      "id": "standard",
+      "name": "Standard",
+      "height": 2.5,
+      "font": "sans",
+      "bold": false,
+      "italic": false
+    }
+  ],
+  "dimStyles": [
+    {
+      "id": "standard",
+      "name": "Standard",
+      "textStyle": "standard",
+      "arrow": "tick",
+      "arrowSize": 1.5,
+      "extGap": 1,
+      "extOver": 1.5,
+      "placement": "above",
+      "textGap": 0.8,
+      "precision": 2,
+      "unit": "m"
+    }
+  ],
+  "layerGroups": [],
+  "joineryTypes": [],
+  "currentJoinery": {},
+  "joineryMapping": {
+    "byName": true,
+    "byDimensions": true,
+    "tolerance": 0.02,
+    "aliases": {},
+    "types": {},
+    "elements": {}
+  },
+  "elementTypes": [],
+  "currentTypes": {},
+  "schedules": [],
+  "structureProfiles": [],
+  "civilDrawings": [],
+  "typicalSections": [],
+  "materials": [],
+  "savedSectionCuts": [],
+  "annotationTypes": [],
+  "symbols": [],
+  "legends": [],
+  "issues": []
+}
