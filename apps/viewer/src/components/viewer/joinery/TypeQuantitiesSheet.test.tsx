@@ -25,6 +25,17 @@ beforeEach(() => resetProject());
 afterEach(() => cleanup());
 
 describe('quantities by type on a sheet', () => {
+  // Review of #108: every geometry-bearing entity was read, so FZK-Haus's 17 IfcOpeningElement became type rows.
+  it('lists physical elements only: no openings or other features of an element', async () => {
+    const store = await parseStep(new Uint8Array(readFileSync(new URL('../../../../public/_fixtures/AC20-FZK-Haus.ifc', import.meta.url))));
+    useViewerStore.setState({ models: new Map([['fzk', { id: 'fzk', name: 'fzk', ifcDataStore: store, visible: true } as never]]) });
+    const classes = new Set(collectTypeElements().map((e) => e.className));
+    assert.ok(classes.has('IfcWall') || classes.has('IfcWallStandardCase'), `walls are listed (${[...classes].join(', ')})`);
+    for (const notPhysical of ['IfcOpeningElement', 'IfcSite', 'IfcBuildingStorey', 'IfcSpace']) {
+      assert.ok(!classes.has(notPhysical), `${notPhysical} is not listed`);
+    }
+  });
+
   it('prints the FZK-Haus wall types and their volumes into the sheet SVG and the DXF', async () => {
     const store = await parseStep(new Uint8Array(readFileSync(new URL('../../../../public/_fixtures/AC20-FZK-Haus.ifc', import.meta.url))));
     useViewerStore.setState({ models: new Map([['fzk', { id: 'fzk', name: 'fzk', ifcDataStore: store, visible: true } as never]]) });

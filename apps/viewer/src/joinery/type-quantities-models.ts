@@ -4,17 +4,35 @@
 
 /**
  * The loaded models read into `type-quantities.ts`'s input: every
- * geometry-bearing element with its defining type, its storey and its Qto
+ * geometry-bearing physical element with its defining type, its storey and its Qto
  * quantities in SI. It reads the quantities the way the material takeoff does
  * (the list provider's `getQuantitySets`, the model's units scaled to SI).
  */
 
 import { RelationshipType } from '@ifc-lite/data';
-import { extractProjectUnits, ProjectUnits } from '@ifc-lite/parser';
+import { extractProjectUnits, getInheritanceChainAcrossSchemas, ProjectUnits } from '@ifc-lite/parser';
 import { createListDataProvider } from '@/lib/lists';
 import { useViewerStore } from '@/store';
 import { quantityScales } from './material-takeoff-models';
 import { elementTypeQuantities, type TypeElement } from './type-quantities';
+
+/** Not things a takeoff counts: openings and other features of an element, virtual elements. */
+const NOT_PHYSICAL = ['IfcFeatureElement', 'IfcVirtualElement'];
+const physicalByClass = new Map<string, boolean>();
+
+/**
+ * An IfcElement that is neither a feature of another (IfcOpeningElement, IfcVoidingFeature, ...) nor virtual;
+ * spatial entities (site, storey, space) are not IfcElement at all. Read from the schema's inheritance, once per class.
+ */
+function isPhysicalElement(className: string): boolean {
+  let known = physicalByClass.get(className);
+  if (known === undefined) {
+    const chain = getInheritanceChainAcrossSchemas(className);
+    known = chain.includes('IfcElement') && !NOT_PHYSICAL.some((n) => chain.includes(n));
+    physicalByClass.set(className, known);
+  }
+  return known;
+}
 
 export function collectTypeElements(): TypeElement[] {
   const s = useViewerStore.getState();
@@ -28,6 +46,7 @@ export function collectTypeElements(): TypeElement[] {
     const hierarchy = store.spatialHierarchy;
     for (const id of provider.getAllEntityIds?.() ?? []) {
       const className = provider.getEntityTypeName(id);
+      if (!isPhysicalElement(className)) continue;
       const typeId = store.relationships?.getRelated(id, RelationshipType.DefinesByType, 'inverse')[0];
       const typeName = typeId === undefined ? '' : provider.getEntityDefiningTypeName?.(id) ?? '';
       const storey = hierarchy?.elementToStorey.get(id);

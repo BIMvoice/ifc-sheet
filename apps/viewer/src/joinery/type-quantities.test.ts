@@ -132,6 +132,7 @@ describe('FZK-Haus wall types', () => {
       assert.equal(perLevel.reduce((s, t) => s + t.count, 0), r.total.count);
       assert.ok(Math.abs(perLevel.reduce((s, t) => s + (t.volume ?? 0), 0) - r.total.volume!) < 1e-9);
     }
-    assert.deepEqual(out.levels, ['Erdgeschoss', 'Dachgeschoss', '']);
+    // No column for 'no storey': in FZK-Haus only the IfcSite and the 17 openings had none, and neither is listed (#108 review).
+    assert.deepEqual(out.levels, ['Erdgeschoss', 'Dachgeschoss']);
   });
 });
