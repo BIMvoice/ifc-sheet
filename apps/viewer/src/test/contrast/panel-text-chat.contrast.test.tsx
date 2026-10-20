@@ -27,7 +27,7 @@ import { cleanup, click, render } from '@/test/render.js';
 import { ChatPanel } from '@/components/viewer/ChatPanel.js';
 import { ByokKeyModal } from '@/components/viewer/chat/ByokKeyModal.js';
 import { ModelSelector } from '@/components/viewer/chat/ModelSelector.js';
-import { closeContrastBrowser, warmContrastBrowser } from './render-harness.js';
+import { CHROME_SKIP, closeContrastBrowser, warmContrastBrowser } from './render-harness.js';
 import {
   assertRenderedTextClears,
   assertForcedClassReddens,
@@ -101,7 +101,7 @@ const PRICING_HINTS = {
   openai: 'OpenAI requires prepaid credits or a payment method on your OpenAI account.',
 } as const;
 
-describe('chat secondary text contrast (#6205)', () => {
+describe('chat secondary text contrast (#6205)', { skip: CHROME_SKIP }, () => {
   for (const theme of THEMES) {
     it(`ChatPanel idle footer hints and empty-state hint clear AA in ${theme}`, async () => {
       const html = mountChat();
@@ -136,7 +136,7 @@ describe('chat secondary text contrast (#6205)', () => {
   }
 });
 
-describe('chat secondary text contrast negative controls (#6205)', () => {
+describe('chat secondary text contrast negative controls (#6205)', { skip: CHROME_SKIP }, () => {
   const controls: Array<{ className: string; site: string; mount: () => void; host?: string; text: () => string }> = [
     {
       className: 'text-[10px] text-muted-foreground/40',
