@@ -9,6 +9,7 @@ import { cleanup, click, render } from '@/test/render.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import type { ProjectLevel } from '@/project/types';
+import { disciplineViewFor } from '@/project/discipline-views';
 import { AddDrawing } from './AddDrawing.js';
 
 /**
@@ -111,5 +112,18 @@ describe('AddDrawing', () => {
     click(button(plain, /^Ground Floor$/));
     const own = useProjectStore.getState().views.find((v) => v.kind === 'plan' && !v.discipline && v.level.name === 'Ground Floor');
     assert.equal(made[1], own?.id);
+  });
+
+  it('opens the storey\'s own plan, not a structural plan of it listed first', () => {
+    const { views } = useProjectStore.getState();
+    const structural = { ...disciplineViewFor('structural', LEVELS[1], views), id: 'structural-ground' };
+    useProjectStore.setState({ views: [structural as (typeof views)[number], ...views] });
+    const made: string[] = [];
+    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    click(button(ui, /Plan of a storey/));
+    click(button(ui, /^Ground Floor$/));
+    const own = useProjectStore.getState().views.find((v) => v.kind === 'plan' && !v.discipline && v.level.name === 'Ground Floor');
+    assert.ok(own);
+    assert.deepEqual(made, [own.id]);
   });
 });
