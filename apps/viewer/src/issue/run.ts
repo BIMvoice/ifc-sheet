@@ -20,6 +20,7 @@ import { captureSheets, failureLine } from './capture';
 import { drawingListCsv, uniqueNames, type ListLabels } from './output';
 import { buildIssuePdf, type PdfLabels } from './pdf-build';
 import { titleBlockOf } from '@/project/title-block';
+import { effectiveTitleBlock } from '@/project/title-block-model';
 import { rasterViewNames } from '@/project/view-raster';
 import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
 
@@ -75,7 +76,7 @@ export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst
     date: options.date ?? new Date().toISOString().slice(0, 10),
     listFirst: options.listFirst ?? true,
     asIndicated: resolve('sheets.asIndicated'),
-  }, project.titleBlock, { issues: project.issues, schedules: project.schedules });
+  }, effectiveTitleBlock(), { issues: project.issues, schedules: project.schedules });
 }
 
 /** What a DXF issue leaves out: each sheet's views that print as images, which DXF cannot carry. */
@@ -102,7 +103,8 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   let pdf: Uint8Array | null = null;
   let zip: Uint8Array | null = null;
   if (options.format === 'pdf') {
-    const projectName = plan.sheets.map((s) => titleBlockOf(s.sheet, project.titleBlock, project.name).project).find((n) => n) || project.name;
+    const projectFields = effectiveTitleBlock();
+    const projectName = plan.sheets.map((s) => titleBlockOf(s.sheet, projectFields, project.name).project).find((n) => n) || project.name;
     pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival, onWarning: (w) => lines.push(w) });
   } else {
     const ext = options.format;
