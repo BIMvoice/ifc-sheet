@@ -45,7 +45,7 @@ import { LEFT_PANEL_DEFAULT_SIZE } from '@/store/layoutReset';
 import { useOverlayCompositor } from './schedule/useOverlayCompositor';
 import { CommandPalette } from './CommandPalette';
 import { SearchModal } from './SearchModal';
-import { can, isDocsEdition } from '@/edition';
+import { isDocsEdition } from '@/edition';
 import { TourHost } from '@/components/tours/TourHost';
 import { SidebarDock } from './sidebar/SidebarDock';
 import { FloatingPanelHost } from './dock/FloatingPanelHost';

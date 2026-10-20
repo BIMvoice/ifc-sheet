@@ -10,27 +10,6 @@ import { createChatSlice, __resetChatPersistWarningForTests, type ChatSlice } fr
 import { createPatchDiagnostic, createPreflightDiagnostic } from '../../lib/llm/script-diagnostics.js';
 import { DEFAULT_FREE_MODEL, DEFAULT_BYOK_MODEL } from '../../lib/llm/models.js';
 
-function withMockLocalStorage(fn: () => void) {
-  const original = globalThis.localStorage;
-  const store = new Map<string, string>();
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => { store.set(key, value); },
-      removeItem: (key: string) => { store.delete(key); },
-    },
-  });
-  try {
-    fn();
-  } finally {
-    Object.defineProperty(globalThis, 'localStorage', {
-      configurable: true,
-      value: original,
-    });
-  }
-}
-
 test('buildErrorFeedbackContent includes revision and diagnostics for patch conflicts', () => {
   const prompt = buildErrorFeedbackContent(
     'const width = 30;',

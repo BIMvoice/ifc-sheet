@@ -12,7 +12,7 @@
 
 import { memo } from 'react';
 import { sX, sY, type Fit } from '@/lib/rooms/plate-geometry';
-import type { SnapResult, Vec2 } from '@/lib/snap/types';
+import type { Vec2 } from '@/lib/snap/types';
 import type { WallAxis } from '@/lib/snap/sources/semantic';
 import type { PlanGrid } from './plan-fit';
 import type { PlanCutLine, PlanCutPolygon } from './usePlanCut';
