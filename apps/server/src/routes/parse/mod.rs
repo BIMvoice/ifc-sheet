@@ -267,7 +267,10 @@ fn unwrap_ifczip(
         if entry.is_dir() {
             continue;
         }
-        let name = entry.name();
+        // zip 9 made `name()` fallible (non-UTF-8 names); decode the raw bytes
+        // lossily so an odd entry name can't reject the whole archive.
+        let name = String::from_utf8_lossy(entry.name_raw());
+        let name = name.as_ref();
         let lower = name.to_ascii_lowercase();
         if (lower.ends_with(".ifc") || lower.ends_with(".ifcxml")) && !is_apple_double(name) {
             candidates.push((i, name.to_string()));
