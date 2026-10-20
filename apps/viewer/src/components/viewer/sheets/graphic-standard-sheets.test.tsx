@@ -16,6 +16,13 @@ import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { SheetPaper } from './SheetPaper';
 import { sheetPrintHtml, sheetSvgText } from './sheet-export';
 import { sheetDxf } from './sheet-dxf';
+import { viewportPens } from './viewport-pens';
+import { viewDxf } from '../drafting/view-dxf';
+import { planOverlays } from '@/project/plan-overlays';
+import type { MeshData } from '@ifc-lite/geometry';
+import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
+import { patchViewDrawing, useViewDrawings } from '@/project/view-drawings';
+import { useSheetContent } from './useSheetContent';
 
 /**
  * The graphic standard reaches every sheet through one path: SheetPaper draws the sheet SVG, and the print (PDF) document and the
@@ -163,6 +170,21 @@ describe('choosing the Romanian-practice standard', () => {
     assert.deepEqual(s.dimStyles, [myDim]);
   });
 
+  it('going back to the default keeps a preset style a draft still uses, so the draft keeps its size and its style id resolves', () => {
+    setGraphicStandard('ro-practice');
+    const text = { id: 'title', viewId: view.id, layerId: 'default', shape: { type: 'text' as const, p: { x: 0, y: 0 }, text: 'Plan', height: 0.7, rotation: 0 }, params: { textStyle: 'ro-title-70' } };
+    const dim = { id: 'dim', viewId: view.id, layerId: 'default', shape: { type: 'dimension' as const, variant: 'aligned' as const, a: { x: 0, y: 0 }, b: { x: 4, y: 0 }, at: { x: 2, y: 1 }, height: 0.25 }, params: { dimStyle: 'ro-dim' } };
+    useProjectStore.setState({ drafts: [text, dim] });
+    setGraphicStandard('default');
+    const s = useProjectStore.getState();
+    assert.deepEqual(s.textStyles?.map((t) => t.id), [STANDARD, 'ro-text-25', 'ro-title-70'], 'the used title style, and the text style the used dimension style names');
+    assert.deepEqual(s.dimStyles?.map((d) => d.id), [STANDARD, 'ro-dim']);
+    const title = s.drafts.find((d) => d.id === 'title')?.shape;
+    assert.equal(title?.type === 'text' ? title.height : null, 0.7, '7 mm at 1:100 still');
+    setGraphicStandard('ro-practice');
+    assert.equal(new Set(useProjectStore.getState().textStyles?.map((t) => t.id)).size, useProjectStore.getState().textStyles?.length, 'choosing it again adds no duplicate');
+  });
+
   it('adds the standard\'s styles and selects them for new annotations; the default selects Standard again', () => {
     setGraphicStandard('ro-practice');
     const s = useProjectStore.getState();
@@ -171,5 +193,71 @@ describe('choosing the Romanian-practice standard', () => {
     assert.deepEqual(currentStyles(), ROMANIAN_PRACTICE.current);
     setGraphicStandard('default');
     assert.deepEqual(currentStyles(), { textStyle: STANDARD, dimStyle: STANDARD });
+  });
+});
+
+describe('the standard reaches every pen it claims', () => {
+  it('a category weight takes the standard\'s cut / projection pair', () => {
+    const graphics = { categories: { walls: { lineWeight: 'light' as const }, doors: { lineWeight: 'light' as const } } };
+    const widths = (standard: typeof ROMANIAN_PRACTICE) => {
+      const pens = viewportPens(DRAWING, graphics, { scale: 10, x: 0, y: 0 }, 'down', [], standard);
+      return { cut: pens.find((p) => p.layer === 'CUT')?.width, seen: pens.find((p) => p.layer === 'SEEN')?.width };
+    };
+    assert.deepEqual(widths(ROMANIAN_PRACTICE), { cut: ROMANIAN_PRACTICE.weights.light.cut, seen: ROMANIAN_PRACTICE.weights.light.projection });
+    assert.deepEqual(widths(ROMANIAN_PRACTICE), { cut: 0.35, seen: 0.18 });
+    assert.deepEqual(widths(DEFAULT_GRAPHIC_STANDARD), { cut: 0.25, seen: 0.125 });
+  });
+
+  it('a drafting view\'s DXF takes the project\'s standard for its pens (group 370)', () => {
+    const real = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = ((el: Element) => ({
+      stroke: el.getAttribute('stroke') ?? '', fill: el.getAttribute('fill') ?? '', fontSize: el.getAttribute('font-size') ?? '', textAnchor: el.getAttribute('text-anchor') ?? '',
+    })) as unknown as typeof getComputedStyle;
+    try {
+      const cutLineweight = () => {
+        const dxf = new TextDecoder('windows-1252').decode(viewDxf({ view, drawing: DRAWING, axis: 'down', drafts: [], layers: [], extraPatterns: [], overlays: [] }));
+        const line = /LINE\n[\s\S]*?\n\s*8\nCUT\n[\s\S]*?\n370\n(\d+)\n/.exec(dxf) ?? /\n\s*2\nCUT\n[\s\S]*?\n370\n(\d+)\n/.exec(dxf);
+        return Number(line?.[1]);
+      };
+      assert.equal(cutLineweight(), 50);
+      setGraphicStandard('ro-practice');
+      assert.equal(cutLineweight(), 70);
+    } finally {
+      globalThis.getComputedStyle = real;
+    }
+  });
+
+  const pts: number[] = [];
+  for (const x of [-0.45, 0.45]) for (const y of [-1.05, 1.05]) for (const z of [-0.03, 0.03]) pts.push(x, y, z);
+  const door = { expressId: 7, ifcType: 'IfcDoor', positions: new Float32Array(pts), origin: [5, 1.05, 2] } as unknown as MeshData;
+
+  it('a sheet\'s door symbols take the project\'s standard', () => {
+    publishDrawingRuntime({ geometryResult: { meshes: [door] } as never, sourceCoordinateInfo: undefined, generateDrawing: async () => {}, isRegenerating: false });
+    patchViewDrawing(view.id, { drawing: DRAWING });
+    try {
+      const widths = () => {
+        let out: number[] = [];
+        function Probe() {
+          const sheet = useProjectStore.getState().sheets[0];
+          out = (useSheetContent(sheet).content(sheet.viewports![0]).overlays ?? []).filter((o) => o.layer === 'SYMBOLS').map((o) => o.width).sort();
+          return null;
+        }
+        render(<Probe />);
+        cleanup();
+        return out;
+      };
+      assert.deepEqual(widths(), [0.13, 0.5]);
+      setGraphicStandard('ro-practice');
+      assert.deepEqual(widths(), [0.13, 0.7]);
+    } finally {
+      publishDrawingRuntime(null);
+      useViewDrawings.setState({ byView: {} });
+    }
+  });
+
+  it('a plan\'s door symbols take the pens they are given', () => {
+    const widths = (pens?: typeof ROMANIAN_PRACTICE.pens) => planOverlays(view, { axis: 'y', position: 1.2, flipped: false }, [door], undefined, new Set(), null, pens).map((o) => o.width).sort();
+    assert.deepEqual(widths(ROMANIAN_PRACTICE.pens), [0.13, 0.7], 'thin at the hatch pen, the leaf at the cut pen');
+    assert.deepEqual(widths(), [0.13, 0.5]);
   });
 });
