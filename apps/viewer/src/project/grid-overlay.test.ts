@@ -12,18 +12,20 @@
  * the grid's placement chain, its rotation or the unit scale moves them apart.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it, before, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { IfcParser, type IfcDataStore } from '@ifc-lite/parser';
 import { GeometryProcessor, type MeshData } from '@ifc-lite/geometry';
+import { addGridToStore, extractGridAxesForStorey, rectangularGridAxes, resolveSpatialAnchor } from '@ifc-lite/create';
+import { MutablePropertyView, StoreEditor } from '@ifc-lite/mutations';
 import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { useViewerStore } from '@/store';
 import { worldToDrawing } from '@/drafting/frame';
 import type { DraftShape, Pt } from '@/drafting/types';
 import { buildStoreyWorkplane } from '@/lib/commands/modeling/workplane';
-import { gridAxesInRender, gridOverlays } from './grid-overlay.js';
+import { gridAxesInRender, gridOverlays, setGridExtractorForTests } from './grid-overlay.js';
 import { planOverlays, type PlanOverlay } from './plan-overlays.js';
 import type { PlanProjectView, ProjectView, SectionProjectView, GridEnds } from './types.js';
 
@@ -330,5 +332,51 @@ describe('a model without a grid', () => {
     // Shape counts as origin/main produces them for this model (measured on main): the symbols alone, nothing added.
     assert.deepEqual(p.map((o) => [o.layer, o.shapes.length]), [['SYMBOLS', 33], ['SYMBOLS', 6]]);
     assert.deepEqual(sec, []);
+  });
+});
+
+describe('grid extraction cost (PR #125 review)', () => {
+  /** Count extractor calls; the real extractor does the work. */
+  let calls = 0;
+  const counting = () => {
+    calls = 0;
+    setGridExtractorForTests((...args) => { calls++; return extractGridAxesForStorey(...args); });
+  };
+  afterEach(() => setGridExtractorForTests(null));
+
+  it('never runs the extractor for a model without an IfcGrid', wasmOptions, async () => {
+    const { store } = await seed(new Uint8Array(await readFile(FZK)));
+    assert.ok(store.spatialHierarchy!.storeyElevations.size > 1, 'FZK-Haus has storeys a walk would visit');
+    counting();
+    assert.deepEqual(gridOverlays(plan(), PLAN_PLANE), []);
+    assert.deepEqual(gridOverlays(section(), { axis: 'z', position: 0, flipped: false }, BOUNDS), []);
+    assert.equal(calls, 0);
+  });
+
+  it('still draws a grid authored this session in a model whose file has none', wasmOptions, async () => {
+    const { store } = await seed(new Uint8Array(await readFile(FZK)));
+    assert.equal(store.entityIndex.byType.get('IFCGRID')?.length ?? 0, 0);
+    const storeyId = [...store.spatialHierarchy!.storeyElevations.entries()].sort((a, b) => a[1] - b[1])[0][0];
+    const view = new MutablePropertyView(null, 'm');
+    addGridToStore(new StoreEditor(store, view), resolveSpatialAnchor(store, storeyId, view), {
+      Position: [0, 0, 0], ...rectangularGridAxes({ UOffsets: [0, 6], VOffsets: [0, 4], Overhang: 1 }),
+    });
+    useViewerStore.setState({ mutationViews: new Map([['m', view]]) as never });
+    assert.deepEqual(textsOf(gridOverlays(plan(), PLAN_PLANE)).map((t) => t.text).sort(), ['1', '1', '2', '2', 'A', 'A', 'B', 'B']);
+  });
+
+  it('extracts once per edit: the same mutationVersion reuses the axes, a new one extracts again', wasmOptions, async () => {
+    await seed(new TextEncoder().encode(await readFile(FIXTURE, 'utf8')));
+    useViewerStore.setState({ mutationVersion: 7 });
+    counting();
+    const first = linesOf(gridOverlays(plan(), PLAN_PLANE));
+    const once = calls;
+    assert.ok(once > 0, 'the first recompute extracts');
+    assert.deepEqual(linesOf(gridOverlays(plan(), PLAN_PLANE)), first, 'the reused axes draw the same lines');
+    gridOverlays(section(), { axis: 'x', position: 17, flipped: false }, BOUNDS);
+    assert.equal(calls, once, 'recomputes at the same mutationVersion extract nothing');
+    useViewerStore.setState({ mutationVersion: 8 });
+    gridOverlays(plan(), PLAN_PLANE);
+    assert.equal(calls, 2 * once, 'an edit extracts again');
   });
 });

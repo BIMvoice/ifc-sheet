@@ -17,7 +17,9 @@
  * to the render frame the drawing was cut in, the step the roof and corridor
  * overlays use. Overlays are derived from the live store on every call, so a
  * grid edited, moved or re-tagged follows; each axis is identified by its
- * grid's GlobalId and its tag (`ViewGridAxis.key`).
+ * grid's GlobalId and its tag (`ViewGridAxis.key`). A model with no IfcGrid is
+ * skipped before any extraction, and the extracted axes are reused until the
+ * store's `mutationVersion` (or the model's mutation view) changes.
  */
 
 import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
@@ -59,12 +61,56 @@ export function gridSettings(view: ProjectView): { visible: boolean; ends: GridE
   return { visible: g?.visible ?? (view.kind === 'plan' || view.kind === 'section'), ends: g?.ends ?? 'both' };
 }
 
-/** The axes of the grids that apply to one storey, in the render frame: storey-local metres through the storey workplane. */
+type ExtractGridAxes = typeof extractGridAxesForStorey;
+let extractAxes: ExtractGridAxes = extractGridAxesForStorey;
+
+/**
+ * Extracted storey axes, per model store, valid for one `mutationVersion` and
+ * one mutation view. Extraction re-parses the spatial relationships from the
+ * source bytes, so it runs once per storey per edit, not on every recompute.
+ * Keyed by the store itself: a model reloaded under the same id is a new store.
+ */
+interface AxesMemo { version: number; view: MutablePropertyView | null; byStorey: Map<number, GridAxisSegment[]> }
+let axesMemo = new WeakMap<IfcDataStore, AxesMemo>();
+
+/** Swap the extractor (to count calls) and drop the memo; `null` restores the real one. */
+export function setGridExtractorForTests(fn: ExtractGridAxes | null): void {
+  extractAxes = fn ?? extractGridAxesForStorey;
+  axesMemo = new WeakMap();
+}
+
+/** Whether the model can hold an IfcGrid at all: one parsed from the file, created this session, or retyped to one. */
+function modelHasGrid(store: IfcDataStore, view: MutablePropertyView | null): boolean {
+  if ((store.entityIndex?.byType.get('IFCGRID')?.length ?? 0) > 0) return true;
+  if (!view) return false;
+  if (!view.getNewEntitiesOfType('IFCGRID').next().done) return true;
+  for (const { newType } of view.getTypeMutations().values()) if (newType.toUpperCase() === 'IFCGRID') return true;
+  return false;
+}
+
+function storeyAxes(store: IfcDataStore, view: MutablePropertyView | null, storeyId: number, mutationVersion?: number): GridAxisSegment[] {
+  if (mutationVersion === undefined) return extractAxes(store, storeyId, view ?? undefined).axes;
+  let memo = axesMemo.get(store);
+  if (!memo || memo.version !== mutationVersion || memo.view !== view) {
+    memo = { version: mutationVersion, view, byStorey: new Map() };
+    axesMemo.set(store, memo);
+  }
+  let axes = memo.byStorey.get(storeyId);
+  if (!axes) {
+    axes = extractAxes(store, storeyId, view ?? undefined).axes;
+    memo.byStorey.set(storeyId, axes);
+  }
+  return axes;
+}
+
+/**
+ * The axes of the grids that apply to one storey, in the render frame: storey-local metres through the storey workplane.
+ * With `mutationVersion`, the extracted axes are reused until the model is edited.
+ */
 export function gridAxesInRender(
-  store: IfcDataStore, view: MutablePropertyView | null, storeyId: number, workplane: Workplane,
+  store: IfcDataStore, view: MutablePropertyView | null, storeyId: number, workplane: Workplane, mutationVersion?: number,
 ): { axisId: number; axis: ViewGridAxis }[] {
-  const axes: GridAxisSegment[] = extractGridAxesForStorey(store, storeyId, view ?? undefined).axes;
-  return axes.map((a) => ({
+  return storeyAxes(store, view, storeyId, mutationVersion).map((a) => ({
     axisId: a.axisId,
     axis: {
       key: `${store.entities.getGlobalId(a.gridId) || `#${a.gridId}`}:${a.AxisTag}`,
@@ -85,13 +131,15 @@ function viewGridAxes(view: ProjectView): ViewGridAxis[] {
     const storeys = store?.spatialHierarchy?.storeyElevations;
     if (!store || !storeys) continue;
     const mv = s.mutationViews.get(modelId) ?? null;
+    // No IfcGrid anywhere in the model: nothing to extract, and no storey walk.
+    if (!modelHasGrid(store, mv)) continue;
     const seen = new Set<number>();
     for (const storeyId of [...storeys.keys()].sort((x, y) => (storeys.get(x) ?? 0) - (storeys.get(y) ?? 0))) {
       if (wanted.size && !wanted.has(store.entities.getGlobalId(storeyId) ?? '')) continue;
       const workplane = buildStoreyWorkplane(s, modelId, storeyId, 0);
       if ('refused' in workplane) continue;
       // One grid runs through every storey it serves: the lowest one draws it.
-      for (const { axisId, axis } of gridAxesInRender(store, mv, storeyId, workplane)) {
+      for (const { axisId, axis } of gridAxesInRender(store, mv, storeyId, workplane, s.mutationVersion)) {
         if (!seen.has(axisId)) {
           seen.add(axisId);
           out.push(axis);
