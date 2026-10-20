@@ -14,16 +14,18 @@ import { readPaper } from './paper';
 import type { ProjectSheet, SheetTemplate, TemplateSeries } from './types';
 import { freshProjectId } from './view-defaults';
 
-const frame = (patch: Partial<SheetTemplate['frame']['margins']> = {}, titleBlock: SheetTemplate['frame']['titleBlock'] = 'bottom-right') =>
-  ({ margins: { ...DEFAULT_FRAME.margins, ...patch }, titleBlock });
+/** The filing margin on the left that ISO 5457 asks of a drawing sheet, mm (the other three sides keep the standard 10). */
+export const FILING_MARGIN_MM = 20;
 
-/** The templates every project has. Ids start with `builtin:`; names are what the person reads. */
+const frame = (titleBlock: SheetTemplate['frame']['titleBlock'] = 'bottom-right') =>
+  ({ margins: { ...DEFAULT_FRAME.margins, left: FILING_MARGIN_MM }, titleBlock });
+
+/** The templates every project has, each with the filing margin. Ids start with `builtin:`; names are what the person reads. */
 export const BUILT_IN_TEMPLATES: readonly SheetTemplate[] = [
   { id: 'builtin:a1-plans', name: 'A1 plans', paper: 'A1', orientation: 'landscape', frame: frame() },
-  // A binding margin on the left, as on a sheet that is filed.
-  { id: 'builtin:a3-details', name: 'A3 details', paper: 'A3', orientation: 'landscape', frame: frame({ left: 20 }) },
+  { id: 'builtin:a3-details', name: 'A3 details', paper: 'A3', orientation: 'landscape', frame: frame() },
   { id: 'builtin:a2-elevations-long', name: 'A2 elevations long', paper: { kind: 'elongated', base: 'A2', factor: 3 }, orientation: 'landscape', frame: frame() },
-  { id: 'builtin:a3-schedules', name: 'A3 schedules', paper: 'A3', orientation: 'landscape', frame: frame({}, 'right') },
+  { id: 'builtin:a3-schedules', name: 'A3 schedules', paper: 'A3', orientation: 'landscape', frame: frame('right') },
 ];
 
 /** Built-in templates, then the project's own. */

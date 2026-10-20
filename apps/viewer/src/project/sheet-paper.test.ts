@@ -235,6 +235,10 @@ describe('sheet templates', () => {
     assert.deepEqual(long?.paper, { kind: 'elongated', base: 'A2', factor: 3 });
   });
 
+  it('every built-in template has the ISO 5457 filing margin of 20 mm on the left (review of #129)', () => {
+    for (const t of BUILT_IN_TEMPLATES) assert.equal(t.frame.margins.left, 20, t.name);
+  });
+
   it('a new detail sheet from the "A3 details" template has A3 paper and the template\'s margins and title block', () => {
     const details = findTemplate('builtin:a3-details')!;
     setSeriesTemplate('details', details.id);
