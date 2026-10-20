@@ -9,6 +9,9 @@
  */
 
 import '@/test/setup-dom.js';
+import { cleanup, render, waitFor } from '@/test/render.js';
+import { latestToast } from '@/test/toasts.js';
+import { Toaster } from '@/components/ui/toast';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { watchProjectForAutosave } from './autosave-watch.js';
 import assert from 'node:assert/strict';
@@ -145,29 +148,22 @@ describe('after a crash', () => {
 
   it('does not offer, in a new session, the autosave of a project file that was opened and then left as it was', () => {
     const storage = fakeStorage();
-    localStorage.clear();
-    try {
-      const file = readFileSync(fileURLToPath(new URL('./fixtures/v1.ifclite-project.json', import.meta.url)), 'utf8');
-      openProjectDocument(parseProjectFile(file));
-      // The open is stamped with the real clock, so the autosaves come after it on that clock too.
-      const afterOpen = Date.now() + 60_000;
-      const key = autosaveKey(useProjectStore.getState().models);
-      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i) as string; storage.setItem(k, localStorage.getItem(k) as string); }
-      diedWith(storage, key, afterOpen);
-      resetProject();
-      assert.equal(planAutosave(key, storage).recoverable, null);
-      addProjectSheet('A sheet after the open');
-      diedWith(storage, key, afterOpen + 1000);
-      assert.ok(planAutosave(key, storage).recoverable, 'but one drawn after the open is');
-    } finally {
-      localStorage.clear();
-    }
+    const file = readFileSync(fileURLToPath(new URL('./fixtures/v1.ifclite-project.json', import.meta.url)), 'utf8');
+    // The open is stamped on the test's clock, not the wall clock: BEFORE the autosaves at SAVED_AT.
+    openProjectDocument(parseProjectFile(file), { now: BEFORE, storage });
+    const key = autosaveKey(useProjectStore.getState().models);
+    diedWith(storage, key, SAVED_AT.getTime());
+    resetProject();
+    assert.equal(planAutosave(key, storage).recoverable, null);
+    addProjectSheet('A sheet after the open');
+    diedWith(storage, key, AFTER);
+    assert.ok(planAutosave(key, storage).recoverable, 'but one drawn after the open is');
   });
 
   it('has nothing to offer when nothing was autosaved', () => {
     const storage = fakeStorage();
     markSessionOpen(KEY, storage);
-    assert.deepEqual(planAutosave(KEY, storage), { restore: null, recoverable: null });
+    assert.deepEqual(planAutosave(KEY, storage), { restore: null, recoverable: null, tooNew: false });
   });
 
   it('reads an autosave through the project file reader: a slot from a newer build is not offered or loaded', () => {
@@ -175,8 +171,30 @@ describe('after a crash', () => {
     markSessionOpen(KEY, storage);
     useProjectStore.setState({ models: MODELS });
     writeAutosave(KEY, projectDocument(), storage, SAVED_AT);
-    storage.set(KEY, JSON.stringify({ ...JSON.parse(storage.get(KEY) as string), version: 99 }));
-    assert.deepEqual(planAutosave(KEY, storage), { restore: null, recoverable: null });
+    const newer = JSON.stringify({ ...JSON.parse(storage.get(KEY) as string), version: 99 });
+    storage.set(KEY, newer);
+    assert.deepEqual(planAutosave(KEY, storage), { restore: null, recoverable: null, tooNew: true });
+    assert.equal(storage.get(KEY), newer, 'and it is left as it is, even after a crash');
+    assert.equal(storage.get(recoverableKey(KEY)), undefined);
+  });
+
+  it('does not replace a newer build\'s kept session with this build\'s autosave', () => {
+    const storage = fakeStorage();
+    session(storage);
+    const newer = JSON.stringify({ ...JSON.parse(storage.get(KEY) as string), version: 99 });
+    storage.set(recoverableKey(KEY), newer);
+    planAutosave(KEY, storage);
+    assert.equal(storage.get(recoverableKey(KEY)), newer);
+  });
+
+  it('tells the person when the browser refuses the slot, instead of only logging it', async () => {
+    const ui = render(<Toaster />);
+    const full = { setItem: () => { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); } };
+    useProjectStore.setState({ models: MODELS });
+    writeAutosave(KEY, projectDocument(), full, SAVED_AT);
+    await waitFor(() => latestToast(ui.ownerDocument.body) !== '', 'a notice to show');
+    assert.match(latestToast(ui.ownerDocument.body), /not being autosaved.*quota has been exceeded/);
+    cleanup();
   });
 
   it('other models coming to the front forget the offer without removing the kept session', () => {

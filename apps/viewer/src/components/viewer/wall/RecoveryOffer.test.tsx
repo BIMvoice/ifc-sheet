@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { cleanup, click, render } from '@/test/render.js';
 import { addProjectSheet, projectDocument, resetProject, useProjectStore } from '@/project/project-store';
 import { discardRecovery, offerRecovery, useRecoveryStore } from '@/project/recovery-store';
+import { recoverableKey } from '@/project/recovery';
 import type { ModelExtent } from '@/project/drawing-set';
 import { WallIntro } from './WallIntro.js';
 
@@ -64,5 +65,21 @@ describe('the intro screen with an autosave on offer', () => {
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     assert.equal(hung, 1, 'outside the offer, Enter still hangs it');
     assert.notEqual(useRecoveryStore.getState().offer, null, 'and hanging the set leaves the offer standing');
+  });
+
+  it('going on without answering (ArrowRight, Enter, Hang it, the intro closing) keeps the offer and its slot', () => {
+    const key = 'ifc-lite:project:v1:house';
+    localStorage.setItem(recoverableKey(key), 'the kept session');
+    offerRecovery({ key, doc: projectDocument(), savedAt: 1, modelName: 'house.ifc' });
+    let hung = 0;
+    const ui = render(<WallIntro modelName="house.ifc" extent={HOUSE} onHang={() => { hung++; }} />);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    click([...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Hang it on the wall')!);
+    assert.equal(hung, 3);
+    cleanup();
+    assert.equal(useRecoveryStore.getState().offer?.key, key, 'still on offer after the intro is gone');
+    assert.equal(localStorage.getItem(recoverableKey(key)), 'the kept session', 'and its slot is kept');
+    localStorage.removeItem(recoverableKey(key));
   });
 });

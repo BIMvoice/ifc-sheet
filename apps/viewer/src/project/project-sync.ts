@@ -22,6 +22,7 @@ import type { ProjectModelRef } from './types';
 import { autosaveKey } from './project-saved';
 import { watchProjectForAutosave } from './autosave-watch';
 import { markSessionClosed, markSessionOpen, planAutosave } from './recovery';
+import { noticeAutosaveTooNew } from './autosave-notice';
 import { forgetRecoveryOffer, offerRecovery, restoreModelState } from './recovery-store';
 import { keepProjectForNewVersion, modelVersionSwapActive } from './model-version';
 
@@ -64,6 +65,8 @@ function loadedModels(): { refs: ProjectModelRef[]; storeys: StoreyInput[] } {
 export function useProjectSync(): void {
   useEffect(() => {
     let slot: string | null = null;
+    // The slot in front holds a newer build's autosave: it is not written for as long as these models are in front.
+    let readOnlySlot = false;
 
     const onModels = () => {
       const { refs, storeys } = loadedModels();
@@ -71,11 +74,13 @@ export function useProjectSync(): void {
       const key = autosaveKey(refs);
       if (key !== slot) {
         // The models in front before these ended as they should: theirs is not a session that died.
-        if (slot) markSessionClosed(slot);
+        if (slot && !readOnlySlot) markSessionClosed(slot);
         slot = key;
         forgetRecoveryOffer();
         const plan = planAutosave(key);
-        markSessionOpen(key);
+        readOnlySlot = plan.tooNew;
+        // No marker on a slot this session does not write: a crash here leaves nothing of ours to offer.
+        if (!plan.tooNew) markSessionOpen(key);
         const current = useProjectStore.getState();
         const overlaps = current.models.some((m) => refs.some((r) => r.key === m.key));
         if (modelVersionSwapActive()) keepProjectForNewVersion(refs);
@@ -85,6 +90,7 @@ export function useProjectSync(): void {
         } else if (!overlaps) resetProject();
         // The last session on these models died with work no project file holds: the intro and the drawer offer it back.
         if (plan.recoverable) offerRecovery({ key, doc: plan.recoverable.doc, savedAt: plan.recoverable.savedAt, modelName: refs.map((r) => r.name).join(', ') });
+        if (plan.tooNew) noticeAutosaveTooNew();
       }
       syncProjectWithModels(refs, storeys);
     };
@@ -93,10 +99,10 @@ export function useProjectSync(): void {
     const unsubModels = useViewerStore.subscribe((state, prev) => {
       if (state.models !== prev.models || state.ifcDataStore !== prev.ifcDataStore || state.mutationVersion !== prev.mutationVersion) onModels();
     });
-    const stopAutosave = watchProjectForAutosave(() => slot);
+    const stopAutosave = watchProjectForAutosave(() => (readOnlySlot ? null : slot));
     // The page closing as a page does is a clean end; coming back from the back-forward cache reopens it.
-    const closed = () => { if (slot) markSessionClosed(slot); };
-    const reopened = (e: PageTransitionEvent) => { if (e.persisted && slot) markSessionOpen(slot); };
+    const closed = () => { if (slot && !readOnlySlot) markSessionClosed(slot); };
+    const reopened = (e: PageTransitionEvent) => { if (e.persisted && slot && !readOnlySlot) markSessionOpen(slot); };
     window.addEventListener('pagehide', closed);
     window.addEventListener('pageshow', reopened);
     return () => {

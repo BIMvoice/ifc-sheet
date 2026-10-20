@@ -11,9 +11,13 @@
 import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanup, render } from '@/test/render.js';
+import { cleanup, render, waitFor } from '@/test/render.js';
+import { latestToast } from '@/test/toasts.js';
+import { Toaster } from '@/components/ui/toast';
+import { serializeProject } from './project-file.js';
+import { autosaveKey } from './project-saved.js';
 import { useViewerStore } from '@/store';
-import { addProjectSheet, resetProject, useProjectStore } from './project-store.js';
+import { addProjectSheet, projectDocument, resetProject, useProjectStore } from './project-store.js';
 import { useProjectSync } from './project-sync.js';
 import { discardRecovery, forgetRecoveryOffer, restoreRecovery, useRecoveryStore } from './recovery-store.js';
 
@@ -115,6 +119,32 @@ describe('a session that ended cleanly', () => {
     start();
     assert.equal(useRecoveryStore.getState().offer, null);
     assert.deepEqual(sheetNames(), ['Drawn, never saved to a file']);
+  });
+});
+
+describe('an autosave written by a newer version', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => { cleanup(); localStorage.clear(); });
+
+  it('is not loaded, not written over by the edits of this session, and the person is told', async () => {
+    const key = autosaveKey([{ key: 'legacy', name: 'Model' }]);
+    resetProject();
+    addProjectSheet('Drawn in a newer version');
+    const newer = JSON.stringify({ ...JSON.parse(serializeProject(projectDocument())), models: [{ key: 'legacy', name: 'Model' }], version: 99 });
+    localStorage.setItem(key, newer);
+    const toasts = render(<Toaster />);
+
+    start();
+    assert.deepEqual(sheetNames(), [], 'nothing of it is loaded');
+    await waitFor(() => /newer version of IfcSheet/.test(latestToast(toasts.ownerDocument.body)), 'the notice');
+    addProjectSheet('Drawn in this version');
+    await wait();
+    assert.equal(localStorage.getItem(key), newer, 'the newer autosave is still there, as it was');
+    crash();
+
+    start();
+    assert.equal(localStorage.getItem(key), newer, 'and a crash in this version does not move or replace it');
+    assert.equal(useRecoveryStore.getState().offer, null);
   });
 });
 

@@ -13,11 +13,16 @@
  * (`recovery-store.ts`). The recoverable slot is not written again, and not removed, until the user
  * answers Discard or a Restore has loaded it: going on without answering keeps it. Any other autosave
  * is put back as it always was. Every slot is read through `parseProjectFile`, the reader every
- * project file goes through, so a slot from an older build is migrated the same way.
+ * project file goes through, so a slot from an older build is migrated the same way. A slot from a
+ * NEWER build is neither loaded nor written: the plan says so (`tooNew`), the sync stops autosaving
+ * to it for the session and tells the person (`autosave-notice.ts`). A write the browser refuses is
+ * told to the person too, not only logged.
  */
 
 import { readModelState, withoutModelState, writeModelState } from './autosave-snapshots';
+import { noticeAutosaveFailed } from './autosave-notice';
 import { parseProjectFile, serializeProject } from './project-file';
+import { ProjectFileTooNewError } from './project-migrations';
 import { AUTOSAVE_PREFIX, projectFingerprint, readSavedMark, safeStorage } from './project-saved';
 import type { ProjectDocument } from './types';
 
@@ -34,6 +39,8 @@ export interface AutosavePlan {
   restore: Autosave | null;
   /** The session kept in the recoverable slot, to offer, if any. */
   recoverable: Autosave | null;
+  /** The autosave slot was written by a newer build: it is left as it is, and must not be autosaved over. */
+  tooNew: boolean;
 }
 
 const RECOVERABLE_PREFIX = 'ifc-lite:project-recoverable:v1:';
@@ -46,17 +53,26 @@ export function recoverableKey(key: string): string {
 
 const sessionKey = (key: string): string => SESSION_PREFIX + key.slice(AUTOSAVE_PREFIX.length);
 
-export function readAutosave(key: string, storage: Pick<Storage, 'getItem'> | undefined = safeStorage()): Autosave | null {
+/** A slot as read: its autosave, or none; `tooNew` when it holds a project from a newer build (which is not none). */
+function readSlot(key: string, storage: Pick<Storage, 'getItem'> | undefined): { autosave: Autosave | null; tooNew: boolean } {
   try {
     const text = storage?.getItem(key);
-    if (!text) return null;
+    if (!text) return { autosave: null, tooNew: false };
     const doc = parseProjectFile(text);
     const stamp = Date.parse(String((JSON.parse(text) as { savedAt?: unknown }).savedAt));
-    return { doc, savedAt: Number.isFinite(stamp) ? stamp : 0 };
+    return { autosave: { doc, savedAt: Number.isFinite(stamp) ? stamp : 0 }, tooNew: false };
   } catch (err) {
+    if (err instanceof ProjectFileTooNewError) {
+      console.warn('[project] the autosave was written by a newer version; leaving it as it is', err);
+      return { autosave: null, tooNew: true };
+    }
     console.warn('[project] ignoring unreadable autosave', err);
-    return null;
+    return { autosave: null, tooNew: false };
   }
+}
+
+export function readAutosave(key: string, storage: Pick<Storage, 'getItem'> | undefined = safeStorage()): Autosave | null {
+  return readSlot(key, storage).autosave;
 }
 
 export function writeAutosave(key: string, doc: ProjectDocument, storage: Pick<Storage, 'setItem'> | undefined = safeStorage(), now = new Date()): void {
@@ -65,7 +81,9 @@ export function writeAutosave(key: string, doc: ProjectDocument, storage: Pick<S
   try {
     storage?.setItem(key, serializeProject(slim, now));
   } catch (err) {
+    // The slot keeps its older copy: said on screen, so it is not mistaken for the current work.
     console.warn('[project] autosave failed', err);
+    noticeAutosaveFailed(err);
   }
   // Never written empty: a slot restored before its state has been read back must not erase it.
   if (modelState) void writeModelState(key, modelState);
@@ -122,14 +140,19 @@ function keepAsRecoverable(key: string, storage: Store): boolean {
 
 /** What the start of a session on slot `key` finds. Read before `markSessionOpen` for this session. */
 export function planAutosave(key: string, storage: Store | undefined = safeStorage()): AutosavePlan {
-  if (!storage) return { restore: null, recoverable: null };
-  const autosave = readAutosave(key, storage);
-  const recoverable = readAutosave(recoverableKey(key), storage);
-  if (!recoverable && autosave && lastSessionDied(key, storage) && isUnsavedWork(key, autosave, storage)) {
+  if (!storage) return { restore: null, recoverable: null, tooNew: false };
+  const slot = readSlot(key, storage);
+  const kept = readSlot(recoverableKey(key), storage);
+  const recoverable = kept.autosave;
+  // A newer build's autosave: nothing is restored from it, moved, or written over it.
+  if (slot.tooNew) return { restore: null, recoverable, tooNew: true };
+  const autosave = slot.autosave;
+  // A newer build's kept session counts as kept: it is not replaced, only not offered.
+  if (!recoverable && !kept.tooNew && autosave && lastSessionDied(key, storage) && isUnsavedWork(key, autosave, storage)) {
     // No copy kept, no offer: the work is put back in front rather than left for the next autosave to replace.
-    if (keepAsRecoverable(key, storage)) return { restore: null, recoverable: autosave };
+    if (keepAsRecoverable(key, storage)) return { restore: null, recoverable: autosave, tooNew: false };
   }
-  return { restore: autosave, recoverable };
+  return { restore: autosave, recoverable, tooNew: false };
 }
 
 /** Removes the recoverable slot of `key` (Discard, or a Restore that loaded it); its model state is the caller's to remove. */

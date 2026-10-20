@@ -4,18 +4,21 @@
 
 /**
  * #71: a project file saved by an earlier build still opens, and one from a later build is refused whole.
- * `fixtures/v1.ifclite-project.json` was written by `serializeProject` at version 1; when the shape
- * changes, a migration is added and that file stays as it is, so this test keeps proving it opens.
+ * `fixtures/v1.ifclite-project.json` was written by this branch's `serializeProject` at version 1.
+ * `fixtures/pre-section-cuts.ifclite-project.json` is older: it was written by the serializer and store
+ * of commit 9e17a1f0 (2026-10-12), before named section cuts were saved and while the title block was
+ * kept per sheet. When the shape changes, a migration is added and both files stay as they are, so
+ * these tests keep proving they open.
  */
 
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { parseProjectFile } from './project-file.js';
+import { parseProjectFile, serializeProject } from './project-file.js';
 import { migrateProject, PROJECT_FILE_VERSION, ProjectFileTooNewError, type ProjectMigration } from './project-migrations.js';
 import { projectOpenErrorText } from './open-error.js';
-import { loadProjectDocument, resetProject, useProjectStore } from './project-store.js';
+import { loadProjectDocument, projectDocument, resetProject, useProjectStore } from './project-store.js';
 
 const fixture = (name: string): string => readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), 'utf8');
 const t = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
@@ -39,6 +42,34 @@ describe('a project file saved at version 1', () => {
     const withVersion = JSON.parse(fixture('v1.ifclite-project.json')) as Record<string, unknown>;
     const { version: _version, ...without } = withVersion;
     assert.deepEqual(parseProjectFile(JSON.stringify(without)), parseProjectFile(JSON.stringify(withVersion)));
+  });
+});
+
+describe('a project file written by an older build (9e17a1f0)', () => {
+  beforeEach(() => resetProject());
+
+  it('opens through the real load path: the per-sheet title blocks become the project\'s, the later fields take their defaults', () => {
+    const text = fixture('pre-section-cuts.ifclite-project.json');
+    const raw = JSON.parse(text) as Record<string, unknown>;
+    assert.ok(!('savedSectionCuts' in raw) && !('titleBlock' in raw) && !('issues' in raw), 'the fixture predates these fields');
+    loadProjectDocument(parseProjectFile(text));
+    const s = useProjectStore.getState();
+    assert.equal(s.name, 'Old house');
+    assert.deepEqual(s.models, [{ key: 'house-sha', name: 'house.ifc' }]);
+    assert.deepEqual(s.sheets.map((x) => [x.number, x.name, x.viewports?.length ?? 0]), [['A-101', 'Ground floor plan', 1], ['A-102', 'Notes', 0]]);
+    assert.ok(s.views.some((v) => v.id === s.sheets[0].viewports?.[0].viewId), 'the viewport still names its view');
+    assert.deepEqual(s.titleBlock, { project: 'Old house', drawnBy: 'PC', date: '2026-10-12' }, 'the shared fields are lifted to the project');
+    assert.equal(s.sheets[0].titleBlock, undefined, 'the first sheet held only shared values');
+    assert.deepEqual(s.sheets[1].titleBlock, { drawnBy: 'IC' }, 'a sheet keeps what differs');
+    assert.deepEqual(s.savedSectionCuts, []);
+    assert.deepEqual(s.issues, []);
+  });
+
+  it('saves again in today\'s shape and reads back the same', () => {
+    loadProjectDocument(parseProjectFile(fixture('pre-section-cuts.ifclite-project.json')));
+    const again = parseProjectFile(serializeProject(projectDocument()));
+    assert.deepEqual(again, parseProjectFile(serializeProject(again)));
+    assert.deepEqual(again.titleBlock, { project: 'Old house', drawnBy: 'PC', date: '2026-10-12' });
   });
 });
 

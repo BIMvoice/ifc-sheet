@@ -17,7 +17,7 @@ import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
-import { declaredVersion, migrateProject, PROJECT_FILE_VERSION } from './project-migrations';
+import { declaredVersion, migrateProject, PROJECT_FILE_VERSION, PROJECT_MIGRATIONS, type ProjectMigration } from './project-migrations';
 import { withoutModelState } from './autosave-snapshots';
 import { markProjectSaved } from './project-saved';
 import { loadProjectDocument, projectDocument } from './project-store';
@@ -47,9 +47,9 @@ export function serializeProject(doc: ProjectDocument, now = new Date()): string
  * autosave is not offered back next session. Autosave restores load with `loadProjectDocument`
  * directly. Kept out of the store so the drafting session does not reach the file reader.
  */
-export function openProjectDocument(doc: ProjectDocument, options: { dirty?: boolean } = {}): void {
-  loadProjectDocument(doc, options);
-  noteProjectFile(projectDocument());
+export function openProjectDocument(doc: ProjectDocument, options: { dirty?: boolean; now?: number; storage?: Parameters<typeof markProjectSaved>[2] } = {}): void {
+  loadProjectDocument(doc, { dirty: options.dirty });
+  noteProjectFile(projectDocument(), options.now, options.storage);
 }
 
 export function exportProjectFile(doc: ProjectDocument): void {
@@ -141,8 +141,16 @@ function readModel(v: unknown, path: string): ProjectModelRef {
   return { key: v.key, name: v.name };
 }
 
+/** The versions a reader brings files to: this build's, unless a test stands in a later one. */
+export interface ProjectFileSchema {
+  migrations: Readonly<Record<number, ProjectMigration>>;
+  current: number;
+}
+
+const THIS_BUILD: ProjectFileSchema = { migrations: PROJECT_MIGRATIONS, current: PROJECT_FILE_VERSION };
+
 /** Parse and validate a project file's text. Throws with the first problem found. */
-export function parseProjectFile(text: string): ProjectDocument {
+export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_BUILD): ProjectDocument {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -153,7 +161,7 @@ export function parseProjectFile(text: string): ProjectDocument {
   const version = declaredVersion(parsed);
   if (version === null) fail('/version', 'must be a whole number from 1');
   // Older files are brought up to this build's shape first; a newer one throws here, before anything is read.
-  const raw = migrateProject(parsed, version);
+  const raw = migrateProject(parsed, version, schema.migrations, schema.current);
   const list = (key: string): unknown[] => {
     const value = raw[key];
     if (value === undefined) return [];
