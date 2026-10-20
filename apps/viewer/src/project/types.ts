@@ -4,6 +4,7 @@
 
 import type { TitleSource } from './title-block-sources';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
+import type { PhaseSource } from './phases';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
@@ -30,6 +31,8 @@ import type { ProjectIssue } from '@/issue/types';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
 
 export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './project-records';
+import type { ViewGraphics } from './view-graphics-types';
+export type { CategoryGraphics, CategoryLineWeight, GridEnds, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types';
 
 export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d' | 'drafting';
 
@@ -92,40 +95,6 @@ export interface ViewDetail {
   max: { x: number; y: number };
   /** The detail's number (1, 2, …), unique among the project's details. */
   number: number;
-}
-
-export type CategoryLineWeight = 'heavy' | 'medium' | 'light' | 'hairline';
-
-/** How one element category draws in a view. Absent fields keep the preset's look. */
-export interface CategoryGraphics {
-  visible?: boolean;
-  lineColor?: string;
-  fillColor?: string;
-  lineWeight?: CategoryLineWeight;
-  /** A hatch pattern name (built-in or imported .pat) drawn over the category's cut faces. */
-  cutHatch?: string;
-  /** Hatch scale (1 = the pattern's own size in drawing millimetres). */
-  hatchScale?: number;
-}
-
-/** Which ends of a grid axis carry a bubble; on a section, `start` is the foot and `end` the head. */
-export type GridEnds = 'start' | 'end' | 'both';
-
-/** How a view draws the model's structural grid (IfcGrid). */
-export interface ViewGridGraphics {
-  /** Absent: on for plans and sections, off for elevations. */
-  visible?: boolean;
-  /** Absent: both ends. */
-  ends?: GridEnds;
-}
-
-export interface ViewGraphics {
-  /** The structural grid's axes and bubbles. */
-  grid?: ViewGridGraphics;
-  /** A built-in graphic override preset id; absent = the default, null = none. */
-  presetId?: string | null;
-  /** By category id (`VIEW_CATEGORIES`). */
-  categories?: Record<string, CategoryGraphics>;
 }
 
 export interface PlanProjectView extends ProjectViewBase {
@@ -355,6 +324,8 @@ export interface ProjectDocument {
   cadLayers?: CadLayerRule[];
   /** Named section cuts of the Drawing panel. */
   savedSectionCuts?: SavedSectionCut[];
+  /** Where an element's phase is read from besides its IFC Status (`phases.ts`). */
+  phaseSource?: PhaseSource;
   /** Named presets of the annotation tools. */
   annotationTypes?: AnnotationType[];
   /** The project's own symbols (the built-in ones are in code). */
