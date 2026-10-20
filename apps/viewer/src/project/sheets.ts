@@ -88,11 +88,10 @@ export function addViewport(sheetId: string, viewId: string, at: { x: number; y:
   // 0 × 0: the box fits the drawing once it is generated (see `viewportBox`); a raster has no drawing to fit, so it starts at a size.
   const box = view && isRasterView(view) ? { width: RASTER_BOX_MM.width, height: RASTER_BOX_MM.height } : { width: 0, height: 0 };
   const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, ...box, center: null };
-  const kind = view?.kind;
   patchSheet(sheetId, (s) => {
     // A number the program chose follows what the sheet comes to hold, once.
     const renumber = s.autoNumber && (s.viewports ?? []).length === 0;
-    const number = renumber ? nextSheetNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), sheetGroupOfView(kind)) : s.number;
+    const number = renumber ? nextSheetNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), sheetGroupOfView(view)) : s.number;
     return { ...withoutAutoNumber(s), number, viewports: [...(s.viewports ?? []), viewport] };
   });
   return id;

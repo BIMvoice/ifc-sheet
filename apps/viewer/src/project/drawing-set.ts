@@ -38,12 +38,14 @@ export interface ModelExtent {
   max: { x: number; y: number; z: number };
 }
 
-export type SetGroup = 'plans' | 'elevations' | 'sections' | 'schedules';
+/** `interiors`: a room's interior elevations (A-4xx), kept apart from the facade elevations so each group is scaled on its own. */
+export type SetGroup = 'plans' | 'elevations' | 'sections' | 'interiors' | 'schedules';
 
 /** Width and height a view's drawing takes, metres, estimated from the model's extent. */
 export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number; h: number } {
-  // A detail shows its rectangle only.
-  if (view.detail) return { w: view.detail.max.x - view.detail.min.x, h: view.detail.max.y - view.detail.min.y };
+  // A detail shows its rectangle only, an interior elevation its wall.
+  const crop = view.detail ?? (view.kind === 'elevation' ? view.interior?.crop : undefined);
+  if (crop) return { w: crop.max.x - crop.min.x, h: crop.max.y - crop.min.y };
   const dx = extent.max.x - extent.min.x;
   const dy = extent.max.y - extent.min.y;
   const dz = extent.max.z - extent.min.z;
@@ -113,7 +115,7 @@ export function choosePaper(rows: readonly (readonly { w: number; h: number }[])
 }
 
 /** Viewports for `views` in one row across the drawing area at `scale`, centred, each centred on its drawing. */
-export function rowOfViewports(views: readonly ProjectView[], sizes: readonly { w: number; h: number }[], scale: number, paper: PaperSize = SET_PAPER): SheetViewport[] {
+export function rowOfViewports(views: readonly Pick<ProjectView, 'id'>[], sizes: readonly { w: number; h: number }[], scale: number, paper: PaperSize = SET_PAPER): SheetViewport[] {
   const area = drawingArea(paper);
   const k = 1000 / scale;
   const widths = sizes.map((s) => s.w * k);
@@ -163,7 +165,7 @@ function setRows(allViews: readonly ProjectView[]): SetRow[] {
   const plans = views.filter((v) => v.kind === 'plan').sort((a, b) => (a.kind === 'plan' && b.kind === 'plan' ? a.level.elevation - b.level.elevation : 0));
   pairs(plans).forEach((pair, i) => add('plans', `A-${101 + i}`, plans.length > 2 ? `Floor plans ${i + 1}` : 'Floor plans', pair));
   ELEVATION_PAIRS.forEach(({ directions, name }, i) => {
-    add('elevations', `A-${201 + i}`, name, directions.flatMap((d) => views.filter((v) => v.kind === 'elevation' && v.direction === d)));
+    add('elevations', `A-${201 + i}`, name, directions.flatMap((d) => views.filter((v) => v.kind === 'elevation' && v.direction === d && !v.interior)));
   });
   const sections = views.filter((v) => v.kind === 'section');
   pairs(sections).forEach((pair, i) => add('sections', `A-${301 + i}`, sections.length > 2 ? `Sections ${i + 1}` : 'Sections', pair));
@@ -207,10 +209,15 @@ export function buildDrawingSet({ views, extent, now = Date.now() }: SetInput): 
 /** Which group a sheet of the set belongs to, by its number series (A-1xx plans, A-2xx elevations, A-3xx sections, A-6xx schedules). */
 export function sheetGroup(sheet: Pick<ProjectSheet, 'number'>): SetGroup | null {
   const m = /^A-(\d)\d\d$/.exec(sheet.number);
-  return m ? ({ '1': 'plans', '2': 'elevations', '3': 'sections', '6': 'schedules' } as Record<string, SetGroup>)[m[1]] ?? null : null;
+  return m ? ({ '1': 'plans', '2': 'elevations', '3': 'sections', '4': 'interiors', '6': 'schedules' } as Record<string, SetGroup>)[m[1]] ?? null : null;
 }
 
-/** The next free number of a group's series: A-101…, A-201…, A-301…, A-601…. */
+/** Whether a sheet belongs to the drawing set the program lays out: every sheet but a room's interior elevations (A-4xx). */
+export function isSetSheet(sheet: Pick<ProjectSheet, 'number'>): boolean {
+  return sheetGroup(sheet) !== 'interiors';
+}
+
+/** The next free number of a group's series: A-101…, A-201…, A-301…, A-401…, A-601…. */
 export function nextInSeries(sheets: readonly Pick<ProjectSheet, 'number'>[], group: SetGroup): string {
   const taken = new Set(sheets.map((s) => s.number));
   let n = SERIES_START[group];
@@ -221,13 +228,13 @@ export function nextInSeries(sheets: readonly Pick<ProjectSheet, 'number'>[], gr
 /** The group a view's sheet belongs to, and its number series' first number. */
 export function groupOfView(view: ProjectView): SetGroup | null {
   if (view.kind === 'plan') return 'plans';
-  if (view.kind === 'elevation') return 'elevations';
+  if (view.kind === 'elevation') return view.interior ? 'interiors' : 'elevations';
   if (view.kind === 'section') return 'sections';
   return null;
 }
 
-const SERIES_START: Record<SetGroup, number> = { plans: 101, elevations: 201, sections: 301, schedules: 601 };
-const GROUP_NAMES: Record<SetGroup, string> = { plans: 'Floor plans', elevations: 'Elevations', sections: 'Sections', schedules: 'Schedules' };
+const SERIES_START: Record<SetGroup, number> = { plans: 101, elevations: 201, sections: 301, interiors: 401, schedules: 601 };
+const GROUP_NAMES: Record<SetGroup, string> = { plans: 'Floor plans', elevations: 'Elevations', sections: 'Sections', interiors: 'Interior elevations', schedules: 'Schedules' };
 /** Drawings a set sheet holds before a new one is started. */
 export const PER_SHEET = 2;
 
