@@ -15,6 +15,7 @@ import { useTranslation, formatLocaleNumber } from '@/i18n';
 import { drawingToScreen, screenToDrawing, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import type { AnnotationShape, SymbolInstanceShape } from '@/drafting/types';
 import type { Rect } from '@/siteplan/key-plan';
+import { PLOT_BOUNDARY_LAYER } from '@/siteplan/plot';
 import { COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID, type LiveSymbolContext } from '@/siteplan/live-symbols';
 import { coordinateLabelBox, SITE_ARROW_SCALE, siteSymbolPlaces } from '@/siteplan/site-symbols';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
@@ -25,6 +26,7 @@ import type { SiteContent } from './useSheetSite';
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
 const DIM_TEXT_MM = 2.5;
 const NO_PATTERNS: never[] = [];
+const ENCROACHMENT_COLOR = PLOT_BOUNDARY_LAYER.color;
 
 /** Footprint and setbacks, in the viewport's drawing → paper transform. */
 export function SiteOverlay({ site, transform: t, axis, scale }: { site: SiteContent; transform: ViewTransform; axis: SectionAxisName; scale: number }) {
@@ -38,9 +40,12 @@ export function SiteOverlay({ site, transform: t, axis, scale }: { site: SiteCon
       ))}
       {site.setbacks.map((s) => {
         const dim: AnnotationShape = { type: 'dimension', variant: 'aligned', a: s.from, b: s.to, at: s.from, height, text: fmt(s.distance) };
+        // A negative setback: the building is over the plot line on that side, drawn in the plot boundary's red.
+        const encroaches = s.distance < 0;
+        const color = encroaches ? ENCROACHMENT_COLOR : '#000';
         return (
-          <g key={s.edge} {...penTags('SITE-SETBACKS', 0.18)} data-setback={s.distance.toFixed(3)}>
-            <AnnotationGraphics shape={dim} color="#000" selected={false} transform={t} axis={axis} extraPatterns={NO_PATTERNS} strokeScale={0.25} paperUnit={scale / 1000} />
+          <g key={s.edge} {...penTags('SITE-SETBACKS', 0.18, false, encroaches ? ENCROACHMENT_COLOR : undefined)} data-setback={s.distance.toFixed(3)} data-encroachment={encroaches ? 'true' : undefined}>
+            <AnnotationGraphics shape={dim} color={color} selected={false} transform={t} axis={axis} extraPatterns={NO_PATTERNS} strokeScale={0.25} paperUnit={scale / 1000} />
           </g>
         );
       })}
@@ -67,7 +72,7 @@ export function SiteSymbols({ site, transform: t, axis, scale, box, live, symbol
     boundary: site.boundary, footprint: site.footprint, setbacks: site.setbacks, labels,
     setbackText: (v) => formatLocaleNumber(locale, v, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
   });
-  const arrow: AnnotationShape = { type: 'symbol', symbolId: NORTH_ARROW_ID, p: screenToDrawing(places.arrow, t, axis), scale: SITE_ARROW_SCALE / t.scale, rotation: 0 };
+  const arrow: AnnotationShape = { type: 'symbol', symbolId: NORTH_ARROW_ID, p: screenToDrawing(places.arrow, t, axis), scale: SITE_ARROW_SCALE / t.scale, rotation: 0, followsNorth: true };
   const bar: AnnotationShape = { type: 'symbol', symbolId: SCALE_BAR_ID, p: screenToDrawing(places.bar, t, axis), scale: 1, rotation: 0 };
   return (
     <g data-site-symbols="true">

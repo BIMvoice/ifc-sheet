@@ -19,6 +19,7 @@ export const wallRo = {
   'wall.intro.views': { one: '{count} vedere', few: '{count} vederi', other: '{count} de vederi' },
   'wall.intro.hang': 'Afișează pe panou',
   'wall.intro.waiting': 'Se citește modelul…',
+  'wall.group.general': 'Planșe generale',
   'wall.group.plans': 'Planuri',
   'wall.group.elevations': 'Fațade',
   'wall.group.interiors': 'Elevații interioare',

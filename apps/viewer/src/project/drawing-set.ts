@@ -310,7 +310,7 @@ export function withViewHung(
 ): { sheets: ProjectSheet[]; sheetId: string } | null {
   if (sheets.some((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id))) return null;
   if (view.detail) return withDetailHung(sheets, view, extent, now, scheme, templates.details);
-  if (view.kind === 'plan' && view.site) return withSitePlanHung(sheets, view, extent, now);
+  if (view.kind === 'plan' && view.site) return withSitePlanHung(sheets, view, extent, now, scheme);
   const group = groupOfView(view);
   if (!group) return null;
   const layOut = (sheet: ProjectSheet, members: ProjectView[]): ProjectSheet => {

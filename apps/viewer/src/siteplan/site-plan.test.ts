@@ -90,8 +90,8 @@ describe('north arrow from the model (#48)', () => {
   it('points on paper at the angle between the view up and true north, within 0.1°', async () => {
     const north = trueNorthOf(await parseSiteFixture());
     const ctx = liveSymbolContext(frameOf({ north }), PLAN, 'down', 100, 'en', labels);
-    // Placed by the user unrotated; the model turns it.
-    const { def, at } = liveSymbol(symbol(NORTH_ARROW_ID, { x: 4, y: 6 }, 0.1, 0), ctx);
+    // Placed by the site plan unrotated, marked to follow true north; the model turns it.
+    const { def, at } = liveSymbol({ ...symbol(NORTH_ARROW_ID, { x: 4, y: 6 }, 0.1, 0), followsNorth: true }, ctx);
     assert.ok(def);
     const shaft = placeSymbol(def, at, -1).geometry.find((g) => g.type === 'line');
     assert.ok(shaft && shaft.type === 'line');
@@ -102,6 +102,17 @@ describe('north arrow from the model (#48)', () => {
     // Paper up is project +Y on an unflipped plan; true north is 30° counter-clockwise from it.
     const got = paperAngleFromUp({ x: tip.x - tail.x, y: tip.y - tail.y });
     assert.ok(Math.abs(got - SITE_FIXTURE.trueNorthDeg) < 0.1, `arrow at ${got}°`);
+  });
+});
+
+describe('a hand-placed north arrow keeps its rotation (#135 review)', () => {
+  it('is drawn at the rotation it was placed with, true north known or not', async () => {
+    const north = trueNorthOf(await parseSiteFixture());
+    for (const frame of [frameOf({ north }), frameOf({})]) {
+      const ctx = liveSymbolContext(frame, PLAN, 'down', 100, 'en', labels);
+      assert.equal(liveSymbol(symbol(NORTH_ARROW_ID, { x: 4, y: 6 }, 0.1, 0.7), ctx).at.rotation, 0.7);
+      assert.notEqual(liveSymbol({ ...symbol(NORTH_ARROW_ID, { x: 4, y: 6 }, 0.1, 0.7), followsNorth: true }, ctx).at.rotation, 0.7);
+    }
   });
 });
 
@@ -162,6 +173,24 @@ describe('setbacks to a drawn plot boundary (#48)', () => {
       assert.ok(Math.abs(along) < 1e-9, `edge ${s.edge} not perpendicular`);
       assert.ok(footprint[0].some((p) => p.x === s.from.x && p.y === s.from.y));
     }
+  });
+
+  it('gives a building over the plot line a negative setback on that side (#135 review)', () => {
+    // The same building moved 13 m west: it now stands 3 m over the west line (x = 0).
+    const over = [footprint[0].map((p) => ({ x: p.x - 13, y: p.y }))];
+    const got = setbacks(over, plot).map((s) => [s.edge, Number(s.distance.toFixed(6))]);
+    assert.deepEqual(got, [[0, 9], [1, 25], [2, 8], [3, -3]]);
+  });
+
+  it('measures an edge no footprint corner faces from the nearest point of that edge (#135 review)', () => {
+    // The plot with a tab on its north side, x 36..40, up to y = 30: no footprint corner (x ≤ 30, y ≤ 17) projects onto the tab's edges.
+    const tabbed = [{ x: 0, y: -4 }, { x: 42, y: -4 }, { x: 42, y: 25 }, { x: 40, y: 25 }, { x: 40, y: 30 }, { x: 36, y: 30 }, { x: 36, y: 25 }, { x: 0, y: 25 }];
+    const s = setbacks(footprint, tabbed).find((x) => x.edge === 3);
+    assert.ok(s, 'the tab\'s east edge has a setback');
+    assert.ok(Math.abs(s.distance - Math.hypot(10, 8)) < 1e-9, `${s.distance}`);
+    assert.deepEqual(s.to, { x: 40, y: 25 });
+    assert.deepEqual(s.from, { x: 30, y: 17 });
+    assert.equal(setbacks(footprint, tabbed).length, tabbed.length);
   });
 
   it('the plot area is the drawn boundary\'s, for the urban indicators to take', () => {

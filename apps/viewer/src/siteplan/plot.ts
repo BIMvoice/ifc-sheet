@@ -5,8 +5,8 @@
 /**
  * The plot on a site plan: its boundary (a closed polyline the user draws on
  * the site plan, on the "Plot boundary" layer), its area, and the setbacks —
- * for each boundary edge, the perpendicular distance from it to the nearest
- * point of the building's footprint. Pure, in the site plan's drawing metres.
+ * for each boundary edge, the distance from it to the nearest point of the
+ * building's footprint, negative where the building is over that line. Pure, in the site plan's drawing metres.
  */
 
 import type { DraftEntity, Pt } from '@/drafting/types';
@@ -79,21 +79,27 @@ export function plotAreaOf(project: Pick<ProjectDocument, 'views' | 'drafts'>): 
 export interface Setback {
   /** The boundary edge, by its first vertex's index. */
   edge: number;
-  /** The footprint point nearest the edge, and its foot on the edge. */
+  /** The footprint point nearest the edge, and the nearest point of the edge to it. */
   from: Pt;
   to: Pt;
-  /** Metres. */
+  /** Metres; negative when the footprint point lies beyond the edge's line, outside the plot: the building encroaches over that side. */
   distance: number;
 }
 
 /**
- * For each edge of `boundary`, the footprint vertex nearest to it whose
- * perpendicular falls on the edge, and that distance: the setback of the
- * building from that side of the plot. An edge no footprint vertex faces
- * (its perpendicular falls past both ends) has none.
+ * For each edge of `boundary`, the setback of the building from that side of
+ * the plot: the footprint vertex nearest to the edge whose perpendicular falls
+ * on it, and that distance. An edge no footprint vertex faces (every
+ * perpendicular falls past its ends) is measured from the footprint vertex
+ * nearest to the edge segment, to its nearest point (an end). The distance is
+ * negative for a vertex on the outer side of the edge's line, and the most
+ * negative one wins: a building over the plot line reports how far over it is.
  */
 export function setbacks(footprint: readonly (readonly Pt[])[], boundary: readonly Pt[]): Setback[] {
   const out: Setback[] = [];
+  const better = (a: Setback, b: Setback | null) => !b || a.distance < b.distance;
+  // The plot's inside is left of each edge on a counter-clockwise ring, right on a clockwise one.
+  const turn = Math.sign(doubleSignedArea(boundary)) || 1;
   for (let i = 0; i < boundary.length; i++) {
     const a = boundary[i];
     const b = boundary[(i + 1) % boundary.length];
@@ -101,16 +107,21 @@ export function setbacks(footprint: readonly (readonly Pt[])[], boundary: readon
     const dy = b.y - a.y;
     const len2 = dx * dx + dy * dy;
     if (len2 < 1e-12) continue;
-    let best: Setback | null = null;
+    let facing: Setback | null = null;
+    let nearest: Setback | null = null;
     for (const ring of footprint) {
       for (const p of ring) {
         const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
-        if (t < 0 || t > 1) continue;
-        const foot = { x: a.x + t * dx, y: a.y + t * dy };
-        const distance = Math.hypot(p.x - foot.x, p.y - foot.y);
-        if (!best || distance < best.distance) best = { edge: i, from: p, to: foot, distance };
+        const c = Math.min(1, Math.max(0, t));
+        const foot = { x: a.x + c * dx, y: a.y + c * dy };
+        const sign = turn * (dx * (p.y - a.y) - dy * (p.x - a.x)) >= 0 ? 1 : -1;
+        const s: Setback = { edge: i, from: p, to: foot, distance: sign * Math.hypot(p.x - foot.x, p.y - foot.y) };
+        if (t >= 0 && t <= 1) {
+          if (better(s, facing)) facing = s;
+        } else if (better(s, nearest)) nearest = s;
       }
     }
+    const best = facing ?? nearest;
     if (best) out.push(best);
   }
   return out;

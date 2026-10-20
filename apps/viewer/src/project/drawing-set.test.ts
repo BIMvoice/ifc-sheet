@@ -17,6 +17,7 @@ import { defaultViews } from './view-defaults.js';
 import { buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fittingScale, groupsThatDoNotFit, overrun, sheetGroup, sheetScaleReason, sheetSeries, withViewHung, type ModelExtent } from './drawing-set.js';
 import { addScheduleToSet, groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
 import { PAPER_MM } from './paper.js';
+import { nextNumber, numberGroupOf, SEQUENTIAL_SCHEME } from './numbering.js';
 import { fitViewportBox } from './sheets.js';
 import type { ProjectLevel, ProjectView } from './types';
 
@@ -180,6 +181,29 @@ describe('a detail on the set', () => {
     assert.equal(withViewHung(hung.sheets, views, { ...detail, id: 'det2' }, HOUSE)?.sheets.at(-1)?.number, 'A-502');
     assert.equal(sheetSeries(sheet), 'details', 'its series template applies');
     assert.equal(sheetSeries({ number: 'A-901' }), null, 'A-9xx is other sheets, not details');
+  });
+});
+
+describe('the site plan on the set (#135 review)', () => {
+  const plan = defaultViews(LEVELS).find((v) => v.kind === 'plan');
+  assert.ok(plan?.kind === 'plan');
+  const site: ProjectView = { ...plan, id: 'site', name: 'Site plan', site: true, scale: 200 };
+
+  it('takes the next free number of the general series, A-0xx, through the one numbering helper', () => {
+    const views = [...defaultViews(LEVELS), site];
+    assert.equal(withViewHung([], views, site, HOUSE)?.sheets[0].number, 'A-001');
+    const taken = [{ id: 'g', number: 'A-001', name: 'Cover', createdAt: 0 }, { id: 'h', number: 'A-002', name: 'Notes', createdAt: 0 }];
+    assert.equal(withViewHung(taken, views, site, HOUSE)?.sheets.at(-1)?.number, 'A-003');
+    assert.equal(nextNumber(taken, 'general'), 'A-003');
+    assert.equal(nextNumber([], 'other'), 'A-901');
+  });
+
+  it('is numbered by the project\'s scheme (#115) in the general series, and an A-0xx sheet from an old file reads as general', () => {
+    const views = [...defaultViews(LEVELS), site];
+    const hung = withViewHung([], views, site, HOUSE, 0, SEQUENTIAL_SCHEME)?.sheets[0];
+    assert.equal(hung?.number, 'A01');
+    assert.equal(hung?.series, 'general');
+    assert.equal(numberGroupOf({ number: 'A-001' }), 'general');
   });
 });
 

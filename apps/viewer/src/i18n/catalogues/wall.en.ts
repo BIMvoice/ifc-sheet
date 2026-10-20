@@ -22,6 +22,7 @@ export const wallEn = {
   'wall.recovery.restore': 'Restore it',
   'wall.recovery.discard': 'Discard',
   'wall.intro.waiting': 'Reading the model…',
+  'wall.group.general': 'General sheets',
   'wall.group.plans': 'Plans',
   'wall.group.elevations': 'Elevations',
   'wall.group.drafting': 'Drafting views',
