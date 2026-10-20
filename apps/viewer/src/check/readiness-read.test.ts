@@ -56,12 +56,26 @@ describe('readModelFacts on synthetic stores', () => {
     assert.deepEqual([facts.elements, facts.elementsWithoutStorey, facts.elementsWithoutMaterial, facts.elementsWithoutQuantities], [1, 1, 1, 1]);
   });
 
-  it('counts a GlobalId shared inside one model, and across two', () => {
-    const a = fakeStore([{ id: 1, guid: G('a') }, { id: 2, guid: G('a') }, { id: 3, guid: G('b') }]);
-    const b = fakeStore([{ id: 1, guid: G('b') }, { id: 2, guid: G('c') }]);
+  it('counts an element GlobalId shared inside one model, and across two, with or without geometry', () => {
+    const a = fakeStore([{ id: 1, guid: G('a'), geometry: true, type: 'IfcWall' }, { id: 2, guid: G('a'), type: 'IfcSlab' }, { id: 3, guid: G('b'), geometry: true, type: 'IfcDoor' }]);
+    const b = fakeStore([{ id: 1, guid: G('b'), geometry: true, type: 'IfcBeam' }, { id: 2, guid: G('c'), geometry: true, type: 'IfcColumn' }]);
     const facts = readModelFacts([{ store: a, storeys: 0 }, { store: b, storeys: 0 }]);
     assert.equal(facts.duplicateGlobalIds, 2);
     assert.equal(facts.duplicatedEntities, 4);
+  });
+
+  it('does not count the project, site, building and storeys two discipline models share', () => {
+    const spatial = (first: number) => [
+      { id: first, guid: G('project'), type: 'IfcProject' },
+      { id: first + 1, guid: G('site'), geometry: true, type: 'IfcSite' },
+      { id: first + 2, guid: G('building'), type: 'IfcBuilding' },
+      { id: first + 3, guid: G('storey'), type: 'IfcBuildingStorey' },
+    ];
+    const architecture = fakeStore([...spatial(1), { id: 10, guid: G('wall'), geometry: true, type: 'IfcWall' }]);
+    const structure = fakeStore([...spatial(101), { id: 110, guid: G('beam'), geometry: true, type: 'IfcBeam' }]);
+    const facts = readModelFacts([{ store: architecture, storeys: 1 }, { store: structure, storeys: 1 }]);
+    assert.equal(facts.duplicateGlobalIds, 0);
+    assert.equal(facts.duplicatedEntities, 0);
   });
 
   it('does not take a name that is not a GlobalId for one', () => {

@@ -37,7 +37,7 @@ export function isPhysicalElement(typeName: string): boolean {
 
 export interface FactSource { store: IfcDataStore; storeys: number }
 
-/** Counts over the stores; GlobalIds are compared across all of them, as a tag finds its element in whichever model holds it. */
+/** Counts over the stores; element GlobalIds are compared across all of them, as a tag finds its element in whichever model holds it. */
 export function readModelFacts(sources: Iterable<FactSource>): ModelFacts {
   const facts: ModelFacts = { storeys: 0, spaces: 0, elements: 0, elementsWithoutStorey: 0, elementsWithoutMaterial: 0, elementsWithoutQuantities: 0, duplicateGlobalIds: 0, duplicatedEntities: 0 };
   const seen = new Map<string, number>();
@@ -47,9 +47,11 @@ export function readModelFacts(sources: Iterable<FactSource>): ModelFacts {
     facts.spaces += entityIndex.byType.get('IFCSPACE')?.length ?? 0;
     for (let i = 0; i < entities.count; i++) {
       const id = entities.expressId[i];
+      if (!isPhysicalElement(entities.getTypeName(id))) continue;
+      // Elements only: discipline models of one building share the project, site and storey GlobalIds by design.
       const guid = entities.getGlobalId(id);
       if (IFC_GUID.test(guid)) seen.set(guid, (seen.get(guid) ?? 0) + 1);
-      if (!entities.hasGeometry(id) || !isPhysicalElement(entities.getTypeName(id))) continue;
+      if (!entities.hasGeometry(id)) continue;
       facts.elements++;
       // On a storey directly, or in a room (IfcSpace) that is on one.
       const onStorey = (k: number | undefined): boolean => k !== undefined && (spatialHierarchy?.elementToStorey.has(k) ?? false);
