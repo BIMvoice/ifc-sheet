@@ -17,7 +17,10 @@ import { chooseCloudRevision } from './revision-tool';
 import { cloudRevisionId, currentRevisionOf, liftTypedRevisions, REVISION_ID_PARAM, sheetRevisions } from './revisions';
 import { loadProjectDocument, projectDocument, resetProject, useProjectStore } from './project-store';
 import { addSheetRevision } from './sheets';
+import { fingerprintSources } from './sheet-fingerprint';
+import { issueRecord, planIssue } from '@/issue/plan';
 import type { DraftEntity } from '@/drafting/types';
+import { clearDraftHistory, redoDrafts, undoDrafts } from '@/drafting/draft-store';
 import type { ProjectDocument, ProjectSheet } from './types';
 
 const sheet = (id: string, number: string, extra: Partial<ProjectSheet> = {}): ProjectSheet => ({ id, number, name: number, createdAt: 0, viewports: [], ...extra });
@@ -95,6 +98,30 @@ describe('a sheet\'s revisions', () => {
   });
 });
 
+describe('removing a revision (#133 review)', () => {
+  beforeEach(() => { demoSet(); clearDraftHistory(); });
+
+  it('takes the record, its clouds and the sheets\' choice of it in one store write, and one undo brings all back in order', () => {
+    useProjectStore.setState({ drafts: [cloudOn('s101', 'rev-b'), cloudOn('s201', 'rev-a')] });
+    const before = useProjectStore.getState();
+    let writes = 0;
+    const stop = useProjectStore.subscribe(() => { writes++; });
+    removeRevision('rev-a');
+    stop();
+    assert.equal(writes, 1);
+    const after = useProjectStore.getState();
+    assert.deepEqual(after.revisions?.map((r) => r.code), ['B']);
+    assert.deepEqual(after.drafts.map(cloudRevisionId), ['rev-b']);
+    assert.ok(undoDrafts());
+    const back = useProjectStore.getState();
+    assert.deepEqual(back.revisions, before.revisions);
+    assert.deepEqual(back.drafts.map(cloudRevisionId), ['rev-b', 'rev-a']);
+    assert.deepEqual(back.sheets.map((s) => s.revisionIds), [['rev-a'], ['rev-a']]);
+    assert.ok(redoDrafts());
+    assert.deepEqual(useProjectStore.getState().revisions?.map((r) => r.code), ['B']);
+  });
+});
+
 describe('a project that typed the revision into the title block', () => {
   const old = (extra: Partial<ProjectDocument> = {}): ProjectDocument => ({
     name: 'P', models: [], views: [], drafts: [], draftLayers: [], titleBlock: { project: 'House', date: '2026-10-12', revision: '02' },
@@ -132,6 +159,26 @@ describe('a project that typed the revision into the title block', () => {
     const lifted = liftTypedRevisions(old({ revisions: [existing] }), () => 'new');
     assert.deepEqual(lifted.revisions?.map((r) => r.id), ['rev-x', 'new']);
     assert.deepEqual(lifted.sheets[0].revisionIds, ['rev-x']);
+  });
+
+  it('does not make the next issue read any sheet as changed (#133 review)', () => {
+    // Issued before revisions were records: the fingerprints were taken of the project as it was saved.
+    const placed = (id: string, number: string, extra: Partial<ProjectSheet> = {}) => sheet(id, number, { viewports: [{ id: `vp-${id}`, viewId: 'v1', x: 0, y: 0, scale: 50, width: 0, height: 0, center: null }], ...extra });
+    const saved = old({
+      views: [{ id: 'v1', name: 'Plan', kind: 'plan', createdAt: 0, cutHeight: 1.2, level: { name: 'Ground', elevation: 0, storeyGlobalIds: [] } }],
+      sheets: [placed('s1', 'A-101'), placed('s2', 'A-201', { titleBlock: { revision: '03' } }), placed('s3', 'A-301', { titleBlock: { revision: '' } })],
+    });
+    const issued = planIssue(saved.sheets, fingerprintSources(saved), { name: 'Issue 1', date: '2026-10-01', listFirst: false });
+    loadProjectDocument({ ...saved, issues: [issueRecord(issued, 'i1', 1)] });
+    // What the issue run plans with (`issue/run.ts`'s `planFor`): the store's sheets, sources and records.
+    const planNow = () => { const s = useProjectStore.getState(); return planIssue(s.sheets, fingerprintSources(s), { name: 'Issue 2', date: '2026-10-20', listFirst: false }, s.revisions); };
+    const next = planNow();
+    const was = new Map(useProjectStore.getState().issues?.[0].sheets.map((r) => [r.number, r.fingerprint]));
+    assert.deepEqual(next.sheets.map((s) => s.row.number), ['A-101', 'A-201', 'A-301']);
+    assert.deepEqual(next.sheets.filter((s) => was.get(s.row.number) !== s.row.fingerprint).map((s) => s.row.number), []);
+    // And an edit after the migration still reads as a change.
+    updateRevision(useProjectStore.getState().revisions?.[0].id ?? '', { code: 'P02' });
+    assert.notEqual(planNow().sheets[0].row.fingerprint, was.get('A-101'));
   });
 
   it('leaves a document with no typed revision as it is', () => {

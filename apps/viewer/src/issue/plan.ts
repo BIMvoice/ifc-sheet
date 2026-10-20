@@ -12,7 +12,7 @@ import type { TranslationKey } from '@/i18n';
 import type { DraftEntity } from '@/drafting/types';
 import type { IssuedSheet, ProjectIssue, ProjectRevision, ProjectSheet } from '@/project/types';
 import { currentRevisionOf } from '@/project/revisions';
-import { sheetFingerprint, type FingerprintSources } from './fingerprint';
+import { sheetFingerprint, type FingerprintSources } from '@/project/sheet-fingerprint';
 
 export interface IssueReason {
   key: TranslationKey;

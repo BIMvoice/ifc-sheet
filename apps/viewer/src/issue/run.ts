@@ -14,13 +14,13 @@ import { printHtml } from '@/components/viewer/sheets/sheet-export';
 import { resolve } from '@/i18n/registry';
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
-import type { ProjectDocument } from '@/project/types';
 import type { TranslationKey } from '@/i18n';
 import { currentFindings } from '@/check/collect';
 import { captureSheets, failureLine } from './capture';
 import { drawingListCsv, issuePrintHtml, uniqueNames, type ListLabels } from './output';
 import { titleBlockOf } from '@/project/title-block';
 import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
+import { fingerprintSources } from '@/project/sheet-fingerprint';
 
 export type IssueFormat = 'pdf' | 'svg' | 'dxf';
 
@@ -52,14 +52,10 @@ export function listLabels(): ListLabels {
   return { title: t('title'), issue: t('issue'), date: t('date'), sheet: t('sheet'), sheetTitle: t('sheetTitle'), scale: t('scale'), paper: t('paper'), revision: t('revision') };
 }
 
-function sources(project: ProjectDocument) {
-  return { documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])], drafts: project.drafts, revisions: project.revisions };
-}
-
 /** The plan for the project as it stands (nothing is drawn or recorded). */
 export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst'>): IssuePlan {
   const project = useProjectStore.getState();
-  return planIssue(project.sheets, sources(project), {
+  return planIssue(project.sheets, fingerprintSources(project), {
     name: options.name?.trim() || nextIssueName(project.issues ?? []),
     date: options.date ?? new Date().toISOString().slice(0, 10),
     listFirst: options.listFirst ?? true,

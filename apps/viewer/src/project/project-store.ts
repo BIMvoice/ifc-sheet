@@ -20,6 +20,7 @@ import { settleDetailMarks } from '@/drafting/detail-mark';
 import { create } from 'zustand';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { liftTypedRevisions } from './revisions';
+import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
@@ -81,8 +82,10 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
 export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
-  // Saved when the title block's revision was typed: it becomes a revision record (`revisions.ts`).
-  const doc = liftTypedRevisions(liftSheetTitleBlocks(saved), () => freshProjectId('revision'));
+  // Saved when the title block's revision was typed: it becomes a revision record (`revisions.ts`). The sheets
+  // print what they printed, so a sheet unchanged since the last issue still reads unchanged at the next one.
+  const titled = liftSheetTitleBlocks(saved);
+  const doc = carryIssueFingerprints(titled, liftTypedRevisions(titled, () => freshProjectId('revision')));
   useProjectStore.setState({
     ...doc,
     symbolFlips: doc.symbolFlips ?? {},

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import type { ProjectSheet } from '@/project/types.js';
 import { issueRecord, nextIssueName, planIssue, scaleText } from './plan.js';
 import { readIssues } from './file.js';
-import { sheetFingerprint } from './fingerprint.js';
+import { sheetFingerprint } from '@/project/sheet-fingerprint.js';
 import { drawingListCsv, issuePrintHtml, uniqueNames } from './output.js';
 
 const vp = (viewId: string, scale: number) => ({ id: `vp-${viewId}-${scale}`, viewId, x: 0, y: 0, scale, width: 0, height: 0, center: null });
