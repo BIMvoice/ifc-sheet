@@ -19,8 +19,9 @@ import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, placeView
 import { findTemplate, templateFields } from './sheet-templates';
 import { refittedOnPaper, type BoxOf } from './sheet-refit';
 import { frameOf, frameProblem, type FrameProblem } from './sheet-frame';
-import { paperMm } from './paper';
+import { paperLabel, paperMm } from './paper';
 import { addSchedule } from '@/joinery/schedules';
+import { registerHolders, registerSheetFit } from './drawing-register';
 import { proposalInputForLevel } from './model-rooms';
 import { nextNumber, numberSheets } from './numbering';
 import { addProjectView, numberingScheme, updateProjectView, useProjectStore } from './project-store';
@@ -344,3 +345,85 @@ export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent:
   });
   return null;
 }
+/** The register's number: A-000, else the first free number of the general series A-001… */
+export function registerNumber(sheets: readonly Pick<ProjectSheet, 'number'>[]): string {
+  const taken = new Set(sheets.map((s) => s.number));
+  let n = 0;
+  while (taken.has(`A-${String(n).padStart(3, '0')}`)) n++;
+  return `A-${String(n).padStart(3, '0')}`;
+}
+
+/**
+ * The drawing register on a sheet of its own, numbered A-000 (`registerNumber`), its table at the top left of the
+ * drawing area. It holds no rows: they are read from the sheets whenever it is drawn. A register already on a
+ * sheet returns that sheet.
+ */
+export function addRegisterToSet(name: string): string {
+  const { sheets, schedules } = useProjectStore.getState();
+  const existing = schedules?.find((s) => s.kind === 'register');
+  const placed = existing && sheets.find((sh) => (sh.viewports ?? []).some((vp) => vp.viewId === existing.id));
+  if (placed) return placed.id;
+  const scheduleId = existing?.id ?? addSchedule('register', name);
+  const area = drawingArea(SET_PAPER);
+  const sheet: ProjectSheet = {
+    id: freshProjectId('sheet'), number: registerNumber(sheets), name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
+    viewports: [{ id: freshProjectId('viewport'), viewId: scheduleId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 1, width: 0, height: 0, center: null }],
+  };
+  useProjectStore.setState({ sheets: [...useProjectStore.getState().sheets, sheet], dirty: true });
+  syncRegisterPages();
+  return sheet.id;
+}
+
+/**
+ * The register's sheets, its own first and then its continuation sheets by
+ * page: as many as `registerSheetFit` needs for a row per sheet of the set, the
+ * continuation sheets counted. A continuation sheet is numbered after the
+ * register's own (A-000.1, A-000.2…, skipping a number another sheet has) and
+ * holds the register's next page; one no longer needed is removed. Runs
+ * whenever the sheets change, so the register never runs off its paper.
+ */
+export function syncRegisterPages(): void {
+  const { sheets, schedules } = useProjectStore.getState();
+  const register = schedules?.find((s) => s.kind === 'register');
+  if (!register) return;
+  const pageOf = (s: ProjectSheet) => (s.viewports ?? []).find((vp) => vp.viewId === register.id)?.page ?? 0;
+  const holders = registerHolders(sheets, register.id);
+  const first = holders[0];
+  if (!first) return;
+  const others = sheets.length - holders.length;
+  // Each continuation sheet is a row of the register too: settle on a count that holds itself.
+  let pages = 1;
+  for (let i = 0; i < 8; i++) {
+    const need = registerSheetFit(others + pages, sheets, register.id).pages;
+    if (need === pages) break;
+    pages = need;
+  }
+  const keep = holders.slice(0, pages);
+  const gone = new Set(holders.slice(pages).map((s) => s.id));
+  const taken = new Set(sheets.filter((s) => !gone.has(s.id)).map((s) => s.number));
+  const added: ProjectSheet[] = [];
+  for (let page = keep.length; page < pages; page++) {
+    let n = page;
+    while (taken.has(`${first.number}.${n}`)) n++;
+    const number = `${first.number}.${n}`;
+    taken.add(number);
+    const vp = (first.viewports ?? []).find((v) => v.viewId === register.id);
+    added.push({
+      id: freshProjectId('sheet'), number, name: first.name, createdAt: Date.now(), paper: first.paper, orientation: first.orientation,
+      viewports: [{ ...(vp ?? { x: 0, y: 0, scale: 1, width: 0, height: 0, center: null }), id: freshProjectId('viewport'), viewId: register.id, page }],
+    });
+  }
+  // A continuation sheet removed by hand leaves a gap: the ones kept show pages 0, 1, 2… in order.
+  // Every page is fitted to the first sheet's paper (`registerSheetFit`): a continuation sheet takes that paper too, so its page stays on it.
+  const renumbered = new Map(keep.flatMap((s, i) => (pageOf(s) === i && (i === 0 || (paperLabel(s.paper ?? SET_PAPER) === paperLabel(first.paper ?? SET_PAPER) && s.orientation === first.orientation)) ? [] : [[s.id, {
+    ...s, ...(i === 0 ? {} : { paper: first.paper, orientation: first.orientation }),
+    viewports: (s.viewports ?? []).map((vp) => (vp.viewId !== register.id ? vp : i === 0 ? (({ page: _p, ...rest }) => rest)(vp) : { ...vp, page: i })),
+  }] as const])));
+  if (added.length === 0 && gone.size === 0 && renumbered.size === 0) return;
+  useProjectStore.setState({ sheets: [...sheets.filter((s) => !gone.has(s.id)).map((s) => renumbered.get(s.id) ?? s), ...added], dirty: true });
+}
+
+// The register follows the set: a sheet added or removed may need a page more or less.
+useProjectStore.subscribe((state, previous) => {
+  if (state.sheets !== previous.sheets || state.schedules !== previous.schedules) syncRegisterPages();
+});
