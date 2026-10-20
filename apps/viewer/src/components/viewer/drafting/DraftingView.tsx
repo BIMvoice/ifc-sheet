@@ -27,7 +27,8 @@ import { useTranslation } from '@/i18n';
 
 import { cn } from '@/lib/utils';
 
-import { Spinner } from '@/components/ui/spinner';
+import { viewportState } from '@/project/viewport-state';
+import { ViewportState } from '../wall/ViewportState';
 
 import { IconButton } from '@/components/ui/icon-button';
 
@@ -317,16 +318,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         ) : null}
         <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
-        {status === 'generating' ? (
-          <div className="absolute inset-x-0 top-2 flex justify-center pointer-events-none">
-            <div className="flex items-center gap-2 rounded-md bg-background/90 px-3 py-1 text-xs shadow">
-              <Spinner className="size-3.5" /> {entry.phase} {Math.round(entry.progress)}%
-            </div>
-          </div>
-        ) : null}
-        {status === 'error' && entry.error ? (
-          <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-destructive pointer-events-none">{entry.error}</div>
-        ) : null}
+        <ViewportState state={viewportState(entry, view.kind)} />
         <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
         </div>

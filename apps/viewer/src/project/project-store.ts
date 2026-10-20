@@ -21,6 +21,8 @@ import { settleDetailMarks } from '@/drafting/detail-mark';
 import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { nextDetailNumber } from './detail';
+import { upgradeTagAllTypes } from '@/tagall/types';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
@@ -40,8 +42,8 @@ export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visib
 export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
-  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined, graphicStandard: undefined,
+  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, tagFields: undefined, graphicStandard: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -63,6 +65,9 @@ const DOCUMENT_FIELDS = {
   schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
   typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
   modelState: true,
+  cadLayers: true,
+  details: true,
+  tagFields: true,
   graphicStandard: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
@@ -79,6 +84,8 @@ const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[
   schedules: () => [], joineryMapping: () => ({ ...DEFAULT_JOINERY_MAPPING }), elementTypes: () => [], currentTypes: () => ({}),
   structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], savedSectionCuts: () => [],
   annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [],
+  cadLayers: () => [],
+  details: () => [],
 };
 
 /** The persisted part of the store. */
@@ -118,11 +125,15 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     civilDrawings: doc.civilDrawings ?? [],
     typicalSections: doc.typicalSections ?? [],
     materials: doc.materials ?? [],
+    cadLayers: doc.cadLayers ?? [],
     savedSectionCuts: doc.savedSectionCuts ?? [],
-    annotationTypes: doc.annotationTypes ?? [],
+    // A project made before the room label read the tag name takes the new template (`tagall/types.ts`).
+    annotationTypes: upgradeTagAllTypes(doc.annotationTypes ?? []),
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
+    details: doc.details ?? [],
     issues: doc.issues ?? [],
+    tagFields: doc.tagFields,
     modelState: doc.modelState,
     graphicStandard: standard.id,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
@@ -227,7 +238,11 @@ export function duplicateProjectView(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.views.find((v) => v.id === id);
   if (!source) return null;
-  const copy = { ...structuredClone(source), id: freshProjectId('view'), name: uniqueViewName(`${source.name} Copy`, state.views), auto: false, createdAt: Date.now() };
+  const clone = structuredClone(source);
+  // A detail number names one detail: a copied drafting view takes one when a mark is made for it, a copied area detail the next free one.
+  if (clone.kind === 'drafting') delete clone.number;
+  if (clone.detail) clone.detail = { ...clone.detail, number: nextDetailNumber(state.views) };
+  const copy = { ...clone, id: freshProjectId('view'), name: uniqueViewName(`${source.name} Copy`, state.views), auto: false, createdAt: Date.now() };
   const at = state.views.indexOf(source) + 1;
   useProjectStore.setState({ views: [...state.views.slice(0, at), copy, ...state.views.slice(at)], dirty: true });
   return copy.id;
@@ -290,10 +305,10 @@ function mergeModels(known: readonly ProjectModelRef[], loaded: readonly Project
 }
 
 function sameLevels(a: readonly ProjectLevel[], b: readonly ProjectLevel[]): boolean {
-  return a.length === b.length && a.every((l, i) => l.name === b[i].name && l.elevation === b[i].elevation);
+  return a.length === b.length && a.every((l, i) => l.name === b[i].name && l.elevation === b[i].elevation && l.floorY === b[i].floorY);
 }
 
-// A detail mark's label is the detail's number and the number of the sheet it is on: derived, so it follows
+// A detail mark's label is the detail's drawing number on its sheet and that sheet's number: derived, so it follows
 // a sheet's renumbering or the detail's placement without anyone editing the text.
 useProjectStore.subscribe((state, previous) => {
   if (state.sheets === previous.sheets && state.views === previous.views && state.drafts === previous.drafts) return;

@@ -25,6 +25,7 @@ import type { ModelExtent } from '@/project/drawing-set';
 import { useDraftingKeys } from '../drafting/useDraftingKeys.js';
 import { SteppedSheet } from './SteppedSheet.js';
 import { ToolRail } from './ToolRail.js';
+import { toolHelpKey } from './tool-help.js';
 import { DRAW_TOOLS, WALL_TOOLS } from './wall-actions.js';
 import { steppedHandlers } from './stepped-keys.js';
 import { buildWallCommands } from '../commandPaletteCommandsWall.js';
@@ -160,7 +161,7 @@ describe('the rail\'s tooltips', () => {
       for (const tool of [...WALL_TOOLS, ...DRAW_TOOLS]) {
         const id = wallToolKey(tool.command);
         assert.ok(id, tool.command);
-        const button = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('title') === `${t(tool.labelKey)} (${shortcutLabel(id, apple)})`);
+        const button = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('title') === `${t(toolHelpKey(tool.command))} (${shortcutLabel(id, apple)})`);
         assert.ok(button, `${tool.command} shows ${shortcutLabel(id, apple)}`);
       }
       const add = [...ui.querySelectorAll('button')].find((b) => b.textContent?.includes('Add a drawing'));
@@ -175,7 +176,7 @@ describe('the rail\'s tooltips', () => {
       const ui = rail();
       for (const tool of [...WALL_TOOLS, ...DRAW_TOOLS]) {
         const id = wallToolKey(tool.command)!;
-        const button = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('title') === `${t(tool.labelKey)} (${shortcutLabel(id, apple)})`);
+        const button = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('title') === `${t(toolHelpKey(tool.command))} (${shortcutLabel(id, apple)})`);
         assert.equal(button?.getAttribute('aria-keyshortcuts'), ariaKeyShortcuts(id, apple), tool.command);
       }
       const add = [...ui.querySelectorAll('button')].find((b) => b.textContent?.includes('Add a drawing'));

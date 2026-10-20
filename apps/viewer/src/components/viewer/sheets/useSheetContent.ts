@@ -5,7 +5,9 @@
 /**
  * What a sheet's viewports show: each placed view's drawing styled by its own
  * graphics (door and window symbols, roofs and membranes on plans), its
- * drafts with level marks read now, and the schedules, road drawings and
+ * drafts with level marks read now and the cross-reference marks (a section's
+ * "1 / A-301", the ground plan's elevation marks) made from the sheets as they
+ * are now, and the schedules, road drawings and
  * legends placed beside them. The sheet editor and the Wall's sheets both
  * draw through this, so a sheet looks the same wherever it hangs.
  */
@@ -19,7 +21,12 @@ import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
-import type { ProjectSheet, SheetViewport } from '@/project/types';
+import { isRasterView } from '@/project/axonometric';
+import { isAutosaveRasterRef } from '@/project/autosave-rasters';
+import { drawingNumbers } from '@/drafting/cross-ref';
+import { elevationMarkDrafts, elevationMarkPlan, obstacleBoxes, sectionReferenceDrafts } from '@/drafting/cross-ref-marks';
+import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
+import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { partHostType } from '@/project/part-host';
 import { viewOmits } from '@/project/discipline-facts';
@@ -27,11 +34,18 @@ import { viewMaterials } from '@/project/material-resolver';
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { planOverlays, type PlanOverlay } from '@/project/plan-overlays';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
+import { entityStyles } from '@/project/model-styles';
 import { useSheetSchedules } from '../joinery/ScheduleGraphic';
 import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
 import { useSheetLegends } from '../legend/LegendGraphic';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import type { ViewportContent } from './SheetPaper';
+
+/** The raster capture a 3D view prints as, when it prints as one and has been captured (and, after an autosave restore, read back). */
+function rasterOf(view: ProjectView | undefined): ViewRaster | undefined {
+  const raster = view && isRasterView(view) ? view.raster ?? undefined : undefined;
+  return raster && !isAutosaveRasterRef(raster.href) ? raster : undefined;
+}
 
 export interface SheetContent {
   content: (vp: SheetViewport) => ViewportContent;
@@ -52,6 +66,10 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const materialsTable = useProjectStore((s) => s.materials);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const { geometryResult } = useDrawingRuntime();
+  // Linked models in their own style (#96): follows the loaded models and the project's model list.
+  const loadedModels = useViewerStore((s) => s.models);
+  const projectModels = useProjectStore((s) => s.models);
+  const styleOf = useMemo(() => entityStyles(useViewerStore.getState(), projectModels), [loadedModels, projectModels]);
   const styled = useMemo(() => {
     const out = new Map<string, { drawing: Drawing2D | null; overlays: PlanOverlay[] }>();
     for (const vp of sheet.viewports ?? []) {
@@ -74,15 +92,34 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
     return view ? settleLevelDrafts(own, levelResolverFor(view, levels, byView[viewId]?.drawing?.config.plane)) : own;
   }, [views, drafts, levels, byView]);
   const placedLegends = useSheetLegends(sheet);
+  // Cross-references are derived here, at draw time, from the sheets as they are: nothing of them is stored on the plan.
+  const sheets = useProjectStore((s) => s.sheets);
+  const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
+  const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
+  const ground = useMemo(() => elevationMarkPlan(views), [views]);
+  const draftsFor = useCallback((vp: SheetViewport) => {
+    const own = settledDrafts(vp.viewId);
+    const view = views.find((v) => v.id === vp.viewId);
+    const sections = view?.kind === 'plan' ? sectionReferenceDrafts(own, views, sheets) : [];
+    const bounds = byView[vp.viewId]?.drawing?.bounds;
+    const withSections = sections.length ? [...own, ...sections] : own;
+    const elevations = view && view.id === ground?.id && bounds
+      ? elevationMarkDrafts({ planViewId: view.id, layerId: '0', views, sheets, bounds, paperUnit: viewportPaperUnit(vp.scale), factor: annotationFactor(vp.scale, view.scale), obstacles: obstacleBoxes(withSections) })
+      : [];
+    return elevations.length ? [...withSections, ...elevations] : withSections;
+  }, [settledDrafts, views, sheets, byView, ground]);
   const content = useCallback((vp: SheetViewport): ViewportContent => ({
     schedule: placedSchedules.get(vp.viewId),
     civil: placedCivil.get(vp.viewId),
     legend: placedLegends.get(vp.viewId),
     view: views.find((v) => v.id === vp.viewId),
+    raster: rasterOf(views.find((v) => v.id === vp.viewId)),
     drawing: styled.get(vp.viewId)?.drawing ?? null,
-    drafts: settledDrafts(vp.viewId),
+    drafts: draftsFor(vp),
+    drawingNumber: numbers.get(vp.id),
     overlays: styled.get(vp.viewId)?.overlays,
-  }), [views, styled, settledDrafts, placedSchedules, placedCivil, placedLegends]);
+    styleOf,
+  }), [views, styled, draftsFor, numbers, placedSchedules, placedCivil, placedLegends, styleOf]);
 
   const boxOf = useCallback((v: SheetViewport) => {
     const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);

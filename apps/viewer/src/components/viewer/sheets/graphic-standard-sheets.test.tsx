@@ -200,7 +200,7 @@ describe('the standard reaches every pen it claims', () => {
   it('a category weight takes the standard\'s cut / projection pair', () => {
     const graphics = { categories: { walls: { lineWeight: 'light' as const }, doors: { lineWeight: 'light' as const } } };
     const widths = (standard: typeof ROMANIAN_PRACTICE) => {
-      const pens = viewportPens(DRAWING, graphics, { scale: 10, x: 0, y: 0 }, 'down', [], standard);
+      const pens = viewportPens(DRAWING, graphics, { scale: 10, x: 0, y: 0 }, 'down', [], undefined, undefined, standard);
       return { cut: pens.find((p) => p.layer === 'CUT')?.width, seen: pens.find((p) => p.layer === 'SEEN')?.width };
     };
     assert.deepEqual(widths(ROMANIAN_PRACTICE), { cut: ROMANIAN_PRACTICE.weights.light.cut, seen: ROMANIAN_PRACTICE.weights.light.projection });
