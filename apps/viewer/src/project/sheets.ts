@@ -10,9 +10,10 @@
  */
 
 import { draftingFrame } from '@/drafting/drafting-view';
-import { useProjectStore } from './project-store';
+import { numberingScheme, useProjectStore } from './project-store';
+import { nextNumber } from './numbering';
 import { withSources, type TitleSource } from './title-block-sources';
-import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { isRasterView } from './axonometric';
 import { RASTER_BOX_MM } from './view-raster';
 import { freshProjectId } from './view-defaults';
@@ -108,8 +109,9 @@ export function addViewport(sheetId: string, viewId: string, at: { x: number; y:
   patchSheet(sheetId, (s) => {
     // A number the program chose follows what the sheet comes to hold, once.
     const renumber = s.autoNumber && (s.viewports ?? []).length === 0;
-    const number = renumber ? nextSheetNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), sheetGroupOfView(view)) : s.number;
-    return { ...withoutAutoNumber(s), number, viewports: [...(s.viewports ?? []), viewport] };
+    const series = renumber ? sheetGroupOfView(view) : s.series;
+    const number = renumber && series ? nextNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), series, numberingScheme()) : s.number;
+    return { ...withoutAutoNumber(s), number, ...(series ? { series } : {}), viewports: [...(s.viewports ?? []), viewport] };
   });
   return id;
 }

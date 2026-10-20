@@ -13,6 +13,7 @@ import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
+import { readNumberingScheme } from './numbering';
 import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
@@ -237,6 +238,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     legends: readList(raw, 'legends', readLegend),
     details: readList(raw, 'details', readLibraryDetail),
     issues: readIssues(raw.issues),
+    ...(raw.sheetNumbering !== undefined ? { sheetNumbering: readNumberingScheme(raw.sheetNumbering) } : {}),
     ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
   };

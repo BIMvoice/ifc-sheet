@@ -17,7 +17,7 @@ import { defaultViews } from './view-defaults.js';
 import { buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fittingScale, groupsThatDoNotFit, overrun, sheetGroup, sheetScaleReason, withViewHung, type ModelExtent } from './drawing-set.js';
 import { addScheduleToSet, groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
 import { fitViewportBox, PAPER_MM } from './sheets.js';
-import { nextSheetNumber } from './sheet-numbers.js';
+import { nextNumber } from './numbering.js';
 import type { ProjectLevel, ProjectView } from './types';
 
 /** A 10 × 7 m two-storey house, 6 m tall: long along X. */
@@ -199,8 +199,8 @@ describe('the site plan on the set (#135 review)', () => {
     assert.equal(withViewHung([], views, site, HOUSE)?.sheets[0].number, 'A-001');
     const taken = [{ id: 'g', number: 'A-001', name: 'Cover', createdAt: 0 }, { id: 'h', number: 'A-002', name: 'Notes', createdAt: 0 }];
     assert.equal(withViewHung(taken, views, site, HOUSE)?.sheets.at(-1)?.number, 'A-003');
-    assert.equal(nextSheetNumber(taken, 'general'), 'A-003');
-    assert.equal(nextSheetNumber([], 'other'), 'A-901');
+    assert.equal(nextNumber(taken, 'general'), 'A-003');
+    assert.equal(nextNumber([], 'other'), 'A-901');
   });
 });
 

@@ -21,9 +21,10 @@ import { addScheduleToSet, hangLegend, hangSchedule, hangView } from '@/project/
 import { projectOpenErrorText } from '@/project/open-error';
 import { requestNewProject } from '@/project/new-project';
 import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
-import { addProjectSheet, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
+import { addProjectSheet, projectDocument, removeProjectItem, renameProjectItem, useProjectStore } from '@/project/project-store';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
+import { SheetNumberingForm } from './SheetNumberingForm';
 import { useViewDrawings } from '@/project/view-drawings';
 import { viewportState, type ViewportState as ViewportStateValue } from '@/project/viewport-state';
 import { RecoveryOffer } from './RecoveryOffer';
@@ -107,14 +108,9 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
     stepInto(sheetId, focus);
     onClose();
   };
-  /** A blank sheet, numbered past the set's series (A-901…), for whatever does not fit them. */
+  /** A blank sheet, numbered in the "other" series, for whatever does not fit the rest. */
   const newSheet = (): void => {
-    const taken = new Set(sheets.map((s) => s.number));
-    let n = 901;
-    while (taken.has(`A-${n}`)) n++;
-    const id = addProjectSheet(t('wall.project.newSheet'));
-    setSheetNumber(id, `A-${n}`);
-    go(id);
+    go(addProjectSheet(t('wall.project.newSheet'), 'other'));
   };
   const openDrawing = (viewId: string): void => {
     const hung = sheetsShowing(viewId)[0]?.id ?? (extent ? hangView(viewId, extent) : null);
@@ -159,6 +155,10 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('ready.title')}</summary>
           {/* Mounted only while open: reading the facts walks every entity of every model. */}
           {readyOpen ? <div className="mt-2 text-xs leading-relaxed"><ReadinessList skin={WALL_SKIN} /></div> : null}
+        </details>
+        <details className="border-t border-sky-300/10 px-4 py-3">
+          <summary className="cursor-pointer text-xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.num.title')}</summary>
+          <SheetNumberingForm />
         </details>
         <details className="border-t border-sky-300/10 px-4 py-3">
           <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.tb.title')}</summary>
