@@ -63,5 +63,6 @@ describe('the intro screen with an autosave on offer', () => {
     assert.equal(hung, 0);
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     assert.equal(hung, 1, 'outside the offer, Enter still hangs it');
+    assert.notEqual(useRecoveryStore.getState().offer, null, 'and hanging the set leaves the offer standing');
   });
 });

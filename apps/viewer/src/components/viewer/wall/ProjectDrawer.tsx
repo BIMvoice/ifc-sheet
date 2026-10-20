@@ -32,6 +32,7 @@ import { viewportState, type ViewportState as ViewportStateValue } from '@/proje
 import { ReadinessList } from '../sheets/ReadinessList';
 import { WALL_SKIN } from '../sheets/set-skin';
 import { SheetNumberingForm } from './SheetNumberingForm';
+import { RecoveryOffer } from './RecoveryOffer';
 import { TitleBlockForm } from './TitleBlockForm';
 import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
@@ -145,6 +146,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           if (file) void importProjectFile(file).then((doc) => openProjectDocument(doc, { dirty: false })).catch((err: unknown) => { console.warn('[ifcsheet] could not open the project file', err); toast.error(projectOpenErrorText(err, t)); });
         }} />
       </div>
+      <div className="px-4"><RecoveryOffer /></div>
       <LibraryPanel />
       <CommentsSection onGo={go} />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">

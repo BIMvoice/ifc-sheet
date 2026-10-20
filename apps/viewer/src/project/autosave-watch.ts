@@ -3,15 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * Writes the project to its autosave slot a moment after it changes. While an autosave is on offer
- * (`recovery-store.ts`) nothing is written, so the work on offer is not replaced before it is
- * answered; the first change the user makes ends the offer (see `recovery-store.ts`) and is then
- * written like any other.
+ * Writes the project to its autosave slot a moment after it changes. A session on offer
+ * (`recovery-store.ts`) is kept in a slot of its own, so writing here never replaces it.
  */
 
 import { writeAutosave } from './recovery';
 import { PROJECT_DOCUMENT_KEYS, projectDocument, useProjectStore } from './project-store';
-import { recoveryOpenFor } from './recovery-store';
 
 export const AUTOSAVE_DEBOUNCE_MS = 500;
 
@@ -20,7 +17,7 @@ export function watchProjectForAutosave(slot: () => string | null, write: (key: 
   let timer: ReturnType<typeof setTimeout> | undefined;
   const unsubscribe = useProjectStore.subscribe((state, prev) => {
     const key = slot();
-    if (!key || recoveryOpenFor(key) || PROJECT_DOCUMENT_KEYS.every((k) => state[k] === prev[k])) return;
+    if (!key || PROJECT_DOCUMENT_KEYS.every((k) => state[k] === prev[k])) return;
     clearTimeout(timer);
     timer = setTimeout(() => write(key), debounceMs);
   });

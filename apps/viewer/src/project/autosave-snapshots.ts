@@ -67,3 +67,12 @@ export async function readModelState(key: string): Promise<ModelSnapshot | null>
     return null;
   }
 }
+
+/** Removes the state kept under `key`. */
+export async function deleteModelState(key: string): Promise<void> {
+  try {
+    await run('readwrite', (s) => s.delete(key));
+  } catch (err) {
+    console.warn('[project] the kept model state could not be removed', err);
+  }
+}
