@@ -18,6 +18,7 @@ import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
+import { readTitleSources } from './title-block-sources';
 import { readStandards } from './standards-file';
 import { isDisciplineId } from './discipline-views';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
@@ -136,7 +137,7 @@ function readView(v: unknown, path: string): ProjectView {
   switch (v.kind) {
     case 'plan':
       if (!isNumber(v.cutHeight)) fail(`${path}.cutHeight`, 'must be a number');
-      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(isDisciplineId(v.discipline) ? { discipline: v.discipline } : {}), ...(v.reflected === true ? { reflected: true } : {}) };
+      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(v.site === true ? { site: true as const } : {}), ...(isDisciplineId(v.discipline) ? { discipline: v.discipline } : {}), ...(v.reflected === true ? { reflected: true } : {}) };
     case 'section': {
       const section = { ...base, kind: 'section' as const, plane: readPlane(v.plane, `${path}.plane`) };
       return isString(v.through) && v.through ? { ...section, through: v.through } : section;
@@ -182,6 +183,11 @@ export interface ProjectFileSchema {
 
 const THIS_BUILD: ProjectFileSchema = { migrations: PROJECT_MIGRATIONS, current: PROJECT_FILE_VERSION };
 
+const readSources = (raw: Record<string, unknown>): Pick<ProjectDocument, 'titleBlockSources'> => {
+  const titleBlockSources = readTitleSources(raw.titleBlockSources);
+  return titleBlockSources ? { titleBlockSources } : {};
+};
+
 /** Parse and validate a project file's text. Throws with the first problem found. */
 export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_BUILD): ProjectDocument {
   let parsed: unknown;
@@ -208,6 +214,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     sheets: list('sheets').map((s, i) => readSheet(s, `/sheets/${i}`)),
     // Absent in a file saved before the title block was the project's (`liftSheetTitleBlocks` fills it on load).
     ...(raw.titleBlock !== undefined ? { titleBlock: readTitleBlock(raw.titleBlock) ?? {} } : {}),
+    ...readSources(raw),
     drafts: list('drafts').map((d, i) => readDraft(d, `/drafts/${i}`)),
     draftLayers: list('draftLayers').map((l, i) => readDraftLayer(l, `/draftLayers/${i}`)),
     hatchPatterns: isString(raw.hatchPatterns) ? raw.hatchPatterns : '',

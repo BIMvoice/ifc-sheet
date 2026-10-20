@@ -40,6 +40,7 @@ import { useSheetSchedules } from '../joinery/ScheduleGraphic';
 import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
 import { useSheetLegends } from '../legend/LegendGraphic';
 import type { ViewportContent } from './SheetPaper';
+import { siteBounds, useSheetSite } from '../siteplan/useSheetSite';
 
 /** The raster capture a 3D view prints as, when it prints as one and has been captured (and, after an autosave restore, read back). */
 function rasterOf(view: ProjectView | undefined): ViewRaster | undefined {
@@ -93,6 +94,15 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
     return view ? settleLevelDrafts(own, levelResolverFor(view, levels, byView[viewId]?.drawing?.config.plane)) : own;
   }, [views, drafts, levels, byView]);
   const placedLegends = useSheetLegends(sheet);
+  // A site plan's plot and footprint; its viewport fits and centres on the whole plot (`siteBounds`).
+  const rawDrawing = useCallback((viewId: string) => byView[viewId]?.drawing ?? null, [byView]);
+  const placedViewIds = useMemo(() => (sheet.viewports ?? []).map((vp) => vp.viewId), [sheet.viewports]);
+  const sites = useSheetSite(placedViewIds, views, drafts, rawDrawing);
+  const siteDrawing = useCallback((viewId: string): Drawing2D | null => {
+    const drawing = styled.get(viewId)?.drawing ?? null;
+    const site = sites.get(viewId);
+    return drawing && site?.boundary ? { ...drawing, bounds: siteBounds(drawing.bounds, site) } : drawing;
+  }, [styled, sites]);
   // Cross-references are derived here, at draw time, from the sheets as they are: nothing of them is stored on the plan.
   const sheets = useProjectStore((s) => s.sheets);
   const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
@@ -115,16 +125,18 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
     legend: placedLegends.get(vp.viewId),
     view: views.find((v) => v.id === vp.viewId),
     raster: rasterOf(views.find((v) => v.id === vp.viewId)),
-    drawing: styled.get(vp.viewId)?.drawing ?? null,
+    drawing: siteDrawing(vp.viewId),
     drafts: draftsFor(vp),
     drawingNumber: numbers.get(vp.id),
     overlays: styled.get(vp.viewId)?.overlays,
+    site: vp.keyPlanOf ? undefined : sites.get(vp.viewId),
     styleOf,
-  }), [views, styled, draftsFor, numbers, placedSchedules, placedCivil, placedLegends, styleOf]);
+  }), [views, styled, draftsFor, numbers, placedSchedules, placedCivil, placedLegends, siteDrawing, sites, styleOf]);
 
   const boxOf = useCallback((v: SheetViewport) => {
     const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);
-    return placed ? { width: placed.width, height: placed.height } : viewportBox(v, byView[v.viewId]?.drawing?.bounds ?? null);
-  }, [placedSchedules, placedCivil, placedLegends, byView]);
+    const drawing = byView[v.viewId]?.drawing;
+    return placed ? { width: placed.width, height: placed.height } : viewportBox(v, drawing ? siteBounds(drawing.bounds, sites.get(v.viewId)) : null);
+  }, [placedSchedules, placedCivil, placedLegends, byView, sites]);
   return { content, boxOf };
 }
