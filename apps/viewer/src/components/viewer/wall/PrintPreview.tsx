@@ -51,21 +51,28 @@ export function PrintPreview({ sheet, paper, sheetContent, onClose }: PrintPrevi
   // A snapshot of the export's own text, taken when the preview opens.
   const src = useMemo(() => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sheetSvgText(paper, sheet))}`, [paper, sheet]);
 
+  const placedDocs = useProjectStore((s) => s.schedules);
+  const legends = useProjectStore((s) => s.legends);
+  const civilDrawings = useProjectStore((s) => s.civilDrawings);
+
   const { bars, problems } = useMemo(() => {
-    const placed = (sheet.viewports ?? []).filter((vp) => {
+    // Every viewport is checked by its box; only a drawn view (not a schedule, legend or road drawing) gets a 1 m bar.
+    const docName = (id: string) => [...(placedDocs ?? []), ...(legends ?? []), ...(civilDrawings ?? [])].find((d) => d.id === id)?.name ?? '?';
+    const all = (sheet.viewports ?? []).map((vp) => {
       const c = sheetContent.content(vp);
-      return !c.schedule && !c.civil && !c.legend;
+      const drawn = !c.schedule && !c.civil && !c.legend;
+      return { id: vp.id, scale: vp.scale, box: viewportRect(vp, sheetContent.boxOf(vp)), drawn, name: drawn ? c.view?.name ?? '?' : docName(vp.viewId) };
     });
-    const boxes = placed.map((vp) => ({ id: vp.id, scale: vp.scale, box: viewportRect(vp, sheetContent.boxOf(vp)), name: sheetContent.content(vp).view?.name ?? '?' }));
+    const boxes = all.filter((b) => b.drawn);
     const items: SheetItem[] = [
-      ...boxes.map((b) => ({ id: b.id, kind: 'viewport' as const, name: t('printPreview.item.viewport', { name: b.name, scale: b.scale }), box: b.box })),
+      ...all.map((b) => ({ id: b.id, kind: 'viewport' as const, name: b.drawn ? t('printPreview.item.viewport', { name: b.name, scale: b.scale }) : b.name, box: b.box })),
       ...draftsOfView(sheet.id, drafts).map((d) => {
         const item = draftItem(d);
         return { ...item, name: t('printPreview.item.draft', { kind: item.name }) };
       }),
     ];
     return { bars: referenceBars(boxes).map((b, i) => ({ ...b, name: boxes[i].name })), problems: fitProblems(items, sheetRegions(sheet.paper ?? 'A1', sheet.orientation ?? 'landscape', { w: size.w, h: size.h })) };
-  }, [sheet, sheetContent, drafts, t, size.w, size.h]);
+  }, [sheet, sheetContent, drafts, placedDocs, legends, civilDrawings, t, size.w, size.h]);
 
   // Fit the whole paper in the stage.
   useLayoutEffect(() => {

@@ -98,6 +98,19 @@ describe('print preview warnings', () => {
     assert.match(list, /Draft line overlaps the title block/);
   });
 
+  // Review of #136: schedules, legends and road drawings were left out of the check.
+  it('lists and highlights a schedule over the title block, by its name and its own box', () => {
+    const sheet = sheetOf([vp('a', 'p', 150, 100), { id: 'k', viewId: 'sch', x: 494, y: 362, scale: 50, width: 0, height: 0, center: null }]);
+    useProjectStore.setState({ views: [plan, section], sheets: [sheet], drafts: [], schedules: [{ id: 'sch', name: 'Door schedule', kind: 'door', createdAt: 0 }] });
+    mountOpen();
+    assert.deepEqual(warned(), ['k:titleBlock']);
+    assert.match(document.querySelector('[data-warnings]')!.textContent ?? '', /Door schedule overlaps the title block/);
+    // Its box is the table's own size (34 x 86 mm here), not the viewport's stored width and height.
+    const box = document.querySelector('[data-warning="k"]')!;
+    assert.ok(Number(box.getAttribute('height')) > 0 && Number(box.getAttribute('width')) > 0);
+    assert.deepEqual(Object.keys(barLengths()), ['a'], 'a schedule has no 1 m bar');
+  });
+
   it('has no warnings on a clean sheet', () => {
     load([vp('a', 'p', 150, 100)], [draft('d', { x: 20, y: 20 }, { x: 80, y: 30 })]);
     mountOpen();
