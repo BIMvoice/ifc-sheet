@@ -62,6 +62,7 @@ import { BinaryCacheWriter, type CacheDataStore } from '@ifc-lite/cache';
 import type { TessellationQuality } from '@ifc-lite/geometry';
 import { useViewerStore } from '@/store';
 import { posthog } from '@/lib/analytics';
+import { waitFor } from '@/test/render.js';
 import { CACHE_SIZE_THRESHOLD } from '@/utils/ifcConfig.js';
 import { GEOM_TIER_STORAGE_KEY, type GeometryMode } from '@/store/geometryFidelity.js';
 import { resolveLoadTessellationTier } from '@/store/constants.js';
@@ -238,6 +239,12 @@ async function captureCacheHitPayload(
   await act(async () => {
     await hookApi!.loadFile(file, { kind: 'primary' }, loadOptions);
   });
+
+  // `captureModelLoaded` emits after an on-demand chunk (`loadFieldTelemetry`)
+  // resolves, so on the first load of a process the event lands a few ticks
+  // after `loadFile` returns. Wait for it; a load that never emits fails here.
+  await waitFor(() => captured.some((p) => p.load_path === 'cache'),
+    'the cache hit never emitted ifc_model_loaded (a count of 0 means the load never reached the cache-hit branch)', 5_000);
 
   const hits = captured.filter((p) => p.load_path === 'cache');
   assert.equal(
