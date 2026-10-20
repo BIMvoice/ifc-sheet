@@ -11,9 +11,10 @@
 
 import { useState } from 'react';
 import { useTranslation } from '@/i18n';
-import { captureViewRaster } from '@/lib/export/view-raster-capture';
+import { captureViewRaster, type RasterCaptureDeps } from '@/lib/export/view-raster-capture';
 import { AXONOMETRIC_PRESETS, isRasterView, projectionOf } from '@/project/axonometric';
 import { updateProjectView } from '@/project/project-store';
+import { viewportBox } from '@/project/sheets';
 import { PRINT_DPI, rasterFits } from '@/project/view-raster';
 import type { AxonometricPreset, SheetViewport, ThreeDProjectView, ThreeDProjection } from '@/project/types';
 
@@ -21,15 +22,25 @@ const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2
 const quiet = 'rounded-full border border-sky-300/30 px-3 py-1.5 text-sm text-sky-100 hover:border-sky-300/70';
 const SAVED = 'saved';
 
-export function ThreeDControls({ view, slot }: { view: ThreeDProjectView; slot: SheetViewport }) {
+interface ThreeDControlsProps {
+  view: ThreeDProjectView;
+  slot: SheetViewport;
+  /** The placed drawing's extent, metres, if it has one: an auto-fit slot (0 × 0) takes its box from it, as the sheet does. */
+  bounds?: { min: { x: number; y: number }; max: { x: number; y: number } } | null;
+  /** How the viewport is captured; the live 3D view unless a test hands in its own. */
+  captureDeps?: RasterCaptureDeps;
+}
+
+export function ThreeDControls({ view, slot, bounds = null, captureDeps }: ThreeDControlsProps) {
   const { t } = useTranslation();
   const [failure, setFailure] = useState<string | null>(null);
   const projection = projectionOf(view);
-  const box = { width: slot.width, height: slot.height };
+  // The box the sheet draws the viewport in: a slot placed as vector stays 0 × 0 and fits its drawing.
+  const box = viewportBox(slot, bounds);
   const capture = async (): Promise<void> => {
     setFailure(null);
     try {
-      updateProjectView(view.id, { raster: await captureViewRaster(view, box) });
+      updateProjectView(view.id, { raster: await captureViewRaster(view, box, captureDeps) });
     } catch (error) {
       setFailure(error instanceof Error ? error.message : String(error));
     }

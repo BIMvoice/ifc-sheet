@@ -6,11 +6,13 @@ import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { act } from 'react';
-import { cleanup, render } from '@/test/render.js';
+import { cleanup, click, render, waitFor } from '@/test/render.js';
 import { addProjectSheet, addProjectView, resetProject, useProjectStore } from '@/project/project-store';
-import { addViewport } from '@/project/sheets';
+import { addViewport, viewportBox } from '@/project/sheets';
+import type { ThreeDProjectView } from '@/project/types';
 import { saveAxonometricView } from '@/project/open-view';
 import { ViewportCard } from './ViewportCard.js';
+import { ThreeDControls } from './ThreeDControls.js';
 
 /**
  * Issue #49: a 3D view is placeable like any other (the card used to leave
@@ -66,5 +68,27 @@ describe('3D views on the Wall', () => {
     assert.doesNotMatch(text(), /Scale/, 'a perspective has no scale field');
     assert.match(text(), /Capture the 3D view at 300 dpi/);
     assert.match(text(), /Not captured yet/);
+  });
+
+  it('captures a viewport placed as vector and then switched to raster, at the box the sheet draws it in (PR #130 review)', async () => {
+    saveAxonometricView('Axo');
+    addProjectSheet('Presentation');
+    addViewport(sheet().id, view().id, { x: 100, y: 100 }, 200);
+    const slot = sheet().viewports![0];
+    assert.deepEqual([slot.width, slot.height], [0, 0], 'an axonometric is placed auto-fit');
+    let ui = render(<ViewportCard sheet={sheet()} slot={slot} onOpen={() => {}} onChoose={() => {}} />);
+    choose([...ui.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.value === 'perspective'))!, 'perspective');
+    cleanup();
+
+    const asked: [number, number][] = [];
+    const deps = { capture: async (_vp: unknown, w: number, h: number) => { asked.push([w, h]); return 'data:image/png;base64,AAAA'; } };
+    ui = render(<ThreeDControls view={view() as ThreeDProjectView} slot={slot} bounds={null} captureDeps={deps} />);
+    click([...ui.querySelectorAll('button')].find((b) => /Capture the 3D view/.test(b.textContent ?? ''))!);
+    await waitFor(() => (view() as ThreeDProjectView).raster != null || /could not be captured/.test(ui.textContent ?? ''), 'the capture to land or fail');
+    assert.doesNotMatch(ui.textContent ?? '', /could not be captured/);
+    const raster = (view() as ThreeDProjectView).raster!;
+    const box = viewportBox(slot, null);
+    assert.deepEqual([raster.widthMm, raster.heightMm], [box.width, box.height], 'sized for the effective box, not the 0 x 0 slot');
+    assert.ok(asked.length === 1 && asked[0][0] > 0 && asked[0][1] > 0);
   });
 });
