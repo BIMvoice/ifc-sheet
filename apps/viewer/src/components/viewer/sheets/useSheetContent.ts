@@ -79,7 +79,7 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
       const raw = (byView[vp.viewId] ?? EMPTY_VIEW_DRAWING).drawing;
       const phases = phaseViewOf(view?.graphics, phaseSource);
       const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, viewOmits(view), viewMaterials(raw), phases) : null;
-      const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, phaseMeshes(geometryResult?.meshes, phases), flips, hiddenClasses(view.graphics), raw) : []), ...membraneOverlays(drawing)];
+      const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, phaseMeshes(geometryResult?.meshes, phases), flips, hiddenClasses(view.graphics), raw, vp.scale) : []), ...membraneOverlays(drawing)];
       out.set(vp.viewId, { drawing, overlays });
     }
     return out;

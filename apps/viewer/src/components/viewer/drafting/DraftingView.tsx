@@ -99,6 +99,7 @@ import { CutHatchLayer } from './CutHatchLayer';
 import { MembraneLayer } from './MembraneLayer';
 
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
+import { GridLayer } from './GridLayer';
 
 import { roofAtPoint } from '@/project/roof-plan';
 
@@ -331,6 +332,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         <ViewportState state={viewportState(entry, view.kind)} />
         <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
+        <GridLayer view={view} plane={plane ?? null} drawing={shown} transform={viewTransform} axis={axis} />
         </div>
         <DraftOverlay
           entities={entities}

@@ -10,32 +10,23 @@
  */
 
 import { draftingFrame } from '@/drafting/drafting-view';
-import { useProjectStore } from './project-store';
+import { numberingScheme, useProjectStore } from './project-store';
+import { nextNumber } from './numbering';
 import { withSources, type TitleSource } from './title-block-sources';
-import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { isRasterView } from './axonometric';
 import { RASTER_BOX_MM } from './view-raster';
 import { freshProjectId } from './view-defaults';
-import type { PaperSize, ProjectSheet, SheetViewport } from './types';
-
-export const PAPER_MM: Record<PaperSize, { w: number; h: number }> = {
-  A0: { w: 1189, h: 841 },
-  A1: { w: 841, h: 594 },
-  A2: { w: 594, h: 420 },
-  A3: { w: 420, h: 297 },
-  A4: { w: 297, h: 210 },
-};
+import { paperMm } from './paper';
+import { templateFromSheet } from './sheet-templates';
+import type { ProjectSheet, SheetViewport, TemplateSeries } from './types';
 
 /** The scales a viewport offers, most detailed first: details, buildings, sites. */
 export const SHEET_SCALES = [1, 2, 5, 10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 10000] as const;
 
-/** Frame margin and title block size on the paper, mm. */
-export const FRAME_MARGIN_MM = 10;
-export const TITLE_BLOCK_MM = { w: 180, h: 50 };
-
+/** The sheet's paper as it lies on the table: width and height in mm, by its paper and orientation. */
 export function paperOf(sheet: ProjectSheet): { w: number; h: number } {
-  const base = PAPER_MM[sheet.paper ?? 'A1'];
-  return (sheet.orientation ?? 'landscape') === 'landscape' ? { w: base.w, h: base.h } : { w: base.h, h: base.w };
+  return paperMm(sheet.paper ?? 'A1', sheet.orientation ?? 'landscape');
 }
 
 /** Paper millimetres per drawing metre for a viewport. */
@@ -51,6 +42,24 @@ function patchSheet(id: string, patch: (sheet: ProjectSheet) => ProjectSheet): v
 
 export function updateSheet(id: string, patch: Partial<Omit<ProjectSheet, 'id' | 'viewports'>>): void {
   patchSheet(id, (s) => ({ ...s, ...patch }));
+}
+
+/** Save how a sheet is set up (paper, orientation, frame) as a project template under `name`; the sheet then counts as started from it. Returns the template's id. */
+export function saveSheetTemplate(sheetId: string, name: string): string | null {
+  const state = useProjectStore.getState();
+  const sheet = state.sheets.find((s) => s.id === sheetId);
+  const trimmed = name.trim();
+  if (!sheet || !trimmed) return null;
+  const template = templateFromSheet(sheet, trimmed);
+  useProjectStore.setState({ sheetTemplates: [...(state.sheetTemplates ?? []), template], dirty: true });
+  patchSheet(sheetId, (s) => ({ ...s, templateId: template.id }));
+  return template.id;
+}
+
+/** New sheets of `series` start from the template `id` (a built-in or the project's); `null` goes back to the smallest paper that fits. */
+export function setSeriesTemplate(series: TemplateSeries, id: string | null): void {
+  const { [series]: _was, ...rest } = useProjectStore.getState().seriesTemplates ?? {};
+  useProjectStore.setState({ seriesTemplates: id ? { ...rest, [series]: id } : rest, dirty: true });
 }
 
 /** `sheet` says otherwise for `key` than the project's title block (`title-block.ts`). */
@@ -108,8 +117,9 @@ export function addViewport(sheetId: string, viewId: string, at: { x: number; y:
   patchSheet(sheetId, (s) => {
     // A number the program chose follows what the sheet comes to hold, once.
     const renumber = s.autoNumber && (s.viewports ?? []).length === 0;
-    const number = renumber ? nextSheetNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), sheetGroupOfView(view)) : s.number;
-    return { ...withoutAutoNumber(s), number, viewports: [...(s.viewports ?? []), viewport] };
+    const series = renumber ? sheetGroupOfView(view) : s.series;
+    const number = renumber && series ? nextNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), series, numberingScheme()) : s.number;
+    return { ...withoutAutoNumber(s), number, ...(series ? { series } : {}), viewports: [...(s.viewports ?? []), viewport] };
   });
   return id;
 }

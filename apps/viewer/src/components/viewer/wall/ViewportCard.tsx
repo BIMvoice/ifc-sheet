@@ -59,7 +59,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
       onChoose(placeLegend(sheet.id, id, labels));
       return;
     }
-    const area = drawingArea(sheet.paper);
+    const area = drawingArea(sheet);
     const scale = views.find((v) => v.id === id)?.scale ?? slot?.scale ?? 100;
     onChoose(addViewport(sheet.id, id, { x: area.x + area.w / 2, y: area.y + area.h / 2 }, scale));
   };

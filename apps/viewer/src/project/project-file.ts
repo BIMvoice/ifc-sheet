@@ -13,9 +13,11 @@ import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
+import { readNumberingScheme } from './numbering';
 import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
+import { readSeriesTemplates, readTemplate } from './sheet-templates';
 import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
 import { readTitleSources } from './title-block-sources';
@@ -31,7 +33,7 @@ import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readTagFields } from '@/tagfields/tag-fields-file';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics, PhaseId, PhaseStyle } from './types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics, ViewGridGraphics, PhaseId, PhaseStyle } from './types';
 import { PHASES, type PhaseSource } from './phases';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
@@ -239,6 +241,9 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     legends: readList(raw, 'legends', readLegend),
     details: readList(raw, 'details', readLibraryDetail),
     issues: readIssues(raw.issues),
+    sheetTemplates: list('sheetTemplates').flatMap((v) => readTemplate(v) ?? []),
+    seriesTemplates: readSeriesTemplates(raw.seriesTemplates),
+    ...(raw.sheetNumbering !== undefined ? { sheetNumbering: readNumberingScheme(raw.sheetNumbering) } : {}),
     ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
   };
@@ -285,6 +290,12 @@ function readGraphics(raw: Record<string, unknown>): ViewGraphics {
       ...(raw.phases.demolishAsExisting === true ? { demolishAsExisting: true } : {}),
       ...(Object.keys(styles).length ? { styles } : {}),
     };
+  }
+  if (isObject(raw.grid)) {
+    const grid: ViewGridGraphics = {};
+    if (typeof raw.grid.visible === 'boolean') grid.visible = raw.grid.visible;
+    if (raw.grid.ends === 'start' || raw.grid.ends === 'end' || raw.grid.ends === 'both') grid.ends = raw.grid.ends;
+    if (Object.keys(grid).length > 0) out.grid = grid;
   }
   return out;
 }
@@ -373,7 +384,7 @@ function readCivilDrawing(raw: unknown): ProjectCivilDrawing[] {
 
 function readSchedule(raw: unknown): ProjectSchedule[] {
   if (!isObject(raw) || !isString(raw.id)) return [];
-  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' || raw.kind === 'finishes' ? raw.kind : 'all';
+  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' || raw.kind === 'finishes' || raw.kind === 'register' ? raw.kind : 'all';
   const out: ProjectSchedule = { id: raw.id, name: isString(raw.name) && raw.name ? raw.name : 'Schedule', kind, createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0 };
   if (typeof raw.scale === 'number' && raw.scale > 0) out.scale = raw.scale;
   return [out];

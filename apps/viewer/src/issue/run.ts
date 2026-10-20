@@ -75,7 +75,8 @@ export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst
     name: options.name?.trim() || nextIssueName(project.issues ?? []),
     date: options.date ?? new Date().toISOString().slice(0, 10),
     listFirst: options.listFirst ?? true,
-  }, effectiveTitleBlock());
+    asIndicated: resolve('sheets.asIndicated'),
+  }, effectiveTitleBlock(), { issues: project.issues, schedules: project.schedules });
 }
 
 /** What a DXF issue leaves out: each sheet's views that print as images, which DXF cannot carry. */
