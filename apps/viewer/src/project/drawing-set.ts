@@ -15,7 +15,7 @@
  */
 
 import type { TranslationKey } from '@/i18n';
-import { FRAME_MARGIN_MM, PAPER_MM, TITLE_BLOCK_MM } from './sheets';
+import { fitViewportBox, FRAME_MARGIN_MM, PAPER_MM, SHEET_SCALES, TITLE_BLOCK_MM } from './sheets';
 import { freshProjectId } from './view-defaults';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf, numberSheets } from './numbering';
 import type { ElevationDirection, NumberingScheme, PaperSize, ProjectSheet, ProjectView, SheetViewport } from './types';
@@ -76,6 +76,19 @@ export function fitsScale(sizes: readonly { w: number; h: number }[], area: { w:
   const width = sizes.reduce((sum, s) => sum + s.w * k, 0) + GAP_MM * (sizes.length + 1);
   const height = Math.max(0, ...sizes.map((s) => s.h * k)) + TITLE_ROOM_MM + GAP_MM * 2;
   return width <= area.w && height <= area.h;
+}
+
+type Bounds = { min: { x: number; y: number }; max: { x: number; y: number } };
+
+/** The drawing area of `paper` (mm) when a viewport box is larger than it; null when the box fits. */
+export function overrun(box: { width: number; height: number }, paper: PaperSize = SET_PAPER): { w: number; h: number } | null {
+  const area = drawingArea(paper);
+  return box.width > area.w || box.height > area.h ? { w: area.w, h: area.h } : null;
+}
+
+/** The most detailed offered scale (`SHEET_SCALES`) at which a drawing of `bounds` fits on `paper`; null when none does. */
+export function detailedScaleThatFits(bounds: Bounds, paper: PaperSize = SET_PAPER): number | null {
+  return SHEET_SCALES.find((scale) => !overrun(fitViewportBox(bounds, scale), paper)) ?? null;
 }
 
 /** The most detailed set scale at which `sizes` (metres) fit side by side in `area`; the least detailed when none does. */
