@@ -13,7 +13,7 @@ import { create } from 'zustand';
 import { deleteModelState, readModelState } from './autosave-snapshots';
 import { loadProjectDocument, useProjectStore } from './project-store';
 import { dropRecoverable, recoverableKey } from './recovery';
-import { restoreRasters } from './autosave-rasters';
+import { deleteRasters, restoreRasters } from './autosave-rasters';
 import type { ProjectDocument } from './types';
 
 export interface RecoveryOffer {
@@ -43,6 +43,7 @@ export function discardRecovery(storage?: Pick<Storage, 'removeItem'>): void {
   useRecoveryStore.setState({ offer: null });
   dropRecoverable(offer.key, storage);
   void deleteModelState(recoverableKey(offer.key));
+  void deleteRasters(recoverableKey(offer.key), offer.doc);
 }
 
 /** Puts the model state kept under `stateKey` into the project, if slot `key` is still the one in front and the project has none. */
@@ -60,5 +61,6 @@ export function restoreRecovery(storage?: Pick<Storage, 'removeItem'>): void {
   dropRecoverable(offer.key, storage);
   const stateKey = recoverableKey(offer.key);
   void restoreModelState(offer.key, () => offer.key, stateKey).then(() => deleteModelState(stateKey));
-  void restoreRasters(offer.key, () => offer.key);
+  // The captures come from the recoverable copy, not the live slot the new session has been autosaving to.
+  void restoreRasters(offer.key, () => offer.key, stateKey).then(() => deleteRasters(stateKey, offer.doc));
 }

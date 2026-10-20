@@ -17,7 +17,8 @@ import { cleanup, render, waitFor } from '@/test/render.js';
 import { latestToast } from '@/test/toasts.js';
 import { Toaster } from '@/components/ui/toast';
 import { addProjectView, projectDocument, resetProject, useProjectStore } from './project-store.js';
-import { readAutosave, writeAutosave } from './recovery.js';
+import { markSessionOpen, planAutosave, readAutosave, writeAutosave } from './recovery.js';
+import { forgetRecoveryOffer, offerRecovery, restoreRecovery } from './recovery-store.js';
 import { restoreRasters } from './autosave-rasters.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
 import type { ThreeDProjectView } from './types';
@@ -72,5 +73,34 @@ describe('the autosave of a project with a raster capture', () => {
     }
     await waitFor(() => latestToast(ui.ownerDocument.body) !== '', 'a notice to show');
     assert.match(latestToast(ui.ownerDocument.body), /not being autosaved.*quota has been exceeded/);
+  });
+});
+
+describe('restoring a session that died, with a raster capture (integration of #106 and #130)', () => {
+  const A = `data:image/png;base64,${'A'.repeat(4096)}`;
+  const B = `data:image/png;base64,${'B'.repeat(4096)}`;
+  const SLOT = 'ifc-lite:project:v1:test-raster-recovery';
+  const pause = (ms = 60) => new Promise((r) => setTimeout(r, ms));
+  beforeEach(() => { resetProject(); localStorage.clear(); forgetRecoveryOffer(); });
+  afterEach(() => { cleanup(); forgetRecoveryOffer(); });
+
+  it('puts back the capture the dead session had, not the one the new session autosaved since', async () => {
+    // The session that dies: one 3D view captured as A, autosaved, and the tab gone without closing.
+    const id = addProjectView({ kind: '3d', name: 'Perspective', viewpoint: null, projection: 'perspective', raster: { href: A, widthPx: 10, heightPx: 10, widthMm: 50, heightMm: 50 } });
+    await writeAutosave(SLOT, projectDocument());
+    markSessionOpen(SLOT);
+    // The next start keeps that autosave as the recoverable copy and offers it.
+    const plan = planAutosave(SLOT);
+    assert.ok(plan.recoverable, 'the dead session is kept');
+    offerRecovery({ key: SLOT, doc: plan.recoverable.doc, savedAt: plan.recoverable.savedAt, modelName: 'house.ifc' });
+    await pause();
+    // The new session captures the same view again as B, and autosaves before anyone answers.
+    resetProject();
+    useProjectStore.setState({ views: [{ ...(plan.recoverable.doc.views.find((v) => v.id === id) as ThreeDProjectView), raster: { href: B, widthPx: 10, heightPx: 10, widthMm: 50, heightMm: 50 } }] });
+    await writeAutosave(SLOT, projectDocument());
+    // Restore: the dead session's views, with the dead session's capture.
+    restoreRecovery();
+    await waitFor(() => { const r = raster(id); return !!r && r.href.startsWith('data:'); }, 'the capture to come back');
+    assert.equal(raster(id)?.href, A);
   });
 });

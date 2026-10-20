@@ -17,7 +17,7 @@
  */
 
 import { readModelState, withoutModelState, writeModelState } from './autosave-snapshots';
-import { withoutRasters, writeRasters } from './autosave-rasters';
+import { copyRasters, withoutRasters, writeRasters } from './autosave-rasters';
 import { toast } from '@/components/ui/toast';
 import { resolve } from '@/i18n/registry';
 import { parseProjectFile, serializeProject } from './project-file';
@@ -140,7 +140,11 @@ export function planAutosave(key: string, storage: Store | undefined = safeStora
   const recoverable = readAutosave(recoverableKey(key), storage);
   if (!recoverable && autosave && lastSessionDied(key, storage) && isUnsavedWork(key, autosave, storage)) {
     // No copy kept, no offer: the work is put back in front rather than left for the next autosave to replace.
-    if (keepAsRecoverable(key, storage)) return { restore: null, recoverable: autosave };
+    if (keepAsRecoverable(key, storage)) {
+      // Its captures too: the next session's autosave of the same views writes under the live slot.
+      void copyRasters(key, recoverableKey(key), autosave.doc);
+      return { restore: null, recoverable: autosave };
+    }
   }
   return { restore: autosave, recoverable };
 }

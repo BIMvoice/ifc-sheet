@@ -59,18 +59,51 @@ export async function writeRasters(slot: string, rasters: ReadonlyMap<string, st
   return ok;
 }
 
+/** The views of `doc` whose capture the slot holds as a reference. */
+const referencedViews = (doc: Pick<ProjectDocument, 'views'>): string[] =>
+  doc.views.filter((v) => v.kind === '3d' && v.raster && isAutosaveRasterRef(v.raster.href)).map((v) => v.id);
+
+/**
+ * Copies the images slot `from` keeps for the views of `doc` to slot `to`: a
+ * session that died keeps its captures beside its recoverable copy, where the
+ * next session's autosaves of the same views cannot replace them.
+ */
+export async function copyRasters(from: string, to: string, doc: Pick<ProjectDocument, 'views'>): Promise<void> {
+  for (const viewId of referencedViews(doc)) {
+    try {
+      const href = await run<unknown>('readonly', (s) => s.get(keyOf(from, viewId)));
+      if (typeof href === 'string') await run('readwrite', (s) => s.put(href, keyOf(to, viewId)));
+    } catch (err) {
+      console.warn('[project] a raster capture could not be kept with the recoverable session', err);
+    }
+  }
+}
+
+/** Removes the images slot `slot` keeps for the views of `doc` (a recoverable copy discarded, or restored). */
+export async function deleteRasters(slot: string, doc: Pick<ProjectDocument, 'views'>): Promise<void> {
+  for (const viewId of referencedViews(doc)) {
+    try {
+      await run('readwrite', (s) => s.delete(keyOf(slot, viewId)));
+      written.delete(keyOf(slot, viewId));
+    } catch (err) {
+      console.warn('[project] a kept raster capture could not be removed', err);
+    }
+  }
+}
+
 /**
  * Puts the images back into the views the slot restored, while `slot` is still
- * the one in front. A view whose image is gone (site data cleared) is left
- * without a capture, so it asks to be captured again instead of showing a
- * broken image.
+ * the one in front. `from` is the slot the images are read from: the slot
+ * itself, or a recoverable copy of it. A view whose image is gone (site data
+ * cleared) is left without a capture, so it asks to be captured again instead
+ * of showing a broken image.
  */
-export async function restoreRasters(slot: string, current: () => string | null): Promise<void> {
+export async function restoreRasters(slot: string, current: () => string | null, from: string = slot): Promise<void> {
   const refs = useProjectStore.getState().views.filter((v) => v.kind === '3d' && v.raster && isAutosaveRasterRef(v.raster.href));
   if (refs.length === 0) return;
   const found = new Map<string, string | null>();
   for (const v of refs) {
-    const key = keyOf(slot, v.id);
+    const key = keyOf(from, v.id);
     try {
       const href = await run<unknown>('readonly', (s) => s.get(key));
       found.set(v.id, typeof href === 'string' ? href : null);
