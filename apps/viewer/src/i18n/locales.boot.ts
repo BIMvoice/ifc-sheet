@@ -47,7 +47,9 @@ provideLocaleActivator(activator, localStorageOrNull());
 activateStartupLocale(activator, {
   search: window.location.search,
   storage: localStorageOrNull(),
-  languages: navigator.languages ?? [navigator.language],
+  // English is IfcSheet's main language: another language only when someone
+  // chooses it (?lang= or the header picker), never from the browser's languages.
+  languages: [],
 }).catch((error: unknown) => {
   console.warn('[i18n] Locale startup failed; the viewer stays in English.', error);
 });
