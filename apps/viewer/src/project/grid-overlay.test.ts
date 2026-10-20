@@ -4,7 +4,8 @@
 
 /**
  * The structural grid as a view's overlay, against a real mesh pipeline.
- * `public/_fixtures/structural-grid.ifc` (millimetres) has a four-column
+ * `__fixtures__/structural-grid.ifc` (millimetres, committed next to this test
+ * and outside `public/`, so it never ships) has a four-column
  * building on a 2 x 2 grid (A, B at 6 m; 1, 2 at 5 m) whose IfcGrid is placed
  * under the IfcBuilding at (10 m, 20 m) in a storey that is itself offset (5 m, -2 m) and
  * raised 3 m, rotated 15 degrees, while the columns sit under the same storey. Every axis must pass through
@@ -30,7 +31,7 @@ import { planOverlays, type PlanOverlay } from './plan-overlays.js';
 import type { PlanProjectView, ProjectView, SectionProjectView, GridEnds } from './types.js';
 
 const WASM = new URL('../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
-const FIXTURE = new URL('../../public/_fixtures/structural-grid.ifc', import.meta.url);
+const FIXTURE = new URL('./__fixtures__/structural-grid.ifc', import.meta.url);
 const FZK = new URL('../../public/_fixtures/AC20-FZK-Haus.ifc', import.meta.url);
 /** Every test here runs the real mesh pipeline: without the wasm runtime it skips, never throws. */
 const wasmOptions = { skip: !existsSync(WASM) && 'Run pnpm build:wasm' };
