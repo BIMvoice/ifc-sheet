@@ -25,6 +25,8 @@ import type { ThreeDProjectView } from './types';
 /** A data URL the size of a real print capture: a 150 x 100 mm box at 300 dpi compresses to a few MB of PNG. */
 const BIG = `data:image/png;base64,${'A'.repeat(6_000_000)}`;
 const KEY = 'ifc-lite:project:v1:test-raster';
+/** The slot once another model joins the set. */
+const OTHER = 'ifc-lite:project:v1:test-raster|another-model';
 
 function placeRaster(): string {
   return addProjectView({ kind: '3d', name: 'Perspective', viewpoint: null, projection: 'perspective', raster: { href: BIG, widthPx: 1772, heightPx: 1182, widthMm: 150, heightMm: 100 } });
@@ -47,7 +49,7 @@ describe('the autosave of a project with a raster capture', () => {
     useProjectStore.setState(parseProjectFile(slot));
     assert.ok(readAutosave(KEY), 'the slot reads back as a project');
     assert.notEqual(raster(id)?.href, BIG, 'the slot alone has only the reference');
-    await restoreRasters(KEY, () => KEY);
+    await restoreRasters(KEY);
     assert.equal(raster(id)?.href, BIG);
     assert.deepEqual([raster(id)?.widthMm, raster(id)?.heightMm], [150, 100]);
   });
@@ -56,8 +58,44 @@ describe('the autosave of a project with a raster capture', () => {
     const id = placeRaster();
     await writeAutosave(KEY, projectDocument());
     useProjectStore.setState(parseProjectFile(localStorage.getItem(KEY)!));
-    await restoreRasters('ifc-lite:project:v1:another-slot', () => 'ifc-lite:project:v1:another-slot');
+    await restoreRasters('ifc-lite:project:v1:another-slot');
     assert.equal(raster(id), null);
+  });
+
+  it('keeps the capture when the slot changes while the image is being read back', async () => {
+    const id = placeRaster();
+    await writeAutosave(KEY, projectDocument());
+    useProjectStore.setState(parseProjectFile(localStorage.getItem(KEY)!));
+    // A model joins the set while the image is read: the slot in front becomes another one.
+    await restoreRasters(KEY);
+    // The next autosave goes to the new slot; the capture must go with it.
+    await writeAutosave(OTHER, projectDocument());
+    resetProject();
+    useProjectStore.setState(parseProjectFile(localStorage.getItem(OTHER)!));
+    await restoreRasters(OTHER);
+    assert.equal(raster(id)?.href === BIG, true, `the capture came back under the new slot: ${raster(id)?.href.slice(0, 40) ?? 'null'}`);
+  });
+
+  it('fills only views that still hold their own reference: a capture taken meanwhile, or another project, is left alone', async () => {
+    const id = placeRaster();
+    await writeAutosave(KEY, projectDocument());
+    useProjectStore.setState(parseProjectFile(localStorage.getItem(KEY)!));
+    const FRESH = 'data:image/png;base64,ZnJlc2g=';
+    const restoring = restoreRasters(KEY);
+    // While the image is read back, the person captures the view again.
+    useProjectStore.setState({ views: useProjectStore.getState().views.map((v) => (v.id === id && v.kind === '3d' && v.raster ? { ...v, raster: { ...v.raster, href: FRESH } } : v)) });
+    await restoring;
+    assert.equal(raster(id)?.href, FRESH, 'the new capture stays');
+
+    // Another project comes in front while the image is read back: its own reference is not touched.
+    useProjectStore.setState(parseProjectFile(localStorage.getItem(KEY)!));
+    const again = restoreRasters(KEY);
+    resetProject();
+    const other = addProjectView({ kind: '3d', name: 'Other', viewpoint: null, projection: 'perspective' });
+    const otherRef = `autosave-raster:${other}`;
+    useProjectStore.setState({ views: useProjectStore.getState().views.map((v) => (v.id === other ? { ...v, raster: { href: otherRef, widthPx: 10, heightPx: 10, widthMm: 10, heightMm: 10 } } : v)) });
+    await again;
+    assert.equal(raster(other)?.href, otherRef, 'the other project keeps its reference for its own restore');
   });
 
   it('tells the person when the browser refuses the slot', async () => {

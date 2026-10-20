@@ -200,4 +200,16 @@ describe('a perspective on a sheet (issue #49)', () => {
     assert.match(svg, /Perspective  \(no scale\)/, 'a perspective states no scale');
     assert.doesNotMatch(svg, /1:100/, 'and the title block states none either');
   });
+
+  it('prints no image while the capture is still the autosave reference, not yet read back', () => {
+    const viewId = addProjectView({ kind: '3d', name: 'Perspective', viewpoint: null, projection: 'perspective' });
+    const sheetId = addProjectSheet('Views');
+    addViewport(sheetId, viewId, { x: 200, y: 150 });
+    const ref = `autosave-raster:${viewId}`;
+    useProjectStore.setState({ views: useProjectStore.getState().views.map((v) => (v.id === viewId ? { ...v, raster: { href: ref, widthPx: 1772, heightPx: 1182, widthMm: 150, heightMm: 100 } } : v)) });
+
+    const { svg } = exportSheet(sheetId);
+    assert.doesNotMatch(svg, /autosave-raster:/, 'the reference is not printed as an image source');
+    assert.equal((svg.match(/<image [^>]*>/g) ?? []).length, 0, 'no broken image on the sheet');
+  });
 });
