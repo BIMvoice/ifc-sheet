@@ -82,6 +82,8 @@ export const wallEn = {
   'wall.draw.text.body': 'Click where the text goes and type it.',
   'wall.draw.hatch': 'Hatched zone',
   'wall.draw.hatch.body': 'Click inside a closed polyline: the zone fills with the pattern below.',
+  'wall.draw.ptext': 'Parameter text',
+  'wall.draw.ptext.body': 'Click where it goes on the sheet and type the words. Put a parameter\'s name in curly braces to print its value.',
   'wall.draw.onSheet': 'On the sheet',
   'wall.draw.onDrawing': 'On {name}',
   'wall.hatch.pattern': 'Pattern',

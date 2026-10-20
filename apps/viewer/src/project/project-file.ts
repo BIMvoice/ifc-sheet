@@ -17,6 +17,7 @@ import { readNumberingScheme } from './numbering';
 import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
+import { readTitleBlockParams, readTitleBlockTemplate } from './title-block-file';
 import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
 import { readTitleSources } from './title-block-sources';
@@ -183,9 +184,11 @@ export interface ProjectFileSchema {
 
 const THIS_BUILD: ProjectFileSchema = { migrations: PROJECT_MIGRATIONS, current: PROJECT_FILE_VERSION };
 
-const readSources = (raw: Record<string, unknown>): Pick<ProjectDocument, 'titleBlockSources'> => {
+const readSources = (raw: Record<string, unknown>): Pick<ProjectDocument, 'titleBlockSources' | 'titleBlockParams' | 'titleBlockTemplate'> => {
   const titleBlockSources = readTitleSources(raw.titleBlockSources);
-  return titleBlockSources ? { titleBlockSources } : {};
+  const titleBlockParams = readTitleBlockParams(raw.titleBlockParams);
+  const titleBlockTemplate = readTitleBlockTemplate(raw.titleBlockTemplate);
+  return { ...(titleBlockSources ? { titleBlockSources } : {}), ...(titleBlockParams ? { titleBlockParams } : {}), ...(titleBlockTemplate ? { titleBlockTemplate } : {}) };
 };
 
 /** Parse and validate a project file's text. Throws with the first problem found. */

@@ -12,7 +12,7 @@ import { useTranslation } from '@/i18n';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 import { cn } from '@/lib/utils';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
-import { Circle, PaintBucket, Slash, Spline, Type } from 'lucide-react';
+import { Braces, Circle, PaintBucket, Slash, Spline, Type } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProjectView } from '@/project/types';
 import { toolHelpKey } from './tool-help';
@@ -22,7 +22,7 @@ import { keyProps } from './wall-key-title';
 
 const DRAW_ICONS: Record<string, ReactNode> = {
   line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, circle: <Circle className="size-5" />,
-  text: <Type className="size-5" />, hatch: <PaintBucket className="size-5" />,
+  text: <Type className="size-5" />, hatch: <PaintBucket className="size-5" />, ptext: <Braces className="size-5" />,
 };
 
 interface ToolRailProps {

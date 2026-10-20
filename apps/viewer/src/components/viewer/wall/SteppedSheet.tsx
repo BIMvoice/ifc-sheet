@@ -32,7 +32,7 @@ import { ScaleChips } from './WallGrid';
 import { SheetCanvas } from './SheetCanvas';
 import { TitleBlockCard } from './TitleBlockForm';
 import { ViewportCard } from './ViewportCard';
-import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
+import { DRAW_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
@@ -123,7 +123,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     // Plain drawing goes on the drawing in front, else on the sheet's paper.
     if (DRAW_TOOLS.some((d) => d.command === command)) {
       setTool(command);
-      cancelStart.current = startWhenAttached(focusView?.id ?? sheet.id, command);
+      cancelStart.current = startWhenAttached(drawTarget(command, focusView?.id, sheet.id), command);
       return;
     }
     // A section line is drawn on a plan: the chosen one, else the lowest.

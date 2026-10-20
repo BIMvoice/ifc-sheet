@@ -17,6 +17,8 @@ import { LOGO_FIELD, LOGO_MAX_BYTES, TITLE_BLOCK_FIELDS, titleBlockOf, type Titl
 import { useEffectiveTitleBlock, useResolvedTitleBlock } from '@/project/title-block-model';
 import type { ProjectSheet } from '@/project/types';
 import { SourceBadge, SourcePicker } from './TitleBlockSource';
+import { ProjectParams, SheetParams } from './TitleBlockParams';
+import { TitleBlockLayout } from './TitleBlockLayout';
 
 const LABELS: Record<TitleBlockField, TranslationKey> = {
   project: 'sheets.tb.project',
@@ -122,6 +124,8 @@ export function TitleBlockForm({ sheet }: { sheet?: ProjectSheet }) {
         );
       })}
       {sheet ? null : <Logo />}
+      {sheet ? <SheetParams sheet={sheet} /> : <ProjectParams />}
+      {sheet ? null : <TitleBlockLayout />}
     </div>
   );
 }

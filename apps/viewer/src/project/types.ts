@@ -3,6 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import type { TitleSource } from './title-block-sources';
+import type { TitleBlockParam } from './title-block-params';
+import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
@@ -277,6 +279,8 @@ export interface ProjectSheet {
   viewports?: SheetViewport[];
   /** Title block fields this sheet says otherwise than the project's (`ProjectDocument.titleBlock`); a key present wins, even empty. */
   titleBlock?: Record<string, string>;
+  /** The values this sheet gives title block parameters otherwise than the project's (`title-block-params.ts`); a name present wins. */
+  titleBlockParams?: Record<string, string>;
 }
 
 /** The identity of a model a project refers to (content hash, else its name). */
@@ -309,6 +313,10 @@ export interface ProjectDocument {
   titleBlock?: Record<string, string>;
   /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
   titleBlockSources?: Record<string, TitleSource[]>;
+  /** The user's own title block parameters, in order, each with its project-wide value (`title-block-params.ts`). */
+  titleBlockParams?: TitleBlockParam[];
+  /** The title block's layout once edited; absent: the standard layout (`title-block-template.ts`). */
+  titleBlockTemplate?: TitleBlockTemplate;
   /** Drafted geometry, each entity on one view (phase 4). */
   drafts: DraftEntity[];
   draftLayers: DraftLayer[];
