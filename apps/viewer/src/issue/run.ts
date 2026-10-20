@@ -61,7 +61,10 @@ export function pdfLabels(): PdfLabels {
 }
 
 function sources(project: ProjectDocument) {
-  return { documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])], drafts: project.drafts };
+  return {
+    documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])],
+    drafts: project.drafts, views: project.views, sheets: project.sheets,
+  };
 }
 
 /** The plan for the project as it stands (nothing is drawn or recorded). */

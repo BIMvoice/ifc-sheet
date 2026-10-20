@@ -17,6 +17,7 @@ import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
+import { isDisciplineId } from './discipline-views';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
 import { declaredVersion, migrateProject, PROJECT_FILE_VERSION, PROJECT_MIGRATIONS, type ProjectMigration } from './project-migrations';
 import { withoutModelState } from './autosave-snapshots';
@@ -131,7 +132,7 @@ function readView(v: unknown, path: string): ProjectView {
   switch (v.kind) {
     case 'plan':
       if (!isNumber(v.cutHeight)) fail(`${path}.cutHeight`, 'must be a number');
-      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(v.reflected === true ? { reflected: true } : {}) };
+      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(isDisciplineId(v.discipline) ? { discipline: v.discipline } : {}), ...(v.reflected === true ? { reflected: true } : {}) };
     case 'section': {
       const section = { ...base, kind: 'section' as const, plane: readPlane(v.plane, `${path}.plane`) };
       return isString(v.through) && v.through ? { ...section, through: v.through } : section;

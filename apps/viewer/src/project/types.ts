@@ -8,6 +8,7 @@ import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/crea
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
+import type { DisciplineId } from './discipline-views';
 
 /**
  * The project document: the views and sheets a user organises over the
@@ -104,6 +105,8 @@ export interface PlanProjectView extends ProjectViewBase {
   level: ProjectLevel;
   /** Cut height above the level's floor, metres. */
   cutHeight: number;
+  /** A discipline plan (structural, foundation, roof): it draws only the elements its discipline keeps (`discipline-views.ts`). */
+  discipline?: DisciplineId;
   /**
    * A reflected ceiling plan: the same plan, looking up from the cut. It keeps
    * the floor plan's x/y (a point sits where it does in the plan below) and
@@ -213,6 +216,8 @@ export interface SheetViewport {
   center: { x: number; y: number } | null;
   /** Drafting layers this viewport hides, on top of its view's. */
   hiddenLayers?: string[];
+  /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
+  drawingNumber?: string;
 }
 
 export interface ProjectSheet {
