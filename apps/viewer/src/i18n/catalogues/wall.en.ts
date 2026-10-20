@@ -204,4 +204,5 @@ export const wallEn = {
   'wall.project.addTakeoff': '+ Material takeoff',
   'wall.project.addTypeQuantities': '+ Quantities by type',
   'wall.project.addFinishes': '+ Room finishes',
+  'wall.project.addRegister': '+ Drawing register',
 } as const satisfies Record<string, TranslationValue>;

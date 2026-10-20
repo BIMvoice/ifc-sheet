@@ -27,6 +27,8 @@ import { roomFinishes, type RoomFinishes } from '@/joinery/room-finishes';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
 import { layoutRoomFinishes, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
 import { layoutUrban } from '@/urban/urban-layout';
+import { drawingRegisterRows, type RegisterRow } from '@/project/drawing-register';
+import { layoutRegister, type RegisterLabels } from '@/joinery/register-layout';
 import { penTags } from '../sheets/dxf-tags';
 import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 
@@ -93,6 +95,27 @@ export function useRoomFinishes(): RoomFinishes[] {
   return useMemo(() => roomFinishes(collectRoomInputs()), [mutationVersion, models]);
 }
 
+export function useRegisterLabels(title: string): RegisterLabels {
+  const { t } = useTranslation();
+  return useMemo(() => ({
+    title, number: t('issue.list.sheet'), sheetTitle: t('issue.list.sheetTitle'), scale: t('issue.list.scale'), revision: t('issue.list.revision'), date: t('issue.list.date'),
+  }), [t, title]);
+}
+
+/** The register's rows, read from the sheets, the title block and the issues as they stand: nothing about them is stored. */
+export function useRegisterRows(): RegisterRow[] {
+  const { t } = useTranslation();
+  const sheets = useProjectStore((s) => s.sheets);
+  const titleBlock = useProjectStore((s) => s.titleBlock);
+  const issues = useProjectStore((s) => s.issues);
+  const schedules = useProjectStore((s) => s.schedules);
+  const asIndicated = t('sheets.asIndicated');
+  return useMemo(
+    () => drawingRegisterRows({ sheets, titleBlock, issues, asIndicated, schedules }),
+    [sheets, titleBlock, issues, schedules, asIndicated],
+  );
+}
+
 /** The schedule's data and layout, recomputed when the models or the catalogue change. */
 export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data: ScheduleData; layout: ScheduleLayout } | null {
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
@@ -101,7 +124,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels(schedule?.name ?? '');
   return useMemo(() => {
-    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'types' || schedule.kind === 'finishes' || schedule.kind === 'urban') return null;
+    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'types' || schedule.kind === 'finishes' || schedule.kind === 'urban' || schedule.kind === 'register') return null;
     const data = scheduleData(schedule.kind);
     return { data, layout: layoutSchedule(data, labels, { scale: schedule.scale ?? 50 }) };
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
@@ -126,6 +149,8 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   // The indicators measure footprints: only when the sheet shows them.
   const urban = useUrbanIndicators(places('urban'));
   const urbanLabels = useUrbanLabels('', urban?.areas ?? null);
+  const registerLabels = useRegisterLabels('');
+  const registerRows = useRegisterRows();
   return useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
     // The takeoff parses materials on demand: read once per change, and only when a sheet shows one.
@@ -139,7 +164,9 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
         if (urban) out.set(schedule.id, layoutUrban(urban.result, { ...urbanLabels, title: schedule.name }));
         continue;
       }
-      out.set(schedule.id, schedule.kind === 'materials'
+      out.set(schedule.id, schedule.kind === 'register'
+        ? layoutRegister(registerRows, { ...registerLabels, title: schedule.name })
+        : schedule.kind === 'materials'
         ? layoutMaterialTakeoff(rows, { ...takeoffLabels, title: schedule.name })
         : schedule.kind === 'types'
           ? layoutTypeQuantities(byType ?? { levels: [], rows: [] }, { ...typeLabels, title: schedule.name })
@@ -149,7 +176,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet.viewports, schedules, labels, takeoffLabels, typeLabels, finishLabels, placesTakeoff, placesTypes, placesFinishes, urban, urbanLabels, mutationVersion, models, catalogue, mapping]);
+  }, [sheet.viewports, schedules, labels, takeoffLabels, typeLabels, finishLabels, registerLabels, registerRows, placesTakeoff, placesTypes, placesFinishes, urban, urbanLabels, mutationVersion, models, catalogue, mapping]);
 }
 
 function Prim({ p }: { p: SchedulePrim }) {

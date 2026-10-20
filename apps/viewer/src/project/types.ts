@@ -287,8 +287,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, or the permit's areas and urban indicators (`urban/`). */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'urban';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, the permit's areas and urban indicators (`urban/`), or the set's own sheets (the drawing register, derived from the sheets on every draw). */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'urban' | 'register';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;

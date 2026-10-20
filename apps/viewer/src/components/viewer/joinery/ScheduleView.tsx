@@ -26,6 +26,7 @@ import { toast } from '@/components/ui/toast';
 import { svgToDxf } from '../sheets/sheet-dxf';
 import { ScheduleGraphic, useScheduleLabels, useScheduleLayout } from './ScheduleGraphic';
 import { RoomFinishesView } from './RoomFinishesView';
+import { RegisterView } from './RegisterView';
 import { TakeoffView } from './TakeoffView';
 import { TypeQuantitiesView } from './TypeQuantitiesView';
 import { UrbanView } from '../urban/UrbanView';
@@ -39,6 +40,7 @@ export function ScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   if (schedule.kind === 'types') return <TypeQuantitiesView schedule={schedule} />;
   if (schedule.kind === 'finishes') return <RoomFinishesView schedule={schedule} />;
   if (schedule.kind === 'materials') return <TakeoffView schedule={schedule} />;
+  if (schedule.kind === 'register') return <RegisterView schedule={schedule} />;
   if (schedule.kind === 'urban') return <UrbanView schedule={schedule} />;
   return <JoineryScheduleView schedule={schedule} />;
 }
