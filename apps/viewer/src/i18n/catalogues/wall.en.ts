@@ -131,6 +131,7 @@ export const wallEn = {
   'wall.shell.untitled': 'No model open',
   'wall.shell.project': 'Project',
   'wall.vp.eyebrow': 'Drawing on this sheet',
+  'wall.vp.drawingNumber': 'Drawing number (empty: numbered in reading order)',
   'wall.vp.scale': 'Scale',
   'wall.vp.scaleOther': 'Other…',
   'wall.vp.scaleTyped': 'Scale 1 : (Enter to apply)',
