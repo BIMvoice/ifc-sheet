@@ -148,4 +148,10 @@ export const wallRo = {
   'wall.project.joinerySchedule': 'Tabel de tâmplărie (uși și ferestre)',
   'wall.project.addJoinery': '+ Tabel de tâmplărie (uși și ferestre)',
   'wall.project.addTakeoff': '+ Extras de materiale',
+  'wall.find.label': 'Căutați o planșă',
+  'wall.find.placeholder': 'Căutați o planșă sau un desen',
+  'wall.find.results': 'Planșe găsite',
+  'wall.find.none': 'Nicio planșă nu se potrivește.',
+  'wall.map.label': 'Harta panoului',
+  'wall.map.hint': 'Clic sau trageți pentru a muta ecranul pe panou',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

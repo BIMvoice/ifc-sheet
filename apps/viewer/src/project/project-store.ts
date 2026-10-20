@@ -18,6 +18,7 @@ import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
+import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { liftSheetTitleBlocks } from './title-block';
@@ -82,6 +83,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
   const doc = liftSheetTitleBlocks(saved);
+  resetWallView();
   useProjectStore.setState({
     ...doc,
     symbolFlips: doc.symbolFlips ?? {},
@@ -131,6 +133,7 @@ export function syncProjectWithModels(models: ProjectModelRef[], storeys: readon
 }
 
 export function resetProject(): void {
+  resetWallView();
   useProjectStore.setState({ ...EMPTY_PROJECT, name: resolve('names.project.untitled'), activeItemId: null, dirty: false });
 }
 

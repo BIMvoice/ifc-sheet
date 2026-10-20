@@ -169,4 +169,5 @@ export const wallEn = {
   'wall.project.joinerySchedule': 'Door and window schedule',
   'wall.project.addJoinery': '+ Door and window schedule',
   'wall.project.addTakeoff': '+ Material takeoff',
+  'wall.project.addTypeQuantities': '+ Quantities by type',
 } as const satisfies Record<string, TranslationValue>;
