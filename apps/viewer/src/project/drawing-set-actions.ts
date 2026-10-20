@@ -14,7 +14,6 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
-import { useViewerStore } from '@/store';
 import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
 import { paperLabel } from './paper';

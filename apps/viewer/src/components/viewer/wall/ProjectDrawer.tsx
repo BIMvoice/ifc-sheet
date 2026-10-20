@@ -17,7 +17,7 @@ import { X } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { inSetOrder } from '@/project/drawing-register';
-import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
+import type { ModelExtent } from '@/project/drawing-set';
 import { addRegisterToSet, addScheduleToSet, hangLegend, hangSchedule, hangView } from '@/project/drawing-set-actions';
 import { projectOpenErrorText } from '@/project/open-error';
 import { requestNewProject } from '@/project/new-project';

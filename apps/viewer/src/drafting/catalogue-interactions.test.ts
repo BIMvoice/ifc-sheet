@@ -46,7 +46,6 @@ function placeSymbolAt(x: number, y: number): DraftEntity {
   assert.equal(drafts().length, before + 1);
   return drafts().at(-1) as DraftEntity;
 }
-const instance = (): DraftEntity => drafts().find((d) => d.shape.type === 'symbol') as DraftEntity;
 
 beforeEach(() => {
   cancelCommand();
