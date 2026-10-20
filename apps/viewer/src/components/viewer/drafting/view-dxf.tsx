@@ -30,6 +30,7 @@ import { shapePath } from './DraftOverlay';
 import { AnnotationGraphics } from './AnnotationGraphics';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
 import { useProjectStore } from '@/project/project-store';
+import type { LiveSymbolContext } from '@/siteplan/live-symbols';
 
 /** Drawing metres → DXF millimetres. */
 const MM: ViewTransform = { scale: 1000, x: 0, y: 0 };
@@ -43,9 +44,11 @@ interface ViewDxfInput {
   layers: readonly DraftLayer[];
   extraPatterns: readonly HatchPattern[];
   overlays: readonly PlanOverlay[];
+  /** What the view's live symbols draw from (a coordinate point's label, a scale bar's ticks), as the drawing tab has it. */
+  symbols?: LiveSymbolContext | null;
 }
 
-function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays }: ViewDxfInput) {
+function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays, symbols }: ViewDxfInput) {
   const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns) : [];
   const s = useProjectStore.getState();
   const book = { textStyles: s.textStyles ?? [], dimStyles: s.dimStyles ?? [] };
@@ -63,7 +66,7 @@ function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays 
         if (color === null) return null;
         return isGeometry(e.shape)
           ? <path key={e.id} {...layerTags(layerById.get(e.layerId))} d={shapePath(e.shape, MM, axis)} stroke={color ?? '#000'} strokeWidth={layerPen(layerById.get(e.layerId)).width} fill="none" />
-          : <g key={e.id} {...layerTags(layerById.get(e.layerId))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={MM} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} /></g>;
+          : <g key={e.id} {...layerTags(layerById.get(e.layerId))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={MM} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={symbols} /></g>;
       })}
     </svg>
   );

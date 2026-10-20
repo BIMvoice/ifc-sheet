@@ -37,6 +37,13 @@ export interface SiteFrame {
 
 const ZERO: Vec3 = { x: 0, y: 0, z: 0 };
 
+/** The model's TrueNorth, else grid north of its map conversion, else none (project north). */
+export function siteNorth(trueNorth: PlanDirection | null, anchor: Pick<MapAnchor, 'eff'> | null | undefined): Pick<SiteFrame, 'north' | 'northSource'> {
+  if (trueNorth) return { north: trueNorth, northSource: 'trueNorth' };
+  const grid = anchor ? gridNorthOf(anchor.eff.mapConversion.xAxisAbscissa, anchor.eff.mapConversion.xAxisOrdinate) : null;
+  return grid ? { north: grid, northSource: 'gridNorth' } : { north: null, northSource: null };
+}
+
 /** The frame of the anchor (or first) model. Recomputed on load and georeference edits only. */
 export function useSiteFrame(): SiteFrame {
   const anchor = useAnchorGeoreference();
@@ -49,11 +56,8 @@ export function useSiteFrame(): SiteFrame {
     const model = anchorModel ?? ordered.find((m) => m.ifcDataStore);
     const store = (model?.ifcDataStore ?? legacyStore) as IfcDataStore | null;
     const info = model ? model.geometryResult?.coordinateInfo : legacyInfo;
-    const trueNorth = trueNorthOf(store);
-    const grid = !trueNorth && anchor ? gridNorthOf(anchor.eff.mapConversion.xAxisAbscissa, anchor.eff.mapConversion.xAxisOrdinate) : null;
     return {
-      north: trueNorth ?? grid,
-      northSource: trueNorth ? 'trueNorth' : grid ? 'gridNorth' : null,
+      ...siteNorth(trueNorthOf(store), anchor),
       anchor: anchor ? { eff: anchor.eff, originViewer: anchor.originViewer } : null,
       frameOffset: info ? totalYupOffset(info) : ZERO,
     };

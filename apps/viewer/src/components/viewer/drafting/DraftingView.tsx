@@ -253,7 +253,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   useDraftingKeys({ inputRef, setText, submit: () => submitCommandLine('', state.cursor) });
 
   const exportDxf = () => exportViewDxf({
-    view, drawing: shown, axis, drafts: entities, layers, extraPatterns,
+    view, drawing: shown, axis, drafts: entities, layers, extraPatterns, symbols: liveSymbols,
     overlays: [...(plane ? planOverlays(view, plane, runtimeGeometry?.meshes, useProjectStore.getState().symbolFlips, hidden, shown) : []), ...membraneOverlays(shown)],
   });
 

@@ -23,8 +23,8 @@ import { viewportTransform } from '@/components/viewer/sheets/SheetPaper';
 import { parseSiteFixture, SITE_FIXTURE } from '@/test/site-fixture';
 import { drawingPointToMap, type MapAnchor } from './map-coordinates';
 import { liveSymbol, COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID } from './live-symbols';
-import { liveSymbolContext, type SiteFrame } from './site-frame';
-import { trueNorthOf } from './true-north';
+import { liveSymbolContext, siteNorth, type SiteFrame } from './site-frame';
+import { gridNorthOf, trueNorthOf } from './true-north';
 import { plotAreaOf, PLOT_BOUNDARY_LAYER, setbacks } from './plot';
 import { keyPlanHighlight, viewportExtent } from './key-plan';
 import { footprintArea, footprintRings, offsetRing, outerRings } from './footprint';
@@ -71,6 +71,40 @@ describe('site plan map coordinates (#48)', () => {
     const texts = def?.shapes.flatMap((s) => (s.type === 'text' ? [s.text] : [])) ?? [];
     const m = drawingPointToMap(PLAN, p, anchor);
     assert.deepEqual(texts, [`E ${m.e.toFixed(2)}`, `N ${m.n.toFixed(2)}`]);
+  });
+});
+
+describe('local coordinates in a shifted render frame (#135 review)', () => {
+  it('a coordinate point with no georeference prints the project x / y, the frame\'s shift taken back', () => {
+    // The render frame is the model's viewer frame less `frameOffset`: project (3, 4) is drawn at viewer (3 − 100, ·, −4 + 50).
+    const frameOffset = { x: 100, y: 7, z: -50 };
+    const ctx = liveSymbolContext(frameOf({ frameOffset }), PLAN, 'down', 200, 'en', labels);
+    const p = worldToDrawing(PLAN, { x: 3 - frameOffset.x, y: 1.2, z: -4 - frameOffset.z });
+    const { def } = liveSymbol(symbol(COORDINATE_POINT_ID, p), ctx);
+    assert.deepEqual(def?.shapes.flatMap((s) => (s.type === 'text' ? [s.text] : [])), ['X 3.00', 'Y 4.00']);
+  });
+});
+
+describe('grid north when the model states no TrueNorth (#135 review)', () => {
+  it('points along the map\'s +N: no easting and a positive northing through the IfcMapConversion formula', async () => {
+    const anchor = await fixtureAnchor();
+    const { north, northSource } = siteNorth(null, anchor);
+    assert.equal(northSource, 'gridNorth');
+    assert.ok(north);
+    const a = SITE_FIXTURE.xAxisAbscissa, b = SITE_FIXTURE.xAxisOrdinate;
+    // E = a·x − b·y, N = b·x + a·y (IfcMapConversion, scale 1).
+    assert.ok(Math.abs(a * north.x - b * north.y) < 1e-9, `ΔE ${a * north.x - b * north.y}`);
+    assert.ok(Math.abs(b * north.x + a * north.y - 1) < 1e-9, `ΔN ${b * north.x + a * north.y}`);
+  });
+
+  it('the model\'s TrueNorth wins; with neither, project north', async () => {
+    const anchor = await fixtureAnchor();
+    const trueNorth = trueNorthOf(await parseSiteFixture());
+    assert.ok(trueNorth);
+    assert.deepEqual(siteNorth(trueNorth, anchor), { north: trueNorth, northSource: 'trueNorth' });
+    assert.deepEqual(siteNorth(null, null), { north: null, northSource: null });
+    // A map conversion that states no X axis is unrotated: grid north is project +Y.
+    assert.deepEqual(gridNorthOf(undefined, undefined), { x: 0, y: 1 });
   });
 });
 
@@ -146,6 +180,14 @@ describe('scale bar follows its viewport (#48)', () => {
       }
     });
   }
+
+  it('letters its labels 2.5 mm high on paper, whatever the scale (#135 review)', () => {
+    for (const scale of [100, 200, 500]) {
+      const { def } = liveSymbol(symbol(SCALE_BAR_ID), liveSymbolContext(frameOf({}), PLAN, 'down', scale, 'en', labels));
+      const heights = def?.shapes.flatMap((s) => (s.type === 'text' ? [(s.height * 1000) / scale] : [])) ?? [];
+      assert.ok(heights.length > 0 && heights.every((h) => Math.abs(h - 2.5) < 1e-9), `1:${scale}: ${heights.join(', ')} mm`);
+    }
+  });
 
   it('10 m is 100 mm at 1:100', () => {
     const { ticks, values } = measure(100, 100);
