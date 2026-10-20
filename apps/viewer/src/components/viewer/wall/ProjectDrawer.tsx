@@ -14,15 +14,18 @@
 
 import { useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { toast } from '@/components/ui/toast';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
 import { addScheduleToSet, hangLegend, hangSchedule, hangView } from '@/project/drawing-set-actions';
+import { projectOpenErrorText } from '@/project/open-error';
 import { requestNewProject } from '@/project/new-project';
-import { exportProjectFile, importProjectFile, PROJECT_FILE_SUFFIX } from '@/project/project-file';
-import { addProjectSheet, loadProjectDocument, projectDocument, removeProjectItem, renameProjectItem, useProjectStore } from '@/project/project-store';
+import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
+import { addProjectSheet, projectDocument, removeProjectItem, renameProjectItem, useProjectStore } from '@/project/project-store';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
 import { SheetNumberingForm } from './SheetNumberingForm';
+import { RecoveryOffer } from './RecoveryOffer';
 import { ReadinessList } from '../sheets/ReadinessList';
 import { WALL_SKIN } from '../sheets/set-skin';
 import { TitleBlockForm } from './TitleBlockForm';
@@ -130,9 +133,10 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
         <input ref={fileInput} type="file" accept={`${PROJECT_FILE_SUFFIX},application/json`} className="hidden" onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = '';
-          if (file) void importProjectFile(file).then((doc) => loadProjectDocument(doc, { dirty: false })).catch((err: unknown) => console.warn('[ifcsheet] could not open the project file', err));
+          if (file) void importProjectFile(file).then((doc) => openProjectDocument(doc, { dirty: false })).catch((err: unknown) => { console.warn('[ifcsheet] could not open the project file', err); toast.error(projectOpenErrorText(err, t)); });
         }} />
       </div>
+      <div className="px-4"><RecoveryOffer /></div>
       <LibraryPanel />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         <Group title={t('wall.project.sheets')} add={<button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>}>

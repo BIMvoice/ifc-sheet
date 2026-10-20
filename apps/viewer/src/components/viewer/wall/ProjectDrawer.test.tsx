@@ -6,13 +6,14 @@ import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanup, click, render } from '@/test/render.js';
-import { resetProject, useProjectStore } from '@/project/project-store';
+import { projectDocument, resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet } from '@/project/drawing-set-actions';
 import type { ModelExtent } from '@/project/drawing-set';
 import type { ProjectLevel } from '@/project/types';
 import { ProjectDrawer } from './ProjectDrawer.js';
 import { useWallNav } from './wall-nav.js';
+import { forgetRecoveryOffer, offerRecovery } from '@/project/recovery-store';
 
 /**
  * The project drawer: a click goes to a sheet, brings a drawing forward on
@@ -37,6 +38,18 @@ const button = (ui: HTMLElement, text: string | RegExp) => {
 };
 
 describe('ProjectDrawer', () => {
+  it('keeps a session on offer within reach after the intro is gone, with both answers', () => {
+    offerRecovery({ key: 'k', doc: projectDocument(), savedAt: 0, modelName: 'house.ifc' });
+    try {
+      const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+      assert.match(ui.textContent ?? '', /Recover previous session/);
+      button(ui, 'Restore it');
+      button(ui, 'Discard');
+    } finally {
+      forgetRecoveryOffer();
+    }
+  });
+
   it('offers the library file beside new, open and save', () => {
     const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
     button(ui, 'Import library');

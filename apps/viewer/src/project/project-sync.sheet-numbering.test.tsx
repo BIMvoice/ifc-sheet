@@ -10,7 +10,8 @@ import { useViewerStore } from '@/store';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { SEQUENTIAL_SCHEME } from './numbering';
 import { resetProject } from './project-store';
-import { autosaveKey, useProjectSync } from './project-sync';
+import { autosaveKey } from './project-saved';
+import { useProjectSync } from './project-sync';
 import { setSchemeForNewSheets } from './sheet-renumber';
 
 const SLOT = autosaveKey([{ key: 'legacy', name: 'Model' }]);

@@ -3,16 +3,19 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * "Add a drawing", in four big choices: a plan of a storey (pick the storey),
- * a section (draw a line on a plan), an elevation (pick a side), a detail of
- * an area (mark it on the drawing in front). A new drawing hangs on the set where its kind belongs.
+ * "Add a drawing", in five big choices: a plan of a storey (pick the storey),
+ * a section (draw a line on a plan), an elevation (pick a side), a plan of one
+ * discipline (structural, foundation, roof: `project/discipline-views.ts`), a
+ * detail of an area (mark it on the drawing in front). A new drawing hangs on
+ * the set where its kind belongs.
  */
 
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from '@/i18n';
 import { ELEVATION_DIRECTIONS, planViewFor, resolvePlanLevel } from '@/project/view-defaults';
+import { defaultDisciplineLevel, disciplineViewFor, DISCIPLINE_IDS, type DisciplineId } from '@/project/discipline-views';
 import { addProjectView, useProjectStore } from '@/project/project-store';
-import type { ElevationDirection, PlanProjectView } from '@/project/types';
+import type { ElevationDirection, PlanProjectView, ProjectLevel } from '@/project/types';
 import { ToolIcon, type ToolIconName } from '../ifcsheet/ToolIcon';
 
 interface AddDrawingProps {
@@ -46,12 +49,25 @@ const pick = 'rounded-full border border-sky-300/40 px-4 py-2 text-sky-50 hover:
 export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingProps) {
   const { t } = useTranslation();
   const levels = useProjectStore((s) => s.levels);
-  const [step, setStep] = useState<'kinds' | 'storey' | 'side'>('kinds');
+  const [step, setStep] = useState<'kinds' | 'storey' | 'side' | 'discipline'>('kinds');
+  // The discipline plan a storey is being picked for.
+  const [discipline, setDiscipline] = useState<DisciplineId | null>(null);
 
+  const disciplinePlanOf = (id: DisciplineId, level: ProjectLevel): void => {
+    const { views } = useProjectStore.getState();
+    const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && v.discipline === id && resolvePlanLevel(v, [level]) !== undefined);
+    onView(existing?.id ?? addProjectView(disciplineViewFor(id, level, views)));
+  };
+  const pickDiscipline = (id: DisciplineId): void => {
+    const level = defaultDisciplineLevel(id, levels);
+    if (level) disciplinePlanOf(id, level);
+    else { setDiscipline(id); setStep('storey'); }
+  };
   const planOf = (index: number): void => {
     const { views } = useProjectStore.getState();
     const level = levels[index];
-    const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && resolvePlanLevel(v, [level]) !== undefined);
+    if (discipline) return disciplinePlanOf(discipline, level);
+    const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && !v.discipline && resolvePlanLevel(v, [level]) !== undefined);
     if (existing) {
       onView(existing.id);
       return;
@@ -68,15 +84,18 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
       <div className="w-44 shrink-0">
         <h2 className="m-0 text-3xl font-light leading-tight text-white">{t('wall.add.title')}</h2>
         <p className="mb-4 mt-3 text-[11px] uppercase leading-relaxed tracking-[0.25em] text-cyan-400">{t('wall.add.kinds')}</p>
-        <button type="button" onClick={step === 'kinds' ? onClose : () => setStep('kinds')} className="text-sm text-sky-300 underline-offset-4 hover:underline">{t('wall.add.close')}</button>
+        <button type="button" onClick={step === 'kinds' ? onClose : () => { setStep('kinds'); setDiscipline(null); }} className="text-sm text-sky-300 underline-offset-4 hover:underline">{t('wall.add.close')}</button>
       </div>
       {step === 'kinds' ? (
         <div className="flex gap-4">
           <Choice icon="level" title={t('wall.add.plan')} hint={t('wall.add.planHint')} onClick={() => setStep('storey')} disabled={levels.length === 0} />
           <Choice icon="section" title={t('wall.add.section')} hint={t('wall.add.sectionHint')} onClick={onSection} />
           <Choice icon="symbol" title={t('wall.add.elevation')} hint={t('wall.add.elevationHint')} onClick={() => setStep('side')} />
+          <Choice icon="cube" title={t('wall.add.discipline')} hint={t('wall.add.disciplineHint')} onClick={() => setStep('discipline')} disabled={levels.length === 0} />
           <Choice icon="plus" title={t('wall.add.detail')} hint={t('wall.add.detailHint')} onClick={onDetail} />
         </div>
+      ) : step === 'discipline' ? (
+        <Picks>{DISCIPLINE_IDS.map((id) => <button key={id} type="button" className={pick} onClick={() => pickDiscipline(id)}>{t(`wall.add.discipline.${id}`)}</button>)}</Picks>
       ) : step === 'storey' ? (
         <Picks>{levels.map((level, i) => <button key={level.name + level.elevation} type="button" className={pick} onClick={() => planOf(i)}>{level.name}</button>)}</Picks>
       ) : (
