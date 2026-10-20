@@ -9,6 +9,7 @@
  */
 
 import { formatValue } from './label-format';
+import { resolveTagField, tagKindOf, TAG_FIELD_ATTRIBUTES, type TagFieldConfig } from '@/tagfields/tag-fields';
 import type { AttributeField, FieldRef, ParsedTemplate, TemplateField } from './label-template';
 
 export interface PropertySetLike {
@@ -36,6 +37,8 @@ export interface LabelElement {
   storey(): string;
   /** Metres in one model length unit (0.001 for a model in millimetres). */
   lengthUnitScale(): number;
+  /** Which property feeds the tag fields `Mark` and `TagName` (`tagfields/tag-fields.ts`); absent: the defaults. */
+  tagFields?: TagFieldConfig;
 }
 
 /** What shows where a field has no value: nothing, a question mark, or the field's own path. */
@@ -71,8 +74,16 @@ export interface FieldValue {
 
 const plain = (value: unknown): FieldValue => ({ value, length: false });
 
-/** What a reference reads: the raw value (`undefined` when the element has none) and whether it is a length. */
+/** What a reference reads: the raw value (`undefined` when the element has none) and whether it is a length. `Mark` and `TagName` read the element's tag field, from the sources the office set for its kind. */
 export function readFieldValue(ref: FieldRef, el: LabelElement): FieldValue {
+  if (ref.kind === 'attribute' && ref.name in TAG_FIELD_ATTRIBUTES) {
+    return resolveTagField(el.tagFields, tagKindOf(el.className()), TAG_FIELD_ATTRIBUTES[ref.name as keyof typeof TAG_FIELD_ATTRIBUTES], (r) => readStored(r, el));
+  }
+  return readStored(ref, el);
+}
+
+/** What the element stores at a reference, as it is (`Mark` and `TagName` are read as the attributes they are, not as the tag fields). */
+export function readStored(ref: FieldRef, el: LabelElement): FieldValue {
   switch (ref.kind) {
     case 'attribute': return plain(el.attribute(ref.name) || undefined);
     case 'class': return plain(el.className() ? (ref.withPrefix ? el.className() : el.className().replace(/^Ifc/i, '')) : undefined);

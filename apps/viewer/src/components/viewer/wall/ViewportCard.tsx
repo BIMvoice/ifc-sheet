@@ -11,12 +11,15 @@
 import { useTranslation } from '@/i18n';
 import { placeLegend } from '@/legend/legend-actions';
 import { renameProjectItem, useProjectStore } from '@/project/project-store';
-import { addViewport, removeViewport } from '@/project/sheets';
+import { addViewport, removeViewport, updateViewport } from '@/project/sheets';
+import { drawingNumbers } from '@/drafting/cross-ref';
 import { drawingArea } from '@/project/drawing-set';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { useLegendLabels } from '../legend/LegendGraphic';
 import { LegendCard } from './LegendCard';
+import { hasTrueScale } from '@/project/axonometric';
 import { ScaleField } from './ScaleField';
+import { ThreeDControls } from './ThreeDControls';
 import { CutHeightControl, DepthControl } from './ViewControls';
 
 const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
@@ -43,7 +46,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
   const name = view?.name ?? schedule?.name ?? legend?.name ?? '';
   const placed = new Set((sheet.viewports ?? []).map((vp) => vp.viewId));
   const placeable = [
-    ...views.filter((v) => v.kind !== '3d' && !placed.has(v.id)).map((v) => ({ id: v.id, name: v.name })),
+    ...views.filter((v) => !placed.has(v.id)).map((v) => ({ id: v.id, name: v.name })),
     ...schedules.filter((s) => !placed.has(s.id)).map((s) => ({ id: s.id, name: s.name })),
     ...legends.filter((l) => !placed.has(l.id)).map((l) => ({ id: l.id, name: l.name })),
   ];
@@ -68,7 +71,21 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
             {t('wall.project.rename')}
             <input key={slot.viewId} className={field} defaultValue={name} onBlur={(e) => renameProjectItem(slot.viewId, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           </label>
-          {legend ? <LegendCard legend={legend} /> : <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} />}
+          {legend ? <LegendCard legend={legend} /> : (
+            <>
+              <label className="mt-4 block text-sm text-sky-200">
+                {t('wall.vp.drawingNumber')}
+                <input
+                  key={`${slot.id}:${slot.drawingNumber ?? ''}`} className={field} defaultValue={slot.drawingNumber ?? ''}
+                  placeholder={drawingNumbers({ viewports: (sheet.viewports ?? []).map((vp) => (vp.id === slot.id ? { ...vp, drawingNumber: undefined } : vp)) }, new Set(views.map((v) => v.id))).get(slot.id) ?? ''}
+                  onBlur={(e) => updateViewport(sheet.id, slot.id, { drawingNumber: e.target.value.trim() || undefined })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                />
+              </label>
+              {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} /> : null}
+            </>
+          )}
+          {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
           <div className="mt-4 flex flex-wrap gap-2">
