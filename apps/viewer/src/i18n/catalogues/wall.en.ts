@@ -23,6 +23,7 @@ export const wallEn = {
   'wall.group.sections': 'Sections',
   'wall.group.schedules': 'Schedules',
   'wall.group.other': 'Other sheets',
+  'wall.series.details': 'Details',
   'wall.hint': 'Hover a sheet to remove it. Double-click to step into it. Everything stays in view: there are no tabs and no tree.',
   'wall.remove': 'Remove {name}',
   'wall.planScale': 'Scale of the plans',

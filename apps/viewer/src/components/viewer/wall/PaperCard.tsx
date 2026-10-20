@@ -30,7 +30,7 @@ const CUSTOM = 'custom';
 const SIDES = ['top', 'right', 'bottom', 'left'] as const;
 const SIDE_KEYS: Record<(typeof SIDES)[number], TranslationKey> = { top: 'wall.paper.top', right: 'wall.paper.right', bottom: 'wall.paper.bottom', left: 'wall.paper.left' };
 const SERIES_KEYS: Record<TemplateSeries, TranslationKey> = {
-  plans: 'wall.group.plans', elevations: 'wall.group.elevations', sections: 'wall.group.sections', schedules: 'wall.group.schedules', details: 'wall.group.other',
+  plans: 'wall.group.plans', elevations: 'wall.group.elevations', sections: 'wall.group.sections', schedules: 'wall.group.schedules', details: 'wall.series.details',
 };
 const SIZES = [...ISO_PAPERS, ...ELONGATED_PAPERS].map(paperLabel);
 

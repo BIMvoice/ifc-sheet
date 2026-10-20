@@ -247,7 +247,7 @@ describe('sheet templates', () => {
     const detailId = addProjectView({ kind: 'plan', name: 'Stair detail', cutHeight: 1.2, level: plan.kind === 'plan' ? plan.level : LEVELS[0], detail: { of: plan.id, number: 1, min: { x: 0, y: 0 }, max: { x: 4, y: 3 } }, scale: 25 });
     const landed = hangView(detailId, DEMO);
     const sheet = state().sheets.find((s) => s.id === landed)!;
-    assert.deepEqual([sheet.number, sheet.paper, sheet.orientation, sheet.templateId], ['A-901', 'A3', 'landscape', 'builtin:a3-details']);
+    assert.deepEqual([sheet.number, sheet.paper, sheet.orientation, sheet.templateId], ['A-501', 'A3', 'landscape', 'builtin:a3-details']);
     assert.deepEqual(sheet.frame, details.frame);
     assert.deepEqual(sheet.frame?.margins, { top: 10, right: 10, bottom: 10, left: 20 });
     assert.equal(sheet.frame?.titleBlock, 'bottom-right');

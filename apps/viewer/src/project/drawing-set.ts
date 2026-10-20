@@ -337,9 +337,12 @@ export function buildDrawingSet({ views, extent, now = Date.now(), templates = {
   });
 }
 
-/** The series a sheet is in: its group, or `details` for the A-9xx sheets details hang on. */
+/** First number of the details series (A-501…): details hang there, as drafting views do. */
+const DETAILS_START = 501;
+
+/** The series a sheet is in: its group, or `details` for the A-5xx sheets details hang on. */
 export function sheetSeries(sheet: Pick<ProjectSheet, 'number'>): TemplateSeries | null {
-  return sheetGroup(sheet) ?? (/^A-9\d\d$/.test(sheet.number) ? 'details' : null);
+  return sheetGroup(sheet) ?? (/^A-5\d\d$/.test(sheet.number) ? 'details' : null);
 }
 
 /** Which group a sheet of the set belongs to, by its number series (A-1xx plans, A-2xx elevations, A-3xx sections, A-6xx schedules). */
@@ -402,7 +405,7 @@ export function withViewHung(
 }
 
 /**
- * A detail hangs on a sheet of its own in the "other" series (A-901…), on the
+ * A detail hangs on a sheet of its own in the details series (A-501…), on the
  * template's paper or else the smallest paper it fits, at the scale it was
  * made for when that fits, else the most detailed set scale that does.
  */
@@ -410,7 +413,7 @@ function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, exte
   const sizes = [viewExtent(view, extent)];
   const start = startOf(template, choosePaper([sizes]).paper);
   const taken = new Set(sheets.map((s) => s.number));
-  let n = 901;
+  let n = DETAILS_START;
   while (taken.has(`A-${n}`)) n++;
   const sheet: ProjectSheet = {
     id: freshProjectId('sheet'), number: `A-${n}`, name: view.name, createdAt: now, ...start,
