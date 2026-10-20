@@ -112,6 +112,24 @@ describe('PaperCard', () => {
     assert.equal(long.getAttribute('aria-invalid'), 'true');
   });
 
+  it('refuses a value past the top of its range, which the sheet itself could take: a 20 m side, a 60 mm margin', () => {
+    const ui = card();
+    choose(select(ui, 'Size'), 'custom');
+    const width = [...ui.querySelectorAll('label')].find((l) => l.firstChild?.textContent === 'Width (mm)')!.querySelector('input')!;
+    const before = plans().paper;
+    type(width, '20000');
+    blur(width);
+    assert.equal(plans().paper, before, 'a custom side over 10 000 mm is not applied');
+    assert.equal(width.getAttribute('aria-invalid'), 'true');
+
+    const frame = plans().frame;
+    const left = [...ui.querySelectorAll('label')].find((l) => l.firstChild?.textContent === 'Left')!.querySelector('input')!;
+    type(left, '60');
+    blur(left);
+    assert.deepEqual(plans().frame, frame, 'a margin over 50 mm is not applied');
+    assert.equal(left.getAttribute('aria-invalid'), 'true');
+  });
+
   it('refuses margins that leave no room for the title block, and says why (review of #129)', () => {
     useProjectStore.setState({ sheets: [{ ...plans(), paper: { kind: 'custom', widthMm: 200, heightMm: 200 } }, ...useProjectStore.getState().sheets.slice(1)] });
     const ui = card();

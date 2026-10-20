@@ -26,6 +26,10 @@ describe('paper sizes', () => {
     assert.equal(ELONGATED_PAPERS.length, Object.keys(ELONGATED_MM).length);
   });
 
+  it('makes A4×5 1050 mm long, as ISO 5457 lists it', () => {
+    assert.deepEqual(ELONGATED_MM['A4×5'], { short: 297, long: 1050 });
+  });
+
   it('lays an elongated sheet long side across in landscape, down in portrait', () => {
     const a3x3 = { kind: 'elongated', base: 'A3', factor: 3 } as const;
     assert.deepEqual(paperMm(a3x3), { w: 891, h: 420 });
