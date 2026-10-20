@@ -18,16 +18,19 @@ import { applyRemeshConfig, remeshOnApi, styleWireOnApi } from '../../../../pack
 
 const WASM = new URL('../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
 let ready = false;
-const FIXTURE = new URL('../../public/_fixtures/reflected-ceiling-room.ifc', import.meta.url);
+const FIXTURE = new URL('../project/__fixtures__/reflected-ceiling-room.ifc', import.meta.url);
 
 /** Level 1's elevation, the soffit and the light's height above it, and the light's footprint centre (IFC x, y), as the fixture states them. */
 export const RCP_FIXTURE = { storeyZ: 3.0, ceilingHeight: 2.7, lightHeight: 2.6, light: { x: 6.0, y: 1.2 }, ceilingEdgeX: 4.0 } as const;
 
 export interface RcpFixtureIds { wall: number[]; slab: number; ceiling: number; light: number }
 
-export function meshRcpFixture(): { meshes: MeshData[]; ids: RcpFixtureIds } {
-  const bytes = new Uint8Array(readFileSync(FIXTURE));
-  const text = new TextDecoder().decode(bytes);
+/** The fixture's STEP text. */
+export const rcpFixtureText = (): string => readFileSync(FIXTURE, 'utf8');
+
+/** Meshes the fixture, or the STEP text `text` (a variant of it). */
+export function meshRcpFixture(text: string = rcpFixtureText()): { meshes: MeshData[]; ids: RcpFixtureIds } {
+  const bytes = new TextEncoder().encode(text);
   const idsOf = (type: string) => [...text.matchAll(new RegExp(`^#(\\d+)=${type}\\(`, 'gm'))].map((m) => Number(m[1]));
   const ids: RcpFixtureIds = { wall: idsOf('IFCWALL'), slab: idsOf('IFCSLAB')[0], ceiling: idsOf('IFCCOVERING')[0], light: idsOf('IFCLIGHTFIXTURE')[0] };
   if (!ready) { initSync({ module: readFileSync(WASM) }); ready = true; }

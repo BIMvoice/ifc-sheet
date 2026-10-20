@@ -7,7 +7,8 @@
  * its height above the storey level and a point under it to tag it at.
  *
  * The height is read from the geometry: the lowest face of the covering (the
- * soffit you see from the room) minus the level's floor elevation. It does not
+ * soffit you see from the room) minus the level's floor, both in the mesh frame
+ * (`ceiling-floor.ts`). It does not
  * read a Qto or property, because IFC4 has none for it and the placement alone
  * does not give the soffit of an extruded covering. The tag point is the
  * area-centroid of that lowest face, in the plan's drawing coordinates (viewer
@@ -57,7 +58,9 @@ export function ceilingTags(meshes: readonly CeilingMesh[], floor: number, isCei
         tri.push([0, 1, 2].flatMap((k) => [0, 1, 2].map((c) => m.positions[m.indices[t + k] * 3 + c] + (o[c] ?? 0))));
       }
     }
-    const low = Math.min(...tri.flatMap((t) => [t[1], t[4], t[7]]));
+    // A loop, not Math.min(...): a dense covering has more vertices than a call takes arguments.
+    let low = Infinity;
+    for (const t of tri) low = Math.min(low, t[1], t[4], t[7]);
     let area = 0, cx = 0, cz = 0;
     for (const t of tri) {
       if (![t[1], t[4], t[7]].every((y) => Math.abs(y - low) <= SOFFIT_TOLERANCE)) continue;

@@ -109,3 +109,18 @@ describe('ceiling height tags', () => {
     assert.deepEqual(ceilingTags(meshes, RCP_FIXTURE.storeyZ, (id) => id === ids.light), []);
   });
 });
+
+describe('ceiling height tags on a dense covering', () => {
+  it('reads the soffit of a covering with 300 000 vertices (no argument-spread limit)', () => {
+    const triangles = 100_000;
+    const positions = new Float32Array(triangles * 9);
+    for (let t = 0; t < triangles; t++) {
+      const x = (t % 300) * 0.01, z = Math.floor(t / 300) * 0.01;
+      positions.set([x, 2.7, z, x + 0.01, 2.7, z, x, 2.7, z + 0.01], t * 9);
+    }
+    const mesh = { expressId: 7, ifcType: 'IfcCovering', positions, indices: Uint32Array.from({ length: triangles * 3 }, (_, i) => i) };
+    const tags = ceilingTags([mesh], 0, () => true);
+    assert.equal(tags.length, 1);
+    assert.equal(tags[0].text, '+2.70');
+  });
+});
