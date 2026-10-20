@@ -28,7 +28,7 @@ import type { DraftShape, Pt } from '@/drafting/types';
 import { buildStoreyWorkplane } from '@/lib/commands/modeling/workplane';
 import { gridAxesInRender, gridOverlays, setGridExtractorForTests } from './grid-overlay.js';
 import { planOverlays, type PlanOverlay } from './plan-overlays.js';
-import type { PlanProjectView, ProjectView, SectionProjectView, GridEnds } from './types.js';
+import type { ElevationProjectView, PlanProjectView, ProjectView, SectionProjectView, GridEnds } from './types.js';
 
 const WASM = new URL('../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
 const FIXTURE = new URL('./__fixtures__/structural-grid.ifc', import.meta.url);
@@ -395,5 +395,61 @@ describe('grid extraction cost (PR #125 review)', () => {
     useViewerStore.setState({ mutationVersion: 8 });
     gridOverlays(plan(), PLAN_PLANE);
     assert.equal(calls, 2 * once, 'an edit extracts again');
+  });
+});
+
+describe('which axes a view draws (PR #125 pre-merge review)', () => {
+  let fixture = '';
+  before(async () => { fixture = await readFile(FIXTURE, 'utf8'); });
+
+  const STOREY_1 = '2vKqrHenC6bslbBgEPEX5v';
+  const STOREY_2 = '3vKqrHenC6bslbBgEPEX5w';
+  /** The fixture with a second storey, Level 2 at 6 m, under the building; with `gridOnBuilding`, the grid is contained in the building, so it serves both storeys. */
+  const twoStoreys = (ifc: string, gridOnBuilding: boolean) => {
+    let out = ifc
+      .replace("#19= IFCBUILDINGSTOREY('2vKqrHenC6bslbBgEPEX5v',$,'Level 1',$,$,#18,$,$,.ELEMENT.,3000.);",
+        `$&\n#900= IFCCARTESIANPOINT((5000.,-2000.,6000.));\n#901= IFCAXIS2PLACEMENT3D(#900,#1,#16);\n#902= IFCLOCALPLACEMENT(#13,#901);\n#903= IFCBUILDINGSTOREY('${STOREY_2}',$,'Level 2',$,$,#902,$,$,.ELEMENT.,6000.);`)
+      .replace('#22= IFCRELAGGREGATES(\'1VWG_MqFouLEDgjhL07x_q\',$,$,$,#14,(#19));', "#22= IFCRELAGGREGATES('1VWG_MqFouLEDgjhL07x_q',$,$,$,#14,(#19,#903));");
+    if (gridOnBuilding) out = out.replace("#133= IFCRELCONTAINEDINSPATIALSTRUCTURE('01CBS0tLy25vJ_dROe3SXY',$,$,$,(#132),#19);", "#133= IFCRELCONTAINEDINSPATIALSTRUCTURE('01CBS0tLy25vJ_dROe3SXY',$,$,$,(#132),#14);");
+    assert.equal((out.match(/IFCBUILDINGSTOREY\(/g) ?? []).length, 2, 'two storeys');
+    assert.ok(out.includes('(#19,#903)'), 'both under the building');
+    if (gridOnBuilding) assert.ok(out.includes('(#132),#14)'), 'the grid in the building');
+    return out;
+  };
+  const planOf = (storeyGlobalIds: string[]): PlanProjectView => ({ ...plan(), level: { name: 'L', elevation: 0, storeyGlobalIds } });
+  const X17: SectionPlaneConfig = { axis: 'x', position: 17, flipped: false };
+
+  it('draws a grid that serves several storeys once on a section, not once per storey', wasmOptions, async () => {
+    const { store } = await seed(new TextEncoder().encode(twoStoreys(fixture, true)));
+    assert.equal(store.spatialHierarchy!.storeyElevations.size, 2, 'the walk visits two storeys');
+    const lines = linesOf(gridOverlays(section(), X17, BOUNDS));
+    assert.equal(lines.length, 2, 'axes 1 and 2, each once');
+    assert.deepEqual(textsOf(gridOverlays(section(), X17, BOUNDS)).map((t) => t.text).sort(), ['1', '1', '2', '2']);
+  });
+
+  it('draws on a plan only the grids of its own storeys', wasmOptions, async () => {
+    await seed(new TextEncoder().encode(twoStoreys(fixture, false)));
+    assert.equal(linesOf(gridOverlays(planOf([STOREY_1]), PLAN_PLANE)).length, 4, 'Level 1 holds the grid');
+    assert.deepEqual(gridOverlays(planOf([STOREY_2]), PLAN_PLANE), [], 'Level 2 holds none, and does not borrow Level 1\'s');
+  });
+
+  it('leaves out an axis whose crossing lies beside the drawing on a section', wasmOptions, async () => {
+    await seed(new TextEncoder().encode(fixture));
+    // At x = 17 m the cut crosses axes 1 and 2; drawing x = -IFC y. A drawing that spans only axis 1's crossing.
+    const full = gridOverlays(section(), X17, BOUNDS);
+    const tags = textsOf(full).filter((_, i) => i % 2 === 0).map((t) => t.text);
+    const [y1, y2] = ['1', '2'].map((tag) => linesOf(full)[tags.indexOf(tag)].a.x);
+    assert.ok(Math.abs(y1 - y2) > 1, `the crossings are apart: ${y1}, ${y2}`);
+    const narrow = { bounds: { min: { x: y1 - 0.5, y: 2.5 }, max: { x: y1 + 0.5, y: 6.5 } } } as unknown as Drawing2D;
+    const drawn = gridOverlays(section(), X17, narrow);
+    assert.equal(linesOf(drawn).length, 1);
+    assert.deepEqual(textsOf(drawn).map((t) => t.text), ['1', '1']);
+  });
+
+  it('is off on an elevation unless the view turns it on', wasmOptions, async () => {
+    await seed(new TextEncoder().encode(fixture));
+    const elevation = (grid?: { visible?: boolean }): ElevationProjectView => ({ ...base, kind: 'elevation', direction: 'east', ...(grid ? { graphics: { grid } } : {}) });
+    assert.deepEqual(gridOverlays(elevation(), X17, BOUNDS), [], 'off by default');
+    assert.equal(linesOf(gridOverlays(elevation({ visible: true }), X17, BOUNDS)).length, 2, 'drawn once turned on');
   });
 });
