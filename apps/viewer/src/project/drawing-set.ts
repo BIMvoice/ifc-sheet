@@ -240,16 +240,20 @@ function paperChanged(a: Pick<ProjectSheet, 'paper' | 'orientation'>, b: Pick<Pr
  * (`relaidOnPaper`) only when the paper or its orientation changed, or a
  * viewport's box no longer fits the drawing area; any other change (a
  * margin, the title block's position) keeps each viewport's position, box
- * and scale. `relaid` says which happened: only then may a scale have changed.
+ * and scale. Without the model's `extent` nothing can be laid out again.
+ * Either way every viewport, a schedule or legend too, is then moved just
+ * enough for its whole box (`boxOf`, what the sheet draws for it) to sit
+ * inside the drawing area. `relaid` says whether the sheet was laid out
+ * again: only then may a scale have changed.
  */
 export function refittedOnPaper(
-  before: ProjectSheet, after: ProjectSheet, views: readonly ProjectView[], extent: ModelExtent,
+  before: ProjectSheet, after: ProjectSheet, views: readonly ProjectView[], extent: ModelExtent | null,
   boxOf: BoxOf = (vp) => estimatedBox(vp, views, extent),
 ): { sheet: ProjectSheet; relaid: boolean } {
   const area = drawingArea(after);
   const vps = after.viewports ?? [];
   const tooBig = vps.some((vp) => { const box = boxOf(vp); return box.width > area.w || box.height > area.h; });
-  const relaid = paperChanged(before, after) || tooBig;
+  const relaid = extent !== null && (paperChanged(before, after) || tooBig);
   const laid = relaid ? relaidOnPaper(after, views, extent) : after;
   const moved = new Set((laid.viewports ?? []).filter((vp, i) => vp !== vps[i]).map((vp) => vp.id));
   // A viewport laid out again is fitted to its drawing at its new scale; any other keeps the box it is drawn with.

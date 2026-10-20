@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { drawingArea, fitsScale, scaleOn, viewExtent, type ModelExtent } from './drawing-set.js';
+import { drawingArea, estimatedBox, fitsScale, scaleOn, viewExtent, type ModelExtent } from './drawing-set.js';
 import { hangView, seriesTemplates, setSheetFormat, startDrawingSet } from './drawing-set-actions.js';
 import { addProjectSheet, resetProject, useProjectStore } from './project-store.js';
 import { BUILT_IN_TEMPLATES, findTemplate } from './sheet-templates.js';
@@ -159,6 +159,43 @@ describe('a frame change keeps what was set by hand (review of #129)', () => {
     const after = sheetNo('A-101');
     assert.deepEqual(after.viewports!.map((v) => [v.width, v.height]), [[0, 0], [0, 0]], 'laid out again, fitted to the drawings');
     assertInsideArea(after);
+  });
+});
+
+describe('a smaller paper keeps every viewport\'s whole box on the sheet (review of #129)', () => {
+  const inside = (box: { width: number; height: number }, vp: { x: number; y: number }, area: { x: number; y: number; w: number; h: number }, what: string): void => {
+    assert.ok(vp.x - box.width / 2 >= area.x - 1e-6 && vp.x + box.width / 2 <= area.x + area.w + 1e-6, `${what}: across`);
+    assert.ok(vp.y - box.height / 2 >= area.y - 1e-6 && vp.y + box.height / 2 <= area.y + area.h + 1e-6, `${what}: down`);
+  };
+
+  it('A1 to A3 with no model loaded brings every viewport box inside the paper\'s drawing area', () => {
+    const sheet = sheetNo('A-101');
+    const [a, b] = sheet.viewports!;
+    useProjectStore.setState({ sheets: state().sheets.map((s) => (s.id === sheet.id ? { ...s, paper: 'A1' } : s)) });
+    updateViewport(sheet.id, a.id, { x: 700, y: 450, width: 150, height: 100, scale: 20 });
+    updateViewport(sheet.id, b.id, { x: 780, y: 60 });
+    setSheetFormat(sheet.id, { paper: 'A3', templateId: null }, null);
+    const after = sheetNo('A-101');
+    assert.equal(after.paper, 'A3');
+    const area = drawingArea(after);
+    for (const vp of after.viewports!) inside(estimatedBox(vp, state().views, null), vp, area, vp.id);
+    assert.deepEqual([after.viewports![0].scale, after.viewports![0].width, after.viewports![0].height], [20, 150, 100], 'nothing to lay out again without the model: the box and scale stay');
+  });
+
+  it('a schedule\'s whole box, not only its centre, stays inside when the paper shrinks', () => {
+    const sheet = sheetNo('A-101');
+    const schedule = { id: 'vp-schedule', viewId: 'schedule-doors', x: 520, y: 300, scale: 50, width: 0, height: 0, center: null };
+    useProjectStore.setState({ sheets: state().sheets.map((s) => (s.id === sheet.id ? { ...s, viewports: [...s.viewports!, schedule] } : s)) });
+    // What the sheet draws for it: the schedule's own table size.
+    const boxOf = (vp: { id: string; viewId: string; width: number; height: number; scale: number; x: number; y: number }) => (vp.id === schedule.id ? { width: 200, height: 120 } : estimatedBox({ ...vp, center: null }, state().views, DEMO));
+    for (const extent of [DEMO, null]) {
+      setSheetFormat(sheet.id, { paper: 'A2', templateId: null }, DEMO);
+      useProjectStore.setState({ sheets: state().sheets.map((s) => (s.id === sheet.id ? { ...s, viewports: s.viewports!.map((v) => (v.id === schedule.id ? schedule : v)) } : s)) });
+      setSheetFormat(sheet.id, { paper: 'A3', templateId: null }, extent, boxOf);
+      const after = sheetNo('A-101');
+      const vp = after.viewports!.find((v) => v.id === schedule.id)!;
+      inside({ width: 200, height: 120 }, vp, drawingArea(after), `schedule, ${extent ? 'with' : 'without'} the model`);
+    }
   });
 });
 

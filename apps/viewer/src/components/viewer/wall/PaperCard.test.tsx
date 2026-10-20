@@ -55,6 +55,18 @@ describe('PaperCard', () => {
     for (const vp of sheet.viewports ?? []) assert.ok(vp.x >= area.x && vp.x <= area.x + area.w && vp.y >= area.y && vp.y <= area.y + area.h);
   });
 
+  it('keeps a viewport\'s whole box, as the sheet draws it, inside the smaller paper (review of #129)', () => {
+    const sheet = plans();
+    const vp = sheet.viewports![0];
+    useProjectStore.setState({ sheets: [{ ...sheet, viewports: [{ ...vp, x: 300, y: 200 }] }, ...useProjectStore.getState().sheets.slice(1)] });
+    const box = { width: 200, height: 100 };
+    choose(select(render(<PaperCard sheet={plans()} extent={null} boxOf={() => box} onClose={() => {}} />), 'Size'), 'A4');
+    const after = plans().viewports![0];
+    const area = drawingArea(plans());
+    assert.ok(after.x - box.width / 2 >= area.x && after.x + box.width / 2 <= area.x + area.w, 'across');
+    assert.ok(after.y - box.height / 2 >= area.y && after.y + box.height / 2 <= area.y + area.h, 'down');
+  });
+
   it('offers elongated sizes and takes a custom one typed in', () => {
     const ui = card();
     choose(select(ui, 'Size'), 'A3×3');

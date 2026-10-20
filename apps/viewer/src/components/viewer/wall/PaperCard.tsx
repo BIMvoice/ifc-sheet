@@ -14,7 +14,7 @@
 
 import { useState } from 'react';
 import { useTranslation, type TranslationKey } from '@/i18n';
-import type { ModelExtent } from '@/project/drawing-set';
+import type { BoxOf, ModelExtent } from '@/project/drawing-set';
 import { sheetSeries } from '@/project/drawing-set';
 import { setSheetFormat } from '@/project/drawing-set-actions';
 import { CUSTOM_MM, ELONGATED_PAPERS, ISO_PAPERS, isCustom, paperFromLabel, paperLabel, paperMm } from '@/project/paper';
@@ -60,7 +60,8 @@ function Mm({ label, value, min, max, onCommit }: { label: string; value: number
   );
 }
 
-export function PaperCard({ sheet, extent, onClose }: { sheet: ProjectSheet; extent: ModelExtent | null; onClose: () => void }) {
+/** `boxOf` is each viewport's box as the sheet draws it, so a schedule or legend is kept whole inside the drawing area. */
+export function PaperCard({ sheet, extent, boxOf, onClose }: { sheet: ProjectSheet; extent: ModelExtent | null; boxOf?: BoxOf; onClose: () => void }) {
   const { t } = useTranslation();
   const own = useProjectStore((s) => s.sheetTemplates);
   const chosen = useProjectStore((s) => s.seriesTemplates);
@@ -72,7 +73,7 @@ export function PaperCard({ sheet, extent, onClose }: { sheet: ProjectSheet; ext
   const custom = isCustom(paper);
   const [asCustom, setAsCustom] = useState(custom);
   const { w, h } = paperMm(paper);
-  const set = (patch: Parameters<typeof setSheetFormat>[1]): void => setSheetFormat(sheet.id, patch, extent);
+  const set = (patch: Parameters<typeof setSheetFormat>[1]): void => setSheetFormat(sheet.id, patch, extent, boxOf);
   // Anything set by hand no longer follows the template the sheet came from.
   const setFrame = (next: SheetFrame): void => set({ frame: next, templateId: null });
 

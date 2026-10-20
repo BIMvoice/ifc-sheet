@@ -15,7 +15,7 @@ import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, placeViewports, refittedOnPaper, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, placeViewports, refittedOnPaper, SET_PAPER, sheetGroup, viewExtent, withViewHung, type BoxOf, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
 import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
@@ -289,9 +289,12 @@ export type SheetFormatPatch = Partial<Pick<ProjectSheet, 'paper' | 'orientation
  * set's own path; a margin or title block change keeps each viewport's
  * position, box and scale and only brings it inside the drawing area. A
  * view's scale is written back only when the sheet was laid out again. One
- * undo step. Without the model's extent the drawings stay where they were.
+ * undo step. Without the model's extent nothing is laid out again, but every
+ * viewport is still brought inside. `boxOf` is each viewport's box as the
+ * sheet draws it (a schedule's or legend's own size); without it the box is
+ * estimated (`estimatedBox`).
  */
-export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent: ModelExtent | null): void {
+export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent: ModelExtent | null, boxOf?: BoxOf): void {
   const { sheets, views } = state();
   const sheet = sheets.find((s) => s.id === sheetId);
   if (!sheet) return;
@@ -299,7 +302,7 @@ export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent:
   const { templateId: kept, ...rest } = sheet;
   const templateId = patched === undefined ? kept : patched ?? undefined;
   const changed: ProjectSheet = { ...rest, ...fields, ...(templateId ? { templateId } : {}) };
-  const { sheet: fitted, relaid } = extent ? refittedOnPaper(sheet, changed, views, extent) : { sheet: changed, relaid: false };
+  const { sheet: fitted, relaid } = refittedOnPaper(sheet, changed, views, extent, boxOf);
   runAsOneUndoStep(() => {
     useProjectStore.setState({ sheets: sheets.map((s) => (s.id === sheetId ? fitted : s)), dirty: true });
     if (!relaid) return;
