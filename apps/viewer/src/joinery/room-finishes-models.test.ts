@@ -9,7 +9,8 @@
  *    `Qto_CoveringBaseQuantities`, and the Qto still wins when both exist;
  *  - a NOTDEFINED IfcCovering takes its IfcCoveringType's PredefinedType;
  *  - a covering IfcRelCoversSpaces gives to two rooms has its area split
- *    equally between them.
+ *    equally between them;
+ *  - a model in millimetres gives its covering areas in m², not mm².
  */
 
 import { afterEach, describe, it } from 'node:test';
@@ -95,5 +96,50 @@ describe('room finishes of an IFC2x3-style model (PR #109 review)', () => {
     assert.deepEqual(rooms.map((r) => r.number), ['201', '202']);
     for (const r of rooms) assert.deepEqual(r.finishes.floor.map((f) => [f.name, f.area, f.sharedBy]), [['Ceramic tile', 15, 2]], r.number);
     assert.equal(rooms[0].finishes.wall[0].sharedBy, 1);
+  });
+});
+
+/** One room with one floor covering of 24 500 000 mm² (24.5 m²), in a model whose length unit is the millimetre and which declares no area unit. */
+const STEP_MM = `ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('ViewDefinition [CoordinationView]'),'2;1');
+FILE_NAME('finishes-mm.ifc','2026-10-20T00:00:00',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCAXIS2PLACEMENT3D(#1,$,$);
+#3=IFCLOCALPLACEMENT($,#2);
+#4=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-5,#2,$);
+#5=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#7=IFCUNITASSIGNMENT((#5));
+#8=IFCPROJECT('3FINISHMM0000000000001',$,'Finishes mm',$,$,$,$,(#4),#7);
+#9=IFCSITE('3FINISHMM0000000000002',$,'Site',$,$,#3,$,$,.ELEMENT.,$,$,$,$,$);
+#10=IFCBUILDING('3FINISHMM0000000000003',$,'Building',$,$,#3,$,$,.ELEMENT.,$,$,$);
+#11=IFCBUILDINGSTOREY('3FINISHMM0000000000004',$,'Level 1',$,$,#3,$,$,.ELEMENT.,0.);
+#12=IFCRELAGGREGATES('3FINISHMM0000000000005',$,$,$,#8,(#9));
+#13=IFCRELAGGREGATES('3FINISHMM0000000000006',$,$,$,#9,(#10));
+#14=IFCRELAGGREGATES('3FINISHMM0000000000007',$,$,$,#10,(#11));
+#15=IFCSPACE('3FINISHMM0000000000008',$,'101',$,$,#3,$,'Living room',.ELEMENT.,.SPACE.,$);
+#17=IFCRELAGGREGATES('3FINISHMM0000000000009',$,$,$,#11,(#15));
+#21=IFCCOVERING('3FINISHMM0000000000010',$,'Oak parquet',$,$,#3,$,$,.FLOORING.);
+#23=IFCQUANTITYAREA('NetArea',$,$,24500000.,$);
+#24=IFCELEMENTQUANTITY('3FINISHMM0000000000011',$,'Qto_CoveringBaseQuantities',$,$,(#23));
+#25=IFCRELDEFINESBYPROPERTIES('3FINISHMM0000000000012',$,$,$,(#21),#24);
+#60=IFCRELCOVERSSPACES('3FINISHMM0000000000013',$,$,$,#15,(#21));
+ENDSEC;
+END-ISO-10303-21;
+`;
+
+describe('room finishes of a model in millimetres (PR #109)', () => {
+  it('scales a covering area given in mm² to m²', async () => {
+    const store = await parseStep(STEP_MM);
+    useViewerStore.setState({ models: new Map([['mm', { id: 'mm', name: 'mm', ifcDataStore: store, visible: true } as never]]) });
+    const [room] = roomFinishes(collectRoomInputs());
+    assert.equal(room.number, '101');
+    assert.equal(room.finishes.floor.length, 1);
+    assert.equal(room.finishes.floor[0].name, 'Oak parquet');
+    const area = room.finishes.floor[0].area;
+    assert.ok(area !== null && Math.abs(area - 24.5) < 1e-9, `area ${area}`);
   });
 });
