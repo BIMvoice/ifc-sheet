@@ -26,7 +26,6 @@ import { toast } from '@/components/ui/toast';
 import { resolve } from '@/i18n/registry';
 import type { ProjectSheet } from '@/project/types';
 import type { CadLayerRule } from '@/project/cad-layers';
-import { useProjectStore } from '@/project/project-store';
 import { layerAndPens } from './dxf-cad-layers';
 
 type P = { x: number; y: number };
