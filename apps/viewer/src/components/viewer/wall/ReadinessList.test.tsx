@@ -6,7 +6,8 @@ import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { cleanup, render } from '@/test/render.js';
+import { act } from 'react';
+import { cleanup, click, render } from '@/test/render.js';
 import { resetProject } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { parseStep } from '@/test/properties-panel-harness.js';
@@ -33,6 +34,13 @@ async function openSample(): Promise<void> {
   useViewerStore.setState({ models: new Map([['m', { ifcDataStore, name: 'building-architecture.ifc' }]]) } as never);
 }
 
+/** Open the drawer's "What the model lacks" section the way a user does, by its summary. */
+function openReadiness(root: HTMLElement): void {
+  const summary = [...root.querySelectorAll('summary')].find((el) => el.textContent === 'What the model lacks');
+  assert.ok(summary, 'the drawer has a What the model lacks section');
+  click(summary);
+}
+
 describe('what the model lacks', () => {
   it('is said on the intro, without the effects', async () => {
     await openSample();
@@ -44,7 +52,9 @@ describe('what the model lacks', () => {
 
   it('is said in the project drawer with the feature each gap weakens', async () => {
     await openSample();
-    const text = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />).textContent ?? '';
+    const root = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    openReadiness(root);
+    const text = root.textContent ?? '';
     assert.match(text, /What the model lacks/);
     assert.match(text, /5 of 11 elements are on no storey\./);
     assert.match(text, /The joinery schedule shows a dash/);
@@ -53,7 +63,25 @@ describe('what the model lacks', () => {
   });
 
   it('is silent while no model is open', () => {
+    const root = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    openReadiness(root);
+    assert.doesNotMatch(root.textContent ?? '', /elements have no|has what the drawing set reads/);
+  });
+
+  // Review of #105: the list was read once at mount, so a model opened after the drawer never showed.
+  it('is read again when a model opens while the drawer is showing it', async () => {
+    const root = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    openReadiness(root);
+    assert.doesNotMatch(root.textContent ?? '', /elements are on no storey/);
+    await act(async () => { await openSample(); });
+    assert.match(root.textContent ?? '', /5 of 11 elements are on no storey\./);
+  });
+
+  // Review of #105: the facts walk every entity, so a collapsed section does not read them.
+  it('is not read while its drawer section is collapsed', async () => {
+    await openSample();
     const text = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />).textContent ?? '';
-    assert.doesNotMatch(text, /elements have no|has what the drawing set reads/);
+    assert.match(text, /What the model lacks/);
+    assert.doesNotMatch(text, /elements are on no storey/);
   });
 });
