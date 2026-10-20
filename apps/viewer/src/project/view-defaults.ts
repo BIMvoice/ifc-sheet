@@ -108,7 +108,8 @@ export function defaultViews(levels: readonly ProjectLevel[], now = Date.now()):
  * same array when nothing changed, so callers can skip a store write.
  */
 export function syncDefaultViews(views: readonly ProjectView[], levels: readonly ProjectLevel[], now = Date.now()): readonly ProjectView[] {
-  const plans = views.filter((v): v is PlanProjectView => v.kind === 'plan');
+  // A discipline plan is a plan of its level for its discipline only: the level still gets its own.
+  const plans = views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.discipline);
   const missing = levels.filter((level) => !plans.some((p) => resolvePlanLevel(p, [level])));
   if (missing.length === 0) return views;
   const next = [...views];

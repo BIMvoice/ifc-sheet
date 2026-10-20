@@ -32,7 +32,7 @@ import { RibbonToolbar } from '@/components/viewer/ribbon/RibbonToolbar.js';
 import { LayersPanel } from '@/components/viewer/layers/LayersPanel.js';
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ClassVisibilityMenuContent } from '@/components/viewer/toolbar/ClassVisibilityMenu.js';
-import { closeContrastBrowser, warmContrastBrowser } from './render-harness.js';
+import { CHROME_SKIP, closeContrastBrowser, warmContrastBrowser } from './render-harness.js';
 import {
   assertRenderedTextClears,
   assertForcedClassReddens,
@@ -200,7 +200,7 @@ function mountClassVisibilityMenu(): string {
   return snapshotRenderedDom();
 }
 
-describe('tour and misc panel secondary text clears AA as rendered (#6205, #4792)', () => {
+describe('tour and misc panel secondary text clears AA as rendered (#6205, #4792)', { skip: CHROME_SKIP }, () => {
   for (const theme of THEMES) {
     it(`TourStepCard docked-back notice, stuck hint, step count clear AA in ${theme}`, async () => {
       await assertRenderedTextClears(theme, mountTourCard(), [
@@ -244,7 +244,7 @@ describe('tour and misc panel secondary text clears AA as rendered (#6205, #4792
   }
 });
 
-describe('the measurement catches the pre-#4792 classes on the real sites', () => {
+describe('the measurement catches the pre-#4792 classes on the real sites', { skip: CHROME_SKIP }, () => {
   /** `host` is the surface the site's mount wraps it in (see the mount helpers). */
   const controls: ReadonlyArray<{ site: string; oldClass: string; mount: () => string; text: string; host?: string }> = [
     {

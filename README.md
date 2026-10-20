@@ -74,6 +74,10 @@ IfcSheet runs in your browser. IFC parsing and geometry run locally in WebAssemb
 
 Two things are off by default and only exist if whoever builds the app turns them on: a server for IFC parsing, and anonymous usage analytics. Analytics events are scrubbed of file and model names and can be opted out of. Build it yourself and you control both.
 
+## Where it is going
+
+The direction is in [VISION.md](VISION.md): you correct a drawing set, you do not build one. Each direction is an [issue you can comment on](https://github.com/BIMvoice/ifcsheet/issues?q=is%3Aissue+label%3Adirection).
+
 ## Status
 
 Early and in active development. Things will change, and some will break. Being worked on now:
@@ -117,6 +121,12 @@ Issues and pull requests are welcome. Open an issue first for anything large, so
 ## Who is behind it
 
 IfcSheet is built by [BIMvoice](https://github.com/BIMvoice): Ionut Ciuntuc and Petru Conduraru. Petru is an openBIM consultant and trainer.
+
+## Need a tool for your own IFC workflow?
+
+IfcSheet started as one architect's problem. If something in your work with IFC models costs you hours every week and no tool does it well, tell us about it. We build tools around IFC for real workflows, and yours may be the next one.
+
+Write to [petru@bimvoice.com](mailto:petru@bimvoice.com).
 
 ---
 

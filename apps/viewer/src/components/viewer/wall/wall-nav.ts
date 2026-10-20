@@ -9,6 +9,7 @@
  */
 
 import { create } from 'zustand';
+import { emitWallStepped } from '@/lib/tours/events';
 
 interface WallNav {
   /** The sheet stepped into, or null on the wall. */
@@ -26,6 +27,7 @@ export const useWallNav = create<WallNav>()(() => ({ stepped: null, focus: null,
 
 export function stepInto(sheetId: string | null, focus: string | null = null): void {
   useWallNav.setState((s) => ({ stepped: sheetId, focus, visit: s.visit + 1 }));
+  if (sheetId) emitWallStepped(sheetId);
 }
 
 export function setDrawer(open: boolean): void {
