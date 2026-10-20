@@ -35,6 +35,17 @@ describe('resolveParamText (#143)', () => {
     assert.equal(resolveParamText('[{Phase}]', lookup({ Phase: '' })), '[]');
   });
 
+  it('a known name next to an unknown one: only the unknown one is marked, nothing else leaks into the text', () => {
+    const out = resolveParamText('Issued for {Phase}, sheet {SheetNumber}, {Nope}', lookup({ Phase: 'Permit set', SheetNumber: 'A-101' }));
+    assert.equal(out, 'Issued for Permit set, sheet A-101, {Nope?}');
+    assert.ok(!/undefined|null/.test(out));
+  });
+
+  it('an unknown name and an empty value never print undefined or null', () => {
+    assert.equal(resolveParamText('{Nope}', lookup({})), '{Nope?}');
+    assert.equal(resolveParamText('{A}|{Nope}|{B}', lookup({ A: '', B: 'b' })), '|{Nope?}|b');
+  });
+
   it('leaves braces that do not name a parameter alone', () => {
     assert.equal(resolveParamText('{ spaced } {1st} {}', lookup({})), '{ spaced } {1st} {}');
   });
