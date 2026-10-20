@@ -163,7 +163,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {focusView ? <><span className="text-sky-200/50">/</span><span className="text-white">{focusView.name}</span></> : null}
         <kbd className="rounded border border-sky-300/40 px-1.5 text-xs text-sky-200/80">Esc</kbd>
         <span className="flex-1" />
-        {group === 'plans' && !focusView ? <ScaleChips group="plans" extent={extent} /> : null}
+        {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
         {!focusView ? (
           <>
             <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
@@ -189,7 +189,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
               : focusView ? null
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
-                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} />}
+                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
           </div>
           {adding ? (
             <div className="absolute inset-x-3 bottom-3 flex justify-center">

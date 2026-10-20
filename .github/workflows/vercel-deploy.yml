@@ -20,7 +20,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 concurrency:
@@ -32,8 +32,15 @@ permissions:
 
 jobs:
   deploy:
-    # Forks get no secrets; only branches of this repository deploy.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Main always deploys. A pull request deploys a preview only when it carries
+    # the `preview` label: every push to every pull request used to deploy,
+    # which ran into the free plan's daily deployment limit and blocked main.
+    # Forks and Dependabot get no repository secrets, so they never deploy.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.user.login != 'dependabot[bot]' &&
+       contains(github.event.pull_request.labels.*.name, 'preview'))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -79,8 +86,10 @@ jobs:
       - name: Build
         run: vercel build ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN"
 
+      # One archive instead of thousands of files: the free plan allows 5000
+      # uploaded files a day (the free-plan file-count limit).
       - name: Publish
         run: |
-          url="$(vercel deploy --prebuilt ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN")"
+          url="$(vercel deploy --prebuilt --archive=tgz ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN")"
           echo "Published (${{ steps.target.outputs.env }}): $url" >> "$GITHUB_STEP_SUMMARY"
           echo "$url"
