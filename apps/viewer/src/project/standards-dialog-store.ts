@@ -6,7 +6,7 @@
 
 import { create } from 'zustand';
 
-export type StandardsTab = 'layers' | 'text' | 'dim' | 'types' | 'symbols' | 'library';
+export type StandardsTab = 'layers' | 'text' | 'dim' | 'types' | 'symbols' | 'library' | 'cad';
 
 export const useStandardsDialog = create<{ tab: StandardsTab | null; styleId: string | null }>()(() => ({ tab: null, styleId: null }));
 
