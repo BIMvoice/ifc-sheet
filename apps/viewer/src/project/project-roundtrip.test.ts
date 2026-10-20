@@ -12,18 +12,25 @@
  * the document is compared whole, so a field the writer or the reader forgets
  * fails here; and the project store is checked key by key, so a new store
  * field must be either persisted or listed in `SESSION_ONLY` with its reason.
+ *
+ * A field the fixture leaves at its default proves nothing (a writer that drops
+ * it reads back the same default), so every document key (those a reset store
+ * writes, those the fixture sets, and those of `EMPTY_PROJECT`) must hold a
+ * value that is not its default. Every schedule kind and view kind is in
+ * the fixture, so a kind the reader does not know fails the comparison.
  */
 
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
+import { isDeepStrictEqual } from 'node:util';
+import { defaultDoorSpec, defaultWindowSpec, profileFromPreset } from '@ifc-lite/create';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
 import { snapshotFromElements } from '@/whatchanged/snapshot.js';
 import { defaultTypeSpec } from '@/element-types/spec';
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import type { AnnotationShape, DraftEntity, DraftLayer, DraftShape, EntityShape } from '@/drafting/types';
-import { loadProjectDocument, projectDocument, resetProject, useProjectStore, type ProjectState } from './project-store.js';
+import { EMPTY_PROJECT, loadProjectDocument, projectDocument, resetProject, useProjectStore, type ProjectState } from './project-store.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package/package-io.js';
 import type {
@@ -126,7 +133,14 @@ const sheet: Required<ProjectSheet> = {
   id: 'sh1', number: 'A-201', autoNumber: true, name: 'Plans', createdAt: 9, paper: 'A2', orientation: 'portrait', viewports: [viewport],
   titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12', revision: 'B' },
 };
-const schedule: Required<ProjectSchedule> = { id: 'sc1', name: 'Doors', kind: 'door', createdAt: 5, scale: 25 };
+/** One schedule of every kind: a kind added to `ProjectSchedule['kind']` does not compile until it is listed here. */
+const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<ProjectSchedule> & { kind: K } } = {
+  door: { id: 'sc1', name: 'Doors', kind: 'door', createdAt: 5, scale: 25 },
+  window: { id: 'sc2', name: 'Windows', kind: 'window', createdAt: 6, scale: 20 },
+  all: { id: 'sc3', name: 'Joinery', kind: 'all', createdAt: 7, scale: 50 },
+  materials: { id: 'sc4', name: 'Takeoff', kind: 'materials', createdAt: 8, scale: 100 },
+  types: { id: 'sc5', name: 'Quantities by type', kind: 'types', createdAt: 9, scale: 100 },
+};
 const civil: Required<ProjectCivilDrawing> = {
   id: 'c1', name: 'DN1 sections', kind: 'sections', createdAt: 3, corridorGlobalId: '2O2Fr$t4X7Zf8NOew3FLOH', scale: 200, vExaggeration: 10,
   stationStep: 50, elevationStep: 5, every: 25, stations: [0, 100, 250], columns: 3, halfWidth: 20,
@@ -155,8 +169,8 @@ const FULL: Required<ProjectDocument> = {
   joineryMapping: { ...DEFAULT_JOINERY_MAPPING, byName: false, byDimensions: false, tolerance: 0.07, aliases: { j1: ['Door 90'] } },
   elementTypes: (['wall', 'slab', 'column', 'beam', 'roof', 'opening'] as const).map((kind, i) => ({ ...defaultTypeSpec(kind), kind, id: `t${i}`, name: `Type ${kind}`, mark: `M${i}` }) as never),
   currentTypes: { wall: 't0', slab: 't1', column: 't2' },
-  schedules: [schedule],
-  structureProfiles: [],
+  schedules: Object.values(SCHEDULES),
+  structureProfiles: [profileFromPreset('box-tunnel', 'sp1', 'Culvert 2x2')],
   civilDrawings: [civil],
   typicalSections: [{ id: 'ts1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: { width: 1, slope: -4 }, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 }, nominalDepth: 0.6 } }],
   materials: [material],
@@ -189,6 +203,17 @@ describe('project round trip, one of everything', () => {
   it('the fixture covers every shape type and view kind', () => {
     assert.deepEqual(new Set(drafts.map((d) => d.shape.type)), new Set([...Object.keys(GEOMETRY), ...Object.keys(ANNOTATION)]));
     assert.equal(new Set(FULL.views.map((v) => v.kind)).size, 4);
+    assert.equal(new Set(FULL.schedules?.map((s) => s.kind)).size, Object.keys(SCHEDULES).length);
+  });
+
+  it('sets every document field to something that is not its default', () => {
+    // The keys come from the document itself, not a list kept here: whatever a
+    // reset store writes, whatever the fixture sets, and whatever EMPTY_PROJECT names.
+    const defaults = projectDocument();
+    const keys = [...new Set([...Object.keys(defaults), ...Object.keys(FULL), ...Object.keys(EMPTY_PROJECT)])] as (keyof ProjectDocument)[];
+    const empty = (v: unknown) => v === undefined || v === '' || (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
+    const unset = keys.filter((k) => empty(FULL[k]) || isDeepStrictEqual(FULL[k], defaults[k]) || isDeepStrictEqual(FULL[k], EMPTY_PROJECT[k]));
+    assert.deepEqual(unset, [], `give these fields a non-default value in FULL, so a save that drops them fails: ${unset.join(', ')}`);
   });
 
   it('survives the .ifclite-project.json sidecar', () => {

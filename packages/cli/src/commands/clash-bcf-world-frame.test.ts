@@ -13,7 +13,7 @@
  * (41266, 308208, 126) with two overlapping boxes on it.
  */
 
-import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
@@ -110,14 +110,10 @@ function expectWorldCameras(project: BCFProject): void {
   }
 }
 
-describe('clash --bcf writes world-coordinate cameras for a far-from-origin site (#4879)', () => {
-  beforeAll(() => {
-    const missing = [CLI_ENTRY, WASM_RUNTIME].filter((path) => !existsSync(path));
-    if (missing.length > 0) {
-      throw new Error(`missing build artifacts ${missing.join(', ')}: run \`pnpm turbo run build --filter=@ifc-lite/cli\` (and \`bash scripts/build-wasm.sh\`) first`);
-    }
-  });
+// Needs the built CLI (`pnpm turbo run build --filter=@ifc-lite/cli`) and the wasm (`pnpm build:wasm`); skips without them.
+const BUILT = existsSync(CLI_ENTRY) && existsSync(WASM_RUNTIME);
 
+describe.skipIf(!BUILT)('clash --bcf writes world-coordinate cameras for a far-from-origin site (#4879)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
