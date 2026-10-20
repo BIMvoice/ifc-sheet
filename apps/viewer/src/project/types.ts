@@ -104,6 +104,12 @@ export interface PlanProjectView extends ProjectViewBase {
   level: ProjectLevel;
   /** Cut height above the level's floor, metres. */
   cutHeight: number;
+  /**
+   * A reflected ceiling plan: the same plan, looking up from the cut. It keeps
+   * the floor plan's x/y (a point sits where it does in the plan below) and
+   * draws what is above the cut: ceilings, soffits, lights, beams.
+   */
+  reflected?: boolean;
 }
 
 /** A section cut stored in world metres, independent of the model bounds. */
@@ -212,8 +218,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), or the materials with their quantities (a takeoff). */
-  kind: 'door' | 'window' | 'all' | 'materials';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), or the quantities by element type. */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;

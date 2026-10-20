@@ -63,12 +63,18 @@ export function useNavigatorDialogs() {
     fields.push({ key: 'level', label: t('projectNavigator.dialog.level'), type: 'select', initial: '0', options: levels.map((l, i) => ({ value: String(i), label: `${l.name} (${l.elevation.toFixed(2)} m)` })) });
     fields.push({ key: 'name', label: t('projectNavigator.dialog.name'), type: 'text', initial: '' });
     fields.push({ key: 'cut', label: t('projectNavigator.props.cutHeight'), type: 'number', initial: DEFAULT_PLAN_CUT_HEIGHT_M });
+    fields.push({ key: 'looking', label: t('projectNavigator.dialog.looking'), type: 'select', initial: 'down', options: [
+      { value: 'down', label: t('projectNavigator.dialog.lookingDown') },
+      { value: 'up', label: t('projectNavigator.dialog.lookingUp') },
+    ] });
     onSubmit = (v) => {
       const level = levels[Number(v.level)];
       const cut = Number(v.cut);
       if (!level) return t('projectNavigator.dialog.noLevel');
       if (!Number.isFinite(cut)) return t('projectNavigator.dialog.badNumber');
-      const id = addProjectView({ kind: 'plan', name: v.name?.trim() || level.name, level: { ...level, storeyGlobalIds: [...level.storeyGlobalIds] }, cutHeight: cut });
+      const reflected = v.looking === 'up';
+      const name = v.name?.trim() || (reflected ? t('projectNavigator.dialog.ceilingPlanName', { level: level.name }) : level.name);
+      const id = addProjectView({ kind: 'plan', name, level: { ...level, storeyGlobalIds: [...level.storeyGlobalIds] }, cutHeight: cut, ...(reflected ? { reflected: true } : {}) });
       openProjectView(id);
       return null;
     };
