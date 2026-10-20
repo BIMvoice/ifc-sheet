@@ -20,6 +20,8 @@ import { layoutSchedule, type ScheduleLabels, type ScheduleLayout, type Schedule
 import { takeoffRows, type TakeoffRow } from '@/joinery/material-takeoff';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
 import { layoutMaterialTakeoff, type TakeoffLabels } from '@/joinery/material-takeoff-layout';
+import { registerFitOn, registerPaper, sharedRegisterRows, type RegisterRow } from '@/project/drawing-register';
+import { layoutRegisterPage, type RegisterLabels } from '@/joinery/register-layout';
 import { roomFinishes, type RoomFinishes } from '@/joinery/room-finishes';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
 import { layoutRoomFinishes, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
@@ -54,6 +56,34 @@ export function useTakeoffRows(): TakeoffRow[] {
   const models = useViewerStore((s) => s.models);
   // mutationVersion / models: what `collectTakeoffElements` reads.
   return useMemo(() => takeoffRows(collectTakeoffElements()), [mutationVersion, models]);
+}
+
+export function useRegisterLabels(title: string): RegisterLabels {
+  const { t } = useTranslation();
+  return useMemo(() => ({
+    title, number: t('issue.list.sheet'), sheetTitle: t('issue.list.sheetTitle'), scale: t('issue.list.scale'), revision: t('issue.list.revision'), date: t('issue.list.date'),
+  }), [t, title]);
+}
+
+const NO_ROWS: RegisterRow[] = [];
+
+/**
+ * The register's rows, read from the sheets, the title block and the issues as
+ * they stand: nothing about them is stored. Through the one shared cache, so a
+ * sheet edit builds that sheet's row once however many sheets are on screen;
+ * `false` (a sheet without the register) reads nothing.
+ */
+export function useRegisterRows(wanted = true): RegisterRow[] {
+  const { t } = useTranslation();
+  const sheets = useProjectStore((s) => s.sheets);
+  const titleBlock = useProjectStore((s) => s.titleBlock);
+  const issues = useProjectStore((s) => s.issues);
+  const schedules = useProjectStore((s) => s.schedules);
+  const asIndicated = t('sheets.asIndicated');
+  return useMemo(
+    () => (wanted ? sharedRegisterRows({ sheets, titleBlock, issues, asIndicated, schedules }) : NO_ROWS),
+    [wanted, sheets, titleBlock, issues, schedules, asIndicated],
+  );
 }
 
 export function useRoomFinishLabels(title: string): RoomFinishLabels {
@@ -98,7 +128,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels(schedule?.name ?? '');
   return useMemo(() => {
-    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types') return null;
+    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register') return null;
     const data = scheduleData(schedule.kind);
     return { data, layout: layoutSchedule(data, labels, { scale: schedule.scale ?? 50 }) };
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
@@ -114,6 +144,12 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels('');
   const takeoffLabels = useTakeoffLabels('');
+  const registerLabels = useRegisterLabels('');
+  const placesRegister = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'register'));
+  const registerRows = useRegisterRows(placesRegister);
+  // Every page is fitted to the register's own sheet's paper, the one `syncRegisterPages` counted pages on: not this sheet's.
+  const registerId = placesRegister ? schedules?.find((s) => s.kind === 'register')?.id : undefined;
+  const pagePaper = useProjectStore((s) => (registerId ? registerPaper(s.sheets, registerId) : null));
   const finishLabels = useRoomFinishLabels('');
   const placesFinishes = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'finishes'));
   const typeLabels = useTypeQuantityLabels('');
@@ -128,7 +164,10 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || out.has(schedule.id)) continue;
-      out.set(schedule.id, schedule.kind === 'materials'
+      out.set(schedule.id, schedule.kind === 'register'
+        // Shrunk to the register's own sheet's drawing area, then split into pages: this viewport shows its own (`syncRegisterPages`).
+        ? layoutRegisterPage(registerRows, { ...registerLabels, title: schedule.name }, registerFitOn(registerRows.length, pagePaper ?? registerPaper([sheet], schedule.id)), vp.page ?? 0)
+        : schedule.kind === 'materials'
         ? layoutMaterialTakeoff(rows, { ...takeoffLabels, title: schedule.name })
         : schedule.kind === 'finishes'
           ? layoutRoomFinishes(finishRooms, { ...finishLabels, title: schedule.name })
@@ -138,7 +177,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet.viewports, schedules, labels, takeoffLabels, finishLabels, typeLabels, placesTakeoff, placesFinishes, placesTypes, mutationVersion, models, catalogue, mapping]);
+  }, [sheet.viewports, schedules, labels, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, mutationVersion, models, catalogue, mapping]);
 }
 
 function Prim({ p }: { p: SchedulePrim }) {

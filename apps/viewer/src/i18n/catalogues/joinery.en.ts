@@ -169,6 +169,8 @@ export const joineryEn = {
   'takeoff.area': 'Area m²',
   'takeoff.usedIn': 'Used in',
   'takeoff.total': 'Total',
+  'register.name': 'Drawing register',
+  'register.empty': 'The set has no sheets yet.',
   'takeoff.empty': 'No element of the loaded models has a material.',
   'typeQty.newName': 'Quantities by type',
   'typeQty.type': 'Type',

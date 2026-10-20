@@ -10,7 +10,8 @@
  * are in front.
  *
  * A view is independent of the 3D view's hide / isolate state, like a Revit
- * view: only the class-level visibility toggles (spaces, openings…) apply.
+ * view: only the class-level visibility toggles (spaces, openings…) apply,
+ * and the phases the view does not show (`project/phases.ts`).
  * Geometry is the federated set `DrawingRuntimeHost` publishes.
  */
 
@@ -22,6 +23,7 @@ import { useDrawingGeneration } from '@/hooks/useDrawingGeneration';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { useProjectStore } from '@/project/project-store';
+import { phaseHiddenIds, phaseViewOf } from '@/project/phase-view';
 import { sectionPlaneForView } from '@/project/view-plane';
 import { dropViewDrawing, generatesFromModel, patchViewDrawing, planeKey, useViewDrawings, viewDisplayOverrides } from '@/project/view-drawings';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
@@ -55,6 +57,17 @@ function ModelDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }>
   if (planeRef.current.key !== key) planeRef.current = { key, plane: resolved ?? FALLBACK_PLANE };
   const sectionPlane = planeRef.current.plane;
 
+  // A view that draws by phase leaves the elements of the phases it does not show out of the generator's input
+  // (as a hidden element is), so they occlude, hatch and symbolize nothing. A new set regenerates the drawing.
+  const phaseSource = useProjectStore((s) => s.phaseSource);
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const phases = view.graphics?.phases;
+  const hiddenByPhase = useMemo(
+    () => phaseHiddenIds(geometryResult?.meshes, phaseViewOf(phases ? { phases } : undefined, phaseSource)) ?? NO_HIDDEN,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a Status edit (mutationVersion) changes the phases; `phases` is read by its shown set
+    [geometryResult, phases?.show.join(), phaseSource, mutationVersion],
+  );
+
   const { showConstructionProjection, constructionProjectionDepth } = viewDisplayOverrides(view);
   const displayOptions = useMemo(
     () => ({ ...sharedOptions, showConstructionProjection, constructionProjectionDepth }),
@@ -81,7 +94,7 @@ function ModelDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }>
     sectionPlane,
     displayOptions,
     typeVisibility,
-    combinedHiddenIds: NO_HIDDEN,
+    combinedHiddenIds: hiddenByPhase,
     combinedIsolatedIds: null,
     computedIsolatedIds: null,
     models,

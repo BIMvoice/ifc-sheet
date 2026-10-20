@@ -11,9 +11,11 @@ import assert from 'node:assert/strict';
 import { cleanup, click, press, render } from '@/test/render.js';
 import { cancelCommand, clickDrawing, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { resetProject, useProjectStore } from '@/project/project-store';
+import { paperOf } from '@/project/sheets';
 import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet } from '@/project/drawing-set-actions';
 import type { ModelExtent } from '@/project/drawing-set';
+import type { ProjectSheet } from '@/project/types';
 import { SteppedSheet } from './SteppedSheet.js';
 
 /**
@@ -38,6 +40,19 @@ const button = (ui: HTMLElement, label: string) => [...ui.querySelectorAll('butt
 /** Whether the sheet's canvas is showing, i.e. no drawing is in front. */
 const onSheet = (ui: HTMLElement): boolean => ui.querySelector('[data-sheet-canvas]') !== null;
 const esc = (times: number) => { for (let i = 0; i < times; i += 1) press(document.body, 'Escape'); };
+
+/** A pointer event on the sheet canvas at the centre of the viewport that shows `viewId` (the canvas fits the whole sheet on arrival). */
+function clickViewport(ui: HTMLElement, sheet: ProjectSheet, viewId: string, type: 'pointerdown' | 'pointerup' | 'dblclick'): void {
+  const paper = paperOf(sheet);
+  const vp = (sheet.viewports ?? []).find((v) => v.viewId === viewId)!;
+  const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]');
+  assert.ok(canvas);
+  const { width, height } = canvas.getBoundingClientRect();
+  const k = Math.min((width - 24) / paper.w, (height - 24) / paper.h);
+  const at = { clientX: (width - paper.w * k) / 2 + vp.x * k, clientY: (height - paper.h * k) / 2 + vp.y * k };
+  const event = type === 'dblclick' ? new window.MouseEvent('dblclick', { ...at, bubbles: true }) : new window.PointerEvent(type, { ...at, bubbles: true, button: 0, pointerId: 1 });
+  act(() => { canvas.dispatchEvent(event); });
+}
 
 beforeEach(() => {
   resetProject();
@@ -124,5 +139,71 @@ describe('leaving edit mode (#142)', () => {
     click(button(ui, 'Back to sheet')!);
     assert.equal(runningCommand(), null, 'no half-drawn line is left running behind the sheet');
     assert.equal(onSheet(ui), true);
+  });
+
+  it('puts focus on the sheet canvas when the button unmounts, not on <body>', () => {
+    const ui = stepIn(true);
+    const done = button(ui, 'Back to sheet');
+    assert.ok(done);
+    act(() => done.focus());
+    assert.equal(document.activeElement, done, 'the button had focus');
+    click(done);
+    const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]');
+    assert.ok(canvas, 'the sheet is back');
+    assert.ok(document.activeElement === canvas, 'focus is on the sheet canvas');
+    assert.ok(document.activeElement !== document.body);
+  });
+
+  it('closes the title block card with Esc and stays on the sheet', () => {
+    const ui = stepIn(false);
+    click(button(ui, 'Title block')!);
+    assert.equal(button(ui, 'Title block')?.getAttribute('aria-pressed'), 'true');
+    esc(1);
+    assert.equal(button(ui, 'Title block')?.getAttribute('aria-pressed'), 'false', 'the card closed');
+    assert.equal(backs, 0);
+  });
+
+  it('closes the Paper card with Esc and stays on the sheet (main\'s papering state)', () => {
+    const ui = stepIn(false);
+    click(button(ui, 'Paper')!);
+    assert.equal(button(ui, 'Paper')?.getAttribute('aria-pressed'), 'true');
+    assert.ok(ui.querySelector('aside[aria-label="Paper"]'), 'the Paper card is open');
+    esc(1);
+    assert.equal(button(ui, 'Paper')?.getAttribute('aria-pressed'), 'false', 'the card closed');
+    assert.ok(!ui.querySelector('aside[aria-label="Paper"]'));
+    assert.equal(backs, 0);
+  });
+
+  it('keeps the chosen drawing under Esc while one is in front: only the button lets go', () => {
+    const ui = stepIn(false);
+    // Choose the plan with a click on its viewport, bring it forward with a tool, as a user does.
+    const plan = useProjectStore.getState().views.find((v) => v.kind === 'plan')!;
+    const sheet = useProjectStore.getState().sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === plan.id))!;
+    clickViewport(ui, sheet, plan.id, 'pointerdown');
+    clickViewport(ui, sheet, plan.id, 'pointerup');
+    click(button(ui, 'Dimension')!);
+    assert.equal(onSheet(ui), false, 'the drawing is in front');
+    esc(1); // ends the tool
+    assert.equal(runningCommand(), null);
+    esc(2);
+    click(button(ui, 'Dimension')!);
+    assert.ok(runningCommand(), 'the drawing is still chosen: the tool starts on it again');
+  });
+
+  it('forgets a tool picked before the button: nothing is pressed when the drawing comes forward again', () => {
+    const ui = stepIn(true);
+    const plan = useProjectStore.getState().views.find((v) => v.kind === 'plan')!;
+    const sheet = useProjectStore.getState().sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === plan.id))!;
+    // The pick finds the drawing not yet attached, so the tool is set and its command waits.
+    act(() => useDraftingSession.setState({ viewId: null }));
+    click(button(ui, 'Line')!);
+    assert.equal(button(ui, 'Line')?.getAttribute('aria-pressed'), 'true', 'the tool is picked');
+    assert.equal(runningCommand(), null, 'and its command is still waiting');
+    click(button(ui, 'Back to sheet')!);
+    assert.equal(onSheet(ui), true);
+    clickViewport(ui, sheet, plan.id, 'dblclick');
+    assert.equal(onSheet(ui), false, 'the drawing is in front again');
+    assert.equal(runningCommand(), null, 'the waiting command did not start on the new visit');
+    assert.deepEqual([...ui.querySelectorAll('button[aria-pressed="true"]')].map((b) => b.textContent?.trim()), [], 'no tool is held');
   });
 });

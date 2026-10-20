@@ -32,6 +32,7 @@ import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
 import { SheetCanvas } from './SheetCanvas';
 import { TitleBlockCard } from './TitleBlockForm';
+import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 import { steppedHandlers } from './stepped-keys';
@@ -65,6 +66,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
+  const [papering, setPapering] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
@@ -102,8 +104,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   // The drafting keys cancel a running tool on the same keydown, so this listener must see the state as the key found it:
   // it registers once, in a layout effect (which runs before any child's passive effect, so before the drafting keys'
   // own listeners), and reads the rest from a ref.
-  const live = useRef({ focusId, chosen, adding, titling, previewing });
-  live.current = { focusId, chosen, adding, titling, previewing };
+  const live = useRef({ focusId, chosen, adding, titling, papering, previewing });
+  live.current = { focusId, chosen, adding, titling, papering, previewing };
   useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const now = live.current;
@@ -114,18 +116,29 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       if (now.adding) setAdding(false);
       else if (now.titling) setTitling(false);
+      else if (now.papering) setPapering(false);
       else if (!now.focusId && now.chosen) setChosen(null);
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
+  const root = useRef<HTMLDivElement>(null);
+  const refocus = useRef(false);
   /** Edit mode ends here and nowhere else: the drawing goes back on the sheet (the drawing's unmount ends any tool still running on it). */
   const leaveEditMode = useCallback((): void => {
     cancelStart.current();
     setTool(null);
     setFocusId(null);
+    refocus.current = true;
   }, []);
+  // The button unmounts with the click, so focus would drop to <body>: it goes to the sheet's canvas instead, once that is back.
+  const inDrawing = focusView !== null;
+  useEffect(() => {
+    if (inDrawing || !refocus.current) return;
+    refocus.current = false;
+    root.current?.querySelector<HTMLElement>('[data-sheet-canvas]')?.focus();
+  }, [inDrawing]);
 
   const startTool = (command: string): void => {
     cancelStart.current();
@@ -161,7 +174,10 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   // Choosing a drawing brings its card back in place of the title block's.
   const choose = useCallback((viewportId: string | null): void => {
     setChosen(viewportId);
-    if (viewportId) setTitling(false);
+    if (viewportId) {
+      setTitling(false);
+      setPapering(false);
+    }
   }, []);
   const open = useCallback((vp: SheetViewport): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
@@ -192,7 +208,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   }));
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={root} className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-3 px-6 pb-2 pt-4 text-sky-100">
         <button type="button" className="text-cyan-400 hover:text-cyan-300" onClick={onBack}>{t('wall.back')}</button>
         <span className="text-sky-200/50">/</span>
@@ -203,7 +219,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
         {!focusView ? (
           <>
-            <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); }}>{t('wall.paper.button')}</button>
+            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); }}>{t('wall.tb.title')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
             <button type="button" className={issue} onClick={() => setPreviewing(true)}>{t('printPreview.open')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
@@ -226,6 +243,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
           <div className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
               : focusView ? null
+                : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
                   : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
           </div>
