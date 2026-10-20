@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import type { MeshData } from '@ifc-lite/geometry';
 import type { SectionPlaneConfig } from './types.js';
-import { getViewDirectionForPlane } from './projection-bands.js';
+import { getViewDirectionForPlane, looksUp } from './projection-bands.js';
 import { clipMeshToHalfSpace } from './half-space-clip.js';
 
 /** Clip in 3D BEFORE discarding depth in a projected footprint (#6615).
@@ -13,7 +13,7 @@ export function clipMeshToProjectionWindow(
 ): MeshData | null {
   if (!Number.isFinite(minDepth) || !Number.isFinite(maxDepth) || maxDepth <= minDepth) return null;
   const view = getViewDirectionForPlane(plane);
-  const offset = (plane.customPlane?.distance ?? plane.position) * (plane.flipped ? 1 : -1);
+  const offset = (plane.customPlane?.distance ?? plane.position) * (looksUp(plane) ? 1 : -1);
   const far = clipMeshToHalfSpace(mesh, view, offset + maxDepth).mesh;
   if (!far) return null;
   return clipMeshToHalfSpace(far, { x: -view.x, y: -view.y, z: -view.z }, -offset - minDepth).mesh;
