@@ -22,6 +22,7 @@ import type { DisciplineId } from './discipline-views';
 import type { CameraViewpoint, SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
+import type { ProjectIssue } from '@/issue/types';
 
 export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d';
 
@@ -382,25 +383,5 @@ export interface ProjectDocument {
   modelState?: ModelSnapshot;
 }
 
-/** One sheet as it stood when a set was issued. */
-export interface IssuedSheet {
-  number: string;
-  title: string;
-  /** The scales of its viewports, as drawn on the list: `1:50`, or `1:50, 1:100`; empty when it holds none. */
-  scale: string;
-  paper: PaperSize;
-  orientation: 'landscape' | 'portrait';
-  revision: string;
-  /** What the sheet held (`issue/fingerprint.ts`): equal fingerprints mean an unchanged sheet. */
-  fingerprint: string;
-}
-
-/** A set of sheets sent out together, recorded with the project so a later issue can say what changed. */
-export interface ProjectIssue {
-  id: string;
-  name: string;
-  /** `YYYY-MM-DD`. */
-  date: string;
-  createdAt: number;
-  sheets: IssuedSheet[];
-}
+// The issue records live with the issue code; re-exported so the document's types stay in one import.
+export type { IssuedSheet, ProjectIssue } from '@/issue/types';
