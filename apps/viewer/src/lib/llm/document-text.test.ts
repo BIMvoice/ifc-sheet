@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import test from 'node:test';
-import { evidenceSkip } from '@/test/evidence-fixture.js';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { extractPdfText, MAX_DOCUMENT_TEXT_CHARS, type PdfTextBackend } from './document-text';
@@ -32,7 +31,7 @@ test('#4177 extracts ordered, page-labelled PDF text and disposes every page', a
   assert.equal(fake.destroyed(), true);
 });
 
-test('#4177 extracts text through the real PDF.js parser', { skip: evidenceSkip('pdf-fidelity-report/control-text-accepted.pdf') }, async () => {
+test('#4177 extracts text through the real PDF.js parser', async () => {
   const pdf = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const realBackend: PdfTextBackend = { load(data) {
     const task = pdf.getDocument({ data, enableXfa: false, stopAtErrors: true });

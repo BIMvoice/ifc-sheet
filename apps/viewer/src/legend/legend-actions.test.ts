@@ -6,7 +6,9 @@
 
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { removeProjectItem, resetProject, useProjectStore } from '@/project/project-store';
+import { addProjectSheet, removeProjectItem, resetProject, useProjectStore } from '@/project/project-store';
+import { drawingArea } from '@/project/drawing-set';
+import type { ProjectSheet } from '@/project/types';
 import type { LegendLabels } from './legend-layout.js';
 import { addLegend, keepLegendOnSheets, moveLegendCategory, placeLegend, projectLegends, toggleLegendCategory, updateLegend } from './legend-actions.js';
 
@@ -96,4 +98,37 @@ describe('keepLegendOnSheets', () => {
     assert.ok(off < 590 && off > 400, `moved in to ${off}`);
     assert.equal(fits, 300);
   });
+});
+
+describe('legends on the paper the sheet has (#129 review)', () => {
+  const sheetOf = (id: string) => useProjectStore.getState().sheets.find((s) => s.id === id) as ProjectSheet;
+  /** The legend's centre is in the sheet's own drawing area: on the paper, clear of the frame and the title block wherever it sits. */
+  const inArea = (sheetId: string, legendId: string) => {
+    const s = sheetOf(sheetId);
+    const vp = s.viewports!.find((v) => v.viewId === legendId)!;
+    const area = drawingArea(s);
+    return { ok: vp.x >= area.x && vp.x <= area.x + area.w && vp.y >= area.y && vp.y <= area.y + area.h, at: `${vp.x}, ${vp.y} in ${JSON.stringify(area)}` };
+  };
+
+  for (const [what, make] of [
+    ['an A3 portrait sheet', () => {
+      const id = addProjectSheet('Portrait');
+      useProjectStore.setState({ sheets: useProjectStore.getState().sheets.map((s) => (s.id === id ? { ...s, paper: 'A3' as const, orientation: 'portrait' as const } : s)) });
+      return id;
+    }],
+    ['the "A3 schedules" template, title block in a strip at the right', () => addProjectSheet('Schedules', undefined, 'builtin:a3-schedules')],
+  ] as const) {
+    it(`places a legend, and keeps it, inside the drawing area of ${what}`, () => {
+      const sheetId = make();
+      const id = addLegend('Key', { categories: ['hatches'] });
+      placeLegend(sheetId, id, LABELS);
+      const placed = inArea(sheetId, id);
+      assert.ok(placed.ok, `placed at ${placed.at}`);
+      // Pushed off to the right, it is pulled back into the same area.
+      useProjectStore.setState({ sheets: useProjectStore.getState().sheets.map((s) => (s.id === sheetId ? { ...s, viewports: s.viewports!.map((vp) => (vp.viewId === id ? { ...vp, x: 2000 } : vp)) } : s)) });
+      keepLegendOnSheets(id, LABELS);
+      const kept = inArea(sheetId, id);
+      assert.ok(kept.ok, `kept at ${kept.at}`);
+    });
+  }
 });

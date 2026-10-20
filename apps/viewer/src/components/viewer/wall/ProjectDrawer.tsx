@@ -16,16 +16,22 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { inSetOrder } from '@/project/drawing-register';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
-import { addScheduleToSet, hangLegend, hangSchedule, hangView } from '@/project/drawing-set-actions';
+import { addRegisterToSet, addScheduleToSet, hangLegend, hangSchedule, hangView } from '@/project/drawing-set-actions';
 import { projectOpenErrorText } from '@/project/open-error';
 import { requestNewProject } from '@/project/new-project';
 import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
-import { addProjectSheet, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
+import { addProjectSheet, projectDocument, removeProjectItem, renameProjectItem, useProjectStore } from '@/project/project-store';
+import { paperLabel } from '@/project/paper';
+import { allTemplates } from '@/project/sheet-templates';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
 import { useViewerStore } from '@/store';
 import { modelSiteArea } from '@/urban/urban-models';
+import { SheetNumberingForm } from './SheetNumberingForm';
+import { useViewDrawings } from '@/project/view-drawings';
+import { viewportState, type ViewportState as ViewportStateValue } from '@/project/viewport-state';
 import { RecoveryOffer } from './RecoveryOffer';
 import { ReadinessList } from '../sheets/ReadinessList';
 import { WALL_SKIN } from '../sheets/set-skin';
@@ -34,11 +40,14 @@ import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
 import { LegendsAdd } from './LegendsAdd';
 import { SiteAreaField } from '../urban/SiteAreaField';
+import { ViewportState } from './ViewportState';
+import { TagFieldsPanel } from './TagFieldsPanel';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
   { kind: 'plan', labelKey: 'wall.group.plans' },
   { kind: 'section', labelKey: 'wall.group.sections' },
   { kind: 'elevation', labelKey: 'wall.group.elevations' },
+  { kind: 'drafting', labelKey: 'wall.group.drafting' },
 ];
 
 const action = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
@@ -53,7 +62,7 @@ function Group({ title, children, add }: { title: string; children: ReactNode; a
   );
 }
 
-function Row({ id, label, sub, onOpen }: { id: string; label: string; sub?: string; onOpen: () => void }) {
+function Row({ id, label, sub, state, onOpen }: { id: string; label: string; sub?: string; state?: ViewportStateValue; onOpen: () => void }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   return (
@@ -81,6 +90,7 @@ function Row({ id, label, sub, onOpen }: { id: string; label: string; sub?: stri
           {label}
         </button>
       )}
+      {state ? <ViewportState state={state} compact /> : null}
       <button type="button" aria-label={t('wall.remove', { name: label })} onClick={() => removeProjectItem(id)} className="mr-1 rounded p-1 text-sky-200 opacity-0 hover:bg-sky-400/20 group-hover:opacity-100 focus-visible:opacity-100">
         <X className="size-3.5" />
       </button>
@@ -98,6 +108,9 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
   const models = useViewerStore((s) => s.models);
   // models: what `modelSiteArea` reads.
   const siteFromModel = useMemo(() => modelSiteArea(), [models]);
+  const ownTemplates = useProjectStore((s) => s.sheetTemplates);
+  const [template, setTemplate] = useState('');
+  const byView = useViewDrawings((s) => s.byView);
   const fileInput = useRef<HTMLInputElement>(null);
   const [readyOpen, setReadyOpen] = useState(false);
 
@@ -106,27 +119,14 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
     stepInto(sheetId, focus);
     onClose();
   };
-  /** A blank sheet, numbered past the set's series (A-901…), for whatever does not fit them. */
+  /** A blank sheet, numbered in the "other" series, for whatever does not fit the rest. */
   const newSheet = (): void => {
-    const taken = new Set(sheets.map((s) => s.number));
-    let n = 901;
-    while (taken.has(`A-${n}`)) n++;
-    const id = addProjectSheet(t('wall.project.newSheet'));
-    setSheetNumber(id, `A-${n}`);
-    go(id);
+    go(addProjectSheet(t('wall.project.newSheet'), 'other', template || undefined));
   };
   const openDrawing = (viewId: string): void => {
     const hung = sheetsShowing(viewId)[0]?.id ?? (extent ? hangView(viewId, extent) : null);
     go(hung, viewId);
   };
-  const series: { group: ReturnType<typeof sheetGroup>; labelKey: TranslationKey }[] = [
-    { group: 'plans', labelKey: 'wall.group.plans' },
-    { group: 'elevations', labelKey: 'wall.group.elevations' },
-    { group: 'sections', labelKey: 'wall.group.sections' },
-    { group: 'schedules', labelKey: 'wall.group.schedules' },
-    { group: null, labelKey: 'wall.group.other' },
-  ];
-
   return (
     <aside aria-label={t('wall.project.title')} className="absolute inset-y-0 left-0 z-20 flex w-80 flex-col border-r border-sky-300/20 bg-[#08214a]/98 text-sky-50 shadow-2xl">
       <header className="flex items-center gap-2 px-4 pb-2 pt-4">
@@ -149,8 +149,16 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
       <div className="px-4"><RecoveryOffer /></div>
       <LibraryPanel />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
-        <Group title={t('wall.project.sheets')} add={<button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>}>
-          {series.flatMap(({ group }) => sheets.filter((s) => sheetGroup(s) === group)).map((s) => (
+        <Group title={t('wall.project.sheets')} add={(
+          <>
+            <select aria-label={t('wall.paper.newSheetTemplate')} className={`${action} max-w-[9rem] bg-transparent`} value={template} onChange={(e) => setTemplate(e.target.value)}>
+              <option value="">{t('wall.paper.noTemplate')}</option>
+              {allTemplates(ownTemplates).map((tpl) => <option key={tpl.id} value={tpl.id}>{`${tpl.name} (${paperLabel(tpl.paper)})`}</option>)}
+            </select>
+            <button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>
+          </>
+        )}>
+          {inSetOrder(sheets, schedules).map((s) => (
             <Row key={s.id} id={s.id} sub={s.number} label={s.name} onOpen={() => go(s.id)} />
           ))}
         </Group>
@@ -160,13 +168,18 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           {readyOpen ? <div className="mt-2 text-xs leading-relaxed"><ReadinessList skin={WALL_SKIN} /></div> : null}
         </details>
         <details className="border-t border-sky-300/10 px-4 py-3">
+          <summary className="cursor-pointer text-xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.num.title')}</summary>
+          <SheetNumberingForm />
+        </details>
+        <details className="border-t border-sky-300/10 px-4 py-3">
           <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.tb.title')}</summary>
           <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('wall.tb.everySheet')}</p>
           <TitleBlockForm />
         </details>
+        <TagFieldsPanel />
         {DRAWING_KINDS.map(({ kind, labelKey }) => (
           <Group key={kind} title={t(labelKey)}>
-            {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} onOpen={() => openDrawing(v.id)} />)}
+            {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} state={viewportState(byView[v.id], v.kind)} onOpen={() => openDrawing(v.id)} />)}
           </Group>
         ))}
         <Group
@@ -175,7 +188,9 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
             <>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('all', t('wall.project.joinerySchedule')))}>{t('wall.project.addJoinery')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('materials', t('takeoff.newName')))}>{t('wall.project.addTakeoff')}</button>
+              <button type="button" className={action} onClick={() => go(addRegisterToSet(t('register.name')))}>{t('wall.project.addRegister')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('types', t('typeQty.newName')))}>{t('wall.project.addTypeQuantities')}</button>
+              <button type="button" className={action} onClick={() => go(addScheduleToSet('finishes', t('finishes.newName')))}>{t('wall.project.addFinishes')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('urban', t('urban.newName')))}>{t('urban.add')}</button>
               <SiteAreaField
                 modelSiteArea={siteFromModel}

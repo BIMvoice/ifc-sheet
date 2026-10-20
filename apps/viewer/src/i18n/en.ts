@@ -76,6 +76,8 @@ import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
 import { printPreviewEn } from './catalogues/print-preview.en';
 import { wallEn } from './catalogues/wall.en';
+import { sitePlanEn } from './catalogues/site-plan.en';
+import { ifcsheetTourEn } from './catalogues/ifcsheet-tour.en';
 import { wallFindEn } from './catalogues/wall-find.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
@@ -108,6 +110,7 @@ import { alignmentSectionEn } from './catalogues/alignment-section.en';
 import { projectNavigatorEn } from './catalogues/project-navigator.en';
 import { draftingEn } from './catalogues/drafting.en';
 import { sheetsEn } from './catalogues/sheets.en';
+import { titleBlockSourcesEn } from './catalogues/title-block-sources.en';
 import { draftSetEn } from './catalogues/draft-set.en';
 import { issueEn } from './catalogues/issue.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
@@ -118,9 +121,13 @@ import { projectPackageEn } from './catalogues/project-package.en';
 import { projectVersionsEn } from './catalogues/project-versions.en';
 import { roofBlockEn } from './catalogues/roof-block.en';
 import { viewGraphicsEn } from './catalogues/view-graphics.en';
+import { cadLayersEn } from './catalogues/cad-layers.en';
+import { phasesEn } from './catalogues/phases.en';
 import { catalogueEn } from './catalogues/catalogue.en';
+import { tagFieldsEn } from './catalogues/tag-fields.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
+import { roomFinishesEn } from './catalogues/room-finishes.en';
 import { urbanEn } from './catalogues/urban.en';
 import { elementTypesEn } from './catalogues/element-types.en';
 import { roofEn } from './catalogues/roof.en';
@@ -186,6 +193,7 @@ export const en = {
   ...projectNavigatorEn,
   ...draftingEn,
   ...sheetsEn,
+  ...titleBlockSourcesEn,
   ...draftSetEn,
   ...issueEn,
   ...annotateAllEn,
@@ -196,9 +204,13 @@ export const en = {
   ...projectVersionsEn,
   ...roofBlockEn,
   ...viewGraphicsEn,
+  ...phasesEn,
   ...catalogueEn,
+  ...cadLayersEn,
+  ...tagFieldsEn,
   ...draftingStandardsEn,
   ...joineryEn,
+  ...roomFinishesEn,
   ...urbanEn,
   ...elementTypesEn,
   ...roofEn,
@@ -258,6 +270,8 @@ export const en = {
   ...settingsEn,
   ...printPreviewEn,
   ...wallEn,
+  ...sitePlanEn,
+  ...ifcsheetTourEn,
   ...wallFindEn,
   ...whatChangedEn,
   ...hierarchyEn,

@@ -31,6 +31,7 @@ import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
 import { SheetCanvas } from './SheetCanvas';
 import { TitleBlockCard } from './TitleBlockForm';
+import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 import { steppedHandlers } from './stepped-keys';
@@ -64,6 +65,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
+  const [papering, setPapering] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
@@ -100,10 +102,13 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || previewing) return; // the preview, when open, takes its own Esc
+      // A panel that keeps its own keys (the tour card) has Esc for itself.
+      if (e.target instanceof Element && e.target.closest('[data-owns-keys]')) return;
       // A running tool or a drafted selection lets go first (the drafting keys' own Esc).
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       if (adding) setAdding(false);
       else if (titling) setTitling(false);
+      else if (papering) setPapering(false);
       else if (focusId) {
         setFocusId(null);
         setTool(null);
@@ -112,7 +117,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onBack, focusId, chosen, adding, titling, previewing]);
+  }, [onBack, focusId, chosen, adding, titling, papering, previewing]);
 
   const startTool = (command: string): void => {
     cancelStart.current();
@@ -148,7 +153,10 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   // Choosing a drawing brings its card back in place of the title block's.
   const choose = useCallback((viewportId: string | null): void => {
     setChosen(viewportId);
-    if (viewportId) setTitling(false);
+    if (viewportId) {
+      setTitling(false);
+      setPapering(false);
+    }
   }, []);
   const open = useCallback((vp: SheetViewport): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
@@ -190,7 +198,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
         {!focusView ? (
           <>
-            <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); }}>{t('wall.paper.button')}</button>
+            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); }}>{t('wall.tb.title')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
             <button type="button" className={issue} onClick={() => setPreviewing(true)}>{t('printPreview.open')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
@@ -213,6 +222,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
           <div className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
               : focusView ? null
+                : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
                   : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
           </div>

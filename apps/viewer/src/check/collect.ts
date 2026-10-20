@@ -8,6 +8,7 @@ import { labelTargets } from '@/labels/label-all';
 import { viewElements } from '@/labels/view-elements';
 import { elementByGlobalId } from '@/project/element-label';
 import { useProjectStore } from '@/project/project-store';
+import { effectiveTitleBlock } from '@/project/title-block-model';
 import { useViewDrawings } from '@/project/view-drawings';
 import { roomsOfPlan } from '@/tagall/rooms';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
@@ -27,7 +28,8 @@ function planElements(viewId: string): PlanElement[] | null {
 }
 
 export function collectInput(): CheckInput {
-  const { views, sheets, drafts, titleBlock, name } = useProjectStore.getState();
+  const { views, sheets, drafts, name } = useProjectStore.getState();
+  const titleBlock = effectiveTitleBlock();
   return { views, sheets, drafts, titleBlock, projectName: name, planElements, elementExists: (guid) => elementByGlobalId(guid) !== null };
 }
 

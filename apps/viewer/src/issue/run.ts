@@ -13,13 +13,15 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 import { resolve } from '@/i18n/registry';
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
-import type { ProjectDocument } from '@/project/types';
+import type { ProjectDocument, ProjectSheet, ProjectView } from '@/project/types';
 import type { TranslationKey } from '@/i18n';
 import { currentFindings } from '@/check/collect';
 import { captureSheets, failureLine } from './capture';
 import { drawingListCsv, uniqueNames, type ListLabels } from './output';
 import { buildIssuePdf, type PdfLabels } from './pdf-build';
 import { titleBlockOf } from '@/project/title-block';
+import { effectiveTitleBlock } from '@/project/title-block-model';
+import { rasterViewNames } from '@/project/view-raster';
 import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
 
 export type IssueFormat = 'pdf' | 'svg' | 'dxf';
@@ -73,7 +75,16 @@ export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst
     name: options.name?.trim() || nextIssueName(project.issues ?? []),
     date: options.date ?? new Date().toISOString().slice(0, 10),
     listFirst: options.listFirst ?? true,
-  }, project.titleBlock);
+    asIndicated: resolve('sheets.asIndicated'),
+  }, effectiveTitleBlock(), { issues: project.issues, schedules: project.schedules });
+}
+
+/** What a DXF issue leaves out: each sheet's views that print as images, which DXF cannot carry. */
+export function dxfRasterLines(sheets: readonly ProjectSheet[], views: readonly ProjectView[]): IssueResult['lines'] {
+  return sheets.flatMap((sheet) => {
+    const names = rasterViewNames(sheet, views);
+    return names.length > 0 ? [{ key: 'issue.msg.dxfRaster' as const, params: { number: sheet.number, views: names.join(', ') } }] : [];
+  });
 }
 
 /** Draw the sheets, build the files and record the issue. Nothing is recorded when a sheet could not be drawn. */
@@ -85,13 +96,15 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   const missing = currentFindings().length;
   if (missing > 0) lines.unshift({ key: 'check.msg.unfinished', params: { count: missing } });
   if (plan.sheets.length === 0) return { plan, pdf: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.nothing', params: {} }] };
+  if (options.format === 'dxf') lines.push(...dxfRasterLines(plan.sheets.map((s) => s.sheet), useProjectStore.getState().views));
   const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf' });
   if (failed.length > 0) return { plan, pdf: null, csv, zip: null, lines: [...lines, ...failed.map((f) => failureLine(f)), { key: 'issue.msg.notIssued', params: {} }] };
   const project = useProjectStore.getState();
   let pdf: Uint8Array | null = null;
   let zip: Uint8Array | null = null;
   if (options.format === 'pdf') {
-    const projectName = plan.sheets.map((s) => titleBlockOf(s.sheet, project.titleBlock, project.name).project).find((n) => n) || project.name;
+    const projectFields = effectiveTitleBlock();
+    const projectName = plan.sheets.map((s) => titleBlockOf(s.sheet, projectFields, project.name).project).find((n) => n) || project.name;
     pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival, onWarning: (w) => lines.push(w) });
   } else {
     const ext = options.format;

@@ -13,6 +13,7 @@
  */
 
 import { withoutModelState } from './autosave-snapshots';
+import { withoutRasters } from './autosave-rasters';
 import type { ProjectDocument, ProjectModelRef } from './types';
 
 export const AUTOSAVE_PREFIX = 'ifc-lite:project:v1:';
@@ -23,9 +24,12 @@ export function autosaveKey(models: readonly ProjectModelRef[]): string {
   return AUTOSAVE_PREFIX + models.map((m) => m.key).sort().join('|');
 }
 
-/** What the project holds, as a short string: the same project gives the same one (FNV-1a over its JSON, model state left out). */
+/**
+ * What the project holds, as a short string: the same project gives the same one (FNV-1a over its JSON,
+ * model state left out, raster captures as the autosave slot's references, so a slot and its file agree).
+ */
 export function projectFingerprint(doc: ProjectDocument): string {
-  const text = JSON.stringify(withoutModelState(doc).slim);
+  const text = JSON.stringify(withoutRasters(withoutModelState(doc).slim).slim);
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
   return `${text.length.toString(36)}-${(h >>> 0).toString(36)}`;

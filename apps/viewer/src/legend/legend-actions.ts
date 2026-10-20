@@ -82,7 +82,7 @@ export function placeLegend(sheetId: string, legendId: string, labels: LegendLab
   const legend = legends?.find((l) => l.id === legendId);
   if (!sheet || !legend) return null;
   const size = layoutOf(legend, readLegendEnv(labels), sheetId);
-  const at = freeSpot(drawingArea(sheet.paper), takenBoxes(sheet, labels), size);
+  const at = freeSpot(drawingArea(sheet), takenBoxes(sheet, labels), size);
   return addViewport(sheetId, legendId, { x: at.x + size.width / 2, y: at.y + size.height / 2 });
 }
 
@@ -98,7 +98,7 @@ export function keepLegendOnSheets(legendId: string, labels: LegendLabels): void
   const env = readLegendEnv(labels);
   const moved = sheets.map((sheet) => {
     if (!sheet.viewports?.some((vp) => vp.viewId === legendId)) return sheet;
-    const area = drawingArea(sheet.paper);
+    const area = drawingArea(sheet);
     const { width, height } = layoutOf(legend, env, sheet.id);
     const clamp = (centre: number, from: number, length: number, size: number) => Math.min(Math.max(centre, from + size / 2), Math.max(from + size / 2, from + length - size / 2));
     return { ...sheet, viewports: sheet.viewports.map((vp) => (vp.viewId === legendId ? { ...vp, x: clamp(vp.x, area.x, area.w, width), y: clamp(vp.y, area.y, area.h, height) } : vp)) };

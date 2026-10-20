@@ -12,14 +12,43 @@
  * drawing and hatch regions.
  */
 
-import { BUILT_IN_PRESETS, ifcTypeCriterion, type Drawing2D, type GraphicOverrideRule } from '@ifc-lite/drawing-2d';
+import { BUILT_IN_PRESETS, ifcTypeCriterion, type Drawing2D, type DrawingLine, type DrawingPolygon, type GraphicOverrideRule } from '@ifc-lite/drawing-2d';
 import type { Pt } from '@/drafting/types';
-import type { CategoryGraphics, ViewGraphics } from './types';
+import type { CategoryGraphics, PhaseId, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
 import type { DraftShape } from '@/drafting/types';
 
-/** A drawing as a view shows it, with its building materials' hatches and membrane lines. */
-export type StyledDrawing = Drawing2D & { materialHatches?: (MaterialHatch & { ifcType?: string })[]; membranes?: DraftShape[] };
+/** A drawing as a view shows it, with its building materials' hatches and membrane lines, and (a view that draws by phase) the phase of each line and cut face. */
+export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
+  lines: (DrawingLine & { phase?: PhaseId })[];
+  cutPolygons: (DrawingPolygon & { phase?: PhaseId })[];
+  materialHatches?: (MaterialHatch & HatchSource)[];
+  membranes?: DraftShape[];
+};
+
+/** Which element (and layer material) a hatch was cut from: what the CAD layer standard matches it on. */
+export interface HatchSource { ifcType?: string; entityId?: number; materialId?: number }
+
+/** The phases a view shows and the phase of an element (by the drawing's entity id; null: not a model element, always shown). */
+export interface PhaseView {
+  show: ReadonlySet<PhaseId>;
+  phaseOf: (entityId: number) => PhaseId | null;
+  /** The phase an element of a phase is drawn with, when the view draws one phase in another's style (a survey). */
+  drawnAs?: (phase: PhaseId) => PhaseId;
+}
+
+/** The drawing with each element's lines and cut faces marked with its phase (the other phases never reach it: `phaseHiddenIds` leaves them out of the generator's input). */
+function phased(drawing: StyledDrawing, phases: PhaseView): StyledDrawing {
+  const mark = (id: number): { phase?: PhaseId } => {
+    const phase = phases.phaseOf(id);
+    return phase === null ? {} : { phase: phases.drawnAs?.(phase) ?? phase };
+  };
+  return {
+    ...drawing,
+    cutPolygons: drawing.cutPolygons.map((p) => ({ ...p, ...mark(p.entityId) })),
+    lines: drawing.lines.map((l) => ({ ...l, ...mark(l.entityId) })),
+  };
+}
 
 /** The Drawing panel's default preset (IFC material colours). */
 export const DEFAULT_VIEW_PRESET = 'preset-3d-colors';
@@ -109,9 +138,11 @@ export function styledDrawing(
   replaced?: (entityId: number, ifcType: string | undefined) => boolean,
   /** The cut by building materials (`material-drawing.ts`), computed on this same drawing. */
   materials?: MaterialDrawing | null,
+  /** A view that draws by phase (`phases.ts`): each element's lines and cut faces carry its phase. */
+  phases?: PhaseView | null,
 ): StyledDrawing {
   if (materials) {
-    const hatchOf = new Map<unknown, string | undefined>(drawing.cutPolygons.map((p) => [p.polygon.outer, p.ifcType]));
+    const hatchOf = new Map<unknown, HatchSource>(drawing.cutPolygons.map((p) => [p.polygon.outer, { ifcType: p.ifcType, entityId: p.entityId, ...(p.materialId !== undefined ? { materialId: p.materialId } : {}) }]));
     drawing = {
       ...drawing,
       cutPolygons: drawing.cutPolygons.filter((p) => !materials.hidePolygons.has(p)).map((p) => {
@@ -119,7 +150,7 @@ export function styledDrawing(
         return fill === undefined ? p : { ...p, color: fill === null ? [1, 1, 1, 1] as [number, number, number, number] : rgba(fill) ?? p.color };
       }),
       lines: materials.dropLines.size ? drawing.lines.filter((l) => !materials.dropLines.has(l)) : drawing.lines,
-      materialHatches: materials.hatches.map((h) => ({ ...h, ifcType: hatchOf.get(h.loops[0]) ?? undefined })),
+      materialHatches: materials.hatches.map((h) => ({ ...h, ...(hatchOf.get(h.loops[0]) ?? { ifcType: undefined }) })),
       membranes: materials.membranes,
     } as StyledDrawing;
   }
@@ -130,6 +161,7 @@ export function styledDrawing(
       lines: drawing.lines.filter((l) => !replaced(l.entityId, l.ifcType)),
     };
   }
+  if (phases) drawing = phased(drawing as StyledDrawing, phases);
   const hidden = hiddenClasses(graphics);
   const fills = new Map<string, [number, number, number, number]>();
   for (const category of VIEW_CATEGORIES) {
@@ -161,6 +193,8 @@ export interface CutHatch {
   color: string;
   /** Pen of the hatch lines, paper millimetres (absent: the hatch pen). */
   width?: number;
+  /** The element it was cut from. */
+  source?: HatchSource;
 }
 
 const HATCH_PEN_MM = { heavy: 0.35, medium: 0.25, light: 0.18, hairline: 0.13 } as const;
@@ -177,7 +211,7 @@ export function cutHatches(drawing: StyledDrawing, graphics: ViewGraphics | unde
   };
   for (const h of drawing.materialHatches ?? []) {
     if (overridden(h.ifcType)) continue;
-    out.push({ loops: h.loops, pattern: h.pattern, scale: h.scale, color: '#000000', width: HATCH_PEN_MM[h.pen] });
+    out.push({ loops: h.loops, pattern: h.pattern, scale: h.scale, color: '#000000', width: HATCH_PEN_MM[h.pen], source: { ifcType: h.ifcType, entityId: h.entityId, materialId: h.materialId } });
   }
   if (!categories) return out;
   for (const polygon of drawing.cutPolygons) {
@@ -189,6 +223,7 @@ export function cutHatches(drawing: StyledDrawing, graphics: ViewGraphics | unde
       pattern: g.cutHatch,
       scale: g.hatchScale ?? 1,
       color: g.lineColor ?? '#000000',
+      source: { ifcType: polygon.ifcType, entityId: polygon.entityId, ...(polygon.materialId !== undefined ? { materialId: polygon.materialId } : {}) },
     });
   }
   return out;
