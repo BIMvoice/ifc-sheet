@@ -26,7 +26,7 @@ export function CutHeightControl({ view }: { view: Extract<ProjectView, { kind: 
   return (
     <div className="flex flex-col gap-3 text-sky-100">
       <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.cutHeight')}</span>
-      <span className="text-4xl font-light tabular-nums text-white">{view.cutHeight.toFixed(2)}<span className="ml-1 text-lg text-sky-200/70">m</span></span>
+      <span className="text-4xl font-light tabular-nums text-white">{view.cutHeight.toFixed(2)}<span className="ml-1 text-lg text-sky-200/70">{t('wall.unitMetre')}</span></span>
       <div className="relative ml-16" style={{ height: RULER_PX }}>
         <input
           type="range"
@@ -64,7 +64,7 @@ export function DepthControl({ view }: { view: Extract<ProjectView, { kind: 'sec
     <div className="flex flex-col gap-3 text-sky-100">
       <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.depth')}</span>
       <span className="text-4xl font-light tabular-nums text-white">
-        {view.viewDepth == null ? t('wall.depthAuto') : <>{view.viewDepth.toFixed(1)}<span className="ml-1 text-lg text-sky-200/70">m</span></>}
+        {view.viewDepth == null ? t('wall.depthAuto') : <>{view.viewDepth.toFixed(1)}<span className="ml-1 text-lg text-sky-200/70">{t('wall.unitMetre')}</span></>}
       </span>
       <div className="flex gap-2">
         <button type="button" className="rounded-full border border-sky-300/40 px-3 py-1 text-lg hover:border-sky-300" aria-label={t('wall.depthLess')} onClick={() => nudgeViewDepth(view.id, -1)}>−</button>

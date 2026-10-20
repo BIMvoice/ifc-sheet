@@ -193,7 +193,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         <span className="text-sky-200/50">/</span>
         <span className="font-semibold text-white">{sheet.number} {sheet.name}</span>
         {focusView ? <><span className="text-sky-200/50">/</span><span className="text-white">{focusView.name}</span></> : null}
-        <kbd className="rounded border border-sky-300/40 px-1.5 text-xs text-sky-200/80">Esc</kbd>
+        <kbd className="rounded border border-sky-300/40 px-1.5 text-xs text-sky-200/80">{t('wall.escKey')}</kbd>
         <span className="flex-1" />
         {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
         {!focusView ? (

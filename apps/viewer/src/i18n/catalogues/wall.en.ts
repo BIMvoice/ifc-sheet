@@ -45,6 +45,8 @@ export const wallEn = {
   'wall.depth': 'View depth',
   'wall.depthHint': 'Alt + wheel inside the drawing to see further or less far.',
   'wall.depthAuto': 'auto',
+  'wall.unitMetre': 'm',
+  'wall.escKey': 'Esc',
   'wall.depthLess': 'See less far',
   'wall.depthMore': 'See further',
   'wall.tray': 'Show this view in the slot',
