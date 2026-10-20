@@ -76,6 +76,7 @@ import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
 import { wallEn } from './catalogues/wall.en';
 import { reviewEn } from './catalogues/review.en';
+import { wallFindEn } from './catalogues/wall-find.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
 import { landXmlEn } from './catalogues/landxml.en';
@@ -253,6 +254,7 @@ export const en = {
   ...settingsEn,
   ...wallEn,
   ...reviewEn,
+  ...wallFindEn,
   ...whatChangedEn,
   ...hierarchyEn,
   ...propertiesEn,
