@@ -17,8 +17,9 @@ import { cleanup, render, waitFor } from '@/test/render.js';
 import { latestToast } from '@/test/toasts.js';
 import { Toaster } from '@/components/ui/toast';
 import { addProjectView, projectDocument, resetProject, useProjectStore } from './project-store.js';
-import { readAutosave, writeAutosave } from './project-sync.js';
+import { readAutosave, writeAutosave } from './recovery.js';
 import { restoreRasters } from './autosave-rasters.js';
+import { projectFingerprint } from './project-saved.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
 import type { ThreeDProjectView } from './types';
 
@@ -96,6 +97,14 @@ describe('the autosave of a project with a raster capture', () => {
     useProjectStore.setState({ views: useProjectStore.getState().views.map((v) => (v.id === other ? { ...v, raster: { href: otherRef, widthPx: 10, heightPx: 10, widthMm: 10, heightMm: 10 } } : v)) });
     await again;
     assert.equal(raster(other)?.href, otherRef, 'the other project keeps its reference for its own restore');
+  });
+
+  it('fingerprints the slot like the project file it came from, so a saved project is not offered back as unsaved work', async () => {
+    placeRaster();
+    const file = projectDocument();
+    await writeAutosave(KEY, file);
+    const slot = parseProjectFile(localStorage.getItem(KEY)!);
+    assert.equal(projectFingerprint(slot), projectFingerprint(parseProjectFile(serializeProject(file))));
   });
 
   it('tells the person when the browser refuses the slot', async () => {

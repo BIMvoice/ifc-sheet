@@ -41,6 +41,7 @@ export const projectNavigatorEn = {
   'projectNavigator.error.noSection': 'Turn on a plane section cut in the 3D view first.',
   'projectNavigator.error.noCamera': 'The 3D view is not ready yet.',
   'projectNavigator.error.unresolved': 'This view cannot open: its level is not in the loaded models.',
+  'project.file.tooNew': 'This project was saved by a newer version of IfcSheet (file version {found}; this version opens up to {supported}). Update IfcSheet to open it. Nothing was opened.',
   'projectNavigator.error.import': 'Could not open the project file: {detail}',
   'projectNavigator.imported': 'Opened project "{name}".',
   'projectNavigator.sheetPending': 'Placing views on sheets arrives in a later phase; the sheet is listed in the project.',
