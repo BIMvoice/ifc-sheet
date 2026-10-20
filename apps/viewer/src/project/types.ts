@@ -29,6 +29,10 @@ import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, Saved
 
 export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './document-parts';
 import type { ReviewComment } from '@/review/types';
+import type { NumberGroup, NumberingScheme } from './sheet-types';
+import type { AxonometricPreset, ProjectIssue, ProjectRevision, ThreeDProjection, ViewGridGraphics, ViewPhases, ViewRaster } from './document-records';
+
+export type { AxonometricPreset, GridEnds, IssuedSheet, PhaseId, PhaseStyle, ProjectIssue, ProjectRevision, ThreeDProjection, ViewGridGraphics, ViewPhases, ViewRaster } from './document-records';
 
 export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d' | 'drafting';
 
@@ -107,34 +111,6 @@ export interface CategoryGraphics {
   hatchScale?: number;
 }
 
-/** The phase of an element (`phases.ts`): IFC Status NEW, EXISTING, DEMOLISH, TEMPORARY. */
-export type PhaseId = 'existing' | 'demolish' | 'new' | 'temporary';
-
-/** How a phase draws: its line (colour, pen, dashed) and the fill of its cut faces. */
-export interface PhaseStyle {
-  lineColor: string;
-  lineWeight: CategoryLineWeight;
-  dashed: boolean;
-  fillColor: string;
-}
-
-/** A view that draws by phase: which phases it shows, and the styles it changes from the default look. */
-export interface ViewPhases {
-  show: PhaseId[];
-  styles?: Partial<Record<PhaseId, Partial<PhaseStyle>>>;
-}
-
-/** Which ends of a grid axis carry a bubble; on a section, `start` is the foot and `end` the head. */
-export type GridEnds = 'start' | 'end' | 'both';
-
-/** How a view draws the model's structural grid (IfcGrid). */
-export interface ViewGridGraphics {
-  /** Absent: on for plans and sections, off for elevations. */
-  visible?: boolean;
-  /** Absent: both ends. */
-  ends?: GridEnds;
-}
-
 export interface ViewGraphics {
   /** The structural grid's axes and bubbles. */
   grid?: ViewGridGraphics;
@@ -203,26 +179,6 @@ export interface InteriorElevation {
   crop: { min: { x: number; y: number }; max: { x: number; y: number } };
 }
 
-/** How a 3D view prints: an axonometric is parallel (a true scale), a perspective has none. */
-export type ThreeDProjection = 'axonometric' | 'perspective';
-
-/** The four isometric corners a model is seen from; the camera stands at that corner, 35.26 degrees up. */
-export type AxonometricPreset = 'se' | 'sw' | 'ne' | 'nw';
-
-/**
- * A raster capture of the 3D viewport, printed as an image on a sheet. Sized in
- * paper millimetres at print resolution, so it carries its own box.
- */
-export interface ViewRaster {
-  /** PNG data URL of the capture. */
-  href: string;
-  widthPx: number;
-  heightPx: number;
-  /** The paper box the capture was sized for, millimetres. */
-  widthMm: number;
-  heightMm: number;
-}
-
 export interface ThreeDProjectView extends ProjectViewBase {
   kind: '3d';
   /** `null` means "the default 3D view": fit the whole model. */
@@ -267,7 +223,7 @@ export type ProjectViewPatch = ProjectView extends infer V
   : never;
 
 export type PaperSize = 'A0' | 'A1' | 'A2' | 'A3' | 'A4';
-export type { CustomPaper, ElongatedPaper, Paper, SheetFrame, SheetTemplate, TemplateSeries, TitleBlockPosition } from './sheet-types';
+export type { CustomPaper, ElongatedPaper, GroupPattern, NumberGroup, NumberingScheme, Paper, SheetFrame, SheetTemplate, TemplateSeries, TitleBlockPosition } from './sheet-types';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types';
 
 /** A view placed on a sheet. Positions and sizes are paper millimetres from the sheet's top-left. */
@@ -290,27 +246,6 @@ export interface SheetViewport {
   drawingNumber?: string;
   /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
   keyPlanOf?: string;
-}
-
-/** The groups of sheets a numbering scheme numbers apart: `other` is details and whatever fits no series. */
-export type NumberGroup = 'plans' | 'elevations' | 'sections' | 'interiors' | 'details' | 'schedules' | 'other';
-
-/** How one group's numbers are written: `<discipline><prefix><separator><n padded to digits>`, `n` running from `start` by `step`. */
-export interface GroupPattern {
-  prefix: string;
-  separator: string;
-  start: number;
-  digits: number;
-  step: number;
-}
-
-/** The project's sheet numbering (`numbering.ts`). */
-export interface NumberingScheme {
-  /** Printed first on every number: `A` for architecture. */
-  discipline: string;
-  /** One running sequence through the whole set (A01, A02, …) instead of one per group; the plans pattern then numbers every sheet. */
-  continuous: boolean;
-  groups: Record<NumberGroup, GroupPattern>;
 }
 
 export interface ProjectSheet {
@@ -363,7 +298,6 @@ export interface ProjectSchedule {
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
 }
-
 
 export interface ProjectDocument {
   name: string;
@@ -440,39 +374,4 @@ export interface ProjectDocument {
   modelState?: ModelSnapshot;
   /** Review comments pinned on sheets (`review/`). */
   comments?: ReviewComment[];
-}
-
-/** One revision of the set: a letter or number, when, what changed, who made it. */
-export interface ProjectRevision {
-  id: string;
-  /** `A`, `B`, `01`: what the title block reads. */
-  code: string;
-  /** `YYYY-MM-DD`, or empty. */
-  date: string;
-  description: string;
-  by: string;
-}
-
-/** One sheet as it stood when a set was issued. */
-export interface IssuedSheet {
-  number: string;
-  title: string;
-  /** The scales of its viewports, as drawn on the list: `1:50`, or `1:50, 1:100`; empty when it holds none. */
-  scale: string;
-  /** The paper as named on the list (`paperLabel`): `A1`, `A3×3`, `500×700`. */
-  paper: string;
-  orientation: 'landscape' | 'portrait';
-  revision: string;
-  /** What the sheet held (`issue/fingerprint.ts`): equal fingerprints mean an unchanged sheet. */
-  fingerprint: string;
-}
-
-/** A set of sheets sent out together, recorded with the project so a later issue can say what changed. */
-export interface ProjectIssue {
-  id: string;
-  name: string;
-  /** `YYYY-MM-DD`. */
-  date: string;
-  createdAt: number;
-  sheets: IssuedSheet[];
 }

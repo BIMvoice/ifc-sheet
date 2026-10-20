@@ -21,6 +21,7 @@ import { drawingAreaIn, frameOf, type Rect } from './sheet-frame';
 import { templateFields } from './sheet-templates';
 import { fitViewportBox, SHEET_SCALES } from './sheets';
 import { freshProjectId } from './view-defaults';
+import { withSitePlanHung } from './site-plan-sheet';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf, numberSheets } from './numbering';
 import type { ElevationDirection, NumberingScheme, Paper, PaperSize, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './types';
 
@@ -328,33 +329,6 @@ export function withViewHung(
     : last ? { paper: last.paper ?? SET_PAPER, orientation: last.orientation ?? 'landscape', ...(last.frame ? { frame: last.frame } : {}), ...(last.templateId ? { templateId: last.templateId } : {}) }
       : startOf(undefined, choosePaper([[viewExtent(view, extent)]]).paper);
   const sheet = layOut({ id: freshProjectId('sheet'), number: nextNumber(sheets, group, scheme), series: group, name: resolve(GROUP_NAMES[group]), createdAt: now, ...start }, [view]);
-  return { sheets: [...sheets, sheet], sheetId: sheet.id };
-}
-
-/** Room around the building a site plan's sheet leaves for the plot, as a share of the building's extent. */
-const SITE_ROOM = 1;
-
-/**
- * The site plan hangs on a sheet of its own, first of the set (A-001…), at
- * its own scale (1:200) on the smallest set paper that holds the building
- * with room around it for the plot, else at the scale that fits.
- */
-function withSitePlanHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, now: number): { sheets: ProjectSheet[]; sheetId: string } {
-  const own = viewExtent(view, extent);
-  const sizes = [{ w: own.w * (1 + SITE_ROOM), h: own.h * (1 + SITE_ROOM) }];
-  const scale = view.scale ?? 200;
-  const paper = SET_PAPERS.find((p) => fitsScale(sizes, drawingArea(p), scale)) ?? SET_PAPERS[SET_PAPERS.length - 1];
-  const taken = new Set(sheets.map((s) => s.number));
-  const numberOf = (k: number) => `A-${String(k).padStart(3, '0')}`;
-  let n = 1;
-  while (taken.has(numberOf(n))) n++;
-  const area = drawingArea(paper);
-  const fitting = fitsScale(sizes, area, scale) ? scale : SHEET_SCALES.find((s) => fitsScale(sizes, area, s)) ?? scale;
-  // A little above the middle: the site balance goes under it.
-  const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: numberOf(n), name: view.name, createdAt: now, paper, orientation: 'landscape',
-    viewports: [{ id: freshProjectId('viewport'), viewId: view.id, x: area.x + area.w / 2, y: area.y + area.h / 2 - 15, scale: fitting, width: 0, height: 0, center: null }],
-  };
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
 

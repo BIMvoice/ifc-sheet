@@ -47,3 +47,24 @@ export interface SheetTemplate {
   orientation: 'landscape' | 'portrait';
   frame: SheetFrame;
 }
+
+/** The groups of sheets a numbering scheme numbers apart: `other` is details and whatever fits no series. */
+export type NumberGroup = 'plans' | 'elevations' | 'sections' | 'interiors' | 'details' | 'schedules' | 'other';
+
+/** How one group's numbers are written: `<discipline><prefix><separator><n padded to digits>`, `n` running from `start` by `step`. */
+export interface GroupPattern {
+  prefix: string;
+  separator: string;
+  start: number;
+  digits: number;
+  step: number;
+}
+
+/** The project's sheet numbering (`numbering.ts`). */
+export interface NumberingScheme {
+  /** Printed first on every number: `A` for architecture. */
+  discipline: string;
+  /** One running sequence through the whole set (A01, A02, …) instead of one per group; the plans pattern then numbers every sheet. */
+  continuous: boolean;
+  groups: Record<NumberGroup, GroupPattern>;
+}
