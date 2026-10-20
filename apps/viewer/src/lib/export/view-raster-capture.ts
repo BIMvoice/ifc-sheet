@@ -3,7 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * A raster capture of the 3D viewport for a sheet: the view's camera applied,
+ * A raster capture of the 3D viewport for a sheet: the view's camera applied
+ * (its saved one, else its preset corner framed on the model, `captureViewpoint`),
  * the viewport's canvas read through the renderer's `captureScreenshot` (the
  * one capture path the BCF, report and clash snapshots use), cropped to the
  * viewport box's aspect and resampled to the pixel size the box needs at print
@@ -20,11 +21,15 @@ import { getGlobalRenderer } from '@/hooks/useBCF';
 import { useViewerStore } from '@/store';
 import type { CameraViewpoint } from '@/store/types';
 import { rasterRequest } from '@/project/view-raster';
+import { captureViewpoint } from '@/project/axonometric';
+import { mergedSectionBounds, type AxisBounds } from '@/lib/section/section-distance';
 import type { ThreeDProjectView, ViewRaster } from '@/project/types';
 
 export interface RasterCaptureDeps {
-  /** A PNG data URL of exactly `widthPx` × `heightPx` showing the viewport from `viewpoint` (`null`: as it stands), or `null` when it cannot be captured. */
-  capture(viewpoint: CameraViewpoint | null, widthPx: number, heightPx: number): Promise<string | null>;
+  /** A PNG data URL of exactly `widthPx` × `heightPx` showing the viewport from `viewpoint`, or `null` when it cannot be captured. */
+  capture(viewpoint: CameraViewpoint, widthPx: number, heightPx: number): Promise<string | null>;
+  /** The loaded models' box in the renderer frame, which a preset corner is framed on; `null` with none. */
+  modelBounds(): AxisBounds | null;
 }
 
 /** The source rectangle of a `srcW` × `srcH` image that fills a `dstW` × `dstH` box with nothing stretched: the largest centred crop of the box's aspect. */
@@ -41,7 +46,10 @@ export async function captureViewRaster(
   deps: RasterCaptureDeps = liveCapture,
 ): Promise<ViewRaster> {
   const { widthPx, heightPx } = rasterRequest(box.width, box.height);
-  const href = await deps.capture(view.viewpoint, widthPx, heightPx);
+  // A preset corner (or no saved camera) is turned into a camera first, so the capture is of that corner.
+  const viewpoint = captureViewpoint(view, deps.modelBounds());
+  if (!viewpoint) throw new Error('no model is loaded to frame the view on');
+  const href = await deps.capture(viewpoint, widthPx, heightPx);
   if (!href) throw new Error('the viewport has nothing to capture');
   return { href, widthPx, heightPx, widthMm: box.width, heightMm: box.height };
 }
@@ -49,13 +57,17 @@ export async function captureViewRaster(
 const nextFrame = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
 const liveCapture: RasterCaptureDeps = {
+  modelBounds() {
+    const { models, geometryResult } = useViewerStore.getState();
+    return mergedSectionBounds(models, geometryResult);
+  },
   async capture(viewpoint, widthPx, heightPx) {
     const renderer = getGlobalRenderer();
     if (!renderer) return null;
     const { cameraCallbacks } = useViewerStore.getState();
-    const before = viewpoint ? cameraCallbacks.getViewpoint?.() ?? null : null;
+    const before = cameraCallbacks.getViewpoint?.() ?? null;
     try {
-      if (viewpoint) cameraCallbacks.applyViewpoint?.(viewpoint, false);
+      cameraCallbacks.applyViewpoint?.(viewpoint, false);
       // FRAME-WAIT-ALLOW(#2385): the frame must be presented before the canvas is read.
       await nextFrame();
       await nextFrame();

@@ -179,6 +179,7 @@ describe('a perspective on a sheet (issue #49)', () => {
     assert.equal(view.kind, '3d');
     if (view.kind !== '3d') return;
     const raster = await captureViewRaster(view, { width: vp.width, height: vp.height }, {
+      modelBounds: () => ({ min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 8 } }),
       capture: async (_vp, w, h) => {
         asked.push([w, h]);
         return 'data:image/png;base64,iVBORw0KGgo=';

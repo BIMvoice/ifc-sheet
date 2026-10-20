@@ -81,7 +81,7 @@ describe('3D views on the Wall', () => {
     cleanup();
 
     const asked: [number, number][] = [];
-    const deps = { capture: async (_vp: unknown, w: number, h: number) => { asked.push([w, h]); return 'data:image/png;base64,AAAA'; } };
+    const deps = { modelBounds: () => ({ min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 8 } }), capture: async (_vp: unknown, w: number, h: number) => { asked.push([w, h]); return 'data:image/png;base64,AAAA'; } };
     ui = render(<ThreeDControls view={view() as ThreeDProjectView} slot={slot} bounds={null} captureDeps={deps} />);
     click([...ui.querySelectorAll('button')].find((b) => /Capture the 3D view/.test(b.textContent ?? ''))!);
     await waitFor(() => (view() as ThreeDProjectView).raster != null || /could not be captured/.test(ui.textContent ?? ''), 'the capture to land or fail');

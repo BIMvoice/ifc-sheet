@@ -26,6 +26,7 @@
 import { vec3, type CameraFrame, type Drawing2D, type Vec3 } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import { generateCameraDrawing } from '@/lib/export/view-pdf/camera-drawing';
+import type { CameraViewpoint } from '@/store/types';
 import { drawingAsViewShows } from './view-appearance';
 import type { AxonometricPreset, ProjectView, ThreeDProjectView, ThreeDProjection } from './types';
 
@@ -85,6 +86,44 @@ export function axonometricCamera(view: ThreeDProjectView): CameraFrame {
   const direction = view.preset || !usable ? presetViewDirection(view.preset ?? DEFAULT_AXONOMETRIC_PRESET) : fromSaved;
   const up = view.preset || !saved || !usable ? vec3(0, 1, 0) : vec3(saved.up.x, saved.up.y, saved.up.z);
   return { position: vec3(-direction.x, -direction.y, -direction.z), target: vec3(0, 0, 0), up };
+}
+
+/** The renderer camera's own field of view, radians. */
+const DEFAULT_FOV = Math.PI / 4;
+/** Slack around the model's bounding sphere when a capture frames it. */
+const FRAME_PADDING = 1.05;
+
+/**
+ * The camera a raster capture of `view` is taken from. A saved camera is used
+ * as it is, unless the view is an axonometric seen from a preset corner (the
+ * preset wins, as in `axonometricCamera`); a view with no saved camera is seen
+ * from its preset corner, else the default one, so the capture never depends
+ * on whatever the 3D view happens to show. A preset camera looks at the centre
+ * of `bounds` (renderer frame) and frames its bounding sphere; `null` without
+ * a model to frame.
+ */
+export function captureViewpoint(
+  view: ThreeDProjectView,
+  bounds: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | null,
+  fov = DEFAULT_FOV,
+): CameraViewpoint | null {
+  const ortho = projectionOf(view) === 'axonometric';
+  const saved = view.viewpoint;
+  if (saved && !(ortho && view.preset)) return saved;
+  if (!bounds) return null;
+  const target = { x: (bounds.min.x + bounds.max.x) / 2, y: (bounds.min.y + bounds.max.y) / 2, z: (bounds.min.z + bounds.max.z) / 2 };
+  const radius = Math.max(0.5, Math.hypot(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y, bounds.max.z - bounds.min.z) / 2) * FRAME_PADDING;
+  const d = presetViewDirection(view.preset ?? DEFAULT_AXONOMETRIC_PRESET);
+  // A parallel projection does not depend on the distance, only on orthoSize; a perspective fits the sphere in its fov.
+  const distance = ortho ? radius * 4 : radius / Math.sin(fov / 2);
+  return {
+    position: { x: target.x - d.x * distance, y: target.y - d.y * distance, z: target.z - d.z * distance },
+    target,
+    up: { x: 0, y: 1, z: 0 },
+    fov,
+    projectionMode: ortho ? 'orthographic' : 'perspective',
+    ...(ortho ? { orthoSize: radius } : {}),
+  };
 }
 
 /**
