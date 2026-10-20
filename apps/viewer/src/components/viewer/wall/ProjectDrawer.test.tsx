@@ -91,6 +91,14 @@ describe('ProjectDrawer', () => {
     assert.equal(useProjectStore.getState().schedules?.find((s) => s.id === sheet.viewports?.[0]?.viewId)?.kind, 'types');
   });
 
+  it('adds a room finishes schedule on a new A-6xx sheet', () => {
+    const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    click(button(ui, '+ Room finishes'));
+    const sheet = useProjectStore.getState().sheets.find((s) => s.number === 'A-601');
+    assert.ok(sheet);
+    assert.equal(useProjectStore.getState().schedules?.find((s) => s.id === sheet.viewports?.[0]?.viewId)?.kind, 'finishes');
+  });
+
   it('starts a blank sheet past the set\'s series', () => {
     const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
     click(button(ui, '+ Sheet'));
