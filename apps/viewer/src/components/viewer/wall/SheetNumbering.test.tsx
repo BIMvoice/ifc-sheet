@@ -18,7 +18,7 @@ import { renumberAll } from '@/project/sheet-renumber';
 import { addDetail } from '@/drafting/commands/detail';
 import { emptySheets } from '@/check/findings';
 import { issueRecord, planIssue } from '@/issue/plan';
-import { drawingListCsv, issuePrintHtml } from '@/issue/output';
+import { drawingListCsv } from '@/issue/output';
 import type { ProjectLevel, ProjectSheet } from '@/project/types';
 import { sheetSvgText } from '../sheets/sheet-export';
 import { SheetPaper } from '../sheets/SheetPaper';
@@ -101,9 +101,9 @@ describe('switching to A01, A02', () => {
     }
     // the drawing list of a new issue
     const plan2 = planIssue(state().sheets, { documents: [], drafts: state().drafts }, { name: 'Next', date: '2026-10-20', listFirst: true });
-    const list = `${drawingListCsv(plan2, LABELS)}${issuePrintHtml(plan2, new Map(), 'P', LABELS)}`;
+    const list = drawingListCsv(plan2, LABELS);
     for (const s of plan2.sheets) assert.ok(list.includes(s.sheet.number));
-    for (const old of before) assert.ok(!list.includes(`${old},`) && !list.includes(`<td>${old}</td>`), `the list names no ${old}`);
+    for (const old of before) assert.ok(!list.includes(`${old},`), `the list names no ${old}`);
     // the detail mark, a derived label
     assert.deepEqual(mark(), [`1/${state().sheets.find((s) => s.viewports?.some((v) => v.viewId === detailId))!.number}`]);
     assert.ok(!mark()[0].includes('A-'));

@@ -10,18 +10,25 @@
  */
 
 import { X } from 'lucide-react';
+import { memo, useEffect, useRef } from 'react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { SET_SCALES, sheetGroup, sheetScaleReason, type ModelExtent, type SetGroup } from '@/project/drawing-set';
 import { groupScale, setGroupScale } from '@/project/drawing-set-actions';
 import { removeProjectItem, useProjectStore } from '@/project/project-store';
 import type { ProjectSheet } from '@/project/types';
-import { WallSheet } from './WallSheet';
+import { startWallFill } from '@/wall/wall-fill';
+import { useWallView } from '@/wall/wall-view';
+import { LazyWallSheet } from './LazyWallSheet';
+import { useWallMeasure, WALL_SHEET_ATTR } from './useWallMeasure';
+import { WallFind } from './WallFind';
+import { WallMiniMap } from './WallMiniMap';
 
 const GROUPS: { group: SetGroup | null; labelKey: TranslationKey }[] = [
   { group: 'plans', labelKey: 'wall.group.plans' },
   { group: 'elevations', labelKey: 'wall.group.elevations' },
   { group: 'sections', labelKey: 'wall.group.sections' },
+  { group: 'interiors', labelKey: 'wall.group.interiors' },
   { group: 'schedules', labelKey: 'wall.group.schedules' },
   { group: null, labelKey: 'wall.group.other' },
 ];
@@ -63,13 +70,15 @@ export function ScaleChips({ group, extent }: { group: SetGroup; extent: ModelEx
   );
 }
 
-function SheetOnWall({ sheet, extent, onStep }: { sheet: ProjectSheet; extent: ModelExtent | null; onStep: (id: string) => void }) {
+const SheetOnWall = memo(function SheetOnWall({ sheet, extent, onStep }: { sheet: ProjectSheet; extent: ModelExtent | null; onStep: (id: string) => void }) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const reason = extent ? sheetScaleReason(sheet, views, extent) : null;
   const name = `${sheet.number} ${sheet.name}`;
+  const near = useWallView((s) => s.near.includes(sheet.id));
+  const flashed = useWallView((s) => s.highlight === sheet.id);
   return (
-    <figure className="group relative m-0">
+    <figure {...{ [WALL_SHEET_ATTR]: sheet.id }} data-flashed={flashed || undefined} className={cn('group relative m-0 rounded-sm transition-shadow duration-500', flashed && 'ring-4 ring-sky-300 shadow-[0_0_28px_rgba(125,211,252,0.7)]')}>
       <button
         type="button"
         aria-label={name}
@@ -79,7 +88,7 @@ function SheetOnWall({ sheet, extent, onStep }: { sheet: ProjectSheet; extent: M
           if (e.key === 'Enter') onStep(sheet.id);
         }}
       >
-        <WallSheet sheet={sheet} width={SHEET_PX} />
+        <LazyWallSheet sheet={sheet} width={SHEET_PX} near={near} />
       </button>
       <button
         type="button"
@@ -100,18 +109,28 @@ function SheetOnWall({ sheet, extent, onStep }: { sheet: ProjectSheet; extent: M
       </figcaption>
     </figure>
   );
-}
+});
 
 export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onStep: (sheetId: string) => void }) {
   const { t } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
+  const scroller = useRef<HTMLDivElement>(null);
+  const sheetIds = sheets.map((s) => s.id).join(',');
+  // A document loaded with the same sheet ids forgets the Wall without changing them: measure and fill again.
+  const generation = useWallView((s) => s.generation);
+  useWallMeasure(scroller, `${generation}|${sheets.map((s) => `${s.id}:${sheetGroup(s) ?? ''}`).join(',')}`);
+  // Started here, kept going after the Wall is gone; a sheet added starts it again.
+  useEffect(() => startWallFill(), [sheetIds, generation]);
   const columns = GROUPS.map((g) => ({ ...g, sheets: sheets.filter((s) => sheetGroup(s) === g.group) })).filter((g) => g.sheets.length > 0);
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-x-10 gap-y-3 px-8 pt-6">
-        {SCALED.filter((g) => sheets.some((s) => sheetGroup(s) === g)).map((g) => <ScaleChips key={g} group={g} extent={extent} />)}
+    <div className="relative flex h-full flex-col">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-10 gap-y-3 px-8 pt-6">
+        <div className="flex flex-wrap items-center gap-x-10 gap-y-3">
+          {SCALED.filter((g) => sheets.some((s) => sheetGroup(s) === g)).map((g) => <ScaleChips key={g} group={g} extent={extent} />)}
+        </div>
+        <WallFind />
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-8 pb-10 pt-6">
+      <div ref={scroller} className="min-h-0 flex-1 overflow-auto px-8 pb-10 pt-6">
         <div className="flex flex-wrap items-start gap-10">
           {columns.map((col) => (
             <section key={col.labelKey} aria-label={t(col.labelKey)} className="flex flex-col gap-8">
@@ -122,6 +141,7 @@ export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onSte
         </div>
         <p className="mt-10 max-w-xl text-sm text-sky-200/70">{t('wall.hint')}</p>
       </div>
+      <WallMiniMap />
     </div>
   );
 }

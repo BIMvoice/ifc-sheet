@@ -7,7 +7,7 @@
  * themselves come from the project's scheme (`numbering.ts`).
  */
 
-import type { NumberGroup, ProjectSheet, ProjectViewKind } from './types';
+import type { NumberGroup, ProjectSheet, ProjectView } from './types';
 
 /** The sheet as a person's own: no longer numbered by the program. */
 export function withoutAutoNumber(sheet: ProjectSheet): ProjectSheet {
@@ -15,7 +15,8 @@ export function withoutAutoNumber(sheet: ProjectSheet): ProjectSheet {
   return rest;
 }
 
-/** The group of sheets a view of this kind belongs to; `undefined` (a schedule, a legend) is `other`. */
-export function sheetGroupOfView(kind: ProjectViewKind | undefined): NumberGroup {
-  return kind === 'plan' ? 'plans' : kind === 'elevation' ? 'elevations' : kind === 'section' ? 'sections' : 'other';
+/** The group of sheets a view belongs to: an interior elevation its own, apart from the facades; none (a schedule, a legend) is `other`. */
+export function sheetGroupOfView(view: ProjectView | undefined): NumberGroup {
+  if (view?.kind === 'elevation') return view.interior ? 'interiors' : 'elevations';
+  return view?.kind === 'plan' ? 'plans' : view?.kind === 'section' ? 'sections' : 'other';
 }

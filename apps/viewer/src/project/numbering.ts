@@ -8,8 +8,8 @@
  *
  * A number is `<discipline><prefix><separator><n>`, `n` zero-padded to
  * `digits`, running from the group's `start` by `step`. Today's numbers
- * (A-101 plans, A-201 elevations, A-301 sections, A-601 schedules, A-901
- * the rest) are `DEFAULT_SCHEME`.
+ * (A-101 plans, A-201 elevations, A-301 sections, A-401 interior
+ * elevations, A-601 schedules, A-901 the rest) are `DEFAULT_SCHEME`.
  *
  * The sheet's number is its one stored copy. Everything else that names a
  * sheet by number (title block, drawing list, file names, findings, detail
@@ -19,15 +19,15 @@
 
 import type { GroupPattern, NumberGroup, NumberingScheme, ProjectSheet } from './types';
 
-export const NUMBER_GROUPS: readonly NumberGroup[] = ['plans', 'elevations', 'sections', 'schedules', 'other'];
+export const NUMBER_GROUPS: readonly NumberGroup[] = ['plans', 'elevations', 'sections', 'interiors', 'schedules', 'other'];
 
 const pattern = (start: number): GroupPattern => ({ prefix: '', separator: '-', start, digits: 3, step: 1 });
 
-/** A-101 plans, A-201 elevations, A-301 sections, A-601 schedules, A-901 the rest. */
+/** A-101 plans, A-201 elevations, A-301 sections, A-401 interior elevations, A-601 schedules, A-901 the rest. */
 export const DEFAULT_SCHEME: NumberingScheme = {
   discipline: 'A',
   continuous: false,
-  groups: { plans: pattern(101), elevations: pattern(201), sections: pattern(301), schedules: pattern(601), other: pattern(901) },
+  groups: { plans: pattern(101), elevations: pattern(201), sections: pattern(301), interiors: pattern(401), schedules: pattern(601), other: pattern(901) },
 };
 
 /** A01, A02, A03… through the whole set, in set order. */
@@ -62,10 +62,10 @@ export function typedBeforeSchemes(number: string): boolean {
   return !LEGACY_SERIES.test(number.trim());
 }
 
-/** Sheets from files before groups were stored: the series is read back from the number (A-1xx plans, A-2xx elevations, A-3xx sections, A-6xx schedules). */
+/** Sheets from files before groups were stored: the series is read back from the number (A-1xx plans, A-2xx elevations, A-3xx sections, A-4xx interior elevations, A-6xx schedules). */
 function legacyGroup(number: string): NumberGroup {
   const m = LEGACY_SERIES.exec(number);
-  return m ? ({ '1': 'plans', '2': 'elevations', '3': 'sections', '6': 'schedules' } as Record<string, NumberGroup>)[m[1]] ?? 'other' : 'other';
+  return m ? ({ '1': 'plans', '2': 'elevations', '3': 'sections', '4': 'interiors', '6': 'schedules' } as Record<string, NumberGroup>)[m[1]] ?? 'other' : 'other';
 }
 
 /** The group a sheet is numbered in: the one it was made in, else the one its number reads as. */

@@ -23,6 +23,8 @@ import { addProjectSheet, loadProjectDocument, projectDocument, removeProjectIte
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
 import { SheetNumberingForm } from './SheetNumberingForm';
+import { ReadinessList } from '../sheets/ReadinessList';
+import { WALL_SKIN } from '../sheets/set-skin';
 import { TitleBlockForm } from './TitleBlockForm';
 import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
@@ -89,6 +91,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
   const schedules = useProjectStore((s) => s.schedules ?? []);
   const legends = useProjectStore((s) => s.legends ?? []);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [readyOpen, setReadyOpen] = useState(false);
 
   const go = (sheetId: string | null, focus: string | null = null): void => {
     if (!sheetId) return;
@@ -137,6 +140,11 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
             <Row key={s.id} id={s.id} sub={s.number} label={s.name} onOpen={() => go(s.id)} />
           ))}
         </Group>
+        <details className="border-t border-sky-300/10 px-4 py-3" onToggle={(e) => setReadyOpen(e.currentTarget.open)}>
+          <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('ready.title')}</summary>
+          {/* Mounted only while open: reading the facts walks every entity of every model. */}
+          {readyOpen ? <div className="mt-2 text-xs leading-relaxed"><ReadinessList skin={WALL_SKIN} /></div> : null}
+        </details>
         <details className="border-t border-sky-300/10 px-4 py-3">
           <summary className="cursor-pointer text-xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.num.title')}</summary>
           <SheetNumberingForm />
@@ -157,6 +165,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
             <>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('all', t('wall.project.joinerySchedule')))}>{t('wall.project.addJoinery')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('materials', t('takeoff.newName')))}>{t('wall.project.addTakeoff')}</button>
+              <button type="button" className={action} onClick={() => go(addScheduleToSet('types', t('typeQty.newName')))}>{t('wall.project.addTypeQuantities')}</button>
             </>
           )}
         >

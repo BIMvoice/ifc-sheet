@@ -85,11 +85,11 @@ export function addViewport(sheetId: string, viewId: string, at: { x: number; y:
   const id = freshProjectId('viewport');
   // 0 × 0: the box fits the drawing once it is generated (see `viewportBox`).
   const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, width: 0, height: 0, center: null };
-  const kind = useProjectStore.getState().views.find((v) => v.id === viewId)?.kind;
+  const view = useProjectStore.getState().views.find((v) => v.id === viewId);
   patchSheet(sheetId, (s) => {
     // A number the program chose follows what the sheet comes to hold, once.
     const renumber = s.autoNumber && (s.viewports ?? []).length === 0;
-    const series = renumber ? sheetGroupOfView(kind) : s.series;
+    const series = renumber ? sheetGroupOfView(view) : s.series;
     const number = renumber && series ? nextNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), series, numberingScheme()) : s.number;
     return { ...withoutAutoNumber(s), number, ...(series ? { series } : {}), viewports: [...(s.viewports ?? []), viewport] };
   });
