@@ -31,8 +31,8 @@ export interface SectionPlaneConfig {
   axis: SectionAxis;
   /** Position along the axis in world units */
   position: number;
-  /** Whether to flip the view direction */
-  flipped: boolean;
+  flipped: boolean; // flip the view direction (and mirror U)
+  reflected?: boolean; // look UP like `flipped` but keep the plan's x/y (no U mirror): a reflected ceiling plan; with a non-flipped `y` plane, see `looksUp`
   /**
    * Optional arbitrary-normal override (issue #243). When supplied, the
    * cutter uses this plane verbatim (`dot(p, normal) = distance`) and

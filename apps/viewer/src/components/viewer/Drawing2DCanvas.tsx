@@ -779,7 +779,7 @@ export function Drawing2DCanvas({
           switch (line.category) {
             case 'projection': lineWidth = 0.25; break;
             case 'hidden': lineWidth = 0.18; strokeColor = '#666666'; dashPattern = [4, 2]; break;
-            case 'silhouette': lineWidth = 0.35; break;
+            case 'silhouette': lineWidth = 0.5; break;
             case 'crease': lineWidth = 0.18; break;
             case 'boundary': lineWidth = 0.25; break;
             case 'annotation': lineWidth = 0.13; break;
@@ -1163,7 +1163,7 @@ export function Drawing2DCanvas({
             dashPattern = [2, 1];
             break;
           case 'silhouette':
-            lineWidth = 0.35;
+            lineWidth = 0.5;
             strokeColor = paperTheme.ink;
             break;
           case 'crease':

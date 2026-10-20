@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import type { IfcSourceBytes } from '@ifc-lite/parser';
+import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
 
 /**
  * useDrawingGeneration - Custom hook for 2D drawing generation logic
@@ -27,6 +27,7 @@ import {
   type SectionConfig,
   type ProfileEntry,
 } from '@ifc-lite/drawing-2d';
+import type { UseDrawingGenerationParams } from './drawingGenerationParams.js';
 import { createDrawingRequestQueue } from './drawingRequestQueue.js';
 import { createMeshOutlineProvider, type MeshOutline2dFn } from './meshOutlineProvider.js';
 import { type GeometryResult } from '@ifc-lite/geometry';
@@ -34,12 +35,11 @@ import { getWholeSourceForWorker, parseProfilesFlat } from '@/lib/overlay-parse/
 import { placedConstructionProfiles } from '@/lib/model-placement/construction-profiles';
 import { buildProfileEntries, warnAboutSkippedProfiles } from '@/lib/overlay-parse/profile-entries.js';
 import { type SymbolicDrawingLine } from '@/lib/overlay-parse/symbolic-drawing-lines.js';
-import type { SpatialHierarchy } from '@ifc-lite/data';
 import * as IfcWasm from '@ifc-lite/wasm';
 import { customPlaneCenter, useViewerStore } from '@/store';
 import { notifyDrawing2DSectionConfig, consumeRestoredSectionConfig } from './useDrawing2DPersistence.js';
 import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visibility';
-import { isTypeVisible, type TypeVisibilityGate } from '@/store/typeVisibilityFilter';
+import { isTypeVisible } from '@/store/typeVisibilityFilter';
 import { roomDrawingSymbolic } from '@/lib/collab/room-drawing-symbolic';
 import { ifcToViewerAxes } from '@/lib/geo/coordinate-frame';
 import { useDrawingRtcContext } from './useDrawingRtcContext.js';
@@ -82,53 +82,7 @@ export const ANNOTATION_VIEW_DEPTH = 1.2;
 // occluded/far dashed (hidden-line pass) — and culls the cut-away front half
 // and anything past this depth. Half the model depth is a sensible default;
 // tune here if sections feel too deep or too shallow.
-export const SECTION_VIEW_DEPTH_FRACTION = 0.5;
-
-interface UseDrawingGenerationParams {
-  geometryResult: GeometryResult | null | undefined;
-  // `spatialHierarchy` (optional — absent on cache-reopened models) backs the
-  // current-floor projection scoping (issue #979 follow-up). The runtime
-  // already passes the full DataStore from `useIfc()`, so this is a pure type
-  // widen, not new prop threading.
-  ifcDataStore: { source: IfcSourceBytes; spatialHierarchy?: SpatialHierarchy } | null;
-  /**
-   * Section plane state. `custom` is the optional face-pick override
-   * (issue #243); when set the cutter cuts on that arbitrary plane and
-   * the cap basis flows from `custom.tangent`/`bitangent` so the cap
-   * silhouette lands precisely on the tilted plane.
-   */
-  sectionPlane: {
-    axis: 'down' | 'front' | 'side';
-    position: number;
-    flipped: boolean;
-    custom?: {
-      normal:    [number, number, number];
-      distance:  number;
-      pickedAt:  [number, number, number];
-      tangent:   [number, number, number];
-      bitangent: [number, number, number];
-    };
-  };
-  displayOptions: { showHiddenLines: boolean; useSymbolicRepresentations: boolean; show3DOverlay: boolean; scale: number; showConstructionProjection: boolean; constructionProjectionDepth?: number | null };
-  /**
-   * Class-level Visibility toggles (Spaces, Openings, Site, Virtual Elements,
-   * Spatial Zones, Annotations). Global, not 3D-only — see the filter in
-   * `generateDrawing` (issue #2060).
-   */
-  typeVisibility: TypeVisibilityGate;
-  combinedHiddenIds: Set<number>;
-  combinedIsolatedIds: Set<number> | null;
-  computedIsolatedIds?: Set<number> | null;
-  models: Map<string, { id: string; visible: boolean; idOffset?: number }>;
-  panelVisible: boolean;
-  activeTool: string;
-  drawing: Drawing2D | null;
-  // Store actions
-  setDrawing: (d: Drawing2D | null) => void;
-  setDrawingStatus: (s: 'idle' | 'generating' | 'ready' | 'error') => void;
-  setDrawingProgress: (p: number, phase: string) => void;
-  setDrawingError: (e: string | null) => void; /** false: a project view's own generator, without the shared drawing's global side effects. */ primary?: boolean;
-}
+export { SECTION_VIEW_DEPTH_FRACTION };
 
 interface UseDrawingGenerationResult {
   generateDrawing: (isRegenerate?: boolean) => Promise<void>;
@@ -291,14 +245,16 @@ export function useDrawingGeneration({
       }
     }
 
-    // Construction projection runs on any CARDINAL cut (plan 'down' + vertical
-    // 'front'/'side'), but NOT a face-picked custom plane (the band classifier
-    // and outline binding are cardinal-only). Plan and section use different
+    // Construction projection runs on every cut: plan 'down', vertical
+    // 'front'/'side', and a face-picked or plan-line custom plane. The engine
+    // takes the custom basis end to end (cutter, band clip, silhouette path,
+    // depth raster; it bypasses the cardinal-only outline binding itself), so
+    // a section made from a line on a plan shows what lies beyond the cut to
+    // the view depth, like an elevation. Plan and section use different
     // boundaries: plan scopes to the current storey; a vertical section has no
     // "storey", so it projects a bounded view depth behind the cut (see the
-    // band computation below). The UI gates the toggle to the same set; the
-    // persisted flag can survive a switch to a custom plane, so gate here too.
-    const projectionSupported = !sectionPlane.custom;
+    // band computation below).
+    const projectionSupported = true;
     const manualDepth = displayOptions.constructionProjectionDepth;
     const boundedProjection = typeof manualDepth === 'number' && Number.isFinite(manualDepth) && manualDepth >= 0;
     const projectionOn = projectionSupported && displayOptions.showConstructionProjection && (!boundedProjection || manualDepth > 0);
@@ -311,7 +267,7 @@ export function useDrawingGeneration({
     // (profiles stay empty → every mesh silhouettes). Cached per model since
     // they don't move with the section. Single-model (modelIndex 0) for now,
     // mirroring the symbolic path's federation limitation.
-    const profilesNeeded = projectionOn && !boundedProjection && sectionPlane.axis === 'down';
+    const profilesNeeded = projectionOn && !boundedProjection && sectionPlane.axis === 'down' && !sectionPlane.custom && !sectionPlane.reflected;
     let profiles: ProfileEntry[] = [];
     if (profilesNeeded && ifcDataStore?.source && modelCacheKey !== null) {
       const pcache = profileCacheRef.current;
@@ -442,13 +398,14 @@ export function useDrawingGeneration({
           // swapped. The shipped full-extent bands were symmetric so this never
           // mattered before; the asymmetric storey bands make flip significant.
           const bands = currentFloorBands(floors, position, axisMin, axisMax);
-          belowDepth = sectionPlane.flipped ? bands.above : bands.below;
-          aboveDepth = sectionPlane.flipped ? bands.below : bands.above;
+          belowDepth = sectionPlane.flipped || sectionPlane.reflected ? bands.above : bands.below;
+          aboveDepth = sectionPlane.flipped || sectionPlane.reflected ? bands.below : bands.above;
         }
       }
 
-      if (projectionOn && !sectionPlane.custom && sectionPlane.axis !== 'down') {
-        belowDepth = Math.max((axisMax - axisMin) * SECTION_VIEW_DEPTH_FRACTION, 1e-3);
+      if (projectionOn && (sectionPlane.custom || sectionPlane.axis !== 'down')) {
+        // The automatic depth is shared with the section's depth band on its plan.
+        belowDepth = automaticViewDepth(sectionPlane, bounds) ?? 1e-3;
         aboveDepth = 1e-3;
       }
       if (boundedProjection) {
@@ -456,6 +413,7 @@ export function useDrawingGeneration({
         if (manualDepth === 0 || sectionPlane.axis !== 'down') aboveDepth = 0;
       }
 
+      if (sectionPlane.reflected) aboveDepth = 1e-3; // a reflected ceiling plan sees only above its cut; the floor side is not drawn
       // Adjust progress to account for symbolic parsing phase (0-20%)
       const progressOffset = symbolicLines.length > 0 ? 20 : 0;
       const progressScale = symbolicLines.length > 0 ? 0.8 : 1;
@@ -475,6 +433,7 @@ export function useDrawingGeneration({
 
       // Override the flipped setting
       config.plane.flipped = sectionPlane.flipped;
+      if (sectionPlane.reflected) config.plane.reflected = true;
 
       // Face-pick custom plane (issue #243): hand the cutter the explicit
       // basis so its 2D output sits in the same coordinate system the cap
@@ -709,7 +668,7 @@ export function useDrawingGeneration({
             wy * cullNormal[1] +
             wz * cullNormal[2] -
             cullDistance;
-          if (sectionPlane.flipped) {
+          if (sectionPlane.flipped || sectionPlane.reflected) {
             return signedDist >= 0 && signedDist <= ANNOTATION_VIEW_DEPTH;
           }
           return signedDist <= 0 && signedDist >= -ANNOTATION_VIEW_DEPTH;
@@ -1004,7 +963,7 @@ export function useDrawingGeneration({
     previousInputs.current = [];
   }, [queue]);
   useEffect(() => {
-    const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped,
+    const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped, sectionPlane.reflected === true,
       sectionPlane.custom]);
     const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
       displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,

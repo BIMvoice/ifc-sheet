@@ -25,7 +25,7 @@ export const tagCommand: DraftCommandDef = {
   aliases: ['TAG', 'TG'],
   labelKey: 'drafting.cmd.tag',
   create(ctx) {
-    let field: TagField = 'mark';
+    let field: TagField = ctx.settings.tagField;
     let anchor: { p: Pt; guid: string; text: string } | null = null;
     return {
       prompt: () => ({ key: anchor ? 'drafting.prompt.tagLabel' : 'drafting.prompt.tagElement', params: { field: field.toUpperCase() } }),
@@ -52,7 +52,7 @@ export const tagCommand: DraftCommandDef = {
         }
         const shape = { type: 'leader' as const, pts: [anchor.p, p], text: anchor.text, height: ctx.settings.textHeight };
         const styled = styledParams(ctx.viewId, shape, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle });
-        editDrafts({ add: [newDraft(ctx.viewId, ctx.layerId, shape, { ...styled, tagOf: anchor.guid, tagField: field })] });
+        editDrafts({ add: [newDraft(ctx.viewId, ctx.layerId, shape, { ...styled, tagOf: anchor.guid, tagField: field, ...(ctx.settings.annotationType?.tool === 'tag' ? { atype: ctx.settings.annotationType.id } : {}) })] });
         anchor = null;
         return 'continue';
       },

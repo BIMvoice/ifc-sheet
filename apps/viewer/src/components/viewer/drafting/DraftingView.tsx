@@ -9,74 +9,138 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GraphicOverrideEngine, type Drawing2D } from '@ifc-lite/drawing-2d';
-import { isGeometry, type DraftEntity, type DraftShape, type Pt } from '@/drafting/types';
-import { drawingToWorld, type SectionAxisName } from '@/drafting/frame';
+
+import { GraphicOverrideEngine } from '@ifc-lite/drawing-2d';
+import { isGeometry } from '@/drafting/types';
+import { type SectionAxisName } from '@/drafting/frame';
 import { parsePat } from '@/drafting/hatch/pattern';
-import { resolvePlanLevel } from '@/project/view-defaults';
+
 import { viewPlaneConfig, viewWorkPlane } from '@/project/view-plane-config';
+
 import { mergedSectionBounds } from '@/lib/section/section-distance';
+
 import { FileDown, Layers, Maximize2, Redo2, Undo2 } from 'lucide-react';
+
 import { openStandards } from '@/project/standards-dialog-store';
+
 import { useTranslation } from '@/i18n';
+
 import { cn } from '@/lib/utils';
+
 import { Spinner } from '@/components/ui/spinner';
+
 import { IconButton } from '@/components/ui/icon-button';
+
 import { Drawing2DCanvas } from '@/components/viewer/Drawing2DCanvas';
+
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
+
 import { useViewControls } from '@/hooks/useViewControls';
+
 import { useViewerStore } from '@/store';
+
 import { useProjectStore } from '@/project/project-store';
+
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
+
 import type { ProjectView } from '@/project/types';
-import { pickModelElement, referenceSet, referencesIn } from '@/drafting/references';
-import { selectFromPlan } from '@/components/viewer/plan/PlanPointer';
+
+import { referenceSet, referencesIn } from '@/drafting/references';
 import { draftsOfView } from '@/drafting/draft-store';
+
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
+
 import {
-  attachDraftingView, currentLayerId, setElementPicker, pressEscape, runningCommand, setAnnotationProviders, setCurrentLayer, setModelPicker, setWorkPlaneProvider, submitCommandLine,
-  toggleOrtho, toggleSnap, useDraftingSession, pickEntity, setDraftSelection,
+  attachDraftingView,
+  currentLayerId,
+  pressEscape,
+  runningCommand,
+  setCurrentLayer,
+  submitCommandLine,
+  toggleOrtho,
+  toggleSnap,
+  useDraftingSession,
+  pickEntity,
+  setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
+
+import { modelHighlight } from './drafting-shapes';
+
+import { useDraftingProviders } from './useDraftingProviders';
+
 import { CommandLine } from './CommandLine';
+
 import { useDraftingPointer } from './useDraftingPointer';
+
 import { useDraftingKeys } from './useDraftingKeys';
+
 import { DraftPropertiesPanel } from './DraftPropertiesPanel';
+
 import { SelectionBar } from './SelectionBar';
+
 import { gripsOf } from '@/drafting/grips';
-import { arrangementLoops, type Segment } from '@/drafting/arrangement';
-import { shapeSegments } from '@/hooks/useDraftingLines3D';
+
+import { grippable } from '@/drafting/section-link';
+
+import { cropClipPath, isDetailMark, selectedDetailGrips } from '@/drafting/detail-mark';
+
+import { selectedSectionBand } from '@/drafting/section-depth';
+
 import { screenToDrawing } from '@/drafting/frame';
+
 import { useModelCommandBridge } from './ModelCommandLayer';
+
 import { OpeningSymbolsLayer } from './OpeningSymbolsLayer';
+
 import { CutHatchLayer } from './CutHatchLayer';
+
 import { MembraneLayer } from './MembraneLayer';
+
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
+
 import { roofAtPoint } from '@/project/roof-plan';
+
 import { editRoofBlock } from '@/project/roof-block';
+
 import { useRoofDialog } from '@/project/roof-dialog-store';
+
 import { exportViewDxf } from './view-dxf';
-import { drawnBySymbol } from '@/project/view-symbols';
+
+import { viewOmits } from '@/project/discipline-facts';
+
 import { planOverlays } from '@/project/plan-overlays';
+
 import { viewMaterials } from '@/project/material-resolver';
+
 import { membraneOverlays } from '@/project/membrane-overlays';
+
 import { partHostType } from '@/project/part-host';
+
 import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOverrideRules } from '@/project/view-graphics';
+
 import { capturePointer } from '@/lib/pointer-capture';
+
 import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
+
 
 const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
 const NO_SHEET_TRANSFORM = { current: null };
 
-export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d' }> }) {
+/**
+ * `bare`: the drawing alone, as IfcSheet shows it inside a sheet: no toolbar,
+ * no property grid; only the prompt line stays, it carries the tools' choices.
+ */
+export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView, { kind: '3d' }>; bare?: boolean }) {
   const { t } = useTranslation();
   const entry = useViewDrawings((s) => s.byView[view.id]) ?? EMPTY_VIEW_DRAWING;
   const { drawing, status } = entry;
   const showHiddenLines = useViewerStore((s) => s.drawing2DDisplayOptions.showHiddenLines);
   const allDrafts = useProjectStore((s) => s.drafts);
   const layers = useProjectStore((s) => s.draftLayers);
+  const views = useProjectStore((s) => s.views);
   const selection = useDraftingSession((s) => s.selection);
-  const ortho = useDraftingSession((s) => s.ortho);
+  const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
   const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -87,6 +151,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
   const models = useViewerStore((s) => s.models);
   const legacyGeometry = useViewerStore((s) => s.geometryResult);
   // The drawing's own plane; without a drawing (an empty project) the view's work plane.
+  const modelBounds = useMemo(() => mergedSectionBounds(models, legacyGeometry), [models, legacyGeometry]);
   const fallbackPlane = useMemo(() => viewPlaneConfig(view, levels, mergedSectionBounds(models, legacyGeometry)), [view, levels, models, legacyGeometry]);
   const plane = drawing?.config.plane ?? fallbackPlane ?? undefined;
   const axis: SectionAxisName = plane ? AXIS_NAME[plane.axis] : 'down';
@@ -116,10 +181,11 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
   const graphics = view.graphics;
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
+  const discipline = view.kind === 'plan' ? view.discipline : undefined;
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
-    return drawing ? styledDrawing(drawing, graphics, partHostType, view.kind === 'plan' ? drawnBySymbol : undefined, viewMaterials(drawing)) : null;
-  }, [drawing, graphics, view.kind, materialsTable, mutationVersionForMaterials]);
+    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing)) : null;
+  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials]);
   const overrideRules = useMemo(() => viewOverrideRules(graphics), [graphics]);
   const overrideEngine = useMemo(() => new GraphicOverrideEngine(overrideRules), [overrideRules]);
   const useIfcMaterials = (graphics?.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId) === DEFAULT_VIEW_PRESET;
@@ -136,34 +202,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
     // Annotation sizes are paper sizes at the view's scale (the settings read as at 1:100).
     attachDraftingView(view.id, axis, (min, max) => (references ? referencesIn(references, min, max) : []), (view.scale ?? 100) / 100);
   }, [view.id, axis, references, view.scale]);
-  // An idle click on the drawing selects the model element under it (both selection channels, as the plan view does).
-  useEffect(() => {
-    setModelPicker((p, tolerance, additive) => {
-      // Nothing cut under the click: a roof whose outline holds it (roofs are drawn over the plan, not cut).
-      const id = (drawing && references ? pickModelElement(drawing, references, p, tolerance) : null) ?? (view.kind === 'plan' && plane ? roofAtPoint(view, plane, p) : null);
-      if (id !== null || !additive) selectFromPlan(id, additive);
-    });
-    return () => setModelPicker(null);
-  }, [drawing, references, view, plane]);
-  // Commands that work on a model element (a door into a wall in elevation) ask what is under a point.
-  useEffect(() => {
-    setElementPicker((p) => (drawing && references ? pickModelElement(drawing, references, p, 6 / viewTransform.scale) : null));
-    return () => setElementPicker(null);
-  }, [drawing, references, viewTransform.scale]);
-  // Hatch boundaries: drafted closed shapes and the drawing's cut outlines. Level marks: the
-  // plan's level, or the point's height on a section / elevation.
-  useEffect(() => {
-    setAnnotationProviders(
-      () => closedLoopsOf(entities, drawing),
-      (p) => {
-        if (view.kind === 'plan') return (resolvePlanLevel(view, levels) ?? view.level).elevation;
-        return plane ? drawingToWorld(plane, p).y : 0;
-      },
-    );
-  }, [entities, drawing, view, levels, plane]);
-  useEffect(() => {
-    setWorkPlaneProvider(() => viewWorkPlane(view, plane ?? null, levels), () => view);
-  }, [plane, view, levels]);
+  useDraftingProviders({ view, drawing, references, entities, plane, levels, scale: viewTransform.scale });
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
   const selectedModelIds = useViewerStore((s) => s.selectedEntityIds);
@@ -176,7 +215,14 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
 
   // The selection's grips (a handful of entities at most) and the on-canvas editing bar.
   const selected = useMemo(() => entities.filter((e) => selection.has(e.id)), [entities, selection]);
-  const grips = useMemo(() => (selected.length <= 20 ? selected.flatMap((e) => gripsOf(e.id, e.shape)) : []), [selected]);
+  // A selected section symbol also shows the depth band, with its one handle on the viewing side.
+  const sectionBand = useMemo(() => selectedSectionBand(selection, entities, views, modelBounds), [selection, entities, views, modelBounds]);
+  // A selected detail mark shows the grips of its area.
+  const detailMark = useMemo(() => selectedDetailGrips(selection, entities, views), [selection, entities, views]);
+  const grips = useMemo(() => {
+    const own = selected.length <= 20 ? grippable(selected.filter((e) => !isDetailMark(e, views)), entities, views).flatMap((e) => gripsOf(e.id, e.shape)) : [];
+    return [...own, ...(sectionBand ? [sectionBand.grip] : []), ...(detailMark?.grips ?? [])];
+  }, [selected, entities, views, sectionBand, detailMark]);
   const [editingText, setEditingText] = useState(false);
   useEffect(() => setEditingText(false), [selection]);
   const { state, handlers } = useDraftingPointer({ containerRef, transform: viewTransform, setTransform: setViewTransform, axis, entityShapes, references, grips });
@@ -214,7 +260,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex shrink-0 items-center gap-1 h-9 px-2 border-b border-zinc-200 dark:border-zinc-800 text-xs">
+      {bare ? null : <div className="flex shrink-0 items-center gap-1 h-9 px-2 border-b border-zinc-200 dark:border-zinc-800 text-xs">
         <span className="font-semibold truncate">{view.name}</span>
         <span className="flex-1" />
         <Toggle active={snap} label={t('drafting.snap')} onClick={toggleSnap} />
@@ -232,7 +278,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
         <IconButton label={t('drafting.redo')} className="size-7" onClick={redoEarliest}><Redo2 className="size-4" /></IconButton>
         <IconButton label={t('drafting.fit')} className="size-7" onClick={fitToView}><Maximize2 className="size-4" /></IconButton>
         <IconButton label={t('drafting.exportDxf')} className="size-7" onClick={exportDxf}><FileDown className="size-4" /></IconButton>
-      </div>
+      </div>}
       <div
         ref={containerRef}
         data-drafting-canvas
@@ -254,6 +300,8 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
           if (roof !== null && !useRoofDialog.getState().editing) editRoofBlock(roof);
         }}
       >
+        {/* A detail shows only its area of the drawing and of the symbols derived from the model. */}
+        <div className="absolute inset-0" style={view.detail ? { clipPath: cropClipPath({ min: view.detail.min, max: view.detail.max }, viewTransform, axis) } : undefined}>
         {shown ? (
           <Drawing2DCanvas
             drawing={shown}
@@ -280,6 +328,7 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
         ) : null}
         <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
+        </div>
         <DraftOverlay
           entities={entities}
           layers={layers}
@@ -297,52 +346,17 @@ export function DraftingView({ view }: { view: Exclude<ProjectView, { kind: '3d'
           hiddenLayers={view.hiddenLayers}
           grips={grips}
           gripDrag={state.gripDrag}
+          sectionBand={sectionBand}
+          crop={view.detail}
         />
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}
-        <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />
+        {bare ? null : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
       <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
     </div>
   );
-}
-
-const HIGHLIGHT_LIMIT = 5000;
-const CIRCLE_STEPS = 64;
-/** Ends closer than this (metres) count as meeting when lines enclose an area. */
-const ARRANGEMENT_TOLERANCE_M = 0.001;
-
-/** Every closed loop a hatch can fill in this view. */
-function closedLoopsOf(entities: readonly DraftEntity[], drawing: Drawing2D | null): Pt[][] {
-  const loops: Pt[][] = [];
-  for (const e of entities) {
-    const s = e.shape;
-    if (s.type === 'polyline' && s.closed) loops.push(s.pts);
-    else if (s.type === 'circle') loops.push(Array.from({ length: CIRCLE_STEPS }, (_, i) => ({ x: s.c.x + s.r * Math.cos((i / CIRCLE_STEPS) * Math.PI * 2), y: s.c.y + s.r * Math.sin((i / CIRCLE_STEPS) * Math.PI * 2) })));
-  }
-  // Whatever drafted lines, arcs and polylines enclose — end to end or crossing (BOUNDARY).
-  const segments = entities.flatMap((e) => (isGeometry(e.shape) ? shapeSegments(e.shape).map(([a, b]) => [a, b] as Segment) : []));
-  loops.push(...arrangementLoops(segments, ARRANGEMENT_TOLERANCE_M));
-  for (const polygon of drawing?.cutPolygons ?? []) {
-    loops.push(polygon.polygon.outer);
-    for (const hole of polygon.polygon.holes) loops.push(hole);
-  }
-  return loops;
-}
-
-/** The selected model elements' cut outlines and drawn lines, for the overlay. */
-function modelHighlight(drawing: Drawing2D | null, ids: ReadonlySet<number>): DraftShape[] {
-  if (!drawing || ids.size === 0) return [];
-  const shapes: DraftShape[] = [];
-  for (const polygon of drawing.cutPolygons) {
-    if (ids.has(polygon.entityId)) shapes.push({ type: 'polyline', pts: polygon.polygon.outer, closed: true });
-  }
-  for (const line of drawing.lines) {
-    if (shapes.length >= HIGHLIGHT_LIMIT) break;
-    if (ids.has(line.entityId) && line.visibility !== 'hidden') shapes.push({ type: 'line', a: line.line.start, b: line.line.end });
-  }
-  return shapes;
 }
 
 function Toggle({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {

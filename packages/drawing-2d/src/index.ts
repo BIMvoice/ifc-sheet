@@ -113,7 +113,7 @@ export {
   signedAxisDepth,
   bandVisibility,
   projectPointForPlane,
-  getViewDirectionForPlane,
+  getViewDirectionForPlane, looksUp,
   outlineToProjectionLines,
 } from './projection-bands.js';
 export type { ProjectionBand, ProjectionBandDepths } from './projection-bands.js';

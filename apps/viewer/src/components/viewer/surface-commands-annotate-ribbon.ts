@@ -10,7 +10,7 @@
  */
 
 import {
-  AnnoAxis, AnnoDimAligned, AnnoDimAngular, AnnoDimLinear, AnnoDimRadius, AnnoHatch, AnnoLeader, AnnoLevel, AnnoLoadPattern, AnnoTag, AnnoText, DraftingStandards,
+  AnnoAxis, AnnoDimAligned, AnnoDimAngular, AnnoDimLinear, AnnoDimRadius, AnnoHatch, AnnoLeader, AnnoLevel, AnnoLegend, AnnoLoadPattern, AnnoSymbol, AnnoSymbolMake, AnnoTag, AnnoText, DraftingStandards,
 } from '@/icons';
 import { resolve } from '@/i18n/registry';
 import { toast } from '@/components/ui/toast';
@@ -18,6 +18,9 @@ import { isDrawingTabActive } from '@/project/document-tabs';
 import { startDraftCommand } from '@/drafting/session';
 import { importHatchPatternFile } from '@/drafting/hatch-import';
 import { openStandards } from '@/project/standards-dialog-store';
+import { addLegend } from '@/legend/legend-actions';
+import { activateDocumentTab } from '@/project/open-view';
+import { useProjectStore } from '@/project/project-store';
 import type { SurfaceCommandDefinition } from './surface-command-types';
 
 const ribbonOnly = ['ribbon'] as const;
@@ -33,18 +36,34 @@ function draft(id: string): () => void {
   };
 }
 
+/** A new legend that lists what the item in front uses (a sheet and its views, or a view), else the whole project; it opens as a tab. */
+function newLegend(): void {
+  const s = useProjectStore.getState();
+  const front = s.activeItemId;
+  const scope = s.sheets.some((x) => x.id === front) ? { scope: 'sheet' as const, scopeId: front ?? undefined }
+    : s.views.some((x) => x.id === front) ? { scope: 'view' as const, scopeId: front ?? undefined } : {};
+  activateDocumentTab(addLegend(resolve('legend.newName'), scope));
+}
+
 export const RIBBON_ANNOTATE_SURFACE_COMMANDS = [
   { id: 'annotate:text', labelKey: 'drafting.tool.text', keywords: 'text note label', category: 'Tools', icon: AnnoText, surfaces: ribbonOnly, enabled: always, run: draft('text') },
   { id: 'annotate:standards', labelKey: 'standards.open', keywords: 'layers layer groups text style dimension style standards manager', category: 'Tools', icon: DraftingStandards, surfaces: ribbonOnly, enabled: always, run: () => openStandards('layers') },
   { id: 'annotate:tag', labelKey: 'drafting.tool.tag', keywords: 'tag label element mark door window number', category: 'Tools', icon: AnnoTag, surfaces: ribbonOnly, enabled: always, run: draft('tag') },
+  { id: 'annotate:label', labelKey: 'drafting.tool.label', keywords: 'parametric label property pset quantity template automatic', category: 'Tools', icon: AnnoTag, surfaces: ribbonOnly, enabled: always, run: draft('label') },
+  { id: 'annotate:label-all', labelKey: 'drafting.tool.labelAll', keywords: 'label all tag every element class parametric', category: 'Tools', icon: AnnoTag, surfaces: ribbonOnly, enabled: always, run: draft('labelall') },
   { id: 'annotate:leader', labelKey: 'drafting.tool.leader', keywords: 'leader arrow callout note', category: 'Tools', icon: AnnoLeader, surfaces: ribbonOnly, enabled: always, run: draft('leader') },
   { id: 'annotate:dim-aligned', labelKey: 'drafting.tool.dimAligned', keywords: 'dimension aligned measure', category: 'Tools', icon: AnnoDimAligned, surfaces: ribbonOnly, enabled: always, run: draft('dimaligned') },
   { id: 'annotate:dim-linear', labelKey: 'drafting.tool.dimLinear', keywords: 'dimension linear horizontal vertical', category: 'Tools', icon: AnnoDimLinear, surfaces: ribbonOnly, enabled: always, run: draft('dimlinear') },
   { id: 'annotate:dim-radius', labelKey: 'drafting.tool.dimRadius', keywords: 'dimension radius', category: 'Tools', icon: AnnoDimRadius, surfaces: ribbonOnly, enabled: always, run: draft('dimradius') },
   { id: 'annotate:dim-diameter', labelKey: 'drafting.tool.dimDiameter', keywords: 'dimension diameter', category: 'Tools', icon: AnnoDimRadius, surfaces: ribbonOnly, enabled: always, run: draft('dimdiameter') },
   { id: 'annotate:dim-angular', labelKey: 'drafting.tool.dimAngular', keywords: 'dimension angle angular', category: 'Tools', icon: AnnoDimAngular, surfaces: ribbonOnly, enabled: always, run: draft('dimangular') },
+  { id: 'annotate:level-align', labelKey: 'drafting.tool.levelAlign', keywords: 'align level marks line up stack section', category: 'Tools', icon: AnnoLevel, surfaces: ribbonOnly, enabled: always, run: draft('levelalign') },
   { id: 'annotate:level', labelKey: 'drafting.tool.level', keywords: 'level mark spot elevation cota', category: 'Tools', icon: AnnoLevel, surfaces: ribbonOnly, enabled: always, run: draft('level') },
   { id: 'annotate:axis', labelKey: 'drafting.tool.axis', keywords: 'axis axes grid gridline bubble ax', category: 'Tools', icon: AnnoAxis, surfaces: ribbonOnly, enabled: always, run: draft('axis') },
   { id: 'annotate:hatch', labelKey: 'drafting.tool.hatch', keywords: 'hatch fill pattern pat', category: 'Tools', icon: AnnoHatch, surfaces: ribbonOnly, enabled: always, run: draft('hatch') },
+  { id: 'annotate:symbol', labelKey: 'drafting.tool.symbol', keywords: 'symbol block north arrow scale bar insert place', category: 'Tools', icon: AnnoSymbol, surfaces: ribbonOnly, enabled: always, run: draft('symbol') },
+  { id: 'annotate:make-symbol', labelKey: 'drafting.tool.makeSymbol', keywords: 'symbol block make create selection', category: 'Tools', icon: AnnoSymbolMake, surfaces: ribbonOnly, enabled: always, run: draft('makesymbol') },
+  { id: 'annotate:edit-symbol', labelKey: 'drafting.tool.explodeSymbol', keywords: 'symbol block edit explode redefine', category: 'Tools', icon: AnnoSymbolMake, surfaces: ribbonOnly, enabled: always, run: draft('explodesymbol') },
+  { id: 'annotate:legend', labelKey: 'legend.new', keywords: 'legend key table materials hatches layers symbols', category: 'Tools', icon: AnnoLegend, surfaces: ribbonOnly, enabled: always, run: newLegend },
   { id: 'annotate:load-pattern', labelKey: 'drafting.tool.loadPattern', keywords: 'load import hatch pattern pat file', category: 'Tools', icon: AnnoLoadPattern, surfaces: ribbonOnly, enabled: always, run: () => { void importHatchPatternFile(); } },
 ] as const satisfies readonly SurfaceCommandDefinition[];

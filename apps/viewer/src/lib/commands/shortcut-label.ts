@@ -8,7 +8,7 @@
  * hint is spelled once and follows the platform.
  */
 
-import { chordOnPlatform, formatChord, isApplePlatform } from './chord';
+import { ariaChord, chordOnPlatform, formatChord, isApplePlatform } from './chord';
 import { KEY_COMMANDS, type KeyCommandDefinition, type KeyCommandId } from './keyboard-commands';
 
 export type { KeyCommandId };
@@ -50,4 +50,14 @@ export function primaryShortcutLabel(id: KeyCommandId, apple: boolean = isAppleP
   // which `keyboard-commands.test.ts` asserts.
   if (!chord) throw new Error(`Keyboard command ${id} has no chord on this platform`);
   return formatChord(chord, apple);
+}
+
+/**
+ * A command's keys as the `aria-keyshortcuts` attribute takes them: every
+ * chord on this platform, space-separated (`PageDown`, `Alt+Shift+1`). Read
+ * from the same row as {@link shortcutLabel}, so what a control says and what
+ * it announces cannot differ.
+ */
+export function ariaKeyShortcuts(id: KeyCommandId, apple: boolean = isApplePlatform()): string {
+  return keyCommand(id).keys.filter((chord) => chordOnPlatform(chord, apple)).map((chord) => ariaChord(chord, apple)).filter((k): k is string => k !== null).join(' ');
 }

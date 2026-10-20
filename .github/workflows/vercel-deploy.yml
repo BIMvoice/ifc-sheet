@@ -1,0 +1,157 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# Build the app on GitHub and publish the result to Vercel.
+#
+# Vercel's free build machine has 8 GB, and bundling the viewer now runs out of
+# memory there on some builds (exit 137 at "rendering chunks"). GitHub's runners
+# for public repositories have 16 GB, so the same build (the project's own
+# install and build commands, through `vercel build`) runs here, and Vercel only
+# receives the finished output (`vercel deploy --prebuilt`).
+#
+# Production is published once a day, and only when main has changed since the
+# last publish, or by hand (Actions > Deploy to Vercel > Run workflow). Each
+# deployment is about 110 MB and Vercel keeps them all, so publishing on every
+# merge filled the free plan's 10 GB of deployment storage; after each production
+# publish, scripts/vercel-prune.sh deletes all but the live deployment and the
+# five newest. Pull requests from this repository publish a preview when they
+# carry the `preview` label. Needs the repository secrets VERCEL_TOKEN,
+# VERCEL_ORG_ID and VERCEL_PROJECT_ID.
+
+name: Deploy to Vercel
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The daily run publishes only when main has moved since the last successful
+  # publish from main; a run by hand always publishes.
+  changed:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      deploy: ${{ steps.decide.outputs.deploy }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          last="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/vercel-deploy.yml/runs?branch=main&status=success&per_page=50" \
+            --jq '[.workflow_runs[] | select(.event != "pull_request")][0].head_sha // ""')"
+          if [ "$last" = "$GITHUB_SHA" ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "main has not changed since ${last:0:8} was published; nothing to do." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: changed
+    # A pull request deploys a preview only when it carries the `preview` label:
+    # every push to every pull request used to deploy, which ran into the free
+    # plan's daily deployment limit and blocked main. Forks and Dependabot get no
+    # repository secrets, so they never deploy.
+    if: >-
+      !cancelled() && (
+        (github.event_name != 'pull_request' && needs.changed.outputs.deploy == 'true') ||
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name == github.repository &&
+         github.event.pull_request.user.login != 'dependabot[bot]' &&
+         contains(github.event.pull_request.labels.*.name, 'preview')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # The Vercel secrets are given only to the three steps that call Vercel, so no
+    # other step (in particular the third-party action below) can read them.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Tools
+        run: |
+          corepack enable
+          npm install --global vercel@63
+
+      # The engine is compiled from source when its Rust sources differ from the
+      # last release (scripts/vercel-install.sh decides). That script installs
+      # wasm-pack with its own installer, which on GitHub's runner tries to write
+      # to /etc/skel and fails; installed here first, the script finds it and
+      # skips that step.
+      - name: wasm-pack
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: wasm-pack
+
+      - name: Production or preview
+        id: target
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "env=production" >> "$GITHUB_OUTPUT"
+            echo "flag=--prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "env=preview" >> "$GITHUB_OUTPUT"
+            echo "flag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Project settings and environment from Vercel
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=${{ steps.target.outputs.env }} --token="$VERCEL_TOKEN"
+
+      - name: Build
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel build ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN"
+
+      # One archive instead of thousands of files: the free plan allows 5000
+      # uploaded files a day (the free-plan file-count limit).
+      - name: Publish
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          url="$(vercel deploy --prebuilt --archive=tgz ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN")"
+          echo "Published (${{ steps.target.outputs.env }}): $url" >> "$GITHUB_STEP_SUMMARY"
+          echo "$url"
+
+  # Runs even when the publish failed: a full deployment storage is one reason a
+  # publish fails, and freeing it lets the next run through.
+  prune:
+    needs: [changed, deploy]
+    if: >-
+      !cancelled() && github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' && needs.changed.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Delete old deployments
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bash scripts/vercel-prune.sh

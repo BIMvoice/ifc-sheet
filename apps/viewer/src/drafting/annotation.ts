@@ -10,8 +10,14 @@
  */
 
 import { nearestOnShape, shapeBounds } from './curves';
+import { placeSymbol as placeLevelMark } from './level-mark';
 import { mirrorShape, rotateShape, translateShape } from './transform';
+import { findSymbol, missingSymbolMark, placeSymbol } from './symbols';
 import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
+import { figureUp, leaderOf } from './figure-layout';
+import { leaderTextRight } from './leader-segments';
+import { leaderStart } from '@/labels/label-leader';
+import { textBlock, type TextFrame } from './text-block';
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
 
 export interface DimensionLayout {
@@ -40,6 +46,17 @@ export function formatLevel(m: number): string {
 function unit(v: Pt): Pt {
   const l = Math.hypot(v.x, v.y);
   return l > 1e-12 ? { x: v.x / l, y: v.y / l } : { x: 1, y: 0 };
+}
+
+/**
+ * The short leader a figure carries when it was moved off its dimension line (above, below, or past the end of
+ * the string): from the middle of the line to the figure's near edge. Nothing for a figure left on the line.
+ */
+function figureLeader(layout: DimensionLayout, textAt: Pt, height: number): { a: Pt; b: Pt }[] {
+  const line = layout.lines[2];
+  const along = { x: Math.cos(layout.textAngle), y: Math.sin(layout.textAngle) };
+  const l = leaderOf(add(line.a, scale(sub(line.b, line.a), 0.5)), textAt, height, figureUp(along, screenUp, screenRight), along, textBlock(layout.label, height).outer.x1);
+  return l ? [l] : [];
 }
 
 /** Drawing-unit sizes and the number format a dimension style gives its layout. */
@@ -82,7 +99,7 @@ export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimensi
   const format = o.format ?? formatLength;
   if (shape.type === 'dimension') {
     const layout = linearLayout(shape.a, shape.b, shape.at, shape.variant, shape.text, o);
-    return shape.textAt ? { ...layout, textAt: shape.textAt } : layout;
+    return shape.textAt ? { ...layout, lines: [...layout.lines, ...figureLeader(layout, shape.textAt, shape.height)], textAt: shape.textAt } : layout;
   }
   if (shape.type === 'radial') {
     const dir = unit(sub(shape.at, shape.c));
@@ -129,15 +146,29 @@ export function setAnnotationScreenUp(sign: 1 | -1): void {
   screenUp = sign;
 }
 
+/** Which way drawing x runs on screen for the view being annotated (-1: mirrored, as in a side view). */
+let screenRight: 1 | -1 = 1;
+export function setAnnotationScreenRight(sign: 1 | -1): void {
+  screenRight = sign;
+}
+
 /** Model metres per hatch-pattern unit at scale 1: patterns are drawn in paper millimetres, views default to 1:100. */
 export const HATCH_UNIT_M = 0.1;
 
-/** A text box's corners: `width` approximated from the character count. */
-export function textBox(p: Pt, text: string, height: number, rotation: number): Pt[] {
-  const width = Math.max(1, text.length) * height * 0.62;
-  const h = height * screenUp;
-  const corners = [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: h }, { x: 0, y: h }];
-  return corners.map((c) => rotatePt(add(p, c), p, rotation));
+/** The leader a text carries, drawing coordinates: from the edge of its frame to the tip on the element. */
+export function textLeader(shape: Extract<AnnotationShape, { type: 'text' }>): { from: Pt; tip: Pt } | null {
+  if (!shape.leader) return null;
+  const pts = textBox(shape.p, shape.text, shape.height, shape.rotation, shape.frame);
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const from = leaderStart({ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }, shape.frame === 'bubble', shape.leader);
+  return from ? { from, tip: shape.leader } : null;
+}
+
+/** A text box's corners (frame included), as the text block lays it out. */
+export function textBox(p: Pt, text: string, height: number, rotation: number, frame?: TextFrame): Pt[] {
+  const { outer } = textBlock(text, height, frame);
+  const at = (x: number, y: number): Pt => ({ x: p.x + x, y: p.y - y * screenUp });
+  return [at(outer.x0, outer.y1), at(outer.x1, outer.y1), at(outer.x1, outer.y0), at(outer.x0, outer.y0)].map((c) => rotatePt(c, p, rotation));
 }
 
 /** Where an axis's bubbles sit: centres just past its ends (along the line), and their radius / half side. */
@@ -174,11 +205,18 @@ export function nextAxisLabel(label: string): string {
 export function entitySkeleton(shape: EntityShape): DraftShape[] {
   if (isGeometry(shape)) return [shape];
   switch (shape.type) {
-    case 'text':
-      return [{ type: 'polyline', pts: textBox(shape.p, shape.text, shape.height, shape.rotation), closed: true }];
+    case 'text': {
+      const box: DraftShape = { type: 'polyline', pts: textBox(shape.p, shape.text, shape.height, shape.rotation, shape.frame), closed: true };
+      const line = textLeader(shape);
+      return line ? [box, { type: 'polyline', pts: [line.from, line.tip], closed: false }] : [box];
+    }
     case 'leader': {
       const end = shape.pts[shape.pts.length - 1];
-      return [{ type: 'polyline', pts: shape.pts, closed: false }, { type: 'polyline', pts: textBox(end, shape.text, shape.height, 0), closed: true }];
+      // The text sits beyond the end of the last segment, on whichever side of the screen that is.
+      const toPlusX = (leaderTextRight(shape.pts, screenRight) ? screenRight : -screenRight) > 0;
+      const width = textBlock(shape.text, shape.height).box.x1;
+      const anchor = toPlusX ? end : { x: end.x - width, y: end.y };
+      return [{ type: 'polyline', pts: shape.pts, closed: false }, { type: 'polyline', pts: textBox(anchor, shape.text, shape.height, 0), closed: true }];
     }
     case 'level': {
       const h = shape.height * screenUp;
@@ -186,6 +224,12 @@ export function entitySkeleton(shape: EntityShape): DraftShape[] {
         { type: 'polyline', pts: [shape.p, { x: shape.p.x - shape.height, y: shape.p.y + h }, { x: shape.p.x + shape.height, y: shape.p.y + h }], closed: true },
         { type: 'line', a: shape.p, b: { x: shape.p.x + shape.height * 5, y: shape.p.y } },
       ];
+    }
+    case 'symbol': {
+      const def = findSymbol(shape.symbolId);
+      if (!def) return missingSymbolMark(shape);
+      const { geometry, texts } = placeSymbol(def, shape, screenUp);
+      return [...geometry, ...texts.map((t): DraftShape => ({ type: 'polyline', pts: textBox(t.p, t.text, t.height, t.rotation), closed: true }))];
     }
     case 'hatch':
       return shape.loops.filter((l) => l.length >= 3).map((pts) => ({ type: 'polyline', pts, closed: true }));
@@ -245,7 +289,11 @@ function mapAnnotation(shape: AnnotationShape, f: (p: Pt) => Pt): AnnotationShap
       return { ...shape, c: f(shape.c), at: f(shape.at) };
     case 'angular':
       return { ...shape, c: f(shape.c), a: f(shape.a), b: f(shape.b), at: f(shape.at) };
+    // Symbol only: the reference keeps what it measured (a copy reads the same point, a mirror or
+    // rotation never changes the number), and the symbol stays where it may be.
     case 'level':
+      return placeLevelMark(shape, f(shape.p));
+    case 'symbol':
       return { ...shape, p: f(shape.p) };
     case 'axis':
       return { ...shape, a: f(shape.a), b: f(shape.b) };
@@ -262,6 +310,7 @@ export function rotateEntity(shape: EntityShape, center: Pt, angle: number): Ent
   if (isGeometry(shape)) return rotateShape(shape, center, angle);
   const mapped = mapAnnotation(shape, (p) => rotatePt(p, center, angle));
   if (mapped.type === 'text') return { ...mapped, rotation: mapped.rotation + angle };
+  if (mapped.type === 'symbol') return { ...mapped, rotation: mapped.rotation + angle * screenUp };
   if (mapped.type === 'hatch') return { ...mapped, angle: mapped.angle + (angle * 180) / Math.PI };
   return mapped;
 }
@@ -270,3 +319,6 @@ export function rotateEntity(shape: EntityShape, center: Pt, angle: number): Ent
 export function mirrorEntity(shape: EntityShape, a: Pt, b: Pt): EntityShape {
   return isGeometry(shape) ? mirrorShape(shape, a, b) : mapAnnotation(shape, (p) => mirrorPt(p, a, b));
 }
+
+/** The current screen-up direction in drawing y (see {@link setAnnotationScreenUp}). */
+export const annotationScreenUp = (): 1 | -1 => screenUp;

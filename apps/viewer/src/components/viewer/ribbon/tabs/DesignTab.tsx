@@ -25,7 +25,7 @@ export function DesignTab() {
   const { t } = useTranslation();
   const commandId = useDraftingSession((s) => s.commandId);
   const snap = useDraftingSession((s) => s.snap);
-  const ortho = useDraftingSession((s) => s.ortho);
+  const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
   const on = (id: string) => commandId === id;
   const drafting3d = useDrafting3dPref((s) => s.show);
 
@@ -66,6 +66,7 @@ export function DesignTab() {
       <RibbonGroupDivider />
       <RibbonGroup label={t('drafting.group.workplane')}>
         <RibbonCommandLargeButton commandId="design:section-line" icon={DraftSectionLine} active={on('sectionline')} />
+        <RibbonCommandLargeButton commandId="design:detail" icon={DraftRectangle} active={on('detail')} />
         <RibbonCommandLargeButton commandId="design:workplane-face" icon={DraftWorkplane} />
       </RibbonGroup>
       <RibbonGroupDivider />

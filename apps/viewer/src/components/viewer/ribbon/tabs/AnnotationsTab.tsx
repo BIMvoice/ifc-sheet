@@ -9,7 +9,7 @@
  * `annotate:*` commands (`surface-commands-annotate-ribbon.ts`).
  */
 
-import { AnnoAxis, AnnoDimAligned, AnnoDimAngular, AnnoDimLinear, AnnoDimRadius, AnnoHatch, AnnoLeader, AnnoLevel, AnnoLoadPattern, AnnoTag, AnnoText, DraftingStandards } from '@/icons';
+import { AnnoAxis, AnnoDimAligned, AnnoDimAngular, AnnoDimLinear, AnnoDimRadius, AnnoHatch, AnnoLeader, AnnoLevel, AnnoLegend, AnnoLoadPattern, AnnoSymbol, AnnoSymbolMake, AnnoTag, AnnoText, DraftingStandards } from '@/icons';
 import { useTranslation } from '@/i18n';
 import { useDraftingSession } from '@/drafting/session';
 import { RibbonGroup, RibbonGroupDivider, RibbonSmallStack } from '../primitives';
@@ -25,6 +25,10 @@ export function AnnotationsTab() {
         <RibbonCommandLargeButton commandId="annotate:text" icon={AnnoText} active={on('text')} />
         <RibbonCommandLargeButton commandId="annotate:leader" icon={AnnoLeader} active={on('leader')} />
         <RibbonCommandLargeButton commandId="annotate:tag" icon={AnnoTag} active={on('tag')} />
+        <RibbonSmallStack>
+          <RibbonCommandSmallButton commandId="annotate:label" icon={AnnoTag} active={on('label')} />
+          <RibbonCommandSmallButton commandId="annotate:label-all" icon={AnnoTag} active={on('labelall')} />
+        </RibbonSmallStack>
       </RibbonGroup>
       <RibbonGroupDivider />
       <RibbonGroup label={t('drafting.group.dimensions')}>
@@ -45,6 +49,18 @@ export function AnnotationsTab() {
       <RibbonGroup label={t('drafting.group.fill')}>
         <RibbonCommandLargeButton commandId="annotate:hatch" icon={AnnoHatch} active={on('hatch')} />
         <RibbonCommandLargeButton commandId="annotate:load-pattern" icon={AnnoLoadPattern} />
+      </RibbonGroup>
+      <RibbonGroupDivider />
+      <RibbonGroup label={t('standards.tab.symbols')}>
+        <RibbonCommandLargeButton commandId="annotate:symbol" icon={AnnoSymbol} active={on('symbol')} />
+        <RibbonCommandLargeButton commandId="annotate:make-symbol" icon={AnnoSymbolMake} active={on('makesymbol')} />
+        <RibbonSmallStack>
+          <RibbonCommandSmallButton commandId="annotate:edit-symbol" icon={AnnoSymbolMake} active={on('explodesymbol')} />
+        </RibbonSmallStack>
+      </RibbonGroup>
+      <RibbonGroupDivider />
+      <RibbonGroup label={t('legend.folder')}>
+        <RibbonCommandLargeButton commandId="annotate:legend" icon={AnnoLegend} />
       </RibbonGroup>
       <RibbonGroupDivider />
       <RibbonGroup label={t('standards.title')}>
