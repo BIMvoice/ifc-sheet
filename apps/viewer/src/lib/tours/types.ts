@@ -122,6 +122,12 @@ export interface TourDefinition {
    * see its entry points again.
    */
   version: number;
+  /**
+   * Set for a tour that belongs to another face of the app (the IfcSheet
+   * Wall): it runs from that face's own help button, so the classic Learn hub
+   * and command palette leave it out.
+   */
+  face?: 'ifcsheet';
   /** Panel this tour teaches; lights up that panel's header help button. */
   panel?: WorkspacePanelId;
   prerequisites?: TourPrerequisites;

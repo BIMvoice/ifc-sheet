@@ -34,6 +34,7 @@ import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
 import { LegendsAdd } from './LegendsAdd';
 import { ViewportState } from './ViewportState';
+import { TagFieldsPanel } from './TagFieldsPanel';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
   { kind: 'plan', labelKey: 'wall.group.plans' },
@@ -163,6 +164,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('wall.tb.everySheet')}</p>
           <TitleBlockForm />
         </details>
+        <TagFieldsPanel />
         {DRAWING_KINDS.map(({ kind, labelKey }) => (
           <Group key={kind} title={t(labelKey)}>
             {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} state={viewportState(byView[v.id], v.kind)} onOpen={() => openDrawing(v.id)} />)}

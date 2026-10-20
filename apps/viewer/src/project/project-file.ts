@@ -15,6 +15,7 @@ import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
 import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
+import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
 import { isDisciplineId } from './discipline-views';
@@ -27,6 +28,7 @@ import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
+import { readTagFields } from '@/tagfields/tag-fields-file';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics } from './types';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
@@ -145,7 +147,7 @@ function readView(v: unknown, path: string): ProjectView {
         ...(v.interior !== undefined ? { interior: readInterior(v.interior, `${path}.interior`) } : {}),
       };
     default:
-      return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null };
+      return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null, ...read3dPrint(v) };
   }
 }
 
@@ -215,6 +217,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     symbols: readList(raw, 'symbols', readSymbol),
     legends: readList(raw, 'legends', readLegend),
     issues: readIssues(raw.issues),
+    ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
   };
 }

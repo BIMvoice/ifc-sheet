@@ -21,10 +21,12 @@ import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
+import { isRasterView } from '@/project/axonometric';
+import { isAutosaveRasterRef } from '@/project/autosave-rasters';
 import { drawingNumbers } from '@/drafting/cross-ref';
 import { elevationMarkDrafts, elevationMarkPlan, obstacleBoxes, sectionReferenceDrafts } from '@/drafting/cross-ref-marks';
 import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
-import type { ProjectSheet, SheetViewport } from '@/project/types';
+import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { partHostType } from '@/project/part-host';
 import { viewOmits } from '@/project/discipline-facts';
@@ -36,6 +38,12 @@ import { useSheetSchedules } from '../joinery/ScheduleGraphic';
 import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
 import { useSheetLegends } from '../legend/LegendGraphic';
 import type { ViewportContent } from './SheetPaper';
+
+/** The raster capture a 3D view prints as, when it prints as one and has been captured (and, after an autosave restore, read back). */
+function rasterOf(view: ProjectView | undefined): ViewRaster | undefined {
+  const raster = view && isRasterView(view) ? view.raster ?? undefined : undefined;
+  return raster && !isAutosaveRasterRef(raster.href) ? raster : undefined;
+}
 
 export interface SheetContent {
   content: (vp: SheetViewport) => ViewportContent;
@@ -98,6 +106,7 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
     civil: placedCivil.get(vp.viewId),
     legend: placedLegends.get(vp.viewId),
     view: views.find((v) => v.id === vp.viewId),
+    raster: rasterOf(views.find((v) => v.id === vp.viewId)),
     drawing: styled.get(vp.viewId)?.drawing ?? null,
     drafts: draftsFor(vp),
     drawingNumber: numbers.get(vp.id),

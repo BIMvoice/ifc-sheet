@@ -114,7 +114,8 @@ describe('the list of keys', () => {
   it('opens on "?" and says what the Wall\'s keys do', () => {
     renderViewerLayout();
     press(document.body, '?', { shiftKey: true });
-    const dialog = document.body.querySelector('[role="dialog"]');
+    // The first-run tour's card is a dialog too: the list is the one with the keys.
+    const dialog = [...document.body.querySelectorAll('[role="dialog"]')].find((d) => d.querySelector('[data-shortcut-command]'));
     assert.ok(dialog, 'the list is open');
     const ids = [...dialog.querySelectorAll('[data-shortcut-command]')].map((r) => r.getAttribute('data-shortcut-command'));
     assert.ok(ids.includes('wall.tool.tag') && ids.includes('wall.nextSheet') && ids.includes('ui.commandPalette'), ids.join(', '));
