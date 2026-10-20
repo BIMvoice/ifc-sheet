@@ -25,7 +25,15 @@ const isCeilingCovering = (renderId: number): boolean => {
   return (guid ? labelElementByGlobalId(guid)?.attribute('PredefinedType') : undefined) === 'CEILING';
 };
 
-export function ceilTag(ctx: DraftContext, isCeiling: (renderId: number) => boolean = isCeilingCovering): void {
+/**
+ * `globalIdOf` is how a renderer id becomes the key the project file keeps: each text records its ceiling's GlobalId
+ * as `ceilingOf`, so a second run skips ceilings tagged under another renderer id (re-export, other load order).
+ */
+export function ceilTag(
+  ctx: DraftContext,
+  isCeiling: (renderId: number) => boolean = isCeilingCovering,
+  globalIdOf: (renderId: number) => string | null = renderIdGlobalId,
+): void {
   const view = ctx.view();
   if (view?.kind !== 'plan' || !view.reflected) {
     ctx.say('drafting.msg.ceilTagCeilingPlanOnly');
@@ -37,14 +45,16 @@ export function ceilTag(ctx: DraftContext, isCeiling: (renderId: number) => bool
   // only this storey's ceilings (above the cut, below the next level) are tagged.
   const plan = { level: resolvePlanLevel(view, levels) ?? view.level, cutHeight: view.cutHeight };
   const tags = ceilingPlanTags(geometry?.meshes ?? [], plan, levels, loadedDataStores(), geometry?.coordinateInfo, isCeiling);
-  const done = new Set(ctx.entities().flatMap((d) => (typeof d.params.ceilingOf === 'number' ? [d.params.ceilingOf] : [])));
-  const todo = tags.filter((t) => !done.has(t.renderId));
+  const done = new Set(ctx.entities().flatMap((d) => (typeof d.params.ceilingOf === 'string' ? [d.params.ceilingOf] : [])));
+  // A ceiling with no GlobalId cannot be recognised on the next run, so it is not tagged.
+  const keyed = tags.flatMap((t) => { const guid = globalIdOf(t.renderId); return guid ? [{ ...t, guid }] : []; });
+  const todo = keyed.filter((t) => !done.has(t.guid));
   const height = ctx.settings.textHeight;
   const drafts = todo.map((t) => newDraft(ctx.viewId, ctx.layerId, {
     type: 'text' as const, p: centredAnchor(t.at, t.text, height, undefined, annotationScreenUp()), text: t.text, height, rotation: 0,
-  }, { ...styledParams(ctx.viewId, { type: 'text', p: t.at, text: t.text, height, rotation: 0 }, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }), ceilingOf: t.renderId }));
+  }, { ...styledParams(ctx.viewId, { type: 'text', p: t.at, text: t.text, height, rotation: 0 }, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }), ceilingOf: t.guid }));
   if (drafts.length) editDrafts({ add: drafts });
-  ctx.say(drafts.length ? 'drafting.msg.ceilTagDone' : 'drafting.msg.ceilTagNone', { count: drafts.length, already: tags.length - drafts.length });
+  ctx.say(drafts.length ? 'drafting.msg.ceilTagDone' : 'drafting.msg.ceilTagNone', { count: drafts.length, already: keyed.length - drafts.length });
 }
 
 export const ceilTagCommand: DraftCommandDef = {
