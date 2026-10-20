@@ -18,25 +18,25 @@ Everything the model already knows, the tool should already have done: the store
 
 Each direction is an issue, open for discussion. None is a promise or a date.
 
-| Direction | Issue |
-|---|---|
-| A draft drawing set is there when the model opens | [#20](https://github.com/BIMvoice/ifcsheet/issues/20) |
-| A set template you carry between projects | [#21](https://github.com/BIMvoice/ifcsheet/issues/21) |
-| A new model version shows only what changed | [#22](https://github.com/BIMvoice/ifcsheet/issues/22) |
-| Annotate a whole view in one action | [#23](https://github.com/BIMvoice/ifcsheet/issues/23) |
-| A list of what is missing before issue | [#24](https://github.com/BIMvoice/ifcsheet/issues/24) |
-| Issue the whole set in one action | [#25](https://github.com/BIMvoice/ifcsheet/issues/25) |
+| Direction | Issue | State |
+|---|---|---|
+| A draft drawing set is there when the model opens | [#20](https://github.com/BIMvoice/ifcsheet/issues/20) | open |
+| A set template you carry between projects | [#21](https://github.com/BIMvoice/ifcsheet/issues/21) | open |
+| A new model version shows only what changed | [#22](https://github.com/BIMvoice/ifcsheet/issues/22) | shipped (16 Oct) |
+| Annotate a whole view in one action | [#23](https://github.com/BIMvoice/ifcsheet/issues/23) | open |
+| A list of what is missing before issue | [#24](https://github.com/BIMvoice/ifcsheet/issues/24) | open |
+| Issue the whole set in one action | [#25](https://github.com/BIMvoice/ifcsheet/issues/25) | open |
 
 If you produce drawings from IFC models, your comment on these issues is the most useful thing you can give us: which one would save you the most time, and what is missing from the list.
 
 ## How it should feel
 
-Unlike a CAD program. No wall of buttons. The drawing set is what you look at, and the tools appear where you are working. The interface that exists today is the one the engine came with; it will be replaced.
+Unlike a CAD program. No wall of buttons. The drawing set is what you look at, and the tools appear where you are working. The Wall, where the set hangs and you step into a sheet, is the first piece of that interface and is on main; the rest of the screen will follow it.
 
 ## How it is built
 
 - **The engine is the product.** The drawing logic lives in plain modules, reached through commands. The interface is one way of using it, and a showcase of what the engine can do. Other tools should be able to build on the same engine.
-- **The promises** to the people who use it are in [CONTRIBUTING.md](CONTRIBUTING.md): the model is not changed, it stays on your machine, drawings are true to scale, what you save comes back, old projects keep opening, the drawing follows the model.
+- **The promises** to the people who use it are in [CONTRIBUTING.md](CONTRIBUTING.md) (added with the house rules, #19): the model is not changed, it stays on your machine, drawings are true to scale, what you save comes back, old projects keep opening, the drawing follows the model.
 - **Later.** Because everything is reachable by commands, the same engine can be driven by automation. That is a later step, not the current work.
 
 ## How a direction becomes work
