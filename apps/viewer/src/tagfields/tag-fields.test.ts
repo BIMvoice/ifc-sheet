@@ -100,6 +100,15 @@ describe('tag fields in the files', () => {
     assert.equal(parseCatalogue(serializeCatalogue(emptyCatalogue(), 'Office')).catalogue.tagFields, undefined);
   });
 
+  it('a library file carrying them puts them in the project on import', () => {
+    resetProject();
+    assert.equal(useProjectStore.getState().tagFields, undefined);
+    const { report } = importCatalogueText(serializeCatalogue({ ...emptyCatalogue(), tagFields: config }, 'Office'), 'theirs');
+    assert.deepEqual(useProjectStore.getState().tagFields, config);
+    assert.equal(report.tagFields.added, 2);
+    assert.equal(useProjectStore.getState().dirty, true);
+  });
+
   it('fail with their path when malformed, and drop kinds and fields they do not know', () => {
     assert.throws(() => readTagFields({ door: { mark: [{ kind: 'pset', pset: 'A' }] } }, '/tagFields'), /tagFields\.door\.mark\[0\]/);
     assert.throws(() => readTagFields({ door: { mark: [{ kind: 'attribute', name: 'TagName' }] } }, '/tagFields'), /tagFields\.door\.mark\[0\]\.name/);

@@ -23,8 +23,9 @@ import { configureMutationView } from '@/utils/configureMutationView';
 import { newDraft } from '@/drafting/draft-store';
 import type { DraftEntity, Pt } from '@/drafting/types';
 import { labelElementByGlobalId, markOf } from '@/labels/label-element.js';
-import { refreshParametricLabels } from '@/labels/label-sync.js';
-import { refreshElementTags } from '@/project/useElementTagSync.js';
+import { act } from 'react';
+import { refreshParametricLabels, useParametricLabelSync } from '@/labels/label-sync.js';
+import { refreshElementTags, useElementTagSync } from '@/project/useElementTagSync.js';
 import { loadProjectDocument, projectDocument, resetProject, useProjectStore } from '@/project/project-store.js';
 import { parseProjectFile, serializeProject } from '@/project/project-file.js';
 import type { ProjectSheet } from '@/project/types.js';
@@ -205,5 +206,33 @@ describe('tag fields on FZK-Haus', () => {
     setFieldSources('room', 'name', [{ kind: 'attribute', name: 'LongName' }, { kind: 'attribute', name: 'Name' }]);
     refreshElementTags();
     assert.deepEqual(tags(), ['Innentuer-1', 'Innentuer-1', 'Schlafzimmer', 'Schlafzimmer', 'Door'], 'a room has no Tag: its mark falls back to the name');
+  });
+});
+
+describe('the mounted sync hooks follow a change of the tag fields, with no refresh called by hand', () => {
+  const doorMark = () => setFieldSources('door', 'mark', [{ kind: 'pset', pset: DOOR_SET, property: DOOR_PROP }, { kind: 'attribute', name: 'Name' }]);
+  function ElementTagSync() { useElementTagSync(); return null; }
+  function LabelSync() { useParametricLabelSync(); return null; }
+
+  it('useElementTagSync re-reads the element tags', () => {
+    useProjectStore.setState({ drafts: doorTags('v') });
+    render(<ElementTagSync />);
+    const tags = () => useProjectStore.getState().drafts.filter((d) => d.params.tagOf !== undefined);
+    // The mount reads the default (the TAG tool's mark is the Tag as written), not the property.
+    for (const d of tags()) assert.notEqual(text(d), prop(String(d.params.tagOf), DOOR_SET, DOOR_PROP));
+    assert.ok(tags().every((d) => text(d) !== 'x'), 'the mount refreshed the placeholder text');
+    act(() => doorMark());
+    assert.equal(tags().length, 5);
+    for (const d of tags()) assert.equal(text(d), prop(String(d.params.tagOf), DOOR_SET, DOOR_PROP));
+  });
+
+  it('useParametricLabelSync re-reads the labels', () => {
+    useProjectStore.setState({ drafts: tagAll('v') });
+    render(<LabelSync />);
+    for (const [g, v] of textsOf('v', 'door')) assert.equal(v, el(g).attribute('Name'), 'the mount reads the default');
+    act(() => doorMark());
+    const after = textsOf('v', 'door');
+    assert.equal(after.size, 5);
+    for (const [g, v] of after) assert.equal(v, prop(g, DOOR_SET, DOOR_PROP));
   });
 });
