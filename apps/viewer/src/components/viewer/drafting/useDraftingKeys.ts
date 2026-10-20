@@ -4,15 +4,24 @@
 
 /**
  * Keyboard for the drafting view in front: typing goes to the command line
- * (CAD style — no need to click it first), Enter / Space confirm or repeat,
- * Escape cancels, Delete erases the selection, Ctrl/Cmd+Z / Shift+Z (or Y)
- * undo / redo, F3 toggles snap and F8 ortho; holding Ctrl locks ortho while down.
+ * (CAD style — no need to click it first); the keys (undo, redo, snap, ortho,
+ * cancel, erase, confirm) are the rows of `lib/commands/drafting-key-commands.ts`,
+ * which the shortcut list also reads; holding Ctrl locks ortho while down.
  */
 
 import { useEffect, useRef } from 'react';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import { getCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { pressEnter, pressEscape, startDraftCommand, setOrthoHeld, toggleOrtho, toggleSnap, useDraftingSession } from '@/drafting/session';
+import { eventMatchesChords } from '@/lib/commands/dispatcher';
+import { DRAFTING_EXACT_MODIFIERS, DRAFTING_KEY_COMMANDS, type DraftingKeyId } from '@/lib/commands/drafting-key-commands';
+
+const DRAFTING_KEYS: ReadonlyMap<DraftingKeyId, (typeof DRAFTING_KEY_COMMANDS)[number]['keys']> = new Map(DRAFTING_KEY_COMMANDS.map((c) => [c.id, c.keys]));
+
+/** Whether the event is a key of the row `id` of the drafting keymap. */
+function isKey(id: DraftingKeyId, e: KeyboardEvent): boolean {
+  return eventMatchesChords(DRAFTING_KEYS.get(id) ?? [], e, !DRAFTING_EXACT_MODIFIERS.has(id));
+}
 
 interface Params {
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -42,33 +51,32 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
       // A running BIM tool owns the keys (Enter, Escape, typed lengths: its own bindings).
       if (getCommandRuntime().command) return;
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === 'z') {
+      if (isKey('drafting.undo', e)) {
         e.preventDefault();
-        if (e.shiftKey) redoEarliest();
-        else undoLatest();
+        undoLatest();
         return;
       }
-      if (mod && e.key.toLowerCase() === 'y') {
+      if (isKey('drafting.redo', e)) {
         e.preventDefault();
         redoEarliest();
         return;
       }
-      if (e.key === 'F3') {
+      if (isKey('drafting.snap', e)) {
         e.preventDefault();
         toggleSnap();
         return;
       }
-      if (e.key === 'F8') {
+      if (isKey('drafting.ortho', e)) {
         e.preventDefault();
         toggleOrtho();
         return;
       }
       if (e.target === input) return; // the command line handles its own Enter / Escape / typing
-      if (e.key === 'Escape') {
+      if (isKey('drafting.cancel', e)) {
         pressEscape();
         return;
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (isKey('drafting.erase', e)) {
         if (useDraftingSession.getState().selection.size > 0 && !useDraftingSession.getState().commandId) {
           e.preventDefault();
           startDraftCommand('erase');
@@ -76,7 +84,7 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
         }
         return;
       }
-      if (e.key === 'Enter' || e.key === ' ') {
+      if (isKey('drafting.confirm', e)) {
         e.preventDefault();
         submitRef.current();
         return;

@@ -16,9 +16,10 @@ import type { Command } from './commandPaletteSearch';
 import type { CommandPaletteBuildParams } from './commandPaletteCommandsTypes';
 import { buildCoreCommands } from './commandPaletteCommandsCore';
 import { buildPanelCommands } from './commandPaletteCommandsPanels';
+import { buildWallCommands } from './commandPaletteCommandsWall';
 
 export type { CommandPaletteBuildParams, RightPanel } from './commandPaletteCommandsTypes';
 
 export function buildCommandPaletteCommands(p: CommandPaletteBuildParams): Command[] {
-  return [...buildCoreCommands(p), ...buildPanelCommands(p)];
+  return [...buildWallCommands(p.sheets ?? []), ...buildCoreCommands(p), ...buildPanelCommands(p)];
 }
