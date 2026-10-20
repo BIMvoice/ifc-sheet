@@ -89,12 +89,14 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel build ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN"
 
+      # One archive instead of thousands of files: the free plan allows 5000
+      # uploaded files a day (the free-plan file-count limit).
       - name: Publish
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          url="$(vercel deploy --prebuilt ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN")"
+          url="$(vercel deploy --prebuilt --archive=tgz ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN")"
           echo "Published (${{ steps.target.outputs.env }}): $url" >> "$GITHUB_STEP_SUMMARY"
           echo "$url"
