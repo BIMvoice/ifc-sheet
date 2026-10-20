@@ -17,7 +17,7 @@ import { forwardRef, memo, useMemo } from 'react';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useTranslation } from '@/i18n';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
-import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types';
+import { isGeometry, type DraftEntity, type DraftLayer, type SymbolInstanceShape } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { frameOf, frameRect, titleBlockRect, TITLE_BLOCK_MM } from '@/project/sheet-frame';
 import { mmPerMetre, paperOf, viewportBox } from '@/project/sheets';
@@ -45,6 +45,10 @@ import { CivilDrawingGraphic } from '../civil/CivilDrawingGraphic';
 import { LegendGraphic } from '../legend/LegendGraphic';
 import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
+import { useLiveSymbolContext } from '@/siteplan/site-frame';
+import { keyPlanHighlight, viewportExtent, type Rect } from '@/siteplan/key-plan';
+import { KeyPlanHighlight, SiteBalance, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
+import type { SiteContent } from '../siteplan/useSheetSite';
 
 /** The cut axis a drawing is put on paper by (`viewportTransform`), from its plane's axis. */
 export const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
@@ -66,6 +70,8 @@ export interface ViewportContent {
   legend?: LegendLayout;
   /** A 3D view printed as a raster capture of the viewport, instead of drawn lines. */
   raster?: ViewRaster;
+  /** A site plan's plot, footprint, setbacks and areas (`siteplan/`). */
+  site?: SiteContent;
 }
 
 interface SheetPaperProps {
@@ -108,8 +114,10 @@ function TitleNumber({ number, x, baseline }: { number: string | undefined; x: n
   );
 }
 
-const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, extraPatterns, selected }: {
+const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, extraPatterns, selected, highlight = null }: {
   vp: SheetViewport; content: ViewportContent; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[]; selected: boolean;
+  /** On a key plan: the part its keyed viewport shows, paper mm. */
+  highlight?: Rect | null;
 }) {
   const { t: tr } = useTranslation();
   const { view, drawing, drafts } = content;
@@ -140,6 +148,10 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   // Annotation prints at the paper size it was drawn for, whatever scale the viewport shows the view at.
   const paperUnit = viewportPaperUnit(vp.scale);
   const factor = annotationFactor(vp.scale, view?.scale);
+  // Scale bar, north arrow and coordinate points follow this viewport's scale and the model (`siteplan/live-symbols.ts`).
+  const live = useLiveSymbolContext(drawing?.config.plane, axis, vp.scale);
+  // A key plan is the whole plan alone: no drafting on it, only the outline of the part keyed.
+  const keyPlan = vp.keyPlanOf !== undefined;
   return (
     <g data-viewport-id={vp.id}>
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
@@ -148,13 +160,15 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
         {pens.map((p, i) => (
           <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} d={p.d} fill={p.fill ?? 'none'} fillRule="evenodd" stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
         ))}
-        {content.overlays?.length ? <OverlayPaths overlays={content.overlays} transform={t} axis={axis} /> : null}
-        {drafts.map((e) => {
+        {content.overlays?.length && !keyPlan ? <OverlayPaths overlays={content.overlays} transform={t} axis={axis} /> : null}
+        {content.site ? <SiteOverlay site={content.site} transform={t} axis={axis} scale={vp.scale} /> : null}
+        {highlight ? <KeyPlanHighlight rect={highlight} /> : null}
+        {(keyPlan ? [] : drafts).map((e) => {
           const color = layerColor.get(e.layerId);
           if (color === null) return null;
           return isGeometry(e.shape)
             ? <PenPath key={e.id} layer={layerById.get(e.layerId)} d={shapePath(e.shape, t, axis)} color={color ?? '#000'} />
-            : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} /></g>;
+            : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={live} /></g>;
         })}
       </g>
       <rect
@@ -162,10 +176,16 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined}
         data-export-ignore={selected ? 'true' : undefined}
       />
-      <TitleNumber number={content.drawingNumber} x={left} baseline={top + box.height + standard.type.viewTitle + 1.5} />
-      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (content.drawingNumber ? numberWidth(content.drawingNumber) + 2 : 0)} y={top + box.height + standard.type.viewTitle + 1.5} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
-        {hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
+      <TitleNumber number={keyPlan ? undefined : content.drawingNumber} x={left} baseline={top + box.height + standard.type.viewTitle + 1.5} />
+      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (!keyPlan && content.drawingNumber ? numberWidth(content.drawingNumber) + 2 : 0)} y={top + box.height + standard.type.viewTitle + 1.5} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
+        {keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
       </text>
+      {content.site ? <SiteBalance site={content.site} x={left} y={top + box.height + LABEL_MM + 4} /> : null}
+      {content.site ? <SiteSymbols site={content.site} transform={t} axis={axis} scale={vp.scale} box={{ x: left, y: top, width: box.width, height: box.height }} live={live}
+        symbols={drafts.flatMap((e): SymbolInstanceShape[] => {
+          const shown = e.shape.type === 'symbol' && layerColor.get(e.layerId) !== null ? annotationAtFactor(e.shape, factor) : null;
+          return shown?.type === 'symbol' ? [shown] : [];
+        })} /> : null}
     </g>
   );
 });
@@ -207,6 +227,17 @@ function LegendViewport({ vp, layout, selected }: { vp: SheetViewport; layout: L
 }
 
 const PAPER: ViewTransform = { scale: 1, x: 0, y: 0 };
+
+/** On a key plan, the box of the viewport it keys taken to its own paper (`siteplan/key-plan.ts`); else null. */
+function keyedExtent(sheet: ProjectSheet, vp: SheetViewport, content: (vp: SheetViewport) => ViewportContent, own: ViewportContent): Rect | null {
+  const keyed = vp.keyPlanOf ? (sheet.viewports ?? []).find((o) => o.id === vp.keyPlanOf) : undefined;
+  const drawing = keyed ? content(keyed).drawing : null;
+  if (!keyed || !drawing || !own.drawing) return null;
+  const axis = AXIS_NAME[drawing.config.plane.axis];
+  const box = viewportBox(keyed, drawing.bounds);
+  const extent = viewportExtent({ x: keyed.x - box.width / 2, y: keyed.y - box.height / 2, width: box.width, height: box.height }, viewportTransform(keyed, drawing, axis), axis);
+  return keyPlanHighlight(extent, viewportTransform(vp, own.drawing, AXIS_NAME[own.drawing.config.plane.axis]), axis);
+}
 
 /** The project's styles and layer groups, as drafting graphics need them. */
 function useDraftingStandards() {
@@ -338,7 +369,7 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
         if (c.legend) return <LegendViewport key={vp.id} vp={vp} layout={c.legend} selected={vp.id === selectedViewportId} />;
         return c.schedule
           ? <ScheduleViewport key={vp.id} vp={vp} layout={c.schedule} selected={vp.id === selectedViewportId} />
-          : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} />;
+          : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} highlight={keyedExtent(sheet, vp, content, c)} />;
       })}
       <RevisionTable revisions={own} titleBlock={titleBlockRect({ w, h }, frameOf(sheet))} />
       <TitleBlock sheet={sheet} projectName={projectName} w={w} h={h} />

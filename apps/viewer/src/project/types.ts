@@ -153,6 +153,8 @@ export interface PlanProjectView extends ProjectViewBase {
   reflected?: boolean;
   /** A discipline plan (structural, foundation, roof): it draws only the elements its discipline keeps (`discipline-views.ts`). */
   discipline?: DisciplineId;
+  /** The site plan: the ground storey's cut with the plot, setbacks and coordinates on it (`siteplan/`). */
+  site?: true;
 }
 
 /** A section cut stored in world metres, independent of the model bounds. */
@@ -280,6 +282,8 @@ export interface SheetViewport {
   hiddenLayers?: string[];
   /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
   drawingNumber?: string;
+  /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
+  keyPlanOf?: string;
 }
 
 /** The groups of sheets a numbering scheme numbers apart: `other` is details and whatever fits no series. */

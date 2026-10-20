@@ -44,7 +44,7 @@ export function modelTitleBlock(now = new Date()): Record<string, string> {
 
 /** The lowest plan: the one a set's sections are drawn on. */
 export function groundPlan(views: readonly ProjectView[]): PlanProjectView | null {
-  const plans = views.filter((v): v is PlanProjectView => v.kind === 'plan');
+  const plans = views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.site);
   return plans.sort((a, b) => a.level.elevation - b.level.elevation)[0] ?? null;
 }
 

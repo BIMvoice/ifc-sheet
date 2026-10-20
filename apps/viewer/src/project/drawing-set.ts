@@ -217,8 +217,8 @@ interface SetRow {
 /** The rows of the starting set, in reading order: plans bottom storey first, elevations in pairs, sections in pairs. A group with nothing to show has no row. */
 function setRows(allViews: readonly ProjectView[]): SetRow[] {
   const rows: SetRow[] = [];
-  // A detail is hung where it is made, not by the starting set.
-  const views = allViews.filter((v) => !v.detail);
+  // A detail, and the site plan, are hung where they are made, not by the starting set.
+  const views = allViews.filter((v) => !v.detail && !(v.kind === 'plan' && v.site));
   const add = (group: SetGroup, name: string, members: ProjectView[]): void => {
     if (members.length > 0) rows.push({ group, name, members });
   };
@@ -309,6 +309,7 @@ export function withViewHung(
 ): { sheets: ProjectSheet[]; sheetId: string } | null {
   if (sheets.some((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id))) return null;
   if (view.detail) return withDetailHung(sheets, view, extent, now, scheme, templates.details);
+  if (view.kind === 'plan' && view.site) return withSitePlanHung(sheets, view, extent, now);
   const group = groupOfView(view);
   if (!group) return null;
   const layOut = (sheet: ProjectSheet, members: ProjectView[]): ProjectSheet => {
@@ -327,6 +328,33 @@ export function withViewHung(
     : last ? { paper: last.paper ?? SET_PAPER, orientation: last.orientation ?? 'landscape', ...(last.frame ? { frame: last.frame } : {}), ...(last.templateId ? { templateId: last.templateId } : {}) }
       : startOf(undefined, choosePaper([[viewExtent(view, extent)]]).paper);
   const sheet = layOut({ id: freshProjectId('sheet'), number: nextNumber(sheets, group, scheme), series: group, name: resolve(GROUP_NAMES[group]), createdAt: now, ...start }, [view]);
+  return { sheets: [...sheets, sheet], sheetId: sheet.id };
+}
+
+/** Room around the building a site plan's sheet leaves for the plot, as a share of the building's extent. */
+const SITE_ROOM = 1;
+
+/**
+ * The site plan hangs on a sheet of its own, first of the set (A-001…), at
+ * its own scale (1:200) on the smallest set paper that holds the building
+ * with room around it for the plot, else at the scale that fits.
+ */
+function withSitePlanHung(sheets: readonly ProjectSheet[], view: ProjectView, extent: ModelExtent, now: number): { sheets: ProjectSheet[]; sheetId: string } {
+  const own = viewExtent(view, extent);
+  const sizes = [{ w: own.w * (1 + SITE_ROOM), h: own.h * (1 + SITE_ROOM) }];
+  const scale = view.scale ?? 200;
+  const paper = SET_PAPERS.find((p) => fitsScale(sizes, drawingArea(p), scale)) ?? SET_PAPERS[SET_PAPERS.length - 1];
+  const taken = new Set(sheets.map((s) => s.number));
+  const numberOf = (k: number) => `A-${String(k).padStart(3, '0')}`;
+  let n = 1;
+  while (taken.has(numberOf(n))) n++;
+  const area = drawingArea(paper);
+  const fitting = fitsScale(sizes, area, scale) ? scale : SHEET_SCALES.find((s) => fitsScale(sizes, area, s)) ?? scale;
+  // A little above the middle: the site balance goes under it.
+  const sheet: ProjectSheet = {
+    id: freshProjectId('sheet'), number: numberOf(n), name: view.name, createdAt: now, paper, orientation: 'landscape',
+    viewports: [{ id: freshProjectId('viewport'), viewId: view.id, x: area.x + area.w / 2, y: area.y + area.h / 2 - 15, scale: fitting, width: 0, height: 0, center: null }],
+  };
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }
 

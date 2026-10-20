@@ -3,11 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * "Add a drawing", in six big choices: a plan of a storey (pick the storey),
+ * "Add a drawing", in seven big choices: a plan of a storey (pick the storey),
  * a section (draw a line on a plan), an elevation (pick a side), a plan of one
  * discipline (structural, foundation, roof: `project/discipline-views.ts`), a
  * detail of an area (mark it on the drawing in front), a drafting view (blank,
- * or a library detail). A new drawing hangs on the set where its kind belongs.
+ * or a library detail), the site plan (`siteplan/`). A new drawing hangs on the
+ * set where its kind belongs.
  */
 
 import { useState, type ReactNode } from 'react';
@@ -19,6 +20,7 @@ import { draftingViewOf } from '@/drafting/drafting-view';
 import { placeLibraryDetail } from '@/catalogue/detail-actions';
 import type { ElevationDirection, PlanProjectView, ProjectLevel } from '@/project/types';
 import { ToolIcon, type ToolIconName } from '../ifcsheet/ToolIcon';
+import { ensureSitePlan } from '@/siteplan/site-actions';
 
 interface AddDrawingProps {
   /** Hang a view made or found here; the sheet it lands on is stepped into. */
@@ -68,7 +70,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
     const { views } = useProjectStore.getState();
     const level = levels[index];
     if (discipline) return disciplinePlanOf(discipline, level);
-    const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && !v.discipline && resolvePlanLevel(v, [level]) !== undefined);
+    const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && !v.discipline && !v.site && resolvePlanLevel(v, [level]) !== undefined);
     if (existing) {
       onView(existing.id);
       return;
@@ -101,6 +103,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
           <Choice icon="cube" title={t('wall.add.discipline')} hint={t('wall.add.disciplineHint')} onClick={() => setStep('discipline')} disabled={levels.length === 0} />
           <Choice icon="plus" title={t('wall.add.detail')} hint={t('wall.add.detailHint')} onClick={onDetail} />
           <Choice icon="symbol" title={t('wall.add.drafting')} hint={t('wall.add.draftingHint')} onClick={() => setStep('drafting')} />
+          <Choice icon="cube" title={t('site.add')} hint={t('site.addHint')} disabled={levels.length === 0} onClick={() => { const id = ensureSitePlan(t('site.viewName')); if (id) onView(id); }} />
         </div>
       ) : step === 'discipline' ? (
         <Picks>{DISCIPLINE_IDS.map((id) => <button key={id} type="button" className={pick} onClick={() => pickDiscipline(id)}>{t(`wall.add.discipline.${id}`)}</button>)}</Picks>

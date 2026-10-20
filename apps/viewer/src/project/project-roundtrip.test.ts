@@ -67,7 +67,7 @@ const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, de
 
 const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').ProjectView, { kind: K }>> } = {
   plan: {
-    ...base, id: 'v-plan', name: 'Level 1', kind: 'plan', cutHeight: 1.4, reflected: true, discipline: 'foundation',
+    ...base, id: 'v-plan', name: 'Level 1', kind: 'plan', cutHeight: 1.4, reflected: true, discipline: 'foundation', site: true,
     level: { name: 'Level 1', elevation: 3.2, storeyGlobalIds: ['G-A', 'G-B'] },
   } satisfies Required<PlanProjectView>,
   section: {
@@ -136,7 +136,7 @@ const legend: Required<ProjectLegend> = {
 const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'dashdot', group: 'g1' };
 
 const viewport: Required<SheetViewport> = {
-  id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], drawingNumber: '7',
+  id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], drawingNumber: '7', keyPlanOf: 'vp0',
 };
 const sheet: Required<ProjectSheet> = {
   id: 'sh1', number: 'A-201', autoNumber: true, numberOverride: true, series: 'elevations', name: 'Plans', createdAt: 9, paper: { kind: 'elongated', base: 'A2', factor: 3 }, orientation: 'portrait', viewports: [viewport],
