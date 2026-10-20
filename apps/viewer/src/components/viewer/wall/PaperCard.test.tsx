@@ -12,6 +12,7 @@ import { startDrawingSet } from '@/project/drawing-set-actions.js';
 import { resetProject, useProjectStore } from '@/project/project-store.js';
 import { defaultViews } from '@/project/view-defaults.js';
 import type { ProjectLevel, ProjectSheet } from '@/project/types.js';
+import { paperMm } from '@/project/paper.js';
 import { PaperCard } from './PaperCard.js';
 
 /**
@@ -79,6 +80,25 @@ describe('PaperCard', () => {
     type(long, '700');
     blur(long);
     assert.deepEqual(plans().paper, { kind: 'custom', widthMm: 700, heightMm: 420 });
+  });
+
+  it('takes a custom size as width × height on the sheet, as typed: 300 × 500 is a sheet 300 wide (review of #129)', () => {
+    let ui = card();
+    choose(select(ui, 'Size'), 'custom');
+    const field = (label: string): HTMLInputElement => [...ui.querySelectorAll('label')].find((l) => l.firstChild?.textContent === label)!.querySelector('input')!;
+    type(field('Width (mm)'), '300');
+    blur(field('Width (mm)'));
+    // The Wall hands the card the sheet as it now is.
+    cleanup();
+    ui = card();
+    type(field('Height (mm)'), '500');
+    blur(field('Height (mm)'));
+    cleanup();
+    ui = card();
+    assert.deepEqual(paperMm(plans().paper!, plans().orientation), { w: 300, h: 500 });
+    assert.equal(plans().orientation, 'portrait');
+    assert.equal(field('Width (mm)').value, '300');
+    assert.equal(field('Height (mm)').value, '500');
   });
 
   it('refuses a custom side out of bounds', () => {

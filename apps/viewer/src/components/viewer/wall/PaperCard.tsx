@@ -72,7 +72,11 @@ export function PaperCard({ sheet, extent, boxOf, onClose }: { sheet: ProjectShe
   const templates = allTemplates(own);
   const custom = isCustom(paper);
   const [asCustom, setAsCustom] = useState(custom);
-  const { w, h } = paperMm(paper);
+  // The paper as it lies on the sheet: what the size fields and the dimensions read.
+  const { w, h } = paperMm(paper, sheet.orientation);
+  /** A custom paper `width` × `height` on the sheet, as typed: the orientation follows which side is longer. */
+  const setCustom = (width: number, height: number): boolean =>
+    set({ paper: { kind: 'custom', widthMm: width, heightMm: height }, orientation: height > width ? 'portrait' : 'landscape', templateId: null });
   const [problem, setProblem] = useState<FrameProblem | null>(null);
   /** Make the change, or keep why it was refused; true when it was made. */
   const set = (patch: Parameters<typeof setSheetFormat>[1]): boolean => {
@@ -114,8 +118,8 @@ export function PaperCard({ sheet, extent, boxOf, onClose }: { sheet: ProjectShe
       </label>
       {asCustom ? (
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <Mm label={t('wall.paper.width')} value={Math.max(w, h)} min={CUSTOM_MM.min} max={CUSTOM_MM.max} onCommit={(mm) => set({ paper: { kind: 'custom', widthMm: mm, heightMm: Math.min(w, h) }, templateId: null })} />
-          <Mm label={t('wall.paper.height')} value={Math.min(w, h)} min={CUSTOM_MM.min} max={CUSTOM_MM.max} onCommit={(mm) => set({ paper: { kind: 'custom', widthMm: Math.max(w, h), heightMm: mm }, templateId: null })} />
+          <Mm label={t('wall.paper.width')} value={w} min={CUSTOM_MM.min} max={CUSTOM_MM.max} onCommit={(mm) => setCustom(mm, h)} />
+          <Mm label={t('wall.paper.height')} value={h} min={CUSTOM_MM.min} max={CUSTOM_MM.max} onCommit={(mm) => setCustom(w, mm)} />
         </div>
       ) : null}
       <p className="m-0 mt-1 text-xs text-sky-300/80">{t('wall.paper.dimensions', { w: Math.round(w), h: Math.round(h) })}</p>
