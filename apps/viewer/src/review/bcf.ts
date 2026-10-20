@@ -41,6 +41,8 @@ export interface BcfExportOptions {
    * else this tool (`IfcSheet`).
    */
   fallbackAuthor?: string;
+  /** Comment id to a PNG data URL of the sheet around its pin, the viewpoint's thumbnail (`review/snapshot.ts`). */
+  snapshots?: ReadonlyMap<string, string>;
 }
 
 export function exportableComments(comments: readonly ReviewComment[]): ReviewComment[] {
@@ -74,6 +76,7 @@ function viewpointOf(c: ReviewComment, opts: BcfExportOptions): BCFViewpoint {
   const viewpoint: BCFViewpoint = {
     guid: c.bcfViewpointGuid || generateUuid(),
     components: { selection: [{ ifcGuid: c.elementGuid, originatingSystem: ORIGIN }] },
+    ...(opts.snapshots?.get(c.id) ? { snapshot: opts.snapshots.get(c.id) } : {}),
   };
   const plane = c.viewId && c.point ? opts.drawingOf(c.viewId)?.config.plane : undefined;
   if (!plane || !c.point) return viewpoint;
