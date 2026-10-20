@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { DocumentPreview } from '../../components/viewer/document/DocumentPreview';
 import { DOCUMENT_VERSION } from '../../lib/document/types';
 import { CoordRow } from '../../components/viewer/properties/CoordinateDisplay';
-import { closeContrastBrowser, measureTextContrastOnSurface, measureTextHoverColors, type Theme } from './render-harness';
+import { CHROME_SKIP, closeContrastBrowser, measureTextContrastOnSurface, measureTextHoverColors, type Theme } from './render-harness';
 import { extractClassNameAfter } from './extract-classname';
 import { WCAG_AA_NORMAL_TEXT } from './wcag';
 
@@ -52,7 +52,7 @@ after(async () => {
   await closeContrastBrowser();
 });
 
-describe('semantic text surfaces meet WCAG AA (#4792)', () => {
+describe('semantic text surfaces meet WCAG AA (#4792)', { skip: CHROME_SKIP }, () => {
   for (const theme of THEMES) {
     it(`primary foreground clears AA on primary in ${theme}`, async () => {
       const ratio = await measureTextContrastOnSurface(theme, 'bg-primary', 'text-primary-foreground');
