@@ -41,7 +41,7 @@ import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { measureTooltipTextContrast, closeContrastBrowser, type Theme } from './render-harness';
+import { CHROME_SKIP, measureTooltipTextContrast, closeContrastBrowser, type Theme } from './render-harness';
 import { extractClassNameAfter } from './extract-classname';
 import { WCAG_AA_NORMAL_TEXT } from './wcag';
 
@@ -58,7 +58,7 @@ after(async () => {
   await closeContrastBrowser();
 });
 
-describe('tooltip secondary text meets WCAG AA on the real popover surface (#4783)', () => {
+describe('tooltip secondary text meets WCAG AA on the real popover surface (#4783)', { skip: CHROME_SKIP }, () => {
   // These three all fix onto `text-muted-foreground` (#4784) and clear AA
   // normal-text (4.5:1) with real margin in every theme (measured floor,
   // light theme: 4.83:1). If a future edit reverts any of them toward
@@ -106,7 +106,7 @@ describe('tooltip secondary text meets WCAG AA on the real popover surface (#478
   }
 });
 
-describe('non-vacuousness proof: invisible tooltip text reddens in every theme', () => {
+describe('non-vacuousness proof: invisible tooltip text reddens in every theme', { skip: CHROME_SKIP }, () => {
   // `text-popover` resolves to the same color as TooltipContent's
   // `bg-popover`. It is deliberately independent of the primary token this
   // issue repairs, so improving that token cannot silently invalidate the
