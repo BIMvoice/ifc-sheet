@@ -7,7 +7,7 @@ import type { TranslationValue } from '../types';
 export const feedbackEn = {
   'feedback.button': 'Feedback',
   'feedback.title': 'Report a problem or suggest something',
-  'feedback.opens': 'Send opens GitHub in a new tab with this report filled in. You need a GitHub account to submit it, and the issue is public on the IfcSheet repository. IfcSheet sends nothing itself, holds no GitHub login, and this form records no analytics.',
+  'feedback.opens': 'Open GitHub opens a new tab with this report filled in. You need a GitHub account to submit it, and the issue is public on the IfcSheet repository. IfcSheet sends nothing itself, holds no GitHub login, and this form records no analytics.',
   'feedback.kind': 'What is it',
   'feedback.kind.bug': 'Bug',
   'feedback.kind.suggestion': 'Suggestion',

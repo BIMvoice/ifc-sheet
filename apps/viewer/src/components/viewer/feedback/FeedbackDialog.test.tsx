@@ -67,7 +67,7 @@ describe('Feedback form (#148)', () => {
     await waitFor(() => dialog() !== null, 'the form opens');
 
     const form = dialog() as HTMLElement;
-    assert.match(form.textContent ?? '', /opens GitHub in a new tab/i);
+    assert.match(form.textContent ?? '', /Open GitHub opens a new tab/);
     assert.match(form.textContent ?? '', /GitHub account/i);
 
     type(byLabel<HTMLInputElement>(/^Title/), 'Scale bar is wrong');
