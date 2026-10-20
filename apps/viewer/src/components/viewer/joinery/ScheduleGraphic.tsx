@@ -17,6 +17,9 @@ import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule, ProjectSheet } from '@/project/types';
 import { scheduleData, type ScheduleData } from '@/joinery/schedule-data';
 import { layoutSchedule, type ScheduleLabels, type ScheduleLayout, type SchedulePrim } from '@/joinery/schedule-layout';
+import { takeoffRows, type TakeoffRow } from '@/joinery/material-takeoff';
+import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
+import { layoutMaterialTakeoff, type TakeoffLabels } from '@/joinery/material-takeoff-layout';
 import { penTags } from '../sheets/dxf-tags';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
@@ -31,6 +34,22 @@ export function useScheduleLabels(title: string): ScheduleLabels {
   }), [t, title]);
 }
 
+export function useTakeoffLabels(title: string): TakeoffLabels {
+  const { t } = useTranslation();
+  return useMemo(() => ({
+    title, material: t('takeoff.material'), elements: t('takeoff.elements'), volume: t('takeoff.volume'),
+    area: t('takeoff.area'), usedIn: t('takeoff.usedIn'), total: t('takeoff.total'),
+  }), [t, title]);
+}
+
+/** The material takeoff's rows, read from the loaded models again only when they change (materials are parsed on demand). */
+export function useTakeoffRows(): TakeoffRow[] {
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const models = useViewerStore((s) => s.models);
+  // mutationVersion / models: what `collectTakeoffElements` reads.
+  return useMemo(() => takeoffRows(collectTakeoffElements()), [mutationVersion, models]);
+}
+
 /** The schedule's data and layout, recomputed when the models or the catalogue change. */
 export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data: ScheduleData; layout: ScheduleLayout } | null {
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
@@ -39,7 +58,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels(schedule?.name ?? '');
   return useMemo(() => {
-    if (!schedule) return null;
+    if (!schedule || schedule.kind === 'materials') return null;
     const data = scheduleData(schedule.kind);
     return { data, layout: layoutSchedule(data, labels, { scale: schedule.scale ?? 50 }) };
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
@@ -54,16 +73,22 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels('');
+  const takeoffLabels = useTakeoffLabels('');
+  const placesTakeoff = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'materials'));
   return useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
+    // The takeoff parses materials on demand: read once per change, and only when a sheet shows one.
+    const rows = placesTakeoff ? takeoffRows(collectTakeoffElements()) : [];
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || out.has(schedule.id)) continue;
-      out.set(schedule.id, layoutSchedule(scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50 }));
+      out.set(schedule.id, schedule.kind === 'materials'
+        ? layoutMaterialTakeoff(rows, { ...takeoffLabels, title: schedule.name })
+        : layoutSchedule(scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50 }));
     }
     return out;
-    // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
-  }, [sheet.viewports, schedules, labels, mutationVersion, models, catalogue, mapping]);
+    // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
+  }, [sheet.viewports, schedules, labels, takeoffLabels, placesTakeoff, mutationVersion, models, catalogue, mapping]);
 }
 
 function Prim({ p }: { p: SchedulePrim }) {

@@ -19,14 +19,11 @@
  *     rule: never raise a budget). A same-shaped contribution to either
  *     would fail CI on line count alone; splitting `sectionSlice.ts` to buy
  *     room is a larger, riskier PR than this feature justifies.
- *  2. A saved cut is a document the user authored, like a `BasketView`
- *     preset (`pinboardSlice.ts`) — the same reasoning that keeps
- *     `basketViews` out of the `'all-models-cleared'` teardown arm applies
- *     here without qualification: this store is never torn down by a model
- *     swap. Its geometry (axis/position/custom) can go stale relative to a
- *     very different model's bounds, exactly like a `BasketView`'s
- *     `entityRefs` can — a soft UX question, not a correctness bug, and one
- *     the existing precedent already accepts.
+ *  2. A saved cut is a document the user authored, so the list lives in the
+ *     project document and is saved and opened with it; only the pointer to
+ *     the cut on screen is kept here. Its geometry (axis/position/custom) can
+ *     go stale relative to a very different model's bounds — a soft UX
+ *     question, not a correctness bug.
  *
  * The only coupling to the main store is one-directional and explicit:
  * `saveCurrentSectionCut` reads `useViewerStore.getState().sectionPlane`,
@@ -38,32 +35,14 @@
  */
 
 import { create } from 'zustand';
-import type { SectionCapStyle, SectionPlane, SectionPlaneAxis } from './types.js';
+import type { SectionPlane } from './types.js';
+import { useProjectStore } from '@/project/project-store';
+import type { SavedSectionCut, SavedSectionCutPlane } from '@/project/types';
 import { useViewerStore } from './index.js';
 
-/** The subset of `SectionPlane` that defines the CUT itself, not its
- *  on-screen/parked lifecycle (`enabled` / `parked`), which only ever means
- *  something for the currently active tool. */
-export interface SavedSectionCutPlane {
-  axis: SectionPlaneAxis;
-  position: number;
-  flipped: boolean;
-  custom?: SectionPlane['custom'];
-  capStyle: SectionCapStyle;
-  showCap: boolean;
-  showOutlines: boolean;
-}
-
-export interface SavedSectionCut {
-  id: string;
-  name: string;
-  plane: SavedSectionCutPlane;
-  createdAt: number;
-  updatedAt: number;
-}
+export type { SavedSectionCut, SavedSectionCutPlane } from '@/project/types';
 
 interface SavedSectionCutsState {
-  cuts: SavedSectionCut[];
   /** The saved cut currently on screen, if the live cut still matches one
    *  exactly (cleared the moment the user edits the cut further). */
   activeCutId: string | null;
@@ -88,10 +67,16 @@ function planeSnapshot(plane: SectionPlane): SavedSectionCutPlane {
   };
 }
 
+/** Which cut is on screen. The cuts themselves are part of the project (`useProjectStore().savedSectionCuts`), so they are saved with it. */
 export const useSavedSectionCuts = create<SavedSectionCutsState>()(() => ({
-  cuts: [],
   activeCutId: null,
 }));
+
+export const savedSectionCuts = (): readonly SavedSectionCut[] => useProjectStore.getState().savedSectionCuts ?? [];
+
+function setCuts(cuts: SavedSectionCut[]): void {
+  useProjectStore.setState({ savedSectionCuts: cuts, dirty: true });
+}
 
 /** Save the live section plane as a new named cut. Returns its id. */
 export function saveCurrentSectionCut(name: string): string {
@@ -99,7 +84,8 @@ export function saveCurrentSectionCut(name: string): string {
   const id = createCutId();
   const now = Date.now();
   const cut: SavedSectionCut = { id, name, plane: planeSnapshot(plane), createdAt: now, updatedAt: now };
-  useSavedSectionCuts.setState((s) => ({ cuts: [...s.cuts, cut], activeCutId: id }));
+  setCuts([...savedSectionCuts(), cut]);
+  useSavedSectionCuts.setState({ activeCutId: id });
   return id;
 }
 
@@ -113,7 +99,7 @@ export function saveCurrentSectionCut(name: string): string {
  * see and edit what they just applied.
  */
 export function applySavedSectionCut(id: string): void {
-  const cut = useSavedSectionCuts.getState().cuts.find((c) => c.id === id);
+  const cut = savedSectionCuts().find((c) => c.id === id);
   if (!cut) return;
   const state = useViewerStore.getState();
   // A saved cut is a plane: leaving a live section box in place would keep
@@ -131,14 +117,10 @@ export function applySavedSectionCut(id: string): void {
 export function renameSavedSectionCut(id: string, name: string): void {
   const trimmed = name.trim();
   if (!trimmed) return;
-  useSavedSectionCuts.setState((s) => ({
-    cuts: s.cuts.map((c) => (c.id === id ? { ...c, name: trimmed, updatedAt: Date.now() } : c)),
-  }));
+  setCuts(savedSectionCuts().map((c) => (c.id === id ? { ...c, name: trimmed, updatedAt: Date.now() } : c)));
 }
 
 export function removeSavedSectionCut(id: string): void {
-  useSavedSectionCuts.setState((s) => ({
-    cuts: s.cuts.filter((c) => c.id !== id),
-    activeCutId: s.activeCutId === id ? null : s.activeCutId,
-  }));
+  setCuts(savedSectionCuts().filter((c) => c.id !== id));
+  useSavedSectionCuts.setState((s) => ({ activeCutId: s.activeCutId === id ? null : s.activeCutId }));
 }

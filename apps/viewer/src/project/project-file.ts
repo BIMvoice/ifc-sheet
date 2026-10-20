@@ -12,12 +12,16 @@
 import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
-import { readSheetLayout } from './sheet-file';
+import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
+import { readSheetLayout, readTitleBlock } from './sheet-file';
+import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
+import { readSnapshot } from '@/whatchanged/snapshot-file';
+import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, ViewGraphics } from './types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, ViewDetail, ViewGraphics } from './types';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -58,12 +62,26 @@ function readLevel(v: unknown, path: string): ProjectLevel {
   return { name: v.name, elevation: v.elevation, storeyGlobalIds: ids };
 }
 
+function readDetail(v: unknown, path: string): ViewDetail {
+  const corner = (c: unknown, at: string) => {
+    if (!isObject(c) || !isNumber(c.x) || !isNumber(c.y)) fail(at, 'must be { x, y }');
+    return { x: c.x, y: c.y };
+  };
+  if (!isObject(v) || !isString(v.of) || !isNumber(v.number)) fail(path, 'must be { of, min, max, number }');
+  const min = corner(v.min, `${path}.min`);
+  const max = corner(v.max, `${path}.max`);
+  if (max.x <= min.x || max.y <= min.y) fail(path, 'must have min below and left of max');
+  return { of: v.of, min, max, number: v.number };
+}
+
 function readView(v: unknown, path: string): ProjectView {
   if (!isObject(v) || !isString(v.id) || !isString(v.name)) fail(path, 'must have a string id and name');
   if (!VIEW_KINDS.includes(v.kind as ProjectViewKind)) fail(`${path}.kind`, `must be one of ${VIEW_KINDS.join(', ')}`);
   const base = {
     id: v.id, name: v.name, auto: v.auto === true, createdAt: isNumber(v.createdAt) ? v.createdAt : 0,
     ...(isNumber(v.viewDepth) && v.viewDepth >= 0 ? { viewDepth: v.viewDepth } : {}),
+    ...(typeof v.showHidden === 'boolean' ? { showHidden: v.showHidden } : {}),
+    ...(v.detail !== undefined ? { detail: readDetail(v.detail, `${path}.detail`) } : {}),
     ...(isObject(v.graphics) ? { graphics: readGraphics(v.graphics) } : {}),
     ...(isNumber(v.scale) && v.scale > 0 ? { scale: v.scale } : {}),
     ...(Array.isArray(v.hiddenLayers) ? { hiddenLayers: v.hiddenLayers.filter(isString) } : {}),
@@ -78,11 +96,13 @@ function readView(v: unknown, path: string): ProjectView {
         fail(`${path}.plane`, 'must be { axis, offset, flipped }');
       }
       const plane = { axis: p.axis as (typeof AXES)[number], offset: p.offset, flipped: p.flipped === true };
-      return { ...base, kind: 'section', plane: isObject(p.custom) ? { ...plane, custom: p.custom as never } : plane };
+      const section = { ...base, kind: 'section' as const, plane: isObject(p.custom) ? { ...plane, custom: p.custom as never } : plane };
+      return isString(v.through) && v.through ? { ...section, through: v.through } : section;
     }
     case 'elevation':
       if (!DIRECTIONS.includes(v.direction as ElevationDirection)) fail(`${path}.direction`, `must be one of ${DIRECTIONS.join(', ')}`);
-      return { ...base, kind: 'elevation', direction: v.direction as ElevationDirection };
+      if (v.planeOffset !== undefined && !isNumber(v.planeOffset)) fail(`${path}.planeOffset`, 'must be a number');
+      return { ...base, kind: 'elevation', direction: v.direction as ElevationDirection, ...(v.planeOffset !== undefined ? { planeOffset: v.planeOffset } : {}) };
     default:
       return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null };
   }
@@ -119,6 +139,8 @@ export function parseProjectFile(text: string): ProjectDocument {
     models: list('models').map((m, i) => readModel(m, `/models/${i}`)),
     views: list('views').map((v, i) => readView(v, `/views/${i}`)),
     sheets: list('sheets').map((s, i) => readSheet(s, `/sheets/${i}`)),
+    // Absent in a file saved before the title block was the project's (`liftSheetTitleBlocks` fills it on load).
+    ...(raw.titleBlock !== undefined ? { titleBlock: readTitleBlock(raw.titleBlock) ?? {} } : {}),
     drafts: list('drafts').map((d, i) => readDraft(d, `/drafts/${i}`)),
     draftLayers: list('draftLayers').map((l, i) => readDraftLayer(l, `/draftLayers/${i}`)),
     hatchPatterns: isString(raw.hatchPatterns) ? raw.hatchPatterns : '',
@@ -135,6 +157,12 @@ export function parseProjectFile(text: string): ProjectDocument {
     civilDrawings: list('civilDrawings').flatMap((v) => readCivilDrawing(v)),
     typicalSections: list('typicalSections').flatMap((v) => readTypicalSection(v)),
     materials: list('materials').flatMap((v) => readMaterial(v)),
+    savedSectionCuts: list('savedSectionCuts').flatMap((v) => readSavedSectionCuts(v)),
+    annotationTypes: readList(raw, 'annotationTypes', readAnnotationType),
+    symbols: readList(raw, 'symbols', readSymbol),
+    legends: readList(raw, 'legends', readLegend),
+    issues: readIssues(raw.issues),
+    ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
   };
 }
 
@@ -185,7 +213,7 @@ function readCurrentJoinery(raw: unknown): { door?: string; window?: string } {
   };
 }
 
-function readMaterial(raw: unknown): ProjectMaterial[] {
+export function readMaterial(raw: unknown): ProjectMaterial[] {
   if (!isObject(raw) || !isString(raw.id) || !isString(raw.name) || !raw.name.trim()) return [];
   const out: ProjectMaterial = { id: raw.id, name: raw.name };
   if (raw.hatch === null || isString(raw.hatch)) out.hatch = raw.hatch;
@@ -232,7 +260,7 @@ function readCivilDrawing(raw: unknown): ProjectCivilDrawing[] {
 
 function readSchedule(raw: unknown): ProjectSchedule[] {
   if (!isObject(raw) || !isString(raw.id)) return [];
-  const kind = raw.kind === 'door' || raw.kind === 'window' ? raw.kind : 'all';
+  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' ? raw.kind : 'all';
   const out: ProjectSchedule = { id: raw.id, name: isString(raw.name) && raw.name ? raw.name : 'Schedule', kind, createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0 };
   if (typeof raw.scale === 'number' && raw.scale > 0) out.scale = raw.scale;
   return [out];

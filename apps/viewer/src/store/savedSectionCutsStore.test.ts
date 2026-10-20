@@ -13,6 +13,7 @@ import '@/test/setup-dom.js';
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { useViewerStore } from './index.js';
+import { useProjectStore } from '@/project/project-store';
 import { activeSectionPlane } from './section-active.js';
 import {
   applySavedSectionCut,
@@ -32,7 +33,8 @@ beforeEach(() => {
   useViewerStore.setState({
     sectionPlane: { ...state().sectionPlane, axis: 'down', position: 50, flipped: false, custom: undefined },
   });
-  useSavedSectionCuts.setState({ cuts: [], activeCutId: null });
+  useSavedSectionCuts.setState({ activeCutId: null });
+  useProjectStore.setState({ savedSectionCuts: [] });
 });
 
 describe('saved section cuts (#5514)', () => {
@@ -94,20 +96,20 @@ describe('saved section cuts (#5514)', () => {
   it('rename updates the name only; delete drops the cut and clears activeCutId', () => {
     const id = saveCurrentSectionCut('Original name');
     renameSavedSectionCut(id, 'Renamed');
-    assert.equal(useSavedSectionCuts.getState().cuts[0]?.name, 'Renamed');
+    assert.equal(useProjectStore.getState().savedSectionCuts?.[0]?.name, 'Renamed');
 
     applySavedSectionCut(id);
     assert.equal(useSavedSectionCuts.getState().activeCutId, id);
 
     removeSavedSectionCut(id);
-    assert.equal(useSavedSectionCuts.getState().cuts.length, 0);
+    assert.equal(useProjectStore.getState().savedSectionCuts?.length, 0);
     assert.equal(useSavedSectionCuts.getState().activeCutId, null, 'removing the active cut clears the pointer');
   });
 
   it('a blank rename is rejected, keeping the original name', () => {
     const id = saveCurrentSectionCut('Keep me');
     renameSavedSectionCut(id, '   ');
-    assert.equal(useSavedSectionCuts.getState().cuts[0]?.name, 'Keep me');
+    assert.equal(useProjectStore.getState().savedSectionCuts?.[0]?.name, 'Keep me');
   });
 
   it('applying a saved plane cut leaves section box mode, so the plane is the cut (#5513)', () => {

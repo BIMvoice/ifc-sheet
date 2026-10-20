@@ -6,13 +6,13 @@
  * Keyboard for the drafting view in front: typing goes to the command line
  * (CAD style — no need to click it first), Enter / Space confirm or repeat,
  * Escape cancels, Delete erases the selection, Ctrl/Cmd+Z / Shift+Z (or Y)
- * undo / redo, F3 toggles snap and F8 ortho.
+ * undo / redo, F3 toggles snap and F8 ortho; holding Ctrl locks ortho while down.
  */
 
 import { useEffect, useRef } from 'react';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import { getCommandRuntime } from '@/lib/commands/modeling/runtime';
-import { pressEnter, pressEscape, startDraftCommand, toggleOrtho, toggleSnap, useDraftingSession } from '@/drafting/session';
+import { pressEnter, pressEscape, startDraftCommand, setOrthoHeld, toggleOrtho, toggleSnap, useDraftingSession } from '@/drafting/session';
 
 interface Params {
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -21,9 +21,14 @@ interface Params {
   submit: () => void;
 }
 
-/** Whether a key event belongs to another text field than the command line. */
+/**
+ * Whether a key event belongs to another text field than the command line,
+ * or to a panel that keeps its own keys (`data-owns-keys`: Enter and Space
+ * press its buttons, and nothing it is given reaches a running tool).
+ */
 function inOtherField(target: EventTarget | null, input: HTMLInputElement | null): boolean {
   if (!(target instanceof HTMLElement) || target === input) return false;
+  if (target.closest('[data-owns-keys]')) return true;
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
@@ -85,6 +90,19 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
     // Capture phase: the command line claims its keys before the viewer's global shortcuts
     // (which skip a prevented event) — typing "DIM" must not toggle panels.
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
+    // Ctrl held = ortho. Tracked apart from `onKey`, which skips text fields and running BIM tools;
+    // a window that loses focus never sees the key come up, so blur releases it.
+    const onCtrl = (e: KeyboardEvent) => setOrthoHeld(e.ctrlKey);
+    const release = () => setOrthoHeld(false);
+    window.addEventListener('keydown', onCtrl, true);
+    window.addEventListener('keyup', onCtrl, true);
+    window.addEventListener('blur', release);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keydown', onCtrl, true);
+      window.removeEventListener('keyup', onCtrl, true);
+      window.removeEventListener('blur', release);
+      release();
+    };
   }, [inputRef, setText]);
 }

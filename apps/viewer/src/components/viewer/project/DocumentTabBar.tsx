@@ -3,17 +3,17 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The central tab strip: the permanent 3D tab, then one tab per opened
+ * The central tab strip: the permanent Wall and 3D tabs, then one tab per opened
  * drawing view. Click brings a tab forward; the × or a middle click closes
  * it (the view stays in the project).
  */
 
 import type { ReactNode } from 'react';
-import { Box, Building2, LayoutTemplate, Scissors, SquareDashed, X, Table2, Spline } from 'lucide-react';
+import { Box, Building2, LayoutGrid, LayoutTemplate, Scissors, SquareDashed, X, Table2, Spline } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useProjectStore } from '@/project/project-store';
-import { MODEL_TAB_ID, useDocumentTabs } from '@/project/document-tabs';
+import { MODEL_TAB_ID, useDocumentTabs, WALL_TAB_ID } from '@/project/document-tabs';
 import { activateDocumentTab, closeProjectTab } from '@/project/open-view';
 import type { ProjectViewKind } from '@/project/types';
 
@@ -32,11 +32,14 @@ export function DocumentTabBar() {
   const sheets = useProjectStore((s) => s.sheets);
   const schedules = useProjectStore((s) => s.schedules);
   const civilDrawings = useProjectStore((s) => s.civilDrawings);
+  const legends = useProjectStore((s) => s.legends);
   const tabs = openIds.flatMap((id): { id: string; label: string; icon: ReactNode }[] => {
     const view = views.find((v) => v.id === id);
     if (view) return [{ id, label: view.name, icon: ICONS[view.kind] }];
     const schedule = schedules?.find((s) => s.id === id);
     if (schedule) return [{ id, label: schedule.name, icon: <Table2 className="size-3.5" /> }];
+    const legend = legends?.find((l) => l.id === id);
+    if (legend) return [{ id, label: legend.name, icon: <Table2 className="size-3.5" /> }];
     const civil = civilDrawings?.find((d) => d.id === id);
     if (civil) return [{ id, label: civil.name, icon: <Spline className="size-3.5" /> }];
     const sheet = sheets.find((s) => s.id === id);
@@ -45,6 +48,7 @@ export function DocumentTabBar() {
 
   return (
     <div role="tablist" aria-label={t('projectNavigator.documentTabs')} className="flex shrink-0 items-end gap-px overflow-x-auto h-8 px-1 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-950">
+      <Tab active={activeId === WALL_TAB_ID} icon={<LayoutGrid className="size-3.5" />} label={t('wall.tab')} onSelect={() => activateDocumentTab(WALL_TAB_ID)} />
       <Tab active={activeId === MODEL_TAB_ID} icon={ICONS['3d']} label={t('projectNavigator.tab.model3d')} onSelect={() => activateDocumentTab(MODEL_TAB_ID)} />
       {tabs.map((tab) => (
         <Tab

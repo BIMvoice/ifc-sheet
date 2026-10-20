@@ -74,6 +74,8 @@ import { manualValidationEn } from './catalogues/manual-validation.en';
 import { flowPanelEn } from './catalogues/flow-panel.en';
 import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
+import { wallEn } from './catalogues/wall.en';
+import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
 import { landXmlEn } from './catalogues/landxml.en';
 import { terrainImageryEn } from './catalogues/terrain-imagery.en';
@@ -104,11 +106,16 @@ import { alignmentSectionEn } from './catalogues/alignment-section.en';
 import { projectNavigatorEn } from './catalogues/project-navigator.en';
 import { draftingEn } from './catalogues/drafting.en';
 import { sheetsEn } from './catalogues/sheets.en';
+import { draftSetEn } from './catalogues/draft-set.en';
+import { issueEn } from './catalogues/issue.en';
+import { annotateAllEn } from './catalogues/annotate-all.en';
+import { checkEn } from './catalogues/check.en';
 import { newProjectEn } from './catalogues/new-project.en';
 import { projectPackageEn } from './catalogues/project-package.en';
 import { projectVersionsEn } from './catalogues/project-versions.en';
 import { roofBlockEn } from './catalogues/roof-block.en';
 import { viewGraphicsEn } from './catalogues/view-graphics.en';
+import { catalogueEn } from './catalogues/catalogue.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
 import { elementTypesEn } from './catalogues/element-types.en';
@@ -175,11 +182,16 @@ export const en = {
   ...projectNavigatorEn,
   ...draftingEn,
   ...sheetsEn,
+  ...draftSetEn,
+  ...issueEn,
+  ...annotateAllEn,
+  ...checkEn,
   ...newProjectEn,
   ...projectPackageEn,
   ...projectVersionsEn,
   ...roofBlockEn,
   ...viewGraphicsEn,
+  ...catalogueEn,
   ...draftingStandardsEn,
   ...joineryEn,
   ...elementTypesEn,
@@ -238,6 +250,8 @@ export const en = {
   ...drawingUnderlayEn,
   ...keyboardShortcutsEn,
   ...settingsEn,
+  ...wallEn,
+  ...whatChangedEn,
   ...hierarchyEn,
   ...propertiesEn,
   ...georeferencingEn,

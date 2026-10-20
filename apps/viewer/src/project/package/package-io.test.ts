@@ -74,6 +74,18 @@ describe('project package', () => {
     assert.deepEqual(mep, { model: { id: 'mep', name: 'mep.ifc', role: 'linked', source: 'mep.ifc', sha256: 'abc' }, bytes: undefined });
   });
 
+  it('keeps the references of parametric level marks, a slid one and an aligned one, through save and open', async () => {
+    const slid = { type: 'level' as const, p: { x: 8, y: 2.5 }, value: 2.5, height: 0.25, ref: { at: { x: 1, y: 2.5 } } };
+    const aligned = { type: 'level' as const, p: { x: 4, y: 3 }, value: 3, height: 0.25, ref: { at: { x: 4, y: 3 }, storey: 'G1' } };
+    const marks = [slid, aligned].map((shape, i) => ({ id: `m${i}`, viewId: 'e1', layerId: '0', shape, params: {} }));
+    const built = await buildPackage({
+      projectId: 'prj-1', doc: { ...doc, drafts: [...doc.drafts, ...marks] }, app: { name: 'BIMVoice', version: '4.0.0' }, now: new Date('2026-10-09T10:00:00Z'),
+      models: [{ id: 'arch', name: 'arch.ifc', role: 'native', bytes: ifc('architecture') }, { id: 'mep', name: 'mep.ifc', role: 'linked', source: 'mep.ifc', sha256: 'abc' }],
+    });
+    const opened = await readPackage(unzipPackage(zipPackage(built.files)));
+    assert.deepEqual(opened.doc.drafts.filter((d) => d.id.startsWith('m')).map((d) => d.shape), [slid, aligned]);
+  });
+
   it('splits the document into parts, one draft part per view', async () => {
     const { files, manifest } = await packaged();
     const paths = manifest.parts.map((p) => p.path);

@@ -15,6 +15,7 @@ import { act } from 'react';
 import { cleanup, click, render, type as typeInput, waitFor } from '@/test/render.js';
 import { loadDialogs } from '@/test/dialog-host.js';
 import { useViewerStore } from '@/store';
+import { useProjectStore } from '@/project/project-store';
 import { useSavedSectionCuts, saveCurrentSectionCut } from '@/store/savedSectionCutsStore';
 import { DrawingSectionCutMenu } from './DrawingSectionCutMenu.js';
 
@@ -35,7 +36,8 @@ beforeEach(() => {
     activeTool: 'select',
     sectionPlane: { ...s().sectionPlane, axis: 'down', position: 50, flipped: false, custom: undefined },
   });
-  useSavedSectionCuts.setState({ cuts: [], activeCutId: null });
+  useSavedSectionCuts.setState({ activeCutId: null });
+  useProjectStore.setState({ savedSectionCuts: [] });
 });
 
 afterEach(() => {
@@ -75,7 +77,7 @@ describe('DrawingSectionCutMenu (#5514)', () => {
     const row = rows().find((r) => r.textContent?.includes('Doomed cut'))!;
     const deleteButton = row.querySelector('button[title="Delete saved cut"]')!;
     click(deleteButton);
-    assert.equal(useSavedSectionCuts.getState().cuts.length, 0);
+    assert.equal(useProjectStore.getState().savedSectionCuts?.length, 0);
   });
 
   it('"Save current cut as..." names the live cut via the menu\'s own prompt', async () => {
@@ -87,7 +89,7 @@ describe('DrawingSectionCutMenu (#5514)', () => {
     assert.ok(dialog);
     typeInput(dialog.querySelector('input')!, 'From the menu');
     click(dialog.querySelector('button[type="submit"]')!);
-    await waitFor(() => useSavedSectionCuts.getState().cuts.some((c) => c.name === 'From the menu'), 'named cut is saved');
+    await waitFor(() => useProjectStore.getState().savedSectionCuts!.some((c) => c.name === 'From the menu'), 'named cut is saved');
   });
 
   it('renames a saved cut via its row\'s prompt', async () => {
@@ -101,6 +103,6 @@ describe('DrawingSectionCutMenu (#5514)', () => {
     assert.ok(dialog);
     typeInput(dialog.querySelector('input')!, 'After');
     click(dialog.querySelector('button[type="submit"]')!);
-    await waitFor(() => useSavedSectionCuts.getState().cuts.find((c) => c.id === id)?.name === 'After', 'saved cut is renamed');
+    await waitFor(() => useProjectStore.getState().savedSectionCuts!.find((c) => c.id === id)?.name === 'After', 'saved cut is renamed');
   });
 });

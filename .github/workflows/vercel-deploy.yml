@@ -1,0 +1,90 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# Build the app on GitHub and publish the result to Vercel.
+#
+# Vercel's free build machine has 8 GB, and bundling the viewer now runs out of
+# memory there on some builds (exit 137 at "rendering chunks"). GitHub's runners
+# for public repositories have 16 GB, so the same build (the project's own
+# install and build commands, through `vercel build`) runs here, and Vercel only
+# receives the finished output (`vercel deploy --prebuilt`).
+#
+# Pushes to main publish to production; pull requests from this repository
+# publish a preview. Needs the repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and
+# VERCEL_PROJECT_ID.
+
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # Forks and Dependabot get no repository secrets, so their pull requests
+    # cannot publish a preview: only other branches of this repository deploy.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.user.login != 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Tools
+        run: |
+          corepack enable
+          npm install --global vercel@63
+
+      # The engine is compiled from source when its Rust sources differ from the
+      # last release (scripts/vercel-install.sh decides). That script installs
+      # wasm-pack with its own installer, which on GitHub's runner tries to write
+      # to /etc/skel and fails; installed here first, the script finds it and
+      # skips that step.
+      - name: wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Production or preview
+        id: target
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "env=production" >> "$GITHUB_OUTPUT"
+            echo "flag=--prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "env=preview" >> "$GITHUB_OUTPUT"
+            echo "flag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Project settings and environment from Vercel
+        run: vercel pull --yes --environment=${{ steps.target.outputs.env }} --token="$VERCEL_TOKEN"
+
+      - name: Build
+        run: vercel build ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN"
+
+      - name: Publish
+        run: |
+          url="$(vercel deploy --prebuilt ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN")"
+          echo "Published (${{ steps.target.outputs.env }}): $url" >> "$GITHUB_STEP_SUMMARY"
+          echo "$url"

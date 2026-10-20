@@ -13,7 +13,10 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { closeStandards, useStandardsDialog, type StandardsTab } from '@/project/standards-dialog-store';
+import { AnnotationTypesTab } from './AnnotationTypesTab';
 import { LayersTab } from './LayersTab';
+import { LibraryTab } from './LibraryTab';
+import { SymbolsTab } from './SymbolsTab';
 import { DimStylesTab, TextStylesTab } from './StyleTabs';
 
 export function DraftingStandardsDialog() {
@@ -30,10 +33,16 @@ export function DraftingStandardsDialog() {
             <TabsTrigger value="layers">{t('standards.tab.layers')}</TabsTrigger>
             <TabsTrigger value="text">{t('standards.tab.text')}</TabsTrigger>
             <TabsTrigger value="dim">{t('standards.tab.dim')}</TabsTrigger>
+            <TabsTrigger value="types">{t('standards.tab.types')}</TabsTrigger>
+            <TabsTrigger value="symbols">{t('standards.tab.symbols')}</TabsTrigger>
+            <TabsTrigger value="library">{t('standards.tab.library')}</TabsTrigger>
           </TabsList>
           <TabsContent value="layers" className="pt-3"><LayersTab /></TabsContent>
           <TabsContent value="text" className="pt-3"><TextStylesTab /></TabsContent>
           <TabsContent value="dim" className="pt-3"><DimStylesTab /></TabsContent>
+          <TabsContent value="types" className="pt-3"><AnnotationTypesTab /></TabsContent>
+          <TabsContent value="symbols" className="pt-3"><SymbolsTab /></TabsContent>
+          <TabsContent value="library" className="pt-3"><LibraryTab /></TabsContent>
         </Tabs>
         <DialogFooter>
           <Button onClick={closeStandards}>{t('standards.close')}</Button>

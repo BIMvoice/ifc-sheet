@@ -22,6 +22,7 @@
  */
 
 import type { DraftLayer, DraftParamValue } from './types';
+import { fontFamilyOf } from './text-width';
 
 export type FontKind = 'sans' | 'serif' | 'mono';
 export type TextPlacement = 'above' | 'centered' | 'below';
@@ -123,13 +124,7 @@ export function overriddenFields(params: Params): string[] {
   return Object.keys(params).filter((k) => k.startsWith('o.')).map((k) => k.slice(2));
 }
 
-const FONTS: Record<FontKind, string> = {
-  sans: 'ui-sans-serif, system-ui, sans-serif',
-  serif: 'ui-serif, Georgia, serif',
-  mono: 'ui-monospace, Menlo, monospace',
-};
-
-export const fontFamily = (font: FontKind) => FONTS[font] ?? FONTS.sans;
+export const fontFamily = (font: FontKind): string => fontFamilyOf(font);
 
 /** A length in a dimension style's unit and precision (the value is metres). */
 export function formatDimension(metres: number, style: Pick<DimStyle, 'unit' | 'precision'>): string {

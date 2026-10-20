@@ -7,7 +7,8 @@
  * malformed entry fails with its path, like the rest of `project-file.ts`.
  */
 
-import type { AnnotationShape, DraftEntity, DraftLayer, DraftParamValue, DraftShape, EntityShape, Pt } from './types';
+import { asTextFrame } from './text-block';
+import type { AnnotationShape, DraftEntity, DraftLayer, LevelRef, DraftParamValue, DraftShape, EntityShape, Pt } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -28,12 +29,22 @@ function readHeight(v: Json, path: string): number {
   return v.height;
 }
 
+function readLevelRef(v: unknown, path: string): LevelRef {
+  if (!isObject(v)) fail(path, 'must be a level reference { at, storey? }');
+  if (v.storey !== undefined && !isString(v.storey)) fail(`${path}.storey`, 'must be a string');
+  return { at: readPt(v.at, `${path}.at`), ...(isString(v.storey) ? { storey: v.storey } : {}) };
+}
+
 function readAnnotation(v: Json, path: string): AnnotationShape | null {
   const pt = (key: string) => readPt(v[key], `${path}.${key}`);
   switch (v.type) {
     case 'text':
       if (!isString(v.text)) fail(`${path}.text`, 'must be a string');
-      return { type: 'text', p: pt('p'), text: v.text, height: readHeight(v, path), rotation: isNumber(v.rotation) ? v.rotation : 0 };
+      {
+      const frame = asTextFrame(v.frame);
+      if (v.frame !== undefined && !frame) fail(`${path}.frame`, 'must be box, rounded or bubble');
+      return { type: 'text', p: pt('p'), text: v.text, height: readHeight(v, path), rotation: isNumber(v.rotation) ? v.rotation : 0, ...(frame ? { frame } : {}), ...(isObject(v.leader) ? { leader: readPt(v.leader, `${path}.leader`) } : {}) };
+    }
     case 'leader':
       if (!Array.isArray(v.pts) || v.pts.length < 2 || !isString(v.text)) fail(path, 'must be a leader { pts, text }');
       return { type: 'leader', pts: v.pts.map((p, i) => readPt(p, `${path}.pts/${i}`)), text: v.text, height: readHeight(v, path) };
@@ -41,6 +52,7 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
       return {
         type: 'dimension', variant: v.variant === 'linear' ? 'linear' : 'aligned', a: pt('a'), b: pt('b'), at: pt('at'),
         height: readHeight(v, path), ...(isString(v.text) ? { text: v.text } : {}),
+        ...(isObject(v.textAt) ? { textAt: readPt(v.textAt, `${path}.textAt`) } : {}),
       };
     case 'radial':
       if (!isNumber(v.r) || v.r <= 0) fail(`${path}.r`, 'must be a positive radius');
@@ -49,7 +61,7 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
       return { type: 'angular', c: pt('c'), a: pt('a'), b: pt('b'), at: pt('at'), height: readHeight(v, path) };
     case 'level':
       if (!isNumber(v.value)) fail(`${path}.value`, 'must be a number');
-      return { type: 'level', p: pt('p'), value: v.value, height: readHeight(v, path) };
+      return { type: 'level', p: pt('p'), value: v.value, height: readHeight(v, path), ...(v.ref === undefined ? {} : { ref: readLevelRef(v.ref, `${path}.ref`) }) };
     case 'axis':
       if (!isString(v.label)) fail(`${path}.label`, 'must be a string');
       return {
@@ -58,6 +70,10 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
         size: isNumber(v.size) && v.size > 0 ? v.size : 1, height: readHeight(v, path),
         lineType: v.lineType === 'continuous' || v.lineType === 'dashed' || v.lineType === 'dotted' ? v.lineType : 'dashdot',
       };
+    case 'symbol':
+      if (!isString(v.symbolId) || !v.symbolId) fail(`${path}.symbolId`, 'must be a symbol id');
+      if (!isNumber(v.scale) || v.scale <= 0) fail(`${path}.scale`, 'must be a positive scale');
+      return { type: 'symbol', symbolId: v.symbolId, p: pt('p'), scale: v.scale, rotation: isNumber(v.rotation) ? v.rotation : 0 };
     case 'hatch': {
       if (!Array.isArray(v.loops) || v.loops.length === 0 || !isString(v.pattern)) fail(path, 'must be a hatch { loops, pattern }');
       const loops = v.loops.map((loop, i) => {
@@ -74,7 +90,7 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
   }
 }
 
-function readShape(v: unknown, path: string): EntityShape {
+export function readShape(v: unknown, path: string): EntityShape {
   if (!isObject(v)) fail(path, 'must be a shape');
   const annotation = readAnnotation(v, path);
   if (annotation) return annotation;

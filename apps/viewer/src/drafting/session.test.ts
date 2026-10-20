@@ -32,6 +32,29 @@ beforeEach(() => {
   attachDraftingView('view-1', 'down', () => []);
 });
 
+describe('typed coordinates on a sheet', () => {
+  it('count from the lower-left corner of the paper, y up, so a typed point lands on the sheet', () => {
+    // A3 landscape: 420 x 297 mm; sheet drawing y runs down from the top-left corner.
+    attachDraftingView('sheet-1', 'down', () => [], 10, { x: 0, y: 297 });
+    submitCommandLine('L', null);
+    submitCommandLine('20,30', null);
+    submitCommandLine('@50,0', null);
+    pressEnter();
+    assert.deepEqual(shapes()[0], { type: 'line', a: { x: 20, y: 267 }, b: { x: 70, y: 267 } });
+    // On the paper: 30 mm above the bottom edge, not above the top edge.
+    const { a } = shapes()[0] as { a: { y: number } };
+    assert.ok(a.y >= 0 && a.y <= 297);
+  });
+
+  it('leave a view counting from its drawing origin', () => {
+    submitCommandLine('L', null);
+    submitCommandLine('20,30', null);
+    submitCommandLine('@50,0', null);
+    pressEnter();
+    assert.deepEqual(shapes()[0], { type: 'line', a: { x: 20, y: -30 }, b: { x: 70, y: -30 } });
+  });
+});
+
 describe('draw commands', () => {
   it('LINE draws one entity per segment and closes with C', () => {
     submitCommandLine('L', null);
@@ -219,5 +242,33 @@ describe('annotation commands', () => {
     const [hatch] = shapes();
     assert.ok(hatch.type === 'hatch');
     if (hatch.type === 'hatch') { assert.equal(hatch.pattern, 'CROSS'); assert.equal(hatch.loops.length, 2); }
+  });
+});
+
+describe('WHATCHANGED on the command line', () => {
+  const said = () => useDraftingSession.getState().history.map((h) => JSON.stringify(h)).join('\n');
+  const settled = async (needle: RegExp) => { for (let i = 0; i < 100 && !needle.test(said()); i++) await new Promise((r) => setTimeout(r, 10)); };
+
+  it('runs while LINE is waiting for a point, ends LINE, and does not take its name for a coordinate', async () => {
+    submitCommandLine('L', null);
+    clickDrawing({ x: 0, y: 0 }, TOL, false);
+    assert.equal(useDraftingSession.getState().commandId, 'line');
+    submitCommandLine('whatchanged', null);
+    assert.equal(useDraftingSession.getState().commandId, null);
+    await settled(/No model is loaded/);
+    assert.match(said(), /No model is loaded/);
+    assert.doesNotMatch(said(), /invalidInput|unknownCommand/);
+  });
+  it('takes CLEAR after its name, with no view in front', async () => {
+    attachDraftingView(null, 'down', () => []);
+    submitCommandLine('WHATCHANGED CLEAR', null);
+    await settled(/revision clouds removed/);
+    assert.match(said(), /0 revision clouds removed/);
+  });
+  it('is only text to a tool that is taking text', () => {
+    startDraftCommand('text');
+    clickDrawing({ x: 0, y: 0 }, TOL, false);
+    submitCommandLine('WHATCHANGED', null);
+    assert.equal(shapes().some((s) => s.type === 'text' && s.text === 'WHATCHANGED'), true);
   });
 });

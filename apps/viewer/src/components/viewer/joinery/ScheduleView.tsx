@@ -25,12 +25,18 @@ import { writeOccurrenceNumbers } from '@/joinery/schedule-numbering';
 import { toast } from '@/components/ui/toast';
 import { svgToDxf } from '../sheets/sheet-dxf';
 import { ScheduleGraphic, useScheduleLabels, useScheduleLayout } from './ScheduleGraphic';
+import { TakeoffView } from './TakeoffView';
 
 const SELECT = 'h-7 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1 text-xs';
 const SCALES = [10, 20, 25, 50, 100];
 const MARGIN = 10;
 
+/** A schedule tab: a material takeoff, or a joinery schedule. */
 export function ScheduleView({ schedule }: { schedule: ProjectSchedule }) {
+  return schedule.kind === 'materials' ? <TakeoffView schedule={schedule} /> : <JoineryScheduleView schedule={schedule} />;
+}
+
+function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   const { t } = useTranslation();
   const result = useScheduleLayout(schedule);
   const labels = useScheduleLabels(schedule.name);
