@@ -6,7 +6,7 @@
  * A stepped-into sheet to work on: the wheel zooms about the cursor, a drag
  * on empty paper (or with the middle button) pans; a click chooses a drawing
  * (viewport) and a drag moves it; a double-click opens it to draw in; Delete
- * takes it off the sheet. Alt and the wheel over a drawing move its cut (a
+ * takes it off the sheet; its grips resize the crop (`ViewportHandles`). Alt and the wheel over a drawing move its cut (a
  * plan) or its depth (a section, an elevation). Plain drawing on the paper
  * (lines, text, hatched zones) goes through the same drafting session as a
  * view, in paper millimetres (`useSheetDrafting`).
@@ -24,6 +24,8 @@ import { CommandLine } from '../drafting/CommandLine';
 import { useDraftingKeys } from '../drafting/useDraftingKeys';
 import { useSheetDrafting } from '../sheets/useSheetDrafting';
 import type { SheetContent } from '../sheets/useSheetContent';
+import { isResizable } from '@/project/viewport-resize';
+import { ViewportHandles } from './ViewportHandles';
 import { WallSheet } from './WallSheet';
 
 interface Pan { x: number; y: number; k: number }
@@ -49,6 +51,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
   const [pan, setPan] = useState<Pan>({ x: 0, y: 0, k: 1 });
   const paper = paperOf(sheet);
+  const views = useProjectStore((s) => s.views);
 
   // Fit the whole sheet on arrival, when the paper changes, and on request.
   useLayoutEffect(() => {
@@ -119,6 +122,9 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   }, [chosenId, sheet.id, onChoose]);
 
   const drag = useRef<{ kind: 'pan' | 'move'; sx: number; sy: number; start: Pan; vp?: SheetViewport } | null>(null);
+  // The chosen drawing shows grips to resize its crop, unless a tool is drawing (its clicks are the tool's).
+  const chosenVp = (sheet.viewports ?? []).find((v) => v.id === chosenId) ?? null;
+  const resizing = chosenVp && !drafting.drafting && isResizable(views.find((v) => v.id === chosenVp.viewId)) ? chosenVp : null;
   const showPrompt = drafting.drafting || draftSelection.size > 0;
 
   return (
@@ -155,6 +161,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           <WallSheet ref={paperRef} sheet={sheet} width={paper.w * pan.k} selectedViewportId={chosenId} sheetContent={sheetContent} pinned={false} />
         </div>
         {drafting.overlay}
+        {resizing ? <ViewportHandles key={resizing.id} sheet={sheet} vp={resizing} box={sheetContent.boxOf(resizing)} drawing={sheetContent.content(resizing).drawing ?? null} pan={pan} /> : null}
       </div>
       {showPrompt ? (
         <div className="bg-white text-zinc-900">
