@@ -28,6 +28,7 @@ const GROUPS: { group: SetGroup | null; labelKey: TranslationKey }[] = [
   { group: 'plans', labelKey: 'wall.group.plans' },
   { group: 'elevations', labelKey: 'wall.group.elevations' },
   { group: 'sections', labelKey: 'wall.group.sections' },
+  { group: 'interiors', labelKey: 'wall.group.interiors' },
   { group: 'schedules', labelKey: 'wall.group.schedules' },
   { group: null, labelKey: 'wall.group.other' },
 ];

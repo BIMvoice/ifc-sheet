@@ -130,6 +130,7 @@ export interface SectionProjectView extends ProjectViewBase {
 
 export interface ElevationProjectView extends ProjectViewBase {
   kind: 'elevation';
+  /** The facade it looks at; on an interior elevation, the side of the room its wall is on (it looks that way). */
   direction: ElevationDirection;
   /**
    * World coordinate, metres, of the plane on its axis (z for north and
@@ -137,6 +138,18 @@ export interface ElevationProjectView extends ProjectViewBase {
    * model's box on that facade.
    */
   planeOffset?: number;
+  /** Set on an interior elevation: one wall of a room, seen from inside it. Its plane replaces `direction` / `planeOffset`. */
+  interior?: InteriorElevation;
+}
+
+/** One wall face of a room, looked at from inside the room (`interior-elevations.ts`). */
+export interface InteriorElevation {
+  /** The room's IfcSpace GlobalId. */
+  room: string;
+  /** Parallel to the wall face, inside the room, looking at the face; world metres like a section's plane. */
+  plane: SectionProjectPlane;
+  /** The wall face in drawing metres: its length across, the room's floor to its top up. The drawing is cropped to it. */
+  crop: { min: { x: number; y: number }; max: { x: number; y: number } };
 }
 
 export interface ThreeDProjectView extends ProjectViewBase {

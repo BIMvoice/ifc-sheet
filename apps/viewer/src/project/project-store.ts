@@ -245,7 +245,7 @@ export function duplicateProjectSheet(id: string): string | null {
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;
   const held = state.views.find((v) => v.id === source.viewports?.[0]?.viewId);
-  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held?.kind)), name: `${source.name} Copy`, createdAt: Date.now() };
+  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held)), name: `${source.name} Copy`, createdAt: Date.now() };
   const at = state.sheets.indexOf(source) + 1;
   useProjectStore.setState({ sheets: [...state.sheets.slice(0, at), copy, ...state.sheets.slice(at)], dirty: true });
   return copy.id;
