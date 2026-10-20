@@ -32,6 +32,9 @@ import { SheetCanvas } from './SheetCanvas';
 import { TitleBlockCard } from './TitleBlockForm';
 import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
+import { steppedHandlers } from './stepped-keys';
+import { useWallKeys } from './wall-key-bus';
+import { keyProps } from './wall-key-title';
 
 /** The sheet's way out: printed or saved, at true paper size. */
 const issue = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
@@ -50,6 +53,7 @@ interface SteppedSheetProps {
 export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, onBack, onStep }: SteppedSheetProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
+  const sheets = useProjectStore((s) => s.sheets);
   const sheetContent = useSheetContent(sheet);
   const paperRef = useRef<SVGSVGElement>(null);
   const [fitKey, setFitKey] = useState(0);
@@ -154,6 +158,24 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     else if (v?.kind === 'section' || v?.kind === 'elevation') nudgeViewDepth(v.id, steps);
   }, []);
 
+  // The sheet's own controls, which the keys share with the buttons; they show with no drawing in front.
+  const fit = useCallback(() => setFitKey((k) => k + 1), []);
+  const print = useCallback(() => { if (paperRef.current) printSheet(paperRef.current, sheet); }, [sheet]);
+  const at = sheets.findIndex((s) => s.id === sheet.id);
+  // Stepping to another sheet unmounts this one: never in the middle of a drafting command (a half-drawn
+  // polyline would be lost) or with a drawing in front. Then PageUp / PageDown are not on offer and stay the browser's.
+  const drafting = commandId !== null || runningCommand() !== null;
+  const canStep = !drafting && !focusView;
+  const neighbour = (to: number): (() => void) | null => (canStep && sheets[to] ? () => onStep(sheets[to].id) : null);
+  useWallKeys(steppedHandlers({
+    startTool,
+    toggleAdd: () => setAdding((a) => !a),
+    fit: focusView ? null : fit,
+    print: focusView ? null : print,
+    previous: at > 0 ? neighbour(at - 1) : null,
+    next: at >= 0 ? neighbour(at + 1) : null,
+  }));
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-3 px-6 pb-2 pt-4 text-sky-100">
@@ -167,8 +189,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {!focusView ? (
           <>
             <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
-            <button type="button" className={issue} onClick={() => setFitKey((k) => k + 1)}>{t('wall.fit')}</button>
-            <button type="button" className={issue} onClick={() => paperRef.current && printSheet(paperRef.current, sheet)}>{t('wall.export.pdf')}</button>
+            <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
+            <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
           </>
         ) : null}
