@@ -92,6 +92,20 @@ describe('PaperCard', () => {
     assert.equal(long.getAttribute('aria-invalid'), 'true');
   });
 
+  it('refuses margins that leave no room for the title block, and says why (review of #129)', () => {
+    useProjectStore.setState({ sheets: [{ ...plans(), paper: { kind: 'custom', widthMm: 200, heightMm: 200 } }, ...useProjectStore.getState().sheets.slice(1)] });
+    const ui = card();
+    const before = plans();
+    for (const side of ['Left', 'Right']) {
+      const input = [...ui.querySelectorAll('label')].find((l) => l.firstChild?.textContent === side)!.querySelector('input')!;
+      type(input, '50');
+      blur(input);
+    }
+    // Left 50 still leaves a 140 mm frame: too narrow for the 180 mm title block already, so it is refused, and so is right.
+    assert.deepEqual(plans().frame, before.frame);
+    assert.match(ui.querySelector('[role="alert"]')?.textContent ?? '', /title block/);
+  });
+
   it('starts from a template and then follows the person: a hand change lets go of it', () => {
     choose(select(card(), 'Template'), 'builtin:a3-details');
     assert.deepEqual([plans().paper, plans().templateId, plans().frame?.margins.left], ['A3', 'builtin:a3-details', 20]);

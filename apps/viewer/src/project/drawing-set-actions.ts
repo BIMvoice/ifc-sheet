@@ -17,6 +17,8 @@ import type { AxisBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
 import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, placeViewports, refittedOnPaper, SET_PAPER, sheetGroup, viewExtent, withViewHung, type BoxOf, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
+import { frameOf, frameProblem, type FrameProblem } from './sheet-frame';
+import { paperMm } from './paper';
 import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
 import { addProjectView, updateProjectView, useProjectStore } from './project-store';
@@ -293,15 +295,21 @@ export type SheetFormatPatch = Partial<Pick<ProjectSheet, 'paper' | 'orientation
  * viewport is still brought inside. `boxOf` is each viewport's box as the
  * sheet draws it (a schedule's or legend's own size); without it the box is
  * estimated (`estimatedBox`).
+ *
+ * A paper and frame that cannot hold the title block (`frameProblem`) are
+ * refused: the sheet is left as it was and the problem is returned; null
+ * when the change was made.
  */
-export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent: ModelExtent | null, boxOf?: BoxOf): void {
+export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent: ModelExtent | null, boxOf?: BoxOf): FrameProblem | null {
   const { sheets, views } = state();
   const sheet = sheets.find((s) => s.id === sheetId);
-  if (!sheet) return;
+  if (!sheet) return null;
   const { templateId: patched, ...fields } = patch;
   const { templateId: kept, ...rest } = sheet;
   const templateId = patched === undefined ? kept : patched ?? undefined;
   const changed: ProjectSheet = { ...rest, ...fields, ...(templateId ? { templateId } : {}) };
+  const problem = frameProblem(paperMm(changed.paper ?? 'A1', changed.orientation), frameOf(changed));
+  if (problem) return problem;
   const { sheet: fitted, relaid } = refittedOnPaper(sheet, changed, views, extent, boxOf);
   runAsOneUndoStep(() => {
     useProjectStore.setState({ sheets: sheets.map((s) => (s.id === sheetId ? fitted : s)), dirty: true });
@@ -313,4 +321,5 @@ export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent:
       if (view && was !== vp.scale) updateProjectView(view.id, { scale: vp.scale });
     }
   });
+  return null;
 }

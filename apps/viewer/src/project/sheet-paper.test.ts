@@ -199,6 +199,34 @@ describe('a smaller paper keeps every viewport\'s whole box on the sheet (review
   });
 });
 
+describe('a custom size and frame that cannot hold the title block are refused (review of #129)', () => {
+  const tight = { margins: { top: 50, right: 50, bottom: 50, left: 50 }, titleBlock: 'bottom-right' as const };
+
+  it('200 × 200 mm with 50 mm margins (a 100 mm frame for a 180 mm title block) is refused and the sheet stays as it was', () => {
+    const id = sheetNo('A-101').id;
+    setSheetFormat(id, { paper: { kind: 'custom', widthMm: 200, heightMm: 200 }, templateId: null }, DEMO);
+    const before = sheetNo('A-101');
+    assert.deepEqual(drawingArea(before), { x: 10, y: 10, w: 180, h: 130 }, '200 × 200 with the standard frame holds the title block');
+    const refused = setSheetFormat(id, { frame: tight, templateId: null }, DEMO);
+    assert.deepEqual(refused, { frame: { w: 100, h: 100 }, titleBlock: { w: 180, h: 50 } });
+    assert.deepEqual(sheetNo('A-101'), before);
+  });
+
+  it('the same in one change (paper and margins together, as a template carries them) is refused too', () => {
+    const before = sheetNo('A-101');
+    assert.ok(setSheetFormat(before.id, { paper: { kind: 'custom', widthMm: 200, heightMm: 200 }, frame: tight, templateId: null }, DEMO));
+    assert.deepEqual(sheetNo('A-101'), before);
+  });
+
+  it('a strip title block needs 180 mm of frame height and some width beside it', () => {
+    const strip = { margins: { top: 10, right: 10, bottom: 10, left: 10 }, titleBlock: 'right' as const };
+    const id = sheetNo('A-101').id;
+    assert.equal(setSheetFormat(id, { paper: { kind: 'custom', widthMm: 300, heightMm: 200 }, frame: strip, templateId: null }, DEMO), null, '180 mm frame height holds the 180 mm strip');
+    assert.ok(drawingArea(sheetNo('A-101')).w > 0);
+    assert.ok(setSheetFormat(id, { frame: { ...strip, margins: { ...strip.margins, top: 11 } }, templateId: null }, DEMO), '179 mm does not');
+  });
+});
+
 describe('sheet templates', () => {
   it('has the built-in templates, "A3 details" among them', () => {
     const names = BUILT_IN_TEMPLATES.map((t) => t.name);

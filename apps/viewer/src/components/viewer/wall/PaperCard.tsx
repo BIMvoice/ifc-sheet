@@ -19,7 +19,7 @@ import { sheetSeries } from '@/project/drawing-set';
 import { setSheetFormat } from '@/project/drawing-set-actions';
 import { CUSTOM_MM, ELONGATED_PAPERS, ISO_PAPERS, isCustom, paperFromLabel, paperLabel, paperMm } from '@/project/paper';
 import { useProjectStore } from '@/project/project-store';
-import { DEFAULT_FRAME, frameOf } from '@/project/sheet-frame';
+import { DEFAULT_FRAME, frameOf, type FrameProblem } from '@/project/sheet-frame';
 import { allTemplates, findTemplate, templateFields } from '@/project/sheet-templates';
 import { saveSheetTemplate, setSeriesTemplate } from '@/project/sheets';
 import type { ProjectSheet, SheetFrame, TemplateSeries } from '@/project/types';
@@ -35,13 +35,13 @@ const SERIES_KEYS: Record<TemplateSeries, TranslationKey> = {
 const SIZES = [...ISO_PAPERS, ...ELONGATED_PAPERS].map(paperLabel);
 
 /** A number field that applies on Enter or when left, and shows what is wrong with a value out of range. */
-function Mm({ label, value, min, max, onCommit }: { label: string; value: number; min: number; max: number; onCommit: (mm: number) => void }) {
+function Mm({ label, value, min, max, onCommit }: { label: string; value: number; min: number; max: number; onCommit: (mm: number) => boolean }) {
   const [bad, setBad] = useState(false);
   const commit = (text: string): void => {
     const n = Number(text);
     const ok = text.trim() !== '' && Number.isFinite(n) && n >= min && n <= max;
-    setBad(!ok);
-    if (ok && n !== value) onCommit(n);
+    // A value in range can still be refused (the frame could not hold the title block).
+    setBad(!ok || (n !== value && !onCommit(n)));
   };
   return (
     <label className="block text-sm text-sky-200">
@@ -73,9 +73,15 @@ export function PaperCard({ sheet, extent, boxOf, onClose }: { sheet: ProjectShe
   const custom = isCustom(paper);
   const [asCustom, setAsCustom] = useState(custom);
   const { w, h } = paperMm(paper);
-  const set = (patch: Parameters<typeof setSheetFormat>[1]): void => setSheetFormat(sheet.id, patch, extent, boxOf);
+  const [problem, setProblem] = useState<FrameProblem | null>(null);
+  /** Make the change, or keep why it was refused; true when it was made. */
+  const set = (patch: Parameters<typeof setSheetFormat>[1]): boolean => {
+    const refused = setSheetFormat(sheet.id, patch, extent, boxOf);
+    setProblem(refused);
+    return refused === null;
+  };
   // Anything set by hand no longer follows the template the sheet came from.
-  const setFrame = (next: SheetFrame): void => set({ frame: next, templateId: null });
+  const setFrame = (next: SheetFrame): boolean => set({ frame: next, templateId: null });
 
   return (
     <aside aria-label={t('wall.paper.title')} data-owns-keys className="max-h-[calc(100vh-12rem)] w-[340px] overflow-y-auto rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 text-sky-100 shadow-2xl backdrop-blur">
@@ -138,6 +144,11 @@ export function PaperCard({ sheet, extent, boxOf, onClose }: { sheet: ProjectShe
           ))}
         </div>
       </fieldset>
+      {problem ? (
+        <p role="alert" className="m-0 mt-2 text-xs leading-relaxed text-amber-200">
+          {t('wall.paper.noRoom', { fw: Math.round(problem.frame.w), fh: Math.round(problem.frame.h), tw: problem.titleBlock.w, th: problem.titleBlock.h })}
+        </p>
+      ) : null}
       <button type="button" className={`${quiet} mt-2`} onClick={() => setFrame(DEFAULT_FRAME)}>{t('wall.paper.resetFrame')}</button>
 
       <div className="mt-4 border-t border-sky-300/20 pt-3">

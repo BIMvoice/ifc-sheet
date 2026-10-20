@@ -54,6 +54,25 @@ export function drawingAreaIn(paper: { w: number; h: number }, frame: SheetFrame
   return frame.titleBlock === 'right' ? { ...f, w: f.w - TITLE_BLOCK_MM.h } : { ...f, h: f.h - TITLE_BLOCK_MM.h };
 }
 
+/** A paper and frame that cannot make a sheet: the frame line's size and the title block's, mm. */
+export interface FrameProblem {
+  frame: { w: number; h: number };
+  titleBlock: { w: number; h: number };
+}
+
+/**
+ * Why `frame` on `paper` cannot make a sheet: the frame line is too small for
+ * the title block (as placed: across at the bottom, or a strip at the right),
+ * or leaves no drawing area beside it. Null when it can.
+ */
+export function frameProblem(paper: { w: number; h: number }, frame: SheetFrame): FrameProblem | null {
+  const f = frameRect(paper, frame);
+  const tb = titleBlockRect(paper, frame);
+  const area = drawingAreaIn(paper, frame);
+  const fits = f.w >= tb.w && f.h >= tb.h && area.w > 0 && area.h > 0;
+  return fits ? null : { frame: { w: f.w, h: f.h }, titleBlock: { w: tb.w, h: tb.h } };
+}
+
 const POSITIONS: readonly TitleBlockPosition[] = ['bottom-right', 'right'];
 const margin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= MARGIN_MM.min && v <= MARGIN_MM.max;
 

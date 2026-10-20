@@ -142,6 +142,7 @@ export const wallEn = {
   'wall.paper.width': 'Long side (mm)',
   'wall.paper.height': 'Short side (mm)',
   'wall.paper.dimensions': '{w} × {h} mm on the sheet',
+  'wall.paper.noRoom': 'Not changed: on this paper these margins leave a {fw} × {fh} mm frame, which cannot hold the {tw} × {th} mm title block and a drawing area. Choose a larger paper or smaller margins.',
   'wall.paper.orientation': 'Orientation',
   'wall.paper.landscape': 'Landscape',
   'wall.paper.portrait': 'Portrait',
