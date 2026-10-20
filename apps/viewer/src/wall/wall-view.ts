@@ -43,9 +43,17 @@ export function nearMargin(viewport: Size): number {
 /** When the screen last moved, ms; the background fill waits for the Wall to hold still. */
 let lastMoved = 0;
 export const wallMovedAgo = (): number => Date.now() - lastMoved;
+/** The screen moved, or the user clicked or typed: the background fill holds off a moment. */
+export const noteWallMoved = (): void => {
+  lastMoved = Date.now();
+};
+
+/** Counts `resetWallView` calls, so a background fill started for one project stops when another replaces it. */
+let generation = 0;
+export const wallViewGeneration = (): number => generation;
 
 export function setWallLayout(layout: WallLayout | null): void {
-  lastMoved = Date.now();
+  noteWallMoved();
   useWallView.setState((s) => {
     const near = layout ? visibleSheets(layout.sheets, layout.viewport, nearMargin(layout.viewport)) : [];
     const queue = drawnQueue(s.queue, near);
@@ -64,10 +72,10 @@ export function nextToFill(order: readonly string[], queue: readonly string[]): 
   return order.find((id) => !queued.has(id)) ?? null;
 }
 
-/** Queue the next far sheet for drawing; null when there is none. */
-export function fillNext(): string | null {
+/** Queue the next far sheet for drawing, in `unmeasured` order while no Wall is on screen; null when there is none. */
+export function fillNext(unmeasured: readonly string[] = []): string | null {
   const { layout, queue } = useWallView.getState();
-  const id = layout ? nextToFill(fillOrder(layout), queue) : null;
+  const id = nextToFill(layout ? fillOrder(layout) : unmeasured, queue);
   if (id) useWallView.setState({ queue: [...queue, id] });
   return id;
 }
@@ -104,15 +112,17 @@ export function revealSheet(sheetId: string): void {
   flashTimer = setTimeout(() => useWallView.setState({ highlight: null }), FLASH_MS);
 }
 
+/** Forget the Wall: called when the project is reset or replaced, so no sheet of the last one stays queued. */
 export function resetWallView(): void {
+  generation++;
   clearTimeout(flashTimer);
   useWallView.setState({ layout: null, near: [], queue: [], highlight: null, scroll: null });
 }
 
 /**
  * The sheets whose viewports need their drawings generated: those open as a
- * tab, the one stepped into, and, with the Wall in front, the queue (nearest
- * first). Without the Wall in front only the open ones.
+ * tab, the one stepped into while the Wall is in front, and the queue (nearest
+ * first), which the background fill keeps growing after the Wall is gone.
  */
 export function sheetsToDraw(
   sheets: readonly ProjectSheet[],
@@ -121,10 +131,8 @@ export function sheetsToDraw(
   const byId = new Map(sheets.map((s) => [s.id, s]));
   const ids = new Set<string>();
   for (const id of open) ids.add(id);
-  if (wall) {
-    if (stepped) ids.add(stepped);
-    for (const id of queue) ids.add(id);
-  }
+  if (wall && stepped) ids.add(stepped);
+  for (const id of queue) ids.add(id);
   // Open and stepped-into sheets first: somebody is looking at them.
   return [...ids].map((id) => byId.get(id)).filter((s): s is ProjectSheet => !!s);
 }

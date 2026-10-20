@@ -28,8 +28,11 @@ export function readWallLayout(scroller: HTMLElement): WallLayout {
   };
 }
 
-/** `sheetIds` changing (one added, one taken away) measures again. */
-export function useWallMeasure(scroller: RefObject<HTMLElement | null>, sheetIds: string): void {
+/**
+ * `sheetKey` changing (a sheet added, taken away or moved to another group, so
+ * its frame is a new element) measures again and observes the frames anew.
+ */
+export function useWallMeasure(scroller: RefObject<HTMLElement | null>, sheetKey: string): void {
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -46,13 +49,15 @@ export function useWallMeasure(scroller: RefObject<HTMLElement | null>, sheetIds
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
     observer?.observe(el);
     if (el.firstElementChild) observer?.observe(el.firstElementChild);
+    // A sheet given another paper or orientation moves the ones after it without resizing the Wall.
+    for (const sheet of el.querySelectorAll(`[${WALL_SHEET_ATTR}]`)) observer?.observe(sheet);
     return () => {
       el.removeEventListener('scroll', schedule);
       observer?.disconnect();
       if (frame) cancelAnimationFrame(frame);
       setWallLayout(null);
     };
-  }, [scroller, sheetIds]);
+  }, [scroller, sheetKey]);
 
   const request = useWallView((s) => s.scroll);
   useEffect(() => {

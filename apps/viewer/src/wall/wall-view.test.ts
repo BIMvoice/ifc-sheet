@@ -16,7 +16,10 @@ afterEach(() => resetWallView());
 describe('sheetsToDraw', () => {
   it('draws nothing from the Wall until a sheet comes near, but always the open tabs', () => {
     assert.deepEqual(ids(sheetsToDraw(SHEETS, { wall: true, queue: [], stepped: null, open: [] })), []);
-    assert.deepEqual(ids(sheetsToDraw(SHEETS, { wall: false, queue: ['a'], stepped: null, open: ['c'] })), ['c']);
+  });
+
+  it('keeps drawing the queue with the Wall away (the background fill goes on), but not the sheet stepped into', () => {
+    assert.deepEqual(ids(sheetsToDraw(SHEETS, { wall: false, queue: ['a'], stepped: 'b', open: ['c'] })), ['c', 'a']);
   });
 
   it('draws the queue nearest first, the stepped-into sheet, and the open ones', () => {
@@ -76,6 +79,11 @@ describe('the background fill', () => {
     for (let i = 0; i < 6; i++) taken.push(fillNext());
     assert.deepEqual(taken, ['d', 'b', 'a', null, null, null]);
     assert.deepEqual(useWallView.getState().queue, ['c', 'd', 'b', 'a']);
+  });
+
+  it('with no Wall measured, takes the sheets in the order given', () => {
+    assert.equal(fillNext(), null, 'nothing to take without an order');
+    assert.deepEqual([fillNext(['x', 'y']), fillNext(['x', 'y']), fillNext(['x', 'y'])], ['x', 'y', null]);
   });
 
   it('skips sheets already queued', () => {

@@ -10,16 +10,16 @@
  */
 
 import { X } from 'lucide-react';
-import { memo, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { SET_SCALES, sheetGroup, sheetScaleReason, type ModelExtent, type SetGroup } from '@/project/drawing-set';
 import { groupScale, setGroupScale } from '@/project/drawing-set-actions';
 import { removeProjectItem, useProjectStore } from '@/project/project-store';
 import type { ProjectSheet } from '@/project/types';
+import { startWallFill } from '@/wall/wall-fill';
 import { useWallView } from '@/wall/wall-view';
 import { LazyWallSheet } from './LazyWallSheet';
-import { useWallFill } from './useWallFill';
 import { useWallMeasure, WALL_SHEET_ATTR } from './useWallMeasure';
 import { WallFind } from './WallFind';
 import { WallMiniMap } from './WallMiniMap';
@@ -106,8 +106,9 @@ export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onSte
   const sheets = useProjectStore((s) => s.sheets);
   const scroller = useRef<HTMLDivElement>(null);
   const sheetIds = sheets.map((s) => s.id).join(',');
-  useWallMeasure(scroller, sheetIds);
-  useWallFill(sheetIds);
+  useWallMeasure(scroller, sheets.map((s) => `${s.id}:${sheetGroup(s) ?? ''}`).join(','));
+  // Started here, kept going after the Wall is gone; a sheet added starts it again.
+  useEffect(() => startWallFill(), [sheetIds]);
   const columns = GROUPS.map((g) => ({ ...g, sheets: sheets.filter((s) => sheetGroup(s) === g.group) })).filter((g) => g.sheets.length > 0);
   return (
     <div className="relative flex h-full flex-col">
