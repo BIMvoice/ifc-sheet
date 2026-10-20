@@ -29,6 +29,7 @@ import { typeQuantities, type TypeQuantities } from '@/joinery/type-quantities';
 import { collectTypeElements } from '@/joinery/type-quantities-models';
 import { layoutTypeQuantities, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
 import { penTags } from '../sheets/dxf-tags';
+import { useElementViews, type ViewRequest } from './useElementViews';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
 
@@ -120,19 +121,22 @@ export function useTypeQuantities(): TypeQuantities {
   return useMemo(() => typeQuantities(collectTypeElements()), [mutationVersion, models]);
 }
 
-/** The schedule's data and layout, recomputed when the models or the catalogue change. */
+/** The schedule's data and layout, recomputed when the models or the catalogue change; the cards get their views once cut. */
 export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data: ScheduleData; layout: ScheduleLayout } | null {
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels(schedule?.name ?? '');
-  return useMemo(() => {
+  const data = useMemo(() => {
     if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register') return null;
-    const data = scheduleData(schedule.kind);
-    return { data, layout: layoutSchedule(data, labels, { scale: schedule.scale ?? 50 }) };
+    return scheduleData(schedule.kind);
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
-  }, [schedule, labels, mutationVersion, models, catalogue, mapping]);
+  }, [schedule?.kind, mutationVersion, models, catalogue, mapping]);
+  const scale = schedule?.scale ?? 50;
+  const requests = useMemo<ViewRequest[]>(() => (data ? [{ id: 'self', data, scale }] : []), [data, scale]);
+  const views = useElementViews(requests).get('self');
+  return useMemo(() => (data ? { data, layout: layoutSchedule(data, labels, { scale, views }) } : null), [data, labels, scale, views]);
 }
 
 /** The layouts of the schedules placed on `sheet`, by schedule id. */
@@ -155,6 +159,18 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const typeLabels = useTypeQuantityLabels('');
   const placesTypes = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'types'));
   const placesTakeoff = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'materials'));
+  // The joinery schedules on this sheet: their data once, for the layout and for the views cut from the models.
+  const joinery = useMemo(() => {
+    const out: ViewRequest[] = [];
+    for (const vp of sheet.viewports ?? []) {
+      const schedule = schedules?.find((s) => s.id === vp.viewId);
+      if (!schedule || (schedule.kind !== 'door' && schedule.kind !== 'window' && schedule.kind !== 'all') || out.some((r) => r.id === schedule.id)) continue;
+      out.push({ id: schedule.id, data: scheduleData(schedule.kind), scale: schedule.scale ?? 50 });
+    }
+    return out;
+    // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
+  }, [sheet.viewports, schedules, mutationVersion, models, catalogue, mapping]);
+  const joineryViews = useElementViews(joinery);
   return useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
     // The takeoff parses materials on demand: read once per change, and only when a sheet shows one.
@@ -173,11 +189,11 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
           ? layoutRoomFinishes(finishRooms, { ...finishLabels, title: schedule.name })
         : schedule.kind === 'types'
           ? layoutTypeQuantities(byType ?? { levels: [], rows: [], classTotals: [] }, { ...typeLabels, title: schedule.name })
-          : layoutSchedule(scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50 }));
+          : layoutSchedule(joinery.find((r) => r.id === schedule.id)?.data ?? scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50, views: joineryViews.get(schedule.id) }));
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet.viewports, schedules, labels, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, mutationVersion, models, catalogue, mapping]);
+  }, [sheet.viewports, schedules, labels, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
 }
 
 function Prim({ p }: { p: SchedulePrim }) {
