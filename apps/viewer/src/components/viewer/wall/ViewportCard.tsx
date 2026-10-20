@@ -9,10 +9,13 @@
  */
 
 import { useTranslation } from '@/i18n';
+import { placeLegend } from '@/legend/legend-actions';
 import { renameProjectItem, useProjectStore } from '@/project/project-store';
 import { addViewport, removeViewport } from '@/project/sheets';
 import { drawingArea } from '@/project/drawing-set';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
+import { useLegendLabels } from '../legend/LegendGraphic';
+import { LegendCard } from './LegendCard';
 import { hasTrueScale } from '@/project/axonometric';
 import { ScaleField } from './ScaleField';
 import { ThreeDControls } from './ThreeDControls';
@@ -35,15 +38,24 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
   const view = views.find((v) => v.id === slot?.viewId);
+  const legends = useProjectStore((s) => s.legends ?? []);
+  const labels = useLegendLabels();
   const schedule = schedules.find((s) => s.id === slot?.viewId);
-  const name = view?.name ?? schedule?.name ?? '';
+  const legend = legends.find((l) => l.id === slot?.viewId);
+  const name = view?.name ?? schedule?.name ?? legend?.name ?? '';
   const placed = new Set((sheet.viewports ?? []).map((vp) => vp.viewId));
   const placeable = [
     ...views.filter((v) => !placed.has(v.id)).map((v) => ({ id: v.id, name: v.name })),
     ...schedules.filter((s) => !placed.has(s.id)).map((s) => ({ id: s.id, name: s.name })),
+    ...legends.filter((l) => !placed.has(l.id)).map((l) => ({ id: l.id, name: l.name })),
   ];
 
   const place = (id: string): void => {
+    // A legend sets its own size, at paper size, in a free place.
+    if (legends.some((l) => l.id === id)) {
+      onChoose(placeLegend(sheet.id, id, labels));
+      return;
+    }
     const area = drawingArea(sheet.paper);
     const scale = views.find((v) => v.id === id)?.scale ?? slot?.scale ?? 100;
     onChoose(addViewport(sheet.id, id, { x: area.x + area.w / 2, y: area.y + area.h / 2 }, scale));
@@ -58,7 +70,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
             {t('wall.project.rename')}
             <input key={slot.viewId} className={field} defaultValue={name} onBlur={(e) => renameProjectItem(slot.viewId, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           </label>
-          {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} /> : null}
+          {legend ? <LegendCard legend={legend} /> : hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} /> : null}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
