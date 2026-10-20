@@ -10,17 +10,22 @@
  *
  * A layer name is fixed-length fields, unused positions filled with `-`:
  *
- *     A-  21----  E-   _CUT
- *     |   |       |    optional field (see below)
- *     |   |       presentation (2): E- element graphics, H- hatching, D- dimensions, T- text
- *     |   element (6): a classification code, here CI/SfB table 1, padded with `-`
- *     agent responsible (2): A- architect
+ *     A-  21----  E-  ----------  CUT
+ *     |   |       |   |           user-defined text, from position 21
+ *     |   |       |   positions 11-20: the optional fields, unused, all `-`
+ *     |   |       presentation (9-10): E- element graphics, H- hatching, D- dimensions, T- text
+ *     |   element (3-8): a classification code, here CI/SfB table 1, padded with `-`
+ *     agent responsible (1-2): A- architect
  *
- * The mandatory ten characters are agent + element + presentation. Cut, seen
- * and hidden are not presentation codes, so they go in an optional field after
- * them, as the user-defined suffix `_CUT`, `_SEEN`, `_HIDD` (`_` begins an
- * optional field). The width and position of that suffix among the standard's
- * optional fields were not checked.
+ * Positions 1-10 (agent + element + presentation) are mandatory. Positions
+ * 11-20 are the standard's defined optional fields, as commonly cited:
+ * status (11, 1 character), sector (12-15, 4), phase (16, 1), projection
+ * (17, 1), scale (18, 1), work package (19-20, 2). Those widths are
+ * UNVERIFIED: the standard's text was not available to check them; only the
+ * total (ten characters, user text from 21) is relied on here. The starter
+ * fills none of them. Cut, seen and hidden are not presentation codes, so
+ * they are user-defined text (`CUT`, `SEEN`, `HIDD`) from position 21. A
+ * name with no user text stops after the mandatory ten characters.
  *
  * CI/SfB mapping used (IfcSheet does not tell internal from external, so
  * walls are all 21 and doors and windows both 31):
@@ -51,16 +56,23 @@ const FAMILIES: readonly Family[] = [
 
 const AGENT = 'A-';
 
-/** A layer name: agent (2) + element (6, `-` padded) + presentation (2) + optional suffix. */
-export function isoLayerName(element: string, presentation: string, suffix = ''): string {
-  return `${AGENT}${element.padEnd(6, '-')}${presentation}${suffix}`;
+/** Positions 11-20: the optional fields, none used by the starter. */
+const UNUSED_OPTIONAL_FIELDS = '-'.repeat(10);
+
+/**
+ * A layer name: agent (2) + element (6, `-` padded) + presentation (2); with
+ * user text, the ten optional-field positions as `-` and the text from 21.
+ */
+export function isoLayerName(element: string, presentation: string, userText = ''): string {
+  const mandatory = `${AGENT}${element.padEnd(6, '-')}${presentation}`;
+  return userText ? `${mandatory}${UNUSED_OPTIONAL_FIELDS}${userText}` : mandatory;
 }
 
-const PRESENTATIONS: readonly { source: string; id: string; presentation: string; suffix: string; weight: number; type?: LineType }[] = [
-  { source: 'CUT', id: 'cut', presentation: 'E-', suffix: '_CUT', weight: 0.5 },
-  { source: 'SEEN', id: 'seen', presentation: 'E-', suffix: '_SEEN', weight: 0.25 },
-  { source: 'HIDDEN', id: 'hidd', presentation: 'E-', suffix: '_HIDD', weight: 0.18, type: 'dashed' },
-  { source: 'HATCH', id: 'hatch', presentation: 'H-', suffix: '', weight: 0.13 },
+const PRESENTATIONS: readonly { source: string; id: string; presentation: string; userText: string; weight: number; type?: LineType }[] = [
+  { source: 'CUT', id: 'cut', presentation: 'E-', userText: 'CUT', weight: 0.5 },
+  { source: 'SEEN', id: 'seen', presentation: 'E-', userText: 'SEEN', weight: 0.25 },
+  { source: 'HIDDEN', id: 'hidd', presentation: 'E-', userText: 'HIDD', weight: 0.18, type: 'dashed' },
+  { source: 'HATCH', id: 'hatch', presentation: 'H-', userText: '', weight: 0.13 },
 ];
 
 const ANNOTATIONS: readonly { kind: CadKind; presentation: string }[] = [
@@ -76,7 +88,7 @@ export function isoStarterRules(): CadLayerRule[] {
     for (const p of PRESENTATIONS) {
       rules.push({
         id: `iso-${f.key}-${p.id}`, source: p.source, ifcClasses: [...f.classes],
-        layer: isoLayerName(f.element, p.presentation, p.suffix), color: f.color, lineWeight: p.weight, ...(p.type ? { lineType: p.type } : {}),
+        layer: isoLayerName(f.element, p.presentation, p.userText), color: f.color, lineWeight: p.weight, ...(p.type ? { lineType: p.type } : {}),
       });
     }
   }

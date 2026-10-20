@@ -4,7 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { cadLayerName, cadRuleOrder, matchCadRule, resolveCadLayer, type CadLayerRule } from './cad-layers.js';
+import { cadLayerName, matchCadRule, resolveCadLayer, type CadLayerRule } from './cad-layers.js';
 import { isoStarterRules } from './cad-layers-iso.js';
 import { aiaStarterRules } from './cad-layers-aia.js';
 import { moveRule, patchRule } from './cad-layers-edit.js';
@@ -15,20 +15,19 @@ const materialRule: CadLayerRule = { id: 'm', source: 'CUT', ifcClasses: ['IfcWa
 const wall = { source: 'CUT', ifcClass: 'IfcWall' };
 
 describe('CAD layer rules', () => {
-  it('try material rules before class rules, whatever the table order', () => {
-    // The class rule is first in the table, yet the material rule wins for a wall of that material.
-    assert.equal(matchCadRule([classRule, materialRule], { ...wall, material: 'Beton armat' })?.id, 'm');
+  it('take the first matching rule in table order, whatever its criterion (PR #112 review)', () => {
+    // A class rule above a material rule wins, even for a wall of that material.
+    assert.equal(matchCadRule([classRule, materialRule], { ...wall, material: 'Beton armat' })?.id, 'c');
     assert.equal(matchCadRule([materialRule, classRule], { ...wall, material: 'Beton armat' })?.id, 'm');
-    assert.deepEqual(cadRuleOrder([classRule, materialRule]).map((r) => r.id), ['m', 'c']);
   });
 
-  it('fall to the class rule when the material does not match, and to nothing when no class does', () => {
-    assert.equal(matchCadRule([classRule, materialRule], { ...wall, material: 'Lemn' })?.id, 'c');
-    assert.equal(matchCadRule([classRule, materialRule], { ...wall })?.id, 'c');
-    assert.equal(matchCadRule([classRule, materialRule], { source: 'CUT', ifcClass: 'IfcDoor' }), null);
+  it('fall past a material rule whose material does not match, and to nothing when no rule does', () => {
+    assert.equal(matchCadRule([materialRule, classRule], { ...wall, material: 'Lemn' })?.id, 'c');
+    assert.equal(matchCadRule([materialRule, classRule], { ...wall })?.id, 'c');
+    assert.equal(matchCadRule([materialRule, classRule], { source: 'CUT', ifcClass: 'IfcDoor' }), null);
   });
 
-  it('take the first of two rules in the same tier', () => {
+  it('take the first of two rules with the same criterion', () => {
     const first: CadLayerRule = { id: 'a', ifcClasses: ['IfcWall'], layer: 'FIRST' };
     const second: CadLayerRule = { id: 'b', ifcClasses: ['IfcWall'], layer: 'SECOND' };
     assert.equal(resolveCadLayer([first, second], wall)?.name, 'FIRST');
@@ -74,16 +73,20 @@ describe('CAD layer names', () => {
 describe('ISO 13567-style starter', () => {
   const rules = isoStarterRules();
 
-  it('has unique rule ids, a criterion on every rule, and names in the mandatory 2+6+2 structure', () => {
+  it('has unique rule ids, a criterion on every rule, and names in the ISO 13567 field positions', () => {
     assert.equal(new Set(rules.map((r) => r.id)).size, rules.length);
     for (const r of rules) {
       assert.equal(cadLayerName(r.layer), r.layer, r.layer);
       assert.ok(r.source || r.kind, r.id);
-      // Agent (2) + element (6, `-` filled) + presentation (2), then an optional `_` field.
-      assert.match(r.layer, /^A-[0-9-]{6}[EHDT]-(_[A-Z]{3,4})?$/, r.layer);
-      const element = r.layer.slice(2, 8);
-      assert.match(element, /^([0-9]+-*|-+)$/, 'digits first, then fill');
-      assert.equal(r.layer.slice(0, 10).length, 10);
+      // Positions 1-2 agent, 3-8 element (`-` filled), 9-10 presentation: mandatory.
+      assert.match(r.layer.slice(0, 10), /^A-[0-9-]{6}[EHDT]-$/, r.layer);
+      assert.match(r.layer.slice(2, 8), /^([0-9]+-*|-+)$/, 'digits first, then fill');
+      if (r.layer.length === 10) continue;
+      // Positions 11-20 are the optional fields, unused here, so all `-`;
+      // user-defined text starts at position 21 (index 20).
+      assert.ok(r.layer.length >= 21, r.layer);
+      assert.equal(r.layer.slice(10, 20), '-'.repeat(10), r.layer);
+      assert.match(r.layer.slice(20), /^(CUT|SEEN|HIDD)$/, r.layer);
     }
   });
 
@@ -97,10 +100,10 @@ describe('ISO 13567-style starter', () => {
   });
 
   it('puts a wall cut and a wall seen on different layers, and annotations on theirs', () => {
-    assert.equal(resolveCadLayer(rules, { source: 'CUT', ifcClass: 'IfcWall' })?.name, 'A-21----E-_CUT');
-    assert.equal(resolveCadLayer(rules, { source: 'SEEN', ifcClass: 'IfcWall' })?.name, 'A-21----E-_SEEN');
+    assert.equal(resolveCadLayer(rules, { source: 'CUT', ifcClass: 'IfcWall' })?.name, 'A-21----E-----------CUT');
+    assert.equal(resolveCadLayer(rules, { source: 'SEEN', ifcClass: 'IfcWall' })?.name, 'A-21----E-----------SEEN');
     assert.equal(resolveCadLayer(rules, { source: 'HATCH', ifcClass: 'IfcWall' })?.name, 'A-21----H-');
-    assert.equal(resolveCadLayer(rules, { source: 'CUT', ifcClass: 'IfcWindow' })?.name, 'A-31----E-_CUT');
+    assert.equal(resolveCadLayer(rules, { source: 'CUT', ifcClass: 'IfcWindow' })?.name, 'A-31----E-----------CUT');
     assert.equal(resolveCadLayer(rules, { source: 'Notes', kind: 'dimension' })?.name, 'A-------D-');
     assert.equal(resolveCadLayer(rules, { source: 'Notes', kind: 'text' })?.name, 'A-------T-');
     assert.equal(resolveCadLayer(rules, { source: 'FRAME' }), null, 'the sheet frame keeps its fixed layer');
