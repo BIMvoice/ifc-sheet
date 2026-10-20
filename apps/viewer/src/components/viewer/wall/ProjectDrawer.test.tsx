@@ -5,7 +5,9 @@
 import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { act } from 'react';
 import { cleanup, click, render } from '@/test/render.js';
+import { patchViewDrawing, useViewDrawings } from '@/project/view-drawings';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet } from '@/project/drawing-set-actions';
@@ -24,6 +26,7 @@ const LEVELS: ProjectLevel[] = [{ name: 'Ground Floor', elevation: 0, storeyGlob
 
 beforeEach(() => {
   resetProject();
+  useViewDrawings.setState({ byView: {} });
   useWallNav.setState({ stepped: null, focus: null, visit: 0, drawer: true });
   useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
   startDrawingSet(null, HOUSE);
@@ -81,5 +84,17 @@ describe('ProjectDrawer', () => {
     assert.ok(remove);
     click(remove);
     assert.ok(!useProjectStore.getState().views.some((v) => v.name === 'North Elevation'));
+  });
+  it('says beside a drawing that it cannot be drawn, and why', () => {
+    const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    const east = useProjectStore.getState().views.find((v) => v.name === 'East Elevation');
+    assert.ok(east);
+    assert.equal(ui.querySelector('[data-viewport-state]'), null, 'nothing to say before a drawing is asked for');
+    act(() => patchViewDrawing(east.id, { status: 'error', error: 'Its level is not in the loaded models.' }));
+    const row = button(ui, 'East Elevation').parentElement;
+    const state = row?.querySelector('[data-viewport-state]');
+    assert.equal(state?.getAttribute('data-viewport-state'), 'failed');
+    assert.match(state?.textContent ?? '', /Its level is not in the loaded models/);
+    assert.equal(ui.querySelectorAll('[data-viewport-state]').length, 1, 'on that drawing only');
   });
 });
