@@ -116,3 +116,23 @@ describe('a topic from another tool, read twice (PR #127, item 3)', () => {
     assert.equal(only((await exported(withBcfGuids(first.comments).comments)).topics).guid, topic.guid);
   });
 });
+
+describe('a reply without a date (PR #127, item 5)', () => {
+  it('is dated when it is read here, and goes out with that date, not 1970', async () => {
+    const readAt = Date.UTC(2026, 9, 20, 9, 30);
+    const read = await exported(withBcfGuids([onElement]).comments);
+    const topic = only(read.topics);
+    delete topic.comments[0].date;
+    const undated = { ...createBCFComment({ author: 'Mihai Pop', comment: 'Fără dată' }), date: undefined };
+    topic.comments.push(undated);
+
+    // Read into a project that does not have it, and merged into one that does.
+    const fresh = bcfToComments(read, [], { ...importing(), readAt });
+    assert.deepEqual(fresh.comments[0].replies.map((r) => r.createdAt), [readAt, readAt]);
+    const merged = bcfToComments(read, [{ ...onElement, bcfGuid: topic.guid }], { ...importing(), readAt });
+    assert.equal(merged.updated[0].replies.at(-1)?.createdAt, readAt);
+
+    const out = only((await exported(fresh.comments)).topics);
+    assert.deepEqual(out.comments.map((c) => c.date), [new Date(readAt).toISOString(), new Date(readAt).toISOString()]);
+  });
+});

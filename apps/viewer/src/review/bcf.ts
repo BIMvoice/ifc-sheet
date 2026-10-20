@@ -124,8 +124,18 @@ function guidsOf(topic: BCFTopic): string[] {
   return topic.viewpoints.flatMap((v) => (v.components?.selection ?? []).flatMap((c) => (c.ifcGuid ? [c.ifcGuid] : [])));
 }
 
-function replyOf(c: BCFComment, newId: () => string): CommentReply {
-  return { id: newId(), author: c.author ?? '', createdAt: c.date ? Date.parse(c.date) || 0 : 0, text: c.comment, bcfGuid: c.guid };
+/**
+ * A BCF date as a time. A date the file leaves out (or one that does not
+ * parse) becomes the time it was read here, the earliest this project knew
+ * of it, rather than 0, which a later export would write as 1970.
+ */
+function timeOf(date: string | undefined, readAt: number): number {
+  const t = date ? Date.parse(date) : NaN;
+  return Number.isFinite(t) ? t : readAt;
+}
+
+function replyOf(c: BCFComment, newId: () => string, readAt: number): CommentReply {
+  return { id: newId(), author: c.author ?? '', createdAt: timeOf(c.date, readAt), text: c.comment, bcfGuid: c.guid };
 }
 
 /**
@@ -134,7 +144,7 @@ function replyOf(c: BCFComment, newId: () => string): CommentReply {
  * from before GUIDs were saved is matched by author and text and learns its
  * GUID), and the topic's status is taken. Null when nothing changes.
  */
-function mergeTopic(c: ReviewComment, topic: BCFTopic, newId: () => string): { comment: ReviewComment; merged: boolean } | null {
+function mergeTopic(c: ReviewComment, topic: BCFTopic, newId: () => string, readAt: number): { comment: ReviewComment; merged: boolean } | null {
   const replies = [...c.replies];
   let merged = false;
   let learnt = false;
@@ -145,7 +155,7 @@ function mergeTopic(c: ReviewComment, topic: BCFTopic, newId: () => string): { c
       replies[same] = { ...replies[same], bcfGuid: bc.guid };
       learnt = true;
     } else {
-      replies.push(replyOf(bc, newId));
+      replies.push(replyOf(bc, newId, readAt));
       merged = true;
     }
   }
@@ -167,14 +177,15 @@ function mergeTopic(c: ReviewComment, topic: BCFTopic, newId: () => string): { c
 export function bcfToComments(
   project: BCFProject,
   existing: readonly ReviewComment[],
-  opts: { sheets: readonly ProjectSheet[]; drawingOf: DrawingOf; guidOf: GuidOf; newId: () => string },
+  opts: { sheets: readonly ProjectSheet[]; drawingOf: DrawingOf; guidOf: GuidOf; newId: () => string; readAt?: number },
 ): BcfImportResult {
+  const readAt = opts.readAt ?? Date.now();
   const result: BcfImportResult = { comments: [], updated: [], merged: 0, unplaced: 0, known: 0 };
   for (const topic of project.topics.values()) {
     const own = topic.labels?.find((l) => l.startsWith(COMMENT_LABEL))?.slice(COMMENT_LABEL.length);
     const here = existing.find((c) => c.bcfGuid === topic.guid) ?? (own ? existing.find((c) => c.id === own) : undefined);
     if (here) {
-      const change = mergeTopic(here, topic, opts.newId);
+      const change = mergeTopic(here, topic, opts.newId, readAt);
       if (!change) result.known++;
       else {
         result.updated.push(change.comment);
@@ -203,9 +214,9 @@ export function bcfToComments(
     const viewpointGuid = topic.viewpoints[0]?.guid;
     result.comments.push({
       id: own ?? opts.newId(), sheetId: sheet.id, x: place.x, y: place.y, viewportId: place.viewportId, viewId: place.viewId, point: place.point, elementGuid: place.elementGuid,
-      author: topic.creationAuthor ?? '', createdAt: topic.creationDate ? Date.parse(topic.creationDate) || 0 : 0,
+      author: topic.creationAuthor ?? '', createdAt: timeOf(topic.creationDate, readAt),
       status: closed(topic.topicStatus) ? 'done' : 'open', text: topic.description || topic.title,
-      replies: topic.comments.map((c) => replyOf(c, opts.newId)), bcfGuid: topic.guid, ...(viewpointGuid ? { bcfViewpointGuid: viewpointGuid } : {}),
+      replies: topic.comments.map((c) => replyOf(c, opts.newId, readAt)), bcfGuid: topic.guid, ...(viewpointGuid ? { bcfViewpointGuid: viewpointGuid } : {}),
     });
   }
   return result;
