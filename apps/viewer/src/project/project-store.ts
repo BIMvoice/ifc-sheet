@@ -21,6 +21,7 @@ import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { nextDetailNumber } from './detail';
+import { upgradeTagAllTypes } from '@/tagall/types';
 import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
@@ -40,7 +41,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined,
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, tagFields: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -64,6 +65,7 @@ const DOCUMENT_FIELDS = {
   modelState: true,
   cadLayers: true,
   details: true,
+  tagFields: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -121,11 +123,13 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     materials: doc.materials ?? [],
     cadLayers: doc.cadLayers ?? [],
     savedSectionCuts: doc.savedSectionCuts ?? [],
-    annotationTypes: doc.annotationTypes ?? [],
+    // A project made before the room label read the tag name takes the new template (`tagall/types.ts`).
+    annotationTypes: upgradeTagAllTypes(doc.annotationTypes ?? []),
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
     details: doc.details ?? [],
     issues: doc.issues ?? [],
+    tagFields: doc.tagFields,
     modelState: doc.modelState,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],

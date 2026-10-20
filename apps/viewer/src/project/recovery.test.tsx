@@ -279,7 +279,14 @@ describe('what the autosave watches', () => {
   });
 
   it('is the same list the saved document is built from', () => {
-    assert.deepEqual(Object.keys(projectDocument()).sort(), PROJECT_DOCUMENT_KEYS.filter((k) => k !== 'modelState').sort());
-    assert.ok(Object.keys(projectDocument({ ...useProjectStore.getState(), modelState: undefined })).length > 20);
+    // Every field set: the document holds exactly the watched fields.
+    const state = useProjectStore.getState();
+    const filled = Object.fromEntries(PROJECT_DOCUMENT_KEYS.map((k) => [k, state[k] ?? {}]));
+    assert.deepEqual(Object.keys(projectDocument({ ...state, ...filled })).sort(), [...PROJECT_DOCUMENT_KEYS].sort());
+    // A fresh project: a field is left out only when the store has none and it has no default.
+    const fresh = Object.keys(projectDocument());
+    for (const k of PROJECT_DOCUMENT_KEYS) if (!fresh.includes(k)) assert.equal(state[k], undefined, `${k} is left out though the store has it`);
+    assert.ok(!fresh.includes('modelState'));
+    assert.ok(Object.keys(projectDocument({ ...state, modelState: undefined })).length > 20);
   });
 });

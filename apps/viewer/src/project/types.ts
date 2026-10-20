@@ -8,6 +8,7 @@ import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/crea
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from '@/catalogue/types';
+import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import type { CadLayerRule } from './cad-layers';
 import type { DisciplineId } from './discipline-views';
 import type { ThreeDProjectView } from './view-3d-types';
@@ -358,6 +359,8 @@ export interface ProjectDocument {
   details?: LibraryDetail[];
   /** Legends: generated tables of what the drawings use, placeable on sheets. */
   legends?: ProjectLegend[];
+  /** Which IFC property feeds each field of a tag, per tag kind (`tagfields/tag-fields.ts`); only what differs from the defaults. */
+  tagFields?: TagFieldConfig;
   /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */
   issues?: ProjectIssue[];
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
