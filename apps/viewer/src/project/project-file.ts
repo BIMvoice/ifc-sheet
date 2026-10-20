@@ -13,6 +13,7 @@ import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
+import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { read3dPrint } from './view-3d-file';
@@ -70,7 +71,7 @@ export function noteProjectFile(doc: ProjectDocument, now?: number, storage?: Pa
   markProjectSaved(parseProjectFile(serializeProject(withoutModelState(doc).slim)), now, storage);
 }
 
-const VIEW_KINDS: readonly ProjectViewKind[] = ['plan', 'section', 'elevation', '3d'];
+const VIEW_KINDS: readonly ProjectViewKind[] = ['plan', 'section', 'elevation', '3d', 'drafting'];
 const DIRECTIONS: readonly ElevationDirection[] = ['north', 'south', 'east', 'west'];
 const AXES = ['down', 'front', 'side'] as const;
 
@@ -146,6 +147,8 @@ function readView(v: unknown, path: string): ProjectView {
         ...base, kind: 'elevation', direction: v.direction as ElevationDirection, ...(v.planeOffset !== undefined ? { planeOffset: v.planeOffset } : {}),
         ...(v.interior !== undefined ? { interior: readInterior(v.interior, `${path}.interior`) } : {}),
       };
+    case 'drafting':
+      return { ...base, kind: 'drafting', ...(isNumber(v.number) && v.number > 0 ? { number: v.number } : {}) };
     default:
       return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null, ...read3dPrint(v) };
   }
@@ -225,6 +228,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     annotationTypes: readList(raw, 'annotationTypes', readAnnotationType),
     symbols: readList(raw, 'symbols', readSymbol),
     legends: readList(raw, 'legends', readLegend),
+    details: readList(raw, 'details', readLibraryDetail),
     issues: readIssues(raw.issues),
     ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),

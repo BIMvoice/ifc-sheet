@@ -43,6 +43,14 @@ export function dropViewDrawing(viewId: string): void {
   });
 }
 
+/**
+ * Whether the view's drawing is generated from the model. A drafting view has
+ * no model behind it: it keeps the empty entry, so every consumer (sheets,
+ * the editor) takes the "no model drawing" path they already have for a
+ * project without geometry.
+ */
+export const generatesFromModel = (view: Pick<ProjectView, 'kind'>): boolean => view.kind !== 'drafting';
+
 /** The display options a view overrides on top of the viewer's shared ones. */
 export interface ViewDisplayOverrides {
   showConstructionProjection: boolean;
