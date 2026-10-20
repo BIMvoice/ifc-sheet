@@ -14,6 +14,7 @@
 
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { IfcParser, type IfcDataStore } from '@ifc-lite/parser';
 import { GeometryProcessor, type MeshData } from '@ifc-lite/geometry';
@@ -29,6 +30,8 @@ import type { PlanProjectView, ProjectView, SectionProjectView, GridEnds } from 
 const WASM = new URL('../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
 const FIXTURE = new URL('../../public/_fixtures/structural-grid.ifc', import.meta.url);
 const FZK = new URL('../../public/_fixtures/AC20-FZK-Haus.ifc', import.meta.url);
+/** Every test here runs the real mesh pipeline: without the wasm runtime it skips, never throws. */
+const wasmOptions = { skip: !existsSync(WASM) && 'Run pnpm build:wasm' };
 
 const PLAN_PLANE: SectionPlaneConfig = { axis: 'y', position: 1.2, flipped: false };
 const base = { id: 'v', name: 'v', createdAt: 0 };
@@ -134,25 +137,25 @@ describe('structural grid on a plan', () => {
   let fixture = '';
   before(async () => { fixture = await readFile(FIXTURE, 'utf8'); });
 
-  it('puts every axis through the centres of its two columns, to the millimetre', async () => {
+  it('puts every axis through the centres of its two columns, to the millimetre', wasmOptions, async () => {
     assert.ok(await frameError(fixture) < 0.001);
   });
 
-  it('mutation: a grid placed without its rotation is off by metres', async () => {
+  it('mutation: a grid placed without its rotation is off by metres', wasmOptions, async () => {
     const { direction } = gridPlacement(fixture);
     const broken = fixture.replace(new RegExp(`#${direction}= IFCDIRECTION\\([^)]*\\)\\)`), `#${direction}= IFCDIRECTION((1.,0.,0.))`);
     assert.notEqual(broken, fixture);
     assert.ok(await frameError(broken) > 0.5);
   });
 
-  it('mutation: a grid placed without its translation is off by tens of metres', async () => {
+  it('mutation: a grid placed without its translation is off by tens of metres', wasmOptions, async () => {
     const { point } = gridPlacement(fixture);
     const broken = fixture.replace(new RegExp(`#${point}= IFCCARTESIANPOINT\\([^;]*;`), `#${point}= IFCCARTESIANPOINT((0.,0.,0.));`);
     assert.notEqual(broken, fixture);
     assert.ok(await frameError(broken) > 10);
   });
 
-  it('mutation: a storey placement dropped from the chain leaves the axes at the wrong place', async () => {
+  it('mutation: a storey placement dropped from the chain leaves the axes at the wrong place', wasmOptions, async () => {
     const storeyPlacement = /#\d+= IFCBUILDINGSTOREY\([^,]*,[^,]*,[^,]*,[^,]*,[^,]*,#(\d+),/.exec(fixture)![1];
     const broken = fixture.replace(new RegExp(`(#\\d+= IFCBUILDINGSTOREY\\([^,]*,[^,]*,[^,]*,[^,]*,[^,]*,)#${storeyPlacement},`), '$1$,');
     assert.notEqual(broken, fixture);
@@ -160,14 +163,14 @@ describe('structural grid on a plan', () => {
     assert.ok(error > 1, `off by ${error} m`);
   });
 
-  it('mutation: a grid without an ObjectPlacement in a placed storey is not drawn at a guessed place', async () => {
+  it('mutation: a grid without an ObjectPlacement in a placed storey is not drawn at a guessed place', wasmOptions, async () => {
     const { placement } = gridPlacement(fixture);
     const broken = fixture.replace(new RegExp(`(#\\d+= IFCGRID\\([^,]*,[^,]*,[^,]*,[^,]*,[^,]*,)#${placement},`), '$1$,');
     assert.notEqual(broken, fixture);
     await assert.rejects(frameError(broken), /all four axes/);
   });
 
-  it('puts the tags A, B, 1, 2 on bubbles at the configured ends', async () => {
+  it('puts the tags A, B, 1, 2 on bubbles at the configured ends', wasmOptions, async () => {
     await seed(new TextEncoder().encode(fixture));
     const tagsAt = (ends: GridEnds | undefined) => {
       const overlays = gridOverlays(plan(ends ? { ends } : undefined), PLAN_PLANE);
@@ -194,7 +197,7 @@ describe('structural grid on a plan', () => {
     assert.ok(Math.abs(Math.hypot(c.x - line.a.x, c.y - line.a.y) - both.bubbles[0].r) < 1e-9);
   });
 
-  it('runs each axis across the drawing and no further than its bubble fits in the auto-fit margin', async () => {
+  it('runs each axis across the drawing and no further than its bubble fits in the auto-fit margin', wasmOptions, async () => {
     const { meshes } = await seed(new TextEncoder().encode(fixture));
     // The building's box in the plan's drawing coordinates (x = render x, y = render z), from its meshes.
     const box = { min: { x: Infinity, y: Infinity }, max: { x: -Infinity, y: -Infinity } };
@@ -212,7 +215,7 @@ describe('structural grid on a plan', () => {
     for (const b of bubblesOf(overlays)) assert.ok(slack(b.c) + b.r <= 10 * unit + 1e-6, 'a bubble stays inside the 10 mm margin');
   });
 
-  it('draws a dash-dot GRID line and continuous GRID bubbles, and nothing when the view switches the grid off', async () => {
+  it('draws a dash-dot GRID line and continuous GRID bubbles, and nothing when the view switches the grid off', wasmOptions, async () => {
     await seed(new TextEncoder().encode(fixture));
     const overlays = gridOverlays(plan(), PLAN_PLANE);
     assert.deepEqual(overlays.map((o) => [o.layer, o.lineType ?? 'continuous']), [['GRID', 'dashdot'], ['GRID', 'continuous']]);
@@ -223,7 +226,7 @@ describe('structural grid on a plan', () => {
     assert.deepEqual(gridOverlays({ ...plan(), kind: '3d', viewpoint: null } as unknown as ProjectView, PLAN_PLANE), []);
   });
 
-  it('names each axis by its grid\'s GlobalId and its tag, so an edit or a re-export finds it again', async () => {
+  it('names each axis by its grid\'s GlobalId and its tag, so an edit or a re-export finds it again', wasmOptions, async () => {
     const { store } = await seed(new TextEncoder().encode(fixture));
     const storeyId = [...store.spatialHierarchy!.storeyElevations.keys()][0];
     const workplane = buildStoreyWorkplane(useViewerStore.getState(), 'm', storeyId, 0);
@@ -233,7 +236,7 @@ describe('structural grid on a plan', () => {
     assert.deepEqual(axes.map((a) => a.axis.key), ['A', 'B', '1', '2'].map((tag) => `${guid}:${tag}`));
   });
 
-  it('follows the model: the axis moves with an edit of the grid, and keeps its tag', async () => {
+  it('follows the model: the axis moves with an edit of the grid, and keeps its tag', wasmOptions, async () => {
     await seed(new TextEncoder().encode(fixture));
     const before = linesOf(gridOverlays(plan(), PLAN_PLANE))[0];
     const shifted = fixture.replace(new RegExp(`#${gridPlacement(fixture).point}= IFCCARTESIANPOINT\\([^;]*;`), `#${gridPlacement(fixture).point}= IFCCARTESIANPOINT((10500.,20000.,0.));`);
@@ -265,7 +268,7 @@ describe('structural grid on a section', () => {
     return t >= 0 && t <= 1 ? [[tag, a[0] + t * (b[0] - a[0])] as const] : [];
   });
 
-  it('shows the axes a cut across x crosses, at their positions along the section', async () => {
+  it('shows the axes a cut across x crosses, at their positions along the section', wasmOptions, async () => {
     await seed(new TextEncoder().encode(fixture));
     // Render frame: x = IFC x, z = -IFC y. A side cut at x = 17 m looks along x; drawing x = render z.
     const plane: SectionPlaneConfig = { axis: 'x', position: 17, flipped: false };
@@ -288,7 +291,7 @@ describe('structural grid on a section', () => {
     assert.ok(head.every((t) => t.at.y > BOUNDS.bounds.max.y));
   });
 
-  it('shows the axes of a cut across z, and none for a cut beside the building', async () => {
+  it('shows the axes of a cut across z, and none for a cut beside the building', wasmOptions, async () => {
     await seed(new TextEncoder().encode(fixture));
     // A front cut at render z = -22 is IFC y = 23; drawing x = render x = IFC x.
     const plane: SectionPlaneConfig = { axis: 'z', position: -23, flipped: false };
@@ -300,7 +303,7 @@ describe('structural grid on a section', () => {
     assert.deepEqual(gridOverlays(section(), { axis: 'x', position: 200, flipped: false }, BOUNDS), []);
   });
 
-  it('works through a custom plane the same way', async () => {
+  it('works through a custom plane the same way', wasmOptions, async () => {
     await seed(new TextEncoder().encode(fixture));
     const plane: SectionPlaneConfig = {
       axis: 'x', position: 17, flipped: false,
@@ -314,7 +317,7 @@ describe('structural grid on a section', () => {
 });
 
 describe('a model without a grid', () => {
-  it('draws exactly as before: no GRID overlay on the FZK-Haus plan or section', async () => {
+  it('draws exactly as before: no GRID overlay on the FZK-Haus plan or section', wasmOptions, async () => {
     const { meshes } = await seed(new Uint8Array(await readFile(FZK)));
     const hidden = new Set<string>();
     const sectionPlane: SectionPlaneConfig = { axis: 'z', position: 0, flipped: false };
