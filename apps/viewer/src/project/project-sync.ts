@@ -126,7 +126,7 @@ export function useProjectSync(): void {
         else if (saved) {
           loadProjectDocument(saved);
           void restoreModelState(key, () => slot);
-          void restoreRasters(key, () => slot);
+          void restoreRasters(key);
         } else if (!overlaps) resetProject();
       }
       syncProjectWithModels(refs, storeys);

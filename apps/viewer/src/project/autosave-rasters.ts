@@ -60,12 +60,16 @@ export async function writeRasters(slot: string, rasters: ReadonlyMap<string, st
 }
 
 /**
- * Puts the images back into the views the slot restored, while `slot` is still
- * the one in front. A view whose image is gone (site data cleared) is left
- * without a capture, so it asks to be captured again instead of showing a
- * broken image.
+ * Puts the images back into the views the slot restored. It completes even
+ * when the slot in front changed during the read (a model joined the set):
+ * the views still hold the reference, and the next autosave, to the new slot,
+ * keeps only what is in the views, so stopping here would lose the capture.
+ * Only a view that still holds its own reference is filled, so a capture
+ * taken during the read, or another project's views, are left as they are.
+ * A view whose image is gone (site data cleared) is left without a capture,
+ * so it asks to be captured again instead of showing a broken image.
  */
-export async function restoreRasters(slot: string, current: () => string | null): Promise<void> {
+export async function restoreRasters(slot: string): Promise<void> {
   const refs = useProjectStore.getState().views.filter((v) => v.kind === '3d' && v.raster && isAutosaveRasterRef(v.raster.href));
   if (refs.length === 0) return;
   const found = new Map<string, string | null>();
@@ -80,10 +84,9 @@ export async function restoreRasters(slot: string, current: () => string | null)
       found.set(v.id, null);
     }
   }
-  if (current() !== slot) return;
   useProjectStore.setState({
     views: useProjectStore.getState().views.map((v) => {
-      if (v.kind !== '3d' || !v.raster || !isAutosaveRasterRef(v.raster.href) || !found.has(v.id)) return v;
+      if (v.kind !== '3d' || !v.raster || v.raster.href !== REF_PREFIX + v.id || !found.has(v.id)) return v;
       const href = found.get(v.id);
       return { ...v, raster: href ? { ...v.raster, href } : null };
     }),
