@@ -4,8 +4,9 @@
 
 /**
  * The mark a detail leaves on its source view: a dashed rectangle with
- * rounded corners and a label, the detail's number and, once the detail is on
- * a sheet, that sheet's number (`2/A-101`). Plain drafted shapes locked to
+ * rounded corners and a label: the detail's own number until the detail is on
+ * a sheet, then its drawing number on that sheet and the sheet's number
+ * (`1/A-901`), read from `viewReference` like every other cross-reference. Plain drafted shapes locked to
  * their detail like a section's symbol is to its section; the rectangle also
  * has grips that change the detail's crop. Pure.
  */
@@ -15,6 +16,7 @@ import type { ProjectSheet, ProjectView, ViewDetail } from '@/project/types';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from './frame';
 import type { Grip } from './grips';
 import type { DraftEntity, EntityShape, Pt } from './types';
+import { viewReference, type ViewReference } from './cross-ref';
 
 type Rect = Pick<ViewDetail, 'min' | 'max'>;
 
@@ -33,17 +35,14 @@ export const detailLink = (e: Pick<DraftEntity, 'params'>): string | null => {
 };
 export const DETAIL_LINK = LINK;
 
-/** `2` on its own, `2/A-101` once the detail is on sheet A-101. */
-export const detailLabel = (number: number, sheetNumber?: string): string => (sheetNumber ? `${number}/${sheetNumber}` : String(number));
+/** The detail's own number (`2`) on no sheet; on a sheet, the drawing number the sheet's title prints and the sheet's number (`1/A-901`). */
+export const detailLabel = (number: number, ref?: ViewReference | null): string => (ref ? `${ref.drawing}/${ref.sheet}` : String(number));
 
-/** The first sheet (in set order) that holds a viewport of the view, if any. */
-export function sheetHolding<S extends Pick<ProjectSheet, 'viewports'>>(viewId: string, sheets: readonly S[]): S | undefined {
-  return sheets.find((s) => (s.viewports ?? []).some((v) => v.viewId === viewId));
-}
-
-/** The number of the first sheet that holds a viewport of the view, if any. */
-export function sheetNumberOf(viewId: string, sheets: readonly Pick<ProjectSheet, 'number' | 'viewports'>[]): string | undefined {
-  return sheetHolding(viewId, sheets)?.number;
+/** The label of the mark of detail view `detailViewId`, numbered `number`, with the views and sheets as they are now. */
+export function detailMarkLabel(
+  detailViewId: string, number: number, views: readonly { id: string }[], sheets: readonly Pick<ProjectSheet, 'number' | 'viewports'>[],
+): string {
+  return detailLabel(number, viewReference(detailViewId, new Set(views.map((v) => v.id)), sheets));
 }
 
 /**
@@ -77,7 +76,7 @@ export function markParts(drafts: readonly DraftEntity[], detailViewId: string):
   return drafts.filter((d) => detailLink(d) === detailViewId).sort((a, b) => Number(a.params[PART] ?? 0) - Number(b.params[PART] ?? 0));
 }
 
-/** The drafts with every detail mark's label showing its detail's number and sheet. The same array when nothing changes. */
+/** The drafts with every detail mark's label showing where its detail is drawn (`detailMarkLabel`). The same array when nothing changes. */
 export function settleDetailMarks(drafts: DraftEntity[], views: readonly ProjectView[], sheets: readonly Pick<ProjectSheet, 'number' | 'viewports'>[]): DraftEntity[] {
   let changed = false;
   const next = drafts.map((d) => {
@@ -85,7 +84,7 @@ export function settleDetailMarks(drafts: DraftEntity[], views: readonly Project
     if (!id || d.shape.type !== 'text') return d;
     const detail = views.find((v) => v.id === id)?.detail;
     if (!detail) return d;
-    const text = detailLabel(detail.number, sheetNumberOf(id, sheets));
+    const text = detailMarkLabel(id, detail.number, views, sheets);
     if (d.shape.text === text) return d;
     changed = true;
     return { ...d, shape: { ...d.shape, text } };
