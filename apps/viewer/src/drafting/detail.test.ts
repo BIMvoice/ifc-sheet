@@ -14,6 +14,7 @@ import { addDetail, setDetailRect } from './commands/detail';
 import { eraseCommand, moveCommand, rotateCommand } from './commands/modify';
 import { detailGrips, markParts, moveDetailGrip, selectedDetailGrips } from './detail-mark';
 import { isLockedToView } from './section-symbol';
+import { drawingNumbers } from './cross-ref';
 import type { DraftContext } from './commands/types';
 
 const A = { x: 2, y: 3 };
@@ -94,9 +95,25 @@ describe('a detail of an area', () => {
     addViewport(sheet, planView().id, { x: 100, y: 100 }, 100);
     assert.equal(label(), '1');
     addViewport(sheet, id, { x: 250, y: 100 }, 25);
-    assert.equal(label(), `1/${state().sheets.find((s) => s.id === sheet)?.number}`);
+    // Second drawing on the sheet, beside the plan: its title prints 2, so does the mark (#134 review).
+    assert.equal(label(), `2/${state().sheets.find((s) => s.id === sheet)?.number}`);
     setSheetNumber(sheet, 'D-7');
-    assert.equal(label(), '1/D-7');
+    assert.equal(label(), '2/D-7');
+  });
+
+  it('prints the drawing number its sheet title prints, not its own detail number (#134 review)', () => {
+    addDetail(planView().id, A, B, cur);
+    const second = addDetail(planView().id, { x: 8, y: 3 }, { x: 11, y: 5 }, cur) as string;
+    assert.equal(state().views.find((v) => v.id === second)?.detail?.number, 2);
+    const label = () => { const t = markOf(second).find((d) => d.shape.type === 'text'); return t?.shape.type === 'text' ? t.shape.text : null; };
+    const sheet = addProjectSheet('Details');
+    setSheetNumber(sheet, 'A-901');
+    addViewport(sheet, second, { x: 100, y: 100 }, 25);
+    const placed = state().sheets.find((s) => s.id === sheet);
+    assert.ok(placed?.viewports?.[0]);
+    // The title of the one drawing on A-901 reads (1); the mark pointing at it must read 1/A-901.
+    assert.equal(drawingNumbers(placed, new Set(state().views.map((v) => v.id))).get(placed.viewports[0].id), '1');
+    assert.equal(label(), '1/A-901');
   });
 
   it('is removed with its mark when the view is deleted', () => {

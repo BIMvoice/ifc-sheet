@@ -4,15 +4,15 @@
 
 /**
  * Cross-references: which drawing number a view has on its sheet, and the one
- * place a mark resolves "the view I point at" to "3 / A-301". Section marks
- * and elevation marks both read it. Nothing here is stored: a number and a
+ * place a mark resolves "the view I point at" to "3 / A-301". Section marks,
+ * elevation marks and detail marks all read it, and so does the drawing title
+ * on the sheet, so a mark and the title it points at always print one number. Nothing here is stored: a number and a
  * sheet number are looked up from the sheets as they are now, so a mark follows a
  * drawing that moves to another sheet, is renumbered, or sits on a sheet that is
  * renumbered, without anyone editing the plan the mark is on. Pure.
  */
 
 import type { ProjectSheet, SheetViewport } from '@/project/types';
-import { sheetHolding } from './detail-mark';
 
 type SheetLike = Pick<ProjectSheet, 'number' | 'viewports'>;
 
@@ -57,6 +57,11 @@ function readingOrder(vps: readonly SheetViewport[]): SheetViewport[] {
   return rows.flatMap((row) => row.sort((a, b) => a.x - b.x));
 }
 
+/** The first sheet (in set order) that holds a viewport of the view, if any. */
+export function sheetHolding<S extends Pick<ProjectSheet, 'viewports'>>(viewId: string, sheets: readonly S[]): S | undefined {
+  return sheets.find((s) => (s.viewports ?? []).some((v) => v.viewId === viewId));
+}
+
 /** Where a view is drawn: its number on its sheet, and the sheet's number. */
 export interface ViewReference {
   drawing: string;
@@ -65,8 +70,7 @@ export interface ViewReference {
 
 /**
  * Where `viewId` is drawn, or `null` when it is on no sheet. On two sheets
- * the first in set order (the order of `sheets`) is the one named. Detail
- * marks name their sheet the same way (`sheetNumberOf`, over the same `sheetHolding`).
+ * the first in set order (the order of `sheets`) is the one named.
  */
 export function viewReference(viewId: string, viewIds: ReadonlySet<string>, sheets: readonly SheetLike[]): ViewReference | null {
   const sheet = sheetHolding(viewId, sheets);
