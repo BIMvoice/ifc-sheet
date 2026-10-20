@@ -11,7 +11,9 @@ import '@/test/setup-dom.js';
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { deflateSync } from 'node:zlib';
 import * as jspdf from 'jspdf';
+import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { addProjectView, resetProject, useProjectStore } from '@/project/project-store';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import type { ProjectSheet } from '@/project/types';
@@ -26,10 +28,46 @@ const vp = (id: string, viewId: string, scale: number, y: number) => ({ id, view
 const sheet = (id: string, number: string, name: string, viewports: ReturnType<typeof vp>[]) =>
   ({ id, number, name, createdAt: 0, paper: 'A3', orientation: 'landscape', viewports }) as unknown as ProjectSheet;
 
-/** A plan view that is "drawn" (empty) and carries a 1 m line on the drafting layer "Walls". */
+/**
+ * The generated drawing of the plan: one wall cut 4 m by 0.3 m, centred on the origin, so the page carries
+ * a fill, cut lines and (the view's walls are hatched BRICK) hatch lines, each inside its own layer.
+ */
+const WALL_CUT = [{ x: -2, y: -0.15 }, { x: 2, y: -0.15 }, { x: 2, y: 0.15 }, { x: -2, y: 0.15 }];
+const DRAWING = {
+  config: { plane: { axis: 'y', position: 1.2, flipped: false }, projectionDepth: 10, includeHiddenLines: true, creaseAngle: 30, scale: 100 },
+  lines: WALL_CUT.map((a, i) => ({ line: { start: a, end: WALL_CUT[(i + 1) % 4] }, category: 'cut', visibility: 'visible', entityId: 7, ifcType: 'IfcWall', modelIndex: 0, depth: 0 })),
+  cutPolygons: [{ polygon: { outer: WALL_CUT, holes: [] }, entityId: 7, ifcType: 'IfcWall', modelIndex: 0, isCut: true }],
+  projectionPolygons: [],
+  bounds: { min: { x: -2, y: -0.15 }, max: { x: 2, y: 0.15 } },
+  stats: { cutLineCount: 4, projectionLineCount: 0, hiddenLineCount: 0, silhouetteLineCount: 0, polygonCount: 1, totalTriangles: 0, processingTimeMs: 0 },
+} as unknown as Drawing2D;
+
+/** A 4 x 4 px red PNG, as a title-block logo is stored: a data URL. */
+function logoPng(): string {
+  const table = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (b: Buffer) => { let c = 0xffffffff; for (const x of b) c = table[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type: string, data: Buffer) => {
+    const typed = Buffer.concat([Buffer.from(type), data]);
+    const out = Buffer.alloc(4 + typed.length + 4);
+    out.writeUInt32BE(data.length, 0);
+    typed.copy(out, 4);
+    out.writeUInt32BE(crc(typed), 4 + typed.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(4, 0);
+  header.writeUInt32BE(4, 4);
+  header[8] = 8; // bit depth
+  header[9] = 2; // RGB
+  const rows = Buffer.concat(Array.from({ length: 4 }, () => Buffer.from([0, ...Array.from({ length: 4 }, () => [255, 0, 0]).flat()])));
+  const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
+/** A plan view with a generated drawing (`DRAWING`, its walls hatched) and a 1 m line on the drafting layer "Walls". */
 function reference(): string {
-  const view = addProjectView({ kind: 'plan', name: 'Ground floor plan', level: { name: 'L0', elevation: 0 }, cutHeight: 1.2, scale: 100 } as never);
-  useViewDrawings.setState({ byView: { [view]: { ...EMPTY_VIEW_DRAWING, status: 'ready' } } });
+  const view = addProjectView({ kind: 'plan', name: 'Ground floor plan', level: { name: 'L0', elevation: 0 }, cutHeight: 1.2, scale: 100, graphics: { categories: { walls: { cutHatch: 'BRICK' } } } } as never);
+  useViewDrawings.setState({ byView: { [view]: { ...EMPTY_VIEW_DRAWING, drawing: DRAWING, status: 'ready' } } });
   useProjectStore.setState({
     draftLayers: [{ id: 'L1', name: 'Walls', color: '#000000', visible: true, locked: false, lineWeight: 0.35 }],
     drafts: [{ id: 'd1', viewId: view, layerId: 'L1', shape: { type: 'line', a: { x: 0, y: 0 }, b: { x: 1, y: 0 } }, params: {} }],
@@ -40,8 +78,9 @@ function reference(): string {
 /** The fonts as the browser fetches them from `public/`. */
 const loadFont = async (url: string) => new Uint8Array(readFileSync(new URL(`../../public${url}`, import.meta.url)));
 
-async function issued(options: { archival?: boolean; romanian?: boolean; drawnBy?: string; extraText?: string; loadFont?: FontLoader; warnings?: PdfWarning[] } = {}) {
+async function issued(options: { archival?: boolean; romanian?: boolean; drawnBy?: string; logo?: string; extraText?: string; loadFont?: FontLoader; warnings?: PdfWarning[] } = {}) {
   const view = reference();
+  if (options.logo) useProjectStore.setState({ titleBlock: { logo: options.logo } });
   if (options.romanian) {
     useProjectStore.setState({ titleBlock: { drawnBy: 'Proiectant: Ștefan Țepeș' } });
     useProjectStore.setState({ views: useProjectStore.getState().views.map((v) => ({ ...v, name: 'Cameră înaltă â' })) });
@@ -142,10 +181,47 @@ describe('the issued PDF', () => {
       // And they sit where the sheet put them: the viewports' centres at x 100 mm, y 100 and 200 mm from the top.
       assert.ok(Math.abs(fifty.x1 - 100) < 0.1 && Math.abs(fifty.y1 - 100) < 0.1, `1:50 starts at ${fifty.x1}, ${fifty.y1}`);
       assert.ok(Math.abs(hundred.x1 - 100) < 0.1 && Math.abs(hundred.y1 - 200) < 0.1, `1:100 starts at ${hundred.x1}, ${hundred.y1}`);
+
+      // Review of #110: the generated drawing, drawn inside its own layers, keeps the scale too. The 4 m cut
+      // edges of the wall measure 80 mm at 1:50 and 40 mm at 1:100, and its hatch lies inside the cut.
+      const segments = await strokedSegments(pdf, pdfjs, 2);
+      const cut = segments.filter((s) => s.layer === 'Cut lines');
+      const long = cut.map((s) => s.length).filter((l) => l > 30).sort((a, b) => a - b);
+      assert.equal(long.length, 4, `two long cut edges per viewport, got ${cut.map((s) => s.length.toFixed(2)).join(', ')}`);
+      for (const [l, want] of long.map((l, i) => [l, i < 2 ? 40 : 80])) assert.ok(Math.abs(l - want) < 0.1, `a cut edge measures ${l} mm, expected ${want}`);
+      const hatch = segments.filter((s) => s.layer === 'Hatching');
+      assert.ok(hatch.length > 10, `the wall is hatched (${hatch.length} hatch lines)`);
+      const fiftyCut = cut.filter((s) => Math.abs(s.y1 - 100) < 4);
+      const [minX, maxX] = [Math.min(...fiftyCut.flatMap((s) => [s.x1, s.x2])), Math.max(...fiftyCut.flatMap((s) => [s.x1, s.x2]))];
+      const [minY, maxY] = [Math.min(...fiftyCut.flatMap((s) => [s.y1, s.y2])), Math.max(...fiftyCut.flatMap((s) => [s.y1, s.y2]))];
+      assert.ok(Math.abs(maxX - minX - 80) < 0.1 && Math.abs(maxY - minY - 6) < 0.1, `the 1:50 wall is ${maxX - minX} by ${maxY - minY} mm`);
+      for (const s of hatch.filter((h) => Math.abs(h.y1 - 100) < 4)) {
+        for (const [x, y] of [[s.x1, s.y1], [s.x2, s.y2]]) assert.ok(x > minX - 0.1 && x < maxX + 0.1 && y > minY - 0.1 && y < maxY + 0.1, `hatch point ${x}, ${y} inside the cut`);
+      }
     } finally { await close(); }
   });
 
-  it('writes the archival description only when asked', async () => {
+  // Review of #110: /Properties was opened inside the /XObject dictionary before addImage wrote its names, so
+  // the image's /I0 landed in /Properties and the logo was not drawn.
+  it('draws the title-block logo: the image is a page XObject and the page paints it', async () => {
+    const { pdf, pdfjs, close } = await openPdf(await issued({ logo: logoPng() }));
+    try {
+      for (const n of [2, 3]) {
+        const page = await pdf.getPage(n);
+        const ops = await page.getOperatorList();
+        const at = ops.fnArray.indexOf(pdfjs.OPS.paintImageXObject);
+        assert.ok(at >= 0, `page ${n} paints an image`);
+        // pdf.js passes the image XObject's id and its pixel size.
+        assert.deepEqual((ops.argsArray[at] as unknown[]).slice(1, 3), [4, 4], `page ${n}: the logo's own pixels`);
+      }
+      const config = await pdf.getOptionalContentConfig();
+      assert.ok([...config].some(([, group]) => group.name === 'Title block'), 'the layers are still there');
+    } finally { await close(); }
+  });
+
+  // Review of #110: the file claimed PDF/A-2b (pdfaid part 2, conformance B) though jsPDF cannot write a conforming
+  // file and no validator was run; archives trust that claim, so the archival metadata carries none.
+  it('writes the archival metadata only when asked, and claims no PDF/A conformance', async () => {
     const plain = new TextDecoder('latin1').decode(await issued());
     assert.ok(!plain.includes('/OutputIntents') && !plain.includes('pdfaid'));
     const bytes = await issued({ archival: true });
@@ -155,8 +231,10 @@ describe('the issued PDF', () => {
     const { pdf, close } = await openPdf(bytes);
     try {
       const { metadata } = await pdf.getMetadata();
-      assert.equal(metadata?.get('pdfaid:part'), '2');
-      assert.equal(metadata?.get('pdfaid:conformance'), 'B');
+      assert.ok(metadata, 'the XMP packet is written');
+      assert.equal(metadata.get('pdfaid:part'), null);
+      assert.equal(metadata.get('pdfaid:conformance'), null);
+      assert.ok(!metadata.getRaw().includes('pdfa'), `no PDF/A identification in the XMP: ${metadata.getRaw()}`);
       assert.equal(metadata?.get('dc:title'), 'House P01');
       assert.equal(metadata?.get('xmp:createdate'), '2026-10-19T12:00:00' + metadata?.get('xmp:createdate')?.slice(19));
     } finally { await close(); }

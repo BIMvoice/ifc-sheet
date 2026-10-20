@@ -30,7 +30,7 @@ export interface PdfLabels extends ListLabels {
 }
 
 export interface PdfOptions {
-  /** Write the archival description (`pdf-archival.ts`; not a validated PDF/A file). */
+  /** Write the archival metadata (`pdf-archival.ts`; not a PDF/A file, and the file does not claim to be one). */
   archival?: boolean;
   /** The creation date; now when omitted. */
   created?: Date;

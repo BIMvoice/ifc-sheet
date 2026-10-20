@@ -11,7 +11,7 @@ export const issueEn = {
   'issue.dxfZip': 'DXF, zipped',
   'issue.csv': 'Drawing list (CSV)',
   'issue.listFirst': 'Drawing list as first page',
-  'issue.archival': 'PDF/A (archival metadata; not validated)',
+  'issue.archival': 'Archival metadata',
   'issue.layer.group.sheet': 'Sheet',
   'issue.layer.group.drawing': 'Model drawing',
   'issue.layer.group.schedules': 'Schedules, legends and road drawings',

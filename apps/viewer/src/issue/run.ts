@@ -29,7 +29,7 @@ export interface IssueOptions {
   name?: string;
   date?: string;
   listFirst?: boolean;
-  /** PDF: write the archival description (PDF/A-2b identification and sRGB output intent; not validated). */
+  /** PDF: write the archival metadata (XMP, sRGB output intent; no PDF/A claim, see `pdf-archival.ts`). */
   archival?: boolean;
 }
 

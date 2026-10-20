@@ -3,23 +3,19 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The archival metadata of an issued PDF: what PDF/A-2b asks of the file's
- * description that jsPDF can write. This is NOT a conforming PDF/A writer and
- * nothing here has been run through a validator, so nothing here may be
- * described as "PDF/A compliant":
+ * The archival metadata of an issued PDF: a self-describing file, without any
+ * claim to be PDF/A. jsPDF cannot write a conforming PDF/A file (it writes
+ * the standard fonts unembedded, among others) and no validator has been run,
+ * so the XMP carries no `pdfaid` identification: archives trust that claim,
+ * and it would be false.
  *
- *   written: PDF 1.7 header, an XMP packet (`pdfaid` part 2, conformance B,
- *            title, producer, creation date that agrees with the document
- *            information), a file identifier, an sRGB output intent with its
- *            ICC profile embedded.
- *            The text font (Inter) is embedded in full (`pdf-fonts.ts`), so no
- *            font is left unembedded; whether jsPDF's font dictionaries meet
- *            every PDF/A font rule has not been checked.
- *   not written (jsPDF cannot, or this has not been done): /ModDate in the
- *            document information, accented text in the Info dictionary
- *            (folded to ASCII there; the XMP keeps it exact), a validated
- *            ICC profile (the profile below is generated from the sRGB
- *            primaries and transfer curve, not taken from the ICC's file).
+ *   written: PDF 1.7 header, an XMP packet (title, producer, creation date
+ *            that agrees with the document information), a file identifier,
+ *            an sRGB output intent with its ICC profile embedded.
+ *   not written: /ModDate in the document information, accented text in the
+ *            Info dictionary (folded to ASCII there; the XMP keeps it exact),
+ *            a validated ICC profile (the profile below is generated from the
+ *            sRGB primaries and transfer curve, not taken from the ICC's file).
  */
 
 import type { jsPDF } from 'jspdf';
@@ -85,7 +81,7 @@ export function srgbProfile(): Uint8Array {
 
 const hex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
 
-/** The XMP packet: PDF/A identification, title, producer and the creation date the document information carries. */
+/** The XMP packet: title, producer and the creation date the document information carries; no PDF/A identification. */
 export function xmpPacket(title: string, producer: string, created: Date): string {
   const pad = (n: number, w = 2) => String(n).padStart(w, '0');
   const offset = -created.getTimezoneOffset();
@@ -93,14 +89,13 @@ export function xmpPacket(title: string, producer: string, created: Date): strin
   const date = `${created.getFullYear()}-${pad(created.getMonth() + 1)}-${pad(created.getDate())}T${pad(created.getHours())}:${pad(created.getMinutes())}:${pad(created.getSeconds())}${zone}`;
   return '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>'
     + '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
-    + '<rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"><pdfaid:part>2</pdfaid:part><pdfaid:conformance>B</pdfaid:conformance></rdf:Description>'
     + `<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title><rdf:Alt><rdf:li xml:lang="x-default">${asciiXml(title)}</rdf:li></rdf:Alt></dc:title></rdf:Description>`
     + `<rdf:Description rdf:about="" xmlns:pdf="http://ns.adobe.com/pdf/1.3/"><pdf:Producer>${asciiXml(producer)}</pdf:Producer></rdf:Description>`
     + `<rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/"><xmp:CreateDate>${date}</xmp:CreateDate></rdf:Description>`
     + '</rdf:RDF></x:xmpmeta><?xpacket end="w"?>';
 }
 
-/** Make `doc` carry the archival description. Call once, before the first page is drawn. */
+/** Make `doc` carry the archival metadata. Call once, before the first page is drawn. */
 export function archival(doc: jsPDF, jsPdfVersion: string, title: string, created: Date): void {
   const priv = (doc as unknown as Private).__private__;
   priv.setPdfVersion('1.7');

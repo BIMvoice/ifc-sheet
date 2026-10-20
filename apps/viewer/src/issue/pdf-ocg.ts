@@ -53,10 +53,23 @@ export function optionalContent(doc: jsPDF): OptionalContent {
       internal.write(`<< /Type /OCG /Name ${pdfText(entry.layer.name)} /Intent /View >>`, 'endobj');
     }
   });
-  // The resource dictionary closes the /XObject dictionary after this event: close it here and open /Properties in its place.
-  internal.events.subscribe('putXobjectDict', () => {
+  // /Properties goes into the resource dictionary through the /XObject
+  // dictionary's event: jsPDF closes /XObject right after it, so this closes
+  // it first and opens /Properties in its place. It must run after every other
+  // subscriber of that event, which writes XObject names (addImage's /I0, ...):
+  // one that ran later would land in /Properties and its image would be lost.
+  // addImage subscribes on the first image, after this module, so the handler
+  // is subscribed afresh on 'putResources', which jsPDF publishes after all
+  // drawing and just before it writes the resource dictionaries.
+  const putProperties = () => {
+    if (made.size === 0) return;
     internal.write('>>', '/Properties <<');
     for (const { key: name, object } of made.values()) internal.write(`/${name} ${object} 0 R`);
+  };
+  let propertiesToken: string | undefined;
+  internal.events.subscribe('putResources', () => {
+    if (propertiesToken !== undefined) internal.events.unsubscribe(propertiesToken);
+    propertiesToken = internal.events.subscribe('putXobjectDict', putProperties);
   });
   internal.events.subscribe('putCatalog', () => {
     if (made.size === 0) return;
