@@ -32,7 +32,7 @@ import { PropertiesPanel } from '@/components/viewer/PropertiesPanel.js';
 import { IDSPanel } from '@/components/viewer/IDSPanel.js';
 import { cleanup, click, render } from '@/test/render.js';
 import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
-import { closeContrastBrowser, warmContrastBrowser } from './render-harness.js';
+import { CHROME_SKIP, closeContrastBrowser, warmContrastBrowser } from './render-harness.js';
 import {
   assertRenderedTextClears,
   assertForcedClassReddens,
@@ -129,7 +129,7 @@ const MOVED_LINE = resolve('comparePanel.changeDetail.movedLine', { distance: '5
 const SIZE_LINE = resolve('comparePanel.changeDetail.sizeLine', { dx: '+1.00', dy: '0', dz: '0' });
 const SHAPE_HASH_NOTICE = resolve('comparePanel.changeDetail.unchangedShapeHash');
 
-describe('ComparePanel secondary text contrast (#4792, #6205)', () => {
+describe('ComparePanel secondary text contrast (#4792, #6205)', { skip: CHROME_SKIP }, () => {
   for (const theme of THEMES) {
     it(`CountBadge hint, data count, moved/reshaped lines and before/after arrow clear AA in ${theme}`, async () => {
       mountCompare({ sameBox: false });
@@ -185,7 +185,7 @@ async function mountPropertiesSize(): Promise<void> {
   click(elementWithText(resolve('properties.panel.worldCoordinates')));
 }
 
-describe('PropertiesPanel "Size" row contrast (#4792, #6205)', () => {
+describe('PropertiesPanel "Size" row contrast (#4792, #6205)', { skip: CHROME_SKIP }, () => {
   before(() => localStorage.removeItem(COORDINATES_DISCLOSURE_KEY));
 
   for (const theme of THEMES) {
@@ -244,7 +244,7 @@ function mountIdsAuditDetail(): void {
   click(elementWithText(ISSUE_MESSAGE));
 }
 
-describe('IDSAuditSummary issue detail contrast (#4792, #6205)', () => {
+describe('IDSAuditSummary issue detail contrast (#4792, #6205)', { skip: CHROME_SKIP }, () => {
   for (const theme of THEMES) {
     it(`"path", "facet" and detail key labels clear AA in ${theme}`, async () => {
       mountIdsAuditDetail();
