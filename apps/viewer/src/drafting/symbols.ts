@@ -34,6 +34,40 @@ function scaleBar(metres: number): SymbolShape[] {
   return out;
 }
 
+/**
+ * Insulation batting along +x: the usual detail sign of loops, a prolate
+ * trochoid (its loop radius exceeds its pitch over 2π, so each turn crosses
+ * itself) between the two faces of a layer `length` long and `thickness` thick.
+ */
+function batting(length: number, thickness: number, loops: number): SymbolShape[] {
+  const pitch = length / loops;
+  const r = thickness * 0.45;
+  const steps = loops * 24;
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * loops * Math.PI * 2;
+    pts.push([(pitch / (Math.PI * 2)) * t - r * Math.sin(t), thickness / 2 - r * Math.cos(t)]);
+  }
+  return [poly([[0, 0], [length, 0]]), poly([[0, thickness], [length, thickness]]), poly(pts)];
+}
+
+/** `count` stretcher bricks (215 x 65 mm, 10 mm joints) in one course, in metres. */
+function brickCourse(count: number): SymbolShape[] {
+  const w = 0.215;
+  const h = 0.065;
+  const joint = 0.01;
+  return Array.from({ length: count }, (_, i) => poly([[i * (w + joint), 0], [i * (w + joint) + w, 0], [i * (w + joint) + w, h], [i * (w + joint), h]], true));
+}
+
+/** A rolled I section outline about its centroid, in metres (h, b, web and flange thickness in millimetres). */
+function iSection(h: number, b: number, tw: number, tf: number): SymbolShape[] {
+  const [H, B, W, F] = [h, b, tw, tf].map((v) => v / 1000);
+  const x = B / 2;
+  const w = W / 2;
+  const y = H / 2;
+  return [poly([[-x, -y], [x, -y], [x, -y + F], [w, -y + F], [w, y - F], [x, y - F], [x, y], [-x, y], [-x, y - F], [-w, y - F], [-w, -y + F], [-x, -y + F]], true)];
+}
+
 /** The symbols that ship with the app, drawn in code. Ids start with `builtin:`; a project's own symbols never do. */
 export const BUILT_IN_SYMBOLS: readonly DraftSymbol[] = [
   {
@@ -50,6 +84,10 @@ export const BUILT_IN_SYMBOLS: readonly DraftSymbol[] = [
     id: 'builtin:centre-line', name: 'Centre line mark', unit: 'paper',
     shapes: [line(-12, 0, -4, 0), line(-2, 0, 2, 0), line(4, 0, 12, 0), line(-4, -3, -4, 3), line(4, -3, 4, 3), text(-2.2, 4.5, 'CL', 3)],
   },
+  // Detail components: model-unit symbols, real size in the drawing, so they print smaller at a smaller scale.
+  { id: 'builtin:batting', name: 'Insulation batting 1 m x 100 mm', unit: 'model', shapes: batting(1, 0.1, 10) },
+  { id: 'builtin:brick-course', name: 'Brick course, 5 stretchers', unit: 'model', shapes: brickCourse(5) },
+  { id: 'builtin:ipe-200', name: 'Steel section IPE 200', unit: 'model', shapes: iSection(200, 100, 5.6, 8.5) },
   {
     id: 'builtin:tag-bubble', name: 'Tag bubble', unit: 'paper',
     shapes: [{ type: 'circle', c: { x: 0, y: 0 }, r: 4.5 }, text(-1.55, -0.9, '01', 2.5)],

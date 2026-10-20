@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** The 3D view kind and what it prints (moved out of `types.ts`, which re-exports it, for the module-size limit). */
+/** A 3D view of the project and how it prints (vector axonometric, or a raster capture). Re-exported by `types.ts`. */
 
 import type { CameraViewpoint } from '@/store/types';
 import type { ProjectViewBase } from './types';

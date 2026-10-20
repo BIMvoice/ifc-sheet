@@ -28,7 +28,7 @@ import { loadProjectDocument, projectDocument, resetProject, useProjectStore, ty
 import { parseProjectFile, serializeProject } from './project-file.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package/package-io.js';
 import type {
-  CategoryGraphics, ElevationProjectView, PlanProjectView, ProjectCivilDrawing, ProjectDocument, ProjectMaterial, ProjectSchedule,
+  CategoryGraphics, DraftingProjectView, ElevationProjectView, PlanProjectView, ProjectCivilDrawing, ProjectDocument, ProjectMaterial, ProjectSchedule,
   ProjectSheet, ProjectViewKind, SectionProjectView, SheetViewport, ThreeDProjectView, ViewGraphics,
 } from './types.js';
 
@@ -86,6 +86,7 @@ const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').Pro
     projection: 'axonometric', preset: 'sw', shaded: true,
     raster: { href: 'data:image/png;base64,AAAA', widthPx: 1772, heightPx: 1182, widthMm: 150, heightMm: 100 },
   } satisfies Required<ThreeDProjectView>,
+  drafting: { ...base, id: 'v-draft', name: 'Typical parapet', kind: 'drafting', number: 4 } satisfies Required<DraftingProjectView>,
 };
 
 const GEOMETRY: { [K in DraftShape['type']]: Required<Extract<DraftShape, { type: K }>> } = {
@@ -178,6 +179,12 @@ const FULL: Required<ProjectDocument> = {
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],
+  details: [{
+    id: 'dt1', name: 'Typical parapet', scale: 10,
+    drafts: drafts.slice(0, 3).map(({ viewId: _viewId, ...rest }) => rest),
+    layers: [{ id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'dashdot' }],
+    hatchPatterns: '*MY-LINES, test\n0, 0,0, 0,2\n', symbols,
+  }],
   tagFields: { door: { mark: [{ kind: 'pset', pset: 'Pset_DoorCommon', property: 'Reference' }, { kind: 'attribute', name: 'Mark' }] }, room: { name: [{ kind: 'quantity', qto: 'Qto_SpaceBaseQuantities', name: 'NetFloorArea' }, { kind: 'type-pset', pset: 'Pset_X', property: 'Y' }] } },
   issues: [{
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
@@ -204,7 +211,7 @@ beforeEach(() => resetProject());
 describe('project round trip, one of everything', () => {
   it('the fixture covers every shape type and view kind', () => {
     assert.deepEqual(new Set(drafts.map((d) => d.shape.type)), new Set([...Object.keys(GEOMETRY), ...Object.keys(ANNOTATION)]));
-    assert.equal(new Set(FULL.views.map((v) => v.kind)).size, 4);
+    assert.equal(new Set(FULL.views.map((v) => v.kind)).size, 5);
   });
 
   it('survives the .ifclite-project.json sidecar', () => {

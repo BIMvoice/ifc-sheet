@@ -3,11 +3,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * "Add a drawing", in five big choices: a plan of a storey (pick the storey),
+ * "Add a drawing", in six big choices: a plan of a storey (pick the storey),
  * a section (draw a line on a plan), an elevation (pick a side), a plan of one
  * discipline (structural, foundation, roof: `project/discipline-views.ts`), a
- * detail of an area (mark it on the drawing in front). A new drawing hangs on
- * the set where its kind belongs.
+ * detail of an area (mark it on the drawing in front), a drafting view (blank,
+ * or a library detail). A new drawing hangs on the set where its kind belongs.
  */
 
 import { useState, type ReactNode } from 'react';
@@ -15,6 +15,8 @@ import { useTranslation } from '@/i18n';
 import { ELEVATION_DIRECTIONS, planViewFor, resolvePlanLevel } from '@/project/view-defaults';
 import { defaultDisciplineLevel, disciplineViewFor, DISCIPLINE_IDS, type DisciplineId } from '@/project/discipline-views';
 import { addProjectView, useProjectStore } from '@/project/project-store';
+import { draftingViewOf } from '@/drafting/drafting-view';
+import { placeLibraryDetail } from '@/catalogue/detail-actions';
 import type { ElevationDirection, PlanProjectView, ProjectLevel } from '@/project/types';
 import { ToolIcon, type ToolIconName } from '../ifcsheet/ToolIcon';
 
@@ -49,9 +51,10 @@ const pick = 'rounded-full border border-sky-300/40 px-4 py-2 text-sky-50 hover:
 export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingProps) {
   const { t } = useTranslation();
   const levels = useProjectStore((s) => s.levels);
-  const [step, setStep] = useState<'kinds' | 'storey' | 'side' | 'discipline'>('kinds');
+  const [step, setStep] = useState<'kinds' | 'storey' | 'side' | 'discipline' | 'drafting'>('kinds');
   // The discipline plan a storey is being picked for.
   const [discipline, setDiscipline] = useState<DisciplineId | null>(null);
+  const details = useProjectStore((s) => s.details);
 
   const disciplinePlanOf = (id: DisciplineId, level: ProjectLevel): void => {
     const { views } = useProjectStore.getState();
@@ -79,6 +82,12 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
     onView(existing?.id ?? addProjectView({ kind: 'elevation', name: SIDE_NAMES[direction], direction }));
   };
 
+  const draftingBlank = (): void => onView(addProjectView(draftingViewOf(t('wall.add.draftingName'))));
+  const draftingFromLibrary = (entryId: string): void => {
+    const id = placeLibraryDetail(entryId);
+    if (id) onView(id);
+  };
+
   return (
     <section aria-label={t('wall.add.title')} className="flex items-center gap-8 rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 shadow-2xl backdrop-blur">
       <div className="w-44 shrink-0">
@@ -93,11 +102,17 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
           <Choice icon="symbol" title={t('wall.add.elevation')} hint={t('wall.add.elevationHint')} onClick={() => setStep('side')} />
           <Choice icon="cube" title={t('wall.add.discipline')} hint={t('wall.add.disciplineHint')} onClick={() => setStep('discipline')} disabled={levels.length === 0} />
           <Choice icon="plus" title={t('wall.add.detail')} hint={t('wall.add.detailHint')} onClick={onDetail} />
+          <Choice icon="symbol" title={t('wall.add.drafting')} hint={t('wall.add.draftingHint')} onClick={() => setStep('drafting')} />
         </div>
       ) : step === 'discipline' ? (
         <Picks>{DISCIPLINE_IDS.map((id) => <button key={id} type="button" className={pick} onClick={() => pickDiscipline(id)}>{t(`wall.add.discipline.${id}`)}</button>)}</Picks>
       ) : step === 'storey' ? (
         <Picks>{levels.map((level, i) => <button key={level.name + level.elevation} type="button" className={pick} onClick={() => planOf(i)}>{level.name}</button>)}</Picks>
+      ) : step === 'drafting' ? (
+        <Picks>
+          <button type="button" className={pick} onClick={draftingBlank}>{t('wall.add.draftingBlank')}</button>
+          {(details ?? []).map((d) => <button key={d.id} type="button" className={pick} onClick={() => draftingFromLibrary(d.id)}>{d.name}</button>)}
+        </Picks>
       ) : (
         <Picks>{ELEVATION_DIRECTIONS.map((d) => <button key={d} type="button" className={pick} onClick={() => sideOf(d)}>{SIDE_NAMES[d]}</button>)}</Picks>
       )}

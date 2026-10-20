@@ -34,6 +34,7 @@ import { viewMaterials } from '@/project/material-resolver';
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { planOverlays, type PlanOverlay } from '@/project/plan-overlays';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
+import { entityStyles } from '@/project/model-styles';
 import { useSheetSchedules } from '../joinery/ScheduleGraphic';
 import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
 import { useSheetLegends } from '../legend/LegendGraphic';
@@ -63,6 +64,10 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const materialsTable = useProjectStore((s) => s.materials);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const { geometryResult } = useDrawingRuntime();
+  // Linked models in their own style (#96): follows the loaded models and the project's model list.
+  const loadedModels = useViewerStore((s) => s.models);
+  const projectModels = useProjectStore((s) => s.models);
+  const styleOf = useMemo(() => entityStyles(useViewerStore.getState(), projectModels), [loadedModels, projectModels]);
   const styled = useMemo(() => {
     const out = new Map<string, { drawing: Drawing2D | null; overlays: PlanOverlay[] }>();
     for (const vp of sheet.viewports ?? []) {
@@ -111,7 +116,8 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
     drafts: draftsFor(vp),
     drawingNumber: numbers.get(vp.id),
     overlays: styled.get(vp.viewId)?.overlays,
-  }), [views, styled, draftsFor, numbers, placedSchedules, placedCivil, placedLegends]);
+    styleOf,
+  }), [views, styled, draftsFor, numbers, placedSchedules, placedCivil, placedLegends, styleOf]);
 
   const boxOf = useCallback((v: SheetViewport) => {
     const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);
