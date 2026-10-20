@@ -12,16 +12,19 @@
 
 import { can } from '@/edition';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { Spline, Box, Files, Building2, Camera, FileBox, FilePlus2, FolderOpen, LayoutTemplate, Plus, Rows3, Save, Scissors, Search, SquareDashed, Table2 } from 'lucide-react';
+import { PencilRuler, Spline, Box, Files, Building2, Camera, FileBox, FilePlus2, FolderOpen, LayoutTemplate, Plus, Rows3, Save, Scissors, Search, SquareDashed, Table2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
+import { useViewerStore } from '@/store';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { requestNewProject } from '@/project/new-project';
 import { IconButton } from '@/components/ui/icon-button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { toast } from '@/components/ui/toast';
+import { draftingViewOf } from '@/drafting/drafting-view';
 import {
   addProjectSheet,
+  addProjectView,
   duplicateProjectSheet,
   duplicateProjectView,
   projectDocument,
@@ -31,7 +34,7 @@ import {
 } from '@/project/project-store';
 import { projectOpenErrorText } from '@/project/open-error';
 import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
-import { activateDocumentTab, openProjectView, saveLiveCameraAsView, saveLiveSectionAsView } from '@/project/open-view';
+import { activateDocumentTab, openProjectView, saveAxonometricView, saveLiveCameraAsView, saveLiveSectionAsView } from '@/project/open-view';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import { addSchedule } from '@/joinery/schedules';
 import { makeDraftSet } from '@/draft-set/run';
@@ -43,17 +46,20 @@ import type { ProjectView, ProjectViewKind } from '@/project/types';
 import { ProjectFolderRow, ProjectItemRow } from './ProjectTreeRow';
 import { ViewPropertiesPanel } from './ViewPropertiesPanel';
 import { LevelsFolder } from './LevelsFolder';
+import { ProjectModelRow } from './ProjectModelRow';
+import { loadedModelKeys, modelDrawings } from '@/project/model-styles';
 import { useNavigatorDialogs } from './useNavigatorDialogs';
 
 type FolderId = ProjectViewKind | 'sheets' | 'schedules' | 'legends' | 'civil' | 'models';
 
-const FOLDER_ORDER: readonly FolderId[] = ['plan', 'section', 'elevation', '3d', 'schedules', 'legends', 'civil', 'sheets', 'models'];
+const FOLDER_ORDER: readonly FolderId[] = ['plan', 'section', 'elevation', 'drafting', '3d', 'schedules', 'legends', 'civil', 'sheets', 'models'];
 
 const ICONS: Record<FolderId, ReactNode> = {
   plan: <LayoutTemplate className="size-3.5" />,
   section: <Scissors className="size-3.5" />,
   elevation: <Building2 className="size-3.5" />,
   '3d': <Box className="size-3.5" />,
+  drafting: <PencilRuler className="size-3.5" />,
   sheets: <Rows3 className="size-3.5" />,
   schedules: <Table2 className="size-3.5" />,
   legends: <AnnoLegend className="size-3.5" />,
@@ -66,6 +72,7 @@ const FOLDER_LABELS = {
   section: 'projectNavigator.folder.sections',
   elevation: 'projectNavigator.folder.elevations',
   '3d': 'projectNavigator.folder.views3d',
+  drafting: 'projectNavigator.folder.drafting',
   sheets: 'projectNavigator.folder.sheets',
   schedules: 'schedule.folder',
   legends: 'legend.folder',
@@ -84,6 +91,8 @@ export function ProjectNavigatorPanel() {
   const legends = useProjectStore((s) => s.legends) ?? [];
   const civilDrawings = useProjectStore((s) => s.civilDrawings) ?? [];
   const models = useProjectStore((s) => s.models);
+  const loadedModels = useViewerStore((s) => s.models);
+  const modelDrawingByKey = useMemo(() => modelDrawings(models, loadedModelKeys(loadedModels)), [models, loadedModels]);
   const levels = useProjectStore((s) => s.levels);
   const activeItemId = useProjectStore((s) => s.activeItemId);
   const dirty = useProjectStore((s) => s.dirty);
@@ -95,7 +104,7 @@ export function ProjectNavigatorPanel() {
 
   const q = query.trim().toLowerCase();
   const byKind = useMemo(() => {
-    const groups: Record<ProjectViewKind, ProjectView[]> = { plan: [], section: [], elevation: [], '3d': [] };
+    const groups: Record<ProjectViewKind, ProjectView[]> = { plan: [], section: [], elevation: [], '3d': [], drafting: [] };
     for (const view of views) if (!q || matches(view.name, q)) groups[view.kind].push(view);
     // Floor plans read top-down by their level, like the Levels folder.
     groups.plan.sort((a, b) => (b.kind === 'plan' ? b.level.elevation : 0) - (a.kind === 'plan' ? a.level.elevation : 0));
@@ -141,6 +150,11 @@ export function ProjectNavigatorPanel() {
     if (!id) toast.error(t('projectNavigator.error.noCamera'));
     else setRenamingId(id);
   };
+  const newDrafting = () => {
+    const id = addProjectView(draftingViewOf(t('projectNavigator.newDraftingName')));
+    openProjectView(id);
+  };
+  const saveAxo = () => setRenamingId(saveAxonometricView(t('projectNavigator.newAxoName')));
   const newSheet = () => setRenamingId(addProjectSheet());
   const draftSet = () => {
     const { lines } = makeDraftSet();
@@ -159,7 +173,12 @@ export function ProjectNavigatorPanel() {
 
   const folderAction: Partial<Record<FolderId, ReactNode>> = {
     section: <AddButton label={t('projectNavigator.action.saveSection')} onClick={saveSection} />,
-    '3d': <AddButton label={t('projectNavigator.action.save3d')} onClick={save3d} icon={<Camera className="size-3.5" />} />,
+    '3d': (
+      <>
+        <AddButton label={t('projectNavigator.action.save3d')} onClick={save3d} icon={<Camera className="size-3.5" />} />
+        <AddButton label={t('projectNavigator.action.saveAxo')} onClick={saveAxo} icon={<Box className="size-3.5" />} />
+      </>
+    ),
     sheets: (
       <>
         <AddButton label={t('draftSet.action')} onClick={draftSet} icon={<Files className="size-3.5" />} />
@@ -168,6 +187,12 @@ export function ProjectNavigatorPanel() {
     ),
     legends: <AddButton label={t('legend.new')} onClick={() => setRenamingId(addLegend(t('legend.newName')))} />,
     schedules: <AddButton label={t('schedule.new')} onClick={() => setRenamingId(addSchedule('all', t('schedule.newName')))} />,
+    drafting: (
+      <>
+        <AddButton label={t('projectNavigator.action.placeDetail')} onClick={() => dialogs.open('placeDetail')} icon={<FolderOpen className="size-3.5" />} />
+        <AddButton label={t('projectNavigator.action.newDrafting')} onClick={newDrafting} />
+      </>
+    ),
     plan: <AddButton label={t('projectNavigator.action.newPlan')} onClick={() => dialogs.open('plan')} />,
     elevation: <AddButton label={t('projectNavigator.action.newElevation')} onClick={() => dialogs.open('elevation')} />,
   };
@@ -186,7 +211,7 @@ export function ProjectNavigatorPanel() {
       onCancelRename={() => setRenamingId(null)}
       onDuplicate={() => setRenamingId(duplicateProjectView(view.id))}
       onDelete={() => removeProjectItem(view.id)}
-      dragViewId={view.kind === '3d' ? undefined : view.id}
+      dragViewId={view.id}
     />
   );
 
@@ -281,12 +306,7 @@ export function ProjectNavigatorPanel() {
     if (id === 'models') {
       return {
         count: models.length,
-        rows: models.map((m) => (
-          <div key={m.key} className="flex items-center gap-1.5 h-7 pl-8 pr-2 text-xs text-zinc-600 dark:text-zinc-400 truncate">
-            {ICONS.models}
-            <span className="truncate">{m.name}</span>
-          </div>
-        )),
+        rows: models.map((m) => <ProjectModelRow key={m.key} model={m} drawing={modelDrawingByKey.get(m.key) ?? { role: 'linked', style: 'halftone' }} />),
       };
     }
     return { count: byKind[id].length, rows: byKind[id].map(viewRow) };

@@ -76,6 +76,7 @@ import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
 import { printPreviewEn } from './catalogues/print-preview.en';
 import { wallEn } from './catalogues/wall.en';
+import { ifcsheetTourEn } from './catalogues/ifcsheet-tour.en';
 import { wallFindEn } from './catalogues/wall-find.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
@@ -119,9 +120,12 @@ import { projectPackageEn } from './catalogues/project-package.en';
 import { projectVersionsEn } from './catalogues/project-versions.en';
 import { roofBlockEn } from './catalogues/roof-block.en';
 import { viewGraphicsEn } from './catalogues/view-graphics.en';
+import { cadLayersEn } from './catalogues/cad-layers.en';
 import { catalogueEn } from './catalogues/catalogue.en';
+import { tagFieldsEn } from './catalogues/tag-fields.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
+import { roomFinishesEn } from './catalogues/room-finishes.en';
 import { elementTypesEn } from './catalogues/element-types.en';
 import { roofEn } from './catalogues/roof.en';
 import { civilEn } from './catalogues/civil.en';
@@ -198,8 +202,11 @@ export const en = {
   ...roofBlockEn,
   ...viewGraphicsEn,
   ...catalogueEn,
+  ...cadLayersEn,
+  ...tagFieldsEn,
   ...draftingStandardsEn,
   ...joineryEn,
+  ...roomFinishesEn,
   ...elementTypesEn,
   ...roofEn,
   ...civilEn,
@@ -258,6 +265,7 @@ export const en = {
   ...settingsEn,
   ...printPreviewEn,
   ...wallEn,
+  ...ifcsheetTourEn,
   ...wallFindEn,
   ...whatChangedEn,
   ...hierarchyEn,

@@ -30,7 +30,7 @@ import { DEFAULT_SECTION_CONFIG, makeEntityKey } from './types.js';
 import { SectionCutter } from './section-cutter.js';
 import { PolygonBuilder } from './polygon-builder.js';
 import { EdgeExtractor } from './edge-extractor.js';
-import { HiddenLineClassifier } from './hidden-line.js';
+import { HiddenLineClassifier, type ExteriorViewOptions } from './hidden-line.js';
 import { mergeDrawingLines } from './line-merger.js';
 import { HatchGenerator } from './hatch-generator.js';
 import { SVGExporter } from './svg-exporter.js';
@@ -52,7 +52,7 @@ import { boundsEmpty, boundsExtendLine } from './math.js';
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
 
-export interface GeneratorOptions {
+export interface GeneratorOptions extends ExteriorViewOptions {
   /** Use GPU acceleration if available */
   useGPU: boolean;
   /** Include hidden lines in output */
@@ -297,7 +297,7 @@ export class Drawing2DGenerator {
               );
             } else {
               const edges = this.edgeExtractor.extractEdges(mesh);
-              const silhouettes = this.edgeExtractor.extractSilhouettes(edges, viewDir);
+              const silhouettes = this.edgeExtractor.extractExteriorEdges(edges, viewDir, opts.includeFeatureEdges);
               projectionLines.push(
                 ...this.edgeExtractor.edgesToProjectionLines(silhouettes, config.plane, bands),
               );
@@ -338,7 +338,7 @@ export class Drawing2DGenerator {
         ? meshes.map(mesh => clipMeshToProjectionWindow(mesh, config.plane, 0, occluderDepth))
           .filter((mesh): mesh is MeshData => mesh !== null)
         : meshes;
-      this.hiddenLineClassifier.buildDepthBuffer(occluders, config.plane, occluderDepth, bounds);
+      this.hiddenLineClassifier.buildDepthBuffer(occluders, config.plane, occluderDepth, bounds, opts.hiddenLineEdgeTolerancePx ?? 0);
 
       // Occlusion only DOWNGRADES visible → hidden; it can never reveal an
       // already-dashed OVERHEAD line. So classify the visible (below-cut)

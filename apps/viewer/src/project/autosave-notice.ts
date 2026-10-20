@@ -19,6 +19,11 @@ export function noticeAutosaveFailed(err: unknown): void {
   toast.error(resolve('projectPackage.autosaveFailed', { detail: err instanceof Error ? err.message : String(err) }), AUTOSAVE_FAILED);
 }
 
+/** The model state or a raster capture could not be kept in IndexedDB beside the slot. */
+export function noticeAutosaveImagesFailed(): void {
+  toast.error(resolve('projectPackage.autosaveImagesFailed'), AUTOSAVE_FAILED);
+}
+
 /** The slot was written by a newer version: it is not loaded and not written to, so nothing done here is autosaved. */
 export function noticeAutosaveTooNew(): void {
   toast.error(resolve('projectPackage.autosaveTooNew'), AUTOSAVE_FAILED);

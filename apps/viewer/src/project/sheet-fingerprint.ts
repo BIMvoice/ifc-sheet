@@ -4,22 +4,28 @@
 
 /**
  * A content fingerprint of a sheet: the sheet itself, the views, schedules,
- * legends and road drawings placed on it, and the drafted shapes on the sheet
- * and on those views. Two issues carrying the same fingerprint for a sheet
+ * legends and road drawings placed on it, the drafted shapes on the sheet
+ * and on those views, and where the views its plans' cross-reference marks
+ * name are drawn (another sheet's number reprints those marks). Two issues carrying the same fingerprint for a sheet
  * mean the sheet was not edited in between. It does not see the model: a
  * changed model with an unchanged project gives the same fingerprint.
  * Pure; the hash is 53-bit (cyrb53), written as 14 hex digits.
  */
 
 import type { DraftEntity } from '@/drafting/types';
+import { viewReference, type ViewReference } from '@/drafting/cross-ref';
+import { viewsNamedOnPlan } from '@/drafting/cross-ref-marks';
 import { sheetRevisions } from './revisions';
-import type { ProjectDocument, ProjectRevision, ProjectSheet } from './types';
+import type { ProjectDocument, ProjectRevision, ProjectSheet, ProjectView } from './types';
 
 /** What a sheet's content is looked up in. */
 export interface FingerprintSources {
   /** Views, schedules, legends and road drawings: anything a viewport's `viewId` can name. */
   documents: readonly { id: string; createdAt?: unknown }[];
   drafts: readonly DraftEntity[];
+  /** The project's views and sheets: what the cross-reference marks on the sheet's plans are read from. */
+  views: readonly ProjectView[];
+  sheets: readonly Pick<ProjectSheet, 'number' | 'viewports'>[];
   /** The project's revisions: what the sheet's table and title block print comes from them. */
   revisions?: readonly ProjectRevision[];
 }
@@ -52,14 +58,33 @@ export function sheetFingerprint(sheet: ProjectSheet, sources: FingerprintSource
   const drafts = sources.drafts.filter((d) => ids.has(d.viewId)).sort((a, b) => a.id.localeCompare(b.id));
   // When a sheet was made is not what it holds.
   const { createdAt: _created, ...held } = sheet;
+  const references = markReferences(sheet, sources);
   // A sheet in a project with no revisions hashes as it always did.
   const revisions = sheetRevisions(sheet, { revisions: sources.revisions, drafts: sources.drafts as DraftEntity[] });
-  return cyrb53(canonicalJson({ sheet: held, documents, drafts, ...(revisions.length > 0 ? { revisions } : {}) }));
+  return cyrb53(canonicalJson({ sheet: held, documents, drafts, ...(Object.keys(references).length ? { references } : {}), ...(revisions.length > 0 ? { revisions } : {}) }));
 }
 
-/** What an issue fingerprints a project's sheets against: everything a viewport can name, the drafts and the revision records. */
-export function fingerprintSources(project: Pick<ProjectDocument, 'views' | 'schedules' | 'legends' | 'civilDrawings' | 'drafts' | 'revisions'>): FingerprintSources {
-  return { documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])], drafts: project.drafts, revisions: project.revisions };
+/**
+ * Where each view named by a mark on the sheet's plans is drawn ("1 / A-201"), by view id: the marks are made
+ * from the other sheets when the sheet is drawn, so renumbering one of those changes this sheet.
+ */
+function markReferences(sheet: ProjectSheet, sources: FingerprintSources): Record<string, ViewReference | null> {
+  const viewIds = new Set(sources.views.map((v) => v.id));
+  const out: Record<string, ViewReference | null> = {};
+  for (const vp of sheet.viewports ?? []) {
+    if (sources.views.find((v) => v.id === vp.viewId)?.kind !== 'plan') continue;
+    const named = viewsNamedOnPlan(vp.viewId, sources.drafts.filter((d) => d.viewId === vp.viewId), sources.views);
+    for (const id of named) out[id] = viewReference(id, viewIds, sources.sheets);
+  }
+  return out;
+}
+
+/** What an issue fingerprints a project's sheets against: everything a viewport can name, the drafts, the views and sheets the marks read, and the revision records. */
+export function fingerprintSources(project: Pick<ProjectDocument, 'views' | 'sheets' | 'schedules' | 'legends' | 'civilDrawings' | 'drafts' | 'revisions'>): FingerprintSources {
+  return {
+    documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])],
+    drafts: project.drafts, views: project.views, sheets: project.sheets, revisions: project.revisions,
+  };
 }
 
 /**
