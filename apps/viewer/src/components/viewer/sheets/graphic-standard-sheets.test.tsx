@@ -256,7 +256,7 @@ describe('the standard reaches every pen it claims', () => {
   });
 
   it('a plan\'s door symbols take the pens they are given', () => {
-    const widths = (pens?: typeof ROMANIAN_PRACTICE.pens) => planOverlays(view, { axis: 'y', position: 1.2, flipped: false }, [door], undefined, new Set(), null, pens).map((o) => o.width).sort();
+    const widths = (pens?: typeof ROMANIAN_PRACTICE.pens) => planOverlays(view, { axis: 'y', position: 1.2, flipped: false }, [door], undefined, new Set(), null, undefined, pens).map((o) => o.width).sort();
     assert.deepEqual(widths(ROMANIAN_PRACTICE.pens), [0.13, 0.7], 'thin at the hatch pen, the leaf at the cut pen');
     assert.deepEqual(widths(), [0.13, 0.5]);
   });

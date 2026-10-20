@@ -2,9 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import type { TitleSource } from './title-block-sources';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
-import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
+import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from '@/catalogue/types';
@@ -22,10 +23,13 @@ export type { AxonometricPreset, ThreeDProjection, ThreeDProjectView, ViewRaster
  * file kept next to the IFC files (`project-file.ts`).
  */
 
-import type { SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
+import type { SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectIssue } from '@/issue/types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
+
+export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './project-records';
 
 export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d' | 'drafting';
 
@@ -104,7 +108,20 @@ export interface CategoryGraphics {
   hatchScale?: number;
 }
 
+/** Which ends of a grid axis carry a bubble; on a section, `start` is the foot and `end` the head. */
+export type GridEnds = 'start' | 'end' | 'both';
+
+/** How a view draws the model's structural grid (IfcGrid). */
+export interface ViewGridGraphics {
+  /** Absent: on for plans and sections, off for elevations. */
+  visible?: boolean;
+  /** Absent: both ends. */
+  ends?: GridEnds;
+}
+
 export interface ViewGraphics {
+  /** The structural grid's axes and bubbles. */
+  grid?: ViewGridGraphics;
   /** A built-in graphic override preset id; absent = the default, null = none. */
   presetId?: string | null;
   /** By category id (`VIEW_CATEGORIES`). */
@@ -116,6 +133,8 @@ export interface PlanProjectView extends ProjectViewBase {
   level: ProjectLevel;
   /** Cut height above the level's floor, metres. */
   cutHeight: number;
+  /** The site plan: the ground storey's cut with the plot, setbacks and coordinates on it (`siteplan/`). */
+  site?: true;
   /** A discipline plan (structural, foundation, roof): it draws only the elements its discipline keeps (`discipline-views.ts`). */
   discipline?: DisciplineId;
   /**
@@ -190,6 +209,8 @@ export type ProjectViewPatch = ProjectView extends infer V
   : never;
 
 export type PaperSize = 'A0' | 'A1' | 'A2' | 'A3' | 'A4';
+export type { CustomPaper, ElongatedPaper, Paper, SheetFrame, SheetTemplate, TemplateSeries, TitleBlockPosition } from './sheet-types';
+import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types';
 
 /** A view placed on a sheet. Positions and sizes are paper millimetres from the sheet's top-left. */
 export interface SheetViewport {
@@ -207,8 +228,33 @@ export interface SheetViewport {
   center: { x: number; y: number } | null;
   /** Drafting layers this viewport hides, on top of its view's. */
   hiddenLayers?: string[];
+  /** The page of a document split over several sheets (the drawing register's continuation sheets), from 0; absent is 0. */
+  page?: number;
+  /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
+  keyPlanOf?: string;
   /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
   drawingNumber?: string;
+}
+
+/** The groups of sheets a numbering scheme numbers apart: `other` is details and whatever fits no series. */
+export type NumberGroup = 'general' | 'plans' | 'elevations' | 'sections' | 'interiors' | 'details' | 'schedules' | 'other';
+
+/** How one group's numbers are written: `<discipline><prefix><separator><n padded to digits>`, `n` running from `start` by `step`. */
+export interface GroupPattern {
+  prefix: string;
+  separator: string;
+  start: number;
+  digits: number;
+  step: number;
+}
+
+/** The project's sheet numbering (`numbering.ts`). */
+export interface NumberingScheme {
+  /** Printed first on every number: `A` for architecture. */
+  discipline: string;
+  /** One running sequence through the whole set (A01, A02, …) instead of one per group; the plans pattern then numbers every sheet. */
+  continuous: boolean;
+  groups: Record<NumberGroup, GroupPattern>;
 }
 
 export interface ProjectSheet {
@@ -222,10 +268,18 @@ export interface ProjectSheet {
    * renumbered.
    */
   autoNumber?: boolean;
+  /** The number was typed by hand: a renumbering keeps it unless asked to renumber those too (`numbering.ts`). */
+  numberOverride?: boolean;
+  /** The number series the sheet belongs to, what it is renumbered by. Absent on older sheets, read back from the number (`numberGroupOf`). */
+  series?: NumberGroup;
   name: string;
   createdAt: number;
-  paper?: PaperSize;
+  paper?: Paper;
   orientation?: 'landscape' | 'portrait';
+  /** Frame margins and title block position; absent: 10 mm all round, title block bottom right (`sheet-frame.ts`). */
+  frame?: SheetFrame;
+  /** The template the sheet was started from (a record of where it came from; the sheet's own paper and frame rule). */
+  templateId?: string;
   viewports?: SheetViewport[];
   /** Title block fields this sheet says otherwise than the project's (`ProjectDocument.titleBlock`); a key present wins, even empty. */
   titleBlock?: Record<string, string>;
@@ -245,78 +299,11 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, or the finishes of each room. */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, or the set's own sheets (the drawing register, derived from the sheets on every draw). */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
-}
-
-/** A road drawing (longitudinal profile or cross-section set) of a corridor: a project document of its own, placeable on sheets or drawn on a plan. */
-export interface ProjectCivilDrawing {
-  id: string;
-  name: string;
-  kind: 'profile' | 'sections';
-  createdAt: number;
-  /** The corridor it draws, by GlobalId (in whichever loaded model has it). */
-  corridorGlobalId: string;
-  /** Drawing scale denominator (profile: horizontal). */
-  scale: number;
-  /** Profile: vertical exaggeration, grid steps. */
-  vExaggeration?: number;
-  stationStep?: number;
-  elevationStep?: number;
-  /** Sections: sample spacing or explicit stations, layout columns, half width shown (0: automatic). */
-  every?: number;
-  stations?: number[];
-  columns?: number;
-  halfWidth?: number;
-}
-
-/**
- * How a building material draws where a view cuts it (ArchiCAD's Building
- * Materials): matched by IfcMaterial name. `hatch` null draws no hatch,
- * absent takes the default its name suggests; a membrane (or any layer under
- * 2 mm) draws as a heavy dashed line instead of a band.
- */
-export interface ProjectMaterial {
-  id: string;
-  name: string;
-  hatch?: string | null;
-  /** 1 = the pattern's own size. */
-  hatchScale?: number;
-  /** Cut fill colour; null: none (white), absent: the material's IFC colour. */
-  fill?: string | null;
-  /** Pen of the hatch lines. */
-  hatchPen?: CategoryLineWeight;
-  membrane?: boolean;
-}
-
-/** The subset of a section plane that defines the cut itself, not its on-screen lifecycle. */
-export interface SavedSectionCutPlane {
-  axis: SectionPlaneAxis;
-  position: number;
-  flipped: boolean;
-  custom?: SectionPlane['custom'];
-  capStyle: SectionCapStyle;
-  showCap: boolean;
-  showOutlines: boolean;
-}
-
-/** A named section cut kept in the project, to put back on screen later. */
-export interface SavedSectionCut {
-  id: string;
-  name: string;
-  plane: SavedSectionCutPlane;
-  createdAt: number;
-  updatedAt: number;
-}
-
-/** A typical road cross-section (assembly) kept in the project's library. */
-export interface ProjectTypicalSection {
-  id: string;
-  name: string;
-  assembly: AssemblySpec;
 }
 
 export interface ProjectDocument {
@@ -326,6 +313,8 @@ export interface ProjectDocument {
   sheets: ProjectSheet[];
   /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
   titleBlock?: Record<string, string>;
+  /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
+  titleBlockSources?: Record<string, TitleSource[]>;
   /** Drafted geometry, each entity on one view (phase 4). */
   drafts: DraftEntity[];
   draftLayers: DraftLayer[];
@@ -352,6 +341,10 @@ export interface ProjectDocument {
   /** The entry each Design tool builds with, per kind. */
   currentTypes?: Partial<Record<ElementTypeKind, string>>;
   schedules?: ProjectSchedule[];
+  /** The project's own sheet templates (the built-in ones are in code, `sheet-templates.ts`); they travel in the library file. */
+  sheetTemplates?: SheetTemplate[];
+  /** The template new sheets of a series start from, by template id; a series without one is made on the smallest paper that fits. */
+  seriesTemplates?: Partial<Record<TemplateSeries, string>>;
   /** The project's structure profile library (retaining walls, tunnels, decks, barriers… and drawn shapes). */
   structureProfiles?: StructureProfile[];
   /** Road drawings: longitudinal profiles and cross-section sets. */
@@ -376,6 +369,8 @@ export interface ProjectDocument {
   tagFields?: TagFieldConfig;
   /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */
   issues?: ProjectIssue[];
+  /** How sheets are numbered (`numbering.ts`); absent is the default A-101 style. Document key: `sheetNumbering`. */
+  sheetNumbering?: NumberingScheme;
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
 }

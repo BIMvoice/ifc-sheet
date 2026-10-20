@@ -18,7 +18,8 @@ import { readCadLayerRule } from '@/project/cad-layers-file';
 import type { CadLayerRule } from '@/project/cad-layers';
 import { readMaterial } from '@/project/project-file';
 import { readStandards } from '@/project/standards-file';
-import type { ProjectMaterial } from '@/project/types';
+import { readTemplate } from '@/project/sheet-templates';
+import type { ProjectMaterial, SheetTemplate } from '@/project/types';
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import type { TagFieldConfig } from '@/tagfields/tag-fields';
@@ -31,7 +32,7 @@ export const CATALOGUE_FILE_FORMAT = 'bvlib';
 export const CATALOGUE_FILE_VERSION = 1;
 
 /** The kinds of definition a catalogue carries, in the order the dialog lists them. */
-export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details'] as const;
+export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details', 'sheetTemplates'] as const;
 export type CatalogueKind = (typeof CATALOGUE_KINDS)[number];
 
 export interface Catalogue {
@@ -54,6 +55,8 @@ export interface Catalogue {
   tagFields?: TagFieldConfig;
   /** Details drawn once, placed in any project as a drafting view (`detail-library.ts`). */
   details: LibraryDetail[];
+  /** The project's own sheet templates (the built-in ones are in every project). */
+  sheetTemplates: SheetTemplate[];
 }
 
 export interface CatalogueFile extends Catalogue {
@@ -64,7 +67,7 @@ export interface CatalogueFile extends Catalogue {
 }
 
 export const emptyCatalogue = (): Catalogue => ({
-  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], cadLayers: [], details: [],
+  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], cadLayers: [], details: [], sheetTemplates: [],
 });
 
 /** `catalogue` cut down to the chosen kinds (layer groups travel with their layers, text styles with the dimension styles that need them). */
@@ -81,6 +84,7 @@ export function selectKinds(catalogue: Catalogue, kinds: ReadonlySet<CatalogueKi
   if (kinds.has('cadLayers')) out.cadLayers = catalogue.cadLayers;
   if (kinds.has('tagFields') && catalogue.tagFields) out.tagFields = catalogue.tagFields;
   if (kinds.has('details')) out.details = catalogue.details;
+  if (kinds.has('sheetTemplates')) out.sheetTemplates = catalogue.sheetTemplates;
   return out;
 }
 
@@ -135,6 +139,7 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       cadLayers: readList(file, 'cadLayers', (v, p) => readCadLayerRule(v, p, WHAT), WHAT),
       ...readTagFieldsEntry(file),
       details: readList(file, 'details', (v, p) => readLibraryDetail(v, p, WHAT), WHAT),
+      sheetTemplates: readList(file, 'sheetTemplates', (v, p) => readTemplate(v) ?? fail(p, 'must be a sheet template { id, name, paper }', WHAT), WHAT),
       ...(file.graphicStandard === undefined ? {} : { graphicStandard: knownStandard(file.graphicStandard) }),
     },
   };

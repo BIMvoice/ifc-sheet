@@ -32,6 +32,7 @@ import { AnnotationGraphics } from './AnnotationGraphics';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
 import { graphicStandardOf } from '@/drafting/graphic-standard';
 import { useProjectStore } from '@/project/project-store';
+import type { LiveSymbolContext } from '@/siteplan/live-symbols';
 import { currentEntityStyles } from '@/project/model-styles';
 
 /** Drawing metres → DXF millimetres. */
@@ -46,10 +47,12 @@ interface ViewDxfInput {
   layers: readonly DraftLayer[];
   extraPatterns: readonly HatchPattern[];
   overlays: readonly PlanOverlay[];
+  /** What the view's live symbols draw from (a coordinate point's label, a scale bar's ticks), as the drawing tab has it. */
+  symbols?: LiveSymbolContext | null;
 }
 
 /** The off-screen SVG `viewDxf` walks; exported for tests (the DXF walker needs a browser's path geometry). */
-export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays }: ViewDxfInput) {
+export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays, symbols }: ViewDxfInput) {
   const s = useProjectStore.getState();
   const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns, cadPenContext(s.cadLayers), currentEntityStyles(), graphicStandardOf(s.graphicStandard)) : [];
   const book = { textStyles: s.textStyles ?? [], dimStyles: s.dimStyles ?? [] };
@@ -67,7 +70,7 @@ export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, ov
         if (color === null) return null;
         return isGeometry(e.shape)
           ? <path key={e.id} {...layerTags(layerById.get(e.layerId))} d={shapePath(e.shape, MM, axis)} stroke={color ?? '#000'} strokeWidth={layerPen(layerById.get(e.layerId)).width} fill="none" />
-          : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={MM} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} /></g>;
+          : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={MM} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={symbols} /></g>;
       })}
     </svg>
   );

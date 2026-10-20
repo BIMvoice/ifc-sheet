@@ -17,9 +17,10 @@ import { forwardRef, memo, useMemo } from 'react';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useTranslation } from '@/i18n';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
-import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types';
+import { isGeometry, type DraftEntity, type DraftLayer, type SymbolInstanceShape } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
-import { FRAME_MARGIN_MM, mmPerMetre, paperOf, TITLE_BLOCK_MM, viewportBox } from '@/project/sheets';
+import { frameOf, frameRect, titleBlockRect, TITLE_BLOCK_MM } from '@/project/sheet-frame';
+import { mmPerMetre, paperOf, viewportBox } from '@/project/sheets';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hasTrueScale } from '@/project/axonometric';
@@ -27,8 +28,10 @@ import { shapePath } from '../drafting/DraftOverlay';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
 import { cadKindOf, layerTags, penTags } from './dxf-tags';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
+import { notDrawingIds, sheetScaleText } from '@/project/drawing-register';
 import { useProjectStore } from '@/project/project-store';
 import { LOGO_FIELD, titleBlockOf } from '@/project/title-block';
+import { useEffectiveTitleBlock } from '@/project/title-block-model';
 import { viewportPens } from './viewport-pens';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
@@ -40,6 +43,10 @@ import { CivilDrawingGraphic } from '../civil/CivilDrawingGraphic';
 import { LegendGraphic } from '../legend/LegendGraphic';
 import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
+import { useLiveSymbolContext } from '@/siteplan/site-frame';
+import { keyPlanHighlight, viewportExtent, type Rect } from '@/siteplan/key-plan';
+import { KeyPlanHighlight, SiteBalance, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
+import type { SiteContent } from '../siteplan/useSheetSite';
 import type { EntityStyleOf } from '@/project/model-styles';
 
 /** The cut axis a drawing is put on paper by (`viewportTransform`), from its plane's axis. */
@@ -59,6 +66,8 @@ export interface ViewportContent {
   civil?: CivilLayout;
   /** A legend placed here instead of a view (paper millimetres). */
   legend?: LegendLayout;
+  /** A site plan's plot, footprint, setbacks and areas (`siteplan/`). */
+  site?: SiteContent;
   /** Each drawing entity's model style (`project/model-styles.ts`); absent: every model draws normally. */
   styleOf?: EntityStyleOf;
   /** A 3D view printed as a raster capture of the viewport, instead of drawn lines. */
@@ -103,8 +112,10 @@ function TitleNumber({ number, x, baseline, size }: { number: string | undefined
   );
 }
 
-const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, extraPatterns, selected }: {
+const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, extraPatterns, selected, highlight = null }: {
   vp: SheetViewport; content: ViewportContent; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[]; selected: boolean;
+  /** On a key plan: the part its keyed viewport shows, paper mm. */
+  highlight?: Rect | null;
 }) {
   const { t: tr } = useTranslation();
   const { view, drawing, drafts } = content;
@@ -135,6 +146,10 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   // Annotation prints at the paper size it was drawn for, whatever scale the viewport shows the view at.
   const paperUnit = viewportPaperUnit(vp.scale);
   const factor = annotationFactor(vp.scale, view?.scale);
+  // Scale bar, north arrow and coordinate points follow this viewport's scale and the model (`siteplan/live-symbols.ts`).
+  const live = useLiveSymbolContext(drawing?.config.plane, axis, vp.scale);
+  // A key plan is the whole plan alone: no drafting on it, only the outline of the part keyed.
+  const keyPlan = vp.keyPlanOf !== undefined;
   return (
     <g data-viewport-id={vp.id}>
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
@@ -143,13 +158,15 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
         {pens.map((p, i) => (
           <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} d={p.d} fill={p.fill ?? 'none'} fillRule="evenodd" stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
         ))}
-        {content.overlays?.length ? <OverlayPaths overlays={content.overlays} transform={t} axis={axis} /> : null}
-        {drafts.map((e) => {
+        {content.overlays?.length && !keyPlan ? <OverlayPaths overlays={content.overlays} transform={t} axis={axis} /> : null}
+        {content.site ? <SiteOverlay site={content.site} transform={t} axis={axis} scale={vp.scale} /> : null}
+        {highlight ? <KeyPlanHighlight rect={highlight} /> : null}
+        {(keyPlan ? [] : drafts).map((e) => {
           const color = layerColor.get(e.layerId);
           if (color === null) return null;
           return isGeometry(e.shape)
             ? <PenPath key={e.id} layer={layerById.get(e.layerId)} d={shapePath(e.shape, t, axis)} color={color ?? '#000'} />
-            : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} /></g>;
+            : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={live} /></g>;
         })}
       </g>
       <rect
@@ -159,8 +176,14 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
       />
       <TitleNumber number={content.drawingNumber} x={left} baseline={top + box.height + standard.type.viewTitle + 1.5} size={standard.type.viewTitle} />
       <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (content.drawingNumber ? numberWidth(content.drawingNumber, standard.type.viewTitle) + 2 : 0)} y={top + box.height + standard.type.viewTitle + 1.5} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
-        {hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
+        {keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
       </text>
+      {content.site ? <SiteBalance site={content.site} x={left} y={top + box.height + standard.type.viewTitle + 4} /> : null}
+      {content.site ? <SiteSymbols site={content.site} transform={t} axis={axis} scale={vp.scale} box={{ x: left, y: top, width: box.width, height: box.height }} live={live}
+        symbols={drafts.flatMap((e): SymbolInstanceShape[] => {
+          const shown = e.shape.type === 'symbol' && layerColor.get(e.layerId) !== null ? annotationAtFactor(e.shape, factor) : null;
+          return shown?.type === 'symbol' ? [shown] : [];
+        })} /> : null}
     </g>
   );
 });
@@ -203,6 +226,17 @@ function LegendViewport({ vp, layout, selected }: { vp: SheetViewport; layout: L
 
 const PAPER: ViewTransform = { scale: 1, x: 0, y: 0 };
 
+/** On a key plan, the box of the viewport it keys taken to its own paper (`siteplan/key-plan.ts`); else null. */
+function keyedExtent(sheet: ProjectSheet, vp: SheetViewport, content: (vp: SheetViewport) => ViewportContent, own: ViewportContent): Rect | null {
+  const keyed = vp.keyPlanOf ? (sheet.viewports ?? []).find((o) => o.id === vp.keyPlanOf) : undefined;
+  const drawing = keyed ? content(keyed).drawing : null;
+  if (!keyed || !drawing || !own.drawing) return null;
+  const axis = AXIS_NAME[drawing.config.plane.axis];
+  const box = viewportBox(keyed, drawing.bounds);
+  const extent = viewportExtent({ x: keyed.x - box.width / 2, y: keyed.y - box.height / 2, width: box.width, height: box.height }, viewportTransform(keyed, drawing, axis), axis);
+  return keyPlanHighlight(extent, viewportTransform(vp, own.drawing, AXIS_NAME[own.drawing.config.plane.axis]), axis);
+}
+
 /** The project's styles and layer groups, as drafting graphics need them. */
 function useDraftingStandards() {
   const textStyles = useProjectStore((s) => s.textStyles);
@@ -237,30 +271,42 @@ function SheetDrafts({ entities, layers, extraPatterns }: { entities: readonly D
 }
 
 /**
- * The title block, bottom right (180 × 50 mm): project, client and sheet
- * title across, drawn / checked by and date / revision in halves; at the
+ * The title block (180 × 50 mm), in the frame's bottom-right corner or, as a
+ * strip, down its right side reading upwards: project / address and client /
+ * organisation in halves, the sheet title across, drawn / checked by and date /
+ * revision in halves; at the
  * right the logo, the sheet number and its scale. Fields are the project's
  * with the sheet's own on top (`title-block.ts`).
  */
+/** The size of a value in a half-width cell (about 61 mm of text): 3.5 mm, smaller for a longer value so that all of it prints inside its cell. */
+const valueSize = (value: string): number => Math.max(1.6, Math.min(3.5, 61 / (0.55 * Math.max(1, value.length))));
+
 function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; projectName: string; w: number; h: number }) {
   const { t } = useTranslation();
   const { sheet: line, type } = useGraphicStandard();
-  const projectFields = useProjectStore((s) => s.titleBlock);
-  const x = w - FRAME_MARGIN_MM - TITLE_BLOCK_MM.w;
-  const y = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h;
+  const projectFields = useEffectiveTitleBlock();
+  const frame = frameOf(sheet);
+  const box = titleBlockRect({ w, h }, frame);
+  // Drawn at its own origin, then set in place (turned a quarter when it is a strip).
+  const x = 0;
+  const y = 0;
   const fields = titleBlockOf(sheet, projectFields, projectName);
   const logo = projectFields?.[LOGO_FIELD];
+  const schedules = useProjectStore((s) => s.schedules);
   const views = useProjectStore((s) => s.views);
-  // A perspective has no scale to state.
-  const scales = [...new Set((sheet.viewports ?? []).filter((v) => hasTrueScale(views.find((x) => x.id === v.viewId))).map((v) => v.scale))];
-  const scaleText = scales.length === 1 ? `1:${scales[0]}` : scales.length === 0 ? '—' : t('sheets.asIndicated');
+  // A sheet of schedules and tables only has no drawing scale, and a perspective has none to state.
+  const unscaled = new Set(notDrawingIds(schedules));
+  for (const v of sheet.viewports ?? []) if (!hasTrueScale(views.find((x) => x.id === v.viewId))) unscaled.add(v.viewId);
+  const scaleText = sheetScaleText(sheet, unscaled, t('sheets.asIndicated')) || '—';
   const side = 50;
   const left = TITLE_BLOCK_MM.w - side;
   const rowH = TITLE_BLOCK_MM.h / 5;
   // [label, value, column 0 or 1 of 2, or -1 across]
   const cells: [string, string, number, number][] = [
-    [t('sheets.tb.project'), fields.project ?? '', 0, -1],
-    [t('sheets.tb.client'), fields.client ?? '', 1, -1],
+    [t('sheets.tb.project'), fields.project ?? '', 0, 0],
+    [t('sheets.tb.address'), fields.address ?? '', 0, 1],
+    [t('sheets.tb.client'), fields.client ?? '', 1, 0],
+    [t('sheets.tb.organisation'), fields.organisation ?? '', 1, 1],
     [t('sheets.tb.title'), sheet.name, 2, -1],
     [t('sheets.tb.drawnBy'), fields.drawnBy ?? '', 3, 0],
     [t('sheets.tb.checkedBy'), fields.checkedBy ?? '', 3, 1],
@@ -270,16 +316,16 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
   const font = 'ui-sans-serif, system-ui, sans-serif';
   const sx = x + left;
   return (
-    <g {...penTags('TITLEBLOCK', line.titleDivider)}>
+    <g {...penTags('TITLEBLOCK', line.titleDivider)} data-title-block={frame.titleBlock} transform={frame.titleBlock === 'right' ? `translate(${box.x} ${box.y + box.h}) rotate(-90)` : `translate(${box.x} ${box.y})`}>
       <rect x={x} y={y} width={TITLE_BLOCK_MM.w} height={TITLE_BLOCK_MM.h} fill="#fff" stroke="#000" strokeWidth={line.titleOuter} />
       {[1, 2, 3, 4].map((i) => <line key={i} x1={x} y1={y + rowH * i} x2={sx} y2={y + rowH * i} stroke="#000" strokeWidth={line.titleRule} />)}
-      <line x1={x + left / 2} y1={y + rowH * 3} x2={x + left / 2} y2={y + TITLE_BLOCK_MM.h} stroke="#000" strokeWidth={line.titleRule} />
+      {[[0, 2], [3, 5]].map(([from, to]) => <line key={from} x1={x + left / 2} y1={y + rowH * from} x2={x + left / 2} y2={y + rowH * to} stroke="#000" strokeWidth={line.titleRule} />)}
       {cells.map(([label, value, row, col]) => {
         const cx = x + (col === 1 ? left / 2 : 0);
         return (
           <g key={label}>
             <text x={cx + 2} y={y + rowH * row + 3.2} fontSize={type.caption} fontFamily={font} fill="#52525b">{label}</text>
-            <text x={cx + 2} y={y + rowH * row + 8} fontSize={type.value} fontFamily={font} fill="#000">{value}</text>
+            <text x={cx + 2} y={y + rowH * row + 8} fontSize={col < 0 ? type.value : Math.min(type.value, valueSize(value))} fontFamily={font} fill="#000">{value}</text>
           </g>
         );
       })}
@@ -299,18 +345,19 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
   { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [] }, ref,
 ) {
   const { w, h } = paperOf(sheet);
-  const frame = useGraphicStandard().sheet.frame;
+  const pen = useGraphicStandard().sheet.frame;
+  const frame = frameRect({ w, h }, frameOf(sheet));
   return (
     <svg ref={ref} data-sheet-id={sheet.id} xmlns="http://www.w3.org/2000/svg" width={w * pxPerMm} height={h * pxPerMm} viewBox={`0 0 ${w} ${h}`} className="block bg-white shadow-lg">
       <rect data-export-ignore-dxf="true" x={0} y={0} width={w} height={h} fill="#fff" />
-      <rect {...penTags('FRAME', frame)} x={FRAME_MARGIN_MM} y={FRAME_MARGIN_MM} width={w - FRAME_MARGIN_MM * 2} height={h - FRAME_MARGIN_MM * 2} fill="none" stroke="#000" strokeWidth={frame} />
+      <rect {...penTags('FRAME', pen)} x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="none" stroke="#000" strokeWidth={pen} />
       {(sheet.viewports ?? []).map((vp) => {
         const c = content(vp);
         if (c.civil) return <CivilViewport key={vp.id} vp={vp} layout={c.civil} selected={vp.id === selectedViewportId} />;
         if (c.legend) return <LegendViewport key={vp.id} vp={vp} layout={c.legend} selected={vp.id === selectedViewportId} />;
         return c.schedule
           ? <ScheduleViewport key={vp.id} vp={vp} layout={c.schedule} selected={vp.id === selectedViewportId} />
-          : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} />;
+          : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} highlight={keyedExtent(sheet, vp, content, c)} />;
       })}
       <TitleBlock sheet={sheet} projectName={projectName} w={w} h={h} />
       <SheetDrafts entities={sheetDrafts} layers={layers} extraPatterns={extraPatterns} />
