@@ -14,6 +14,7 @@ import { can } from '@/edition';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Spline, Box, Files, Building2, Camera, FileBox, FilePlus2, FolderOpen, LayoutTemplate, Plus, Rows3, Save, Scissors, Search, SquareDashed, Table2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
+import { useViewerStore } from '@/store';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { requestNewProject } from '@/project/new-project';
@@ -44,7 +45,7 @@ import { ProjectFolderRow, ProjectItemRow } from './ProjectTreeRow';
 import { ViewPropertiesPanel } from './ViewPropertiesPanel';
 import { LevelsFolder } from './LevelsFolder';
 import { ProjectModelRow } from './ProjectModelRow';
-import { modelDrawings } from '@/project/model-styles';
+import { loadedModelKeys, modelDrawings } from '@/project/model-styles';
 import { useNavigatorDialogs } from './useNavigatorDialogs';
 
 type FolderId = ProjectViewKind | 'sheets' | 'schedules' | 'legends' | 'civil' | 'models';
@@ -86,7 +87,8 @@ export function ProjectNavigatorPanel() {
   const legends = useProjectStore((s) => s.legends) ?? [];
   const civilDrawings = useProjectStore((s) => s.civilDrawings) ?? [];
   const models = useProjectStore((s) => s.models);
-  const modelDrawingByKey = useMemo(() => modelDrawings(models), [models]);
+  const loadedModels = useViewerStore((s) => s.models);
+  const modelDrawingByKey = useMemo(() => modelDrawings(models, loadedModelKeys(loadedModels)), [models, loadedModels]);
   const levels = useProjectStore((s) => s.levels);
   const activeItemId = useProjectStore((s) => s.activeItemId);
   const dirty = useProjectStore((s) => s.dirty);

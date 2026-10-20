@@ -32,10 +32,16 @@ export const HALFTONE_MIX = 0.6;
 
 /**
  * Every project model's role and style. The host is the model marked host,
- * else the first in the list (the first loaded: `mergeModels` appends).
+ * else the first in the list (the first loaded: `mergeModels` appends). Given
+ * the keys of the models loaded now, the host is picked among those only: a
+ * model the list keeps but that is not loaded (an older version) cannot be the
+ * host and leave every loaded model linked. With none of them loaded, the list
+ * alone decides.
  */
-export function modelDrawings(refs: readonly ProjectModelRef[]): Map<string, ModelDrawing> {
-  const host = refs.find((r) => r.role === 'host') ?? refs[0];
+export function modelDrawings(refs: readonly ProjectModelRef[], loaded?: ReadonlySet<string>): Map<string, ModelDrawing> {
+  const live = loaded ? refs.filter((r) => loaded.has(r.key)) : [];
+  const candidates = live.length > 0 ? live : refs;
+  const host = candidates.find((r) => r.role === 'host') ?? candidates[0];
   const out = new Map<string, ModelDrawing>();
   for (const ref of refs) {
     const role: ModelRole = ref === host ? 'host' : 'linked';
@@ -59,6 +65,14 @@ export interface LoadedModelsView {
   resolveGlobalIdFromModels(globalId: number): { modelId: string } | null;
 }
 
+/** A loaded model's key on the project's model list (`ProjectModelRef.key`). */
+const modelKey = (model: { name: string; sourceContentHash?: string }): string => model.sourceContentHash ?? model.name;
+
+/** The project-list keys of the models loaded now: what {@link modelDrawings} picks the host among. */
+export function loadedModelKeys(models: LoadedModelsView['models']): Set<string> {
+  return new Set([...models.values()].map(modelKey));
+}
+
 /** A drawing entity's model style, or undefined when it draws normally. */
 export type EntityStyleOf = (entityId: number) => ModelDrawStyle | undefined;
 
@@ -70,10 +84,10 @@ export type EntityStyleOf = (entityId: number) => ModelDrawStyle | undefined;
  */
 export function entityStyles(viewer: LoadedModelsView, refs: readonly ProjectModelRef[]): EntityStyleOf | undefined {
   if (viewer.models.size < 2) return undefined;
-  const drawings = modelDrawings(refs);
+  const drawings = modelDrawings(refs, loadedModelKeys(viewer.models));
   const byModel = new Map<string, ModelDrawStyle>();
   for (const model of viewer.models.values()) {
-    const drawing = drawings.get(model.sourceContentHash ?? model.name);
+    const drawing = drawings.get(modelKey(model));
     if (drawing && drawing.style !== 'normal') byModel.set(model.id, drawing.style);
   }
   if (byModel.size === 0) return undefined;

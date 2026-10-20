@@ -15,7 +15,8 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { viewportPens } from '@/components/viewer/sheets/viewport-pens';
 import { entityStyles, halftoneColor, modelDrawings, type LoadedModelsView } from './model-styles';
 import { parseProjectFile, serializeProject } from './project-file';
-import { EMPTY_PROJECT } from './project-store';
+import { keepProjectForNewVersion } from './model-version';
+import { EMPTY_PROJECT, useProjectStore } from './project-store';
 
 const refs = [{ key: 'a', name: 'arch.ifc' }, { key: 's', name: 'str.ifc' }, { key: 'm', name: 'mep.ifc' }];
 
@@ -41,6 +42,40 @@ describe('model roles and styles', () => {
     assert.deepEqual(drawings.get('a'), { role: 'linked', style: 'halftone' });
     assert.deepEqual(drawings.get('s'), { role: 'host', style: 'normal' });
     assert.deepEqual(drawings.get('m'), { role: 'linked', style: 'normal' });
+  });
+
+  // Review of #137: the host was `refs[0]` even when that model was not loaded, so every loaded model drew halftone.
+  it('the host is picked from the loaded models only', () => {
+    const versions = [{ key: 'arch-old', name: 'arch-old.ifc' }, { key: 'arch-new', name: 'arch-new.ifc' }, { key: 'str', name: 'str.ifc' }];
+    const drawings = modelDrawings(versions, new Set(['arch-new', 'str']));
+    assert.deepEqual(drawings.get('arch-new'), { role: 'host', style: 'normal' });
+    assert.deepEqual(drawings.get('str'), { role: 'linked', style: 'halftone' });
+    const loaded = viewer([{ id: 'N', key: 'arch-new', from: 0, to: 999 }, { id: 'S', key: 'str', from: 1000, to: 1999 }]);
+    const styleOf = entityStyles(loaded, versions);
+    assert.equal(styleOf?.(48), undefined, 'the loaded architecture draws in full ink');
+    assert.equal(styleOf?.(1050), 'halftone');
+    // A model marked host that is not loaded hands the role to the first loaded one.
+    assert.equal(modelDrawings([{ ...versions[0], role: 'host' }, versions[1], versions[2]], new Set(['arch-new', 'str'])).get('arch-new')?.role, 'host');
+    assert.equal(modelDrawings(versions, new Set()).get('arch-old')?.role, 'host', 'none loaded: the list alone decides');
+  });
+
+  it('a new version of a model keeps its role and style: by name, else by position', () => {
+    try {
+      useProjectStore.setState({ models: [{ key: 'a1', name: 'arch.ifc', role: 'linked', drawStyle: 'normal' }, { key: 's1', name: 'str.ifc', role: 'host' }] });
+      keepProjectForNewVersion([{ key: 's2', name: 'str.ifc' }, { key: 'a2', name: 'arch.ifc' }]);
+      assert.deepEqual(useProjectStore.getState().models, [
+        { key: 's2', name: 'str.ifc', role: 'host' },
+        { key: 'a2', name: 'arch.ifc', role: 'linked', drawStyle: 'normal' },
+      ], 'matched by name, whatever the order');
+      useProjectStore.setState({ models: [{ key: 'a1', name: 'arch.ifc', role: 'linked', drawStyle: 'normal' }, { key: 's1', name: 'str.ifc', role: 'host' }] });
+      keepProjectForNewVersion([{ key: 'a2', name: 'arch-v2.ifc' }, { key: 's2', name: 'str.ifc' }]);
+      assert.deepEqual(useProjectStore.getState().models, [
+        { key: 'a2', name: 'arch-v2.ifc', role: 'linked', drawStyle: 'normal' },
+        { key: 's2', name: 'str.ifc', role: 'host' },
+      ], 'a renamed file takes the role of the model at its position');
+    } finally {
+      useProjectStore.setState({ models: [], dirty: false });
+    }
   });
 
   it('round-trips through the project file', () => {
@@ -89,5 +124,20 @@ describe('model roles and styles', () => {
     const styleOf = entityStyles(viewer([{ id: 'A', key: 'a', from: 0, to: 999 }, { id: 'S', key: 's', from: 1000, to: 1999 }]), refs);
     assert.deepEqual(viewportPens(drawing, undefined, t, 'down', [], styleOf).map((p) => p.stroke ?? p.fill), ['#eeeeef', '#999999']);
     assert.deepEqual(viewportPens(drawing, undefined, t, 'down', [], styleOf).map((p) => [p.width, p.layer]), plain.map((p) => [p.width, p.layer]));
+  });
+
+  it('a linked model\'s cut hatch goes halftone too, the host\'s stays in full ink', () => {
+    const square = (x: number) => ({ outer: [{ x, y: 0 }, { x: x + 1, y: 0 }, { x: x + 1, y: 1 }, { x, y: 1 }], holes: [] });
+    const drawing = {
+      cutPolygons: [
+        { polygon: square(0), entityId: 48, ifcType: 'IfcWall', modelIndex: 0, isCut: true },
+        { polygon: square(2), entityId: 1050, ifcType: 'IfcWall', modelIndex: 1, isCut: true },
+      ],
+      lines: [],
+    } as unknown as Drawing2D;
+    const graphics = { categories: { walls: { cutHatch: 'LINES45' } } };
+    const styleOf = entityStyles(viewer([{ id: 'A', key: 'a', from: 0, to: 999 }, { id: 'S', key: 's', from: 1000, to: 1999 }]), refs);
+    const hatches = viewportPens(drawing, graphics, { scale: 1, x: 0, y: 0 }, 'down', [], styleOf).filter((p) => p.layer === 'HATCH');
+    assert.deepEqual(hatches.map((p) => p.stroke).sort(), ['#000000', '#999999']);
   });
 });

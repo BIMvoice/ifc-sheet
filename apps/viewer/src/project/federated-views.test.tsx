@@ -21,6 +21,8 @@ import assert from 'node:assert/strict';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useViewerStore } from '@/store';
 import { viewportPens } from '@/components/viewer/sheets/viewport-pens';
+import { ViewSvg } from '@/components/viewer/drafting/view-dxf';
+import { cleanup, render } from '@/test/render';
 import { ARCH, STR, WASM_BUILT, drawView, loadFederatedPair, planOf, type LoadedPair } from '@/test/federated-pair';
 import { entityStyles, setHostModel, setModelDrawStyle } from './model-styles';
 import { useProjectStore } from './project-store';
@@ -73,6 +75,18 @@ describe('federated models on the Wall (#96)', { skip }, () => {
     assert.deepEqual([...new Set(archPens.filter((p) => p.fill).map((p) => p.fill))], ['#d4d4d8']);
     // Weights are the category's, untouched: the same cut pen width for both models.
     assert.deepEqual(strPens.filter((p) => p.layer === 'CUT').map((p) => p.width), archPens.filter((p) => p.layer === 'CUT').map((p) => p.width));
+  });
+
+  it('the view\'s DXF draws the linked model in halftone, like the sheet', () => {
+    // What `viewDxf` hands the DXF walker (which needs a browser's path geometry, so it writes nothing here).
+    const host = render(<ViewSvg view={planOf('Level 0')} drawing={level0} axis="down" drafts={[]} layers={[]} extraPatterns={[]} overlays={[]} />);
+    try {
+      const strokes = new Set([...host.querySelectorAll('path')].map((p) => p.getAttribute('stroke')));
+      assert.ok(strokes.has(HALFTONE_INK), `halftone ink: ${[...strokes].join(', ')}`);
+      assert.ok(strokes.has('#000000'), 'the host stays in full ink');
+    } finally {
+      cleanup();
+    }
   });
 
   it('the style is the project\'s: a normal linked model, or the structure made host, draws in full ink', () => {

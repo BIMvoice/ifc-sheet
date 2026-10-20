@@ -46,7 +46,8 @@ interface ViewDxfInput {
   overlays: readonly PlanOverlay[];
 }
 
-function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays }: ViewDxfInput) {
+/** The off-screen SVG `viewDxf` walks; exported for tests (the DXF walker needs a browser's path geometry). */
+export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays }: ViewDxfInput) {
   const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns, currentEntityStyles()) : [];
   const s = useProjectStore.getState();
   const book = { textStyles: s.textStyles ?? [], dimStyles: s.dimStyles ?? [] };
