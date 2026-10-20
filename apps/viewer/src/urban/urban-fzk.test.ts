@@ -31,6 +31,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { extractQuantitiesOnDemand } from '@ifc-lite/parser';
 import { useViewerStore } from '@/store';
+import { useProjectStore } from '@/project/project-store';
 import type { MeshData } from '@ifc-lite/geometry';
 import { loadUrbanModel, urbanWasm, wasmMeshes } from '@/test/urban-fixture';
 import { layoutUrban, type UrbanLabels } from './urban-layout';
@@ -131,6 +132,31 @@ describe('footprint elements that are not in the flat meshes (#76)', () => {
     assert.match(after(printed, 'Erdgeschoss'), /^0\.00$/, 'the elevation is a plain figure');
     assert.match(printed[printed.indexOf('Erdgeschoss') + 2], /^>= /, 'the level\'s built area is marked');
     assert.doesNotMatch(printed[printed.indexOf('Dachgeschoss') + 2], /^>= /, 'the attic was measured whole');
+  });
+});
+
+describe('measuring once per state (review of #111)', () => {
+  beforeEach(() => useViewerStore.setState({ models: new Map() }));
+
+  // Each table showing the indicators (its tab, each sheet it is placed on) measured the meshes again.
+  it('measures again only when the models, an edit or the levels change', async (t) => {
+    if (!urbanWasm(t)) return;
+    const bytes = new Uint8Array(readFileSync(FZK));
+    const all = wasmMeshes(bytes);
+    await loadUrbanModel('fzk', bytes, all.filter((m) => m.expressId !== EXT_WALL));
+    const pieces = asPieces(all.filter((m) => m.expressId === EXT_WALL));
+    let asked = 0;
+    const instanced = (id: number) => { if (id === EXT_WALL) asked++; return id === EXT_WALL ? pieces : undefined; };
+    const first = collectUrbanAreas(instanced);
+    assert.equal(asked, 1);
+    assert.equal(collectUrbanAreas(instanced), first, 'the same state gives the same measure');
+    assert.equal(asked, 1, 'and does not measure again');
+    useViewerStore.setState({ mutationVersion: useViewerStore.getState().mutationVersion + 1 });
+    collectUrbanAreas(instanced);
+    assert.equal(asked, 2, 'an edit measures again');
+    useProjectStore.setState({ levels: [...useProjectStore.getState().levels] });
+    collectUrbanAreas(instanced);
+    assert.equal(asked, 3, 'new levels measure again');
   });
 });
 

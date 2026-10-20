@@ -100,7 +100,7 @@ describe('project file', () => {
   });
 });
 
-// Review of #108: a kind the reader does not list reopens as a joinery list ('all') with no error.
+// Reviews of #108 and #111: a kind the reader does not list reopens as a joinery list ('all') with no error.
 // The record is keyed by the kind union, so a new kind does not compile until it is listed here.
 const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true, finishes: true, urban: true, register: true };
 
