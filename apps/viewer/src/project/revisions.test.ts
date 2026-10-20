@@ -15,7 +15,7 @@ import { parseProjectFile, serializeProject } from './project-file';
 import { addRevision, nextRevisionCode, removeRevision, updateRevision } from './revision-actions';
 import { chooseCloudRevision } from './revision-tool';
 import { cloudRevisionId, currentRevisionOf, liftTypedRevisions, REVISION_ID_PARAM, sheetRevisions } from './revisions';
-import { loadProjectDocument, projectDocument, resetProject, useProjectStore } from './project-store';
+import { duplicateProjectSheet, loadProjectDocument, projectDocument, resetProject, useProjectStore } from './project-store';
 import { addSheetRevision } from './sheets';
 import { fingerprintSources } from './sheet-fingerprint';
 import { issueRecord, planIssue } from '@/issue/plan';
@@ -95,6 +95,22 @@ describe('a sheet\'s revisions', () => {
     assert.deepEqual(read('s101'), { list: ['A'], current: 'A' });
     assert.equal(useProjectStore.getState().drafts.length, 0);
     assert.deepEqual(useProjectStore.getState().sheets[1].revisionIds, ['rev-a']);
+  });
+});
+
+describe('duplicating a sheet', () => {
+  beforeEach(demoSet);
+
+  it('gives the copy the revisions its clouds name too: a sheet whose A comes from a cloud gets a copy that reads A', () => {
+    useProjectStore.setState({ sheets: [sheet('s401', 'A-401')], drafts: [cloudOn('s401', 'rev-a')] });
+    assert.deepEqual(read('s401'), { list: ['A'], current: 'A' });
+    const copy = duplicateProjectSheet('s401')!;
+    assert.deepEqual(read(copy), { list: ['A'], current: 'A' });
+  });
+
+  it('keeps the revisions chosen for the source and adds those its clouds name: a copy of A-101 lists A and B', () => {
+    const copy = duplicateProjectSheet('s101')!;
+    assert.deepEqual(read(copy), { list: ['A', 'B'], current: 'B' });
   });
 });
 

@@ -20,7 +20,7 @@ import { settleDetailMarks } from '@/drafting/detail-mark';
 import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
-import { liftTypedRevisions } from './revisions';
+import { liftTypedRevisions, sheetRevisions } from './revisions';
 import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
@@ -251,7 +251,8 @@ export function duplicateProjectSheet(id: string): string | null {
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;
   const held = state.views.find((v) => v.id === source.viewports?.[0]?.viewId);
-  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held)), name: `${source.name} Copy`, createdAt: Date.now() };
+  // The copy has a new id, so clouds drawn on the source sheet do not name its revisions: it chooses them itself.
+  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held)), name: `${source.name} Copy`, createdAt: Date.now(), revisionIds: sheetRevisions(source, state).map((r) => r.id) };
   const at = state.sheets.indexOf(source) + 1;
   useProjectStore.setState({ sheets: [...state.sheets.slice(0, at), copy, ...state.sheets.slice(at)], dirty: true });
   return copy.id;
