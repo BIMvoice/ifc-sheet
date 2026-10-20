@@ -77,12 +77,15 @@ describe('comments as BCF', () => {
     // The same file again: those comments are here already.
     const again = bcfToComments(await readBCF(file), back.comments, opts);
     assert.deepEqual([again.comments.length, again.known, again.unplaced], [0, 1, 0]);
-    // A foreign topic (no label of ours): imported by its element alone.
+    // A foreign topic (no label of ours, a GUID of its own): imported by its element alone.
     const foreignProject = await readBCF(file);
-    for (const topic of foreignProject.topics.values()) topic.labels = [];
+    for (const topic of foreignProject.topics.values()) {
+      topic.labels = [];
+      topic.guid = 'b3f1c2d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
+    }
     const foreign = bcfToComments(foreignProject, back.comments, opts);
     assert.deepEqual([foreign.comments.length, foreign.known], [1, 0]);
-    assert.equal(foreign.comments[0].id, 'new-' + n, 'it takes a new id');
+    assert.match(foreign.comments[0].id, /^new-\d+$/, 'it takes a new id');
   });
 
   it('leaves out a topic whose element no sheet shows, and counts it', async () => {

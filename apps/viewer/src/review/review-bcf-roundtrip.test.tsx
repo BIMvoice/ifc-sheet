@@ -95,3 +95,24 @@ describe('a topic another tool changed, read back (PR #127, item 2)', () => {
     assert.deepEqual(back.updated[0].replies.map((r) => r.bcfGuid), [old.comments[0].guid], 'the reply is the same one, not a copy');
   });
 });
+
+describe('a topic from another tool, read twice (PR #127, item 3)', () => {
+  it('becomes one comment that keeps the topic GUID, and the same file again adds nothing', async () => {
+    const foreign = await exported([onElement]);
+    const topic = only(foreign.topics);
+    topic.labels = [];
+    topic.guid = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+    foreign.topics = new Map([[topic.guid, topic]]);
+    const file = await writeBCF(foreign);
+    const opts = importing();
+    const first = bcfToComments(await readBCF(file), [], opts);
+    assert.equal(first.comments.length, 1);
+    assert.equal(first.comments[0].bcfGuid, topic.guid);
+    assert.equal(first.comments[0].bcfViewpointGuid, topic.viewpoints[0].guid);
+    assert.deepEqual(first.comments[0].replies.map((r) => r.bcfGuid), topic.comments.map((c) => c.guid));
+    const second = bcfToComments(await readBCF(file), first.comments, opts);
+    assert.deepEqual([second.comments.length, second.updated.length, second.known], [0, 0, 1]);
+    // Exported from here it is still the other tool's topic.
+    assert.equal(only((await exported(withBcfGuids(first.comments).comments)).topics).guid, topic.guid);
+  });
+});

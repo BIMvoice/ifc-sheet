@@ -199,11 +199,13 @@ export function bcfToComments(
       continue;
     }
     const { sheet, place } = placed;
-    const replies: CommentReply[] = topic.comments.map((c) => ({ id: opts.newId(), author: c.author ?? '', createdAt: c.date ? Date.parse(c.date) || 0 : 0, text: c.comment }));
+    // The topic's GUIDs are kept, so the same file read again finds this comment instead of adding it twice.
+    const viewpointGuid = topic.viewpoints[0]?.guid;
     result.comments.push({
       id: own ?? opts.newId(), sheetId: sheet.id, x: place.x, y: place.y, viewportId: place.viewportId, viewId: place.viewId, point: place.point, elementGuid: place.elementGuid,
       author: topic.creationAuthor ?? '', createdAt: topic.creationDate ? Date.parse(topic.creationDate) || 0 : 0,
-      status: closed(topic.topicStatus) ? 'done' : 'open', text: topic.description || topic.title, replies,
+      status: closed(topic.topicStatus) ? 'done' : 'open', text: topic.description || topic.title,
+      replies: topic.comments.map((c) => replyOf(c, opts.newId)), bcfGuid: topic.guid, ...(viewpointGuid ? { bcfViewpointGuid: viewpointGuid } : {}),
     });
   }
   return result;
