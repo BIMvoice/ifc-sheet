@@ -26,6 +26,8 @@ export const projectPackageEn = {
   'projectPackage.linkedHint': 'This project refers to these coordination models. Locate each file to load it read-only, or skip.',
   'projectPackage.locate': 'Locate…',
   'projectPackage.skipLinked': 'Skip',
+  'projectPackage.autosaveFailed': 'Your drawings are not being autosaved: the browser refused to store them ({detail}). Save the project to a file to keep your work.',
+  'projectPackage.autosaveTooNew': 'The autosave for these models was written by a newer version of IfcSheet. This version leaves it as it is, so what you do here is not autosaved. Save the project to a file to keep your work.',
   'projectPackage.recoveryTitle': 'Unsaved project found',
   'projectPackage.recoveryText': '"{name}" had unsaved changes when the app closed (copy from {time}).',
   'projectPackage.recoveryOpen': 'Recover',

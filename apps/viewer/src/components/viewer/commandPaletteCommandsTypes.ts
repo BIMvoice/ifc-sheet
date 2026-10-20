@@ -11,6 +11,7 @@
 
 import type { CommandContribution, SlotContribution } from '@ifc-lite/extensions';
 import type { ExtensionHostService } from '@/services/extensions/host.js';
+import type { ProjectSheet } from '@/project/types';
 import type { RecentFileEntry } from '@/lib/recent-files';
 import type { BottomPanelId } from '@/lib/panels/bottom-panels';
 import type { TranslationKey, TranslationParameters } from '@/i18n';
@@ -37,6 +38,8 @@ export interface CommandPaletteBuildParams {
   runExport: (request: ExportRequest) => void;
   /** Installed extension exporters, offered as Export rows (#5838). */
   extensionExporters?: readonly ExtensionExporter[];
+  /** The project's sheets, offered as rows on IfcSheet's own face. */
+  sheets?: readonly ProjectSheet[];
 }
 
 /** `labelKey` shorthand: every row that shows fixed UI copy sets exactly

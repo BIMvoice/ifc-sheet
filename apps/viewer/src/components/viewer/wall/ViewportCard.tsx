@@ -3,16 +3,21 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The card for the drawing chosen on a sheet: its name, its scale, its cut
+ * The card for the drawing chosen on a sheet: its name, its scale (`ScaleField`), its cut
  * or depth, opening it to draw in, taking it off the sheet; and below, any
  * drawing or schedule not yet on this sheet, to place on it.
  */
 
 import { useTranslation } from '@/i18n';
-import { renameProjectItem, updateProjectView, useProjectStore } from '@/project/project-store';
-import { addViewport, removeViewport, SHEET_SCALES, updateViewport } from '@/project/sheets';
+import { placeLegend } from '@/legend/legend-actions';
+import { renameProjectItem, useProjectStore } from '@/project/project-store';
+import { addViewport, removeViewport, updateViewport } from '@/project/sheets';
+import { drawingNumbers } from '@/drafting/cross-ref';
 import { drawingArea } from '@/project/drawing-set';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
+import { useLegendLabels } from '../legend/LegendGraphic';
+import { LegendCard } from './LegendCard';
+import { ScaleField } from './ScaleField';
 import { CutHeightControl, DepthControl } from './ViewControls';
 
 const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
@@ -23,22 +28,33 @@ interface ViewportCardProps {
   slot: SheetViewport | null;
   onOpen: (vp: SheetViewport) => void;
   onChoose: (viewportId: string | null) => void;
+  /** The chosen drawing's extent, metres, once generated: says when it does not fit the sheet. */
+  drawingBounds?: { min: { x: number; y: number }; max: { x: number; y: number } } | null;
 }
 
-export function ViewportCard({ sheet, slot, onOpen, onChoose }: ViewportCardProps) {
+export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = null }: ViewportCardProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
   const view = views.find((v) => v.id === slot?.viewId);
+  const legends = useProjectStore((s) => s.legends ?? []);
+  const labels = useLegendLabels();
   const schedule = schedules.find((s) => s.id === slot?.viewId);
-  const name = view?.name ?? schedule?.name ?? '';
+  const legend = legends.find((l) => l.id === slot?.viewId);
+  const name = view?.name ?? schedule?.name ?? legend?.name ?? '';
   const placed = new Set((sheet.viewports ?? []).map((vp) => vp.viewId));
   const placeable = [
     ...views.filter((v) => v.kind !== '3d' && !placed.has(v.id)).map((v) => ({ id: v.id, name: v.name })),
     ...schedules.filter((s) => !placed.has(s.id)).map((s) => ({ id: s.id, name: s.name })),
+    ...legends.filter((l) => !placed.has(l.id)).map((l) => ({ id: l.id, name: l.name })),
   ];
 
   const place = (id: string): void => {
+    // A legend sets its own size, at paper size, in a free place.
+    if (legends.some((l) => l.id === id)) {
+      onChoose(placeLegend(sheet.id, id, labels));
+      return;
+    }
     const area = drawingArea(sheet.paper);
     const scale = views.find((v) => v.id === id)?.scale ?? slot?.scale ?? 100;
     onChoose(addViewport(sheet.id, id, { x: area.x + area.w / 2, y: area.y + area.h / 2 }, scale));
@@ -53,21 +69,20 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose }: ViewportCardProp
             {t('wall.project.rename')}
             <input key={slot.viewId} className={field} defaultValue={name} onBlur={(e) => renameProjectItem(slot.viewId, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           </label>
-          <label className="mt-3 block text-sm text-sky-200">
-            {t('wall.vp.scale')}
-            <select
-              className={field}
-              value={slot.scale}
-              onChange={(e) => {
-                const scale = Number(e.target.value);
-                // The box fits the drawing again at the new scale; the view's annotation sizes follow it.
-                updateViewport(sheet.id, slot.id, { scale, width: 0, height: 0 });
-                if (view) updateProjectView(view.id, { scale });
-              }}
-            >
-              {SHEET_SCALES.map((s) => <option key={s} value={s}>{`1 : ${s}`}</option>)}
-            </select>
-          </label>
+          {legend ? <LegendCard legend={legend} /> : (
+            <>
+              <label className="mt-4 block text-sm text-sky-200">
+                {t('wall.vp.drawingNumber')}
+                <input
+                  key={`${slot.id}:${slot.drawingNumber ?? ''}`} className={field} defaultValue={slot.drawingNumber ?? ''}
+                  placeholder={drawingNumbers({ viewports: (sheet.viewports ?? []).map((vp) => (vp.id === slot.id ? { ...vp, drawingNumber: undefined } : vp)) }, new Set(views.map((v) => v.id))).get(slot.id) ?? ''}
+                  onBlur={(e) => updateViewport(sheet.id, slot.id, { drawingNumber: e.target.value.trim() || undefined })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                />
+              </label>
+              <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} />
+            </>
+          )}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
           <div className="mt-4 flex flex-wrap gap-2">
