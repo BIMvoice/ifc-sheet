@@ -15,6 +15,7 @@ import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
 import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
+import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
 import { isDisciplineId } from './discipline-views';
@@ -145,7 +146,7 @@ function readView(v: unknown, path: string): ProjectView {
         ...(v.interior !== undefined ? { interior: readInterior(v.interior, `${path}.interior`) } : {}),
       };
     default:
-      return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null };
+      return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null, ...read3dPrint(v) };
   }
 }
 
