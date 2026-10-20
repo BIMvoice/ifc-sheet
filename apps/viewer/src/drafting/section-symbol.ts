@@ -9,7 +9,7 @@
  * moves and undoes like any other drawing.
  */
 
-import { resolve } from '@/i18n/registry';
+import { registeredTranslations, resolve } from '@/i18n/registry';
 import type { AnnotationShape, DraftEntity, DraftParamValue, DraftShape, Pt } from './types';
 import { nextAxisLabel, textBox } from './annotation';
 import { DETAIL_LINK, detailLink, isDetailMark, PART } from './detail-mark';
@@ -77,9 +77,18 @@ export function sectionViewName(mark: string): string {
   return resolve('names.view.section', { mark });
 }
 
-/** The mark a view name shows on the symbol: `Section A-A` (or `Secțiunea A-A`) → `A`; any other name is shown whole. */
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The words before `{mark}` in `names.view.section` in every registered language (`Section`, `Secțiunea`, …). */
+function sectionPrefixes(): string[] {
+  const prefixes = registeredTranslations('names.view.section').map((template) => template.split('{mark}')[0].trim());
+  return [...new Set(prefixes.filter((p) => p.length > 0))];
+}
+
+/** The mark a view name shows on the symbol: `Section A-A` (or the same name in any registered language) → `A`; any other name is shown whole. */
 export function sectionMarkOf(name: string): string {
-  const m = /^(?:(?:Section|Secțiunea)\s+)?(.+?)\s*-\s*\1$/.exec(name.trim());
+  const prefix = sectionPrefixes().map(escapeRegExp).join('|');
+  const m = new RegExp(`^(?:(?:${prefix})\\s+)?(.+?)\\s*-\\s*\\1$`).exec(name.trim());
   return m ? m[1] : name;
 }
 
