@@ -55,15 +55,19 @@ describe('resolveField', () => {
 
   it('reads the owner history and the actor with the role', () => {
     const f = facts({ 'owner.organisation': 'Studio', 'owner.person': 'Ana Pop', 'actor.CLIENT': 'Primăria' });
-    const all = resolveTitleBlock(TITLE_BLOCK_FIELDS, {}, undefined, f);
+    const picked = { drawnBy: [{ kind: 'owner', part: 'person' } as const], client: [{ kind: 'actor', role: 'CLIENT' } as const] };
+    const all = resolveTitleBlock(TITLE_BLOCK_FIELDS, {}, picked, f);
     assert.deepEqual([all.organisation.value, all.drawnBy.value, all.client.value], ['Studio', 'Ana Pop', 'Primăria']);
+    // Not picked, drawn by and client stay blank (#114 review).
+    const unpicked = resolveTitleBlock(TITLE_BLOCK_FIELDS, {}, undefined, f);
+    assert.deepEqual([unpicked.drawnBy.from, unpicked.client.from], ['none', 'none']);
   });
 });
 
 describe('the defaults', () => {
-  it('cover project, address, client, organisation and drawn by, and no field the model cannot know', () => {
-    assert.deepEqual(Object.keys(DEFAULT_SOURCES).sort(), ['address', 'client', 'drawnBy', 'organisation', 'project']);
-    for (const field of ['checkedBy', 'date', 'revision']) assert.equal(DEFAULT_SOURCES[field], undefined);
+  it('cover project, address and organisation; drawn by and client only when picked (#114 review)', () => {
+    assert.deepEqual(Object.keys(DEFAULT_SOURCES).sort(), ['address', 'organisation', 'project']);
+    for (const field of ['client', 'drawnBy', 'checkedBy', 'date', 'revision']) assert.equal(DEFAULT_SOURCES[field], undefined);
   });
 
   it('the project is its long name, else its name; the address is the site\'s, else the building\'s', () => {

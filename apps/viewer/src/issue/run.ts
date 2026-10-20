@@ -80,7 +80,8 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   let html: string | null = null;
   let zip: Uint8Array | null = null;
   if (options.format === 'pdf') {
-    html = issuePrintHtml(plan, svgs, plan.sheets.map((s) => titleBlockOf(s.sheet, effectiveTitleBlock(), project.name).project).find((n) => n) || project.name, listLabels());
+    const projectFields = effectiveTitleBlock();
+    html = issuePrintHtml(plan, svgs, plan.sheets.map((s) => titleBlockOf(s.sheet, projectFields, project.name).project).find((n) => n) || project.name, listLabels());
   } else {
     const ext = options.format;
     const names = uniqueNames(plan.sheets.map(({ sheet }) => `${sanitizeFilename(`${sheet.number} ${sheet.name}`, { fallback: 'sheet' })}.${ext}`));

@@ -8,6 +8,7 @@ export const titleBlockSourcesEn = {
   'wall.tbsrc.none': 'not in the model',
   'wall.tbsrc.pick': 'Take {field} from',
   'wall.tbsrc.default': 'Default',
+  'wall.tbsrc.noSource': 'None (leave blank)',
   'wall.tbsrc.property': 'A property…',
   'wall.tbsrc.propertyPath': 'Property of {field} (Pset.Property)',
   'wall.tbsrc.reset': 'Reset to model',

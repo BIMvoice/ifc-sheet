@@ -46,13 +46,16 @@ export interface ModelFacts {
 
 const attr = (on: ModelEntity, name: string): TitleSource => ({ kind: 'attribute', on, name });
 
-/** The sources a field reads when the office has not chosen: what a title block of this kind usually carries. */
+/**
+ * The sources a field reads when the office has not chosen: what a title block of this kind usually carries.
+ * Drawn by and Client have none: the OwnerHistory user is often an exporter account rather than the person who
+ * drew the sheet, and a project made before the title block read the model must print what it printed. They read
+ * the model only once someone picks a source for them.
+ */
 export const DEFAULT_SOURCES: Readonly<Record<string, readonly TitleSource[]>> = {
   project: [attr('IfcProject', 'LongName'), attr('IfcProject', 'Name')],
   address: [attr('IfcSite', 'SiteAddress'), attr('IfcBuilding', 'BuildingAddress')],
-  client: [{ kind: 'actor', role: 'CLIENT' }],
   organisation: [{ kind: 'owner', part: 'organisation' }],
-  drawnBy: [{ kind: 'owner', part: 'person' }],
 };
 
 /** The sources the picker offers for any field, in the order shown. */
