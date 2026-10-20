@@ -9,6 +9,7 @@
  */
 
 import type { TranslationKey } from '@/i18n';
+import { paperLabel } from '@/project/paper';
 import type { IssuedSheet, ProjectIssue, ProjectSheet } from '@/project/types';
 import { holdsRegister, registerRow, sheetScaleText, type RegisterInput, type RegisterRow } from '@/project/drawing-register';
 import { sheetFingerprint, type FingerprintSources } from './fingerprint';
@@ -66,7 +67,7 @@ export function planIssue(
       sheet,
       register,
       row: {
-        number: register.number, title: register.title, scale: register.scale, paper: sheet.paper ?? 'A1', orientation: sheet.orientation ?? 'landscape',
+        number: register.number, title: register.title, scale: register.scale, paper: paperLabel(sheet.paper ?? 'A1'), orientation: sheet.orientation ?? 'landscape',
         revision: register.revision, fingerprint: sheetFingerprint(sheet, sources),
       },
     });

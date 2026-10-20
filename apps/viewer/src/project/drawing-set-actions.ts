@@ -14,7 +14,11 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groupsThatDoNotFit, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { findTemplate, templateFields } from './sheet-templates';
+import { refittedOnPaper, type BoxOf } from './sheet-refit';
+import { frameOf, frameProblem, type FrameProblem } from './sheet-frame';
+import { paperMm } from './paper';
 import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
 import { nextNumber } from './numbering';
@@ -24,7 +28,7 @@ import { seedProjectTitleBlock } from './sheets';
 import { resolve } from '@/i18n/registry';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, elevationName, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
-import type { PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView } from './types';
+import type { PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
 
 /** How many proposed sections the starting set draws; the rest wait in the tray. */
 export const SET_SECTIONS = 2;
@@ -76,6 +80,12 @@ export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | 
 // ---- Make the set whole (the one planner behind the Wall's start and DRAFTSET) ----
 
 const state = () => useProjectStore.getState();
+
+/** The template each series of the set starts its new sheets from, as the project chose; a series without one is absent. */
+export function seriesTemplates(): Partial<Record<TemplateSeries, SheetTemplate>> {
+  const { seriesTemplates: chosen = {}, sheetTemplates = [] } = state();
+  return Object.fromEntries(Object.entries(chosen).flatMap(([series, id]) => { const t = findTemplate(id, sheetTemplates); return t ? [[series, t]] : []; }));
+}
 
 export interface EnsureReport {
   viewsAdded: number;
@@ -151,7 +161,7 @@ function ensureSections(meshes: MeshData[] | null, extent: AxisBounds, options: 
 function ensurePlanScales(extent: AxisBounds): void {
   const plans = state().views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.detail);
   const onSheet = new Map(state().sheets.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
-  const planned = state().sheets.length === 0 ? buildDrawingSet({ views: plans, extent }) : [];
+  const planned = state().sheets.length === 0 ? buildDrawingSet({ views: plans, extent, templates: seriesTemplates() }) : [];
   const plannedScale = new Map(planned.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
   for (const plan of plans) {
     const scale = onSheet.get(plan.id) ?? plannedScale.get(plan.id);
@@ -167,10 +177,10 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
   report.sheetsExisting = before.length;
   let sheets = before;
   if (before.length === 0) {
-    sheets = buildDrawingSet({ views: loose, extent, scheme: numberingScheme() });
+    sheets = buildDrawingSet({ views: loose, extent, scheme: numberingScheme(), templates: seriesTemplates() });
   } else {
     for (const view of loose) {
-      const next = withViewHung(sheets, state().views, view, extent, undefined, numberingScheme());
+      const next = withViewHung(sheets, state().views, view, extent, undefined, numberingScheme(), seriesTemplates());
       if (next) sheets = next.sheets;
     }
   }
@@ -209,7 +219,7 @@ export function setGroupScale(group: SetGroup, scale: number, extent: ModelExten
       if (sheetGroup(sheet) !== group) return sheet;
       const members = (sheet.viewports ?? []).flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []);
       const sizes = members.map((v) => viewExtent(v, extent));
-      return { ...sheet, viewports: rowOfViewports(members, sizes, scale, sheet.paper) };
+      return { ...sheet, viewports: placeViewports(members, sizes, scale, sheet) };
     }),
     dirty: true,
   });
@@ -234,7 +244,7 @@ export function swapViewportView(sheetId: string, viewportId: string, viewId: st
 export function hangView(viewId: string, extent: ModelExtent): string | null {
   const { sheets, views } = useProjectStore.getState();
   const view = views.find((v) => v.id === viewId);
-  const hung = view ? withViewHung(sheets, views, view, extent, undefined, numberingScheme()) : null;
+  const hung = view ? withViewHung(sheets, views, view, extent, undefined, numberingScheme(), seriesTemplates()) : null;
   if (!hung) return null;
   useProjectStore.setState({ sheets: hung.sheets, dirty: true });
   return hung.sheetId;
@@ -245,9 +255,11 @@ function hangOnSheetOfItsOwn(itemId: string, name: string): string {
   const { sheets } = useProjectStore.getState();
   const placed = sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === itemId));
   if (placed) return placed.id;
-  const area = drawingArea(SET_PAPER);
+  const template = seriesTemplates().schedules;
+  const start = template ? templateFields(template) : { paper: SET_PAPER, orientation: 'landscape' as const };
+  const area = drawingArea(start);
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: nextNumber(sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
+    id: freshProjectId('sheet'), number: nextNumber(sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), ...start,
     viewports: [{ id: freshProjectId('viewport'), viewId: itemId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 50, width: 0, height: 0, center: null }],
   };
   useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });
@@ -304,4 +316,47 @@ export function addRegisterToSet(name: string): string {
   };
   useProjectStore.setState({ sheets: [...useProjectStore.getState().sheets, sheet], dirty: true });
   return sheet.id;
+}
+
+/** What a sheet's paper, orientation and frame can be changed to. A `templateId` of `null` says the sheet no longer follows a template. */
+export type SheetFormatPatch = Partial<Pick<ProjectSheet, 'paper' | 'orientation' | 'frame'>> & { templateId?: string | null };
+
+/**
+ * Change a sheet's paper, orientation or frame, and fit its drawings to it
+ * (`refittedOnPaper`): a new paper or orientation, or a viewport that no
+ * longer fits, lays them out again at the scale that fits, the starting
+ * set's own path; a margin or title block change keeps each viewport's
+ * position, box and scale and only brings it inside the drawing area. A
+ * view's scale is written back only when the sheet was laid out again. One
+ * undo step. Without the model's extent nothing is laid out again, but every
+ * viewport is still brought inside. `boxOf` is each viewport's box as the
+ * sheet draws it (a schedule's or legend's own size); without it the box is
+ * estimated (`estimatedBox`).
+ *
+ * A paper and frame that cannot hold the title block (`frameProblem`) are
+ * refused: the sheet is left as it was and the problem is returned; null
+ * when the change was made.
+ */
+export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent: ModelExtent | null, boxOf?: BoxOf): FrameProblem | null {
+  const { sheets, views } = state();
+  const sheet = sheets.find((s) => s.id === sheetId);
+  if (!sheet) return null;
+  const { templateId: patched, ...fields } = patch;
+  const { templateId: kept, ...rest } = sheet;
+  const templateId = patched === undefined ? kept : patched ?? undefined;
+  const changed: ProjectSheet = { ...rest, ...fields, ...(templateId ? { templateId } : {}) };
+  const problem = frameProblem(paperMm(changed.paper ?? 'A1', changed.orientation), frameOf(changed));
+  if (problem) return problem;
+  const { sheet: fitted, relaid } = refittedOnPaper(sheet, changed, views, extent, boxOf);
+  runAsOneUndoStep(() => {
+    useProjectStore.setState({ sheets: sheets.map((s) => (s.id === sheetId ? fitted : s)), dirty: true });
+    if (!relaid) return;
+    // A view's annotation sizes follow the scale it is drawn at (as when the scale is typed on the Wall).
+    for (const vp of fitted.viewports ?? []) {
+      const view = views.find((v) => v.id === vp.viewId);
+      const was = sheet.viewports?.find((o) => o.id === vp.id)?.scale;
+      if (view && was !== vp.scale) updateProjectView(view.id, { scale: vp.scale });
+    }
+  });
+  return null;
 }

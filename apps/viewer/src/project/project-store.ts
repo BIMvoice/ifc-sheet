@@ -23,6 +23,7 @@ import { create } from 'zustand';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { upgradeTagAllTypes } from '@/tagall/types';
+import { findTemplate, templateFields } from './sheet-templates';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
@@ -42,7 +43,7 @@ export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visib
 export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
-  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
+  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
   annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, siteArea: undefined, tagFields: undefined, graphicStandard: undefined, comments: [],
 };
 
@@ -64,7 +65,7 @@ const DOCUMENT_FIELDS = {
   symbolFlips: true, openingLines: true, textStyles: true, dimStyles: true, layerGroups: true, joineryTypes: true, currentJoinery: true,
   schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
   typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
-  modelState: true, siteArea: true, cadLayers: true, tagFields: true, titleBlockSources: true, sheetNumbering: true, phaseSource: true, graphicStandard: true, comments: true, details: true,
+  modelState: true, siteArea: true, cadLayers: true, tagFields: true, titleBlockSources: true, sheetNumbering: true, phaseSource: true, graphicStandard: true, comments: true, details: true, sheetTemplates: true, seriesTemplates: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -79,7 +80,7 @@ const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[
   textStyles: () => [], dimStyles: () => [], layerGroups: () => [], joineryTypes: () => [], currentJoinery: () => ({}),
   schedules: () => [], joineryMapping: () => ({ ...DEFAULT_JOINERY_MAPPING }), elementTypes: () => [], currentTypes: () => ({}),
   structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], cadLayers: () => [], savedSectionCuts: () => [],
-  annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [], comments: () => [], details: () => [],
+  annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [], comments: () => [], details: () => [], sheetTemplates: () => [], seriesTemplates: () => ({}),
 };
 
 /** The persisted part of the store. */
@@ -120,6 +121,8 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     materials: doc.materials ?? [],
     cadLayers: doc.cadLayers ?? [],
     savedSectionCuts: doc.savedSectionCuts ?? [],
+    sheetTemplates: doc.sheetTemplates ?? [],
+    seriesTemplates: doc.seriesTemplates ?? {},
     // A project made before the room label read the tag name takes the new template (`tagall/types.ts`).
     annotationTypes: upgradeTagAllTypes(doc.annotationTypes ?? []),
     phaseSource: doc.phaseSource,
@@ -271,12 +274,16 @@ export const numberingScheme = (state: Pick<ProjectDocument, 'sheetNumbering'> =
 /**
  * A new sheet takes the next number of `group`. Without a group it takes the
  * next plan number until a view is placed on it, then it is numbered by what
- * it holds.
+ * it holds. It starts from the template if one is named.
  */
-export function addProjectSheet(name = 'Unnamed', group?: NumberGroup): string {
+export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateId?: string): string {
   const state = useProjectStore.getState();
   const series = group ?? 'plans';
-  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextNumber(state.sheets, series, numberingScheme(state)), series, ...(group ? {} : { autoNumber: true }), name, createdAt: Date.now() };
+  const template = findTemplate(templateId, state.sheetTemplates);
+  const sheet: ProjectSheet = {
+    id: freshProjectId('sheet'), number: nextNumber(state.sheets, series, numberingScheme(state)), series, ...(group ? {} : { autoNumber: true }), name, createdAt: Date.now(),
+    ...(template ? templateFields(template) : {}),
+  };
   useProjectStore.setState({ sheets: [...state.sheets, sheet], dirty: true });
   return sheet.id;
 }

@@ -30,7 +30,7 @@
 
 import { planeBasis } from '@ifc-lite/renderer';
 import type { Pt } from '@/drafting/types';
-import { choosePaper, drawingArea, fitsScale, fittingScale, rowOfViewports, SET_PAPERS } from './drawing-set';
+import { choosePaper, drawingArea, fitsScale, fittingScale, placeViewports, SET_PAPERS } from './drawing-set';
 import { DEFAULT_SCHEME, nextNumber } from './numbering';
 import { freshProjectId } from './view-defaults';
 import type { ElevationDirection, InteriorElevation, NewProjectView, NumberingScheme, ProjectSheet, SectionProjectPlane } from './types';
@@ -245,6 +245,6 @@ export function interiorElevationSheet(label: string, views: readonly InteriorEl
   const scale = fitsScale(sizes, area, INTERIOR_SCALE) ? INTERIOR_SCALE : fittingScale(sizes, area);
   return {
     id: freshProjectId('sheet'), number: nextNumber(sheets, 'elevations', scheme), series: 'elevations', name: `${label} – Interior elevations`, createdAt: now, paper, orientation: 'landscape',
-    viewports: rowOfViewports(views, sizes, scale, paper),
+    viewports: placeViewports(views, sizes, scale, paper),
   };
 }

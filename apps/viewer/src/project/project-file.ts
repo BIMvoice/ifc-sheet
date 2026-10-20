@@ -18,6 +18,7 @@ import { readCadLayerRule } from './cad-layers-file';
 import { readNumberingScheme } from './numbering';
 import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
+import { readSeriesTemplates, readTemplate } from './sheet-templates';
 import { readIssues } from '@/issue/file';
 import { readTitleSources } from './title-block-sources';
 import { readComments } from '@/review/file';
@@ -227,6 +228,8 @@ export function parseProjectFile(text: string): ProjectDocument {
     ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     ...(raw.sheetNumbering !== undefined ? { sheetNumbering: readNumberingScheme(raw.sheetNumbering) } : {}),
     ...(raw.comments !== undefined ? { comments: readComments(raw.comments) } : {}),
+    sheetTemplates: list('sheetTemplates').flatMap((v) => readTemplate(v) ?? []),
+    seriesTemplates: readSeriesTemplates(raw.seriesTemplates),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
     ...(typeof raw.siteArea === 'number' && Number.isFinite(raw.siteArea) && raw.siteArea > 0 ? { siteArea: raw.siteArea } : {}),
   };

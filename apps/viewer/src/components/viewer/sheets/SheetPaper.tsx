@@ -19,7 +19,8 @@ import { useTranslation } from '@/i18n';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
 import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
-import { FRAME_MARGIN_MM, mmPerMetre, paperOf, TITLE_BLOCK_MM, viewportBox } from '@/project/sheets';
+import { frameOf, frameRect, titleBlockRect, TITLE_BLOCK_MM } from '@/project/sheet-frame';
+import { mmPerMetre, paperOf, viewportBox } from '@/project/sheets';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { shapePath } from '../drafting/DraftOverlay';
@@ -215,7 +216,8 @@ function SheetDrafts({ entities, layers, extraPatterns }: { entities: readonly D
 }
 
 /**
- * The title block, bottom right (180 × 50 mm): project / address and client /
+ * The title block (180 × 50 mm), in the frame's bottom-right corner or, as a
+ * strip, down its right side reading upwards: project / address and client /
  * organisation in halves, the sheet title across, drawn / checked by and date / revision in halves; at the
  * right the logo, the sheet number and its scale. Fields are the project's
  * with the sheet's own on top (`title-block.ts`).
@@ -227,8 +229,11 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
   const { t } = useTranslation();
   const { sheet: line, type } = useGraphicStandard();
   const projectFields = useEffectiveTitleBlock();
-  const x = w - FRAME_MARGIN_MM - TITLE_BLOCK_MM.w;
-  const y = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h;
+  const frame = frameOf(sheet);
+  const box = titleBlockRect({ w, h }, frame);
+  // Drawn at its own origin, then set in place (turned a quarter when it is a strip).
+  const x = 0;
+  const y = 0;
   const fields = titleBlockOf(sheet, projectFields, projectName);
   const logo = projectFields?.[LOGO_FIELD];
   const schedules = useProjectStore((s) => s.schedules);
@@ -252,7 +257,7 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
   const font = 'ui-sans-serif, system-ui, sans-serif';
   const sx = x + left;
   return (
-    <g {...penTags('TITLEBLOCK', line.titleDivider)}>
+    <g {...penTags('TITLEBLOCK', line.titleDivider)} data-title-block={frame.titleBlock} transform={frame.titleBlock === 'right' ? `translate(${box.x} ${box.y + box.h}) rotate(-90)` : `translate(${box.x} ${box.y})`}>
       <rect x={x} y={y} width={TITLE_BLOCK_MM.w} height={TITLE_BLOCK_MM.h} fill="#fff" stroke="#000" strokeWidth={line.titleOuter} />
       {[1, 2, 3, 4].map((i) => <line key={i} x1={x} y1={y + rowH * i} x2={sx} y2={y + rowH * i} stroke="#000" strokeWidth={line.titleRule} />)}
       {[[0, 2], [3, 5]].map(([from, to]) => <line key={from} x1={x + left / 2} y1={y + rowH * from} x2={x + left / 2} y2={y + rowH * to} stroke="#000" strokeWidth={line.titleRule} />)}
@@ -281,11 +286,12 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
   { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [] }, ref,
 ) {
   const { w, h } = paperOf(sheet);
-  const frame = useGraphicStandard().sheet.frame;
+  const framePen = useGraphicStandard().sheet.frame;
+  const frame = frameRect({ w, h }, frameOf(sheet));
   return (
     <svg ref={ref} data-sheet-id={sheet.id} xmlns="http://www.w3.org/2000/svg" width={w * pxPerMm} height={h * pxPerMm} viewBox={`0 0 ${w} ${h}`} className="block bg-white shadow-lg">
       <rect data-export-ignore-dxf="true" x={0} y={0} width={w} height={h} fill="#fff" />
-      <rect {...penTags('FRAME', frame)} x={FRAME_MARGIN_MM} y={FRAME_MARGIN_MM} width={w - FRAME_MARGIN_MM * 2} height={h - FRAME_MARGIN_MM * 2} fill="none" stroke="#000" strokeWidth={frame} />
+      <rect {...penTags('FRAME', framePen)} x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="none" stroke="#000" strokeWidth={framePen} />
       {(sheet.viewports ?? []).map((vp) => {
         const c = content(vp);
         if (c.civil) return <CivilViewport key={vp.id} vp={vp} layout={c.civil} selected={vp.id === selectedViewportId} />;
