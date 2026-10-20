@@ -32,7 +32,7 @@ export const ELONGATED_MM: Record<string, { short: number; long: number }> = {
   'A1×3': { short: 841, long: 1783 }, 'A1×4': { short: 841, long: 2378 },
   'A2×3': { short: 594, long: 1261 }, 'A2×4': { short: 594, long: 1682 }, 'A2×5': { short: 594, long: 2102 },
   'A3×3': { short: 420, long: 891 }, 'A3×4': { short: 420, long: 1189 }, 'A3×5': { short: 420, long: 1486 },
-  'A4×3': { short: 297, long: 630 }, 'A4×4': { short: 297, long: 841 }, 'A4×5': { short: 297, long: 1051 },
+  'A4×3': { short: 297, long: 630 }, 'A4×4': { short: 297, long: 841 }, 'A4×5': { short: 297, long: 1050 },
 };
 
 /** The elongated formats there are, as `{ base, factor }`, smallest base last. */
