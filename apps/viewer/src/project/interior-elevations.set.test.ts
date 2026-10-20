@@ -17,8 +17,10 @@ import assert from 'node:assert/strict';
 import type { Drawing2D, DrawingLine } from '@ifc-lite/drawing-2d';
 import { viewsWithoutLevelMarks } from '@/check/findings';
 import type { CheckInput } from '@/check/types';
-import { resetProject, useProjectStore } from './project-store.js';
-import { sheetGroup, type ModelExtent } from './drawing-set.js';
+import { addProjectSheet, addProjectView, duplicateProjectSheet, resetProject, useProjectStore } from './project-store.js';
+import { addViewport } from './sheets.js';
+import { buildDrawingSet, sheetGroup, viewExtent, type ModelExtent } from './drawing-set.js';
+import { viewPlaneConfig } from './view-plane-config.js';
 import { groupScale, setGroupScale, startDrawingSet } from './drawing-set-actions.js';
 import { addInteriorElevations } from './interior-elevation-actions.js';
 import { interiorElevationViews } from './interior-elevations.js';
@@ -49,6 +51,60 @@ describe('interior elevations have a sheet series of their own', () => {
     setGroupScale('interiors', 20, HOUSE);
     assert.deepEqual(new Set(interiorSheets()[0].viewports?.map((vp) => vp.scale)), new Set([20]));
     assert.equal(groupScale('elevations'), 200);
+  });
+});
+
+describe('sheets numbered by what they hold keep interior elevations in their series', () => {
+  const numberOf = (id: string | null) => useProjectStore.getState().sheets.find((s) => s.id === id)?.number;
+
+  it('duplicating an interior sheet gives the next A-4xx, not a facade number', () => {
+    startDrawingSet(null, HOUSE);
+    const { sheetId } = addInteriorElevations('1 Hall', room());
+    assert.equal(numberOf(duplicateProjectSheet(sheetId)), 'A-402');
+  });
+
+  it('a blank sheet given an interior view is numbered A-401', () => {
+    const [view] = room();
+    const viewId = addProjectView(view);
+    const sheetId = addProjectSheet('Blank');
+    addViewport(sheetId, viewId, { x: 100, y: 100 });
+    assert.equal(numberOf(sheetId), 'A-401');
+  });
+
+  it('an interior sheet duplicated first does not stop the starting set from laying out', () => {
+    const { sheetId } = addInteriorElevations('1 Hall', room());
+    duplicateProjectSheet(sheetId);
+    assert.equal(startDrawingSet(null, HOUSE), true);
+    assert.deepEqual(useProjectStore.getState().sheets.map((s) => s.number), ['A-401', 'A-402', 'A-101', 'A-201', 'A-202', 'A-301']);
+  });
+});
+
+describe('interior views where the set and the drawing read them', () => {
+  it('the starting set\'s facade sheets take the facade elevations only, never a room\'s', () => {
+    startDrawingSet(null, HOUSE);
+    addInteriorElevations('1 Hall', room());
+    const { views } = useProjectStore.getState();
+    const interior = new Set(views.filter((v) => v.kind === 'elevation' && v.interior).map((v) => v.id));
+    const facades = buildDrawingSet({ views, extent: HOUSE }).filter((s) => sheetGroup(s) === 'elevations');
+    assert.deepEqual(facades.map((s) => s.number), ['A-201', 'A-202']);
+    const held = facades.flatMap((s) => s.viewports ?? []).map((vp) => vp.viewId);
+    assert.equal(held.length, 4, 'the four facades');
+    assert.ok(!held.some((id) => interior.has(id)), 'and no interior view');
+  });
+
+  it('an interior elevation is sized by its wall, not the model', () => {
+    const [north, east] = room();
+    assert.deepEqual(viewExtent({ ...north, id: 'n', createdAt: 0 }, HOUSE), { w: 4, h: 2.5 });
+    assert.deepEqual(viewExtent({ ...east, id: 'e', createdAt: 0 }, HOUSE), { w: 3, h: 2.5 });
+  });
+
+  it('an interior elevation is cut on its stored plane, not the facade plane of its direction', () => {
+    const [north] = room();
+    const config = viewPlaneConfig({ ...north, id: 'n', createdAt: 0 }, [], HOUSE);
+    assert.equal(config?.axis, 'z');
+    assert.equal(config?.position, 2.95);
+    assert.equal(config?.flipped, true);
+    assert.deepEqual(config?.customPlane?.normal, { x: 0, y: 0, z: -1 });
   });
 });
 
