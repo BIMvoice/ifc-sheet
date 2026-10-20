@@ -13,6 +13,7 @@
  * evidence README); this test is the ifc-lite side of that reopen.
  */
 import { describe, it } from 'node:test';
+import { evidenceSkip } from '@/test/evidence-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -71,7 +72,7 @@ function decodePng(png: Uint8Array): { width: number; height: number; rgba: Uint
 }
 
 describe('CRAS transferred output reopens, packages and shares (#4381)', () => {
-  it('ifc-lite reopens the transferred wall with unchanged geometry and the atlas bound; IFCZIP and a fresh room guest keep the texture', async t => {
+  it('ifc-lite reopens the transferred wall with unchanged geometry and the atlas bound; IFCZIP and a fresh room guest keep the texture', { skip: evidenceSkip(`scan-registration-cras/${TARGET}`, `scan-registration-cras/${TRANSFERRED}`, 'scan-registration-cras/transfer-summary-wall-1117.json') }, async t => {
     if (!existsSync(WASM)) { t.skip('build WASM with pnpm build:wasm'); return; }
     const targetBytes = new Uint8Array(readFileSync(join(EVIDENCE, TARGET)));
     const transferredBytes = new Uint8Array(readFileSync(join(EVIDENCE, TRANSFERRED)));
