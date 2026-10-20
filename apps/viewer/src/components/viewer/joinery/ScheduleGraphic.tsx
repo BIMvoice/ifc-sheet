@@ -23,6 +23,9 @@ import { layoutMaterialTakeoff, type TakeoffLabels } from '@/joinery/material-ta
 import { sharedRegisterRows, type RegisterRow } from '@/project/drawing-register';
 import { layoutRegisterPage, registerFit, type RegisterLabels } from '@/joinery/register-layout';
 import { drawingArea, SET_PAPER } from '@/project/drawing-set';
+import { typeQuantities, type TypeQuantities } from '@/joinery/type-quantities';
+import { collectTypeElements } from '@/joinery/type-quantities-models';
+import { layoutTypeQuantities, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
 import { penTags } from '../sheets/dxf-tags';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
@@ -81,6 +84,23 @@ export function useRegisterRows(wanted = true): RegisterRow[] {
   );
 }
 
+export function useTypeQuantityLabels(title: string): TypeQuantityLabels {
+  const { t } = useTranslation();
+  return useMemo(() => ({
+    title, type: t('typeQty.type'), class: t('typeQty.class'), level: t('typeQty.level'), count: t('typeQty.count'),
+    length: t('typeQty.length'), area: t('typeQty.area'), volume: t('typeQty.volume'), noQto: t('typeQty.noQto'),
+    total: t('typeQty.total'), noType: t('typeQty.noType'), noLevel: t('typeQty.noLevel'),
+  }), [t, title]);
+}
+
+/** The quantities by type, read from the loaded models again only when they change. */
+export function useTypeQuantities(): TypeQuantities {
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const models = useViewerStore((s) => s.models);
+  // mutationVersion / models: what `collectTypeElements` reads.
+  return useMemo(() => typeQuantities(collectTypeElements()), [mutationVersion, models]);
+}
+
 /** The schedule's data and layout, recomputed when the models or the catalogue change. */
 export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data: ScheduleData; layout: ScheduleLayout } | null {
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
@@ -89,7 +109,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels(schedule?.name ?? '');
   return useMemo(() => {
-    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'register') return null;
+    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'types' || schedule.kind === 'register') return null;
     const data = scheduleData(schedule.kind);
     return { data, layout: layoutSchedule(data, labels, { scale: schedule.scale ?? 50 }) };
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
@@ -108,11 +128,14 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const registerLabels = useRegisterLabels('');
   const placesRegister = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'register'));
   const registerRows = useRegisterRows(placesRegister);
+  const typeLabels = useTypeQuantityLabels('');
+  const placesTypes = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'types'));
   const placesTakeoff = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'materials'));
   return useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
     // The takeoff parses materials on demand: read once per change, and only when a sheet shows one.
     const rows = placesTakeoff ? takeoffRows(collectTakeoffElements()) : [];
+    const byType = placesTypes ? typeQuantities(collectTypeElements()) : null;
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || out.has(schedule.id)) continue;
@@ -121,11 +144,13 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
         ? layoutRegisterPage(registerRows, { ...registerLabels, title: schedule.name }, registerFit(registerRows.length, drawingArea(sheet.paper ?? SET_PAPER).h), vp.page ?? 0)
         : schedule.kind === 'materials'
         ? layoutMaterialTakeoff(rows, { ...takeoffLabels, title: schedule.name })
-        : layoutSchedule(scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50 }));
+        : schedule.kind === 'types'
+          ? layoutTypeQuantities(byType ?? { levels: [], rows: [], classTotals: [] }, { ...typeLabels, title: schedule.name })
+          : layoutSchedule(scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50 }));
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet.viewports, sheet.paper, schedules, labels, takeoffLabels, registerLabels, registerRows, placesTakeoff, mutationVersion, models, catalogue, mapping]);
+  }, [sheet.viewports, sheet.paper, schedules, labels, takeoffLabels, typeLabels, registerLabels, registerRows, placesTakeoff, placesTypes, mutationVersion, models, catalogue, mapping]);
 }
 
 function Prim({ p }: { p: SchedulePrim }) {

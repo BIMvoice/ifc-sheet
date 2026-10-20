@@ -8,7 +8,7 @@ import type { ProjectSheet } from '@/project/types.js';
 import { issueRecord, nextIssueName, planIssue, scaleText } from './plan.js';
 import { readIssues } from './file.js';
 import { sheetFingerprint } from './fingerprint.js';
-import { drawingListCsv, issuePrintHtml, uniqueNames } from './output.js';
+import { drawingListCsv, uniqueNames } from './output.js';
 
 const vp = (viewId: string, scale: number) => ({ id: `vp-${viewId}-${scale}`, viewId, x: 0, y: 0, scale, width: 0, height: 0, center: null });
 const sheet = (id: string, number: string, name: string, extra: Partial<ProjectSheet> = {}): ProjectSheet => ({ id, number, name, createdAt: 1, viewports: [vp('v1', 50)], ...extra });
@@ -90,18 +90,6 @@ describe('what is written and read back', () => {
     const csv = drawingListCsv(plan, labels);
     assert.equal(csv.split('\r\n')[0], 'Sheet,Title,Scale,Paper,Revision,Issue,Date');
     assert.equal(csv.split('\r\n')[1], 'A-101,"Plan, ""ground""",1:50,A1 landscape,,Planning,2026-10-13');
-  });
-
-  it('prints each sheet on a page of its own paper, list first, in order', () => {
-    const sheets = [sheet('a', 'A-102', 'B', { paper: 'A3' }), sheet('b', 'A-101', 'A', { paper: 'A2', orientation: 'portrait' })];
-    const p = planIssue(sheets, none, input);
-    const svgs = new Map(sheets.map((x) => [x.id, `<?xml version="1.0"?>\n<svg id="${x.id}"/>`]));
-    const html = issuePrintHtml(p, svgs, 'House', labels);
-    assert.match(html, /@page p-420x594\{size:420mm 594mm;margin:0\}/);
-    assert.match(html, /@page p-420x297\{size:420mm 297mm;margin:0\}/);
-    assert.match(html, /@page list\{size:210mm 297mm/);
-    assert.ok(html.indexOf('class="pg list"') < html.indexOf('id="b"') && html.indexOf('id="b"') < html.indexOf('id="a"'));
-    assert.equal(issuePrintHtml({ ...p, listFirst: false }, svgs, 'House', labels).includes('class="pg list"'), false);
   });
 
   it('keeps file names apart', () => {

@@ -203,8 +203,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), or the set's own sheets (the drawing register, derived from the sheets on every draw). */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'register';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, or the set's own sheets (the drawing register, derived from the sheets on every draw). */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'register';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
