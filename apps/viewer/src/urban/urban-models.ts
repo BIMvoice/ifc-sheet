@@ -58,8 +58,16 @@ function longName(store: IfcDataStore, id: number): string {
   return typeof v === 'string' ? v : '';
 }
 
-/** The SI scales of a model's quantities. */
-const scalesOf = (store: IfcDataStore) => quantityScales(store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty());
+const scalesByStore = new WeakMap<IfcDataStore, ReturnType<typeof quantityScales>>();
+/** The SI scales of a model's quantities, read from its source once (an edit does not change the project's units). */
+function scalesOf(store: IfcDataStore): ReturnType<typeof quantityScales> {
+  let scales = scalesByStore.get(store);
+  if (!scales) {
+    scales = quantityScales(store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty());
+    scalesByStore.set(store, scales);
+  }
+  return scales;
+}
 
 /** The first positive IfcSite GrossArea among the visible models, m²; null when none states one. */
 export function modelSiteArea(): number | null {
@@ -83,13 +91,29 @@ export type InstancedPieces = (globalId: number) => readonly PlanMesh[] | undefi
 
 const rendererPieces: InstancedPieces = (globalId) => getGlobalRenderer()?.getScene().getInstancedMeshDataPieces(globalId);
 
+/** The last measure and what it was taken from: every table showing the indicators reads this one. */
+let measured: { models: unknown; mutationViews: unknown; mutationVersion: number; levels: unknown; instanced: InstancedPieces; areas: UrbanAreas } | null = null;
+
 /**
  * `instanced` resolves the elements drawn by GPU instancing (default: the live
  * renderer's scene). A footprint element (wall, column, curtain wall, non-roof
  * slab) that still has no mesh, or whose outline fails, is counted per level
  * as unmeasured: the level's area is then a lower bound, and says so.
+ *
+ * Measured once per state: the same models, edit (`mutationVersion`), levels
+ * and resolver give back the same result without outlining the meshes again.
  */
 export function collectUrbanAreas(instanced: InstancedPieces = rendererPieces): UrbanAreas {
+  const s = useViewerStore.getState();
+  const levels = useProjectStore.getState().levels;
+  const m = measured;
+  if (m && m.models === s.models && m.mutationViews === s.mutationViews && m.mutationVersion === s.mutationVersion && m.levels === levels && m.instanced === instanced) return m.areas;
+  const areas = measureUrbanAreas(instanced);
+  measured = { models: s.models, mutationViews: s.mutationViews, mutationVersion: s.mutationVersion, levels, instanced, areas };
+  return areas;
+}
+
+function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
   const s = useViewerStore.getState();
   const levels = useProjectStore.getState().levels;
   const buckets = levels.map(() => ({ enclosure: [] as PlanMesh[][], floor: [] as PlanMesh[][], slabs: new Set<number>(), missing: 0 }));
