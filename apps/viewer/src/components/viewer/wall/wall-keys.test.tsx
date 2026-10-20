@@ -17,6 +17,8 @@ import { attachDraftingView, cancelCommand, clickDrawing, runningCommand, startD
 import { resolveEnglish as t } from '@/i18n/registry';
 import { WALL_KEY_COMMANDS, wallToolKey, type WallKeyId } from '@/lib/commands/wall-key-commands';
 import { resetProject, useProjectStore } from '@/project/project-store';
+import { clearDraftHistory, editDrafts, newDraft } from '@/drafting/draft-store';
+import { undoLatest } from '@/project/unified-undo';
 import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet } from '@/project/drawing-set-actions';
 import type { ModelExtent } from '@/project/drawing-set';
@@ -362,5 +364,20 @@ describe('the drafting keys the shortcut list shows (#119 review)', () => {
       }
     }
     assert.deepEqual(typed, [], 'none of them typed into the command line');
+  });
+
+  it('redoes on Ctrl+Shift+Z, which the undo row (Ctrl+Z) would also take if its modifiers did not have to match', () => {
+    resetProject();
+    clearDraftHistory();
+    const typed: string[] = [];
+    const { handlers } = counting();
+    render(<WithCommandLine handlers={handlers} typed={typed} />);
+    editDrafts({ add: [newDraft('view-1', '0', { type: 'text', p: { x: 0, y: 0 }, text: 'A', height: 0.25, rotation: 0 })] });
+    undoLatest();
+    assert.equal(useProjectStore.getState().drafts.length, 0, 'undone');
+    const event = new window.KeyboardEvent('keydown', { key: 'Z', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true });
+    act(() => { document.body.dispatchEvent(event); });
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(useProjectStore.getState().drafts.length, 1, 'Ctrl+Shift+Z redid the text');
   });
 });
