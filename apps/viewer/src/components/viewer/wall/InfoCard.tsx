@@ -45,7 +45,7 @@ export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string
       <Card eyebrow={t(chosen.labelKey)} title={t(chosen.titleKey)}>
         <p className="m-0 text-lg leading-relaxed">{t(toolHelpKey(chosen.command))}</p>
         <ToolTypes tool={chosen.command} />
-        <p className="mb-0 mt-4 flex items-start gap-2 text-cyan-300"><ToolIcon name="cube" size={22} accent="currentColor" />{t('wall.drawHint')}</p>
+        <p className="mb-0 mt-4 flex items-start gap-2 text-cyan-300"><ToolIcon name="cube" size={22} accent="currentColor" />{t(chosen.hintKey ?? 'wall.drawHint')}</p>
       </Card>
     );
   }

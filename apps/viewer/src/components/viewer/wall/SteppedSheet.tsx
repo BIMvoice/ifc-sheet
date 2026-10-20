@@ -11,9 +11,9 @@
  * once more hangs the sheet back on the wall.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
-import { runningCommand, useDraftingSession } from '@/drafting/session';
+import { patchDraftSettings, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
 import { useProjectStore } from '@/project/project-store';
@@ -36,6 +36,9 @@ import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from '.
 import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
+
+/** The Wall tool that runs as a chain: each click adds the next dimension, until Esc. */
+const CHAINED_TOOL = 'dimaligned';
 
 /** The sheet's way out: printed or saved, at true paper size. */
 const issue = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
@@ -73,15 +76,23 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const group = sheetGroup(sheet);
 
   // A tool ends (Esc, or it finished): the rail lets go of it; the drawing stays forward.
+  // The dimension tool is the exception to "finished": Enter ends a chain, and the tool stays for the next one. Only Esc ends the tool (#141).
   const commandId = useDraftingSession((s) => s.commandId);
   const ran = useRef<string | null>(null);
+  const toolNow = useRef(tool);
+  toolNow.current = tool;
+  const escaped = useRef(false);
   useEffect(() => {
     // Only a command that ran and ended lets go; before it starts there is none either.
-    if (commandId !== null) ran.current = commandId;
-    else if (ran.current !== null) {
-      ran.current = null;
-      setTool(null);
+    if (commandId !== null) {
+      ran.current = commandId;
+      return;
     }
+    if (ran.current === null) return;
+    const ended = ran.current;
+    ran.current = null;
+    if (ended === CHAINED_TOOL && toolNow.current === CHAINED_TOOL && !escaped.current && startDraftCommand(CHAINED_TOOL)) return;
+    setTool(null);
   }, [commandId]);
   useEffect(() => () => cancelStart.current(), []);
 
@@ -97,24 +108,31 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   }, [views, extent]);
 
   // Esc, outermost first to let go: the running tool or selection (the drawing's own), the chooser, the drawing, the sheet.
-  useEffect(() => {
+  // One Esc lets go of ONE thing. The drafting keys cancel a running tool on the same keydown, so this listener must see the
+  // state as the key found it: it registers once, in a layout effect (which runs before any child's passive effect, so before
+  // the drafting keys' own listeners), and reads the rest from a ref.
+  const live = useRef({ onBack, focusId, chosen, adding, titling, previewing });
+  live.current = { onBack, focusId, chosen, adding, titling, previewing };
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || previewing) return; // the preview, when open, takes its own Esc
+      escaped.current = e.key === 'Escape';
+      const now = live.current;
+      if (e.key !== 'Escape' || now.previewing) return; // the preview, when open, takes its own Esc
       // A panel that keeps its own keys (the tour card) has Esc for itself.
       if (e.target instanceof Element && e.target.closest('[data-owns-keys]')) return;
-      // A running tool or a drafted selection lets go first (the drafting keys' own Esc).
+      // A running tool or a drafted selection lets go first (the drafting keys' own Esc), and that is all this Esc does.
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
-      if (adding) setAdding(false);
-      else if (titling) setTitling(false);
-      else if (focusId) {
+      if (now.adding) setAdding(false);
+      else if (now.titling) setTitling(false);
+      else if (now.focusId) {
         setFocusId(null);
         setTool(null);
-      } else if (chosen) setChosen(null);
-      else onBack();
+      } else if (now.chosen) setChosen(null);
+      else now.onBack();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onBack, focusId, chosen, adding, titling, previewing]);
+  }, []);
 
   const startTool = (command: string): void => {
     cancelStart.current();
@@ -126,6 +144,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       cancelStart.current = startWhenAttached(focusView?.id ?? sheet.id, command);
       return;
     }
+    // The Wall's dimension tool chains: a SINGLE typed earlier in the session does not carry over (#141).
+    if (command === CHAINED_TOOL) patchDraftSettings({ dimContinuous: true });
     // A section line is drawn on a plan: the chosen one, else the lowest.
     // A detail marks its area on the drawing in front, else the chosen one, else the lowest plan.
     const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : command === 'detail' ? focusView ?? view ?? groundPlan(views) : view;
