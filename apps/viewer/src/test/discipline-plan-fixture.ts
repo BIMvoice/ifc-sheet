@@ -11,7 +11,7 @@
  * with a manual view depth (`sectionPlaneForView`, `viewDisplayOverrides`).
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createSectionConfig, Drawing2DGenerator, type Drawing2D } from '@ifc-lite/drawing-2d';
@@ -64,6 +64,19 @@ function serveWasmFromDisk(): void {
   Reflect.deleteProperty(WebAssembly, 'instantiateStreaming');
 }
 
+const WASM = new URL('../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
+
+/** The FZK-Haus sample, fetched by `pnpm fixtures` (not in the repo). */
+export const FZK_HAUS = fileURLToPath(new URL('../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url));
+
+/** Why `path` cannot be loaded here (the skip message), or false when it can. */
+export function planModelMissing(path: string): string | false {
+  if (!existsSync(path)) return `${path.split('/').pop()} not found: run \`pnpm fixtures\``;
+  if (!existsSync(WASM)) return 'wasm bundle not built: run `pnpm build:wasm:fetch` (or `bash scripts/build-wasm.sh`) first';
+  return false;
+}
+
+/** Check `planModelMissing(path)` first. */
 export async function loadPlanModel(path: string): Promise<LoadedPlanModel> {
   const bytes = readFileSync(path);
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);

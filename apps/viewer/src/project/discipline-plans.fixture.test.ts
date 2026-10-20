@@ -6,7 +6,7 @@ import '@/test/setup-dom.js';
 import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { loadPlanModel, type LoadedPlanModel } from '@/test/discipline-plan-fixture';
+import { FZK_HAUS, loadPlanModel, planModelMissing, type LoadedPlanModel } from '@/test/discipline-plan-fixture';
 import { defaultDisciplineLevel, disciplineViewFor, type DisciplineId } from './discipline-views';
 import { planViewFor } from './view-defaults';
 import type { ProjectLevel, ProjectView } from './types';
@@ -36,7 +36,7 @@ const level = (m: LoadedPlanModel, name: string): ProjectLevel => {
 const has = (names: Set<string>, ...wanted: string[]) => wanted.forEach((n) => assert.ok(names.has(n), `${n} is drawn (drawn: ${[...names].join(', ')})`));
 const lacks = (names: Set<string>, ...unwanted: string[]) => unwanted.forEach((n) => assert.ok(!names.has(n), `${n} is not drawn`));
 
-describe('discipline plans on the hand-written fixture', () => {
+describe('discipline plans on the hand-written fixture', { skip: planModelMissing(fileURLToPath(new URL('./__fixtures__/disciplines.ifc', import.meta.url))) }, () => {
   let m: LoadedPlanModel;
   before(async () => { m = await loadPlanModel(fileURLToPath(new URL('./__fixtures__/disciplines.ifc', import.meta.url))); });
 
@@ -72,9 +72,9 @@ describe('discipline plans on the hand-written fixture', () => {
   });
 });
 
-describe('discipline plans on FZK-Haus', () => {
+describe('discipline plans on FZK-Haus', { skip: planModelMissing(FZK_HAUS) }, () => {
   let m: LoadedPlanModel;
-  before(async () => { m = await loadPlanModel(fileURLToPath(new URL('../../public/_fixtures/AC20-FZK-Haus.ifc', import.meta.url))); });
+  before(async () => { m = await loadPlanModel(FZK_HAUS); });
 
   it('a structural plan draws no door, window, furniture or stair, and (no wall has LoadBearing here) no wall', async () => {
     const drawing = await m.planOf(view('structural', level(m, 'Erdgeschoss')));
@@ -118,7 +118,7 @@ describe('discipline plans on FZK-Haus', () => {
   });
 });
 
-describe('a roof plan over a lower wing with its own roof', () => {
+describe('a roof plan over a lower wing with its own roof', { skip: planModelMissing(fileURLToPath(new URL('./__fixtures__/roof-two-wings.ifc', import.meta.url))) }, () => {
   let m: LoadedPlanModel;
   before(async () => { m = await loadPlanModel(fileURLToPath(new URL('./__fixtures__/roof-two-wings.ifc', import.meta.url))); });
 
@@ -128,5 +128,23 @@ describe('a roof plan over a lower wing with its own roof', () => {
     assert.ok(top);
     const shown = m.drawnNames(await m.planOf(view('roof', top)));
     has(shown, 'Main roof', 'Wing roof');
+  });
+});
+
+describe('a roof plan on a top storey named Roof, over a slab roof wholly below that level', { skip: planModelMissing(fileURLToPath(new URL('./__fixtures__/roof-storey.ifc', import.meta.url))) }, () => {
+  let m: LoadedPlanModel;
+  before(async () => { m = await loadPlanModel(fileURLToPath(new URL('./__fixtures__/roof-storey.ifc', import.meta.url))); });
+
+  it('draws the main slab roof below the Roof level and the lower wing\'s slab roof, and no wall', async () => {
+    const top = defaultDisciplineLevel('roof', m.levels);
+    assert.equal(top?.name, 'Roof', 'the roof plan sits on the Roof storey, above every roof');
+    assert.ok(top);
+    const shown = m.drawnNames(await m.planOf(view('roof', top)));
+    has(shown, 'Main roof', 'Wing roof');
+    lacks(shown, 'Upper wall');
+  });
+
+  it('draws them from any storey: the cut is clamped to the model top, the depth runs down from there', async () => {
+    for (const name of ['Ground floor', 'Upper floor']) has(m.drawnNames(await m.planOf(view('roof', level(m, name)))), 'Main roof', 'Wing roof');
   });
 });

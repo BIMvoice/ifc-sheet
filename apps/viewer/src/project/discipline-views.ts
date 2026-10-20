@@ -31,6 +31,7 @@
  *   one that fills an opening in a roof or a ROOF slab.
  */
 
+import { getInheritanceChainAcrossSchemas } from '@ifc-lite/parser';
 import type { CategoryGraphics, NewProjectView, ProjectLevel, ProjectView } from './types';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, freshProjectId, uniqueViewName } from './view-defaults';
 
@@ -70,14 +71,33 @@ export interface DisciplineModel {
 /** A storey this far below ±0.00 or more is below ground (metres). */
 export const GROUND_TOLERANCE_M = 0.05;
 
-const WALLS = new Set(['IFCWALL', 'IFCWALLSTANDARDCASE']);
-const FRAMING = new Set(['IFCCOLUMN', 'IFCBEAM', 'IFCMEMBER', 'IFCSLAB', 'IFCFOOTING', 'IFCPILE']);
-const FOOTINGS = new Set(['IFCFOOTING', 'IFCPILE']);
-const ROOFS = new Set(['IFCROOF']);
+/**
+ * The class and its supertypes, upper-case (`IFCCOLUMNSTANDARDCASE`, `IFCCOLUMN`, …, from the schema), so the
+ * IFC4 subtypes (`*StandardCase`, `*ElementedCase`) count as their base class; just the class when the schema
+ * does not know it.
+ */
+const lineages = new Map<string, readonly string[]>();
+function lineage(className: string): readonly string[] {
+  let chain = lineages.get(className);
+  if (!chain) {
+    const known = className ? getInheritanceChainAcrossSchemas(className).map((c) => c.toUpperCase()) : [];
+    lineages.set(className, (chain = known.length ? known : [className]));
+  }
+  return chain;
+}
 
-const isWall = (f: ElementFacts) => WALLS.has(f.className);
-const isRoofSlab = (className: string, predefined: string) => className === 'IFCSLAB' && predefined === 'ROOF';
-const isRoofHost = (className: string, predefined: string) => ROOFS.has(className) || isRoofSlab(className, predefined);
+/** Whether the upper-case class is `base` or one of its subtypes. */
+const isA = (className: string, base: string): boolean => lineage(className).includes(base);
+
+const FRAMING = ['IFCCOLUMN', 'IFCBEAM', 'IFCMEMBER', 'IFCSLAB', 'IFCFOOTING', 'IFCPILE', 'IFCPLATE'];
+
+/** The framing class the element is (or descends from), '' for none. */
+const framingBase = (className: string): string => lineage(className).find((c) => FRAMING.includes(c)) ?? '';
+
+const isWall = (f: ElementFacts) => isA(f.className, 'IFCWALL');
+const isFooting = (className: string) => isA(className, 'IFCFOOTING') || isA(className, 'IFCPILE');
+const isRoofSlab = (className: string, predefined: string) => isA(className, 'IFCSLAB') && predefined === 'ROOF';
+const isRoofHost = (className: string, predefined: string) => isA(className, 'IFCROOF') || isRoofSlab(className, predefined);
 
 /** Whether `facts` stands on the foundation storey: the lowest, and below ground. */
 function onFoundationStorey(facts: ElementFacts, model: DisciplineModel): boolean {
@@ -91,21 +111,23 @@ const sameStorey = (a: number, b: number) => Math.abs(a - b) < GROUND_TOLERANCE_
 function structural(f: ElementFacts, model: DisciplineModel): boolean {
   if (f.storeyElevation !== null && model.planStorey !== null && !sameStorey(f.storeyElevation, model.planStorey)) return false;
   if (isWall(f)) return f.loadBearing === true;
-  if (!FRAMING.has(f.className)) return false;
-  if (f.className === 'IFCMEMBER' && f.predefinedType === 'MULLION') return false;
+  const base = framingBase(f.className);
+  if (!base) return false;
+  if (base === 'IFCMEMBER' && f.predefinedType === 'MULLION') return false;
+  if (base === 'IFCPLATE' && f.predefinedType === 'CURTAIN_PANEL') return false;
   return f.loadBearing !== false;
 }
 
 function foundation(f: ElementFacts, model: DisciplineModel): boolean {
-  if (FOOTINGS.has(f.className)) return true;
-  if (f.className === 'IFCSLAB') return f.predefinedType === 'BASESLAB' || onFoundationStorey(f, model);
+  if (isFooting(f.className)) return true;
+  if (isA(f.className, 'IFCSLAB')) return f.predefinedType === 'BASESLAB' || onFoundationStorey(f, model);
   if (isWall(f)) return f.loadBearing !== false && onFoundationStorey(f, model);
   return false;
 }
 
 function roof(f: ElementFacts): boolean {
-  if (isRoofHost(f.className, f.predefinedType) || ROOFS.has(f.aggregateClass)) return true;
-  if (f.className !== 'IFCWINDOW') return false;
+  if (isRoofHost(f.className, f.predefinedType) || isA(f.aggregateClass, 'IFCROOF')) return true;
+  if (!isA(f.className, 'IFCWINDOW')) return false;
   return f.predefinedType === 'SKYLIGHT' || f.predefinedType === 'LIGHTDOME' || isRoofHost(f.hostClass, f.hostPredefinedType);
 }
 

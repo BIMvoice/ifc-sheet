@@ -188,3 +188,35 @@ describe('the starters', () => {
     assert.equal(plan.kind === 'plan' && plan.discipline, 'roof');
   });
 });
+
+describe('IFC4 subtypes count as their base class (matched by supertype, from the schema)', () => {
+  it('structural plan: the StandardCase / ElementedCase columns, beams, members and slabs, and plates', () => {
+    for (const cls of ['IFCCOLUMNSTANDARDCASE', 'IFCBEAMSTANDARDCASE', 'IFCMEMBERSTANDARDCASE', 'IFCSLABSTANDARDCASE', 'IFCSLABELEMENTEDCASE', 'IFCPLATE', 'IFCPLATESTANDARDCASE']) {
+      assert.equal(keeps('structural', facts(cls)), true, `${cls} without LoadBearing`);
+      assert.equal(keeps('structural', facts(cls, { loadBearing: false })), false, `${cls} not load-bearing`);
+    }
+    assert.equal(keeps('structural', facts('IFCWALLELEMENTEDCASE', { loadBearing: true })), true, 'a load-bearing elemented wall');
+    assert.equal(keeps('structural', facts('IFCWALLELEMENTEDCASE', { loadBearing: null })), false, 'a wall without LoadBearing, as IFCWALL');
+    assert.equal(keeps('structural', facts('IFCMEMBERSTANDARDCASE', { predefinedType: 'MULLION' })), false, 'a mullion, whatever its subtype');
+    assert.equal(keeps('structural', facts('IFCPLATESTANDARDCASE', { predefinedType: 'CURTAIN_PANEL' })), false, 'a curtain wall panel');
+  });
+
+  it('foundation plan: subtype slabs and walls on the foundation storey, a subtype base slab anywhere', () => {
+    assert.equal(keeps('foundation', facts('IFCSLABSTANDARDCASE', { storeyElevation: -3 })), true);
+    assert.equal(keeps('foundation', facts('IFCSLABELEMENTEDCASE', { predefinedType: 'BASESLAB', storeyElevation: 0 })), true);
+    assert.equal(keeps('foundation', facts('IFCWALLELEMENTEDCASE', { storeyElevation: -3 })), true);
+    assert.equal(keeps('foundation', facts('IFCSLABSTANDARDCASE', { storeyElevation: 0 })), false);
+  });
+
+  it('roof plan: an IfcSlabStandardCase ROOF, a skylight of type IfcWindowStandardCase, and a window in one', () => {
+    assert.equal(keeps('roof', facts('IFCSLABSTANDARDCASE', { predefinedType: 'ROOF' })), true);
+    assert.equal(keeps('roof', facts('IFCSLABELEMENTEDCASE', { predefinedType: 'ROOF' })), true);
+    assert.equal(keeps('roof', facts('IFCSLABSTANDARDCASE', { predefinedType: 'FLOOR' })), false);
+    assert.equal(keeps('roof', facts('IFCWINDOWSTANDARDCASE', { predefinedType: 'SKYLIGHT' })), true);
+    assert.equal(keeps('roof', facts('IFCWINDOW', { hostClass: 'IFCSLABSTANDARDCASE', hostPredefinedType: 'ROOF' })), true);
+  });
+
+  it('keeps a class the schema does not know only by its exact name', () => {
+    assert.equal(keeps('structural', facts('IFCVENDORCOLUMN')), false);
+  });
+});
