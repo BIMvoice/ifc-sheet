@@ -107,7 +107,7 @@ import { useRoofDialog } from '@/project/roof-dialog-store';
 
 import { exportViewDxf } from './view-dxf';
 
-import { drawnBySymbol } from '@/project/view-symbols';
+import { viewOmits } from '@/project/discipline-facts';
 
 import { planOverlays } from '@/project/plan-overlays';
 
@@ -188,10 +188,11 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     void mutationVersionForMaterials;
     return phaseViewOf(graphics, phaseSource);
   }, [graphics, phaseSource, mutationVersionForMaterials]);
+  const discipline = view.kind === 'plan' ? view.discipline : undefined;
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
-    return drawing ? styledDrawing(drawing, graphics, partHostType, view.kind === 'plan' ? drawnBySymbol : undefined, viewMaterials(drawing), phases) : null;
-  }, [drawing, graphics, view.kind, materialsTable, mutationVersionForMaterials, phases]);
+    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing), phases) : null;
+  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases]);
   const overrideRules = useMemo(() => viewOverrideRules(graphics), [graphics]);
   const overrideEngine = useMemo(() => new GraphicOverrideEngine(overrideRules), [overrideRules]);
   const useIfcMaterials = (graphics?.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId) === DEFAULT_VIEW_PRESET;
