@@ -5,7 +5,9 @@
 /**
  * What a sheet's viewports show: each placed view's drawing styled by its own
  * graphics (door and window symbols, roofs and membranes on plans), its
- * drafts with level marks read now, and the schedules, road drawings and
+ * drafts with level marks read now and the cross-reference marks (a section's
+ * "1 / A-301", the ground plan's elevation marks) made from the sheets as they
+ * are now, and the schedules, road drawings and
  * legends placed beside them. The sheet editor and the Wall's sheets both
  * draw through this, so a sheet looks the same wherever it hangs.
  */
@@ -19,6 +21,9 @@ import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
+import { drawingNumbers } from '@/drafting/cross-ref';
+import { elevationMarkDrafts, elevationMarkPlan, obstacleBoxes, sectionReferenceDrafts } from '@/drafting/cross-ref-marks';
+import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { partHostType } from '@/project/part-host';
@@ -75,23 +80,40 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const placedLegends = useSheetLegends(sheet);
   // A site plan's plot and footprint; its viewport fits and centres on the whole plot (`siteBounds`).
   const rawDrawing = useCallback((viewId: string) => byView[viewId]?.drawing ?? null, [byView]);
-  const viewIds = useMemo(() => (sheet.viewports ?? []).map((vp) => vp.viewId), [sheet.viewports]);
-  const sites = useSheetSite(viewIds, views, drafts, rawDrawing);
+  const placedViewIds = useMemo(() => (sheet.viewports ?? []).map((vp) => vp.viewId), [sheet.viewports]);
+  const sites = useSheetSite(placedViewIds, views, drafts, rawDrawing);
   const siteDrawing = useCallback((viewId: string): Drawing2D | null => {
     const drawing = styled.get(viewId)?.drawing ?? null;
     const site = sites.get(viewId);
     return drawing && site?.boundary ? { ...drawing, bounds: siteBounds(drawing.bounds, site) } : drawing;
   }, [styled, sites]);
+  // Cross-references are derived here, at draw time, from the sheets as they are: nothing of them is stored on the plan.
+  const sheets = useProjectStore((s) => s.sheets);
+  const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
+  const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
+  const ground = useMemo(() => elevationMarkPlan(views), [views]);
+  const draftsFor = useCallback((vp: SheetViewport) => {
+    const own = settledDrafts(vp.viewId);
+    const view = views.find((v) => v.id === vp.viewId);
+    const sections = view?.kind === 'plan' ? sectionReferenceDrafts(own, views, sheets) : [];
+    const bounds = byView[vp.viewId]?.drawing?.bounds;
+    const withSections = sections.length ? [...own, ...sections] : own;
+    const elevations = view && view.id === ground?.id && bounds
+      ? elevationMarkDrafts({ planViewId: view.id, layerId: '0', views, sheets, bounds, paperUnit: viewportPaperUnit(vp.scale), factor: annotationFactor(vp.scale, view.scale), obstacles: obstacleBoxes(withSections) })
+      : [];
+    return elevations.length ? [...withSections, ...elevations] : withSections;
+  }, [settledDrafts, views, sheets, byView, ground]);
   const content = useCallback((vp: SheetViewport): ViewportContent => ({
     schedule: placedSchedules.get(vp.viewId),
     civil: placedCivil.get(vp.viewId),
     legend: placedLegends.get(vp.viewId),
     view: views.find((v) => v.id === vp.viewId),
     drawing: siteDrawing(vp.viewId),
-    drafts: settledDrafts(vp.viewId),
+    drafts: draftsFor(vp),
+    drawingNumber: numbers.get(vp.id),
     overlays: styled.get(vp.viewId)?.overlays,
     site: vp.keyPlanOf ? undefined : sites.get(vp.viewId),
-  }), [views, styled, settledDrafts, placedSchedules, placedCivil, placedLegends, siteDrawing, sites]);
+  }), [views, styled, draftsFor, numbers, placedSchedules, placedCivil, placedLegends, siteDrawing, sites]);
 
   const boxOf = useCallback((v: SheetViewport) => {
     const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);

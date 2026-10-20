@@ -74,6 +74,7 @@ import { manualValidationEn } from './catalogues/manual-validation.en';
 import { flowPanelEn } from './catalogues/flow-panel.en';
 import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
+import { printPreviewEn } from './catalogues/print-preview.en';
 import { wallEn } from './catalogues/wall.en';
 import { sitePlanEn } from './catalogues/site-plan.en';
 import { wallFindEn } from './catalogues/wall-find.en';
@@ -254,6 +255,7 @@ export const en = {
   ...drawingUnderlayEn,
   ...keyboardShortcutsEn,
   ...settingsEn,
+  ...printPreviewEn,
   ...wallEn,
   ...sitePlanEn,
   ...wallFindEn,

@@ -30,6 +30,7 @@ function readViewport(v: unknown, path: string): SheetViewport {
     x: num('x', 100), y: num('y', 100), width: Math.max(0, num('width', 0)), height: Math.max(0, num('height', 0)), center,
     ...(Array.isArray(v.hiddenLayers) ? { hiddenLayers: v.hiddenLayers.filter((x): x is string => typeof x === 'string') } : {}),
     ...(isString(v.keyPlanOf) && v.keyPlanOf ? { keyPlanOf: v.keyPlanOf } : {}),
+    ...(isString(v.drawingNumber) && v.drawingNumber.trim() ? { drawingNumber: v.drawingNumber.trim() } : {}),
   };
 }
 

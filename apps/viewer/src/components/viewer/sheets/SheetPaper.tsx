@@ -50,6 +50,8 @@ export interface ViewportContent {
   view: ProjectView | undefined;
   drawing: Drawing2D | null;
   drafts: DraftEntity[];
+  /** The drawing's number on this sheet, printed in its title. */
+  drawingNumber?: string;
   /** A plan's symbols and roof lines by pen, drawing units. */
   overlays?: PlanOverlay[];
   /** A joinery schedule placed here instead of a view (paper millimetres). */
@@ -83,6 +85,21 @@ export function viewportTransform(vp: SheetViewport, drawing: Drawing2D | null, 
   const kx = axis === 'side' ? -1 : 1;
   const ky = axis !== 'down' ? -1 : 1;
   return { scale: s, x: vp.x - c.x * kx * s, y: vp.y - c.y * ky * s };
+}
+
+/** Width on paper of the drawing number's ring, mm: round for one or two characters, longer for a longer number. */
+const numberWidth = (n: string): number => Math.max(LABEL_MM + 1, n.length * LABEL_MM * 0.6 + 2);
+
+/** The drawing's number in a ring at the start of its title: the number a mark elsewhere names. */
+function TitleNumber({ number, x, baseline }: { number: string | undefined; x: number; baseline: number }) {
+  if (!number) return null;
+  const w = numberWidth(number);
+  return (
+    <g {...penTags('VIEWPORT-LABELS', 0.25)}>
+      <rect x={x} y={baseline - LABEL_MM - 0.4} width={w} height={LABEL_MM + 1} rx={(LABEL_MM + 1) / 2} fill="none" stroke="#000" strokeWidth={0.25} />
+      <text x={x + w / 2} y={baseline - 0.2} fontSize={LABEL_MM * 0.8} fontWeight={700} textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">{number}</text>
+    </g>
+  );
 }
 
 const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, extraPatterns, selected, highlight = null }: {
@@ -144,7 +161,8 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined}
         data-export-ignore={selected ? 'true' : undefined}
       />
-      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left} y={top + box.height + LABEL_MM + 1.5} fontSize={LABEL_MM} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
+      <TitleNumber number={content.drawingNumber} x={left} baseline={top + box.height + LABEL_MM + 1.5} />
+      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (content.drawingNumber ? numberWidth(content.drawingNumber) + 2 : 0)} y={top + box.height + LABEL_MM + 1.5} fontSize={LABEL_MM} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
         {keyPlan ? tr('site.keyPlan.label') : tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale })}
       </text>
       {content.site ? <SiteBalance site={content.site} x={left} y={top + box.height + LABEL_MM + 4} /> : null}

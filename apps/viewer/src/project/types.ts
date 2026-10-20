@@ -195,6 +195,8 @@ export interface SheetViewport {
   hiddenLayers?: string[];
   /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
   keyPlanOf?: string;
+  /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
+  drawingNumber?: string;
 }
 
 export interface ProjectSheet {
