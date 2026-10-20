@@ -327,7 +327,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         ) : null}
         <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
-        <ViewportState state={viewportState(entry)} />
+        <ViewportState state={viewportState(entry, view.kind)} />
         <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
         <GridLayer view={view} plane={plane ?? null} drawing={shown} transform={viewTransform} axis={axis} />

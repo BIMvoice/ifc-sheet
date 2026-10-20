@@ -4,7 +4,8 @@
 
 /**
  * A viewport's state on screen: generating (with the generator's progress when
- * it reports any), failed (with why), or nothing cut at this height. The one
+ * it reports any), failed (with why), nothing cut at this height (a plan), or
+ * nothing seen (an elevation or a section, which have no cut height). The one
  * component the Wall, the stepped sheet and the project drawer all use.
  *
  * Screen only. It is HTML laid beside the paper's SVG, never inside it, so the
@@ -23,7 +24,8 @@ export function ViewportState({ state, compact = false }: { state: State; compac
     const what = state.phase || t('wall.vpState.generating');
     text = state.percent === null ? what : `${what} ${state.percent}%`;
   } else if (state.kind === 'failed') text = state.reason ? t('wall.vpState.failedWhy', { reason: state.reason }) : t('wall.vpState.failed');
-  else text = t('wall.vpState.emptyCut');
+  else if (state.kind === 'emptyCut') text = t('wall.vpState.emptyCut');
+  else text = t('wall.vpState.emptyView');
   const tone = state.kind === 'failed' ? 'text-red-700' : 'text-zinc-700';
   if (compact) {
     return (

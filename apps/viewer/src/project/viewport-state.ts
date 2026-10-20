@@ -11,9 +11,13 @@
  * `generating`: `percent` is what the generator reported, or null while it has
  *   reported nothing (an indeterminate wait; no figure is made up).
  * `failed`: `reason` is the generator's own message ('' when it gave none).
- * `emptyCut`: the drawing came out, and holds no line and no polygon at all.
+ * `emptyCut`: a plan's drawing came out, and holds no line and no polygon at
+ *   all: nothing is cut at its height.
+ * `emptyView`: the same for an elevation or a section, which have no cut
+ *   height, so they say nothing is seen instead.
  */
 
+import type { ProjectViewKind } from './types';
 import type { ViewDrawingEntry } from './view-drawings';
 
 export type ViewportState =
@@ -21,11 +25,12 @@ export type ViewportState =
   | { kind: 'generating'; percent: number | null; phase: string }
   | { kind: 'failed'; reason: string }
   | { kind: 'emptyCut' }
+  | { kind: 'emptyView' }
   | { kind: 'ready' };
 
 export const IDLE_STATE: ViewportState = { kind: 'idle' };
 
-export function viewportState(entry: ViewDrawingEntry | undefined): ViewportState {
+export function viewportState(entry: ViewDrawingEntry | undefined, viewKind: ProjectViewKind | undefined): ViewportState {
   if (!entry) return IDLE_STATE;
   if (entry.status === 'error') return { kind: 'failed', reason: entry.error ?? '' };
   if (entry.status === 'generating') {
@@ -34,6 +39,6 @@ export function viewportState(entry: ViewDrawingEntry | undefined): ViewportStat
   }
   if (entry.status === 'idle') return IDLE_STATE;
   const d = entry.drawing;
-  if (!d || (d.lines.length === 0 && d.cutPolygons.length === 0 && d.projectionPolygons.length === 0)) return { kind: 'emptyCut' };
+  if (!d || (d.lines.length === 0 && d.cutPolygons.length === 0 && d.projectionPolygons.length === 0)) return viewKind === 'plan' ? { kind: 'emptyCut' } : { kind: 'emptyView' };
   return { kind: 'ready' };
 }

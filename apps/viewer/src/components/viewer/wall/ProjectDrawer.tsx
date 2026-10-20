@@ -177,7 +177,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
         <TagFieldsPanel />
         {DRAWING_KINDS.map(({ kind, labelKey }) => (
           <Group key={kind} title={t(labelKey)}>
-            {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} state={viewportState(byView[v.id])} onOpen={() => openDrawing(v.id)} />)}
+            {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} state={viewportState(byView[v.id], v.kind)} onOpen={() => openDrawing(v.id)} />)}
           </Group>
         ))}
         <Group

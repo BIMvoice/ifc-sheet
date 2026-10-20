@@ -181,6 +181,7 @@ export const wallEn = {
   'wall.vpState.failed': 'This drawing could not be made.',
   'wall.vpState.failedWhy': 'This drawing could not be made: {reason}',
   'wall.vpState.emptyCut': 'Nothing is cut at this height.',
+  'wall.vpState.emptyView': 'Nothing is seen in this view.',
   'wall.num.title': 'Sheet numbering',
   'wall.num.presetDefault': 'A-101 style',
   'wall.num.presetSequential': 'A01, A02 style',

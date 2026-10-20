@@ -46,6 +46,7 @@ export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function Wall
   const own = useSheetContent(sheet);
   const { content, boxOf } = sheetContent ?? own;
   const byView = useViewDrawings((s) => s.byView);
+  const views = useProjectStore((s) => s.views);
   const pxPerMm = width / paperOf(sheet).w;
   return (
     <div className="relative">
@@ -64,7 +65,7 @@ export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function Wall
       />
       {/* Screen only: laid over the paper's SVG, never inside it, so no export reads it. */}
       {(sheet.viewports ?? []).map((vp) => {
-        const state = viewportState(byView[vp.viewId]);
+        const state = viewportState(byView[vp.viewId], views.find((v) => v.id === vp.viewId)?.kind);
         if (state.kind === 'idle' || state.kind === 'ready') return null;
         const box = boxOf(vp);
         return (
