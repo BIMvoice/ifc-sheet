@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import '@/test/setup-dom.js';
+import { toolHelpKey } from './tool-help';
 import { installLayout } from '@/test/dom-layout.js';
 installLayout();
 import { act, useRef, useState } from 'react';
@@ -158,7 +159,8 @@ describe('the rail\'s tooltips', () => {
       for (const tool of [...WALL_TOOLS, ...DRAW_TOOLS]) {
         const id = wallToolKey(tool.command);
         assert.ok(id, tool.command);
-        const button = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('title') === `${t(tool.labelKey)} (${shortcutLabel(id, apple)})`);
+        // The tooltip is the tool's name, its help line (#131) and its key.
+        const button = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('title') === `${t(tool.labelKey)}: ${t(toolHelpKey(tool.command))} (${shortcutLabel(id, apple)})`);
         assert.ok(button, `${tool.command} shows ${shortcutLabel(id, apple)}`);
       }
       const add = [...ui.querySelectorAll('button')].find((b) => b.textContent?.includes('Add a drawing'));
@@ -173,7 +175,8 @@ describe('the rail\'s tooltips', () => {
       const ui = rail();
       for (const tool of [...WALL_TOOLS, ...DRAW_TOOLS]) {
         const id = wallToolKey(tool.command)!;
-        const button = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('title') === `${t(tool.labelKey)} (${shortcutLabel(id, apple)})`);
+        // The tooltip is the tool's name, its help line (#131) and its key.
+        const button = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('title') === `${t(tool.labelKey)}: ${t(toolHelpKey(tool.command))} (${shortcutLabel(id, apple)})`);
         assert.equal(button?.getAttribute('aria-keyshortcuts'), ariaKeyShortcuts(id, apple), tool.command);
       }
       const add = [...ui.querySelectorAll('button')].find((b) => b.textContent?.includes('Add a drawing'));

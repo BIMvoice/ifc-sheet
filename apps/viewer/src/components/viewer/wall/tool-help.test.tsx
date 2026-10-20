@@ -36,8 +36,8 @@ describe('tool help', () => {
     buttons.forEach((b, i) => {
       const line = resolve(toolHelpKey(chosen[i]));
       assert.ok(line.length > 0, `${chosen[i]} has a help line`);
-      // The rail's title is the help line, then the tool's key from the keymap when it has one (`wall.withKey`).
-      assert.ok((b.getAttribute('title') ?? '').startsWith(line), `${chosen[i]} shows it on the rail`);
+      // The rail's title holds the help line, with the tool's name and key (#119).
+      assert.ok((b.getAttribute('title') ?? '').includes(line), `${chosen[i]} shows it on the rail`);
     });
     cleanup();
     for (const command of chosen) {

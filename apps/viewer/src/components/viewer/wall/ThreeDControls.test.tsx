@@ -40,7 +40,7 @@ describe('3D views on the Wall', () => {
     const placed: string[] = [];
     const ui = render(<ViewportCard sheet={sheet()} slot={null} onOpen={() => {}} onChoose={(id) => id && placed.push(id)} />);
     const pick = ui.querySelector('select')!;
-    assert.deepEqual([...pick.querySelectorAll('option')].map((o) => o.textContent), ['Choose a drawing or schedule…', 'Axo', 'Perspective']);
+    assert.deepEqual([...pick.querySelectorAll('option')].map((o) => o.textContent), ['Choose what to place…', 'Axo', 'Perspective']);
 
     choose(pick, useProjectStore.getState().views[0].id);
     choose(pick, useProjectStore.getState().views[1].id);

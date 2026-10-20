@@ -52,7 +52,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
             <button
               type="button"
               aria-pressed={on}
-              {...keyed(t(toolHelpKey(tool.command)), tool.command)}
+              {...keyed(`${t(tool.labelKey)}: ${t(toolHelpKey(tool.command))}`, tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
                 'flex flex-col items-center gap-0.5 rounded-2xl border px-2 py-1.5 text-[14px] transition-colors',
@@ -92,7 +92,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
               key={tool.command}
               type="button"
               aria-pressed={on}
-              {...keyed(t(toolHelpKey(tool.command)), tool.command)}
+              {...keyed(`${t(tool.labelKey)}: ${t(toolHelpKey(tool.command))}`, tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
                 'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1.5 text-[11px] leading-tight',
