@@ -17,5 +17,5 @@ export function withoutAutoNumber(sheet: ProjectSheet): ProjectSheet {
 
 /** The group of sheets a view of this kind belongs to; `undefined` (a schedule, a legend) is `other`. */
 export function sheetGroupOfView(kind: ProjectViewKind | undefined): NumberGroup {
-  return kind === 'plan' ? 'plans' : kind === 'elevation' ? 'elevations' : kind === 'section' ? 'sections' : 'other';
+  return kind === 'plan' ? 'plans' : kind === 'elevation' ? 'elevations' : kind === 'section' ? 'sections' : kind === 'drafting' ? 'details' : 'other';
 }

@@ -29,7 +29,7 @@ import { parseProjectFile, serializeProject } from './project-file.js';
 import { SEQUENTIAL_SCHEME } from './numbering.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package/package-io.js';
 import type {
-  CategoryGraphics, ElevationProjectView, PlanProjectView, ProjectCivilDrawing, ProjectDocument, ProjectMaterial, ProjectSchedule,
+  CategoryGraphics, DraftingProjectView, ElevationProjectView, PlanProjectView, ProjectCivilDrawing, ProjectDocument, ProjectMaterial, ProjectSchedule,
   ProjectSheet, ProjectViewKind, SectionProjectView, SheetViewport, ThreeDProjectView, ViewGraphics,
 } from './types.js';
 
@@ -89,6 +89,7 @@ const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').Pro
     ...base, id: 'v-3d', name: 'Axo', kind: '3d',
     viewpoint: { position: { x: 1, y: 2, z: 3 }, target: { x: 0, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 }, fov: 50, projectionMode: 'orthographic', orthoSize: 12 },
   } satisfies Required<ThreeDProjectView>,
+  drafting: { ...base, id: 'v-draft', name: 'Typical parapet', kind: 'drafting', number: 4 } satisfies Required<DraftingProjectView>,
 };
 
 const GEOMETRY: { [K in DraftShape['type']]: Required<Extract<DraftShape, { type: K }>> } = {
@@ -186,6 +187,12 @@ const FULL: Required<ProjectDocument> = {
   legends: [legend],
   tagFields: { door: { mark: [{ kind: 'pset', pset: 'Pset_DoorCommon', property: 'Reference' }, { kind: 'attribute', name: 'Mark' }] }, room: { name: [{ kind: 'quantity', qto: 'Qto_SpaceBaseQuantities', name: 'NetFloorArea' }, { kind: 'type-pset', pset: 'Pset_X', property: 'Y' }] } },
   sheetNumbering: { discipline: 'AR', continuous: true, groups: { ...SEQUENTIAL_SCHEME.groups, plans: { prefix: 'P', separator: '.', start: 5, digits: 4, step: 5 } } },
+  details: [{
+    id: 'dt1', name: 'Typical parapet', scale: 10,
+    drafts: drafts.slice(0, 3).map(({ viewId: _viewId, ...rest }) => rest),
+    layers: [{ id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'dashdot' }],
+    hatchPatterns: '*MY-LINES, test\n0, 0,0, 0,2\n', symbols,
+  }],
   issues: [{
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
     sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
@@ -218,7 +225,7 @@ beforeEach(() => resetProject());
 describe('project round trip, one of everything', () => {
   it('the fixture covers every shape type and view kind', () => {
     assert.deepEqual(new Set(drafts.map((d) => d.shape.type)), new Set([...Object.keys(GEOMETRY), ...Object.keys(ANNOTATION)]));
-    assert.equal(new Set(FULL.views.map((v) => v.kind)).size, 4);
+    assert.equal(new Set(FULL.views.map((v) => v.kind)).size, 5);
   });
 
   it('survives the .ifclite-project.json sidecar', () => {

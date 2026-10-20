@@ -49,6 +49,7 @@ const doc: ProjectDocument = {
   cadLayers: [{ id: 'c1', source: 'CUT', layer: 'A-WALL-CUT', color: '#7f1d1d' }],
   annotationTypes: [{ id: 'a1', name: 'Door tag', tool: 'tag', textStyle: 'big', tagField: 'name' }],
   symbols: [{ id: 'sy1', name: 'Mark', unit: 'paper', shapes: [{ type: 'circle', c: { x: 0, y: 0 }, r: 4 }] }],
+  details: [],
   legends: [{ id: 'lg1', name: 'Key', createdAt: 1, title: 'Key', showTitle: true, scope: 'project', categories: ['materials', 'symbols'], columns: 1, rowHeight: 7, swatchWidth: 18, textStyle: 'standard', headings: true }],
   issues: [],
   typicalSections: [{ id: 't1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: null, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 } } }],

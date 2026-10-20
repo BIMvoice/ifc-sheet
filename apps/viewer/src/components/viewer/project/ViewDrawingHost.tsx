@@ -15,7 +15,7 @@
  * Geometry is the federated set `DrawingRuntimeHost` publishes.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactElement } from 'react';
 import { drawingAsViewShows } from '@/project/view-appearance';
 import { useViewerStore } from '@/store';
 import { useIfc } from '@/hooks/useIfc';
@@ -25,14 +25,19 @@ import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { useProjectStore } from '@/project/project-store';
 import { phaseHiddenIds, phaseViewOf } from '@/project/phase-view';
 import { sectionPlaneForView } from '@/project/view-plane';
-import { dropViewDrawing, patchViewDrawing, planeKey, useViewDrawings, viewDisplayOverrides } from '@/project/view-drawings';
+import { dropViewDrawing, generatesFromModel, patchViewDrawing, planeKey, useViewDrawings, viewDisplayOverrides } from '@/project/view-drawings';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
 
 const NO_HIDDEN = new Set<number>();
 const FALLBACK_PLANE = { axis: 'down' as const, position: 50, flipped: false };
 
-export function ViewDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }> }): null {
+export function ViewDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }> }): ReactElement | null {
+  // A drafting view has no model behind it: nothing to generate, and no hooks to run for it.
+  return generatesFromModel(view) ? <ModelDrawingHost view={view} /> : null;
+}
+
+function ModelDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }> }): null {
   const viewId = view.id;
   const { geometryResult } = useDrawingRuntime();
   const { ifcDataStore } = useIfc();

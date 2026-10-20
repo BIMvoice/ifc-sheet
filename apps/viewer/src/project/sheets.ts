@@ -9,6 +9,7 @@
  * 1000 / N mm).
  */
 
+import { draftingFrame } from '@/drafting/drafting-view';
 import { numberingScheme, useProjectStore } from './project-store';
 import { withSources, type TitleSource } from './title-block-sources';
 import { nextNumber } from './numbering';
@@ -97,8 +98,11 @@ export function seedProjectTitleBlock(fields: Record<string, string>): void {
 export function addViewport(sheetId: string, viewId: string, at: { x: number; y: number }, scale = 100): string {
   const id = freshProjectId('viewport');
   // 0 × 0: the box fits the drawing once it is generated (see `viewportBox`).
-  const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, width: 0, height: 0, center: null };
-  const kind = useProjectStore.getState().views.find((v) => v.id === viewId)?.kind;
+  const { views, drafts } = useProjectStore.getState();
+  const kind = views.find((v) => v.id === viewId)?.kind;
+  // A drafting view has no drawing to fit to: it is framed on its drafts.
+  const frame = kind === 'drafting' ? draftingFrame(drafts.filter((d) => d.viewId === viewId), scale) : { center: null, width: 0, height: 0 };
+  const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, ...frame };
   patchSheet(sheetId, (s) => {
     // A number the program chose follows what the sheet comes to hold, once.
     const renumber = s.autoNumber && (s.viewports ?? []).length === 0;

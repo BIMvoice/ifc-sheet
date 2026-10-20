@@ -43,7 +43,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined, siteArea: undefined, tagFields: undefined, graphicStandard: undefined, comments: [],
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, siteArea: undefined, tagFields: undefined, graphicStandard: undefined, comments: [],
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -64,7 +64,7 @@ const DOCUMENT_FIELDS = {
   symbolFlips: true, openingLines: true, textStyles: true, dimStyles: true, layerGroups: true, joineryTypes: true, currentJoinery: true,
   schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
   typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
-  modelState: true, siteArea: true, cadLayers: true, tagFields: true, titleBlockSources: true, sheetNumbering: true, phaseSource: true, graphicStandard: true, comments: true,
+  modelState: true, siteArea: true, cadLayers: true, tagFields: true, titleBlockSources: true, sheetNumbering: true, phaseSource: true, graphicStandard: true, comments: true, details: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -79,7 +79,7 @@ const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[
   textStyles: () => [], dimStyles: () => [], layerGroups: () => [], joineryTypes: () => [], currentJoinery: () => ({}),
   schedules: () => [], joineryMapping: () => ({ ...DEFAULT_JOINERY_MAPPING }), elementTypes: () => [], currentTypes: () => ({}),
   structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], cadLayers: () => [], savedSectionCuts: () => [],
-  annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [], comments: () => [],
+  annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [], comments: () => [], details: () => [],
 };
 
 /** The persisted part of the store. */
@@ -125,6 +125,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     phaseSource: doc.phaseSource,
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
+    details: doc.details ?? [],
     issues: doc.issues ?? [],
     tagFields: doc.tagFields,
     sheetNumbering: doc.sheetNumbering,

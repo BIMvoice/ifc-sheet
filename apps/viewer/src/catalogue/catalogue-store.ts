@@ -22,7 +22,7 @@ export function projectCatalogue(s: ProjectState = useProjectStore.getState()): 
     layers: s.draftLayers, layerGroups: s.layerGroups ?? [],
     textStyles: s.textStyles?.length ? s.textStyles : [DEFAULT_TEXT_STYLE], dimStyles: s.dimStyles?.length ? s.dimStyles : [DEFAULT_DIM_STYLE],
     hatchPatterns: s.hatchPatterns ?? '', materials: s.materials ?? [],
-    annotationTypes: s.annotationTypes ?? [], symbols: s.symbols ?? [], legends: s.legends ?? [], cadLayers: s.cadLayers ?? [],
+    annotationTypes: s.annotationTypes ?? [], symbols: s.symbols ?? [], legends: s.legends ?? [], cadLayers: s.cadLayers ?? [], details: s.details ?? [],
     ...(s.tagFields ? { tagFields: s.tagFields } : {}),
   };
 }
@@ -32,7 +32,7 @@ export function applyCatalogue(c: Catalogue): void {
   commitStandards({
     draftLayers: c.layers.length > 0 ? c.layers : useProjectStore.getState().draftLayers,
     layerGroups: c.layerGroups, textStyles: c.textStyles, dimStyles: c.dimStyles, hatchPatterns: c.hatchPatterns,
-    materials: c.materials, annotationTypes: c.annotationTypes, symbols: c.symbols, legends: c.legends, cadLayers: c.cadLayers,
+    materials: c.materials, annotationTypes: c.annotationTypes, symbols: c.symbols, legends: c.legends, cadLayers: c.cadLayers, details: c.details,
   });
   // The tags follow at once: the labels re-read their elements when the configuration changes (`labels/label-sync.ts`).
   if (c.tagFields !== useProjectStore.getState().tagFields) useProjectStore.setState({ tagFields: c.tagFields, dirty: true });

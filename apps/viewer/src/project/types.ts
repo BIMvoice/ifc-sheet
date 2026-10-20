@@ -9,7 +9,7 @@ import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
-import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
+import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from '@/catalogue/types';
 import type { CadLayerRule } from './cad-layers';
 import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import type { DisciplineId } from './discipline-views';
@@ -30,7 +30,7 @@ import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, Saved
 export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './document-parts';
 import type { ReviewComment } from '@/review/types';
 
-export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d';
+export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d' | 'drafting';
 
 /** The facade an elevation looks at (project north = IFC +Y). */
 export type ElevationDirection = 'north' | 'south' | 'east' | 'west';
@@ -201,7 +201,18 @@ export interface ThreeDProjectView extends ProjectViewBase {
   viewpoint: CameraViewpoint | null;
 }
 
-export type ProjectView = PlanProjectView | SectionProjectView | ElevationProjectView | ThreeDProjectView;
+/**
+ * A drawing with no model behind it: a scale, a name and the drafts drawn on
+ * it (a typical parapet, a threshold). It generates no model geometry, is
+ * placed on sheets like any view and can be the target of a detail mark.
+ */
+export interface DraftingProjectView extends ProjectViewBase {
+  kind: 'drafting';
+  /** The number a detail mark shows for it (1, 2, …), set when a mark is made; shared with the numbers of the project's details. */
+  number?: number;
+}
+
+export type ProjectView = PlanProjectView | SectionProjectView | ElevationProjectView | ThreeDProjectView | DraftingProjectView;
 
 /** A view as handed to `addProjectView`: the store assigns `createdAt` (and `id` unless given). */
 export type NewProjectView = ProjectView extends infer V
@@ -234,7 +245,7 @@ export interface SheetViewport {
 }
 
 /** The groups of sheets a numbering scheme numbers apart: `other` is details and whatever fits no series. */
-export type NumberGroup = 'plans' | 'elevations' | 'sections' | 'schedules' | 'other';
+export type NumberGroup = 'plans' | 'elevations' | 'sections' | 'details' | 'schedules' | 'other';
 
 /** How one group's numbers are written: `<discipline><prefix><separator><n padded to digits>`, `n` running from `start` by `step`. */
 export interface GroupPattern {
@@ -351,6 +362,8 @@ export interface ProjectDocument {
   annotationTypes?: AnnotationType[];
   /** The project's own symbols (the built-in ones are in code). */
   symbols?: DraftSymbol[];
+  /** Details drawn once and kept for reuse: drafting views saved to the library, placed again with `placeLibraryDetail`. */
+  details?: LibraryDetail[];
   /** Legends: generated tables of what the drawings use, placeable on sheets. */
   legends?: ProjectLegend[];
   /** Which IFC property feeds each field of a tag, per tag kind (`tagfields/tag-fields.ts`); only what differs from the defaults. */

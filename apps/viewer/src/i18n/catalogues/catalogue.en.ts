@@ -33,6 +33,7 @@ export const catalogueEn = {
   'library.kind.symbols': 'Symbols',
   'library.kind.legends': 'Legend configurations',
   'library.kind.tagFields': 'Tag field sources',
+  'library.kind.details': 'Details (drafting views)',
   'library.report': '{added} added, {kept} kept, {replaced} replaced, {renamed} renamed',
   'library.report.none': 'nothing in the file',
   'atype.title': 'Annotation types',
