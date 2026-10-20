@@ -83,7 +83,7 @@ for (const count of [1, 2]) it.skipIf(!available)(`#6232 public Align measures r
       expect(await graph(model)).toEqual(before);
     }
   } finally { for (const loaded of registry.list()) loaded.backend.dispose(); }
-});
+}, 30_000); // meshes real models; slower than vitest's 5 s default on a GitHub runner
 
 it.skipIf(!available)('#6232 distinct Align root shifts carry a joined neighbour and Undo restores the whole native graph', async () => {
   const { registry, call } = await liveToolSession(1), model = registry.get('alpha')!;
