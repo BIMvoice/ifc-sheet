@@ -12,7 +12,8 @@
  */
 
 import { MAX_SHADING_DIMENSION_PX, MAX_SHADING_PIXELS, fitRasterPixels, type RasterFit } from '@ifc-lite/drawing-2d';
-import type { ViewRaster } from './types';
+import { isRasterView } from './axonometric';
+import type { ProjectSheet, ProjectView, ViewRaster } from './types';
 
 /** Dots per inch a sheet raster is captured at. */
 export const PRINT_DPI = 300;
@@ -28,4 +29,18 @@ export function rasterFits(raster: ViewRaster | null | undefined, box: { width: 
   if (!raster) return false;
   const want = rasterRequest(box.width, box.height);
   return raster.widthPx === want.widthPx && raster.heightPx === want.heightPx;
+}
+
+/**
+ * The names of the views a sheet prints as raster images. DXF has no image
+ * here (`sheet-dxf.ts` walks only lines and text), so a DXF of the sheet says
+ * these are left out instead of handing over empty frames.
+ */
+export function rasterViewNames(sheet: ProjectSheet, views: readonly ProjectView[]): string[] {
+  const names: string[] = [];
+  for (const vp of sheet.viewports ?? []) {
+    const view = views.find((v) => v.id === vp.viewId);
+    if (view && isRasterView(view) && !names.includes(view.name)) names.push(view.name);
+  }
+  return names;
 }

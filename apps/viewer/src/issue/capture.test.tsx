@@ -69,3 +69,20 @@ describe('runIssue when a sheet cannot be drawn', () => {
     assert.deepEqual(useProjectStore.getState().issues ?? [], []);
   });
 });
+
+describe('runIssue as DXF with a view printed as an image (PR #130 review)', () => {
+  it('says the image is left out of that sheet, naming it, instead of issuing an empty frame silently', async () => {
+    const v = plan('Ground floor');
+    const persp = addProjectView({ kind: '3d', name: 'Street view', viewpoint: null, projection: 'perspective' });
+    const axo = addProjectView({ kind: '3d', name: 'Axo', viewpoint: null, projection: 'axonometric', preset: 'se' });
+    const s1 = sheet('s1', 'A-101', v);
+    const withViews = { ...s1, viewports: [...s1.viewports!, { ...s1.viewports![0], id: 'vp-p', viewId: persp }, { ...s1.viewports![0], id: 'vp-a', viewId: axo }] } as ProjectSheet;
+    useProjectStore.setState({ sheets: [withViews] });
+    useViewDrawings.setState({ byView: { [v]: entry('error', 'out of memory') } });
+    const dxf = await runIssue({ format: 'dxf', name: 'P01', date: '2026-10-13' });
+    const said = dxf.lines.filter((l) => l.key === 'issue.msg.dxfRaster');
+    assert.deepEqual(said.map((l) => l.params), [{ number: 'A-101', views: 'Street view' }], 'the vector axonometric is not named');
+    const pdf = await runIssue({ format: 'pdf', name: 'P01', date: '2026-10-13' });
+    assert.ok(!pdf.lines.some((l) => l.key === 'issue.msg.dxfRaster'), 'a PDF carries the image');
+  });
+});
