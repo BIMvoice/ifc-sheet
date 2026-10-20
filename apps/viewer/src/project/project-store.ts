@@ -17,6 +17,7 @@ import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
+import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
 import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { liftSheetTitleBlocks } from './title-block';
@@ -54,36 +55,49 @@ useProjectStore.subscribe((s, previous) => {
   if (s.symbols !== previous.symbols) setSymbolLibrary(s.symbols);
 });
 
+/** Every field of the project document, once: a field added to `ProjectDocument` and not listed here does not compile. */
+const DOCUMENT_FIELDS = {
+  name: true, models: true, views: true, sheets: true, titleBlock: true, drafts: true, draftLayers: true, hatchPatterns: true,
+  symbolFlips: true, openingLines: true, textStyles: true, dimStyles: true, layerGroups: true, joineryTypes: true, currentJoinery: true,
+  schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
+  typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
+  modelState: true, siteArea: true, urbanSettings: true,
+} as const satisfies Record<keyof ProjectDocument, true>;
+
+/**
+ * The fields the project file, the autosave and the change detection all go by: `projectDocument` builds the
+ * document from them and `autosave-watch.ts` saves when any of them changes, so the two cannot name different fields.
+ */
+export const PROJECT_DOCUMENT_KEYS = Object.keys(DOCUMENT_FIELDS) as (keyof ProjectDocument)[];
+
+/** What a field holds when the store has none (an older file, a project not yet touched). */
+const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[K] } = {
+  titleBlock: () => ({}), hatchPatterns: () => '', symbolFlips: () => ({}), openingLines: () => 'handle',
+  textStyles: () => [], dimStyles: () => [], layerGroups: () => [], joineryTypes: () => [], currentJoinery: () => ({}),
+  schedules: () => [], joineryMapping: () => ({ ...DEFAULT_JOINERY_MAPPING }), elementTypes: () => [], currentTypes: () => ({}),
+  structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], savedSectionCuts: () => [],
+  annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [],
+};
+
 /** The persisted part of the store. */
 export function projectDocument(state: ProjectState = useProjectStore.getState()): ProjectDocument {
-  return {
-    name: state.name, models: state.models, views: state.views, sheets: state.sheets, titleBlock: state.titleBlock ?? {},
-    drafts: state.drafts, draftLayers: state.draftLayers, hatchPatterns: state.hatchPatterns ?? '',
-    symbolFlips: state.symbolFlips ?? {}, openingLines: state.openingLines ?? 'handle',
-    textStyles: state.textStyles ?? [], dimStyles: state.dimStyles ?? [], layerGroups: state.layerGroups ?? [],
-    joineryTypes: state.joineryTypes ?? [], currentJoinery: state.currentJoinery ?? {}, schedules: state.schedules ?? [],
-    joineryMapping: state.joineryMapping ?? { ...DEFAULT_JOINERY_MAPPING },
-    elementTypes: state.elementTypes ?? [], currentTypes: state.currentTypes ?? {},
-    structureProfiles: state.structureProfiles ?? [],
-    civilDrawings: state.civilDrawings ?? [],
-    typicalSections: state.typicalSections ?? [],
-    materials: state.materials ?? [],
-    savedSectionCuts: state.savedSectionCuts ?? [],
-    annotationTypes: state.annotationTypes ?? [],
-    symbols: state.symbols ?? [],
-    legends: state.legends ?? [],
-    issues: state.issues ?? [],
-    ...(state.modelState ? { modelState: state.modelState } : {}),
-    ...(state.siteArea !== undefined ? { siteArea: state.siteArea } : {}),
-    ...(state.urbanSettings !== undefined ? { urbanSettings: state.urbanSettings } : {}),
-  };
+  const doc: Record<string, unknown> = {};
+  for (const key of PROJECT_DOCUMENT_KEYS) {
+    const value = state[key] ?? DOCUMENT_DEFAULTS[key]?.();
+    if (value !== undefined) doc[key] = value;
+  }
+  return doc as unknown as ProjectDocument;
 }
 
-/** Replace the document (file import, autosave restore). */
+/**
+ * Replace the document (file import, autosave restore). Only the document: noting a file as the last
+ * one opened for these models is the caller's (`openProjectDocument` in `project-file.ts`).
+ */
 export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
   const doc = liftSheetTitleBlocks(saved);
+  resetWallView();
   useProjectStore.setState({
     ...doc,
     symbolFlips: doc.symbolFlips ?? {},
@@ -148,6 +162,7 @@ export function setUrbanSettings(patch: Partial<UrbanSettings>): void {
 }
 
 export function resetProject(): void {
+  resetWallView();
   useProjectStore.setState({ ...EMPTY_PROJECT, activeItemId: null, dirty: false });
 }
 
@@ -260,7 +275,7 @@ export function duplicateProjectSheet(id: string): string | null {
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;
   const held = state.views.find((v) => v.id === source.viewports?.[0]?.viewId);
-  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held?.kind)), name: `${source.name} Copy`, createdAt: Date.now() };
+  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held)), name: `${source.name} Copy`, createdAt: Date.now() };
   const at = state.sheets.indexOf(source) + 1;
   useProjectStore.setState({ sheets: [...state.sheets.slice(0, at), copy, ...state.sheets.slice(at)], dirty: true });
   return copy.id;

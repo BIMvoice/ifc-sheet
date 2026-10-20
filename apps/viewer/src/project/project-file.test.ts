@@ -73,8 +73,10 @@ describe('project file', () => {
     assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-document', version: 1 })), /\/format/);
   });
 
-  it('rejects an unsupported version', () => {
-    assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-project', version: 2 })), /\/version 2 is not supported/);
+  it('rejects a version that is not a whole number from 1', () => {
+    for (const version of [0, -1, 1.5, '1', null]) {
+      assert.throws(() => parseProjectFile(JSON.stringify({ format: 'ifclite-project', version })), /\/version must be a whole number/, String(version));
+    }
   });
 
   it('names the view that is malformed', () => {
@@ -94,9 +96,9 @@ describe('project file', () => {
   });
 });
 
-// Review of #111: a kind the reader does not list reopens as a joinery list ('all') with no error.
+// Review of #108 and #111: a kind the reader does not list reopens as a joinery list ('all') with no error.
 // The record is keyed by the kind union, so a new kind does not compile until it is listed here.
-const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, urban: true };
+const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true, urban: true };
 
 describe('schedule kinds', () => {
   for (const kind of Object.keys(SCHEDULE_KINDS) as ProjectSchedule['kind'][]) {
