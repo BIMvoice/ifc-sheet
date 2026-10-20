@@ -8,9 +8,10 @@
  * new cloud belongs to (`RevisionPick`). The logic is `project/revision-actions.ts`.
  */
 
+import { useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
-import { addRevision, removeRevision, updateRevision } from '@/project/revision-actions';
+import { addRevision, removeRevision, revisionCloudCount, updateRevision } from '@/project/revision-actions';
 import { chooseCloudRevision, cloudRevisionNow, useRevisionTool } from '@/project/revision-tool';
 import { sheetRevisions } from '@/project/revisions';
 import { addSheetRevision, removeSheetRevision } from '@/project/sheets';
@@ -31,6 +32,8 @@ function Text({ label, value, onCommit }: { label: string; value: string; onComm
 function Record({ record, sheet, byCloud }: { record: ProjectRevision; sheet: ProjectSheet; byCloud: boolean }) {
   const { t } = useTranslation();
   const listed = byCloud || (sheet.revisionIds ?? []).includes(record.id);
+  // Removing takes every cloud of the revision with it, on every sheet: asked first, and one Undo brings it all back.
+  const [asking, setAsking] = useState(false);
   return (
     <li className="mt-3 rounded-xl border border-sky-300/20 p-3">
       <div className="grid grid-cols-2 gap-2">
@@ -44,7 +47,17 @@ function Record({ record, sheet, byCloud }: { record: ProjectRevision; sheet: Pr
         {t('revision.onSheet')}
       </label>
       {byCloud ? <p className="m-0 mt-1 text-xs text-sky-300/80">{t('revision.byCloud')}</p> : null}
-      <button type="button" className={`${quiet} mt-2`} onClick={() => removeRevision(record.id)}>{t('revision.remove')}</button>
+      {asking ? (
+        <fieldset aria-label={t('revision.remove')} className="m-0 mt-2 border-0 p-0">
+          <p className="m-0 text-xs text-amber-300">{t('revision.remove.ask', { code: record.code, count: revisionCloudCount(record.id) })}</p>
+          <div className="mt-2 flex gap-2">
+            <button type="button" className={quiet} onClick={() => { setAsking(false); removeRevision(record.id); }}>{t('revision.remove.yes')}</button>
+            <button type="button" className={quiet} onClick={() => setAsking(false)}>{t('revision.remove.no')}</button>
+          </div>
+        </fieldset>
+      ) : (
+        <button type="button" className={`${quiet} mt-2`} onClick={() => setAsking(true)}>{t('revision.remove')}</button>
+      )}
     </li>
   );
 }

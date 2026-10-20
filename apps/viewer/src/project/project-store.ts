@@ -25,6 +25,7 @@ import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { findTemplate, templateFields } from './sheet-templates';
 import { liftTypedRevisions } from './revisions';
+import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
@@ -101,8 +102,10 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
 export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean; fromAutosave?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
-  // Saved when the title block's revision was typed: it becomes a revision record (`revisions.ts`).
-  const doc = liftTypedRevisions(liftSheetTitleBlocks(saved), () => freshProjectId('revision'));
+  // Saved when the title block's revision was typed: it becomes a revision record (`revisions.ts`). The sheets
+  // print what they printed, so a sheet unchanged since the last issue still reads unchanged at the next one.
+  const titled = liftSheetTitleBlocks(saved);
+  const doc = carryIssueFingerprints(titled, liftTypedRevisions(titled, () => freshProjectId('revision')));
   const standard = knownGraphicStandard(doc.graphicStandard);
   useProjectStore.setState({
     ...doc,

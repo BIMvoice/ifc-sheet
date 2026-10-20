@@ -23,6 +23,7 @@ import { titleBlockOf } from '@/project/title-block';
 import { effectiveTitleBlock } from '@/project/title-block-model';
 import { rasterViewNames } from '@/project/view-raster';
 import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
+import { fingerprintSources } from '@/project/sheet-fingerprint';
 
 export type IssueFormat = 'pdf' | 'svg' | 'dxf';
 
@@ -63,14 +64,10 @@ export function pdfLabels(): PdfLabels {
   return { ...listLabels(), groups: { sheet: t('group.sheet'), drawing: t('group.drawing'), schedules: t('group.schedules'), drafting: t('group.drafting') }, roles, drafting: t('drafting') };
 }
 
-function sources(project: ProjectDocument) {
-  return { documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])], drafts: project.drafts, revisions: project.revisions };
-}
-
 /** The plan for the project as it stands (nothing is drawn or recorded). */
 export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst'>): IssuePlan {
   const project = useProjectStore.getState();
-  return planIssue(project.sheets, sources(project), {
+  return planIssue(project.sheets, fingerprintSources(project), {
     name: options.name?.trim() || nextIssueName(project.issues ?? []),
     date: options.date ?? new Date().toISOString().slice(0, 10),
     listFirst: options.listFirst ?? true,

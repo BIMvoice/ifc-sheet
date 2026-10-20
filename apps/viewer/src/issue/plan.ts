@@ -13,7 +13,7 @@ import { paperLabel } from '@/project/paper';
 import type { DraftEntity } from '@/drafting/types';
 import type { IssuedSheet, ProjectIssue, ProjectSheet } from '@/project/types';
 import { holdsRegister, registerRow, sheetScaleText, type RegisterInput, type RegisterRow } from '@/project/drawing-register';
-import { sheetFingerprint, type FingerprintSources } from './fingerprint';
+import { sheetFingerprint, type FingerprintSources } from '@/project/sheet-fingerprint';
 
 export interface IssueReason {
   key: TranslationKey;

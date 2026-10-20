@@ -80,7 +80,7 @@ export interface IssuedSheet {
   paper: string;
   orientation: 'landscape' | 'portrait';
   revision: string;
-  /** What the sheet held (`issue/fingerprint.ts`): equal fingerprints mean an unchanged sheet. */
+  /** What the sheet held (`project/sheet-fingerprint.ts`): equal fingerprints mean an unchanged sheet. */
   fingerprint: string;
 }
 

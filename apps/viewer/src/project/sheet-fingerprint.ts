@@ -12,8 +12,8 @@
  */
 
 import type { DraftEntity } from '@/drafting/types';
-import { sheetRevisions } from '@/project/revisions';
-import type { ProjectRevision, ProjectSheet } from '@/project/types';
+import { sheetRevisions } from './revisions';
+import type { ProjectDocument, ProjectRevision, ProjectSheet } from './types';
 
 /** What a sheet's content is looked up in. */
 export interface FingerprintSources {
@@ -55,4 +55,40 @@ export function sheetFingerprint(sheet: ProjectSheet, sources: FingerprintSource
   // A sheet in a project with no revisions hashes as it always did.
   const revisions = sheetRevisions(sheet, { revisions: sources.revisions, drafts: sources.drafts as DraftEntity[] });
   return cyrb53(canonicalJson({ sheet: held, documents, drafts, ...(revisions.length > 0 ? { revisions } : {}) }));
+}
+
+/** What an issue fingerprints a project's sheets against: everything a viewport can name, the drafts and the revision records. */
+export function fingerprintSources(project: Pick<ProjectDocument, 'views' | 'schedules' | 'legends' | 'civilDrawings' | 'drafts' | 'revisions'>): FingerprintSources {
+  return { documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])], drafts: project.drafts, revisions: project.revisions };
+}
+
+/**
+ * The issues of `after`, a migration of `saved` that changes how a sheet is
+ * stored but not what it prints, with each recorded fingerprint that matched a
+ * sheet of `saved` replaced by that sheet's fingerprint in `after`: a sheet
+ * unchanged since an issue reads unchanged at the next one. A fingerprint that
+ * did not match (the sheet had changed since) is kept, so it still reads
+ * changed. The same document when nothing is replaced.
+ */
+export function carryIssueFingerprints(saved: ProjectDocument, after: ProjectDocument): ProjectDocument {
+  if (!after.issues?.length || saved === after) return after;
+  const before = fingerprintSources(saved);
+  const now = fingerprintSources(after);
+  const moved = new Map<string, string>();
+  for (const sheet of saved.sheets) {
+    const migrated = after.sheets.find((s) => s.id === sheet.id);
+    if (!migrated) continue;
+    const was = sheetFingerprint(sheet, before);
+    const is = sheetFingerprint(migrated, now);
+    if (was !== is) moved.set(`${sheet.number}\u0000${was}`, is);
+  }
+  if (moved.size === 0) return after;
+  const issues = after.issues.map((issue) => ({
+    ...issue,
+    sheets: issue.sheets.map((row) => {
+      const is = moved.get(`${row.number}\u0000${row.fingerprint}`);
+      return is ? { ...row, fingerprint: is } : row;
+    }),
+  }));
+  return { ...after, issues };
 }

@@ -8,7 +8,7 @@
  * the sheets name it by id (`revisions.ts`).
  */
 
-import { editDrafts } from '@/drafting/draft-store';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { useProjectStore } from './project-store';
 import { cloudRevisionId } from './revisions';
 import { freshProjectId } from './view-defaults';
@@ -45,13 +45,22 @@ export function updateRevision(id: string, patch: Partial<Omit<ProjectRevision, 
   useProjectStore.setState({ revisions: records.map((r) => (r.id === id ? { ...r, ...patch } : r)), dirty: true });
 }
 
-/** Remove a revision, its clouds, and the choice of it on every sheet. */
+/** How many clouds belong to revision `id`: what removing it takes with it, said before it is removed. */
+export function revisionCloudCount(id: string): number {
+  return useProjectStore.getState().drafts.filter((d) => cloudRevisionId(d) === id).length;
+}
+
+/**
+ * Remove a revision, its clouds, and the choice of it on every sheet: one
+ * store write and one undo step, so Undo brings the record and its clouds back
+ * together. The card asks first.
+ */
 export function removeRevision(id: string): void {
-  const clouds = new Set(useProjectStore.getState().drafts.filter((d) => cloudRevisionId(d) === id).map((d) => d.id));
-  if (clouds.size > 0) editDrafts({ remove: clouds });
   const s = useProjectStore.getState();
-  useProjectStore.setState({
+  if (!(s.revisions ?? []).some((r) => r.id === id)) return;
+  runAsOneUndoStep(() => useProjectStore.setState({
     revisions: (s.revisions ?? []).filter((r) => r.id !== id),
+    drafts: s.drafts.filter((d) => cloudRevisionId(d) !== id),
     sheets: s.sheets.map((sheet) => {
       if (!(sheet.revisionIds ?? []).includes(id)) return sheet;
       const { revisionIds: _all, ...rest } = sheet;
@@ -59,5 +68,5 @@ export function removeRevision(id: string): void {
       return left.length > 0 ? { ...rest, revisionIds: left } : rest;
     }),
     dirty: true,
-  });
+  }));
 }
