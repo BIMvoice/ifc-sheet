@@ -12,20 +12,36 @@ import { commitDrafts, runAsOneUndoStep } from '@/drafting/draft-store';
 import { draftingViewOf } from '@/drafting/drafting-view';
 import { addProjectView, useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
-import { nameKey, type ClashPolicy } from './catalogue-merge';
+import { nameKey, uniqueName, type ClashPolicy } from './catalogue-merge';
 import { applyCatalogue } from './catalogue-store';
 import { detailEntryOf, placeDetailEntry } from './detail-library';
+import type { LibraryDetail } from './types';
+
+/** What a save does to an entry of the same name: replace it, or keep both, the new one renamed "Name (2)". */
+export type SameNameChoice = 'replace' | 'both';
+
+/** The library entry that saving drafting view `viewId` as `name` (default: the view's name) would meet by name, if any: what the person is asked about first. */
+export function libraryDetailNamed(viewId: string, name?: string): LibraryDetail | null {
+  const s = useProjectStore.getState();
+  const view = s.views.find((v) => v.id === viewId);
+  if (!view) return null;
+  const key = nameKey(name?.trim() || view.name);
+  return (s.details ?? []).find((d) => nameKey(d.name) === key) ?? null;
+}
 
 /**
  * Save drafting view `viewId` to the library as `name` (default: the view's
- * name). An entry of the same name is replaced. Returns the entry's id, or
- * `null` when the view is not a drafting view.
+ * name). An entry of the same name is kept and the new one renamed "Name (2)"
+ * unless `sameName` is `replace`. Returns the entry's id, or `null` when the
+ * view is not a drafting view.
  */
-export function saveViewAsLibraryDetail(viewId: string, name?: string): string | null {
+export function saveViewAsLibraryDetail(viewId: string, name?: string, sameName: SameNameChoice = 'both'): string | null {
   const s = useProjectStore.getState();
-  const entry = detailEntryOf(s, viewId, freshProjectId('detail'), name);
-  if (!entry) return null;
-  const others = (s.details ?? []).filter((d) => nameKey(d.name) !== nameKey(entry.name));
+  const made = detailEntryOf(s, viewId, freshProjectId('detail'), name);
+  if (!made) return null;
+  const details = s.details ?? [];
+  const entry = sameName === 'both' ? { ...made, name: uniqueName(made.name, new Set(details.map((d) => nameKey(d.name)))) } : made;
+  const others = sameName === 'replace' ? details.filter((d) => nameKey(d.name) !== nameKey(entry.name)) : details;
   useProjectStore.setState({ details: [...others, entry], dirty: true });
   return entry.id;
 }
