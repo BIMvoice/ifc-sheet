@@ -200,6 +200,22 @@ describe('structural grid on a plan', () => {
     assert.ok(Math.abs(Math.hypot(c.x - line.a.x, c.y - line.a.y) - both.bubbles[0].r) < 1e-9);
   });
 
+  it('puts the start bubble at the authored start: an axis with SameSense .F. swaps its bubbles (PR #125 review)', wasmOptions, async () => {
+    const bubbleOfA = async (ifc: string, ends: GridEnds) => {
+      await seed(new TextEncoder().encode(ifc));
+      const overlays = gridOverlays(plan({ ends }), PLAN_PLANE);
+      // Axes in file order, one bubble each: axis A is the first.
+      assert.equal(textsOf(overlays)[0].text, 'A');
+      return bubblesOf(overlays)[0].c;
+    };
+    const reversed = fixture.replace(/(IFCGRIDAXIS\('A',#\d+,)\.T\.\)/, '$1.F.)');
+    assert.notEqual(reversed, fixture);
+    const authoredEnd = await bubbleOfA(fixture, 'end');
+    const reversedStart = await bubbleOfA(reversed, 'start');
+    assert.ok(Math.hypot(reversedStart.x - authoredEnd.x, reversedStart.y - authoredEnd.y) < 1e-6, 'the start bubble moved to the other end');
+    assert.ok(Math.hypot(reversedStart.x - (await bubbleOfA(fixture, 'start')).x, reversedStart.y - (await bubbleOfA(fixture, 'start')).y) > 1, 'and is not where it was');
+  });
+
   it('runs each axis across the drawing and no further than its bubble fits in the auto-fit margin', wasmOptions, async () => {
     const { meshes } = await seed(new TextEncoder().encode(fixture));
     // The building's box in the plan's drawing coordinates (x = render x, y = render z), from its meshes.
