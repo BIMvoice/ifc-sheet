@@ -19,6 +19,7 @@ import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readSeriesTemplates, readTemplate } from './sheet-templates';
 import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
+import { readTitleSources } from './title-block-sources';
 import { readStandards } from './standards-file';
 import { isDisciplineId } from './discipline-views';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
@@ -31,7 +32,7 @@ import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readTagFields } from '@/tagfields/tag-fields-file';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics } from './types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics, ViewGridGraphics } from './types';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -182,6 +183,11 @@ export interface ProjectFileSchema {
 
 const THIS_BUILD: ProjectFileSchema = { migrations: PROJECT_MIGRATIONS, current: PROJECT_FILE_VERSION };
 
+const readSources = (raw: Record<string, unknown>): Pick<ProjectDocument, 'titleBlockSources'> => {
+  const titleBlockSources = readTitleSources(raw.titleBlockSources);
+  return titleBlockSources ? { titleBlockSources } : {};
+};
+
 /** Parse and validate a project file's text. Throws with the first problem found. */
 export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_BUILD): ProjectDocument {
   let parsed: unknown;
@@ -208,6 +214,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     sheets: list('sheets').map((s, i) => readSheet(s, `/sheets/${i}`)),
     // Absent in a file saved before the title block was the project's (`liftSheetTitleBlocks` fills it on load).
     ...(raw.titleBlock !== undefined ? { titleBlock: readTitleBlock(raw.titleBlock) ?? {} } : {}),
+    ...readSources(raw),
     drafts: list('drafts').map((d, i) => readDraft(d, `/drafts/${i}`)),
     draftLayers: list('draftLayers').map((l, i) => readDraftLayer(l, `/draftLayers/${i}`)),
     hatchPatterns: isString(raw.hatchPatterns) ? raw.hatchPatterns : '',
@@ -259,6 +266,12 @@ function readGraphics(raw: Record<string, unknown>): ViewGraphics {
       if (Object.keys(g).length > 0) categories[id] = g;
     }
     out.categories = categories;
+  }
+  if (isObject(raw.grid)) {
+    const grid: ViewGridGraphics = {};
+    if (typeof raw.grid.visible === 'boolean') grid.visible = raw.grid.visible;
+    if (raw.grid.ends === 'start' || raw.grid.ends === 'end' || raw.grid.ends === 'both') grid.ends = raw.grid.ends;
+    if (Object.keys(grid).length > 0) out.grid = grid;
   }
   return out;
 }

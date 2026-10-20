@@ -56,7 +56,7 @@ const pt = (x: number, y: number) => ({ x, y });
 const category: Required<CategoryGraphics> = {
   visible: false, lineColor: '#112233', fillColor: '#445566', lineWeight: 'heavy', cutHatch: 'ANSI31', hatchScale: 2.5,
 };
-const graphics: Required<ViewGraphics> = { presetId: 'structure', categories: { walls: category, doors: { visible: false } } };
+const graphics: Required<ViewGraphics> = { presetId: 'structure', categories: { walls: category, doors: { visible: false } }, grid: { visible: false, ends: 'start' } };
 
 const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'] };
 
@@ -156,6 +156,7 @@ const FULL: Required<ProjectDocument> = {
   views: Object.values(VIEWS),
   sheets: [sheet],
   titleBlock: { project: 'Full house', client: 'Owner', checkedBy: 'PC', logo: 'data:image/png;base64,iVBORw0KGgo=' },
+  titleBlockSources: { address: [{ kind: 'attribute', on: 'IfcBuilding', name: 'BuildingAddress' }], organisation: [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Office' }, { kind: 'owner', part: 'developer' }] },
   drafts,
   draftLayers: [{ id: '0', name: '0', color: '#18181b', visible: true, locked: false }, layer],
   hatchPatterns: '*MY-LINES, test\n0, 0,0, 0,2\n',
