@@ -22,6 +22,7 @@ import { SHEET_SCALES } from '@/project/sheets';
 import { rescaleViewAnnotations } from '@/project/drafting-standards';
 import { Button } from '@/components/ui/button';
 import { ViewGraphicsDialog } from './ViewGraphicsDialog';
+import { SaveToLibraryButton } from './SaveToLibraryButton';
 
 const AXIS_KEYS = {
   down: 'projectNavigator.props.axisDown',
@@ -50,7 +51,9 @@ export function ViewPropertiesPanel({ view }: { view: ProjectView }) {
 
   const depthHint = view.kind === 'plan' ? t('projectNavigator.props.depthToFloor', { depth: view.cutHeight.toFixed(2) }) : t('projectNavigator.props.depthAuto');
   let workPlane: string;
-  if (view.kind === 'plan') {
+  if (view.kind === 'drafting') {
+    workPlane = t('projectNavigator.props.noModel');
+  } else if (view.kind === 'plan') {
     const level = resolvePlanLevel(view, levels) ?? view.level;
     workPlane = t('projectNavigator.props.levelPlane', { name: level.name, elevation: level.elevation.toFixed(2) });
   } else {
@@ -86,6 +89,7 @@ export function ViewPropertiesPanel({ view }: { view: ProjectView }) {
       {view.kind === 'elevation' ? (
         <Row label={t('projectNavigator.props.facing')}><span className="text-zinc-600 dark:text-zinc-400">{t(DIRECTION_KEYS[view.direction])}</span></Row>
       ) : null}
+      {view.kind === 'drafting' ? null : <>
       <Row label={t('projectNavigator.props.viewDepth')}>
         <MetresField value={view.viewDepth ?? null} placeholder={depthHint} label={t('projectNavigator.props.viewDepth')} allowEmpty onCommit={(v) => edit(view, { viewDepth: v })} />
       </Row>
@@ -97,6 +101,7 @@ export function ViewPropertiesPanel({ view }: { view: ProjectView }) {
           onChange={(e) => edit(view, { showHidden: e.target.checked })}
         />
       </Row>
+      </>}
       <Row label={t('projectNavigator.props.scale')}>
         <select
           aria-label={t('projectNavigator.props.scale')}
@@ -110,7 +115,9 @@ export function ViewPropertiesPanel({ view }: { view: ProjectView }) {
           {SHEET_SCALES.map((s) => <option key={s} value={s}>{`1:${s}`}</option>)}
         </select>
       </Row>
-      <Button variant="outline" size="sm" className="w-full" onClick={() => setGraphicsOpen(true)}>{t('viewGraphics.open')}</Button>
+      {view.kind === 'drafting' ? (
+        <SaveToLibraryButton view={view} />
+      ) : <Button variant="outline" size="sm" className="w-full" onClick={() => setGraphicsOpen(true)}>{t('viewGraphics.open')}</Button>}
       <ViewGraphicsDialog view={view} open={graphicsOpen} onOpenChange={setGraphicsOpen} />
     </section>
   );

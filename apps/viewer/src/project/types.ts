@@ -8,10 +8,12 @@ import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
-import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
+import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from '@/catalogue/types';
 import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import type { CadLayerRule } from './cad-layers';
 import type { DisciplineId } from './discipline-views';
+import type { ThreeDProjectView } from './view-3d-types';
+export type { AxonometricPreset, ThreeDProjection, ThreeDProjectView, ViewRaster } from './view-3d-types';
 
 /**
  * The project document: the views and sheets a user organises over the
@@ -21,14 +23,15 @@ import type { DisciplineId } from './discipline-views';
  * file kept next to the IFC files (`project-file.ts`).
  */
 
-import type { CameraViewpoint, SectionPlaneAxis } from '@/store/types';
+import type { SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
-import type { ProjectCivilDrawing, ProjectIssue, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
+import type { ProjectIssue } from '@/issue/types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
 
-export type { IssuedSheet, ProjectCivilDrawing, ProjectIssue, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './project-records';
+export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './project-records';
 
-export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d';
+export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d' | 'drafting';
 
 /** The facade an elevation looks at (project north = IFC +Y). */
 export type ElevationDirection = 'north' | 'south' | 'east' | 'west';
@@ -36,13 +39,19 @@ export type ElevationDirection = 'north' | 'south' | 'east' | 'west';
 /** A building level, merged across federated models at the same elevation. */
 export interface ProjectLevel {
   name: string;
-  /** Floor elevation, metres, in the same frame the section bar uses. */
+  /** Floor elevation, metres: the storeys' IfcBuildingStorey.Elevation, what levels are matched and named by. */
   elevation: number;
   /** IfcBuildingStorey GlobalIds (one per model that has this level). */
   storeyGlobalIds: string[];
+  /**
+   * The floor in the drawing frame (render Y: the storey's placement-chain Z less the RTC offset and origin
+   * shift the meshes were moved by), derived from the loaded models and never saved. Absent: `elevation`.
+   * Read through `levelFloorY`.
+   */
+  floorY?: number;
 }
 
-interface ProjectViewBase {
+export interface ProjectViewBase {
   id: string;
   name: string;
   /** Created by the default-view generator rather than the user. */
@@ -161,36 +170,18 @@ export interface InteriorElevation {
   crop: { min: { x: number; y: number }; max: { x: number; y: number } };
 }
 
-/** How a 3D view prints: an axonometric is parallel (a true scale), a perspective has none. */
-export type ThreeDProjection = 'axonometric' | 'perspective';
-
-/** The four isometric corners a model is seen from; the camera stands at that corner, 35.26 degrees up. */
-export type AxonometricPreset = 'se' | 'sw' | 'ne' | 'nw';
-
-/** A raster capture of the 3D viewport, printed as an image on a sheet. Sized in paper millimetres at print resolution, so it carries its own box. */
-export interface ViewRaster {
-  /** PNG data URL of the capture. */
-  href: string;
-  widthPx: number; heightPx: number;
-  /** The paper box the capture was sized for, millimetres. */
-  widthMm: number; heightMm: number;
+/**
+ * A drawing with no model behind it: a scale, a name and the drafts drawn on
+ * it (a typical parapet, a threshold). It generates no model geometry, is
+ * placed on sheets like any view and can be the target of a detail mark.
+ */
+export interface DraftingProjectView extends ProjectViewBase {
+  kind: 'drafting';
+  /** The number a detail mark shows for it (1, 2, …), set when a mark is made; shared with the numbers of the project's details. */
+  number?: number;
 }
 
-export interface ThreeDProjectView extends ProjectViewBase {
-  kind: '3d';
-  /** `null` means "the default 3D view": fit the whole model. */
-  viewpoint: CameraViewpoint | null;
-  /** How the view prints. Absent: an orthographic `viewpoint` is an axonometric, anything else a perspective. */
-  projection?: ThreeDProjection;
-  /** An axonometric seen from a preset corner instead of a saved camera; wins over `viewpoint`'s direction. */
-  preset?: AxonometricPreset;
-  /** Print as a raster capture of the viewport (always so for a perspective). Absent on an axonometric: vector hidden-line. */
-  raster?: ViewRaster | null;
-  /** An axonometric printed as a shaded raster instead of vector lines. */
-  shaded?: boolean;
-}
-
-export type ProjectView = PlanProjectView | SectionProjectView | ElevationProjectView | ThreeDProjectView;
+export type ProjectView = PlanProjectView | SectionProjectView | ElevationProjectView | ThreeDProjectView | DraftingProjectView;
 
 /** A view as handed to `addProjectView`: the store assigns `createdAt` (and `id` unless given). */
 export type NewProjectView = ProjectView extends infer V
@@ -248,6 +239,10 @@ export interface ProjectSheet {
 export interface ProjectModelRef {
   key: string;
   name: string;
+  /** How views draw it (`model-styles.ts`): the host draws as itself, a linked model in its own style. Absent: the first model is the host. */
+  role?: 'host' | 'linked';
+  /** Absent: the host draws normally, a linked model in halftone. */
+  drawStyle?: 'normal' | 'halftone';
 }
 
 /** A joinery schedule (door / window list): a project document of its own, placeable on sheets. */
@@ -310,6 +305,8 @@ export interface ProjectDocument {
   annotationTypes?: AnnotationType[];
   /** The project's own symbols (the built-in ones are in code). */
   symbols?: DraftSymbol[];
+  /** Details drawn once and kept for reuse: drafting views saved to the library, placed again with `placeLibraryDetail`. */
+  details?: LibraryDetail[];
   /** Legends: generated tables of what the drawings use, placeable on sheets. */
   legends?: ProjectLegend[];
   /** Which IFC property feeds each field of a tag, per tag kind (`tagfields/tag-fields.ts`); only what differs from the defaults. */
@@ -319,3 +316,6 @@ export interface ProjectDocument {
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
 }
+
+// The issue records live with the issue code; re-exported so the document's types stay in one import.
+export type { IssuedSheet, ProjectIssue } from '@/issue/types';

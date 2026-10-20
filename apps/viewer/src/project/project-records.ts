@@ -4,13 +4,13 @@
 
 /**
  * The project's records that are not views or sheets: road drawings, building
- * materials, saved section cuts, typical sections and issues. Part of the
+ * materials, saved section cuts and typical sections. Part of the
  * project document (`types.ts`, which re-exports them).
  */
 
 import type { AssemblySpec } from '@ifc-lite/create';
 import type { SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
-import type { CategoryLineWeight, PaperSize } from './types';
+import type { CategoryLineWeight } from './types';
 
 /** A road drawing (longitudinal profile or cross-section set) of a corridor: a project document of its own, placeable on sheets or drawn on a plan. */
 export interface ProjectCivilDrawing {
@@ -77,27 +77,4 @@ export interface ProjectTypicalSection {
   id: string;
   name: string;
   assembly: AssemblySpec;
-}
-
-/** One sheet as it stood when a set was issued. */
-export interface IssuedSheet {
-  number: string;
-  title: string;
-  /** The scales of its viewports, as drawn on the list: `1:50`, or `1:50, 1:100`; empty when it holds none. */
-  scale: string;
-  paper: PaperSize;
-  orientation: 'landscape' | 'portrait';
-  revision: string;
-  /** What the sheet held (`issue/fingerprint.ts`): equal fingerprints mean an unchanged sheet. */
-  fingerprint: string;
-}
-
-/** A set of sheets sent out together, recorded with the project so a later issue can say what changed. */
-export interface ProjectIssue {
-  id: string;
-  name: string;
-  /** `YYYY-MM-DD`. */
-  date: string;
-  createdAt: number;
-  sheets: IssuedSheet[];
 }

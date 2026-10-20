@@ -37,6 +37,11 @@ const full: Catalogue = {
   }],
   legends: [{ ...DEFAULT_LEGEND, id: 'lg1', name: 'Plan legend', createdAt: 5, title: 'Key', textStyle: 'big', categories: ['materials', 'symbols'], columns: 2 }],
   cadLayers: [{ id: 'cad1', source: 'CUT', ifcClasses: ['IfcWall'], layer: 'A-WALL-CUT', color: '#7f1d1d', lineWeight: 0.5 }],
+  details: [{
+    id: 'd1', name: 'Typical parapet', scale: 10,
+    drafts: [{ id: 'e1', layerId: 'l1', shape: { type: 'line', a: { x: 0, y: 0 }, b: { x: 0, y: 0.6 } }, params: {} }],
+    layers: [{ id: 'l1', name: 'A-WALL', color: '#aa0000', visible: true, locked: false }], hatchPatterns: '', symbols: [],
+  }],
 };
 
 describe('catalogue file', () => {

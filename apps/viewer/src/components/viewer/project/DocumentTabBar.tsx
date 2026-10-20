@@ -9,7 +9,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { Box, Building2, LayoutGrid, LayoutTemplate, Scissors, SquareDashed, X, Table2, Spline } from 'lucide-react';
+import { Box, Building2, PencilRuler, LayoutGrid, LayoutTemplate, Scissors, SquareDashed, X, Table2, Spline } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useProjectStore } from '@/project/project-store';
@@ -22,6 +22,7 @@ const ICONS: Record<ProjectViewKind, ReactNode> = {
   section: <Scissors className="size-3.5" />,
   elevation: <Building2 className="size-3.5" />,
   '3d': <Box className="size-3.5" />,
+  drafting: <PencilRuler className="size-3.5" />,
 };
 
 export function DocumentTabBar() {

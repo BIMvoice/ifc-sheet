@@ -23,7 +23,7 @@
 import { SECTION_VIEW_DEPTH_FRACTION } from '@/hooks/useDrawingGeneration';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { viewDisplayOverrides } from '@/project/view-drawings';
-import { resolvePlanLevel } from '@/project/view-defaults';
+import { levelFloorY, resolvePlanLevel } from '@/project/view-defaults';
 import { viewPlaneConfig } from '@/project/view-plane-config';
 import type { ProjectLevel, ProjectView } from '@/project/types';
 import { cutBand, planBand, type ViewBand } from './visibility';
@@ -36,7 +36,7 @@ export interface Bands {
 
 /** The next level above `elevation`, else the top of the model. */
 function storeyCeiling(levels: readonly ProjectLevel[], elevation: number, bounds: AxisBounds | null): number {
-  const above = levels.map((l) => l.elevation).filter((e) => e > elevation + 1e-6);
+  const above = levels.map(levelFloorY).filter((e) => e > elevation + 1e-6);
   return above.length > 0 ? Math.min(...above) : bounds ? bounds.max.y : elevation;
 }
 
@@ -49,7 +49,7 @@ export function viewBands(views: readonly ProjectView[], levels: readonly Projec
     const depth = viewDisplayOverrides(v).constructionProjectionDepth;
     if (v.kind === 'plan') {
       const level = resolvePlanLevel(v, levels) ?? v.level;
-      const band = planBand(v.id, plane.position - (depth ?? v.cutHeight), Math.max(plane.position, storeyCeiling(levels, level.elevation, bounds)));
+      const band = planBand(v.id, plane.position - (depth ?? v.cutHeight), Math.max(plane.position, storeyCeiling(levels, levelFloorY(level), bounds)));
       return { ...band, plane };
     }
     if (v.kind !== 'section' && v.kind !== 'elevation') return null;
