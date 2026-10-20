@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import '@/test/setup-dom.js';
 import { afterEach, test } from 'node:test';
+import { evidenceSkip } from '@/test/evidence-fixture.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { useViewerStore } from '@/store';
@@ -62,7 +63,7 @@ test('behind-surface limit defaults to the project tolerance and its control rea
   assert.equal(read!.settings.maxDistanceMetres, 0.02, 'other sampling criteria are untouched');
 });
 
-test('coverage report names samples refused behind the surface beside the other unknown reasons (#4381)', () => {
+test('coverage report names samples refused behind the surface beside the other unknown reasons (#4381)', { skip: evidenceSkip('scan-alignment-workbench/good.json') }, () => {
   const counts = { centroidSamples: 2, observedCentroidSamples: 1, rasterInteriorTexels: 4096, observedRasterInteriorTexels: 1800, samples: 8424, observedSamples: 3426,
     unknownDistanceSamples: 0, unknownNormalSamples: 4212, unknownAmbiguousSamples: 38, unknownBehindSamples: 748, unknownSparseSamples: 0, observedAreaEstimateM2: 0.813, unknownAreaEstimateM2: 1.187 };
   const { registration } = { registration: (JSON.parse(readFileSync(new URL('../../../../../../docs/architecture/evidence/scan-alignment-workbench/good.json', import.meta.url), 'utf8')) as { result: { report: ScanRegistrationReport } }).result.report };
@@ -77,7 +78,7 @@ test('coverage report names samples refused behind the surface beside the other 
   for (const pointLabel of pointLabels) assert.equal(ui.querySelector(`input[aria-label="${pointLabel}"]`), null, `${pointLabel} is a point-source control`);
 });
 
-test('point sources expose their fit controls and report sparse samples and the orientation source (#4381, #4561)', () => {
+test('point sources expose their fit controls and report sparse samples and the orientation source (#4381, #4561)', { skip: evidenceSkip('scan-alignment-workbench/good.json') }, () => {
   const counts = { centroidSamples: 12, observedCentroidSamples: 2, rasterInteriorTexels: 105114, observedRasterInteriorTexels: 33841, samples: 105126, observedSamples: 33843,
     unknownDistanceSamples: 63591, unknownNormalSamples: 793, unknownAmbiguousSamples: 700, unknownBehindSamples: 119, unknownSparseSamples: 6080, observedAreaEstimateM2: 8.197, unknownAreaEstimateM2: 17.085 };
   const { registration } = { registration: (JSON.parse(readFileSync(new URL('../../../../../../docs/architecture/evidence/scan-alignment-workbench/good.json', import.meta.url), 'utf8')) as { result: { report: ScanRegistrationReport } }).result.report };
@@ -103,7 +104,7 @@ test('point sources expose their fit controls and report sparse samples and the 
   assert.ok(oriented.textContent!.includes('sample orientation from the capture’s own oriented normals'));
 });
 
-test('coverage metrics use the active application locale rather than the browser locale (#4918)', () => {
+test('coverage metrics use the active application locale rather than the browser locale (#4918)', { skip: evidenceSkip('scan-alignment-workbench/good.json') }, () => {
   registerLocale('ar-EG-u-nu-arab', {});
   setLocale('ar-EG-u-nu-arab');
   const counts = { centroidSamples: 2, observedCentroidSamples: 1, rasterInteriorTexels: 4096, observedRasterInteriorTexels: 1800, samples: 8424, observedSamples: 3426,
