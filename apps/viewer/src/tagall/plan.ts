@@ -45,6 +45,8 @@ export interface TagAllInput {
   crop?: { min: Pt; max: Pt };
 }
 
+const MARK_REF = { kind: 'attribute', name: 'Mark' } as const;
+const hasValue = (v: unknown): boolean => v !== undefined && v !== null && v !== '';
 const within = (r: { min: Pt; max: Pt } | undefined, p: Pt) => !r || (p.x >= r.min.x && p.x <= r.max.x && p.y >= r.min.y && p.y <= r.max.y);
 const isOpening = (className: string) => /^ifc(door|window)/i.test(className);
 const labelledBy = (drafts: readonly DraftEntity[], typeId: string) => new Set(drafts.filter((d) => d.params.atype === typeId && typeof d.params.labelOf === 'string').map((d) => String(d.params.labelOf)));
@@ -83,7 +85,8 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   for (const t of todo) {
     const el = read(t.guid);
     if (!el) continue;
-    if (el.attribute('Mark') === '' && el.attribute('Name') === '') extrasOf.set(t.guid, { numbered: ++counter });
+    // Numbered only when the mark and the name both read nothing (the office's sources for the mark included).
+    if (!hasValue(readFieldValue(MARK_REF, el).value) && el.attribute('Name') === '') extrasOf.set(t.guid, { numbered: ++counter });
   }
   const gap = LABEL_GAP_MM * at.paperUnit;
   const items = todo.flatMap((t) => {

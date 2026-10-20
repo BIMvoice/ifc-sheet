@@ -8,6 +8,8 @@ import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/crea
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
+import type { TagFieldConfig } from '@/tagfields/tag-fields';
+import type { CadLayerRule } from './cad-layers';
 import type { DisciplineId } from './discipline-views';
 
 /**
@@ -18,7 +20,7 @@ import type { DisciplineId } from './discipline-views';
  * file kept next to the IFC files (`project-file.ts`).
  */
 
-import type { CameraViewpoint, SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
+import type { SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 
@@ -36,7 +38,7 @@ export interface ProjectLevel {
   storeyGlobalIds: string[];
 }
 
-interface ProjectViewBase {
+export interface ProjectViewBase {
   id: string;
   name: string;
   /** Created by the default-view generator rather than the user. */
@@ -155,11 +157,8 @@ export interface InteriorElevation {
   crop: { min: { x: number; y: number }; max: { x: number; y: number } };
 }
 
-export interface ThreeDProjectView extends ProjectViewBase {
-  kind: '3d';
-  /** `null` means "the default 3D view": fit the whole model. */
-  viewpoint: CameraViewpoint | null;
-}
+export type { ThreeDProjection, AxonometricPreset, ViewRaster, ThreeDProjectView } from './view-3d-types';
+import type { ThreeDProjectView } from './view-3d-types';
 
 export type ProjectView = PlanProjectView | SectionProjectView | ElevationProjectView | ThreeDProjectView;
 
@@ -340,6 +339,8 @@ export interface ProjectDocument {
   typicalSections?: ProjectTypicalSection[];
   /** Building materials: how each IfcMaterial draws where it is cut. */
   materials?: ProjectMaterial[];
+  /** The CAD layer standard: which DXF layer (name, colour, pen, line type) an IFC class or material goes on (`cad-layers.ts`). */
+  cadLayers?: CadLayerRule[];
   /** Named section cuts of the Drawing panel. */
   savedSectionCuts?: SavedSectionCut[];
   /** Named presets of the annotation tools. */
@@ -348,6 +349,8 @@ export interface ProjectDocument {
   symbols?: DraftSymbol[];
   /** Legends: generated tables of what the drawings use, placeable on sheets. */
   legends?: ProjectLegend[];
+  /** Which IFC property feeds each field of a tag, per tag kind (`tagfields/tag-fields.ts`); only what differs from the defaults. */
+  tagFields?: TagFieldConfig;
   /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */
   issues?: ProjectIssue[];
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
