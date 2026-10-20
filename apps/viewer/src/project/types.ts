@@ -246,6 +246,8 @@ export interface SheetViewport {
   drawingNumber?: string;
   /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
   keyPlanOf?: string;
+  /** The page of a document split over several sheets (the drawing register's continuation sheets), from 0; absent is 0. */
+  page?: number;
 }
 
 export interface ProjectSheet {

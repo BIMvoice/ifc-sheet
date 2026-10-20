@@ -7,13 +7,17 @@
  * and never stored, and which is also the issue's drawing list.
  */
 import '@/test/setup-dom.js';
-import { beforeEach, describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { captureSheets } from '@/issue/capture.js';
 import { planIssue } from '@/issue/plan.js';
 import { drawingListCsv } from '@/issue/output.js';
-import { drawingRegisterRows, inSetOrder, type RegisterRow } from './drawing-register.js';
-import { buildDrawingSet, type ModelExtent } from './drawing-set.js';
+import { act } from 'react';
+import { drawingRegisterRows, holdsRegister, inSetOrder, registerRowsBuilt, type RegisterRow } from './drawing-register.js';
+import { buildDrawingSet, drawingArea, type ModelExtent } from './drawing-set.js';
+import { layoutRegisterPage, registerFit, REGISTER_MIN_TEXT_MM } from '@/joinery/register-layout.js';
+import { useSheetSchedules } from '@/components/viewer/joinery/ScheduleGraphic';
+import { cleanup, render } from '@/test/render.js';
 import { addSchedule } from '@/joinery/schedules.js';
 import { addRegisterToSet, hangSchedule, registerNumber } from './drawing-set-actions.js';
 import { addProjectSheet, resetProject, setSheetNumber, useProjectStore } from './project-store.js';
@@ -51,6 +55,7 @@ const sheetNamed = (name: string): ProjectSheet => {
 };
 
 beforeEach(demoSet);
+afterEach(cleanup);
 
 describe('the drawing register on the demo set', () => {
   it('lists every sheet in the order the drawer lists them, with number, title and scale', () => {
@@ -201,5 +206,85 @@ describe('the register is the drawing list', () => {
     }
     assert.ok(svg.includes('Fatade ț'));
     assert.ok(dxf.includes('Elevations, east and west'));
+  });
+});
+
+describe('a register longer than its paper (#126 review)', () => {
+  /** A set of `n` drawing sheets and the register, on the set paper (A2). */
+  const bigSet = (n: number) => {
+    resetProject();
+    useProjectStore.setState({
+      sheets: Array.from({ length: n }, (_, i): ProjectSheet => ({
+        id: `s${i}`, number: `A-${101 + i}`, name: `Sheet ${i + 1}`, createdAt: i, paper: 'A2', orientation: 'landscape',
+        viewports: [{ id: `vp${i}`, viewId: 'v1', x: 200, y: 150, scale: 100, width: 0, height: 0, center: null }],
+      })),
+    });
+    addRegisterToSet('Drawing register');
+  };
+  const registerSheets = () => {
+    const st = useProjectStore.getState();
+    return inSetOrder(st.sheets, st.schedules).filter((s) => holdsRegister(s, st.schedules));
+  };
+  const labels = { title: 'Drawing register', number: 'Sheet', sheetTitle: 'Title', scale: 'Scale', revision: 'Rev', date: 'Date' };
+
+  it('with 120 sheets goes onto a continuation sheet A-000.1, every page inside the drawing area with text no smaller than 1.8 mm', async () => {
+    bigSet(120);
+    const pages = registerSheets();
+    assert.deepEqual(pages.map((s) => s.number), ['A-000', 'A-000.1']);
+    const all = rows();
+    assert.equal(all.length, 122, 'the continuation sheet is a row too');
+    const fit = registerFit(all.length, drawingArea('A2').h);
+    assert.equal(fit.pages, 2);
+    const pageOfRow = new Map<string, number>();
+    for (let page = 0; page < fit.pages; page++) {
+      const layout = layoutRegisterPage(all, labels, fit, page);
+      for (const p of layout.prims) if (p.kind === 'text' && /^A-\d/.test(p.text)) {
+        assert.equal(pageOfRow.has(p.text), false, `${p.text} on two pages`);
+        pageOfRow.set(p.text, page);
+      }
+      assert.ok(layout.height <= drawingArea('A2').h, `page ${page}: ${layout.height} mm tall`);
+      for (const p of layout.prims) if (p.kind === 'text') assert.ok(p.size >= REGISTER_MIN_TEXT_MM - 1e-9, `text ${p.size} mm`);
+    }
+    assert.deepEqual([...pageOfRow.keys()].sort(), all.map((r) => r.number).sort(), 'every row on one page');
+    // Printed through the sheet: the first sheet's row on the register's own sheet, the last one's on the continuation sheet.
+    const out = await captureSheets(pages, { waitMs: 2000 });
+    assert.deepEqual(out.failed, []);
+    const [own, next] = pages.map((s) => out.svgs.get(s.id) ?? '');
+    assert.ok(own.includes('>A-101<') && !next.includes('>A-101<'));
+    assert.ok(next.includes('>A-220<') && !own.includes('>A-220<'));
+    assert.ok(next.includes('Drawing register (2/2)'));
+  });
+
+  it('shrinks a register a little too long instead of splitting it, and drops the continuation sheet once it fits again', () => {
+    bigSet(60);
+    assert.deepEqual(registerSheets().map((s) => s.number), ['A-000']);
+    const fit = registerFit(rows().length, drawingArea('A2').h);
+    assert.ok(fit.pages === 1 && fit.scale < 1 && fit.scale >= REGISTER_MIN_TEXT_MM / 2.5, `scale ${fit.scale}`);
+    bigSet(120);
+    assert.equal(registerSheets().length, 2);
+    useProjectStore.setState((st) => ({ sheets: st.sheets.filter((s) => !/^s([4-9]\d|1\d\d)$/.test(s.id)) }));
+    assert.deepEqual(registerSheets().map((s) => s.number), ['A-000']);
+  });
+
+  it('builds one row when one sheet is edited, not a row for every sheet on screen', () => {
+    bigSet(120);
+    const st = useProjectStore.getState();
+    function Every() {
+      const sheets = useProjectStore((s) => s.sheets);
+      return <>{sheets.map((s) => <One key={s.id} sheet={s} />)}</>;
+    }
+    function One({ sheet }: { sheet: ProjectSheet }) {
+      useSheetSchedules(sheet);
+      return null;
+    }
+    render(<Every />);
+    const before = registerRowsBuilt();
+    const target = st.sheets.find((s) => s.id === 's7');
+    assert.ok(target);
+    act(() => {
+      useProjectStore.setState((now) => ({ sheets: now.sheets.map((s) => (s.id === 's7' ? { ...s, viewports: (s.viewports ?? []).map((vp) => ({ ...vp, scale: 50 })) } : s)) }));
+    });
+    assert.equal(registerRowsBuilt() - before, 1);
+    assert.equal(rows().find((r) => r.number === target.number)?.scale, '1:50');
   });
 });

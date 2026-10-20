@@ -269,10 +269,10 @@ export function buildDrawingSet({ views, extent, now = Date.now(), scheme = DEFA
   return sheets.map((s) => ({ ...s, number: numbers.get(s.id) ?? s.number }));
 }
 
-/** Which group a sheet of the set belongs to (`null`: details and other sheets). Sheets from older files are read from their A-1xx / A-2xx / A-3xx / A-4xx / A-6xx number. */
+/** Which group a sheet of the set belongs to (`null`: general sheets, details and other sheets). Sheets from older files are read from their A-1xx / A-2xx / A-3xx / A-4xx / A-6xx number. */
 export function sheetGroup(sheet: Pick<ProjectSheet, 'number' | 'series'>): SetGroup | null {
   const group = numberGroupOf(sheet);
-  return group === 'other' || group === 'details' ? null : group;
+  return group === 'other' || group === 'details' || group === 'general' ? null : group;
 }
 
 /** Whether a sheet belongs to the drawing set the program lays out: every sheet but a room's interior elevations (A-4xx by default). */
@@ -280,10 +280,10 @@ export function isSetSheet(sheet: Pick<ProjectSheet, 'number' | 'series'>): bool
   return sheetGroup(sheet) !== 'interiors';
 }
 
-/** The series a sheet is in, for its template: its group, or `details` for the sheets details hang on (A-5xx by default); interior elevations have no template series. */
+/** The series a sheet is in, for its template: its group, or `details` for the sheets details hang on (A-5xx by default); general sheets and interior elevations have no template series. */
 export function sheetSeries(sheet: Pick<ProjectSheet, 'number' | 'series'>): TemplateSeries | null {
   const group = numberGroupOf(sheet);
-  return group === 'other' || group === 'interiors' ? null : group;
+  return group === 'other' || group === 'interiors' || group === 'general' ? null : group;
 }
 
 /** The group a view's sheet belongs to, and its number series' first number. */

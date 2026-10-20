@@ -33,6 +33,7 @@ function readViewport(v: unknown, path: string): SheetViewport {
     ...(Array.isArray(v.hiddenLayers) ? { hiddenLayers: v.hiddenLayers.filter((x): x is string => typeof x === 'string') } : {}),
     ...(isString(v.drawingNumber) && v.drawingNumber.trim() ? { drawingNumber: v.drawingNumber.trim() } : {}),
     ...(isString(v.keyPlanOf) && v.keyPlanOf ? { keyPlanOf: v.keyPlanOf } : {}),
+    ...(isNumber(v.page) && Number.isInteger(v.page) && v.page > 0 ? { page: v.page } : {}),
   };
 }
 
