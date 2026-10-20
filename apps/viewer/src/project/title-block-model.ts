@@ -120,11 +120,43 @@ function projectStore(): { modelId: string; store: IfcDataStore } | null {
 
 const LABEL_ATTRIBUTES = new Set(['Name', 'LongName', 'Description']);
 
-/** The loaded model as `ModelFacts`; silent without one. */
+/** Each answer read once: a title block asks the same few questions for every sheet. */
+function memoised(facts: ModelFacts): ModelFacts {
+  const answers = new Map<string, string>();
+  const once = (key: string, read: () => string): string => {
+    const known = answers.get(key);
+    if (known !== undefined) return known;
+    const value = read();
+    answers.set(key, value);
+    return value;
+  };
+  return {
+    attribute: (on, name) => once(`a\u0000${on}\u0000${name}`, () => facts.attribute(on, name)),
+    property: (on, pset, property) => once(`p\u0000${on ?? ''}\u0000${pset}\u0000${property}`, () => facts.property(on, pset, property)),
+    owner: (part) => once(`o\u0000${part}`, () => facts.owner(part)),
+    actor: (role) => once(`r\u0000${role}`, () => facts.actor(role)),
+  };
+}
+
+/**
+ * The facts of one model at one edit, shared by every caller: the issue run asks once per sheet and every mounted
+ * title block asks again, and each fresh read would build an `EntityExtractor` and re-parse the same records.
+ * A new model (another store) or an edit (`mutationVersion`) reads again.
+ */
+let shared: { store: IfcDataStore; modelId: string; version: number; facts: ModelFacts } | null = null;
+
+/** The loaded model as `ModelFacts`, read once per model and edit; silent without one. */
 export function modelFacts(): ModelFacts {
   const found = projectStore();
   if (!found) return SILENT;
-  const { modelId, store } = found;
+  const version = useViewerStore.getState().mutationVersion;
+  if (shared && shared.store === found.store && shared.modelId === found.modelId && shared.version === version) return shared.facts;
+  const facts = memoised(readModelFacts(found.modelId, found.store));
+  shared = { store: found.store, modelId: found.modelId, version, facts };
+  return facts;
+}
+
+function readModelFacts(modelId: string, store: IfcDataStore): ModelFacts {
   const r = new Records(store);
   const idOf = (on: ModelEntity): number | null => r.first(on);
   const addressOf = (on: ModelEntity, name: string): string => r.address(refOf(r.attrs(idOf(on))[name]));

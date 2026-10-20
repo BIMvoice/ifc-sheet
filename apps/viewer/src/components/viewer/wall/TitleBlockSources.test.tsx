@@ -8,6 +8,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act } from 'react';
+import { EntityExtractor } from '@ifc-lite/parser';
+import { planFor } from '@/issue/run';
 import { blur, cleanup, click, press, render, type } from '@/test/render.js';
 import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
 import { useViewerStore } from '@/store';
@@ -96,14 +98,13 @@ describe('FZK-Haus: what the model carries', () => {
 describe('a model that carries an address, an organisation, a client and a property', () => {
   beforeEach(async () => load(SYNTHETIC, 'syn'));
 
-  it('fills every field from the model by default', () => {
+  it('fills project, address and organisation from the model by default', () => {
     const all = resolveTitleBlock(TITLE_BLOCK_FIELDS, {}, undefined, modelFacts());
     assert.equal(all.project.value, 'Casa Țăran', 'the long name wins over the name');
     assert.equal(all.address.value, 'Strada Împăcării 12, 400000 Cluj-Napoca, România');
     assert.equal(all.organisation.value, 'Birou de arhitectură Îmbinări');
-    assert.equal(all.drawnBy.value, 'Ștefan Țăran');
-    assert.equal(all.client.value, 'Primăria Cluj');
-    assert.deepEqual([all.checkedBy.from, all.date.from, all.revision.from], ['none', 'none', 'none']);
+    // Drawn by and Client read the model only when a source is picked (#114 review).
+    assert.deepEqual([all.drawnBy.from, all.client.from, all.checkedBy.from, all.date.from, all.revision.from], ['none', 'none', 'none', 'none', 'none']);
   });
 
   it('reads phase, land title number and a property path', () => {
@@ -258,5 +259,70 @@ describe('the Title block form', () => {
       act(() => setProjectTitleBlockField('client', ''));
       cleanup();
     }
+  });
+});
+
+describe('review round of #114', () => {
+  beforeEach(async () => load(SYNTHETIC, 'syn'));
+
+  it('reads the model once per model and edit, however many sheets and title blocks ask', () => {
+    const proto = EntityExtractor.prototype;
+    const original = proto.extractEntity;
+    let parsed = 0;
+    proto.extractEntity = function (this: EntityExtractor, ...args: Parameters<typeof original>) { parsed++; return original.apply(this, args); };
+    try {
+      useProjectStore.setState({ sheets: Array.from({ length: 12 }, (_, i) => sheet(`s${i}`, `A-${100 + i}`)) });
+      const first = effectiveTitleBlock();
+      const once = parsed;
+      assert.ok(once > 0, 'the first read parses the records it needs');
+      // The issue run asks once per sheet; each mounted title block asks again.
+      for (const s of useProjectStore.getState().sheets) assert.deepEqual(effectiveTitleBlock(), first, `${s.number} prints the same`);
+      for (const s of useProjectStore.getState().sheets.slice(0, 3)) svgOf(s);
+      planFor({});
+      assert.equal(parsed, once, 'nothing parsed again while the model and its edits are the same');
+      // An edit is a new state of the model: read again, once.
+      useViewerStore.setState({ mutationVersion: useViewerStore.getState().mutationVersion + 1 });
+      effectiveTitleBlock();
+      const twice = parsed;
+      assert.ok(twice > once, 'an edit reads the model again');
+      effectiveTitleBlock();
+      assert.equal(parsed, twice);
+    } finally {
+      proto.extractEntity = original;
+    }
+  });
+
+  it('leaves Drawn by and Client with no source unless one is picked, so an older set prints what it printed', () => {
+    // The model names an OwnerHistory person and a CLIENT actor; neither is printed until the office picks it.
+    assert.equal(modelFacts().owner('person'), 'Ștefan Țăran');
+    assert.equal(modelFacts().actor('CLIENT'), 'Primăria Cluj');
+    // A project saved before the title block read the model: what was typed, and nothing else for these two.
+    useProjectStore.setState({ titleBlock: { checkedBy: 'IC', date: '2026-09-01' }, sheets: [sheet('s1', 'A-101')] });
+    assert.deepEqual([field('drawnBy').from, field('client').from], ['none', 'none']);
+    assert.equal(effectiveTitleBlock().drawnBy, undefined);
+    assert.equal(effectiveTitleBlock().client, undefined);
+    const svg = svgOf(useProjectStore.getState().sheets[0]);
+    assert.doesNotMatch(svg, /Ștefan Țăran|Primăria Cluj/);
+    // Picked, they read the model.
+    setTitleBlockSources('drawnBy', [{ kind: 'owner', part: 'person' }]);
+    setTitleBlockSources('client', [{ kind: 'actor', role: 'CLIENT' }]);
+    assert.equal(effectiveTitleBlock().drawnBy, 'Ștefan Țăran');
+    assert.equal(effectiveTitleBlock().client, 'Primăria Cluj');
+  });
+
+  it('blanks a field the model fills with the "none" source, and the default brings it back', () => {
+    const ui = render(<ProjectDrawer extent={EXTENT} onClose={() => {}} />);
+    assert.equal(textInput(ui, 'Address').value, 'Strada Împăcării 12, 400000 Cluj-Napoca, România');
+    change(select(ui, /Take Address from/), 'none');
+    assert.deepEqual(useProjectStore.getState().titleBlockSources, { address: [] });
+    assert.equal(textInput(ui, 'Address').value, '');
+    assert.equal(select(ui, /Take Address from/).value, 'none', 'the picker shows the choice');
+    assert.equal(effectiveTitleBlock().address, undefined);
+    cleanup();
+    assert.doesNotMatch(svgOf(sheet('s1', 'A-101')), /Strada Împăcării/);
+    const again = render(<ProjectDrawer extent={EXTENT} onClose={() => {}} />);
+    change(select(again, /Take Address from/), 'default');
+    assert.equal(useProjectStore.getState().titleBlockSources, undefined);
+    assert.equal(textInput(again, 'Address').value, 'Strada Împăcării 12, 400000 Cluj-Napoca, România');
   });
 });

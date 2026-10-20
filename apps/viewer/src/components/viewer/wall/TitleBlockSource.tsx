@@ -46,16 +46,21 @@ export function SourceBadge({ resolved }: { resolved: ResolvedField | undefined 
 const PATH_EXAMPLE = 'Pset_ProjectCommon.Reference';
 const PSET = 'pset';
 const DEFAULT = 'default';
+/** No source: the field stays blank even where the model has a value. */
+const NONE = 'none';
 
 /** The picker for a project field: a source from the short list, a property path, or the default. */
 export function SourcePicker({ field, fieldLabel, custom, resolved }: { field: string; fieldLabel: string; custom: TitleSources | undefined; resolved: ResolvedField | undefined }) {
   const { t } = useTranslation();
   const label = useSourceLabel();
-  const chosen = custom?.[field]?.[0];
+  const list = custom?.[field];
+  const chosen = list?.[0];
   const preset = chosen ? PRESET_SOURCES.findIndex((p) => sameSource(p, chosen)) : -1;
-  const value = !chosen ? DEFAULT : preset >= 0 ? String(preset) : PSET;
+  // An empty list is the "none" choice; a field whose default is no source reads the same either way.
+  const value = list === undefined ? DEFAULT : !chosen ? NONE : preset >= 0 ? String(preset) : PSET;
   const onPick = (v: string): void => {
     if (v === DEFAULT) setTitleBlockSources(field, undefined);
+    else if (v === NONE) setTitleBlockSources(field, []);
     // A property needs its path first: the input below sets it.
     else if (v === PSET) setTitleBlockSources(field, [{ kind: 'pset', pset: '', property: '' }]);
     else setTitleBlockSources(field, [PRESET_SOURCES[Number(v)]]);
@@ -72,6 +77,7 @@ export function SourcePicker({ field, fieldLabel, custom, resolved }: { field: s
     <div className="mt-1">
       <select aria-label={t('wall.tbsrc.pick', { field: fieldLabel })} data-owns-keys className={select} value={value} onChange={(e) => onPick(e.target.value)}>
         <option value={DEFAULT}>{`${t('wall.tbsrc.default')}: ${sourcesOf(undefined, field).map(label).join(', ') || '—'}`}</option>
+        <option value={NONE}>{t('wall.tbsrc.noSource')}</option>
         {PRESET_SOURCES.map((s, i) => <option key={sourceText(s)} value={String(i)}>{label(s)}</option>)}
         <option value={PSET}>{t('wall.tbsrc.property')}</option>
       </select>
