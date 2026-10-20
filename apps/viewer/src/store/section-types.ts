@@ -53,6 +53,7 @@ export interface SectionPlane {
   enabled: boolean; // the cut is defined and turned on; ON SCREEN also requires `sceneState.section.visible` (#5893)
   parked?: boolean; // enabled, but hidden by the visibility toggle (`sceneState.section.visible === false`, #5893)
   flipped: boolean; // show the opposite side of the cut
+  reflected?: boolean; // reflected ceiling plan: look up from the cut but keep the plan's x/y (not a mirror)
   /** Whether to render the filled, hatched cap surface at the plane. Defaults to true. */
   showCap: boolean;
   /**

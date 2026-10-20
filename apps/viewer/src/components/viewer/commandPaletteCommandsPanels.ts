@@ -24,7 +24,7 @@ import { useViewerStore } from '@/store';
 import { resolveExtensionIcon } from '@/components/extensions/icon-registry';
 import { toast as paletteToast } from '@/components/ui/toast';
 import { SCRIPT_TEMPLATES } from '@/lib/scripts/templates';
-import { TOUR_REGISTRY } from '@/lib/tours/registry';
+import { CLASSIC_TOURS } from '@/lib/tours/registry';
 import { startTour } from '@/lib/tours/controller';
 import { buildExportCommands } from './commandPaletteExports';
 import { describeRunCommandError } from '@/services/extensions/runtime-errors';
@@ -64,7 +64,7 @@ export function buildPanelCommands(p: CommandPaletteBuildParams): Command[] {
   c.push(...shared.filter((command) => command.id.startsWith('pref:')));
 
   // ── Learn (tours) ──
-  for (const tour of TOUR_REGISTRY) {
+  for (const tour of CLASSIC_TOURS) {
     c.push({
       id: `tour:${tour.id}`,
       runtimeSource: 'tour',
