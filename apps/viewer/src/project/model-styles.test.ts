@@ -43,12 +43,24 @@ describe('model roles and styles', () => {
     assert.deepEqual(drawings.get('m'), { role: 'linked', style: 'normal' });
   });
 
-  it('round-trips through the project file, and refuses an unknown role', () => {
+  it('round-trips through the project file', () => {
     const doc = { ...EMPTY_PROJECT, models: [{ key: 'a', name: 'arch.ifc', role: 'linked' as const, drawStyle: 'normal' as const }, { key: 's', name: 'str.ifc', role: 'host' as const }] };
     assert.deepEqual(parseProjectFile(serializeProject(doc)).models, doc.models);
-    const bad = JSON.parse(serializeProject(doc));
-    bad.models[0].role = 'guest';
-    assert.throws(() => parseProjectFile(JSON.stringify(bad)), /role/);
+  });
+
+  // Review of #137: an unknown role (a newer file, a hand edit) made the whole project fail to open.
+  it('opens a project with an unknown role or style: the model is linked, its style the default, and a note is logged', (t) => {
+    const warn = t.mock.method(console, 'warn', () => {});
+    const doc = { ...EMPTY_PROJECT, models: [{ key: 'a', name: 'arch.ifc', role: 'host' as const }, { key: 's', name: 'str.ifc', role: 'linked' as const, drawStyle: 'normal' as const }] };
+    const file = JSON.parse(serializeProject(doc));
+    file.models[1].role = 'guest';
+    file.models[1].drawStyle = 'ghosted';
+    const models = parseProjectFile(JSON.stringify(file)).models;
+    assert.deepEqual(models, [{ key: 'a', name: 'arch.ifc', role: 'host' }, { key: 's', name: 'str.ifc', role: 'linked' }]);
+    assert.deepEqual(modelDrawings(models).get('s'), { role: 'linked', style: 'halftone' });
+    const notes = warn.mock.calls.map((c) => String(c.arguments[0]));
+    assert.ok(notes.some((n) => n.includes('/models/1.role') && n.includes('guest')), notes.join(' | '));
+    assert.ok(notes.some((n) => n.includes('/models/1.drawStyle') && n.includes('ghosted')), notes.join(' | '));
   });
 
   it('halftone mixes a pen toward white and keeps its hue', () => {
