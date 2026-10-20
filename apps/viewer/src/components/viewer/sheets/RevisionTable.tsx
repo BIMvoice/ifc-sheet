@@ -3,26 +3,28 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The revision table of a sheet, drawn above the title block: a header and one
- * row per revision the sheet has, in order. The layout is `project/revision-table.ts`.
+ * The revision table of a sheet, drawn above the title block (left of it when the
+ * title block is a strip down the right edge): a header and one row per revision
+ * the sheet has, in order. The layout is `project/revision-table.ts`.
  */
 
 import { useTranslation } from '@/i18n';
 import { REVISION_COLUMNS_MM, REVISION_FONT_MM, REVISION_ROW_MM, revisionTableLayout } from '@/project/revision-table';
-import { FRAME_MARGIN_MM, TITLE_BLOCK_MM } from '@/project/sheets';
+import { TITLE_BLOCK_MM } from '@/project/sheet-frame';
 import type { ProjectRevision } from '@/project/types';
 import { penTags } from './dxf-tags';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
 
-export function RevisionTable({ revisions, w, h }: { revisions: readonly ProjectRevision[]; w: number; h: number }) {
+/** `block` is the title block's rectangle on the paper (`titleBlockRect`); `strip` when it runs down the right edge. */
+export function RevisionTable({ revisions, block, strip }: { revisions: readonly ProjectRevision[]; block: { x: number; y: number; w: number; h: number }; strip: boolean }) {
   const { t } = useTranslation();
   if (revisions.length === 0) return null;
   const { rows, hidden } = revisionTableLayout(revisions, [t('revision.table.code'), t('revision.table.date'), t('revision.table.description'), t('revision.table.by')]);
   const width = TITLE_BLOCK_MM.w;
   const height = rows.length * REVISION_ROW_MM;
-  const x = w - FRAME_MARGIN_MM - width;
-  const y = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h - height;
+  const x = strip ? block.x - width : block.x + block.w - width;
+  const y = strip ? block.y + block.h - height : block.y - height;
   const edges = REVISION_COLUMNS_MM.reduce<number[]>((acc, c) => [...acc, acc[acc.length - 1] + c], [0]);
   return (
     <g {...penTags('REVISION-TABLE', 0.25)} data-revision-table="true">

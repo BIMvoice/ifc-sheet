@@ -17,10 +17,10 @@ import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { setSheetNumber } from '@/project/project-store';
 import { removeViewport, setTitleBlockField, SHEET_SCALES, updateSheet, updateViewport } from '@/project/sheets';
-import type { PaperSize, ProjectSheet, SheetViewport } from '@/project/types';
+import { ISO_PAPERS, paperFromLabel, paperLabel } from '@/project/paper';
+import type { ProjectSheet, SheetViewport } from '@/project/types';
 
 const INPUT = 'w-36 h-6 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1';
-const PAPERS: PaperSize[] = ['A0', 'A1', 'A2', 'A3', 'A4'];
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -57,8 +57,9 @@ export function SheetPanel({ sheet, viewport, box, viewportName, onExportSvg, on
     <aside aria-label={t('sheets.panel')} className="w-64 shrink-0 overflow-y-auto border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-3 space-y-2 text-xs">
       <h3 className="font-bold uppercase tracking-wider">{t('sheets.paper')}</h3>
       <Row label={t('sheets.size')}>
-        <select aria-label={t('sheets.size')} className={INPUT} value={sheet.paper ?? 'A1'} onChange={(e) => updateSheet(sheet.id, { paper: e.target.value as PaperSize })}>
-          {PAPERS.map((p) => <option key={p} value={p}>{p}</option>)}
+        <select aria-label={t('sheets.size')} className={INPUT} value={paperLabel(sheet.paper ?? 'A1')} onChange={(e) => updateSheet(sheet.id, { paper: paperFromLabel(e.target.value) })}>
+          {/* An elongated or custom size is set on the Wall; here it is shown, and an A-series size can replace it. */}
+          {[...ISO_PAPERS.map(paperLabel), ...(typeof sheet.paper === 'object' ? [paperLabel(sheet.paper)] : [])].map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
       </Row>
       <Row label={t('sheets.orientation')}>

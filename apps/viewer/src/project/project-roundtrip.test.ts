@@ -26,6 +26,7 @@ import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import type { AnnotationShape, DraftEntity, DraftLayer, DraftShape, EntityShape } from '@/drafting/types';
 import { loadProjectDocument, projectDocument, resetProject, useProjectStore, type ProjectState } from './project-store.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
+import { SEQUENTIAL_SCHEME } from './numbering.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package/package-io.js';
 import type {
   CategoryGraphics, DraftingProjectView, ElevationProjectView, PlanProjectView, ProjectCivilDrawing, ProjectDocument, ProjectMaterial, ProjectSchedule,
@@ -56,13 +57,13 @@ const pt = (x: number, y: number) => ({ x, y });
 const category: Required<CategoryGraphics> = {
   visible: false, lineColor: '#112233', fillColor: '#445566', lineWeight: 'heavy', cutHatch: 'ANSI31', hatchScale: 2.5,
 };
-const graphics: Required<ViewGraphics> = { presetId: 'structure', categories: { walls: category, doors: { visible: false } } };
+const graphics: Required<ViewGraphics> = { presetId: 'structure', categories: { walls: category, doors: { visible: false } }, grid: { visible: false, ends: 'start' } };
 
 const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'] };
 
 const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').ProjectView, { kind: K }>> } = {
   plan: {
-    ...base, id: 'v-plan', name: 'Level 1', kind: 'plan', cutHeight: 1.4, discipline: 'foundation', reflected: true,
+    ...base, id: 'v-plan', name: 'Level 1', kind: 'plan', cutHeight: 1.4, site: true, discipline: 'foundation', reflected: true,
     level: { name: 'Level 1', elevation: 3.2, storeyGlobalIds: ['G-A', 'G-B'] },
   } satisfies Required<PlanProjectView>,
   section: {
@@ -103,7 +104,7 @@ const ANNOTATION: { [K in AnnotationShape['type']]: Required<Extract<AnnotationS
   angular: { type: 'angular', c: pt(0, 0), a: pt(1, 0), b: pt(0, 1), at: pt(2, 2), height: 0.25 },
   level: { type: 'level', p: pt(1, 1), value: 3.2, height: 0.25, ref: { at: pt(1, 1), storey: 'Level 1' } },
   axis: { type: 'axis', a: pt(0, 0), b: pt(0, 9), label: 'B', bubble: 'square', ends: 'start', size: 0.8, height: 0.25, lineType: 'dotted' },
-  symbol: { type: 'symbol', symbolId: 'sym-model', p: pt(2, 3), scale: 1.5, rotation: 0.7 },
+  symbol: { type: 'symbol', symbolId: 'sym-model', p: pt(2, 3), scale: 1.5, rotation: 0.7, followsNorth: true },
   hatch: { type: 'hatch', loops: [[pt(0, 0), pt(2, 0), pt(2, 2)], [pt(0.5, 0.2), pt(1, 0.2), pt(1, 0.8)]], pattern: 'ANSI31', scale: 2, angle: 0.4, color: '#aa5500' },
 };
 const SHAPES: EntityShape[] = [...Object.values(GEOMETRY), ...Object.values(ANNOTATION)];
@@ -131,10 +132,11 @@ const legend: Required<ProjectLegend> = {
 const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'dashdot', group: 'g1' };
 
 const viewport: Required<SheetViewport> = {
-  id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], drawingNumber: '7',
+  id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], page: 2, keyPlanOf: 'vp0', drawingNumber: '7',
 };
 const sheet: Required<ProjectSheet> = {
-  id: 'sh1', number: 'A-201', autoNumber: true, name: 'Plans', createdAt: 9, paper: 'A2', orientation: 'portrait', viewports: [viewport],
+  id: 'sh1', number: 'A-201', autoNumber: true, numberOverride: true, series: 'elevations', name: 'Plans', createdAt: 9, paper: { kind: 'elongated', base: 'A2', factor: 3 }, orientation: 'portrait', viewports: [viewport],
+  frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' }, templateId: 'tpl1',
   titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12' }, revisionIds: ['rev-b'],
 };
 const schedule: Required<ProjectSchedule> = { id: 'sc1', name: 'Doors', kind: 'door', createdAt: 5, scale: 25 };
@@ -156,6 +158,7 @@ const FULL: Required<ProjectDocument> = {
   sheets: [sheet],
   revisions: [{ id: 'rev-a', code: 'A', date: '2026-09-01', description: 'Prima emitere: ș ț ă', by: 'PC' }, { id: 'rev-b', code: 'B', date: '2026-10-12', description: 'Pereți noi', by: 'IC' }],
   titleBlock: { project: 'Full house', client: 'Owner', checkedBy: 'PC', logo: 'data:image/png;base64,iVBORw0KGgo=' },
+  titleBlockSources: { address: [{ kind: 'attribute', on: 'IfcBuilding', name: 'BuildingAddress' }], organisation: [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Office' }, { kind: 'owner', part: 'developer' }] },
   drafts,
   draftLayers: [{ id: '0', name: '0', color: '#18181b', visible: true, locked: false }, layer],
   hatchPatterns: '*MY-LINES, test\n0, 0,0, 0,2\n',
@@ -172,6 +175,8 @@ const FULL: Required<ProjectDocument> = {
   elementTypes: (['wall', 'slab', 'column', 'beam', 'roof', 'opening'] as const).map((kind, i) => ({ ...defaultTypeSpec(kind), kind, id: `t${i}`, name: `Type ${kind}`, mark: `M${i}` }) as never),
   currentTypes: { wall: 't0', slab: 't1', column: 't2' },
   schedules: [schedule],
+  sheetTemplates: [{ id: 'tpl1', name: 'Long elevations', paper: { kind: 'custom', widthMm: 500, heightMm: 700 }, orientation: 'portrait', frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' } }],
+  seriesTemplates: { plans: 'builtin:a1-plans', details: 'tpl1' },
   structureProfiles: [],
   civilDrawings: [civil],
   typicalSections: [{ id: 'ts1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: { width: 1, slope: -4 }, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 }, nominalDepth: 0.6 } }],
@@ -180,6 +185,7 @@ const FULL: Required<ProjectDocument> = {
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],
+  sheetNumbering: { discipline: 'AR', continuous: true, groups: { ...SEQUENTIAL_SCHEME.groups, plans: { prefix: 'P', separator: '.', start: 5, digits: 4, step: 5 } } },
   details: [{
     id: 'dt1', name: 'Typical parapet', scale: 10,
     drafts: drafts.slice(0, 3).map(({ viewId: _viewId, ...rest }) => rest),
@@ -189,7 +195,7 @@ const FULL: Required<ProjectDocument> = {
   tagFields: { door: { mark: [{ kind: 'pset', pset: 'Pset_DoorCommon', property: 'Reference' }, { kind: 'attribute', name: 'Mark' }] }, room: { name: [{ kind: 'quantity', qto: 'Qto_SpaceBaseQuantities', name: 'NetFloorArea' }, { kind: 'type-pset', pset: 'Pset_X', property: 'Y' }] } },
   issues: [{
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
-    sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
+    sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A3×3', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
   }],
   modelState: snapshotFromElements([{ k: '2O2Fr$t4X7Zf8NOew3FLOH', t: 'IfcWall', n: 'Wall', d: 'abcdef0123', g: 'a1b2c3d4e', a: [0, 0, 0, 4, 0.2, 3], p: 'Site/Building/Level 0' }], 7),
   savedSectionCuts: [{

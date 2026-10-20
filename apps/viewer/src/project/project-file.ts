@@ -13,12 +13,15 @@ import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
+import { readNumberingScheme } from './numbering';
 import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
+import { readSeriesTemplates, readTemplate } from './sheet-templates';
 import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
 import { readRevisions } from './revision-file';
+import { readTitleSources } from './title-block-sources';
 import { readStandards } from './standards-file';
 import { isDisciplineId } from './discipline-views';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
@@ -31,7 +34,7 @@ import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readTagFields } from '@/tagfields/tag-fields-file';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics } from './types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics, ViewGridGraphics } from './types';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -136,7 +139,7 @@ function readView(v: unknown, path: string): ProjectView {
   switch (v.kind) {
     case 'plan':
       if (!isNumber(v.cutHeight)) fail(`${path}.cutHeight`, 'must be a number');
-      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(isDisciplineId(v.discipline) ? { discipline: v.discipline } : {}), ...(v.reflected === true ? { reflected: true } : {}) };
+      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(v.site === true ? { site: true as const } : {}), ...(isDisciplineId(v.discipline) ? { discipline: v.discipline } : {}), ...(v.reflected === true ? { reflected: true } : {}) };
     case 'section': {
       const section = { ...base, kind: 'section' as const, plane: readPlane(v.plane, `${path}.plane`) };
       return isString(v.through) && v.through ? { ...section, through: v.through } : section;
@@ -182,6 +185,11 @@ export interface ProjectFileSchema {
 
 const THIS_BUILD: ProjectFileSchema = { migrations: PROJECT_MIGRATIONS, current: PROJECT_FILE_VERSION };
 
+const readSources = (raw: Record<string, unknown>): Pick<ProjectDocument, 'titleBlockSources'> => {
+  const titleBlockSources = readTitleSources(raw.titleBlockSources);
+  return titleBlockSources ? { titleBlockSources } : {};
+};
+
 /** Parse and validate a project file's text. Throws with the first problem found. */
 export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_BUILD): ProjectDocument {
   let parsed: unknown;
@@ -208,6 +216,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     sheets: list('sheets').map((s, i) => readSheet(s, `/sheets/${i}`)),
     // Absent in a file saved before the title block was the project's (`liftSheetTitleBlocks` fills it on load).
     ...(raw.titleBlock !== undefined ? { titleBlock: readTitleBlock(raw.titleBlock) ?? {} } : {}),
+    ...readSources(raw),
     drafts: list('drafts').map((d, i) => readDraft(d, `/drafts/${i}`)),
     draftLayers: list('draftLayers').map((l, i) => readDraftLayer(l, `/draftLayers/${i}`)),
     hatchPatterns: isString(raw.hatchPatterns) ? raw.hatchPatterns : '',
@@ -231,6 +240,9 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     legends: readList(raw, 'legends', readLegend),
     details: readList(raw, 'details', readLibraryDetail),
     issues: readIssues(raw.issues),
+    sheetTemplates: list('sheetTemplates').flatMap((v) => readTemplate(v) ?? []),
+    seriesTemplates: readSeriesTemplates(raw.seriesTemplates),
+    ...(raw.sheetNumbering !== undefined ? { sheetNumbering: readNumberingScheme(raw.sheetNumbering) } : {}),
     ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     revisions: readRevisions(raw.revisions),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
@@ -258,6 +270,12 @@ function readGraphics(raw: Record<string, unknown>): ViewGraphics {
       if (Object.keys(g).length > 0) categories[id] = g;
     }
     out.categories = categories;
+  }
+  if (isObject(raw.grid)) {
+    const grid: ViewGridGraphics = {};
+    if (typeof raw.grid.visible === 'boolean') grid.visible = raw.grid.visible;
+    if (raw.grid.ends === 'start' || raw.grid.ends === 'end' || raw.grid.ends === 'both') grid.ends = raw.grid.ends;
+    if (Object.keys(grid).length > 0) out.grid = grid;
   }
   return out;
 }
@@ -331,7 +349,7 @@ function readCivilDrawing(raw: unknown): ProjectCivilDrawing[] {
 
 function readSchedule(raw: unknown): ProjectSchedule[] {
   if (!isObject(raw) || !isString(raw.id)) return [];
-  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' || raw.kind === 'finishes' ? raw.kind : 'all';
+  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' || raw.kind === 'finishes' || raw.kind === 'register' ? raw.kind : 'all';
   const out: ProjectSchedule = { id: raw.id, name: isString(raw.name) && raw.name ? raw.name : 'Schedule', kind, createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0 };
   if (typeof raw.scale === 'number' && raw.scale > 0) out.scale = raw.scale;
   return [out];

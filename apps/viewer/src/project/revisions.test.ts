@@ -187,7 +187,7 @@ describe('a project that typed the revision into the title block', () => {
     const issued = planIssue(saved.sheets, fingerprintSources(saved), { name: 'Issue 1', date: '2026-10-01', listFirst: false });
     loadProjectDocument({ ...saved, issues: [issueRecord(issued, 'i1', 1)] });
     // What the issue run plans with (`issue/run.ts`'s `planFor`): the store's sheets, sources and records.
-    const planNow = () => { const s = useProjectStore.getState(); return planIssue(s.sheets, fingerprintSources(s), { name: 'Issue 2', date: '2026-10-20', listFirst: false }, s.revisions); };
+    const planNow = () => { const s = useProjectStore.getState(); return planIssue(s.sheets, fingerprintSources(s), { name: 'Issue 2', date: '2026-10-20', listFirst: false }); };
     const next = planNow();
     const was = new Map(useProjectStore.getState().issues?.[0].sheets.map((r) => [r.number, r.fingerprint]));
     assert.deepEqual(next.sheets.map((s) => s.row.number), ['A-101', 'A-201', 'A-301']);

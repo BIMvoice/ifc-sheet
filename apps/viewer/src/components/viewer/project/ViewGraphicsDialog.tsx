@@ -17,11 +17,13 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { updateProjectView, useProjectStore } from '@/project/project-store';
 import { DEFAULT_VIEW_PRESET, VIEW_CATEGORIES } from '@/project/view-graphics';
+import { gridSettings } from '@/project/grid-overlay';
 import { builtInPatterns } from '@/drafting/hatch/library';
 import { parsePat } from '@/drafting/hatch/pattern';
-import type { CategoryGraphics, CategoryLineWeight, ProjectView } from '@/project/types';
+import type { CategoryGraphics, CategoryLineWeight, GridEnds, ProjectView, ViewGridGraphics } from '@/project/types';
 
 const WEIGHTS: readonly CategoryLineWeight[] = ['heavy', 'medium', 'light', 'hairline'];
+const GRID_ENDS: readonly GridEnds[] = ['both', 'start', 'end'];
 const NONE = '__none__';
 const BY_PRESET = '';
 
@@ -41,6 +43,8 @@ export function ViewGraphicsDialog({ view, open, onOpenChange }: Props) {
   const presetId = graphics.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId;
 
   const setPreset = (value: string) => updateProjectView(view.id, { graphics: { ...graphics, presetId: value === NONE ? null : value } });
+  const grid = gridSettings(view);
+  const setGrid = (patch: Partial<ViewGridGraphics>) => updateProjectView(view.id, { graphics: { ...graphics, grid: { ...graphics.grid, ...patch } } });
   const setCategory = (id: string, patch: Partial<CategoryGraphics> | null) => {
     const categories = { ...graphics.categories };
     if (patch === null) delete categories[id];
@@ -67,6 +71,16 @@ export function ViewGraphicsDialog({ view, open, onOpenChange }: Props) {
           </select>
           <span className="flex-1" />
           <Button variant="ghost" size="sm" onClick={() => updateProjectView(view.id, { graphics: undefined })}>{t('viewGraphics.reset')}</Button>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          <label className="flex items-center gap-1.5 font-medium">
+            <input type="checkbox" checked={grid.visible} onChange={(e) => setGrid({ visible: e.target.checked })} />
+            {t('viewGraphics.grid')}
+          </label>
+          <select aria-label={t('viewGraphics.gridEnds')} className={select} value={grid.ends} disabled={!grid.visible}
+            onChange={(e) => setGrid({ ends: e.target.value as GridEnds })}>
+            {GRID_ENDS.map((e) => <option key={e} value={e}>{t(`viewGraphics.gridEnds.${e}` as TranslationKey)}</option>)}
+          </select>
         </div>
         <p className="text-xs text-zinc-500">{t('viewGraphics.hint')}</p>
         <table className="w-full text-xs">
