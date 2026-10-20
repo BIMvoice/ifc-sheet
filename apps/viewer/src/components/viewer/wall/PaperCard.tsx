@@ -5,8 +5,9 @@
 /**
  * The card for a stepped-into sheet's paper: its size (A-series, elongated
  * or custom), orientation, frame margins and title block position, or a
- * template to take them all from. A change lays the sheet's drawings out
- * again at the scale that fits (`setSheetFormat`). The sheet can be saved as
+ * template to take them all from. A new paper or orientation lays the
+ * sheet's drawings out again at the scale that fits; a frame change keeps
+ * them as they are, inside the drawing area (`setSheetFormat`). The sheet can be saved as
  * a template, and the template its series starts new sheets from is chosen
  * here.
  */

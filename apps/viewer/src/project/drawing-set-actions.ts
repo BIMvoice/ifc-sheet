@@ -15,7 +15,7 @@ import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, placeViewports, relaidOnPaper, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groupsThatDoNotFit, nextInSeries, placeViewports, refittedOnPaper, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
 import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
@@ -283,10 +283,13 @@ export function addScheduleToSet(kind: ProjectSchedule['kind'], name: string): s
 export type SheetFormatPatch = Partial<Pick<ProjectSheet, 'paper' | 'orientation' | 'frame'>> & { templateId?: string | null };
 
 /**
- * Change a sheet's paper, orientation or frame, and lay its drawings out again
- * for it at the scale that fits (`relaidOnPaper`): the one path for "fit the
- * drawings on this paper", the starting set's own. One undo step. Without
- * the model's extent the drawings stay where they were.
+ * Change a sheet's paper, orientation or frame, and fit its drawings to it
+ * (`refittedOnPaper`): a new paper or orientation, or a viewport that no
+ * longer fits, lays them out again at the scale that fits, the starting
+ * set's own path; a margin or title block change keeps each viewport's
+ * position, box and scale and only brings it inside the drawing area. A
+ * view's scale is written back only when the sheet was laid out again. One
+ * undo step. Without the model's extent the drawings stay where they were.
  */
 export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent: ModelExtent | null): void {
   const { sheets, views } = state();
@@ -296,11 +299,12 @@ export function setSheetFormat(sheetId: string, patch: SheetFormatPatch, extent:
   const { templateId: kept, ...rest } = sheet;
   const templateId = patched === undefined ? kept : patched ?? undefined;
   const changed: ProjectSheet = { ...rest, ...fields, ...(templateId ? { templateId } : {}) };
-  const relaid = extent ? relaidOnPaper(changed, views, extent) : changed;
+  const { sheet: fitted, relaid } = extent ? refittedOnPaper(sheet, changed, views, extent) : { sheet: changed, relaid: false };
   runAsOneUndoStep(() => {
-    useProjectStore.setState({ sheets: sheets.map((s) => (s.id === sheetId ? relaid : s)), dirty: true });
+    useProjectStore.setState({ sheets: sheets.map((s) => (s.id === sheetId ? fitted : s)), dirty: true });
+    if (!relaid) return;
     // A view's annotation sizes follow the scale it is drawn at (as when the scale is typed on the Wall).
-    for (const vp of relaid.viewports ?? []) {
+    for (const vp of fitted.viewports ?? []) {
       const view = views.find((v) => v.id === vp.viewId);
       const was = sheet.viewports?.find((o) => o.id === vp.id)?.scale;
       if (view && was !== vp.scale) updateProjectView(view.id, { scale: vp.scale });

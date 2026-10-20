@@ -8,7 +8,7 @@ import { drawingArea, fitsScale, scaleOn, viewExtent, type ModelExtent } from '.
 import { hangView, seriesTemplates, setSheetFormat, startDrawingSet } from './drawing-set-actions.js';
 import { addProjectSheet, resetProject, useProjectStore } from './project-store.js';
 import { BUILT_IN_TEMPLATES, findTemplate } from './sheet-templates.js';
-import { setSeriesTemplate } from './sheets.js';
+import { setSeriesTemplate, updateViewport } from './sheets.js';
 import { addProjectView } from './project-store.js';
 import { defaultViews } from './view-defaults.js';
 import type { ProjectLevel, ProjectSheet, ProjectView } from './types.js';
@@ -116,6 +116,49 @@ describe('switching a sheet\'s paper on the Wall', () => {
     setSheetFormat(before.id, { paper: 'A0' }, null);
     assert.deepEqual(sheetNo('A-101').viewports, before.viewports);
     assert.equal(sheetNo('A-101').paper, 'A0');
+  });
+});
+
+describe('a frame change keeps what was set by hand (review of #129)', () => {
+  /** A-101 with its first plan hand-set to 1:20 in a 150 × 100 mm crop at (200, 150). */
+  function handSet(): { sheet: ProjectSheet; viewScale: number | undefined } {
+    const sheet = sheetNo('A-101');
+    const vp = sheet.viewports![0];
+    updateViewport(sheet.id, vp.id, { scale: 20, width: 150, height: 100, x: 200, y: 150 });
+    const view = state().views.find((v) => v.id === vp.viewId)!;
+    return { sheet: sheetNo('A-101'), viewScale: view.scale };
+  }
+  const viewScaleOf = (sheet: ProjectSheet): number | undefined => state().views.find((v) => v.id === sheet.viewports![0].viewId)!.scale;
+
+  it('a 1 mm margin change leaves a hand-set 1:20 viewport, its box and its position as they were', () => {
+    const { sheet, viewScale } = handSet();
+    const frame = { margins: { top: 11, right: 10, bottom: 10, left: 10 }, titleBlock: 'bottom-right' as const };
+    setSheetFormat(sheet.id, { frame, templateId: null }, DEMO);
+    const after = sheetNo('A-101');
+    assert.deepEqual(after.frame, frame);
+    assert.deepEqual(after.viewports, sheet.viewports, 'every viewport keeps position, box and scale');
+    assert.equal(viewScaleOf(after), viewScale, 'no scale is written back onto the view');
+  });
+
+  it('moving the title block to a strip keeps the hand-set viewport and only brings it inside the drawing area', () => {
+    const { sheet, viewScale } = handSet();
+    // Placed against the right edge, where the strip will be.
+    updateViewport(sheet.id, sheet.viewports![0].id, { x: 500 });
+    setSheetFormat(sheet.id, { frame: { margins: { top: 10, right: 10, bottom: 10, left: 10 }, titleBlock: 'right' }, templateId: null }, DEMO);
+    const vp = sheetNo('A-101').viewports![0];
+    const area = drawingArea(sheetNo('A-101'));
+    assert.deepEqual([vp.scale, vp.width, vp.height, vp.y], [20, 150, 100, 150]);
+    assert.equal(vp.x, area.x + area.w - 75, 'moved left just enough for its whole box to clear the strip');
+    assert.equal(viewScaleOf(sheetNo('A-101')), viewScale);
+  });
+
+  it('a margin that leaves a viewport too big for the drawing area lays the sheet out again', () => {
+    const sheet = sheetNo('A-101');
+    updateViewport(sheet.id, sheet.viewports![0].id, { width: 560, height: 100 });
+    setSheetFormat(sheet.id, { frame: { margins: { top: 10, right: 10, bottom: 10, left: 50 }, titleBlock: 'bottom-right' }, templateId: null }, DEMO);
+    const after = sheetNo('A-101');
+    assert.deepEqual(after.viewports!.map((v) => [v.width, v.height]), [[0, 0], [0, 0]], 'laid out again, fitted to the drawings');
+    assertInsideArea(after);
   });
 });
 
