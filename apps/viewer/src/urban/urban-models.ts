@@ -9,16 +9,28 @@
  * floor area, and the site area the model states. Reads the stores; the wasm
  * module must be initialised.
  *
- * - Rooms (IfcSpace): the area is NetFloorArea, else GrossFloorArea, from
+ * - Rooms (Au): an IfcSpace whose PredefinedType (IFC2X3: its
+ *   InteriorOrExteriorSpace, in the same slot) is INTERNAL or NOTDEFINED, or
+ *   unset, which says the same. An EXTERNAL space (balcony, terrace), a GFA
+ *   or other area-scheme space, and any other type are left out and counted
+ *   in `spacesLeftOut`; so is a space that aggregates spaces of its own: only
+ *   the leaves are rooms, so nothing is counted twice.
+ *   The area is NetFloorArea, else GrossFloorArea, from
  *   `Qto_SpaceBaseQuantities` first and then any quantity set (ArchiCAD
  *   writes them to `BaseQuantities`), in SI like the material takeoff. The
  *   category is the room's ObjectType, else its LongName, else its Name.
  * - Site area: the IfcSite's GrossArea quantity, when positive.
+ * - The building's ElevationOfRefHeight, in metres, for finding ±0.00.
+ *
+ * The attributes read off the source (a space's LongName and PredefinedType,
+ * a slab's PredefinedType, the building's reference elevation) are parsed
+ * once per model and entity; an edit to them is read from the model's
+ * mutation view on top.
  */
 
 import { extractAllEntityAttributes, extractProjectUnits, ProjectUnits, type IfcDataStore } from '@ifc-lite/parser';
-import { QuantityType, type QuantitySet } from '@ifc-lite/data';
-import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
+import { QuantityType, RelationshipType, type QuantitySet } from '@ifc-lite/data';
+import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
 import { createListDataProvider } from '@/lib/lists';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
@@ -34,12 +46,42 @@ const AREA_NAMES = ['NetFloorArea', 'GrossFloorArea'];
 
 export interface UrbanAreas {
   storeys: StoreyInput[];
+  /** The rooms Au sums. */
   spaces: SpaceInput[];
+  /** Spaces that are not rooms: EXTERNAL ones, other types (GFA, area schemes, ...), and spaces split into spaces of their own. */
+  spacesLeftOut: { external: number; otherType: number; parents: number };
   /** m² the model states for its site, or null. */
   modelSiteArea: number | null;
+  /** The first building's ElevationOfRefHeight in metres, or null. */
+  buildingRefElevation: number | null;
   /** Names of the levels whose holes were all taken as inside (walls, no slab or room). */
   assumedInterior: string[];
 }
+
+/** The PredefinedType of a space Au counts; '' is an unset one. */
+const ROOM_TYPES = new Set(['INTERNAL', 'NOTDEFINED', '']);
+
+type SourceAttrs = ReadonlyMap<string, string | number | boolean>;
+const attrsByStore = new WeakMap<IfcDataStore, Map<number, SourceAttrs>>();
+/** An entity's attributes off the model source, parsed once per model and entity. */
+function sourceAttrs(store: IfcDataStore, id: number): SourceAttrs {
+  let byId = attrsByStore.get(store);
+  if (!byId) attrsByStore.set(store, (byId = new Map()));
+  let attrs = byId.get(id);
+  if (!attrs) {
+    attrs = store.source.length > 0 ? new Map(extractAllEntityAttributes(store, id).map((a) => [a.name, a.value])) : new Map();
+    byId.set(id, attrs);
+  }
+  return attrs;
+}
+
+/** A text attribute as edited, else as the source has it; an enumeration without its dots, upper case. */
+function textAttr(store: IfcDataStore, view: MutablePropertyView | undefined, id: number, name: string): string {
+  const edited = view?.getAttributeMutationsForEntity(id).find((m) => m.name === name);
+  const v = edited ? edited.value : sourceAttrs(store, id).get(name);
+  return typeof v === 'string' ? v : '';
+}
+const enumAttr = (store: IfcDataStore, view: MutablePropertyView | undefined, id: number, name: string) => textAttr(store, view, id, name).replace(/\./g, '').toUpperCase();
 
 /** The first of `names` found, preferring the set named `preferred`; in SI. */
 export function pickArea(qsets: readonly QuantitySet[], preferred: string, names: readonly string[], siScale: number): number | null {
@@ -53,20 +95,32 @@ export function pickArea(qsets: readonly QuantitySet[], preferred: string, names
   return null;
 }
 
-function longName(store: IfcDataStore, id: number): string {
-  const v = extractAllEntityAttributes(store, id).find((a) => a.name === 'LongName')?.value;
-  return typeof v === 'string' ? v : '';
-}
-
-const scalesByStore = new WeakMap<IfcDataStore, ReturnType<typeof quantityScales>>();
-/** The SI scales of a model's quantities, read from its source once (an edit does not change the project's units). */
-function scalesOf(store: IfcDataStore): ReturnType<typeof quantityScales> {
+const scalesByStore = new WeakMap<IfcDataStore, ReturnType<typeof quantityScales> & { length: number }>();
+/** The SI scales of a model's quantities and lengths, read from its source once (an edit does not change the project's units). */
+function scalesOf(store: IfcDataStore): ReturnType<typeof quantityScales> & { length: number } {
   let scales = scalesByStore.get(store);
   if (!scales) {
-    scales = quantityScales(store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty());
+    const units = store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty();
+    scales = { ...quantityScales(units), length: units.unitForMeasure('IfcLengthMeasure')?.siScale ?? 1 };
     scalesByStore.set(store, scales);
   }
   return scales;
+}
+
+/** The first visible building's ElevationOfRefHeight, metres; null when no model states one. */
+function buildingRefElevation(): number | null {
+  const s = useViewerStore.getState();
+  for (const [modelId, model] of s.models) {
+    const store = model.ifcDataStore;
+    if (!store || model.visible === false) continue;
+    const view = s.mutationViews.get(modelId) ?? null;
+    for (const { expressId: id } of iterateEffectiveEntityIds(store, view, ['IFCBUILDING'])) {
+      const edited = view?.getAttributeMutationsForEntity(id).find((m) => m.name === 'ElevationOfRefHeight');
+      const v = edited ? edited.value : sourceAttrs(store, id).get('ElevationOfRefHeight');
+      if (typeof v === 'number' && Number.isFinite(v)) return v * scalesOf(store).length;
+    }
+  }
+  return null;
 }
 
 /** The first positive IfcSite GrossArea among the visible models, m²; null when none states one. */
@@ -118,6 +172,7 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
   const levels = useProjectStore.getState().levels;
   const buckets = levels.map(() => ({ enclosure: [] as PlanMesh[][], floor: [] as PlanMesh[][], slabs: new Set<number>(), missing: 0 }));
   const spaces: SpaceInput[] = [];
+  const leftOut = { external: 0, otherType: 0, parents: 0 };
   for (const [modelId, model] of s.models) {
     const store = model.ifcDataStore;
     const hierarchy = store?.spatialHierarchy;
@@ -143,7 +198,7 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
     for (const { expressId: id, type } of iterateEffectiveEntityIds(store, view ?? null, [...ENCLOSURE, 'IFCSLAB', 'IFCSPACE'])) {
       const upper = type.toUpperCase();
       const room = upper === 'IFCSPACE';
-      if (upper === 'IFCSLAB' && provider.getEntityPredefinedType?.(id).replace(/\./g, '') === 'ROOF') continue;
+      if (upper === 'IFCSLAB' && enumAttr(store, view, id, 'PredefinedType') === 'ROOF') continue;
       const level = levelOf(id);
       if (level === null) continue;
       const bucket = buckets[level];
@@ -160,8 +215,13 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
       }
     }
     const scales = scalesOf(store);
+    const isSpace = (id: number) => !view?.isDeleted(id) && (store.entities.getTypeName(id) ?? '').toUpperCase() === 'IFCSPACE';
     for (const { expressId: id } of iterateEffectiveEntityIds(store, view ?? null, ['IFCSPACE'])) {
-      const category = provider.getEntityObjectType(id) || longName(store, id) || provider.getEntityName(id) || `#${id}`;
+      const kind = enumAttr(store, view, id, 'PredefinedType');
+      if (kind === 'EXTERNAL') { leftOut.external++; continue; }
+      if (!ROOM_TYPES.has(kind)) { leftOut.otherType++; continue; }
+      if (store.relationships?.getRelated(id, RelationshipType.Aggregates, 'forward').some(isSpace)) { leftOut.parents++; continue; }
+      const category = provider.getEntityObjectType(id) || textAttr(store, view, id, 'LongName') || provider.getEntityName(id) || `#${id}`;
       spaces.push({ storey: levelOf(id), category, area: pickArea(provider.getQuantitySets(id), 'Qto_SpaceBaseQuantities', AREA_NAMES, scales.area) });
     }
   }
@@ -173,5 +233,5 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
     const failed = footprint.unmeasured.enclosure.length + footprint.unmeasured.floor.filter((k) => b.slabs.has(k)).length;
     return { name: level.name, elevation: level.elevation, footprint: footprint.shapes.length ? footprint.shapes : null, unmeasured: b.missing + failed };
   });
-  return { storeys, spaces, modelSiteArea: modelSiteArea(), assumedInterior };
+  return { storeys, spaces, spacesLeftOut: leftOut, modelSiteArea: modelSiteArea(), buildingRefElevation: buildingRefElevation(), assumedInterior };
 }

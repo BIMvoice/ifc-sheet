@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
+import type { UrbanSettings } from '@/urban/indicators';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
@@ -308,6 +309,8 @@ export interface ProjectDocument {
   schedules?: ProjectSchedule[];
   /** The site (plot) area in m² the user entered; absent: the model's IfcSite area, if it states one (`urban/`). */
   siteArea?: number;
+  /** The urban indicators' terrain level, ±0.00 and the storeys left out of Ad for CUT (`urban/indicators.ts`). */
+  urbanSettings?: UrbanSettings;
   /** The project's structure profile library (retaining walls, tunnels, decks, barriers… and drawn shapes). */
   structureProfiles?: StructureProfile[];
   /** Road drawings: longitudinal profiles and cross-section sets. */

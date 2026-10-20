@@ -22,6 +22,7 @@ import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-nu
 import { liftSheetTitleBlocks } from './title-block';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
+import type { UrbanSettings } from '@/urban/indicators';
 
 export interface ProjectState extends ProjectDocument {
   /** Levels of the currently loaded models (derived, never persisted). */
@@ -38,7 +39,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined, siteArea: undefined,
+  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined, siteArea: undefined, urbanSettings: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -74,6 +75,7 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
     issues: state.issues ?? [],
     ...(state.modelState ? { modelState: state.modelState } : {}),
     ...(state.siteArea !== undefined ? { siteArea: state.siteArea } : {}),
+    ...(state.urbanSettings !== undefined ? { urbanSettings: state.urbanSettings } : {}),
   };
 }
 
@@ -106,6 +108,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     issues: doc.issues ?? [],
     modelState: doc.modelState,
     siteArea: doc.siteArea,
+    urbanSettings: doc.urbanSettings,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
@@ -135,6 +138,13 @@ export function syncProjectWithModels(models: ProjectModelRef[], storeys: readon
 export function setProjectSiteArea(area: number | null): void {
   const siteArea = area !== null && Number.isFinite(area) && area > 0 ? area : undefined;
   if (siteArea !== useProjectStore.getState().siteArea) useProjectStore.setState({ siteArea, dirty: true });
+}
+
+/** Change the urban indicators' settings; a field set to undefined goes back to its default. */
+export function setUrbanSettings(patch: Partial<UrbanSettings>): void {
+  const merged: UrbanSettings = { ...useProjectStore.getState().urbanSettings, ...patch };
+  for (const key of Object.keys(merged) as (keyof UrbanSettings)[]) if (merged[key] === undefined) delete merged[key];
+  useProjectStore.setState({ urbanSettings: Object.keys(merged).length ? merged : undefined, dirty: true });
 }
 
 export function resetProject(): void {

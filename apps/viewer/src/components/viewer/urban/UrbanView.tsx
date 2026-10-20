@@ -14,6 +14,7 @@ import { layoutUrban } from '@/urban/urban-layout';
 import type { ProjectSchedule } from '@/project/types';
 import { ScheduleGraphic } from '../joinery/ScheduleGraphic';
 import { SiteAreaField } from './SiteAreaField';
+import { CutLevelToggles, UrbanLevelFields } from './UrbanSettingsFields';
 import { useUrbanIndicators, useUrbanLabels } from './useUrban';
 
 const MARGIN = 10;
@@ -30,8 +31,10 @@ export function UrbanView({ schedule }: { schedule: ProjectSchedule }) {
       <div className="flex shrink-0 items-center gap-2 h-9 px-2 border-b border-zinc-200 dark:border-zinc-800 text-xs">
         <span className="font-semibold truncate">{schedule.name}</span>
         <span className="flex-1" />
+        <UrbanLevelFields result={urban?.result ?? null} />
         <SiteAreaField modelSiteArea={urban?.areas.modelSiteArea ?? null} />
       </div>
+      {urban && urban.result.storeys.length > 0 ? <CutLevelToggles result={urban.result} /> : null}
       <div className="min-h-0 flex-1 overflow-auto bg-zinc-200 p-4 dark:bg-zinc-900">
         {!layout || !measured ? <p className="p-4 text-sm text-zinc-500">{t('urban.empty')}</p> : (
           <svg xmlns="http://www.w3.org/2000/svg" width={(layout.width + 2 * MARGIN) * ZOOM} height={(layout.height + 2 * MARGIN) * ZOOM} viewBox={`${-MARGIN} ${-MARGIN} ${layout.width + 2 * MARGIN} ${layout.height + 2 * MARGIN}`} className="block bg-white shadow-lg">

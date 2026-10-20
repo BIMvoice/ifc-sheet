@@ -5,9 +5,11 @@
 /**
  * The permit's areas and urban indicators as a table on paper, in the
  * joinery schedule's primitives (paper millimetres), so it places, prints
- * and exports to DXF like the other schedules: the storeys with their built
- * and useful areas, the useful area by room category, then Ac, Ad, Au, the
- * site area, POT and CUT. A figure the model does not give prints as "—".
+ * and exports to DXF like the other schedules: the storeys with their
+ * elevation against ±0.00, built and useful areas and whether Ad for CUT
+ * counts them, the useful area by room category, then Ac, Ad, Ad for CUT,
+ * Au, the site area, POT and CUT, and under them the rules they were
+ * measured by. A figure the model does not give prints as "—".
  */
 
 import type { ScheduleLayout, SchedulePrim } from '@/joinery/schedule-layout';
@@ -19,15 +21,24 @@ export interface UrbanLabels {
   elevation: string;
   built: string;
   useful: string;
+  /** The column saying whether Ad for CUT counts a storey, and its two answers. */
+  inCut: string;
+  yes: string;
+  no: string;
   belowGround: (name: string) => string;
+  /** The storey containing ±0.00, Ac's. */
+  ground: (name: string) => string;
   category: string;
   area: string;
   ac: string;
   ad: string;
+  adCut: string;
   au: string;
   site: string;
   pot: string;
   cut: string;
+  /** The rule lines printed under the table, from the figures they explain. */
+  rules: (r: UrbanIndicators) => string[];
   /** A remark printed under the table (levels whose holes were all counted), or empty. */
   note: string;
   /** A figure that is a lower bound: `≥ 120.00`. */
@@ -36,13 +47,21 @@ export interface UrbanLabels {
   unmeasured: (count: number, level: string) => string;
 }
 
+/** An elevation as drawings write it: +2.70, -1.50, ±0.00. */
+export function signedLevel(v: number): string {
+  const text = Math.abs(v).toFixed(2);
+  return text === '0.00' ? '±0.00' : `${v < 0 ? '-' : '+'}${text}`;
+}
+
 const ROW = 6;
 const TEXT = 2.5;
 const PAD = 1.5;
 const GAP = 4;
 const TITLE_H = 10;
-/** Level, elevation, built, useful; the two-column tables span the same width. */
-const STOREY_COLUMNS = [64, 22, 30, 30] as const;
+/** Level, elevation, built, useful, in Ad for CUT; the two-column tables span the same width. */
+const STOREY_COLUMNS = [56, 20, 28, 28, 14] as const;
+/** About the characters a 2 mm note line holds across the table. */
+const NOTE_CHARS = 120;
 const WIDTH = STOREY_COLUMNS.reduce((a, b) => a + b, 0);
 const PAIR_COLUMNS = [WIDTH - 30, 30] as const;
 const PEN = { frame: 0.35, grid: 0.18 } as const;
@@ -72,8 +91,11 @@ export function layoutUrban(r: UrbanIndicators, labels: UrbanLabels): ScheduleLa
   const low = (text: string, atLeast: boolean) => (atLeast && text !== NONE ? labels.atLeast(text) : text);
   const prims: SchedulePrim[] = [{ kind: 'text', x: 0, y: TITLE_H - 3, text: labels.title, size: 4, anchor: 'start', bold: true }];
   let y = table(prims, TITLE_H, STOREY_COLUMNS, [
-    [labels.level, labels.elevation, labels.built, labels.useful],
-    ...r.storeys.map((s) => [s.inAd ? s.name : labels.belowGround(s.name), s.elevation.toFixed(2), low(m2(s.builtArea), s.unmeasured > 0), m2(s.usefulArea)]),
+    [labels.level, labels.elevation, labels.built, labels.useful, labels.inCut],
+    ...r.storeys.map((s) => [
+      s.belowGround ? labels.belowGround(s.name) : s.ground ? labels.ground(s.name) : s.name,
+      signedLevel(s.elevation), low(m2(s.builtArea), s.unmeasured > 0), m2(s.usefulArea), s.inCut ? labels.yes : labels.no,
+    ]),
   ], true);
   if (r.auByCategory.length) {
     y = table(prims, y + GAP, PAIR_COLUMNS, [[labels.category, labels.area], ...r.auByCategory.map((c) => [c.category, m2(c.area)])], true);
@@ -81,16 +103,33 @@ export function layoutUrban(r: UrbanIndicators, labels: UrbanLabels): ScheduleLa
   y = table(prims, y + GAP, PAIR_COLUMNS, [
     [labels.ac, low(m2(r.ac), r.acAtLeast)],
     [labels.ad, low(m2(r.ad), r.adAtLeast)],
+    [labels.adCut, low(m2(r.adCut), r.adCutAtLeast)],
     [labels.au, m2(r.au)],
     [labels.site, m2(r.siteArea)],
     [labels.pot, low(r.pot === null ? NONE : `${r.pot.toFixed(2)} %`, r.acAtLeast)],
-    [labels.cut, low(r.cut === null ? NONE : r.cut.toFixed(2), r.adAtLeast)],
+    [labels.cut, low(r.cut === null ? NONE : r.cut.toFixed(2), r.adCutAtLeast)],
   ], false);
-  const notes = [...r.storeys.filter((s) => s.unmeasured > 0).map((s) => labels.unmeasured(s.unmeasured, s.name)), ...(labels.note ? [labels.note] : [])];
+  const notes = [
+    ...labels.rules(r),
+    ...r.storeys.filter((s) => s.unmeasured > 0).map((s) => labels.unmeasured(s.unmeasured, s.name)),
+    ...(labels.note ? [labels.note] : []),
+  ].flatMap(wrap);
   for (const note of notes) {
     y += GAP;
     prims.push({ kind: 'text', x: 0, y, text: note, size: 2, anchor: 'start' });
   }
   if (notes.length) y += 1;
   return { width: WIDTH, height: y, prims };
+}
+
+/** A note broken at spaces into lines of about `NOTE_CHARS`. */
+function wrap(note: string): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of note.split(' ')) {
+    if (line && line.length + 1 + word.length > NOTE_CHARS) { lines.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines;
 }

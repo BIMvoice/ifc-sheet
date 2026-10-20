@@ -17,12 +17,16 @@
  *   Measured to the inner face it would be 11.4 × 9.4 = 107.16 m².
  * - Ad. The attic storey `Dachgeschoss` (elevation 2.7) stands on the same
  *   rectangle: its walls `Wand-Ext-OG-1..4` (#60012 #67536 #67828 #75347)
- *   repeat the ground-floor outline. Both storeys are above ground, so
- *   Ad = 2 × 120.00 = 240.00 m².
+ *   repeat the ground-floor outline. Ad sums every storey: 2 × 120.00 =
+ *   240.00 m². Neither storey is a basement, so Ad for CUT is the same 240.00
+ *   and CUT is unchanged by the #111 review's Ad / Ad for CUT split.
+ * - Ac is taken on the storey containing ±0.00: `Erdgeschoss`, elevation 0.
  * - Au. The NetFloorArea of the seven rooms, from their `BaseQuantities`
  *   sets: 21.410325 (Schlafzimmer) + 12.127619 (Bad) + 12.59545 (Buero)
  *   + 25.2088935 (Wohnen) + 11.185458 (Flur) + 16.30545 (Küche)
- *   + 74.5092415823 (Galerie) = 173.3424370823 m².
+ *   + 74.5092415823 (Galerie) = 173.3424370823 m². The seven IfcSpace
+ *   leave PredefinedType unset and aggregate no spaces, so all seven are
+ *   rooms under the #111 review's filter, and Au is unchanged.
  */
 
 import { describe, it, beforeEach } from 'node:test';
@@ -61,11 +65,14 @@ describe('urban indicators on AC20-FZK-Haus (#76)', () => {
     const result = urbanIndicators({ ...areas, siteArea: 600 });
     near(result.ac, AC_BY_HAND, 'Ac');
     near(result.ad, AD_BY_HAND, 'Ad');
+    near(result.adCut, AD_BY_HAND, 'Ad for CUT');
     near(result.au, AU_BY_HAND, 'Au');
+    assert.deepEqual(areas.spacesLeftOut, { external: 0, otherType: 0, parents: 0 });
+    assert.deepEqual(result.zero, { elevation: 0, source: 'model' });
     assert.deepEqual(areas.assumedInterior, [], 'both storeys have a slab or rooms to tell rooms from courtyards');
     near(result.pot, (AC_BY_HAND / 600) * 100, 'POT');
     near(result.cut, AD_BY_HAND / 600, 'CUT');
-    assert.deepEqual(result.storeys.map((r) => [r.name, r.ground, r.inAd, r.belowGround]), [
+    assert.deepEqual(result.storeys.map((r) => [r.name, r.ground, r.inCut, r.belowGround]), [
       ['Dachgeschoss', false, true, false], ['Erdgeschoss', true, true, false],
     ]);
     // The attic holds only the gallery; the six ground-floor rooms are the rest.
@@ -92,8 +99,9 @@ const asPieces = (meshes: readonly MeshData[]): MeshData[] => meshes.map((m) => 
 });
 
 const LABELS: UrbanLabels = {
-  title: 'T', level: 'Level', elevation: 'Elevation', built: 'Built', useful: 'Useful', belowGround: (n) => n, category: 'Category', area: 'Area',
-  ac: 'Ac', ad: 'Ad', au: 'Au', site: 'Site', pot: 'POT', cut: 'CUT', note: '',
+  title: 'T', level: 'Level', elevation: 'Elevation', built: 'Built', useful: 'Useful', inCut: 'In CUT', yes: 'yes', no: 'no',
+  belowGround: (n) => n, ground: (n) => n, category: 'Category', area: 'Area',
+  ac: 'Ac', ad: 'Ad', adCut: 'Ad for CUT', au: 'Au', site: 'Site', pot: 'POT', cut: 'CUT', rules: () => [], note: '',
   atLeast: (v) => `>= ${v}`, unmeasured: (count, level) => `${count} unmeasured on ${level}`,
 };
 const texts = (r: ReturnType<typeof urbanIndicators>) => layoutUrban(r, LABELS).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
@@ -128,8 +136,8 @@ describe('footprint elements that are not in the flat meshes (#76)', () => {
     assert.equal(result.adAtLeast, true);
     const printed = texts(result);
     assert.ok(printed.includes('1 unmeasured on Erdgeschoss'), printed.join(' | '));
-    for (const label of ['Ac', 'Ad', 'POT', 'CUT']) assert.match(after(printed, label), /^>= /, label);
-    assert.match(after(printed, 'Erdgeschoss'), /^0\.00$/, 'the elevation is a plain figure');
+    for (const label of ['Ac', 'Ad', 'Ad for CUT', 'POT', 'CUT']) assert.match(after(printed, label), /^>= /, label);
+    assert.equal(after(printed, 'Erdgeschoss'), '±0.00', 'the elevation is a plain figure');
     assert.match(printed[printed.indexOf('Erdgeschoss') + 2], /^>= /, 'the level\'s built area is marked');
     assert.doesNotMatch(printed[printed.indexOf('Dachgeschoss') + 2], /^>= /, 'the attic was measured whole');
   });

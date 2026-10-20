@@ -164,7 +164,22 @@ export function parseProjectFile(text: string): ProjectDocument {
     issues: readIssues(raw.issues),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
     ...(typeof raw.siteArea === 'number' && Number.isFinite(raw.siteArea) && raw.siteArea > 0 ? { siteArea: raw.siteArea } : {}),
+    ...readUrbanSettings(raw.urbanSettings),
   };
+}
+
+/** The urban settings; a field that is not what it should be is dropped (its default applies). */
+function readUrbanSettings(raw: unknown): Pick<ProjectDocument, 'urbanSettings'> {
+  if (!isObject(raw)) return {};
+  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  const out: NonNullable<ProjectDocument['urbanSettings']> = {};
+  if (finite(raw.terrainLevel)) out.terrainLevel = raw.terrainLevel;
+  if (finite(raw.zeroElevation)) out.zeroElevation = raw.zeroElevation;
+  if (isObject(raw.cutExcluded)) {
+    const chosen = Object.entries(raw.cutExcluded).filter((e): e is [string, boolean] => typeof e[1] === 'boolean');
+    if (chosen.length) out.cutExcluded = Object.fromEntries(chosen);
+  }
+  return Object.keys(out).length ? { urbanSettings: out } : {};
 }
 
 const WEIGHTS = new Set(['heavy', 'medium', 'light', 'hairline']);

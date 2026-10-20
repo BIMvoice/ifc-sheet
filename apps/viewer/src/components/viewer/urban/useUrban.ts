@@ -17,7 +17,7 @@ import { useProjectStore } from '@/project/project-store';
 import { ensureWasm, wasmLoaded } from '@/lib/wasm/ensure-wasm';
 import { collectUrbanAreas, type UrbanAreas } from '@/urban/urban-models';
 import { urbanIndicators, type UrbanIndicators } from '@/urban/indicators';
-import type { UrbanLabels } from '@/urban/urban-layout';
+import { signedLevel, type UrbanLabels } from '@/urban/urban-layout';
 
 /** The footprints, rooms and model site area; null until they can be measured. `enabled` false skips the work. */
 export function useUrbanAreas(enabled = true): UrbanAreas | null {
@@ -47,24 +47,41 @@ export function useUrbanAreas(enabled = true): UrbanAreas | null {
   return areas;
 }
 
-/** The indicators, on the project's site area, else the model's. */
+/** The indicators, on the project's site area (else the model's) and its urban settings. */
 export function useUrbanIndicators(enabled = true): { areas: UrbanAreas; result: UrbanIndicators } | null {
   const areas = useUrbanAreas(enabled);
   const siteArea = useProjectStore((s) => s.siteArea);
-  return useMemo(() => (areas ? { areas, result: urbanIndicators({ ...areas, siteArea: siteArea ?? areas.modelSiteArea }) } : null), [areas, siteArea]);
+  const settings = useProjectStore((s) => s.urbanSettings);
+  return useMemo(
+    () => (areas ? { areas, result: urbanIndicators({ ...areas, siteArea: siteArea ?? areas.modelSiteArea, settings }) } : null),
+    [areas, siteArea, settings],
+  );
 }
 
 export function useUrbanLabels(title: string, areas: UrbanAreas | null): UrbanLabels {
   const { t } = useTranslation();
   const assumed = areas?.assumedInterior.join(', ') ?? '';
+  const leftOut = areas?.spacesLeftOut ?? null;
   return useMemo(() => ({
     title,
     level: t('urban.level'), elevation: t('urban.elevation'), built: t('urban.built'), useful: t('urban.useful'),
+    inCut: t('urban.inCut'), yes: t('urban.yes'), no: t('urban.no'),
     belowGround: (name: string) => t('urban.belowGround', { name }),
+    ground: (name: string) => t('urban.ground', { name }),
     category: t('urban.category'), area: t('urban.area'),
-    ac: t('urban.ac'), ad: t('urban.ad'), au: t('urban.au'), site: t('urban.site'), pot: t('urban.pot'), cut: t('urban.cut'),
+    ac: t('urban.ac'), ad: t('urban.ad'), adCut: t('urban.adCut'), au: t('urban.au'), site: t('urban.site'), pot: t('urban.pot'), cut: t('urban.cut'),
+    rules: (r: UrbanIndicators) => {
+      const left = r.storeys.filter((s) => !s.inCut).map((s) => s.name);
+      const out = [
+        t('urban.rule.areas', { level: r.storeys.find((s) => s.ground)?.name ?? '—' }),
+        t('urban.rule.cut', { levels: left.length ? left.join(', ') : t('urban.rule.cutNone') }),
+        t('urban.rule.ground', { terrain: signedLevel(r.terrainLevel), zero: r.zero.elevation.toFixed(2), source: t(`urban.rule.zero.${r.zero.source}`) }),
+      ];
+      if (leftOut) out.push(t('urban.rule.au', { external: leftOut.external, other: leftOut.otherType, parents: leftOut.parents }));
+      return out;
+    },
     note: assumed ? t('urban.assumedInterior', { levels: assumed }) : '',
     atLeast: (value: string) => t('urban.atLeast', { value }),
     unmeasured: (count: number, level: string) => t('urban.unmeasured', { count, level }),
-  }), [t, title, assumed]);
+  }), [t, title, assumed, leftOut]);
 }
