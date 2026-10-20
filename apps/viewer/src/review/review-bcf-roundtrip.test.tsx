@@ -5,10 +5,15 @@
 import '@/test/setup-dom.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBCFComment, readBCF, writeBCF } from '@ifc-lite/bcf';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import JSZip from 'jszip';
+import { createBCFComment, createBCFProject, createBCFTopic, generateUuid, readBCF, writeBCF, type BCFTopic } from '@ifc-lite/bcf';
 import { bcfToComments, commentsToBcf, withBcfGuids } from './bcf';
 import { readComments } from './file';
-import { drawingOf, guidOf, onElement, onPaper, sheet } from '@/test/review-bcf-fixture';
+import { drawingOf, GUID, guidOf, onElement, onPaper, sheet } from '@/test/review-bcf-fixture';
 
 /**
  * Round trips with other BCF tools (PR #127 review): the same comment goes
@@ -135,4 +140,81 @@ describe('a reply without a date (PR #127, item 5)', () => {
     const out = only((await exported(fresh.comments)).topics);
     assert.deepEqual(out.comments.map((c) => c.date), [new Date(readAt).toISOString(), new Date(readAt).toISOString()]);
   });
+});
+
+/**
+ * The official BCF schemas, validated the way `@ifc-lite/bcf` validates its
+ * writer (`packages/bcf/src/schema-validation.test.ts`): its verbatim XSD
+ * copies through its own `xmllint-wasm`, resolved from that package.
+ */
+const BCF_PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../packages/bcf');
+type ValidateXML = (o: { xml: { fileName: string; contents: string }[]; schema: string[]; preload: { fileName: string; contents: string }[] }) => Promise<{ valid: boolean; errors: { message: string }[] }>;
+const { validateXML } = createRequire(path.join(BCF_PKG, 'package.json'))('xmllint-wasm') as { validateXML: ValidateXML };
+const xsd = (version: '2.1' | '3.0', file: string) => readFileSync(path.join(BCF_PKG, 'src/__fixtures__/schemas', version === '2.1' ? 'v2_1' : 'v3_0', file), 'utf8');
+const SCHEMA_FOR_ENTRY: ReadonlyArray<readonly [RegExp, string]> = [
+  [/(^|\/)bcf\.version$/, 'version.xsd'], [/(^|\/)project\.bcfp$/, 'project.xsd'], [/(^|\/)markup\.bcf$/, 'markup.xsd'], [/\.bcfv$/, 'visinfo.xsd'],
+];
+async function schemaErrors(file: Blob, version: '2.1' | '3.0'): Promise<string[]> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const errors: string[] = [];
+  let checked = 0;
+  for (const [name, entry] of Object.entries(zip.files)) {
+    const schemaFile = SCHEMA_FOR_ENTRY.find(([re]) => re.test(name))?.[1];
+    if (entry.dir || !schemaFile) continue;
+    checked++;
+    const result = await validateXML({
+      xml: [{ fileName: 'subject.xml', contents: await entry.async('string') }],
+      schema: [xsd(version, schemaFile)],
+      preload: version === '3.0' ? [{ fileName: 'shared-types.xsd', contents: xsd('3.0', 'shared-types.xsd') }] : [],
+    });
+    errors.push(...result.errors.map((e) => `${name}: ${e.message}`));
+  }
+  assert.ok(checked >= 3, `${checked} entries validated`);
+  return errors;
+}
+
+describe('a topic from another tool keeps its own fields when it goes back (PR #127 pre-merge review)', () => {
+  for (const version of ['2.1', '3.0'] as const) {
+    it(`BCF ${version}: title, type, priority, assignee and labels come back as they went in, ours added to theirs`, async () => {
+      const project = createBCFProject({ name: 'Coordination', version });
+      const topic: BCFTopic = createBCFTopic({
+        title: 'Clash at grid B/3', description: 'Duct crosses the beam at B/3', author: 'mihai.pop@example.com',
+        topicType: 'Clash', topicStatus: 'Open', priority: 'High', assignedTo: 'ana.ionescu@example.com', labels: ['MEP', 'Structure'],
+      });
+      topic.guid = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+      // BCF 3.0 requires a camera on every viewpoint.
+      const orthogonalCamera = { cameraViewPoint: { x: 3, y: -10, z: 1.2 }, cameraDirection: { x: 0, y: 1, z: 0 }, cameraUpVector: { x: 0, y: 0, z: 1 }, viewToWorldScale: 10, aspectRatio: 4 / 3 };
+      topic.viewpoints.push({ guid: generateUuid(), components: { selection: [{ ifcGuid: GUID }] }, orthogonalCamera });
+      project.topics.set(topic.guid, topic);
+      const read = bcfToComments(await readBCF(await writeBCF(project)), [], importing());
+      assert.equal(read.comments.length, 1);
+
+      // Saved in the project and reopened, then sent back.
+      const reopened = readComments(JSON.parse(JSON.stringify(read.comments)));
+      const file = await writeBCF(commentsToBcf(withBcfGuids(reopened).comments, { ...opts, version }));
+      assert.deepEqual(await schemaErrors(file, version), [], 'valid against the official XSDs');
+      const back = only((await readBCF(file)).topics);
+
+      assert.equal(back.guid, topic.guid);
+      assert.equal(back.title, 'Clash at grid B/3');
+      assert.equal(back.description, 'Duct crosses the beam at B/3');
+      assert.equal(back.topicType, 'Clash');
+      assert.equal(back.priority, 'High');
+      assert.equal(back.assignedTo, 'ana.ionescu@example.com');
+      assert.equal(back.topicStatus, 'Open');
+      assert.deepEqual(back.labels?.slice(0, 2), ['MEP', 'Structure'], 'their labels, first and in order');
+      assert.ok(back.labels?.some((l) => l === 'sheet:A-101') && back.labels?.some((l) => l.startsWith('ifcsheet-comment:')), `ours added: ${back.labels}`);
+      assert.equal(back.labels?.length, 4, 'no label twice');
+
+      // The same file read again changes nothing, and a topic changed there (priority, labels) is taken.
+      assert.deepEqual(bcfToComments(await readBCF(file), reopened, importing()).updated, []);
+      back.priority = 'Low';
+      back.labels = ['MEP', ...(back.labels ?? []).slice(1).filter((l) => l !== 'Structure'), 'Fire'];
+      const changed = bcfToComments({ ...(await readBCF(file)), topics: new Map([[back.guid, back]]) }, reopened, importing());
+      assert.equal(changed.merged, 1);
+      const again = only((await readBCF(await writeBCF(commentsToBcf(changed.updated, { ...opts, version })))).topics);
+      assert.equal(again.priority, 'Low');
+      assert.deepEqual(again.labels?.filter((l) => !/^(sheet:|ifcsheet-comment:)/.test(l)), ['MEP', 'Fire']);
+    });
+  }
 });

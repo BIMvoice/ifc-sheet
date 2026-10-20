@@ -8,7 +8,7 @@
  * a field that is not the right kind makes only that comment unreadable.
  */
 
-import type { CommentReply, ReviewComment } from './types';
+import type { BcfTopicFields, CommentReply, ReviewComment } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -20,6 +20,14 @@ const opt = <K extends string>(key: K, v: unknown): { [k in K]?: string } => (st
 function readReply(v: unknown): CommentReply[] {
   if (!isObject(v) || !str(v.id) || !str(v.text)) return [];
   return [{ id: v.id, author: str(v.author) ? v.author : '', createdAt: isNumber(v.createdAt) ? v.createdAt : 0, text: v.text, ...opt('bcfGuid', v.bcfGuid) }];
+}
+
+/** A comment's `bcfTopic`: its string fields and string labels; nothing when none is left. */
+function readTopicFields(v: unknown): { bcfTopic?: BcfTopicFields } {
+  if (!isObject(v)) return {};
+  const labels = Array.isArray(v.labels) ? v.labels.filter((l): l is string => str(l) && !!l) : [];
+  const out: BcfTopicFields = { ...opt('title', v.title), ...opt('topicType', v.topicType), ...opt('priority', v.priority), ...opt('assignedTo', v.assignedTo), ...(labels.length ? { labels } : {}) };
+  return Object.keys(out).length ? { bcfTopic: out } : {};
 }
 
 function readComment(v: unknown): ReviewComment[] {
@@ -38,6 +46,7 @@ function readComment(v: unknown): ReviewComment[] {
     replies: Array.isArray(v.replies) ? v.replies.flatMap(readReply) : [],
     ...opt('bcfGuid', v.bcfGuid),
     ...opt('bcfViewpointGuid', v.bcfViewpointGuid),
+    ...readTopicFields(v.bcfTopic),
   }];
 }
 

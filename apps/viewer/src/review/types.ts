@@ -21,6 +21,21 @@ export interface CommentReply {
   bcfGuid?: string;
 }
 
+/**
+ * What a BCF topic from another tool says that a comment has no field of its
+ * own for, kept so the topic goes back to that tool as it came: its title
+ * (when it is not just the first line of the text), type (when not Issue),
+ * priority, assignee and labels (its own, not the `sheet:` and
+ * `ifcsheet-comment:` labels this tool adds).
+ */
+export interface BcfTopicFields {
+  title?: string;
+  topicType?: string;
+  priority?: string;
+  assignedTo?: string;
+  labels?: string[];
+}
+
 export interface ReviewComment {
   id: string;
   sheetId: string;
@@ -42,4 +57,6 @@ export interface ReviewComment {
   /** The GUID of the BCF topic this comment is (given on its first export, or the topic's own when it came from a BCF file), and of its viewpoint; kept so a later export updates that topic instead of adding another. */
   bcfGuid?: string;
   bcfViewpointGuid?: string;
+  /** The topic's own fields, from the BCF file it came from or was last updated by; written back on export. */
+  bcfTopic?: BcfTopicFields;
 }

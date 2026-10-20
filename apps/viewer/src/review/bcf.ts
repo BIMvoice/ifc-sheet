@@ -21,11 +21,39 @@ import {
 import { drawingToWorld, viewNormal } from '@/drafting/frame';
 import type { ProjectSheet } from '@/project/types';
 import { placeOfElement, type DrawingOf, type ElementPlace, type GuidOf } from './element-at';
-import type { CommentReply, ReviewComment } from './types';
+import type { BcfTopicFields, CommentReply, ReviewComment } from './types';
 
 /** The label that ties a topic to the comment it came from, so reading our own file back adds nothing twice. */
 const COMMENT_LABEL = 'ifcsheet-comment:';
+/** The label naming the sheet a topic's comment is on. */
+const SHEET_LABEL = 'sheet:';
 const ORIGIN = 'IfcSheet';
+/** The type a topic goes out with when its comment has none of its own (`createBCFTopic`'s). */
+const DEFAULT_TYPE = 'Issue';
+
+/** The title a comment's text gives a topic: its first line. */
+const titleOf = (text: string): string => text.split('\n')[0].slice(0, 120) || text;
+const ourLabel = (l: string): boolean => l.startsWith(SHEET_LABEL) || l.startsWith(COMMENT_LABEL);
+
+/**
+ * What of `topic` a comment with `text` keeps as `bcfTopic`: only what export
+ * would not give back by itself (a title other than the text's first line, a
+ * type other than Issue, a priority, an assignee, labels other than ours).
+ * Undefined when nothing; export and import both go through this, so a topic
+ * read back unchanged changes nothing.
+ */
+function topicFields(topic: Pick<BCFTopic, 'title' | 'topicType' | 'priority' | 'assignedTo' | 'labels'>, text: string): BcfTopicFields | undefined {
+  const labels = (topic.labels ?? []).filter((l) => l && !ourLabel(l));
+  const out: BcfTopicFields = {
+    ...(topic.title && topic.title !== titleOf(text) ? { title: topic.title } : {}),
+    ...(topic.topicType && topic.topicType !== DEFAULT_TYPE ? { topicType: topic.topicType } : {}),
+    ...(topic.priority ? { priority: topic.priority } : {}),
+    ...(topic.assignedTo ? { assignedTo: topic.assignedTo } : {}),
+    ...(labels.length ? { labels } : {}),
+  };
+  return Object.keys(out).length ? out : undefined;
+}
+const sameFields = (a: BcfTopicFields | undefined, b: BcfTopicFields | undefined): boolean => JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
 
 export interface BcfExportOptions {
   sheets: readonly ProjectSheet[];
@@ -98,10 +126,12 @@ function authorOf(author: string, opts: BcfExportOptions): string {
 
 function topicOf(c: ReviewComment, opts: BcfExportOptions): BCFTopic {
   const sheet = opts.sheets.find((s) => s.id === c.sheetId);
-  const title = c.text.split('\n')[0].slice(0, 120) || c.text;
+  // The other tool's own fields go back as they came; our labels are added to its labels, never in their place.
+  const own = c.bcfTopic;
   const topic = createBCFTopic({
-    title, description: c.text, author: authorOf(c.author, opts), topicStatus: c.status === 'done' ? 'Closed' : 'Open',
-    labels: [...(sheet ? [`sheet:${sheet.number}`] : []), `${COMMENT_LABEL}${c.id}`],
+    title: own?.title || titleOf(c.text), description: c.text, author: authorOf(c.author, opts), topicStatus: c.status === 'done' ? 'Closed' : 'Open',
+    topicType: own?.topicType || DEFAULT_TYPE, priority: own?.priority, assignedTo: own?.assignedTo,
+    labels: [...(own?.labels ?? []).filter((l) => !ourLabel(l)), ...(sheet ? [`${SHEET_LABEL}${sheet.number}`] : []), `${COMMENT_LABEL}${c.id}`],
   });
   if (c.bcfGuid) topic.guid = c.bcfGuid;
   topic.creationDate = new Date(c.createdAt).toISOString();
@@ -178,11 +208,17 @@ function mergeTopic(c: ReviewComment, topic: BCFTopic, newId: () => string, read
   }
   const status = closed(topic.topicStatus) ? 'done' : 'open';
   if (status !== c.status) merged = true;
+  // A title, type, priority, assignee or label set in the other tool is taken.
+  const fields = topicFields(topic, c.text);
+  const fieldsChanged = !sameFields(fields, c.bcfTopic);
+  if (fieldsChanged) merged = true;
   const bcfGuid = c.bcfGuid || topic.guid;
   const bcfViewpointGuid = c.bcfViewpointGuid || topic.viewpoints[0]?.guid;
   if (bcfGuid !== c.bcfGuid || bcfViewpointGuid !== c.bcfViewpointGuid) learnt = true;
   if (!merged && !learnt) return null;
-  return { comment: { ...c, status, replies, bcfGuid, ...(bcfViewpointGuid ? { bcfViewpointGuid } : {}) }, merged };
+  const { bcfTopic: _kept, ...rest } = c;
+  const bcfTopic = fieldsChanged ? fields : c.bcfTopic;
+  return { comment: { ...rest, status, replies, bcfGuid, ...(bcfViewpointGuid ? { bcfViewpointGuid } : {}), ...(bcfTopic ? { bcfTopic } : {}) }, merged };
 }
 
 /**
@@ -229,11 +265,14 @@ export function bcfToComments(
     const { sheet, place } = placed;
     // The topic's GUIDs are kept, so the same file read again finds this comment instead of adding it twice.
     const viewpointGuid = topic.viewpoints[0]?.guid;
+    const text = topic.description || topic.title;
+    const bcfTopic = topicFields(topic, text);
     result.comments.push({
       id: own ?? opts.newId(), sheetId: sheet.id, x: place.x, y: place.y, viewportId: place.viewportId, viewId: place.viewId, point: place.point, elementGuid: place.elementGuid,
       author: topic.creationAuthor ?? '', createdAt: timeOf(topic.creationDate, readAt),
-      status: closed(topic.topicStatus) ? 'done' : 'open', text: topic.description || topic.title,
+      status: closed(topic.topicStatus) ? 'done' : 'open', text,
       replies: topic.comments.map((c) => replyOf(c, opts.newId, readAt)), bcfGuid: topic.guid, ...(viewpointGuid ? { bcfViewpointGuid: viewpointGuid } : {}),
+      ...(bcfTopic ? { bcfTopic } : {}),
     });
   }
   return result;
