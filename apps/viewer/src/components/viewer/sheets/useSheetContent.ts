@@ -16,7 +16,7 @@ import { useCallback, useMemo } from 'react';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
-import { viewportBox } from '@/project/sheets';
+import { fitExtent, viewportBox } from '@/project/sheets';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
@@ -95,11 +95,15 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const rawDrawing = useCallback((viewId: string) => byView[viewId]?.drawing ?? null, [byView]);
   const placedViewIds = useMemo(() => (sheet.viewports ?? []).map((vp) => vp.viewId), [sheet.viewports]);
   const sites = useSheetSite(placedViewIds, views, drafts, rawDrawing);
-  const siteDrawing = useCallback((viewId: string): Drawing2D | null => {
-    const drawing = styled.get(viewId)?.drawing ?? null;
-    const site = sites.get(viewId);
-    return drawing && site?.boundary ? { ...drawing, bounds: siteBounds(drawing.bounds, site) } : drawing;
-  }, [styled, sites]);
+  // What an auto-fit viewport frames: the drawing, the plot of a site plan and the view's own drafts (#140).
+  // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
+  const fittedBounds = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => fitExtent(vp, siteBounds(bounds, sites.get(vp.viewId)), settledDrafts(vp.viewId)), [sites, settledDrafts]);
+  const siteDrawing = useCallback((vp: SheetViewport): Drawing2D | null => {
+    const drawing = styled.get(vp.viewId)?.drawing ?? null;
+    if (!drawing) return null;
+    const bounds = fittedBounds(vp, drawing.bounds);
+    return bounds === drawing.bounds ? drawing : { ...drawing, bounds };
+  }, [styled, fittedBounds]);
   // Cross-references are derived here, at draw time, from the sheets as they are: nothing of them is stored on the plan.
   const sheets = useProjectStore((s) => s.sheets);
   const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
@@ -122,7 +126,7 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
     legend: placedLegends.get(vp.viewId),
     view: views.find((v) => v.id === vp.viewId),
     raster: rasterOf(views.find((v) => v.id === vp.viewId)),
-    drawing: siteDrawing(vp.viewId),
+    drawing: siteDrawing(vp),
     drafts: draftsFor(vp),
     drawingNumber: numbers.get(vp.id),
     overlays: styled.get(vp.viewId)?.overlays,
@@ -133,7 +137,7 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const boxOf = useCallback((v: SheetViewport) => {
     const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);
     const drawing = byView[v.viewId]?.drawing;
-    return placed ? { width: placed.width, height: placed.height } : viewportBox(v, drawing ? siteBounds(drawing.bounds, sites.get(v.viewId)) : null);
-  }, [placedSchedules, placedCivil, placedLegends, byView, sites]);
+    return placed ? { width: placed.width, height: placed.height } : viewportBox(v, drawing ? fittedBounds(v, drawing.bounds) : null);
+  }, [placedSchedules, placedCivil, placedLegends, byView, fittedBounds]);
   return { content, boxOf };
 }
