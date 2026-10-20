@@ -36,9 +36,14 @@ export const DETAIL_LINK = LINK;
 /** `2` on its own, `2/A-101` once the detail is on sheet A-101. */
 export const detailLabel = (number: number, sheetNumber?: string): string => (sheetNumber ? `${number}/${sheetNumber}` : String(number));
 
+/** The first sheet (in set order) that holds a viewport of the view, if any. */
+export function sheetHolding<S extends Pick<ProjectSheet, 'viewports'>>(viewId: string, sheets: readonly S[]): S | undefined {
+  return sheets.find((s) => (s.viewports ?? []).some((v) => v.viewId === viewId));
+}
+
 /** The number of the first sheet that holds a viewport of the view, if any. */
 export function sheetNumberOf(viewId: string, sheets: readonly Pick<ProjectSheet, 'number' | 'viewports'>[]): string | undefined {
-  return sheets.find((s) => (s.viewports ?? []).some((v) => v.viewId === viewId))?.number;
+  return sheetHolding(viewId, sheets)?.number;
 }
 
 /**

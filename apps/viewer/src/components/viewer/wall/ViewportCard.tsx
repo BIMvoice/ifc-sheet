@@ -11,7 +11,8 @@
 import { useTranslation } from '@/i18n';
 import { placeLegend } from '@/legend/legend-actions';
 import { renameProjectItem, useProjectStore } from '@/project/project-store';
-import { addViewport, removeViewport } from '@/project/sheets';
+import { addViewport, removeViewport, updateViewport } from '@/project/sheets';
+import { drawingNumbers } from '@/drafting/cross-ref';
 import { drawingArea } from '@/project/drawing-set';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { useLegendLabels } from '../legend/LegendGraphic';
@@ -70,7 +71,20 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
             {t('wall.project.rename')}
             <input key={slot.viewId} className={field} defaultValue={name} onBlur={(e) => renameProjectItem(slot.viewId, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           </label>
-          {legend ? <LegendCard legend={legend} /> : hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} /> : null}
+          {legend ? <LegendCard legend={legend} /> : (
+            <>
+              <label className="mt-4 block text-sm text-sky-200">
+                {t('wall.vp.drawingNumber')}
+                <input
+                  key={`${slot.id}:${slot.drawingNumber ?? ''}`} className={field} defaultValue={slot.drawingNumber ?? ''}
+                  placeholder={drawingNumbers({ viewports: (sheet.viewports ?? []).map((vp) => (vp.id === slot.id ? { ...vp, drawingNumber: undefined } : vp)) }, new Set(views.map((v) => v.id))).get(slot.id) ?? ''}
+                  onBlur={(e) => updateViewport(sheet.id, slot.id, { drawingNumber: e.target.value.trim() || undefined })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                />
+              </label>
+              {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} /> : null}
+            </>
+          )}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}

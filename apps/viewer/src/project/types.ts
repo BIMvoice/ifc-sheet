@@ -278,6 +278,8 @@ export interface SheetViewport {
   center: { x: number; y: number } | null;
   /** Drafting layers this viewport hides, on top of its view's. */
   hiddenLayers?: string[];
+  /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
+  drawingNumber?: string;
 }
 
 /** The groups of sheets a numbering scheme numbers apart: `other` is details and whatever fits no series. */
