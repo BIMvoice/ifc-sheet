@@ -50,7 +50,7 @@ export function ScaleChips({ group, extent }: { group: SetGroup; extent: ModelEx
   const current = useProjectStore((s) => groupScale(group, s.sheets));
   return (
     <fieldset className="m-0 flex items-center gap-2 border-0 p-0">
-      <legend className="float-left mr-2 p-0 text-[11px] font-medium uppercase tracking-[0.2em] text-sky-200/70">{t(SCALE_LABELS[group] ?? 'wall.planScale')}</legend>
+      <legend className="float-left mr-2 p-0 text-2xs font-medium uppercase tracking-[0.2em] text-sky-200/70">{t(SCALE_LABELS[group] ?? 'wall.planScale')}</legend>
       {SET_SCALES.map((scale) => (
         <button
           key={scale}

@@ -25,7 +25,7 @@ export function CutHeightControl({ view }: { view: Extract<ProjectView, { kind: 
   const ticks = [0.5, 1, 1.5, 2, 2.5];
   return (
     <div className="flex flex-col gap-3 text-sky-100">
-      <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.cutHeight')}</span>
+      <span className="text-2xs font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.cutHeight')}</span>
       <span className="text-4xl font-light tabular-nums text-white">{view.cutHeight.toFixed(2)}<span className="ml-1 text-lg text-sky-200/70">{t('wall.unitMetre')}</span></span>
       <div className="relative ml-16" style={{ height: RULER_PX }}>
         <input
@@ -62,7 +62,7 @@ export function DepthControl({ view }: { view: Extract<ProjectView, { kind: 'sec
   const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-3 text-sky-100">
-      <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.depth')}</span>
+      <span className="text-2xs font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.depth')}</span>
       <span className="text-4xl font-light tabular-nums text-white">
         {view.viewDepth == null ? t('wall.depthAuto') : <>{view.viewDepth.toFixed(1)}<span className="ml-1 text-lg text-sky-200/70">{t('wall.unitMetre')}</span></>}
       </span>
