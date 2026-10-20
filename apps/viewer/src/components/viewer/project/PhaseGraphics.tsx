@@ -11,7 +11,10 @@
 
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { updateProjectView, useProjectStore } from '@/project/project-store';
-import { PHASES, PHASE_LABEL_KEYS, PHASE_VIEW_PRESETS, phaseStyle, type PhaseSource } from '@/project/phases';
+import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
+import { noElementSaysAPhase } from '@/project/phase-view';
+import { PHASES, PHASE_LABEL_KEYS, PHASE_VIEW_PRESETS, phaseStyle, phasesFromPreset, unmarkedPhase, type PhaseSource } from '@/project/phases';
+import { useViewerStore } from '@/store';
 import type { CategoryLineWeight, PhaseId, PhaseStyle, ProjectView, ViewGraphics } from '@/project/types';
 
 const WEIGHTS: readonly CategoryLineWeight[] = ['heavy', 'medium', 'light', 'hairline'];
@@ -23,6 +26,9 @@ export function PhaseGraphics({ view }: { view: ProjectView }) {
   const graphics: ViewGraphics = view.graphics ?? {};
   const phases = graphics.phases;
   const source = useProjectStore((s) => s.phaseSource) ?? {};
+  const { geometryResult } = useDrawingRuntime();
+  useViewerStore((s) => s.mutationVersion); // an edited Status changes the note below
+  const noPhaseInModel = !!phases && noElementSaysAPhase(geometryResult?.meshes, useProjectStore.getState().phaseSource);
   const set = (next: ViewGraphics['phases']) => updateProjectView(view.id, { graphics: { ...graphics, phases: next } });
   const setStyle = (id: PhaseId, patch: Partial<PhaseStyle>) => phases && set({ ...phases, styles: { ...phases.styles, [id]: { ...phases.styles?.[id], ...patch } } });
   const setSource = (next: PhaseSource) => useProjectStore.setState({ phaseSource: next.mapping || next.unmarked ? next : undefined, dirty: true });
@@ -45,12 +51,20 @@ export function PhaseGraphics({ view }: { view: ProjectView }) {
         <span className="flex-1" />
         <label className="flex items-center gap-1">
           {t('phase.preset')}
-          <select aria-label={t('phase.preset')} className={select} value="" onChange={(e) => e.target.value && set({ ...phases, show: [...PHASE_VIEW_PRESETS[e.target.value as keyof typeof PHASE_VIEW_PRESETS]] })}>
+          <select aria-label={t('phase.preset')} className={select} value="" onChange={(e) => e.target.value && set(phasesFromPreset(e.target.value as keyof typeof PHASE_VIEW_PRESETS, phases))}>
             <option value="">{t('phase.preset')}</option>
             {(Object.keys(PHASE_VIEW_PRESETS) as (keyof typeof PHASE_VIEW_PRESETS)[]).map((k) => <option key={k} value={k}>{t(`phase.preset.${k}` as TranslationKey)}</option>)}
           </select>
         </label>
       </div>
+      {noPhaseInModel ? <p role="note" className="text-amber-700 dark:text-amber-400">{t('phase.noneInModel', { phase: name(unmarkedPhase(source)) })}</p> : null}
+      {phases ? (
+        <label className="flex items-center gap-1">
+          <input type="checkbox" aria-label={t('phase.demolishAsExisting')} checked={!!phases.demolishAsExisting}
+            onChange={(e) => set({ ...phases, demolishAsExisting: e.target.checked || undefined })} />
+          {t('phase.demolishAsExisting')}
+        </label>
+      ) : null}
       {phases ? (
         <table className="w-full">
           <thead>

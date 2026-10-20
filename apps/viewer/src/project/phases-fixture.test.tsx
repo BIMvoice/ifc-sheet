@@ -14,7 +14,7 @@ import '@/test/setup-dom.js';
 import { before, afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanup, render } from '@/test/render.js';
-import { loadPhaseModel, WALL, type PhaseModel } from '@/test/phase-fixture.js';
+import { loadPhaseModel, phaseModelMissing, WALL, type PhaseModel } from '@/test/phase-fixture.js';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { SheetPaper } from '@/components/viewer/sheets/SheetPaper.js';
 import { sheetSvgText } from '@/components/viewer/sheets/sheet-export.js';
@@ -34,7 +34,10 @@ let demolitionPlan: Drawing2D;
 let proposedPlan: Drawing2D;
 /** The view's drawing as the viewer makes it: the phases it does not show are left out of the generator's input. */
 const generate = (kind: 'plan' | 'section' | 'elevation', graphics: ViewGraphics | undefined) => model.draw(kind, phaseHiddenIds(model.meshes, phaseViewOf(graphics, undefined)));
+/** Every suite here skips, saying why, without the FZK-Haus fixture or the wasm runtime. */
+const skip = phaseModelMissing() ?? false;
 before(async () => {
+  if (skip) return;
   model = await loadPhaseModel();
   plan = await model.draw('plan');
   demolitionPlan = await generate('plan', DEMOLITION);
@@ -49,7 +52,7 @@ const only = (d: StyledDrawing, id: number): StyledDrawing => ({ ...d, lines: d.
 const pens = (d: StyledDrawing, graphics: ViewGraphics | undefined): Pen[] => viewportPens(d, graphics, { scale: 1000, x: 0, y: 0 }, 'down', []);
 const outline = (list: Pen[]): Pen[] => list.filter((p) => p.layer === 'CUT');
 
-describe('phase of the fixture walls, read from the model', () => {
+describe('phase of the fixture walls, read from the model', { skip }, () => {
   it('reads the Status set on each wall, the default where there is none', () => {
     assert.deepEqual(WALL.existing.map((id) => phaseOfRenderId(id, undefined)), ['existing', 'existing', 'existing']);
     assert.equal(phaseOfRenderId(WALL.demolish, undefined), 'demolish');
@@ -65,7 +68,7 @@ describe('phase of the fixture walls, read from the model', () => {
   });
 });
 
-describe('the phases a view leaves out of the generator', () => {
+describe('the phases a view leaves out of the generator', { skip }, () => {
   it('are the elements of the other phases, none for a view without phases', () => {
     assert.deepEqual([...phaseHiddenIds(model.meshes, phaseViewOf(PROPOSED, undefined))!], [WALL.demolish]);
     assert.deepEqual([...phaseHiddenIds(model.meshes, phaseViewOf(DEMOLITION, undefined))!], [WALL.new]);
@@ -84,7 +87,7 @@ describe('the phases a view leaves out of the generator', () => {
   });
 });
 
-describe('the demolition plan', () => {
+describe('the demolition plan', { skip }, () => {
   it('draws the existing walls grey, the demolished wall dashed, and not the new wall', () => {
     const d = styled(demolitionPlan, DEMOLITION);
     assert.ok(!entities(d).has(WALL.new), 'the new wall is not drawn');
@@ -114,7 +117,7 @@ describe('the demolition plan', () => {
   });
 });
 
-describe('the proposed plan', () => {
+describe('the proposed plan', { skip }, () => {
   it('draws the existing walls and the new wall heavy, and not the demolished wall', () => {
     const d = styled(proposedPlan, PROPOSED);
     assert.ok(!entities(d).has(WALL.demolish), 'the demolished wall is not drawn');
@@ -132,7 +135,7 @@ describe('the proposed plan', () => {
   });
 });
 
-describe('a view\'s own phase styles', () => {
+describe('a view\'s own phase styles', { skip }, () => {
   it('colour sets: the view changes the demolished wall to yellow and the new wall to red', () => {
     const graphics: ViewGraphics = { phases: { show: ['existing', 'demolish', 'new'], styles: { demolish: { lineColor: '#e6b800' }, new: { lineColor: '#cc0000' } } } };
     const d = styled(plan, graphics);
@@ -141,7 +144,7 @@ describe('a view\'s own phase styles', () => {
   });
 });
 
-describe('views without phases', () => {
+describe('views without phases', { skip }, () => {
   it('are drawn exactly as before: the same drawing object, every element, no phase on anything', async () => {
     assert.equal(phaseViewOf(undefined, undefined), null);
     assert.equal(phaseViewOf({ presetId: null }, undefined), null);

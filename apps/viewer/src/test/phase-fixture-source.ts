@@ -9,8 +9,19 @@
  * IfcPropertyEnumeratedValue (Name 'Status', no Description, one IfcLabel) is appended
  * before ENDSEC, with a fresh id after the sample's last, and added to the wall's own
  * Pset_WallCommon (a new set where the wall has none). Walls not listed get no Status.
- * Deterministic: the same sample gives the same file, and the same express ids.
+ * Deterministic: the same sample gives the same file, and the same express ids. The header's
+ * FILE_DESCRIPTION gains a first entry saying the file was modified, and how.
+ *
+ * Base model: AC20-FZK-Haus.ifc, the FZK-Haus exported from ARCHICAD 20 (FILE_NAME dated
+ * 2016-12-21), from the KIT IFC Examples published by the Institute for Automation and Applied
+ * Informatics (IAI), Karlsruhe Institute of Technology (KIT), on ifcwiki.org. Terms there: the
+ * examples are "for unrestricted use"; publications cite "Institute for Automation and Applied
+ * Informatics (IAI) / Karlsruhe Institute of Technology (KIT)". The repo does not carry it: it is
+ * `ara3d/AC20-FZK-Haus.ifc` in `tests/models/manifest.json`, fetched by `pnpm fixtures`.
  */
+
+/** The first FILE_DESCRIPTION entry of the made file, marking it as modified. */
+export const MODIFIED_NOTE = 'Modified for ifcsheet tests from AC20-FZK-Haus.ifc (IAI / KIT): Pset_WallCommon.Status added on five walls';
 
 /** Wall name in the sample -> Status. Wand-Ext-ERDG-4 is deliberately left out: no Status. */
 export const PHASE_STATUS = {
@@ -68,6 +79,8 @@ export function withPhaseStatus(text: string): string {
       );
     }
   }
+  if (!/FILE_DESCRIPTION\(\(/.test(out)) throw new Error('no FILE_DESCRIPTION in the sample');
+  out = out.replace(/FILE_DESCRIPTION\(\(/, `FILE_DESCRIPTION(('${MODIFIED_NOTE}',`);
   const at = out.lastIndexOf('ENDSEC;');
   return `${out.slice(0, at)}${lines.join('\n')}\n${out.slice(at)}`;
 }

@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { click, cleanup, render, type } from '@/test/render.js';
 import { addProjectView, projectDocument, resetProject, useProjectStore } from '@/project/project-store.js';
+import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime.js';
+import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
 import { PhaseGraphics } from './PhaseGraphics.js';
 
 let viewId = '';
@@ -20,7 +22,7 @@ beforeEach(() => {
   resetProject();
   viewId = addProjectView({ kind: 'plan', name: 'Demolition plan', level: { name: 'EG', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 });
 });
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); publishDrawingRuntime(null); });
 
 describe('PhaseGraphics', () => {
   it('draws by phase only once asked, then starts from a demolition plan', () => {
@@ -54,5 +56,31 @@ describe('PhaseGraphics', () => {
     cleanup();
     type(control(mount(), 'Value for To demolish'), 'De desfiintat');
     assert.deepEqual(projectDocument().phaseSource, { mapping: { set: 'Faza', property: 'Stare', values: { 'De desfiintat': 'demolish' } } });
+  });
+
+  it('says so when no element of the model has a phase, and not once one has', async () => {
+    const step = (status: string) => `ISO-10303-21;
+HEADER;FILE_DESCRIPTION((''),'2;1');FILE_NAME('','',(''),(''),'','','');FILE_SCHEMA(('IFC4'));ENDSEC;
+DATA;
+#1=IFCPROJECT('0PhaseProject0000000001',$,'P',$,$,$,$,$,$);
+#10=IFCWALL('0PhaseWall0000000000001',$,'W1',$,$,$,$,$,$);
+#11=IFCWALL('0PhaseWall0000000000002',$,'W2',$,$,$,$,$,$);
+${status}
+ENDSEC;
+END-ISO-10303-21;
+`;
+    const note = (ui: HTMLElement) => ui.querySelector('[role="note"]')?.textContent ?? null;
+    publishDrawingRuntime({ geometryResult: { meshes: [{ expressId: 10 }, { expressId: 11 }] } } as never);
+    seedModel('m', 0, await parseStep(step('')), 10);
+    assert.equal(note(mount()), null, 'nothing to say while the view does not draw by phase');
+    cleanup();
+    click(control(mount(), 'Draw by phase'));
+    cleanup();
+    assert.match(note(mount()) ?? '', /No element of the loaded model has a phase.*"Existing"/);
+    cleanup();
+    seedModel('m', 0, await parseStep(step(`#20=IFCPROPERTYENUMERATEDVALUE('Status',$,(IFCLABEL('EXISTING')),$);
+#21=IFCPROPERTYSET('0PhasePset0000000000001',$,'Pset_WallCommon',$,(#20));
+#22=IFCRELDEFINESBYPROPERTIES('0PhaseRel00000000000001',$,$,$,(#11),#21);`)), 10);
+    assert.equal(note(mount()), null, 'one wall says EXISTING');
   });
 });

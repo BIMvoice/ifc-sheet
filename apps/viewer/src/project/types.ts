@@ -107,6 +107,8 @@ export interface PhaseStyle {
 /** A view that draws by phase: which phases it shows, and the styles it changes from the default look. */
 export interface ViewPhases {
   show: PhaseId[];
+  /** To demolish draws in the existing style (a survey: the building as it stands). */
+  demolishAsExisting?: boolean;
   styles?: Partial<Record<PhaseId, Partial<PhaseStyle>>>;
 }
 

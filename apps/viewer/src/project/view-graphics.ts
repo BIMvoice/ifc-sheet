@@ -30,13 +30,15 @@ export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
 export interface PhaseView {
   show: ReadonlySet<PhaseId>;
   phaseOf: (entityId: number) => PhaseId | null;
+  /** The phase an element of a phase is drawn with, when the view draws one phase in another's style (a survey). */
+  drawnAs?: (phase: PhaseId) => PhaseId;
 }
 
 /** The drawing with each element's lines and cut faces marked with its phase (the other phases never reach it: `phaseHiddenIds` leaves them out of the generator's input). */
 function phased(drawing: StyledDrawing, phases: PhaseView): StyledDrawing {
   const mark = (id: number): { phase?: PhaseId } => {
     const phase = phases.phaseOf(id);
-    return phase === null ? {} : { phase };
+    return phase === null ? {} : { phase: phases.drawnAs?.(phase) ?? phase };
   };
   return {
     ...drawing,

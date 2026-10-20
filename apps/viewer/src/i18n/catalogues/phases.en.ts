@@ -15,6 +15,8 @@ export const phasesEn = {
   'phase.preset.demolition': 'Demolition plan',
   'phase.preset.proposed': 'Proposed plan',
   'phase.show': 'Show',
+  'phase.demolishAsExisting': 'Draw "To demolish" as existing (survey)',
+  'phase.noneInModel': 'No element of the loaded model has a phase (no IFC Status, nor a value for a mapped property), so everything draws as "{phase}". Set the Status in the model or map a property of your own below.',
   'phase.lineColor': 'Lines',
   'phase.fillColor': 'Cut fill',
   'phase.lineWeight': 'Weight',

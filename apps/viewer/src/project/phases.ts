@@ -18,7 +18,7 @@
  */
 
 import type { PropertySetLike } from '@/labels/label-resolve';
-import type { CategoryLineWeight, PhaseId, PhaseStyle, ViewGraphics } from './types';
+import type { CategoryLineWeight, PhaseId, PhaseStyle, ViewGraphics, ViewPhases } from './types';
 
 export const PHASES = ['existing', 'demolish', 'new', 'temporary'] as const satisfies readonly PhaseId[];
 
@@ -44,6 +44,19 @@ export const PHASE_VIEW_PRESETS = {
   demolition: ['existing', 'demolish'],
   proposed: ['existing', 'new'],
 } as const satisfies Record<string, readonly PhaseId[]>;
+
+/**
+ * A view's phases started from a preset, keeping its style edits. A survey records the building as it
+ * stands, so what is to be demolished draws as plain existing there; the demolition plan marks it.
+ */
+export function phasesFromPreset(preset: keyof typeof PHASE_VIEW_PRESETS, current?: ViewPhases): ViewPhases {
+  const { demolishAsExisting: _, ...rest } = current ?? { show: [] };
+  return { ...rest, show: [...PHASE_VIEW_PRESETS[preset]], ...(preset === 'survey' ? { demolishAsExisting: true } : {}) };
+}
+
+/** The phase an element of `phase` is drawn with in a view: to demolish draws as existing where the view says so. */
+export const drawnPhase = (phase: PhaseId, phases: Pick<ViewPhases, 'demolishAsExisting'> | undefined): PhaseId =>
+  phase === 'demolish' && phases?.demolishAsExisting ? 'existing' : phase;
 
 /** A property of the project's own that says the phase, and what each of its values means. */
 export interface PhaseMapping {
@@ -92,8 +105,8 @@ function mapped(el: PhaseReader, mapping: PhaseMapping): PhaseId | null {
   return null;
 }
 
-/** The phase of an element: the mapped property, else its Status (own, then its type's), else `unmarked`, else EXISTING. */
-export function resolvePhase(el: PhaseReader, source?: PhaseSource): PhaseId {
+/** The phase an element says: the mapped property, else its Status (own, then its type's); null when it says none. */
+export function statedPhase(el: PhaseReader, source?: PhaseSource): PhaseId | null {
   if (source?.mapping?.set && source.mapping.property) {
     const phase = mapped(el, source.mapping);
     if (phase) return phase;
@@ -104,7 +117,15 @@ export function resolvePhase(el: PhaseReader, source?: PhaseSource): PhaseId {
       if (phase) return phase;
     }
   }
-  return source?.unmarked ?? 'existing';
+  return null;
+}
+
+/** The phase of an element that says none: `unmarked`, else EXISTING. */
+export const unmarkedPhase = (source?: PhaseSource): PhaseId => source?.unmarked ?? 'existing';
+
+/** The phase of an element: the one it says (`statedPhase`), else `unmarked`, else EXISTING. */
+export function resolvePhase(el: PhaseReader, source?: PhaseSource): PhaseId {
+  return statedPhase(el, source) ?? unmarkedPhase(source);
 }
 
 const WEIGHT_MM: Record<CategoryLineWeight, number> = { heavy: 0.7, medium: 0.5, light: 0.25, hairline: 0.13 };

@@ -204,7 +204,11 @@ function readGraphics(raw: Record<string, unknown>): ViewGraphics {
         if (Object.keys(g).length > 0) styles[id] = g;
       }
     }
-    out.phases = { show: PHASES.filter((id) => (raw.phases as { show: unknown[] }).show.includes(id)), ...(Object.keys(styles).length ? { styles } : {}) };
+    out.phases = {
+      show: PHASES.filter((id) => (raw.phases as { show: unknown[] }).show.includes(id)),
+      ...(raw.phases.demolishAsExisting === true ? { demolishAsExisting: true } : {}),
+      ...(Object.keys(styles).length ? { styles } : {}),
+    };
   }
   return out;
 }

@@ -3,20 +3,29 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The FZK-Haus with phases (made from `public/_fixtures/AC20-FZK-Haus.ifc` by
- * `phase-fixture-source.ts` as it loads) as a test loads it: parsed into the
+ * The FZK-Haus with phases (made from `tests/models/ara3d/AC20-FZK-Haus.ifc`, fetched by
+ * `pnpm fixtures`, by `phase-fixture-source.ts` as it loads) as a test loads it: parsed into the
  * viewer store (a single model, so a drawing's entity ids are express ids), its real
  * meshes from the wasm geometry pass, and the drawings of a plan, a section and an
  * elevation made by the drawing generator on the CPU. Import `@/test/setup-dom.js` first.
+ * Without the fixture or the wasm runtime, `phaseModelMissing()` says why, and the tests skip.
  */
 
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 import { GeometryProcessor, type MeshData } from '@ifc-lite/geometry';
 import { Drawing2DGenerator, type Drawing2D, type SectionConfig } from '@ifc-lite/drawing-2d';
 import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
 import { withPhaseStatus } from '@/test/phase-fixture-source.js';
+
+const SAMPLE = new URL('../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url);
+const WASM = new URL('../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
+
+/** Why the phase model cannot be made here (the skip message), or null when it can. */
+export function phaseModelMissing(): string | null {
+  if (!existsSync(SAMPLE)) return 'FZK-Haus fixture not fetched: run `pnpm fixtures`';
+  if (!existsSync(WASM)) return 'wasm bundle not built: run `pnpm build:wasm:fetch` (or `bash scripts/build-wasm.sh`) first';
+  return null;
+}
 
 /** Express ids of the fixture's walls, by the Status the generator gave them. */
 export const WALL = {
@@ -37,16 +46,18 @@ export interface PhaseModel {
 
 let loaded: Promise<PhaseModel> | null = null;
 
-/** Parse, seed the store, run the geometry: once per test process. */
+/** Parse, seed the store, run the geometry: once per test process. Check `phaseModelMissing()` first. */
 export function loadPhaseModel(): Promise<PhaseModel> {
   return (loaded ??= (async () => {
-    const sample = readFileSync(resolve(process.cwd(), 'public/_fixtures/AC20-FZK-Haus.ifc'), 'latin1');
+    const missing = phaseModelMissing();
+    if (missing) throw new Error(missing);
+    const sample = readFileSync(SAMPLE, 'latin1');
     const bytes = new Uint8Array(Buffer.from(withPhaseStatus(sample), 'latin1'));
     const store = await parseStep(bytes);
     seedModel('fzk', 0, store, 1);
     // The DOM shim's fetch cannot read a file: URL, so the wasm is handed over as bytes.
     const wasm = await import('@ifc-lite/wasm');
-    wasm.initSync({ module: readFileSync(createRequire(import.meta.url).resolve('@ifc-lite/wasm/ifc-lite_bg.wasm')) });
+    wasm.initSync({ module: readFileSync(WASM) });
     const processor = new GeometryProcessor();
     await processor.init();
     // Type-library geometry (IfcSpaceType…) is no part of a model view, as the viewer's drawing hook also drops it.
