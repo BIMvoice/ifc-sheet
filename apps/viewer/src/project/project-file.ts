@@ -13,6 +13,7 @@ import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
+import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
@@ -208,6 +209,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     civilDrawings: list('civilDrawings').flatMap((v) => readCivilDrawing(v)),
     typicalSections: list('typicalSections').flatMap((v) => readTypicalSection(v)),
     materials: list('materials').flatMap((v) => readMaterial(v)),
+    cadLayers: list('cadLayers').map((v, i) => readCadLayerRule(v, `/cadLayers/${i}`)),
     savedSectionCuts: list('savedSectionCuts').flatMap((v) => readSavedSectionCuts(v)),
     annotationTypes: readList(raw, 'annotationTypes', readAnnotationType),
     symbols: readList(raw, 'symbols', readSymbol),
@@ -311,7 +313,7 @@ function readCivilDrawing(raw: unknown): ProjectCivilDrawing[] {
 
 function readSchedule(raw: unknown): ProjectSchedule[] {
   if (!isObject(raw) || !isString(raw.id)) return [];
-  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' ? raw.kind : 'all';
+  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' || raw.kind === 'finishes' ? raw.kind : 'all';
   const out: ProjectSchedule = { id: raw.id, name: isString(raw.name) && raw.name ? raw.name : 'Schedule', kind, createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0 };
   if (typeof raw.scale === 'number' && raw.scale > 0) out.scale = raw.scale;
   return [out];
