@@ -25,6 +25,7 @@ import { printSheet } from '../sheets/sheet-export';
 import { useSheetContent } from '../sheets/useSheetContent';
 import { AddDrawing } from './AddDrawing';
 import { InfoCard } from './InfoCard';
+import { PrintPreview } from './PrintPreview';
 import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
@@ -63,6 +64,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
@@ -97,7 +99,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   // Esc, outermost first to let go: the running tool or selection (the drawing's own), the chooser, the drawing, the sheet.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || previewing) return; // the preview, when open, takes its own Esc
       // A running tool or a drafted selection lets go first (the drafting keys' own Esc).
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       if (adding) setAdding(false);
@@ -110,7 +112,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onBack, focusId, chosen, adding, titling]);
+  }, [onBack, focusId, chosen, adding, titling, previewing]);
 
   const startTool = (command: string): void => {
     cancelStart.current();
@@ -190,6 +192,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
           <>
             <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
+            <button type="button" className={issue} onClick={() => setPreviewing(true)}>{t('printPreview.open')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
             <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
           </>
@@ -229,6 +232,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
           ) : null}
         </main>
       </div>
+      {previewing && paperRef.current ? <PrintPreview sheet={sheet} paper={paperRef.current} sheetContent={sheetContent} onClose={() => setPreviewing(false)} /> : null}
       {!focusView && group === 'sections' ? (
         <div className="flex shrink-0 justify-center px-6 pb-3">
           <SectionTray sheet={sheet} slotId={slot?.id ?? null} proposals={proposals} />

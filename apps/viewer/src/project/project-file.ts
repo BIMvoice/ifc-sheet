@@ -13,10 +13,16 @@ import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
+import { readCadLayerRule } from './cad-layers-file';
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
+import { isDisciplineId } from './discipline-views';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
+import { declaredVersion, migrateProject, PROJECT_FILE_VERSION, PROJECT_MIGRATIONS, type ProjectMigration } from './project-migrations';
+import { withoutModelState } from './autosave-snapshots';
+import { markProjectSaved } from './project-saved';
+import { loadProjectDocument, projectDocument } from './project-store';
 import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
@@ -25,7 +31,7 @@ import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, Categ
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
-export const PROJECT_FILE_VERSION = 1;
+export { PROJECT_FILE_VERSION };
 
 export interface ProjectFile extends ProjectDocument {
   format: typeof PROJECT_FILE_FORMAT;
@@ -38,9 +44,28 @@ export function serializeProject(doc: ProjectDocument, now = new Date()): string
   return JSON.stringify(file, null, 2);
 }
 
+/**
+ * Open a project file the person chose: load it and note it as the last file opened, so its own
+ * autosave is not offered back next session. Autosave restores load with `loadProjectDocument`
+ * directly. Kept out of the store so the drafting session does not reach the file reader.
+ */
+export function openProjectDocument(doc: ProjectDocument, options: { dirty?: boolean; now?: number; storage?: Parameters<typeof markProjectSaved>[2] } = {}): void {
+  loadProjectDocument(doc, { dirty: options.dirty });
+  noteProjectFile(projectDocument(), options.now, options.storage);
+}
+
 export function exportProjectFile(doc: ProjectDocument): void {
   const stem = sanitizeFilename(doc.name, { fallback: 'project' });
   downloadFile(serializeProject(doc), `${stem}${PROJECT_FILE_SUFFIX}`, 'application/json');
+  noteProjectFile(doc);
+}
+
+/**
+ * Notes `doc` as what a project file holds now (`project-saved.ts`). The autosave is compared to it in the
+ * form a file is read back in, so it is noted in that form: the reader fills defaults a live project lacks.
+ */
+export function noteProjectFile(doc: ProjectDocument, now?: number, storage?: Parameters<typeof markProjectSaved>[2]): void {
+  markProjectSaved(parseProjectFile(serializeProject(withoutModelState(doc).slim)), now, storage);
 }
 
 const VIEW_KINDS: readonly ProjectViewKind[] = ['plan', 'section', 'elevation', '3d'];
@@ -107,7 +132,7 @@ function readView(v: unknown, path: string): ProjectView {
   switch (v.kind) {
     case 'plan':
       if (!isNumber(v.cutHeight)) fail(`${path}.cutHeight`, 'must be a number');
-      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(v.reflected === true ? { reflected: true } : {}) };
+      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(isDisciplineId(v.discipline) ? { discipline: v.discipline } : {}), ...(v.reflected === true ? { reflected: true } : {}) };
     case 'section': {
       const section = { ...base, kind: 'section' as const, plane: readPlane(v.plane, `${path}.plane`) };
       return isString(v.through) && v.through ? { ...section, through: v.through } : section;
@@ -134,16 +159,27 @@ function readModel(v: unknown, path: string): ProjectModelRef {
   return { key: v.key, name: v.name };
 }
 
+/** The versions a reader brings files to: this build's, unless a test stands in a later one. */
+export interface ProjectFileSchema {
+  migrations: Readonly<Record<number, ProjectMigration>>;
+  current: number;
+}
+
+const THIS_BUILD: ProjectFileSchema = { migrations: PROJECT_MIGRATIONS, current: PROJECT_FILE_VERSION };
+
 /** Parse and validate a project file's text. Throws with the first problem found. */
-export function parseProjectFile(text: string): ProjectDocument {
-  let raw: unknown;
+export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_BUILD): ProjectDocument {
+  let parsed: unknown;
   try {
-    raw = JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch (err) {
     throw new Error(`Not a project file: invalid JSON (${err instanceof Error ? err.message : String(err)})`);
   }
-  if (!isObject(raw) || raw.format !== PROJECT_FILE_FORMAT) fail('/format', `must be "${PROJECT_FILE_FORMAT}"`);
-  if (raw.version !== PROJECT_FILE_VERSION) fail('/version', `${String(raw.version)} is not supported (expected ${PROJECT_FILE_VERSION})`);
+  if (!isObject(parsed) || parsed.format !== PROJECT_FILE_FORMAT) fail('/format', `must be "${PROJECT_FILE_FORMAT}"`);
+  const version = declaredVersion(parsed);
+  if (version === null) fail('/version', 'must be a whole number from 1');
+  // Older files are brought up to this build's shape first; a newer one throws here, before anything is read.
+  const raw = migrateProject(parsed, version, schema.migrations, schema.current);
   const list = (key: string): unknown[] => {
     const value = raw[key];
     if (value === undefined) return [];
@@ -173,6 +209,7 @@ export function parseProjectFile(text: string): ProjectDocument {
     civilDrawings: list('civilDrawings').flatMap((v) => readCivilDrawing(v)),
     typicalSections: list('typicalSections').flatMap((v) => readTypicalSection(v)),
     materials: list('materials').flatMap((v) => readMaterial(v)),
+    cadLayers: list('cadLayers').map((v, i) => readCadLayerRule(v, `/cadLayers/${i}`)),
     savedSectionCuts: list('savedSectionCuts').flatMap((v) => readSavedSectionCuts(v)),
     annotationTypes: readList(raw, 'annotationTypes', readAnnotationType),
     symbols: readList(raw, 'symbols', readSymbol),
@@ -276,7 +313,7 @@ function readCivilDrawing(raw: unknown): ProjectCivilDrawing[] {
 
 function readSchedule(raw: unknown): ProjectSchedule[] {
   if (!isObject(raw) || !isString(raw.id)) return [];
-  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' ? raw.kind : 'all';
+  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' || raw.kind === 'finishes' ? raw.kind : 'all';
   const out: ProjectSchedule = { id: raw.id, name: isString(raw.name) && raw.name ? raw.name : 'Schedule', kind, createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0 };
   if (typeof raw.scale === 'number' && raw.scale > 0) out.scale = raw.scale;
   return [out];

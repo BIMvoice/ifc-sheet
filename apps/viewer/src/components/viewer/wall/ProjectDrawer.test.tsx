@@ -8,13 +8,14 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { cleanup, click, render } from '@/test/render.js';
 import { patchViewDrawing, useViewDrawings } from '@/project/view-drawings';
-import { resetProject, useProjectStore } from '@/project/project-store';
+import { projectDocument, resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet } from '@/project/drawing-set-actions';
 import type { ModelExtent } from '@/project/drawing-set';
 import type { ProjectLevel } from '@/project/types';
 import { ProjectDrawer } from './ProjectDrawer.js';
 import { useWallNav } from './wall-nav.js';
+import { forgetRecoveryOffer, offerRecovery } from '@/project/recovery-store';
 
 /**
  * The project drawer: a click goes to a sheet, brings a drawing forward on
@@ -40,6 +41,18 @@ const button = (ui: HTMLElement, text: string | RegExp) => {
 };
 
 describe('ProjectDrawer', () => {
+  it('keeps a session on offer within reach after the intro is gone, with both answers', () => {
+    offerRecovery({ key: 'k', doc: projectDocument(), savedAt: 0, modelName: 'house.ifc' });
+    try {
+      const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+      assert.match(ui.textContent ?? '', /Recover previous session/);
+      button(ui, 'Restore it');
+      button(ui, 'Discard');
+    } finally {
+      forgetRecoveryOffer();
+    }
+  });
+
   it('offers the library file beside new, open and save', () => {
     const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
     button(ui, 'Import library');
@@ -79,6 +92,14 @@ describe('ProjectDrawer', () => {
     const sheet = useProjectStore.getState().sheets.find((s) => s.number === 'A-602');
     assert.ok(sheet);
     assert.equal(useProjectStore.getState().schedules?.find((s) => s.id === sheet.viewports?.[0]?.viewId)?.kind, 'types');
+  });
+
+  it('adds a room finishes schedule on a new A-6xx sheet', () => {
+    const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    click(button(ui, '+ Room finishes'));
+    const sheet = useProjectStore.getState().sheets.find((s) => s.number === 'A-601');
+    assert.ok(sheet);
+    assert.equal(useProjectStore.getState().schedules?.find((s) => s.id === sheet.viewports?.[0]?.viewId)?.kind, 'finishes');
   });
 
   it('starts a blank sheet past the set\'s series', () => {

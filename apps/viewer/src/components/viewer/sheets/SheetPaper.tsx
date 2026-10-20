@@ -24,11 +24,12 @@ import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/proje
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { shapePath } from '../drafting/DraftOverlay';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
-import { layerTags, penTags } from './dxf-tags';
+import { cadKindOf, layerTags, penTags } from './dxf-tags';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
 import { useProjectStore } from '@/project/project-store';
 import { LOGO_FIELD, titleBlockOf } from '@/project/title-block';
 import { viewportPens } from './viewport-pens';
+import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
@@ -46,6 +47,8 @@ export interface ViewportContent {
   view: ProjectView | undefined;
   drawing: Drawing2D | null;
   drafts: DraftEntity[];
+  /** The drawing's number on this sheet, printed in its title. */
+  drawingNumber?: string;
   /** A plan's symbols and roof lines by pen, drawing units. */
   overlays?: PlanOverlay[];
   /** A joinery schedule placed here instead of a view (paper millimetres). */
@@ -79,6 +82,21 @@ export function viewportTransform(vp: SheetViewport, drawing: Drawing2D | null, 
   return { scale: s, x: vp.x - c.x * kx * s, y: vp.y - c.y * ky * s };
 }
 
+/** Width on paper of the drawing number's ring, mm: round for one or two characters, longer for a longer number. */
+const numberWidth = (n: string): number => Math.max(LABEL_MM + 1, n.length * LABEL_MM * 0.6 + 2);
+
+/** The drawing's number in a ring at the start of its title: the number a mark elsewhere names. */
+function TitleNumber({ number, x, baseline }: { number: string | undefined; x: number; baseline: number }) {
+  if (!number) return null;
+  const w = numberWidth(number);
+  return (
+    <g {...penTags('VIEWPORT-LABELS', 0.25)}>
+      <rect x={x} y={baseline - LABEL_MM - 0.4} width={w} height={LABEL_MM + 1} rx={(LABEL_MM + 1) / 2} fill="none" stroke="#000" strokeWidth={0.25} />
+      <text x={x + w / 2} y={baseline - 0.2} fontSize={LABEL_MM * 0.8} fontWeight={700} textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">{number}</text>
+    </g>
+  );
+}
+
 const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, extraPatterns, selected }: {
   vp: SheetViewport; content: ViewportContent; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[]; selected: boolean;
 }) {
@@ -86,9 +104,10 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const { view, drawing, drafts } = content;
   const axis: SectionAxisName = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
   const t = viewportTransform(vp, drawing, axis);
+  const cadLayers = useProjectStore((s) => s.cadLayers);
   const pens = useMemo(
-    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns) : []),
-    [drawing, view?.graphics, vp, axis, extraPatterns],
+    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers)) : []),
+    [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);
   const left = vp.x - box.width / 2;
@@ -114,7 +133,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
       <g clipPath={`url(#${clipId})`}>
         {pens.map((p, i) => (
-          <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000')} d={p.d} fill={p.fill ?? 'none'} fillRule="evenodd" stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
+          <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} d={p.d} fill={p.fill ?? 'none'} fillRule="evenodd" stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
         ))}
         {content.overlays?.length ? <OverlayPaths overlays={content.overlays} transform={t} axis={axis} /> : null}
         {drafts.map((e) => {
@@ -122,7 +141,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
           if (color === null) return null;
           return isGeometry(e.shape)
             ? <PenPath key={e.id} layer={layerById.get(e.layerId)} d={shapePath(e.shape, t, axis)} color={color ?? '#000'} />
-            : <g key={e.id} {...layerTags(layerById.get(e.layerId))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} /></g>;
+            : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} /></g>;
         })}
       </g>
       <rect
@@ -130,7 +149,8 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined}
         data-export-ignore={selected ? 'true' : undefined}
       />
-      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left} y={top + box.height + LABEL_MM + 1.5} fontSize={LABEL_MM} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
+      <TitleNumber number={content.drawingNumber} x={left} baseline={top + box.height + LABEL_MM + 1.5} />
+      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (content.drawingNumber ? numberWidth(content.drawingNumber) + 2 : 0)} y={top + box.height + LABEL_MM + 1.5} fontSize={LABEL_MM} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
         {tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale })}
       </text>
     </g>
@@ -202,7 +222,7 @@ function SheetDrafts({ entities, layers, extraPatterns }: { entities: readonly D
         if (color === null) return null;
         return isGeometry(e.shape)
           ? <PenPath key={e.id} layer={layerById.get(e.layerId)} d={shapePath(e.shape, PAPER, 'down')} color={color ?? '#000'} />
-          : <g key={e.id} {...layerTags(layerById.get(e.layerId))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={PAPER} axis="down" extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={1} /></g>;
+          : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={PAPER} axis="down" extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={1} /></g>;
       })}
     </g>
   );

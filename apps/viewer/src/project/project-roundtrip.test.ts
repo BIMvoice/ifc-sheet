@@ -18,6 +18,7 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import type { CadLayerRule } from './cad-layers.js';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
 import { snapshotFromElements } from '@/whatchanged/snapshot.js';
 import { defaultTypeSpec } from '@/element-types/spec';
@@ -61,7 +62,7 @@ const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, de
 
 const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').ProjectView, { kind: K }>> } = {
   plan: {
-    ...base, id: 'v-plan', name: 'Level 1', kind: 'plan', cutHeight: 1.4, reflected: true,
+    ...base, id: 'v-plan', name: 'Level 1', kind: 'plan', cutHeight: 1.4, discipline: 'foundation', reflected: true,
     level: { name: 'Level 1', elevation: 3.2, storeyGlobalIds: ['G-A', 'G-B'] },
   } satisfies Required<PlanProjectView>,
   section: {
@@ -127,7 +128,7 @@ const legend: Required<ProjectLegend> = {
 const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'dashdot', group: 'g1' };
 
 const viewport: Required<SheetViewport> = {
-  id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'],
+  id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], drawingNumber: '7',
 };
 const sheet: Required<ProjectSheet> = {
   id: 'sh1', number: 'A-201', autoNumber: true, name: 'Plans', createdAt: 9, paper: 'A2', orientation: 'portrait', viewports: [viewport],
@@ -139,6 +140,10 @@ const civil: Required<ProjectCivilDrawing> = {
   stationStep: 50, elevationStep: 5, every: 25, stations: [0, 100, 250], columns: 3, halfWidth: 20,
 };
 const material: Required<ProjectMaterial> = { id: 'm1', name: 'Mineral wool', hatch: 'INSULATION', hatchScale: 1.5, fill: '#ffeeaa', hatchPen: 'light', membrane: true };
+
+const cadRule: Required<CadLayerRule> = {
+  id: 'cad1', source: 'CUT', kind: 'text', ifcClasses: ['IfcWall', 'IfcWallStandardCase'], material: 'Beton armat', layer: 'A-WALL-CUT', color: '#7f1d1d', lineWeight: 0.5, lineType: 'dashed',
+};
 
 /** Every field of the project document set to something that is not its default. */
 const FULL: Required<ProjectDocument> = {
@@ -167,6 +172,7 @@ const FULL: Required<ProjectDocument> = {
   civilDrawings: [civil],
   typicalSections: [{ id: 'ts1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: { width: 1, slope: -4 }, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 }, nominalDepth: 0.6 } }],
   materials: [material],
+  cadLayers: [cadRule],
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],
