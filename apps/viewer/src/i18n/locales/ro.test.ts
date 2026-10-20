@@ -93,6 +93,15 @@ describe('Romanian catalogue (#53)', () => {
     assert.ok(basculant.every((k) => k === 'joinery.op.pivot-horizontal'), basculant.join(', '));
   });
 
+  // PR #124 review: "model" is the IFC model on these screens, so a hatch
+  // pattern is a "tipar", and an element whose shape changed is not "remodelat".
+  it('keeps "model" for the IFC model only', () => {
+    const misread = keys.filter((k) => /pattern|reshaped/i.test(Object.values(forms(en[k])).join(' ')) && /model/i.test(Object.values(forms(catalogue[k])).join(' ')));
+    assert.deepEqual(misread, []);
+    assert.equal(catalogue['wall.hatch.pattern'], 'Tipar');
+    assert.match(String(catalogue['whatchanged.usage']), /^WHATCHANGED nu primește argumente, sau primește CLEAR ori ACCEPT; „\{arg\}”/);
+  });
+
   it('the checks catch a cedilla and a dropped placeholder', () => {
     assert.deepEqual(cedillaProblems({ ...catalogue, 'wall.tb.done': 'Gaţa' }), ['wall.tb.done.other']);
     assert.deepEqual(cedillaProblems({ ...catalogue, 'wall.fit': 'Încadrează ş' }), ['wall.fit.other']);

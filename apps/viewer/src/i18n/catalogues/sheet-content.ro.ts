@@ -29,7 +29,7 @@ export const sheetContentRo = {
   'library.kind.layers': 'Straturi și grupuri de straturi',
   'library.kind.textStyles': 'Stiluri de text',
   'library.kind.dimStyles': 'Stiluri de cotare',
-  'library.kind.hatchPatterns': 'Modele de hașură',
+  'library.kind.hatchPatterns': 'Tipare de hașură',
   'library.kind.materials': 'Materiale și setările lor de desen',
   'library.kind.annotationTypes': 'Tipuri de adnotări',
   'library.kind.symbols': 'Simboluri',

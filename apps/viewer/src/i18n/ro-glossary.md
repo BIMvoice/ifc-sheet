@@ -51,6 +51,8 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET) stay as
 | Landscape / Portrait | Orizontal / Vertical | |
 | As indicated | Conform indicațiilor | |
 | Hatch | Hașură | |
+| Pattern (of a hatch) | Tipar | Not "model", which reads as the IFC model; "Tipare de hașură" |
+| Reshaped (what changed) | Formă modificată | Not "remodelat", for the same reason |
 | Leaf (of a door or window) | Canat | The leaf itself, never the way it opens: "Canat batant", "Canat glisant" |
 | Swing (door) | Canat batant | Neuter "canat" takes "batant"; on its own, of a door, "batantă" |
 | Double-acting (door) | Canat pendulant | As above: "pendulant", "pendulantă" of a door |
