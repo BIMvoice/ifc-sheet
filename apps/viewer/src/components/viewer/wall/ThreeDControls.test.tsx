@@ -66,7 +66,8 @@ describe('3D views on the Wall', () => {
     cleanup();
     ui = render(<ViewportCard sheet={sheet()} slot={sheet().viewports![0]} onOpen={() => {}} onChoose={() => {}} />);
     assert.doesNotMatch(text(), /Scale/, 'a perspective has no scale field');
-    assert.match(text(), /Capture the 3D view at 300 dpi/);
+    assert.match(text(), /Capture the 3D view for print/);
+    assert.doesNotMatch(text(), /300 dpi/, 'no resolution is promised before a capture');
     assert.match(text(), /Not captured yet/);
   });
 
@@ -81,7 +82,7 @@ describe('3D views on the Wall', () => {
     cleanup();
 
     const asked: [number, number][] = [];
-    const deps = { modelBounds: () => ({ min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 8 } }), capture: async (_vp: unknown, w: number, h: number) => { asked.push([w, h]); return 'data:image/png;base64,AAAA'; } };
+    const deps = { modelBounds: () => ({ min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 8 } }), capture: async (_vp: unknown, w: number, h: number) => { asked.push([w, h]); return { href: 'data:image/png;base64,AAAA', widthPx: 800, heightPx: Math.round((800 * h) / w) }; } };
     ui = render(<ThreeDControls view={view() as ThreeDProjectView} slot={slot} bounds={null} captureDeps={deps} />);
     click([...ui.querySelectorAll('button')].find((b) => /Capture the 3D view/.test(b.textContent ?? ''))!);
     await waitFor(() => (view() as ThreeDProjectView).raster != null || /could not be captured/.test(ui.textContent ?? ''), 'the capture to land or fail');
@@ -90,5 +91,10 @@ describe('3D views on the Wall', () => {
     const box = viewportBox(slot, null);
     assert.deepEqual([raster.widthMm, raster.heightMm], [box.width, box.height], 'sized for the effective box, not the 0 x 0 slot');
     assert.ok(asked.length === 1 && asked[0][0] > 0 && asked[0][1] > 0);
+    // 800 px over 120 mm is 169 dpi: said, and said to be below what a print needs.
+    cleanup();
+    ui = render(<ThreeDControls view={view() as ThreeDProjectView} slot={slot} bounds={null} captureDeps={deps} />);
+    assert.match(ui.textContent ?? '', /800 × \d+ px for 120 × 80 mm, 169 dpi on paper/);
+    assert.match(ui.textContent ?? '', /Below the 300 dpi a print needs/);
   });
 });

@@ -15,7 +15,7 @@ import { captureViewRaster, type RasterCaptureDeps } from '@/lib/export/view-ras
 import { AXONOMETRIC_PRESETS, isRasterView, projectionOf } from '@/project/axonometric';
 import { updateProjectView } from '@/project/project-store';
 import { viewportBox } from '@/project/sheets';
-import { PRINT_DPI, rasterFits } from '@/project/view-raster';
+import { PRINT_DPI, effectiveDpi, rasterFits } from '@/project/view-raster';
 import type { AxonometricPreset, SheetViewport, ThreeDProjectView, ThreeDProjection } from '@/project/types';
 
 const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
@@ -77,10 +77,15 @@ export function ThreeDControls({ view, slot, bounds = null, captureDeps }: Three
       ) : null}
       {isRasterView(view) ? (
         <div className="space-y-2">
-          <button type="button" className={quiet} onClick={() => void capture()}>{t('wall.vp.threeD.capture', { dpi: PRINT_DPI })}</button>
-          {view.raster
-            ? <p className="m-0">{rasterFits(view.raster, box) ? t('wall.vp.threeD.captured', { w: view.raster.widthPx, h: view.raster.heightPx, mmw: Math.round(view.raster.widthMm), mmh: Math.round(view.raster.heightMm) }) : t('wall.vp.threeD.stale')}</p>
-            : <p className="m-0">{t('wall.vp.threeD.none')}</p>}
+          <button type="button" className={quiet} onClick={() => void capture()}>{t('wall.vp.threeD.capture')}</button>
+          {!view.raster ? <p className="m-0">{t('wall.vp.threeD.none')}</p>
+            : !rasterFits(view.raster, box) ? <p className="m-0">{t('wall.vp.threeD.stale')}</p>
+              : (
+                <>
+                  <p className="m-0">{t('wall.vp.threeD.captured', { w: view.raster.widthPx, h: view.raster.heightPx, mmw: Math.round(view.raster.widthMm), mmh: Math.round(view.raster.heightMm), dpi: effectiveDpi(view.raster) })}</p>
+                  {effectiveDpi(view.raster) < PRINT_DPI ? <p className="m-0 text-amber-300">{t('wall.vp.threeD.lowDpi', { target: PRINT_DPI })}</p> : null}
+                </>
+              )}
           {failure ? <p className="m-0 text-amber-300">{t('wall.vp.threeD.failed', { reason: failure })}</p> : null}
         </div>
       ) : null}

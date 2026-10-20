@@ -4,11 +4,11 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { captureViewRaster, coverCrop } from '@/lib/export/view-raster-capture';
+import { captureViewRaster, coverCrop, deliveredSize } from '@/lib/export/view-raster-capture';
 import type { CameraViewpoint } from '@/store/types';
 import { presetViewDirection } from './axonometric.js';
 import type { AxonometricPreset, ThreeDProjectView } from './types';
-import { rasterFits, rasterRequest } from './view-raster.js';
+import { effectiveDpi, rasterFits, rasterRequest } from './view-raster.js';
 
 describe('the size of a viewport capture (issue #49)', () => {
   it('is the box in millimetres at 300 dpi, rounded up to a whole pixel', () => {
@@ -50,7 +50,7 @@ describe('the camera a capture is taken from (PR #130 review)', () => {
     let seen: CameraViewpoint | null = null;
     await captureViewRaster(full, { width: 150, height: 100 }, {
       modelBounds: () => BOUNDS,
-      capture: async (vp) => { seen = vp; return 'data:image/png;base64,AAAA'; },
+      capture: async (vp, w, h) => { seen = vp; return { href: 'data:image/png;base64,AAAA', widthPx: w, heightPx: h }; },
     });
     assert.ok(seen, 'a camera was asked for');
     return seen;
@@ -86,5 +86,32 @@ describe('the camera a capture is taken from (PR #130 review)', () => {
 
   it('is the saved camera of a perspective', async () => {
     assert.deepEqual(await asked({ projection: 'perspective', viewpoint: ON_SCREEN }), ON_SCREEN);
+  });
+});
+
+describe('the resolution a capture really has (PR #130 review)', () => {
+  it('is never enlarged to the request: a smaller canvas is delivered at its own pixels', () => {
+    // A 400 x 250 mm box asks for 4725 x 2953 px; a 1600 x 1000 canvas crops to 1600 x 1000.
+    const want = rasterRequest(400, 250);
+    const c = coverCrop(1600, 1000, want.widthPx, want.heightPx);
+    assert.deepEqual(deliveredSize(c.width, c.height, want.widthPx, want.heightPx), { widthPx: 1600, heightPx: 1000 });
+    // A canvas larger than the request is reduced to it.
+    assert.deepEqual(deliveredSize(4000, 2000, 1772, 886), { widthPx: 1772, heightPx: 886 });
+  });
+
+  it('is reported as the dpi on paper, about 100 for the 400 x 250 mm box the review measured, and 300 only when delivered', () => {
+    assert.equal(effectiveDpi({ widthPx: 1600, heightPx: 1000, widthMm: 400, heightMm: 250 }), 101);
+    const full = rasterRequest(150, 100);
+    assert.equal(effectiveDpi({ widthPx: full.widthPx, heightPx: full.heightPx, widthMm: 150, heightMm: 100 }), 300);
+    // The lower axis decides.
+    assert.equal(effectiveDpi({ widthPx: 1772, heightPx: 591, widthMm: 150, heightMm: 100 }), 150);
+  });
+
+  it('is recorded as delivered, not as requested', async () => {
+    const raster = await captureViewRaster({ id: 'v', name: 'V', kind: '3d', createdAt: 0, viewpoint: null, projection: 'perspective' }, { width: 400, height: 250 }, {
+      modelBounds: () => ({ min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }),
+      capture: async () => ({ href: 'data:image/png;base64,AAAA', widthPx: 1600, heightPx: 1000 }),
+    });
+    assert.deepEqual([raster.widthPx, raster.heightPx, effectiveDpi(raster)], [1600, 1000, 101]);
   });
 });

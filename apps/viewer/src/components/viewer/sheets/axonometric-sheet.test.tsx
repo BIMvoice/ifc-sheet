@@ -182,7 +182,7 @@ describe('a perspective on a sheet (issue #49)', () => {
       modelBounds: () => ({ min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 8 } }),
       capture: async (_vp, w, h) => {
         asked.push([w, h]);
-        return 'data:image/png;base64,iVBORw0KGgo=';
+        return { href: 'data:image/png;base64,iVBORw0KGgo=', widthPx: w, heightPx: h };
       },
     });
     // ceil(150 mm * 300 / 25.4) = 1772, ceil(100 mm * 300 / 25.4) = 1182
