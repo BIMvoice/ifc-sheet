@@ -29,6 +29,7 @@ import { cadKindOf, layerTags, penTags } from './dxf-tags';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
 import { useProjectStore } from '@/project/project-store';
 import { LOGO_FIELD, titleBlockOf } from '@/project/title-block';
+import { useEffectiveTitleBlock } from '@/project/title-block-model';
 import { viewportPens } from './viewport-pens';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
@@ -267,14 +268,17 @@ function SheetDrafts({ entities, layers, extraPatterns }: { entities: readonly D
 }
 
 /**
- * The title block, bottom right (180 × 50 mm): project, client and sheet
- * title across, drawn / checked by and date / revision in halves; at the
+ * The title block, bottom right (180 × 50 mm): project / address and client /
+ * organisation in halves, the sheet title across, drawn / checked by and date / revision in halves; at the
  * right the logo, the sheet number and its scale. Fields are the project's
  * with the sheet's own on top (`title-block.ts`).
  */
+/** The size of a value in a half-width cell (about 61 mm of text): 3.5 mm, smaller for a longer value so that all of it prints inside its cell. */
+const valueSize = (value: string): number => Math.max(1.6, Math.min(3.5, 61 / (0.55 * Math.max(1, value.length))));
+
 function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; projectName: string; w: number; h: number }) {
   const { t } = useTranslation();
-  const projectFields = useProjectStore((s) => s.titleBlock);
+  const projectFields = useEffectiveTitleBlock();
   const x = w - FRAME_MARGIN_MM - TITLE_BLOCK_MM.w;
   const y = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h;
   const fields = titleBlockOf(sheet, projectFields, projectName);
@@ -288,8 +292,10 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
   const rowH = TITLE_BLOCK_MM.h / 5;
   // [label, value, column 0 or 1 of 2, or -1 across]
   const cells: [string, string, number, number][] = [
-    [t('sheets.tb.project'), fields.project ?? '', 0, -1],
-    [t('sheets.tb.client'), fields.client ?? '', 1, -1],
+    [t('sheets.tb.project'), fields.project ?? '', 0, 0],
+    [t('sheets.tb.address'), fields.address ?? '', 0, 1],
+    [t('sheets.tb.client'), fields.client ?? '', 1, 0],
+    [t('sheets.tb.organisation'), fields.organisation ?? '', 1, 1],
     [t('sheets.tb.title'), sheet.name, 2, -1],
     [t('sheets.tb.drawnBy'), fields.drawnBy ?? '', 3, 0],
     [t('sheets.tb.checkedBy'), fields.checkedBy ?? '', 3, 1],
@@ -302,13 +308,13 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
     <g {...penTags('TITLEBLOCK', 0.35)}>
       <rect x={x} y={y} width={TITLE_BLOCK_MM.w} height={TITLE_BLOCK_MM.h} fill="#fff" stroke="#000" strokeWidth={0.5} />
       {[1, 2, 3, 4].map((i) => <line key={i} x1={x} y1={y + rowH * i} x2={sx} y2={y + rowH * i} stroke="#000" strokeWidth={0.18} />)}
-      <line x1={x + left / 2} y1={y + rowH * 3} x2={x + left / 2} y2={y + TITLE_BLOCK_MM.h} stroke="#000" strokeWidth={0.18} />
+      {[[0, 2], [3, 5]].map(([from, to]) => <line key={from} x1={x + left / 2} y1={y + rowH * from} x2={x + left / 2} y2={y + rowH * to} stroke="#000" strokeWidth={0.18} />)}
       {cells.map(([label, value, row, col]) => {
         const cx = x + (col === 1 ? left / 2 : 0);
         return (
           <g key={label}>
             <text x={cx + 2} y={y + rowH * row + 3.2} fontSize={2} fontFamily={font} fill="#52525b">{label}</text>
-            <text x={cx + 2} y={y + rowH * row + 8} fontSize={3.5} fontFamily={font} fill="#000">{value}</text>
+            <text x={cx + 2} y={y + rowH * row + 8} fontSize={col < 0 ? 3.5 : valueSize(value)} fontFamily={font} fill="#000">{value}</text>
           </g>
         );
       })}

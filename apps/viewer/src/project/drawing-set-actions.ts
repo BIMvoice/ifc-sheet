@@ -14,7 +14,6 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
-import { useViewerStore } from '@/store';
 import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, nextInSeries, rowOfViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { addSchedule } from '@/joinery/schedules';
 import { proposalInputForLevel } from './model-rooms';
@@ -28,18 +27,13 @@ import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule
 /** How many proposed sections the starting set draws; the rest wait in the tray. */
 export const SET_SECTIONS = 2;
 
-/** Title block fields the model can fill: the project's name and today's date. */
+/**
+ * Title block fields typed for the project when a set is laid out: today's date.
+ * The project's name, address and organisation are not copied in; every sheet
+ * reads them from the model (`title-block-model.ts`) until someone types over them.
+ */
 export function modelTitleBlock(now = new Date()): Record<string, string> {
-  const fields: Record<string, string> = { date: now.toISOString().slice(0, 10) };
-  for (const model of useViewerStore.getState().models.values()) {
-    const project = model.ifcDataStore?.spatialHierarchy?.project;
-    const name = project?.longName || project?.name;
-    if (name) {
-      fields.project = name;
-      break;
-    }
-  }
-  return fields;
+  return { date: now.toISOString().slice(0, 10) };
 }
 
 /** The lowest plan: the one a set's sections are drawn on. */
@@ -181,7 +175,7 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
   }
   if (sheets === before) return;
   useProjectStore.setState({ sheets, dirty: true });
-  // The title block is the project's, filled once: the model's name and today's date where the project has none.
+  // The title block is the project's, filled once: today's date where the project has none.
   seedProjectTitleBlock(modelTitleBlock());
   const known = new Set(before.map((s) => s.id));
   const added = sheets.filter((s) => !known.has(s.id));
