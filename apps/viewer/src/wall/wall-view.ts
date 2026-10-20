@@ -31,9 +31,15 @@ interface WallView {
   highlight: string | null;
   /** A request to scroll the Wall so this point is in the middle; `n` makes each request new. */
   scroll: { n: number; to: { x: number; y: number } } | null;
+  /**
+   * Counts `resetWallView` calls. A project replaced by one with the same sheet
+   * ids leaves the Wall's sheets in place, so the Wall reads this to measure and
+   * fill again; a background fill started for one project stops when it changes.
+   */
+  generation: number;
 }
 
-export const useWallView = create<WallView>()(() => ({ layout: null, near: [], queue: [], highlight: null, scroll: null }));
+export const useWallView = create<WallView>()(() => ({ layout: null, near: [], queue: [], highlight: null, scroll: null, generation: 0 }));
 
 /** How far past the screen a sheet still counts as near: half a screen each way. */
 export function nearMargin(viewport: Size): number {
@@ -48,9 +54,7 @@ export const noteWallMoved = (): void => {
   lastMoved = Date.now();
 };
 
-/** Counts `resetWallView` calls, so a background fill started for one project stops when another replaces it. */
-let generation = 0;
-export const wallViewGeneration = (): number => generation;
+export const wallViewGeneration = (): number => useWallView.getState().generation;
 
 export function setWallLayout(layout: WallLayout | null): void {
   noteWallMoved();
@@ -114,9 +118,8 @@ export function revealSheet(sheetId: string): void {
 
 /** Forget the Wall: called when the project is reset or replaced, so no sheet of the last one stays queued. */
 export function resetWallView(): void {
-  generation++;
   clearTimeout(flashTimer);
-  useWallView.setState({ layout: null, near: [], queue: [], highlight: null, scroll: null });
+  useWallView.setState((s) => ({ layout: null, near: [], queue: [], highlight: null, scroll: null, generation: s.generation + 1 }));
 }
 
 /**

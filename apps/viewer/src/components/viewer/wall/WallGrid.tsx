@@ -115,9 +115,11 @@ export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onSte
   const sheets = useProjectStore((s) => s.sheets);
   const scroller = useRef<HTMLDivElement>(null);
   const sheetIds = sheets.map((s) => s.id).join(',');
-  useWallMeasure(scroller, sheets.map((s) => `${s.id}:${sheetGroup(s) ?? ''}`).join(','));
+  // A document loaded with the same sheet ids forgets the Wall without changing them: measure and fill again.
+  const generation = useWallView((s) => s.generation);
+  useWallMeasure(scroller, `${generation}|${sheets.map((s) => `${s.id}:${sheetGroup(s) ?? ''}`).join(',')}`);
   // Started here, kept going after the Wall is gone; a sheet added starts it again.
-  useEffect(() => startWallFill(), [sheetIds]);
+  useEffect(() => startWallFill(), [sheetIds, generation]);
   const columns = GROUPS.map((g) => ({ ...g, sheets: sheets.filter((s) => sheetGroup(s) === g.group) })).filter((g) => g.sheets.length > 0);
   return (
     <div className="relative flex h-full flex-col">

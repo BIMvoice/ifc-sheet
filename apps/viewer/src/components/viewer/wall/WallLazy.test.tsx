@@ -273,6 +273,16 @@ describe('the Wall after an edit, away from the Wall, and in another project', (
     }
   });
 
+  it('measures and fills again when a document with the same sheets is loaded while the Wall is up', async () => {
+    const ui = render(<WallGrid extent={null} onStep={() => {}} />);
+    assert.equal(papers(ui), 4);
+    // A re-import, the project navigator or an autosave restore: the same sheet ids, and the Wall forgotten.
+    act(() => loadProjectDocument(projectDocument()));
+    assert.equal(useWallView.getState().near.length, 4, 'the Wall measured again');
+    assert.equal(papers(ui), 4, 'so the near sheets are drawn, not left as outlines');
+    await waitFor(() => useWallView.getState().queue.length > 4, 'and the background fill took up the far sheets again');
+  });
+
   it('forgets the last project\'s sheets when another is opened, or the project is reset', async () => {
     render(<WallGrid extent={null} onStep={() => {}} />);
     await waitFor(() => useWallView.getState().queue.length > 4, 'the fill has taken a far sheet of project A');
