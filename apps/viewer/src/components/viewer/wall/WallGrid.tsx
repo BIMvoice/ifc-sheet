@@ -5,8 +5,8 @@
 /**
  * The whole set on one wall: every sheet hangs in view, grouped by kind
  * (plans, elevations, sections). Hover a sheet and press its cross to take it
- * away; double-click it to step into it. The scale of the plans is one tap
- * above the wall.
+ * away; double-click it to step into it. The scale of the plans, of the
+ * elevations and of the sections is each one tap above the wall.
  */
 
 import { X } from 'lucide-react';
@@ -32,15 +32,24 @@ const GROUPS: { group: SetGroup | null; labelKey: TranslationKey }[] = [
   { group: null, labelKey: 'wall.group.other' },
 ];
 
+/** The groups whose sheets share a scale set above the wall. */
+const SCALED: SetGroup[] = ['plans', 'elevations', 'sections'];
+
 /** Width of a sheet on the wall, px. */
 const SHEET_PX = 340;
+
+const SCALE_LABELS: Partial<Record<SetGroup, TranslationKey>> = {
+  plans: 'wall.planScale',
+  elevations: 'wall.elevationScale',
+  sections: 'wall.sectionScale',
+};
 
 export function ScaleChips({ group, extent }: { group: SetGroup; extent: ModelExtent | null }) {
   const { t } = useTranslation();
   const current = useProjectStore((s) => groupScale(group, s.sheets));
   return (
     <fieldset className="m-0 flex items-center gap-2 border-0 p-0">
-      <legend className="float-left mr-2 p-0 text-[11px] font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.planScale')}</legend>
+      <legend className="float-left mr-2 p-0 text-[11px] font-medium uppercase tracking-[0.2em] text-sky-200/70">{t(SCALE_LABELS[group] ?? 'wall.planScale')}</legend>
       {SET_SCALES.map((scale) => (
         <button
           key={scale}
@@ -112,8 +121,10 @@ export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onSte
   const columns = GROUPS.map((g) => ({ ...g, sheets: sheets.filter((s) => sheetGroup(s) === g.group) })).filter((g) => g.sheets.length > 0);
   return (
     <div className="relative flex h-full flex-col">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 px-8 pt-6">
-        {sheets.some((s) => sheetGroup(s) === 'plans') ? <ScaleChips group="plans" extent={extent} /> : <span />}
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-10 gap-y-3 px-8 pt-6">
+        <div className="flex flex-wrap items-center gap-x-10 gap-y-3">
+          {SCALED.filter((g) => sheets.some((s) => sheetGroup(s) === g)).map((g) => <ScaleChips key={g} group={g} extent={extent} />)}
+        </div>
         <WallFind />
       </div>
       <div ref={scroller} className="min-h-0 flex-1 overflow-auto px-8 pb-10 pt-6">
