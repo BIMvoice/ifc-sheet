@@ -38,6 +38,7 @@ import { LegendGraphic } from '../legend/LegendGraphic';
 import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
 
+/** The cut axis a drawing is put on paper by (`viewportTransform`), from its plane's axis. */
 export const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
 const LABEL_MM = 3.5;
 

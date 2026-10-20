@@ -94,6 +94,16 @@ function planeNormalDistance(plane: SectionPlaneConfig): { normal: Vec3; offset:
 }
 
 /**
+ * The plane looks up from its position: a flipped plane, or a reflected one
+ * (a reflected ceiling plan, which looks up but keeps the plan's x/y). Every
+ * depth and view-direction decision reads this; only the U mirror reads
+ * `flipped` alone.
+ */
+export function looksUp(plane: Pick<SectionPlaneConfig, 'flipped' | 'reflected'>): boolean {
+  return plane.flipped || plane.reflected === true;
+}
+
+/**
  * Flip-adjusted depth of a raw coordinate along the cut axis — the scalar
  * mirror of {@link signedDepth} for callers that only have an axis coordinate
  * (e.g. an element's `axisMin`/`axisMax`) rather than a full 3D point. Keeps
@@ -111,7 +121,7 @@ export function signedAxisDepth(coord: number, position: number, flipped: boolea
 export function signedDepth(point: Vec3, plane: SectionPlaneConfig): number {
   const { normal, offset } = planeNormalDistance(plane);
   const raw = point.x * normal.x + point.y * normal.y + point.z * normal.z - offset;
-  return plane.flipped ? -raw : raw;
+  return looksUp(plane) ? -raw : raw;
 }
 
 /**
@@ -120,7 +130,7 @@ export function signedDepth(point: Vec3, plane: SectionPlaneConfig): number {
  * +axis when flipped); for a custom plane it follows the plane normal.
  */
 export function getViewDirectionForPlane(plane: SectionPlaneConfig): Vec3 {
-  const sign = plane.flipped ? 1 : -1;
+  const sign = looksUp(plane) ? 1 : -1;
   if (plane.customPlane) {
     const n = plane.customPlane.normal;
     return { x: n.x * sign, y: n.y * sign, z: n.z * sign };
@@ -244,8 +254,8 @@ export function outlineToProjectionLines(
   // custom-plane `distance` is only the best-available offset if a direct
   // caller ever passes one despite that.
   const pos = plane.customPlane ? plane.customPlane.distance : plane.position;
-  const dMin = signedAxisDepth(outline.axisMin, pos, plane.flipped);
-  const dMax = signedAxisDepth(outline.axisMax, pos, plane.flipped);
+  const dMin = signedAxisDepth(outline.axisMin, pos, looksUp(plane));
+  const dMax = signedAxisDepth(outline.axisMax, pos, looksUp(plane));
   const visibility = bandVisibility(classifyDepthRange(dMin, dMax, depths));
   if (visibility === null) return [];
 
