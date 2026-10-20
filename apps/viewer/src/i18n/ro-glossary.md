@@ -51,6 +51,14 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET) stay as
 | Landscape / Portrait | Orizontal / Vertical | |
 | As indicated | Conform indicațiilor | |
 | Hatch | Hașură | |
+| Leaf (of a door or window) | Canat | The leaf itself, never the way it opens: "Canat batant", "Canat glisant" |
+| Swing (door) | Canat batant | Neuter "canat" takes "batant"; on its own, of a door, "batantă" |
+| Double-acting (door) | Canat pendulant | As above: "pendulant", "pendulantă" of a door |
+| Bottom-hung (tilt) | Oscilant | Not "basculant" |
+| Top-hung | Proiectant | |
+| Tilt and turn | Oscilo-batant | |
+| Pivot, horizontal axis | Pivotant, ax orizontal | The only opening "basculant" may describe |
+| Pivot, vertical axis | Pivotant, ax vertical | |
 | Library | Bibliotecă | |
 | Project navigator | Navigatorul de proiect | |
 

@@ -78,6 +78,21 @@ describe('Romanian catalogue (#53)', () => {
     for (const key of ['check.cmd', 'issue.cmd', 'whatchanged.cmd', 'draftSet.cmd', 'wall.export.dxf'] as const) assert.equal(catalogue[key], en[key]);
   });
 
+  // PR #124 review: the trade's terms for how a door or window opens. "Basculant"
+  // is the horizontal pivot, so it may name nothing else; "canat" is the leaf
+  // and always comes with the word for how it moves.
+  it('names how doors and windows open with the joinery terms', () => {
+    const op = (k: string) => String(catalogue[`joinery.op.${k}`]);
+    assert.match(op('bottom-hung'), /^Oscilant\b/);
+    assert.match(op('top-hung'), /^Proiectant\b/);
+    for (const side of ['left', 'right']) {
+      assert.match(op(`swing-${side}`), /^Canat batant,/);
+      assert.match(op(`double-acting-${side}`), /^Canat pendulant,/);
+    }
+    const basculant = keys.filter((k) => k.startsWith('joinery.op.') && /basculant/i.test(String(catalogue[k])));
+    assert.ok(basculant.every((k) => k === 'joinery.op.pivot-horizontal'), basculant.join(', '));
+  });
+
   it('the checks catch a cedilla and a dropped placeholder', () => {
     assert.deepEqual(cedillaProblems({ ...catalogue, 'wall.tb.done': 'Gaţa' }), ['wall.tb.done.other']);
     assert.deepEqual(cedillaProblems({ ...catalogue, 'wall.fit': 'Încadrează ş' }), ['wall.fit.other']);
