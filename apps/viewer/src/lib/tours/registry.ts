@@ -12,6 +12,7 @@ import type { WorkspacePanelId } from '@/lib/panels/registry';
 import { BCF_TOUR } from './tours/bcf';
 import { CLASH_TOUR } from './tours/clash';
 import { COMPARE_TOUR } from './tours/compare';
+import { IFCSHEET_TOUR } from './tours/ifcsheet';
 import { IDS_TOUR } from './tours/ids';
 import { LAYERS_TOUR } from './tours/layers';
 import { LENS_TOUR } from './tours/lens';
@@ -32,7 +33,11 @@ export const TOUR_REGISTRY: readonly TourDefinition[] = [
   LENS_TOUR,
   SCRIPTING_TOUR,
   BCF_TOUR,
+  IFCSHEET_TOUR,
 ];
+
+/** The tours of the classic interface: what its Learn hub and command palette list. */
+export const CLASSIC_TOURS: readonly TourDefinition[] = TOUR_REGISTRY.filter((t) => !t.face);
 
 export function getTour(id: TourId): TourDefinition | undefined {
   return TOUR_REGISTRY.find((t) => t.id === id);

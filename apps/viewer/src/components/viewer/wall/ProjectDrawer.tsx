@@ -14,27 +14,32 @@
 
 import { useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { toast } from '@/components/ui/toast';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
 import { addScheduleToSet, hangLegend, hangSchedule, hangView } from '@/project/drawing-set-actions';
+import { projectOpenErrorText } from '@/project/open-error';
 import { requestNewProject } from '@/project/new-project';
-import { exportProjectFile, importProjectFile, PROJECT_FILE_SUFFIX } from '@/project/project-file';
-import { addProjectSheet, loadProjectDocument, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
+import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
+import { addProjectSheet, projectDocument, removeProjectItem, renameProjectItem, setSheetNumber, useProjectStore } from '@/project/project-store';
 import { paperLabel } from '@/project/paper';
 import { allTemplates } from '@/project/sheet-templates';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
+import { RecoveryOffer } from './RecoveryOffer';
 import { ReadinessList } from '../sheets/ReadinessList';
 import { WALL_SKIN } from '../sheets/set-skin';
 import { TitleBlockForm } from './TitleBlockForm';
 import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
 import { LegendsAdd } from './LegendsAdd';
+import { TagFieldsPanel } from './TagFieldsPanel';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
   { kind: 'plan', labelKey: 'wall.group.plans' },
   { kind: 'section', labelKey: 'wall.group.sections' },
   { kind: 'elevation', labelKey: 'wall.group.elevations' },
+  { kind: 'drafting', labelKey: 'wall.group.drafting' },
 ];
 
 const action = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
@@ -138,9 +143,10 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
         <input ref={fileInput} type="file" accept={`${PROJECT_FILE_SUFFIX},application/json`} className="hidden" onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = '';
-          if (file) void importProjectFile(file).then((doc) => loadProjectDocument(doc, { dirty: false })).catch((err: unknown) => console.warn('[ifcsheet] could not open the project file', err));
+          if (file) void importProjectFile(file).then((doc) => openProjectDocument(doc, { dirty: false })).catch((err: unknown) => { console.warn('[ifcsheet] could not open the project file', err); toast.error(projectOpenErrorText(err, t)); });
         }} />
       </div>
+      <div className="px-4"><RecoveryOffer /></div>
       <LibraryPanel />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         <Group title={t('wall.project.sheets')} add={(
@@ -166,6 +172,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('wall.tb.everySheet')}</p>
           <TitleBlockForm />
         </details>
+        <TagFieldsPanel />
         {DRAWING_KINDS.map(({ kind, labelKey }) => (
           <Group key={kind} title={t(labelKey)}>
             {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} onOpen={() => openDrawing(v.id)} />)}
@@ -178,6 +185,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
               <button type="button" className={action} onClick={() => go(addScheduleToSet('all', t('wall.project.joinerySchedule')))}>{t('wall.project.addJoinery')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('materials', t('takeoff.newName')))}>{t('wall.project.addTakeoff')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('types', t('typeQty.newName')))}>{t('wall.project.addTypeQuantities')}</button>
+              <button type="button" className={action} onClick={() => go(addScheduleToSet('finishes', t('finishes.newName')))}>{t('wall.project.addFinishes')}</button>
             </>
           )}
         >

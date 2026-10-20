@@ -10,13 +10,15 @@ import { Spinner } from '@/components/ui/spinner';
  * Layering: portal to document.body at z-40 - above floating panels (z-30),
  * below dialogs / dropdowns / the command palette (z-50), so action steps
  * that open those surfaces keep them interactive and un-dimmed. The layer is
- * pointer-events-none; only the step card re-enables pointer events.
+ * pointer-events-none; only the step card re-enables pointer events. The
+ * IfcSheet face's own tour sits at z-[60]: its full-screen shell is z-50.
  */
 
 import { createPortal } from 'react-dom';
 
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n';
+import { cn } from '@/lib/utils';
 import { cancelPrereq, confirmPrereqWithDemo } from '@/lib/tours/controller';
 import { getTour } from '@/lib/tours/registry';
 import { useTourStore } from '@/lib/tours/tour-store';
@@ -70,7 +72,7 @@ export function TourHost() {
   const step = tour.steps[stepIndex];
 
   return createPortal(
-    <div className="pointer-events-none fixed inset-0 z-40">
+    <div className={cn('pointer-events-none fixed inset-0', tour.face === 'ifcsheet' ? 'z-[60]' : 'z-40')}>
       {status === 'prereq' && <PrereqCard tour={tour} />}
       {status === 'running' && step && stepPhase === 'active' && (
         <>

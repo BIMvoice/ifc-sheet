@@ -119,7 +119,12 @@ jobs:
           name: wasm-pkg
           path: packages/wasm/pkg
       - run: pnpm turbo run build --filter='./packages/*'
-      - run: pnpm turbo run test --filter='./packages/*'
+      # Two packages at a time: each vitest run already starts a worker per CPU,
+      # and turbo's default of ten packages at once on a 4-CPU runner pushed
+      # heavy tests past vitest's 5 s limit in whichever package was unlucky
+      # (packages/mcp, packages/cache and in-store, on pull requests that did
+      # not touch them).
+      - run: pnpm turbo run test --filter='./packages/*' --concurrency=2
 
   # The viewer suite is about 15k tests, so it is split by test file across
   # eight runners (TEST_SHARD / TEST_SHARDS, see apps/viewer/package.json).
@@ -231,20 +236,10 @@ jobs:
           shared-key: ci
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      # On main today the test targets of ifc-lite-processing do not compile:
-      # its sources include docs/architecture/evidence/*.json, which is not
-      # committed (12 errors). So that crate's test targets are left out of both
-      # commands below, and its library and binaries are still linted. Put it
-      # back (drop the --exclude, and fold the first clippy step into the
-      # second) once those files are committed or the includes are removed.
-      - name: cargo clippy (ifc-lite-processing, library and binaries)
+      - name: cargo clippy
         if: steps.changes.outputs.rust == 'true'
-        run: cargo clippy -p ifc-lite-processing -- -D warnings
-
-      - name: cargo clippy (everything else, all targets)
-        if: steps.changes.outputs.rust == 'true'
-        run: cargo clippy --workspace --exclude ifc-lite-processing --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: cargo test
         if: steps.changes.outputs.rust == 'true'
-        run: cargo test --workspace --exclude ifc-lite-processing
+        run: cargo test --workspace

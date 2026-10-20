@@ -33,7 +33,8 @@ function open(): Promise<IDBDatabase> {
   });
 }
 
-async function run<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+/** One request on the autosave store. Raster captures share it, under their own keys (`autosave-rasters.ts`). */
+export async function run<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const db = await open();
   try {
     return await new Promise<T>((resolve, reject) => {
@@ -64,5 +65,14 @@ export async function readModelState(key: string): Promise<ModelSnapshot | null>
   } catch (err) {
     console.warn('[project] the kept model state could not be read', err);
     return null;
+  }
+}
+
+/** Removes the state kept under `key`. */
+export async function deleteModelState(key: string): Promise<void> {
+  try {
+    await run('readwrite', (s) => s.delete(key));
+  } catch (err) {
+    console.warn('[project] the kept model state could not be removed', err);
   }
 }

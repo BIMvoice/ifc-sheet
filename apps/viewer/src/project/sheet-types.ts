@@ -37,7 +37,7 @@ export interface SheetFrame {
 }
 
 /** The series of sheets a template can be the start of: the starting set's groups, and details. */
-export type TemplateSeries = 'plans' | 'elevations' | 'sections' | 'schedules' | 'details';
+export type TemplateSeries = 'plans' | 'elevations' | 'sections' | 'interiors' | 'schedules' | 'details';
 
 /** What a new sheet starts from: its paper, orientation, frame margins and title block position. */
 export interface SheetTemplate {

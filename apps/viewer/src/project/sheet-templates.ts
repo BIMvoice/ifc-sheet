@@ -53,7 +53,7 @@ export function readTemplate(v: unknown): SheetTemplate | undefined {
   return { id: o.id, name: o.name, paper, orientation: o.orientation === 'portrait' ? 'portrait' : 'landscape', frame: readFrame(o.frame) ?? DEFAULT_FRAME };
 }
 
-const SERIES: readonly TemplateSeries[] = ['plans', 'elevations', 'sections', 'schedules', 'details'];
+const SERIES: readonly TemplateSeries[] = ['plans', 'elevations', 'sections', 'interiors', 'schedules', 'details'];
 
 /** Which template each series starts from, out of a file; unknown series and non-text ids are dropped. */
 export function readSeriesTemplates(v: unknown): Partial<Record<TemplateSeries, string>> {
