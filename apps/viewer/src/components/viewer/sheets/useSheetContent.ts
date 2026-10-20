@@ -22,8 +22,7 @@ import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
 import { drawingNumbers } from '@/drafting/cross-ref';
-import { elevationMarkDrafts, obstacleBoxes, sectionReferenceDrafts } from '@/drafting/cross-ref-marks';
-import { groundPlan } from '@/project/drawing-set-actions';
+import { elevationMarkDrafts, elevationMarkPlan, obstacleBoxes, sectionReferenceDrafts } from '@/drafting/cross-ref-marks';
 import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
@@ -82,7 +81,7 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const sheets = useProjectStore((s) => s.sheets);
   const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
   const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
-  const ground = useMemo(() => groundPlan(views.filter((v) => !v.detail)), [views]);
+  const ground = useMemo(() => elevationMarkPlan(views), [views]);
   const draftsFor = useCallback((vp: SheetViewport) => {
     const own = settledDrafts(vp.viewId);
     const view = views.find((v) => v.id === vp.viewId);

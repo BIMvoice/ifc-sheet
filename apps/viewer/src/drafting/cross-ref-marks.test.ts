@@ -75,6 +75,21 @@ describe('elevationMarkDrafts', () => {
     assert.equal(withDetail.filter((m) => m.shape.type === 'text').length, 4);
   });
 
+  it('slides the second of two marks on one side clear of the first (#134 review)', () => {
+    // Two north elevations: both start at the middle of the north side; the one placed first is in the way of the other.
+    const second: ProjectView = { ...elevation('north'), id: 'e-north-2' };
+    const both = make([{ ...sheets[0], viewports: [...(sheets[0].viewports ?? []), { id: 'v5', viewId: 'e-north-2', x: 500, y: 100, scale: 100, width: 0, height: 0, center: null }] }, sheets[1]], [...views, second]);
+    const boxOf = (prefix: string): Box => {
+      const pts = both.filter((m) => m.id.includes(`:elevation:${prefix}~`)).flatMap((m) => (m.shape.type === 'line' ? [m.shape.a, m.shape.b] : m.shape.type === 'text' ? textBox(m.shape.p, m.shape.text, m.shape.height, m.shape.rotation) : []));
+      assert.ok(pts.length > 0, prefix);
+      return { x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)) };
+    };
+    const a = boxOf('e-north');
+    const b = boxOf('e-north-2');
+    assert.ok(a.x1 <= b.x0 || b.x1 <= a.x0, `north marks ${JSON.stringify(a)} and ${JSON.stringify(b)} do not overlap`);
+    assert.ok(b.y1 < FOOTPRINT.min.y, 'the slid mark stays on the north side');
+  });
+
   it('keeps the size on paper at the viewport scale', () => {
     const at50 = elevationMarkDrafts({ planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit: 0.05, factor: 0.5 });
     const text = (list: DraftEntity[]) => list.find((m) => m.shape.type === 'text')!.shape;

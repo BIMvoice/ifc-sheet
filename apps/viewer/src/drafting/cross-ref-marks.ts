@@ -13,6 +13,7 @@
  */
 
 import type { ElevationDirection, ProjectView } from '@/project/types';
+import { groundPlan } from '@/project/drawing-set-actions';
 import { axisLayout, textBox } from './annotation';
 import { referenceLabel, viewReference } from './cross-ref';
 import { placementOf, symbolParts } from './section-link';
@@ -45,6 +46,36 @@ function halfAlong(box: Pt[], n: Pt): number {
   return (Math.abs(n.x * u.x + n.y * u.y) * w + Math.abs(n.x * v.x + n.y * v.y) * h) / 2;
 }
 
+/** The section a drafted shape names with a reference beside it: a letter of a section symbol linked to a section view. */
+function namedSection(d: DraftEntity, views: readonly ProjectView[]): string | null {
+  const id = sectionLink(d);
+  return id && d.shape.type === 'text' && views.find((v) => v.id === id)?.kind === 'section' ? id : null;
+}
+
+/** An elevation the ground plan carries a mark for: every one but a detail. */
+const markedElevation = (v: ProjectView): v is Extract<ProjectView, { kind: 'elevation' }> => v.kind === 'elevation' && !v.detail;
+
+/** The plan that carries the elevation marks: the lowest plan that is not a detail. */
+export function elevationMarkPlan(views: readonly ProjectView[]): ProjectView | null {
+  return groundPlan(views.filter((v) => !v.detail));
+}
+
+/**
+ * The views whose "n / sheet" the marks on plan `planViewId` print: the sections
+ * its section letters name ({@link sectionReferenceDrafts}) and, on the plan
+ * that carries them, every marked elevation ({@link elevationMarkDrafts}).
+ * What a sheet holding the plan changes with when another sheet is renumbered.
+ */
+export function viewsNamedOnPlan(planViewId: string, planDrafts: readonly DraftEntity[], views: readonly ProjectView[]): string[] {
+  const ids = new Set<string>();
+  for (const d of planDrafts) {
+    const id = namedSection(d, views);
+    if (id) ids.add(id);
+  }
+  if (elevationMarkPlan(views)?.id === planViewId) for (const v of views) if (markedElevation(v)) ids.add(v.id);
+  return [...ids].sort();
+}
+
 /**
  * For each letter of a section symbol whose section is on a sheet, a text just
  * beyond it reading where the section is drawn ("1 / A-301"). Nothing for a
@@ -57,10 +88,9 @@ export function sectionReferenceDrafts(
   const out: DraftEntity[] = [];
   const normals = new Map<string, Pt | null>();
   for (const d of drafts) {
-    const id = sectionLink(d);
-    if (!id || d.shape.type !== 'text') continue;
-    const ref = views.find((v) => v.id === id)?.kind === 'section' ? viewReference(id, viewIds, sheets) : null;
-    if (!ref) continue;
+    const id = namedSection(d, views);
+    const ref = id ? viewReference(id, viewIds, sheets) : null;
+    if (!id || !ref || d.shape.type !== 'text') continue;
     if (!normals.has(id)) {
       const place = placementOf(symbolParts(drafts, id));
       normals.set(id, place ? sectionNormal(place.a, place.b, place.side) : null);
@@ -151,7 +181,7 @@ export function elevationMarkDrafts(input: ElevationMarkInput): DraftEntity[] {
   const taken: Box[] = [...(input.obstacles ?? [])];
   const out: DraftEntity[] = [];
   for (const view of views) {
-    if (view.kind !== 'elevation' || view.detail) continue;
+    if (!markedElevation(view)) continue;
     const ref = viewReference(view.id, viewIds, sheets);
     if (!ref) continue;
     const { out: o } = SIDES[view.direction];
