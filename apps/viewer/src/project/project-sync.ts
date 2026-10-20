@@ -24,6 +24,7 @@ import { watchProjectForAutosave } from './autosave-watch';
 import { markSessionClosed, markSessionOpen, planAutosave } from './recovery';
 import { noticeAutosaveTooNew } from './autosave-notice';
 import { forgetRecoveryOffer, offerRecovery, restoreModelState } from './recovery-store';
+import { restoreRasters } from './autosave-rasters';
 import { keepProjectForNewVersion, modelVersionSwapActive } from './model-version';
 
 interface StoreySource {
@@ -87,6 +88,7 @@ export function useProjectSync(): void {
         else if (plan.restore) {
           loadProjectDocument(plan.restore.doc);
           void restoreModelState(key, () => slot);
+          void restoreRasters(key);
         } else if (!overlaps) resetProject();
         // The last session on these models died with work no project file holds: the intro and the drawer offer it back.
         if (plan.recoverable) offerRecovery({ key, doc: plan.recoverable.doc, savedAt: plan.recoverable.savedAt, modelName: refs.map((r) => r.name).join(', ') });

@@ -32,7 +32,7 @@ import {
 } from '@/project/project-store';
 import { projectOpenErrorText } from '@/project/open-error';
 import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
-import { activateDocumentTab, openProjectView, saveLiveCameraAsView, saveLiveSectionAsView } from '@/project/open-view';
+import { activateDocumentTab, openProjectView, saveAxonometricView, saveLiveCameraAsView, saveLiveSectionAsView } from '@/project/open-view';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import { addSchedule } from '@/joinery/schedules';
 import { makeDraftSet } from '@/draft-set/run';
@@ -146,6 +146,7 @@ export function ProjectNavigatorPanel() {
     if (!id) toast.error(t('projectNavigator.error.noCamera'));
     else setRenamingId(id);
   };
+  const saveAxo = () => setRenamingId(saveAxonometricView(t('projectNavigator.newAxoName')));
   const newSheet = () => setRenamingId(addProjectSheet());
   const draftSet = () => {
     const { lines } = makeDraftSet();
@@ -164,7 +165,12 @@ export function ProjectNavigatorPanel() {
 
   const folderAction: Partial<Record<FolderId, ReactNode>> = {
     section: <AddButton label={t('projectNavigator.action.saveSection')} onClick={saveSection} />,
-    '3d': <AddButton label={t('projectNavigator.action.save3d')} onClick={save3d} icon={<Camera className="size-3.5" />} />,
+    '3d': (
+      <>
+        <AddButton label={t('projectNavigator.action.save3d')} onClick={save3d} icon={<Camera className="size-3.5" />} />
+        <AddButton label={t('projectNavigator.action.saveAxo')} onClick={saveAxo} icon={<Box className="size-3.5" />} />
+      </>
+    ),
     sheets: (
       <>
         <AddButton label={t('draftSet.action')} onClick={draftSet} icon={<Files className="size-3.5" />} />
@@ -191,7 +197,7 @@ export function ProjectNavigatorPanel() {
       onCancelRename={() => setRenamingId(null)}
       onDuplicate={() => setRenamingId(duplicateProjectView(view.id))}
       onDelete={() => removeProjectItem(view.id)}
-      dragViewId={view.kind === '3d' ? undefined : view.id}
+      dragViewId={view.id}
     />
   );
 
