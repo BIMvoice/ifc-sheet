@@ -11,11 +11,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
-import { coveringArea, finishLines, roomFinishes, surfaceOf, type CoveringInput, type RoomInput } from './room-finishes.js';
+import { coveringArea, coveringPredefinedType, finishLines, roomFinishes, surfaceOf, type CoveringInput, type RoomInput } from './room-finishes.js';
 import { layoutRoomFinishes, roomFinishesCsv } from './room-finishes-layout.js';
 
-const LABELS = { title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²' };
-const cov = (id: number, name: string, predefinedType: string, area: number | null = null): CoveringInput => ({ id, name, predefinedType, area });
+const LABELS = { title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms: area split equally.' };
+const cov = (id: number, name: string, predefinedType: string, area: number | null = null): CoveringInput => ({ id: `m#${id}`, name, predefinedType, area });
 const room = (over: Partial<RoomInput>): RoomInput => ({ number: '1', name: 'Room', level: 'L1', elevation: 0, covers: [], boundary: [], contained: [], properties: {}, ...over });
 const qset = (name: string, quantities: [string, number, QuantityType?][]): QuantitySet => ({
   name, quantities: quantities.map(([n, value, type]) => ({ name: n, value, type: type ?? QuantityType.Area })),
@@ -33,8 +33,29 @@ describe('coveringArea', () => {
     assert.equal(coveringArea([qset('Qto_CoveringBaseQuantities', [['GrossArea', 12], ['NetArea', 10]])], 1), 10);
     assert.equal(coveringArea([qset('Qto_CoveringBaseQuantities', [['GrossArea', 12]])], 1e-6), 12e-6);
     assert.equal(coveringArea([qset('Qto_CoveringBaseQuantities', [['Width', 3, QuantityType.Length]])], 1), null);
-    assert.equal(coveringArea([qset('Qto_Other', [['NetArea', 5]])], 1), null);
     assert.equal(coveringArea([], 1), null);
+  });
+
+  // PR #109 review: IFC2x3 exports write the covering's areas to `BaseQuantities`.
+  it('falls back to any other quantity set, BaseQuantities included, when there is no Qto_CoveringBaseQuantities', () => {
+    assert.equal(coveringArea([qset('BaseQuantities', [['NetArea', 8]])], 1), 8);
+    assert.equal(coveringArea([qset('BaseQuantities', [['GrossArea', 9]])], 1e-6), 9e-6);
+    assert.equal(coveringArea([qset('BaseQuantities', [['NetArea', 99]]), qset('Qto_CoveringBaseQuantities', [['GrossArea', 7]])], 1), 7, 'the Qto wins');
+    assert.equal(coveringArea([qset('Qto_Other', [['NetArea', 5]])], 1), 5, 'any set, not only BaseQuantities');
+    assert.equal(coveringArea([qset('Qto_CoveringBaseQuantities', [['Width', 3, QuantityType.Length]]), qset('BaseQuantities', [['GrossArea', 4]])], 1), 4, 'a Qto without an area falls through');
+    assert.equal(coveringArea([qset('BaseQuantities', [['Width', 3, QuantityType.Length]])], 1), null);
+  });
+});
+
+// PR #109 review: a NOTDEFINED covering takes its type's PredefinedType.
+describe('coveringPredefinedType', () => {
+  it('takes the IfcCoveringType\'s value when the covering\'s own is NOTDEFINED or unset, else the covering\'s own', () => {
+    assert.equal(coveringPredefinedType('NOTDEFINED', 'FLOORING'), 'FLOORING');
+    assert.equal(coveringPredefinedType('', 'CEILING'), 'CEILING');
+    assert.equal(coveringPredefinedType('notdefined', 'FLOORING'), 'FLOORING');
+    assert.equal(coveringPredefinedType('CLADDING', 'FLOORING'), 'CLADDING');
+    assert.equal(coveringPredefinedType('NOTDEFINED', ''), 'NOTDEFINED');
+    assert.equal(coveringPredefinedType('USERDEFINED', 'FLOORING'), 'USERDEFINED');
   });
 });
 
@@ -52,7 +73,7 @@ describe('roomFinishes', () => {
 
   it('falls back to the room properties, name only, when no covering gives the surface', () => {
     const [r] = roomFinishes([room({ contained: [cov(1, 'Panel', 'CLADDING', 9)], properties: { floor: ' Sealed concrete ', wall: 'Ignored', ceiling: '' } })]);
-    assert.deepEqual(r.finishes.floor, [{ name: 'Sealed concrete', area: null, source: 'property' }]);
+    assert.deepEqual(r.finishes.floor, [{ name: 'Sealed concrete', area: null, source: 'property', sharedBy: 1 }]);
     assert.deepEqual(r.finishes.wall.map((f) => f.name), ['Panel']);
     assert.deepEqual(r.finishes.ceiling, []);
   });
@@ -61,6 +82,31 @@ describe('roomFinishes', () => {
     const [r] = roomFinishes([room({ covers: [cov(1, 'Parquet', 'FLOORING', 20), cov(1, 'Parquet', 'FLOORING', 20), cov(2, 'Screed', 'FLOORING'), cov(3, 'Roof felt', 'ROOFING', 99), cov(4, 'Foil', 'MEMBRANE', 99)] })]);
     assert.deepEqual(r.finishes.floor.map((f) => [f.name, f.area]), [['Parquet', 20], ['Screed', null]]);
     assert.deepEqual([r.finishes.wall, r.finishes.ceiling], [[], []]);
+  });
+
+  // PR #109 review: IfcRelCoversSpaces gives no share per room, so a covering
+  // two rooms list has its area split equally between them.
+  it('splits a covering shared by several rooms equally, and counts one room\'s own covering whole', () => {
+    const [a, b, c] = roomFinishes([
+      room({ number: '1', covers: [cov(7, 'Tile', 'FLOORING', 30), cov(7, 'Tile', 'FLOORING', 30), cov(8, 'Paint', 'CLADDING', 12)] }),
+      room({ number: '2', contained: [cov(7, 'Tile', 'FLOORING', 30)] }),
+      room({ number: '3', covers: [cov(9, 'Screed', 'FLOORING')], boundary: [cov(8, 'Paint', 'CLADDING', 12)] }),
+    ]);
+    assert.deepEqual(a.finishes.floor.map((f) => [f.name, f.area, f.sharedBy]), [['Tile', 15, 2]]);
+    assert.deepEqual(b.finishes.floor.map((f) => [f.name, f.area, f.sharedBy]), [['Tile', 15, 2]]);
+    assert.deepEqual(a.finishes.wall.map((f) => [f.area, f.sharedBy]), [[6, 2]]);
+    assert.deepEqual(c.finishes.wall.map((f) => [f.area, f.sharedBy]), [[6, 2]]);
+    assert.deepEqual(c.finishes.floor.map((f) => [f.area, f.sharedBy]), [[null, 1]]);
+  });
+
+  it('does not split a covering a room lists but does not use for that surface', () => {
+    // Room 2 has the tile only as a fallback it never reaches: its covers relation gives the floor.
+    const [a, b] = roomFinishes([
+      room({ number: '1', covers: [cov(7, 'Tile', 'FLOORING', 30)] }),
+      room({ number: '2', covers: [cov(5, 'Carpet', 'FLOORING', 10)], contained: [cov(7, 'Tile', 'FLOORING', 30)] }),
+    ]);
+    assert.deepEqual(a.finishes.floor.map((f) => [f.area, f.sharedBy]), [[30, 1]]);
+    assert.deepEqual(b.finishes.floor.map((f) => [f.name, f.area]), [['Carpet', 10]]);
   });
 
   it('orders rooms by storey elevation, then number as a number, and keeps a room with no finishes', () => {
@@ -99,6 +145,17 @@ describe('finishLines and the table', () => {
       '101,Living,L1,,,Veneer,4.25,,',
       '102,Store,L1,,,,,,',
     ]);
+  });
+
+  it('marks a shared area on paper and prints the note only when a covering is shared', () => {
+    const texts = (rs: ReturnType<typeof roomFinishes>) => layoutRoomFinishes(rs, LABELS).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
+    assert.ok(!texts(rooms).includes(LABELS.sharedNote));
+    const shared = roomFinishes([room({ number: '1', covers: [cov(7, 'Tile', 'FLOORING', 30)] }), room({ number: '2', covers: [cov(7, 'Tile', 'FLOORING', 30)] })]);
+    const t = texts(shared);
+    assert.ok(t.includes(LABELS.sharedNote), 'the note');
+    assert.equal(t.filter((x) => x === '15.00*').length, 2, t.join('|'));
+    const layout = layoutRoomFinishes(shared, LABELS);
+    assert.ok(layout.prims.every((p) => p.kind !== 'text' || p.y <= layout.height), 'the note is inside the layout');
   });
 
   it('guards a model text that would run as a spreadsheet formula', () => {

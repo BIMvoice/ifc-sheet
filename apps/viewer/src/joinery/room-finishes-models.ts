@@ -15,7 +15,7 @@ import { extractProjectUnits, ProjectUnits } from '@ifc-lite/parser';
 import { createListDataProvider, type ListDataProvider } from '@/lib/lists';
 import { useViewerStore } from '@/store';
 import { quantityScales } from './material-takeoff-models';
-import { coveringArea, type CoveringInput, type RoomInput, type Surface } from './room-finishes';
+import { coveringArea, coveringPredefinedType, type CoveringInput, type RoomInput, type Surface } from './room-finishes';
 
 const BOUNDARY_TYPES = [RelationshipType.SpaceBoundary, RelationshipType.SpaceBoundary1stLevel, RelationshipType.SpaceBoundary2ndLevel] as const;
 
@@ -52,12 +52,15 @@ export function collectRoomInputs(): RoomInput[] {
     const graph = store.relationships;
     const coverings = (ids: readonly number[]): CoveringInput[] => ids
       .filter((id) => provider.getEntityTypeName(id) === 'IfcCovering')
-      .map((id) => ({
-        id,
-        name: provider.getEntityName(id) || provider.getEntityDefiningTypeName?.(id) || '',
-        predefinedType: provider.getEntityPredefinedType?.(id) ?? '',
-        area: coveringArea(provider.getQuantitySets(id), areaScale),
-      }));
+      .map((id) => {
+        const typeId = graph?.getRelated(id, RelationshipType.DefinesByType, 'inverse')[0];
+        return {
+          id: `${modelId}#${id}`,
+          name: provider.getEntityName(id) || provider.getEntityDefiningTypeName?.(id) || '',
+          predefinedType: coveringPredefinedType(provider.getEntityPredefinedType?.(id) ?? '', typeId === undefined ? '' : provider.getEntityPredefinedType?.(typeId) ?? ''),
+          area: coveringArea(provider.getQuantitySets(id), areaScale),
+        };
+      });
     for (const { node, level, elevation } of spacesOf(hierarchy.project, hierarchy.storeyElevations)) {
       const id = node.expressId;
       const properties: RoomInput['properties'] = {};

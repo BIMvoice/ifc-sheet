@@ -13,5 +13,6 @@ export const roomFinishesEn = {
   'finishes.wall': 'Wall',
   'finishes.ceiling': 'Ceiling',
   'finishes.area': 'Area m²',
+  'finishes.sharedNote': '* A covering shared by several rooms: its area is split equally between them.',
   'finishes.empty': 'The loaded models have no rooms (IfcSpace).',
 } as const satisfies Record<string, TranslationValue>;

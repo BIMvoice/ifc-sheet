@@ -84,6 +84,7 @@ export function useRoomFinishLabels(title: string): RoomFinishLabels {
   return useMemo(() => ({
     title, number: t('finishes.number'), room: t('finishes.room'), level: t('finishes.level'),
     floor: t('finishes.floor'), wall: t('finishes.wall'), ceiling: t('finishes.ceiling'), area: t('finishes.area'),
+    sharedNote: t('finishes.sharedNote'),
   }), [t, title]);
 }
 
