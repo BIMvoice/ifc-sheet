@@ -34,6 +34,14 @@ function isPhysicalElement(className: string): boolean {
   return known;
 }
 
+/**
+ * Every element is counted once: an element whose IfcRelAggregates parts are
+ * themselves listed (an IfcRoof with its own Body over IfcSlab parts, an
+ * IfcStair over IfcStairFlight parts, an IfcCurtainWall over plates and
+ * members) is left out, and its parts are counted. Parts are the side that
+ * carries the specific Qto (Qto_SlabBaseQuantities, ...), and the rule is the
+ * same whichever parent class it is.
+ */
 export function collectTypeElements(): TypeElement[] {
   const s = useViewerStore.getState();
   const out: TypeElement[] = [];
@@ -44,9 +52,10 @@ export function collectTypeElements(): TypeElement[] {
     const provider = createListDataProvider(store, model.name, undefined, view);
     const scales = quantityScales(store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty());
     const hierarchy = store.spatialHierarchy;
-    for (const id of provider.getAllEntityIds?.() ?? []) {
+    const listed = new Set((provider.getAllEntityIds?.() ?? []).filter((id) => isPhysicalElement(provider.getEntityTypeName(id))));
+    for (const id of listed) {
       const className = provider.getEntityTypeName(id);
-      if (!isPhysicalElement(className)) continue;
+      if (store.relationships?.getRelated(id, RelationshipType.Aggregates, 'forward').some((part) => listed.has(part))) continue;
       const typeId = store.relationships?.getRelated(id, RelationshipType.DefinesByType, 'inverse')[0];
       const typeName = typeId === undefined ? '' : provider.getEntityDefiningTypeName?.(id) ?? '';
       const storey = hierarchy?.elementToStorey.get(id);

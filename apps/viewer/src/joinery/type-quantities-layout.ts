@@ -6,13 +6,14 @@
  * The quantities by type as a table on paper, in the joinery schedule's
  * primitives (paper millimetres), so it places, prints and exports to DXF the
  * same way: title, a header, per type a line per storey (and a total line when
- * the type spans several), a grand total. The CSV and XLSX share the same
- * lines.
+ * the type spans several), then a total per IFC class of element (no total
+ * across classes, see `TypeQuantities.classTotals`). The CSV and XLSX share
+ * the same lines.
  */
 
 import { escapeCsvCell } from '@ifc-lite/export';
 import type { ScheduleLayout, SchedulePrim } from './schedule-layout';
-import { sumTotals, type Totals, type TypeQuantities } from './type-quantities';
+import type { Totals, TypeQuantities } from './type-quantities';
 
 export interface TypeQuantityLabels {
   title: string;
@@ -37,10 +38,11 @@ export interface TypeQuantityLine {
   /** The storey, the "total" label on a type's total line. */
   level: string;
   totals: Totals;
-  /** The first line of its type; the grand total is `grand`. */
+  /** The first line of its type; each class total is its own first line. */
   first: boolean;
   total: boolean;
-  grand: boolean;
+  /** A total per class of element, after the type rows. */
+  classTotal: boolean;
 }
 
 const plainClass = (c: string): string => c.replace(/^Ifc/, '');
@@ -52,11 +54,10 @@ export function typeQuantityLines(data: TypeQuantities, labels: TypeQuantityLabe
     const type = row.typeName ?? `${plainClass(row.className)} ${labels.noType}`;
     const base = { type, className: row.className };
     const levels = data.levels.filter((l) => row.byLevel[l]);
-    levels.forEach((l, i) => lines.push({ ...base, level: l || labels.noLevel, totals: row.byLevel[l], first: i === 0, total: false, grand: false }));
-    if (levels.length > 1) lines.push({ ...base, level: labels.total, totals: row.total, first: false, total: true, grand: false });
+    levels.forEach((l, i) => lines.push({ ...base, level: l || labels.noLevel, totals: row.byLevel[l], first: i === 0, total: false, classTotal: false }));
+    if (levels.length > 1) lines.push({ ...base, level: labels.total, totals: row.total, first: false, total: true, classTotal: false });
   }
-  const grand = sumTotals(data.rows.map((r) => r.total));
-  lines.push({ type: labels.total, className: '', level: '', totals: grand, first: true, total: true, grand: true });
+  for (const c of data.classTotals) lines.push({ type: labels.total, className: c.className, level: '', totals: c.total, first: true, total: true, classTotal: true });
   return lines;
 }
 
@@ -74,13 +75,15 @@ export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityL
   const lefts = COLUMNS.map((_, i) => COLUMNS.slice(0, i).reduce((a, b) => a + b, 0));
   const titleH = 10;
   const lines = typeQuantityLines(data, labels);
-  const table: { cells: string[]; bold: boolean; rule: boolean }[] = [
+  const table: { cells: string[]; bold: boolean; rule: boolean; frameBelow?: boolean }[] = [
     { cells: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], bold: true, rule: true },
     ...lines.map((l, i) => ({
-      cells: [l.first ? l.type : '', l.first && !l.grand ? plainClass(l.className) : '', l.level, String(l.totals.count), fixed(l.totals.length), fixed(l.totals.area), fixed(l.totals.volume), l.totals.noQto ? String(l.totals.noQto) : ''],
+      cells: [l.first ? l.type : '', l.first ? plainClass(l.className) : '', l.level, String(l.totals.count), fixed(l.totals.length), fixed(l.totals.area), fixed(l.totals.volume), l.totals.noQto ? String(l.totals.noQto) : ''],
       bold: l.total,
       // A rule under the last line of each type.
       rule: i === lines.length - 1 || lines[i + 1].first,
+      // A frame rule above the class totals.
+      frameBelow: !l.classTotal && lines[i + 1]?.classTotal === true,
     })),
   ];
   const height = titleH + table.length * ROW;
@@ -92,8 +95,7 @@ export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityL
       const x = numeric ? lefts[c] + COLUMNS[c] - PAD : lefts[c] + PAD;
       if (text) prims.push({ kind: 'text', x, y: top + ROW / 2 + TEXT * 0.35, text, size: TEXT, anchor: numeric ? 'end' : 'start', bold: row.bold });
     });
-    const grandRule = r === table.length - 2;
-    prims.push({ kind: 'line', x1: 0, y1: top + ROW, x2: width, y2: top + ROW, w: r === 0 || grandRule ? PEN.frame : row.rule ? PEN.grid : 0 });
+    prims.push({ kind: 'line', x1: 0, y1: top + ROW, x2: width, y2: top + ROW, w: r === 0 || row.frameBelow ? PEN.frame : row.rule ? PEN.grid : 0 });
   });
   prims.push({ kind: 'line', x1: 0, y1: titleH, x2: width, y2: titleH, w: PEN.frame });
   for (const x of [...lefts, width]) prims.push({ kind: 'line', x1: x, y1: titleH, x2: x, y2: height, w: x === 0 || x === width ? PEN.frame : PEN.grid });

@@ -59,16 +59,35 @@ describe('typeQuantities', () => {
     assert.deepEqual(out.levels, ['Ground', 'Roof', '']);
   });
 
-  it('lists a line per level, a total line for a type on several levels, and a grand total; the CSV carries the same lines unformatted', () => {
+  it('lists a line per level, a total line for a type on several levels, and a total per class; the CSV carries the same lines unformatted', () => {
     const out = typeQuantities([el({ length: 1.5, level: 'L0' }), el({ length: 2, level: 'L1', elevation: 3 }), el({ typeName: '=SUM(A1)', typeClass: 'IfcWallType', length: 1 })]);
     const lines = typeQuantityLines(out, LABELS);
     assert.deepEqual(lines.map((l) => [l.type, l.level, l.totals.count, l.totals.length]), [
       ['=SUM(A1)', 'L0', 1, 1], ['W1', 'L0', 1, 1.5], ['W1', 'L1', 1, 2], ['W1', 'Total', 2, 3.5], ['Total', '', 3, 4.5],
     ]);
+    assert.equal(lines.at(-1)!.className, 'IfcWall');
     const csv = typeQuantitiesCsv(out, LABELS).split('\n');
     assert.equal(csv[0], 'Type,Class,Storey,Count,Length m,Area m²,Volume m³,No Qto');
     assert.equal(csv[4], 'W1,IfcWallType,Total,2,3.5,,,0');
+    assert.equal(csv[5], 'Total,IfcWall,,3,4.5,,,0');
     assert.ok(csv[1].startsWith("'=SUM(A1)"), csv[1]);
+  });
+
+  // Review of #108: one total over every class added door and window areas to wall side areas, and opening volumes on top of walls' NetVolume.
+  it('totals each class of element on its own, a StandardCase with its parent class, and never across classes', () => {
+    const out = typeQuantities([
+      el({ className: 'IfcWallStandardCase', area: 10, volume: 2 }),
+      el({ className: 'IfcWall', typeClass: null, typeName: null, area: 5, volume: 1 }),
+      el({ className: 'IfcDoor', typeClass: 'IfcDoorType', typeName: 'D1', area: 2 }),
+      el({ className: 'IfcSlab', typeClass: 'IfcSlabType', typeName: 'S1', area: 30, volume: 6 }),
+    ]);
+    assert.deepEqual(out.classTotals.map((c) => [c.className, c.total.count, c.total.area, c.total.volume]), [
+      ['IfcDoor', 1, 2, null], ['IfcSlab', 1, 30, 6], ['IfcWall', 2, 15, 3],
+    ]);
+    const totals = typeQuantityLines(out, LABELS).filter((l) => l.classTotal);
+    assert.deepEqual(totals.map((l) => [l.className, l.totals.area]), [['IfcDoor', 2], ['IfcSlab', 30], ['IfcWall', 15]]);
+    // No line adds the classes together.
+    assert.ok(!typeQuantityLines(out, LABELS).some((l) => l.totals.count === 4), 'no line counts all four elements');
   });
 });
 

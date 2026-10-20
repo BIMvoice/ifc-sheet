@@ -108,7 +108,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
       out.set(schedule.id, schedule.kind === 'materials'
         ? layoutMaterialTakeoff(rows, { ...takeoffLabels, title: schedule.name })
         : schedule.kind === 'types'
-          ? layoutTypeQuantities(byType ?? { levels: [], rows: [] }, { ...typeLabels, title: schedule.name })
+          ? layoutTypeQuantities(byType ?? { levels: [], rows: [], classTotals: [] }, { ...typeLabels, title: schedule.name })
           : layoutSchedule(scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50 }));
     }
     return out;

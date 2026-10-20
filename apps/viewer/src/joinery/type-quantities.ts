@@ -55,11 +55,27 @@ export interface TypeRow {
   byLevel: Record<string, Totals>;
 }
 
+export interface ClassTotal {
+  /** The elements' IFC class, a `...StandardCase` / `...ElementedCase` counted with its parent class. */
+  className: string;
+  total: Totals;
+}
+
 export interface TypeQuantities {
   /** Level names, lowest first; '' (no storey) last. */
   levels: string[];
   rows: TypeRow[];
+  /**
+   * Totals per IFC class of element, by class name. There is no total across
+   * classes: a wall's NetVolume already leaves out its openings, a door's
+   * Area is its frame and a slab's is its plan, so a sum over classes adds
+   * figures that do not add up.
+   */
+  classTotals: ClassTotal[];
 }
+
+/** `IfcWallStandardCase` -> `IfcWall`: the IFC4 subtypes that only mark how the geometry is made. */
+export const totalClassOf = (className: string): string => className.replace(/(StandardCase|ElementedCase)$/, '');
 
 /**
  * The quantity each IFC class is measured by, in order of preference: the net
@@ -125,22 +141,16 @@ function add(t: Totals, e: TypeElement): void {
   if (e.volume !== null) t.volume = (t.volume ?? 0) + e.volume;
 }
 
-/** Sum of several totals: a sum over the ones that state a figure, null when none does. */
-export function sumTotals(list: readonly Totals[]): Totals {
-  const out = empty();
-  for (const t of list) {
-    out.count += t.count;
-    out.noQto += t.noQto;
-    for (const k of ['length', 'area', 'volume'] as const) if (t[k] !== null) out[k] = (out[k] ?? 0) + t[k]!;
-  }
-  return out;
-}
-
-/** One row per type (merged across models by class and name), typed rows first by class then name, untyped ones after by class; one pass over the elements. */
+/** One row per type (merged across models by class and name), typed rows first by class then name, untyped ones after by class, and a total per class of element; one pass over the elements. */
 export function typeQuantities(elements: readonly TypeElement[]): TypeQuantities {
   const rows = new Map<string, TypeRow>();
+  const byClass = new Map<string, Totals>();
   const elevation = new Map<string, number | null>();
   for (const e of elements) {
+    const cls = totalClassOf(e.className);
+    let classTotal = byClass.get(cls);
+    if (!classTotal) byClass.set(cls, (classTotal = empty()));
+    add(classTotal, e);
     const typed = e.typeClass !== null && e.typeName !== null;
     const key = typed ? `T|${e.typeClass}|${e.typeName}` : `C|${e.className}`;
     let row = rows.get(key);
@@ -160,5 +170,6 @@ export function typeQuantities(elements: readonly TypeElement[]): TypeQuantities
   });
   const sorted = [...rows.values()].sort((a, b) =>
     Number(a.typeName === null) - Number(b.typeName === null) || a.className.localeCompare(b.className) || (a.typeName ?? '').localeCompare(b.typeName ?? ''));
-  return { levels, rows: sorted };
+  const classTotals = [...byClass].sort(([a], [b]) => a.localeCompare(b)).map(([className, total]) => ({ className, total }));
+  return { levels, rows: sorted, classTotals };
 }
