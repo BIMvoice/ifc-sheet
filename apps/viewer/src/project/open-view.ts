@@ -62,7 +62,7 @@ function applyDrawingView(view: Exclude<ProjectView, { kind: '3d' }>): boolean {
   if (!plane) return false;
   const state = useViewerStore.getState();
   useViewerStore.setState({
-    sectionPlane: { ...state.sectionPlane, ...plane, custom: plane.custom, box: undefined, enabled: true, parked: false },
+    sectionPlane: { ...state.sectionPlane, ...plane, reflected: plane.reflected, custom: plane.custom, box: undefined, enabled: true, parked: false },
   });
   return true;
 }

@@ -25,7 +25,7 @@ describe('tool help', () => {
     const chosen: string[] = [];
     const rail = render(<ToolRail active={null} onTool={(c) => chosen.push(c)} adding={false} onAdd={() => {}} viewKind={null} onAll={() => {}} />);
     // The tools are the rail's buttons that have help: every one except "Add a drawing".
-    const buttons = [...rail.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].filter((b) => b.hasAttribute('title'));
+    const buttons = [...rail.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].filter((b) => b.hasAttribute('title') && !b.textContent?.includes('Add a drawing'));
     for (const b of buttons) click(b);
     assert.ok(chosen.length >= WALL_TOOLS.length, 'the rail offers at least the six large tools');
     assert.equal(chosen.filter((c) => WALL_TOOLS.some((w) => w.command === c)).length, 6, 'six large tools');
@@ -34,7 +34,8 @@ describe('tool help', () => {
     buttons.forEach((b, i) => {
       const line = resolve(toolHelpKey(chosen[i]));
       assert.ok(line.length > 0, `${chosen[i]} has a help line`);
-      assert.equal(b.getAttribute('title'), line, `${chosen[i]} shows it on the rail`);
+      // The tooltip is the line, then the tool's key from the keymap.
+      assert.ok(b.getAttribute('title')?.startsWith(`${line} (`), `${chosen[i]} shows it on the rail: ${b.getAttribute('title')}`);
     });
     cleanup();
     for (const command of chosen) {

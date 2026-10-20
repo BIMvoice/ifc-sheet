@@ -5,7 +5,7 @@
 /** Palette command controls: registered rows take an id; runtime rows carry their own content. */
 import { useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
-import { shortcutLabel, type KeyCommandId } from '@/lib/commands/shortcut-label';
+import { ariaKeyShortcuts, shortcutLabel, type KeyCommandId } from '@/lib/commands/shortcut-label';
 import { SURFACE_COMMANDS, type SurfaceCommandDefinition, type SurfaceCommandIdFor } from './surface-commands';
 import { EXPORT_SURFACE_COMMANDS } from './commandPaletteExports';
 import type { Command } from './commandPaletteSearch';
@@ -60,6 +60,7 @@ function OptionChrome({ owner, icon: Icon, label, detail, shortcut, index, selec
       data-runtime-command-id={registered ? undefined : owner.runtimeCommandId}
       aria-label={registered ? label : undefined}
       aria-selected={selected}
+      aria-keyshortcuts={shortcut ? ariaKeyShortcuts(shortcut) || undefined : undefined}
       className={cn('flex items-center gap-3 w-full px-3 py-2 text-left text-sm',
         selected ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-accent/50')}
       onClick={onActivate} onMouseMove={onHover}>

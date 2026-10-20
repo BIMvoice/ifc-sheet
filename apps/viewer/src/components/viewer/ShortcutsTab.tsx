@@ -12,12 +12,15 @@
 import { useTranslation, type TranslationKey, type TranslationParameters } from '@/i18n';
 import { ALT_SHORTCUT_PANELS } from '@/lib/panels/registry';
 import { isApplePlatform } from '@/lib/commands/chord';
+import { isDocsEdition } from '@/edition';
 import {
   KEY_COMMANDS,
   KEY_COMMAND_CATEGORIES,
   POINTER_GESTURES,
   type KeyCommandCategory,
+  type KeyCommandDefinition,
 } from '@/lib/commands/keyboard-commands';
+import { shownOnTheWall } from '@/lib/commands/wall-key-commands';
 import { formatCommandKeys } from '@/lib/commands/shortcut-label';
 
 interface ShortcutRow {
@@ -27,15 +30,15 @@ interface ShortcutRow {
   readonly params?: TranslationParameters;
 }
 
-function rowsByCategory(apple: boolean, gestureKeys: (row: (typeof POINTER_GESTURES)[number]) => string,
-  panelTitles: { sidePanels: string; bottomPanels: string }) {
+function rowsByCategory(commands: readonly KeyCommandDefinition[], gestures: typeof POINTER_GESTURES, apple: boolean,
+  gestureKeys: (row: (typeof POINTER_GESTURES)[number]) => string, panelTitles: { sidePanels: string; bottomPanels: string }) {
   const rows = new Map<KeyCommandCategory, ShortcutRow[]>();
   const push = (category: KeyCommandCategory, row: ShortcutRow) => {
     const list = rows.get(category) ?? [];
     list.push(row);
     rows.set(category, list);
   };
-  for (const command of KEY_COMMANDS) {
+  for (const command of commands) {
     push(command.category, {
       id: command.id,
       keys: formatCommandKeys(command, apple),
@@ -43,7 +46,7 @@ function rowsByCategory(apple: boolean, gestureKeys: (row: (typeof POINTER_GESTU
       params: command.id === 'ui.openPanel' ? panelTitles : undefined,
     });
   }
-  for (const gesture of POINTER_GESTURES) {
+  for (const gesture of gestures) {
     push(gesture.category, { id: gesture.id, keys: gestureKeys(gesture), labelKey: gesture.labelKey });
   }
   return KEY_COMMAND_CATEGORIES.flatMap((category) => {
@@ -52,13 +55,20 @@ function rowsByCategory(apple: boolean, gestureKeys: (row: (typeof POINTER_GESTU
   });
 }
 
-export function ShortcutsTab() {
+/**
+ * `commands` is every row the list shows (the keymap by default; on
+ * IfcSheet's face, the Wall's rows and the two global ones that work there).
+ * A row is drawn for each, so the list can only name keys the table has.
+ */
+export function ShortcutsTab({ commands }: { commands?: readonly KeyCommandDefinition[] } = {}) {
   const { t } = useTranslation();
+  const wall = isDocsEdition();
+  const rows = commands ?? (wall ? shownOnTheWall(KEY_COMMANDS) : KEY_COMMANDS);
   const apple = isApplePlatform();
   const altPanelTitles = (bottom: boolean) => ALT_SHORTCUT_PANELS
     .filter((panel) => (panel.region === 'bottom') === bottom)
     .map((panel) => t(panel.titleKey)).join(', ');
-  const groups = rowsByCategory(apple, (gesture) => t(gesture.gestureKey, { mod: apple ? '⌘' : 'Ctrl' }),
+  const groups = rowsByCategory(rows, wall ? [] : POINTER_GESTURES, apple, (gesture) => t(gesture.gestureKey, { mod: apple ? '⌘' : 'Ctrl' }),
     { sidePanels: altPanelTitles(false), bottomPanels: altPanelTitles(true) });
 
   return (

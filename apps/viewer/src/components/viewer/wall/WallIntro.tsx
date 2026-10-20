@@ -13,6 +13,8 @@ import { useTranslation } from '@/i18n';
 import type { ModelExtent } from '@/project/drawing-set';
 import { useProjectStore } from '@/project/project-store';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
+import { ReadinessList } from '../sheets/ReadinessList';
+import { WALL_SKIN } from '../sheets/set-skin';
 
 function Chip({ children }: { children: string }) {
   return <span className="rounded-full border border-sky-300/30 px-4 py-1.5 text-sm text-sky-100">{children}</span>;
@@ -52,6 +54,7 @@ export function WallIntro({ modelName, extent, onHang }: { modelName: string; ex
           <Chip>{t('wall.intro.sheets', { count: sheets.length })}</Chip>
           <Chip>{t('wall.intro.views', { count: views })}</Chip>
         </div>
+        <div className="mt-6 max-w-lg"><ReadinessList skin={WALL_SKIN} compact /></div>
         <button type="button" {...tourAnchor(TOUR_ANCHORS.wallHang)} onClick={onHang} className="mt-10 inline-flex items-center gap-3 rounded-md bg-sky-600 px-6 py-3 text-lg text-white hover:bg-sky-500">
           {t('wall.intro.hang')} <ArrowRight className="size-5" />
         </button>
