@@ -33,7 +33,7 @@ import { createElement } from 'react';
 import { render, cleanup } from '@/test/render.js';
 import { resolve } from '@/i18n/registry';
 import { PanelWindowChromeShell } from '@/components/viewer/dock/PanelWindowHost.js';
-import { measureTextContrastOnSurface, closeContrastBrowser, type Theme } from './render-harness';
+import { CHROME_SKIP, measureTextContrastOnSurface, closeContrastBrowser, type Theme } from './render-harness';
 import { WCAG_AA_NORMAL_TEXT } from './wcag';
 
 const THEMES: Theme[] = ['light', 'dark', 'colorful'];
@@ -74,7 +74,7 @@ after(async () => {
   await closeContrastBrowser();
 });
 
-describe('PanelWindowHost translucent header/footer hints meet WCAG AA on their composited surface (#4825)', () => {
+describe('PanelWindowHost translucent header/footer hints meet WCAG AA on their composited surface (#4825)', { skip: CHROME_SKIP }, () => {
   const fixedCases: Array<{ name: string; part: 'header' | 'footer' }> = [
     { name: 'header "Window"/"Picture-in-picture" hint', part: 'header' },
     { name: 'footer "Live · synced with the main window" strip', part: 'footer' },
@@ -97,7 +97,7 @@ describe('PanelWindowHost translucent header/footer hints meet WCAG AA on their 
   }
 });
 
-describe('non-vacuousness proof: reintroducing the pre-#4825 /70 opacity tier reddens in every theme', () => {
+describe('non-vacuousness proof: reintroducing the pre-#4825 /70 opacity tier reddens in every theme', { skip: CHROME_SKIP }, () => {
   // Not extracted from source — deliberately renders the OLD, pre-fix
   // `text-muted-foreground/70` classes these two sites shipped, over their
   // real composited surface, to prove the harness and threshold actually
