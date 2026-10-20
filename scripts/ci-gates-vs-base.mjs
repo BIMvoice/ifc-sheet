@@ -31,6 +31,15 @@
  * Normalisation: surrounding whitespace is trimmed, blank lines are dropped,
  * and hex commit ids are replaced with <sha>, because gates quote the commit
  * they compared against and that differs between the two runs.
+ *
+ * Two kinds of line are not compared as text:
+ *  - `note:` lines are advisory by the gates' own design (module-size slack,
+ *    stale rows). A pull request that shrinks a file adds a new "headroom"
+ *    note; that is an improvement, never a failure.
+ *  - `<path>: <N> lines…` lines name a file and its size. A head line fails
+ *    only when the base has no line for that path, or the head's count is
+ *    higher. A file that shrinks but stays over its budget prints a new count;
+ *    that is not a new failure either.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -60,13 +69,37 @@ export function isImprovementOnly(line) {
   return /:\s*\+0 added, \^0 raised, v\d+ lowered, -\d+ deleted$/.test(line);
 }
 
-/** Lines in `head` that are not in `base`, in head order, without repeats. */
+/** An advisory line: gates print these for slack and stale rows, which never fail a check by themselves. */
+export function isAdvisory(line) {
+  return line.startsWith('note:');
+}
+
+const SIZED = /^(.+?): (\d+) lines\b/;
+
+/** `{ path, lines }` for a line naming a file and its size (`path: N lines…`), else null. */
+export function sizedEntry(line) {
+  const m = SIZED.exec(line);
+  return m ? { path: m[1], lines: Number(m[2]) } : null;
+}
+
+/**
+ * Lines in `head` that are not in `base`, in head order, without repeats.
+ * Advisory notes never count; a sized line counts only for a path the base
+ * did not name, or at a higher count than the base's.
+ */
 export function newLines(head, base) {
   const known = new Set(base);
+  const baseSizes = new Map();
+  for (const line of base) {
+    const entry = sizedEntry(line);
+    if (entry) baseSizes.set(entry.path, Math.max(baseSizes.get(entry.path) ?? 0, entry.lines));
+  }
   const seen = new Set();
   const out = [];
   for (const line of head) {
-    if (known.has(line) || seen.has(line) || isImprovementOnly(line)) continue;
+    if (known.has(line) || seen.has(line) || isImprovementOnly(line) || isAdvisory(line)) continue;
+    const entry = sizedEntry(line);
+    if (entry && baseSizes.has(entry.path) && entry.lines <= baseSizes.get(entry.path)) continue;
     seen.add(line);
     out.push(line);
   }
