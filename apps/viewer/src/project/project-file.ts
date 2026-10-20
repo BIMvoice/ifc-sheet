@@ -17,16 +17,21 @@ import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogu
 import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readIssues } from '@/issue/file';
 import { readStandards } from './standards-file';
+import { isDisciplineId } from './discipline-views';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
+import { declaredVersion, migrateProject, PROJECT_FILE_VERSION, PROJECT_MIGRATIONS, type ProjectMigration } from './project-migrations';
+import { withoutModelState } from './autosave-snapshots';
+import { markProjectSaved } from './project-saved';
+import { loadProjectDocument, projectDocument } from './project-store';
 import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, ViewDetail, ViewGraphics } from './types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics } from './types';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
-export const PROJECT_FILE_VERSION = 1;
+export { PROJECT_FILE_VERSION };
 
 export interface ProjectFile extends ProjectDocument {
   format: typeof PROJECT_FILE_FORMAT;
@@ -39,9 +44,28 @@ export function serializeProject(doc: ProjectDocument, now = new Date()): string
   return JSON.stringify(file, null, 2);
 }
 
+/**
+ * Open a project file the person chose: load it and note it as the last file opened, so its own
+ * autosave is not offered back next session. Autosave restores load with `loadProjectDocument`
+ * directly. Kept out of the store so the drafting session does not reach the file reader.
+ */
+export function openProjectDocument(doc: ProjectDocument, options: { dirty?: boolean; now?: number; storage?: Parameters<typeof markProjectSaved>[2] } = {}): void {
+  loadProjectDocument(doc, { dirty: options.dirty });
+  noteProjectFile(projectDocument(), options.now, options.storage);
+}
+
 export function exportProjectFile(doc: ProjectDocument): void {
   const stem = sanitizeFilename(doc.name, { fallback: 'project' });
   downloadFile(serializeProject(doc), `${stem}${PROJECT_FILE_SUFFIX}`, 'application/json');
+  noteProjectFile(doc);
+}
+
+/**
+ * Notes `doc` as what a project file holds now (`project-saved.ts`). The autosave is compared to it in the
+ * form a file is read back in, so it is noted in that form: the reader fills defaults a live project lacks.
+ */
+export function noteProjectFile(doc: ProjectDocument, now?: number, storage?: Parameters<typeof markProjectSaved>[2]): void {
+  markProjectSaved(parseProjectFile(serializeProject(withoutModelState(doc).slim)), now, storage);
 }
 
 const VIEW_KINDS: readonly ProjectViewKind[] = ['plan', 'section', 'elevation', '3d'];
@@ -63,16 +87,34 @@ function readLevel(v: unknown, path: string): ProjectLevel {
   return { name: v.name, elevation: v.elevation, storeyGlobalIds: ids };
 }
 
-function readDetail(v: unknown, path: string): ViewDetail {
+function readRect(v: Json, path: string): Pick<ViewDetail, 'min' | 'max'> {
   const corner = (c: unknown, at: string) => {
     if (!isObject(c) || !isNumber(c.x) || !isNumber(c.y)) fail(at, 'must be { x, y }');
     return { x: c.x, y: c.y };
   };
-  if (!isObject(v) || !isString(v.of) || !isNumber(v.number)) fail(path, 'must be { of, min, max, number }');
   const min = corner(v.min, `${path}.min`);
   const max = corner(v.max, `${path}.max`);
   if (max.x <= min.x || max.y <= min.y) fail(path, 'must have min below and left of max');
-  return { of: v.of, min, max, number: v.number };
+  return { min, max };
+}
+
+function readDetail(v: unknown, path: string): ViewDetail {
+  if (!isObject(v) || !isString(v.of) || !isNumber(v.number)) fail(path, 'must be { of, min, max, number }');
+  return { of: v.of, ...readRect(v, path), number: v.number };
+}
+
+function readPlane(p: unknown, path: string): SectionProjectPlane {
+  if (!isObject(p) || !AXES.includes(p.axis as (typeof AXES)[number]) || !isNumber(p.offset)) {
+    fail(path, 'must be { axis, offset, flipped }');
+  }
+  const plane = { axis: p.axis as (typeof AXES)[number], offset: p.offset, flipped: p.flipped === true };
+  return isObject(p.custom) ? { ...plane, custom: p.custom as never } : plane;
+}
+
+function readInterior(v: unknown, path: string): InteriorElevation {
+  if (!isObject(v) || !isString(v.room)) fail(path, 'must be { room, plane, crop }');
+  if (!isObject(v.crop)) fail(`${path}.crop`, 'must be { min, max }');
+  return { room: v.room, plane: readPlane(v.plane, `${path}.plane`), crop: readRect(v.crop, `${path}.crop`) };
 }
 
 function readView(v: unknown, path: string): ProjectView {
@@ -90,20 +132,18 @@ function readView(v: unknown, path: string): ProjectView {
   switch (v.kind) {
     case 'plan':
       if (!isNumber(v.cutHeight)) fail(`${path}.cutHeight`, 'must be a number');
-      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight };
+      return { ...base, kind: 'plan', level: readLevel(v.level, `${path}.level`), cutHeight: v.cutHeight, ...(isDisciplineId(v.discipline) ? { discipline: v.discipline } : {}), ...(v.reflected === true ? { reflected: true } : {}) };
     case 'section': {
-      const p = v.plane;
-      if (!isObject(p) || !AXES.includes(p.axis as (typeof AXES)[number]) || !isNumber(p.offset)) {
-        fail(`${path}.plane`, 'must be { axis, offset, flipped }');
-      }
-      const plane = { axis: p.axis as (typeof AXES)[number], offset: p.offset, flipped: p.flipped === true };
-      const section = { ...base, kind: 'section' as const, plane: isObject(p.custom) ? { ...plane, custom: p.custom as never } : plane };
+      const section = { ...base, kind: 'section' as const, plane: readPlane(v.plane, `${path}.plane`) };
       return isString(v.through) && v.through ? { ...section, through: v.through } : section;
     }
     case 'elevation':
       if (!DIRECTIONS.includes(v.direction as ElevationDirection)) fail(`${path}.direction`, `must be one of ${DIRECTIONS.join(', ')}`);
       if (v.planeOffset !== undefined && !isNumber(v.planeOffset)) fail(`${path}.planeOffset`, 'must be a number');
-      return { ...base, kind: 'elevation', direction: v.direction as ElevationDirection, ...(v.planeOffset !== undefined ? { planeOffset: v.planeOffset } : {}) };
+      return {
+        ...base, kind: 'elevation', direction: v.direction as ElevationDirection, ...(v.planeOffset !== undefined ? { planeOffset: v.planeOffset } : {}),
+        ...(v.interior !== undefined ? { interior: readInterior(v.interior, `${path}.interior`) } : {}),
+      };
     default:
       return { ...base, kind: '3d', viewpoint: isObject(v.viewpoint) ? (v.viewpoint as never) : null };
   }
@@ -119,16 +159,27 @@ function readModel(v: unknown, path: string): ProjectModelRef {
   return { key: v.key, name: v.name };
 }
 
+/** The versions a reader brings files to: this build's, unless a test stands in a later one. */
+export interface ProjectFileSchema {
+  migrations: Readonly<Record<number, ProjectMigration>>;
+  current: number;
+}
+
+const THIS_BUILD: ProjectFileSchema = { migrations: PROJECT_MIGRATIONS, current: PROJECT_FILE_VERSION };
+
 /** Parse and validate a project file's text. Throws with the first problem found. */
-export function parseProjectFile(text: string): ProjectDocument {
-  let raw: unknown;
+export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_BUILD): ProjectDocument {
+  let parsed: unknown;
   try {
-    raw = JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch (err) {
     throw new Error(`Not a project file: invalid JSON (${err instanceof Error ? err.message : String(err)})`);
   }
-  if (!isObject(raw) || raw.format !== PROJECT_FILE_FORMAT) fail('/format', `must be "${PROJECT_FILE_FORMAT}"`);
-  if (raw.version !== PROJECT_FILE_VERSION) fail('/version', `${String(raw.version)} is not supported (expected ${PROJECT_FILE_VERSION})`);
+  if (!isObject(parsed) || parsed.format !== PROJECT_FILE_FORMAT) fail('/format', `must be "${PROJECT_FILE_FORMAT}"`);
+  const version = declaredVersion(parsed);
+  if (version === null) fail('/version', 'must be a whole number from 1');
+  // Older files are brought up to this build's shape first; a newer one throws here, before anything is read.
+  const raw = migrateProject(parsed, version, schema.migrations, schema.current);
   const list = (key: string): unknown[] => {
     const value = raw[key];
     if (value === undefined) return [];

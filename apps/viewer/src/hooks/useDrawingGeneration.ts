@@ -267,7 +267,7 @@ export function useDrawingGeneration({
     // (profiles stay empty → every mesh silhouettes). Cached per model since
     // they don't move with the section. Single-model (modelIndex 0) for now,
     // mirroring the symbolic path's federation limitation.
-    const profilesNeeded = projectionOn && !boundedProjection && sectionPlane.axis === 'down' && !sectionPlane.custom;
+    const profilesNeeded = projectionOn && !boundedProjection && sectionPlane.axis === 'down' && !sectionPlane.custom && !sectionPlane.reflected;
     let profiles: ProfileEntry[] = [];
     if (profilesNeeded && ifcDataStore?.source && modelCacheKey !== null) {
       const pcache = profileCacheRef.current;
@@ -398,8 +398,8 @@ export function useDrawingGeneration({
           // swapped. The shipped full-extent bands were symmetric so this never
           // mattered before; the asymmetric storey bands make flip significant.
           const bands = currentFloorBands(floors, position, axisMin, axisMax);
-          belowDepth = sectionPlane.flipped ? bands.above : bands.below;
-          aboveDepth = sectionPlane.flipped ? bands.below : bands.above;
+          belowDepth = sectionPlane.flipped || sectionPlane.reflected ? bands.above : bands.below;
+          aboveDepth = sectionPlane.flipped || sectionPlane.reflected ? bands.below : bands.above;
         }
       }
 
@@ -413,6 +413,7 @@ export function useDrawingGeneration({
         if (manualDepth === 0 || sectionPlane.axis !== 'down') aboveDepth = 0;
       }
 
+      if (sectionPlane.reflected) aboveDepth = 1e-3; // a reflected ceiling plan sees only above its cut; the floor side is not drawn
       // Adjust progress to account for symbolic parsing phase (0-20%)
       const progressOffset = symbolicLines.length > 0 ? 20 : 0;
       const progressScale = symbolicLines.length > 0 ? 0.8 : 1;
@@ -432,6 +433,7 @@ export function useDrawingGeneration({
 
       // Override the flipped setting
       config.plane.flipped = sectionPlane.flipped;
+      if (sectionPlane.reflected) config.plane.reflected = true;
 
       // Face-pick custom plane (issue #243): hand the cutter the explicit
       // basis so its 2D output sits in the same coordinate system the cap
@@ -666,7 +668,7 @@ export function useDrawingGeneration({
             wy * cullNormal[1] +
             wz * cullNormal[2] -
             cullDistance;
-          if (sectionPlane.flipped) {
+          if (sectionPlane.flipped || sectionPlane.reflected) {
             return signedDist >= 0 && signedDist <= ANNOTATION_VIEW_DEPTH;
           }
           return signedDist <= 0 && signedDist >= -ANNOTATION_VIEW_DEPTH;
@@ -961,7 +963,7 @@ export function useDrawingGeneration({
     previousInputs.current = [];
   }, [queue]);
   useEffect(() => {
-    const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped,
+    const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped, sectionPlane.reflected === true,
       sectionPlane.custom]);
     const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
       displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,

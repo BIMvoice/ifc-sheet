@@ -13,6 +13,7 @@ import { registerLocale, setLocale } from '@/i18n/registry';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import type { ProjectLevel } from '@/project/types';
+import { disciplineViewFor } from '@/project/discipline-views';
 import { AddDrawing } from './AddDrawing.js';
 
 /**
@@ -97,5 +98,61 @@ describe('AddDrawing', () => {
 
   it('names them exactly as before under en', () => {
     assert.deepEqual(sides('en', /^Elevation/), { labels: ['North Elevation', 'East Elevation', 'South Elevation', 'West Elevation'], added: ['North Elevation'] });
+  });
+
+  it('makes a foundation plan on the lowest storey and a roof plan on the highest, each once', () => {
+    const made: string[] = [];
+    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    click(button(ui, /Structure, foundations, roof/));
+    click(button(ui, /^Foundation plan$/));
+    const foundation = useProjectStore.getState().views.find((v) => v.kind === 'plan' && v.discipline === 'foundation');
+    assert.ok(foundation && foundation.kind === 'plan');
+    assert.equal(foundation.level.name, 'Ground Floor');
+    assert.equal(foundation.graphics?.presetId, 'preset-monochrome');
+    assert.deepEqual(made, [foundation.id]);
+    cleanup();
+    const again = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    click(button(again, /Structure, foundations, roof/));
+    click(button(again, /^Foundation plan$/));
+    assert.equal(made[1], foundation.id, 'the same plan, not a second one');
+    cleanup();
+    const roofUi = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    click(button(roofUi, /Structure, foundations, roof/));
+    click(button(roofUi, /^Roof plan$/));
+    const roof = useProjectStore.getState().views.find((v) => v.kind === 'plan' && v.discipline === 'roof');
+    assert.ok(roof && roof.kind === 'plan');
+    assert.equal(roof.level.name, 'First Floor');
+  });
+
+  it('asks for the storey of a structural plan, and keeps it apart from the plan of that storey', () => {
+    const made: string[] = [];
+    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    click(button(ui, /Structure, foundations, roof/));
+    click(button(ui, /^Structural plan$/));
+    click(button(ui, /^Ground Floor$/));
+    const structural = useProjectStore.getState().views.find((v) => v.kind === 'plan' && v.discipline === 'structural');
+    assert.ok(structural && structural.kind === 'plan');
+    assert.equal(structural.level.name, 'Ground Floor');
+    assert.deepEqual(made, [structural.id]);
+    // "Plan of a storey" on the same storey is the storey's own plan, not the structural one.
+    cleanup();
+    const plain = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    click(button(plain, /Plan of a storey/));
+    click(button(plain, /^Ground Floor$/));
+    const own = useProjectStore.getState().views.find((v) => v.kind === 'plan' && !v.discipline && v.level.name === 'Ground Floor');
+    assert.equal(made[1], own?.id);
+  });
+
+  it('opens the storey\'s own plan, not a structural plan of it listed first', () => {
+    const { views } = useProjectStore.getState();
+    const structural = { ...disciplineViewFor('structural', LEVELS[1], views), id: 'structural-ground' };
+    useProjectStore.setState({ views: [structural as (typeof views)[number], ...views] });
+    const made: string[] = [];
+    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    click(button(ui, /Plan of a storey/));
+    click(button(ui, /^Ground Floor$/));
+    const own = useProjectStore.getState().views.find((v) => v.kind === 'plan' && !v.discipline && v.level.name === 'Ground Floor');
+    assert.ok(own);
+    assert.deepEqual(made, [own.id]);
   });
 });

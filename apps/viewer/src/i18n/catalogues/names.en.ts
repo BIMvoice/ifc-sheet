@@ -16,6 +16,7 @@ export const namesEn = {
   'names.sheet.plans': 'Floor plans',
   'names.sheet.plansN': 'Floor plans {n}',
   'names.sheet.elevations': 'Elevations',
+  'names.sheet.interiors': 'Interior elevations',
   'names.sheet.elevationsSouthNorth': 'Elevations, south and north',
   'names.sheet.elevationsEastWest': 'Elevations, east and west',
   'names.sheet.sections': 'Sections',

@@ -12,6 +12,9 @@ import { useEffect } from 'react';
 import { formatLocaleFixed, useTranslation } from '@/i18n';
 import type { ModelExtent } from '@/project/drawing-set';
 import { useProjectStore } from '@/project/project-store';
+import { RecoveryOffer } from './RecoveryOffer';
+import { ReadinessList } from '../sheets/ReadinessList';
+import { WALL_SKIN } from '../sheets/set-skin';
 
 function Chip({ children }: { children: string }) {
   return <span className="rounded-full border border-sky-300/30 px-4 py-1.5 text-sm text-sky-100">{children}</span>;
@@ -27,6 +30,7 @@ export function WallIntro({ modelName, extent, onHang }: { modelName: string; ex
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof Element && e.target.closest('[data-owns-keys]')) return;
       if (e.key === 'ArrowRight' || e.key === 'Enter') onHang();
     };
     window.addEventListener('keydown', onKey);
@@ -36,6 +40,7 @@ export function WallIntro({ modelName, extent, onHang }: { modelName: string; ex
   return (
     <div className="flex h-full items-center px-16">
       <div className="max-w-2xl">
+        <RecoveryOffer onRestored={onHang} />
         <p className="mb-6 text-xs font-medium uppercase tracking-[0.3em] text-sky-400">{t('wall.intro.read', { name: modelName })}</p>
         <h1 className="m-0 text-6xl font-light leading-tight text-white">
           {t('wall.intro.titleStart')}
@@ -49,6 +54,7 @@ export function WallIntro({ modelName, extent, onHang }: { modelName: string; ex
           <Chip>{t('wall.intro.sheets', { count: sheets.length })}</Chip>
           <Chip>{t('wall.intro.views', { count: views })}</Chip>
         </div>
+        <div className="mt-6 max-w-lg"><ReadinessList skin={WALL_SKIN} compact /></div>
         <button type="button" onClick={onHang} className="mt-10 inline-flex items-center gap-3 rounded-md bg-sky-600 px-6 py-3 text-lg text-white hover:bg-sky-500">
           {t('wall.intro.hang')} <ArrowRight className="size-5" />
         </button>
