@@ -21,6 +21,7 @@ import { freshProjectId } from '@/project/view-defaults';
 import { useViewDrawings } from '@/project/view-drawings';
 import { bcfToComments, commentsToBcf, exportableComments, withBcfGuids } from '@/review/bcf';
 import { openCount, setCommentStatus } from '@/review/actions';
+import { reviewerName } from '@/review/identity';
 import { setHighlight } from '@/review/ui-store';
 import { useViewerStore } from '@/store';
 
@@ -49,7 +50,7 @@ export function CommentsSection({ onGo }: { onGo: (sheetId: string) => void }) {
     if (guided.changed) useProjectStore.setState({ comments: guided.comments, dirty: true });
     try {
       const viewer = useViewerStore.getState();
-      const project = commentsToBcf(guided.comments, { sheets: state.sheets, drawingOf, worldOffset: bcfWorldOffset(viewer.models, viewer.geometryResult), projectName: state.name });
+      const project = commentsToBcf(guided.comments, { sheets: state.sheets, drawingOf, worldOffset: bcfWorldOffset(viewer.models, viewer.geometryResult), projectName: state.name, fallbackAuthor: reviewerName() });
       downloadBlob(await writeBCF(project), `${sanitizeFilename(state.name, { fallback: 'project' })}-comments.bcfzip`);
       setNote(t('review.bcf.exported', { count: onElement.length, total: comments.length }));
     } catch (err) {

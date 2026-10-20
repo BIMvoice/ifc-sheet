@@ -33,6 +33,14 @@ export interface BcfExportOptions {
   /** Render frame to IFC world, metres (zero near the origin). */
   worldOffset?: BCFPoint;
   projectName?: string;
+  /** BCF version to write; 2.1 when left out. */
+  version?: '2.1' | '3.0';
+  /**
+   * Who to name where a comment or reply has no author, in BCF 3.0 only:
+   * 2.1 allows an empty author, 3.0 requires one. The reviewer exporting,
+   * else this tool (`IfcSheet`).
+   */
+  fallbackAuthor?: string;
 }
 
 export function exportableComments(comments: readonly ReviewComment[]): ReviewComment[] {
@@ -75,29 +83,35 @@ function viewpointOf(c: ReviewComment, opts: BcfExportOptions): BCFViewpoint {
   const normal = viewNormal(plane);
   const up = plane.customPlane ? plane.customPlane.bitangent : plane.axis === 'y' ? { x: 0, y: 0, z: -1 } : { x: 0, y: 1, z: 0 };
   const eye = { x: target.x + normal.x * 10, y: target.y + normal.y * 10, z: target.z + normal.z * 10 };
-  const camera = cameraToOrthogonal({ position: eye, target, up, fov: 0 }, 10);
+  // A 10 m high view, 4:3 (BCF 3.0 requires the aspect ratio).
+  const camera = cameraToOrthogonal({ position: eye, target, up, fov: 0, aspectRatio: 4 / 3 }, 10);
   return translateViewpoint({ ...viewpoint, orthogonalCamera: camera }, opts.worldOffset ?? { x: 0, y: 0, z: 0 });
+}
+
+function authorOf(author: string, opts: BcfExportOptions): string {
+  if (opts.version !== '3.0' || author.trim()) return author;
+  return opts.fallbackAuthor?.trim() || ORIGIN;
 }
 
 function topicOf(c: ReviewComment, opts: BcfExportOptions): BCFTopic {
   const sheet = opts.sheets.find((s) => s.id === c.sheetId);
   const title = c.text.split('\n')[0].slice(0, 120) || c.text;
   const topic = createBCFTopic({
-    title, description: c.text, author: c.author, topicStatus: c.status === 'done' ? 'Closed' : 'Open',
+    title, description: c.text, author: authorOf(c.author, opts), topicStatus: c.status === 'done' ? 'Closed' : 'Open',
     labels: [...(sheet ? [`sheet:${sheet.number}`] : []), `${COMMENT_LABEL}${c.id}`],
   });
   if (c.bcfGuid) topic.guid = c.bcfGuid;
   topic.creationDate = new Date(c.createdAt).toISOString();
   topic.viewpoints.push(viewpointOf(c, opts));
   topic.comments = c.replies.map((r) => ({
-    ...createBCFComment({ author: r.author, comment: r.text }), ...(r.bcfGuid ? { guid: r.bcfGuid } : {}), date: new Date(r.createdAt).toISOString(),
+    ...createBCFComment({ author: authorOf(r.author, opts), comment: r.text }), ...(r.bcfGuid ? { guid: r.bcfGuid } : {}), date: new Date(r.createdAt).toISOString(),
   }));
   return topic;
 }
 
 /** The BCF project of the comments that lie on a model element (pass them through `withBcfGuids` first, and save that, for GUIDs that stay). */
 export function commentsToBcf(comments: readonly ReviewComment[], opts: BcfExportOptions): BCFProject {
-  const project = createBCFProject({ name: opts.projectName });
+  const project = createBCFProject({ name: opts.projectName, version: opts.version });
   for (const c of exportableComments(comments)) {
     const topic = topicOf(c, opts);
     project.topics.set(topic.guid, topic);

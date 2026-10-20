@@ -76,6 +76,19 @@ describe('comments as BCF', () => {
     assert.equal(read.topics.size, 1);
   });
 
+  it('names an author where BCF 3.0 requires one and the comment has none, and leaves 2.1 as written (PR #127, item 5)', async () => {
+    const anonymous = { ...onElement, author: '', replies: [{ ...onElement.replies[0], author: ' ' }] };
+    const v3 = await readBCF(await writeBCF(commentsToBcf([anonymous], { sheets: [sheet], drawingOf, version: '3.0', fallbackAuthor: 'Petru Conduraru' })));
+    assert.equal(v3.version, '3.0');
+    const t3 = [...v3.topics.values()][0];
+    assert.equal(t3.creationAuthor, 'Petru Conduraru');
+    assert.deepEqual(t3.comments.map((c) => c.author), ['Petru Conduraru']);
+    const nobody = await readBCF(await writeBCF(commentsToBcf([anonymous], { sheets: [sheet], drawingOf, version: '3.0' })));
+    assert.equal([...nobody.topics.values()][0].creationAuthor, 'IfcSheet', 'with no reviewer named, the tool that wrote it');
+    const v21 = await readBCF(await writeBCF(commentsToBcf([anonymous], { sheets: [sheet], drawingOf, fallbackAuthor: 'Petru Conduraru' })));
+    assert.equal([...v21.topics.values()][0].creationAuthor ?? '', '', '2.1 keeps the empty author');
+  });
+
   it('exports a done comment as Closed', async () => {
     const read = await readBCF(await writeBCF(commentsToBcf([{ ...onElement, status: 'done' }], { sheets: [sheet], drawingOf })));
     assert.equal([...read.topics.values()][0].topicStatus, 'Closed');
