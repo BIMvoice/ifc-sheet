@@ -73,6 +73,12 @@ export interface PackageManifest {
   models: PackageModel[];
   parts: PackagePart[];
   versionInfo?: PackageVersionInfo;
+  /**
+   * The project file version the parts are written at (`PROJECT_FILE_VERSION`), so a reader runs
+   * the project file's migrations from it. Absent in packages written before it was recorded,
+   * which are version 1.
+   */
+  projectFileVersion?: number;
 }
 
 /** SHA-256 of bytes, lowercase hex (Web Crypto: browser and Node). */
