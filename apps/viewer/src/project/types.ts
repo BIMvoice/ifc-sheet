@@ -23,6 +23,7 @@ import type { DisciplineId } from './discipline-views';
 import type { CameraViewpoint, SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
+import type { ProjectIssue } from '@/issue/types';
 
 export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d';
 
@@ -32,10 +33,16 @@ export type ElevationDirection = 'north' | 'south' | 'east' | 'west';
 /** A building level, merged across federated models at the same elevation. */
 export interface ProjectLevel {
   name: string;
-  /** Floor elevation, metres, in the same frame the section bar uses. */
+  /** Floor elevation, metres: the storeys' IfcBuildingStorey.Elevation, what levels are matched and named by. */
   elevation: number;
   /** IfcBuildingStorey GlobalIds (one per model that has this level). */
   storeyGlobalIds: string[];
+  /**
+   * The floor in the drawing frame (render Y: the storey's placement-chain Z less the RTC offset and origin
+   * shift the meshes were moved by), derived from the loaded models and never saved. Absent: `elevation`.
+   * Read through `levelFloorY`.
+   */
+  floorY?: number;
 }
 
 interface ProjectViewBase {
@@ -244,6 +251,10 @@ export interface ProjectSheet {
 export interface ProjectModelRef {
   key: string;
   name: string;
+  /** How views draw it (`model-styles.ts`): the host draws as itself, a linked model in its own style. Absent: the first model is the host. */
+  role?: 'host' | 'linked';
+  /** Absent: the host draws normally, a linked model in halftone. */
+  drawStyle?: 'normal' | 'halftone';
 }
 
 /** A joinery schedule (door / window list): a project document of its own, placeable on sheets. */
@@ -381,25 +392,5 @@ export interface ProjectDocument {
   modelState?: ModelSnapshot;
 }
 
-/** One sheet as it stood when a set was issued. */
-export interface IssuedSheet {
-  number: string;
-  title: string;
-  /** The scales of its viewports, as drawn on the list: `1:50`, or `1:50, 1:100`; empty when it holds none. */
-  scale: string;
-  paper: PaperSize;
-  orientation: 'landscape' | 'portrait';
-  revision: string;
-  /** What the sheet held (`issue/fingerprint.ts`): equal fingerprints mean an unchanged sheet. */
-  fingerprint: string;
-}
-
-/** A set of sheets sent out together, recorded with the project so a later issue can say what changed. */
-export interface ProjectIssue {
-  id: string;
-  name: string;
-  /** `YYYY-MM-DD`. */
-  date: string;
-  createdAt: number;
-  sheets: IssuedSheet[];
-}
+// The issue records live with the issue code; re-exported so the document's types stay in one import.
+export type { IssuedSheet, ProjectIssue } from '@/issue/types';

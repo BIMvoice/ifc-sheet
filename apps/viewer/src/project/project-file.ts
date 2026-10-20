@@ -158,7 +158,16 @@ function readSheet(v: unknown, path: string): ProjectSheet {
 
 function readModel(v: unknown, path: string): ProjectModelRef {
   if (!isObject(v) || !isString(v.key) || !isString(v.name)) fail(path, 'must be a model { key, name }');
-  return { key: v.key, name: v.name };
+  const model: ProjectModelRef = { key: v.key, name: v.name };
+  // A role or style this version does not know (a newer file, a hand edit) is dropped, not fatal: the model opens linked, in its role's style.
+  if (v.role === 'host' || v.role === 'linked') model.role = v.role;
+  else if (v.role !== undefined) {
+    model.role = 'linked';
+    console.warn(`[ifcsheet] project file ${path}.role: ${JSON.stringify(v.role)} is not host or linked; the model is opened as linked`);
+  }
+  if (v.drawStyle === 'normal' || v.drawStyle === 'halftone') model.drawStyle = v.drawStyle;
+  else if (v.drawStyle !== undefined) console.warn(`[ifcsheet] project file ${path}.drawStyle: ${JSON.stringify(v.drawStyle)} is not normal or halftone; the model's default style is used`);
+  return model;
 }
 
 /** The versions a reader brings files to: this build's, unless a test stands in a later one. */

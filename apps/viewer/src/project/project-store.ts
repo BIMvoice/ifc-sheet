@@ -291,7 +291,7 @@ function mergeModels(known: readonly ProjectModelRef[], loaded: readonly Project
 }
 
 function sameLevels(a: readonly ProjectLevel[], b: readonly ProjectLevel[]): boolean {
-  return a.length === b.length && a.every((l, i) => l.name === b[i].name && l.elevation === b[i].elevation);
+  return a.length === b.length && a.every((l, i) => l.name === b[i].name && l.elevation === b[i].elevation && l.floorY === b[i].floorY);
 }
 
 // A detail mark's label is the detail's drawing number on its sheet and that sheet's number: derived, so it follows
