@@ -24,6 +24,7 @@ import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
 import { revisionsRo } from '../catalogues/revisions.ro';
 import { catalogueRo } from '../catalogues/catalogue.ro';
 import { cadLayersRo } from '../catalogues/cad-layers.ro';
+import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 
 export default {
   ...wallRo,
@@ -39,4 +40,5 @@ export default {
   ...revisionsRo,
   ...catalogueRo,
   ...cadLayersRo,
+  ...titleBlockParamsRo,
 } satisfies Catalogue;
