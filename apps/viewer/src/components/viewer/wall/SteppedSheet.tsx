@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
-import { runningCommand, useDraftingSession } from '@/drafting/session';
+import { patchDraftSettings, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { setPlacing, useReviewUi } from '@/review/ui-store';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
@@ -39,6 +39,9 @@ import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from '.
 import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
+
+/** The Wall tool that runs as a chain: each click adds the next dimension, until Esc. */
+const CHAINED_TOOL = 'dimaligned';
 
 /** The sheet's way out: printed or saved, at true paper size. */
 const issue = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
@@ -78,15 +81,23 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
 
   // A tool ends (Esc, or it finished): the rail lets go of it; the drawing stays forward.
   const commenting = useReviewUi((s) => s.placing);
+  // The dimension tool is the exception to "finished": Enter ends a chain, and the tool stays for the next one. Only Esc ends the tool (#141).
   const commandId = useDraftingSession((s) => s.commandId);
   const ran = useRef<string | null>(null);
+  const toolNow = useRef(tool);
+  toolNow.current = tool;
+  const escaped = useRef(false);
   useEffect(() => {
     // Only a command that ran and ended lets go; before it starts there is none either.
-    if (commandId !== null) ran.current = commandId;
-    else if (ran.current !== null) {
-      ran.current = null;
-      setTool(null);
+    if (commandId !== null) {
+      ran.current = commandId;
+      return;
     }
+    if (ran.current === null) return;
+    const ended = ran.current;
+    ran.current = null;
+    if (ended === CHAINED_TOOL && toolNow.current === CHAINED_TOOL && !escaped.current && startDraftCommand(CHAINED_TOOL)) return;
+    setTool(null);
   }, [commandId]);
   useEffect(() => () => cancelStart.current(), []);
 
@@ -110,6 +121,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   live.current = { focusId, chosen, adding, titling, papering, previewing };
   useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      escaped.current = e.key === 'Escape';
       const now = live.current;
       if (e.key !== 'Escape' || now.previewing) return; // the preview, when open, takes its own Esc
       // A panel that keeps its own keys (the tour card) has Esc for itself.
@@ -157,6 +169,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       cancelStart.current = startWhenAttached(focusView?.id ?? sheet.id, command);
       return;
     }
+    // The Wall's dimension tool chains: a SINGLE typed earlier in the session does not carry over (#141).
+    if (command === CHAINED_TOOL) patchDraftSettings({ dimContinuous: true });
     // A section line is drawn on a plan: the chosen one, else the lowest.
     // A detail marks its area on the drawing in front, else the chosen one, else the lowest plan.
     const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : command === 'detail' ? focusView ?? view ?? groundPlan(views) : view;

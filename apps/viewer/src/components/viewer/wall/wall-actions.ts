@@ -64,11 +64,13 @@ export interface WallTool {
   labelKey: TranslationKey;
   titleKey: TranslationKey;
   bodyKey: TranslationKey;
+  /** What the card says about ending the tool, where it differs from the draw tools' (`wall.drawHint`). */
+  hintKey?: TranslationKey;
 }
 
 /** The only tools a sheet offers: dimension, tag, note, level mark, section mark, symbol. */
 export const WALL_TOOLS: readonly WallTool[] = [
-  { command: 'dimaligned', icon: 'dimension', labelKey: 'wall.tool.dimension', titleKey: 'wall.tool.dimension.title', bodyKey: 'wall.tool.dimension.body' },
+  { command: 'dimaligned', icon: 'dimension', labelKey: 'wall.tool.dimension', titleKey: 'wall.tool.dimension.title', bodyKey: 'wall.tool.dimension.body', hintKey: 'wall.tool.dimension.hint' },
   { command: 'tag', icon: 'tag', labelKey: 'wall.tool.tag', titleKey: 'wall.tool.tag.title', bodyKey: 'wall.tool.tag.body' },
   { command: 'leader', icon: 'note', labelKey: 'wall.tool.text', titleKey: 'wall.tool.text.title', bodyKey: 'wall.tool.text.body' },
   { command: 'level', icon: 'level', labelKey: 'wall.tool.level', titleKey: 'wall.tool.level.title', bodyKey: 'wall.tool.level.body' },
