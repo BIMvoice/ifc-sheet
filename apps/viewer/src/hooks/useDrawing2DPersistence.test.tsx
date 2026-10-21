@@ -43,7 +43,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useViewerStore } from '@/store';
 import type { FederatedModel } from '@/store';
-import { useDrawing2DPersistence, notifyDrawing2DSectionConfig } from './useDrawing2DPersistence.js';
+import { useDrawing2DPersistence, notifyDrawing2DSectionConfig, hasPersistedMarkupEntryFor, onLocalStorageDecidedFor } from './useDrawing2DPersistence.js';
 import { loadDrawing2DEntry, clearAllDrawing2DEntries } from '@/store/slices/drawing2DSlice.persistence.js';
 import { computeFullSourceHashFromBlob } from '@/utils/sourceContentHash.js';
 import { computeSourceFingerprint } from '@ifc-lite/cache';
@@ -124,9 +124,34 @@ async function mount(): Promise<void> {
   });
 }
 
-/** Flush the microtask queue so an in-flight fingerprint promise settles. */
-async function flush(): Promise<void> {
+/**
+ * Resolves once the hook has finished resolving `modelId`'s content hash and
+ * concluded its restore (the hook's own `notifyDecided` signal, which fires in
+ * the same synchronous block that clears the save path's restore-in-flight
+ * guard). Until then a store change is deliberately NOT saved, so a test that
+ * reads `localStorage` earlier sees `null` (#209). Bounded: rejects rather than
+ * hanging if the signal never comes.
+ */
+function settled(modelId: string, timeoutMs = 10_000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (hasPersistedMarkupEntryFor(modelId) !== 'pending') { resolve(); return; }
+    const timer = setTimeout(() => {
+      off();
+      reject(new Error(`restore for ${modelId} did not settle within ${timeoutMs}ms`));
+    }, timeoutMs);
+    const off = onLocalStorageDecidedFor(modelId, () => { clearTimeout(timer); resolve(); });
+  });
+}
+
+/**
+ * Flush the microtask queue so an in-flight fingerprint promise settles. Pass
+ * the ids of the models whose restore the test depends on: the fixed ticks
+ * alone are a guess at how long the async SHA-256 takes (flaky on a slow
+ * runner), so each named model is awaited via {@link settled} first.
+ */
+async function flush(...modelIds: string[]): Promise<void> {
   await act(async () => {
+    for (const id of modelIds) await settled(id);
     await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
   });
@@ -143,8 +168,9 @@ async function flush(): Promise<void> {
  * `hashCache` had resolved) — this ticks far more generously (bounded, not
  * unbounded) rather than weakening any assertion to tolerate that.
  */
-async function flushDeep(): Promise<void> {
+async function flushDeep(...modelIds: string[]): Promise<void> {
   await act(async () => {
+    for (const id of modelIds) await settled(id);
     for (let i = 0; i < 40; i++) {
       await new Promise((r) => setTimeout(r, 5));
     }
@@ -177,7 +203,7 @@ describe('reload (session-reset) — MUTATION TARGET: Bug 1', () => {
     await mount();
 
     await act(async () => { useViewerStore.getState().setActiveModel('model-a'); });
-    await flush();
+    await flush('model-a');
 
     // The user draws something on model A and it saves.
     await act(async () => {
@@ -219,7 +245,7 @@ describe('active-model switch — MUTATION TARGET: Bug 2', () => {
     await mount();
 
     await act(async () => { useViewerStore.getState().setActiveModel('model-a'); });
-    await flush();
+    await flush('model-a');
     await act(async () => {
       useViewerStore.setState({ measure2DResults: [sampleMeasure('mA')] });
     });
@@ -239,7 +265,7 @@ describe('active-model switch — MUTATION TARGET: Bug 2', () => {
       'model A\'s markup must not still be present the instant B becomes active',
     );
 
-    await flush();
+    await flush('model-b');
 
     // A 2D redraw finishing for B — `notifyDrawing2DSectionConfig` fires
     // unconditionally from `useDrawingGeneration.ts` any time a drawing
@@ -309,7 +335,7 @@ describe('setActiveModel atomic clear — MUTATION TARGET: Bug 2 (independently 
     await mount();
 
     await act(async () => { useViewerStore.getState().setActiveModel('model-a'); });
-    await flush();
+    await flush('model-a');
     await act(async () => {
       useViewerStore.setState({ measure2DResults: [sampleMeasure('mA')] });
     });
@@ -329,7 +355,7 @@ describe('setActiveModel atomic clear — MUTATION TARGET: Bug 2 (independently 
     );
 
     // Let the hook's effects settle so unmount doesn't warn.
-    await flush();
+    await flush('model-b');
   });
 });
 
@@ -348,7 +374,7 @@ describe('A → B → A round trip — MUTATION TARGET: Bug 4', () => {
 
     // Visit A, draw, and let it save — hash(A) is now cached.
     await act(async () => { useViewerStore.getState().setActiveModel('model-a'); });
-    await flush();
+    await flush('model-a');
     await act(async () => {
       useViewerStore.setState({ measure2DResults: [sampleMeasure('mA')] });
     });
@@ -357,7 +383,7 @@ describe('A → B → A round trip — MUTATION TARGET: Bug 4', () => {
     // Visit B — hash(B) becomes cached too, matching the bug report's
     // precondition ("both content-hashes are already cached").
     await act(async () => { useViewerStore.getState().setActiveModel('model-b'); });
-    await flush();
+    await flush('model-b');
 
     // The B -> A leg: bare, not wrapped in `act`. This is the exact
     // production ordering the bug report describes — the raw save
@@ -383,7 +409,7 @@ describe('A → B → A round trip — MUTATION TARGET: Bug 4', () => {
     // Let the restore effect settle so unmount doesn't warn, and confirm the
     // data is still intact afterwards too (the restore effect's own save,
     // if any, must persist the SAME real data, not overwrite it again).
-    await flush();
+    await flush('model-a');
     assert.strictEqual(
       loadDrawing2DEntry(hashA, DEFAULTS)!.measure2DResults[0]?.id,
       'mA',
@@ -441,7 +467,7 @@ describe('fingerprint gap collision — MUTATION TARGET: sampled-key data leak',
     // flushDeep, not flush: this activation hashes a real 4MB buffer
     // (computeFullSourceHashFromBlob), which can take longer than flush's
     // fixed two ticks under a loaded CI runner.
-    await flushDeep();
+    await flushDeep('gap-model-a');
     await act(async () => {
       useViewerStore.setState({ measure2DResults: [sampleMeasure('mA')] });
     });
@@ -461,7 +487,7 @@ describe('fingerprint gap collision — MUTATION TARGET: sampled-key data leak',
     assert.strictEqual(entryA.measure2DResults[0].id, 'mA');
 
     await act(async () => { useViewerStore.getState().setActiveModel('gap-model-b'); });
-    await flushDeep();
+    await flushDeep('gap-model-b');
 
     const stateForB = useViewerStore.getState();
     assert.deepStrictEqual(
@@ -523,7 +549,7 @@ describe('restoration-ordering race — MUTATION TARGET: cross-model sectionConf
     // a real saved sectionConfig on disk, and (leaving B below) an entry in
     // `liveMarkupCache` for its markup arrays.
     await act(async () => { useViewerStore.getState().setActiveModel('race-model-b'); });
-    await flushDeep();
+    await flushDeep('race-model-b');
     await act(async () => { notifyDrawing2DSectionConfig('race-model-b', configB); });
     const entryAfterFirstSave = loadDrawing2DEntry(hashB, DEFAULTS);
     assert.ok(entryAfterFirstSave, `setup: expected an entry under model B's hash (${hashB}) after its first notify`);
@@ -532,7 +558,7 @@ describe('restoration-ordering race — MUTATION TARGET: cross-model sectionConf
     // Visit A — this is the "previous model" an in-flight generation is
     // still computing FOR when the user switches away from it.
     await act(async () => { useViewerStore.getState().setActiveModel('race-model-a'); });
-    await flushDeep();
+    await flushDeep('race-model-a');
 
     // The A -> B leg: bare, not wrapped in `act`, so this hook's own restore
     // effect has not run yet even though `setActiveModel`'s synchronous
@@ -566,7 +592,7 @@ describe('restoration-ordering race — MUTATION TARGET: cross-model sectionConf
 
     // Let the restore effect settle and confirm the IN-MEMORY config used
     // for the next save is B's real one too, not the corrupted one.
-    await flushDeep();
+    await flushDeep('race-model-b');
     await act(async () => { notifyDrawing2DSectionConfig('race-model-b', configB); });
     const entryAfterSettling = loadDrawing2DEntry(hashB, DEFAULTS);
     assert.ok(entryAfterSettling, `expected model B's entry under its hash (${hashB}) after the restore effect settled`);
