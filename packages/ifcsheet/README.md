@@ -25,7 +25,7 @@ writeFileSync('house.drawing-set.json', JSON.stringify(set.document, null, 2));
 
 ## What the output is today
 
-- **PDF**: one page per sheet at its paper size, vector lines and text, true to scale. Unstyled: no pens, hatches, symbols or annotation yet.
+- **PDF**: one page per sheet at its paper size, vector lines and text in Inter (shipped in `fonts/`, SIL Open Font License; ș and ț print), true to scale. Each drawing is clipped to its viewport. Unstyled: no pens, hatches, symbols or annotation yet.
 - **DXF**: one R12 file per sheet in paper millimetres, with the frame, the title block's lines and each drawing's linework on their own layers. No text yet.
 
 ## Names
