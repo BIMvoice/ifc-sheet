@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanup, click, press, render } from '@/test/render.js';
 import { setPlatform } from '@/test/platform.js';
-import { IMPORT_MAX_CHARS, KEY_BINDINGS_STORAGE_KEY, loadKeyBindings, rebindAction, resetAllBindings, takeDroppedBindings } from '@/lib/commands/key-bindings';
+import { IMPORT_MAX_CHARS, KEY_BINDINGS_STORAGE_KEY, loadKeyBindings, rebindAction, resetAllBindings, takeDroppedBindings, useKeyBindings } from '@/lib/commands/key-bindings';
 import { WALL_KEY_COMMANDS, type WallKeyId } from '@/lib/commands/wall-key-commands';
 import { resolveEnglish as t } from '@/i18n/registry';
 import { useDraftingKeys } from '../drafting/useDraftingKeys.js';
@@ -165,6 +165,15 @@ describe('the Wall\'s live handlers', () => {
     render(<Claim handlers={handlers} />);
     assert.equal(claimWallKey(down('g')), true);
     assert.deepEqual(calls, ['wall.back']);
+  });
+
+  it('are the only ones a claim looks at, even when a stale set gives two actions one key', () => {
+    // The two cannot be set through the settings; an older build's storage could hold them.
+    useKeyBindings.setState({ overrides: { 'wall.back': [{ key: 'g' }], 'wall.comment': [{ key: 'g' }] } });
+    const { handlers, calls } = counting();
+    render(<Claim handlers={{ ...handlers, 'wall.back': null }} />);
+    assert.equal(claimWallKey(down('g')), true, 'the one on offer runs');
+    assert.deepEqual(calls, ['wall.comment']);
   });
 
   it('claims nothing when no sheet is mounted', () => {

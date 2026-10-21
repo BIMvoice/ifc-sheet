@@ -293,6 +293,21 @@ describe('a sheet stepped into', () => {
     }
   });
 
+  it('leaves the sheet on the key the person gave Back, and not on another', () => {
+    const sheets = useProjectStore.getState().sheets;
+    let backs = 0;
+    rebindAction('wall.back', { key: 'g' });
+    try {
+      render(<SteppedSheet sheet={sheets[1]} extent={HOUSE} proposals={[]} onBack={() => { backs += 1; }} onStep={() => {}} />);
+      stroke(document.body, { key: 'j' });
+      assert.equal(backs, 0);
+      stroke(document.body, { key: 'g' });
+      assert.equal(backs, 1);
+    } finally {
+      resetAllBindings();
+    }
+  });
+
   it('gives the sheet\'s Fit and Print buttons the key of their row as aria-keyshortcuts (#119 review)', () => {
     setPlatform('Win32');
     const ui = render(<SteppedSheet sheet={useProjectStore.getState().sheets[1]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} />);
