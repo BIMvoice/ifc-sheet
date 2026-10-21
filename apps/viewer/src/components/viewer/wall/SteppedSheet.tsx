@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { runningCommand, useDraftingSession } from '@/drafting/session';
+import { setPlacing, useReviewUi } from '@/review/ui-store';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
 import { useProjectStore } from '@/project/project-store';
@@ -76,6 +77,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const group = sheetGroup(sheet);
 
   // A tool ends (Esc, or it finished): the rail lets go of it; the drawing stays forward.
+  const commenting = useReviewUi((s) => s.placing);
   const commandId = useDraftingSession((s) => s.commandId);
   const ran = useRef<string | null>(null);
   useEffect(() => {
@@ -114,6 +116,11 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       if (e.target instanceof Element && e.target.closest('[data-owns-keys]')) return;
       // A running tool or a drafted selection lets go first (the drafting keys' own Esc), and that is all this Esc does.
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
+      // The comment tool lets go first of what is not a drawing tool.
+      if (useReviewUi.getState().placing) {
+        setPlacing(false);
+        return;
+      }
       if (now.adding) setAdding(false);
       else if (now.titling) setTitling(false);
       else if (now.papering) setPapering(false);
@@ -219,6 +226,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
         {!focusView ? (
           <>
+            <button type="button" className={issue} aria-pressed={commenting} title={t('review.tool.hint')} onClick={() => setPlacing(!commenting)}>{t('review.tool')}</button>
             <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); }}>{t('wall.paper.button')}</button>
             <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); }}>{t('wall.tb.title')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
