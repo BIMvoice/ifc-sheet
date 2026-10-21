@@ -4,5 +4,5 @@
 
 /** Moved to the engine package (`packages/ifcsheet/src/numbering.ts`); re-exported here so the app's imports stay as they were. */
 
-export { DEFAULT_SCHEME, NUMBER_GROUPS, SCHEME_PRESETS, SEQUENTIAL_SCHEME, formatNumber, nextNumber, numberAt, numberGroupOf, numberSheets, planRenumber, readNumberingScheme, renumbered, typedBeforeSchemes } from '@bimvoice/ifcsheet';
+export { DEFAULT_SCHEME, NUMBER_GROUPS, SCHEME_PRESETS, SEQUENTIAL_SCHEME, formatNumber, nextNumber, numberAt, numberGroupOf, numberSheets, planRenumber, readNumberingScheme, registerNumberIn, registerSlot, renumbered, typedBeforeSchemes } from '@bimvoice/ifcsheet';
 export type { OverrideMode, RenumberRow } from '@bimvoice/ifcsheet';

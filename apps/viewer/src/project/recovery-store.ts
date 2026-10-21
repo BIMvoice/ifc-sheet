@@ -12,6 +12,7 @@
  */
 
 import { create } from 'zustand';
+import { deleteRasters, restoreRasters } from './autosave-rasters';
 import { deleteModelState, readModelState, withoutModelState, writeModelState } from './autosave-snapshots';
 import { toast } from '@/components/ui/toast';
 import { resolve } from '@/i18n/registry';
@@ -48,6 +49,7 @@ export function discardRecovery(storage?: Pick<Storage, 'removeItem'>): void {
   useRecoveryStore.setState({ offer: null });
   dropRecoverable(offer.key, storage);
   void deleteModelState(recoverableKey(offer.key));
+  void deleteRasters(recoverableKey(offer.key), offer.doc);
 }
 
 /** Puts the model state kept under `stateKey` into the project, if slot `key` is still the one in front and the project has none. */
@@ -75,6 +77,9 @@ export function restoreRecovery(storage: Pick<Storage, 'setItem'> | undefined = 
     return;
   }
   loadProjectDocument(offer.doc, { dirty: true });
+  // The offered session's captures come from the recoverable copy, not the live slot the new session has been autosaving to.
+  const offered = offer.doc;
+  void restoreRasters(offer.key, stateKey).then(() => deleteRasters(stateKey, offered));
   useRecoveryStore.setState({ offer: { ...offer, doc: slim, savedAt: now.getTime() } });
   // The offered session's state is read before the replaced project's is written over it.
   void readModelState(stateKey).then(async (kept) => {
