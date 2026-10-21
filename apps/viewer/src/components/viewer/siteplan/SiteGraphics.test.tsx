@@ -18,7 +18,7 @@ describe('site plan setbacks on the sheet (#135 review)', () => {
     // Footprint 20 × 12 m standing 3 m over the west line (x = 0) of a 42 × 29 m plot.
     const footprint = [[{ x: -3, y: 5 }, { x: 17, y: 5 }, { x: 17, y: 17 }, { x: -3, y: 17 }]];
     const boundary = [{ x: 0, y: -4 }, { x: 42, y: -4 }, { x: 42, y: 25 }, { x: 0, y: 25 }];
-    const site = { boundary, footprint, setbacks: setbacks(footprint, boundary), plotArea: null, footprintArea: null };
+    const site = { boundary, footprint, setbacks: setbacks(footprint, boundary) };
     const ui = render(<svg><SiteOverlay site={site} transform={{ scale: 5, x: 100, y: 100 }} axis="down" scale={200} /></svg>);
     const flagged = [...ui.querySelectorAll('[data-encroachment="true"]')];
     assert.deepEqual(flagged.map((g) => g.getAttribute('data-setback')), ['-3.000']);

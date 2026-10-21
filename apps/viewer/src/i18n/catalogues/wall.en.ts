@@ -88,6 +88,8 @@ export const wallEn = {
   'wall.ortho.aria': 'Ortho lock: horizontal and vertical only',
   'wall.ortho.help': 'Hold lines, dimensions and moves to horizontal or vertical. Hold Ctrl for a temporary lock',
   'wall.ortho.on': 'Ortho is on: points stay horizontal or vertical.',
+  'wall.draw.ptext': 'Parameter text',
+  'wall.draw.ptext.body': 'Click where it goes on the sheet and type the words. Put a parameter\'s name in curly braces to print its value.',
   'wall.draw.onSheet': 'On the sheet',
   'wall.draw.onDrawing': 'On {name}',
   'wall.hatch.pattern': 'Pattern',

@@ -15,9 +15,9 @@ import ro from './ro';
  * drawer, sheet cards, title block, scales and tool rail; the rest are the
  * catalogues the Wall opens (sheet settings, what is missing, issue the set,
  * what changed, libraries, the takeoff and door and window schedule as they
- * print on a sheet, the draft set report).
+ * print on a sheet, the draft set report, the title block's parameters and layout).
  */
-const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'settings.privacy.toast', 'viewerShell.toast.dismiss'];
+const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'settings.privacy.toast', 'viewerShell.toast.dismiss'];
 const keys = (Object.keys(en) as TranslationKey[]).filter((k) => IN_SCOPE.some((p) => k.startsWith(p)));
 const catalogue = ro as Readonly<Record<string, TranslationValue>>;
 

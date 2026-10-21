@@ -148,6 +148,7 @@ const sheet: Required<ProjectSheet> = {
   id: 'sh1', number: 'A-201', autoNumber: true, numberOverride: true, series: 'elevations', name: 'Plans', createdAt: 9, paper: { kind: 'elongated', base: 'A2', factor: 3 }, orientation: 'portrait', viewports: [viewport],
   frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' }, templateId: 'tpl1',
   titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12' }, revisionIds: ['rev-b'],
+  titleBlockParams: { Phase: 'PAC' },
 };
 /** One schedule of every kind: a kind added to `ProjectSchedule['kind']` does not compile until it is listed here. */
 const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<ProjectSchedule> & { kind: K } } = {
@@ -178,6 +179,13 @@ const FULL: Required<ProjectDocument> = {
   sheets: [sheet],
   revisions: [{ id: 'rev-a', code: 'A', date: '2026-09-01', description: 'Prima emitere: ș ț ă', by: 'PC' }, { id: 'rev-b', code: 'B', date: '2026-10-12', description: 'Pereți noi', by: 'IC' }],
   titleBlock: { project: 'Full house', client: 'Owner', checkedBy: 'PC', logo: 'data:image/png;base64,iVBORw0KGgo=' },
+  titleBlockParams: [{ name: 'Phase', value: 'DTAC' }, { name: 'ProjectNumber', value: '2026-014' }],
+  titleBlockTemplate: { items: [
+    { id: 'tb1', kind: 'rect', x: 0, y: 0, w: 180, h: 50, weight: 0.5 },
+    { id: 'tb2', kind: 'line', x1: 0, y1: 25, x2: 130, y2: 25, weight: 0.18 },
+    { id: 'tb3', kind: 'text', x: 2, y: 8, size: 3.5, text: 'Phase: {Phase}', bold: true, muted: true, fit: 61 },
+    { id: 'tb4', kind: 'logo', x: 132, y: 1.5, w: 46, h: 11 },
+  ] },
   titleBlockSources: { address: [{ kind: 'attribute', on: 'IfcBuilding', name: 'BuildingAddress' }], organisation: [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Office' }, { kind: 'owner', part: 'developer' }] },
   drafts,
   draftLayers: [{ id: '0', name: '0', color: '#18181b', visible: true, locked: false }, layer],

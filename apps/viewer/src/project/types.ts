@@ -3,6 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import type { TitleSource } from './title-block-sources';
+import type { TitleBlockParam } from './title-block-params';
+import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
 import type { UrbanSettings } from '@/urban/indicators';
@@ -256,6 +258,8 @@ export interface ProjectSheet {
   titleBlock?: Record<string, string>;
   /** Revisions this sheet lists besides the ones its clouds name: a manual choice (`ProjectRevision.id`; `revisions.ts`). */
   revisionIds?: string[];
+  /** The values this sheet gives title block parameters otherwise than the project's (`title-block-params.ts`); a name present wins. */
+  titleBlockParams?: Record<string, string>;
 }
 
 /** The identity of a model a project refers to (content hash, else its name). */
@@ -290,6 +294,10 @@ export interface ProjectDocument {
   titleBlockSources?: Record<string, TitleSource[]>;
   /** The project's revisions, oldest first (`revisions.ts`); a sheet's table lists the ones it is named by. */
   revisions?: ProjectRevision[];
+  /** The user's own title block parameters, in order, each with its project-wide value (`title-block-params.ts`). */
+  titleBlockParams?: TitleBlockParam[];
+  /** The title block's layout once edited; absent: the standard layout (`title-block-template.ts`). */
+  titleBlockTemplate?: TitleBlockTemplate;
   /** Drafted geometry, each entity on one view (phase 4). */
   drafts: DraftEntity[];
   draftLayers: DraftLayer[];

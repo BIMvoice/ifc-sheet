@@ -11,7 +11,7 @@
 
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
-import type { ProjectRevision, ProjectSheet, ProjectView } from '@/project/types';
+import type { ProjectDocument, ProjectRevision, ProjectSheet, ProjectView } from '@/project/types';
 import { diffById, isEmptyDelta, redoDelta, undoDelta, type Delta } from './step-delta';
 import type { DraftEntity, DraftParamValue, EntityShape } from './types';
 
@@ -23,17 +23,28 @@ const HISTORY_LIMIT = 200;
  * revision removed with its clouds), what it added, removed and changed. A
  * grouped step is undone by taking back just that, so whatever was added after
  * it stays. Revision records are kept oldest first, so their order before and
- * after the step is kept too.
+ * after the step is kept too. Whole project fields (`STEP_FIELDS`) are kept as
+ * their value before and after.
  */
 interface Group {
   drafts: Delta<DraftEntity>;
   views: Delta<ProjectView>;
   sheets: Delta<ProjectSheet>;
   revisions: Delta<ProjectRevision> & { before: string[]; after: string[] };
+  fields: FieldChange[];
 }
 type Step =
   | { drafts: DraftEntity[] }
   | { group: Group };
+
+/**
+ * Project fields a grouped step may also change, held whole (the title block's parameter list and layout, #143): undo puts
+ * back the value from before the step only while the field is still the value the step left, the same identity rule the
+ * deltas follow, so a step never overwrites what came after it, nor a project opened since.
+ */
+const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate'] as const;
+type StepField = (typeof STEP_FIELDS)[number];
+type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; after: ProjectDocument[K] } }[StepField];
 
 let past: Step[] = [];
 let future: Step[] = [];
@@ -42,7 +53,6 @@ let pastAt: number[] = [];
 let futureAt: number[] = [];
 /** While a grouped step runs, individual commits do not make steps of their own. */
 let grouping = false;
-
 /** When the step Undo would revert was made, or null when there is none. */
 export const lastDraftStepAt = (): number | null => pastAt.at(-1) ?? null;
 /** When the step Redo would restore was made, or null when there is none. */
@@ -81,11 +91,20 @@ export function runAsOneUndoStep(change: () => void): void {
   if (wasGrouping) return;
   const revisionsBefore = before.revisions ?? [];
   const revisionsAfter = after.revisions ?? [];
+  const fields = STEP_FIELDS.filter((key) => before[key] !== after[key]).map((key) => ({ key, before: before[key], after: after[key] }) as FieldChange);
   const group: Group = {
     drafts: diffById(before.drafts, after.drafts), views: diffById(before.views, after.views), sheets: diffById(before.sheets, after.sheets),
     revisions: { ...diffById(revisionsBefore, revisionsAfter), before: revisionsBefore.map((r) => r.id), after: revisionsAfter.map((r) => r.id) },
+    fields,
   };
-  if (!isEmptyDelta(group.drafts) || !isEmptyDelta(group.views) || !isEmptyDelta(group.sheets) || !isEmptyDelta(group.revisions)) pushStep({ group });
+  if (!isEmptyDelta(group.drafts) || !isEmptyDelta(group.views) || !isEmptyDelta(group.sheets) || !isEmptyDelta(group.revisions) || fields.length > 0) pushStep({ group });
+}
+
+/** The fields `changes` set back to `to`, each only where it still holds the value the step moved it `from`. */
+function fieldsBack(s: ProjectDocument, changes: readonly FieldChange[], from: 'before' | 'after', to: 'before' | 'after'): Partial<ProjectDocument> {
+  const out: Partial<Record<StepField, unknown>> = {};
+  for (const c of changes) if (s[c.key] === c[from]) out[c.key] = c[to];
+  return out as Partial<ProjectDocument>;
 }
 
 /** `list` in the order of the ids in `order`; anything not in it after, as it was. */
@@ -105,6 +124,7 @@ function revert(step: Step): void {
   useProjectStore.setState((s) => ({
     drafts: undoDelta(s.drafts, group.drafts), views: undoDelta(s.views, group.views), sheets: undoDelta(s.sheets, group.sheets),
     ...(isEmptyDelta(group.revisions) ? {} : { revisions: inOrder(undoDelta(s.revisions ?? [], group.revisions), group.revisions.before) }),
+    ...fieldsBack(s, group.fields, 'after', 'before'),
     dirty: true,
   }));
 }
@@ -115,6 +135,7 @@ function reapply(step: Step): void {
   useProjectStore.setState((s) => ({
     drafts: redoDelta(s.drafts, group.drafts), views: redoDelta(s.views, group.views), sheets: redoDelta(s.sheets, group.sheets),
     ...(isEmptyDelta(group.revisions) ? {} : { revisions: inOrder(redoDelta(s.revisions ?? [], group.revisions), group.revisions.after) }),
+    ...fieldsBack(s, group.fields, 'before', 'after'),
     dirty: true,
   }));
 }
