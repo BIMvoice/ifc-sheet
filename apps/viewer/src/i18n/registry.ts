@@ -14,6 +14,7 @@
  * it separate means converting a component to translated strings never
  * has to touch the (already large) viewer store.
  */
+import { setNameResolver } from '@bimvoice/ifcsheet/names';
 import { appName } from '../edition';
 import { en, type TranslationKey } from './en';
 import { formatLocaleNumber } from './intlFormat';
@@ -140,6 +141,10 @@ function resolveFromCatalogue(key: TranslationKey, params: TranslationParameters
 export function resolve(key: TranslationKey, params: TranslationParameters = {}): string {
   return resolveFromCatalogue(key, params, activeLocale, catalogues.get(activeLocale));
 }
+
+// The drawing-set engine names what it makes (the starting set's sheets, the default views) in the active language.
+// `@bimvoice/ifcsheet/names` imports nothing, so the catalogue does not load the engine to install it.
+setNameResolver((key, params) => resolve(key, params));
 
 /** Freeze a label context for an asynchronous document layout/export (#6610).
  * Locale or catalogue replacement must not mix languages halfway through a PDF. */
