@@ -15,6 +15,7 @@ import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
 import { storeyOfElement } from '@/project/effective-storey';
 import { useViewerStore } from '@/store';
 import { toGlobalIdFromModels } from '@/store/globalId';
+import { idOf } from '@/joinery/object-id';
 import { buildStoreyWorkplane } from '@/lib/commands/modeling/workplane';
 import { worldToDrawing } from '@/drafting/frame';
 import type { Pt } from '@/drafting/types';
@@ -38,6 +39,9 @@ export interface PlanRoof {
   arrows: PlanRoofArrow[];
 }
 
+/** Each model's roof specs, by roof, shared by every plan while the model is unchanged. */
+const specCache = new Map<string, { key: string; specs: Map<number, RoofSystemSpec> }>();
+
 export function planRoofs(view: ProjectView, plane: SectionPlaneConfig): PlanRoof[] {
   if (view.kind !== 'plan') return [];
   const s = useViewerStore.getState();
@@ -49,15 +53,21 @@ export function planRoofs(view: ProjectView, plane: SectionPlaneConfig): PlanRoo
     if (!dataStore || !hierarchy) continue;
     const mv = s.mutationViews.get(modelId) ?? null;
     const onPlan: { roofId: number; storeyId: number }[] = [];
+    const allRoofs: number[] = [];
     for (const { expressId: roofId } of iterateEffectiveEntityIds(dataStore, mv, ['IFCROOF'])) {
+      allRoofs.push(roofId);
       const storeyId = storeyOfElement(modelId, roofId) ?? undefined;
       if (storeyId === undefined || (wanted.size && !wanted.has(dataStore.entities.getGlobalId(storeyId) ?? ''))) continue;
       onPlan.push({ roofId, storeyId });
     }
-    // Every roof's spec in one pass over the model's property relationships, not one pass per roof (#154).
+    // Every roof's spec in one pass over the model's property relationships, not one pass per roof,
+    // and once for all the plans while the model is unchanged, not once per plan (#154).
     let specs: Map<number, RoofSystemSpec>;
     try {
-      specs = readRoofSystems(dataStore, onPlan.map((r) => r.roofId), mv);
+      const key = `${idOf(dataStore)}:${mv ? idOf(mv) : 0}:${s.mutationVersion}:${allRoofs.join(',')}`;
+      const held = specCache.get(modelId);
+      specs = held && held.key === key ? held.specs : readRoofSystems(dataStore, allRoofs, mv);
+      specCache.set(modelId, { key, specs });
     } catch (error) {
       console.warn('[roof-plan] could not read the roof systems', error);
       continue;

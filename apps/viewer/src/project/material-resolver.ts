@@ -12,7 +12,8 @@
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useViewerStore } from '@/store';
-import { layerSetOf, relationSnapshot, type RelationReads } from '@/lib/commands/modeling/authored-kinds';
+import { layerSetOf, relationSnapshot, type LiveModel, type RelationReads } from '@/lib/commands/modeling/authored-kinds';
+import { idOf } from '@/joinery/object-id';
 import { useProjectStore } from './project-store';
 import { materialDrawing, type LayerRef, type MaterialDrawing } from './material-drawing';
 import { MEMBRANE_THICKNESS_M, ifcMaterialName, materialGraphics } from './materials';
@@ -46,6 +47,22 @@ export function drawingMaterialNames(drawing: Drawing2D | null): string[] {
 }
 
 const cache = new WeakMap<Drawing2D, { key: string; value: MaterialDrawing }>();
+/** Each model's relationship snapshot, shared by every view's drawing while the model is unchanged. */
+const relationCache = new Map<string, { key: string; reads: RelationReads }>();
+
+/**
+ * One read of each model's relationships for every drawing, not one per element (#154), until the
+ * model changes: keyed on the mutation version, as the drawing cache is, and on the data store's and
+ * the edit view's identity (a collab refresh swaps the store under the same model id).
+ */
+function relationsFor(modelId: string, live: LiveModel): RelationReads {
+  const stampKey = `${idOf(live.dataStore)}:${live.view ? idOf(live.view) : 0}:${useViewerStore.getState().mutationVersion}`;
+  const held = relationCache.get(modelId);
+  if (held && held.key === stampKey) return held.reads;
+  const reads = relationSnapshot(live);
+  relationCache.set(modelId, { key: stampKey, reads });
+  return reads;
+}
 
 /** The drawing's cut by building materials (null when nothing in it has a layered material). */
 export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null {
@@ -54,8 +71,6 @@ export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null
   const key = `${useViewerStore.getState().mutationVersion}:${JSON.stringify(table)}`;
   const hit = cache.get(drawing);
   if (hit && hit.key === key) return hit.value;
-  // One read of each model's relationships for the whole drawing, not one per element (#154).
-  const relations = new Map<string, RelationReads>();
   const value = materialDrawing(drawing, {
     graphics(p) {
       const m = modelOf(p.entityId);
@@ -66,9 +81,7 @@ export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null
       const m = modelOf(entityId);
       if (!m) return null;
       const live = { dataStore: m.dataStore, view: m.view };
-      let reads = relations.get(m.modelId);
-      if (!reads) relations.set(m.modelId, (reads = relationSnapshot(live)));
-      const set = layerSetOf(live, m.expressId, reads);
+      const set = layerSetOf(live, m.expressId, relationsFor(m.modelId, live));
       if (!m || !set) return null;
       return set.layers.map((l): LayerRef => ({ materialId: l.materialId, name: (l.materialId !== null ? materialName(m, l.materialId) : null) ?? '', thickness: l.thickness }));
     },

@@ -18,7 +18,6 @@ import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/a
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Drawing2DGenerator,
   createSectionConfig,
   currentFloorBands,
   storeyFloorsFromMeshes,
@@ -29,7 +28,8 @@ import {
 } from '@ifc-lite/drawing-2d';
 import type { UseDrawingGenerationParams } from './drawingGenerationParams.js';
 import { createDrawingRequestQueue } from './drawingRequestQueue.js';
-import { createMeshOutlineProvider, type MeshOutline2dFn } from './meshOutlineProvider.js';
+import type { MeshOutline2dFn } from './meshOutlineProvider.js';
+import { generateDrawing as generateDrawingOffThread } from '@/lib/drawing/generation/client';
 import { type GeometryResult } from '@ifc-lite/geometry';
 import { getWholeSourceForWorker, parseProfilesFlat } from '@/lib/overlay-parse/index.js';
 import { placedConstructionProfiles } from '@/lib/model-placement/construction-profiles';
@@ -318,10 +318,7 @@ export function useDrawingGeneration({
 
     profiles = placedConstructionProfiles(profiles, ifcDataStore);
 
-    let generator: Drawing2DGenerator | null = null;
     try {
-      generator = new Drawing2DGenerator();
-      await generator.initialize();
       if (!isCurrent()) return;
 
       // Convert semantic axis to geometric
@@ -546,20 +543,17 @@ export function useDrawingGeneration({
         }
       }
 
-      // Winding-robust outline provider for non-extruded geometry (roofs,
-      // stairs, site). Calls the Rust meshOutline2d binding per mesh; each call
-      // copies the contour data off the WASM heap and frees the handle inline.
-      // Undefined when projection is off or the binding isn't in this wasm
-      // build → the generator falls back to the TS mesh silhouette.
-      const outlineProvider =
-        projectionOn && typeof meshOutline2dFn === 'function'
-          ? createMeshOutlineProvider(meshOutline2dFn)
-          : undefined;
-
-      const result = await generator.generate(
-        meshesToProcess,
+      // Winding-robust outline for non-extruded geometry (roofs, stairs,
+      // site): the Rust meshOutline2d binding, called per mesh. Off when
+      // projection is off or the binding isn't in this wasm build, and the
+      // generator then falls back to the TS mesh silhouette.
+      // The cut runs in the generation worker (#154): `generateDrawingOffThread` sends
+      // the model's meshes there once and this view's mesh selection each time.
+      const result = await generateDrawingOffThread({
+        allMeshes: geometryResult.meshes,
+        meshes: meshesToProcess,
         config,
-        {
+        options: {
           // Always classify projection occlusion. Hidden Lines controls whether
           // the classified hidden edges render/export, not whether opaque walls
           // hide geometry behind them (#6615). Overhead stays dashed separately.
@@ -567,11 +561,11 @@ export function useDrawingGeneration({
           includeProjection: projectionOn,
           includeEdges: projectionOn,
           mergeLines: true,
-          outlineProvider,
-          onProgress: progressCallback,
+          outline: projectionOn && typeof meshOutline2dFn === 'function',
         },
-        projectionOn ? projectionProfiles : undefined,
-      );
+        profiles: projectionOn ? projectionProfiles : undefined,
+        onProgress: progressCallback,
+      }, meshOutline2dFn);
 
       if (!isCurrent()) return;
 
@@ -843,9 +837,6 @@ export function useDrawingGeneration({
     } catch (error) {
       console.error('Drawing generation failed:', error);
       if (isCurrent()) setDrawingError(error instanceof Error ? error.message : 'Generation failed');
-    } finally {
-      // Always cleanup generator to prevent resource leaks
-      generator?.dispose();
     }
   }, [
     geometryResult,

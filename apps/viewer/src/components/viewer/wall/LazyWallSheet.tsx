@@ -13,7 +13,7 @@ import type { ProjectSheet } from '@/project/types';
 import { WallSheet } from './WallSheet';
 
 export function LazyWallSheet({ sheet, width, near }: { sheet: ProjectSheet; width: number; near: boolean }) {
-  if (near) return <WallSheet sheet={sheet} width={width} />;
+  if (near) return <WallSheet sheet={sheet} width={width} deferDrawings />;
   const paper = paperOf(sheet);
   return (
     <div
