@@ -219,7 +219,7 @@ jobs:
   #     fixtures/upload-fixtures (macOS-only path-guard mismatch, unverified on
   #     Linux): need tooling this job does not install.
   #   - check-changeset-bump (no release anchor in this fork's history),
-  #     check-module-size, check-source-text-assertions, check-csv-escaper-copies,
+  #     check-module-size, check-source-text-assertions,
   #     check-unused-locals-baseline: the gate or its baseline is red on main.
   scripts-tests:
     name: Script tests
@@ -267,6 +267,7 @@ jobs:
           node --test scripts/check-clash-degenerate-reason-parity.test.mjs || fail=1
           node --test scripts/check-collab-room-model-target.test.mjs || fail=1
           node --test scripts/check-css-vars.test.mjs || fail=1
+          node --test scripts/check-csv-escaper-copies.test.mjs || fail=1
           node --test scripts/check-i18n-literals.test.mjs || fail=1
           node --test scripts/check-icon-button-adoption.test.mjs || fail=1
           node --test scripts/check-isolate-expansion-routing.test.mjs || fail=1
