@@ -32,7 +32,7 @@ import type { ElevationProjectView, PlanProjectView, ProjectView, SectionProject
 
 const WASM = new URL('../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
 const FIXTURE = new URL('./__fixtures__/structural-grid.ifc', import.meta.url);
-const FZK = new URL('../../public/_fixtures/AC20-FZK-Haus.ifc', import.meta.url);
+const FZK = new URL('../../src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url);
 /** Every test here runs the real mesh pipeline: without the wasm runtime it skips, never throws. */
 const wasmOptions = { skip: !existsSync(WASM) && 'Run pnpm build:wasm' };
 
