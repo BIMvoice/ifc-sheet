@@ -89,6 +89,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { deploymentAssetsDir } from './lib/deployment-assets-dir.mjs';
 import { chunkFormatting, MIN_PUNCTUATION, rewrittenByPlugin } from './lib/tla-chunk-prologue.mjs';
+import { reportUnsafeReExports, unsafeReExports } from './lib/tla-reexport-facades.mjs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -313,26 +314,8 @@ for (const [file, text] of sources) {
     sideEffectViolations.push({ importer: file, imported: importedFile });
   }
 
-  // Re-export facades (`export{r as loadDemoLayerStack}from"./A.js"`). A
-  // re-exported binding is A's own live `var`, still unassigned until A's
-  // `__tla` resolves, so the facade must hand that wait on: export a `__tla`
-  // of its own that waits for A's (the shape the plugin prints when the
-  // bundler emits the facade as import + local export), or re-export A's.
-  // Dynamic importers of the facade do `await m.__tla`; if the facade exports
-  // none, that await is `await undefined`, the caller reads the binding before
-  // A has assigned it, and calling it throws the same TypeError as #2246.
-  // rolldown 1.2.14 (vite 8.3.4) emits facades in this pure re-export form
-  // and the plugin then wraps them without exporting `__tla` -- so this is
-  // checked directly rather than left to the import scan above, which never
-  // sees an `export ... from`. `export * from` re-exports `__tla` with
-  // everything else, so it is not a violation and is not matched.
-  const reExportRe = /export\s*\{([^}]*)\}\s*from\s*["']\.\/([^"']+\.js)["']/g;
-  for (const m of text.matchAll(reExportRe)) {
-    const [, clause, reExported] = m;
-    if (!tlaExporters.has(reExported) || tlaExporters.has(file)) continue;
-    const bindings = clause.split(',').map((e) => e.trim()).filter(Boolean).join(', ');
-    reExportViolations.push({ facade: file, reExported, bindings });
-  }
+  // Re-export facades that drop the wait: scripts/lib/tla-reexport-facades.mjs.
+  reExportViolations.push(...unsafeReExports(file, text, tlaExporters));
 }
 
 if (violations.length > 0) {
@@ -367,24 +350,7 @@ if (sideEffectViolations.length > 0) {
   );
 }
 
-if (reExportViolations.length > 0) {
-  console.error(
-    `\n❌ ${reExportViolations.length} chunk(s) re-export bindings of a __tla-wrapped chunk ` +
-      `without exporting a __tla of their own:\n`,
-  );
-  for (const v of reExportViolations.slice(0, 20)) {
-    console.error(`   ${v.facade}  re-exports { ${v.bindings} }  from  ${v.reExported}  (exports __tla)`);
-  }
-  if (reExportViolations.length > 20) console.error(`   ... and ${reExportViolations.length - 20} more`);
-  console.error(
-    `\nA dynamic importer awaits the facade's \`__tla\`; with none exported it awaits\n` +
-      `undefined and reads the re-exported bindings before the wrapped chunk has\n` +
-      `assigned them -- the #2246 TypeError, behind an import(). The bundler emitted\n` +
-      `these facades as pure re-exports (rolldown 1.2.14 / vite 8.3.4 does) and\n` +
-      `vite-plugin-top-level-await@1.6.0 does not propagate __tla through that form.\n` +
-      `Keep vite/rolldown at the versions pinned in package.json pnpm.overrides.\n`,
-  );
-}
+if (reExportViolations.length > 0) reportUnsafeReExports(reExportViolations);
 
 if (violations.length > 0 || sideEffectViolations.length > 0 || reExportViolations.length > 0) {
   process.exit(1);
