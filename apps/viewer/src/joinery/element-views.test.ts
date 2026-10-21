@@ -72,6 +72,34 @@ describe('the three views of a box window', () => {
     assert.ok(v.plan.lines.some((l) => l.kind === 'hatch'), 'cut faces are hatched');
   });
 
+  it('spaces the hatch by the schedule scale: the same distance on paper at 1:20, 1:50 and 1:100', async () => {
+    /** The smallest distance between two parallel hatch lines of the plan, metres. */
+    const gap = (v: ElementViews): number => {
+      const hatch = v.plan.lines.filter((l) => l.kind === 'hatch');
+      assert.ok(hatch.length > 4, `${hatch.length} hatch lines`);
+      const dir = { x: hatch[0].b.x - hatch[0].a.x, y: hatch[0].b.y - hatch[0].a.y };
+      const len = Math.hypot(dir.x, dir.y);
+      // Distance of each line from the origin, across its direction.
+      const across = hatch
+        .filter((l) => Math.abs((l.b.x - l.a.x) * dir.y - (l.b.y - l.a.y) * dir.x) < 1e-6 * len * len)
+        .map((l) => (l.a.x * dir.y - l.a.y * dir.x) / len)
+        .sort((a, b) => a - b);
+      let min = Infinity;
+      for (let i = 1; i < across.length; i++) if (across[i] - across[i - 1] > 1e-6) min = Math.min(min, across[i] - across[i - 1]);
+      return min;
+    };
+    const onPaper: number[] = [];
+    for (const scale of [20, 50, 100]) {
+      const v = await elementViews([box(1.2, 0.2, 1.5)], { scale });
+      assert.ok(v);
+      onPaper.push((gap(v) * 1000) / scale);
+    }
+    const [at20, at50, at100] = onPaper;
+    assert.ok(at50 > 0.3 && at50 < 3, `about a millimetre apart on paper, not ${at50} mm`);
+    assert.ok(Math.abs(at20 - at50) / at50 < 0.05, `1:20 ${at20} mm vs 1:50 ${at50} mm`);
+    assert.ok(Math.abs(at100 - at50) / at50 < 0.05, `1:100 ${at100} mm vs 1:50 ${at50} mm`);
+  });
+
   it('is null for an element without geometry', async () => {
     assert.equal(await elementViews([]), null);
   });
