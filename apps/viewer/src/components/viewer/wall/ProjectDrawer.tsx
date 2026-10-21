@@ -17,7 +17,7 @@ import { X } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { inSetOrder } from '@/project/drawing-register';
-import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
+import type { ModelExtent } from '@/project/drawing-set';
 import { addRegisterToSet, addScheduleToSet, hangLegend, hangSchedule, hangView } from '@/project/drawing-set-actions';
 import { projectOpenErrorText } from '@/project/open-error';
 import { requestNewProject } from '@/project/new-project';
@@ -56,7 +56,7 @@ const action = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky
 function Group({ title, children, add }: { title: string; children: ReactNode; add?: ReactNode }) {
   return (
     <section className="border-t border-sky-300/10 px-4 py-3">
-      <h3 className="m-0 mb-1.5 text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{title}</h3>
+      <h3 className="m-0 mb-1.5 text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{title}</h3>
       <ul className="m-0 list-none p-0">{children}</ul>
       {add ? <div className="mt-2 flex flex-wrap gap-1.5">{add}</div> : null}
     </section>
@@ -132,7 +132,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
     <aside aria-label={t('wall.project.title')} className="absolute inset-y-0 left-0 z-20 flex w-80 flex-col border-r border-sky-300/20 bg-[#08214a]/98 text-sky-50 shadow-2xl">
       <header className="flex items-center gap-2 px-4 pb-2 pt-4">
         <div className="min-w-0 flex-1">
-          <p className="m-0 text-[11px] uppercase tracking-[0.25em] text-cyan-400">{t('wall.project.title')}</p>
+          <p className="m-0 text-2xs uppercase tracking-[0.25em] text-cyan-400">{t('wall.project.title')}</p>
           <p className="m-0 truncate text-lg text-white">{name}</p>
         </div>
         <button type="button" aria-label={t('wall.add.close')} onClick={onClose} className="rounded p-1 text-sky-200 hover:bg-sky-400/20"><X className="size-4" /></button>
@@ -165,7 +165,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           ))}
         </Group>
         <details className="border-t border-sky-300/10 px-4 py-3" onToggle={(e) => setReadyOpen(e.currentTarget.open)}>
-          <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('ready.title')}</summary>
+          <summary className="cursor-pointer text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('ready.title')}</summary>
           {/* Mounted only while open: reading the facts walks every entity of every model. */}
           {readyOpen ? <div className="mt-2 text-xs leading-relaxed"><ReadinessList skin={WALL_SKIN} /></div> : null}
         </details>
@@ -174,7 +174,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <SheetNumberingForm />
         </details>
         <details className="border-t border-sky-300/10 px-4 py-3">
-          <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.tb.title')}</summary>
+          <summary className="cursor-pointer text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.tb.title')}</summary>
           <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('wall.tb.everySheet')}</p>
           <TitleBlockForm />
         </details>

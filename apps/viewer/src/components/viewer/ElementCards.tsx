@@ -8,7 +8,6 @@
  * the symbol a door or window is drawn with (both editions).
  */
 
-import { can } from '@/edition';
 import { JoinerySymbolCard } from './JoinerySymbolCard';
 
 export function ElementCards({ modelId, expressId }: { modelId: string; expressId: number }) {

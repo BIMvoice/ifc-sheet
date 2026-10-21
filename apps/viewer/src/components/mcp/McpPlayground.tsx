@@ -16,14 +16,7 @@
  * against the local `BimContext`. No IFC ever leaves the browser.
  */
 
-import {
-  type CSSProperties,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type CSSProperties, type ReactNode, useCallback, useRef, useState } from 'react';
 import { ArrowLeft, Box, ChevronDown, ChevronRight, Download, Upload, AlertTriangle, Trash2 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
@@ -42,7 +35,6 @@ import type { ViewerController } from './playground-viewer-types';
 import { playgroundFiles, usePlaygroundFiles, formatBytes as formatFileBytes } from './playground-files';
 const NIGHT = '#0a0a0c';
 const PANEL = '#101014';
-const RULE = 'rgba(237, 228, 211, 0.08)';
 const PAPER = '#ede4d3';
 const PAPER_DIM = 'rgba(237, 228, 211, 0.55)';
 const ACCENT = '#d6ff3f';

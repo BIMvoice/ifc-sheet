@@ -14,7 +14,6 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
-import { useViewerStore } from '@/store';
 import { buildDrawingSet, drawingArea, groundPlan, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
 import { paperLabel } from './paper';
@@ -28,7 +27,7 @@ import { seedProjectTitleBlock } from './sheets';
 import { resolve } from '@/i18n/registry';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, elevationName, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
-import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
+import type { PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
 
 // The lowest plan lives with the set's pure layout (`drawing-set.ts`), so the drafting marks can read it without this module's store.
 export { groundPlan } from './drawing-set';

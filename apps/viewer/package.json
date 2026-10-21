@@ -100,7 +100,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.59.0",
-    "maplibre-gl": "^6.14.0",
+    "maplibre-gl": "^6.15.0",
     "parquet-wasm": "^0.9.0",
     "pdfjs-dist": "6.3.289",
     "postcss": "^8.5.30",

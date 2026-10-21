@@ -62,7 +62,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
               {...keyed(t(toolHelpKey(tool.command)), tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
-                'flex flex-col items-center gap-0.5 rounded-2xl border px-2 py-1.5 text-[14px] transition-colors',
+                'flex flex-col items-center gap-0.5 rounded-2xl border px-2 py-1.5 text-sm transition-colors',
                 on ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 bg-[#0d2a55] text-sky-50 hover:border-sky-300/60',
               )}
             >
@@ -83,14 +83,14 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
         {...keyProps(t, t('wall.addDrawing'), 'wall.addDrawing')}
         onClick={onAdd}
         className={cn(
-          'flex items-center gap-2 rounded-2xl border px-3 py-2 text-left text-[14px] leading-tight',
+          'flex items-center gap-2 rounded-2xl border px-3 py-2 text-left text-sm leading-tight',
           adding ? 'border-cyan-300 bg-cyan-400 text-[#0b1f3d]' : 'border-cyan-400/60 text-cyan-300 hover:bg-cyan-400/10',
         )}
       >
         <ToolIcon name="plus" size={22} accent="currentColor" />
         {t('wall.addDrawing')}
       </button>
-      <p className="m-0 mt-2 text-[11px] font-medium uppercase tracking-[0.25em] text-sky-300/70">{t('wall.draw')}</p>
+      <p className="m-0 mt-2 text-2xs font-medium uppercase tracking-[0.25em] text-sky-300/70">{t('wall.draw')}</p>
       <div className="grid grid-cols-2 gap-1.5">
         {DRAW_TOOLS.map((tool) => {
           const on = active === tool.command;
@@ -102,7 +102,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
               {...keyed(t(toolHelpKey(tool.command)), tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
-                'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1.5 text-[11px] leading-tight',
+                'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1.5 text-2xs leading-tight',
                 on ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
               )}
             >
