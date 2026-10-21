@@ -45,7 +45,7 @@ export function IfcSheetShell() {
   return (
     <div data-ifcsheet-shell className="fixed inset-0 z-50 flex flex-col bg-[#061a36] text-sky-50">
       {files.fileInputs}
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-sky-300/10 px-6">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-sky-300/10 px-4">
         <button type="button" aria-pressed={drawer} className={quiet} onClick={() => setDrawer(!drawer)}>{t('wall.shell.project')}</button>
         <img src="/logo.png" alt="" className="size-6 shrink-0" />
         <span className="text-base font-semibold text-white">IfcSheet</span>

@@ -26,7 +26,7 @@ export function CutHeightControl({ view }: { view: Extract<ProjectView, { kind: 
   return (
     <div className="flex flex-col gap-3 text-sky-100">
       <span className="text-2xs font-medium uppercase tracking-widest text-sky-200/70">{t('wall.cutHeight')}</span>
-      <span className="text-3xl font-light tabular-nums text-white">{formatLocaleFixed(locale, view.cutHeight, 2)}<span className="ml-1 text-sm text-sky-200/70">{t('wall.unitMetre')}</span></span>
+      <span className="text-2xl font-light tabular-nums text-white">{formatLocaleFixed(locale, view.cutHeight, 2)}<span className="ml-1 text-sm text-sky-200/70">{t('wall.unitMetre')}</span></span>
       <div className="relative ml-16" style={{ height: RULER_PX }}>
         <input
           type="range"
@@ -53,7 +53,7 @@ export function CutHeightControl({ view }: { view: Extract<ProjectView, { kind: 
         ))}
         <span className="pointer-events-none absolute -left-2.5 size-5 -translate-y-1/2 rounded-full bg-sky-400 shadow-[0_0_0_6px_rgba(56,189,248,0.25)]" style={{ top: yOf(view.cutHeight) }} />
       </div>
-      <p className="m-0 max-w-[12rem] text-sm text-sky-200/70">{t('wall.cutHint')}</p>
+      <p className="m-0 max-w-[12rem] text-xs text-sky-200/70">{t('wall.cutHint')}</p>
     </div>
   );
 }
@@ -63,14 +63,14 @@ export function DepthControl({ view }: { view: Extract<ProjectView, { kind: 'sec
   return (
     <div className="flex flex-col gap-3 text-sky-100">
       <span className="text-2xs font-medium uppercase tracking-widest text-sky-200/70">{t('wall.depth')}</span>
-      <span className="text-3xl font-light tabular-nums text-white">
+      <span className="text-2xl font-light tabular-nums text-white">
         {view.viewDepth == null ? t('wall.depthAuto') : <>{formatLocaleFixed(locale, view.viewDepth, 1)}<span className="ml-1 text-sm text-sky-200/70">{t('wall.unitMetre')}</span></>}
       </span>
       <div className="flex gap-2">
         <button type="button" className="rounded-full border border-sky-300/40 px-3 py-1 text-base hover:border-sky-300" aria-label={t('wall.depthLess')} onClick={() => nudgeViewDepth(view.id, -1)}>−</button>
         <button type="button" className="rounded-full border border-sky-300/40 px-3 py-1 text-base hover:border-sky-300" aria-label={t('wall.depthMore')} onClick={() => nudgeViewDepth(view.id, 1)}>+</button>
       </div>
-      <p className="m-0 max-w-[12rem] text-sm text-sky-200/70">{t('wall.depthHint')}</p>
+      <p className="m-0 max-w-[12rem] text-xs text-sky-200/70">{t('wall.depthHint')}</p>
     </div>
   );
 }

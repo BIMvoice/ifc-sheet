@@ -34,10 +34,10 @@ interface AddDrawingProps {
 
 function Choice({ icon, title, hint, disabled, onClick }: { icon: ToolIconName; title: string; hint: string; disabled?: boolean; onClick?: () => void }) {
   return (
-    <button type="button" disabled={disabled} onClick={onClick} className="flex w-[200px] flex-col items-start gap-2 rounded-xl border border-sky-300/20 bg-white/5 p-4 text-left text-sky-50 hover:border-sky-300/70 disabled:opacity-40">
-      <span className="flex h-24 w-full items-center justify-center rounded-lg bg-white text-[#0b1f3d]"><ToolIcon name={icon} size={56} accent="#0369a1" /></span>
+    <button type="button" disabled={disabled} onClick={onClick} className="flex w-[180px] flex-col items-start gap-1.5 rounded-xl border border-sky-300/20 bg-white/5 p-3 text-left text-sky-50 hover:border-sky-300/70 disabled:opacity-40">
+      <span className="flex h-20 w-full items-center justify-center rounded-lg bg-white text-[#0b1f3d]"><ToolIcon name={icon} size={44} accent="#0369a1" /></span>
       <span className="text-base">{title}</span>
-      <span className="text-sm text-cyan-300">{hint}</span>
+      <span className="text-xs text-cyan-300">{hint}</span>
     </button>
   );
 }
