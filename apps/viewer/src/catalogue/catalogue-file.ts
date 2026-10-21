@@ -47,6 +47,8 @@ export interface Catalogue {
   symbols: DraftSymbol[];
   /** Legend configurations; a legend's `scopeId` is project-specific and never travels. */
   legends: ProjectLegend[];
+  /** A built-in graphic standard (pens and text sizes) the library ships with, by id (`drafting/graphic-standard.ts`), as the file names it. Only built-in library entries carry one. */
+  graphicStandard?: string;
   /** The CAD layer standard: an ordered rule table, carried and merged as a whole. */
   cadLayers: CadLayerRule[];
   /** Which IFC property feeds each field of a tag; absent: the defaults. */
@@ -138,8 +140,14 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       ...readTagFieldsEntry(file),
       details: readList(file, 'details', (v, p) => readLibraryDetail(v, p, WHAT), WHAT),
       sheetTemplates: readList(file, 'sheetTemplates', (v, p) => readTemplate(v) ?? fail(p, 'must be a sheet template { id, name, paper }', WHAT), WHAT),
+      ...(file.graphicStandard === undefined ? {} : { graphicStandard: knownStandard(file.graphicStandard) }),
     },
   };
+}
+
+/** Kept as named: an id this app does not know is not an error here, it falls back to the default on import (`applyCatalogueImport`). */
+function knownStandard(v: unknown): string {
+  return typeof v === 'string' ? v : fail('/graphicStandard', 'must be a graphic standard id', WHAT);
 }
 
 function readMaterialStrict(v: unknown, path: string): ProjectMaterial {
