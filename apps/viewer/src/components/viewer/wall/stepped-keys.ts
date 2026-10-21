@@ -36,6 +36,7 @@ export function steppedHandlers(a: SteppedActions): WallHandlers {
     'wall.draw.text': tool('text'),
     'wall.draw.hatch': tool('hatch'),
     'wall.draw.revcloud': tool('revcloud'),
+    'wall.draw.ptext': tool('ptext'),
     'wall.addDrawing': a.toggleAdd,
     'wall.fit': a.fit,
     'wall.print': a.print,

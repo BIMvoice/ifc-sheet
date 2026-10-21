@@ -56,7 +56,7 @@ const tableRows = (doc: Document): string[][] => {
 
 /** What the title block prints under the label "Revision". */
 const titleBlockRevision = (doc: Document): string | null => {
-  const label = [...doc.querySelectorAll('text')].find((t) => t.textContent === 'Revision' && t.parentElement?.parentElement?.getAttribute('data-dxf-layer') === 'TITLEBLOCK');
+  const label = [...doc.querySelectorAll('text')].find((t) => t.textContent === 'Revision' && t.closest('[data-dxf-layer="TITLEBLOCK"]') !== null);
   return label?.nextElementSibling?.textContent ?? null;
 };
 
