@@ -1,12 +1,12 @@
 # Reference image for @ifc-lite/collab-server — the real-time collaboration
 # sync server. Build context is the repo root (see railway.toml's
-# dockerfilePath). Node 24 LTS; pnpm via corepack.
+# dockerfilePath). Node 26; pnpm via corepack.
 #
 # This is intentionally simple (single stage). It installs + builds ONLY the
 # collab-server's dependency subgraph (`...`), so it stays off the heavy
 # viewer/wasm toolchain. Slim it with a separate runtime stage + `pnpm deploy`
 # if image size matters.
-FROM node:24-slim AS app
+FROM node:26-slim AS app
 WORKDIR /app
 
 RUN corepack enable
