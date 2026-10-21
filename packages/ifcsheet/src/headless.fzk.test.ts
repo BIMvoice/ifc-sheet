@@ -17,11 +17,12 @@ import DxfParserModule from 'dxf-parser';
 import type { DxfParser as DxfParserInstance } from 'dxf-parser';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generateDefaultSet, type DefaultSet } from './index.js';
-import { exportDxf, exportPdf, openModel, sheetGraphics, type OpenedModel, type SheetGraphic } from './headless.js';
+import { exportDxf, exportPdf, generateViewDrawings, openModel, sheetGraphics, type OpenedModel, type SheetGraphic } from './headless.js';
 
-const FZK = fileURLToPath(new URL('../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url));
+// The copy committed with the viewer's test fixtures: CI does not run `pnpm fixtures`, so `tests/models/` is empty there.
+const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
-const missing = !existsSync(FZK) ? 'AC20-FZK-Haus.ifc not found: run `pnpm fixtures`'
+const missing = !existsSync(FZK) ? 'AC20-FZK-Haus.ifc not found in apps/viewer/src/test/__fixtures__'
   : !existsSync(WASM) ? 'wasm bundle not built: run `pnpm build:wasm:fetch` (or `bash scripts/build-wasm.sh`)' : null;
 if (missing) console.warn(`[ifcsheet] skipping the FZK-Haus headless test: ${missing}`);
 
@@ -64,6 +65,45 @@ describe.skipIf(missing !== null)('the drawing set of AC20-FZK-Haus, from Node (
     expect(views.map((v) => v.kind).sort()).toEqual(['3d', 'elevation', 'elevation', 'elevation', 'elevation', 'plan', 'plan', 'section', 'section']);
     expect(set.document.titleBlock).toEqual({ date: '2026-10-21' });
   });
+
+  it('names the project after the model, and prints it in each title block', () => {
+    expect(set.document.name).toBe('Projekt-FZK-Haus');
+    for (const sheet of sheets) expect(sheet.texts.map((t) => t.text)).toEqual(expect.arrayContaining(['Projekt-FZK-Haus', sheet.number]));
+  });
+
+  it('keeps every drawing inside the room the layout made for it', () => {
+    for (const sheet of sheets) {
+      expect(sheet.viewports.length, sheet.number).toBe(2);
+      const inside = (p: { x: number; y: number }) => sheet.viewports.some(({ box }) => p.x >= box.x - 1e-6 && p.x <= box.x + box.w + 1e-6 && p.y >= box.y - 1e-6 && p.y <= box.y + box.h + 1e-6);
+      for (const pts of [...sheet.cut, ...sheet.lines]) for (const p of pts) expect(inside(p), `${sheet.number} (${p.x}, ${p.y})`).toBe(true);
+      // The two boxes of a sheet do not overlap.
+      const [a, b] = sheet.viewports.map((v) => v.box);
+      expect(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y, sheet.number).toBe(true);
+    }
+  });
+
+  it('draws a south elevation with east on the right and a north one with east on the left', async () => {
+    const view = (name: string) => set.document.views.find((v) => v.name === name)!;
+    const [south, north] = [view('South Elevation'), view('North Elevation')];
+    const drawings = await generateViewDrawings([south, north], model.buildingMeshes, set.levels, model.extent!);
+    // World x (east) of each element's meshes, against the drawing x of its lines: the same sense in the south elevation, the opposite in the north one.
+    const worldX = new Map<number, number>();
+    for (const m of model.buildingMeshes) {
+      let sum = 0;
+      for (let i = 0; i < m.positions.length; i += 3) sum += m.positions[i] + (m.origin?.[0] ?? 0);
+      worldX.set(m.expressId, sum / (m.positions.length / 3));
+    }
+    const sense = (id: string) => {
+      const lines = drawings.get(id)!.lines.filter((l) => worldX.has(l.entityId));
+      const xs = lines.map((l) => (l.line.start.x + l.line.end.x) / 2);
+      const ws = lines.map((l) => worldX.get(l.entityId)!);
+      const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
+      const mw = ws.reduce((a, b) => a + b, 0) / ws.length;
+      return Math.sign(xs.reduce((acc, x, i) => acc + (x - mx) * (ws[i] - mw), 0));
+    };
+    expect(sense(south.id)).toBe(1);
+    expect(sense(north.id)).toBe(-1);
+  }, 120_000);
 
   it('draws every view on its sheet', () => {
     expect(sheets).toHaveLength(set.document.sheets.length);

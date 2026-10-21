@@ -30,12 +30,14 @@ export interface OpenModelOptions {
 
 /** A model opened by {@link openModel}. */
 export interface OpenedModel {
-  /** The IfcProject's name, else empty. */
+  /** The IfcProject's LongName, else its Name (what the app's title block prints for the project by default), else empty. */
   projectName: string;
   /** Every building storey: name, IfcBuildingStorey.Elevation (metres) and GlobalId. */
   storeys: StoreyInput[];
   /** The meshes, in the viewer frame (metres, Y up); empty without geometry. */
   meshes: MeshData[];
+  /** The meshes of what the storeys contain (the building the set is measured on, without the site around it): what the sheets' drawings are cut from. */
+  buildingMeshes: MeshData[];
   /** The box of what the storeys contain, the set is measured on; `null` without geometry or when no storey holds any. */
   extent: ModelExtent | null;
   /** The rooms and stairs of `level` and the building's footprint, for the proposed sections; `null` without an extent. */
@@ -72,16 +74,16 @@ function storeysOf(ds: IfcDataStore): StoreyInput[] {
   }));
 }
 
-/** What the storeys contain, boxed: the building without the site around it (`buildingExtent` in `project/model-rooms.ts`). */
-function buildingExtent(ds: IfcDataStore, meshes: MeshData[], storeys: readonly StoreyInput[]): ModelExtent | null {
+/** The elements the storeys contain: the building without the site around it (`buildingExtent` in `project/model-rooms.ts` reads the same). */
+function buildingIds(ds: IfcDataStore, storeys: readonly StoreyInput[]): number[] {
   const hierarchy = ds.spatialHierarchy;
-  if (!hierarchy || meshes.length === 0) return null;
+  if (!hierarchy) return [];
   const wanted = new Set(storeys.flatMap((s) => (s.globalId ? [s.globalId] : [])));
   const ids: number[] = [];
   for (const storey of findStoreys(hierarchy.project, (id) => wanted.has(ds.entities.getGlobalId(id) ?? ''))) {
     for (const id of hierarchy.byStorey.get(storey.expressId) ?? []) ids.push(id);
   }
-  return ids.length ? unionEntityBounds(meshes, ids, () => null) : null;
+  return ids;
 }
 
 /** The rooms and stairs of `level` and the building's footprint (`project/model-rooms.ts` reads the same from the app's stores). */
@@ -126,11 +128,15 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
     }
   }
   const storeys = storeysOf(ds);
-  const extent = buildingExtent(ds, meshes, storeys);
+  const ids = buildingIds(ds, storeys);
+  const extent = ids.length && meshes.length ? unionEntityBounds(meshes, ids, () => null) : null;
+  const inBuilding = new Set(ids);
+  const project = ds.spatialHierarchy?.project;
   return {
-    projectName: ds.spatialHierarchy?.project.name ?? '',
+    projectName: project?.longName || project?.name || '',
     storeys,
     meshes,
+    buildingMeshes: meshes.filter((m) => inBuilding.has(m.expressId)),
     extent,
     proposalInput: (level) => proposalInputOf(ds, meshes, extent, level),
     dataStore: ds,
