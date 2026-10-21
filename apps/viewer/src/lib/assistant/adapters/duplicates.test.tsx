@@ -19,9 +19,9 @@ import { renderPanelBody } from '@/lib/panels/renderPanelBody';
 import { useAssistant, cancelAssistant } from '@/lib/assistant/conversation';
 import { captureEvidence, evidenceIsCurrent } from '../evidence';
 import { adapterFor } from './registry';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { get: () => 800, configurable: true });
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { get: () => 600, configurable: true });
+stubBoxSize(800, 600);
 
 const initial = useViewerStore.getState();
 afterEach(() => {

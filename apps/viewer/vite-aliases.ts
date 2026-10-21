@@ -7,6 +7,11 @@ import path from 'node:path';
 // Specific subpaths must precede package prefixes in Vite's alias resolution.
 export const viewerAliases = {
       '@': path.resolve(__dirname, './src'),
+      '@bimvoice/ifcsheet/names': path.resolve(__dirname, '../../packages/ifcsheet/src/names.ts'),
+      '@bimvoice/ifcsheet/readiness': path.resolve(__dirname, '../../packages/ifcsheet/src/readiness.ts'),
+      '@bimvoice/ifcsheet/readiness-read': path.resolve(__dirname, '../../packages/ifcsheet/src/readiness-read.ts'),
+      '@bimvoice/ifcsheet/headless': path.resolve(__dirname, '../../packages/ifcsheet/src/headless.ts'),
+      '@bimvoice/ifcsheet': path.resolve(__dirname, '../../packages/ifcsheet/src'),
       '@ifc-lite/parser/browser': path.resolve(__dirname, '../../packages/parser/src/browser.ts'),
       '@ifc-lite/parser': path.resolve(__dirname, '../../packages/parser/src'),
       '@ifc-lite/geometry': path.resolve(__dirname, '../../packages/geometry/src'),

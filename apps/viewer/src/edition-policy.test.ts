@@ -11,7 +11,7 @@
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { can, edition, setEditionForTests } from './edition.js';
-import { draftCommandAllowed, keyCommandAllowed, modellingDenial, panelAllowed, ribbonTabAllowed, surfaceCommandAllowed } from './edition-policy.js';
+import { keyCommandAllowed, modellingDenial, panelAllowed, ribbonTabAllowed, surfaceCommandAllowed } from './edition-policy.js';
 import { draftCommandById, draftCommandByName } from './drafting/commands/registry.js';
 import { useViewerStore } from './store/index.js';
 import { modelChangeDenial } from './store/mutation-permission.js';

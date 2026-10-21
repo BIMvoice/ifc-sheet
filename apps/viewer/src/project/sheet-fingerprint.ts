@@ -15,7 +15,8 @@
 import type { DraftEntity } from '@/drafting/types';
 import { viewReference, type ViewReference } from '@/drafting/cross-ref';
 import { viewsNamedOnPlan } from '@/drafting/cross-ref-marks';
-import type { ProjectSheet, ProjectView } from '@/project/types';
+import { sheetRevisions } from './revisions';
+import type { ProjectDocument, ProjectRevision, ProjectSheet, ProjectView } from './types';
 
 /** What a sheet's content is looked up in. */
 export interface FingerprintSources {
@@ -25,6 +26,8 @@ export interface FingerprintSources {
   /** The project's views and sheets: what the cross-reference marks on the sheet's plans are read from. */
   views: readonly ProjectView[];
   sheets: readonly Pick<ProjectSheet, 'number' | 'viewports'>[];
+  /** The project's revisions: what the sheet's table and title block print comes from them. */
+  revisions?: readonly ProjectRevision[];
 }
 
 /** JSON with object keys in order, so equal values give equal text. */
@@ -56,7 +59,9 @@ export function sheetFingerprint(sheet: ProjectSheet, sources: FingerprintSource
   // When a sheet was made is not what it holds.
   const { createdAt: _created, ...held } = sheet;
   const references = markReferences(sheet, sources);
-  return cyrb53(canonicalJson({ sheet: held, documents, drafts, ...(Object.keys(references).length ? { references } : {}) }));
+  // A sheet in a project with no revisions hashes as it always did.
+  const revisions = sheetRevisions(sheet, { revisions: sources.revisions, drafts: sources.drafts as DraftEntity[] });
+  return cyrb53(canonicalJson({ sheet: held, documents, drafts, ...(Object.keys(references).length ? { references } : {}), ...(revisions.length > 0 ? { revisions } : {}) }));
 }
 
 /**
@@ -72,4 +77,43 @@ function markReferences(sheet: ProjectSheet, sources: FingerprintSources): Recor
     for (const id of named) out[id] = viewReference(id, viewIds, sources.sheets);
   }
   return out;
+}
+
+/** What an issue fingerprints a project's sheets against: everything a viewport can name, the drafts, the views and sheets the marks read, and the revision records. */
+export function fingerprintSources(project: Pick<ProjectDocument, 'views' | 'sheets' | 'schedules' | 'legends' | 'civilDrawings' | 'drafts' | 'revisions'>): FingerprintSources {
+  return {
+    documents: [...project.views, ...(project.schedules ?? []), ...(project.legends ?? []), ...(project.civilDrawings ?? [])],
+    drafts: project.drafts, views: project.views, sheets: project.sheets, revisions: project.revisions,
+  };
+}
+
+/**
+ * The issues of `after`, a migration of `saved` that changes how a sheet is
+ * stored but not what it prints, with each recorded fingerprint that matched a
+ * sheet of `saved` replaced by that sheet's fingerprint in `after`: a sheet
+ * unchanged since an issue reads unchanged at the next one. A fingerprint that
+ * did not match (the sheet had changed since) is kept, so it still reads
+ * changed. The same document when nothing is replaced.
+ */
+export function carryIssueFingerprints(saved: ProjectDocument, after: ProjectDocument): ProjectDocument {
+  if (!after.issues?.length || saved === after) return after;
+  const before = fingerprintSources(saved);
+  const now = fingerprintSources(after);
+  const moved = new Map<string, string>();
+  for (const sheet of saved.sheets) {
+    const migrated = after.sheets.find((s) => s.id === sheet.id);
+    if (!migrated) continue;
+    const was = sheetFingerprint(sheet, before);
+    const is = sheetFingerprint(migrated, now);
+    if (was !== is) moved.set(`${sheet.number}\u0000${was}`, is);
+  }
+  if (moved.size === 0) return after;
+  const issues = after.issues.map((issue) => ({
+    ...issue,
+    sheets: issue.sheets.map((row) => {
+      const is = moved.get(`${row.number}\u0000${row.fingerprint}`);
+      return is ? { ...row, fingerprint: is } : row;
+    }),
+  }));
+  return { ...after, issues };
 }

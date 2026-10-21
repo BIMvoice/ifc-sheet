@@ -248,7 +248,11 @@ export function pickEntity(p: Pt, tolerance: number): DraftEntity | null {
 
 /** Ortho constrains a point against the command's base point, while its toggle is on or Ctrl is held. */
 export function constrainPoint(p: Pt): Pt {
-  const base = command?.basePoint() ?? null;
+  return constrainFrom(command?.basePoint() ?? null, p);
+}
+
+/** Ortho against any origin (a grip drag measures from the grip's own start), while its toggle is on or Ctrl is held. */
+export function constrainFrom(base: Pt | null, p: Pt): Pt {
   return base && (get().ortho || get().orthoHeld) ? applyOrtho(base, p) : p;
 }
 

@@ -32,10 +32,11 @@ import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
 import { SheetCanvas } from './SheetCanvas';
+import { RevisionsCard } from './RevisionsCard';
 import { TitleBlockCard } from './TitleBlockForm';
 import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
-import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
+import { DRAW_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
@@ -70,6 +71,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
+  const [revising, setRevising] = useState(false);
   const [papering, setPapering] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
@@ -117,8 +119,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   // The drafting keys cancel a running tool on the same keydown, so this listener must see the state as the key found it:
   // it registers once, in a layout effect (which runs before any child's passive effect, so before the drafting keys'
   // own listeners), and reads the rest from a ref.
-  const live = useRef({ focusId, chosen, adding, titling, papering, previewing });
-  live.current = { focusId, chosen, adding, titling, papering, previewing };
+  const live = useRef({ focusId, chosen, adding, titling, revising, papering, previewing });
+  live.current = { focusId, chosen, adding, titling, revising, papering, previewing };
   useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       escaped.current = e.key === 'Escape';
@@ -135,6 +137,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       }
       if (now.adding) setAdding(false);
       else if (now.titling) setTitling(false);
+      else if (now.revising) setRevising(false);
       else if (now.papering) setPapering(false);
       else if (!now.focusId && now.chosen) setChosen(null);
     };
@@ -166,7 +169,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     // Plain drawing goes on the drawing in front, else on the sheet's paper.
     if (DRAW_TOOLS.some((d) => d.command === command)) {
       setTool(command);
-      cancelStart.current = startWhenAttached(focusView?.id ?? sheet.id, command);
+      cancelStart.current = startWhenAttached(drawTarget(command, focusView?.id, sheet.id), command);
       return;
     }
     // The Wall's dimension tool chains: a SINGLE typed earlier in the session does not carry over (#141).
@@ -197,6 +200,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     setChosen(viewportId);
     if (viewportId) {
       setTitling(false);
+      setRevising(false);
       setPapering(false);
     }
   }, []);
@@ -241,8 +245,9 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {!focusView ? (
           <>
             <button type="button" className={issue} aria-pressed={commenting} title={t('review.tool.hint')} onClick={() => setPlacing(!commenting)}>{t('review.tool')}</button>
-            <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); }}>{t('wall.paper.button')}</button>
-            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); }}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); setRevising(false); }}>{t('wall.paper.button')}</button>
+            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); setRevising(false); }}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={revising} onClick={() => { setRevising((x) => !x); setTitling(false); setPapering(false); }}>{t('revision.title')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
             <button type="button" className={issue} onClick={() => setPreviewing(true)}>{t('printPreview.open')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
@@ -267,6 +272,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
               : focusView ? null
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
+                  : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
                   : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
           </div>
           {adding ? (

@@ -14,20 +14,23 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
-import { useViewerStore } from '@/store';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groundPlan, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
 import { paperLabel } from './paper';
 import { addSchedule } from '@/joinery/schedules';
 import { registerHolders, registerSheetFit } from './drawing-register';
 import { proposalInputForLevel } from './model-rooms';
-import { nextNumber, numberSheets } from './numbering';
-import { addProjectView, numberingScheme, updateProjectView, useProjectStore } from './project-store';
+import { DEFAULT_SCHEME, nextNumber, numberSheets, registerNumberIn } from './numbering';
+import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useProjectStore } from './project-store';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
-import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, freshProjectId, sameElevation } from './view-defaults';
+import { resolve } from '@/i18n/registry';
+import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, elevationName, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
-import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
+import type { PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
+
+// The lowest plan lives with the set's pure layout (`drawing-set.ts`), so the drafting marks can read it without this module's store.
+export { groundPlan } from './drawing-set';
 
 /** How many proposed sections the starting set draws; the rest wait in the tray. */
 export const SET_SECTIONS = 2;
@@ -50,12 +53,6 @@ function withoutClashes(existing: readonly ProjectSheet[], set: readonly Project
   if (existing.length === 0) return [...set];
   const numbers = numberSheets([...existing.map((s) => ({ ...s, numberOverride: true })), ...set], numberingScheme());
   return set.map((s) => ({ ...s, number: numbers.get(s.id) ?? s.number }));
-}
-
-/** The lowest plan: the one a set's sections are drawn on. */
-export function groundPlan(views: readonly ProjectView[]): PlanProjectView | null {
-  const plans = views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.site);
-  return plans.sort((a, b) => a.level.elevation - b.level.elevation)[0] ?? null;
 }
 
 /** The sections the model suggests, cut on its lowest plan. Empty until the geometry is there. */
@@ -81,6 +78,10 @@ export function sectionForProposal(proposal: SectionProposal): string | null {
  */
 export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | null): boolean {
   if (!bounds || useProjectStore.getState().sheets.some(isSetSheet)) return false;
+  // A project still carrying the untouched English default name takes the active language's, once, as it is started.
+  const { name, dirty } = useProjectStore.getState();
+  const untitled = resolve('names.project.untitled');
+  if (!dirty && name === EMPTY_PROJECT.name && untitled !== name) useProjectStore.setState({ name: untitled });
   return ensureDrawingSet(meshes, bounds, { onOpen: true }).sheetsAdded > 0;
 }
 
@@ -110,8 +111,6 @@ export interface EnsureOptions {
   onOpen?: boolean;
 }
 
-const ELEVATION_NAMES: Record<ElevationDirection, string> = { north: 'North Elevation', east: 'East Elevation', south: 'South Elevation', west: 'West Elevation' };
-
 
 /** One plan per storey that has none yet; a model with no storeys gets one cut at mid-height. */
 function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
@@ -123,7 +122,7 @@ function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
     if (state().views.some((v) => v.kind === 'plan')) return;
     const height = Math.round(((extent.max.y - extent.min.y) / 2) * 10) / 10;
     report.notes.push({ key: 'draftSet.note.noStoreys', params: { height } });
-    addProjectView({ kind: 'plan', name: 'Plan', cutHeight: height, level: { name: 'Plan', elevation: extent.min.y, storeyGlobalIds: [] } });
+    addProjectView({ kind: 'plan', name: resolve('names.view.plan'), cutHeight: height, level: { name: resolve('names.view.plan'), elevation: extent.min.y, storeyGlobalIds: [] } });
     report.viewsAdded++;
     return;
   }
@@ -142,7 +141,7 @@ function ensureElevations(extent: AxisBounds, report: EnsureReport): void {
   for (const direction of ELEVATION_DIRECTIONS) {
     const found = state().views.find((v) => v.kind === 'elevation' && v.direction === direction && !v.interior);
     if (!found) {
-      addProjectView({ kind: 'elevation', name: ELEVATION_NAMES[direction], direction, planeOffset: elevationPlaneOffset(direction, extent), viewDepth: elevationDepth(direction, extent) });
+      addProjectView({ kind: 'elevation', name: elevationName(direction), direction, planeOffset: elevationPlaneOffset(direction, extent), viewDepth: elevationDepth(direction, extent) });
       report.viewsAdded++;
       continue;
     }
@@ -302,12 +301,9 @@ export function addScheduleToSet(kind: ProjectSchedule['kind'], name: string): s
 }
 
 export { setSheetFormat, type SheetFormatPatch } from './sheet-format-actions';
-/** The register's number: A-000, else the first free number of the general series A-001… */
-export function registerNumber(sheets: readonly Pick<ProjectSheet, 'number'>[]): string {
-  const taken = new Set(sheets.map((s) => s.number));
-  let n = 0;
-  while (taken.has(`A-${String(n).padStart(3, '0')}`)) n++;
-  return `A-${String(n).padStart(3, '0')}`;
+/** The register's number under the project's scheme: its slot before the general series (A-000, A00 in a sequential scheme) while free, else the first free number of the general series (`registerNumberIn`). */
+export function registerNumber(sheets: readonly Pick<ProjectSheet, 'number'>[], scheme = DEFAULT_SCHEME): string {
+  return registerNumberIn(sheets, scheme);
 }
 
 /**
@@ -323,7 +319,7 @@ export function addRegisterToSet(name: string): string {
   const scheduleId = existing?.id ?? addSchedule('register', name);
   const area = drawingArea(SET_PAPER);
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: registerNumber(sheets), name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
+    id: freshProjectId('sheet'), number: registerNumber(sheets, numberingScheme()), series: 'general', name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
     viewports: [{ id: freshProjectId('viewport'), viewId: scheduleId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 1, width: 0, height: 0, center: null }],
   };
   useProjectStore.setState({ sheets: [...useProjectStore.getState().sheets, sheet], dirty: true });
@@ -366,7 +362,7 @@ export function syncRegisterPages(): void {
     taken.add(number);
     const vp = (first.viewports ?? []).find((v) => v.viewId === register.id);
     added.push({
-      id: freshProjectId('sheet'), number, name: first.name, createdAt: Date.now(), paper: first.paper, orientation: first.orientation,
+      id: freshProjectId('sheet'), number, series: 'general', name: first.name, createdAt: Date.now(), paper: first.paper, orientation: first.orientation,
       viewports: [{ ...(vp ?? { x: 0, y: 0, scale: 1, width: 0, height: 0, center: null }), id: freshProjectId('viewport'), viewId: register.id, page }],
     });
   }

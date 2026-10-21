@@ -2,10 +2,21 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** A 3D view of the project and how it prints (vector axonometric, or a raster capture). Re-exported by `types.ts`. */
+/** A 3D view of the project and how it prints (vector axonometric, or a raster capture). Re-exported by `document.ts`. */
 
-import type { CameraViewpoint } from '@/store/types';
-import type { ProjectViewBase } from './types';
+import type { ProjectViewBase } from './document.js';
+
+export type ProjectionMode = 'perspective' | 'orthographic';
+
+/** A saved camera: where it stands, what it looks at, and how it projects. */
+export interface CameraViewpoint {
+  position: { x: number; y: number; z: number };
+  target: { x: number; y: number; z: number };
+  up: { x: number; y: number; z: number };
+  fov: number;
+  projectionMode: ProjectionMode;
+  orthoSize?: number;
+}
 
 /** How a 3D view prints: an axonometric is parallel (a true scale), a perspective has none. */
 export type ThreeDProjection = 'axonometric' | 'perspective';

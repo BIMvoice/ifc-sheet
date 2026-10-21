@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { GeometryProcessor } from '@ifc-lite/geometry';
 import { MutablePropertyView } from '@ifc-lite/mutations';
 import { act } from 'react';
@@ -207,9 +208,10 @@ test('mounted panel loads records, shows validation, selects linked IFC geometry
   const reopened = render(<SemanticPanel validationExecutor={executeValidation} />);
   assert.ok(reopened.querySelector('tbody')?.textContent?.includes('Installed door 1'));
 });
-test('authored pilot doors produce real WASM meshes in both revision positions', async () => {
+const WASM = new URL('../../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
+test('authored pilot doors produce real WASM meshes in both revision positions', { skip: !existsSync(WASM) && 'Run pnpm build:wasm' }, async () => {
   const { default: init } = await import('@ifc-lite/wasm');
-  await init({ module_or_path: await readFile(new URL('../../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url)) });
+  await init({ module_or_path: await readFile(WASM) });
   const centers: number[] = [];
   for (const revision of [0, 1]) {
     const model = pilotModel(revision); const processor = new GeometryProcessor();

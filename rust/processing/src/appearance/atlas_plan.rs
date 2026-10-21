@@ -97,7 +97,7 @@ pub(super) fn plan_sampled_appearance(bytes: &[u8], spec: &AppearanceRequest, so
             }, &mut remaining, &mut ItemShader { item, sampler })?;
             sampler.end_item()?;
             let png = encode_png(&atlas, 96 * 1024 * 1024 - output_bytes)?;
-            let uri = format!("textures/{:x}.png", Sha256::digest(&png));
+            let uri = format!("textures/{}.png", hex::encode(Sha256::digest(&png)));
             if image_uris.insert(uri.clone()) {
                 output_bytes += png.len();
                 assets.push(AppearanceGeneratedImage { image_uri: uri.clone(), width: atlas.width, height: atlas.height, png });

@@ -11,8 +11,9 @@
 
 import { drawingArea, SET_PAPER, sheetGroup, type SetGroup } from './drawing-set';
 import { registerFit, type RegisterFit } from '@/joinery/register-layout';
-import { titleBlockOf } from './title-block';
-import type { Paper, ProjectIssue, ProjectSchedule, ProjectSheet } from './types';
+import { currentRevisionOf } from './revisions';
+import type { DraftEntity } from '@/drafting/types';
+import type { Paper, ProjectIssue, ProjectRevision, ProjectSchedule, ProjectSheet } from './types';
 
 export interface RegisterRow {
   number: string;
@@ -34,6 +35,9 @@ export interface RegisterInput {
   schedules?: readonly Pick<ProjectSchedule, 'id' | 'kind'>[];
   /** What the scale column says of a sheet with several scales. */
   asIndicated?: string;
+  /** The project's revisions and drafts: a sheet's revision is the latest its clouds and choices name (`revisions.ts`). */
+  revisions?: readonly ProjectRevision[];
+  drafts?: readonly DraftEntity[];
 }
 
 /** The order the drawer lists sheets in: the register first, then by series, plans first, sheets of no series last; creation order within a series. */
@@ -97,11 +101,10 @@ function lastIssueDate(number: string, issues: RegisterInput['issues']): string 
 
 /** One sheet's row. The number is read from the sheet now, never copied. */
 export function registerRow(sheet: ProjectSheet, input: Omit<RegisterInput, 'sheets'>): RegisterRow {
-  const block = titleBlockOf(sheet, input.titleBlock, '');
-  const revision = block.revision ?? '';
+  const current = currentRevisionOf(sheet, { revisions: input.revisions, drafts: (input.drafts ?? []) as DraftEntity[] });
   return {
-    number: sheet.number, title: sheet.name, scale: sheetScaleText(sheet, notDrawingIds(input.schedules), input.asIndicated), revision,
-    date: (revision && block.date) || lastIssueDate(sheet.number, input.issues),
+    number: sheet.number, title: sheet.name, scale: sheetScaleText(sheet, notDrawingIds(input.schedules), input.asIndicated), revision: current?.code ?? '',
+    date: current?.date || lastIssueDate(sheet.number, input.issues),
   };
 }
 
@@ -113,12 +116,13 @@ export function drawingRegisterRows(input: RegisterInput): RegisterRow[] {
 /** The inputs a row reads besides its sheet: a row is reused while every one of them is the same object. */
 type RowContext = Omit<RegisterInput, 'sheets'>;
 const sameContext = (a: RowContext, b: RowContext): boolean =>
-  a.titleBlock === b.titleBlock && a.issues === b.issues && a.schedules === b.schedules && a.asIndicated === b.asIndicated;
+  a.titleBlock === b.titleBlock && a.issues === b.issues && a.schedules === b.schedules && a.asIndicated === b.asIndicated
+  && a.revisions === b.revisions && a.drafts === b.drafts;
 
 /**
  * `drawingRegisterRows`, remembered: a sheet's row is built again only when
  * that sheet changed (a new object) or the title block, the issues, the
- * schedules or the wording did; the same input twice returns the same rows.
+ * schedules, the revisions, the drafts (a cloud names a revision) or the wording did; the same input twice returns the same rows.
  * Every sheet on screen reads the register through one of these, so editing
  * one sheet builds one row, not a row for every sheet on every sheet.
  */

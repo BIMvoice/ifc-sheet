@@ -1,6 +1,15 @@
 # Dependabot tracks third-party updates so SHA-pinned actions in
 # .github/workflows/ don't rot, and npm/cargo deps get security PRs
 # without manual auditing. Phase A hardening — see AGENTS.md.
+#
+# CI runs one pull request at a time on this account, so updates are batched:
+# every ecosystem is weekly, on its own weekday so the batches do not queue
+# behind each other; minor and patch updates of an ecosystem arrive as one
+# grouped pull request; a semver-major update keeps its own pull request
+# (it matches no group), so it can be reviewed and reverted alone. The
+# open-PR limits cap how many of those can wait in the CI queue at once.
+# .github/workflows/dependabot-automerge.yml turns on auto-merge for the
+# minor and patch pull requests; majors are merged by hand.
 
 version: 2
 updates:
@@ -8,6 +17,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
     groups:
       actions-minor-and-patch:
         update-types:
@@ -18,7 +29,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+      day: tuesday
+    open-pull-requests-limit: 5
     groups:
       npm-minor-and-patch:
         update-types:
@@ -38,12 +50,23 @@ updates:
       # output is verified stable for this repo.
       - dependency-name: "vite"
         update-types: ["version-update:semver-major"]
+      # vite 8.3.4 (rolldown 1.2.14) emits re-export facade chunks that
+      # vite-plugin-top-level-await@1.6.0 wraps without exporting `__tla`, so
+      # their dynamic importers no longer wait for the engine to initialise
+      # (scripts/check-tla-chunk-await.mjs fails the build). Both are pinned in
+      # package.json pnpm.overrides; lift these two entries together with that
+      # pin once a newer vite/rolldown or plugin passes the viewer build.
+      - dependency-name: "vite"
+        versions: [">8.3.1"]
+      - dependency-name: "rolldown"
+        versions: [">1.2.11"]
 
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+      day: wednesday
+    open-pull-requests-limit: 5
     groups:
       cargo-minor-and-patch:
         update-types:
@@ -60,6 +83,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: thursday
+    open-pull-requests-limit: 2
     groups:
       pip-minor-and-patch:
         update-types:
@@ -76,6 +101,8 @@ updates:
       - /tools/ifcopenshell_reference
     schedule:
       interval: weekly
+      day: thursday
+    open-pull-requests-limit: 3
     groups:
       docker-minor-and-patch:
         update-types:

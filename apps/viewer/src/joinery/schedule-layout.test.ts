@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
 import { layoutSchedule, scheduleCsv, type ScheduleLabels } from './schedule-layout';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
+import type { MeshData } from '@ifc-lite/geometry';
+import { elementViews } from './element-views';
 
 const labels: ScheduleLabels = {
   title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
@@ -68,5 +70,64 @@ describe('occurrenceMark', () => {
     const o = { modelId: 'm', expressId: 5, globalId: 'g', level: 'L1', tag: null, number: 3 };
     assert.equal(occurrenceMark(entry({ mark: 'W1' }), o), 'W1.3');
     assert.equal(occurrenceMark(entry({ mark: '—', name: 'Door' }), o), 'Door-3');
+  });
+});
+
+/** A box mesh `w` x `d` x `h` standing on the ground, as an element's body. */
+function boxMesh(w: number, d: number, h: number): MeshData {
+  const pts: number[] = [];
+  for (const [a, b, y] of [[-1, -1, 0], [1, -1, 0], [1, 1, 0], [-1, 1, 0], [-1, -1, h], [1, -1, h], [1, 1, h], [-1, 1, h]]) pts.push(5 + (a * w) / 2, y, 7 + (b * d) / 2);
+  const indices = [0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7];
+  return { expressId: 1, ifcType: 'IfcWindow', positions: new Float32Array(pts), normals: new Float32Array(pts.length), indices: new Uint32Array(indices), color: [1, 1, 1, 1] } as MeshData;
+}
+
+const viewBounds = (l: ReturnType<typeof layoutSchedule>, view: 'front' | 'plan' | 'section') => {
+  const pts = l.prims.flatMap((p) => (p.kind === 'path' && p.view === view ? p.pts : []));
+  assert.ok(pts.length > 0, `no ${view} view drawn`);
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), top: Math.min(...ys), left: Math.min(...xs), right: Math.max(...xs), bottom: Math.max(...ys) };
+};
+
+describe('joinery schedule with views from the real geometry', () => {
+  const win = entry({ key: 'w1', mark: 'W1', counts: { Ground: 1 }, total: 1 });
+  const one: ScheduleData = { levels: ['Ground'], entries: [win] };
+
+  it('draws the front, plan and section at the schedule scale', async () => {
+    const views = new Map([['w1', (await elementViews([boxMesh(1.2, 0.2, 1.5)]))!]]);
+    for (const scale of [20, 50]) {
+      const k = 1000 / scale;
+      const l = layoutSchedule(one, labels, { scale, views });
+      const f = viewBounds(l, 'front'), p = viewBounds(l, 'plan'), s = viewBounds(l, 'section');
+      const near = (a: number, b: number, what: string) => assert.ok(Math.abs(a - b) < 0.05, `1:${scale} ${what}: ${a} vs ${b}`);
+      near(f.w, 1.2 * k, 'front width'); near(f.h, 1.5 * k, 'front height');
+      near(p.w, 1.2 * k, 'plan width'); near(p.h, 0.2 * k, 'plan depth');
+      near(s.w, 0.2 * k, 'section depth'); near(s.h, 1.5 * k, 'section height');
+      // The plan lies under the front, the section beside it.
+      assert.ok(p.top > f.bottom, 'plan under front');
+      assert.ok(s.left > f.right, 'section beside front');
+    }
+  });
+
+  it('keeps all of it inside the card, which grows to hold the views', async () => {
+    const views = new Map([['w1', (await elementViews([boxMesh(1.2, 0.2, 1.5)]))!]]);
+    const without = layoutSchedule(one, labels, { scale: 20 });
+    const withViews = layoutSchedule(one, labels, { scale: 20, views });
+    assert.ok(withViews.height > without.height);
+    for (const view of ['front', 'plan', 'section'] as const) {
+      const b = viewBounds(withViews, view);
+      assert.ok(b.left >= 34 && b.right <= withViews.width && b.bottom <= withViews.height, `${view} inside the card`);
+    }
+  });
+
+  it('draws the generated symbol where the element has no views', () => {
+    const l = layoutSchedule(one, labels, { scale: 50, views: new Map() });
+    assert.deepEqual(l, layoutSchedule(one, labels, { scale: 50 }));
+    assert.ok(!l.prims.some((p) => p.kind === 'path' && p.view !== undefined));
+  });
+
+  it('overlays the opening symbol on the real front view', async () => {
+    const views = new Map([['w1', (await elementViews([boxMesh(1.2, 0.2, 1.5)]))!]]);
+    const l = layoutSchedule(one, labels, { scale: 20, views });
+    assert.ok(l.prims.some((p) => p.kind === 'path' && p.view === 'symbol'));
   });
 });

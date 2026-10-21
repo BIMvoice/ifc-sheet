@@ -12,11 +12,18 @@
  * the document is compared whole, so a field the writer or the reader forgets
  * fails here; and the project store is checked key by key, so a new store
  * field must be either persisted or listed in `SESSION_ONLY` with its reason.
+ *
+ * A field the fixture leaves at its default proves nothing (a writer that drops
+ * it reads back the same default), so every document key (those a reset store
+ * writes, those the fixture sets, and those of `EMPTY_PROJECT`) must hold a
+ * value that is not its default. Every schedule kind and view kind is in
+ * the fixture, so a kind the reader does not know fails the comparison.
  */
 
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
+import { isDeepStrictEqual } from 'node:util';
+import { defaultDoorSpec, defaultWindowSpec, profileFromPreset } from '@ifc-lite/create';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import type { CadLayerRule } from './cad-layers.js';
 import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
@@ -24,7 +31,7 @@ import { snapshotFromElements } from '@/whatchanged/snapshot.js';
 import { defaultTypeSpec } from '@/element-types/spec';
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import type { AnnotationShape, DraftEntity, DraftLayer, DraftShape, EntityShape } from '@/drafting/types';
-import { loadProjectDocument, projectDocument, resetProject, useProjectStore, type ProjectState } from './project-store.js';
+import { EMPTY_PROJECT, loadProjectDocument, PROJECT_DOCUMENT_KEYS, projectDocument, resetProject, useProjectStore, type ProjectState } from './project-store.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
 import { SEQUENTIAL_SCHEME } from './numbering.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package/package-io.js';
@@ -140,9 +147,20 @@ const viewport: Required<SheetViewport> = {
 const sheet: Required<ProjectSheet> = {
   id: 'sh1', number: 'A-201', autoNumber: true, numberOverride: true, series: 'elevations', name: 'Plans', createdAt: 9, paper: { kind: 'elongated', base: 'A2', factor: 3 }, orientation: 'portrait', viewports: [viewport],
   frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' }, templateId: 'tpl1',
-  titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12', revision: 'B' },
+  titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12' }, revisionIds: ['rev-b'],
+  titleBlockParams: { Phase: 'PAC' },
 };
-const schedule: Required<ProjectSchedule> = { id: 'sc1', name: 'Doors', kind: 'door', createdAt: 5, scale: 25 };
+/** One schedule of every kind: a kind added to `ProjectSchedule['kind']` does not compile until it is listed here. */
+const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<ProjectSchedule> & { kind: K } } = {
+  door: { id: 'sc1', name: 'Doors', kind: 'door', createdAt: 5, scale: 25 },
+  window: { id: 'sc2', name: 'Windows', kind: 'window', createdAt: 6, scale: 20 },
+  all: { id: 'sc3', name: 'Joinery', kind: 'all', createdAt: 7, scale: 50 },
+  materials: { id: 'sc4', name: 'Takeoff', kind: 'materials', createdAt: 8, scale: 100 },
+  types: { id: 'sc5', name: 'Quantities by type', kind: 'types', createdAt: 9, scale: 100 },
+  finishes: { id: 'sc6', name: 'Room finishes', kind: 'finishes', createdAt: 10, scale: 100 },
+  register: { id: 'sc7', name: 'Drawing register', kind: 'register', createdAt: 11, scale: 100 },
+  urban: { id: 'sc8', name: 'Urban indicators', kind: 'urban', createdAt: 12, scale: 100 },
+};
 const civil: Required<ProjectCivilDrawing> = {
   id: 'c1', name: 'DN1 sections', kind: 'sections', createdAt: 3, corridorGlobalId: '2O2Fr$t4X7Zf8NOew3FLOH', scale: 200, vExaggeration: 10,
   stationStep: 50, elevationStep: 5, every: 25, stations: [0, 100, 250], columns: 3, halfWidth: 20,
@@ -159,7 +177,15 @@ const FULL: Required<ProjectDocument> = {
   models: [{ key: 'hash-arch', name: 'arch.ifc' }],
   views: Object.values(VIEWS),
   sheets: [sheet],
+  revisions: [{ id: 'rev-a', code: 'A', date: '2026-09-01', description: 'Prima emitere: ș ț ă', by: 'PC' }, { id: 'rev-b', code: 'B', date: '2026-10-12', description: 'Pereți noi', by: 'IC' }],
   titleBlock: { project: 'Full house', client: 'Owner', checkedBy: 'PC', logo: 'data:image/png;base64,iVBORw0KGgo=' },
+  titleBlockParams: [{ name: 'Phase', value: 'DTAC' }, { name: 'ProjectNumber', value: '2026-014' }],
+  titleBlockTemplate: { items: [
+    { id: 'tb1', kind: 'rect', x: 0, y: 0, w: 180, h: 50, weight: 0.5 },
+    { id: 'tb2', kind: 'line', x1: 0, y1: 25, x2: 130, y2: 25, weight: 0.18 },
+    { id: 'tb3', kind: 'text', x: 2, y: 8, size: 3.5, text: 'Phase: {Phase}', bold: true, muted: true, fit: 61 },
+    { id: 'tb4', kind: 'logo', x: 132, y: 1.5, w: 46, h: 11 },
+  ] },
   titleBlockSources: { address: [{ kind: 'attribute', on: 'IfcBuilding', name: 'BuildingAddress' }], organisation: [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Office' }, { kind: 'owner', part: 'developer' }] },
   drafts,
   draftLayers: [{ id: '0', name: '0', color: '#18181b', visible: true, locked: false }, layer],
@@ -177,10 +203,10 @@ const FULL: Required<ProjectDocument> = {
   joineryMapping: { ...DEFAULT_JOINERY_MAPPING, byName: false, byDimensions: false, tolerance: 0.07, aliases: { j1: ['Door 90'] } },
   elementTypes: (['wall', 'slab', 'column', 'beam', 'roof', 'opening'] as const).map((kind, i) => ({ ...defaultTypeSpec(kind), kind, id: `t${i}`, name: `Type ${kind}`, mark: `M${i}` }) as never),
   currentTypes: { wall: 't0', slab: 't1', column: 't2' },
-  schedules: [schedule],
+  schedules: Object.values(SCHEDULES),
   sheetTemplates: [{ id: 'tpl1', name: 'Long elevations', paper: { kind: 'custom', widthMm: 500, heightMm: 700 }, orientation: 'portrait', frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' } }],
   seriesTemplates: { plans: 'builtin:a1-plans', details: 'tpl1' },
-  structureProfiles: [],
+  structureProfiles: [profileFromPreset('box-tunnel', 'sp1', 'Culvert 2x2')],
   civilDrawings: [civil],
   typicalSections: [{ id: 'ts1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: { width: 1, slope: -4 }, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 }, nominalDepth: 0.6 } }],
   materials: [material],
@@ -208,6 +234,8 @@ const FULL: Required<ProjectDocument> = {
     bcfGuid: '0b9a8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d', bcfViewpointGuid: '5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a',
   }],
   modelState: snapshotFromElements([{ k: '2O2Fr$t4X7Zf8NOew3FLOH', t: 'IfcWall', n: 'Wall', d: 'abcdef0123', g: 'a1b2c3d4e', a: [0, 0, 0, 4, 0.2, 3], p: 'Site/Building/Level 0' }], 7),
+  siteArea: 1250.5,
+  urbanSettings: { terrainLevel: -0.6, zeroElevation: 245.2, cutExcluded: { Subsol: true, Demisol: false } },
   savedSectionCuts: [{
     id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,
     plane: { axis: 'side', position: 4.2, flipped: true, capStyle: { fillColor: [1, 0.5, 0, 1], strokeColor: [0, 0, 0, 1], pattern: 'brick', spacingPx: 6, angleRad: 0.5, widthPx: 2, secondaryAngleRad: -0.5 }, showCap: false, showOutlines: false },
@@ -228,7 +256,18 @@ beforeEach(() => resetProject());
 describe('project round trip, one of everything', () => {
   it('the fixture covers every shape type and view kind', () => {
     assert.deepEqual(new Set(drafts.map((d) => d.shape.type)), new Set([...Object.keys(GEOMETRY), ...Object.keys(ANNOTATION)]));
-    assert.equal(new Set(FULL.views.map((v) => v.kind)).size, 5);
+    assert.equal(new Set(FULL.views.map((v) => v.kind)).size, Object.keys(VIEWS).length);
+    assert.equal(new Set(FULL.schedules?.map((s) => s.kind)).size, Object.keys(SCHEDULES).length);
+  });
+
+  it('sets every document field to something that is not its default', () => {
+    // The keys come from the document itself (PROJECT_DOCUMENT_KEYS, the store's DOCUMENT_FIELDS), not a list kept here: whatever a
+    // reset store writes, whatever the fixture sets, and whatever EMPTY_PROJECT names.
+    const defaults = projectDocument();
+    const keys = [...new Set([...PROJECT_DOCUMENT_KEYS, ...Object.keys(defaults), ...Object.keys(FULL), ...Object.keys(EMPTY_PROJECT)])] as (keyof ProjectDocument)[];
+    const empty = (v: unknown) => v === undefined || v === '' || (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
+    const unset = keys.filter((k) => empty(FULL[k]) || isDeepStrictEqual(FULL[k], defaults[k]) || isDeepStrictEqual(FULL[k], EMPTY_PROJECT[k]));
+    assert.deepEqual(unset, [], `give these fields a non-default value in FULL, so a save that drops them fails: ${unset.join(', ')}`);
   });
 
   it('survives the .ifclite-project.json sidecar', () => {

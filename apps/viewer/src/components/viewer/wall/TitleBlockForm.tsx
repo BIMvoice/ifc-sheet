@@ -17,6 +17,8 @@ import { LOGO_FIELD, LOGO_MAX_BYTES, TITLE_BLOCK_FIELDS, titleBlockOf, type Titl
 import { useEffectiveTitleBlock, useResolvedTitleBlock } from '@/project/title-block-model';
 import type { ProjectSheet } from '@/project/types';
 import { SourceBadge, SourcePicker } from './TitleBlockSource';
+import { ProjectParams, SheetParams } from './TitleBlockParams';
+import { TitleBlockLayout } from './TitleBlockLayout';
 
 const LABELS: Record<TitleBlockField, TranslationKey> = {
   project: 'sheets.tb.project',
@@ -26,7 +28,6 @@ const LABELS: Record<TitleBlockField, TranslationKey> = {
   drawnBy: 'sheets.tb.drawnBy',
   checkedBy: 'sheets.tb.checkedBy',
   date: 'sheets.tb.date',
-  revision: 'sheets.tb.revision',
 };
 
 const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-sm text-white';
@@ -101,7 +102,7 @@ export function TitleBlockForm({ sheet }: { sheet?: ProjectSheet }) {
             <label className="block">
               <span className="flex items-baseline gap-2">
                 {t(LABELS[key])}
-                {isOwn ? <span className="text-[11px] text-amber-300">{t('wall.tb.ownField')}</span> : <SourceBadge resolved={resolved[key]} />}
+                {isOwn ? <span className="text-2xs text-amber-300">{t('wall.tb.ownField')}</span> : <SourceBadge resolved={resolved[key]} />}
               </span>
               <input
                 // Typed elsewhere (the other form, a project opened): show the new value.
@@ -121,7 +122,9 @@ export function TitleBlockForm({ sheet }: { sheet?: ProjectSheet }) {
           </div>
         );
       })}
-      {sheet ? null : <Logo />}
+      {sheet ? <p className="m-0 mt-3 text-xs text-sky-300/80">{t('revision.tbDerived')}</p> : <Logo />}
+      {sheet ? <SheetParams sheet={sheet} /> : <ProjectParams />}
+      {sheet ? null : <TitleBlockLayout />}
     </div>
   );
 }
@@ -131,7 +134,7 @@ export function TitleBlockCard({ sheet, onClose }: { sheet: ProjectSheet; onClos
   const { t } = useTranslation();
   return (
     <aside aria-label={t('wall.tb.title')} className="max-h-[calc(100vh-12rem)] w-[340px] overflow-y-auto rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 text-sky-100 shadow-2xl backdrop-blur">
-      <p className="m-0 text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.tb.title')}</p>
+      <p className="m-0 text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.tb.title')}</p>
       <p className="mb-2 mt-2 text-sm leading-relaxed text-sky-200">{t('wall.tb.sheetHint', { number: sheet.number })}</p>
       <TitleBlockForm sheet={sheet} />
       <button type="button" className={`${quiet} mt-4`} onClick={onClose}>{t('wall.tb.done')}</button>

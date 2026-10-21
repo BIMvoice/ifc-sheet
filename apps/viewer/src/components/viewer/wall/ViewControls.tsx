@@ -8,7 +8,7 @@
  * view depth. The wheel inside the drawing moves the same values.
  */
 
-import { useTranslation } from '@/i18n';
+import { formatLocaleFixed, useTranslation } from '@/i18n';
 import type { ProjectView } from '@/project/types';
 import { CUT_HEIGHT_RANGE, nudgeViewDepth, setCutHeight } from './wall-actions';
 
@@ -21,12 +21,12 @@ const RULER_PX = 220;
 const yOf = (m: number): number => ((RULER.max - Math.min(RULER.max, Math.max(RULER.min, m))) / (RULER.max - RULER.min)) * RULER_PX;
 
 export function CutHeightControl({ view }: { view: Extract<ProjectView, { kind: 'plan' }> }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const ticks = [0.5, 1, 1.5, 2, 2.5];
   return (
     <div className="flex flex-col gap-3 text-sky-100">
-      <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.cutHeight')}</span>
-      <span className="text-4xl font-light tabular-nums text-white">{view.cutHeight.toFixed(2)}<span className="ml-1 text-lg text-sky-200/70">m</span></span>
+      <span className="text-2xs font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.cutHeight')}</span>
+      <span className="text-4xl font-light tabular-nums text-white">{formatLocaleFixed(locale, view.cutHeight, 2)}<span className="ml-1 text-lg text-sky-200/70">{t('wall.unitMetre')}</span></span>
       <div className="relative ml-16" style={{ height: RULER_PX }}>
         <input
           type="range"
@@ -42,7 +42,7 @@ export function CutHeightControl({ view }: { view: Extract<ProjectView, { kind: 
         {ticks.map((m) => (
           <div key={m} className="absolute left-0 flex items-center" style={{ top: yOf(m) }}>
             <span className="h-px w-2 -translate-x-1 bg-sky-300/50" />
-            <span className="ml-3 -translate-y-px text-xs tabular-nums text-sky-200/60">{m.toFixed(1)}</span>
+            <span className="ml-3 -translate-y-px text-xs tabular-nums text-sky-200/60">{formatLocaleFixed(locale, m, 1)}</span>
           </div>
         ))}
         {[[HEAD_M, 'wall.head'], [SILL_M, 'wall.sill']].map(([m, key]) => (
@@ -59,12 +59,12 @@ export function CutHeightControl({ view }: { view: Extract<ProjectView, { kind: 
 }
 
 export function DepthControl({ view }: { view: Extract<ProjectView, { kind: 'section' | 'elevation' }> }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return (
     <div className="flex flex-col gap-3 text-sky-100">
-      <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.depth')}</span>
+      <span className="text-2xs font-medium uppercase tracking-[0.2em] text-sky-200/70">{t('wall.depth')}</span>
       <span className="text-4xl font-light tabular-nums text-white">
-        {view.viewDepth == null ? t('wall.depthAuto') : <>{view.viewDepth.toFixed(1)}<span className="ml-1 text-lg text-sky-200/70">m</span></>}
+        {view.viewDepth == null ? t('wall.depthAuto') : <>{formatLocaleFixed(locale, view.viewDepth, 1)}<span className="ml-1 text-lg text-sky-200/70">{t('wall.unitMetre')}</span></>}
       </span>
       <div className="flex gap-2">
         <button type="button" className="rounded-full border border-sky-300/40 px-3 py-1 text-lg hover:border-sky-300" aria-label={t('wall.depthLess')} onClick={() => nudgeViewDepth(view.id, -1)}>−</button>

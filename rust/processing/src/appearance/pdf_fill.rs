@@ -250,7 +250,7 @@ pub fn plan_pdf_fill_annotation_with_clip(
             return Err("Canonical PDF fill vertices exceed the requested metric precision; move the page nearer the model origin".into());
         }
     }
-    let source_ifc_sha256 = format!("{:x}", Sha256::digest(bytes));
+    let source_ifc_sha256 = hex::encode(Sha256::digest(bytes));
     let mut digest = Sha256::new();
     digest.update(ALGORITHM.as_bytes());
     digest.update(b"\0");
@@ -267,7 +267,7 @@ pub fn plan_pdf_fill_annotation_with_clip(
         source_ifc_sha256,
         source_pdf_sha256: r.page.pdf_sha256.clone(),
         page_number: r.page.page_number,
-        request_sha256: format!("{:x}", digest.finalize()),
+        request_sha256: hex::encode(digest.finalize()),
         algorithm: ALGORITHM,
         calibration_key: r.page.calibration_key.clone(),
         tolerance_metres: r.page.tolerance_metres,

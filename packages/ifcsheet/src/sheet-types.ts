@@ -2,9 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** Types of a sheet's paper, frame and templates (re-exported by `types.ts`). */
+/** Types of a sheet's paper, frame and templates (re-exported by `document.ts`). */
 
-import type { PaperSize } from './types';
+import type { PaperSize } from './document.js';
 
 /** An elongated ISO 5457 format: `base` with its long side extended by `factor` (A3×3 is 420 × 891 mm). Only the sizes ISO 5457 lists exist (`paper.ts`). */
 export interface ElongatedPaper {

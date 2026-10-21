@@ -7,6 +7,11 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
+      "@bimvoice/ifcsheet/names": ["../../packages/ifcsheet/src/names"],
+      "@bimvoice/ifcsheet/readiness": ["../../packages/ifcsheet/src/readiness"],
+      "@bimvoice/ifcsheet/readiness-read": ["../../packages/ifcsheet/src/readiness-read"],
+      "@bimvoice/ifcsheet/headless": ["../../packages/ifcsheet/src/headless"],
+      "@bimvoice/ifcsheet": ["../../packages/ifcsheet/src"],
       "@ifc-lite/parser": ["../../packages/parser/src"],
       "@ifc-lite/parser/browser": ["../../packages/parser/src/browser"],
       "@ifc-lite/geometry": ["../../packages/geometry/src"],

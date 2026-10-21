@@ -1,0 +1,79 @@
+{
+  "name": "@bimvoice/ifcsheet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The IfcSheet drawing-set engine: the project document, the starting set of views and sheets, and headless PDF and DXF export, in Node or the browser",
+  "type": "module",
+  "bin": {
+    "ifcsheet": "./dist/bin.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./names": {
+      "types": "./dist/names.d.ts",
+      "import": "./dist/names.js",
+      "default": "./dist/names.js"
+    },
+    "./readiness": {
+      "types": "./dist/readiness.d.ts",
+      "import": "./dist/readiness.js",
+      "default": "./dist/readiness.js"
+    },
+    "./readiness-read": {
+      "types": "./dist/readiness-read.d.ts",
+      "import": "./dist/readiness-read.js",
+      "default": "./dist/readiness-read.js"
+    },
+    "./headless": {
+      "types": "./dist/headless.d.ts",
+      "import": "./dist/headless.js",
+      "default": "./dist/headless.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm exec tsc",
+    "typecheck": "node ../../scripts/typecheck-tests.mjs",
+    "dev": "pnpm exec tsc --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ifc-lite/data": "workspace:^",
+    "@ifc-lite/drawing-2d": "workspace:^",
+    "@ifc-lite/geometry": "workspace:^",
+    "@ifc-lite/parser": "workspace:^",
+    "jspdf": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "dxf-parser": "1.1.2",
+    "pdfjs-dist": "6.3.289",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  },
+  "license": "MPL-2.0",
+  "author": "BIMvoice",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BIMvoice/ifcsheet.git",
+    "directory": "packages/ifcsheet"
+  },
+  "keywords": [
+    "ifc",
+    "bim",
+    "drawings",
+    "sheets",
+    "pdf",
+    "dxf"
+  ],
+  "files": [
+    "dist",
+    "fonts",
+    "README.md"
+  ]
+}

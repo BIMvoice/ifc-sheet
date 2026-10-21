@@ -37,7 +37,6 @@ import type { LoadedPlaygroundModel } from './playground-dispatcher';
 import { playgroundGeometrySource } from './playground-geometry-source';
 import type { IfcDataStore } from '@ifc-lite/parser';
 
-const ACCENT = 0xd6ff3f;
 const BG_COLOR = '#0e0e12';
 
 // ── geometry loading (extracted for direct testing — see
