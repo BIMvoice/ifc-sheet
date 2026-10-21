@@ -3,14 +3,17 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The site area POT and CUT are measured on, kept in the project. Empty
- * falls back to the model's IfcSite area, shown as the placeholder; text that
- * is not an area is refused and the stored value shown again.
+ * The site area POT and CUT are measured on, kept in the project. Typed, it
+ * overrides; empty falls back to the plot boundary drawn on the site plan,
+ * else the model's IfcSite area (`urban/site-area.ts`), shown as the
+ * placeholder; text that is not an area is refused and the stored value
+ * shown again.
  */
 
 import { useId } from 'react';
 import { useTranslation } from '@/i18n';
 import { setProjectSiteArea, useProjectStore } from '@/project/project-store';
+import { plotAreaOf } from '@/siteplan/plot';
 
 /**
  * The typed value as m²: `{ area: null }` for an empty field (the model's area is used), null for text that is not a
@@ -39,6 +42,9 @@ export function SiteAreaField({ modelSiteArea, className, inputClassName }: { mo
   const { t } = useTranslation();
   const id = useId();
   const siteArea = useProjectStore((s) => s.siteArea);
+  const plot = useProjectStore((s) => plotAreaOf(s));
+  const placeholder = plot !== null ? t('urban.siteArea.fromPlot', { area: plot.toFixed(2) })
+    : modelSiteArea === null ? t('urban.siteArea.none') : t('urban.siteArea.fromModel', { area: modelSiteArea.toFixed(2) });
   return (
     <span className={className ?? 'flex items-center gap-1.5'}>
       <label htmlFor={id}>{t('urban.siteArea')}</label>
@@ -49,7 +55,7 @@ export function SiteAreaField({ modelSiteArea, className, inputClassName }: { mo
         type="text"
         inputMode="decimal"
         defaultValue={siteArea === undefined ? '' : String(siteArea)}
-        placeholder={modelSiteArea === null ? t('urban.siteArea.none') : t('urban.siteArea.fromModel', { area: modelSiteArea.toFixed(2) })}
+        placeholder={placeholder}
         title={t('urban.siteArea.help')}
         className={inputClassName ?? 'h-7 w-32 rounded-sm border border-zinc-300 bg-transparent px-1.5 text-xs dark:border-zinc-700'}
         onBlur={(e) => {

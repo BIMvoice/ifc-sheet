@@ -23,7 +23,7 @@ const ZOOM = 3;
 export function UrbanView({ schedule }: { schedule: ProjectSchedule }) {
   const { t } = useTranslation();
   const urban = useUrbanIndicators();
-  const labels = useUrbanLabels(schedule.name, urban?.areas ?? null);
+  const labels = useUrbanLabels(schedule.name, urban?.areas ?? null, urban?.site);
   const layout = useMemo(() => (urban ? layoutUrban(urban.result, labels) : null), [urban, labels]);
   const measured = urban?.result.storeys.some((s) => s.builtArea !== null) ?? false;
   return (

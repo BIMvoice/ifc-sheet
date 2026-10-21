@@ -166,7 +166,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const placesTakeoff = places('materials');
   // The indicators measure footprints: only when the sheet shows them.
   const urban = useUrbanIndicators(places('urban'));
-  const urbanLabels = useUrbanLabels('', urban?.areas ?? null);
+  const urbanLabels = useUrbanLabels('', urban?.areas ?? null, urban?.site);
   // The joinery schedules on this sheet: their data once, for the layout and for the views cut from the models.
   const joinery = useMemo(() => {
     const out: ViewRequest[] = [];

@@ -25,9 +25,9 @@ import { drawingPointToMap, type MapAnchor } from './map-coordinates';
 import { liveSymbol, COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID } from './live-symbols';
 import { liveSymbolContext, siteNorth, type SiteFrame } from './site-frame';
 import { gridNorthOf, trueNorthOf } from './true-north';
-import { plotAreaOf, PLOT_BOUNDARY_LAYER, setbacks } from './plot';
+import { plotAreaOf, PLOT_BOUNDARY_LAYER, ringArea, setbacks } from './plot';
 import { keyPlanHighlight, viewportExtent } from './key-plan';
-import { footprintArea, footprintRings, offsetRing, outerRings } from './footprint';
+import { footprintRings, offsetRing, outerRings } from './footprint';
 import type { DrawingPolygon } from '@ifc-lite/drawing-2d';
 
 /** A plan as the drawing generator cuts it: axis y (viewer up), not flipped. */
@@ -297,6 +297,6 @@ describe('footprint from the ground storey cut (#48)', () => {
     // A union that changes nothing: the one ring stays one shape.
     const rings = footprintRings([wallRing, furniture], (r) => r);
     assert.equal(rings.length, 1);
-    assert.ok(Math.abs(footprintArea(rings) - 60) < 1e-9);
+    assert.ok(Math.abs(ringArea(rings[0]) - 60) < 1e-9);
   });
 });

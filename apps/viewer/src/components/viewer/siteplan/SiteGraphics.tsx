@@ -5,10 +5,9 @@
 /**
  * A site plan's own graphics on its sheet viewport, computed from the model
  * and the drawn plot boundary, never typed: the building footprint as a
- * heavy outline, a dimension per setback, and under the viewport a site
- * balance (plot area, footprint area, their ratio). The balance is
- * provisional: the urban indicators table, once merged, is the permit's.
- * And a key plan's outline of the part another viewport shows.
+ * heavy outline and a dimension per setback (the site balance under the
+ * viewport is `SiteBalance.tsx`). And a key plan's outline of the part
+ * another viewport shows.
  */
 
 import { useTranslation, formatLocaleNumber } from '@/i18n';
@@ -81,34 +80,6 @@ export function SiteSymbols({ site, transform: t, axis, scale, box, live, symbol
           <AnnotationGraphics shape={shape} color="#000" selected={false} transform={t} axis={axis} extraPatterns={NO_PATTERNS} strokeScale={0.25} paperUnit={scale / 1000} symbols={live} />
         </g>
       ))}
-    </g>
-  );
-}
-
-/** The site balance under a site plan viewport, paper millimetres from its top-left corner. */
-export function SiteBalance({ site, x, y }: { site: SiteContent; x: number; y: number }) {
-  const { t, locale } = useTranslation();
-  const area = (v: number | null) => (v === null ? '—' : t('site.balance.area', { value: formatLocaleNumber(locale, v, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }));
-  const ratio = site.plotArea && site.footprintArea !== null ? formatLocaleNumber(locale, site.footprintArea / site.plotArea, { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
-  const rows: [string, string][] = [
-    [t('site.balance.plot'), area(site.plotArea)],
-    [t('site.balance.footprint'), area(site.footprintArea)],
-    [t('site.balance.ratio'), ratio],
-  ];
-  const w = 95;
-  const rowH = 5;
-  return (
-    <g {...penTags('SITE-BALANCE', 0.25)} data-site-balance="true">
-      <text x={x} y={y + 3.2} fontSize={3} fontWeight={700} fontFamily={FONT} fill="#000">{t('site.balance.title')}</text>
-      <rect x={x} y={y + 5} width={w} height={rowH * rows.length} fill="none" stroke="#000" strokeWidth={0.25} />
-      {rows.map(([label, value], i) => (
-        <g key={label}>
-          {i > 0 ? <line x1={x} y1={y + 5 + rowH * i} x2={x + w} y2={y + 5 + rowH * i} stroke="#000" strokeWidth={0.18} /> : null}
-          <text x={x + 1.5} y={y + 5 + rowH * i + 3.6} fontSize={2.5} fontFamily={FONT} fill="#000">{label}</text>
-          <text x={x + w - 1.5} y={y + 5 + rowH * i + 3.6} fontSize={2.5} fontFamily={FONT} fill="#000" textAnchor="end" data-value={label}>{value}</text>
-        </g>
-      ))}
-      <text x={x} y={y + 5 + rowH * rows.length + 3.5} fontSize={2} fontFamily={FONT} fill="#52525b">{t('site.balance.note')}</text>
     </g>
   );
 }
