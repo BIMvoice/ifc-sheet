@@ -71,6 +71,7 @@ jobs:
         with:
           name: wasm-pkg
           path: packages/wasm/pkg
+          if-no-files-found: error
           retention-days: 3
 
   typecheck:
