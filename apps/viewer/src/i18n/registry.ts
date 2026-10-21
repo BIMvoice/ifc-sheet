@@ -14,6 +14,7 @@
  * it separate means converting a component to translated strings never
  * has to touch the (already large) viewer store.
  */
+import { setNameResolver } from '@bimvoice/ifcsheet/names';
 import { appName } from '../edition';
 import { en, type TranslationKey } from './en';
 import { formatLocaleNumber } from './intlFormat';
@@ -39,6 +40,32 @@ export function registerLocale(locale: Locale, catalogue: Catalogue): void {
   }
   catalogues.set(locale, catalogue);
   if (locale === activeLocale) notifyLocaleChanged();
+}
+
+/** Names catalogues of every shipped locale, loaded or not (`locales.boot.ts`). */
+const readBackCatalogues: Catalogue[] = [];
+
+/**
+ * Keep a locale's `names.*` strings for reading back, without making the
+ * locale available. A project made in Romanian and opened in English still
+ * has to read `Secțiunea A-A` as mark A, before (or without) the Romanian
+ * catalogue ever loading.
+ */
+export function registerReadBackNames(catalogue: Catalogue): void {
+  readBackCatalogues.push(catalogue);
+}
+
+/** The string every registered or read-back catalogue gives a key, English
+ * first, duplicates dropped. A catalogue that leaves the key out adds
+ * nothing; plural forms are skipped. For reading back text that was
+ * resolved in whichever language was active when it was made. */
+export function registeredTranslations(key: TranslationKey): string[] {
+  const out = new Set<string>();
+  for (const catalogue of [...catalogues.values(), ...readBackCatalogues]) {
+    const value = catalogue[key];
+    if (typeof value === 'string') out.add(value);
+  }
+  return [...out];
 }
 
 /** Switch the active locale. Falls back to 'en' if the locale was never registered. */
@@ -114,6 +141,10 @@ function resolveFromCatalogue(key: TranslationKey, params: TranslationParameters
 export function resolve(key: TranslationKey, params: TranslationParameters = {}): string {
   return resolveFromCatalogue(key, params, activeLocale, catalogues.get(activeLocale));
 }
+
+// The drawing-set engine names what it makes (the starting set's sheets, the default views) in the active language.
+// `@bimvoice/ifcsheet/names` imports nothing, so the catalogue does not load the engine to install it.
+setNameResolver((key, params) => resolve(key, params));
 
 /** Freeze a label context for an asynchronous document layout/export (#6610).
  * Locale or catalogue replacement must not mix languages halfway through a PDF. */

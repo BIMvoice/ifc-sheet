@@ -12,15 +12,20 @@
  * tagged ancestor names (`dxf-tags.ts`): drafted lines and annotations on
  * their drafting layer — with its colour, line weight and line type — the
  * generated drawing on CUT / SEEN / HIDDEN / HATCH / SYMBOLS with its pens,
- * the sheet on FRAME / TITLEBLOCK / VIEWPORT-LABELS. Fills are left out.
+ * the sheet on FRAME / TITLEBLOCK / VIEWPORT-LABELS. Fills are left out,
+ * and so are raster images (a 3D view captured as one): `exportSheetDxf` and
+ * the issue say which.
  */
 
 import { DxfR2000 } from './dxf-r2000';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 import { paperOf } from '@/project/sheets';
+import { useProjectStore } from '@/project/project-store';
+import { rasterViewNames } from '@/project/view-raster';
+import { toast } from '@/components/ui/toast';
+import { resolve } from '@/i18n/registry';
 import type { ProjectSheet } from '@/project/types';
 import type { CadLayerRule } from '@/project/cad-layers';
-import { useProjectStore } from '@/project/project-store';
 import { layerAndPens } from './dxf-cad-layers';
 
 type P = { x: number; y: number };
@@ -256,4 +261,7 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
 export function exportSheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): void {
   const name = sanitizeFilename(`${sheet.number} ${sheet.name}`, { fallback: 'sheet' });
   downloadFile(sheetDxf(svg, sheet), `${name}.dxf`, 'application/dxf');
+  // A raster viewport comes out as an empty frame: say so, and where the image is.
+  const rasters = rasterViewNames(sheet, useProjectStore.getState().views);
+  if (rasters.length > 0) toast.error(resolve('sheets.dxf.rasterOmitted', { views: rasters.join(', ') }), `dxf-raster-${sheet.id}`);
 }

@@ -15,6 +15,8 @@ import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
 import { useProjectStore } from '@/project/project-store';
 import { viewElevationSymbols, viewOpeningSymbols, visibleEntities } from '@/project/view-symbols';
 import type { DraftShape } from '@/drafting/types';
+import { phaseMeshes } from '@/project/phase-view';
+import type { PhaseView } from '@/project/view-graphics';
 import { shapePath } from './DraftOverlay';
 
 interface Props {
@@ -24,11 +26,13 @@ interface Props {
   drawing?: Drawing2D | null;
   /** Upper-case IFC classes the view hides (`hiddenClasses`). */
   hidden: ReadonlySet<string>;
+  /** The view's phases: the doors and windows of a phase it does not show have no symbol. */
+  phases?: PhaseView | null;
   transform: ViewTransform;
   axis: SectionAxisName;
 }
 
-export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, drawing, hidden, transform, axis }: Props) {
+export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, drawing, hidden, phases, transform, axis }: Props) {
   const { geometryResult } = useDrawingRuntime();
   const flips = useProjectStore((s) => s.symbolFlips);
   // Symbols follow the catalogue and the symbol mapping too.
@@ -37,11 +41,12 @@ export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, dr
   const symbols = useMemo(
     () => {
       if (!plane || !geometryResult?.meshes) return [];
-      if (plane.axis === 'y') return viewOpeningSymbols(geometryResult.meshes, plane, flips, hidden);
-      return drawing ? viewElevationSymbols(geometryResult.meshes, plane, visibleEntities(drawing), hidden) : [];
+      const meshes = phaseMeshes(geometryResult.meshes, phases ?? null) ?? geometryResult.meshes;
+      if (plane.axis === 'y') return viewOpeningSymbols(meshes, plane, flips, hidden);
+      return drawing ? viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden) : [];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogue / mapping are read through the project store
-    [plane, drawing, geometryResult, flips, hidden, catalogue, mapping],
+    [plane, drawing, geometryResult, flips, hidden, phases, catalogue, mapping],
   );
   if (symbols.length === 0) return null;
   const path = (shapes: DraftShape[]) => shapes.map((s) => shapePath(s, transform, axis)).join('');

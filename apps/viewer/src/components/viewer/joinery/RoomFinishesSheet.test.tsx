@@ -25,7 +25,7 @@ import { WallSheet } from '../wall/WallSheet';
 import { sheetSvgText } from '../sheets/sheet-export';
 import { sheetDxf } from '../sheets/sheet-dxf';
 
-const FIXTURE = new URL('../../../../public/_fixtures/rooms-with-finishes.ifc', import.meta.url);
+const FIXTURE = new URL('../../../test/__fixtures__/rooms-with-finishes.ifc', import.meta.url);
 
 /**
  * What the fixture says, read straight off its STEP text: per room (by Name),

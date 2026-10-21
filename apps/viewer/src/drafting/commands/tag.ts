@@ -11,7 +11,7 @@
  */
 
 import { renderIdGlobalId } from '@/project/element-guid';
-import { elementLabel, type TagField } from '@/project/element-label';
+import { elementLabel, type TagField } from '@/tagfields/element-tag';
 import { editDrafts, newDraft } from '../draft-store';
 import { styledParams } from '@/project/drafting-standards';
 import { entitySkeleton } from '../annotation';

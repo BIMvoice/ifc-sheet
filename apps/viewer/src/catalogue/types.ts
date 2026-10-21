@@ -11,7 +11,7 @@
  * materials that already exist there.
  */
 
-import type { AxisShape, DraftShape, AnnotationShape } from '@/drafting/types';
+import type { AxisShape, DraftShape, AnnotationShape, DraftEntity, DraftLayer } from '@/drafting/types';
 import type { TextFrame } from '@/drafting/text-block';
 import type { LeaderMode } from '@/labels/label-leader';
 import type { MissingMode } from '@/labels/label-resolve';
@@ -109,3 +109,24 @@ export const DEFAULT_LEGEND: LegendConfig = {
   title: 'Legend', showTitle: true, scope: 'project', categories: ['materials', 'layers', 'hatches', 'symbols', 'annotations'],
   columns: 1, rowHeight: 7, swatchWidth: 18, textStyle: 'standard', headings: true,
 };
+
+/**
+ * A detail kept in the library: the drafts of a drafting view with what they
+ * refer to, so it can be placed in any project. Self-contained: layers,
+ * symbols and hatch patterns are the entry's own copies (ids inside it refer
+ * only to each other), merged into the project under the library's clash
+ * policies when it is placed.
+ */
+export interface LibraryDetail {
+  id: string;
+  name: string;
+  /** Drawing scale denominator of the view it was saved from. */
+  scale: number;
+  drafts: Omit<DraftEntity, 'viewId'>[];
+  /** The layers the drafts are on (without their group). */
+  layers: DraftLayer[];
+  /** The user hatch patterns the drafts use, as `.pat` text. */
+  hatchPatterns: string;
+  /** The project symbols the drafts place. */
+  symbols: DraftSymbol[];
+}

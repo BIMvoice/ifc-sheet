@@ -25,7 +25,7 @@ describe('readModelFacts on the sample models', () => {
   });
 
   it('AC20-FZK-Haus.ifc: two storeys, seven rooms; every element is on a storey; four lack a material', async () => {
-    const facts = readModelFacts([await sample('../../public/_fixtures/AC20-FZK-Haus.ifc')]);
+    const facts = readModelFacts([await sample('../../src/test/__fixtures__/AC20-FZK-Haus.ifc')]);
     assert.deepEqual(facts, { storeys: 2, spaces: 7, elements: 82, elementsWithoutStorey: 0, elementsWithoutMaterial: 4, elementsWithoutQuantities: 0, duplicateGlobalIds: 0, duplicatedEntities: 0 });
   });
 });
