@@ -11,7 +11,7 @@
 
 import { memo, useMemo } from 'react';
 import type { PanelOperation } from '@ifc-lite/create';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { formatLocaleFixed, useTranslation, type TranslationKey } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule, ProjectSheet } from '@/project/types';
@@ -46,11 +46,13 @@ export function useScheduleLabels(title: string): ScheduleLabels {
 }
 
 export function useTakeoffLabels(title: string): TakeoffLabels {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return useMemo(() => ({
     title, material: t('takeoff.material'), elements: t('takeoff.elements'), volume: t('takeoff.volume'),
     area: t('takeoff.area'), usedIn: t('takeoff.usedIn'), total: t('takeoff.total'),
-  }), [t, title]);
+    // English keeps the plain `toFixed` text it always printed; other locales write their own separators.
+    number: locale === 'en' ? undefined : (value, digits) => formatLocaleFixed(locale, value, digits),
+  }), [t, locale, title]);
 }
 
 /** The material takeoff's rows, read from the loaded models again only when they change (materials are parsed on demand). */

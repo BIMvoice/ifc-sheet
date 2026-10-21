@@ -13,7 +13,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from '@/i18n';
-import { ELEVATION_DIRECTIONS, planViewFor, resolvePlanLevel } from '@/project/view-defaults';
+import { ELEVATION_DIRECTIONS, elevationName, planViewFor, resolvePlanLevel } from '@/project/view-defaults';
 import { defaultDisciplineLevel, disciplineViewFor, DISCIPLINE_IDS, type DisciplineId } from '@/project/discipline-views';
 import { addProjectView, useProjectStore } from '@/project/project-store';
 import { draftingViewOf } from '@/drafting/drafting-view';
@@ -31,8 +31,6 @@ interface AddDrawingProps {
   onDetail: () => void;
   onClose: () => void;
 }
-
-const SIDE_NAMES: Record<ElevationDirection, string> = { north: 'North Elevation', east: 'East Elevation', south: 'South Elevation', west: 'West Elevation' };
 
 function Choice({ icon, title, hint, disabled, onClick }: { icon: ToolIconName; title: string; hint: string; disabled?: boolean; onClick?: () => void }) {
   return (
@@ -81,7 +79,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
   };
   const sideOf = (direction: ElevationDirection): void => {
     const existing = useProjectStore.getState().views.find((v) => v.kind === 'elevation' && v.direction === direction && !v.interior);
-    onView(existing?.id ?? addProjectView({ kind: 'elevation', name: SIDE_NAMES[direction], direction }));
+    onView(existing?.id ?? addProjectView({ kind: 'elevation', name: elevationName(direction), direction }));
   };
 
   const draftingBlank = (): void => onView(addProjectView(draftingViewOf(t('wall.add.draftingName'))));
@@ -117,7 +115,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
           {(details ?? []).map((d) => <button key={d.id} type="button" className={pick} onClick={() => draftingFromLibrary(d.id)}>{d.name}</button>)}
         </Picks>
       ) : (
-        <Picks>{ELEVATION_DIRECTIONS.map((d) => <button key={d} type="button" className={pick} onClick={() => sideOf(d)}>{SIDE_NAMES[d]}</button>)}</Picks>
+        <Picks>{ELEVATION_DIRECTIONS.map((d) => <button key={d} type="button" className={pick} onClick={() => sideOf(d)}>{elevationName(d)}</button>)}</Picks>
       )}
     </section>
   );
