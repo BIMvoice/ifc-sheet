@@ -20,6 +20,7 @@ import { DEFAULT_VIEW_PRESET, VIEW_CATEGORIES } from '@/project/view-graphics';
 import { gridSettings } from '@/project/grid-overlay';
 import { builtInPatterns } from '@/drafting/hatch/library';
 import { parsePat } from '@/drafting/hatch/pattern';
+import { PhaseGraphics } from './PhaseGraphics';
 import type { CategoryGraphics, CategoryLineWeight, GridEnds, ProjectView, ViewGridGraphics } from '@/project/types';
 
 const WEIGHTS: readonly CategoryLineWeight[] = ['heavy', 'medium', 'light', 'hairline'];
@@ -139,6 +140,7 @@ export function ViewGraphicsDialog({ view, open, onOpenChange }: Props) {
             })}
           </tbody>
         </table>
+        <PhaseGraphics view={view} />
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)}>{t('viewGraphics.close')}</Button>
         </DialogFooter>

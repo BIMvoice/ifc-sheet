@@ -21,8 +21,10 @@ import { HATCH_UNIT_M } from '@/drafting/annotation';
 import { findPattern } from '@/drafting/hatch/library';
 import { hatchSegments } from '@/drafting/hatch/fill';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
-import { categoryOf, cutHatches } from '@/project/view-graphics';
-import type { CategoryLineWeight, ViewGraphics } from '@/project/types';
+import { categoryOf, cutHatches, type StyledDrawing } from '@/project/view-graphics';
+import { phaseInk } from '@/project/phases';
+import { DEFAULT_GRAPHIC_STANDARD, type GraphicStandard } from '@/drafting/graphic-standard';
+import type { ViewGraphics } from '@/project/types';
 import { halftoneColor, type EntityStyleOf } from '@/project/model-styles';
 
 export interface Pen {
@@ -45,18 +47,19 @@ export interface CadPenContext {
   materialOf(entityId: number, materialId?: number): string | null;
 }
 
-/** Default pens, paper millimetres. */
-export const PEN = { cut: 0.5, outline: 0.5, seen: 0.25, hidden: 0.18, hatch: 0.13 };
-const WEIGHT_MM: Record<CategoryLineWeight, number> = { heavy: 0.7, medium: 0.5, light: 0.25, hairline: 0.13 };
+/** Default pens, paper millimetres (the default graphic standard's; the overlays that do not take a standard yet draw with these). */
+export const PEN = DEFAULT_GRAPHIC_STANDARD.pens;
 const DEFAULT_FILL = '#d4d4d8';
 
 const hex = (c: readonly number[]) => `#${c.slice(0, 3).map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`;
 
 export function viewportPens(
-  drawing: Drawing2D, graphics: ViewGraphics | undefined, t: ViewTransform, axis: SectionAxisName, extraPatterns: readonly HatchPattern[], cad?: CadPenContext,
+  drawing: Drawing2D | StyledDrawing, graphics: ViewGraphics | undefined, t: ViewTransform, axis: SectionAxisName, extraPatterns: readonly HatchPattern[], cad?: CadPenContext,
   /** Each entity's model style; absent: every model draws normally. */
   styleOf?: EntityStyleOf,
+  standard: GraphicStandard = DEFAULT_GRAPHIC_STANDARD,
 ): Pen[] {
+  const base = standard.pens;
   const pens = new Map<string, Pen>();
   const add = (key: string, base: Omit<Pen, 'd'>, d: string) => {
     const pen = pens.get(key);
@@ -81,23 +84,28 @@ export function viewportPens(
   const ink = (colour: string, entityId: number | undefined) => (entityId !== undefined && styleOf?.(entityId) === 'halftone' ? halftoneColor(colour) : colour);
 
   for (const polygon of drawing.cutPolygons) {
-    const fill = ink(polygon.color && style(polygon.ifcType)?.fillColor ? hex(polygon.color) : DEFAULT_FILL, polygon.entityId);
+    // A phase's fill, like its line, comes after the category's.
+    const phase = 'phase' in polygon ? polygon.phase : undefined;
+    const fill = ink(phase ? phaseInk(graphics, phase).fill : polygon.color && style(polygon.ifcType)?.fillColor ? hex(polygon.color) : DEFAULT_FILL, polygon.entityId);
     add(`fill:${fill}`, { stroke: null, width: 0, fill, layer: 'FILL' }, [polygon.polygon.outer, ...polygon.polygon.holes].map(loop).join(''));
   }
   for (const line of drawing.lines) {
     const g = style(line.ifcType);
     const d = `M${pt(line.line.start)}L${pt(line.line.end)}`;
-    const color = ink(g?.lineColor ?? '#000000', line.entityId);
+    const phase = 'phase' in line && line.phase ? phaseInk(graphics, line.phase) : null;
+    const color = ink(phase?.color ?? g?.lineColor ?? '#000000', line.entityId);
     const who = subject(line.ifcType, line.entityId);
     if (line.visibility === 'hidden' || line.category === 'hidden') {
-      add(`hidden:${color}${who.key}`, { stroke: color, width: PEN.hidden, fill: null, dash: '1.5 1', layer: 'HIDDEN', ...who.tags }, d);
+      add(`hidden:${color}${who.key}`, { stroke: color, width: base.hidden, fill: null, dash: '1.5 1', layer: 'HIDDEN', ...who.tags }, d);
       continue;
     }
     const cut = line.category === 'cut';
-    const weight = g?.lineWeight ? WEIGHT_MM[g.lineWeight] * (cut ? 1 : 0.5) : cut ? PEN.cut : line.category === 'silhouette' ? PEN.outline : PEN.seen;
-    add(`${cut ? 'cut' : 'seen'}:${color}:${weight}${who.key}`, { stroke: color, width: weight, fill: null, layer: cut ? 'CUT' : 'SEEN', ...who.tags }, d);
+    const weight = phase ? phase.weightMm * (cut ? 1 : 0.5) : g?.lineWeight ? standard.weights[g.lineWeight][cut ? 'cut' : 'projection'] : cut ? base.cut : line.category === 'silhouette' ? base.outline : base.seen;
+    // A dashed phase keeps its layer (CUT / SEEN) and gains the dash; the DXF reads the line type from it.
+    const dash = phase?.dash.length ? phase.dash.join(' ') : undefined;
+    add(`${cut ? 'cut' : 'seen'}:${color}:${weight}:${dash ?? ''}${who.key}`, { stroke: color, width: weight, fill: null, layer: cut ? 'CUT' : 'SEEN', ...(dash ? { dash } : {}), ...who.tags }, d);
   }
-  for (const h of cutHatches(drawing, graphics)) {
+  for (const h of cutHatches(drawing, graphics, standard.materialHatch)) {
     const pattern = findPattern(h.pattern, extraPatterns);
     if (!pattern) continue;
     const color = ink(h.color, h.source?.entityId);
@@ -106,11 +114,11 @@ export function viewportPens(
       continue;
     }
     const segments = hatchSegments(h.loops, pattern, { scale: h.scale * HATCH_UNIT_M, angleDeg: 0, maxSegments: 20000 }).segments;
-    const width = h.width ?? PEN.hatch;
+    const width = h.width ?? base.hatch;
     const who = subject(h.source?.ifcType, h.source?.entityId, h.source?.materialId);
     add(`hatch:${color}:${width}${who.key}`, { stroke: color, width, fill: null, layer: 'HATCH', ...who.tags }, segments.map((s) => `M${pt(s.a)}L${pt(s.b)}`).join(''));
   }
   // Fills first, then hatches, then lines (hidden, seen, cut).
-  const order = (p: Pen) => (p.fill ? 0 : p.layer === 'HATCH' ? 1 : p.dash ? 2 : p.width < PEN.cut ? 3 : 4);
+  const order = (p: Pen) => (p.fill ? 0 : p.layer === 'HATCH' ? 1 : p.layer === 'HIDDEN' ? 2 : p.width < base.cut ? 3 : 4);
   return [...pens.values()].sort((a, b) => order(a) - order(b));
 }

@@ -8,6 +8,9 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { addProjectSheet, removeProjectItem, resetProject, useProjectStore } from '@/project/project-store';
 import { drawingArea } from '@/project/drawing-set';
+import { layoutOf, readLegendEnv } from './legend-env.js';
+import { useViewDrawings } from '@/project/view-drawings';
+import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { ProjectSheet } from '@/project/types';
 import type { LegendLabels } from './legend-layout.js';
 import { addLegend, keepLegendOnSheets, moveLegendCategory, placeLegend, projectLegends, toggleLegendCategory, updateLegend } from './legend-actions.js';
@@ -64,6 +67,30 @@ describe('legend actions', () => {
     const overlapsX = Math.abs(vp.x - box.x) < box.w / 2;
     const overlapsY = Math.abs(vp.y - box.y) < box.h / 2;
     assert.equal(overlapsX && overlapsY, false, `the legend centre ${vp.x}, ${vp.y} is inside the drawing`);
+  });
+
+  it('keeps a legend off the annotation an auto-fit viewport frames beyond its model (#140)', () => {
+    const id = addLegend('Key', { categories: ['hatches'] });
+    const area = drawingArea(sheet);
+    const cx = area.x + area.w - 100;
+    const cy = area.y + area.h - 20;
+    const model = { lines: [], cutPolygons: [], projectionPolygons: [], bounds: { min: { x: 0, y: 0 }, max: { x: 2, y: 2 } }, config: { plane: { axis: 'y', position: 1.2, flipped: false } } } as unknown as Drawing2D;
+    useViewDrawings.setState({ byView: { plan: { drawing: model, status: 'ready', progress: 100, phase: '', error: null } } });
+    // A line out to x = 18 m: at 1:100 the fitted box is 200 mm wide, the model alone gives 40 mm.
+    useProjectStore.setState({
+      views: [{ id: 'plan', kind: 'plan', name: 'Ground', createdAt: 0, scale: 100, level: { name: 'Ground', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 }],
+      drafts: [{ id: 'd', viewId: 'plan', layerId: '0', params: {}, shape: { type: 'line', a: { x: 0, y: 0 }, b: { x: 18, y: 0 } } }],
+      sheets: useProjectStore.getState().sheets.map((s) => (s.id === 's1' ? { ...s, viewports: [{ id: 'v', viewId: 'plan', x: cx, y: cy, scale: 100, width: 0, height: 0, center: null }] } : s)),
+    });
+    const viewportId = placeLegend('s1', id, LABELS);
+    const vp = useProjectStore.getState().sheets[0]?.viewports?.find((v) => v.id === viewportId);
+    const legend = projectLegends().find((l) => l.id === id);
+    assert.ok(vp && legend);
+    const size = layoutOf(legend, readLegendEnv(LABELS), 's1');
+    const overlapsX = Math.abs(vp.x - cx) < 100 + size.width / 2;
+    const overlapsY = Math.abs(vp.y - cy) < 15 + size.height / 2;
+    assert.equal(overlapsX && overlapsY, false, `the legend at ${vp.x}, ${vp.y} sits on the fitted drawing`);
+    useViewDrawings.setState({ byView: {} });
   });
 
   it('places nothing for a legend or a sheet that is gone', () => {
