@@ -261,7 +261,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         {focusView ? <><span className="text-sky-200/50">/</span><span className="text-white">{focusView.name}</span></> : null}
         {focusView ? <button type="button" className={issue} aria-keyshortcuts={ariaKeyShortcuts('wall.leaveEdit') || undefined} onClick={leaveEditMode}>{t('wall.leaveEdit')}</button> : null}
         <span className="flex-1" />
-        {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
+        {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} labelFromWide /> : null}
         {!focusView ? (
           <>
             <button type="button" className={issue} aria-pressed={commenting} title={t('review.tool.hint')} aria-keyshortcuts={ariaKeyShortcuts('wall.comment') || undefined} onClick={toggleComment}>{t('review.tool')}</button>
@@ -270,7 +270,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
             <button type="button" className={issue} aria-pressed={revising} {...keyProps(t, t('revision.title'), 'wall.revisions')} onClick={toggleRevisions}>{t('revision.title')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
             <button type="button" className={issue} {...keyProps(t, t('printPreview.open'), 'wall.printPreview')} onClick={preview}>{t('printPreview.open')}</button>
-            <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
+            <button type="button" className={issue} aria-label={t('wall.export.pdf')} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdfShort')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.export.dxf'), 'wall.exportDxf')} onClick={exportDxf}>{t('wall.export.dxf')}</button>
           </>
         ) : null}

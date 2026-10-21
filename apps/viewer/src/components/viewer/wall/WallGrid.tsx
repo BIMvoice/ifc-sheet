@@ -46,12 +46,16 @@ const SCALE_LABELS: Partial<Record<SetGroup, TranslationKey>> = {
   sections: 'wall.sectionScale',
 };
 
-export function ScaleChips({ group, extent }: { group: SetGroup; extent: ModelExtent | null }) {
+/**
+ * `labelFromWide` keeps the group's name for a screen reader but draws it only from the 2xl breakpoint up: the sheet toolbar
+ * needs that room for its buttons at 1280 px (#227).
+ */
+export function ScaleChips({ group, extent, labelFromWide = false }: { group: SetGroup; extent: ModelExtent | null; labelFromWide?: boolean }) {
   const { t } = useTranslation();
   const current = useProjectStore((s) => groupScale(group, s.sheets));
   return (
     <fieldset className="m-0 flex shrink-0 items-center gap-2 border-0 p-0">
-      <legend className="float-left mr-2 p-0 text-2xs font-medium uppercase tracking-widest text-sky-200/70">{t(SCALE_LABELS[group] ?? 'wall.planScale')}</legend>
+      <legend className={cn('float-left mr-2 p-0 text-2xs font-medium uppercase tracking-widest text-sky-200/70', labelFromWide && 'sr-only 2xl:not-sr-only')}>{t(SCALE_LABELS[group] ?? 'wall.planScale')}</legend>
       {SET_SCALES.map((scale) => (
         <button
           key={scale}
