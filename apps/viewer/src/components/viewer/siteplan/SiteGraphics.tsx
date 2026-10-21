@@ -22,7 +22,6 @@ import { shapePath } from '../drafting/DraftOverlay';
 import { penTags } from '../sheets/dxf-tags';
 import type { SiteContent } from './useSheetSite';
 
-const FONT = 'ui-sans-serif, system-ui, sans-serif';
 const DIM_TEXT_MM = 2.5;
 const NO_PATTERNS: never[] = [];
 const ENCROACHMENT_COLOR = PLOT_BOUNDARY_LAYER.color;
