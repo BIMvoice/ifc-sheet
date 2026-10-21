@@ -140,7 +140,8 @@ describe('facade elevations and sections are unchanged', () => {
     return `${d.lines.length}/${d.cutPolygons.length}/${d.projectionPolygons?.length ?? 0}/${h}`;
   }
   const ON_MAIN: Record<string, string> = {
-    north: '200/0/0/805198097', south: '241/0/0/1942490408', east: '374/0/0/-1670670891', west: '433/0/0/-189981305',
+    // north, east and west re-recorded for #218: a facade elevation with no plane of its own now stands outside the bounds (it stood 5 cm inside and cut the wall that reaches them).
+    north: '193/0/0/2000451137', south: '241/0/0/1942490408', east: '363/0/0/-141235747', west: '421/0/0/155999563',
     'north-deep': '200/0/0/2058618608', 'south-deep': '258/0/0/1672430668', 'east-deep': '371/0/0/-464167292', 'west-deep': '371/0/0/-1001212464',
     s1: '712/84/0/1814603118', s2: '2008/32/0/1592352504', s3: '1901/43/0/-787997569',
   };

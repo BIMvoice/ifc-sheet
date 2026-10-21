@@ -19,7 +19,7 @@ import { percentToWorld, sectionAxisRange, worldToPercent, type AxisBounds } fro
 import type { SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import { levelFloorY, resolvePlanLevel } from './view-defaults';
-import { ELEVATION_INSET_M } from './set-defaults';
+import { ELEVATION_CLEARANCE_M } from './set-defaults';
 import type { ElevationDirection, ProjectLevel, ProjectView, SectionProjectPlane } from './types';
 
 export interface ViewSectionPlane {
@@ -40,15 +40,17 @@ const ELEVATION_PLANES: Record<ElevationDirection, { axis: SectionPlaneAxis; atM
   west: { axis: 'side', atMax: false, flipped: true },
 };
 
-// How far inside the model bounds an elevation's plane sits: one constant with the starting set's defaults.
-export { ELEVATION_INSET_M };
+// How far outside the model bounds an elevation's plane stands: one constant with the starting set's defaults.
+export { ELEVATION_CLEARANCE_M };
 
 function elevationPlane(direction: ElevationDirection, bounds: AxisBounds | null, planeOffset?: number): ViewSectionPlane {
   const { axis, atMax, flipped } = ELEVATION_PLANES[direction];
   const range = sectionAxisRange(bounds, axis);
-  if (range && planeOffset !== undefined && Number.isFinite(planeOffset)) return { axis, position: worldToPercent(planeOffset, range), flipped };
-  const inset = range ? Math.min(50, (ELEVATION_INSET_M / (range.max - range.min)) * 100) : 0.1;
-  return { axis, position: atMax ? 100 - inset : inset, flipped };
+  // Not clamped to 0..100: an elevation's plane stands OUTSIDE the bounds, and every reader turns the percentage back to metres linearly.
+  const percent = (world: number, r: { min: number; max: number }): number => ((world - r.min) / (r.max - r.min)) * 100;
+  if (range && planeOffset !== undefined && Number.isFinite(planeOffset)) return { axis, position: percent(planeOffset, range), flipped };
+  const clearance = range ? (ELEVATION_CLEARANCE_M / (range.max - range.min)) * 100 : 0.1;
+  return { axis, position: atMax ? 100 + clearance : -clearance, flipped };
 }
 
 /**

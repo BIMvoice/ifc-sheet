@@ -48,8 +48,8 @@ describe('ensureDrawingSet', () => {
     updateProjectView(south.id, { planeOffset: 150 });
     run();
     const offset = (d: string) => (state().views.find((v) => v.kind === 'elevation' && v.direction === d) as { planeOffset: number }).planeOffset;
-    assert.ok(Math.abs(offset('north') - 200.05) < 1e-9);
-    assert.ok(Math.abs(offset('east') - 111.95) < 1e-9);
+    assert.ok(Math.abs(offset('north') - 199.5) < 1e-9);
+    assert.ok(Math.abs(offset('east') - 112.5) < 1e-9);
     assert.equal(offset('south'), 150);
   });
 
@@ -86,10 +86,10 @@ describe('ensureDrawingSet', () => {
   it('gives views a default depth, and a plan the scale of its sheet', () => {
     run();
     const depth = (name: string) => state().views.find((v) => v.name === name)?.viewDepth;
-    // The section looks +x from the middle of 12 m: 6 m to the far wall + 1 m. North / south see through 10 m, east / west through 12 m, each + 1 m.
+    // The section looks +x from the middle of 12 m: 6 m to the far wall + 1 m. North / south see through 10 m, east / west through 12 m, each + 1 m, and 0.5 m more from the plane outside the facade.
     assert.equal(sections()[0].viewDepth, 7);
-    assert.equal(depth('North Elevation'), 11);
-    assert.equal(depth('East Elevation'), 13);
+    assert.equal(depth('North Elevation'), 11.5);
+    assert.equal(depth('East Elevation'), 13.5);
     assert.equal(state().views.find((v) => v.kind === 'plan')?.scale, 100);
   });
 
