@@ -31,6 +31,9 @@ export type {
   ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster,
 } from './document.js';
 
+// What the model lacks (the counting, `readModelFacts`, is in `/headless` and `/readiness-read`: it loads the parser)
+export { READINESS_EN, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from './readiness.js';
+
 // Names
 export { ENGINE_NAMES_EN, englishName, nameOf, setNameResolver, type EngineNameKey, type NameParams, type NameResolver } from './names.js';
 
