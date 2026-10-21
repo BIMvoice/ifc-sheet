@@ -21,7 +21,7 @@ import { paperLabel } from './paper';
 import { addSchedule } from '@/joinery/schedules';
 import { registerHolders, registerSheetFit } from './drawing-register';
 import { proposalInputForLevel } from './model-rooms';
-import { nextNumber, numberSheets } from './numbering';
+import { DEFAULT_SCHEME, nextNumber, numberSheets, registerNumberIn } from './numbering';
 import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useProjectStore } from './project-store';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
@@ -302,12 +302,9 @@ export function addScheduleToSet(kind: ProjectSchedule['kind'], name: string): s
 }
 
 export { setSheetFormat, type SheetFormatPatch } from './sheet-format-actions';
-/** The register's number: A-000, else the first free number of the general series A-001… */
-export function registerNumber(sheets: readonly Pick<ProjectSheet, 'number'>[]): string {
-  const taken = new Set(sheets.map((s) => s.number));
-  let n = 0;
-  while (taken.has(`A-${String(n).padStart(3, '0')}`)) n++;
-  return `A-${String(n).padStart(3, '0')}`;
+/** The register's number under the project's scheme: its slot before the general series (A-000, A00 in a sequential scheme) while free, else the first free number of the general series (`registerNumberIn`). */
+export function registerNumber(sheets: readonly Pick<ProjectSheet, 'number'>[], scheme = DEFAULT_SCHEME): string {
+  return registerNumberIn(sheets, scheme);
 }
 
 /**
@@ -323,7 +320,7 @@ export function addRegisterToSet(name: string): string {
   const scheduleId = existing?.id ?? addSchedule('register', name);
   const area = drawingArea(SET_PAPER);
   const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: registerNumber(sheets), name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
+    id: freshProjectId('sheet'), number: registerNumber(sheets, numberingScheme()), series: 'general', name, createdAt: Date.now(), paper: SET_PAPER, orientation: 'landscape',
     viewports: [{ id: freshProjectId('viewport'), viewId: scheduleId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 1, width: 0, height: 0, center: null }],
   };
   useProjectStore.setState({ sheets: [...useProjectStore.getState().sheets, sheet], dirty: true });
@@ -366,7 +363,7 @@ export function syncRegisterPages(): void {
     taken.add(number);
     const vp = (first.viewports ?? []).find((v) => v.viewId === register.id);
     added.push({
-      id: freshProjectId('sheet'), number, name: first.name, createdAt: Date.now(), paper: first.paper, orientation: first.orientation,
+      id: freshProjectId('sheet'), number, series: 'general', name: first.name, createdAt: Date.now(), paper: first.paper, orientation: first.orientation,
       viewports: [{ ...(vp ?? { x: 0, y: 0, scale: 1, width: 0, height: 0, center: null }), id: freshProjectId('viewport'), viewId: register.id, page }],
     });
   }

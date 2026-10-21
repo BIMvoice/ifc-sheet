@@ -94,7 +94,7 @@ jobs:
       rust: ${{ steps.flags.outputs.rust }}
       viewer: ${{ steps.flags.outputs.viewer }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The merge commit and its first parent, the base.
           fetch-depth: 2
@@ -153,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Restore the wasm build
         id: wasm-cache
@@ -172,7 +172,7 @@ jobs:
         run: corepack enable
 
       - if: steps.wasm-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -202,12 +202,12 @@ jobs:
       # below reads.
       TURBO_RUN_SUMMARY: 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Enable pnpm
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -265,7 +265,7 @@ jobs:
     env:
       ALL: ${{ needs.changes.outputs.all }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # turbo's `[HEAD^1]` filter needs the base commit.
           fetch-depth: 2
@@ -273,7 +273,7 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -322,7 +322,12 @@ jobs:
       - name: Test
         run: |
           args=(); while IFS= read -r a; do args+=("$a"); done < "$RUNNER_TEMP/turbo-scope"
-          pnpm turbo run test "${args[@]}" --concurrency=2
+          # One retry, CI only, for the vitest timeouts under runner load. `--retry=1`
+          # reaches every package's test script; the node:test packages ignore it
+          # (their runner takes no such flag), so only vitest retries. A test that
+          # fails twice still fails the job. The default reporter does not print
+          # retries; `vitest run --reporter=verbose` marks them "(retry x1)".
+          pnpm turbo run test "${args[@]}" --concurrency=2 -- --retry=1
 
   # The viewer suite is about 15k tests, so it is split by test file across
   # eight runners (TEST_SHARD / TEST_SHARDS, see apps/viewer/package.json).
@@ -340,12 +345,12 @@ jobs:
       TEST_SHARD: ${{ matrix.shard }}
       TEST_SHARDS: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Enable pnpm
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -376,14 +381,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Enable pnpm
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -444,7 +449,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # rust-toolchain.toml pins the nightly; `rustup show` installs it.
       - name: Setup Rust (pinned by rust-toolchain.toml)
