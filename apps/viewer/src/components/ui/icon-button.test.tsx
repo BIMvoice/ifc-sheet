@@ -126,8 +126,28 @@ describe('IconButton', () => {
     await act(async () => {
       button.focus();
     });
-    assert.equal(document.querySelector('[role="tooltip"]')?.textContent, 'Undo');
-    assert.equal(button.getAttribute('aria-describedby'), null);
+    const tip = document.querySelector('[role="tooltip"]');
+    assert.equal(tip?.textContent, 'Undo');
+    // Radix Tooltip 1.4 points the trigger at its open content (the WAI-ARIA
+    // tooltip pattern). IconButton itself adds no description here, so the
+    // open tooltip is the only thing the button is described by.
+    const content = tip!.closest('[data-state]')!;
+    const ids = (button.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean);
+    assert.equal(ids.length, 1, 'only the open tooltip describes the button');
+    assert.ok(content.id === ids[0] || document.getElementById(ids[0])?.contains(tip), 'and it is the tooltip content');
+  });
+
+  it('keeps its own description alongside the open tooltip', async () => {
+    const host = render(<IconButton label="Fork" tooltip="Fork: edit this extension in the chat"><Plus /></IconButton>);
+    const button = host.querySelector('button')!;
+    const own = button.getAttribute('aria-describedby')!;
+    await act(async () => {
+      button.focus();
+    });
+    const ids = (button.getAttribute('aria-describedby') ?? '').split(' ');
+    assert.ok(ids.includes(own), 'Radix appends to aria-describedby instead of replacing it');
+    assert.equal(ids.length, 2, 'the open tooltip is the second description');
+    assert.equal(document.getElementById(own)?.textContent, 'Fork: edit this extension in the chat');
   });
 });
 
