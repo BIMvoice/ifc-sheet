@@ -15,7 +15,7 @@ import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
-import { buildDrawingSet, drawingArea, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
+import { buildDrawingSet, drawingArea, groundPlan, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
 import { paperLabel } from './paper';
 import { addSchedule } from '@/joinery/schedules';
@@ -28,6 +28,9 @@ import { seedProjectTitleBlock } from './sheets';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
 import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, ProjectView, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
+
+// The lowest plan lives with the set's pure layout (`drawing-set.ts`), so the drafting marks can read it without this module's store.
+export { groundPlan } from './drawing-set';
 
 /** How many proposed sections the starting set draws; the rest wait in the tray. */
 export const SET_SECTIONS = 2;
@@ -50,12 +53,6 @@ function withoutClashes(existing: readonly ProjectSheet[], set: readonly Project
   if (existing.length === 0) return [...set];
   const numbers = numberSheets([...existing.map((s) => ({ ...s, numberOverride: true })), ...set], numberingScheme());
   return set.map((s) => ({ ...s, number: numbers.get(s.id) ?? s.number }));
-}
-
-/** The lowest plan: the one a set's sections are drawn on. */
-export function groundPlan(views: readonly ProjectView[]): PlanProjectView | null {
-  const plans = views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.site);
-  return plans.sort((a, b) => a.level.elevation - b.level.elevation)[0] ?? null;
 }
 
 /** The sections the model suggests, cut on its lowest plan. Empty until the geometry is there. */

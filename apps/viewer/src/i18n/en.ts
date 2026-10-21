@@ -114,6 +114,7 @@ import { sheetsEn } from './catalogues/sheets.en';
 import { titleBlockSourcesEn } from './catalogues/title-block-sources.en';
 import { draftSetEn } from './catalogues/draft-set.en';
 import { issueEn } from './catalogues/issue.en';
+import { revisionsEn } from './catalogues/revisions.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
 import { checkEn } from './catalogues/check.en';
 import { checkReadyEn } from './catalogues/check-ready.en';
@@ -197,6 +198,7 @@ export const en = {
   ...titleBlockSourcesEn,
   ...draftSetEn,
   ...issueEn,
+  ...revisionsEn,
   ...annotateAllEn,
   ...checkEn,
   ...checkReadyEn,

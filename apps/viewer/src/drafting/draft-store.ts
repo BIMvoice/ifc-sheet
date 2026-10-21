@@ -11,7 +11,7 @@
 
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
-import type { ProjectSheet, ProjectView } from '@/project/types';
+import type { ProjectRevision, ProjectSheet, ProjectView } from '@/project/types';
 import { diffById, isEmptyDelta, redoDelta, undoDelta, type Delta } from './step-delta';
 import type { DraftEntity, DraftParamValue, EntityShape } from './types';
 
@@ -19,13 +19,21 @@ const HISTORY_LIMIT = 200;
 
 /**
  * One undo step: the drafts as they were, or, for a grouped step that also
- * changed the project's views and sheets (a draft set), what it added,
- * removed and changed. A grouped step is undone by taking back just that, so
- * whatever was added after it stays.
+ * changed the project's views, sheets or revision records (a draft set, a
+ * revision removed with its clouds), what it added, removed and changed. A
+ * grouped step is undone by taking back just that, so whatever was added after
+ * it stays. Revision records are kept oldest first, so their order before and
+ * after the step is kept too.
  */
+interface Group {
+  drafts: Delta<DraftEntity>;
+  views: Delta<ProjectView>;
+  sheets: Delta<ProjectSheet>;
+  revisions: Delta<ProjectRevision> & { before: string[]; after: string[] };
+}
 type Step =
   | { drafts: DraftEntity[] }
-  | { group: { drafts: Delta<DraftEntity>; views: Delta<ProjectView>; sheets: Delta<ProjectSheet> } };
+  | { group: Group };
 
 let past: Step[] = [];
 let future: Step[] = [];
@@ -71,8 +79,19 @@ export function runAsOneUndoStep(change: () => void): void {
   }
   const after = useProjectStore.getState();
   if (wasGrouping) return;
-  const group = { drafts: diffById(before.drafts, after.drafts), views: diffById(before.views, after.views), sheets: diffById(before.sheets, after.sheets) };
-  if (!isEmptyDelta(group.drafts) || !isEmptyDelta(group.views) || !isEmptyDelta(group.sheets)) pushStep({ group });
+  const revisionsBefore = before.revisions ?? [];
+  const revisionsAfter = after.revisions ?? [];
+  const group: Group = {
+    drafts: diffById(before.drafts, after.drafts), views: diffById(before.views, after.views), sheets: diffById(before.sheets, after.sheets),
+    revisions: { ...diffById(revisionsBefore, revisionsAfter), before: revisionsBefore.map((r) => r.id), after: revisionsAfter.map((r) => r.id) },
+  };
+  if (!isEmptyDelta(group.drafts) || !isEmptyDelta(group.views) || !isEmptyDelta(group.sheets) || !isEmptyDelta(group.revisions)) pushStep({ group });
+}
+
+/** `list` in the order of the ids in `order`; anything not in it after, as it was. */
+function inOrder<T extends { id: string }>(list: T[], order: readonly string[]): T[] {
+  const at = new Map(order.map((id, i) => [id, i]));
+  return list.map((t, i) => ({ t, k: at.get(t.id) ?? order.length + i })).sort((a, b) => a.k - b.k).map((x) => x.t);
 }
 
 /** The step Redo needs when `step` is undone: a snapshot step records the state it replaced; a grouped step is its own inverse. */
@@ -83,13 +102,21 @@ function currentLike(step: Step): Step {
 function revert(step: Step): void {
   if (!('group' in step)) { useProjectStore.setState({ drafts: step.drafts, dirty: true }); return; }
   const { group } = step;
-  useProjectStore.setState((s) => ({ drafts: undoDelta(s.drafts, group.drafts), views: undoDelta(s.views, group.views), sheets: undoDelta(s.sheets, group.sheets), dirty: true }));
+  useProjectStore.setState((s) => ({
+    drafts: undoDelta(s.drafts, group.drafts), views: undoDelta(s.views, group.views), sheets: undoDelta(s.sheets, group.sheets),
+    ...(isEmptyDelta(group.revisions) ? {} : { revisions: inOrder(undoDelta(s.revisions ?? [], group.revisions), group.revisions.before) }),
+    dirty: true,
+  }));
 }
 
 function reapply(step: Step): void {
   if (!('group' in step)) { useProjectStore.setState({ drafts: step.drafts, dirty: true }); return; }
   const { group } = step;
-  useProjectStore.setState((s) => ({ drafts: redoDelta(s.drafts, group.drafts), views: redoDelta(s.views, group.views), sheets: redoDelta(s.sheets, group.sheets), dirty: true }));
+  useProjectStore.setState((s) => ({
+    drafts: redoDelta(s.drafts, group.drafts), views: redoDelta(s.views, group.views), sheets: redoDelta(s.sheets, group.sheets),
+    ...(isEmptyDelta(group.revisions) ? {} : { revisions: inOrder(redoDelta(s.revisions ?? [], group.revisions), group.revisions.after) }),
+    dirty: true,
+  }));
 }
 
 export function undoDrafts(): boolean {

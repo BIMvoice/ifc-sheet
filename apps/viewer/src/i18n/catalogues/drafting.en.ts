@@ -14,6 +14,7 @@ export const draftingEn = {
   'drafting.cmd.line': 'LINE',
   'drafting.cmd.polyline': 'PLINE',
   'drafting.cmd.rectangle': 'RECTANGLE',
+  'drafting.cmd.revcloud': 'REVCLOUD',
   'drafting.cmd.circle': 'CIRCLE',
   'drafting.cmd.arc': 'ARC',
   'drafting.cmd.erase': 'ERASE',

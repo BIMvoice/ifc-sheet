@@ -81,10 +81,12 @@ export function useRegisterRows(wanted = true): RegisterRow[] {
   const titleBlock = useProjectStore((s) => s.titleBlock);
   const issues = useProjectStore((s) => s.issues);
   const schedules = useProjectStore((s) => s.schedules);
+  const revisions = useProjectStore((s) => s.revisions);
+  const drafts = useProjectStore((s) => s.drafts);
   const asIndicated = t('sheets.asIndicated');
   return useMemo(
-    () => (wanted ? sharedRegisterRows({ sheets, titleBlock, issues, asIndicated, schedules }) : NO_ROWS),
-    [wanted, sheets, titleBlock, issues, schedules, asIndicated],
+    () => (wanted ? sharedRegisterRows({ sheets, titleBlock, issues, asIndicated, schedules, revisions, drafts }) : NO_ROWS),
+    [wanted, sheets, titleBlock, issues, schedules, asIndicated, revisions, drafts],
   );
 }
 

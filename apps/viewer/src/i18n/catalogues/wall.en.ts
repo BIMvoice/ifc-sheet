@@ -54,6 +54,7 @@ export const wallEn = {
   'wall.tool.dimension': 'Dimension',
   'wall.tool.dimension.title': 'Measured, not typed',
   'wall.tool.dimension.body': 'Click two points; keep clicking and the chain continues. Every length is read from the model.',
+  'wall.tool.dimension.hint': 'Click to continue the chain · Esc to stop',
   'wall.tool.dimension.all': 'Dimension the whole plan',
   'wall.tool.tag.all': 'Tag everything',
   'wall.tool.level.all': 'Mark all levels',
