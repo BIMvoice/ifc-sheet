@@ -112,6 +112,7 @@ import { exportViewDxf } from './view-dxf';
 import { viewOmits } from '@/project/discipline-facts';
 
 import { planOverlays } from '@/project/plan-overlays';
+import { graphicStandardOf } from '@/drafting/graphic-standard';
 
 import { viewMaterials } from '@/project/material-resolver';
 
@@ -119,6 +120,7 @@ import { membraneOverlays } from '@/project/membrane-overlays';
 
 import { partHostType } from '@/project/part-host';
 
+import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOverrideRules } from '@/project/view-graphics';
 
 import { capturePointer } from '@/lib/pointer-capture';
@@ -186,11 +188,17 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const graphics = view.graphics;
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
+  const phaseSource = useProjectStore((st) => st.phaseSource);
+  // The view's phases (a Status edit counts): which elements it shows, and each one's phase.
+  const phases = useMemo(() => {
+    void mutationVersionForMaterials;
+    return phaseViewOf(graphics, phaseSource);
+  }, [graphics, phaseSource, mutationVersionForMaterials]);
   const discipline = view.kind === 'plan' ? view.discipline : undefined;
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
-    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing)) : null;
-  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials]);
+    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing), phases) : null;
+  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases]);
   const overrideRules = useMemo(() => viewOverrideRules(graphics), [graphics]);
   const overrideEngine = useMemo(() => new GraphicOverrideEngine(overrideRules), [overrideRules]);
   const useIfcMaterials = (graphics?.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId) === DEFAULT_VIEW_PRESET;
@@ -257,7 +265,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
 
   const exportDxf = () => exportViewDxf({
     view, drawing: shown, axis, drafts: entities, layers, extraPatterns, symbols: liveSymbols,
-    overlays: [...(plane ? planOverlays(view, plane, runtimeGeometry?.meshes, useProjectStore.getState().symbolFlips, hidden, shown) : []), ...membraneOverlays(shown)],
+    overlays: [...(plane ? planOverlays(view, plane, phaseMeshes(runtimeGeometry?.meshes, phases), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens) : []), ...membraneOverlays(shown)],
   });
 
   const command = runningCommand();
@@ -313,6 +321,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
             transform={viewTransform}
             showHiddenLines={showHiddenLines}
             overrideEngine={overrideEngine}
+            graphics={graphics}
             overridesEnabled={overrideRules.length > 0}
             entityColorMap={materialColors}
             useIfcMaterials={useIfcMaterials}
@@ -322,7 +331,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
         <ViewportState state={viewportState(entry, view.kind)} />
-        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} transform={viewTransform} axis={axis} />
+        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
         <GridLayer view={view} plane={plane ?? null} drawing={shown} transform={viewTransform} axis={axis} />
         </div>

@@ -13,6 +13,7 @@ import {
   DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, STANDARD,
   type ArrowKind, type DimStyle, type FontKind, type LayerGroup, type LengthUnit, type TextPlacement, type TextStyle,
 } from '@/drafting/styles';
+import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 
 type Raw = Record<string, unknown>;
 const isObject = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -44,9 +45,12 @@ function withStandard<T extends { id: string }>(list: T[], standard: T): T[] {
   return list.some((s) => s.id === STANDARD) ? list : [{ ...standard }, ...list];
 }
 
-export function readStandards(raw: Raw): { textStyles: TextStyle[]; dimStyles: DimStyle[]; layerGroups: LayerGroup[] } {
+export function readStandards(raw: Raw): { textStyles: TextStyle[]; dimStyles: DimStyle[]; layerGroups: LayerGroup[]; graphicStandard?: string } {
   const list = (key: string) => (Array.isArray(raw[key]) ? (raw[key] as unknown[]).filter(isObject) : []);
+  // Kept as named, known or not: loading the project falls back to the default for an unknown id, and says so (`loadProjectDocument`).
+  const standard = typeof raw.graphicStandard === 'string' && raw.graphicStandard !== DEFAULT_GRAPHIC_STANDARD.id ? raw.graphicStandard : undefined;
   return {
+    ...(standard ? { graphicStandard: standard } : {}),
     textStyles: withStandard(list('textStyles').map(readText), DEFAULT_TEXT_STYLE),
     dimStyles: withStandard(list('dimStyles').map(readDim), DEFAULT_DIM_STYLE),
     layerGroups: list('layerGroups').filter((g) => typeof g.id === 'string').map((g) => ({

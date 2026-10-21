@@ -10,6 +10,7 @@
  * project file opened before its models load loses nothing.
  */
 
+import { resolve } from '@/i18n/registry';
 import type { ElevationDirection, ProjectLevel, ProjectView, PlanProjectView } from './types';
 
 /** Standard architectural plan-cut height above the floor, metres. */
@@ -20,12 +21,8 @@ export const LEVEL_MATCH_TOLERANCE_M = 0.25;
 
 export const ELEVATION_DIRECTIONS: readonly ElevationDirection[] = ['north', 'east', 'south', 'west'];
 
-const ELEVATION_NAMES: Record<ElevationDirection, string> = {
-  north: 'North Elevation',
-  east: 'East Elevation',
-  south: 'South Elevation',
-  west: 'West Elevation',
-};
+/** The default name of an elevation, in the active language: stored as plain text when the view is made. */
+export const elevationName = (direction: ElevationDirection): string => resolve(`names.view.${direction}` as const);
 
 export interface StoreyInput {
   name: string;
@@ -106,7 +103,7 @@ export function defaultViews(levels: readonly ProjectLevel[], now = Date.now()):
   const views: ProjectView[] = [];
   for (const level of levels) views.push(planViewFor(level, views, now));
   for (const direction of ELEVATION_DIRECTIONS) {
-    views.push({ id: freshProjectId('view'), kind: 'elevation', name: ELEVATION_NAMES[direction], direction, auto: true, createdAt: now });
+    views.push({ id: freshProjectId('view'), kind: 'elevation', name: elevationName(direction), direction, auto: true, createdAt: now });
   }
   views.push({ id: freshProjectId('view'), kind: '3d', name: '{3D}', viewpoint: null, auto: true, createdAt: now });
   return views;
