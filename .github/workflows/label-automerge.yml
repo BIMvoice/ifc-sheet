@@ -1,0 +1,71 @@
+# The `ready-to-merge` label turns on auto-merge for a pull request; removing
+# it turns auto-merge off again. Auto-merge then waits for the required checks
+# and merges once they are green, so the label never bypasses CI.
+#
+# Why pull_request_target: a pull request from a fork gets a read-only token
+# under `pull_request`, so enabling auto-merge would fail there. This is safe
+# because the workflow has NO checkout step and runs no code from the pull
+# request: it only calls the GitHub API with values from the event, passed
+# through env vars (never interpolated into the script).
+#
+# Who may use it: the person who added the label (`sender`) must have write or
+# admin permission, read from the collaborators API and not from the event.
+# Anyone with triage rights can add a label, so the label alone proves nothing.
+name: Label auto-merge
+
+on:
+  pull_request_target:
+    types: [labeled, unlabeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: label-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  enable:
+    name: Enable auto-merge
+    if: github.event.action == 'labeled' && github.event.label.name == 'ready-to-merge'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      ACTOR: ${{ github.event.sender.login }}
+    steps:
+      - name: Check the labeller has write access
+        id: perm
+        run: |
+          permission=$(gh api "repos/$GH_REPO/collaborators/$ACTOR/permission" --jq .permission)
+          echo "$ACTOR has permission: $permission"
+          case "$permission" in
+            admin|write) echo "allowed=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "allowed=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Enable auto-merge
+        if: steps.perm.outputs.allowed == 'true'
+        run: gh pr merge "$PR" --auto --merge
+
+      - name: Remove the label when the labeller may not use it
+        if: steps.perm.outputs.allowed != 'true'
+        run: |
+          echo "::warning::$ACTOR needs write access to use ready-to-merge; removing the label."
+          gh pr edit "$PR" --remove-label ready-to-merge
+
+  disable:
+    name: Disable auto-merge
+    if: github.event.action == 'unlabeled' && github.event.label.name == 'ready-to-merge'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      # Turning auto-merge off is always safe, so no permission check here.
+      - run: gh pr merge "$PR" --disable-auto

@@ -37,6 +37,10 @@ These are the promises IfcSheet makes to the people who use it. A change that br
 - **No silent failures.** No empty `catch`, no `as any`, no `@ts-ignore`. If something cannot be done, tell the user in words.
 - **Words on screen go through the translation catalogues**, like the code around them.
 
+## Merging
+
+A maintainer (write or admin access) merges by adding the `ready-to-merge` label to a pull request. That turns on auto-merge: the pull request merges by itself once every required check is green, and removing the label turns auto-merge off again. A label added by anyone without write access is removed and does nothing.
+
 Setup, build and test commands are in [AGENTS.md](AGENTS.md).
 
 ## Pull requests

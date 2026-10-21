@@ -104,7 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let content = std::fs::read(&args[0])?;
     let input_bytes = content.len();
-    let input_sha256 = format!("{:x}", Sha256::digest(&content));
+    let input_sha256 = hex::encode(Sha256::digest(&content));
     let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
     let (result, counters) = pool.install(|| process_and_drain(&content));
     drop(content);
@@ -136,7 +136,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut writer = HashWriter { inner: BufWriter::new(file), sha256: Sha256::new() };
         serde_json::to_writer(&mut writer, &Capture(&result)).map_err(std::io::Error::other)?;
         writer.flush()?;
-        Ok(format!("{:x}", writer.sha256.finalize()))
+        Ok(hex::encode(writer.sha256.finalize()))
     })?;
     println!("{}", serde_json::to_string_pretty(&json!({
         "schemaVersion": 1,
@@ -208,7 +208,7 @@ mod tests {
         let parsed: Value = serde_json::from_slice(&writer.inner).expect("parse capture");
         assert_eq!(parsed[0]["positions"][0].as_f64(), Some(f64::from(meshes[0].positions[0])));
         assert_eq!(writer.inner, serde_json::to_vec(&json!(meshes)).expect("original capture layout"));
-        assert_eq!(format!("{:x}", writer.sha256.finalize()),
-            format!("{:x}", Sha256::digest(&writer.inner)));
+        assert_eq!(hex::encode(writer.sha256.finalize()),
+            hex::encode(Sha256::digest(&writer.inner)));
     }
 }

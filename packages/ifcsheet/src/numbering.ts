@@ -84,24 +84,68 @@ export function nextNumber(sheets: readonly Pick<ProjectSheet, 'number'>[], grou
   }
 }
 
+/**
+ * The number just before the general series' first (A-000 by default, A00 in a
+ * continuous scheme): the drawing register's, so it opens the set ahead of
+ * every number the scheme hands out. `null` when the series starts at 0.
+ */
+export function registerSlot(scheme: NumberingScheme = DEFAULT_SCHEME): string | null {
+  const p = scheme.groups[scheme.continuous ? 'plans' : 'general'];
+  const n = p.start - p.step;
+  return n >= 0 ? formatNumber(scheme.discipline, p, n) : null;
+}
+
+/** The register's number: its slot (`registerSlot`) while free, else the first free number of the general series. */
+export function registerNumberIn(sheets: readonly Pick<ProjectSheet, 'number'>[], scheme: NumberingScheme = DEFAULT_SCHEME): string {
+  const slot = registerSlot(scheme);
+  return slot && !sheets.some((s) => key(s.number) === key(slot)) ? slot : nextNumber(sheets, 'general', scheme);
+}
+
 export type OverrideMode = 'keep' | 'renumber';
 
-type Numbered = Pick<ProjectSheet, 'id' | 'number' | 'series' | 'numberOverride'>;
+type Numbered = Pick<ProjectSheet, 'id' | 'number' | 'series' | 'numberOverride'> & Partial<Pick<ProjectSheet, 'viewports'>>;
+
+/** The page a sheet shows of a document split over several sheets, and that document; `null` for a first page or a sheet of its own. */
+function continuationPage(sheet: Numbered): { viewId: string; page: number } | null {
+  const vp = (sheet.viewports ?? []).find((v) => (v.page ?? 0) > 0);
+  return vp ? { viewId: vp.viewId, page: vp.page ?? 0 } : null;
+}
+
+const showsFirstPage = (sheet: Numbered, viewId: string): boolean => (sheet.viewports ?? []).some((v) => v.viewId === viewId && (v.page ?? 0) === 0);
 
 /**
  * The number of every sheet under `scheme`, in the order given (the set's).
  * A group's sheets take its run in turn; a sheet whose number was typed by
  * hand keeps it when `overrides` is `keep`, and the run skips that number so
  * two sheets never share one. Sheet id to number.
+ *
+ * `registers` are the ids of the drawing register's documents: the sheet with
+ * its first page takes the register's slot (`registerSlot`) while that is
+ * free. A continuation sheet (a viewport showing page 1, 2… of a document) is
+ * numbered after the sheet with the first page, `A-000.1`, and takes no number
+ * of the scheme's runs.
  */
-export function numberSheets(sheets: readonly Numbered[], scheme: NumberingScheme, overrides: OverrideMode = 'keep'): Map<string, string> {
+export function numberSheets(sheets: readonly Numbered[], scheme: NumberingScheme, overrides: OverrideMode = 'keep', registers: ReadonlySet<string> = new Set()): Map<string, string> {
   const out = new Map<string, string>();
   const kept = (s: Numbered): boolean => overrides === 'keep' && s.numberOverride === true;
   const taken = new Set(sheets.filter(kept).map((s) => key(s.number)));
   const ordinal = new Map<string, number>();
+  const slot = registerSlot(scheme);
+  const continuations: { sheet: Numbered; first: Numbered; page: number }[] = [];
   for (const sheet of sheets) {
     if (kept(sheet)) {
       out.set(sheet.id, sheet.number);
+      continue;
+    }
+    const cont = continuationPage(sheet);
+    const first = cont ? sheets.find((s) => s !== sheet && showsFirstPage(s, cont.viewId)) : undefined;
+    if (cont && first) {
+      continuations.push({ sheet, first, page: cont.page });
+      continue;
+    }
+    if (slot && !taken.has(key(slot)) && (sheet.viewports ?? []).some((v) => registers.has(v.viewId) && (v.page ?? 0) === 0)) {
+      taken.add(key(slot));
+      out.set(sheet.id, slot);
       continue;
     }
     const group = numberGroupOf(sheet);
@@ -115,6 +159,13 @@ export function numberSheets(sheets: readonly Numbered[], scheme: NumberingSchem
     taken.add(key(number));
     out.set(sheet.id, number);
   }
+  for (const { sheet, first, page } of continuations) {
+    const base = out.get(first.id) ?? first.number;
+    let n = page;
+    while (taken.has(key(`${base}.${n}`))) n++;
+    taken.add(key(`${base}.${n}`));
+    out.set(sheet.id, `${base}.${n}`);
+  }
   return out;
 }
 
@@ -127,8 +178,8 @@ export interface RenumberRow {
 }
 
 /** The old to new table a renumbering would apply, in set order. */
-export function planRenumber(sheets: readonly Numbered[], scheme: NumberingScheme, overrides: OverrideMode = 'keep'): RenumberRow[] {
-  const numbers = numberSheets(sheets, scheme, overrides);
+export function planRenumber(sheets: readonly Numbered[], scheme: NumberingScheme, overrides: OverrideMode = 'keep', registers: ReadonlySet<string> = new Set()): RenumberRow[] {
+  const numbers = numberSheets(sheets, scheme, overrides, registers);
   return sheets.map((s) => ({ id: s.id, from: s.number, to: numbers.get(s.id) ?? s.number, kept: overrides === 'keep' && s.numberOverride === true }));
 }
 

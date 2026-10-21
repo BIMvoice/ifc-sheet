@@ -83,7 +83,7 @@ fn plan_transfer(
             "Transfer registration digest does not match its frozen correspondence request".into(),
         );
     }
-    if format!("{:x}", Sha256::digest(bytes)) != registration.target_frame.asset_sha256 {
+    if hex::encode(Sha256::digest(bytes)) != registration.target_frame.asset_sha256 {
         return Err("Transfer target snapshot does not match the frozen registration frame".into());
     }
     let source_frame = TransferFrame {
@@ -222,7 +222,7 @@ fn digest(
         }
     }
     serde_json::to_writer(&mut hash, request).map_err(|e| e.to_string())?;
-    Ok(format!("{:x}", hash.0.finalize()))
+    Ok(hex::encode(hash.0.finalize()))
 }
 #[cfg(test)]
 #[path = "transfer_tests.rs"]
