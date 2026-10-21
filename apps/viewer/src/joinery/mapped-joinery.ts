@@ -86,7 +86,7 @@ interface Memo {
   key: string;
   byElement: Map<number, DrawnJoinery | null>;
   /** Every occurrence's type, read once for this key (`typeIndex`). */
-  types?: Map<number, number>;
+  types?: Map<number, number | null>;
 }
 const memo = new Map<string, Memo>();
 // Distinct objects get distinct numbers, so a key changes whenever the mapping or the catalogue is replaced.

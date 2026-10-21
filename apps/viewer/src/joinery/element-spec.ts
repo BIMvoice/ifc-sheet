@@ -22,7 +22,7 @@ interface ModelMemo {
   stamp: string;
   byElement: Map<number, JoineryElement | null>;
   /** Every occurrence's type, read once for this stamp (`typeIndex`). */
-  types?: Map<number, number>;
+  types?: Map<number, number | null>;
 }
 
 const memo = new Map<string, ModelMemo>();

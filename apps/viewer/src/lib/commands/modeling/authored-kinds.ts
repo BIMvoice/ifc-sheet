@@ -143,10 +143,10 @@ export function typeOf(model: LiveModel, expressId: number): number | null {
 }
 
 /** `relatingOf` for every related object at once. Where one is in more than one relationship, the first wins, as in `relatingOf`. */
-function relatingIndex(model: LiveModel, relType: RelType): Map<number, number> {
-  const index = new Map<number, number>();
+function relatingIndex(model: LiveModel, relType: RelType): Map<number, number | null> {
+  const index = new Map<number, number | null>();
   for (const rel of readRelatedLists(model.dataStore, relType, model.view)) {
-    for (const id of rel.relatedIds) if (!index.has(id)) index.set(id, rel.relatingId);
+    for (const id of rel.relatedIds) if (!index.has(id)) index.set(id, rel.relatingId ?? null);
   }
   return index;
 }
@@ -156,7 +156,7 @@ function relatingIndex(model: LiveModel, relType: RelType): Map<number, number> 
  * IfcRelDefinesByType instead of one per element. A snapshot: rebuild it when
  * the overlay changes.
  */
-export function typeIndex(model: LiveModel): Map<number, number> {
+export function typeIndex(model: LiveModel): Map<number, number | null> {
   return relatingIndex(model, 'IfcRelDefinesByType');
 }
 
@@ -172,7 +172,7 @@ export interface RelationReads {
  * cannot change.
  */
 export function relationSnapshot(model: LiveModel): RelationReads {
-  const built = new Map<RelType, Map<number, number>>();
+  const built = new Map<RelType, Map<number, number | null>>();
   return {
     relatingOf(relType, expressId) {
       let index = built.get(relType);
