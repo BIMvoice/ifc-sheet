@@ -12,7 +12,7 @@ import { IMPORT_MAX_CHARS, KEY_BINDINGS_STORAGE_KEY, loadKeyBindings, rebindActi
 import { WALL_KEY_COMMANDS, type WallKeyId } from '@/lib/commands/wall-key-commands';
 import { resolveEnglish as t } from '@/i18n/registry';
 import { useDraftingKeys } from '../drafting/useDraftingKeys.js';
-import { toggleOrtho, toggleSnap, useDraftingSession } from '@/drafting/session';
+import { toggleSnap, useDraftingSession } from '@/drafting/session';
 import { KeyboardSettings } from './KeyboardSettings.js';
 import { claimWallKey, useWallKeys, type WallHandlers } from './wall-key-bus.js';
 import { steppedHandlers, type SteppedActions } from './stepped-keys.js';
