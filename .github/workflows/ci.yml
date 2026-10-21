@@ -2,8 +2,44 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-# Checks every pull request gets: typecheck, tests, the gate scripts and, when
-# Rust changed, cargo clippy and cargo test (#66).
+# Checks for pull requests and for main: build wasm, typecheck, package tests,
+# viewer tests, the gate scripts and, for Rust, cargo clippy and cargo test
+# (#66).
+#
+# A pull request runs only the jobs its changed files can affect. The `changes`
+# job reads `git diff --name-only HEAD^1 HEAD` (HEAD is the merge commit GitHub
+# builds for the pull request, so HEAD^1 is the base it was merged onto) and
+# sets one flag per job:
+#   - docs only (docs/, *.md, mkdocs.yml, requirements-docs.txt, .changeset/,
+#     LICENSE*): only the gates run.
+#   - Rust only (rust/, apps/server/, Cargo.toml, *.rs, rust-toolchain.toml,
+#     .cargo/): wasm, typecheck, package tests and Rust run; the viewer shards
+#     do not. Package tests run because every package's turbo hash includes
+#     rust/** (turbo.json globalDependencies), so turbo selects them all.
+#   - JavaScript: Rust does not run. Package tests run only for the packages
+#     the pull request changed and their dependents (turbo
+#     `--filter='...[HEAD^1]'`); the viewer shards run unless every change is
+#     docs, Rust or an app other than apps/viewer.
+# Anything not listed above counts as JavaScript, so an unclassified path runs
+# more, never less. A change under .github/ (this workflow, the shared
+# actions), or to pnpm-lock.yaml or Cargo.lock, runs everything. A push to main
+# and a merge-queue entry always run everything, with the full package set.
+#
+# Skipped jobs make the per-job checks unusable as required checks (a skipped
+# matrix job reports the unexpanded name "Viewer tests (shard
+# ${{ matrix.shard }})"), so the last job, "CI passed", needs every other job
+# and fails if any of them failed or was cancelled. Skipped counts as passed.
+# The `main` ruleset (repository setting, not code) requires "CI passed" only.
+#
+# Caches, besides cargo's (Swatinem/rust-cache, written from main only):
+#   - the wasm build (packages/wasm/pkg), keyed on a hash of everything the
+#     build reads, so a pull request that leaves Rust alone restores it instead
+#     of compiling it;
+#   - turbo's local cache (.turbo/cache), keyed on pnpm-lock.yaml and the
+#     commit, written only by the Typecheck job on a push to main and read by
+#     every job that runs turbo. Before it is saved it is cut down to the tasks
+#     that run produced, and the @ifc-lite/wasm task is dropped so a turbo hit
+#     can never put an older wasm build over this run's artifact.
 #
 # No secrets are used, so Dependabot and fork pull requests run the same checks.
 # Nothing here is continue-on-error: a failing test is a red check.
@@ -11,10 +47,6 @@
 # The gate scripts are compared against the pull request's base commit (see
 # scripts/ci-gates-vs-base.mjs): some of them already fail on main, and a pull
 # request should fail only for what it adds.
-#
-# To make these required, add the check names to the `main` ruleset (repository
-# setting, not code): Build wasm, Typecheck, Package tests, Viewer tests
-# (shard 0..7), Gates vs base, Rust.
 #
 # The gates job also runs, directly and not against the base, the checks for
 # what review kept finding by hand: test fixtures under apps/*/public/, tests
@@ -48,30 +80,107 @@ permissions:
   contents: read
 
 jobs:
+  # Decides which of the jobs below a pull request needs; see the header.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      all: ${{ steps.flags.outputs.all }}
+      ci: ${{ steps.flags.outputs.ci }}
+      code: ${{ steps.flags.outputs.code }}
+      docs_only: ${{ steps.flags.outputs.docs_only }}
+      packages: ${{ steps.flags.outputs.packages }}
+      rust: ${{ steps.flags.outputs.rust }}
+      viewer: ${{ steps.flags.outputs.viewer }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The merge commit and its first parent, the base.
+          fetch-depth: 2
+
+      - name: What did this change touch?
+        id: flags
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -eu
+          out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; echo "$1=$2"; }
+          everything() {
+            echo "$1: running everything."
+            out all true; out ci "$2"; out code true; out docs_only false
+            out packages true; out rust true; out viewer true
+            exit 0
+          }
+
+          [ "$EVENT" = "pull_request" ] || everything "Event is $EVENT" false
+
+          changed="$RUNNER_TEMP/changed-files.txt"
+          git diff --name-only HEAD^1 HEAD > "$changed"
+          echo "Changed files:"; cat "$changed"
+          [ -s "$changed" ] || everything "No changed files found" false
+
+          # True when some changed file matches / does not match the pattern.
+          # No pipefail on purpose: grep -q may close the pipe early.
+          any() { grep -qE "$1" "$changed"; }
+          any_but() { grep -vE "$1" "$changed" | grep -q .; }
+
+          DOCS='^(docs/|\.changeset/|mkdocs\.yml$|requirements-docs\.txt$|LICENSE)|\.md$'
+          RUST='^(rust/|apps/server/|\.cargo/|rust-toolchain\.toml$)|(^|/)Cargo\.(toml|lock)$|\.rs$'
+
+          if any '^\.github/'; then everything "A change under .github/" true; fi
+          if any '^(pnpm-lock\.yaml|Cargo\.lock)$'; then everything "A lockfile changed" false; fi
+
+          out all false
+          out ci false
+          if any_but "$DOCS"; then out code true; out docs_only false
+          else out code false; out docs_only true; fi
+          # Rust changes reach every package through the wasm build, and turbo
+          # agrees (rust/** is a globalDependency), so they count here.
+          if any_but "$DOCS|^apps/"; then out packages true; else out packages false; fi
+          if any "$RUST"; then out rust true; else out rust false; fi
+          if any '^apps/viewer/' || any_but "$DOCS|$RUST|^apps/"; then out viewer true
+          else out viewer false; fi
+
   # The engine (packages/wasm/pkg) is not committed and IfcSheet's Rust differs
   # from the published @ifc-lite/wasm, so it is built from source once here and
-  # handed to the jobs below as an artifact.
+  # handed to the jobs below as an artifact. The build is cached on a hash of
+  # its inputs, so it is compiled only when one of them changed.
   wasm:
     name: Build wasm
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./.github/actions/setup-wasm-build
+      - name: Restore the wasm build
+        id: wasm-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: packages/wasm/pkg
+          key: wasm-pkg-${{ runner.os }}-${{ hashFiles('rust/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/**', 'scripts/build-wasm.sh', 'scripts/run-build-wasm.mjs', 'packages/wasm/package.json', '.github/actions/setup-wasm-build/**') }}
+
+      - if: steps.wasm-cache.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-wasm-build
         with:
           cache-prefix: ci-wasm
 
       - name: Enable pnpm
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - if: steps.wasm-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @ifc-lite/wasm build
+      - if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @ifc-lite/wasm build
 
       - name: The build produced the runtime and its types
         run: test -f packages/wasm/pkg/ifc-lite_bg.wasm && test -f packages/wasm/pkg/ifc-lite.d.ts
@@ -84,9 +193,14 @@ jobs:
 
   typecheck:
     name: Typecheck
-    needs: wasm
+    needs: [changes, wasm]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Each turbo run writes .turbo/runs/<id>.json, which the cache pruning
+      # below reads.
+      TURBO_RUN_SUMMARY: 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -103,16 +217,58 @@ jobs:
         with:
           name: wasm-pkg
           path: packages/wasm/pkg
+
+      - name: Restore the turbo cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
       - run: pnpm turbo run build --filter='./packages/*'
       - run: pnpm typecheck
 
+      # Keep only the entries this run's tasks used or wrote, so the cache does
+      # not grow with every push, and drop @ifc-lite/wasm (see the header).
+      - name: Prune the turbo cache to this run
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          node --input-type=module <<'EOF'
+          import { readdirSync, readFileSync, rmSync } from "node:fs";
+          const keep = new Set();
+          for (const f of readdirSync(".turbo/runs")) {
+            const run = JSON.parse(readFileSync(`.turbo/runs/${f}`, "utf8"));
+            for (const t of run.tasks) if (t.package !== "@ifc-lite/wasm") keep.add(t.hash);
+          }
+          let removed = 0;
+          for (const f of readdirSync(".turbo/cache")) {
+            if (!keep.has(f.split(/[.-]/)[0])) { rmSync(`.turbo/cache/${f}`, { recursive: true }); removed++; }
+          }
+          console.log(`kept ${keep.size} task hashes, removed ${removed} files`);
+          EOF
+
+      - name: Save the turbo cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+
   package-tests:
     name: Package tests
-    needs: wasm
+    needs: [changes, wasm]
+    if: needs.changes.outputs.packages == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      ALL: ${{ needs.changes.outputs.all }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # turbo's `[HEAD^1]` filter needs the base commit.
+          fetch-depth: 2
 
       - name: Enable pnpm
         run: corepack enable
@@ -127,24 +283,58 @@ jobs:
         with:
           name: wasm-pkg
           path: packages/wasm/pkg
-      - run: pnpm turbo run build --filter='./packages/*'
+
+      - name: Restore the turbo cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
+      # Every package when `changes` says everything runs; otherwise the
+      # packages the pull request changed plus their dependents, without apps/
+      # and examples/ (the viewer has its own job).
+      - name: Which packages
+        run: |
+          scope="$RUNNER_TEMP/turbo-scope"
+          if [ "$ALL" = "true" ]; then
+            echo "Every package under packages/."
+            printf '%s\n' --filter='./packages/*' > "$scope"
+          else
+            printf '%s\n' --filter='...[HEAD^1]' --filter='!./apps/*' --filter='!./examples/*' > "$scope"
+            echo "Changed packages and their dependents:"
+            args=(); while IFS= read -r a; do args+=("$a"); done < "$scope"
+            pnpm turbo run test "${args[@]}" --dry=json \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const t=JSON.parse(s).tasks.filter(t=>t.task==="test").map(t=>t.package);console.log(t.length?t.join("\n"):"(none)")})'
+          fi
+
+      - name: Build
+        run: |
+          args=(); while IFS= read -r a; do args+=("$a"); done < "$RUNNER_TEMP/turbo-scope"
+          pnpm turbo run build "${args[@]}"
       # Two packages at a time: each vitest run already starts a worker per CPU,
       # and turbo's default of ten packages at once on a 4-CPU runner pushed
       # heavy tests past vitest's 5 s limit in whichever package was unlucky
       # (packages/mcp, packages/cache and in-store, on pull requests that did
       # not touch them).
-      # One retry, CI only, for the vitest timeouts under runner load. `--retry=1`
-      # reaches every package's test script; the node:test packages ignore it
-      # (their runner takes no such flag), so only vitest retries. A test that
-      # fails twice still fails the job. The default reporter does not print
-      # retries; `vitest run --reporter=verbose` marks them "(retry x1)".
-      - run: pnpm turbo run test --filter='./packages/*' --concurrency=2 -- --retry=1
+      - name: Test
+        run: |
+          args=(); while IFS= read -r a; do args+=("$a"); done < "$RUNNER_TEMP/turbo-scope"
+          # One retry, CI only, for the vitest timeouts under runner load. `--retry=1`
+          # reaches every package's test script; the node:test packages ignore it
+          # (their runner takes no such flag), so only vitest retries. A test that
+          # fails twice still fails the job. The default reporter does not print
+          # retries; `vitest run --reporter=verbose` marks them "(retry x1)".
+          pnpm turbo run test "${args[@]}" --concurrency=2 -- --retry=1
 
   # The viewer suite is about 15k tests, so it is split by test file across
   # eight runners (TEST_SHARD / TEST_SHARDS, see apps/viewer/package.json).
   viewer-tests:
     name: Viewer tests (shard ${{ matrix.shard }})
-    needs: wasm
+    needs: [changes, wasm]
+    if: needs.changes.outputs.viewer == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -170,6 +360,16 @@ jobs:
         with:
           name: wasm-pkg
           path: packages/wasm/pkg
+
+      - name: Restore the turbo cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
       - run: pnpm turbo run build --filter='./packages/*'
       - name: Viewer tests
         working-directory: apps/viewer
@@ -239,51 +439,50 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/check-changesets.mjs
 
+  # Runs when `changes` says Rust changed: always on main and in the merge
+  # queue, and on a pull request that touches Rust, Cargo.lock, the pinned
+  # toolchain, .cargo/ or anything under .github/.
   rust:
     name: Rust
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      # Pushes to main always run; a pull request runs only when it touches
-      # Rust, the lockfile, the pinned toolchain, .cargo/, the shared wasm
-      # build action or this workflow.
-      - name: Did Rust change?
-        id: changes
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: |
-          if [ "$EVENT" != "pull_request" ]; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if git diff --name-only "$BASE_SHA" HEAD | grep -E '^(rust/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|\.cargo/|\.github/actions/setup-wasm-build/|\.github/workflows/ci\.yml$)'; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "rust=false" >> "$GITHUB_OUTPUT"
-            echo "No Rust changes; skipping."
-          fi
 
       # rust-toolchain.toml pins the nightly; `rustup show` installs it.
       - name: Setup Rust (pinned by rust-toolchain.toml)
-        if: steps.changes.outputs.rust == 'true'
         run: rustup show
 
       - name: Cargo cache
-        if: steps.changes.outputs.rust == 'true'
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: ci
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo clippy
-        if: steps.changes.outputs.rust == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: cargo test
-        if: steps.changes.outputs.rust == 'true'
         run: cargo test --workspace
+
+  # The one check the `main` ruleset requires. Skipped jobs pass; a failed or
+  # cancelled one fails this job.
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [changes, wasm, typecheck, package-tests, viewer-tests, gates, rust]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          bad=$(echo "$NEEDS" | jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key] | join(", ")')
+          if [ -n "$bad" ]; then
+            echo "::error::Not passed: $bad"
+            exit 1
+          fi
