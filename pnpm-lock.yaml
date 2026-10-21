@@ -1471,6 +1471,9 @@ importers:
       dxf-parser:
         specifier: 1.1.2
         version: 1.1.2
+      pdfjs-dist:
+        specifier: 6.3.289
+        version: 6.3.289
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

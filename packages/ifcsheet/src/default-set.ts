@@ -31,13 +31,15 @@ export const SET_SECTIONS = 2;
 
 /** What the set is made from: an opened model, or the same facts from elsewhere. */
 export interface SetModel {
+  /** The project's name in the model, the document's name when none is given. */
+  projectName?: string;
   storeys: readonly StoreyInput[];
   extent: ModelExtent | null;
   proposalInput(level: ProjectLevel): ProposalInput | null;
 }
 
 export interface DefaultSetOptions {
-  /** The project's name; the untitled name in the installed language when absent. */
+  /** The project's name; else the model's (`SetModel.projectName`), else the untitled name in the installed language. */
   name?: string;
   /** Creation time stamped on views and sheets, ms (default: now). */
   now?: number;
@@ -176,7 +178,7 @@ export function generateDefaultSet(model: SetModel, options: DefaultSetOptions =
   const notes = [...planner.notes, ...groupsThatDoNotFit(planner.views, model.extent).map((kind: SetGroup): SetNote => ({ key: 'draftSet.note.noFit', params: { kind } }))];
   return {
     document: {
-      name: options.name ?? nameOf('names.project.untitled'),
+      name: options.name ?? (model.projectName || nameOf('names.project.untitled')),
       models: [],
       views: planner.views,
       sheets,

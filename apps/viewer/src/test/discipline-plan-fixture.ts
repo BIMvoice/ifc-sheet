@@ -66,8 +66,8 @@ function serveWasmFromDisk(): void {
 
 const WASM = new URL('../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
 
-/** The FZK-Haus sample, fetched by `pnpm fixtures` (not in the repo). */
-export const FZK_HAUS = fileURLToPath(new URL('../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url));
+/** The FZK-Haus sample, committed beside these helpers (the same file `pnpm fixtures` fetches to `tests/models/ara3d/`), so CI runs what reads it. */
+export const FZK_HAUS = fileURLToPath(new URL('./__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 
 /** Why `path` cannot be loaded here (the skip message), or false when it can. */
 export function planModelMissing(path: string): string | false {

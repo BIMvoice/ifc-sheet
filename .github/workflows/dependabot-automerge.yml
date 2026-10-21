@@ -1,0 +1,46 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# Turns on auto-merge for Dependabot's semver-minor and semver-patch pull
+# requests (including the grouped ones, whose update type is the largest in
+# the group), so they merge as soon as the required check, "CI passed", is
+# green. Semver-major updates are left for a person to review and merge.
+#
+# GitHub's documented pattern: the `pull_request` event, not
+# `pull_request_target`, and no checkout, so no code from the pull request runs
+# here. A Dependabot-triggered `pull_request` run has no secrets and a
+# read-only token unless `permissions` grants more; the two write scopes below
+# are exactly what `gh pr merge --auto` needs.
+#
+# Only when Dependabot itself opened the pull request and triggered this run:
+# if a person pushes to the branch, github.actor is that person and nothing is
+# turned on.
+
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    name: Dependabot auto-merge
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for minor and patch updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --auto --merge "$PR_URL"
