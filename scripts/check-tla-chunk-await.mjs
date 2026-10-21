@@ -72,6 +72,11 @@
  * below runs over an empty set, so "0 violations" would mean "0 chunks
  * examined". Its own behaviour is pinned by check-tla-chunk-await.test.mjs.
  *
+ * It also fails on a re-export facade (`export { a as b } from "./A.js"`,
+ * A exporting `__tla`) that exports no `__tla` of its own, since dynamic
+ * importers of the facade await only the facade's `__tla` (see
+ * `reExportViolations` below).
+ *
  * It also fails if the plugin re-printed any chunk it rewrote (every chunk
  * that mentions `__tla`, entry and worker chunks included) unminified (see
  * `unminified` below).
@@ -84,6 +89,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { deploymentAssetsDir } from './lib/deployment-assets-dir.mjs';
 import { chunkFormatting, MIN_PUNCTUATION, rewrittenByPlugin } from './lib/tla-chunk-prologue.mjs';
+import { reportUnsafeReExports, unsafeReExports } from './lib/tla-reexport-facades.mjs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -253,6 +259,7 @@ if (unminified.length > 0) {
 
 const violations = [];
 const sideEffectViolations = [];
+const reExportViolations = [];
 let staticTlaImports = 0;
 let sideEffectImports = 0;
 
@@ -306,6 +313,9 @@ for (const [file, text] of sources) {
     if (!tlaExporters.has(importedFile)) continue;
     sideEffectViolations.push({ importer: file, imported: importedFile });
   }
+
+  // Re-export facades that drop the wait: scripts/lib/tla-reexport-facades.mjs.
+  reExportViolations.push(...unsafeReExports(file, text, tlaExporters));
 }
 
 if (violations.length > 0) {
@@ -340,7 +350,9 @@ if (sideEffectViolations.length > 0) {
   );
 }
 
-if (violations.length > 0 || sideEffectViolations.length > 0) {
+if (reExportViolations.length > 0) reportUnsafeReExports(reExportViolations);
+
+if (violations.length > 0 || sideEffectViolations.length > 0 || reExportViolations.length > 0) {
   process.exit(1);
 }
 
@@ -349,6 +361,7 @@ console.log(
     `${staticTlaImports} static import(s) of a __tla-wrapped chunk checked ` +
     `(${tlaExporters.size} __tla-wrapped chunk(s) among ${files.length} emitted chunk(s)); ` +
     `${sideEffectImports} bare side-effect import(s) checked; ` +
+    `0 re-export facades missing __tla; ` +
     `all ${tlaChunks.length} plugin-rewritten chunk(s) minified.`,
 );
 
