@@ -16,6 +16,7 @@ import { projectDocument, useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 import { useFileCommands } from '../toolbar/useFileCommands';
+import { FeedbackButton } from '../feedback/FeedbackDialog';
 import { WallView } from '../wall/WallView';
 import { setDrawer, setPanel, useWallNav } from '../wall/wall-nav';
 import { WhatChanged } from '../whatchanged/WhatChanged';
@@ -67,6 +68,7 @@ export function IfcSheetShell() {
             {t('wall.shell.saveProject')}{dirty ? ' •' : ''}
           </button>
         ) : null}
+        <FeedbackButton className={quiet} />
         <button type="button" aria-label={t('ifcsheetTour.helpLabel')} className={quiet} onClick={reopenTour}>{t('ifcsheetTour.help')}</button>
       </header>
       <div className="min-h-0 flex-1">
