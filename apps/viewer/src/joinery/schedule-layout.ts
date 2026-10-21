@@ -155,7 +155,12 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
 
 /** The schedule as CSV (one line per type), the counts per level as columns. */
 export function scheduleCsv(data: ScheduleData, labels: ScheduleLabels): string {
-  const quote = (v: string) => escapeCsvCell(v);
+  // Also quote a `;`: Excel in a Romanian (or most European) locale splits a
+  // double-clicked .csv on `;`, so an unquoted one would break the row there.
+  const quote = (v: string) => {
+    const cell = escapeCsvCell(v);
+    return cell.startsWith('"') || !cell.includes(';') ? cell : `"${cell}"`;
+  };
   const header = [labels.mark, labels.name, 'Width (mm)', 'Height (mm)', labels.operation, labels.sill, ...data.levels, labels.total, labels.uValue, labels.fire];
   const lines = data.entries.map((e) => [
     e.mark, e.name, String(Math.round(e.width * 1000)), String(Math.round(e.height * 1000)), operationText(e, labels),
