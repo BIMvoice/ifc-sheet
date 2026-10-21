@@ -26,9 +26,10 @@ import { ThreeDControls } from './ThreeDControls';
 import { CutHeightControl, DepthControl } from './ViewControls';
 import { startWhenAttached } from './wall-actions';
 import { addKeyPlan, drawPlotBoundary } from '@/siteplan/site-actions';
+import { WALL_CARD, WALL_FIELD, WALL_PILL } from './wall-type';
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1.5 text-sm text-sky-100 hover:border-sky-300/70';
+const field = WALL_FIELD;
+const quiet = WALL_PILL;
 
 interface ViewportCardProps {
   sheet: ProjectSheet;
@@ -68,17 +69,17 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
   };
 
   return (
-    <aside className="w-[340px] rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 text-sky-100 shadow-2xl backdrop-blur">
+    <aside className={WALL_CARD}>
       {slot ? (
         <>
-          <p className="m-0 text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.vp.eyebrow')}</p>
-          <label className="mt-2 block text-sm text-sky-200">
+          <p className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.vp.eyebrow')}</p>
+          <label className="mt-2 block text-xs text-sky-200">
             {t('wall.project.rename')}
             <input key={slot.viewId} className={field} defaultValue={name} onBlur={(e) => renameProjectItem(slot.viewId, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           </label>
           {legend ? <LegendCard legend={legend} /> : (
             <>
-              <label className="mt-4 block text-sm text-sky-200">
+              <label className="mt-4 block text-xs text-sky-200">
                 {t('wall.vp.drawingNumber')}
                 <input
                   key={`${slot.id}:${slot.drawingNumber ?? ''}`} className={field} defaultValue={slot.drawingNumber ?? ''}
@@ -107,7 +108,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
         <p className="m-0 text-sm text-sky-200">{t('wall.vp.none')}</p>
       )}
       {placeable.length > 0 ? (
-        <label className="mt-5 block border-t border-sky-300/20 pt-4 text-sm text-sky-200">
+        <label className="mt-5 block border-t border-sky-300/20 pt-4 text-xs text-sky-200">
           {t('wall.vp.place')}
           <select className={field} value="" onChange={(e) => e.target.value && place(e.target.value)}>
             <option value="">{t('wall.vp.placePick')}</option>

@@ -34,10 +34,10 @@ interface AddDrawingProps {
 
 function Choice({ icon, title, hint, disabled, onClick }: { icon: ToolIconName; title: string; hint: string; disabled?: boolean; onClick?: () => void }) {
   return (
-    <button type="button" disabled={disabled} onClick={onClick} className="flex w-[200px] flex-col items-start gap-2 rounded-xl border border-sky-300/20 bg-white/5 p-4 text-left text-sky-50 hover:border-sky-300/70 disabled:opacity-40">
-      <span className="flex h-24 w-full items-center justify-center rounded-lg bg-white text-[#0b1f3d]"><ToolIcon name={icon} size={56} accent="#0369a1" /></span>
-      <span className="text-xl">{title}</span>
-      <span className="text-sm text-cyan-300">{hint}</span>
+    <button type="button" disabled={disabled} onClick={onClick} className="flex w-[180px] flex-col items-start gap-1.5 rounded-xl border border-sky-300/20 bg-white/5 p-3 text-left text-sky-50 hover:border-sky-300/70 disabled:opacity-40">
+      <span className="flex h-20 w-full items-center justify-center rounded-lg bg-white text-[#0b1f3d]"><ToolIcon name={icon} size={44} accent="#0369a1" /></span>
+      <span className="text-base">{title}</span>
+      <span className="text-xs text-cyan-300">{hint}</span>
     </button>
   );
 }
@@ -91,8 +91,8 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
   return (
     <section aria-label={t('wall.add.title')} className="flex items-center gap-8 rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 shadow-2xl backdrop-blur">
       <div className="w-44 shrink-0">
-        <h2 className="m-0 text-3xl font-light leading-tight text-white">{t('wall.add.title')}</h2>
-        <p className="mb-4 mt-3 text-2xs uppercase leading-relaxed tracking-[0.25em] text-cyan-400">{t('wall.add.kinds')}</p>
+        <h2 className="m-0 text-xl font-light leading-snug text-white">{t('wall.add.title')}</h2>
+        <p className="mb-4 mt-3 text-2xs uppercase leading-relaxed tracking-widest text-cyan-400">{t('wall.add.kinds')}</p>
         <button type="button" onClick={step === 'kinds' ? onClose : () => { setStep('kinds'); setDiscipline(null); }} className="text-sm text-sky-300 underline-offset-4 hover:underline">{t('wall.add.close')}</button>
       </div>
       {step === 'kinds' ? (

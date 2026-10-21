@@ -17,9 +17,10 @@ import { updateProjectView } from '@/project/project-store';
 import { viewportBox } from '@/project/sheets';
 import { PRINT_DPI, effectiveDpi, rasterFits } from '@/project/view-raster';
 import type { AxonometricPreset, SheetViewport, ThreeDProjectView, ThreeDProjection } from '@/project/types';
+import { WALL_FIELD, WALL_PILL } from './wall-type';
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1.5 text-sm text-sky-100 hover:border-sky-300/70';
+const field = WALL_FIELD;
+const quiet = WALL_PILL;
 const SAVED = 'saved';
 
 interface ThreeDControlsProps {

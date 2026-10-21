@@ -15,9 +15,10 @@ import { detailedScaleThatFits, overrun } from '@/project/drawing-set';
 import { updateProjectView } from '@/project/project-store';
 import { SHEET_SCALES, updateViewport, viewportBox } from '@/project/sheets';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
+import { WALL_FIELD, WALL_PILL } from './wall-type';
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
+const field = WALL_FIELD;
+const quiet = WALL_PILL;
 const OTHER = 'other';
 /** A typed scale is a whole denominator up to this (1:100 000, a regional plan). */
 export const MAX_SCALE = 100_000;
@@ -56,7 +57,7 @@ export function ScaleField({ sheet, slot, view, bounds }: ScaleFieldProps) {
 
   return (
     <div className="mt-3">
-      <label className="block text-sm text-sky-200">
+      <label className="block text-xs text-sky-200">
         {t('wall.vp.scale')}
         <select
           className={field}
@@ -76,7 +77,7 @@ export function ScaleField({ sheet, slot, view, bounds }: ScaleFieldProps) {
         </select>
       </label>
       {typing ? (
-        <label className="mt-2 block text-sm text-sky-200">
+        <label className="mt-2 block text-xs text-sky-200">
           {t('wall.vp.scaleTyped')}
           <input
             // The field is what "Other…" asked for: it takes the keys at once.

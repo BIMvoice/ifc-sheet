@@ -16,8 +16,9 @@ import { useProjectStore } from '@/project/project-store';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { addTemplateItem, clearTemplateFit, customiseTitleBlock, removeTemplateItem, resetTitleBlockTemplate, setTemplateField } from '@/project/title-block-template-actions';
 import { standardTitleBlock, type TemplateItem } from '@/project/title-block-template';
+import { WALL_PILL } from './wall-type';
 
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
+const quiet = WALL_PILL;
 const small = 'w-full rounded border border-sky-300/30 bg-[#061a36] px-1.5 py-1 text-xs text-white';
 
 const NUMBER_FIELDS: Record<TemplateItem['kind'], readonly string[]> = {
@@ -115,7 +116,7 @@ export function TitleBlockLayout() {
   const counts: Partial<Record<TemplateItem['kind'], number>> = {};
   return (
     <section aria-label={t('tblayout.title')} className="mt-4 border-t border-sky-300/10 pt-3">
-      <h4 className="m-0 text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('tblayout.title')}</h4>
+      <h4 className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('tblayout.title')}</h4>
       <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('tblayout.intro')}</p>
       {!template ? (
         <button type="button" className={`${quiet} mt-2`} onClick={() => customiseTitleBlock(standardTitleBlock(t, standard))}>{t('tblayout.edit')}</button>

@@ -6,10 +6,11 @@
 
 import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from '@/i18n';
+import { WALL_PILL } from '../wall/wall-type';
 
 const Panel = lazy(() => import('./WhatChangedPanel').then((m) => ({ default: m.WhatChangedPanel })));
 
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
+const quiet = WALL_PILL;
 
 export function WhatChanged() {
   const { t } = useTranslation();
