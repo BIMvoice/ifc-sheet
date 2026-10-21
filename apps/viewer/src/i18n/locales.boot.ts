@@ -9,7 +9,10 @@
  * lives in `locale-activation.ts`, which the node test runner can load
  * (`import.meta.glob` is a Vite transform and cannot run there).
  */
+import { checkCatalogue, isCatalogueRecord } from './catalogue-problems';
 import { activateStartupLocale, createLocaleActivator, type CatalogueLoader } from './locale-activation';
+import { provideLocaleActivator } from './locale-service';
+import { registerReadBackNames } from './registry';
 
 const modules = import.meta.glob<unknown>(['./locales/*.ts', '!./locales/*.test.ts'], { import: 'default' });
 
@@ -17,6 +20,16 @@ const loaders: Record<string, CatalogueLoader> = {};
 for (const [path, load] of Object.entries(modules)) {
   const tag = path.slice('./locales/'.length, -'.ts'.length);
   loaders[tag] = load;
+}
+
+// The names the app gives what it creates, in every shipped language, loaded
+// eagerly (they are small) so a stored name made under a locale that is not
+// active reads back: `catalogues/names.<tag>.ts`, any named export.
+const names = import.meta.glob<Record<string, unknown>>('./catalogues/names.*.ts', { eager: true });
+for (const module of Object.values(names)) {
+  for (const exported of Object.values(module)) {
+    if (isCatalogueRecord(exported)) registerReadBackNames(checkCatalogue(exported).catalogue);
+  }
 }
 
 function localStorageOrNull(): Storage | null {
@@ -28,10 +41,15 @@ function localStorageOrNull(): Storage | null {
   }
 }
 
-activateStartupLocale(createLocaleActivator(loaders, document.documentElement), {
+const activator = createLocaleActivator(loaders, document.documentElement);
+provideLocaleActivator(activator, localStorageOrNull());
+
+activateStartupLocale(activator, {
   search: window.location.search,
   storage: localStorageOrNull(),
-  languages: navigator.languages ?? [navigator.language],
+  // English is IfcSheet's main language: another language only when someone
+  // chooses it (?lang= or the header picker), never from the browser's languages.
+  languages: [],
 }).catch((error: unknown) => {
   console.warn('[i18n] Locale startup failed; the viewer stays in English.', error);
 });

@@ -9,6 +9,7 @@
  * hand-edited or truncated file fails loudly instead of half-loading.
  */
 
+import { resolve } from '@/i18n/registry';
 import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
@@ -20,6 +21,7 @@ import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readSeriesTemplates, readTemplate } from './sheet-templates';
 import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
+import { readRevisions } from './revision-file';
 import { readComments } from '@/review/file';
 import { readTitleSources } from './title-block-sources';
 import { readStandards } from './standards-file';
@@ -34,8 +36,8 @@ import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readTagFields } from '@/tagfields/tag-fields-file';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics, ViewGridGraphics, PhaseId, PhaseStyle } from './types';
-import { PHASES, type PhaseSource } from './phases';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
+import { HEX, WEIGHTS, readGraphics, readPhaseSource } from './view-graphics-file';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -211,7 +213,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     return value;
   };
   return {
-    name: isString(raw.name) && raw.name.trim() ? raw.name : 'Untitled project',
+    name: isString(raw.name) && raw.name.trim() ? raw.name : resolve('names.project.untitled'),
     models: list('models').map((m, i) => readModel(m, `/models/${i}`)),
     views: list('views').map((v, i) => readView(v, `/views/${i}`)),
     sheets: list('sheets').map((s, i) => readSheet(s, `/sheets/${i}`)),
@@ -247,75 +249,27 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     ...(raw.sheetNumbering !== undefined ? { sheetNumbering: readNumberingScheme(raw.sheetNumbering) } : {}),
     ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     ...(raw.comments !== undefined ? { comments: readComments(raw.comments) } : {}),
+    revisions: readRevisions(raw.revisions),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
+    ...(typeof raw.siteArea === 'number' && Number.isFinite(raw.siteArea) && raw.siteArea > 0 ? { siteArea: raw.siteArea } : {}),
+    ...readUrbanSettings(raw.urbanSettings),
   };
 }
 
-const WEIGHTS = new Set(['heavy', 'medium', 'light', 'hairline']);
-const HEX = /^#[0-9a-f]{6}$/i;
-
-/** A view's `graphics`: unknown or malformed fields are dropped, never fatal. */
-function readGraphics(raw: Record<string, unknown>): ViewGraphics {
-  const out: ViewGraphics = {};
-  if (raw.presetId === null || isString(raw.presetId)) out.presetId = raw.presetId;
-  if (isObject(raw.categories)) {
-    const categories: Record<string, CategoryGraphics> = {};
-    for (const [id, value] of Object.entries(raw.categories)) {
-      if (!isObject(value)) continue;
-      const g: CategoryGraphics = {};
-      if (value.visible === false) g.visible = false;
-      if (isString(value.lineColor) && HEX.test(value.lineColor)) g.lineColor = value.lineColor;
-      if (isString(value.fillColor) && HEX.test(value.fillColor)) g.fillColor = value.fillColor;
-      if (isString(value.lineWeight) && WEIGHTS.has(value.lineWeight)) g.lineWeight = value.lineWeight as CategoryGraphics['lineWeight'];
-      if (isString(value.cutHatch) && value.cutHatch) g.cutHatch = value.cutHatch;
-      if (isNumber(value.hatchScale) && value.hatchScale > 0) g.hatchScale = value.hatchScale;
-      if (Object.keys(g).length > 0) categories[id] = g;
-    }
-    out.categories = categories;
+/** The urban settings; a field that is not what it should be is dropped (its default applies). */
+function readUrbanSettings(raw: unknown): Pick<ProjectDocument, 'urbanSettings'> {
+  if (!isObject(raw)) return {};
+  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  const out: NonNullable<ProjectDocument['urbanSettings']> = {};
+  if (finite(raw.terrainLevel)) out.terrainLevel = raw.terrainLevel;
+  if (finite(raw.zeroElevation)) out.zeroElevation = raw.zeroElevation;
+  if (isObject(raw.cutExcluded)) {
+    const chosen = Object.entries(raw.cutExcluded).filter((e): e is [string, boolean] => typeof e[1] === 'boolean');
+    if (chosen.length) out.cutExcluded = Object.fromEntries(chosen);
   }
-  if (isObject(raw.phases) && Array.isArray(raw.phases.show)) {
-    const styles: NonNullable<ViewGraphics['phases']>['styles'] = {};
-    if (isObject(raw.phases.styles)) {
-      for (const id of PHASES) {
-        const value = raw.phases.styles[id];
-        if (!isObject(value)) continue;
-        const g: Partial<PhaseStyle> = {};
-        if (isString(value.lineColor) && HEX.test(value.lineColor)) g.lineColor = value.lineColor;
-        if (isString(value.fillColor) && HEX.test(value.fillColor)) g.fillColor = value.fillColor;
-        if (isString(value.lineWeight) && WEIGHTS.has(value.lineWeight)) g.lineWeight = value.lineWeight as PhaseStyle['lineWeight'];
-        if (typeof value.dashed === 'boolean') g.dashed = value.dashed;
-        if (Object.keys(g).length > 0) styles[id] = g;
-      }
-    }
-    out.phases = {
-      show: PHASES.filter((id) => (raw.phases as { show: unknown[] }).show.includes(id)),
-      ...(raw.phases.demolishAsExisting === true ? { demolishAsExisting: true } : {}),
-      ...(Object.keys(styles).length ? { styles } : {}),
-    };
-  }
-  if (isObject(raw.grid)) {
-    const grid: ViewGridGraphics = {};
-    if (typeof raw.grid.visible === 'boolean') grid.visible = raw.grid.visible;
-    if (raw.grid.ends === 'start' || raw.grid.ends === 'end' || raw.grid.ends === 'both') grid.ends = raw.grid.ends;
-    if (Object.keys(grid).length > 0) out.grid = grid;
-  }
-  return out;
+  return Object.keys(out).length ? { urbanSettings: out } : {};
 }
 
-/** The project's phase source: a malformed mapping or phase is dropped, never fatal. */
-function readPhaseSource(value: unknown): PhaseSource | undefined {
-  if (!isObject(value)) return undefined;
-  const out: PhaseSource = {};
-  const phase = (v: unknown): PhaseId | undefined => PHASES.find((id) => id === v);
-  if (phase(value.unmarked)) out.unmarked = phase(value.unmarked);
-  const m = value.mapping;
-  if (isObject(m) && isString(m.set) && m.set && isString(m.property) && m.property && isObject(m.values)) {
-    const values: Record<string, PhaseId> = {};
-    for (const [k, v] of Object.entries(m.values)) if (phase(v)) values[k] = phase(v)!;
-    out.mapping = { set: m.set, property: m.property, values };
-  }
-  return out.mapping || out.unmarked ? out : undefined;
-}
 
 /** `symbolFlips`: GlobalId → 1..3; anything else is dropped. */
 function readFlips(value: unknown): Record<string, number> {
@@ -386,7 +340,7 @@ function readCivilDrawing(raw: unknown): ProjectCivilDrawing[] {
 
 function readSchedule(raw: unknown): ProjectSchedule[] {
   if (!isObject(raw) || !isString(raw.id)) return [];
-  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' || raw.kind === 'finishes' || raw.kind === 'register' ? raw.kind : 'all';
+  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' || raw.kind === 'finishes' || raw.kind === 'register' || raw.kind === 'urban' ? raw.kind : 'all';
   const out: ProjectSchedule = { id: raw.id, name: isString(raw.name) && raw.name ? raw.name : 'Schedule', kind, createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0 };
   if (typeof raw.scale === 'number' && raw.scale > 0) out.scale = raw.scale;
   return [out];

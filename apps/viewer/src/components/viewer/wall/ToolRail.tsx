@@ -5,24 +5,27 @@
 /**
  * The rail beside a stepped-into sheet: six large tools that only add
  * information, "Add a drawing", and below them a smaller set for plain
- * drawing (lines, polylines, circles, text, a hatched zone).
+ * drawing (lines, polylines, circles, text, a hatched zone), and the Ortho
+ * lock that holds every point to horizontal or vertical (F8; Ctrl holds it).
  */
 
 import { useTranslation } from '@/i18n';
+import { toggleOrtho, useDraftingSession } from '@/drafting/session';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 import { cn } from '@/lib/utils';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
-import { Circle, PaintBucket, Slash, Spline, Type } from 'lucide-react';
+import { Circle, Cloud, PaintBucket, Slash, Spline, Type } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProjectView } from '@/project/types';
 import { toolHelpKey } from './tool-help';
 import { wallToolKey } from '@/lib/commands/wall-key-commands';
 import { DRAW_TOOLS, WALL_ALL, WALL_TOOLS } from './wall-actions';
+import { shortcutLabel } from '@/lib/commands/shortcut-label';
 import { keyProps } from './wall-key-title';
 
 const DRAW_ICONS: Record<string, ReactNode> = {
   line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, circle: <Circle className="size-5" />,
-  text: <Type className="size-5" />, hatch: <PaintBucket className="size-5" />,
+  text: <Type className="size-5" />, hatch: <PaintBucket className="size-5" />, revcloud: <Cloud className="size-5" />,
 };
 
 interface ToolRailProps {
@@ -37,6 +40,7 @@ interface ToolRailProps {
 
 export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: ToolRailProps) {
   const { t } = useTranslation();
+  const ortho = useDraftingSession((o) => o.ortho);
   /** The tooltip: the tool's help line and its key from the keymap; a tool the keymap does not know keeps the bare line and announces no key. */
   const keyed = (name: string, command: string): { title: string; 'aria-keyshortcuts'?: string } => {
     const id = wallToolKey(command);
@@ -105,6 +109,20 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
           );
         })}
       </div>
+      <button
+        type="button"
+        aria-pressed={ortho}
+        aria-label={t('wall.ortho.aria')}
+        {...keyProps(t, t('wall.ortho.help'), 'drafting.ortho')}
+        onClick={toggleOrtho}
+        className={cn(
+          'flex items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-sm leading-tight',
+          ortho ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
+        )}
+      >
+        {t('drafting.ortho')}
+        <kbd className="rounded border border-current/40 px-1 text-xs opacity-80">{shortcutLabel('drafting.ortho')}</kbd>
+      </button>
     </nav>
   );
 }
