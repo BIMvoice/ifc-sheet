@@ -22,6 +22,7 @@ export const sheetsEn = {
   'sheets.asIndicated': 'As indicated',
   'sheets.viewport': 'Viewport · {name}',
   'sheets.viewportLabel': '{name}  1:{scale}',
+  'sheets.viewportLabelNoScale': '{name}  (no scale)',
   'sheets.scale': 'Scale',
   'sheets.width': 'Width (mm)',
   'sheets.height': 'Height (mm)',
@@ -31,5 +32,6 @@ export const sheetsEn = {
   'sheets.export': 'Export',
   'sheets.svg': 'SVG',
   'sheets.dxf': 'DXF',
+  'sheets.dxf.rasterOmitted': 'The DXF has no images: {views} printed as an image and came out as an empty frame. Export the sheet as PDF to keep it.',
   'sheets.pdf': 'PDF / Print',
 } as const satisfies Record<string, TranslationValue>;

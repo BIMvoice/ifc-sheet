@@ -7,11 +7,13 @@
  * classic Library tab and the Wall's library panel, so both count the same.
  */
 
+import { configuredFields } from '@/tagfields/tag-fields';
 import { selectKinds, CATALOGUE_KINDS, type Catalogue, type CatalogueKind } from './catalogue-file';
 
 /** The number of definitions of `kind` in `catalogue` (hatch patterns are counted by their `*NAME` headers). */
 export function kindCount(catalogue: Catalogue, kind: CatalogueKind): number {
   const only = selectKinds(catalogue, new Set([kind]));
+  if (kind === 'tagFields') return configuredFields(only.tagFields);
   return kind === 'hatchPatterns' ? (only.hatchPatterns.match(/^\*/gm) ?? []).length : (only[kind] as unknown[]).length;
 }
 

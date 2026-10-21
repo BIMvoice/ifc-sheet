@@ -43,6 +43,14 @@ export function dropViewDrawing(viewId: string): void {
   });
 }
 
+/**
+ * Whether the view's drawing is generated from the model. A drafting view has
+ * no model behind it: it keeps the empty entry, so every consumer (sheets,
+ * the editor) takes the "no model drawing" path they already have for a
+ * project without geometry.
+ */
+export const generatesFromModel = (view: Pick<ProjectView, 'kind'>): boolean => view.kind !== 'drafting';
+
 /** The display options a view overrides on top of the viewer's shared ones. */
 export interface ViewDisplayOverrides {
   showConstructionProjection: boolean;
@@ -52,17 +60,18 @@ export interface ViewDisplayOverrides {
 /**
  * Projection follows the view's depth: a plan with no depth of its own sees
  * down to its level's floor (as deep as its cut is high), a section /
- * elevation with no depth projects with the automatic bands, and an
+ * elevation (and a reflected ceiling plan, which sees all that is above its
+ * cut) with no depth projects with the automatic bands, and an
  * explicit depth always projects exactly that far (0: the cut only).
  */
 export function viewDisplayOverrides(view: ProjectView): ViewDisplayOverrides {
   const depth = typeof view.viewDepth === 'number' && view.viewDepth >= 0 ? view.viewDepth : null;
   if (depth !== null) return { showConstructionProjection: depth > 0, constructionProjectionDepth: depth };
-  if (view.kind === 'plan') return { showConstructionProjection: view.cutHeight > 0, constructionProjectionDepth: view.cutHeight };
+  if (view.kind === 'plan' && !view.reflected) return { showConstructionProjection: view.cutHeight > 0, constructionProjectionDepth: view.cutHeight };
   return { showConstructionProjection: true, constructionProjectionDepth: null };
 }
 
 /** A stable key for a resolved plane, so an unchanged view never regenerates. */
 export function planeKey(plane: ViewSectionPlane | null): string {
-  return plane ? JSON.stringify([plane.axis, plane.position, plane.flipped, plane.custom ?? null]) : '';
+  return plane ? JSON.stringify([plane.axis, plane.position, plane.flipped, plane.reflected === true, plane.custom ?? null]) : '';
 }

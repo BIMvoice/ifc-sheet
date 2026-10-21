@@ -13,7 +13,7 @@
 
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
 import type { ProjectDocument } from '../types';
-import { parseProjectFile, PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION } from '../project-file';
+import { parseProjectFile, PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, type ProjectFileSchema } from '../project-file';
 import {
   MANIFEST_PATH, PACKAGE_FORMAT, PACKAGE_VERSION, segment, sha256,
   type ModelRole, type PackageManifest, type PackageModel, type PackageVersionInfo,
@@ -75,6 +75,7 @@ export async function buildPackage(input: PackageInput): Promise<{ files: Packag
     ...(input.author ? { author: input.author } : {}),
     models, parts: parts.sort((a, b) => a.path.localeCompare(b.path)),
     ...(input.versionInfo ? { versionInfo: input.versionInfo } : {}),
+    projectFileVersion: PROJECT_FILE_VERSION,
   };
   files.set(MANIFEST_PATH, strToU8(JSON.stringify(manifest, null, 2)));
   return { files, manifest };
@@ -118,11 +119,17 @@ function readManifest(files: PackageFiles): PackageManifest {
     throw new Error(`This project was saved by a newer version of the app (package format ${m.version}); update the app to open it`);
   }
   if (!Array.isArray(m.parts) || !Array.isArray(m.models) || typeof m.projectId !== 'string') throw new Error('Not a project package: the manifest is incomplete');
+  const v = m.projectFileVersion;
+  if (v !== undefined && !(typeof v === 'number' && Number.isInteger(v) && v >= 1)) throw new Error('Not a project package: projectFileVersion must be a whole number from 1');
   return m;
 }
 
-/** Read and check a package: every listed part present with its hash, the document valid. */
-export async function readPackage(files: PackageFiles): Promise<OpenedPackage> {
+/**
+ * Read and check a package: every listed part present with its hash, the document valid. The parts
+ * are read as the project file version the manifest records (1 when it records none), so an older
+ * package is migrated and a newer one refused, exactly as a project file is.
+ */
+export async function readPackage(files: PackageFiles, schema?: ProjectFileSchema): Promise<OpenedPackage> {
   const manifest = readManifest(files);
   for (const part of manifest.parts) {
     const bytes = files.get(part.path);
@@ -139,7 +146,7 @@ export async function readPackage(files: PackageFiles): Promise<OpenedPackage> {
     }
   }
   // The project file reader validates (and migrates) the merged document.
-  const doc = parseProjectFile(JSON.stringify({ format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, savedAt: manifest.savedAt, ...mergeParts(parts) }));
+  const doc = parseProjectFile(JSON.stringify({ ...mergeParts(parts), format: PROJECT_FILE_FORMAT, version: manifest.projectFileVersion ?? 1, savedAt: manifest.savedAt }), schema);
   const models = manifest.models.map((model) => ({ model, bytes: model.role === 'native' && model.path ? files.get(model.path) : undefined }));
   for (const { model, bytes } of models) {
     if (model.role === 'native' && !bytes) throw new Error(`The project package is damaged: model "${model.name}" is missing`);

@@ -18,8 +18,10 @@ import type { SectionPlane } from '@/store/types';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { addProjectView, setActiveProjectItem, useProjectStore } from './project-store';
 import { projectPlaneFromSection, sectionPlaneForView } from './view-plane';
+import { generatesFromModel } from './view-drawings';
 import { closeDocumentTab, isDrawingTabActive, MODEL_TAB_ID, showDocumentTab, useDocumentTabs, WALL_TAB_ID } from './document-tabs';
-import type { ProjectView } from './types';
+import { DEFAULT_AXONOMETRIC_PRESET } from './axonometric';
+import type { AxonometricPreset, ProjectView } from './types';
 
 export type OpenViewResult = 'opened' | 'unresolved' | 'missing';
 
@@ -62,7 +64,7 @@ function applyDrawingView(view: Exclude<ProjectView, { kind: '3d' }>): boolean {
   if (!plane) return false;
   const state = useViewerStore.getState();
   useViewerStore.setState({
-    sectionPlane: { ...state.sectionPlane, ...plane, custom: plane.custom, box: undefined, enabled: true, parked: false },
+    sectionPlane: { ...state.sectionPlane, ...plane, reflected: plane.reflected, custom: plane.custom, box: undefined, enabled: true, parked: false },
   });
   return true;
 }
@@ -94,7 +96,7 @@ export function activateDocumentTab(id: string): OpenViewResult {
   if (view.kind === '3d') return openProjectView(id);
   leaveModelTab();
   // Without geometry there is no section to point at, but the view is still a work plane to draft on.
-  if (!applyDrawingView(view) && liveBounds() !== null) return 'unresolved';
+  if (generatesFromModel(view) && !applyDrawingView(view) && liveBounds() !== null) return 'unresolved';
   setActiveProjectItem(id);
   showDocumentTab(id);
   return 'opened';
@@ -140,5 +142,11 @@ export function saveLiveSectionAsView(name = 'Section'): string | null {
 export function saveLiveCameraAsView(name = '3D View'): string | null {
   const viewpoint = useViewerStore.getState().cameraCallbacks.getViewpoint?.() ?? null;
   if (!viewpoint) return null;
-  return addProjectView({ kind: '3d', name, viewpoint });
+  // An orthographic camera is a parallel projection, which has a true scale; a perspective prints as an image.
+  return addProjectView({ kind: '3d', name, viewpoint, projection: viewpoint.projectionMode === 'orthographic' ? 'axonometric' : 'perspective', scale: 200 });
+}
+
+/** A new axonometric seen from a preset corner of the model, at 1:200. Needs no camera. */
+export function saveAxonometricView(name = 'Axonometric', preset: AxonometricPreset = DEFAULT_AXONOMETRIC_PRESET): string {
+  return addProjectView({ kind: '3d', name, viewpoint: null, projection: 'axonometric', preset, scale: 200 });
 }

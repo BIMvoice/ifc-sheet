@@ -56,6 +56,12 @@ function matches(chord: KeyChord, event: KeyboardEvent, key: string, double: boo
   return key === chord.key;
 }
 
+/** Whether a keydown is one of `keys`, matched as the dispatcher matches (for a handler that listens on its own). */
+export function eventMatchesChords(keys: readonly KeyChord[], event: KeyboardEvent, ignoreModifiers = false): boolean {
+  const key = eventKey(event);
+  return key !== null && keys.some((chord) => matches(chord, event, key, false, ignoreModifiers));
+}
+
 function openLayer(): KeyboardLayer | null {
   if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return 'modal';
   if (document.querySelector('[role="menu"], [role="listbox"], [data-state="open"][role="dialog"]')) return 'popover';

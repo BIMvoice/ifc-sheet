@@ -9,29 +9,26 @@
  * 1000 / N mm).
  */
 
-import { useProjectStore } from './project-store';
-import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { draftingFrame, draftsExtent } from '@/drafting/drafting-view';
+import { numberingScheme, useProjectStore } from './project-store';
+import { nextNumber } from './numbering';
+import { withSources, type TitleSource } from './title-block-sources';
+import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { isRasterView } from './axonometric';
+import { RASTER_BOX_MM } from './view-raster';
 import { freshProjectId } from './view-defaults';
-import type { PaperSize, ProjectSheet, SheetViewport } from './types';
-
-export const PAPER_MM: Record<PaperSize, { w: number; h: number }> = {
-  A0: { w: 1189, h: 841 },
-  A1: { w: 841, h: 594 },
-  A2: { w: 594, h: 420 },
-  A3: { w: 420, h: 297 },
-  A4: { w: 297, h: 210 },
-};
+import { paperMm } from './paper';
+import { templateFromSheet } from './sheet-templates';
+import { isGeometry, type DraftEntity } from '@/drafting/types';
+import { annotationAtFactor, annotationFactor } from './viewport-annotation';
+import type { ProjectSheet, SheetViewport, TemplateSeries } from './types';
 
 /** The scales a viewport offers, most detailed first: details, buildings, sites. */
 export const SHEET_SCALES = [1, 2, 5, 10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 10000] as const;
 
-/** Frame margin and title block size on the paper, mm. */
-export const FRAME_MARGIN_MM = 10;
-export const TITLE_BLOCK_MM = { w: 180, h: 50 };
-
+/** The sheet's paper as it lies on the table: width and height in mm, by its paper and orientation. */
 export function paperOf(sheet: ProjectSheet): { w: number; h: number } {
-  const base = PAPER_MM[sheet.paper ?? 'A1'];
-  return (sheet.orientation ?? 'landscape') === 'landscape' ? { w: base.w, h: base.h } : { w: base.h, h: base.w };
+  return paperMm(sheet.paper ?? 'A1', sheet.orientation ?? 'landscape');
 }
 
 /** Paper millimetres per drawing metre for a viewport. */
@@ -47,6 +44,24 @@ function patchSheet(id: string, patch: (sheet: ProjectSheet) => ProjectSheet): v
 
 export function updateSheet(id: string, patch: Partial<Omit<ProjectSheet, 'id' | 'viewports'>>): void {
   patchSheet(id, (s) => ({ ...s, ...patch }));
+}
+
+/** Save how a sheet is set up (paper, orientation, frame) as a project template under `name`; the sheet then counts as started from it. Returns the template's id. */
+export function saveSheetTemplate(sheetId: string, name: string): string | null {
+  const state = useProjectStore.getState();
+  const sheet = state.sheets.find((s) => s.id === sheetId);
+  const trimmed = name.trim();
+  if (!sheet || !trimmed) return null;
+  const template = templateFromSheet(sheet, trimmed);
+  useProjectStore.setState({ sheetTemplates: [...(state.sheetTemplates ?? []), template], dirty: true });
+  patchSheet(sheetId, (s) => ({ ...s, templateId: template.id }));
+  return template.id;
+}
+
+/** New sheets of `series` start from the template `id` (a built-in or the project's); `null` goes back to the smallest paper that fits. */
+export function setSeriesTemplate(series: TemplateSeries, id: string | null): void {
+  const { [series]: _was, ...rest } = useProjectStore.getState().seriesTemplates ?? {};
+  useProjectStore.setState({ seriesTemplates: id ? { ...rest, [series]: id } : rest, dirty: true });
 }
 
 /** `sheet` says otherwise for `key` than the project's title block (`title-block.ts`). */
@@ -72,6 +87,18 @@ export function setProjectTitleBlockField(key: string, value: string): void {
   useProjectStore.setState({ titleBlock, dirty: true });
 }
 
+/** Choose the model sources a title block field reads (the order is the priority); `undefined` puts back the default. */
+export function setTitleBlockSources(key: string, sources: readonly TitleSource[] | undefined): void {
+  useProjectStore.setState({ titleBlockSources: withSources(useProjectStore.getState().titleBlockSources, key, sources), dirty: true });
+}
+
+/** Put a field back to the model: the typed value is dropped and its sources are the default. */
+export function resetTitleBlockField(key: string): void {
+  const titleBlock = { ...useProjectStore.getState().titleBlock };
+  delete titleBlock[key];
+  useProjectStore.setState({ titleBlock, titleBlockSources: withSources(useProjectStore.getState().titleBlockSources, key, undefined), dirty: true });
+}
+
 /** Fill the project title block fields not set yet (from the model when a set is laid out); set ones stay. */
 export function seedProjectTitleBlock(fields: Record<string, string>): void {
   const current = useProjectStore.getState().titleBlock ?? {};
@@ -82,14 +109,19 @@ export function seedProjectTitleBlock(fields: Record<string, string>): void {
 /** Place a view on a sheet, centred at a paper point. Returns the viewport id. */
 export function addViewport(sheetId: string, viewId: string, at: { x: number; y: number }, scale = 100): string {
   const id = freshProjectId('viewport');
-  // 0 × 0: the box fits the drawing once it is generated (see `viewportBox`).
-  const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, width: 0, height: 0, center: null };
-  const kind = useProjectStore.getState().views.find((v) => v.id === viewId)?.kind;
+  const { views, drafts } = useProjectStore.getState();
+  const view = views.find((v) => v.id === viewId);
+  // 0 × 0: the box fits the drawing once it is generated (see `viewportBox`); a raster has no drawing to fit, so it starts at a size;
+  // a drafting view has no drawing to fit to either: it is framed on its drafts.
+  const box = view?.kind === 'drafting' ? draftingFrame(drafts.filter((d) => d.viewId === viewId), scale)
+    : view && isRasterView(view) ? { width: RASTER_BOX_MM.width, height: RASTER_BOX_MM.height, center: null } : { width: 0, height: 0, center: null };
+  const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, ...box };
   patchSheet(sheetId, (s) => {
     // A number the program chose follows what the sheet comes to hold, once.
     const renumber = s.autoNumber && (s.viewports ?? []).length === 0;
-    const number = renumber ? nextSheetNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), sheetGroupOfView(kind)) : s.number;
-    return { ...withoutAutoNumber(s), number, viewports: [...(s.viewports ?? []), viewport] };
+    const series = renumber ? sheetGroupOfView(view) : s.series;
+    const number = renumber && series ? nextNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), series, numberingScheme()) : s.number;
+    return { ...withoutAutoNumber(s), number, ...(series ? { series } : {}), viewports: [...(s.viewports ?? []), viewport] };
   });
   return id;
 }
@@ -111,6 +143,28 @@ export function sheetsShowing(viewId: string, sheets: readonly ProjectSheet[] = 
 export function viewportBox(vp: SheetViewport, bounds: { min: { x: number; y: number }; max: { x: number; y: number } } | null): { width: number; height: number } {
   if (vp.width > 0 && vp.height > 0) return { width: vp.width, height: vp.height };
   return bounds ? fitViewportBox(bounds, vp.scale) : { width: 120, height: 80 };
+}
+
+/** Whether the viewport fits its content by itself (no manual size). A manual size is a crop, and a crop clips. */
+export const autoFits = (vp: Pick<SheetViewport, 'width' | 'height'>): boolean => !(vp.width > 0 && vp.height > 0);
+
+type Extent = { min: { x: number; y: number }; max: { x: number; y: number } };
+
+/**
+ * The extent an auto-fit viewport frames: the drawing's bounds together with
+ * its view's drafts, so a dimension, text or tag drawn beyond the model prints
+ * (#140). A viewport with a manual size keeps `bounds`: it crops on purpose.
+ */
+export function fitExtent(vp: Pick<SheetViewport, 'width' | 'height' | 'scale'>, bounds: Extent, drafts: readonly Pick<DraftEntity, 'shape'>[], viewScale: number | undefined): Extent {
+  // The sheet prints annotation at the viewport's scale (`annotationAtFactor`), so the extent is measured the same way.
+  const factor = annotationFactor(vp.scale, viewScale);
+  const printed = factor === 1 ? drafts : drafts.map((d) => (isGeometry(d.shape) ? d : { ...d, shape: annotationAtFactor(d.shape, factor) }));
+  const extent = autoFits(vp) ? draftsExtent(printed) : null;
+  if (!extent) return bounds;
+  return {
+    min: { x: Math.min(bounds.min.x, extent.min.x), y: Math.min(bounds.min.y, extent.min.y) },
+    max: { x: Math.max(bounds.max.x, extent.max.x), y: Math.max(bounds.max.y, extent.max.y) },
+  };
 }
 
 /** A viewport box that fits a drawing's extent at its scale (plus a margin), in paper mm. */
