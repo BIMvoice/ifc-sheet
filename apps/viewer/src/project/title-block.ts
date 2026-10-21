@@ -12,8 +12,11 @@
 
 import type { ProjectDocument, ProjectSheet } from './types';
 
-/** The text fields, in the order the title block prints them. */
-export const TITLE_BLOCK_FIELDS = ['project', 'client', 'drawnBy', 'checkedBy', 'date', 'revision'] as const;
+/**
+ * The text fields that are typed, in the order the title block prints them. The revision is
+ * not one: a sheet's title block reads its latest revision (`currentRevisionOf`).
+ */
+export const TITLE_BLOCK_FIELDS = ['project', 'address', 'client', 'organisation', 'drawnBy', 'checkedBy', 'date'] as const;
 export type TitleBlockField = (typeof TITLE_BLOCK_FIELDS)[number];
 
 /** The logo: an image data URL, project-wide only. */

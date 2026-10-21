@@ -71,7 +71,7 @@ pub(super) fn fingerprint(global_id: &str, points: &[[f64; 3]], scale: f64, indi
     }
     hasher.update((indices.len() as u64).to_le_bytes());
     for &index in indices { hasher.update(index.to_le_bytes()); }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode(hasher.finalize()))
 }
 
 /// Source triangle corners split by the accepted mask, in source order.

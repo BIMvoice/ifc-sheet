@@ -207,7 +207,8 @@ export interface EdgeLockState {
 // Section Plane Types
 // ============================================================================
 /** Semantic axis names: down (Y), front (Z), side (X) for intuitive user experience */
-export type SectionPlaneAxis = 'down' | 'front' | 'side';
+// A view's section plane is stored in the project document, so the axis type is the engine's.
+export type { SectionPlaneAxis } from '@bimvoice/ifcsheet';
 // Re-export the renderer's canonical cap-styling types so the viewer store and
 // the WebGPU renderer share a single source of truth. Adding a new hatch
 // pattern only requires editing `packages/renderer/src/section-cap-style.ts`.
@@ -305,16 +306,9 @@ export interface CameraRotation {
   elevation: number;
 }
 
-export type ProjectionMode = 'perspective' | 'orthographic';
-
-export interface CameraViewpoint {
-  position: { x: number; y: number; z: number };
-  target: { x: number; y: number; z: number };
-  up: { x: number; y: number; z: number };
-  fov: number;
-  projectionMode: ProjectionMode;
-  orthoSize?: number;
-}
+// A saved camera is part of the project document (a 3D view's viewpoint), so its type is the engine's.
+export type { CameraViewpoint, ProjectionMode } from '@bimvoice/ifcsheet';
+import type { CameraViewpoint, ProjectionMode } from '@bimvoice/ifcsheet';
 
 export interface CameraCallbacks {
   setPresetView?: (view: 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right') => void;

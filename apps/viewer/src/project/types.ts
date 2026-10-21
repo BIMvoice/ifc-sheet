@@ -2,13 +2,24 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import type { TitleSource } from './title-block-sources';
+import type { TitleBlockParam } from './title-block-params';
+import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
+import type { PhaseSource } from './phases';
+import type { UrbanSettings } from '@/urban/indicators';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
-import type { AssemblySpec, JoinerySpec, StructureProfile } from '@ifc-lite/create';
+import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
-import type { AnnotationType, DraftSymbol, ProjectLegend } from '@/catalogue/types';
-import type { DisciplineId } from './discipline-views';
+import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from '@/catalogue/types';
+import type { TagFieldConfig } from '@/tagfields/tag-fields';
+import type { CadLayerRule } from './cad-layers';
+import type { DraftEntity, DraftLayer } from '@/drafting/types';
+import type { ProjectIssue } from '@/issue/types';
+import type { ReviewComment } from '@/review/types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
+import type { ProjectDocument as EngineDocument, NumberingScheme, ProjectView, SheetTemplate, TemplateSeries } from '@bimvoice/ifcsheet';
 
 /**
  * The project document: the views and sheets a user organises over the
@@ -16,152 +27,20 @@ import type { DisciplineId } from './discipline-views';
  * object; opening one only points the live section / camera at it. The
  * whole document round-trips through the `.ifclite-project.json` sidecar
  * file kept next to the IFC files (`project-file.ts`).
+ *
+ * The drawing-set part (levels, views, sheets, numbering, templates) is the
+ * engine's contract and is defined in `@bimvoice/ifcsheet`; this module
+ * re-exports it and adds what only the app keeps.
  */
 
-import type { CameraViewpoint, SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
-import type { CustomSectionPlane } from '@/store/section-types';
-import type { DraftEntity, DraftLayer } from '@/drafting/types';
-
-export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d';
-
-/** The facade an elevation looks at (project north = IFC +Y). */
-export type ElevationDirection = 'north' | 'south' | 'east' | 'west';
-
-/** A building level, merged across federated models at the same elevation. */
-export interface ProjectLevel {
-  name: string;
-  /** Floor elevation, metres, in the same frame the section bar uses. */
-  elevation: number;
-  /** IfcBuildingStorey GlobalIds (one per model that has this level). */
-  storeyGlobalIds: string[];
-}
-
-interface ProjectViewBase {
-  id: string;
-  name: string;
-  /** Created by the default-view generator rather than the user. */
-  auto?: boolean;
-  createdAt: number;
-  /**
-   * View depth: how far beyond the cut plane the view sees, metres. `null`
-   * or absent is the view kind's default — a plan shows the cut only, a
-   * section / elevation projects with the automatic depth bands.
-   */
-  viewDepth?: number | null;
-  /**
-   * Draw the lines that are hidden behind other geometry, dashed. Absent:
-   * an elevation does not (it shows what is seen from outside), every other
-   * view does.
-   */
-  showHidden?: boolean;
-  /**
-   * Set on a detail view: the area of its source view it shows, in the source's
-   * drawing metres. The detail is otherwise a copy of its source (same cut,
-   * same depth), shown at a larger scale and cropped to `min`..`max`.
-   */
-  detail?: ViewDetail;
-  /** The view's own graphics (Visibility / Graphics): a preset and per-category overrides. */
-  graphics?: ViewGraphics;
-  /** Drawing scale denominator (100 = 1:100). Annotation sizes follow it; absent = 1:100. */
-  scale?: number;
-  /** Drafting layers this view hides (by id), over their own switches. */
-  hiddenLayers?: string[];
-}
-
-/** The area a detail view shows of its source view. */
-export interface ViewDetail {
-  /** The view the area was marked on. */
-  of: string;
-  /** Corners of the area, drawing metres, `min` below and left of `max`. */
-  min: { x: number; y: number };
-  max: { x: number; y: number };
-  /** The detail's number (1, 2, …), unique among the project's details. */
-  number: number;
-}
-
-export type CategoryLineWeight = 'heavy' | 'medium' | 'light' | 'hairline';
-
-/** How one element category draws in a view. Absent fields keep the preset's look. */
-export interface CategoryGraphics {
-  visible?: boolean;
-  lineColor?: string;
-  fillColor?: string;
-  lineWeight?: CategoryLineWeight;
-  /** A hatch pattern name (built-in or imported .pat) drawn over the category's cut faces. */
-  cutHatch?: string;
-  /** Hatch scale (1 = the pattern's own size in drawing millimetres). */
-  hatchScale?: number;
-}
-
-export interface ViewGraphics {
-  /** A built-in graphic override preset id; absent = the default, null = none. */
-  presetId?: string | null;
-  /** By category id (`VIEW_CATEGORIES`). */
-  categories?: Record<string, CategoryGraphics>;
-}
-
-export interface PlanProjectView extends ProjectViewBase {
-  kind: 'plan';
-  level: ProjectLevel;
-  /** Cut height above the level's floor, metres. */
-  cutHeight: number;
-  /** A discipline plan (structural, foundation, roof): it draws only the elements its discipline keeps (`discipline-views.ts`). */
-  discipline?: DisciplineId;
-  /**
-   * A reflected ceiling plan: the same plan, looking up from the cut. It keeps
-   * the floor plan's x/y (a point sits where it does in the plan below) and
-   * draws what is above the cut: ceilings, soffits, lights, beams.
-   */
-  reflected?: boolean;
-}
-
-/** A section cut stored in world metres, independent of the model bounds. */
-export interface SectionProjectPlane {
-  axis: SectionPlaneAxis;
-  /** World coordinate along the axis, metres (viewer frame). */
-  offset: number;
-  flipped: boolean;
-  custom?: CustomSectionPlane;
-}
-
-export interface SectionProjectView extends ProjectViewBase {
-  kind: 'section';
-  plane: SectionProjectPlane;
-  /** What the cut passes through, for people ("Through the stair"); set on proposed sections. */
-  through?: string;
-}
-
-export interface ElevationProjectView extends ProjectViewBase {
-  kind: 'elevation';
-  /** The facade it looks at; on an interior elevation, the side of the room its wall is on (it looks that way). */
-  direction: ElevationDirection;
-  /**
-   * World coordinate, metres, of the plane on its axis (z for north and
-   * south, x for east and west). Absent: the plane sits just inside the whole
-   * model's box on that facade.
-   */
-  planeOffset?: number;
-  /** Set on an interior elevation: one wall of a room, seen from inside it. Its plane replaces `direction` / `planeOffset`. */
-  interior?: InteriorElevation;
-}
-
-/** One wall face of a room, looked at from inside the room (`interior-elevations.ts`). */
-export interface InteriorElevation {
-  /** The room's IfcSpace GlobalId. */
-  room: string;
-  /** Parallel to the wall face, inside the room, looking at the face; world metres like a section's plane. */
-  plane: SectionProjectPlane;
-  /** The wall face in drawing metres: its length across, the room's floor to its top up. The drawing is cropped to it. */
-  crop: { min: { x: number; y: number }; max: { x: number; y: number } };
-}
-
-export interface ThreeDProjectView extends ProjectViewBase {
-  kind: '3d';
-  /** `null` means "the default 3D view": fit the whole model. */
-  viewpoint: CameraViewpoint | null;
-}
-
-export type ProjectView = PlanProjectView | SectionProjectView | ElevationProjectView | ThreeDProjectView;
+export type {
+  AxonometricPreset, CategoryGraphics, CategoryLineWeight, CustomPaper, DraftingProjectView, ElevationDirection, ElevationProjectView,
+  ElongatedPaper, GridEnds, GroupPattern, InteriorElevation, NumberGroup, NumberingScheme, Paper, PaperSize, PhaseId, PhaseStyle,
+  PlanProjectView, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, ProjectViewBase, ProjectViewKind, SectionProjectPlane,
+  SectionProjectView, SheetFrame, SheetTemplate, SheetViewport, TemplateSeries, ThreeDProjection, ThreeDProjectView, TitleBlockPosition,
+  ViewDetail, ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster,
+} from '@bimvoice/ifcsheet';
+export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './project-records';
 
 /** A view as handed to `addProjectView`: the store assigns `createdAt` (and `id` unless given). */
 export type NewProjectView = ProjectView extends infer V
@@ -173,139 +52,28 @@ export type ProjectViewPatch = ProjectView extends infer V
   ? V extends ProjectView ? Partial<Omit<V, 'id' | 'kind'>> : never
   : never;
 
-export type PaperSize = 'A0' | 'A1' | 'A2' | 'A3' | 'A4';
-
-/** A view placed on a sheet. Positions and sizes are paper millimetres from the sheet's top-left. */
-export interface SheetViewport {
-  id: string;
-  viewId: string;
-  /** Centre of the viewport on the paper. */
-  x: number;
-  y: number;
-  /** Drawing scale denominator: 100 means 1:100. */
-  scale: number;
-  /** Crop box on the paper; the drawing is clipped to it. 0 × 0 means "fit the drawing". */
-  width: number;
-  height: number;
-  /** Drawing point (metres) shown at the viewport centre; `null` centres the drawing. */
-  center: { x: number; y: number } | null;
-  /** Drafting layers this viewport hides, on top of its view's. */
-  hiddenLayers?: string[];
-  /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
-  drawingNumber?: string;
-}
-
-export interface ProjectSheet {
-  id: string;
-  /** Sheet number as printed in the title block, e.g. "A-101". */
-  number: string;
-  /**
-   * The number was chosen by the program, not typed: it is replaced by the
-   * group's next number when the first view is placed. Cleared by then, and
-   * by typing a number. Absent on sheets from older files, which are never
-   * renumbered.
-   */
-  autoNumber?: boolean;
-  name: string;
-  createdAt: number;
-  paper?: PaperSize;
-  orientation?: 'landscape' | 'portrait';
-  viewports?: SheetViewport[];
-  /** Title block fields this sheet says otherwise than the project's (`ProjectDocument.titleBlock`); a key present wins, even empty. */
-  titleBlock?: Record<string, string>;
-}
-
-/** The identity of a model a project refers to (content hash, else its name). */
-export interface ProjectModelRef {
-  key: string;
-  name: string;
-}
-
 /** A joinery schedule (door / window list): a project document of its own, placeable on sheets. */
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, or the finishes of each room. */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, the set's own sheets (the drawing register, derived from the sheets on every draw), or the permit's areas and urban indicators (`urban/`). */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register' | 'urban';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
 }
 
-/** A road drawing (longitudinal profile or cross-section set) of a corridor: a project document of its own, placeable on sheets or drawn on a plan. */
-export interface ProjectCivilDrawing {
-  id: string;
-  name: string;
-  kind: 'profile' | 'sections';
-  createdAt: number;
-  /** The corridor it draws, by GlobalId (in whichever loaded model has it). */
-  corridorGlobalId: string;
-  /** Drawing scale denominator (profile: horizontal). */
-  scale: number;
-  /** Profile: vertical exaggeration, grid steps. */
-  vExaggeration?: number;
-  stationStep?: number;
-  elevationStep?: number;
-  /** Sections: sample spacing or explicit stations, layout columns, half width shown (0: automatic). */
-  every?: number;
-  stations?: number[];
-  columns?: number;
-  halfWidth?: number;
-}
-
-/**
- * How a building material draws where a view cuts it (ArchiCAD's Building
- * Materials): matched by IfcMaterial name. `hatch` null draws no hatch,
- * absent takes the default its name suggests; a membrane (or any layer under
- * 2 mm) draws as a heavy dashed line instead of a band.
- */
-export interface ProjectMaterial {
-  id: string;
-  name: string;
-  hatch?: string | null;
-  /** 1 = the pattern's own size. */
-  hatchScale?: number;
-  /** Cut fill colour; null: none (white), absent: the material's IFC colour. */
-  fill?: string | null;
-  /** Pen of the hatch lines. */
-  hatchPen?: CategoryLineWeight;
-  membrane?: boolean;
-}
-
-/** The subset of a section plane that defines the cut itself, not its on-screen lifecycle. */
-export interface SavedSectionCutPlane {
-  axis: SectionPlaneAxis;
-  position: number;
-  flipped: boolean;
-  custom?: SectionPlane['custom'];
-  capStyle: SectionCapStyle;
-  showCap: boolean;
-  showOutlines: boolean;
-}
-
-/** A named section cut kept in the project, to put back on screen later. */
-export interface SavedSectionCut {
-  id: string;
-  name: string;
-  plane: SavedSectionCutPlane;
-  createdAt: number;
-  updatedAt: number;
-}
-
-/** A typical road cross-section (assembly) kept in the project's library. */
-export interface ProjectTypicalSection {
-  id: string;
-  name: string;
-  assembly: AssemblySpec;
-}
-
-export interface ProjectDocument {
-  name: string;
-  models: ProjectModelRef[];
-  views: ProjectView[];
-  sheets: ProjectSheet[];
+export interface ProjectDocument extends EngineDocument {
   /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
   titleBlock?: Record<string, string>;
+  /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
+  titleBlockSources?: Record<string, TitleSource[]>;
+  /** The project's revisions, oldest first (`revisions.ts`); a sheet's table lists the ones it is named by. */
+  revisions?: ProjectRevision[];
+  /** The user's own title block parameters, in order, each with its project-wide value (`title-block-params.ts`). */
+  titleBlockParams?: TitleBlockParam[];
+  /** The title block's layout once edited; absent: the standard layout (`title-block-template.ts`). */
+  titleBlockTemplate?: TitleBlockTemplate;
   /** Drafted geometry, each entity on one view (phase 4). */
   drafts: DraftEntity[];
   draftLayers: DraftLayer[];
@@ -315,6 +83,8 @@ export interface ProjectDocument {
   textStyles?: TextStyle[];
   dimStyles?: DimStyle[];
   layerGroups?: LayerGroup[];
+  /** The built-in graphic standard (pens and text sizes) the sheets draw with, by id (`drafting/graphic-standard.ts`); absent: the IfcSheet default. */
+  graphicStandard?: string;
   /** Door and window opening symbols in elevation: apex at the handle (default, window makers' sketches) or at the hinges (DIN 1356). */
   openingLines?: 'handle' | 'hinge';
   /** Plan symbol overrides by element GlobalId: bit 1 hinges a door on its other jamb, bit 2 swings it to the other side. */
@@ -330,6 +100,14 @@ export interface ProjectDocument {
   /** The entry each Design tool builds with, per kind. */
   currentTypes?: Partial<Record<ElementTypeKind, string>>;
   schedules?: ProjectSchedule[];
+  /** The project's own sheet templates (the built-in ones are in code, `sheet-templates.ts`); they travel in the library file. */
+  sheetTemplates?: SheetTemplate[];
+  /** The template new sheets of a series start from, by template id; a series without one is made on the smallest paper that fits. */
+  seriesTemplates?: Partial<Record<TemplateSeries, string>>;
+  /** The site (plot) area in m² the user entered; absent: the model's IfcSite area, if it states one (`urban/`). */
+  siteArea?: number;
+  /** The urban indicators' terrain level, ±0.00 and the storeys left out of Ad for CUT (`urban/indicators.ts`). */
+  urbanSettings?: UrbanSettings;
   /** The project's structure profile library (retaining walls, tunnels, decks, barriers… and drawn shapes). */
   structureProfiles?: StructureProfile[];
   /** Road drawings: longitudinal profiles and cross-section sets. */
@@ -338,39 +116,42 @@ export interface ProjectDocument {
   typicalSections?: ProjectTypicalSection[];
   /** Building materials: how each IfcMaterial draws where it is cut. */
   materials?: ProjectMaterial[];
+  /** The CAD layer standard: which DXF layer (name, colour, pen, line type) an IFC class or material goes on (`cad-layers.ts`). */
+  cadLayers?: CadLayerRule[];
   /** Named section cuts of the Drawing panel. */
   savedSectionCuts?: SavedSectionCut[];
+  /** Where an element's phase is read from besides its IFC Status (`phases.ts`). */
+  phaseSource?: PhaseSource;
   /** Named presets of the annotation tools. */
   annotationTypes?: AnnotationType[];
   /** The project's own symbols (the built-in ones are in code). */
   symbols?: DraftSymbol[];
+  /** Details drawn once and kept for reuse: drafting views saved to the library, placed again with `placeLibraryDetail`. */
+  details?: LibraryDetail[];
   /** Legends: generated tables of what the drawings use, placeable on sheets. */
   legends?: ProjectLegend[];
+  /** Which IFC property feeds each field of a tag, per tag kind (`tagfields/tag-fields.ts`); only what differs from the defaults. */
+  tagFields?: TagFieldConfig;
   /** The sets of sheets that were issued, oldest first (`issue/plan.ts`). */
   issues?: ProjectIssue[];
+  /** How sheets are numbered (`numbering.ts`); absent is the default A-101 style. Document key: `sheetNumbering`. */
+  sheetNumbering?: NumberingScheme;
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
+  /** Review comments pinned on sheets (`review/`). */
+  comments?: ReviewComment[];
 }
 
-/** One sheet as it stood when a set was issued. */
-export interface IssuedSheet {
-  number: string;
-  title: string;
-  /** The scales of its viewports, as drawn on the list: `1:50`, or `1:50, 1:100`; empty when it holds none. */
-  scale: string;
-  paper: PaperSize;
-  orientation: 'landscape' | 'portrait';
-  revision: string;
-  /** What the sheet held (`issue/fingerprint.ts`): equal fingerprints mean an unchanged sheet. */
-  fingerprint: string;
-}
-
-/** A set of sheets sent out together, recorded with the project so a later issue can say what changed. */
-export interface ProjectIssue {
+/** One revision of the set: a letter or number, when, what changed, who made it. */
+export interface ProjectRevision {
   id: string;
-  name: string;
-  /** `YYYY-MM-DD`. */
+  /** `A`, `B`, `01`: what the title block reads. */
+  code: string;
+  /** `YYYY-MM-DD`, or empty. */
   date: string;
-  createdAt: number;
-  sheets: IssuedSheet[];
+  description: string;
+  by: string;
 }
+
+// The issue records live with the issue code; re-exported so the document's types stay in one import.
+export type { IssuedSheet, ProjectIssue } from '@/issue/types';

@@ -45,6 +45,13 @@ without `other`; the same problems are logged in the browser console when the
 locale loads. Untranslated keys fall back to English one by one, so a partial
 locale is valid.
 
+The names the app gives what it creates (`names.*`: sheets, default views,
+`Section A-A`) are stored as plain text in the language active at the time.
+Put a locale's `names.*` keys in `catalogues/names.<tag>.ts` (spread into
+`locales/<tag>.ts` like `names.ro.ts`): `locales.boot.ts` loads those files
+eagerly, so a project made in that language still reads its section marks
+back when it is opened in another.
+
 ## Coverage
 
 The ribbon toolbar catalogue covers the default toolbar's own chrome: tab

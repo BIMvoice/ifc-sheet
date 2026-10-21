@@ -18,7 +18,7 @@
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { customPlaneCenter } from '@/store/slices/section-plane-center';
 import { percentToWorld, sectionAxisRange, type AxisBounds } from '@/lib/section/section-distance';
-import { resolvePlanLevel } from './view-defaults';
+import { levelFloorY, resolvePlanLevel } from './view-defaults';
 import { sectionPlaneForView } from './view-plane';
 import type { ProjectLevel, ProjectView, SectionProjectPlane } from './types';
 
@@ -33,14 +33,14 @@ const AXIS = { down: 'y', front: 'z', side: 'x' } as const;
 export function viewWorkPlane(view: ProjectView, drawingPlane: SectionPlaneConfig | null, levels: readonly ProjectLevel[]): SectionPlaneConfig | null {
   if (view.kind !== 'plan') return drawingPlane;
   const level = resolvePlanLevel(view, levels) ?? view.level;
-  return { axis: 'y', position: level.elevation, flipped: false };
+  return { axis: 'y', position: levelFloorY(level), flipped: false };
 }
 
 export function viewPlaneConfig(view: ProjectView, levels: readonly ProjectLevel[], bounds: AxisBounds | null): SectionPlaneConfig | null {
   switch (view.kind) {
     case 'plan': {
       const level = resolvePlanLevel(view, levels) ?? view.level;
-      return { axis: 'y', position: level.elevation + view.cutHeight, flipped: false, ...(view.reflected ? { reflected: true } : {}) };
+      return { axis: 'y', position: levelFloorY(level) + view.cutHeight, flipped: false, ...(view.reflected ? { reflected: true } : {}) };
     }
     case 'section':
       return storedPlaneConfig(view.plane);

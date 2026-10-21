@@ -1,0 +1,79 @@
+ISO-10303-21;
+HEADER;
+/* Hand-written federated pair, architecture half (IfcSheet #96). Pairs with
+   str.ifc: both are authored in one set of project coordinates, about
+   2,600 km east and 1,200 km north of the file origin, so each file is meshed
+   with its own RTC offset and a federation must bring them onto one frame.
+   This file puts its IfcSite AT the project position and its building at the
+   site's origin. Walls: A along +X (x 0..6, y 0..0.3), B along +Y (x 0..0.3,
+   y 0..6), both 3 m on Level 0 (elevation 0); C on Level 1 (elevation 3),
+   over A. A door box sits inside wall A at x 2..2.9. The inner corner of
+   A and B is (0.3, 0.3), where str.ifc's column touches both walls. */
+FILE_DESCRIPTION(('ViewDefinition[DesignTransferView]'),'2;1');
+FILE_NAME('arch.ifc','2026-10-19T00:00:00',('IfcSheet'),('IfcSheet'),'hand-written','hand-written','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('2fedArchProject0000010',$,'Federated pair',$,$,$,$,(#14),#9);
+#2=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#3=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);
+#4=IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.);
+#6=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#9=IFCUNITASSIGNMENT((#2,#3,#4,#6));
+#10=IFCCARTESIANPOINT((0.,0.,0.));
+#11=IFCDIRECTION((0.,0.,1.));
+#12=IFCDIRECTION((1.,0.,0.));
+#13=IFCAXIS2PLACEMENT3D(#10,#11,#12);
+#14=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#13,$);
+#15=IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,#14,$,.MODEL_VIEW.,$);
+#20=IFCCARTESIANPOINT((2600000.,1200000.,0.));
+#21=IFCAXIS2PLACEMENT3D(#20,#11,#12);
+#22=IFCLOCALPLACEMENT($,#21);
+#23=IFCLOCALPLACEMENT(#22,#13);
+#24=IFCLOCALPLACEMENT(#23,#13);
+#25=IFCCARTESIANPOINT((0.,0.,3.));
+#26=IFCAXIS2PLACEMENT3D(#25,#11,#12);
+#27=IFCLOCALPLACEMENT(#23,#26);
+#30=IFCSITE('2fedArchSite0000000010',$,'Site',$,$,#22,$,$,.ELEMENT.,$,$,$,$,$);
+#31=IFCBUILDING('2fedArchBuilding000010',$,'Building',$,$,#23,$,$,.ELEMENT.,$,$,$);
+#32=IFCBUILDINGSTOREY('2fedArchLevel000000100',$,'Level 0',$,$,#24,$,$,.ELEMENT.,0.);
+#33=IFCBUILDINGSTOREY('2fedArchLevel100000100',$,'Level 1',$,$,#27,$,$,.ELEMENT.,3.);
+#34=IFCRELAGGREGATES('2fedArchAggProject0010',$,$,$,#1,(#30));
+#35=IFCRELAGGREGATES('2fedArchAggSite0000010',$,$,$,#30,(#31));
+#36=IFCRELAGGREGATES('2fedArchAggBuilding010',$,$,$,#31,(#32,#33));
+#40=IFCDIRECTION((1.,0.));
+#41=IFCCARTESIANPOINT((3.,0.15));
+#42=IFCAXIS2PLACEMENT2D(#41,#40);
+#43=IFCRECTANGLEPROFILEDEF(.AREA.,'A',#42,6.,0.3);
+#44=IFCEXTRUDEDAREASOLID(#43,#13,#11,3.);
+#45=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#44));
+#46=IFCPRODUCTDEFINITIONSHAPE($,$,(#45));
+#47=IFCLOCALPLACEMENT(#24,#13);
+#48=IFCWALL('2fedArchWallA000000010',$,'Wall A',$,$,#47,#46,$,.STANDARD.);
+#50=IFCCARTESIANPOINT((0.15,3.));
+#51=IFCAXIS2PLACEMENT2D(#50,#40);
+#52=IFCRECTANGLEPROFILEDEF(.AREA.,'B',#51,0.3,6.);
+#53=IFCEXTRUDEDAREASOLID(#52,#13,#11,3.);
+#54=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#53));
+#55=IFCPRODUCTDEFINITIONSHAPE($,$,(#54));
+#56=IFCLOCALPLACEMENT(#24,#13);
+#57=IFCWALL('2fedArchWallB000000010',$,'Wall B',$,$,#56,#55,$,.STANDARD.);
+#60=IFCEXTRUDEDAREASOLID(#43,#13,#11,3.);
+#61=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#60));
+#62=IFCPRODUCTDEFINITIONSHAPE($,$,(#61));
+#63=IFCLOCALPLACEMENT(#27,#13);
+#64=IFCWALL('2fedArchWallC000000010',$,'Wall C',$,$,#63,#62,$,.STANDARD.);
+#70=IFCCARTESIANPOINT((2.,0.1,0.));
+#71=IFCAXIS2PLACEMENT3D(#70,#11,#12);
+#72=IFCLOCALPLACEMENT(#24,#71);
+#73=IFCCARTESIANPOINT((0.45,0.05));
+#74=IFCAXIS2PLACEMENT2D(#73,#40);
+#75=IFCRECTANGLEPROFILEDEF(.AREA.,'Door',#74,0.9,0.1);
+#76=IFCEXTRUDEDAREASOLID(#75,#13,#11,2.1);
+#77=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#76));
+#78=IFCPRODUCTDEFINITIONSHAPE($,$,(#77));
+#79=IFCDOOR('2fedArchDoor0000000010',$,'Door 1',$,$,#72,#78,$,2.1,0.9,.DOOR.,.SINGLE_SWING_LEFT.,$);
+#80=IFCRELCONTAINEDINSPATIALSTRUCTURE('2fedArchContainL000010',$,$,$,(#48,#57,#79),#32);
+#81=IFCRELCONTAINEDINSPATIALSTRUCTURE('2fedArchContainL100010',$,$,$,(#64),#33);
+ENDSEC;
+END-ISO-10303-21;

@@ -24,7 +24,7 @@ import { modelChangeDenial } from '@/store/mutation-permission';
 import { buildStoreyWorkplane } from '@/lib/commands/modeling/workplane';
 import { requestRemesh } from '@/lib/remesh/remesh-service';
 import { registerAuthoredElement } from '@/utils/spatialHierarchy';
-import { drawingToWorld, type Vec3 } from '@/drafting/frame';
+import { drawingToWorld, viewNormal, type Vec3 } from '@/drafting/frame';
 import type { Pt } from '@/drafting/types';
 import { modelLevels } from './model-levels';
 import { selfIntersects } from '@/drafting/arrangement';
@@ -58,9 +58,7 @@ const tuple = (p: Vec3): V => [p.x, p.y, p.z];
 
 /** The direction (world) a view looks FROM: out of the drawing toward the viewer. */
 export function towardViewer(plane: SectionPlaneConfig): V {
-  const sign = plane.flipped ? -1 : 1;
-  if (plane.customPlane) return [plane.customPlane.normal.x * sign, plane.customPlane.normal.y * sign, plane.customPlane.normal.z * sign];
-  return plane.axis === 'x' ? [sign, 0, 0] : plane.axis === 'y' ? [0, sign, 0] : [0, 0, sign];
+  return tuple(viewNormal(plane));
 }
 
 /** Why a contour cannot become a solid, or null: a loop crossing itself, a hole outside the outline or across another. */

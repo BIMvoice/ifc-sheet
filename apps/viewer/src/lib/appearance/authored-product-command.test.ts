@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import '@/test/setup-dom.js';
 import { test } from 'node:test';
-import { evidenceSkip } from '@/test/evidence-fixture.js';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { IfcParser } from '@ifc-lite/parser';
@@ -30,7 +29,7 @@ import { configureMutationView } from '@/utils/configureMutationView';
 import { pathForEntity } from '@/lib/collab/entity-paths';
 import { resolvePlacementChain } from '@/lib/placement-core';
 
-for (const federated of [false, true]) test(`native multicolour PDF owner is one IFC/GPU/history transaction; federation=${federated} (#4406)`, { skip: evidenceSkip('pdf-fill-annotations/page-1-request.json') }, async t => {
+for (const federated of [false, true]) test(`native multicolour PDF owner is one IFC/GPU/history transaction; federation=${federated} (#4406)`, async t => {
   let binary: Buffer;
   try { binary = await readFile(new URL('../../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url)); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; t.skip('Build WASM with pnpm build:wasm'); return; }

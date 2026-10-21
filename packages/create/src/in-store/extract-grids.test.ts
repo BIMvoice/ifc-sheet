@@ -116,6 +116,16 @@ describe('extractGridAxesForStorey: a file grid (#6232 D3)', () => {
     expect(byTag.get('A')!.family).toBe('V');
   });
 
+  it('honours SameSense: an axis authored against its curve starts at the curve end (PR #125 review)', async () => {
+    const reversed = FILE_GRID.replace("#73=IFCGRIDAXIS('1',#72,.T.);", "#73=IFCGRIDAXIS('1',#72,.F.);");
+    expect(reversed).not.toBe(FILE_GRID);
+    const byTag = new Map(extractGridAxesForStorey(await parse(reversed), 50).axes.map((a) => [a.AxisTag, a]));
+    expect(round(byTag.get('1')!.a)).toEqual([-7.5, 0]);
+    expect(round(byTag.get('1')!.b)).toEqual([0.5, 0]);
+    // The other axis keeps its .T. sense.
+    expect(round(byTag.get('A')!.a)).toEqual([-2.5, 0]);
+  });
+
   it('offers nothing for a storey with no grid above or on it', async () => {
     const store = await parse(FILE_GRID.replace('#92=IFCRELCONTAINEDINSPATIALSTRUCTURE(\'6hQBAVPOr5VxhS3Jl0O47h\',$,$,$,(#80),#40);', ''));
     expect(extractGridAxesForStorey(store, 50).axes).toEqual([]);
