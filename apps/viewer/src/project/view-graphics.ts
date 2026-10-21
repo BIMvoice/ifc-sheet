@@ -14,7 +14,8 @@
 
 import { BUILT_IN_PRESETS, ifcTypeCriterion, type Drawing2D, type DrawingLine, type DrawingPolygon, type GraphicOverrideRule } from '@ifc-lite/drawing-2d';
 import type { Pt } from '@/drafting/types';
-import type { CategoryGraphics, PhaseId, ViewGraphics } from './types';
+import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
+import type { CategoryGraphics, CategoryLineWeight, PhaseId, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
 import type { DraftShape } from '@/drafting/types';
 
@@ -197,10 +198,8 @@ export interface CutHatch {
   source?: HatchSource;
 }
 
-const HATCH_PEN_MM = { heavy: 0.35, medium: 0.25, light: 0.18, hairline: 0.13 } as const;
-
 /** The cut faces to hatch, by their category's `cutHatch`. */
-export function cutHatches(drawing: StyledDrawing, graphics: ViewGraphics | undefined): CutHatch[] {
+export function cutHatches(drawing: StyledDrawing, graphics: ViewGraphics | undefined, hatchPens: Record<CategoryLineWeight, number> = DEFAULT_GRAPHIC_STANDARD.materialHatch): CutHatch[] {
   const categories = graphics?.categories;
   const out: CutHatch[] = [];
   // A category's own cut hatch wins over its elements' materials.
@@ -211,7 +210,7 @@ export function cutHatches(drawing: StyledDrawing, graphics: ViewGraphics | unde
   };
   for (const h of drawing.materialHatches ?? []) {
     if (overridden(h.ifcType)) continue;
-    out.push({ loops: h.loops, pattern: h.pattern, scale: h.scale, color: '#000000', width: HATCH_PEN_MM[h.pen], source: { ifcType: h.ifcType, entityId: h.entityId, materialId: h.materialId } });
+    out.push({ loops: h.loops, pattern: h.pattern, scale: h.scale, color: '#000000', width: hatchPens[h.pen], source: { ifcType: h.ifcType, entityId: h.entityId, materialId: h.materialId } });
   }
   if (!categories) return out;
   for (const polygon of drawing.cutPolygons) {

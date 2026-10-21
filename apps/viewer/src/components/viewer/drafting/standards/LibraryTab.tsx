@@ -15,7 +15,9 @@ import { toast } from '@/components/ui/toast';
 import { CATALOGUE_KINDS, type CatalogueKind } from '@/catalogue/catalogue-file';
 import { kindCounts } from '@/catalogue/catalogue-counts';
 import type { ClashPolicy, MergeReport } from '@/catalogue/catalogue-merge';
-import { exportCatalogue, importCatalogueText, projectCatalogue } from '@/catalogue/catalogue-store';
+import { exportBuiltInLibrary, exportCatalogue, importCatalogueText, projectCatalogue } from '@/catalogue/catalogue-store';
+import { GRAPHIC_STANDARDS } from '@/drafting/graphic-standard';
+import { setGraphicStandard, useGraphicStandard } from '@/project/graphic-standard-actions';
 import { useProjectStore } from '@/project/project-store';
 
 function ExportSection() {
@@ -102,9 +104,25 @@ function ImportSection() {
   );
 }
 
+/** The project's graphic standard: pens and text sizes of every sheet, from a built-in set. */
+function StandardSection() {
+  const { t } = useTranslation();
+  const current = useGraphicStandard();
+  return (
+    <section className="col-span-2 space-y-2" data-testid="graphic-standard">
+      <h3 className="font-medium">{t('library.standard.title')}</h3>
+      <p className="text-zinc-500">{t('library.standard.hint')}</p>
+      <SegmentedControl size="sm" label={t('library.standard.title')} value={current.id} onValueChange={setGraphicStandard}
+        options={GRAPHIC_STANDARDS.map((g) => ({ value: g.id, label: g.name }))} />
+      <div><Button size="sm" onClick={() => { exportBuiltInLibrary(current.id); toast.success(t('library.export.done')); }}>{t('library.standard.export')}</Button></div>
+    </section>
+  );
+}
+
 export function LibraryTab() {
   return (
     <div className="grid grid-cols-2 gap-8 text-xs">
+      <StandardSection />
       <ExportSection />
       <ImportSection />
     </div>

@@ -30,6 +30,7 @@ import { cadKindOf, layerTags, penTags } from '../sheets/dxf-tags';
 import { shapePath } from './DraftOverlay';
 import { AnnotationGraphics } from './AnnotationGraphics';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
+import { graphicStandardOf } from '@/drafting/graphic-standard';
 import { useProjectStore } from '@/project/project-store';
 import type { LiveSymbolContext } from '@/siteplan/live-symbols';
 import { currentEntityStyles } from '@/project/model-styles';
@@ -53,7 +54,7 @@ interface ViewDxfInput {
 /** The off-screen SVG `viewDxf` walks; exported for tests (the DXF walker needs a browser's path geometry). */
 export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays, symbols }: ViewDxfInput) {
   const s = useProjectStore.getState();
-  const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns, cadPenContext(s.cadLayers), currentEntityStyles()) : [];
+  const pens = drawing ? viewportPens(drawing, view.graphics, MM, axis, extraPatterns, cadPenContext(s.cadLayers), currentEntityStyles(), graphicStandardOf(s.graphicStandard)) : [];
   const book = { textStyles: s.textStyles ?? [], dimStyles: s.dimStyles ?? [] };
   const colour = new Map(layers.map((l) => [l.id, layerShows(l, s.layerGroups ?? [], { view: view.hiddenLayers }) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));

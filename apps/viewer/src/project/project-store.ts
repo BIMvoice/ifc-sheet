@@ -15,6 +15,7 @@
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
 import { resetWallView } from '@/wall/wall-view';
@@ -27,6 +28,7 @@ import { upgradeTagAllTypes } from '@/tagall/types';
 import { liftTypedRevisions, sheetRevisions } from './revisions';
 import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
+import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 
@@ -45,7 +47,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, revisions: [], drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
-  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined,
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -75,6 +77,7 @@ const DOCUMENT_FIELDS = {
   titleBlockSources: true,
   sheetNumbering: true,
   phaseSource: true,
+  graphicStandard: true,
   revisions: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
@@ -118,6 +121,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
   // print what they printed, so a sheet unchanged since the last issue still reads unchanged at the next one.
   const titled = liftSheetTitleBlocks(saved);
   const doc = carryIssueFingerprints(titled, liftTypedRevisions(titled, () => freshProjectId('revision')));
+  const standard = knownGraphicStandard(doc.graphicStandard);
   resetWallView();
   useProjectStore.setState({
     ...doc,
@@ -152,11 +156,13 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     revisions: doc.revisions ?? [],
     modelState: doc.modelState,
     titleBlockSources: doc.titleBlockSources,
+    graphicStandard: standard.id,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
     dirty: options.dirty ?? false,
   });
+  if (standard.unknown) warnUnknownGraphicStandard(standard.unknown);
 }
 
 /**
