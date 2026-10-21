@@ -541,11 +541,6 @@ jobs:
   #     fixtures/upload-fixtures (macOS-only path-guard mismatch, unverified on
   #     Linux): need tooling this job does not install.
   #   - check-changeset-bump: no release anchor in this fork's history.
-  #   - check-module-size: apps/viewer/src/components/viewer/PropertiesPanel.tsx
-  #     is 2050 lines against a budget of 2048; clearing it means raising a
-  #     budget, which needs a maintainer sweep (--all --allow-raise).
-  #   - check-unused-locals-baseline: measures 240 against a baseline of 194;
-  #     depends on the chore/lint-baselines branch, which removes 74.
   scripts-tests:
     name: Script tests
     needs: [changes, wasm]
@@ -600,6 +595,7 @@ jobs:
           node --test scripts/check-jsx-a11y.test.mjs || fail=1
           node --test scripts/check-lint-ran.test.mjs || fail=1
           node --test scripts/check-loader-hook-specifier-match.test.mjs || fail=1
+          node --test scripts/check-module-size.test.mjs || fail=1
           node --test scripts/check-overlay-palette.test.mjs || fail=1
           node --test scripts/check-partial-close-admission.test.mjs || fail=1
           node --test scripts/check-path-case-collisions.test.mjs || fail=1
@@ -624,6 +620,7 @@ jobs:
           node --test scripts/check-test-wiring.test.mjs || fail=1
           node --test scripts/check-tla-chunk-await.test.mjs || fail=1
           node --test scripts/check-type-scale.test.mjs || fail=1
+          node --test scripts/check-unused-locals-baseline.test.mjs || fail=1
           node --test scripts/check-workflow-report-paths.test.mjs || fail=1
           node --test scripts/ci-evidence-guards.test.mjs || fail=1
           node --test scripts/ci-wasm-prebuilt-eligible.test.mjs || fail=1
