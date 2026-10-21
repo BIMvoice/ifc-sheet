@@ -19,7 +19,7 @@ import { findTemplate, templateFields } from './sheet-templates';
 import { addSchedule } from '@/joinery/schedules';
 import { registerHolders, registerSheetFit } from './drawing-register';
 import { withContinuationPages } from './continuation-pages';
-import { isJoinerySchedule, pagesIn, paperHolding, syncSchedulePages } from './schedule-fit';
+import { isFittedSchedule, isJoinerySchedule, pagesIn, paperHolding, syncSchedulePages } from './schedule-fit';
 import { sheetDrawingArea } from './viewport-resize';
 import { scheduleData, type ScheduleData } from '@/joinery/schedule-data';
 import { proposalInputForLevel } from './model-rooms';
@@ -265,39 +265,42 @@ export function hangView(viewId: string, extent: ModelExtent): string | null {
 
 /**
  * Hang a schedule or a legend on a sheet of its own in the A-6xx series, named `name`: `itemId` centred in the drawing area.
- * A joinery schedule (`data`) instead takes the whole drawing area as its box and is checked to fit: on a paper too small
- * for even one band at its scale the sheet is made the next larger paper that holds it, and the bands that do not fit the
- * box's height continue on further sheets (`schedule-fit`).
+ * A schedule that fits its viewport (`fit`) instead takes the whole drawing area as its box. A joinery schedule (`fit.data`)
+ * is checked to fit: on a paper too small for even one band at its scale the sheet is made the next larger paper that holds
+ * it, and the bands that do not fit the box's height continue on further sheets (`schedule-fit`). A column table's pages are
+ * counted from its rows when the sheet draws it (`useSheetSchedules`).
  */
-function hangOnSheetOfItsOwn(itemId: string, name: string, joinery?: { data: ScheduleData; scale: number }): string {
+function hangOnSheetOfItsOwn(itemId: string, name: string, fit?: { data?: ScheduleData; scale: number }): string {
   const { sheets } = useProjectStore.getState();
   const placed = sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === itemId));
   if (placed) return placed.id;
   const template = seriesTemplates().schedules;
   const start = template ? templateFields(template) : { paper: SET_PAPER, orientation: 'landscape' as const };
   const bare: ProjectSheet = { id: freshProjectId('sheet'), number: nextNumber(sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), ...start };
-  const paper = joinery ? paperHolding(bare, joinery.data, joinery.scale) : bare.paper;
+  const paper = fit?.data ? paperHolding(bare, fit.data, fit.scale) : bare.paper;
   const sheet: ProjectSheet = { ...bare, paper };
-  const area = joinery ? sheetDrawingArea(sheet) : drawingArea(sheet);
-  const box = joinery ? { width: area.w, height: area.h } : { width: 0, height: 0 };
-  sheet.viewports = [{ id: freshProjectId('viewport'), viewId: itemId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: joinery?.scale ?? 50, ...box, center: null }];
+  const area = fit ? sheetDrawingArea(sheet) : drawingArea(sheet);
+  const box = fit ? { width: area.w, height: area.h } : { width: 0, height: 0 };
+  sheet.viewports = [{ id: freshProjectId('viewport'), viewId: itemId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: fit?.scale ?? 50, ...box, center: null }];
   useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });
-  if (joinery) syncSchedulePages(itemId, pagesIn(joinery.data, joinery.scale, area));
+  if (fit?.data) syncSchedulePages(itemId, pagesIn(fit.data, fit.scale, area));
   return sheet.id;
 }
 
 /**
- * Hang a schedule (doors and windows, or the material takeoff) on a sheet of
- * its own in the schedules series (A-6xx by default), named after it. A joinery
- * schedule fills the sheet's drawing area and continues on A-6xx.1… when its
- * bands do not fit; the others are centred. Returns the sheet's id; a schedule
- * already on a sheet returns that sheet. `data` stands in for the model's schedule data.
+ * Hang a schedule (doors and windows, the material takeoff, the finishes, the
+ * types or the urban indicators) on a sheet of its own in the schedules series
+ * (A-6xx by default), named after it. Every kind but the register fills the
+ * sheet's drawing area and continues on A-6xx.1… when its bands or rows do not
+ * fit. Returns the sheet's id; a schedule already on a sheet returns that
+ * sheet. `data` stands in for the model's joinery schedule data.
  */
 export function hangSchedule(scheduleId: string, data?: ScheduleData): string | null {
   const schedule = useProjectStore.getState().schedules?.find((s) => s.id === scheduleId);
   if (!schedule) return null;
   const scale = schedule.scale ?? 50;
-  return hangOnSheetOfItsOwn(scheduleId, schedule.name, isJoinerySchedule(schedule) ? { data: data ?? scheduleData(schedule.kind as 'door' | 'window' | 'all'), scale } : undefined);
+  if (!isFittedSchedule(schedule)) return hangOnSheetOfItsOwn(scheduleId, schedule.name);
+  return hangOnSheetOfItsOwn(scheduleId, schedule.name, { scale, data: isJoinerySchedule(schedule) ? data ?? scheduleData(schedule.kind as 'door' | 'window' | 'all') : undefined });
 }
 
 /** Hang a legend the same way (`hangSchedule`); a legend already on a sheet returns that sheet. */

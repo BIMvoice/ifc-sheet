@@ -9,7 +9,8 @@
  */
 
 import { escapeCsvCell } from '@ifc-lite/export';
-import type { ScheduleLayout, SchedulePrim } from './schedule-layout';
+import type { ScheduleLayout } from './schedule-layout';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
 import type { TakeoffRow } from './material-takeoff';
 
 export interface TakeoffLabels {
@@ -24,42 +25,24 @@ export interface TakeoffLabels {
   number?: (value: number, digits: number) => string;
 }
 
-const ROW = 6;
-const TEXT = 2.5;
-const PAD = 1.5;
 const COLUMNS = [62, 18, 24, 24, 70] as const;
-const PEN = { frame: 0.35, grid: 0.18 } as const;
 
 /** The `IfcWall` style class names, without the prefix, for people. */
 const plainClass = (c: string): string => c.replace(/^Ifc/, '');
 
-export function layoutMaterialTakeoff(rows: readonly TakeoffRow[], labels: TakeoffLabels): ScheduleLayout {
+export function layoutMaterialTakeoff(rows: readonly TakeoffRow[], labels: TakeoffLabels, paging: PagedOptions = {}): ScheduleLayout {
   const fixed = (v: number | null, digits = 2): string => (v === null ? '–' : labels.number ? labels.number(v, digits) : v.toFixed(digits));
-  const prims: SchedulePrim[] = [];
-  const width = COLUMNS.reduce((a, b) => a + b, 0);
-  const lefts = COLUMNS.map((_, i) => COLUMNS.slice(0, i).reduce((a, b) => a + b, 0));
-  const titleH = 10;
   const sum = (key: 'volume' | 'area'): number | null => (rows.some((r) => r[key] !== null) ? rows.reduce((s, r) => s + (r[key] ?? 0), 0) : null);
   const table: string[][] = [
-    [labels.material, labels.elements, labels.volume, labels.area, labels.usedIn],
     ...rows.map((r) => [r.material, String(r.elements), fixed(r.volume), fixed(r.area), r.classes.map(plainClass).join(', ')]),
     [labels.total, String(rows.reduce((s, r) => s + r.elements, 0)), fixed(sum('volume')), fixed(sum('area')), ''],
   ];
-  const height = titleH + table.length * ROW;
-  prims.push({ kind: 'text', x: 0, y: titleH - 3, text: labels.title, size: 4, anchor: 'start', bold: true });
-  table.forEach((cells, r) => {
-    const top = titleH + r * ROW;
-    const bold = r === 0 || r === table.length - 1;
-    cells.forEach((text, c) => {
-      const numeric = c >= 1 && c <= 3;
-      const x = numeric ? lefts[c] + COLUMNS[c] - PAD : lefts[c] + PAD;
-      prims.push({ kind: 'text', x, y: top + ROW / 2 + TEXT * 0.35, text, size: TEXT, anchor: numeric ? 'end' : 'start', bold });
-    });
-    prims.push({ kind: 'line', x1: 0, y1: top + ROW, x2: width, y2: top + ROW, w: r === 0 || r === table.length - 2 ? PEN.frame : PEN.grid });
-  });
-  prims.push({ kind: 'line', x1: 0, y1: titleH, x2: width, y2: titleH, w: PEN.frame });
-  for (const x of [...lefts, width]) prims.push({ kind: 'line', x1: x, y1: titleH, x2: x, y2: height, w: x === 0 || x === width ? PEN.frame : PEN.grid });
-  return { width, height, prims };
+  const block: TableBlock = {
+    columns: COLUMNS, header: [labels.material, labels.elements, labels.volume, labels.area, labels.usedIn], numeric: (c) => c >= 1 && c <= 3,
+    // A frame rule above the total.
+    rows: table.map((cells, i) => ({ cells, bold: i === table.length - 1, rule: i === table.length - 2 ? PEN.frame : PEN.grid })),
+  };
+  return layoutPagedTable(labels.title, 4, [{ kind: 'table', block }], paging);
 }
 
 /** The takeoff as CSV, numbers unformatted; material names are model text, so every cell is formula-guarded (#1506). */

@@ -3,12 +3,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * Where a joinery schedule sits on the paper (#186). Its viewport is a box the
- * table wraps to: bands break at the box's width, and the bands that do not fit
- * its height continue on a continuation sheet (A-601.1…; `continuation-pages`),
- * so a schedule never runs off the paper and is never shrunk to fit: the
- * drawings keep the schedule's scale. A viewport with no box (0 × 0, from
- * before) takes the sheet's drawing area.
+ * Where a schedule sits on the paper (#186). Its viewport is a box the table
+ * fits: a joinery schedule's bands break at the box's width, a column table's
+ * (takeoff, finishes, types, urban) rows at its height, and what does not fit
+ * the height continues on a continuation sheet (A-601.1…; `continuation-pages`),
+ * so a schedule never runs off the paper and is never shrunk to fit. One
+ * path (`layoutOnSheet`) boxes, pages, clips and sizes every kind; only the
+ * layout function differs. A viewport with no box (0 × 0, from before) takes
+ * the sheet's drawing area. The register shrinks its rows instead (`registerFit`).
  */
 
 import { ISO_PAPERS } from './paper';
@@ -22,7 +24,12 @@ import type { ScheduleData } from '@/joinery/schedule-data';
 import type { Rect } from './sheet-frame';
 import type { Paper, ProjectSchedule, ProjectSheet, SheetViewport } from './types';
 
-/** The schedules whose table wraps to its viewport: the joinery lists. */
+/** The schedules that fit their viewport's box (all but the register, which has its own fit): `layoutOnSheet`. */
+export function isFittedSchedule(schedule: Pick<ProjectSchedule, 'kind'> | undefined): boolean {
+  return !!schedule && schedule.kind !== 'register';
+}
+
+/** The schedules whose table wraps to its viewport's width: the joinery lists (`layoutJoineryOnSheet`). */
 export function isJoinerySchedule(schedule: Pick<ProjectSchedule, 'kind'> | undefined): boolean {
   return schedule?.kind === 'door' || schedule?.kind === 'window' || schedule?.kind === 'all';
 }
@@ -89,14 +96,33 @@ export function pagesIn(data: ScheduleData, scale: number, box: Rect): number {
 }
 
 /**
- * The page of the schedule that viewport `vp` of `sheet` shows: wrapped to the box of the schedule's first sheet (so every page
- * agrees on where the bands break), drawn into `vp`'s own box, with the smallest box a resize may shrink it to.
+ * The page of the schedule that viewport `vp` of `sheet` shows, whatever its kind: `build` lays out one page for the box of the
+ * schedule's first sheet (so every page agrees on where the breaks fall), the result is given the box `vp` draws into, and the
+ * smallest box a resize may shrink it to (`min`, else the layout's own `minBox`).
  */
+export function layoutOnSheet(
+  input: { sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
+  build: (wrap: Rect, page: number) => ScheduleLayout,
+  min?: { width: number; height: number },
+): ScheduleLayout {
+  const { sheets, sheet, vp } = input;
+  const layout = build(scheduleHomeBox(sheets, vp.viewId, sheet, vp), vp.page ?? 0);
+  const floor = min ?? layout.minBox;
+  return floor ? { ...layout, fit: { box: scheduleBox(sheet, vp), min: floor } } : layout;
+}
+
+/** A joinery schedule's page: wrapped to the first sheet's box at its scale (`layoutSchedule`). */
 export function layoutJoineryOnSheet(
   input: { data: ScheduleData; labels: ScheduleLabels; scale: number; views?: ReadonlyMap<string, ElementViews>; sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
 ): ScheduleLayout {
-  const { data, labels, scale, views, sheets, sheet, vp } = input;
-  const wrap = scheduleHomeBox(sheets, vp.viewId, sheet, vp);
-  const layout = layoutSchedule(data, labels, { ...boxOptions(wrap, scale), views, page: vp.page ?? 0 });
-  return { ...layout, fit: { box: scheduleBox(sheet, vp), min: scheduleMinBox(data, { scale, views }) } };
+  const { data, labels, scale, views, ...place } = input;
+  return layoutOnSheet(place, (wrap, page) => layoutSchedule(data, labels, { ...boxOptions(wrap, scale), views, page }), scheduleMinBox(data, { scale, views }));
+}
+
+/** A column table's page (takeoff, finishes, types, urban): `layout` lays out the rows that fit the first sheet's box height. */
+export function layoutTableOnSheet(
+  input: { sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
+  layout: (paging: { maxHeight: number; page: number }) => ScheduleLayout,
+): ScheduleLayout {
+  return layoutOnSheet(input, (wrap, page) => layout({ maxHeight: wrap.h, page }));
 }
