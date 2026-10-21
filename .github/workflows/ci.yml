@@ -63,8 +63,9 @@
 # docs-only pull request, and on every push to main.
 #
 # Deliberately out of scope for now (follow-up): the other scripts/check-*
-# gates (check-refwalk-guards, check-api-surface, the docs checks) and their
-# scripts/*.test.mjs files. Only check-module-size, check-test-wiring and
+# gates (check-refwalk-guards, check-api-surface, the docs checks) and the
+# scripts/*.test.mjs files that the "Script tests" job leaves out (listed with
+# reasons above that job). Only check-module-size, check-test-wiring and
 # check-source-text-assertions are compared against the base.
 
 name: CI
@@ -193,6 +194,7 @@ jobs:
         with:
           name: wasm-pkg
           path: packages/wasm/pkg
+          if-no-files-found: error
           retention-days: 3
 
   typecheck:
@@ -517,6 +519,243 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/check-changesets.mjs
 
+  # Runs the scripts/*.test.mjs files listed below when `changes` reports code
+  # (anything but a docs-only pull request, and every push to main). It is part
+  # of "CI passed" through its `needs`, so it gates the merge.
+  #
+  # One `node --test` line per file, on purpose: scripts/check-test-wiring.mjs
+  # reads literal paths from workflow lines that carry `--test`, so a glob or a
+  # list kept in another file would leave these tests reported as unwired. A
+  # new scripts/**/*.test.mjs is added here by hand (check-test-wiring names it
+  # when it is missing). Left out, and why:
+  #   - scripts/check-census-timeout, check-ci-aggregate-coverage,
+  #     check-ci-path-coverage, check-issue-queue, check-pr-review-signal,
+  #     check-review-posted, check-rust-semver, check-server-bin-targets,
+  #     lib/ci-verdict-replay, lib/pr-review-signal, lib/server-bin-targets-parse,
+  #     release-tag-commit, release-version-changed, scan-dirty-prs,
+  #     review/{build-review-input,lane-canary,post-review,rubric-eval,run-judge,
+  #     run-reviewer,validate-findings}: assert on workflow files that are not in
+  #     this fork (only ci.yml and vercel-deploy.yml exist).
+  #   - check-codegen-sync (rustfmt), lib/revert-oracle-browser-observer
+  #     (Chrome), lib/revert-oracle-python-wheel (Python venv),
+  #     fixtures/upload-fixtures (macOS-only path-guard mismatch, unverified on
+  #     Linux): need tooling this job does not install.
+  #   - check-changeset-bump: no release anchor in this fork's history.
+  scripts-tests:
+    name: Script tests
+    needs: [changes, wasm]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # check-module-size.test.mjs runs the gate against the real repo, and
+          # the gate's merge-base audit needs origin/main and the history.
+          fetch-depth: 0
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+      # Some of the tests import packages/*/dist and the wasm runtime.
+      - run: pnpm turbo run build --filter='./packages/*'
+
+      # Every file runs even when an earlier one fails, so one run names all.
+      - name: node --test, file by file
+        run: |
+          fail=0
+          node --test scripts/ai-eval/check-ai-eval-invariants.test.mjs || fail=1
+          node --test scripts/ai-eval/check-ai-eval-manifest.test.mjs || fail=1
+          node --test scripts/ai-eval/lib/invariants.test.mjs || fail=1
+          node --test scripts/ai-eval/lib/schema-subset.test.mjs || fail=1
+          node --test scripts/ai-eval/lib/sse.test.mjs || fail=1
+          node --test scripts/browser-ab-report.test.mjs || fail=1
+          node --test scripts/browser-cold-inputs.test.mjs || fail=1
+          node --test scripts/browser-cold-teardown.test.mjs || fail=1
+          node --test scripts/browser-cold-wrapper.test.mjs || fail=1
+          node --test scripts/browser-metadata-readiness.test.mjs || fail=1
+          node --test scripts/build-rustdoc-index.test.mjs || fail=1
+          node --test scripts/check-agents-md-size.test.mjs || fail=1
+          node --test scripts/check-asset-usage.test.mjs || fail=1
+          node --test scripts/check-base-freshness.test.mjs || fail=1
+          node --test scripts/check-benchmark-regression.test.mjs || fail=1
+          node --test scripts/check-clash-degenerate-reason-parity.test.mjs || fail=1
+          node --test scripts/check-collab-room-model-target.test.mjs || fail=1
+          node --test scripts/check-css-vars.test.mjs || fail=1
+          node --test scripts/check-csv-escaper-copies.test.mjs || fail=1
+          node --test scripts/check-i18n-literals.test.mjs || fail=1
+          node --test scripts/check-icon-button-adoption.test.mjs || fail=1
+          node --test scripts/check-isolate-expansion-routing.test.mjs || fail=1
+          node --test scripts/check-jsx-a11y.test.mjs || fail=1
+          node --test scripts/check-lint-ran.test.mjs || fail=1
+          node --test scripts/check-loader-hook-specifier-match.test.mjs || fail=1
+          node --test scripts/check-module-size.test.mjs || fail=1
+          node --test scripts/check-overlay-palette.test.mjs || fail=1
+          node --test scripts/check-partial-close-admission.test.mjs || fail=1
+          node --test scripts/check-path-case-collisions.test.mjs || fail=1
+          node --test scripts/check-perf-flags.test.mjs || fail=1
+          node --test scripts/check-pset-name-find.test.mjs || fail=1
+          node --test scripts/check-raw-entity-enumeration.test.mjs || fail=1
+          node --test scripts/check-refwalk-guards.test.mjs || fail=1
+          node --test scripts/check-release-credential-quota.test.mjs || fail=1
+          node --test scripts/check-release-late-changesets.test.mjs || fail=1
+          node --test scripts/check-rtc-frame-copies.test.mjs || fail=1
+          node --test scripts/check-rust-api-surface.test.mjs || fail=1
+          node --test scripts/check-rust-major-offset.test.mjs || fail=1
+          node --test scripts/check-rust-source-text-assertions.test.mjs || fail=1
+          node --test scripts/check-sdk-canary-coverage.test.mjs || fail=1
+          node --test scripts/check-server-attr-index-usage.test.mjs || fail=1
+          node --test scripts/check-server-browser-type-parity.test.mjs || fail=1
+          node --test scripts/check-source-text-assertions-identity.test.mjs || fail=1
+          node --test scripts/check-source-text-assertions.test.mjs || fail=1
+          node --test scripts/check-step-escaper-copies.test.mjs || fail=1
+          node --test scripts/check-swallowed-push.test.mjs || fail=1
+          node --test scripts/check-test-glob-coverage.test.mjs || fail=1
+          node --test scripts/check-test-wiring.test.mjs || fail=1
+          node --test scripts/check-tla-chunk-await.test.mjs || fail=1
+          node --test scripts/check-type-scale.test.mjs || fail=1
+          node --test scripts/check-unused-locals-baseline.test.mjs || fail=1
+          node --test scripts/check-workflow-report-paths.test.mjs || fail=1
+          node --test scripts/ci-evidence-guards.test.mjs || fail=1
+          node --test scripts/ci-wasm-prebuilt-eligible.test.mjs || fail=1
+          node --test scripts/docs/check-doc-samples.test.mjs || fail=1
+          node --test scripts/docs/check-mkdocs-nav.real-tree.test.mjs || fail=1
+          node --test scripts/docs/check-mkdocs-nav.test.mjs || fail=1
+          node --test scripts/docs/check-package-readmes.test.mjs || fail=1
+          node --test scripts/docs/generate-docs-sections.test.mjs || fail=1
+          node --test scripts/enforce-pipeline-labels.test.mjs || fail=1
+          node --test scripts/examples-current.test.mjs || fail=1
+          node --test scripts/fetch-prebuilt-wasm.test.mjs || fail=1
+          node --test scripts/fixtures/build-manifest.test.mjs || fail=1
+          node --test scripts/fixtures/download-url.test.mjs || fail=1
+          node --test scripts/fixtures/fetch-fixtures.test.mjs || fail=1
+          node --test scripts/fixtures/zip-member.test.mjs || fail=1
+          node --test scripts/generate-coverage-ledger.test.mjs || fail=1
+          node --test scripts/generate-ifc2x3-entity-names.test.mjs || fail=1
+          node --test scripts/generate-server-attr-indices.test.mjs || fail=1
+          node --test scripts/lib/coderabbit-review-state.test.mjs || fail=1
+          node --test scripts/lib/count-ratchet.test.mjs || fail=1
+          node --test scripts/lib/crates-io.test.mjs || fail=1
+          node --test scripts/lib/deployment-assets-dir.test.mjs || fail=1
+          node --test scripts/lib/dirty-pr-scan.test.mjs || fail=1
+          node --test scripts/lib/exists-or-throw.test.mjs || fail=1
+          node --test scripts/lib/is-main-entry.test.mjs || fail=1
+          node --test scripts/lib/issue-refs.test.mjs || fail=1
+          node --test scripts/lib/license-header.test.mjs || fail=1
+          node --test scripts/lib/list-workspace-packages.test.mjs || fail=1
+          node --test scripts/lib/module-size-base-audit.test.mjs || fail=1
+          node --test scripts/lib/module-size-ratchet.test.mjs || fail=1
+          node --test scripts/lib/npm-pack-output.test.mjs || fail=1
+          node --test scripts/lib/open-pr-fetch.test.mjs || fail=1
+          node --test scripts/lib/partial-close-admission.test.mjs || fail=1
+          node --test scripts/lib/pr-green-sweep.test.mjs || fail=1
+          node --test scripts/lib/ref-issues-fetch.test.mjs || fail=1
+          node --test scripts/lib/refwalk-classify.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-browser-specs.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-browser.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-cargo.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-comment-only.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-compile-failure.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-dependabot.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-ifc-gitattributes.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-json.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-ledger.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-python.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-rename-boundary.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-rename.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-result.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-root-scaffolding.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-runtime-evidence.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-rust-bin-target.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-rust-char-literal.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-rust-feature-gate.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-rust-features.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-rust-siblings.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-type-only.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-unhandled-cfg.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle-version-bump.test.mjs || fail=1
+          node --test scripts/lib/revert-oracle.test.mjs || fail=1
+          node --test scripts/lib/review-dropped-verdict.test.mjs || fail=1
+          node --test scripts/lib/review-marker.test.mjs || fail=1
+          node --test scripts/lib/review-poll-page.test.mjs || fail=1
+          node --test scripts/lib/review-provenance.test.mjs || fail=1
+          node --test scripts/lib/rust-major-offset.test.mjs || fail=1
+          node --test scripts/lib/rust-public-api.test.mjs || fail=1
+          node --test scripts/lib/unified-diff.test.mjs || fail=1
+          node --test scripts/lib/unused-locals-classify.test.mjs || fail=1
+          node --test scripts/lib/vitest-timeout-audit.test.mjs || fail=1
+          node --test scripts/lib/wasm-export-parity.test.mjs || fail=1
+          node --test scripts/lib/workflow-triggers.test.mjs || fail=1
+          node --test scripts/pdf-fidelity-evidence.test.mjs || fail=1
+          node --test scripts/perf-ratchet/compare.test.mjs || fail=1
+          node --test scripts/perf-ratchet/lower.test.mjs || fail=1
+          node --test scripts/perf-ratchet/measure-bundle.test.mjs || fail=1
+          node --test scripts/perf-ratchet/measure-native-instructions.test.mjs || fail=1
+          node --test scripts/perf/ab-order.test.mjs || fail=1
+          node --test scripts/perf/build-csg-work-bundle.test.mjs || fail=1
+          node --test scripts/perf/csg-work-diagnostic.test.mjs || fail=1
+          node --test scripts/perf/field-verdict.test.mjs || fail=1
+          node --test scripts/perf/frame-gpu-rig.test.mjs || fail=1
+          node --test scripts/perf/hook-census.test.mjs || fail=1
+          node --test scripts/perf/instructions-replay.test.mjs || fail=1
+          node --test scripts/perf/instructions-report.test.mjs || fail=1
+          node --test scripts/perf/opening-work-diagnostic.test.mjs || fail=1
+          node --test scripts/perf/run-csg-work-bundle.test.mjs || fail=1
+          node --test scripts/perf/stream-diagnostic.test.mjs || fail=1
+          node --test scripts/release-crates-order.test.mjs || fail=1
+          node --test scripts/release-crates.test.mjs || fail=1
+          node --test scripts/report-scheduled-failure.test.mjs || fail=1
+          node --test scripts/revert-oracle-cargo-lock-restore.test.mjs || fail=1
+          node --test scripts/revert-oracle-selfcheck.test.mjs || fail=1
+          node --test scripts/review/build-context-pack.test.mjs || fail=1
+          node --test scripts/review/classify-pr-risk.test.mjs || fail=1
+          node --test scripts/review/classify-review-target.test.mjs || fail=1
+          node --test scripts/review/dedup-findings.test.mjs || fail=1
+          node --test scripts/review/ensemble-reviewer.test.mjs || fail=1
+          node --test scripts/review/eval-commit.test.mjs || fail=1
+          node --test scripts/review/eval-score-matcher.test.mjs || fail=1
+          node --test scripts/review/lib/class-applicability.test.mjs || fail=1
+          node --test scripts/review/lib/eval-cache.test.mjs || fail=1
+          node --test scripts/review/lib/redact-secrets.test.mjs || fail=1
+          node --test scripts/review/lib/resolved-threads.test.mjs || fail=1
+          node --test scripts/review/lib/retry-outcome.test.mjs || fail=1
+          node --test scripts/review/lib/review-reasoning.test.mjs || fail=1
+          node --test scripts/review/nested-diff-quote.test.mjs || fail=1
+          node --test scripts/review/openai-reviewer.test.mjs || fail=1
+          node --test scripts/review/openrouter-eval-reviewer.test.mjs || fail=1
+          node --test scripts/review/openrouter-reviewer.test.mjs || fail=1
+          node --test scripts/review/pr-agent-publish.test.mjs || fail=1
+          node --test scripts/review/pr-agent-run.test.mjs || fail=1
+          node --test scripts/review/provider-fallbacks.test.mjs || fail=1
+          node --test scripts/review/refresh-eval-case.test.mjs || fail=1
+          node --test scripts/review/semantic-match.test.mjs || fail=1
+          node --test scripts/sync-versions.test.mjs || fail=1
+          node --test scripts/tla-sourcemaps.test.mjs || fail=1
+          node --test scripts/typecheck-tests.test.mjs || fail=1
+          node --test scripts/vercel-node-heap.test.mjs || fail=1
+          node --test scripts/vercel-skew-cookie.test.mjs || fail=1
+          node --test scripts/vercel-sourcemaps.test.mjs || fail=1
+          node --test scripts/verify-crates-publish.test.mjs || fail=1
+          node --test scripts/verify-esm-entrypoints.test.mjs || fail=1
+          node --test scripts/verify-npm-publish.test.mjs || fail=1
+          node --test scripts/viewer-benchmark-load-counters.test.mjs || fail=1
+          node --test scripts/viewer-benchmark-span-agreement.test.mjs || fail=1
+          node --test scripts/viewer-benchmark-span-metrics.test.mjs || fail=1
+          node --test scripts/xmatch/claims.test.mjs || fail=1
+          node --test scripts/xmatch/edits.test.mjs || fail=1
+          node --test scripts/xmatch/rectangle-profile.test.mjs || fail=1
+          exit $fail
+
   # Runs when `changes` says Rust changed: always on main and in the merge
   # queue, and on a pull request that touches Rust, Cargo.lock, the pinned
   # toolchain, .cargo/ or anything under .github/.
@@ -550,7 +789,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, wasm, typecheck, lint, package-tests, viewer-tests, viewer-build, gates, rust]
+    needs: [changes, wasm, typecheck, lint, package-tests, viewer-tests, viewer-build, gates, scripts-tests, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
