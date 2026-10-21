@@ -1,0 +1,22 @@
+name: Suggestion (from the app)
+description: An idea for IfcSheet. The Feedback button in the app opens this form with the fields filled in.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository is public. Do not paste confidential model data, client names or file names you would not want read by anyone.
+  - type: textarea
+    id: description
+    attributes:
+      label: What would help
+      description: What you are trying to do, and what would make it easier.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: App version, browser and where you were, if you chose to attach them in the app.
+    validations:
+      required: false
