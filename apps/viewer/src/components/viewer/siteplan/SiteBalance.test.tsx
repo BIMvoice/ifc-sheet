@@ -24,7 +24,7 @@ import { ensureSitePlan } from '@/siteplan/site-actions';
 import { UrbanView } from '../urban/UrbanView';
 import { SiteBalance } from './SiteBalance';
 
-const FZK = resolve(import.meta.dirname, '../../../../public/_fixtures/AC20-FZK-Haus.ifc');
+const FZK = resolve(import.meta.dirname, '../../../../src/test/__fixtures__/AC20-FZK-Haus.ifc');
 
 const rect = (w: number, h: number): Pt[] => [{ x: -5, y: -5 }, { x: w - 5, y: -5 }, { x: w - 5, y: h - 5 }, { x: -5, y: h - 5 }];
 /** Draw (or redraw) the plot boundary on the site plan, as the polyline command leaves it. */
