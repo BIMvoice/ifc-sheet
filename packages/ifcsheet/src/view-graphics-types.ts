@@ -5,7 +5,7 @@
 /**
  * How a view draws the model: category styles, phases and the structural
  * grid (`view-graphics.ts` applies them). Part of the project document
- * (`types.ts`, which re-exports them).
+ * (`document.ts`, which re-exports them).
  */
 
 export type CategoryLineWeight = 'heavy' | 'medium' | 'light' | 'hairline';

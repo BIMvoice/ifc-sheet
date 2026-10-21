@@ -1,0 +1,64 @@
+{
+  "name": "@bimvoice/ifcsheet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The IfcSheet drawing-set engine: the project document, the starting set of views and sheets, and headless PDF and DXF export, in Node or the browser",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./names": {
+      "types": "./dist/names.d.ts",
+      "import": "./dist/names.js",
+      "default": "./dist/names.js"
+    },
+    "./headless": {
+      "types": "./dist/headless.d.ts",
+      "import": "./dist/headless.js",
+      "default": "./dist/headless.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm exec tsc",
+    "typecheck": "node ../../scripts/typecheck-tests.mjs",
+    "dev": "pnpm exec tsc --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ifc-lite/data": "workspace:^",
+    "@ifc-lite/drawing-2d": "workspace:^",
+    "@ifc-lite/geometry": "workspace:^",
+    "@ifc-lite/parser": "workspace:^",
+    "jspdf": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "dxf-parser": "1.1.2",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
+  },
+  "license": "MPL-2.0",
+  "author": "BIMvoice",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BIMvoice/ifcsheet.git",
+    "directory": "packages/ifcsheet"
+  },
+  "keywords": [
+    "ifc",
+    "bim",
+    "drawings",
+    "sheets",
+    "pdf",
+    "dxf"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

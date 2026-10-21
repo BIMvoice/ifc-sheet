@@ -17,24 +17,14 @@ import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { isRasterView } from './axonometric';
 import { RASTER_BOX_MM } from './view-raster';
 import { freshProjectId } from './view-defaults';
-import { paperMm } from './paper';
+import { fitViewportBox } from '@bimvoice/ifcsheet';
 import { templateFromSheet } from './sheet-templates';
 import { isGeometry, type DraftEntity } from '@/drafting/types';
 import { annotationAtFactor, annotationFactor } from './viewport-annotation';
 import type { ProjectSheet, SheetViewport, TemplateSeries } from './types';
 
-/** The scales a viewport offers, most detailed first: details, buildings, sites. */
-export const SHEET_SCALES = [1, 2, 5, 10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 10000] as const;
-
-/** The sheet's paper as it lies on the table: width and height in mm, by its paper and orientation. */
-export function paperOf(sheet: ProjectSheet): { w: number; h: number } {
-  return paperMm(sheet.paper ?? 'A1', sheet.orientation ?? 'landscape');
-}
-
-/** Paper millimetres per drawing metre for a viewport. */
-export function mmPerMetre(viewport: Pick<SheetViewport, 'scale'>): number {
-  return 1000 / viewport.scale;
-}
+// The viewport scales, the sheet's paper and the box that fits a drawing are the engine's (`viewport-fit.ts`).
+export { SHEET_SCALES, fitViewportBox, mmPerMetre, paperOf } from '@bimvoice/ifcsheet';
 
 function patchSheet(id: string, patch: (sheet: ProjectSheet) => ProjectSheet): void {
   const state = useProjectStore.getState();
@@ -164,16 +154,6 @@ export function fitExtent(vp: Pick<SheetViewport, 'width' | 'height' | 'scale'>,
   return {
     min: { x: Math.min(bounds.min.x, extent.min.x), y: Math.min(bounds.min.y, extent.min.y) },
     max: { x: Math.max(bounds.max.x, extent.max.x), y: Math.max(bounds.max.y, extent.max.y) },
-  };
-}
-
-/** A viewport box that fits a drawing's extent at its scale (plus a margin), in paper mm. */
-export function fitViewportBox(bounds: { min: { x: number; y: number }; max: { x: number; y: number } }, scale: number): { width: number; height: number } {
-  const k = 1000 / scale;
-  const margin = 10;
-  return {
-    width: Math.max(40, (bounds.max.x - bounds.min.x) * k + margin * 2),
-    height: Math.max(30, (bounds.max.y - bounds.min.y) * k + margin * 2),
   };
 }
 

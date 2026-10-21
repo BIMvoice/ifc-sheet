@@ -19,6 +19,7 @@ import { percentToWorld, sectionAxisRange, worldToPercent, type AxisBounds } fro
 import type { SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import { levelFloorY, resolvePlanLevel } from './view-defaults';
+import { ELEVATION_INSET_M } from './set-defaults';
 import type { ElevationDirection, ProjectLevel, ProjectView, SectionProjectPlane } from './types';
 
 export interface ViewSectionPlane {
@@ -39,13 +40,8 @@ const ELEVATION_PLANES: Record<ElevationDirection, { axis: SectionPlaneAxis; atM
   west: { axis: 'side', atMax: false, flipped: true },
 };
 
-/**
- * How far inside the model bounds an elevation's plane sits, metres. A plane
- * exactly ON the bounds is degenerate for the projection classifier (every
- * mesh touches it) and draws a scatter of fragments; just inside it, the
- * facade projects cleanly and nothing real is cut.
- */
-export const ELEVATION_INSET_M = 0.05;
+// How far inside the model bounds an elevation's plane sits: one constant with the starting set's defaults.
+export { ELEVATION_INSET_M };
 
 function elevationPlane(direction: ElevationDirection, bounds: AxisBounds | null, planeOffset?: number): ViewSectionPlane {
   const { axis, atMax, flipped } = ELEVATION_PLANES[direction];
