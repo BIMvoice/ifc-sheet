@@ -4,6 +4,9 @@
   "private": true,
   "description": "The IfcSheet drawing-set engine: the project document, the starting set of views and sheets, and headless PDF and DXF export, in Node or the browser",
   "type": "module",
+  "bin": {
+    "ifcsheet": "./dist/bin.js"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
