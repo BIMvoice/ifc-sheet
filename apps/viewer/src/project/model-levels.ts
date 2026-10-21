@@ -20,6 +20,8 @@ import { modelEditTarget, recordModellingEdit } from '@/store/slices/mutation-mo
 import { ensureStoreyPlacement } from '@/store/slices/storeyPlacement';
 import { mutationDenial } from '@/store/mutation-permission';
 import type { StoreyInput } from './view-defaults';
+import { resolveStoreyOriginMeters } from '@/lib/geo/storey-elevation';
+import { dxfElevationRenderY } from '@/hooks/dxfUnderlayMath';
 
 export interface ModelLevel extends StoreyInput {
   expressId: number;
@@ -43,6 +45,19 @@ function lengthUnitScale(ds: IfcDataStore, referenceStorey: number | undefined):
   }
 }
 
+/**
+ * A storey's floor in the frame its model's meshes are drawn in (#96): the Z of its placement through every
+ * PlacementRelTo hop, less the RTC offset and origin shift that frame subtracts (`dxfElevationRenderY`, the
+ * canonical `renderY = ifcZ - originShift.y - rtc.z`). `Elevation` alone is not that height: a model whose
+ * real elevation sits in its site or storey placement is meshed RTC-shifted by it, and a federation moves
+ * every model onto one shared anchor (`convergeFederationRtcFrame`), which updates `coordinateInfo` here.
+ */
+function floorOf(ds: IfcDataStore, storeyId: number, frame: Parameters<typeof dxfElevationRenderY>[0]): { floorY?: number } {
+  if (!frame) return {};
+  const origin = resolveStoreyOriginMeters(ds, storeyId);
+  return origin && Number.isFinite(origin.z) ? { floorY: dxfElevationRenderY(frame, origin.z) } : {};
+}
+
 /** Every effective storey of a loaded model, unsorted. */
 export function modelLevels(modelId: string): ModelLevel[] {
   const state = useViewerStore.getState();
@@ -50,6 +65,7 @@ export function modelLevels(modelId: string): ModelLevel[] {
   const hierarchy = ds?.spatialHierarchy;
   if (!ds || !hierarchy) return [];
   const view = state.mutationViews.get(modelId);
+  const frame = state.models.get(modelId)?.geometryResult?.coordinateInfo;
   const levels: ModelLevel[] = [];
   for (const id of hierarchy.byStorey.keys()) {
     if (view?.isDeleted(id)) continue;
@@ -59,6 +75,7 @@ export function modelLevels(modelId: string): ModelLevel[] {
       name: (typeof renamed === 'string' && renamed) || ds.entities.getName(id) || `Storey #${id}`,
       elevation: hierarchy.storeyElevations.get(id) ?? 0,
       globalId: ds.entities.getGlobalId(id) || undefined,
+      ...floorOf(ds, id, frame),
       created: false,
     });
   }

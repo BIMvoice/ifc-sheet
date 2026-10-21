@@ -1,0 +1,11 @@
+# Files under apps/*/public/ that scripts/check-public-fixtures.mjs would refuse
+# (an IFC model, or anything over 1 MiB) and that the app really loads at
+# runtime, so they must ship with the deploy. One `<path>  # reason` per line;
+# the reason is required. A test fixture never goes here: put it next to its
+# test (apps/viewer/src/**/__fixtures__/) or in tests/models/manifest.json.
+apps/viewer/public/samples/bloc-p4.ifc  # the IfcSheet demo model, DEMO_MODEL in components/viewer/ifcsheet/demo-model.ts
+apps/viewer/public/samples/building-architecture.ifc  # demo kit base model (lib/tours/demo-kit.ts) and MCP playground sample
+apps/viewer/public/samples/building-architecture-rev-b.ifc  # demo kit revision B, the compare and clash tours (lib/tours/demo-kit.ts)
+apps/viewer/public/samples/hello-wall.ifc  # MCP playground sample (components/mcp/McpPlayground.tsx)
+apps/viewer/public/samples/hello-wall.ifcx  # IFC5 base of the layers demo stack (lib/layers/demo-stack.ts)
+apps/viewer/public/samples/infra-bridge.ifc  # MCP playground sample (components/mcp/McpPlayground.tsx)

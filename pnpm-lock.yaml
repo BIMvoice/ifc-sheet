@@ -159,6 +159,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1144.0
         version: 3.1144.0
+      '@bimvoice/ifcsheet':
+        specifier: workspace:^
+        version: link:../../packages/ifcsheet
       '@codemirror/autocomplete':
         specifier: ^6.20.3
         version: 6.20.3
@@ -1443,6 +1446,40 @@ importers:
       xmllint-wasm:
         specifier: 5.3.0
         version: 5.3.0(@types/node@26.6.2)
+
+  packages/ifcsheet:
+    dependencies:
+      '@ifc-lite/data':
+        specifier: workspace:^
+        version: link:../data
+      '@ifc-lite/drawing-2d':
+        specifier: workspace:^
+        version: link:../drawing-2d
+      '@ifc-lite/geometry':
+        specifier: workspace:^
+        version: link:../geometry
+      '@ifc-lite/parser':
+        specifier: workspace:^
+        version: link:../parser
+      jspdf:
+        specifier: ^4.2.1
+        version: 4.2.1
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.2
+        version: 26.6.2
+      dxf-parser:
+        specifier: 1.1.2
+        version: 1.1.2
+      pdfjs-dist:
+        specifier: 6.3.289
+        version: 6.3.289
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.11(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/ifcx:
     dependencies:

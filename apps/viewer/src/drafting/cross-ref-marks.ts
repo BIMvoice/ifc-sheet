@@ -13,7 +13,7 @@
  */
 
 import type { ElevationDirection, ProjectView } from '@/project/types';
-import { groundPlan } from '@/project/drawing-set-actions';
+import { groundPlan } from '@/project/drawing-set';
 import { axisLayout, textBox } from './annotation';
 import { referenceLabel, viewReference } from './cross-ref';
 import { placementOf, symbolParts } from './section-link';

@@ -8,10 +8,11 @@
  * the section view it created, and one undo step removes it again.
  */
 
-import { beforeEach, describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { removeProjectItem, renameProjectItem, resetProject, useProjectStore } from '@/project/project-store';
 import type { ProjectView } from '@/project/types';
+import { registerLocale, registerReadBackNames, setLocale } from '@/i18n/registry';
 import { clearDraftHistory, undoDrafts } from './draft-store.js';
 import { attachDraftingView, cancelCommand, clickDrawing, setWorkPlaneProvider, startDraftCommand, useDraftingSession } from './session.js';
 import { textBox } from './annotation.js';
@@ -150,5 +151,31 @@ describe('section names', () => {
     removeProjectItem(sections()[0].id);
     assert.ok(drafts().length > 0);
     assert.ok(drafts().every((d) => d.params.sectionOf === sections()[0].id));
+  });
+});
+
+/**
+ * PR #124 review: the section word comes from every catalogue's
+ * `names.view.section`, so a new language needs no edit here for
+ * `nextSectionMark` to keep a mark already used under it.
+ */
+describe('Section marks in any language', () => {
+  const view = (name: string) => ({ name, kind: 'section' as const }) as Pick<ProjectView, 'name' | 'kind'>;
+  afterEach(() => {
+    setLocale('en');
+    registerLocale('x-fake', {});
+  });
+
+  it('reads the mark of a section named under a third registered locale', () => {
+    registerLocale('x-fake', { 'names.view.section': 'Sch.nitt {mark}-{mark}' });
+    assert.equal(sectionMarkOf('Sch.nitt B-B'), 'B');
+    assert.equal(nextSectionMark([view('Sch.nitt A-A'), view('Sch.nitt B-B'), view('Section C-C')]), 'D');
+    // The word is matched literally: `.` is not a regex wildcard.
+    assert.equal(sectionMarkOf('SchXnitt B-B'), 'SchXnitt B-B');
+  });
+
+  it('reads it from a shipped language whose catalogue never loaded', () => {
+    registerReadBackNames({ 'names.view.section': 'Przekrój {mark}-{mark}' });
+    assert.equal(nextSectionMark([view('Przekrój A-A')]), 'B');
   });
 });

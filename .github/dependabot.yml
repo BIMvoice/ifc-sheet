@@ -1,6 +1,15 @@
 # Dependabot tracks third-party updates so SHA-pinned actions in
 # .github/workflows/ don't rot, and npm/cargo deps get security PRs
 # without manual auditing. Phase A hardening — see AGENTS.md.
+#
+# CI runs one pull request at a time on this account, so updates are batched:
+# every ecosystem is weekly, on its own weekday so the batches do not queue
+# behind each other; minor and patch updates of an ecosystem arrive as one
+# grouped pull request; a semver-major update keeps its own pull request
+# (it matches no group), so it can be reviewed and reverted alone. The
+# open-PR limits cap how many of those can wait in the CI queue at once.
+# .github/workflows/dependabot-automerge.yml turns on auto-merge for the
+# minor and patch pull requests; majors are merged by hand.
 
 version: 2
 updates:
@@ -8,6 +17,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
     groups:
       actions-minor-and-patch:
         update-types:
@@ -18,7 +29,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+      day: tuesday
+    open-pull-requests-limit: 5
     groups:
       npm-minor-and-patch:
         update-types:
@@ -43,7 +55,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+      day: wednesday
+    open-pull-requests-limit: 5
     groups:
       cargo-minor-and-patch:
         update-types:
@@ -60,6 +73,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: thursday
+    open-pull-requests-limit: 2
     groups:
       pip-minor-and-patch:
         update-types:
@@ -76,6 +91,8 @@ updates:
       - /tools/ifcopenshell_reference
     schedule:
       interval: weekly
+      day: thursday
+    open-pull-requests-limit: 3
     groups:
       docker-minor-and-patch:
         update-types:

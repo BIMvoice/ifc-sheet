@@ -71,10 +71,12 @@ export function useParametricLabelSync(): void {
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
   const types = useProjectStore((s) => s.annotationTypes);
+  // The sources of the tag fields: a label takes the text the new sources give.
+  const tagFields = useProjectStore((s) => s.tagFields);
   const drafts = useProjectStore((s) => s.drafts);
   const count = useProjectStore((s) => s.drafts.filter(isParametricLabel).length);
   // `drafts` too: a label dragged by hand gains or loses its leader. Settling twice changes nothing, so this cannot loop.
   useEffect(() => {
     if (count > 0) refreshParametricLabels();
-  }, [mutationVersion, models, types, count, drafts]);
+  }, [mutationVersion, models, types, count, drafts, tagFields]);
 }

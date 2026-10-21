@@ -1,0 +1,4 @@
+# Test files that read the wasm build (packages/wasm/pkg/) and deliberately do
+# NOT skip without it, for scripts/check-wasm-test-skip.mjs. One
+# `<path>  # reason` per line; the reason is required. Empty on purpose: every
+# test that read the build unguarded when the check landed was fixed instead.
