@@ -31,6 +31,8 @@ import { layerPen, layerShows, lookOf } from '@/drafting/styles';
 import { notDrawingIds, sheetScaleText } from '@/project/drawing-register';
 import { useProjectStore } from '@/project/project-store';
 import { LOGO_FIELD, titleBlockOf } from '@/project/title-block';
+import { currentRevisionOf, printsAtCurrentRevision, sheetRevisions } from '@/project/revisions';
+import { RevisionTable } from './RevisionTable';
 import { useEffectiveTitleBlock } from '@/project/title-block-model';
 import { viewportPens } from './viewport-pens';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
@@ -85,6 +87,8 @@ interface SheetPaperProps {
   pxPerMm: number;
   /** Lines and annotations drawn on the sheet itself, paper millimetres. */
   sheetDrafts?: readonly DraftEntity[];
+  /** Print only the clouds of the sheet's current revision (an issue's option); older revisions' clouds are left off. */
+  currentCloudsOnly?: boolean;
 }
 
 /** The viewport's drawing → paper transform: the chosen (or drawing's) centre at the viewport centre. */
@@ -290,7 +294,10 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
   // Drawn at its own origin, then set in place (turned a quarter when it is a strip).
   const x = 0;
   const y = 0;
-  const fields = titleBlockOf(sheet, projectFields, projectName);
+  const revisions = useProjectStore((s) => s.revisions);
+  const drafts = useProjectStore((s) => s.drafts);
+  // The revision is never typed: it is the latest the sheet has (`revisions.ts`).
+  const fields: Record<string, string> = { ...titleBlockOf(sheet, projectFields, projectName), revision: currentRevisionOf(sheet, { revisions, drafts })?.code ?? '' };
   const logo = projectFields?.[LOGO_FIELD];
   const schedules = useProjectStore((s) => s.schedules);
   const views = useProjectStore((s) => s.views);
@@ -342,9 +349,17 @@ function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; project
 }
 
 export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function SheetPaper(
-  { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [] }, ref,
+  { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [], currentCloudsOnly = false }, ref,
 ) {
   const { w, h } = paperOf(sheet);
+  const revisions = useProjectStore((s) => s.revisions);
+  const projectDrafts = useProjectStore((s) => s.drafts);
+  const own = useMemo(() => sheetRevisions(sheet, { revisions, drafts: projectDrafts }), [sheet, revisions, projectDrafts]);
+  const shows = useMemo(() => {
+    if (!currentCloudsOnly) return null;
+    const current = currentRevisionOf(sheet, { revisions, drafts: projectDrafts });
+    return (d: DraftEntity) => printsAtCurrentRevision(d, current, { revisions });
+  }, [currentCloudsOnly, sheet, revisions, projectDrafts]);
   const pen = useGraphicStandard().sheet.frame;
   const frame = frameRect({ w, h }, frameOf(sheet));
   return (
@@ -352,15 +367,17 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
       <rect data-export-ignore-dxf="true" x={0} y={0} width={w} height={h} fill="#fff" />
       <rect {...penTags('FRAME', pen)} x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="none" stroke="#000" strokeWidth={pen} />
       {(sheet.viewports ?? []).map((vp) => {
-        const c = content(vp);
+        const c0 = content(vp);
+        const c = shows ? { ...c0, drafts: c0.drafts.filter(shows) } : c0;
         if (c.civil) return <CivilViewport key={vp.id} vp={vp} layout={c.civil} selected={vp.id === selectedViewportId} />;
         if (c.legend) return <LegendViewport key={vp.id} vp={vp} layout={c.legend} selected={vp.id === selectedViewportId} />;
         return c.schedule
           ? <ScheduleViewport key={vp.id} vp={vp} layout={c.schedule} selected={vp.id === selectedViewportId} />
           : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} highlight={keyedExtent(sheet, vp, content, c)} />;
       })}
+      <RevisionTable revisions={own} block={titleBlockRect({ w, h }, frameOf(sheet))} strip={frameOf(sheet).titleBlock === 'right'} />
       <TitleBlock sheet={sheet} projectName={projectName} w={w} h={h} />
-      <SheetDrafts entities={sheetDrafts} layers={layers} extraPatterns={extraPatterns} />
+      <SheetDrafts entities={shows ? sheetDrafts.filter(shows) : sheetDrafts} layers={layers} extraPatterns={extraPatterns} />
     </svg>
   );
 });

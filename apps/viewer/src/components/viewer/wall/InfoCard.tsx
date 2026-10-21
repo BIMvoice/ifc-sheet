@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from '@/i18n';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
 import { HatchSettings } from './HatchSettings';
+import { RevisionPick } from './RevisionsCard';
 import { ToolTypes } from './ToolTypes';
 import { toolHelpKey } from './tool-help';
 import { DRAW_TOOLS, WALL_TOOLS } from './wall-actions';
@@ -36,6 +37,7 @@ export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string
       <Card eyebrow={drawingOn ? t('wall.draw.onDrawing', { name: drawingOn }) : t('wall.draw.onSheet')} title={t(draw.labelKey)}>
         <p className="m-0 text-lg leading-relaxed">{t(toolHelpKey(draw.command))}</p>
         {draw.command === 'hatch' ? <><ToolTypes tool="hatch" /><HatchSettings /></> : null}
+        {draw.command === 'revcloud' ? <RevisionPick /> : null}
         <p className="mb-0 mt-4 text-sm text-cyan-300">{t('wall.drawHint')}</p>
       </Card>
     );

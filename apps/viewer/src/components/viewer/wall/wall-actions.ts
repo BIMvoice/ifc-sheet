@@ -86,7 +86,7 @@ export interface DrawTool {
 
 /**
  * Plain drawing, on the sheet's paper (or on the drawing in front): lines,
- * polylines, circles, text, and a hatched zone inside a closed polyline.
+ * polylines, circles, text, a hatched zone and a revision cloud inside a closed polyline.
  */
 export const DRAW_TOOLS: readonly DrawTool[] = [
   { command: 'line', labelKey: 'wall.draw.line', bodyKey: 'wall.draw.line.body' },
@@ -94,6 +94,7 @@ export const DRAW_TOOLS: readonly DrawTool[] = [
   { command: 'circle', labelKey: 'wall.draw.circle', bodyKey: 'wall.draw.circle.body' },
   { command: 'text', labelKey: 'wall.draw.text', bodyKey: 'wall.draw.text.body' },
   { command: 'hatch', labelKey: 'wall.draw.hatch', bodyKey: 'wall.draw.hatch.body' },
+  { command: 'revcloud', labelKey: 'wall.draw.revcloud', bodyKey: 'wall.draw.revcloud.body' },
 ];
 
 /**

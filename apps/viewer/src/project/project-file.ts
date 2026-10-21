@@ -20,6 +20,7 @@ import { readSheetLayout, readTitleBlock } from './sheet-file';
 import { readSeriesTemplates, readTemplate } from './sheet-templates';
 import { read3dPrint } from './view-3d-file';
 import { readIssues } from '@/issue/file';
+import { readRevisions } from './revision-file';
 import { readComments } from '@/review/file';
 import { readTitleSources } from './title-block-sources';
 import { readStandards } from './standards-file';
@@ -247,6 +248,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     ...(raw.sheetNumbering !== undefined ? { sheetNumbering: readNumberingScheme(raw.sheetNumbering) } : {}),
     ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     ...(raw.comments !== undefined ? { comments: readComments(raw.comments) } : {}),
+    revisions: readRevisions(raw.revisions),
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
   };
 }
