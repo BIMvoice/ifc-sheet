@@ -78,6 +78,7 @@ import { printPreviewEn } from './catalogues/print-preview.en';
 import { wallEn } from './catalogues/wall.en';
 import { namesEn } from './catalogues/names.en';
 import { feedbackEn } from './catalogues/feedback.en';
+import { titleBlockParamsEn } from './catalogues/title-block-params.en';
 import { sitePlanEn } from './catalogues/site-plan.en';
 import { ifcsheetTourEn } from './catalogues/ifcsheet-tour.en';
 import { reviewEn } from './catalogues/review.en';
@@ -277,6 +278,7 @@ export const en = {
   ...wallEn,
   ...namesEn,
   ...feedbackEn,
+  ...titleBlockParamsEn,
   ...sitePlanEn,
   ...ifcsheetTourEn,
   ...reviewEn,

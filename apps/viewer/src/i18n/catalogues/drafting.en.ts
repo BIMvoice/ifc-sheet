@@ -118,6 +118,7 @@ export const draftingEn = {
   'drafting.unit.squareMetres': '{value} m²',
   'drafting.unit.degrees': '{value}°',
   'drafting.cmd.text': 'TEXT',
+  'drafting.cmd.ptext': 'PTEXT',
   'drafting.cmd.leader': 'LEADER',
   'drafting.cmd.dimAligned': 'DIMALIGNED',
   'drafting.cmd.dimLinear': 'DIMLINEAR',

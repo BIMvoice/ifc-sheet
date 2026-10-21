@@ -65,7 +65,8 @@ describe('Romanian on the Wall', () => {
     const drawer = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
     const drawerText = drawer.textContent ?? '';
     for (const word of ['Importă biblioteca', 'Planșe', 'Beneficiar', 'Adresă', 'Cartuș']) assert.ok(drawerText.includes(word), `${word} in the drawer: ${drawerText.slice(0, 300)}`);
-    assert.doesNotMatch(drawerText, /Client|Revision|Title block|Sheets/);
+    // A parameter's name in braces (`{Revision}`, #143) is a name a text refers to, not copy: it stays as written in every language.
+    assert.doesNotMatch(drawerText.replace(/\{[A-Za-z][A-Za-z0-9_]*\}/g, ''), /Client|Revision|Title block|Sheets|Parameters|Layout/);
   });
 
   it('says the counts in the Romanian plural of each number', () => {

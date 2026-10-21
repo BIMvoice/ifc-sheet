@@ -46,7 +46,7 @@ export interface ProjectState extends ProjectDocument {
 export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visible: true, locked: false } as const;
 
 export const EMPTY_PROJECT: ProjectDocument = {
-  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, revisions: [], drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
+  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, revisions: [], titleBlockParams: undefined, titleBlockTemplate: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
   annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined, siteArea: undefined, urbanSettings: undefined,
@@ -77,6 +77,8 @@ const DOCUMENT_FIELDS = {
   sheetTemplates: true,
   seriesTemplates: true,
   titleBlockSources: true,
+  titleBlockParams: true,
+  titleBlockTemplate: true,
   sheetNumbering: true,
   phaseSource: true,
   graphicStandard: true,
@@ -163,6 +165,8 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     revisions: doc.revisions ?? [],
     modelState: doc.modelState,
     titleBlockSources: doc.titleBlockSources,
+    titleBlockParams: doc.titleBlockParams,
+    titleBlockTemplate: doc.titleBlockTemplate,
     graphicStandard: standard.id,
     siteArea: doc.siteArea,
     urbanSettings: doc.urbanSettings,

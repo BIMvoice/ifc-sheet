@@ -78,6 +78,14 @@ export const WALL_TOOLS: readonly WallTool[] = [
   { command: 'symbol', icon: 'symbol', labelKey: 'wall.tool.symbol', titleKey: 'wall.tool.symbol.title', bodyKey: 'wall.tool.symbol.body' },
 ];
 
+/**
+ * Where a plain drawing tool draws: the drawing in front, else the sheet's paper. Parameter text is the exception,
+ * since only a sheet resolves `{Name}`: it always goes on the paper.
+ */
+export function drawTarget(command: string, focusViewId: string | undefined, sheetId: string): string {
+  return command === 'ptext' ? sheetId : (focusViewId ?? sheetId);
+}
+
 export interface DrawTool {
   command: string;
   labelKey: TranslationKey;
@@ -95,6 +103,7 @@ export const DRAW_TOOLS: readonly DrawTool[] = [
   { command: 'text', labelKey: 'wall.draw.text', bodyKey: 'wall.draw.text.body' },
   { command: 'hatch', labelKey: 'wall.draw.hatch', bodyKey: 'wall.draw.hatch.body' },
   { command: 'revcloud', labelKey: 'wall.draw.revcloud', bodyKey: 'wall.draw.revcloud.body' },
+  { command: 'ptext', labelKey: 'wall.draw.ptext', bodyKey: 'wall.draw.ptext.body' },
 ];
 
 /**
