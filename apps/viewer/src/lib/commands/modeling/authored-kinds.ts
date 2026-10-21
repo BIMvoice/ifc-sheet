@@ -132,12 +132,54 @@ export function materialsOf(model: LiveModel): NamedEntity[] {
   return named(model, liveIdsOf(model, 'IfcMaterial'));
 }
 
-function relatingOf(model: LiveModel, relType: 'IfcRelDefinesByType' | 'IfcRelAssociatesMaterial', expressId: number): number | null {
+type RelType = 'IfcRelDefinesByType' | 'IfcRelAssociatesMaterial';
+
+function relatingOf(model: LiveModel, relType: RelType, expressId: number): number | null {
   return readRelatedLists(model.dataStore, relType, model.view).find((rel) => rel.relatedIds.includes(expressId))?.relatingId ?? null;
 }
 
 export function typeOf(model: LiveModel, expressId: number): number | null {
   return relatingOf(model, 'IfcRelDefinesByType', expressId);
+}
+
+/** `relatingOf` for every related object at once. Where one is in more than one relationship, the first wins, as in `relatingOf`. */
+function relatingIndex(model: LiveModel, relType: RelType): Map<number, number> {
+  const index = new Map<number, number>();
+  for (const rel of readRelatedLists(model.dataStore, relType, model.view)) {
+    for (const id of rel.relatedIds) if (!index.has(id)) index.set(id, rel.relatingId);
+  }
+  return index;
+}
+
+/**
+ * `typeOf` for every typed occurrence at once: one read of the model's
+ * IfcRelDefinesByType instead of one per element. A snapshot: rebuild it when
+ * the overlay changes.
+ */
+export function typeIndex(model: LiveModel): Map<number, number> {
+  return relatingIndex(model, 'IfcRelDefinesByType');
+}
+
+/** How `layerSetOf` finds an element's relationships. */
+export interface RelationReads {
+  relatingOf(relType: RelType, expressId: number): number | null;
+}
+
+/**
+ * Relationship reads for a pass over many elements of one model (a drawing's
+ * materials): each kind of relationship is read once, on first use, instead
+ * of once per element. A snapshot: use it within one pass, while the overlay
+ * cannot change.
+ */
+export function relationSnapshot(model: LiveModel): RelationReads {
+  const built = new Map<RelType, Map<number, number>>();
+  return {
+    relatingOf(relType, expressId) {
+      let index = built.get(relType);
+      if (!index) built.set(relType, (index = relatingIndex(model, relType)));
+      return index.get(expressId) ?? null;
+    },
+  };
 }
 
 /** The occurrences a type object types (IfcRelDefinesByType.RelatedObjects). */
@@ -203,10 +245,14 @@ export function layerSetBehind(model: LiveModel, materialId: number | null): num
 }
 
 /** The element's layer set: its own association first, then its type's. */
-export function layerSetOf(model: LiveModel, expressId: number): LiveLayerSet | null {
-  const own = layerSetBehind(model, relatingOf(model, 'IfcRelAssociatesMaterial', expressId));
-  const typeId = own === null ? typeOf(model, expressId) : null;
-  const inherited = typeId === null ? null : layerSetBehind(model, relatingOf(model, 'IfcRelAssociatesMaterial', typeId));
+export function layerSetOf(
+  model: LiveModel,
+  expressId: number,
+  relations: RelationReads = { relatingOf: (relType, id) => relatingOf(model, relType, id) },
+): LiveLayerSet | null {
+  const own = layerSetBehind(model, relations.relatingOf('IfcRelAssociatesMaterial', expressId));
+  const typeId = own === null ? relations.relatingOf('IfcRelDefinesByType', expressId) : null;
+  const inherited = typeId === null ? null : layerSetBehind(model, relations.relatingOf('IfcRelAssociatesMaterial', typeId));
   const layerSetId = own ?? inherited;
   const layers = layerSetId === null ? null : readLayerSet(model, layerSetId);
   return layerSetId === null || !layers ? null : { layerSetId, layers, via: own !== null ? 'element' : 'type' };

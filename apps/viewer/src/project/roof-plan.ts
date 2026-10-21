@@ -10,7 +10,7 @@
  */
 
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { readRoofSystem, roofGeometry, type RoofGeometry, type RoofSystemSpec } from '@ifc-lite/create';
+import { readRoofSystems, roofGeometry, type RoofGeometry, type RoofSystemSpec } from '@ifc-lite/create';
 import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
 import { storeyOfElement } from '@/project/effective-storey';
 import { useViewerStore } from '@/store';
@@ -48,13 +48,25 @@ export function planRoofs(view: ProjectView, plane: SectionPlaneConfig): PlanRoo
     const hierarchy = dataStore?.spatialHierarchy;
     if (!dataStore || !hierarchy) continue;
     const mv = s.mutationViews.get(modelId) ?? null;
+    const onPlan: { roofId: number; storeyId: number }[] = [];
     for (const { expressId: roofId } of iterateEffectiveEntityIds(dataStore, mv, ['IFCROOF'])) {
       const storeyId = storeyOfElement(modelId, roofId) ?? undefined;
       if (storeyId === undefined || (wanted.size && !wanted.has(dataStore.entities.getGlobalId(storeyId) ?? ''))) continue;
+      onPlan.push({ roofId, storeyId });
+    }
+    // Every roof's spec in one pass over the model's property relationships, not one pass per roof (#154).
+    let specs: Map<number, RoofSystemSpec>;
+    try {
+      specs = readRoofSystems(dataStore, onPlan.map((r) => r.roofId), mv);
+    } catch (error) {
+      console.warn('[roof-plan] could not read the roof systems', error);
+      continue;
+    }
+    for (const { roofId, storeyId } of onPlan) {
       let spec: RoofSystemSpec | null = null;
       let geometry: RoofGeometry;
       try {
-        spec = readRoofSystem(dataStore, roofId, mv);
+        spec = specs.get(roofId) ?? null;
         if (!spec) continue;
         geometry = roofGeometry(spec.outline, spec.rules);
       } catch {
