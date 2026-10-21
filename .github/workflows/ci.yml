@@ -218,9 +218,12 @@ jobs:
   #     (Chrome), lib/revert-oracle-python-wheel (Python venv),
   #     fixtures/upload-fixtures (macOS-only path-guard mismatch, unverified on
   #     Linux): need tooling this job does not install.
-  #   - check-changeset-bump (no release anchor in this fork's history),
-  #     check-module-size,
-  #     check-unused-locals-baseline: the gate or its baseline is red on main.
+  #   - check-changeset-bump: no release anchor in this fork's history.
+  #   - check-module-size: apps/viewer/src/components/viewer/PropertiesPanel.tsx
+  #     is 2050 lines against a budget of 2048; clearing it means raising a
+  #     budget, which needs a maintainer sweep (--all --allow-raise).
+  #   - check-unused-locals-baseline: measures 240 against a baseline of 194;
+  #     depends on the chore/lint-baselines branch, which removes 74.
   scripts-tests:
     name: Script tests
     needs: wasm
