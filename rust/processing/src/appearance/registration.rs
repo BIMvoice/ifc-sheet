@@ -212,7 +212,7 @@ pub fn register_scan_correspondences(
         diagnostics.push("Unconstrained solution would reflect; proper rotation retained and mismatch remains in residuals".into());
     }
     Ok(ScanRegistrationReport {
-        request_sha256: format!("{:x}", digest.finalize()),
+        request_sha256: hex::encode(digest.finalize()),
         algorithm: ALGORITHM.into(),
         source_frame: r.source_frame.clone(),
         target_frame: r.target_frame.clone(),
