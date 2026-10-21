@@ -221,19 +221,14 @@ fn token_list_at_depth(input: &[u8], depth: u32) -> IResult<&[u8], Vec<Token<'_>
 /// Parse typed value: IFCPARAMETERVALUE(0.), IFCBOOLEAN(.T.)
 ///
 /// The type name and its `(` are usually adjacent, but a STEP writer's line
-/// wrap can land exactly between them - measured on a real file where 39 of
-/// 175 `IFCSURFACESTYLERENDERING` entities wrap as `…MEASURE\r\n(1.)`. Without
-/// `ws` here, `char('(')` sees `\r` and the whole entity fails to parse, which
-/// silently dropped it from every full-file walk (`decode_at_uncached` returns
-/// `Err`, and every caller's `let Ok(..) = .. else { continue }` skips it) -
-/// the entity was never malformed, just wrapped where the parser assumed it
-/// never would be.
+/// wrap can land exactly between them (measured: 39 of 175
+/// `IFCSURFACESTYLERENDERING` entities wrap as `…MEASURE\r\n(1.)`). Without
+/// `ws` there the whole entity fails to parse and every full-file walk skips
+/// it, though it was never malformed.
 ///
 /// An EMPTY argument list also needs `ws` on both sides of the parens
-/// (`IFCLABEL(\r\n)`), not just before `(`: `separated_list0` matches zero
-/// items without consuming anything, so with a bare `char(')')` any
-/// whitespace or comment before the `)` left it unconsumed and the whole
-/// typed value failed to parse (#3789).
+/// (`IFCLABEL(\r\n)`): a zero-item list consumes nothing, so a bare
+/// `char(')')` failed past any whitespace or comment before the `)` (#3789).
 fn typed_value_at_depth(input: &[u8], depth: u32) -> IResult<&[u8], Token<'_>> {
     // Hand-written sequence (recursive path; see `token_at_depth`).
     // Type name (all caps with optional numbers/underscores)
@@ -256,15 +251,13 @@ fn literal(c: u8, input: &[u8]) -> IResult<&[u8], char> {
 
 /// Skip whitespace AND `/* ... */` comments -- 10303-21 allows a comment
 /// anywhere whitespace is allowed, including between the attributes this
-/// tokenizer decodes. Without this, `/* rev; b */ $` was not trivia: no `alt`
-/// branch in `token_at_depth` starts with `/`, so a comment before a value
-/// made the whole entity fail to parse rather than reading the value clean.
+/// tokenizer decodes; no token branch starts with `/`, so an unskipped comment
+/// made the whole entity fail to parse.
 ///
 /// Reuses `skip_step_trivia`, the matched pair of the scanners' trivia skip
 /// (`step-lexing.ts`'s `skipTrivia` on the TS side). An unterminated comment
-/// consumes to end of input rather than failing this always-succeeds
-/// combinator; the `alt` that follows then has nothing left to match and the
-/// entity fails to parse, which is the existing behaviour for corrupt input.
+/// consumes to end of input; the entity then fails to parse, as for any
+/// corrupt input.
 fn ws(input: &[u8]) -> IResult<&[u8], ()> {
     let end = super::lexical::skip_step_trivia(input, 0).unwrap_or(input.len());
     Ok((&input[end..], ()))
@@ -333,18 +326,15 @@ fn token_at_depth(input: &[u8], depth: u32) -> IResult<&[u8], Token<'_>> {
     Ok((rest, token))
 }
 
-/// Parse list: (1, 2, 3) or nested lists
 /// Test-only wrapper for the depth-0 entry into list.
 #[cfg(test)]
 fn list(input: &[u8]) -> IResult<&[u8], Token<'_>> {
     list_at_depth(input, 0)
 }
 
-/// An EMPTY list (`( )`, `(\r\n)`, `(/* empty */)`) needs `ws` explicitly
-/// around the empty `separated_list0`: it matches zero items without
-/// consuming anything, so a bare `char(')')` failed to parse past any
-/// whitespace or comment left between the parens (#3789, same shape as
-/// `typed_value_at_depth`'s empty-args fix).
+/// Parse list: (1, 2, 3) or nested lists. An EMPTY list (`( )`, `(\r\n)`,
+/// `(/* empty */)`) needs `ws` between the parens, same as
+/// `typed_value_at_depth` (#3789).
 fn list_at_depth(input: &[u8], depth: u32) -> IResult<&[u8], Token<'_>> {
     // Hand-written sequence (recursive path; see `token_at_depth`).
     let (i, _) = literal(b'(', input)?;
@@ -382,12 +372,9 @@ where
                 ws,
             ),
         ),
-        // Arguments: ('guid', 'owner', ...). `ws` around the empty
-        // `separated_list0` handles an EMPTY argument list separated from
-        // its `)` by whitespace or a comment (`#1=IFCX(\r\n);`), the same
-        // shape as `list_at_depth`'s and `typed_value_at_depth`'s fix
-        // (#3789): with zero items `separated_list0` consumes nothing, so
-        // a bare `char(')')` failed to parse past it.
+        // Arguments: ('guid', 'owner', ...). `ws` after `(` handles an EMPTY
+        // argument list split from its `)` (`#1=IFCX(\r\n);`), same as
+        // `list_at_depth` (#3789).
         delimited(
             pair(char('('), ws),
             separated_list0(delimited(ws, char(','), ws), token),
