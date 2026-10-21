@@ -11,6 +11,9 @@
 import type { SectionPlaneAxis } from '@/store/types';
 import { sectionAxisRange, type AxisBounds } from './section-distance';
 
+/** A plan's depth below its cut, counted from the model top when the cut is above it (#226): one rule with the engine. */
+export { planDepthBelowCut } from '@bimvoice/ifcsheet';
+
 /** Half the model's depth along the cut (its diagonal for a plane that is not along an axis). */
 export const SECTION_VIEW_DEPTH_FRACTION = 0.5;
 

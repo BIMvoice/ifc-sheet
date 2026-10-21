@@ -20,7 +20,7 @@ import { IfcParser } from '@ifc-lite/parser';
 import { useViewerStore } from '@/store';
 import { modelLevels } from '@/project/model-levels';
 import { useProjectStore } from '@/project/project-store';
-import { levelsFromStoreys } from '@/project/view-defaults';
+import { levelsFromStoreys, planDepthBelowCut } from '@/project/view-defaults';
 import { sectionPlaneForView } from '@/project/view-plane';
 import { viewDisplayOverrides } from '@/project/view-drawings';
 import { styledDrawing } from '@/project/view-graphics';
@@ -107,7 +107,7 @@ export async function loadPlanModel(path: string): Promise<LoadedPlanModel> {
     const position = bounds.min[axis] + (resolved.position / 100) * range;
     // A plan sees down its manual view depth and up to the model's top; any other view projects through the whole model.
     const { constructionProjectionDepth } = viewDisplayOverrides(view);
-    const below = view.kind === 'plan' ? constructionProjectionDepth ?? 0 : range;
+    const below = view.kind === 'plan' ? planDepthBelowCut(constructionProjectionDepth ?? 0, position, bounds.max[axis]) : range;
     const above = view.kind === 'plan' ? Math.max(range, 1e-3) : 1e-3;
     const generator = new Drawing2DGenerator();
     await generator.initialize();

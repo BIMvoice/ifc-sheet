@@ -11,7 +11,7 @@ import { getWholeSourceForWorker } from '@/lib/overlay-parse/source-handoff';
 import { displayedTranslation, placementFor } from '@/lib/model-placement/state';
 import { AlignmentClient } from './alignment-client';
 import { placementCoordinateInfo } from './placement-coordinate-info';
-import { mergedSectionBounds, sectionAxisRange, worldToPercent } from './section-distance';
+import { mergedSectionBounds, sectionAxisRange, worldToSliderPercent } from './section-distance';
 import { customPlaneCenter } from '@/store/slices/section-plane-center';
 import { alignmentSectionPlane } from './alignment-plane';
 import type { AlignmentAxisMetadata, AlignmentSectionBinding, AlignmentSectionSample } from './alignment-contract';
@@ -51,7 +51,7 @@ function apply(sample: AlignmentSectionSample, binding: AlignmentSectionBinding,
   const range = sectionAxisRange(placed?.shiftedBounds ?? merged, cardinal.axis);
   const center = customPlaneCenter(custom);
   const component = cardinal.axis === 'side' ? center[0] : cardinal.axis === 'down' ? center[1] : center[2];
-  const position = range ? worldToPercent(component, range) : state.sectionPlane.position;
+  const position = range ? worldToSliderPercent(component, range) : state.sectionPlane.position;
   useViewerStore.setState({ sectionPlane: { ...state.sectionPlane, custom, box: undefined,
     axis: cardinal.axis, position, ...(initial ? { enabled: true } : {}) }, sectionPickMode: false, sectionPickPreview: null });
   if (initial) state.setSectionVisible(true);

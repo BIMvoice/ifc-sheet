@@ -28,7 +28,7 @@ import {
   percentToWorld,
   sectionAxisRange,
   storeyCutElevation,
-  worldToPercent,
+  worldToSliderPercent,
   type AxisBounds,
   type AxisRange,
   type SectionStorey,
@@ -90,13 +90,13 @@ export function useSectionDistance(): SectionDistance {
     const state = useViewerStore.getState();
     if (state.sectionPlane.custom || state.sectionPlane.axis !== 'down') setSectionPlaneAxis('down');
     const r = sectionAxisRange(placed?.shiftedBounds ?? null, 'down');
-    if (r) setSectionPlanePosition(worldToPercent(storeyCutElevation(storey), r));
+    if (r) setSectionPlanePosition(worldToSliderPercent(storeyCutElevation(storey), r));
   }, [placed, setSectionPlaneAxis, setSectionPlanePosition]);
 
   const bounds = placed?.shiftedBounds ?? null;
   const custom = sectionPlane.custom;
   const onChangeWorld = useCallback((next: number) => {
-    if (range) setSectionPlanePosition(worldToPercent(next, range));
+    if (range) setSectionPlanePosition(worldToSliderPercent(next, range));
   }, [range, setSectionPlanePosition]);
 
   if (custom) {

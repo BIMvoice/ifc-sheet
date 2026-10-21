@@ -6,7 +6,7 @@
  * The Section bar's distance arithmetic (#5499, charter #5478 §6).
  *
  * The store keeps a cardinal cut as a PERCENTAGE of the model bounds along
- * its axis (`SectionPlane.position`, 0..100), which is what every reader
+ * its axis (`SectionPlane.position`, 0..100 inside the bounds), which is what every reader
  * (renderer, drawing generation, BCF, export) resolves against the merged
  * `shiftedBounds`. The bar shows the same cut in world METRES — "+1.20 m",
  * not "37.5 %" — because a distance is what a user reasons about, and a
@@ -108,10 +108,24 @@ export function percentToWorld(position: number, range: AxisRange): number {
   return range.min + (position / 100) * (range.max - range.min);
 }
 
-/** A world coordinate along the axis as the clamped 0..100 `position`. */
+/**
+ * A world coordinate along the axis as a `position`: the exact inverse of
+ * `percentToWorld`, NOT clamped. A plane outside the bounds (a plan cut above
+ * the model top, an elevation standing outside the facade) is below 0 or past
+ * 100, and every reader turns it back into the same metres. Clamping here
+ * moved such a cut onto the face of the bounds, i.e. onto geometry (#226).
+ */
 export function worldToPercent(world: number, range: AxisRange): number {
-  const pct = ((world - range.min) / (range.max - range.min)) * 100;
-  return Math.min(100, Math.max(0, pct));
+  return ((world - range.min) / (range.max - range.min)) * 100;
+}
+
+/**
+ * A world coordinate as the Section bar slider's 0..100 position: the one
+ * clamped conversion, for a cut the user places with the slider. A view's
+ * plane goes through `worldToPercent`, never this.
+ */
+export function worldToSliderPercent(world: number, range: AxisRange): number {
+  return Math.min(100, Math.max(0, worldToPercent(world, range)));
 }
 
 /**

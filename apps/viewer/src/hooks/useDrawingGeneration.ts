@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
+import { automaticViewDepth, planDepthBelowCut, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
 
 /**
  * useDrawingGeneration - Custom hook for 2D drawing generation logic
@@ -406,7 +406,7 @@ export function useDrawingGeneration({
         aboveDepth = 1e-3;
       }
       if (boundedProjection) {
-        belowDepth = manualDepth;
+        belowDepth = sectionPlane.axis === 'down' && !sectionPlane.custom && !sectionPlane.flipped && !sectionPlane.reflected ? planDepthBelowCut(manualDepth, position, axisMax) : manualDepth; // a plan cut above the model looks its depth into it (#226)
         if (manualDepth === 0 || sectionPlane.axis !== 'down') aboveDepth = 0;
       }
 
