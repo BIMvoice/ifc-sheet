@@ -12,7 +12,8 @@ import assert from 'node:assert/strict';
 import { withoutAutoNumber } from './sheet-numbers.js';
 import { syncProjectWithModels } from './project-store.js';
 import { addProjectSheet, projectDocument, resetProject, setSheetNumber, useProjectStore } from './project-store.js';
-import { addViewport, mmPerMetre, paperOf, PAPER_MM, removeViewport, SHEET_SCALES, sheetsShowing, updateSheet, updateViewport, viewportBox } from './sheets.js';
+import { addViewport, mmPerMetre, paperOf, removeViewport, SHEET_SCALES, sheetsShowing, updateSheet, updateViewport, viewportBox } from './sheets.js';
+import { PAPER_MM } from './paper.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
 
 beforeEach(() => resetProject());

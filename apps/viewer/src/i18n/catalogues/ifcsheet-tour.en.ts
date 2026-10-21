@@ -14,7 +14,7 @@ export const ifcsheetTourEn = {
   'ifcsheetTour.hang.title': 'Hang it on the Wall',
   'ifcsheetTour.hang.body': 'Press this button to see every sheet at once.',
   'ifcsheetTour.sheet.title': 'Step into a sheet',
-  'ifcsheetTour.sheet.body': 'Double-click a sheet to work on it where it hangs. Esc steps back.',
+  'ifcsheetTour.sheet.body': 'Double-click a sheet to work on it where it hangs. The Wall link steps back.',
   'ifcsheetTour.tools.title': 'Six tools',
   'ifcsheetTour.tools.body': 'Dimension, tag, note, level mark, section mark and symbol. Pick one and a card says what it does.',
   'ifcsheetTour.issue.title': 'Issue the set',

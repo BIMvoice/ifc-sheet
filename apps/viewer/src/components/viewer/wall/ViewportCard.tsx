@@ -17,8 +17,12 @@ import { drawingArea } from '@/project/drawing-set';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { useLegendLabels } from '../legend/LegendGraphic';
 import { LegendCard } from './LegendCard';
+import { hasTrueScale } from '@/project/axonometric';
 import { ScaleField } from './ScaleField';
+import { ThreeDControls } from './ThreeDControls';
 import { CutHeightControl, DepthControl } from './ViewControls';
+import { startWhenAttached } from './wall-actions';
+import { addKeyPlan, drawPlotBoundary } from '@/siteplan/site-actions';
 
 const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
 const quiet = 'rounded-full border border-sky-300/30 px-3 py-1.5 text-sm text-sky-100 hover:border-sky-300/70';
@@ -44,7 +48,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
   const name = view?.name ?? schedule?.name ?? legend?.name ?? '';
   const placed = new Set((sheet.viewports ?? []).map((vp) => vp.viewId));
   const placeable = [
-    ...views.filter((v) => v.kind !== '3d' && !placed.has(v.id)).map((v) => ({ id: v.id, name: v.name })),
+    ...views.filter((v) => !placed.has(v.id)).map((v) => ({ id: v.id, name: v.name })),
     ...schedules.filter((s) => !placed.has(s.id)).map((s) => ({ id: s.id, name: s.name })),
     ...legends.filter((l) => !placed.has(l.id)).map((l) => ({ id: l.id, name: l.name })),
   ];
@@ -55,7 +59,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
       onChoose(placeLegend(sheet.id, id, labels));
       return;
     }
-    const area = drawingArea(sheet.paper);
+    const area = drawingArea(sheet);
     const scale = views.find((v) => v.id === id)?.scale ?? slot?.scale ?? 100;
     onChoose(addViewport(sheet.id, id, { x: area.x + area.w / 2, y: area.y + area.h / 2 }, scale));
   };
@@ -80,13 +84,16 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
                   onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                 />
               </label>
-              <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} />
+              {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} /> : null}
             </>
           )}
+          {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
           <div className="mt-4 flex flex-wrap gap-2">
             {view ? <button type="button" className={quiet} onClick={() => onOpen(slot)}>{t('wall.vp.open')}</button> : null}
+            {view?.kind === 'plan' && view.site ? <button type="button" className={quiet} onClick={() => { drawPlotBoundary(slot.viewId, startWhenAttached); onOpen(slot); }}>{t('site.drawBoundary')}</button> : null}
+            {view?.kind === 'plan' && !slot.keyPlanOf ? <button type="button" className={quiet} onClick={() => onChoose(addKeyPlan(sheet, slot, drawingBounds))}>{t('site.keyPlan.add')}</button> : null}
             <button type="button" className={quiet} onClick={() => { removeViewport(sheet.id, slot.id); onChoose(null); }}>{t('wall.vp.remove')}</button>
           </div>
         </>

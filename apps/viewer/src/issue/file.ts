@@ -8,9 +8,9 @@
  * place of the problem rather than silently repaired.
  */
 
-import type { IssuedSheet, PaperSize, ProjectIssue } from '@/project/types';
+import { paperFromLabel } from '@/project/paper';
+import type { IssuedSheet, ProjectIssue } from '@/project/types';
 
-const PAPERS: readonly PaperSize[] = ['A0', 'A1', 'A2', 'A3', 'A4'];
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -27,11 +27,11 @@ function text(o: Json, key: string, path: string): string {
 function readSheet(v: unknown, path: string): IssuedSheet {
   if (!isObject(v)) fail(path, 'must be an issued sheet');
   const paper = v.paper;
-  if (!PAPERS.includes(paper as PaperSize)) fail(`${path}/paper`, `must be one of ${PAPERS.join(', ')}`);
+  if (!paperFromLabel(paper)) fail(`${path}/paper`, 'must be a paper: A0 to A4, an elongated size like A3×3, or a custom size like 500×700');
   if (v.orientation !== 'landscape' && v.orientation !== 'portrait') fail(`${path}/orientation`, 'must be landscape or portrait');
   const fingerprint = text(v, 'fingerprint', path);
   if (!/^[0-9a-f]{14}$/.test(fingerprint)) fail(`${path}/fingerprint`, 'must be 14 hex digits');
-  return { number: text(v, 'number', path), title: text(v, 'title', path), scale: text(v, 'scale', path), paper: paper as PaperSize, orientation: v.orientation, revision: text(v, 'revision', path), fingerprint };
+  return { number: text(v, 'number', path), title: text(v, 'title', path), scale: text(v, 'scale', path), paper: paper as string, orientation: v.orientation, revision: text(v, 'revision', path), fingerprint };
 }
 
 export function readIssues(raw: unknown): ProjectIssue[] {

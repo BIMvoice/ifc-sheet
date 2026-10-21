@@ -10,6 +10,7 @@
  * project file opened before its models load loses nothing.
  */
 
+import { resolve } from '@/i18n/registry';
 import type { ElevationDirection, ProjectLevel, ProjectView, PlanProjectView } from './types';
 
 /** Standard architectural plan-cut height above the floor, metres. */
@@ -20,17 +21,20 @@ export const LEVEL_MATCH_TOLERANCE_M = 0.25;
 
 export const ELEVATION_DIRECTIONS: readonly ElevationDirection[] = ['north', 'east', 'south', 'west'];
 
-const ELEVATION_NAMES: Record<ElevationDirection, string> = {
-  north: 'North Elevation',
-  east: 'East Elevation',
-  south: 'South Elevation',
-  west: 'West Elevation',
-};
+/** The default name of an elevation, in the active language: stored as plain text when the view is made. */
+export const elevationName = (direction: ElevationDirection): string => resolve(`names.view.${direction}` as const);
 
 export interface StoreyInput {
   name: string;
   elevation: number;
   globalId?: string;
+  /** The storey's floor in the drawing frame (`ProjectLevel.floorY`), when its placement resolves. */
+  floorY?: number;
+}
+
+/** Where a level's floor is in the drawing frame: the frame plan cuts, work planes and bands are in. */
+export function levelFloorY(level: Pick<ProjectLevel, 'elevation' | 'floorY'>): number {
+  return level.floorY ?? level.elevation;
 }
 
 export function freshProjectId(prefix: string): string {
@@ -53,9 +57,10 @@ export function levelsFromStoreys(storeys: readonly StoreyInput[]): ProjectLevel
     if (match) {
       if (storey.globalId && !match.storeyGlobalIds.includes(storey.globalId)) match.storeyGlobalIds.push(storey.globalId);
       if (storey.name.length < match.name.length) match.name = storey.name;
+      if (match.floorY === undefined && storey.floorY !== undefined) match.floorY = storey.floorY;
       continue;
     }
-    levels.push({ name: storey.name, elevation: storey.elevation, storeyGlobalIds: storey.globalId ? [storey.globalId] : [] });
+    levels.push({ name: storey.name, elevation: storey.elevation, storeyGlobalIds: storey.globalId ? [storey.globalId] : [], ...(storey.floorY !== undefined ? { floorY: storey.floorY } : {}) });
   }
   return levels.sort((a, b) => b.elevation - a.elevation);
 }
@@ -85,7 +90,8 @@ export function planViewFor(level: ProjectLevel, views: readonly ProjectView[], 
     id: freshProjectId('view'),
     kind: 'plan',
     name: uniqueViewName(level.name, views),
-    level: { ...level, storeyGlobalIds: [...level.storeyGlobalIds] },
+    // The frame-derived floor stays with the live level (`levelFloorY`), never in the saved view.
+    level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] },
     cutHeight: DEFAULT_PLAN_CUT_HEIGHT_M,
     auto: true,
     createdAt: now,
@@ -97,7 +103,7 @@ export function defaultViews(levels: readonly ProjectLevel[], now = Date.now()):
   const views: ProjectView[] = [];
   for (const level of levels) views.push(planViewFor(level, views, now));
   for (const direction of ELEVATION_DIRECTIONS) {
-    views.push({ id: freshProjectId('view'), kind: 'elevation', name: ELEVATION_NAMES[direction], direction, auto: true, createdAt: now });
+    views.push({ id: freshProjectId('view'), kind: 'elevation', name: elevationName(direction), direction, auto: true, createdAt: now });
   }
   views.push({ id: freshProjectId('view'), kind: '3d', name: '{3D}', viewpoint: null, auto: true, createdAt: now });
   return views;

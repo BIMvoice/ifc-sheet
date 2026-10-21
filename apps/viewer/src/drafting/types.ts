@@ -68,6 +68,8 @@ export interface SymbolInstanceShape {
   p: Pt;
   scale: number;
   rotation: number;
+  /** A north arrow that turns to the model's true north wherever it is drawn (the site plan's own); without it, an arrow keeps `rotation`. */
+  followsNorth?: true;
 }
 
 /** Which ends of an axis carry a bubble. */

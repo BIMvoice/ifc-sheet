@@ -6,7 +6,10 @@
  * A joinery schedule laid out on paper (millimetres, y down), as the list a
  * drawing set carries: one card per type — its mark, its elevation seen from
  * the interior with the opening symbols and the hardware scheme (hinges,
- * handles) at the schedule's scale, dimensioned — over the rows of data:
+ * handles) at the schedule's scale, dimensioned — over the rows of data. Given
+ * `views` (cut from the element's own mesh, `element-views.ts`) a card draws
+ * those instead, front, plan and section, with the opening symbol overlaid;
+ * without them the generated symbol. The rows:
  * name, size, operation, sill, count per level, total, U value, fire rating.
  * A label column runs down the left; cards wrap into bands under a maximum
  * width. Pure: the screen tab, sheets, SVG and DXF all draw these primitives.
@@ -16,10 +19,12 @@ import { normalisedPanels, type PanelOperation } from '@ifc-lite/create';
 import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
+import type { ElementViews } from './element-views';
+import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 
 export type SchedulePrim =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number }
-  | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean }
+  | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol' }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number };
 
 export interface ScheduleLayout {
@@ -47,6 +52,12 @@ export interface ScheduleLayoutOptions {
   scale?: number;
   /** Cards wrap past this width (mm). */
   maxWidth?: number;
+  /**
+   * Front, plan and section cut from the real geometry, by entry key. An entry
+   * with views draws them (with the opening symbol overlaid); one without draws
+   * the generated symbol.
+   */
+  views?: ReadonlyMap<string, ElementViews>;
 }
 
 const LABEL_W = 34;
@@ -89,8 +100,11 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
   const maxWidth = options.maxWidth ?? 380;
   const prims: SchedulePrim[] = [];
   const tableRows = rows(data, labels);
-  const cardW = (e: ScheduleEntry) => Math.max(30, e.width * k + 16);
-  const drawingH = Math.max(30, ...data.entries.map((e) => e.height * k + 14));
+  const viewsOf = (e: ScheduleEntry) => options.views?.get(e.key);
+  const cardW = (e: ScheduleEntry) => { const v = viewsOf(e); return Math.max(30, (v?.width ?? e.width) * k + 16 + (v ? sectionRoom(v, k) : 0)); };
+  // Under the front view and its dimension: the plan, in the room the deepest one needs.
+  const planBlock = Math.max(0, ...data.entries.map((e) => { const v = viewsOf(e); return v ? planRoom(v, k) : 0; }));
+  const drawingH = Math.max(30, ...data.entries.map((e) => (viewsOf(e)?.height ?? e.height) * k + 14 + planBlock));
   const bandH = MARK_ROW + drawingH + tableRows.length * ROW;
 
   // Split the cards into bands.
@@ -125,10 +139,16 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
       const cx = x + cw / 2;
       prims.push({ kind: 'line', x1: x + cw, y1: top, x2: x + cw, y2: top + bandH, w: PEN.grid });
       prims.push({ kind: 'text', x: cx, y: top + 7, text: e.mark, size: 4, anchor: 'middle', bold: true });
-      // The elevation, bottom on a baseline that leaves room for the width dimension.
-      const base = top + MARK_ROW + drawingH - 7;
-      const x0 = cx - (e.width * k) / 2, x1 = cx + (e.width * k) / 2;
-      if (e.spec) {
+      // The elevation, bottom on a baseline that leaves room for the width dimension (and the plan under it).
+      const base = top + MARK_ROW + drawingH - 7 - planBlock;
+      const v = viewsOf(e);
+      // Views draw to their own extent, centred over the card less the section beside them.
+      const w = v?.width ?? e.width, h = v?.height ?? e.height;
+      const fx = v ? cx - sectionRoom(v, k) / 2 : cx;
+      const x0 = fx - (w * k) / 2, x1 = fx + (w * k) / 2;
+      if (v) {
+        prims.push(...viewPrims(v, e.spec, { fx, base }, k, openingConvention()));
+      } else if (e.spec) {
         const strokes = elevationSymbol(e.spec, { hardware: true, convention: openingConvention() });
         const b = strokeBounds(strokes);
         const ox = cx - ((b.min.x + b.max.x) / 2) * k;
@@ -139,7 +159,7 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
         prims.push({ kind: 'path', pts: [{ x: x0, y: base }, { x: x1, y: base }, { x: x1, y: base - e.height * k }, { x: x0, y: base - e.height * k }], closed: true, w: PEN.drawing.outline });
       }
       dimension(prims, { x: x0, y: base + 4.5 }, { x: x1, y: base + 4.5 }, String(Math.round(e.width * 1000)));
-      dimension(prims, { x: x0 - 4, y: base }, { x: x0 - 4, y: base - e.height * k }, String(Math.round(e.height * 1000)));
+      dimension(prims, { x: x0 - 4, y: base }, { x: x0 - 4, y: base - h * k }, String(Math.round(e.height * 1000)));
       tableRows.forEach((row, i) => {
         const value = row.value(e);
         const size = value.length > cw / 1.6 ? Math.max(1.6, (cw - 2) / value.length * 1.7) : TEXT;

@@ -16,6 +16,11 @@ export function formatLocaleNumber(locale: string, value: number, options?: Intl
   return new Intl.NumberFormat(supportedLocale(locale), options).format(value);
 }
 
+/** A figure with exactly `digits` decimals in the locale's own separators ("1.234,50" in Romanian), for text read on screen. */
+export function formatLocaleFixed(locale: string, value: number, digits: number): string {
+  return formatLocaleNumber(locale, value, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
 export function localeCount(locale: string, count: number): { count: number; countDisplay: string } {
   return { count, countDisplay: formatLocaleNumber(locale, count) };
 }
