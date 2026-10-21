@@ -20,9 +20,9 @@ import { useViewerStore } from '@/store';
 import { fixtureModel } from '@/test/store-fixture.js';
 import { SourceHostProvider } from '@/services/sources/SourceHostProvider';
 import { HierarchyPanel } from './HierarchyPanel.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 });
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 400 });
+stubBoxSize(400, 600);
 
 afterEach(() => {
   cleanup();
