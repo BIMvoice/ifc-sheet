@@ -88,12 +88,12 @@ describe('the project title block in the store and the file', () => {
   });
 
   it('saves and opens with the project, and an old file opens lifted', () => {
-    setProjectTitleBlockField('revision', 'C');
+    setProjectTitleBlockField('checkedBy', 'C');
     setTitleBlockField('A-101', 'drawnBy', 'IC');
     const saved = serializeProject(projectDocument());
     resetProject();
     loadProjectDocument(parseProjectFile(saved));
-    assert.equal(useProjectStore.getState().titleBlock?.revision, 'C');
+    assert.equal(useProjectStore.getState().titleBlock?.checkedBy, 'C');
     assert.equal(useProjectStore.getState().sheets[0].titleBlock?.drawnBy, 'IC');
 
     const oldFile = JSON.stringify({

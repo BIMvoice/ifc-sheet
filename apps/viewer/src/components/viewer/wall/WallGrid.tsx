@@ -17,6 +17,7 @@ import { SET_SCALES, sheetGroup, sheetScaleReason, type ModelExtent, type SetGro
 import { groupScale, setGroupScale } from '@/project/drawing-set-actions';
 import { removeProjectItem, useProjectStore } from '@/project/project-store';
 import type { ProjectSheet } from '@/project/types';
+import { CardMarks } from './CardMarks';
 import { startWallFill } from '@/wall/wall-fill';
 import { useWallView } from '@/wall/wall-view';
 import { LazyWallSheet } from './LazyWallSheet';
@@ -90,6 +91,7 @@ const SheetOnWall = memo(function SheetOnWall({ sheet, extent, onStep }: { sheet
       >
         <LazyWallSheet sheet={sheet} width={SHEET_PX} near={near} />
       </button>
+      <CardMarks sheet={sheet} width={SHEET_PX} />
       <button
         type="button"
         aria-label={t('wall.remove', { name })}

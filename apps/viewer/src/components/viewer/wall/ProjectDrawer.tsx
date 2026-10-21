@@ -12,7 +12,7 @@
  * is filled under the sheets.
  */
 
-import { useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -27,6 +27,8 @@ import { paperLabel } from '@/project/paper';
 import { allTemplates } from '@/project/sheet-templates';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
+import { useViewerStore } from '@/store';
+import { modelSiteArea } from '@/urban/urban-models';
 import { SheetNumberingForm } from './SheetNumberingForm';
 import { useViewDrawings } from '@/project/view-drawings';
 import { viewportState, type ViewportState as ViewportStateValue } from '@/project/viewport-state';
@@ -36,7 +38,9 @@ import { WALL_SKIN } from '../sheets/set-skin';
 import { TitleBlockForm } from './TitleBlockForm';
 import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
+import { CommentsSection } from './CommentsSection';
 import { LegendsAdd } from './LegendsAdd';
+import { SiteAreaField } from '../urban/SiteAreaField';
 import { ViewportState } from './ViewportState';
 import { TagFieldsPanel } from './TagFieldsPanel';
 
@@ -102,6 +106,9 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
   const legends = useProjectStore((s) => s.legends ?? []);
+  const models = useViewerStore((s) => s.models);
+  // models: what `modelSiteArea` reads.
+  const siteFromModel = useMemo(() => modelSiteArea(), [models]);
   const ownTemplates = useProjectStore((s) => s.sheetTemplates);
   const [template, setTemplate] = useState('');
   const byView = useViewDrawings((s) => s.byView);
@@ -142,6 +149,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
       </div>
       <div className="px-4"><RecoveryOffer /></div>
       <LibraryPanel />
+      <CommentsSection onGo={go} />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         <Group title={t('wall.project.sheets')} add={(
           <>
@@ -185,6 +193,12 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
               <button type="button" className={action} onClick={() => go(addRegisterToSet(t('register.name')))}>{t('wall.project.addRegister')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('types', t('typeQty.newName')))}>{t('wall.project.addTypeQuantities')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('finishes', t('finishes.newName')))}>{t('wall.project.addFinishes')}</button>
+              <button type="button" className={action} onClick={() => go(addScheduleToSet('urban', t('urban.newName')))}>{t('urban.add')}</button>
+              <SiteAreaField
+                modelSiteArea={siteFromModel}
+                className="mt-1 flex w-full items-center justify-between gap-2 text-xs text-sky-200"
+                inputClassName="w-36 rounded border border-sky-300/40 bg-[#061a36] px-1.5 py-1 text-xs text-white"
+              />
             </>
           )}
         >

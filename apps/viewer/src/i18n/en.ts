@@ -76,9 +76,11 @@ import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
 import { printPreviewEn } from './catalogues/print-preview.en';
 import { wallEn } from './catalogues/wall.en';
+import { feedbackEn } from './catalogues/feedback.en';
 import { titleBlockParamsEn } from './catalogues/title-block-params.en';
 import { sitePlanEn } from './catalogues/site-plan.en';
 import { ifcsheetTourEn } from './catalogues/ifcsheet-tour.en';
+import { reviewEn } from './catalogues/review.en';
 import { wallFindEn } from './catalogues/wall-find.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
@@ -114,6 +116,7 @@ import { sheetsEn } from './catalogues/sheets.en';
 import { titleBlockSourcesEn } from './catalogues/title-block-sources.en';
 import { draftSetEn } from './catalogues/draft-set.en';
 import { issueEn } from './catalogues/issue.en';
+import { revisionsEn } from './catalogues/revisions.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
 import { checkEn } from './catalogues/check.en';
 import { checkReadyEn } from './catalogues/check-ready.en';
@@ -129,6 +132,7 @@ import { tagFieldsEn } from './catalogues/tag-fields.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
 import { roomFinishesEn } from './catalogues/room-finishes.en';
+import { urbanEn } from './catalogues/urban.en';
 import { elementTypesEn } from './catalogues/element-types.en';
 import { roofEn } from './catalogues/roof.en';
 import { civilEn } from './catalogues/civil.en';
@@ -196,6 +200,7 @@ export const en = {
   ...titleBlockSourcesEn,
   ...draftSetEn,
   ...issueEn,
+  ...revisionsEn,
   ...annotateAllEn,
   ...checkEn,
   ...checkReadyEn,
@@ -211,6 +216,7 @@ export const en = {
   ...draftingStandardsEn,
   ...joineryEn,
   ...roomFinishesEn,
+  ...urbanEn,
   ...elementTypesEn,
   ...roofEn,
   ...civilEn,
@@ -269,9 +275,11 @@ export const en = {
   ...settingsEn,
   ...printPreviewEn,
   ...wallEn,
+  ...feedbackEn,
   ...titleBlockParamsEn,
   ...sitePlanEn,
   ...ifcsheetTourEn,
+  ...reviewEn,
   ...wallFindEn,
   ...whatChangedEn,
   ...hierarchyEn,

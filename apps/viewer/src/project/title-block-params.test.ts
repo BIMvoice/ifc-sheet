@@ -4,10 +4,11 @@
 
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resetProject, useProjectStore } from './project-store';
+import { EMPTY_PROJECT, loadProjectDocument, resetProject, useProjectStore } from './project-store';
+import { customiseTitleBlock, setTemplateField } from './title-block-template-actions';
 import { addProjectSheet } from './project-store';
 import { addTitleBlockParam, clearSheetParam, deleteTitleBlockParam, renameTitleBlockParam, setSheetParam, setTitleBlockParamValue } from './title-block-param-actions';
-import { checkParamName, resolveParamText } from './title-block-params';
+import { checkParamName, paramLookup, resolveParamText } from './title-block-params';
 import { clearDraftHistory, commitDrafts, newDraft, redoDrafts, undoDrafts } from '@/drafting/draft-store';
 import { PARAMETRIC_TEXT } from './parametric-text';
 
@@ -213,5 +214,77 @@ describe('parameter actions (#143)', () => {
     assert.equal(useProjectStore.getState().drafts.length, 1);
     assert.equal(redoDrafts(), true);
     assert.deepEqual(names(), ['Stage']);
+  });
+  /** Every sheet value and every `{X}` in the layout names a parameter the list has, and no two parameters share a name. */
+  const consistent = (): void => {
+    const s = useProjectStore.getState();
+    const list = names() ?? [];
+    assert.equal(new Set(list.map((n) => n.toLowerCase())).size, list.length, `two parameters share a name: ${list.join(', ')}`);
+    for (const sheet of s.sheets) for (const k of Object.keys(sheet.titleBlockParams ?? {})) assert.ok(list.includes(k), `a sheet value names ${k}, which the list does not have (${list.join(', ')})`);
+    for (const item of s.titleBlockTemplate?.items ?? []) {
+      if (item.kind !== 'text') continue;
+      assert.ok(!resolveParamText(item.text, (n) => (list.includes(n) ? 'v' : undefined)).includes('?}'), `the layout prints ${item.text} unresolved`);
+    }
+  };
+
+  it('undoing a rename never leaves two parameters with one name, nor redo (the old name reused since)', () => {
+    addTitleBlockParam('A', '1');
+    renameTitleBlockParam('A', 'B');
+    assert.equal(addTitleBlockParam('A', '2'), null);
+    for (let i = 0; i < 3; i += 1) { undoDrafts(); consistent(); }
+    assert.deepEqual(names() ?? [], []);
+    for (let i = 0; i < 3; i += 1) { redoDrafts(); consistent(); }
+    assert.deepEqual(names(), ['B', 'A']);
+  });
+
+  it('undo after another project is opened leaves that project\'s parameters alone', () => {
+    addTitleBlockParam('A', '1');
+    renameTitleBlockParam('A', 'B');
+    loadProjectDocument({ ...EMPTY_PROJECT, name: 'Other', titleBlockParams: [{ name: 'B', value: 'other' }] });
+    undoDrafts();
+    assert.deepEqual(useProjectStore.getState().titleBlockParams, [{ name: 'B', value: 'other' }]);
+  });
+
+  it('a sheet value set after a rename: every undo and redo keeps the sheet values on parameters that exist', () => {
+    addTitleBlockParam('A', '1');
+    const sheet = addProjectSheet('Plans', 'plans');
+    setSheetParam(sheet, 'A', 'own');
+    renameTitleBlockParam('A', 'B');
+    setSheetParam(sheet, 'B', 'own2');
+    const own = () => useProjectStore.getState().sheets.find((x) => x.id === sheet)?.titleBlockParams;
+    undoDrafts(); consistent(); assert.deepEqual(own(), { B: 'own' });
+    undoDrafts(); consistent(); assert.deepEqual(own(), { A: 'own' });
+    redoDrafts(); redoDrafts(); consistent(); assert.deepEqual(own(), { B: 'own2' });
+  });
+
+  it('deleting a parameter in use is one undo step that brings back its sheet values', () => {
+    addTitleBlockParam('A', '1');
+    const sheet = addProjectSheet('Plans', 'plans');
+    setSheetParam(sheet, 'A', 'own');
+    deleteTitleBlockParam('A');
+    assert.deepEqual(names(), []);
+    assert.equal(undoDrafts(), true);
+    consistent();
+    assert.deepEqual(names(), ['A']);
+    assert.deepEqual(useProjectStore.getState().sheets.find((x) => x.id === sheet)?.titleBlockParams, { A: 'own' });
+  });
+
+  it('a layout edit after a rename: undoing both brings the layout\'s {Name} back with the name', () => {
+    addTitleBlockParam('A', '1');
+    customiseTitleBlock({ items: [{ id: 'tx', kind: 'text', x: 0, y: 0, size: 3, text: 'Phase {A}' }] });
+    renameTitleBlockParam('A', 'B');
+    assert.equal(setTemplateField('tx', 'x', 5), true);
+    const words = () => useProjectStore.getState().titleBlockTemplate?.items.map((i) => (i.kind === 'text' ? i.text : ''));
+    undoDrafts(); consistent(); assert.deepEqual(words(), ['Phase {B}']);
+    undoDrafts(); consistent(); assert.deepEqual(words(), ['Phase {A}']);
+    assert.deepEqual(names(), ['A']);
+  });
+});
+
+describe('paramLookup (#143)', () => {
+  it('does not read a sheet value for a parameter the project no longer has: it prints as missing', () => {
+    const read = paramLookup({ titleBlockParams: { Gone: 'stale', Phase: 'own' } }, [{ name: 'Phase', value: 'DTAC' }], {});
+    assert.equal(read('Phase'), 'own');
+    assert.equal(resolveParamText('{Gone}', read), '{Gone?}');
   });
 });

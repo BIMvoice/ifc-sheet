@@ -7,9 +7,10 @@
  * layout is first edited: until then every sheet prints the standard layout
  * in the language of the day. Each edit refuses a value that would draw
  * nothing sensible (a number that is not one, a pen or a letter height that
- * is not positive) and leaves the item as it was.
+ * is not positive) and leaves the item as it was. Every edit is one undo step.
  */
 
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { useProjectStore } from './project-store';
 import { freshProjectId } from './view-defaults';
 import { ITEM_KINDS, type TemplateItem, type TitleBlockTemplate } from './title-block-template';
@@ -27,8 +28,9 @@ const NUMBERS: Record<TemplateItem['kind'], Record<string, boolean>> = {
 
 const current = (): TitleBlockTemplate | undefined => useProjectStore.getState().titleBlockTemplate;
 
+/** Each edit is an undo step, so undoing an older step (a parameter's rename) finds the layout it left and puts it back. */
 function write(template: TitleBlockTemplate | undefined): void {
-  useProjectStore.setState({ titleBlockTemplate: template, dirty: true });
+  runAsOneUndoStep(() => useProjectStore.setState({ titleBlockTemplate: template, dirty: true }));
 }
 
 /** The layout, applied to every text it holds (a parameter renamed). */

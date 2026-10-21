@@ -17,6 +17,7 @@ import { hasTrueScale } from '@/project/axonometric';
 import { titleBlockOf } from '@/project/title-block';
 import { useEffectiveTitleBlock } from '@/project/title-block-model';
 import { paramLookup } from '@/project/title-block-params';
+import { currentRevisionOf } from '@/project/revisions';
 import type { ProjectSheet } from '@/project/types';
 
 /** The scale the sheet states: a sheet of schedules and tables only has none, and a perspective has none to state. */
@@ -34,6 +35,8 @@ export function useSheetParamLookup(sheet: ProjectSheet, projectName: string): (
   const params = useProjectStore((s) => s.titleBlockParams);
   const sheets = useProjectStore((s) => s.sheets);
   const schedules = useProjectStore((s) => s.schedules);
+  const revisions = useProjectStore((s) => s.revisions);
+  const drafts = useProjectStore((s) => s.drafts);
   const scale = useSheetScaleText(sheet);
   return useMemo(() => {
     const fields = titleBlockOf(sheet, projectFields, projectName);
@@ -41,7 +44,8 @@ export function useSheetParamLookup(sheet: ProjectSheet, projectName: string): (
     return paramLookup(sheet, params, {
       SheetNumber: sheet.number, SheetName: sheet.name, Scale: scale, Date: fields.date ?? '', Page: `${page}/${sheets.length}`,
       Project: fields.project ?? '', Address: fields.address ?? '', Client: fields.client ?? '', Organisation: fields.organisation ?? '',
-      DrawnBy: fields.drawnBy ?? '', CheckedBy: fields.checkedBy ?? '', Revision: fields.revision ?? '',
+      DrawnBy: fields.drawnBy ?? '', CheckedBy: fields.checkedBy ?? '', // The revision is never typed: it is the latest the sheet has (`revisions.ts`).
+      Revision: currentRevisionOf(sheet, { revisions, drafts })?.code ?? '',
     });
-  }, [sheet, projectFields, projectName, params, sheets, schedules, scale]);
+  }, [sheet, projectFields, projectName, params, sheets, schedules, scale, revisions, drafts]);
 }

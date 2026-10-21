@@ -4,12 +4,15 @@
 
 /**
  * Writes to the title block's parameter list (#143). A rename carries the
- * sheets' own values and the `{Name}` in the layout and in sheet text along
- * (all of it one undo step, `runAsOneUndoStep`, with an effect for the parameter list and layout);
- * a delete drops the sheets' values. Each returns what refused it, or null.
+ * sheets' own values and the `{Name}` in the layout and in sheet text along;
+ * a delete drops the sheets' values. Every write is one undo step
+ * (`runAsOneUndoStep`, which holds the list and the layout whole): the
+ * history then holds every change to the list in order, so undoing a rename
+ * always finds the list, sheets and texts it left. Each returns what refused
+ * it, or null.
  */
 
-import { addStepEffect, commitDrafts, runAsOneUndoStep } from '@/drafting/draft-store';
+import { commitDrafts, runAsOneUndoStep } from '@/drafting/draft-store';
 import { useProjectStore } from './project-store';
 import { checkParamName, renameParamIn, type ParamNameProblem, type TitleBlockParam } from './title-block-params';
 import { renameInTemplate } from './title-block-template-actions';
@@ -31,28 +34,22 @@ const current = (): readonly TitleBlockParam[] => useProjectStore.getState().tit
 export function addTitleBlockParam(name: string, value = ''): ParamNameProblem | null {
   const problem = checkParamName(name, current());
   if (problem) return problem;
-  useProjectStore.setState({ titleBlockParams: [...current(), { name: name.trim(), value }], dirty: true });
+  runAsOneUndoStep(() => useProjectStore.setState({ titleBlockParams: [...current(), { name: name.trim(), value }], dirty: true }));
   return null;
 }
 
 export function setTitleBlockParamValue(name: string, value: string): void {
-  useProjectStore.setState({ titleBlockParams: current().map((p) => (p.name === name ? { ...p, value } : p)), dirty: true });
-}
-
-/** The parameter list and the layout's `{Name}` renamed (the sheets' values and the texts are carried by the step's own deltas). */
-function renameListAndLayout(from: string, to: string): void {
-  const s = useProjectStore.getState();
-  useProjectStore.setState({
-    titleBlockParams: current().map((p) => (p.name === from ? { ...p, name: to } : p)),
-    titleBlockTemplate: s.titleBlockTemplate ? renameInTemplate(s.titleBlockTemplate, (text) => renameParamIn(text, from, to)) : s.titleBlockTemplate,
-    dirty: true,
-  });
+  runAsOneUndoStep(() => useProjectStore.setState({ titleBlockParams: current().map((p) => (p.name === name ? { ...p, value } : p)), dirty: true }));
 }
 
 function applyRename(from: string, to: string): void {
   const s = useProjectStore.getState();
-  renameListAndLayout(from, to);
-  useProjectStore.setState({ sheets: patchSheetsTitleParams(s.sheets, (own) => Object.fromEntries(Object.entries(own).map(([k, v]) => [k === from ? to : k, v]))) });
+  useProjectStore.setState({
+    titleBlockParams: current().map((p) => (p.name === from ? { ...p, name: to } : p)),
+    titleBlockTemplate: s.titleBlockTemplate ? renameInTemplate(s.titleBlockTemplate, (text) => renameParamIn(text, from, to)) : s.titleBlockTemplate,
+    sheets: patchSheetsTitleParams(s.sheets, (own) => Object.fromEntries(Object.entries(own).map(([k, v]) => [k === from ? to : k, v]))),
+    dirty: true,
+  });
   const rewritten = renameInParametricDrafts(s.drafts, (text) => renameParamIn(text, from, to));
   if (rewritten.some((d, i) => d !== s.drafts[i])) commitDrafts(rewritten);
 }
@@ -62,34 +59,37 @@ export function renameTitleBlockParam(from: string, to: string): ParamNameProble
   if (next === from) return null;
   const problem = checkParamName(next, current(), from);
   if (problem) return problem;
-  // ONE undo step across the parameter list, the layout, the sheets' values and the texts: the list lives in the project store, the texts in the drafts' history, and two histories would let an undo bring `{Old}` back while the parameter stays `New` (printing `{Old?}`).
-  runAsOneUndoStep(() => {
-    applyRename(from, next);
-    addStepEffect({ undo: () => renameListAndLayout(next, from), redo: () => renameListAndLayout(from, next) });
-  });
+  // ONE undo step across the parameter list, the layout, the sheets' values and the texts: two histories would let an undo bring `{Old}` back while the parameter stays `New` (printing `{Old?}`).
+  runAsOneUndoStep(() => applyRename(from, next));
   return null;
 }
 
 export function deleteTitleBlockParam(name: string): void {
-  const s = useProjectStore.getState();
-  useProjectStore.setState({
-    titleBlockParams: current().filter((p) => p.name !== name),
-    sheets: patchSheetsTitleParams(s.sheets, (own) => Object.fromEntries(Object.entries(own).filter(([k]) => k !== name))),
-    dirty: true,
+  runAsOneUndoStep(() => {
+    const s = useProjectStore.getState();
+    useProjectStore.setState({
+      titleBlockParams: current().filter((p) => p.name !== name),
+      sheets: patchSheetsTitleParams(s.sheets, (own) => Object.fromEntries(Object.entries(own).filter(([k]) => k !== name))),
+      dirty: true,
+    });
   });
 }
 
 /** This sheet's own value for a parameter. */
 export function setSheetParam(sheetId: string, name: string, value: string): void {
-  const s = useProjectStore.getState();
-  useProjectStore.setState({ sheets: s.sheets.map((x) => (x.id === sheetId ? { ...x, titleBlockParams: { ...x.titleBlockParams, [name]: value } } : x)), dirty: true });
+  runAsOneUndoStep(() => {
+    const s = useProjectStore.getState();
+    useProjectStore.setState({ sheets: s.sheets.map((x) => (x.id === sheetId ? { ...x, titleBlockParams: { ...x.titleBlockParams, [name]: value } } : x)), dirty: true });
+  });
 }
 
 /** Back to the project's value on this sheet. */
 export function clearSheetParam(sheetId: string, name: string): void {
-  const s = useProjectStore.getState();
-  useProjectStore.setState({
-    sheets: patchSheetsTitleParams(s.sheets, (own) => Object.fromEntries(Object.entries(own).filter(([k]) => k !== name)), sheetId),
-    dirty: true,
+  runAsOneUndoStep(() => {
+    const s = useProjectStore.getState();
+    useProjectStore.setState({
+      sheets: patchSheetsTitleParams(s.sheets, (own) => Object.fromEntries(Object.entries(own).filter(([k]) => k !== name)), sheetId),
+      dirty: true,
+    });
   });
 }

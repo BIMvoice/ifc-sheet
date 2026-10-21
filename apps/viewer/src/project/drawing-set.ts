@@ -21,7 +21,7 @@ import { templateFields } from './sheet-templates';
 import { fitViewportBox, SHEET_SCALES } from './sheets';
 import { freshProjectId } from './view-defaults';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf, numberSheets } from './numbering';
-import type { ElevationDirection, NumberingScheme, Paper, PaperSize, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './types';
+import type { ElevationDirection, NumberingScheme, Paper, PaperSize, PlanProjectView, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './types';
 
 /** The scales a set chooses among, most detailed first. */
 export const SET_SCALES = [50, 100, 200] as const;
@@ -53,6 +53,12 @@ const isSheetLike = (l: SheetLayout): l is Pick<ProjectSheet, 'paper' | 'orienta
 /** The paper, orientation and frame a new sheet starts with: the template's, else `paper` in landscape. */
 function startOf(template: SheetTemplate | undefined, paper: PaperSize): Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId'> {
   return template ? templateFields(template) : { paper, orientation: 'landscape' };
+}
+
+/** The lowest plan: the one a set's sections are drawn on. */
+export function groundPlan(views: readonly ProjectView[]): PlanProjectView | null {
+  const plans = views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.site);
+  return plans.sort((a, b) => a.level.elevation - b.level.elevation)[0] ?? null;
 }
 
 /** Width and height a view's drawing takes, metres, estimated from the model's extent. */

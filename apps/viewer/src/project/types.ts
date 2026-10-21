@@ -7,6 +7,7 @@ import type { TitleBlockParam } from './title-block-params';
 import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
+import type { UrbanSettings } from '@/urban/indicators';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
@@ -30,6 +31,7 @@ import type { SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectIssue } from '@/issue/types';
+import type { ReviewComment } from '@/review/types';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
 
 export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './project-records';
@@ -254,6 +256,8 @@ export interface ProjectSheet {
   viewports?: SheetViewport[];
   /** Title block fields this sheet says otherwise than the project's (`ProjectDocument.titleBlock`); a key present wins, even empty. */
   titleBlock?: Record<string, string>;
+  /** Revisions this sheet lists besides the ones its clouds name: a manual choice (`ProjectRevision.id`; `revisions.ts`). */
+  revisionIds?: string[];
   /** The values this sheet gives title block parameters otherwise than the project's (`title-block-params.ts`); a name present wins. */
   titleBlockParams?: Record<string, string>;
 }
@@ -272,8 +276,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, or the set's own sheets (the drawing register, derived from the sheets on every draw). */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, the set's own sheets (the drawing register, derived from the sheets on every draw), or the permit's areas and urban indicators (`urban/`). */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register' | 'urban';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
@@ -288,6 +292,8 @@ export interface ProjectDocument {
   titleBlock?: Record<string, string>;
   /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
   titleBlockSources?: Record<string, TitleSource[]>;
+  /** The project's revisions, oldest first (`revisions.ts`); a sheet's table lists the ones it is named by. */
+  revisions?: ProjectRevision[];
   /** The user's own title block parameters, in order, each with its project-wide value (`title-block-params.ts`). */
   titleBlockParams?: TitleBlockParam[];
   /** The title block's layout once edited; absent: the standard layout (`title-block-template.ts`). */
@@ -322,6 +328,10 @@ export interface ProjectDocument {
   sheetTemplates?: SheetTemplate[];
   /** The template new sheets of a series start from, by template id; a series without one is made on the smallest paper that fits. */
   seriesTemplates?: Partial<Record<TemplateSeries, string>>;
+  /** The site (plot) area in m² the user entered; absent: the model's IfcSite area, if it states one (`urban/`). */
+  siteArea?: number;
+  /** The urban indicators' terrain level, ±0.00 and the storeys left out of Ad for CUT (`urban/indicators.ts`). */
+  urbanSettings?: UrbanSettings;
   /** The project's structure profile library (retaining walls, tunnels, decks, barriers… and drawn shapes). */
   structureProfiles?: StructureProfile[];
   /** Road drawings: longitudinal profiles and cross-section sets. */
@@ -352,6 +362,19 @@ export interface ProjectDocument {
   sheetNumbering?: NumberingScheme;
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
+  /** Review comments pinned on sheets (`review/`). */
+  comments?: ReviewComment[];
+}
+
+/** One revision of the set: a letter or number, when, what changed, who made it. */
+export interface ProjectRevision {
+  id: string;
+  /** `A`, `B`, `01`: what the title block reads. */
+  code: string;
+  /** `YYYY-MM-DD`, or empty. */
+  date: string;
+  description: string;
+  by: string;
 }
 
 // The issue records live with the issue code; re-exported so the document's types stay in one import.

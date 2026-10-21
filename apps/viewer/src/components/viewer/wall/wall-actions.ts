@@ -64,11 +64,13 @@ export interface WallTool {
   labelKey: TranslationKey;
   titleKey: TranslationKey;
   bodyKey: TranslationKey;
+  /** What the card says about ending the tool, where it differs from the draw tools' (`wall.drawHint`). */
+  hintKey?: TranslationKey;
 }
 
 /** The only tools a sheet offers: dimension, tag, note, level mark, section mark, symbol. */
 export const WALL_TOOLS: readonly WallTool[] = [
-  { command: 'dimaligned', icon: 'dimension', labelKey: 'wall.tool.dimension', titleKey: 'wall.tool.dimension.title', bodyKey: 'wall.tool.dimension.body' },
+  { command: 'dimaligned', icon: 'dimension', labelKey: 'wall.tool.dimension', titleKey: 'wall.tool.dimension.title', bodyKey: 'wall.tool.dimension.body', hintKey: 'wall.tool.dimension.hint' },
   { command: 'tag', icon: 'tag', labelKey: 'wall.tool.tag', titleKey: 'wall.tool.tag.title', bodyKey: 'wall.tool.tag.body' },
   { command: 'leader', icon: 'note', labelKey: 'wall.tool.text', titleKey: 'wall.tool.text.title', bodyKey: 'wall.tool.text.body' },
   { command: 'level', icon: 'level', labelKey: 'wall.tool.level', titleKey: 'wall.tool.level.title', bodyKey: 'wall.tool.level.body' },
@@ -92,7 +94,7 @@ export interface DrawTool {
 
 /**
  * Plain drawing, on the sheet's paper (or on the drawing in front): lines,
- * polylines, circles, text, and a hatched zone inside a closed polyline.
+ * polylines, circles, text, a hatched zone and a revision cloud inside a closed polyline.
  */
 export const DRAW_TOOLS: readonly DrawTool[] = [
   { command: 'line', labelKey: 'wall.draw.line', bodyKey: 'wall.draw.line.body' },
@@ -100,6 +102,7 @@ export const DRAW_TOOLS: readonly DrawTool[] = [
   { command: 'circle', labelKey: 'wall.draw.circle', bodyKey: 'wall.draw.circle.body' },
   { command: 'text', labelKey: 'wall.draw.text', bodyKey: 'wall.draw.text.body' },
   { command: 'hatch', labelKey: 'wall.draw.hatch', bodyKey: 'wall.draw.hatch.body' },
+  { command: 'revcloud', labelKey: 'wall.draw.revcloud', bodyKey: 'wall.draw.revcloud.body' },
   { command: 'ptext', labelKey: 'wall.draw.ptext', bodyKey: 'wall.draw.ptext.body' },
 ];
 

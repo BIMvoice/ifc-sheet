@@ -39,8 +39,8 @@ function readViewport(v: unknown, path: string): SheetViewport {
 }
 
 /** The optional sheet layout fields, read from `v` (already known to be an object). */
-export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'titleBlockParams' | 'autoNumber' | 'numberOverride' | 'series'> {
-  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'titleBlockParams' | 'autoNumber' | 'numberOverride' | 'series'> = {};
+export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'autoNumber' | 'numberOverride' | 'series' | 'revisionIds' | 'titleBlockParams'> {
+  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'autoNumber' | 'numberOverride' | 'series' | 'revisionIds' | 'titleBlockParams'> = {};
   if (v.autoNumber === true) out.autoNumber = true;
   if (v.numberOverride === true) out.numberOverride = true;
   // Saved before schemes: no series, no override mark. A number outside the old A-nnn series was typed by hand and keeps that protection.
@@ -59,6 +59,7 @@ export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'pape
   }
   const titleBlock = readTitleBlock(v.titleBlock);
   if (titleBlock) out.titleBlock = titleBlock;
+  if (Array.isArray(v.revisionIds)) out.revisionIds = v.revisionIds.filter(isString);
   const titleBlockParams = readSheetParams(v.titleBlockParams);
   if (titleBlockParams) out.titleBlockParams = titleBlockParams;
   return out;
