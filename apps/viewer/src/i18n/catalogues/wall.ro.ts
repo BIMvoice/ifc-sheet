@@ -107,6 +107,7 @@ export const wallRo = {
   'wall.lib.saved': 'S-a salvat {file}.',
   'wall.tools.rail': 'Instrumente pentru adăugarea informațiilor',
   'wall.export.pdf': 'Tipărește sau salvează ca PDF',
+  'wall.export.pdfShort': 'PDF',
   'wall.export.dxf': 'DXF',
   'wall.sheetHint.title': 'În interiorul unei planșe.',
   'wall.sheetHint.body': 'Rotița mouse-ului face zoom, trageți planșa pentru a o deplasa. Clic pe un desen pentru a-l alege, trageți-l pentru a-l muta, dublu clic pentru a desena în el. Alt + rotița într-un plan mută secționarea, într-o secțiune îi schimbă adâncimea. Esc revine la panou.',
