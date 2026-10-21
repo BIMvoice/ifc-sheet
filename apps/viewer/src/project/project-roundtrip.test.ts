@@ -31,7 +31,7 @@ import { snapshotFromElements } from '@/whatchanged/snapshot.js';
 import { defaultTypeSpec } from '@/element-types/spec';
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import type { AnnotationShape, DraftEntity, DraftLayer, DraftShape, EntityShape } from '@/drafting/types';
-import { EMPTY_PROJECT, loadProjectDocument, projectDocument, resetProject, useProjectStore, type ProjectState } from './project-store.js';
+import { EMPTY_PROJECT, loadProjectDocument, PROJECT_DOCUMENT_KEYS, projectDocument, resetProject, useProjectStore, type ProjectState } from './project-store.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
 import { SEQUENTIAL_SCHEME } from './numbering.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package/package-io.js';
@@ -249,10 +249,10 @@ describe('project round trip, one of everything', () => {
   });
 
   it('sets every document field to something that is not its default', () => {
-    // The keys come from the document itself, not a list kept here: whatever a
+    // The keys come from the document itself (PROJECT_DOCUMENT_KEYS, the store's DOCUMENT_FIELDS), not a list kept here: whatever a
     // reset store writes, whatever the fixture sets, and whatever EMPTY_PROJECT names.
     const defaults = projectDocument();
-    const keys = [...new Set([...Object.keys(defaults), ...Object.keys(FULL), ...Object.keys(EMPTY_PROJECT)])] as (keyof ProjectDocument)[];
+    const keys = [...new Set([...PROJECT_DOCUMENT_KEYS, ...Object.keys(defaults), ...Object.keys(FULL), ...Object.keys(EMPTY_PROJECT)])] as (keyof ProjectDocument)[];
     const empty = (v: unknown) => v === undefined || v === '' || (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
     const unset = keys.filter((k) => empty(FULL[k]) || isDeepStrictEqual(FULL[k], defaults[k]) || isDeepStrictEqual(FULL[k], EMPTY_PROJECT[k]));
     assert.deepEqual(unset, [], `give these fields a non-default value in FULL, so a save that drops them fails: ${unset.join(', ')}`);
