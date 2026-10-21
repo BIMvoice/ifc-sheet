@@ -25,7 +25,10 @@ const HISTORY_LIMIT = 200;
  */
 type Step =
   | { drafts: DraftEntity[] }
-  | { group: { drafts: Delta<DraftEntity>; views: Delta<ProjectView>; sheets: Delta<ProjectSheet> } };
+  | { group: { drafts: Delta<DraftEntity>; views: Delta<ProjectView>; sheets: Delta<ProjectSheet>; effects: StepEffect[] } };
+
+/** What a grouped step also did outside drafts, views and sheets (the title block's parameter list, say): how to take it back and how to make it again. */
+export interface StepEffect { undo(): void; redo(): void }
 
 let past: Step[] = [];
 let future: Step[] = [];
@@ -34,6 +37,13 @@ let pastAt: number[] = [];
 let futureAt: number[] = [];
 /** While a grouped step runs, individual commits do not make steps of their own. */
 let grouping = false;
+/** Effects registered by the grouped step now running (and the steps nested in it). */
+let effects: StepEffect[] = [];
+
+/** Inside `runAsOneUndoStep`: make `effect` part of the step, so Undo and Redo run it together with the rest. Outside one it is ignored. */
+export function addStepEffect(effect: StepEffect): void {
+  if (grouping) effects.push(effect);
+}
 
 /** When the step Undo would revert was made, or null when there is none. */
 export const lastDraftStepAt = (): number | null => pastAt.at(-1) ?? null;
@@ -63,16 +73,20 @@ export function commitDrafts(next: DraftEntity[]): void {
 export function runAsOneUndoStep(change: () => void): void {
   const before = useProjectStore.getState();
   const wasGrouping = grouping;
+  const outerEffects = effects;
+  if (!wasGrouping) effects = [];
   grouping = true;
   try {
     change();
   } finally {
     grouping = wasGrouping;
   }
+  const own = effects;
+  if (!wasGrouping) effects = outerEffects;
   const after = useProjectStore.getState();
   if (wasGrouping) return;
-  const group = { drafts: diffById(before.drafts, after.drafts), views: diffById(before.views, after.views), sheets: diffById(before.sheets, after.sheets) };
-  if (!isEmptyDelta(group.drafts) || !isEmptyDelta(group.views) || !isEmptyDelta(group.sheets)) pushStep({ group });
+  const group = { drafts: diffById(before.drafts, after.drafts), views: diffById(before.views, after.views), sheets: diffById(before.sheets, after.sheets), effects: own };
+  if (!isEmptyDelta(group.drafts) || !isEmptyDelta(group.views) || !isEmptyDelta(group.sheets) || own.length > 0) pushStep({ group });
 }
 
 /** The step Redo needs when `step` is undone: a snapshot step records the state it replaced; a grouped step is its own inverse. */
@@ -84,12 +98,14 @@ function revert(step: Step): void {
   if (!('group' in step)) { useProjectStore.setState({ drafts: step.drafts, dirty: true }); return; }
   const { group } = step;
   useProjectStore.setState((s) => ({ drafts: undoDelta(s.drafts, group.drafts), views: undoDelta(s.views, group.views), sheets: undoDelta(s.sheets, group.sheets), dirty: true }));
+  for (const e of [...group.effects].reverse()) e.undo();
 }
 
 function reapply(step: Step): void {
   if (!('group' in step)) { useProjectStore.setState({ drafts: step.drafts, dirty: true }); return; }
   const { group } = step;
   useProjectStore.setState((s) => ({ drafts: redoDelta(s.drafts, group.drafts), views: redoDelta(s.views, group.views), sheets: redoDelta(s.sheets, group.sheets), dirty: true }));
+  for (const e of group.effects) e.redo();
 }
 
 export function undoDrafts(): boolean {

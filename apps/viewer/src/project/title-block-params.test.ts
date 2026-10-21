@@ -152,12 +152,66 @@ describe('parameter actions (#143)', () => {
     assert.deepEqual(words(), ['P {Stage}', 'line']);
   });
 
-  it('a rename that touches no draft text leaves the undo history alone', () => {
+  /** What every text would print: no `{X?}` may appear for a parameter that exists. */
+  const printed = (): string[] => {
+    const known = Object.fromEntries((useProjectStore.getState().titleBlockParams ?? []).map((p) => [p.name, p.value]));
+    return useProjectStore.getState().drafts.flatMap((d) => (d.shape.type === 'text' ? [resolveParamText(d.shape.text, lookup(known))] : []));
+  };
+  const names = () => useProjectStore.getState().titleBlockParams?.map((p) => p.name);
+  const texts = () => useProjectStore.getState().drafts.map((d) => d.shape.type === 'text' && d.shape.text);
+  const setup = () => {
+    addTitleBlockParam('Phase', 'DTAC');
+    const sheet = addProjectSheet('Plans', 'plans');
+    const text = newDraft(sheet, '0', { type: 'text', p: { x: 0, y: 0 }, text: 'P {Phase}', height: 3.5, rotation: 0 }, { [PARAMETRIC_TEXT]: true });
+    const line = newDraft(sheet, '0', { type: 'line', a: { x: 0, y: 0 }, b: { x: 10, y: 0 } });
+    commitDrafts([text]);
+    return { text, line };
+  };
+
+  it('undoing a rename takes back the parameter AND the texts', () => {
+    setup();
+    renameTitleBlockParam('Phase', 'Stage');
+    assert.deepEqual(printed(), ['P DTAC']);
+    assert.equal(undoDrafts(), true);
+    assert.deepEqual(names(), ['Phase']);
+    assert.deepEqual(texts(), ['P {Phase}']);
+    assert.deepEqual(printed(), ['P DTAC']);
+  });
+
+  it('redoing a rename re-applies the parameter AND the texts', () => {
+    setup();
+    renameTitleBlockParam('Phase', 'Stage');
+    undoDrafts();
+    assert.deepEqual(names(), ['Phase']);
+    assert.equal(redoDrafts(), true);
+    assert.deepEqual(names(), ['Stage']);
+    assert.deepEqual(texts(), ['P {Stage}']);
+    assert.deepEqual(printed(), ['P DTAC']);
+  });
+
+  it('stays consistent at every step of rename, line and undo/redo', () => {
+    const { text, line } = setup();
+    commitDrafts([text, line]);
+    renameTitleBlockParam('Phase', 'Stage');
+    const ok = () => assert.deepEqual(printed(), ['P DTAC']);
+    ok();
+    undoDrafts(); ok(); assert.deepEqual(names(), ['Phase']);
+    undoDrafts(); ok(); assert.equal(useProjectStore.getState().drafts.length, 1);
+    redoDrafts(); ok(); assert.deepEqual(names(), ['Phase']);
+    redoDrafts(); ok(); assert.deepEqual(names(), ['Stage']);
+    assert.equal(useProjectStore.getState().drafts.length, 2);
+  });
+
+  it('a rename that touches no text still renames, and undo reverts it', () => {
     addTitleBlockParam('Phase', 'DTAC');
     const sheet = addProjectSheet('Plans', 'plans');
     commitDrafts([newDraft(sheet, '0', { type: 'line', a: { x: 0, y: 0 }, b: { x: 10, y: 0 } })]);
     renameTitleBlockParam('Phase', 'Stage');
+    assert.deepEqual(names(), ['Stage']);
     assert.equal(undoDrafts(), true);
-    assert.deepEqual(useProjectStore.getState().drafts, []);
+    assert.deepEqual(names(), ['Phase']);
+    assert.equal(useProjectStore.getState().drafts.length, 1);
+    assert.equal(redoDrafts(), true);
+    assert.deepEqual(names(), ['Stage']);
   });
 });
