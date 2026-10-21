@@ -5,6 +5,7 @@
 import type { TitleSource } from './title-block-sources';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
+import type { UrbanSettings } from '@/urban/indicators';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
@@ -271,8 +272,8 @@ export interface ProjectModelRef {
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, or the set's own sheets (the drawing register, derived from the sheets on every draw). */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register';
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, the set's own sheets (the drawing register, derived from the sheets on every draw), or the permit's areas and urban indicators (`urban/`). */
+  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register' | 'urban';
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
@@ -319,6 +320,10 @@ export interface ProjectDocument {
   sheetTemplates?: SheetTemplate[];
   /** The template new sheets of a series start from, by template id; a series without one is made on the smallest paper that fits. */
   seriesTemplates?: Partial<Record<TemplateSeries, string>>;
+  /** The site (plot) area in m² the user entered; absent: the model's IfcSite area, if it states one (`urban/`). */
+  siteArea?: number;
+  /** The urban indicators' terrain level, ±0.00 and the storeys left out of Ad for CUT (`urban/indicators.ts`). */
+  urbanSettings?: UrbanSettings;
   /** The project's structure profile library (retaining walls, tunnels, decks, barriers… and drawn shapes). */
   structureProfiles?: StructureProfile[];
   /** Road drawings: longitudinal profiles and cross-section sets. */

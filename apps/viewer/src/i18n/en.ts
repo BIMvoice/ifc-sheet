@@ -77,6 +77,7 @@ import { settingsEn } from './catalogues/settings.en';
 import { printPreviewEn } from './catalogues/print-preview.en';
 import { wallEn } from './catalogues/wall.en';
 import { namesEn } from './catalogues/names.en';
+import { feedbackEn } from './catalogues/feedback.en';
 import { sitePlanEn } from './catalogues/site-plan.en';
 import { ifcsheetTourEn } from './catalogues/ifcsheet-tour.en';
 import { reviewEn } from './catalogues/review.en';
@@ -131,6 +132,7 @@ import { tagFieldsEn } from './catalogues/tag-fields.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
 import { roomFinishesEn } from './catalogues/room-finishes.en';
+import { urbanEn } from './catalogues/urban.en';
 import { elementTypesEn } from './catalogues/element-types.en';
 import { roofEn } from './catalogues/roof.en';
 import { civilEn } from './catalogues/civil.en';
@@ -214,6 +216,7 @@ export const en = {
   ...draftingStandardsEn,
   ...joineryEn,
   ...roomFinishesEn,
+  ...urbanEn,
   ...elementTypesEn,
   ...roofEn,
   ...civilEn,
@@ -273,6 +276,7 @@ export const en = {
   ...printPreviewEn,
   ...wallEn,
   ...namesEn,
+  ...feedbackEn,
   ...sitePlanEn,
   ...ifcsheetTourEn,
   ...reviewEn,
