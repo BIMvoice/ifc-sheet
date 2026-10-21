@@ -17,6 +17,7 @@ import { layoutSchedule, type ScheduleLabels } from '@/joinery/schedule-layout.j
 import { SheetPaper } from '@/components/viewer/sheets/SheetPaper';
 import { sheetPrintHtml, sheetSvgText } from '@/components/viewer/sheets/sheet-export';
 import { sheetDxf } from '@/components/viewer/sheets/sheet-dxf';
+import { schedulePoints } from '@/test/schedule-dxf-points.js';
 import { hangSchedule } from './drawing-set-actions.js';
 import { resetProject, useProjectStore } from './project-store.js';
 import { frameOf, frameRect } from './sheet-frame.js';
@@ -43,24 +44,6 @@ function paperOfSheet(sheet: ProjectSheet, scheduleId: string, data = manyTypes(
   );
   assert.ok(el, 'the sheet renders');
   return el;
-}
-
-/** The points of the entities on the schedule's layers (group codes 10/20 and 11/21 pairs, as the DXF has them). */
-function schedulePoints(dxf: string): { x: number; y: number }[] {
-  const lines = dxf.slice(dxf.indexOf('ENTITIES') + 'ENTITIES'.length).split(/\r?\n/).slice(1);
-  const out: { x: number; y: number }[] = [];
-  let layer = '', pending: { x: number; y: number }[] = [];
-  const lastX: Record<string, number> = {};
-  const flush = () => { if (/^SCHEDULE/.test(layer)) out.push(...pending); layer = ''; pending = []; };
-  for (let i = 0; i + 1 < lines.length; i += 2) {
-    const code = lines[i].trim(), value = Number(lines[i + 1]);
-    if (code === '0') flush();
-    else if (code === '8') layer = lines[i + 1].trim();
-    else if (code === '10' || code === '11') lastX[code] = value;
-    else if (code === '20' || code === '21') pending.push({ x: lastX[code === '20' ? '10' : '11'], y: value });
-  }
-  flush();
-  return out;
 }
 
 beforeEach(() => resetProject());

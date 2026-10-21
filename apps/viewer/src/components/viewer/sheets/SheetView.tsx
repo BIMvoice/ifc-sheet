@@ -24,7 +24,8 @@ import { exportSheetDxf } from './sheet-dxf';
 import { useSheetDrafting } from './useSheetDrafting';
 import { CommandLine } from '../drafting/CommandLine';
 import { useDraftingKeys } from '../drafting/useDraftingKeys';
-import { pressEscape, submitCommandLine } from '@/drafting/session';
+import { pressEscape } from '@/drafting/session';
+import { submitTypedLine } from '../drafting/typed-line';
 
 interface Pan { x: number; y: number; k: number }
 
@@ -93,7 +94,7 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
   const lastPaper = useRef<{ x: number; y: number } | null>(null);
-  useDraftingKeys({ inputRef, setText, submit: () => submitCommandLine('', lastPaper.current) });
+  useDraftingKeys({ inputRef, setText, submit: () => submitTypedLine('', lastPaper.current) });
 
   const selectedVp = (sheet.viewports ?? []).find((v) => v.id === selected) ?? null;
   return (
@@ -154,7 +155,7 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
           </div>
           {sheetDrafting.overlay}
         </div>
-        <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={() => { submitCommandLine(text, lastPaper.current); setText(''); }} onEscape={() => { setText(''); pressEscape(); }} />
+        <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={() => { submitTypedLine(text, lastPaper.current); setText(''); }} onEscape={() => { setText(''); pressEscape(); }} />
       </div>
       <SheetPanel
         sheet={sheet}

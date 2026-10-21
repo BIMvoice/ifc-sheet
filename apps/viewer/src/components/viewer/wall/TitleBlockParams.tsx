@@ -16,9 +16,10 @@ import { useProjectStore } from '@/project/project-store';
 import { addTitleBlockParam, clearSheetParam, deleteTitleBlockParam, renameTitleBlockParam, setSheetParam, setTitleBlockParamValue } from '@/project/title-block-param-actions';
 import { BUILTIN_PARAMS, type ParamNameProblem } from '@/project/title-block-params';
 import type { ProjectSheet } from '@/project/types';
+import { WALL_FIELD, WALL_PILL } from './wall-type';
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-sm text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
+const field = WALL_FIELD;
+const quiet = WALL_PILL;
 const PROBLEMS: Record<ParamNameProblem, TranslationKey> = {
   empty: 'tbparams.problem.empty', invalid: 'tbparams.problem.invalid', builtin: 'tbparams.problem.builtin', duplicate: 'tbparams.problem.duplicate',
 };
@@ -77,7 +78,7 @@ export function ProjectParams() {
   };
   return (
     <section aria-label={t('tbparams.title')} className="mt-4 border-t border-sky-300/10 pt-3">
-      <h4 className="m-0 text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('tbparams.title')}</h4>
+      <h4 className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('tbparams.title')}</h4>
       <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('tbparams.hint', { token: token('Name') })}</p>
       <p className="m-0 mt-1 text-xs leading-relaxed text-sky-200/80">{t('tbparams.builtin', { names: BUILTIN_PARAMS.map(token).join(' ') })}</p>
       {params.length === 0 ? <p className="m-0 mt-2 text-xs text-sky-200/80">{t('tbparams.none')}</p> : null}
@@ -94,7 +95,7 @@ export function SheetParams({ sheet }: { sheet: ProjectSheet }) {
   if (params.length === 0) return null;
   return (
     <section aria-label={t('tbparams.title')} className="mt-4 border-t border-sky-300/10 pt-3">
-      <h4 className="m-0 text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('tbparams.title')}</h4>
+      <h4 className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('tbparams.title')}</h4>
       <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('tbparams.sheetHint')}</p>
       {params.map((p) => {
         const own = sheet.titleBlockParams?.[p.name];

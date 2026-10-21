@@ -18,7 +18,7 @@ import { ReadinessList } from '../sheets/ReadinessList';
 import { WALL_SKIN } from '../sheets/set-skin';
 
 function Chip({ children }: { children: string }) {
-  return <span className="rounded-full border border-sky-300/30 px-4 py-1.5 text-sm text-sky-100">{children}</span>;
+  return <span className="rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100">{children}</span>;
 }
 
 export function WallIntro({ modelName, extent, onHang }: { modelName: string; extent: ModelExtent; onHang: () => void }) {
@@ -43,13 +43,13 @@ export function WallIntro({ modelName, extent, onHang }: { modelName: string; ex
     <div className="flex h-full items-center px-16">
       <div className="max-w-2xl">
         <RecoveryOffer onRestored={onHang} />
-        <p className="mb-6 text-xs font-medium uppercase tracking-[0.3em] text-sky-400">{t('wall.intro.read', { name: modelName })}</p>
-        <h1 className="m-0 text-6xl font-light leading-tight text-white">
+        <p className="mb-4 text-2xs font-medium uppercase tracking-widest text-sky-400">{t('wall.intro.read', { name: modelName })}</p>
+        <h1 className="m-0 text-5xl font-light leading-tight text-white">
           {t('wall.intro.titleStart')}
           <br />
           <span className="text-sky-400">{t('wall.intro.titleEnd')}</span>
         </h1>
-        <p className="mt-6 max-w-lg text-lg leading-relaxed text-sky-100/80">{t('wall.intro.body', { views, sheets: sheets.length })}</p>
+        <p className="mt-6 max-w-lg text-base leading-relaxed text-sky-100/80">{t('wall.intro.body', { views, sheets: sheets.length })}</p>
         <div className="mt-6 flex flex-wrap gap-2">
           <Chip>{t('wall.intro.storeys', { count: levels.length })}</Chip>
           <Chip>{t('wall.intro.extent', { w, d })}</Chip>
@@ -57,8 +57,8 @@ export function WallIntro({ modelName, extent, onHang }: { modelName: string; ex
           <Chip>{t('wall.intro.views', { count: views })}</Chip>
         </div>
         <div className="mt-6 max-w-lg"><ReadinessList skin={WALL_SKIN} compact /></div>
-        <button type="button" {...tourAnchor(TOUR_ANCHORS.wallHang)} onClick={onHang} className="mt-10 inline-flex items-center gap-3 rounded-md bg-sky-600 px-6 py-3 text-lg text-white hover:bg-sky-500">
-          {t('wall.intro.hang')} <ArrowRight className="size-5" />
+        <button type="button" {...tourAnchor(TOUR_ANCHORS.wallHang)} onClick={onHang} className="mt-8 inline-flex items-center gap-3 rounded-md bg-sky-600 px-5 py-2.5 text-base text-white hover:bg-sky-500">
+          {t('wall.intro.hang')} <ArrowRight className="size-4" />
         </button>
       </div>
     </div>

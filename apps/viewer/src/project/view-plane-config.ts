@@ -11,7 +11,7 @@
  *
  * Plans: horizontal at level + cut height. Sections: their stored world
  * offset or custom plane (anchored like the generator anchors it).
- * Elevations: just inside the model bounds (needs bounds); an interior
+ * Elevations: just outside the model bounds (needs bounds); an interior
  * elevation, its stored plane like a section.
  */
 

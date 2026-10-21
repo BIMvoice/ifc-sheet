@@ -12,13 +12,17 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import { getCommandRuntime } from '@/lib/commands/modeling/runtime';
-import { pressEnter, pressEscape, startDraftCommand, setOrthoHeld, toggleOrtho, toggleSnap, useDraftingSession } from '@/drafting/session';
+import { pressEnter, pressEscape, startDraftCommand, setOrthoHeld, useDraftingSession } from '@/drafting/session';
+import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
 import type { DraftingKeyId } from '@/lib/commands/drafting-key-commands';
 import { claimWallKey } from '../wall/wall-key-bus';
 import { isDraftingKey } from './drafting-key-match';
+import { runDraftingAction, type DraftingRunId } from './run-action';
+
+/** The keys that act in place, in the order they are matched. */
+const TOGGLES: readonly DraftingRunId[] = ['drafting.undo', 'drafting.redo', 'drafting.snap', 'drafting.ortho'];
 
 interface Params {
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -38,6 +42,18 @@ function inOtherField(target: EventTarget | null, input: HTMLInputElement | null
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
+/** A control that acts on Enter or Space itself: a button, a link, a role=button, a form control. */
+const INTERACTIVE = 'button, a[href], [role="button"], select, textarea, input, [contenteditable]:not([contenteditable="false"])';
+
+/**
+ * Whether Enter or Space is aimed at a control that acts on it (the command
+ * line, which `submit`s on its own, aside). In AutoCAD mode (#168) `confirm`
+ * repeats the last alias, so a Space that presses a button must not also do that.
+ */
+function onInteractiveControl(target: EventTarget | null, input: HTMLInputElement | null): boolean {
+  return target instanceof Element && target !== input && target.closest(INTERACTIVE) !== null;
+}
+
 export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
   const submitRef = useRef(submit);
   submitRef.current = submit;
@@ -52,25 +68,13 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
       const mod = e.ctrlKey || e.metaKey;
       // The command line has the keys while it has focus or holds text.
       const typing = e.target === input || (input?.value ?? '') !== '';
-      const isKey = (id: DraftingKeyId) => isDraftingKey(id, e, typing);
-      if (isKey('drafting.undo')) {
+      // In AutoCAD mode (#168) every letter builds the typed command: a bare key the person bound is text, as while typing.
+      const textFirst = typing || autocadModeOn();
+      const isKey = (id: DraftingKeyId) => isDraftingKey(id, e, textFirst);
+      const toggle = TOGGLES.find(isKey);
+      if (toggle) {
         e.preventDefault();
-        undoLatest();
-        return;
-      }
-      if (isKey('drafting.redo')) {
-        e.preventDefault();
-        redoEarliest();
-        return;
-      }
-      if (isKey('drafting.snap')) {
-        e.preventDefault();
-        toggleSnap();
-        return;
-      }
-      if (isKey('drafting.ortho')) {
-        e.preventDefault();
-        toggleOrtho();
+        runDraftingAction(toggle);
         return;
       }
       if (e.target === input) return; // the command line handles its own Enter / Escape / typing
@@ -87,6 +91,7 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
         return;
       }
       if (isKey('drafting.confirm')) {
+        if (autocadModeOn() && onInteractiveControl(e.target, input)) return;
         e.preventDefault();
         submitRef.current();
         return;
@@ -94,8 +99,9 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
       if (!mod && !e.altKey && e.key.length === 1 && /[\w@<.,-]/.test(e.key) && input) {
         e.preventDefault();
         // A bare key the person bound to a Wall action runs it at once (#166), unless text is being
-        // typed. Any other key reaches the Wall's handlers on its own; the defaults bind no bare key.
-        if (!typing && claimWallKey(e)) return;
+        // typed or AutoCAD mode is on. Any other key reaches the Wall's handlers on its own; the
+        // defaults bind no bare key.
+        if (!textFirst && claimWallKey(e)) return;
         input.focus();
         setText((prev) => prev + e.key);
       }

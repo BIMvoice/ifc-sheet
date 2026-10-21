@@ -112,7 +112,7 @@ class Planner {
     }
   }
 
-  /** The four elevations, each plane just inside its facade and each seeing through the building. */
+  /** The four elevations, each plane outside its facade and each seeing through the building. */
   elevations(): void {
     for (const direction of ELEVATION_DIRECTIONS) {
       const found = this.views.find((v): v is ElevationProjectView => v.kind === 'elevation' && v.direction === direction && !v.interior);

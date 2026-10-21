@@ -14,8 +14,9 @@ import { builtInPatterns } from '@/drafting/hatch/library';
 import { parsePat } from '@/drafting/hatch/pattern';
 import { baseDraftSettings, patchDraftSettings, useDraftingSession } from '@/drafting/session';
 import { useProjectStore } from '@/project/project-store';
+import { WALL_FIELD } from './wall-type';
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
+const field = WALL_FIELD;
 
 export function HatchSettings() {
   const { t } = useTranslation();

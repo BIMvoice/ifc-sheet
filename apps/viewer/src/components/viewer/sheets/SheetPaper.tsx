@@ -35,6 +35,7 @@ import { useSheetParamLookup } from './useSheetParams';
 import { currentRevisionOf, printsAtCurrentRevision, sheetRevisions } from '@/project/revisions';
 import { RevisionTable } from './RevisionTable';
 import { viewportPens } from './viewport-pens';
+import { memoOn, sharedMemo } from './shared-memo';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
@@ -117,6 +118,8 @@ function TitleNumber({ number, x, baseline, size }: { number: string | undefined
   );
 }
 
+const pensMemo = sharedMemo<ReturnType<typeof viewportPens>>();
+
 const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, extraPatterns, selected, highlight = null }: {
   vp: SheetViewport; content: ViewportContent; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[]; selected: boolean;
   /** On a key plan: the part its keyed viewport shows, paper mm. */
@@ -128,8 +131,10 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const axis: SectionAxisName = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
   const t = viewportTransform(vp, drawing, axis);
   const cadLayers = useProjectStore((s) => s.cadLayers);
+  // Shared with every other component that pens this drawing the same way (`shared-memo.ts`): opening a sheet reuses the Wall's pens (#154).
   const pens = useMemo(
-    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard) : []),
+    () => (drawing ? memoOn(pensMemo, drawing, [view?.graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
+      () => viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard)) : []),
     [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);

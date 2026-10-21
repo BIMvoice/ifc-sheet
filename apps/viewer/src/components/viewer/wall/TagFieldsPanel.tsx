@@ -117,7 +117,7 @@ export function TagFieldsPanel() {
   const guid = elements.find((e) => e.guid === picked[kind])?.guid ?? elements[0]?.guid ?? null;
   return (
     <details className="border-t border-sky-300/10 px-4 py-3" data-owns-keys>
-      <summary className="cursor-pointer text-xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('tagFields.title')}</summary>
+      <summary className="cursor-pointer text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('tagFields.title')}</summary>
       <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('tagFields.hint')}</p>
       <fieldset className="m-0 mt-2 flex flex-wrap gap-1.5 border-0 p-0">
         <legend className="sr-only">{t('tagFields.kind')}</legend>

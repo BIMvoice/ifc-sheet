@@ -19,6 +19,7 @@ import type { ProjectSheet } from '@/project/types';
 import { SourceBadge, SourcePicker } from './TitleBlockSource';
 import { ProjectParams, SheetParams } from './TitleBlockParams';
 import { TitleBlockLayout } from './TitleBlockLayout';
+import { WALL_CARD, WALL_FIELD, WALL_PILL } from './wall-type';
 
 const LABELS: Record<TitleBlockField, TranslationKey> = {
   project: 'sheets.tb.project',
@@ -30,8 +31,8 @@ const LABELS: Record<TitleBlockField, TranslationKey> = {
   date: 'sheets.tb.date',
 };
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-sm text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
+const field = WALL_FIELD;
+const quiet = WALL_PILL;
 
 function Logo() {
   const { t } = useTranslation();
@@ -133,8 +134,8 @@ export function TitleBlockForm({ sheet }: { sheet?: ProjectSheet }) {
 export function TitleBlockCard({ sheet, onClose }: { sheet: ProjectSheet; onClose: () => void }) {
   const { t } = useTranslation();
   return (
-    <aside aria-label={t('wall.tb.title')} className="max-h-[calc(100vh-12rem)] w-[340px] overflow-y-auto rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 text-sky-100 shadow-2xl backdrop-blur">
-      <p className="m-0 text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.tb.title')}</p>
+    <aside aria-label={t('wall.tb.title')} className={`max-h-[calc(100vh-12rem)] overflow-y-auto ${WALL_CARD}`}>
+      <p className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.tb.title')}</p>
       <p className="mb-2 mt-2 text-sm leading-relaxed text-sky-200">{t('wall.tb.sheetHint', { number: sheet.number })}</p>
       <TitleBlockForm sheet={sheet} />
       <button type="button" className={`${quiet} mt-4`} onClick={onClose}>{t('wall.tb.done')}</button>

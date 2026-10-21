@@ -308,10 +308,20 @@ describe('a sheet stepped into', () => {
     }
   });
 
+  it('keeps the PDF button short so the toolbar stays on one row at 1280 px, with its full name for a screen reader and the tooltip (#227)', () => {
+    setPlatform('Win32');
+    const ui = render(<SteppedSheet sheet={useProjectStore.getState().sheets[1]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} />);
+    const pdf = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === t('wall.export.pdf'));
+    assert.ok(pdf, 'the PDF button is named in full');
+    assert.equal(pdf.textContent?.trim(), t('wall.export.pdfShort'));
+    assert.ok(pdf.getAttribute('title')?.startsWith(t('wall.export.pdf')), 'the tooltip carries the full name too');
+  });
+
   it('gives the sheet\'s Fit and Print buttons the key of their row as aria-keyshortcuts (#119 review)', () => {
     setPlatform('Win32');
     const ui = render(<SteppedSheet sheet={useProjectStore.getState().sheets[1]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} />);
-    const named = (label: string) => [...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
+    // A button's accessible name is its aria-label when it has one, else its text.
+    const named = (label: string) => [...ui.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') ?? b.textContent)?.trim() === label);
     assert.equal(named(t('wall.fit'))?.getAttribute('aria-keyshortcuts'), ariaKeyShortcuts('wall.fit', false));
     assert.equal(named(t('wall.export.pdf'))?.getAttribute('aria-keyshortcuts'), 'Control+P');
     for (const b of ui.querySelectorAll('button[title]')) {

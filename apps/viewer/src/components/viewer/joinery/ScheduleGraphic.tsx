@@ -15,7 +15,7 @@ import { formatLocaleFixed, useTranslation, type TranslationKey } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule, ProjectSheet, SheetViewport } from '@/project/types';
-import { layoutJoineryOnSheet, syncSchedulePages } from '@/project/schedule-fit';
+import { isJoinerySchedule, layoutJoineryOnSheet, layoutTableOnSheet, syncSchedulePages } from '@/project/schedule-fit';
 import { scheduleData, type ScheduleData, type ScheduleKind } from '@/joinery/schedule-data';
 import { layoutSchedule, type ScheduleLabels, type ScheduleLayout, type SchedulePrim } from '@/joinery/schedule-layout';
 import { takeoffRows, type TakeoffRow } from '@/joinery/material-takeoff';
@@ -183,13 +183,14 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
   }, [sheet.viewports, schedules, mutationVersion, models, catalogue, mapping]);
   const joineryViews = useElementViews(joinery);
-  const layouts = useMemo(() => {
+  const { layouts, loaded } = useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
+    // The schedules whose data is there: before the models load a table is empty, and that is not a reason to drop its sheets.
+    const loaded = new Set<string>();
     // The takeoff parses materials on demand: read once per change, and only when a sheet shows one.
     const rows = placesTakeoff ? takeoffRows(collectTakeoffElements()) : [];
     const finishRooms = placesFinishes ? roomFinishes(collectRoomInputs()) : [];
     const byType = placesTypes ? typeQuantities(collectTypeElements()) : null;
-    // A joinery schedule wraps to its viewport's box (the first sheet's, for every page) and shows its own page.
     const layoutJoinery = (schedule: ProjectSchedule, kind: ScheduleKind, vp: SheetViewport): ScheduleLayout => layoutJoineryOnSheet({
       data: joinery.find((r) => r.id === schedule.id)?.data ?? scheduleData(kind), labels: { ...labels, title: schedule.name }, scale: schedule.scale ?? 50,
       views: joineryViews.get(schedule.id), sheets, sheet, vp,
@@ -197,32 +198,38 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || out.has(schedule.id)) continue;
+      const place = { sheets, sheet, vp };
+      // A schedule wraps to its viewport's box (the first sheet's, for every page) and shows its own page: a joinery list by bands, a column table by rows.
+      const table = (has: boolean, layout: (paging: { maxHeight: number; page: number }) => ScheduleLayout): ScheduleLayout => {
+        if (has) loaded.add(schedule.id);
+        return layoutTableOnSheet(place, layout);
+      };
       if (schedule.kind === 'urban') {
-        if (urban) out.set(schedule.id, layoutUrban(urban.result, { ...urbanLabels, title: schedule.name }));
+        if (urban) out.set(schedule.id, table(true, (paging) => layoutUrban(urban.result, { ...urbanLabels, title: schedule.name }, paging)));
         continue;
       }
       out.set(schedule.id, schedule.kind === 'register'
         // Shrunk to the register's own sheet's drawing area, then split into pages: this viewport shows its own (`syncRegisterPages`).
         ? layoutRegisterPage(registerRows, { ...registerLabels, title: schedule.name }, registerFitOn(registerRows.length, pagePaper ?? registerPaper([sheet], schedule.id)), vp.page ?? 0)
         : schedule.kind === 'materials'
-        ? layoutMaterialTakeoff(rows, { ...takeoffLabels, title: schedule.name })
+        ? table(rows.length > 0, (paging) => layoutMaterialTakeoff(rows, { ...takeoffLabels, title: schedule.name }, paging))
         : schedule.kind === 'finishes'
-          ? layoutRoomFinishes(finishRooms, { ...finishLabels, title: schedule.name })
+          ? table(finishRooms.length > 0, (paging) => layoutRoomFinishes(finishRooms, { ...finishLabels, title: schedule.name }, paging))
         : schedule.kind === 'types'
-          ? layoutTypeQuantities(byType ?? { levels: [], rows: [], classTotals: [] }, { ...typeLabels, title: schedule.name })
+          ? table((byType?.rows.length ?? 0) > 0, (paging) => layoutTypeQuantities(byType ?? { levels: [], rows: [], classTotals: [] }, { ...typeLabels, title: schedule.name }, paging))
           : layoutJoinery(schedule, schedule.kind, vp));
+      if (schedule.kind !== 'register' && isJoinerySchedule(schedule) && joinery.find((r) => r.id === schedule.id)?.data.entries.length) loaded.add(schedule.id);
     }
-    return out;
+    return { layouts: out, loaded };
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
   }, [sheet, sheets, schedules, labels, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, urban, urbanLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
-  // A joinery schedule that runs over several pages has a sheet for each: the sheets follow the layout, from the schedule's first one.
-  // Only once the data is there: before the models load the schedule is empty, and that is not a reason to drop its sheets.
+  // A schedule that runs over several pages has a sheet for each: the sheets follow the layout, from the schedule's first one.
   useEffect(() => {
     for (const vp of sheet.viewports ?? []) {
       const layout = layouts.get(vp.viewId);
-      if (layout?.fit && (vp.page ?? 0) === 0 && joinery.find((r) => r.id === vp.viewId)?.data.entries.length) syncSchedulePages(vp.viewId, layout.pages ?? 1);
+      if (layout?.fit && (vp.page ?? 0) === 0 && loaded.has(vp.viewId)) syncSchedulePages(vp.viewId, layout.pages ?? 1);
     }
-  }, [layouts, joinery, sheet.viewports]);
+  }, [layouts, loaded, sheet.viewports]);
   return layouts;
 }
 

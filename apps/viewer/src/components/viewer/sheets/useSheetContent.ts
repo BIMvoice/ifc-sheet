@@ -12,12 +12,13 @@
  * draw through this, so a sheet looks the same wherever it hangs.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useDeferredValue, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { fitExtent, viewportBox } from '@/project/sheets';
-import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
+import { useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
@@ -41,6 +42,7 @@ import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
 import { useSheetLegends } from '../legend/LegendGraphic';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import type { ViewportContent } from './SheetPaper';
+import { memoOn, sharedMemo } from './shared-memo';
 import { siteBounds, useSheetSite } from '../siteplan/useSheetSite';
 
 /** The raster capture a 3D view prints as, when it prints as one and has been captured (and, after an autosave restore, read back). */
@@ -49,16 +51,36 @@ function rasterOf(view: ProjectView | undefined): ViewRaster | undefined {
   return raster && !isAutosaveRasterRef(raster.href) ? raster : undefined;
 }
 
+interface StyledViewport { drawing: Drawing2D | null; overlays: PlanOverlay[] }
+
+const styledMemo = sharedMemo<StyledViewport>();
+const fittedMemo = sharedMemo<Drawing2D>();
+
 export interface SheetContent {
   content: (vp: SheetViewport) => ViewportContent;
   /** A viewport's box on the paper, mm. */
   boxOf: (vp: SheetViewport) => { width: number; height: number };
 }
 
-export function useSheetContent(sheet: ProjectSheet): SheetContent {
+export interface SheetContentOptions {
+  /**
+   * Take a newly generated drawing in a deferred render (`useDeferredValue`), which React splits
+   * into short tasks and lets input go first. For the Wall, where views land one by one while the
+   * user scrolls (#154); a caller that reads the paper as soon as a view is ready (an issue's
+   * capture, the sheet editor) keeps the default, which draws the drawing in the same render.
+   */
+  deferDrawings?: boolean;
+}
+
+export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: SheetContentOptions = {}): SheetContent {
   const views = useProjectStore((s) => s.views);
   const drafts = useProjectStore((s) => s.drafts);
-  const byView = useViewDrawings((s) => s.byView);
+  // Only this sheet's drawings: a progress tick, or another sheet's view landing, leaves the sheet as it is (#154).
+  const placedViewIds = useMemo(() => (sheet.viewports ?? []).map((vp) => vp.viewId), [sheet.viewports]);
+  const liveDrawings = useViewDrawings(useShallow((s) => placedViewIds.map((id) => s.byView[id]?.drawing ?? null)));
+  const deferredDrawings = useDeferredValue(liveDrawings);
+  const sheetDrawings = deferDrawings ? deferredDrawings : liveDrawings;
+  const drawingOf = useMemo(() => new Map(placedViewIds.map((id, i) => [id, sheetDrawings[i]])), [placedViewIds, sheetDrawings]);
   // Each placed view as its own graphics style it: styled drawing and (plans) door / window symbols and roofs.
   const flips = useProjectStore((s) => s.symbolFlips);
   const standard = useGraphicStandard();
@@ -73,19 +95,27 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const loadedModels = useViewerStore((s) => s.models);
   const projectModels = useProjectStore((s) => s.models);
   const styleOf = useMemo(() => entityStyles(useViewerStore.getState(), projectModels), [loadedModels, projectModels]);
+  // A viewport is styled again only when its own drawing, view or scale changed, or one of the shared inputs
+  // did: views land one at a time and the others on the sheet keep what they had, and the sheet editor
+  // reuses what the Wall styled (`styledMemo`, #154).
   const styled = useMemo(() => {
-    const out = new Map<string, { drawing: Drawing2D | null; overlays: PlanOverlay[] }>();
+    const out = new Map<string, StyledViewport>();
     for (const vp of sheet.viewports ?? []) {
       if (out.has(vp.viewId)) continue;
       const view = views.find((v) => v.id === vp.viewId);
-      const raw = (byView[vp.viewId] ?? EMPTY_VIEW_DRAWING).drawing;
-      const phases = phaseViewOf(view?.graphics, phaseSource);
-      const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, viewOmits(view), viewMaterials(raw), phases) : null;
-      const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, phaseMeshes(geometryResult?.meshes, phases), flips, hiddenClasses(view.graphics), raw, vp.scale, standard.pens) : []), ...membraneOverlays(drawing)];
-      out.set(vp.viewId, { drawing, overlays });
+      const raw = drawingOf.get(vp.viewId) ?? null;
+      const style = (): StyledViewport => {
+        const phases = phaseViewOf(view?.graphics, phaseSource);
+        const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, viewOmits(view), viewMaterials(raw), phases) : null;
+        const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, phaseMeshes(geometryResult?.meshes, phases), flips, hiddenClasses(view.graphics), raw, vp.scale, standard.pens) : []), ...membraneOverlays(drawing)];
+        return { drawing, overlays };
+      };
+      out.set(vp.viewId, raw
+        ? memoOn(styledMemo, raw, [view, vp.scale, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard], style)
+        : style());
     }
     return out;
-  }, [sheet.viewports, views, byView, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard]);
+  }, [sheet.viewports, views, drawingOf, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard]);
   const placedSchedules = useSheetSchedules(sheet);
   const placedCivil = useSheetCivilDrawings(sheet);
   // A mark prints the number its reference reads now, not the one cached when the view was last open.
@@ -93,21 +123,22 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const settledDrafts = useCallback((viewId: string) => {
     const view = views.find((v) => v.id === viewId);
     const own = draftsOfView(viewId, drafts);
-    return view ? settleLevelDrafts(own, levelResolverFor(view, levels, byView[viewId]?.drawing?.config.plane)) : own;
-  }, [views, drafts, levels, byView]);
+    return view ? settleLevelDrafts(own, levelResolverFor(view, levels, drawingOf.get(viewId)?.config.plane)) : own;
+  }, [views, drafts, levels, drawingOf]);
   const placedLegends = useSheetLegends(sheet);
   // A site plan's plot and footprint; its viewport fits and centres on the whole plot (`siteBounds`).
-  const rawDrawing = useCallback((viewId: string) => byView[viewId]?.drawing ?? null, [byView]);
-  const placedViewIds = useMemo(() => (sheet.viewports ?? []).map((vp) => vp.viewId), [sheet.viewports]);
+  const rawDrawing = useCallback((viewId: string) => drawingOf.get(viewId) ?? null, [drawingOf]);
   const sites = useSheetSite(placedViewIds, views, drafts, rawDrawing);
   // What an auto-fit viewport frames: the drawing, the plot of a site plan and the view's own drafts (#140).
   // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
   const fittedBounds = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => fitExtent(vp, siteBounds(bounds, sites.get(vp.viewId)), settledDrafts(vp.viewId), views.find((v) => v.id === vp.viewId)?.scale), [sites, settledDrafts, views]);
+  // The same refitted drawing object while its bounds are the same, so a viewport's pens (memoised on it) are kept.
   const siteDrawing = useCallback((vp: SheetViewport): Drawing2D | null => {
     const drawing = styled.get(vp.viewId)?.drawing ?? null;
     if (!drawing) return null;
     const bounds = fittedBounds(vp, drawing.bounds);
-    return bounds === drawing.bounds ? drawing : { ...drawing, bounds };
+    if (bounds === drawing.bounds) return drawing;
+    return memoOn(fittedMemo, drawing, [bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y], () => ({ ...drawing, bounds }));
   }, [styled, fittedBounds]);
   // Cross-references are derived here, at draw time, from the sheets as they are: nothing of them is stored on the plan.
   const sheets = useProjectStore((s) => s.sheets);
@@ -117,9 +148,9 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const draftsFor = useCallback((vp: SheetViewport) => {
     return withCrossReferences({
       drafts: settledDrafts(vp.viewId), view: views.find((v) => v.id === vp.viewId), views, sheets, groundPlanId: ground?.id,
-      bounds: byView[vp.viewId]?.drawing?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays,
+      bounds: drawingOf.get(vp.viewId)?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays,
     });
-  }, [settledDrafts, views, sheets, byView, ground, styled]);
+  }, [settledDrafts, views, sheets, drawingOf, ground, styled]);
   const content = useCallback((vp: SheetViewport): ViewportContent => ({
     schedule: placedSchedules.get(vp.viewId),
     civil: placedCivil.get(vp.viewId),
@@ -136,8 +167,8 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
 
   const boxOf = useCallback((v: SheetViewport) => {
     const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);
-    const drawing = byView[v.viewId]?.drawing;
+    const drawing = drawingOf.get(v.viewId);
     return placed ? ('fit' in placed && placed.fit ? { width: placed.fit.box.w, height: placed.fit.box.h } : { width: placed.width, height: placed.height }) : viewportBox(v, drawing ? fittedBounds(v, drawing.bounds) : null);
-  }, [placedSchedules, placedCivil, placedLegends, byView, fittedBounds]);
+  }, [placedSchedules, placedCivil, placedLegends, drawingOf, fittedBounds]);
   return { content, boxOf };
 }

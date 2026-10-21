@@ -46,12 +46,16 @@ const SCALE_LABELS: Partial<Record<SetGroup, TranslationKey>> = {
   sections: 'wall.sectionScale',
 };
 
-export function ScaleChips({ group, extent }: { group: SetGroup; extent: ModelExtent | null }) {
+/**
+ * `labelFromWide` keeps the group's name for a screen reader but draws it only from the 2xl breakpoint up: the sheet toolbar
+ * needs that room for its buttons at 1280 px (#227).
+ */
+export function ScaleChips({ group, extent, labelFromWide = false }: { group: SetGroup; extent: ModelExtent | null; labelFromWide?: boolean }) {
   const { t } = useTranslation();
   const current = useProjectStore((s) => groupScale(group, s.sheets));
   return (
-    <fieldset className="m-0 flex items-center gap-2 border-0 p-0">
-      <legend className="float-left mr-2 p-0 text-2xs font-medium uppercase tracking-[0.2em] text-sky-200/70">{t(SCALE_LABELS[group] ?? 'wall.planScale')}</legend>
+    <fieldset className="m-0 flex shrink-0 items-center gap-2 border-0 p-0">
+      <legend className={cn('float-left mr-2 p-0 text-2xs font-medium uppercase tracking-widest text-sky-200/70', labelFromWide && 'sr-only 2xl:not-sr-only')}>{t(SCALE_LABELS[group] ?? 'wall.planScale')}</legend>
       {SET_SCALES.map((scale) => (
         <button
           key={scale}
@@ -60,7 +64,7 @@ export function ScaleChips({ group, extent }: { group: SetGroup; extent: ModelEx
           disabled={!extent}
           onClick={() => extent && setGroupScale(group, scale, extent)}
           className={cn(
-            'rounded-full border px-3 py-1 text-sm tabular-nums transition-colors',
+            'whitespace-nowrap rounded-full border px-3 py-1 text-xs tabular-nums transition-colors',
             current === scale ? 'border-sky-500 bg-sky-500 text-white' : 'border-sky-300/30 text-sky-100 hover:border-sky-300/70',
           )}
         >
@@ -136,7 +140,7 @@ export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onSte
         <div className="flex flex-wrap items-start gap-10">
           {columns.map((col) => (
             <section key={col.labelKey} aria-label={t(col.labelKey)} className="flex flex-col gap-8">
-              <h2 className="m-0 border-b border-sky-300/20 pb-2 text-xs font-medium uppercase tracking-[0.25em] text-sky-400">{t(col.labelKey)}</h2>
+              <h2 className="m-0 border-b border-sky-300/20 pb-2 text-xs font-medium uppercase tracking-widest text-sky-400">{t(col.labelKey)}</h2>
               {col.sheets.map((sheet) => <SheetOnWall key={sheet.id} sheet={sheet} extent={extent} onStep={onStep} />)}
             </section>
           ))}

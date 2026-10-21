@@ -121,6 +121,7 @@ export const wallEn = {
   'wall.lib.saved': 'Saved {file}.',
   'wall.tools.rail': 'Tools for adding information',
   'wall.export.pdf': 'Print or save as PDF',
+  'wall.export.pdfShort': 'PDF',
   'wall.export.dxf': 'DXF',
   'wall.sheetHint.title': 'Inside a sheet.',
   'wall.sheetHint.body': 'Wheel zooms, drag the paper to pan. Click a drawing to choose it, drag to move it, double-click to draw in it. Alt + wheel inside a plan moves its cut, inside a section its depth. Esc cancels the running tool, then clears the selection; the Wall link above returns to the wall.',
