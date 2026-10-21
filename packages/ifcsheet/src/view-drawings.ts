@@ -5,7 +5,7 @@
 /**
  * The drawing of each view on a sheet, cut from the meshes by the section
  * generator (`@ifc-lite/drawing-2d`): a plan at its level's cut height, an
- * elevation on its plane just inside the facade, a section on its own plane.
+ * elevation on its plane outside the facade, a section on its own plane.
  * Unstyled: cut faces and visible lines only. The app styles its drawings
  * (pens, hatches, symbols, annotation) in `project/view-graphics.ts` and the
  * sheet components; that styling has not moved here yet.
