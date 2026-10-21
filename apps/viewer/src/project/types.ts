@@ -28,6 +28,7 @@ import type { SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectIssue } from '@/issue/types';
+import type { ReviewComment } from '@/review/types';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
 
 export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './project-records';
@@ -344,6 +345,8 @@ export interface ProjectDocument {
   sheetNumbering?: NumberingScheme;
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
+  /** Review comments pinned on sheets (`review/`). */
+  comments?: ReviewComment[];
 }
 
 // The issue records live with the issue code; re-exported so the document's types stay in one import.

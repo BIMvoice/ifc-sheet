@@ -24,6 +24,7 @@ import { CommandLine } from '../drafting/CommandLine';
 import { useDraftingKeys } from '../drafting/useDraftingKeys';
 import { useSheetDrafting } from '../sheets/useSheetDrafting';
 import type { SheetContent } from '../sheets/useSheetContent';
+import { CommentLayer } from './CommentLayer';
 import { WallSheet } from './WallSheet';
 
 interface Pan { x: number; y: number; k: number }
@@ -126,7 +127,8 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
       <div
         ref={host}
         data-sheet-canvas
-        className={`relative min-h-0 flex-1 overflow-hidden touch-none ${drafting.drafting ? 'cursor-none' : ''}`}
+        tabIndex={-1}
+        className={`relative min-h-0 flex-1 overflow-hidden touch-none outline-none ${drafting.drafting ? 'cursor-none' : ''}`}
         onPointerDown={(e) => {
           capturePointer(e.currentTarget, e.pointerId);
           const p = toPaper(e.clientX, e.clientY);
@@ -155,6 +157,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           <WallSheet ref={paperRef} sheet={sheet} width={paper.w * pan.k} selectedViewportId={chosenId} sheetContent={sheetContent} pinned={false} />
         </div>
         {drafting.overlay}
+        <CommentLayer sheet={sheet} pan={pan} toPaper={toPaper} />
       </div>
       {showPrompt ? (
         <div className="bg-white text-zinc-900">
