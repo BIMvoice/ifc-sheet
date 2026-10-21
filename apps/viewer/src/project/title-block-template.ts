@@ -13,6 +13,7 @@
 import type { TranslationKey } from '@/i18n';
 import { DEFAULT_GRAPHIC_STANDARD, type GraphicStandard } from '@/drafting/graphic-standard';
 import { TITLE_BLOCK_MM } from './sheet-frame';
+import { textWidthEm, truncateToWidth } from './text-width';
 
 interface ItemBase {
   id: string;
@@ -38,14 +39,21 @@ export interface TitleBlockTemplate {
   items: TemplateItem[];
 }
 
-export const TEXT_FIT_MIN = 1.6;
-/** The advance of a letter in the title block's sans-serif, as a share of its height. */
-const GLYPH_WIDTH = 0.55;
+/** The smallest letter height a fitted text shrinks to, mm: the graphic standard's smallest caption. */
+export const TEXT_FIT_MIN = 2;
 
-/** The height a text prints at: its own, or smaller so `shown` fits `fit` millimetres. */
-export function textSizeFor(item: Pick<TemplateText, 'size' | 'fit'>, shown: string): number {
-  if (!item.fit) return item.size;
-  return Math.max(TEXT_FIT_MIN, Math.min(item.size, item.fit / (GLYPH_WIDTH * Math.max(1, shown.length))));
+/**
+ * What a text prints as: its own height and words, or, with `fit`, a height
+ * smaller (down to {@link TEXT_FIT_MIN}) so the measured width (`textWidthEm`)
+ * is at most `fit` millimetres and, only when even the smallest height is too
+ * wide, the words cut short with an ellipsis. Never wider than `fit`.
+ */
+export function fitText(item: Pick<TemplateText, 'size' | 'fit' | 'bold'>, shown: string): { size: number; text: string } {
+  if (!item.fit) return { size: item.size, text: shown };
+  const em = textWidthEm(shown, item.bold);
+  const size = Math.min(item.size, item.fit / Math.max(em, 1e-9));
+  if (size >= TEXT_FIT_MIN) return { size, text: shown };
+  return { size: TEXT_FIT_MIN, text: truncateToWidth(shown, item.fit / TEXT_FIT_MIN, item.bold) };
 }
 
 export const ITEM_KINDS = ['line', 'rect', 'text', 'logo'] as const;
