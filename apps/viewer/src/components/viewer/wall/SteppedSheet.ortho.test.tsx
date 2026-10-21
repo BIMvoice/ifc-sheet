@@ -113,6 +113,15 @@ describe('the Ortho button on the Wall (#146)', () => {
     act(() => click(named(ui, 'Ortho')!));
     assert.equal(ui.textContent?.includes('Ortho is on'), true);
   });
+
+  it('says so on the card while Ctrl holds the lock, with the toggle off', () => {
+    const ui = mount();
+    act(() => click(named(ui, 'Line')!));
+    assert.equal(ui.textContent?.includes('Ortho is on'), false);
+    act(() => useDraftingSession.setState({ orthoHeld: true }));
+    assert.equal(useDraftingSession.getState().ortho, false);
+    assert.equal(ui.textContent?.includes('Ortho is on'), true);
+  });
 });
 
 describe('the ortho lock for a grip drag (#146)', () => {

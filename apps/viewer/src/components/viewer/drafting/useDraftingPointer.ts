@@ -95,9 +95,11 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     }
     const raw = screenToDrawing(s, transform, axis);
     if (d?.kind === 'grip' && d.grip) {
-      // A dragged grip snaps like a point does, and keeps to horizontal / vertical from where it started under the ortho lock.
+      // A dragged grip snaps like a point does, and keeps to horizontal / vertical from where it started under the ortho lock
+      // (a detail's crop corner moves freely on both axes, so it is not held).
       const hit = snapOn ? findSnap(raw, entityShapes, null, { tolerance: SNAP_PX / transform.scale, modes: ALL_MODES, from: null }) : null;
-      const at = constrainFrom(d.grip.at, hit?.point ?? raw);
+      const free = hit?.point ?? raw;
+      const at = d.grip.detail ? free : constrainFrom(d.grip.at, free);
       setState({ cursor: at, snap: hit, hoverId: null, window: null, gripDrag: { grip: d.grip, at } });
       return;
     }
