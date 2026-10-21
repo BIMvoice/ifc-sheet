@@ -10,7 +10,9 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanup, click, press, render } from '@/test/render.js';
 import { clearDraftHistory } from '@/drafting/draft-store';
+import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { cancelCommand, startDraftCommand } from '@/drafting/session';
+import { patchViewDrawing, useViewDrawings } from '@/project/view-drawings';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { undoLatest } from '@/project/unified-undo';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
@@ -32,7 +34,8 @@ import { useSheetContent } from '../sheets/useSheetContent.js';
 const plan: ProjectView = { id: 'p', kind: 'plan', name: 'Ground', createdAt: 0, level: { name: 'Ground', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 };
 const drafting: ProjectView = { id: 'd', kind: 'drafting', name: 'Notes', createdAt: 0 };
 const vp: SheetViewport = { id: 'vp', viewId: 'p', x: 150, y: 150, scale: 50, width: 0, height: 0, center: null };
-// With no drawing generated the box falls back to 120 x 80: left 90, right 210, top 110, bottom 190.
+// The plan's generated drawing is 5 x 3 m, so at 1:50 its automatic box is 120 x 80 mm (a 10 mm margin all round): left 90, right 210, top 110, bottom 190.
+const DRAWING = { lines: [], cutPolygons: [], projectionPolygons: [], bounds: { min: { x: 0, y: 0 }, max: { x: 5, y: 3 } }, config: { plane: { axis: 'y' } } } as unknown as Drawing2D;
 const K = 776 / 420;
 const X0 = (1280 - 594 * K) / 2;
 const Y0 = 12;
@@ -55,6 +58,8 @@ beforeEach(() => {
   clearDraftHistory();
   cancelCommand();
   chosen = 'vp';
+  useViewDrawings.setState({ byView: {} });
+  patchViewDrawing('p', { status: 'ready', drawing: DRAWING });
   useProjectStore.setState({ views: [plan, drafting], sheets: [{ id: 's', number: 'A-101', name: 'Plans', createdAt: 0, paper: 'A2', orientation: 'landscape', viewports: [vp] }] });
 });
 afterEach(() => cleanup());
@@ -73,7 +78,7 @@ function drag(el: HTMLElement, from: { x: number; y: number }, to: { x: number; 
   pointer(el, 'pointermove', at(to));
   if (release) pointer(el, 'pointerup', at(to));
 }
-const placed = (v: SheetViewport) => viewportTransform(v, null, 'down');
+const placed = (v: SheetViewport) => viewportTransform(v, DRAWING, 'down');
 
 describe('resizing a drawing by its grips (#139)', () => {
   it('shows eight grips, each named, on the chosen drawing only', () => {
@@ -140,6 +145,32 @@ describe('resizing a drawing by its grips (#139)', () => {
     act(() => undoLatest());
     assert.deepEqual(vpOf(), vp, 'both gone: the automatic box and centre are back');
     assert.notDeepEqual(resized, vp);
+  });
+
+  it('records nothing when the drag ends where it began, and none for a press and release without a move', () => {
+    const ui = render(<Harness />);
+    const g = grip(ui, 'se');
+    drag(g, { x: 210, y: 190 }, { x: 250, y: 215 }, false);
+    pointer(g, 'pointermove', at({ x: 210, y: 190 }));
+    pointer(g, 'pointerup', at({ x: 210, y: 190 }));
+    assert.deepEqual(vpOf(), vp, 'back at the start: the viewport is as it was, automatic box and centre');
+    pointer(g, 'pointerdown', at({ x: 210, y: 190 }));
+    pointer(g, 'pointerup', at({ x: 210, y: 190 }));
+    assert.deepEqual(vpOf(), vp);
+    drag(grip(ui, 'e'), { x: 210, y: 150 }, { x: 230, y: 150 });
+    assert.equal(vpOf().width, 140);
+    act(() => undoLatest());
+    assert.deepEqual(vpOf(), vp, 'the one real drag is the only step: a single undo reaches the start');
+  });
+
+  it('shows no grips until the drawing is generated: its place on the paper is not known before, and a crop stored against a guess would shift it', () => {
+    useViewDrawings.setState({ byView: {} });
+    const ui = render(<Harness />);
+    assert.equal(ui.querySelectorAll('[data-viewport-grip]').length, 0, 'nothing generated yet');
+    act(() => patchViewDrawing('p', { status: 'generating', drawing: null }));
+    assert.equal(ui.querySelectorAll('[data-viewport-grip]').length, 0, 'still generating');
+    act(() => patchViewDrawing('p', { status: 'ready', drawing: DRAWING }));
+    assert.equal(ui.querySelectorAll('[data-viewport-grip]').length, 8, 'the grips come with the drawing');
   });
 
   it('puts the box back on Esc during the drag, and a release afterwards changes nothing', () => {

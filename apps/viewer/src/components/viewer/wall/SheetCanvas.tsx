@@ -122,9 +122,11 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   }, [chosenId, sheet.id, onChoose]);
 
   const drag = useRef<{ kind: 'pan' | 'move'; sx: number; sy: number; start: Pan; vp?: SheetViewport } | null>(null);
-  // The chosen drawing shows grips to resize its crop, unless a tool is drawing (its clicks are the tool's).
+  // The chosen drawing shows grips to resize its crop, unless a tool is drawing (its clicks are the tool's) or the drawing is not generated yet:
+  // the crop's centre is stored against where the drawing is on the paper, which is unknown until it exists.
   const chosenVp = (sheet.viewports ?? []).find((v) => v.id === chosenId) ?? null;
-  const resizing = chosenVp && !drafting.drafting && isResizable(views.find((v) => v.id === chosenVp.viewId)) ? chosenVp : null;
+  const chosenDrawing = chosenVp ? sheetContent.content(chosenVp).drawing ?? null : null;
+  const resizing = chosenVp && chosenDrawing && !drafting.drafting && isResizable(views.find((v) => v.id === chosenVp.viewId)) ? chosenVp : null;
   const showPrompt = drafting.drafting || draftSelection.size > 0;
 
   return (
@@ -161,7 +163,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           <WallSheet ref={paperRef} sheet={sheet} width={paper.w * pan.k} selectedViewportId={chosenId} sheetContent={sheetContent} pinned={false} />
         </div>
         {drafting.overlay}
-        {resizing ? <ViewportHandles key={resizing.id} sheet={sheet} vp={resizing} box={sheetContent.boxOf(resizing)} drawing={sheetContent.content(resizing).drawing ?? null} pan={pan} /> : null}
+        {resizing ? <ViewportHandles key={resizing.id} sheet={sheet} vp={resizing} box={sheetContent.boxOf(resizing)} drawing={chosenDrawing} pan={pan} /> : null}
       </div>
       {showPrompt ? (
         <div className="bg-white text-zinc-900">
