@@ -26,9 +26,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { useViewerStore } from '@/store';
 import { summarizeClashes, type Clash, type ClashElementRef, type ClashResult } from '@ifc-lite/clash';
 import { ClashPanel } from './ClashPanel.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 });
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 400 });
+stubBoxSize(400, 600);
 
 function ref(key: string, id: number, tag: string, name: string): ClashElementRef {
   return { key, ref: id, model: 'm1', tag, name };

@@ -184,3 +184,26 @@ export function installResizablePanelLayout(): () => void {
     restoreLayout();
   };
 }
+
+/**
+ * Give every element a fixed box through BOTH measurement channels,
+ * `offset*` and `client*`.
+ *
+ * `@tanstack/virtual-core` changed which one it reads: through 3.19.4 its
+ * `getRect` used `offsetWidth`/`offsetHeight`, from 3.19.6 it uses
+ * `clientWidth`/`clientHeight` (and the ResizeObserver callback no longer
+ * reads the entry's `borderBoxSize`). A stub that sets only the `offset*` pair
+ * pins the test to one library version and renders zero rows on the other, so
+ * stub the pair of pairs. Prefer {@link installLayout} when nothing depends on
+ * the exact size; use this when a test needs specific dimensions.
+ */
+export function stubBoxSize(width: number, height: number): void {
+  for (const [name, value] of [
+    ['offsetWidth', width],
+    ['offsetHeight', height],
+    ['clientWidth', width],
+    ['clientHeight', height],
+  ] as const) {
+    Object.defineProperty(HTMLElement.prototype, name, { get: () => value, configurable: true });
+  }
+}
