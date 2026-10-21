@@ -100,14 +100,14 @@ describe('print preview warnings', () => {
 
   // Review of #136: schedules, legends and road drawings were left out of the check.
   it('lists and highlights a schedule over the title block, by its name and its own box', () => {
-    const sheet = sheetOf([vp('a', 'p', 150, 100), { id: 'k', viewId: 'sch', x: 494, y: 362, scale: 50, width: 0, height: 0, center: null }]);
+    const sheet = sheetOf([vp('a', 'p', 150, 100), { id: 'k', viewId: 'sch', x: 494, y: 362, scale: 50, width: 60, height: 40, center: null }]);
     useProjectStore.setState({ views: [plan, section], sheets: [sheet], drafts: [], schedules: [{ id: 'sch', name: 'Door schedule', kind: 'door', createdAt: 0 }] });
     mountOpen();
     assert.deepEqual(warned(), ['k:titleBlock']);
     assert.match(document.querySelector('[data-warnings]')!.textContent ?? '', /Door schedule overlaps the title block/);
-    // Its box is the table's own size (34 x 86 mm here), not the viewport's stored width and height.
+    // Its box is the viewport's (#186: the table wraps to it and is clipped to it), 60 x 40 mm here.
     const box = document.querySelector('[data-warning="k"]')!;
-    assert.ok(Number(box.getAttribute('height')) > 0 && Number(box.getAttribute('width')) > 0);
+    assert.deepEqual([Number(box.getAttribute('width')), Number(box.getAttribute('height'))], [60, 40]);
     assert.deepEqual(Object.keys(barLengths()), ['a'], 'a schedule has no 1 m bar');
   });
 

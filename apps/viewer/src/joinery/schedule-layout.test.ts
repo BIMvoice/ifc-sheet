@@ -57,6 +57,11 @@ describe('joinery schedule layout', () => {
     assert.equal(csv[1], 'W1,W,1200,1500,tilt-turn-left + side-right,900,3,2,5,1.1,');
     assert.equal(csv[3].split(',')[0], '—');
   });
+
+  it('quotes a cell holding a semicolon, so a European-locale Excel keeps the row together', () => {
+    const csv = scheduleCsv({ levels: [], entries: [entry({ key: 's', mark: 'W2', name: 'Sliding; left' })] }, labels).trim().split('\n');
+    assert.equal(csv[1].split(',')[1], '"Sliding; left"');
+  });
 });
 
 describe('occurrenceMark', () => {

@@ -50,11 +50,11 @@ export function isResizable(view: ProjectView | undefined): boolean {
  * The frame after `handle` is dragged to the paper point `to`. `box` is the box
  * the viewport shows now; `anchor` is where the drawing's origin sits on the
  * paper (the viewport's drawing → paper transform) and `signs` its axis flips,
- * so the drawing does not move; `scale` is the viewport's 1:N denominator.
+ * so the drawing does not move; `scale` is the viewport's 1:N denominator. `min` is the smallest box (a schedule's: one band whole).
  */
 export function resizedFrame(
   vp: Pick<SheetViewport, 'x' | 'y' | 'scale'>, box: { width: number; height: number }, handle: ResizeHandle, to: { x: number; y: number },
-  area: Rect, anchor: { x: number; y: number }, signs: { x: number; y: number },
+  area: Rect, anchor: { x: number; y: number }, signs: { x: number; y: number }, min: { width: number; height: number } = MIN_VIEWPORT_MM,
 ): ViewportFrame {
   const left = vp.x - box.width / 2;
   const right = vp.x + box.width / 2;
@@ -66,17 +66,17 @@ export function resizedFrame(
   let x = vp.x;
   let y = vp.y;
   if (handle.includes('e')) {
-    width = clamp(Math.round(to.x - left), MIN_VIEWPORT_MM.width, area.x + area.w - left);
+    width = clamp(Math.round(to.x - left), min.width, area.x + area.w - left);
     x = left + width / 2;
   } else if (handle.includes('w')) {
-    width = clamp(Math.round(right - to.x), MIN_VIEWPORT_MM.width, right - area.x);
+    width = clamp(Math.round(right - to.x), min.width, right - area.x);
     x = right - width / 2;
   }
   if (handle.includes('s')) {
-    height = clamp(Math.round(to.y - top), MIN_VIEWPORT_MM.height, area.y + area.h - top);
+    height = clamp(Math.round(to.y - top), min.height, area.y + area.h - top);
     y = top + height / 2;
   } else if (handle.includes('n')) {
-    height = clamp(Math.round(bottom - to.y), MIN_VIEWPORT_MM.height, bottom - area.y);
+    height = clamp(Math.round(bottom - to.y), min.height, bottom - area.y);
     y = bottom - height / 2;
   }
   const mm = 1000 / vp.scale;

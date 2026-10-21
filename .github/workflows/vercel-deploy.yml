@@ -41,6 +41,7 @@ jobs:
   changed:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       actions: read
     outputs:
@@ -147,6 +148,7 @@ jobs:
       !cancelled() && github.event_name != 'pull_request' &&
       github.ref == 'refs/heads/main' && needs.changed.outputs.deploy == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - name: Delete old deployments

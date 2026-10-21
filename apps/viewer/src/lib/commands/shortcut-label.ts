@@ -9,6 +9,7 @@
  */
 
 import { ariaChord, chordOnPlatform, formatChord, isApplePlatform } from './chord';
+import { effectiveKeys } from './key-bindings';
 import { KEY_COMMANDS, type KeyCommandDefinition, type KeyCommandId } from './keyboard-commands';
 
 export type { KeyCommandId };
@@ -17,11 +18,13 @@ const BY_ID: ReadonlyMap<string, KeyCommandDefinition> = new Map(
   KEY_COMMANDS.map((command) => [command.id, command]),
 );
 
+/** The command's row, with the keys in force: a Wall action the person rebound shows its new keys (#166). */
 export function keyCommand(id: KeyCommandId): KeyCommandDefinition {
   const command = BY_ID.get(id);
   // Unreachable: `KeyCommandId` is derived from the same table.
   if (!command) throw new Error(`Unknown keyboard command: ${id}`);
-  return command;
+  const keys = effectiveKeys(id);
+  return keys === command.keys ? command : { ...command, keys };
 }
 
 /** All of a command's chords, e.g. `Del, Backspace, Space`, or `Alt+1…0` for a range. */
@@ -46,10 +49,8 @@ export function shortcutLabel(id: KeyCommandId, apple: boolean = isApplePlatform
  */
 export function primaryShortcutLabel(id: KeyCommandId, apple: boolean = isApplePlatform()): string {
   const chord = keyCommand(id).keys.find((c) => chordOnPlatform(c, apple));
-  // Unreachable while every command has a chord for both platform families,
-  // which `keyboard-commands.test.ts` asserts.
-  if (!chord) throw new Error(`Keyboard command ${id} has no chord on this platform`);
-  return formatChord(chord, apple);
+  // A Wall action may have no key (shipped so, or left so by the person): no hint then.
+  return chord ? formatChord(chord, apple) : '';
 }
 
 /**

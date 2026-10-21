@@ -12,7 +12,8 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { registerKeyboardCommand } from '@/lib/commands/dispatcher';
+import { eventMatchesChords, registerKeyboardCommand } from '@/lib/commands/dispatcher';
+import { effectiveKeys } from '@/lib/commands/key-bindings';
 import { WALL_KEY_COMMANDS, type WallKeyId } from '@/lib/commands/wall-key-commands';
 import { isTextEntryElement } from '@/lib/keyboard-event';
 
@@ -36,6 +37,16 @@ export function runWallCommand(id: WallKeyId): boolean {
   if (!handler) return false;
   handler();
   return true;
+}
+
+/**
+ * Run the Wall action bound to this keydown, if one is on offer: for the
+ * drafting view, which takes bare keys for its command line and hands over a
+ * key a person bound to a Wall action (#166). Modifiers must match exactly.
+ */
+export function claimWallKey(event: KeyboardEvent): boolean {
+  const id = WALL_KEY_COMMANDS.find((c) => live?.current[c.id] && eventMatchesChords(effectiveKeys(c.id), event))?.id;
+  return id ? runWallCommand(id) : false;
 }
 
 /** The actions on offer now, in keymap order. */

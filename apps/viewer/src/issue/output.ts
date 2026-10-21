@@ -9,6 +9,7 @@
  */
 
 import type { IssuePlan } from './plan';
+import { escapeCsvCell } from '@ifc-lite/export';
 
 export interface ListLabels {
   title: string;
@@ -21,7 +22,7 @@ export interface ListLabels {
   revision: string;
 }
 
-const csvCell = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+const csvCell = (s: string) => escapeCsvCell(s);
 
 const paperText = (p: IssuePlan['sheets'][number]['row']) => `${p.paper} ${p.orientation}`;
 
