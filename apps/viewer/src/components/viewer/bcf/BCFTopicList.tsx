@@ -6,7 +6,7 @@
  * BCFTopicList - Topic list with filtering and sorting for the BCF panel.
  */
 
-import React, { useCallback, useState, useMemo, useId } from 'react';
+import { useCallback, useState, useMemo, useId } from 'react';
 import {
   Plus,
   MessageSquare,

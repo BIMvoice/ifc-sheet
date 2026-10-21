@@ -21,8 +21,8 @@ import { DRAW_TOOLS, WALL_TOOLS } from './wall-actions';
 function Card({ eyebrow, title, children }: { eyebrow: string; title: string; children: ReactNode }) {
   return (
     <aside className="w-[340px] rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 text-sky-100 shadow-2xl backdrop-blur">
-      <p className="m-0 text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{eyebrow}</p>
-      <h2 className="mb-4 mt-2 text-[28px] font-light leading-tight text-white">{title}</h2>
+      <p className="m-0 text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{eyebrow}</p>
+      <h2 className="mb-4 mt-2 text-3xl font-light leading-tight text-white">{title}</h2>
       {children}
     </aside>
   );

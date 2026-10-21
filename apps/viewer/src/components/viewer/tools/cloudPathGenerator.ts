@@ -75,15 +75,6 @@ export function generateCloudArcs(
     const segmentLength = edgeLength / arcCount;
     const actualRadius = segmentLength / 2;
 
-    // Unit direction along edge
-    const ux = dx / edgeLength;
-    const uy = dy / edgeLength;
-
-    // Outward normal (perpendicular, pointing outward from rectangle)
-    // For clockwise winding, outward normal is to the right of the edge direction
-    const nx = uy;
-    const ny = -ux;
-
     for (let j = 0; j < arcCount; j++) {
       const t0 = j / arcCount;
       const t1 = (j + 1) / arcCount;
@@ -167,14 +158,6 @@ export function drawCloudOnCanvas(
     const arcCount = Math.max(1, Math.round(edgeLength / arcDiameter));
     const actualRadius = (edgeLength / arcCount) / 2;
 
-    // Unit direction along edge
-    const ux = dx / edgeLength;
-    const uy = dy / edgeLength;
-
-    // Outward normal for clockwise winding
-    const nx = uy;
-    const ny = -ux;
-
     for (let j = 0; j < arcCount; j++) {
       const t0 = j / arcCount;
       const t1 = (j + 1) / arcCount;
@@ -246,9 +229,6 @@ export function generateCloudSVGPath(
 
     const arcDiameter = arcRadius * 2;
     const arcCount = Math.max(1, Math.round(edgeLength / arcDiameter));
-    const segmentLength = edgeLength / arcCount;
-    const r = segmentLength / 2;
-
     for (let j = 0; j < arcCount; j++) {
       const t0 = j / arcCount;
       const t1 = (j + 1) / arcCount;

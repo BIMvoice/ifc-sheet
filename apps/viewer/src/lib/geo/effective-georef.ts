@@ -11,12 +11,7 @@ import {
   type ProjectedCRS,
 } from '@ifc-lite/parser';
 import type { CoordinateInfo } from '@ifc-lite/geometry';
-import {
-  detectScaleUnitMismatch,
-  getEffectiveHorizontalScale,
-  inferMapUnitScale,
-  type ScaleUnitMismatch,
-} from './geo-scale';
+import { inferMapUnitScale } from './geo-scale';
 
 export {
   detectScaleUnitMismatch,

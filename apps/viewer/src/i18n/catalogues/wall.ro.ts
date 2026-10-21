@@ -35,6 +35,8 @@ export const wallRo = {
   'wall.depth': 'Adâncimea vederii',
   'wall.depthHint': 'Alt + rotița mouse-ului în desen pentru a vedea mai departe sau mai aproape.',
   'wall.depthAuto': 'automat',
+  'wall.unitMetre': 'm',
+  'wall.escKey': 'Esc',
   'wall.depthLess': 'Vezi mai aproape',
   'wall.depthMore': 'Vezi mai departe',
   'wall.tray': 'Arată această vedere în locaș',
