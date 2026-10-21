@@ -31,6 +31,13 @@ export interface ScheduleLayout {
   width: number;
   height: number;
   prims: SchedulePrim[];
+  /** How many pages the table runs over (a schedule given a `maxHeight` it does not fit continues on further sheets); absent: one. */
+  pages?: number;
+  /**
+   * Set when the table is wrapped to a viewport's box (joinery schedules on a sheet): the box, paper mm, it is drawn at the top
+   * left of and clipped to, and the smallest box that holds one band whole (a resize stops there).
+   */
+  fit?: { box: { x: number; y: number; w: number; h: number }; min: { width: number; height: number } };
 }
 
 export interface ScheduleLabels {
@@ -50,8 +57,12 @@ export interface ScheduleLabels {
 export interface ScheduleLayoutOptions {
   /** Scale of the drawings: 50 = 1:50. */
   scale?: number;
-  /** Cards wrap past this width (mm). */
+  /** Cards wrap past this width (mm): the viewport's width. */
   maxWidth?: number;
+  /** Bands that do not fit this height (mm) go on the next page; at least one band is kept per page. Absent: all on one. */
+  maxHeight?: number;
+  /** The page to lay out, from 0 (`pages` of the result says how many there are). */
+  page?: number;
   /**
    * Front, plan and section cut from the real geometry, by entry key. An entry
    * with views draws them (with the opening symbol overlaid); one without draws
@@ -65,6 +76,9 @@ const ROW = 6;
 const MARK_ROW = 10;
 const PEN = { frame: 0.35, grid: 0.18, drawing: { cut: 0.35, outline: 0.25, thin: 0.13 } } as const;
 const TEXT = 2.5;
+const TITLE_H = 10;
+const BAND_GAP = 8;
+const DEFAULT_MAX_WIDTH = 380;
 
 export function operationText(entry: ScheduleEntry, labels: ScheduleLabels): string {
   if (!entry.spec) return '—';
@@ -95,19 +109,20 @@ function dimension(prims: SchedulePrim[], a: { x: number; y: number }, b: { x: n
   else prims.push({ kind: 'text', x: (a.x + b.x) / 2, y: a.y - 0.8, text, size: 2, anchor: 'middle' });
 }
 
-export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, options: ScheduleLayoutOptions = {}): ScheduleLayout {
+/** Labels for a measurement: only the number of rows depends on the data, never their text. */
+const NO_LABELS: ScheduleLabels = { title: '', mark: '', name: '', size: '', operation: '', sill: '', total: '', uValue: '', fire: '', op: () => '' };
+
+/** The cards' sizes and how they split into bands and pages; what `layoutSchedule` draws and `schedulePages` counts, so they cannot disagree. */
+function plan(data: ScheduleData, options: ScheduleLayoutOptions) {
   const k = 1000 / (options.scale ?? 50);
-  const maxWidth = options.maxWidth ?? 380;
-  const prims: SchedulePrim[] = [];
-  const tableRows = rows(data, labels);
+  const maxWidth = options.maxWidth ?? DEFAULT_MAX_WIDTH;
+  const rowCount = rows(data, NO_LABELS).length;
   const viewsOf = (e: ScheduleEntry) => options.views?.get(e.key);
   const cardW = (e: ScheduleEntry) => { const v = viewsOf(e); return Math.max(30, (v?.width ?? e.width) * k + 16 + (v ? sectionRoom(v, k) : 0)); };
   // Under the front view and its dimension: the plan, in the room the deepest one needs.
   const planBlock = Math.max(0, ...data.entries.map((e) => { const v = viewsOf(e); return v ? planRoom(v, k) : 0; }));
   const drawingH = Math.max(30, ...data.entries.map((e) => (viewsOf(e)?.height ?? e.height) * k + 14 + planBlock));
-  const bandH = MARK_ROW + drawingH + tableRows.length * ROW;
-
-  // Split the cards into bands.
+  const bandH = MARK_ROW + drawingH + rowCount * ROW;
   const bands: ScheduleEntry[][] = [];
   let band: ScheduleEntry[] = [], used = LABEL_W;
   for (const e of data.entries) {
@@ -116,9 +131,30 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
     used += cardW(e);
   }
   if (band.length || bands.length === 0) bands.push(band);
+  const perPage = options.maxHeight === undefined ? bands.length : Math.max(1, Math.floor((options.maxHeight - TITLE_H + BAND_GAP) / (bandH + BAND_GAP)));
+  return { k, viewsOf, cardW, planBlock, drawingH, bandH, bands, perPage, pages: Math.max(1, Math.ceil(bands.length / perPage)), maxCard: Math.max(0, ...data.entries.map(cardW)) };
+}
 
-  prims.push({ kind: 'text', x: 0, y: 6, text: labels.title, size: 5, anchor: 'start', bold: true });
-  let top = 10, width = LABEL_W;
+/** How many pages `data` runs over in a box `maxWidth` × `maxHeight`: one per sheet the schedule takes. */
+export function schedulePages(data: ScheduleData, options: ScheduleLayoutOptions): number {
+  return plan(data, options).pages;
+}
+
+/** The smallest box that holds one band of `data` at its scale: any smaller and a card or a band cannot fit whole. */
+export function scheduleMinBox(data: ScheduleData, options: Pick<ScheduleLayoutOptions, 'scale' | 'views'>): { width: number; height: number } {
+  const p = plan(data, options);
+  return { width: Math.ceil(LABEL_W + p.maxCard), height: Math.ceil(TITLE_H + p.bandH) };
+}
+
+export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, options: ScheduleLayoutOptions = {}): ScheduleLayout {
+  const { k, viewsOf, cardW, planBlock, drawingH, bandH, perPage, pages, bands: all } = plan(data, options);
+  const page = Math.max(0, options.page ?? 0);
+  const bands = all.slice(page * perPage, (page + 1) * perPage);
+  const prims: SchedulePrim[] = [];
+  const tableRows = rows(data, labels);
+
+  prims.push({ kind: 'text', x: 0, y: 6, text: pages > 1 ? `${labels.title} (${page + 1}/${pages})` : labels.title, size: 5, anchor: 'start', bold: true });
+  let top = TITLE_H, width = LABEL_W;
   for (const cards of bands) {
     const w = LABEL_W + cards.reduce((s, e) => s + cardW(e), 0);
     width = Math.max(width, w);
@@ -167,9 +203,9 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
       });
       x += cw;
     }
-    top += bandH + 8;
+    top += bandH + BAND_GAP;
   }
-  return { width, height: top - 8, prims };
+  return { width, height: top - BAND_GAP, prims, pages };
 }
 
 /** The schedule as CSV (one line per type), the counts per level as columns. */
