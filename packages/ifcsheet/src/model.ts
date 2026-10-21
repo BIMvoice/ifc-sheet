@@ -95,9 +95,11 @@ function proposalInputOf(ds: IfcDataStore, meshes: MeshData[], extent: ModelExte
   const storeys = findStoreys(hierarchy.project, (id) => wanted.has(ds.entities.getGlobalId(id) ?? ''));
   const storeyIds = new Set(storeys.map((n) => n.expressId));
   const rooms: RoomFootprint[] = [];
-  for (const space of storeys.flatMap((n) => spacesUnder(n))) {
-    const b = boundsOf(space.expressId);
-    if (b) rooms.push({ name: space.longName || space.name || `Room ${space.expressId}`, ...footprint(b) });
+  for (const storey of storeys) {
+    for (const space of spacesUnder(storey)) {
+      const b = boundsOf(space.expressId);
+      if (b) rooms.push({ id: ds.entities.getGlobalId(space.expressId) || `#${space.expressId}`, storey: storey.longName || storey.name || undefined, name: space.longName || space.name || `Room ${space.expressId}`, ...footprint(b) });
+    }
   }
   const stairs: Footprint[] = [];
   for (const { expressId } of iterateEffectiveEntities(ds, null, ['IFCSTAIR', 'IFCSTAIRFLIGHT'])) {

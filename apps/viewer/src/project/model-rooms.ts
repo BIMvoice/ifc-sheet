@@ -55,9 +55,11 @@ export function proposalInputForLevel(level: ProjectLevel, meshes: MeshData[] | 
     const offset = model.idOffset ?? 0;
     const storeys = findStoreys(hierarchy.project, (id) => wanted.has(store.entities.getGlobalId(id) ?? ''));
     const storeyIds = new Set(storeys.map((n) => n.expressId));
-    for (const space of storeys.flatMap((n) => spacesUnder(n))) {
-      const b = boundsOf(space.expressId + offset);
-      if (b) rooms.push({ name: space.longName || space.name || `Room ${space.expressId}`, ...footprint(b) });
+    for (const storey of storeys) {
+      for (const space of spacesUnder(storey)) {
+        const b = boundsOf(space.expressId + offset);
+        if (b) rooms.push({ id: store.entities.getGlobalId(space.expressId) || `${modelId}#${space.expressId}`, storey: storey.longName || storey.name || undefined, name: space.longName || space.name || `Room ${space.expressId}`, ...footprint(b) });
+      }
     }
     const mv = s.mutationViews.get(modelId) ?? null;
     for (const { expressId } of iterateEffectiveEntityIds(store, mv, ['IFCSTAIR', 'IFCSTAIRFLIGHT'])) {
