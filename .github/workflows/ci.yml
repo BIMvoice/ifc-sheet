@@ -3,8 +3,8 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 # Checks for pull requests and for main: build wasm, typecheck, package tests,
-# viewer tests, the gate scripts and, for Rust, cargo clippy and cargo test
-# (#66).
+# viewer tests, the viewer's production build (with its top-level-await chunk
+# gate), the gate scripts and, for Rust, cargo clippy and cargo test (#66).
 #
 # A pull request runs only the jobs its changed files can affect. The `changes`
 # job reads `git diff --name-only HEAD^1 HEAD` (HEAD is the merge commit GitHub
@@ -375,6 +375,50 @@ jobs:
         working-directory: apps/viewer
         run: pnpm test
 
+  # The production build Vercel deploys, including the check that runs after
+  # `vite build` (scripts/check-tla-chunk-await.mjs). Nothing else here bundles
+  # the viewer, so a dependency bump that changed the emitted chunks (vite 8.3.4
+  # with rolldown 1.2.14, in the npm group update of #187) merged green and
+  # failed only in the deploy. Runs whenever the viewer shards do.
+  viewer-build:
+    name: Viewer production build
+    needs: [changes, wasm]
+    if: needs.changes.outputs.viewer == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The bundle step needs more than Node's default heap; the runner has 16 GB.
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+
+      - name: Restore the turbo cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
+      - run: pnpm turbo run build --filter='./packages/*'
+      - name: Build the viewer and check its top-level-await chunks
+        run: pnpm --filter @ifc-lite/viewer build
+
   gates:
     name: Gates vs base
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -472,7 +516,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, wasm, typecheck, package-tests, viewer-tests, gates, rust]
+    needs: [changes, wasm, typecheck, package-tests, viewer-tests, viewer-build, gates, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

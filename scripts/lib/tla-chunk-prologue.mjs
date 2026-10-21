@@ -25,9 +25,13 @@
  * printing, or are only quotes:
  *   * Vite's `const __vite__mapDeps=...` preload line, prepended after the
  *     plugin ran, always minified;
- *   * leading `import ... from "./x.js";` statements, whose specifier is the
- *     only string in them (kept, with the specifier blanked, since SWC prints
- *     the import clause too: `import { a as b } from` vs `import{a as b}from`).
+ *   * leading `import ... from "./x.js";` and `export {...} from "./x.js";`
+ *     statements, whose specifier is the only string in them (kept, with the
+ *     specifier blanked, since SWC prints the clause too: `import { a as b }
+ *     from` vs `import{a as b}from`). The re-export form is what a facade
+ *     chunk starts with when the bundler emits it as a pure re-export (seen
+ *     with rolldown 1.2.14); without skipping it the prologue would stop at
+ *     its specifier and be too short to judge.
  * The prologue then normally runs into the plugin's own wrapper
  * (`let __tla=Promise.all([`, `(async()=>{`), so it is the plugin's output
  * that is being judged.
@@ -44,7 +48,8 @@
  */
 
 const MAP_DEPS = /^const __vite__mapDeps=[^\n]*\n/;
-const LEADING_IMPORT = /^\s*import\s*(?:[\w$*{}\s,]*?\s*from\s*)?(["'])[^"'\n]*\1\s*;?/;
+const LEADING_IMPORT =
+  /^\s*(?:import\s*(?:[\w$*{}\s,]*?\s*from\s*)?|export\s*(?:\*|\{[^}]*\})\s*from\s*)(["'])[^"'\n]*\1\s*;?/;
 const PUNCTUATION = /[=,{}();:[\]]/g;
 const PUNCTUATION_BESIDE_WHITESPACE = /[=,{}();:[\]][ \t\n]|[ \t][=,{}();:[\]]/;
 export const MIN_PUNCTUATION = 8;

@@ -312,6 +312,39 @@ test('RED: a __tla chunk with too little leading code to judge fails instead of 
   assert.match(out, /too little leading code/);
 });
 
+/**
+ * A re-export facade exactly as rolldown 1.2.14 (vite 8.3.4) emitted it and
+ * vite-plugin-top-level-await@1.6.0 then rewrote it (demo-stack-*.js in the
+ * viewer build): it waits for the wrapped chunk's `__tla` but throws the
+ * promise away and exports no `__tla`, so `await m.__tla` in its dynamic
+ * importers awaits undefined.
+ */
+const UNSAFE_REEXPORT_FACADE =
+  `import{__tla as __tla_0}from"./store-abc.js";export{z as loadDemo}from"./store-abc.js";` +
+  `Promise.all([(()=>{try{return __tla_0}catch{}})()]).then(async()=>{});`;
+
+/** The same facade as rolldown 1.2.11 emitted it: it re-exports its own `__tla`. */
+const SAFE_FACADE =
+  `import{z as e,__tla as __tla_0}from"./store-abc.js";` +
+  `let __tla=Promise.all([(()=>{try{return __tla_0}catch{}})()]).then(async()=>{});export{e as loadDemo,__tla};`;
+
+test('RED: a re-export facade of a __tla chunk that exports no __tla is caught', () => {
+  const { status, out } = runOn({ 'store-abc.js': TLA_CHUNK, 'demo-stack-def.js': UNSAFE_REEXPORT_FACADE });
+  assert.equal(status, 1, out);
+  assert.doesNotMatch(out, /✅/);
+  // Judged as minified (the leading re-export is skipped like an import), so
+  // the failure names the real hazard rather than "too little leading code".
+  assert.doesNotMatch(out, /too little leading code/);
+  assert.match(out, /1 chunk\(s\) re-export bindings of a __tla-wrapped chunk without exporting a __tla/);
+  assert.match(out, /demo-stack-def\.js {2}re-exports \{ z as loadDemo \} {2}from {2}store-abc\.js/);
+});
+
+test('a facade that exports its own __tla (the rolldown 1.2.11 shape) passes', () => {
+  const { status, out } = runOn({ 'store-abc.js': TLA_CHUNK, 'demo-stack-def.js': SAFE_FACADE });
+  assert.equal(status, 0, out);
+  assert.match(out, /0 re-export facades missing __tla/);
+});
+
 test('an untouched chunk that only mentions __tla inside a string is not scanned', () => {
   // Its prologue (`const help=`) is too short to judge, so scanning it would
   // fail a healthy build. The plugin never rewrote it: no __tla in its leading
