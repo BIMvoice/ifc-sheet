@@ -35,8 +35,8 @@ import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readTagFields } from '@/tagfields/tag-fields-file';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, CategoryGraphics, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail, ViewGraphics, ViewGridGraphics, PhaseId, PhaseStyle } from './types';
-import { PHASES, type PhaseSource } from './phases';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
+import { HEX, WEIGHTS, readGraphics, readPhaseSource } from './view-graphics-file';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -269,71 +269,6 @@ function readUrbanSettings(raw: unknown): Pick<ProjectDocument, 'urbanSettings'>
   return Object.keys(out).length ? { urbanSettings: out } : {};
 }
 
-const WEIGHTS = new Set(['heavy', 'medium', 'light', 'hairline']);
-const HEX = /^#[0-9a-f]{6}$/i;
-
-/** A view's `graphics`: unknown or malformed fields are dropped, never fatal. */
-function readGraphics(raw: Record<string, unknown>): ViewGraphics {
-  const out: ViewGraphics = {};
-  if (raw.presetId === null || isString(raw.presetId)) out.presetId = raw.presetId;
-  if (isObject(raw.categories)) {
-    const categories: Record<string, CategoryGraphics> = {};
-    for (const [id, value] of Object.entries(raw.categories)) {
-      if (!isObject(value)) continue;
-      const g: CategoryGraphics = {};
-      if (value.visible === false) g.visible = false;
-      if (isString(value.lineColor) && HEX.test(value.lineColor)) g.lineColor = value.lineColor;
-      if (isString(value.fillColor) && HEX.test(value.fillColor)) g.fillColor = value.fillColor;
-      if (isString(value.lineWeight) && WEIGHTS.has(value.lineWeight)) g.lineWeight = value.lineWeight as CategoryGraphics['lineWeight'];
-      if (isString(value.cutHatch) && value.cutHatch) g.cutHatch = value.cutHatch;
-      if (isNumber(value.hatchScale) && value.hatchScale > 0) g.hatchScale = value.hatchScale;
-      if (Object.keys(g).length > 0) categories[id] = g;
-    }
-    out.categories = categories;
-  }
-  if (isObject(raw.phases) && Array.isArray(raw.phases.show)) {
-    const styles: NonNullable<ViewGraphics['phases']>['styles'] = {};
-    if (isObject(raw.phases.styles)) {
-      for (const id of PHASES) {
-        const value = raw.phases.styles[id];
-        if (!isObject(value)) continue;
-        const g: Partial<PhaseStyle> = {};
-        if (isString(value.lineColor) && HEX.test(value.lineColor)) g.lineColor = value.lineColor;
-        if (isString(value.fillColor) && HEX.test(value.fillColor)) g.fillColor = value.fillColor;
-        if (isString(value.lineWeight) && WEIGHTS.has(value.lineWeight)) g.lineWeight = value.lineWeight as PhaseStyle['lineWeight'];
-        if (typeof value.dashed === 'boolean') g.dashed = value.dashed;
-        if (Object.keys(g).length > 0) styles[id] = g;
-      }
-    }
-    out.phases = {
-      show: PHASES.filter((id) => (raw.phases as { show: unknown[] }).show.includes(id)),
-      ...(raw.phases.demolishAsExisting === true ? { demolishAsExisting: true } : {}),
-      ...(Object.keys(styles).length ? { styles } : {}),
-    };
-  }
-  if (isObject(raw.grid)) {
-    const grid: ViewGridGraphics = {};
-    if (typeof raw.grid.visible === 'boolean') grid.visible = raw.grid.visible;
-    if (raw.grid.ends === 'start' || raw.grid.ends === 'end' || raw.grid.ends === 'both') grid.ends = raw.grid.ends;
-    if (Object.keys(grid).length > 0) out.grid = grid;
-  }
-  return out;
-}
-
-/** The project's phase source: a malformed mapping or phase is dropped, never fatal. */
-function readPhaseSource(value: unknown): PhaseSource | undefined {
-  if (!isObject(value)) return undefined;
-  const out: PhaseSource = {};
-  const phase = (v: unknown): PhaseId | undefined => PHASES.find((id) => id === v);
-  if (phase(value.unmarked)) out.unmarked = phase(value.unmarked);
-  const m = value.mapping;
-  if (isObject(m) && isString(m.set) && m.set && isString(m.property) && m.property && isObject(m.values)) {
-    const values: Record<string, PhaseId> = {};
-    for (const [k, v] of Object.entries(m.values)) if (phase(v)) values[k] = phase(v)!;
-    out.mapping = { set: m.set, property: m.property, values };
-  }
-  return out.mapping || out.unmarked ? out : undefined;
-}
 
 /** `symbolFlips`: GlobalId → 1..3; anything else is dropped. */
 function readFlips(value: unknown): Record<string, number> {
