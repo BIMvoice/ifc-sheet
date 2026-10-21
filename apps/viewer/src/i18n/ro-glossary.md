@@ -1,7 +1,7 @@
 # Romanian glossary (ro)
 
 One place to correct term choices. Edit the term here and in `catalogues/*.ro.ts`
-(`wall`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`); the tests in
+(`wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`); the tests in
 `locales/ro.test.ts` keep keys, placeholders and diacritics honest.
 
 Rules: comma-below diacritics only (ș ț, never ş ţ), plus ă â î. Polite plural
@@ -63,6 +63,10 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET) stay as
 | Pivot, vertical axis | Pivotant, ax vertical | |
 | Library | Bibliotecă | |
 | Project navigator | Navigatorul de proiect | |
+| Keyboard (settings) | Tastatură | |
+| Key / key combination | Tastă / combinație de taste | "Tasta implicită" for the default key |
+| Shortcut | Comandă rapidă | "Comenzile rapide" for the list |
+| Customise (keys) | Personalizați | |
 
 ## Not translated yet
 

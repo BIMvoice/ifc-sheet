@@ -28,6 +28,8 @@ import { isResizable } from '@/project/viewport-resize';
 import { ViewportHandles } from './ViewportHandles';
 import { CommentLayer } from './CommentLayer';
 import { WallSheet } from './WallSheet';
+import { isDraftingKey } from '../drafting/drafting-key-match';
+import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
 
 interface Pan { x: number; y: number; k: number }
 
@@ -112,7 +114,8 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   // Delete takes the chosen drawing off the sheet (a drafted selection is the drafting keys' own).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!chosenId || (e.key !== 'Delete' && e.key !== 'Backspace')) return;
+      // Erase's keys as bound now (`drafting.erase`), not a key of this sheet's own.
+      if (!chosenId || !isDraftingKey('drafting.erase', e) || openKeyboardOverlay()) return;
       if (e.target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       removeViewport(sheet.id, chosenId);

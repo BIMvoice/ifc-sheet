@@ -24,10 +24,12 @@ const shown = (ui: HTMLElement) => new Map([...ui.querySelectorAll('[data-shortc
   .map((row) => [row.getAttribute('data-shortcut-command') ?? '', row.querySelector('kbd')?.textContent ?? '']));
 
 describe('the shortcut list on IfcSheet\'s face', () => {
-  it('has a row for every entry of the Wall in the keymap, with the keymap\'s keys', () => {
+  it('has a row for every entry of the Wall in the keymap that has a key, with the keymap\'s keys', () => {
     setEditionForTests('docs');
     const rows = shown(render(<ShortcutsTab />));
-    for (const c of WALL_KEY_COMMANDS) assert.equal(rows.get(c.id), shortcutLabel(c.id), c.id);
+    // An action that ships with no key (#166) is not a shortcut: the keyboard settings list it instead.
+    for (const c of WALL_KEY_COMMANDS) assert.equal(rows.get(c.id), c.keys.length > 0 ? shortcutLabel(c.id) : undefined, c.id);
+    assert.ok(WALL_KEY_COMMANDS.some((c) => c.keys.length === 0), 'the control has an unbound row to skip');
     assert.ok(rows.has('ui.commandPalette') && rows.has('help.shortcuts'));
     assert.equal(rows.has('walk.move'), false, 'no key of the 3D viewer');
   });
@@ -55,6 +57,6 @@ describe('the shortcut list on IfcSheet\'s face', () => {
   it('keeps the whole keymap in the full edition', () => {
     setEditionForTests('full');
     const rows = shown(render(<ShortcutsTab />));
-    for (const c of KEY_COMMANDS) assert.ok(rows.has(c.id), c.id);
+    for (const c of KEY_COMMANDS) assert.equal(rows.has(c.id), c.keys.length > 0, c.id);
   });
 });

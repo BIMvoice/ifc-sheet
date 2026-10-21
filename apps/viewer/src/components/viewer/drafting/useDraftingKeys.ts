@@ -6,22 +6,19 @@
  * Keyboard for the drafting view in front: typing goes to the command line
  * (CAD style — no need to click it first); the keys (undo, redo, snap, ortho,
  * cancel, erase, confirm) are the rows of `lib/commands/drafting-key-commands.ts`,
- * which the shortcut list also reads; holding Ctrl locks ortho while down.
+ * read as bound now (`key-bindings.ts`, #166, matched in `drafting-key-match.ts`),
+ * as the shortcut list reads them; an open dialog or menu keeps every key;
+ * holding Ctrl locks ortho while down.
  */
 
 import { useEffect, useRef } from 'react';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import { getCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { pressEnter, pressEscape, startDraftCommand, setOrthoHeld, toggleOrtho, toggleSnap, useDraftingSession } from '@/drafting/session';
-import { eventMatchesChords } from '@/lib/commands/dispatcher';
-import { DRAFTING_EXACT_MODIFIERS, DRAFTING_KEY_COMMANDS, type DraftingKeyId } from '@/lib/commands/drafting-key-commands';
-
-const DRAFTING_KEYS: ReadonlyMap<DraftingKeyId, (typeof DRAFTING_KEY_COMMANDS)[number]['keys']> = new Map(DRAFTING_KEY_COMMANDS.map((c) => [c.id, c.keys]));
-
-/** Whether the event is a key of the row `id` of the drafting keymap. */
-function isKey(id: DraftingKeyId, e: KeyboardEvent): boolean {
-  return eventMatchesChords(DRAFTING_KEYS.get(id) ?? [], e, !DRAFTING_EXACT_MODIFIERS.has(id));
-}
+import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
+import type { DraftingKeyId } from '@/lib/commands/drafting-key-commands';
+import { claimWallKey } from '../wall/wall-key-bus';
+import { isDraftingKey } from './drafting-key-match';
 
 interface Params {
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -48,35 +45,40 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
     const onKey = (e: KeyboardEvent) => {
       const input = inputRef.current;
       if (inOtherField(e.target, input)) return;
+      // An open dialog or menu owns the keyboard, as it does for the viewer's own keys (the dispatcher).
+      if (openKeyboardOverlay()) return;
       // A running BIM tool owns the keys (Enter, Escape, typed lengths: its own bindings).
       if (getCommandRuntime().command) return;
       const mod = e.ctrlKey || e.metaKey;
-      if (isKey('drafting.undo', e)) {
+      // The command line has the keys while it has focus or holds text.
+      const typing = e.target === input || (input?.value ?? '') !== '';
+      const isKey = (id: DraftingKeyId) => isDraftingKey(id, e, typing);
+      if (isKey('drafting.undo')) {
         e.preventDefault();
         undoLatest();
         return;
       }
-      if (isKey('drafting.redo', e)) {
+      if (isKey('drafting.redo')) {
         e.preventDefault();
         redoEarliest();
         return;
       }
-      if (isKey('drafting.snap', e)) {
+      if (isKey('drafting.snap')) {
         e.preventDefault();
         toggleSnap();
         return;
       }
-      if (isKey('drafting.ortho', e)) {
+      if (isKey('drafting.ortho')) {
         e.preventDefault();
         toggleOrtho();
         return;
       }
       if (e.target === input) return; // the command line handles its own Enter / Escape / typing
-      if (isKey('drafting.cancel', e)) {
+      if (isKey('drafting.cancel')) {
         pressEscape();
         return;
       }
-      if (isKey('drafting.erase', e)) {
+      if (isKey('drafting.erase')) {
         if (useDraftingSession.getState().selection.size > 0 && !useDraftingSession.getState().commandId) {
           e.preventDefault();
           startDraftCommand('erase');
@@ -84,13 +86,16 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
         }
         return;
       }
-      if (isKey('drafting.confirm', e)) {
+      if (isKey('drafting.confirm')) {
         e.preventDefault();
         submitRef.current();
         return;
       }
       if (!mod && !e.altKey && e.key.length === 1 && /[\w@<.,-]/.test(e.key) && input) {
         e.preventDefault();
+        // A bare key the person bound to a Wall action runs it at once (#166), unless text is being
+        // typed. Any other key reaches the Wall's handlers on its own; the defaults bind no bare key.
+        if (!typing && claimWallKey(e)) return;
         input.focus();
         setText((prev) => prev + e.key);
       }

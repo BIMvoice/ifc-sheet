@@ -53,7 +53,9 @@ export function KeyboardShortcutsDialog({ open, onClose, initialTab }: InfoDialo
           explicitly (CodeRabbit, #5817 review) rather than leaving it
           unset, which some Radix versions read as "forgot to wire one up"
           and warn about in dev. */}
-      <DialogContent hideCloseButton aria-describedby={undefined} className="max-w-md w-full gap-0 p-0 bg-card">
+      {/* A key being recorded in the keyboard settings (#166) may be Escape: that cancels the recording, not the dialog. */}
+      <DialogContent hideCloseButton aria-describedby={undefined} className="max-w-md w-full gap-0 p-0 bg-card"
+        onEscapeKeyDown={(e) => { if (document.activeElement?.closest('[data-recording]')) e.preventDefault(); }}>
         {/* Header — the MCP CTA lives here, in line with the title, so
             it's a discoverable "what else can this do?" affordance
             without crowding the modeling toolbar. */}
