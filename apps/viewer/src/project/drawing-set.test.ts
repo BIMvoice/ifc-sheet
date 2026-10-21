@@ -14,9 +14,10 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject, useProjectStore } from './project-store.js';
 import { defaultViews } from './view-defaults.js';
-import { buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fittingScale, groupsThatDoNotFit, overrun, sheetGroup, sheetScaleReason, withViewHung, type ModelExtent } from './drawing-set.js';
+import { buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fittingScale, groupsThatDoNotFit, overrun, sheetGroup, sheetScaleReason, sheetSeries, withViewHung, type ModelExtent } from './drawing-set.js';
 import { addScheduleToSet, groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
-import { fitViewportBox, PAPER_MM } from './sheets.js';
+import { PAPER_MM } from './paper.js';
+import { fitViewportBox } from './sheets.js';
 import { nextNumber } from './numbering.js';
 import type { ProjectLevel, ProjectView } from './types';
 
@@ -93,8 +94,8 @@ describe('buildDrawingSet', () => {
 describe('drawingArea', () => {
   it('turns the paper for portrait: the frame and the title block come off the turned sheet', () => {
     assert.deepEqual(drawingArea('A3'), { x: 10, y: 10, w: 400, h: 227 });
-    assert.deepEqual(drawingArea('A3', 'landscape'), drawingArea('A3'));
-    assert.deepEqual(drawingArea('A3', 'portrait'), { x: 10, y: 10, w: 277, h: 350 });
+    assert.deepEqual(drawingArea({ paper: 'A3', orientation: 'landscape' }), drawingArea('A3'));
+    assert.deepEqual(drawingArea({ paper: 'A3', orientation: 'portrait' }), { x: 10, y: 10, w: 277, h: 350 });
   });
 });
 
@@ -176,16 +177,18 @@ describe('withViewHung (a drawing added from inside a sheet)', () => {
 describe('a detail on the set', () => {
   const detail: ProjectView = { ...defaultViews(LEVELS).find((v) => v.kind === 'plan') as ProjectView, id: 'det', name: 'Detail 1 - Ground Floor', detail: { of: 'src', min: { x: 1, y: 1 }, max: { x: 3, y: 2.5 }, number: 1 }, scale: 25 };
 
-  it('hangs on a sheet of its own in the A-9xx series, at the scale it was made for, and not in the starting set', () => {
+  it('hangs on a sheet of its own in the A-5xx details series (as drafting views do), at the scale it was made for, and not in the starting set', () => {
     const views = [...defaultViews(LEVELS), detail];
     assert.equal(buildDrawingSet({ views, extent: HOUSE }).some((s) => s.viewports?.some((vp) => vp.viewId === 'det')), false);
     const hung = withViewHung([], views, detail, HOUSE);
     assert.ok(hung);
     const [sheet] = hung.sheets;
-    assert.deepEqual([sheet.number, sheet.name, sheet.paper, sheet.viewports?.[0].scale], ['A-901', detail.name, 'A3', 25]);
+    assert.deepEqual([sheet.number, sheet.name, sheet.paper, sheet.viewports?.[0].scale], ['A-501', detail.name, 'A3', 25]);
     assert.equal(sheetGroup(sheet), null);
     assert.equal(withViewHung(hung.sheets, views, detail, HOUSE), null, 'not twice');
-    assert.equal(withViewHung(hung.sheets, views, { ...detail, id: 'det2' }, HOUSE)?.sheets.at(-1)?.number, 'A-902');
+    assert.equal(withViewHung(hung.sheets, views, { ...detail, id: 'det2' }, HOUSE)?.sheets.at(-1)?.number, 'A-502');
+    assert.equal(sheetSeries(sheet), 'details', 'its series template applies');
+    assert.equal(sheetSeries({ number: 'A-901' }), null, 'A-9xx is other sheets, not details');
   });
 });
 

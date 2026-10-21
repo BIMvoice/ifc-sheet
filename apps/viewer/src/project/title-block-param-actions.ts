@@ -4,10 +4,12 @@
 
 /**
  * Writes to the title block's parameter list (#143). A rename carries the
- * sheets' own values and the `{Name}` in the layout and in sheet text along;
+ * sheets' own values and the `{Name}` in the layout and in sheet text along
+ * (the sheet text rewrite is a step of the drafts' undo history);
  * a delete drops the sheets' values. Each returns what refused it, or null.
  */
 
+import { commitDrafts } from '@/drafting/draft-store';
 import { useProjectStore } from './project-store';
 import { checkParamName, renameParamIn, type ParamNameProblem, type TitleBlockParam } from './title-block-params';
 import { renameInTemplate } from './title-block-template-actions';
@@ -47,9 +49,12 @@ export function renameTitleBlockParam(from: string, to: string): ParamNameProble
     titleBlockParams: current().map((p) => (p.name === from ? { ...p, name: next } : p)),
     sheets: patchSheetsTitleParams(s.sheets, (own) => Object.fromEntries(Object.entries(own).map(([k, v]) => [k === from ? next : k, v]))),
     titleBlockTemplate: s.titleBlockTemplate ? renameInTemplate(s.titleBlockTemplate, (text) => renameParamIn(text, from, next)) : s.titleBlockTemplate,
-    drafts: renameInParametricDrafts(s.drafts, (text) => renameParamIn(text, from, next)),
     dirty: true,
   });
+  // The texts are the drafts, and the drafts have an undo history: the rewrite is a step of it (a plain `setState` would be silently undone with an older step, which restores the drafts as they were).
+  // `renameInParametricDrafts` always returns a new array, so a rename that touched no text must not make an empty step.
+  const rewritten = renameInParametricDrafts(s.drafts, (text) => renameParamIn(text, from, next));
+  if (rewritten.some((d, i) => d !== s.drafts[i])) commitDrafts(rewritten);
   return null;
 }
 

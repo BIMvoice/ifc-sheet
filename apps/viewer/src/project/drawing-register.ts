@@ -12,7 +12,7 @@
 import { drawingArea, SET_PAPER, sheetGroup, type SetGroup } from './drawing-set';
 import { registerFit, type RegisterFit } from '@/joinery/register-layout';
 import { titleBlockOf } from './title-block';
-import type { PaperSize, ProjectIssue, ProjectSchedule, ProjectSheet } from './types';
+import type { Paper, ProjectIssue, ProjectSchedule, ProjectSheet } from './types';
 
 export interface RegisterRow {
   number: string;
@@ -61,7 +61,7 @@ export function registerHolders<S extends Pick<ProjectSheet, 'viewports'>>(sheet
  * (`registerSheetFit`), so a page can neither repeat nor skip rows when the
  * sheets' papers differ.
  */
-export function registerPaper(sheets: readonly Pick<ProjectSheet, 'viewports' | 'paper'>[], registerId: string): PaperSize {
+export function registerPaper(sheets: readonly Pick<ProjectSheet, 'viewports' | 'paper'>[], registerId: string): Paper {
   return registerHolders(sheets, registerId)[0]?.paper ?? SET_PAPER;
 }
 
@@ -71,7 +71,7 @@ export function registerSheetFit(rows: number, sheets: readonly Pick<ProjectShee
 }
 
 /** `registerSheetFit` for a caller that already holds `registerPaper(sheets, registerId)`. */
-export function registerFitOn(rows: number, paper: PaperSize): RegisterFit {
+export function registerFitOn(rows: number, paper: Paper): RegisterFit {
   return registerFit(rows, drawingArea(paper).h);
 }
 

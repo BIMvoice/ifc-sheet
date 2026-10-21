@@ -57,7 +57,10 @@ const pt = (x: number, y: number) => ({ x, y });
 const category: Required<CategoryGraphics> = {
   visible: false, lineColor: '#112233', fillColor: '#445566', lineWeight: 'heavy', cutHatch: 'ANSI31', hatchScale: 2.5,
 };
-const graphics: Required<ViewGraphics> = { presetId: 'structure', categories: { walls: category, doors: { visible: false } }, grid: { visible: false, ends: 'start' } };
+const graphics: Required<ViewGraphics> = {
+  presetId: 'structure', categories: { walls: category, doors: { visible: false } }, grid: { visible: false, ends: 'start' },
+  phases: { show: ['existing', 'demolish'], styles: { demolish: { lineColor: '#ffcc00', lineWeight: 'heavy', dashed: false, fillColor: '#fff2a8' } } },
+};
 
 const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'] };
 
@@ -135,7 +138,8 @@ const viewport: Required<SheetViewport> = {
   id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], page: 2, keyPlanOf: 'vp0', drawingNumber: '7',
 };
 const sheet: Required<ProjectSheet> = {
-  id: 'sh1', number: 'A-201', autoNumber: true, numberOverride: true, series: 'elevations', name: 'Plans', createdAt: 9, paper: 'A2', orientation: 'portrait', viewports: [viewport],
+  id: 'sh1', number: 'A-201', autoNumber: true, numberOverride: true, series: 'elevations', name: 'Plans', createdAt: 9, paper: { kind: 'elongated', base: 'A2', factor: 3 }, orientation: 'portrait', viewports: [viewport],
+  frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' }, templateId: 'tpl1',
   titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12', revision: 'B' },
   titleBlockParams: { Phase: 'PAC' },
 };
@@ -173,6 +177,7 @@ const FULL: Required<ProjectDocument> = {
     id: 'arch', name: 'Arch', textStyle: 'big', arrow: 'arrow', arrowSize: 2, extGap: 0.5, extOver: 2, placement: 'below', textGap: 0.8, precision: 0, unit: 'mm', color: '#0000aa',
   }],
   layerGroups: [{ id: 'g1', name: 'Annotation', visible: false, locked: true }],
+  graphicStandard: 'ro-practice',
   openingLines: 'hinge',
   symbolFlips: { '2O2Fr$t4X7Zf8NOew3FLOH': 3 },
   joineryTypes: [{ ...defaultDoorSpec('D-1'), id: 'j1' }, { ...defaultWindowSpec('W-1'), id: 'j2', columns: [2, 1], panels: [{ col: 0, row: 0, operation: 'tilt-turn-right' }] }],
@@ -181,11 +186,14 @@ const FULL: Required<ProjectDocument> = {
   elementTypes: (['wall', 'slab', 'column', 'beam', 'roof', 'opening'] as const).map((kind, i) => ({ ...defaultTypeSpec(kind), kind, id: `t${i}`, name: `Type ${kind}`, mark: `M${i}` }) as never),
   currentTypes: { wall: 't0', slab: 't1', column: 't2' },
   schedules: [schedule],
+  sheetTemplates: [{ id: 'tpl1', name: 'Long elevations', paper: { kind: 'custom', widthMm: 500, heightMm: 700 }, orientation: 'portrait', frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' } }],
+  seriesTemplates: { plans: 'builtin:a1-plans', details: 'tpl1' },
   structureProfiles: [],
   civilDrawings: [civil],
   typicalSections: [{ id: 'ts1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: { width: 1, slope: -4 }, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 }, nominalDepth: 0.6 } }],
   materials: [material],
   cadLayers: [cadRule],
+  phaseSource: { mapping: { set: 'Faza', property: 'Stare', values: { Existent: 'existing', Desfiintare: 'demolish', Propus: 'new' } }, unmarked: 'new' },
   annotationTypes: [annotationType],
   symbols,
   legends: [legend],
@@ -199,7 +207,7 @@ const FULL: Required<ProjectDocument> = {
   tagFields: { door: { mark: [{ kind: 'pset', pset: 'Pset_DoorCommon', property: 'Reference' }, { kind: 'attribute', name: 'Mark' }] }, room: { name: [{ kind: 'quantity', qto: 'Qto_SpaceBaseQuantities', name: 'NetFloorArea' }, { kind: 'type-pset', pset: 'Pset_X', property: 'Y' }] } },
   issues: [{
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
-    sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A2', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
+    sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A3×3', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
   }],
   modelState: snapshotFromElements([{ k: '2O2Fr$t4X7Zf8NOew3FLOH', t: 'IfcWall', n: 'Wall', d: 'abcdef0123', g: 'a1b2c3d4e', a: [0, 0, 0, 4, 0.2, 3], p: 'Site/Building/Level 0' }], 7),
   savedSectionCuts: [{

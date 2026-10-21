@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
+import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { addTemplateItem, clearTemplateFit, customiseTitleBlock, removeTemplateItem, resetTitleBlockTemplate, setTemplateField } from '@/project/title-block-template-actions';
 import { standardTitleBlock, type TemplateItem } from '@/project/title-block-template';
 
@@ -108,6 +109,7 @@ function ItemRow({ item, label }: { item: TemplateItem; label: string }) {
 
 export function TitleBlockLayout() {
   const { t } = useTranslation();
+  const standard = useGraphicStandard();
   const template = useProjectStore((s) => s.titleBlockTemplate);
   const [asking, setAsking] = useState(false);
   const counts: Partial<Record<TemplateItem['kind'], number>> = {};
@@ -116,7 +118,7 @@ export function TitleBlockLayout() {
       <h4 className="m-0 text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('tblayout.title')}</h4>
       <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('tblayout.intro')}</p>
       {!template ? (
-        <button type="button" className={`${quiet} mt-2`} onClick={() => customiseTitleBlock(standardTitleBlock(t))}>{t('tblayout.edit')}</button>
+        <button type="button" className={`${quiet} mt-2`} onClick={() => customiseTitleBlock(standardTitleBlock(t, standard))}>{t('tblayout.edit')}</button>
       ) : (
         <>
           <p className="m-0 mt-1 text-xs text-sky-200/80">{t('tblayout.unit')}</p>

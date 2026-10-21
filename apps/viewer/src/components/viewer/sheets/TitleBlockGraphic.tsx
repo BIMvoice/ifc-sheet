@@ -3,14 +3,17 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The title block, bottom right, drawn from its layout (#143): the project's
- * edited layout, else the standard one (`title-block-template.ts`). Text is
- * resolved through the sheet's parameters; the logo is the project's.
+ * The title block, in the frame's bottom-right corner or as a strip down its
+ * right side, drawn from its layout (#143): the project's edited layout, else
+ * the standard one (`title-block-template.ts`, on the project's graphic
+ * standard). Text is resolved through the sheet's parameters; the logo is the
+ * project's.
  */
 
 import { useMemo } from 'react';
 import { useTranslation } from '@/i18n';
-import { FRAME_MARGIN_MM, TITLE_BLOCK_MM } from '@/project/sheets';
+import { frameOf, titleBlockRect, TITLE_BLOCK_MM } from '@/project/sheet-frame';
+import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { useProjectStore } from '@/project/project-store';
 import { LOGO_FIELD } from '@/project/title-block';
 import { useEffectiveTitleBlock } from '@/project/title-block-model';
@@ -42,13 +45,15 @@ export function TitleBlockGraphic({ sheet, projectName, w, h }: { sheet: Project
   const logo = useEffectiveTitleBlock()?.[LOGO_FIELD];
   const edited = useProjectStore((s) => s.titleBlockTemplate);
   const lookup = useSheetParamLookup(sheet, projectName);
-  const template = useMemo(() => edited ?? standardTitleBlock(t), [edited, t]);
-  const ox = w - FRAME_MARGIN_MM - TITLE_BLOCK_MM.w;
-  const oy = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h;
+  const standard = useGraphicStandard();
+  const template = useMemo(() => edited ?? standardTitleBlock(t, standard), [edited, t, standard]);
+  const frame = frameOf(sheet);
+  const box = titleBlockRect({ w, h }, frame);
+  // Drawn at its own origin, then set in place (turned a quarter when it is a strip).
   return (
-    <g {...penTags('TITLEBLOCK', 0.35)}>
-      <rect x={ox} y={oy} width={TITLE_BLOCK_MM.w} height={TITLE_BLOCK_MM.h} fill="#fff" />
-      {template.items.map((item) => <Item key={item.id} item={item} ox={ox} oy={oy} lookup={lookup} logo={logo} />)}
+    <g {...penTags('TITLEBLOCK', standard.sheet.titleDivider)} data-title-block={frame.titleBlock} transform={frame.titleBlock === 'right' ? `translate(${box.x} ${box.y + box.h}) rotate(-90)` : `translate(${box.x} ${box.y})`}>
+      <rect x={0} y={0} width={TITLE_BLOCK_MM.w} height={TITLE_BLOCK_MM.h} fill="#fff" />
+      {template.items.map((item) => <Item key={item.id} item={item} ox={0} oy={0} lookup={lookup} logo={logo} />)}
     </g>
   );
 }

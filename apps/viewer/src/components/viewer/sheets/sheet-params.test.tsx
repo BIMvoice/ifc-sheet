@@ -14,7 +14,8 @@ import { standardTitleBlock } from '@/project/title-block-template';
 import { PARAMETRIC_TEXT } from '@/project/parametric-text';
 import { newDraft } from '@/drafting/draft-store';
 import { resolveEnglish as t } from '@/i18n/registry';
-import { FRAME_MARGIN_MM, paperOf, TITLE_BLOCK_MM } from '@/project/sheets';
+import { FRAME_MARGIN_MM, TITLE_BLOCK_MM } from '@/project/sheet-frame';
+import { paperOf } from '@/project/sheets';
 import type { DraftEntity } from '@/drafting/types';
 import type { ProjectSheet } from '@/project/types';
 import { SheetPaper } from './SheetPaper';
@@ -171,8 +172,12 @@ describe('the title block layout (#143)', () => {
     const { w, h } = paperOf(sheet);
     const left = w - FRAME_MARGIN_MM - TITLE_BLOCK_MM.w;
     const top = h - FRAME_MARGIN_MM - TITLE_BLOCK_MM.h;
-    const moved = [left + line.x1, top + 33, left + line.x2, top + 33].map((n) => n.toFixed(2)).join(',');
-    assert.ok(linesAt(paper(sheet)).includes(moved), `a line at ${moved}`);
+    // The block is drawn at its own origin and set in place, so the moved line is at its own y inside the placed group.
+    const ui = paper(sheet);
+    const block = ui.querySelector('[data-title-block]');
+    assert.equal(block?.getAttribute('transform'), `translate(${left} ${top})`);
+    const moved = [line.x1, 33, line.x2, 33].map((n) => n.toFixed(2)).join(',');
+    assert.ok(linesAt(block as HTMLElement).includes(moved), `a line at ${moved}`);
   });
 
   it('refuses a value that would draw nothing sensible, leaving the item alone', () => {

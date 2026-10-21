@@ -6,6 +6,7 @@ import type { TitleSource } from './title-block-sources';
 import type { TitleBlockParam } from './title-block-params';
 import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
+import type { PhaseSource } from './phases';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
@@ -32,6 +33,8 @@ import type { ProjectIssue } from '@/issue/types';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
 
 export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './project-records';
+import type { ViewGraphics } from './view-graphics-types';
+export type { CategoryGraphics, CategoryLineWeight, GridEnds, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types';
 
 export type ProjectViewKind = 'plan' | 'section' | 'elevation' | '3d' | 'drafting';
 
@@ -94,40 +97,6 @@ export interface ViewDetail {
   max: { x: number; y: number };
   /** The detail's number (1, 2, …), unique among the project's details. */
   number: number;
-}
-
-export type CategoryLineWeight = 'heavy' | 'medium' | 'light' | 'hairline';
-
-/** How one element category draws in a view. Absent fields keep the preset's look. */
-export interface CategoryGraphics {
-  visible?: boolean;
-  lineColor?: string;
-  fillColor?: string;
-  lineWeight?: CategoryLineWeight;
-  /** A hatch pattern name (built-in or imported .pat) drawn over the category's cut faces. */
-  cutHatch?: string;
-  /** Hatch scale (1 = the pattern's own size in drawing millimetres). */
-  hatchScale?: number;
-}
-
-/** Which ends of a grid axis carry a bubble; on a section, `start` is the foot and `end` the head. */
-export type GridEnds = 'start' | 'end' | 'both';
-
-/** How a view draws the model's structural grid (IfcGrid). */
-export interface ViewGridGraphics {
-  /** Absent: on for plans and sections, off for elevations. */
-  visible?: boolean;
-  /** Absent: both ends. */
-  ends?: GridEnds;
-}
-
-export interface ViewGraphics {
-  /** The structural grid's axes and bubbles. */
-  grid?: ViewGridGraphics;
-  /** A built-in graphic override preset id; absent = the default, null = none. */
-  presetId?: string | null;
-  /** By category id (`VIEW_CATEGORIES`). */
-  categories?: Record<string, CategoryGraphics>;
 }
 
 export interface PlanProjectView extends ProjectViewBase {
@@ -211,6 +180,8 @@ export type ProjectViewPatch = ProjectView extends infer V
   : never;
 
 export type PaperSize = 'A0' | 'A1' | 'A2' | 'A3' | 'A4';
+export type { CustomPaper, ElongatedPaper, Paper, SheetFrame, SheetTemplate, TemplateSeries, TitleBlockPosition } from './sheet-types';
+import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types';
 
 /** A view placed on a sheet. Positions and sizes are paper millimetres from the sheet's top-left. */
 export interface SheetViewport {
@@ -274,8 +245,12 @@ export interface ProjectSheet {
   series?: NumberGroup;
   name: string;
   createdAt: number;
-  paper?: PaperSize;
+  paper?: Paper;
   orientation?: 'landscape' | 'portrait';
+  /** Frame margins and title block position; absent: 10 mm all round, title block bottom right (`sheet-frame.ts`). */
+  frame?: SheetFrame;
+  /** The template the sheet was started from (a record of where it came from; the sheet's own paper and frame rule). */
+  templateId?: string;
   viewports?: SheetViewport[];
   /** Title block fields this sheet says otherwise than the project's (`ProjectDocument.titleBlock`); a key present wins, even empty. */
   titleBlock?: Record<string, string>;
@@ -326,6 +301,8 @@ export interface ProjectDocument {
   textStyles?: TextStyle[];
   dimStyles?: DimStyle[];
   layerGroups?: LayerGroup[];
+  /** The built-in graphic standard (pens and text sizes) the sheets draw with, by id (`drafting/graphic-standard.ts`); absent: the IfcSheet default. */
+  graphicStandard?: string;
   /** Door and window opening symbols in elevation: apex at the handle (default, window makers' sketches) or at the hinges (DIN 1356). */
   openingLines?: 'handle' | 'hinge';
   /** Plan symbol overrides by element GlobalId: bit 1 hinges a door on its other jamb, bit 2 swings it to the other side. */
@@ -341,6 +318,10 @@ export interface ProjectDocument {
   /** The entry each Design tool builds with, per kind. */
   currentTypes?: Partial<Record<ElementTypeKind, string>>;
   schedules?: ProjectSchedule[];
+  /** The project's own sheet templates (the built-in ones are in code, `sheet-templates.ts`); they travel in the library file. */
+  sheetTemplates?: SheetTemplate[];
+  /** The template new sheets of a series start from, by template id; a series without one is made on the smallest paper that fits. */
+  seriesTemplates?: Partial<Record<TemplateSeries, string>>;
   /** The project's structure profile library (retaining walls, tunnels, decks, barriers… and drawn shapes). */
   structureProfiles?: StructureProfile[];
   /** Road drawings: longitudinal profiles and cross-section sets. */
@@ -353,6 +334,8 @@ export interface ProjectDocument {
   cadLayers?: CadLayerRule[];
   /** Named section cuts of the Drawing panel. */
   savedSectionCuts?: SavedSectionCut[];
+  /** Where an element's phase is read from besides its IFC Status (`phases.ts`). */
+  phaseSource?: PhaseSource;
   /** Named presets of the annotation tools. */
   annotationTypes?: AnnotationType[];
   /** The project's own symbols (the built-in ones are in code). */

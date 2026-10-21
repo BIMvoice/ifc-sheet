@@ -19,7 +19,8 @@ import { useTranslation } from '@/i18n';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
 import { isGeometry, type DraftEntity, type DraftLayer, type SymbolInstanceShape } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
-import { FRAME_MARGIN_MM, mmPerMetre, paperOf, viewportBox } from '@/project/sheets';
+import { frameOf, frameRect } from '@/project/sheet-frame';
+import { mmPerMetre, paperOf, viewportBox } from '@/project/sheets';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hasTrueScale } from '@/project/axonometric';
@@ -32,6 +33,7 @@ import { resolvedDraft } from '@/project/parametric-text';
 import { TitleBlockGraphic } from './TitleBlockGraphic';
 import { useSheetParamLookup } from './useSheetParams';
 import { viewportPens } from './viewport-pens';
+import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
 import type { PlanOverlay } from '@/project/plan-overlays';
@@ -49,7 +51,6 @@ import type { EntityStyleOf } from '@/project/model-styles';
 
 /** The cut axis a drawing is put on paper by (`viewportTransform`), from its plane's axis. */
 export const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
-const LABEL_MM = 3.5;
 
 export interface ViewportContent {
   view: ProjectView | undefined;
@@ -97,16 +98,16 @@ export function viewportTransform(vp: SheetViewport, drawing: Drawing2D | null, 
 }
 
 /** Width on paper of the drawing number's ring, mm: round for one or two characters, longer for a longer number. */
-const numberWidth = (n: string): number => Math.max(LABEL_MM + 1, n.length * LABEL_MM * 0.6 + 2);
+const numberWidth = (n: string, size: number): number => Math.max(size + 1, n.length * size * 0.6 + 2);
 
-/** The drawing's number in a ring at the start of its title: the number a mark elsewhere names. */
-function TitleNumber({ number, x, baseline }: { number: string | undefined; x: number; baseline: number }) {
+/** The drawing's number in a ring at the start of its title, at the title's text size (mm): the number a mark elsewhere names. */
+function TitleNumber({ number, x, baseline, size }: { number: string | undefined; x: number; baseline: number; size: number }) {
   if (!number) return null;
-  const w = numberWidth(number);
+  const w = numberWidth(number, size);
   return (
     <g {...penTags('VIEWPORT-LABELS', 0.25)}>
-      <rect x={x} y={baseline - LABEL_MM - 0.4} width={w} height={LABEL_MM + 1} rx={(LABEL_MM + 1) / 2} fill="none" stroke="#000" strokeWidth={0.25} />
-      <text x={x + w / 2} y={baseline - 0.2} fontSize={LABEL_MM * 0.8} fontWeight={700} textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">{number}</text>
+      <rect x={x} y={baseline - size - 0.4} width={w} height={size + 1} rx={(size + 1) / 2} fill="none" stroke="#000" strokeWidth={0.25} />
+      <text x={x + w / 2} y={baseline - 0.2} fontSize={size * 0.8} fontWeight={700} textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">{number}</text>
     </g>
   );
 }
@@ -118,12 +119,13 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
 }) {
   const { t: tr } = useTranslation();
   const { view, drawing, drafts } = content;
+  const standard = useGraphicStandard();
   const axis: SectionAxisName = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
   const t = viewportTransform(vp, drawing, axis);
   const cadLayers = useProjectStore((s) => s.cadLayers);
   const pens = useMemo(
-    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf) : []),
-    [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers, content.styleOf],
+    () => (drawing ? viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard) : []),
+    [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);
   const left = vp.x - box.width / 2;
@@ -172,11 +174,11 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined}
         data-export-ignore={selected ? 'true' : undefined}
       />
-      <TitleNumber number={content.drawingNumber} x={left} baseline={top + box.height + LABEL_MM + 1.5} />
-      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (content.drawingNumber ? numberWidth(content.drawingNumber) + 2 : 0)} y={top + box.height + LABEL_MM + 1.5} fontSize={LABEL_MM} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
+      <TitleNumber number={content.drawingNumber} x={left} baseline={top + box.height + standard.type.viewTitle + 1.5} size={standard.type.viewTitle} />
+      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (content.drawingNumber ? numberWidth(content.drawingNumber, standard.type.viewTitle) + 2 : 0)} y={top + box.height + standard.type.viewTitle + 1.5} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
         {keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
       </text>
-      {content.site ? <SiteBalance site={content.site} x={left} y={top + box.height + LABEL_MM + 4} /> : null}
+      {content.site ? <SiteBalance site={content.site} x={left} y={top + box.height + standard.type.viewTitle + 4} /> : null}
       {content.site ? <SiteSymbols site={content.site} transform={t} axis={axis} scale={vp.scale} box={{ x: left, y: top, width: box.width, height: box.height }} live={live}
         symbols={drafts.flatMap((e): SymbolInstanceShape[] => {
           const shown = e.shape.type === 'symbol' && layerColor.get(e.layerId) !== null ? annotationAtFactor(e.shape, factor) : null;
@@ -275,10 +277,12 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
   { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [] }, ref,
 ) {
   const { w, h } = paperOf(sheet);
+  const pen = useGraphicStandard().sheet.frame;
+  const frame = frameRect({ w, h }, frameOf(sheet));
   return (
     <svg ref={ref} data-sheet-id={sheet.id} xmlns="http://www.w3.org/2000/svg" width={w * pxPerMm} height={h * pxPerMm} viewBox={`0 0 ${w} ${h}`} className="block bg-white shadow-lg">
       <rect data-export-ignore-dxf="true" x={0} y={0} width={w} height={h} fill="#fff" />
-      <rect {...penTags('FRAME', 0.7)} x={FRAME_MARGIN_MM} y={FRAME_MARGIN_MM} width={w - FRAME_MARGIN_MM * 2} height={h - FRAME_MARGIN_MM * 2} fill="none" stroke="#000" strokeWidth={0.7} />
+      <rect {...penTags('FRAME', pen)} x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="none" stroke="#000" strokeWidth={pen} />
       {(sheet.viewports ?? []).map((vp) => {
         const c = content(vp);
         if (c.civil) return <CivilViewport key={vp.id} vp={vp} layout={c.civil} selected={vp.id === selectedViewportId} />;

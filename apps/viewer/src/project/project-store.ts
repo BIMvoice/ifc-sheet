@@ -15,15 +15,18 @@
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
 import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { findTemplate, templateFields } from './sheet-templates';
 import { nextDetailNumber } from './detail';
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { liftSheetTitleBlocks } from './title-block';
+import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 
@@ -41,8 +44,8 @@ export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visib
 export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, titleBlockParams: undefined, titleBlockTemplate: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
-  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined,
+  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -67,10 +70,14 @@ const DOCUMENT_FIELDS = {
   cadLayers: true,
   details: true,
   tagFields: true,
+  sheetTemplates: true,
+  seriesTemplates: true,
   titleBlockSources: true,
   titleBlockParams: true,
   titleBlockTemplate: true,
   sheetNumbering: true,
+  phaseSource: true,
+  graphicStandard: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -88,6 +95,7 @@ const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[
   annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [],
   cadLayers: () => [],
   details: () => [],
+  sheetTemplates: () => [], seriesTemplates: () => ({}),
 };
 
 /** The persisted part of the store. */
@@ -108,6 +116,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
   const doc = liftSheetTitleBlocks(saved);
+  const standard = knownGraphicStandard(doc.graphicStandard);
   resetWallView();
   useProjectStore.setState({
     ...doc,
@@ -128,6 +137,9 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     materials: doc.materials ?? [],
     cadLayers: doc.cadLayers ?? [],
     savedSectionCuts: doc.savedSectionCuts ?? [],
+    sheetTemplates: doc.sheetTemplates ?? [],
+    seriesTemplates: doc.seriesTemplates ?? {},
+    phaseSource: doc.phaseSource,
     // A project made before the room label read the tag name takes the new template (`tagall/types.ts`).
     annotationTypes: upgradeTagAllTypes(doc.annotationTypes ?? []),
     symbols: doc.symbols ?? [],
@@ -140,11 +152,13 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     titleBlockSources: doc.titleBlockSources,
     titleBlockParams: doc.titleBlockParams,
     titleBlockTemplate: doc.titleBlockTemplate,
+    graphicStandard: standard.id,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
     dirty: options.dirty ?? false,
   });
+  if (standard.unknown) warnUnknownGraphicStandard(standard.unknown);
 }
 
 /**
@@ -273,12 +287,13 @@ export const numberingScheme = (state: Pick<ProjectDocument, 'sheetNumbering'> =
 /**
  * A new sheet takes the next number of `group`. Without a group it takes the
  * next plan number until a view is placed on it, then it is numbered by what
- * it holds.
+ * it holds. It starts from the template if one is named.
  */
-export function addProjectSheet(name = 'Unnamed', group?: NumberGroup): string {
+export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateId?: string): string {
   const state = useProjectStore.getState();
   const series = group ?? 'plans';
-  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextNumber(state.sheets, series, numberingScheme(state)), series, ...(group ? {} : { autoNumber: true }), name, createdAt: Date.now() };
+  const template = findTemplate(templateId, state.sheetTemplates);
+  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextNumber(state.sheets, series, numberingScheme(state)), series, ...(group ? {} : { autoNumber: true }), name, createdAt: Date.now(), ...(template ? templateFields(template) : {}) };
   useProjectStore.setState({ sheets: [...state.sheets, sheet], dirty: true });
   return sheet.id;
 }
