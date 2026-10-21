@@ -28,6 +28,7 @@
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
+    "@bimvoice/ifcsheet": "workspace:^",
     "@floating-ui/dom": "^1.8.0",
     "@ifc-lite/bcf": "workspace:^",
     "@ifc-lite/bcf-api": "workspace:^",

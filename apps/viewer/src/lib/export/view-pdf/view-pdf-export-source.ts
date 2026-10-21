@@ -94,7 +94,7 @@ export function readViewPdfSource(state: ViewerState): ViewPdfSource {
  * drawing pipeline does: a printed drawing draws the building, never the type
  * library (#2058).
  */
-function gatherDrawnMeshes(state: ViewerState): MeshData[] {
+export function gatherDrawnMeshes(state: ViewerState): MeshData[] {
   const results: {
     geometry: GeometryResult;
     instancedModelRange: InstancedModelRange | null;

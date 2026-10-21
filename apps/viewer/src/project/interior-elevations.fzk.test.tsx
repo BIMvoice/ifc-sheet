@@ -20,7 +20,7 @@ import { interiorElevationSheet, interiorElevationViews, type InteriorElevationV
 import { roomGeometry } from './interior-room';
 import type { ElevationDirection, ProjectView } from './types';
 
-const FZK = new URL('../../public/_fixtures/AC20-FZK-Haus.ifc', import.meta.url);
+const FZK = new URL('../../src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url);
 /** Two rectangular ground floor rooms side by side: Buero (2) and Bad (3); Bad's door opens to the hall through the same wall as Buero's. */
 const BUERO = 21640;
 const BAD = 21283;

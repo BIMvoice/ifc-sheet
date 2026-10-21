@@ -6,7 +6,12 @@
 
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { removeProjectItem, resetProject, useProjectStore } from '@/project/project-store';
+import { addProjectSheet, removeProjectItem, resetProject, useProjectStore } from '@/project/project-store';
+import { drawingArea } from '@/project/drawing-set';
+import { layoutOf, readLegendEnv } from './legend-env.js';
+import { useViewDrawings } from '@/project/view-drawings';
+import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import type { ProjectSheet } from '@/project/types';
 import type { LegendLabels } from './legend-layout.js';
 import { addLegend, keepLegendOnSheets, moveLegendCategory, placeLegend, projectLegends, toggleLegendCategory, updateLegend } from './legend-actions.js';
 
@@ -64,6 +69,30 @@ describe('legend actions', () => {
     assert.equal(overlapsX && overlapsY, false, `the legend centre ${vp.x}, ${vp.y} is inside the drawing`);
   });
 
+  it('keeps a legend off the annotation an auto-fit viewport frames beyond its model (#140)', () => {
+    const id = addLegend('Key', { categories: ['hatches'] });
+    const area = drawingArea(sheet);
+    const cx = area.x + area.w - 100;
+    const cy = area.y + area.h - 20;
+    const model = { lines: [], cutPolygons: [], projectionPolygons: [], bounds: { min: { x: 0, y: 0 }, max: { x: 2, y: 2 } }, config: { plane: { axis: 'y', position: 1.2, flipped: false } } } as unknown as Drawing2D;
+    useViewDrawings.setState({ byView: { plan: { drawing: model, status: 'ready', progress: 100, phase: '', error: null } } });
+    // A line out to x = 18 m: at 1:100 the fitted box is 200 mm wide, the model alone gives 40 mm.
+    useProjectStore.setState({
+      views: [{ id: 'plan', kind: 'plan', name: 'Ground', createdAt: 0, scale: 100, level: { name: 'Ground', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 }],
+      drafts: [{ id: 'd', viewId: 'plan', layerId: '0', params: {}, shape: { type: 'line', a: { x: 0, y: 0 }, b: { x: 18, y: 0 } } }],
+      sheets: useProjectStore.getState().sheets.map((s) => (s.id === 's1' ? { ...s, viewports: [{ id: 'v', viewId: 'plan', x: cx, y: cy, scale: 100, width: 0, height: 0, center: null }] } : s)),
+    });
+    const viewportId = placeLegend('s1', id, LABELS);
+    const vp = useProjectStore.getState().sheets[0]?.viewports?.find((v) => v.id === viewportId);
+    const legend = projectLegends().find((l) => l.id === id);
+    assert.ok(vp && legend);
+    const size = layoutOf(legend, readLegendEnv(LABELS), 's1');
+    const overlapsX = Math.abs(vp.x - cx) < 100 + size.width / 2;
+    const overlapsY = Math.abs(vp.y - cy) < 15 + size.height / 2;
+    assert.equal(overlapsX && overlapsY, false, `the legend at ${vp.x}, ${vp.y} sits on the fitted drawing`);
+    useViewDrawings.setState({ byView: {} });
+  });
+
   it('places nothing for a legend or a sheet that is gone', () => {
     assert.equal(placeLegend('s1', 'nope', LABELS), null);
     assert.equal(placeLegend('nope', addLegend('Key'), LABELS), null);
@@ -96,4 +125,37 @@ describe('keepLegendOnSheets', () => {
     assert.ok(off < 590 && off > 400, `moved in to ${off}`);
     assert.equal(fits, 300);
   });
+});
+
+describe('legends on the paper the sheet has (#129 review)', () => {
+  const sheetOf = (id: string) => useProjectStore.getState().sheets.find((s) => s.id === id) as ProjectSheet;
+  /** The legend's centre is in the sheet's own drawing area: on the paper, clear of the frame and the title block wherever it sits. */
+  const inArea = (sheetId: string, legendId: string) => {
+    const s = sheetOf(sheetId);
+    const vp = s.viewports!.find((v) => v.viewId === legendId)!;
+    const area = drawingArea(s);
+    return { ok: vp.x >= area.x && vp.x <= area.x + area.w && vp.y >= area.y && vp.y <= area.y + area.h, at: `${vp.x}, ${vp.y} in ${JSON.stringify(area)}` };
+  };
+
+  for (const [what, make] of [
+    ['an A3 portrait sheet', () => {
+      const id = addProjectSheet('Portrait');
+      useProjectStore.setState({ sheets: useProjectStore.getState().sheets.map((s) => (s.id === id ? { ...s, paper: 'A3' as const, orientation: 'portrait' as const } : s)) });
+      return id;
+    }],
+    ['the "A3 schedules" template, title block in a strip at the right', () => addProjectSheet('Schedules', undefined, 'builtin:a3-schedules')],
+  ] as const) {
+    it(`places a legend, and keeps it, inside the drawing area of ${what}`, () => {
+      const sheetId = make();
+      const id = addLegend('Key', { categories: ['hatches'] });
+      placeLegend(sheetId, id, LABELS);
+      const placed = inArea(sheetId, id);
+      assert.ok(placed.ok, `placed at ${placed.at}`);
+      // Pushed off to the right, it is pulled back into the same area.
+      useProjectStore.setState({ sheets: useProjectStore.getState().sheets.map((s) => (s.id === sheetId ? { ...s, viewports: s.viewports!.map((vp) => (vp.viewId === id ? { ...vp, x: 2000 } : vp)) } : s)) });
+      keepLegendOnSheets(id, LABELS);
+      const kept = inArea(sheetId, id);
+      assert.ok(kept.ok, `kept at ${kept.at}`);
+    });
+  }
 });

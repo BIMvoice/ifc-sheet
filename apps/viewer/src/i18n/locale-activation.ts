@@ -40,7 +40,7 @@ function readStoredLocale(storage: LocaleEnvironment['storage']): string | null 
   }
 }
 
-function storeLocale(storage: LocaleEnvironment['storage'], locale: Locale): void {
+export function storeLocale(storage: LocaleEnvironment['storage'], locale: Locale): void {
   try {
     storage?.setItem(LOCALE_STORAGE_KEY, locale);
   } catch (error) {

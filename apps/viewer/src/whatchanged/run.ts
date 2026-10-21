@@ -14,7 +14,7 @@
  *   WHATCHANGED ACCEPT   take the model as it is now as the state to compare with; remove the clouds
  */
 
-import { editDrafts, newDraft } from '@/drafting/draft-store';
+import { editDrafts } from '@/drafting/draft-store';
 import type { DraftEntity } from '@/drafting/types';
 import { resolve } from '@/i18n/registry';
 import type { TranslationKey } from '@/i18n';
@@ -24,7 +24,8 @@ import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { setResult, useWhatChanged } from './baseline';
 import { viewBands } from './bands';
-import { cloudBoxes, cloudRing, groupBoxes } from './cloud';
+import { cloudBoxes, cloudDraft, ensureRevisionsLayer, groupBoxes, REVISIONS_LAYER } from './cloud';
+import { latestRevisionId, REVISION_ID_PARAM } from '@/project/revisions';
 import { compareStates, type ModelChange } from './compare';
 import { currentSnapshot } from './current';
 import { renderFrameOffset } from './frame';
@@ -35,7 +36,7 @@ import type { ModelSnapshot } from './snapshot';
 import { toRenderFrame, type ViewBand } from './visibility';
 
 export const REVISION_STAMP = 'whatchanged';
-export const REVISIONS_LAYER = 'revisions';
+export { REVISIONS_LAYER };
 export type Mode = 'compare' | 'clear' | 'accept';
 
 const t = (key: string, params: Record<string, string | number> = {}) => resolve(`whatchanged.${key}` as TranslationKey, params);
@@ -54,11 +55,6 @@ function removeClouds(): number {
   return ids.size;
 }
 
-function ensureLayer(): void {
-  const { draftLayers } = useProjectStore.getState();
-  if (!draftLayers.some((l) => l.id === REVISIONS_LAYER)) useProjectStore.setState({ draftLayers: [...draftLayers, { id: REVISIONS_LAYER, name: t('layer'), color: '#dc2626', visible: true, locked: false }], dirty: true });
-}
-
 /** What changed between two snapshots, boxes in the render frame the views are drawn in (the snapshots' own are absolute). */
 export function compareInRenderFrame(base: ModelSnapshot, head: ModelSnapshot, offset = renderFrameOffset()): ModelChange[] {
   return toRenderFrame(compareStates(base, head), offset);
@@ -67,13 +63,13 @@ export function compareInRenderFrame(base: ModelSnapshot, head: ModelSnapshot, o
 /** At most this many clouds in one view: past it, changes that lie near each other share one. */
 export const CLOUD_LIMIT = 100;
 
-/** Revision clouds round each changed element in each view that shows it. */
-export function cloudsFor(changes: readonly ModelChange[], bands: readonly ViewBand[]): DraftEntity[] {
+/** Revision clouds round each changed element in each view that shows it; `revisionId` is the revision they belong to, when the project has one. */
+export function cloudsFor(changes: readonly ModelChange[], bands: readonly ViewBand[], revisionId: string | null = null): DraftEntity[] {
   return bands.flatMap((band) => {
     const unit = paperUnitOf(band.viewId);
     const pad = 1.5 * unit;
     const boxes = cloudBoxes(changes, band).map((r) => ({ x0: r.x0 - pad, y0: r.y0 - pad, x1: r.x1 + pad, y1: r.y1 + pad }));
-    return groupBoxes(boxes, CLOUD_LIMIT).map((rect) => newDraft(band.viewId, REVISIONS_LAYER, { type: 'polyline', pts: cloudRing(rect, 2 * unit), closed: true }, { revision: REVISION_STAMP }));
+    return groupBoxes(boxes, CLOUD_LIMIT).map((rect) => cloudDraft(band.viewId, rect, unit, { revision: REVISION_STAMP, ...(revisionId ? { [REVISION_ID_PARAM]: revisionId } : {}) }));
   });
 }
 
@@ -117,8 +113,8 @@ export async function runWhatChanged(mode: Mode, say: (text: string) => void, re
   const byGuid = new Map(changes.map((c) => [c.guid, c]));
   for (const line of sheetLines(report, (id) => views.find((v) => v.id === id)?.name ?? '', (g) => byGuid.get(g))) say(line);
   // Clouds replace the last run's.
-  ensureLayer();
-  const clouds = cloudsFor(changes, bands);
+  ensureRevisionsLayer();
+  const clouds = cloudsFor(changes, bands, latestRevisionId(useProjectStore.getState()));
   const old = new Set(useProjectStore.getState().drafts.filter(isCloud).map((d) => d.id));
   editDrafts({ remove: old, add: clouds });
   setResult({ changed: changes.length, sheets: report, unread: unread.length, clouds: clouds.length });

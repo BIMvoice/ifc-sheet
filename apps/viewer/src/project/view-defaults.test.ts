@@ -28,6 +28,16 @@ describe('levelsFromStoreys', () => {
     assert.deepEqual(levels[1].storeyGlobalIds, ['A0', 'S0']);
   });
 
+  it('a merged level takes the first floor in the drawing frame any of its storeys resolved', () => {
+    const levels = levelsFromStoreys([
+      { name: 'Level 0', elevation: 250, globalId: 'A0' },
+      { name: 'Structure L0', elevation: 250, globalId: 'S0', floorY: 0.2 },
+      { name: 'Level 1', elevation: 253, globalId: 'A1', floorY: 3 },
+      { name: 'Structure L1', elevation: 253, globalId: 'S1', floorY: 3.4 },
+    ]);
+    assert.deepEqual(levels.map((l) => [l.name, l.floorY]), [['Level 1', 3], ['Level 0', 0.2]]);
+  });
+
   it('returns no levels for no storeys', () => {
     assert.deepEqual(levelsFromStoreys([]), []);
   });

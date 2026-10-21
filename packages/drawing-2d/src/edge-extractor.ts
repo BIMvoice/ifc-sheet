@@ -231,6 +231,26 @@ export class EdgeExtractor {
   }
 
   /**
+   * The edges an exterior view of a solid draws: its silhouette, and with
+   * `includeCreases` every crease (a corner sharper than the crease angle) with
+   * at least one front-facing face. A crease whose faces both turn away from the viewer is
+   * on the far side of the solid and left out (the omitted back edges of a
+   * box), so only the hidden-line pass has to deal with what OTHER elements
+   * cover. Open (boundary) edges are silhouettes already.
+   */
+  extractExteriorEdges(edges: EdgeData[], viewDirection: Vec3, includeCreases = false): EdgeData[] {
+    const view = vec3Normalize(viewDirection);
+    const silhouettes = this.extractSilhouettes(edges, view);
+    if (!includeCreases) return silhouettes;
+    const silhouetteSet = new Set(silhouettes);
+    return edges.filter((edge) => {
+      if (silhouetteSet.has(edge)) return true;
+      if (edge.type !== 'crease' || !edge.face0Normal || !edge.face1Normal) return false;
+      return vec3Dot(edge.face0Normal, view) < -SILHOUETTE_EPSILON || vec3Dot(edge.face1Normal, view) < -SILHOUETTE_EPSILON;
+    });
+  }
+
+  /**
    * Convert silhouette edges into band-classified construction-projection
    * lines (issue #979). Each edge is classified by its own endpoints:
    *  - below the cut → `visibility: 'visible'` (thin solid)

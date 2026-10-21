@@ -17,7 +17,8 @@
  * form `addGridToStore`, Revit and most exporters write), or an IfcTrimmedCurve
  * over an IfcLine trimmed by points or by parameters (ArchiCAD). Other curves
  * (arcs of a radial grid) are skipped and counted, never guessed at.
- * `IfcGridAxis.SameSense` is ignored, as everywhere else the grid is read.
+ * `IfcGridAxis.SameSense` FALSE swaps the ends, so `a` is the start of the
+ * axis in its authored sense (where a drawing puts its start bubble).
  */
 
 import { EntityExtractor, type IfcDataStore } from '@ifc-lite/parser';
@@ -65,6 +66,12 @@ type Reader = (id: number) => { type?: string; attributes: readonly unknown[] } 
 const refList = (value: unknown): number[] => (Array.isArray(value)
   ? value.map((v) => numericAttr(v as never)).filter((n): n is number => n !== null)
   : []);
+
+/** An IFC BOOLEAN that is FALSE: `.F.` from a file, `false` when authored. Anything else (TRUE, unset) is not. */
+function isFalse(value: unknown): boolean {
+  const scalar = authoredScalar(value as never);
+  return scalar === false || scalar === '.F.' || scalar === 'F';
+}
 
 /**
  * A trim value: a parameter (`IFCPARAMETERVALUE(2.5)` parses to
@@ -220,8 +227,10 @@ export function extractGridAxesForStorey(
           out.skippedAxes += 1;
           continue;
         }
-        const a = applyFrame(frame, ends[0]);
-        const b = applyFrame(frame, ends[1]);
+        // SameSense FALSE: the axis runs against its curve, so its start is the curve's end.
+        const reversed = isFalse(axis.attributes[2]);
+        const a = applyFrame(frame, ends[reversed ? 1 : 0]);
+        const b = applyFrame(frame, ends[reversed ? 0 : 1]);
         if (Math.hypot(b[0] - a[0], b[1] - a[1]) <= AXIS_EPS) {
           out.skippedAxes += 1;
           continue;

@@ -14,6 +14,7 @@ export const projectPackageEn = {
   'projectPackage.savingModel': 'Saving model {name}…',
   'projectPackage.saved': 'Project saved to {name} ({mb} MB)',
   'projectPackage.saveFailed': 'The project could not be saved: {detail}',
+  'projectPackage.autosaveImagesFailed': 'The model state or a 3D capture could not be kept with the autosave. Save the project to a file to keep it.',
   'projectPackage.opening': 'Opening the project…',
   'projectPackage.openingModel': 'Loading model {name}…',
   'projectPackage.opened': 'Project {name} opened',

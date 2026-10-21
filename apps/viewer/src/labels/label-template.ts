@@ -15,7 +15,9 @@
  *   {Material}  {Storey}            the material names, the storey name
  *   {Pset.Prop|n/a}                 text to show when there is no value
  *   {Tag ?? Name}                   the first of these that has a value
- *   {Mark}                          the Tag when it is a mark (D-01), not a machine identifier (a GUID)
+ *   {Mark}                          the element's mark: by default the Tag when it is a mark (D-01), not a
+ *                                   machine identifier (a GUID); the office can map it to any property
+ *   {TagName}                       the name a tag shows: by default the Name (a room's long name first); mappable too
  *
  * `\{`, `\}`, `\|` and `\\` write the character; `\n` and a real line break both
  * break the line. A brace that is not closed stays literal and is reported.
@@ -23,7 +25,7 @@
 
 import { parseFormatSpec, type FormatSpec } from './label-format';
 
-export const ATTRIBUTE_FIELDS = ['Name', 'LongName', 'Tag', 'Mark', 'ObjectType', 'Description', 'PredefinedType', 'GlobalId'] as const;
+export const ATTRIBUTE_FIELDS = ['Name', 'LongName', 'Tag', 'Mark', 'TagName', 'ObjectType', 'Description', 'PredefinedType', 'GlobalId'] as const;
 export type AttributeField = (typeof ATTRIBUTE_FIELDS)[number];
 
 export type FieldRef =
