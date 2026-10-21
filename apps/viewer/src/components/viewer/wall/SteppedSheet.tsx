@@ -7,13 +7,15 @@
  * The rail at the left holds six large tools that only add information; the
  * card at the right says what the chosen tool does, or holds the chosen
  * drawing's one control. Picking a tool brings that drawing forward on white
- * paper to work on; Esc ends the tool, Esc again goes back to the sheet, and
- * once more hangs the sheet back on the wall.
+ * paper to work on. Esc ends the tool, then clears the selection, then closes
+ * the chooser, and nothing more: the drawing in front is left with the "Back to
+ * sheet" button and the sheet with the Back link (#142).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
-import { runningCommand, useDraftingSession } from '@/drafting/session';
+import { patchDraftSettings, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
+import { setPlacing, useReviewUi } from '@/review/ui-store';
 import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
 import { useProjectStore } from '@/project/project-store';
@@ -30,12 +32,17 @@ import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
 import { SheetCanvas } from './SheetCanvas';
+import { RevisionsCard } from './RevisionsCard';
 import { TitleBlockCard } from './TitleBlockForm';
+import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
+
+/** The Wall tool that runs as a chain: each click adds the next dimension, until Esc. */
+const CHAINED_TOOL = 'dimaligned';
 
 /** The sheet's way out: printed or saved, at true paper size. */
 const issue = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
@@ -64,6 +71,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
+  const [revising, setRevising] = useState(false);
+  const [papering, setPapering] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
@@ -73,15 +82,24 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const group = sheetGroup(sheet);
 
   // A tool ends (Esc, or it finished): the rail lets go of it; the drawing stays forward.
+  const commenting = useReviewUi((s) => s.placing);
+  // The dimension tool is the exception to "finished": Enter ends a chain, and the tool stays for the next one. Only Esc ends the tool (#141).
   const commandId = useDraftingSession((s) => s.commandId);
   const ran = useRef<string | null>(null);
+  const toolNow = useRef(tool);
+  toolNow.current = tool;
+  const escaped = useRef(false);
   useEffect(() => {
     // Only a command that ran and ended lets go; before it starts there is none either.
-    if (commandId !== null) ran.current = commandId;
-    else if (ran.current !== null) {
-      ran.current = null;
-      setTool(null);
+    if (commandId !== null) {
+      ran.current = commandId;
+      return;
     }
+    if (ran.current === null) return;
+    const ended = ran.current;
+    ran.current = null;
+    if (ended === CHAINED_TOOL && toolNow.current === CHAINED_TOOL && !escaped.current && startDraftCommand(CHAINED_TOOL)) return;
+    setTool(null);
   }, [commandId]);
   useEffect(() => () => cancelStart.current(), []);
 
@@ -96,25 +114,53 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     }
   }, [views, extent]);
 
-  // Esc, outermost first to let go: the running tool or selection (the drawing's own), the chooser, the drawing, the sheet.
-  useEffect(() => {
+  // Esc lets go of ONE local thing, innermost first: the running tool or selection (the drawing's own keys), the chooser,
+  // the title block card, the chosen drawing. It never leaves the drawing in front or the sheet: those have buttons (#142).
+  // The drafting keys cancel a running tool on the same keydown, so this listener must see the state as the key found it:
+  // it registers once, in a layout effect (which runs before any child's passive effect, so before the drafting keys'
+  // own listeners), and reads the rest from a ref.
+  const live = useRef({ focusId, chosen, adding, titling, revising, papering, previewing });
+  live.current = { focusId, chosen, adding, titling, revising, papering, previewing };
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || previewing) return; // the preview, when open, takes its own Esc
+      escaped.current = e.key === 'Escape';
+      const now = live.current;
+      if (e.key !== 'Escape' || now.previewing) return; // the preview, when open, takes its own Esc
       // A panel that keeps its own keys (the tour card) has Esc for itself.
       if (e.target instanceof Element && e.target.closest('[data-owns-keys]')) return;
-      // A running tool or a drafted selection lets go first (the drafting keys' own Esc).
+      // A running tool or a drafted selection lets go first (the drafting keys' own Esc), and that is all this Esc does.
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
-      if (adding) setAdding(false);
-      else if (titling) setTitling(false);
-      else if (focusId) {
-        setFocusId(null);
-        setTool(null);
-      } else if (chosen) setChosen(null);
-      else onBack();
+      // The comment tool lets go first of what is not a drawing tool.
+      if (useReviewUi.getState().placing) {
+        setPlacing(false);
+        return;
+      }
+      if (now.adding) setAdding(false);
+      else if (now.titling) setTitling(false);
+      else if (now.revising) setRevising(false);
+      else if (now.papering) setPapering(false);
+      else if (!now.focusId && now.chosen) setChosen(null);
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onBack, focusId, chosen, adding, titling, previewing]);
+  }, []);
+
+  const root = useRef<HTMLDivElement>(null);
+  const refocus = useRef(false);
+  /** Edit mode ends here and nowhere else: the drawing goes back on the sheet (the drawing's unmount ends any tool still running on it). */
+  const leaveEditMode = useCallback((): void => {
+    cancelStart.current();
+    setTool(null);
+    setFocusId(null);
+    refocus.current = true;
+  }, []);
+  // The button unmounts with the click, so focus would drop to <body>: it goes to the sheet's canvas instead, once that is back.
+  const inDrawing = focusView !== null;
+  useEffect(() => {
+    if (inDrawing || !refocus.current) return;
+    refocus.current = false;
+    root.current?.querySelector<HTMLElement>('[data-sheet-canvas]')?.focus();
+  }, [inDrawing]);
 
   const startTool = (command: string): void => {
     cancelStart.current();
@@ -126,6 +172,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       cancelStart.current = startWhenAttached(focusView?.id ?? sheet.id, command);
       return;
     }
+    // The Wall's dimension tool chains: a SINGLE typed earlier in the session does not carry over (#141).
+    if (command === CHAINED_TOOL) patchDraftSettings({ dimContinuous: true });
     // A section line is drawn on a plan: the chosen one, else the lowest.
     // A detail marks its area on the drawing in front, else the chosen one, else the lowest plan.
     const target = command === 'sectionline' && view?.kind !== 'plan' ? groundPlan(views) : command === 'detail' ? focusView ?? view ?? groundPlan(views) : view;
@@ -150,7 +198,11 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   // Choosing a drawing brings its card back in place of the title block's.
   const choose = useCallback((viewportId: string | null): void => {
     setChosen(viewportId);
-    if (viewportId) setTitling(false);
+    if (viewportId) {
+      setTitling(false);
+      setRevising(false);
+      setPapering(false);
+    }
   }, []);
   const open = useCallback((vp: SheetViewport): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
@@ -181,18 +233,21 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   }));
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={root} className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-3 px-6 pb-2 pt-4 text-sky-100">
         <button type="button" className="text-cyan-400 hover:text-cyan-300" onClick={onBack}>{t('wall.back')}</button>
         <span className="text-sky-200/50">/</span>
         <span className="font-semibold text-white">{sheet.number} {sheet.name}</span>
         {focusView ? <><span className="text-sky-200/50">/</span><span className="text-white">{focusView.name}</span></> : null}
-        <kbd className="rounded border border-sky-300/40 px-1.5 text-xs text-sky-200/80">Esc</kbd>
+        {focusView ? <button type="button" className={issue} onClick={leaveEditMode}>{t('wall.leaveEdit')}</button> : null}
         <span className="flex-1" />
         {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
         {!focusView ? (
           <>
-            <button type="button" className={issue} aria-pressed={titling} onClick={() => setTitling((x) => !x)}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={commenting} title={t('review.tool.hint')} onClick={() => setPlacing(!commenting)}>{t('review.tool')}</button>
+            <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); setRevising(false); }}>{t('wall.paper.button')}</button>
+            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); setRevising(false); }}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={revising} onClick={() => { setRevising((x) => !x); setTitling(false); setPapering(false); }}>{t('revision.title')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
             <button type="button" className={issue} onClick={() => setPreviewing(true)}>{t('printPreview.open')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
@@ -215,7 +270,9 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
           <div className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
               : focusView ? null
+                : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
+                  : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
                   : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
           </div>
           {adding ? (

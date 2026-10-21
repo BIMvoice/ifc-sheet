@@ -13,7 +13,8 @@
  */
 
 import { isRasterView } from './axonometric';
-import { FRAME_MARGIN_MM, paperOf, TITLE_BLOCK_MM } from './sheets';
+import { drawingAreaIn, frameOf } from './sheet-frame';
+import { paperOf } from './sheets';
 import type { ProjectSheet, ProjectView, SheetViewport } from './types';
 
 export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
@@ -30,8 +31,7 @@ export type ViewportFrame = Pick<SheetViewport, 'x' | 'y' | 'width' | 'height'> 
 
 /** The sheet's drawing area, paper mm: inside the frame, above the title block. */
 export function sheetDrawingArea(sheet: ProjectSheet): Rect {
-  const paper = paperOf(sheet);
-  return { x: FRAME_MARGIN_MM, y: FRAME_MARGIN_MM, w: paper.w - FRAME_MARGIN_MM * 2, h: paper.h - FRAME_MARGIN_MM * 2 - TITLE_BLOCK_MM.h };
+  return drawingAreaIn(paperOf(sheet), frameOf(sheet));
 }
 
 /**

@@ -29,11 +29,13 @@ interface WallSheetProps {
   sheetContent?: SheetContent;
   /** The pin at the top, as on the wall; off where the sheet is worked on. */
   pinned?: boolean;
+  /** Print only the clouds of the sheet's current revision (an issue's option). */
+  currentCloudsOnly?: boolean;
 }
 
 const NO_DRAFTS: DraftEntity[] = [];
 
-export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function WallSheet({ sheet, width, selectedViewportId = null, sheetContent, pinned = true }, ref) {
+export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function WallSheet({ sheet, width, selectedViewportId = null, sheetContent, pinned = true, currentCloudsOnly = false }, ref) {
   // What is drawn on the paper itself hangs with it.
   const drafts = useProjectStore((s) => s.drafts);
   const sheetDrafts = useMemo(() => (drafts.some((d) => d.viewId === sheet.id) ? draftsOfView(sheet.id, drafts) : NO_DRAFTS), [drafts, sheet.id]);
@@ -59,6 +61,7 @@ export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function Wall
         selectedViewportId={selectedViewportId}
         pxPerMm={pxPerMm}
         sheetDrafts={sheetDrafts}
+        currentCloudsOnly={currentCloudsOnly}
       />
       {/* Screen only: laid over the paper's SVG, never inside it, so no export reads it. */}
       {(sheet.viewports ?? []).map((vp) => {

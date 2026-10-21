@@ -71,7 +71,7 @@ export function PrintPreview({ sheet, paper, sheetContent, onClose }: PrintPrevi
         return { ...item, name: t('printPreview.item.draft', { kind: item.name }) };
       }),
     ];
-    return { bars: referenceBars(boxes).map((b, i) => ({ ...b, name: boxes[i].name })), problems: fitProblems(items, sheetRegions(sheet.paper ?? 'A1', sheet.orientation ?? 'landscape', { w: size.w, h: size.h })) };
+    return { bars: referenceBars(boxes).map((b, i) => ({ ...b, name: boxes[i].name })), problems: fitProblems(items, sheetRegions(sheet, { w: size.w, h: size.h })) };
   }, [sheet, sheetContent, drafts, placedDocs, legends, civilDrawings, t, size.w, size.h]);
 
   // Fit the whole paper in the stage.
