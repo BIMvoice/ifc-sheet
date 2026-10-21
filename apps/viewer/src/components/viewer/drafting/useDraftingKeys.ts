@@ -42,6 +42,18 @@ function inOtherField(target: EventTarget | null, input: HTMLInputElement | null
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
+/** A control that acts on Enter or Space itself: a button, a link, a role=button, a form control. */
+const INTERACTIVE = 'button, a[href], [role="button"], select, textarea, input, [contenteditable]:not([contenteditable="false"])';
+
+/**
+ * Whether Enter or Space is aimed at a control that acts on it (the command
+ * line, which `submit`s on its own, aside). In AutoCAD mode (#168) `confirm`
+ * repeats the last alias, so a Space that presses a button must not also do that.
+ */
+function onInteractiveControl(target: EventTarget | null, input: HTMLInputElement | null): boolean {
+  return target instanceof Element && target !== input && target.closest(INTERACTIVE) !== null;
+}
+
 export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
   const submitRef = useRef(submit);
   submitRef.current = submit;
@@ -79,6 +91,7 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
         return;
       }
       if (isKey('drafting.confirm')) {
+        if (autocadModeOn() && onInteractiveControl(e.target, input)) return;
         e.preventDefault();
         submitRef.current();
         return;

@@ -272,6 +272,130 @@ describe('AutoCAD mode on: typed coordinates and distances', () => {
   });
 });
 
+describe('AutoCAD mode on: Wall shortcuts after a typed alias', () => {
+  beforeEach(() => setAutocadMode(true));
+
+  /** The keys that stay the Wall's: a stepped sheet, a tool, print. */
+  const KEYS: readonly [string, KeyboardEventInit, WallKeyId][] = [
+    ['PageDown', {}, 'wall.nextSheet'],
+    ['1', { altKey: true, code: 'Digit1' }, 'wall.tool.dimaligned'],
+    ['p', { ctrlKey: true, code: 'KeyP' }, 'wall.print'],
+  ];
+
+  for (const [key, init, id] of KEYS) {
+    it(`${key}${init.altKey ? ' (Alt)' : init.ctrlKey ? ' (Ctrl)' : ''} still runs ${id} from the command line once Z has run and the line is empty`, () => {
+      const { handlers, calls } = counting();
+      const line = mount(handlers);
+      enter(line, 'z');
+      act(() => line.focus());
+      assert.equal(document.activeElement, line);
+      calls.length = 0;
+      press(line, key, init);
+      assert.deepEqual(calls, [id]);
+    });
+  }
+
+  it('a line that holds text keeps its keys: PageDown there is the field\'s', () => {
+    const { handlers, calls } = counting();
+    const line = mount(handlers);
+    press(document.body, 'z');
+    act(() => line.focus());
+    assert.equal(line.value, 'z');
+    press(line, 'PageDown');
+    assert.deepEqual(calls, []);
+  });
+
+  it('another text field keeps its keys', () => {
+    const { handlers, calls } = counting();
+    mount(handlers);
+    const other = document.createElement('input');
+    document.body.appendChild(other);
+    press(other, 'PageDown');
+    assert.deepEqual(calls, []);
+    other.remove();
+  });
+});
+
+describe('AutoCAD mode off: the command line keeps the keys, as on main', () => {
+  it('PageDown in the empty command line is not the Wall\'s', () => {
+    const { handlers, calls } = counting();
+    const line = mount(handlers);
+    press(line, 'PageDown');
+    assert.deepEqual(calls, []);
+  });
+});
+
+describe('AutoCAD mode on: a focused control keeps Enter and Space', () => {
+  beforeEach(() => setAutocadMode(true));
+
+  const CONTROLS: readonly [string, () => HTMLElement][] = [
+    ['button', () => document.createElement('button')],
+    ['link', () => Object.assign(document.createElement('a'), { href: '#x' })],
+    ['role=button', () => { const d = document.createElement('div'); d.setAttribute('role', 'button'); return d; }],
+    ['select', () => document.createElement('select')],
+    ['checkbox', () => Object.assign(document.createElement('input'), { type: 'checkbox' })],
+    ['span inside a button', () => { const b = document.createElement('button'); b.appendChild(document.createElement('span')); return b.firstChild as HTMLElement; }],
+  ];
+
+  for (const [name, make] of CONTROLS) {
+    for (const key of ['Enter', ' ']) {
+      it(`${key === ' ' ? 'Space' : key} on a ${name} does not repeat the last alias, and is not cancelled`, () => {
+        const { handlers, calls } = counting();
+        const line = mount(handlers);
+        enter(line, 'z');
+        const control = make();
+        const host = control.closest('button') ?? control;
+        document.body.appendChild(host);
+        const ev = new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+        act(() => { control.dispatchEvent(ev); });
+        assert.deepEqual(calls, ['wall.fit']);
+        assert.equal(ev.defaultPrevented, false);
+        host.remove();
+      });
+    }
+  }
+
+  it('Enter on the page body still repeats', () => {
+    const { handlers, calls } = counting();
+    const line = mount(handlers);
+    enter(line, 'z');
+    press(document.body, 'Enter');
+    assert.deepEqual(calls, ['wall.fit', 'wall.fit']);
+  });
+});
+
+describe('AutoCAD mode off: Enter on a focused button confirms, as on main', () => {
+  it('repeats the last drawing command', () => {
+    const line = mount();
+    enter(line, 'l');
+    enter(line, '0,0');
+    enter(line, '@1,0');
+    press(line, 'Enter'); // ends LINE
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+    press(button, 'Enter');
+    assert.equal(useDraftingSession.getState().commandId, 'line');
+    button.remove();
+  });
+});
+
+describe('AutoCAD mode on: a selection prompt takes the line', () => {
+  beforeEach(() => setAutocadMode(true));
+
+  it('U typed at "Select objects" does not undo', () => {
+    const line = mount();
+    enter(line, 'l');
+    enter(line, '0,0');
+    enter(line, '@3,4');
+    press(line, 'Enter');
+    assert.equal(shapes().length, 1);
+    enter(line, 'm');
+    assert.equal(useDraftingSession.getState().selecting, true);
+    enter(line, 'u');
+    assert.equal(shapes().length, 1, 'U was typed at a selection prompt, so it is not UNDO');
+  });
+});
+
 describe('aliases never fire from other text fields', () => {
   beforeEach(() => setAutocadMode(true));
 

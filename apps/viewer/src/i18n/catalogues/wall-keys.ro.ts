@@ -52,7 +52,7 @@ export const wallKeysRo = {
   'wall.keys.action.printPreview': 'Previzualizare la dimensiunea hârtiei',
   'wall.keys.action.exportDxf': 'Exportați DXF',
   'wall.keys.autocad.label': 'Modul AutoCAD',
-  'wall.keys.autocad.hint': 'Pentru modul de lucru cunoscut: scrieți numele comenzilor AutoCAD în linia de comandă (L, PL, DIM, CO, M, apoi Z pentru încadrare, U pentru anulare, PLOT pentru tipărire). Enter sau Spațiu pe o linie goală repetă ultima comandă, Esc o anulează, iar F8 pornește sau oprește modul ortogonal. Fiecare literă ajunge în linia de comandă, deci o tastă fără Ctrl sau Alt nu pornește o acțiune. Oprit implicit.',
+  'wall.keys.autocad.hint': 'Pentru modul de lucru cunoscut: scrieți numele comenzilor AutoCAD în linia de comandă (L, PL, DIM, CO, M, apoi Z pentru încadrare, U pentru anulare, PLOT pentru tipărire). Enter sau Spațiu pe o linie goală repetă ultima comandă, Esc o anulează, iar F8 pornește sau oprește modul ortogonal. Fiecare literă și cifră ajunge în linia de comandă, deci doar o combinație cu Ctrl sau Alt, sau o tastă care nu scrie nimic (PageUp, PageDown, F3, F8, Delete), pornește o acțiune. Oprit implicit.',
   'wall.keys.autocad.turnedOn': 'Modul AutoCAD este pornit.',
   'wall.keys.autocad.turnedOff': 'Modul AutoCAD este oprit.',
   'wall.keys.autocad.unavailable': 'Comanda {name} nu este disponibilă aici.',

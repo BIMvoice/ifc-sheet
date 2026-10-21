@@ -15,6 +15,7 @@ import { useEffect, useRef } from 'react';
 import { eventMatchesChords, registerKeyboardCommand } from '@/lib/commands/dispatcher';
 import { effectiveKeys } from '@/lib/commands/key-bindings';
 import { WALL_KEY_COMMANDS, type WallKeyId } from '@/lib/commands/wall-key-commands';
+import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import { isTextEntryElement } from '@/lib/keyboard-event';
 
 export type WallHandlers = Readonly<Record<WallKeyId, (() => void) | null>>;
@@ -23,8 +24,16 @@ export type WallHandlers = Readonly<Record<WallKeyId, (() => void) | null>>;
  * Whether a key event belongs to something other than the Wall: a text field
  * (a drafting command line included) or a panel that keeps its own keys
  * (`data-owns-keys`). The Wall's keys leave such an event alone.
+ *
+ * In AutoCAD mode (#168) an EMPTY command line (`data-command-line`) is not a
+ * text field in that sense: focus stays in it after an alias runs, and there
+ * is nothing typed there for a key to belong to. With text in it, the keys
+ * are the field's.
  */
 export function keysBelongElsewhere(target: EventTarget | null): boolean {
+  if (autocadModeOn() && target instanceof HTMLInputElement && target.hasAttribute('data-command-line') && target.value === '') {
+    return target.closest('[data-owns-keys]') !== null;
+  }
   if (isTextEntryElement(target)) return true;
   return target instanceof Element && target.closest('[data-owns-keys]') !== null;
 }

@@ -51,7 +51,7 @@ export const wallKeysEn = {
   'wall.keys.action.printPreview': 'Preview at paper size',
   'wall.keys.action.exportDxf': 'Export DXF',
   'wall.keys.autocad.label': 'AutoCAD mode',
-  'wall.keys.autocad.hint': 'For the familiar way: type AutoCAD command names in the command line (L, PL, DIM, CO, M, and Z to fit, U to undo, PLOT to print). Enter or Space on an empty line repeats the last command, Esc cancels and F8 turns ortho on or off. Every letter goes to the command line, so a key without Ctrl or Alt does not run an action. Off by default.',
+  'wall.keys.autocad.hint': 'For the familiar way: type AutoCAD command names in the command line (L, PL, DIM, CO, M, and Z to fit, U to undo, PLOT to print). Enter or Space on an empty line repeats the last command, Esc cancels and F8 turns ortho on or off. Every letter and digit goes to the command line, so only a Ctrl or Alt chord, or a key that types nothing (PageUp, PageDown, F3, F8, Delete), runs an action. Off by default.',
   'wall.keys.autocad.turnedOn': 'AutoCAD mode is on.',
   'wall.keys.autocad.turnedOff': 'AutoCAD mode is off.',
   'wall.keys.autocad.unavailable': '{name} is not available here.',
