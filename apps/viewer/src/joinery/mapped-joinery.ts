@@ -18,6 +18,7 @@ import { useProjectStore } from '@/project/project-store';
 import { typeIndex, typeOf } from '@/lib/commands/modeling/authored-kinds';
 import { getModelLengthUnitScale } from '@/lib/length-unit-scale';
 import { joineryOfElement } from './element-spec';
+import { idOf } from './object-id';
 import {
   DEFAULT_JOINERY_MAPPING, fitToElement, resolveMapping, type ElementFacts, type MappingSource,
 } from './symbol-mapping';
@@ -89,23 +90,17 @@ interface Memo {
   types?: Map<number, number | null>;
 }
 const memo = new Map<string, Memo>();
-// Distinct objects get distinct numbers, so a key changes whenever the mapping or the catalogue is replaced.
-const ids = new WeakMap<object, number>();
-let nextId = 1;
-const idOf = (o: object): number => {
-  let id = ids.get(o);
-  if (id === undefined) { id = nextId++; ids.set(o, id); }
-  return id;
-};
 
 /** The joinery element `expressId` of `modelId` is drawn with, or null (drawn from its mesh). */
 export function drawnJoinery(modelId: string, expressId: number): DrawnJoinery | null {
   const s = useViewerStore.getState();
   const p = useProjectStore.getState();
+  const dataStore = s.models.get(modelId)?.ifcDataStore;
+  if (!dataStore) return null;
   const view = s.mutationViews.get(modelId) ?? null;
   const mapping = p.joineryMapping ?? DEFAULT_JOINERY_MAPPING;
   const list = p.joineryTypes ?? [];
-  const key = `${view ? `${view.getMutationCount()}:${view.getNewEntities().length}` : '-'}|${idOf(mapping)}|${idOf(list)}|${idOf(p.symbolFlips ?? {})}`;
+  const key = `${idOf(dataStore)}|${view ? `${view.getMutationCount()}:${view.getNewEntities().length}` : '-'}|${idOf(mapping)}|${idOf(list)}|${idOf(p.symbolFlips ?? {})}`;
   let m = memo.get(modelId);
   if (!m || m.key !== key) {
     m = { key, byElement: new Map() };

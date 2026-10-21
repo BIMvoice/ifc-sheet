@@ -11,6 +11,7 @@
 
 import { readJoineryFlips, readJoineryType, type JoineryTypeRead } from '@ifc-lite/create';
 import { useViewerStore } from '@/store';
+import { idOf } from './object-id';
 import { typeIndex } from '@/lib/commands/modeling/authored-kinds';
 
 /** A configured element: its type, and how it is turned in its opening (`emitMappedBody`'s flips). */
@@ -39,7 +40,7 @@ export function joineryOfElement(modelId: string, expressId: number): JoineryEle
   const dataStore = s.models.get(modelId)?.ifcDataStore;
   if (!dataStore) return null;
   const view = s.mutationViews.get(modelId) ?? null;
-  const stamp = view ? `${view.getMutationCount()}:${view.getNewEntities().length}` : '-';
+  const stamp = `${idOf(dataStore)}|` + (view ? `${view.getMutationCount()}:${view.getNewEntities().length}` : '-');
   let m = memo.get(modelId);
   if (!m || m.stamp !== stamp) {
     m = { stamp, byElement: new Map() };
