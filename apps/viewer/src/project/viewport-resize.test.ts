@@ -12,9 +12,9 @@ import assert from 'node:assert/strict';
 import { loadProjectDocument, projectDocument, resetProject, useProjectStore } from './project-store.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package/package-io.js';
-import { resizedFrame, sheetDrawingArea } from './viewport-resize.js';
+import { isResizable, resizedFrame, sheetDrawingArea } from './viewport-resize.js';
 import { updateViewport } from './sheets.js';
-import type { ProjectSheet, SheetViewport } from './types.js';
+import type { ProjectSheet, ProjectView, SheetViewport } from './types.js';
 
 const area = { x: 10, y: 10, w: 574, h: 350 };
 const vp: SheetViewport = { id: 'vp', viewId: 'p', x: 150, y: 150, scale: 50, width: 0, height: 0, center: null };
@@ -57,6 +57,36 @@ describe('resizedFrame', () => {
   it('takes the area from the sheet\'s own paper: the frame inside, the title block out', () => {
     const sheet = { id: 's', number: 'A-1', name: 'x', createdAt: 0, paper: 'A3', orientation: 'portrait' } as ProjectSheet;
     assert.deepEqual(sheetDrawingArea(sheet), { x: 10, y: 10, w: 277, h: 420 - 20 - 50 });
+  });
+
+  it('takes the area from the sheet\'s own frame: a title block strip at the right, and custom margins', () => {
+    const base = { id: 's', number: 'A-1', name: 'x', createdAt: 0, paper: 'A3', orientation: 'landscape' } as ProjectSheet;
+    // A3 landscape is 420 x 297. A strip takes 50 off the right of the frame, not off the bottom.
+    const strip: ProjectSheet = { ...base, frame: { margins: { top: 20, right: 10, bottom: 10, left: 25 }, titleBlock: 'right' } };
+    assert.deepEqual(sheetDrawingArea(strip), { x: 25, y: 20, w: 335, h: 267 });
+    const custom: ProjectSheet = { ...base, frame: { margins: { top: 15, right: 30, bottom: 5, left: 40 }, titleBlock: 'bottom-right' } };
+    assert.deepEqual(sheetDrawingArea(custom), { x: 40, y: 15, w: 350, h: 227 });
+    // The clamp a drag runs into is that area, on every side.
+    const centred = { ...vp, x: 200, y: 150 };
+    const se = resizedFrame(centred, { width: 100, height: 80 }, 'se', { x: 9999, y: 9999 }, sheetDrawingArea(strip), { x: 0, y: 0 }, { x: 1, y: 1 });
+    assert.deepEqual([se.x + se.width / 2, se.y + se.height / 2], [360, 287]);
+    const nw = resizedFrame(centred, { width: 100, height: 80 }, 'nw', { x: -9999, y: -9999 }, sheetDrawingArea(strip), { x: 0, y: 0 }, { x: 1, y: 1 });
+    assert.deepEqual([nw.x - nw.width / 2, nw.y - nw.height / 2], [25, 20]);
+  });
+});
+
+describe('isResizable', () => {
+  const view = (v: Record<string, unknown>) => ({ id: 'v', name: 'v', createdAt: 0, ...v }) as unknown as ProjectView;
+
+  it('resizes a cut drawing and a vector axonometric, never a detail, a raster, a drafting view or no view', () => {
+    const plan = view({ kind: 'plan', level: { name: 'L', elevation: 0 } });
+    assert.equal(isResizable(plan), true);
+    assert.equal(isResizable({ ...plan, detail: { of: 'p', min: { x: 0, y: 0 }, max: { x: 2, y: 2 }, number: 1 } } as ProjectView), false, 'a detail shows exactly its area');
+    assert.equal(isResizable(view({ kind: '3d', projection: 'axonometric' })), true, 'vector axonometric');
+    assert.equal(isResizable(view({ kind: '3d', projection: 'perspective' })), false, 'a perspective prints as a raster');
+    assert.equal(isResizable(view({ kind: '3d', projection: 'axonometric', shaded: true })), false, 'a shaded axonometric prints as a raster');
+    assert.equal(isResizable(view({ kind: 'drafting' })), false);
+    assert.equal(isResizable(undefined), false);
   });
 });
 

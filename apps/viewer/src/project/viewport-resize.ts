@@ -13,7 +13,8 @@
  */
 
 import { isRasterView } from './axonometric';
-import { FRAME_MARGIN_MM, paperOf, TITLE_BLOCK_MM } from './sheets';
+import { drawingAreaIn, frameOf, type Rect } from './sheet-frame';
+import { paperOf } from './sheets';
 import type { ProjectSheet, ProjectView, SheetViewport } from './types';
 
 export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
@@ -23,15 +24,16 @@ export const RESIZE_HANDLES: readonly ResizeHandle[] = ['nw', 'n', 'ne', 'e', 's
 /** The smallest box, paper mm: enough to still see and grab. */
 export const MIN_VIEWPORT_MM = { width: 20, height: 15 } as const;
 
-interface Rect { x: number; y: number; w: number; h: number }
-
 /** What a resize sets on the viewport: the box, its centre on the paper, and the drawing point shown there. */
 export type ViewportFrame = Pick<SheetViewport, 'x' | 'y' | 'width' | 'height'> & { center: { x: number; y: number } };
 
-/** The sheet's drawing area, paper mm: inside the frame, above the title block. */
+/**
+ * The sheet's drawing area, paper mm: inside its frame's margins, beside its
+ * title block. The same `drawingAreaIn` the sheet SVG and the scales read, so
+ * a resize cannot stop short of, or run past, the area the sheet draws.
+ */
 export function sheetDrawingArea(sheet: ProjectSheet): Rect {
-  const paper = paperOf(sheet);
-  return { x: FRAME_MARGIN_MM, y: FRAME_MARGIN_MM, w: paper.w - FRAME_MARGIN_MM * 2, h: paper.h - FRAME_MARGIN_MM * 2 - TITLE_BLOCK_MM.h };
+  return drawingAreaIn(paperOf(sheet), frameOf(sheet));
 }
 
 /**
