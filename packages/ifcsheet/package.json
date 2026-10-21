@@ -20,6 +20,16 @@
       "import": "./dist/names.js",
       "default": "./dist/names.js"
     },
+    "./readiness": {
+      "types": "./dist/readiness.d.ts",
+      "import": "./dist/readiness.js",
+      "default": "./dist/readiness.js"
+    },
+    "./readiness-read": {
+      "types": "./dist/readiness-read.d.ts",
+      "import": "./dist/readiness-read.js",
+      "default": "./dist/readiness-read.js"
+    },
     "./headless": {
       "types": "./dist/headless.d.ts",
       "import": "./dist/headless.js",

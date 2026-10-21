@@ -11,7 +11,8 @@
 
 import { readJoineryFlips, readJoineryType, type JoineryTypeRead } from '@ifc-lite/create';
 import { useViewerStore } from '@/store';
-import { typeOf } from '@/lib/commands/modeling/authored-kinds';
+import { idOf } from './object-id';
+import { typeIndex } from '@/lib/commands/modeling/authored-kinds';
 
 /** A configured element: its type, and how it is turned in its opening (`emitMappedBody`'s flips). */
 export interface JoineryElement extends JoineryTypeRead {
@@ -21,6 +22,8 @@ export interface JoineryElement extends JoineryTypeRead {
 interface ModelMemo {
   stamp: string;
   byElement: Map<number, JoineryElement | null>;
+  /** Every occurrence's type, read once for this stamp (`typeIndex`). */
+  types?: Map<number, number | null>;
 }
 
 const memo = new Map<string, ModelMemo>();
@@ -37,7 +40,7 @@ export function joineryOfElement(modelId: string, expressId: number): JoineryEle
   const dataStore = s.models.get(modelId)?.ifcDataStore;
   if (!dataStore) return null;
   const view = s.mutationViews.get(modelId) ?? null;
-  const stamp = view ? `${view.getMutationCount()}:${view.getNewEntities().length}` : '-';
+  const stamp = `${idOf(dataStore)}|` + (view ? `${view.getMutationCount()}:${view.getNewEntities().length}` : '-');
   let m = memo.get(modelId);
   if (!m || m.stamp !== stamp) {
     m = { stamp, byElement: new Map() };
@@ -46,7 +49,8 @@ export function joineryOfElement(modelId: string, expressId: number): JoineryEle
   if (m.byElement.has(expressId)) return m.byElement.get(expressId) ?? null;
   let read: JoineryElement | null = null;
   try {
-    const typeId = typeOf({ dataStore, view }, expressId);
+    m.types ??= typeIndex({ dataStore, view });
+    const typeId = m.types.get(expressId) ?? null;
     const type = typeId === null ? null : readJoineryType(dataStore, typeId, view);
     read = type ? { ...type, flips: readJoineryFlips(dataStore, expressId, view) } : null;
   } catch {

@@ -31,6 +31,7 @@ import {
 } from '@ifc-lite/clash';
 import { useViewerStore } from '@/store';
 import { ClashPanel } from './ClashPanel.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
 let nextRef = 1;
 
@@ -47,13 +48,12 @@ function element(key: string): ClashElement {
 }
 
 // happy-dom performs no layout, so every element measures 0×0 and the panel's
-// row virtualizer (which reads `offsetWidth`/`offsetHeight`, see
+// row virtualizer (which reads `clientWidth`/`clientHeight`, see
 // @tanstack/virtual-core `getRect`) computes an empty window — no section
 // header would render no matter what the panel does. Give every element a
 // fixed size so the virtual list actually materializes rows. Scoped to this
 // test file's process (node:test runs each file in its own child process).
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { get: () => 800, configurable: true });
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { get: () => 600, configurable: true });
+stubBoxSize(800, 600);
 
 let root: Root | null = null;
 let container: HTMLElement | null = null;

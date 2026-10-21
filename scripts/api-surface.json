@@ -5257,6 +5257,7 @@
     "readProfileLibrary: function",
     "readRelatedLists: function",
     "readRoofSystem: function",
+    "readRoofSystems: function",
     "readStairDimensions: function",
     "readStructureProfile: function",
     "readStructureProfileList: function",

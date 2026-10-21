@@ -27,6 +27,7 @@ import { addFacetedElementToStore, rewriteFacetedGeometry } from './faceted.js';
 import { elementGeometryRefs, pruneOrphanOverlay } from './overlay-prune.js';
 import { addMemberToStore } from './member.js';
 import { AnchorEntityReader } from './resolve-anchor.js';
+import { ROOF_SYSTEM_PSET, refId, roofSpecOfSet, type RoofSpecRead } from './roof-system-specs.js';
 import { roofSolidFaces } from './roof-surface.js';
 import { roofGeometry, type RoofEdgeRule, type RoofGeometry } from './roof-system.js';
 import { roofStructure, type RoofMember, type RoofStructureSpec } from './roof-structure.js';
@@ -38,7 +39,7 @@ type Vec2 = [number, number];
 type Vec3 = [number, number, number];
 type Attr = Parameters<StoreEditor['addEntity']>[1];
 
-export const ROOF_SYSTEM_PSET = 'Pset_IfcLiteRoofSystem';
+export { ROOF_SYSTEM_PSET };
 
 export interface RoofSystemSpec {
   /** The drafting contour (or project item) the system was made from. */
@@ -223,11 +224,6 @@ export function addRoofSystemToStore(editor: StoreEditor, anchor: SpatialAnchor,
   return { roofId, globalId, parts, removed: [] };
 }
 
-const refId = (v: unknown): number | null => {
-  if (typeof v === 'number' && Number.isInteger(v) && v > 0) return v;
-  return typeof v === 'string' && /^#\d+$/.test(v) ? Number(v.slice(1)) : null;
-};
-
 interface RoofRead {
   spec: RoofSystemSpec;
   /** The Spec property, to rewrite. */
@@ -238,19 +234,12 @@ interface RoofRead {
 
 function readRoof(store: IfcDataStore, roofId: number, view?: MutablePropertyView | null): RoofRead | null {
   const reader = new AnchorEntityReader(store, view);
-  let found: { spec: RoofSystemSpec; propertyId: number } | null = null;
+  let found: RoofSpecRead = null;
   for (const relId of reader.ids('IFCRELDEFINESBYPROPERTIES')) {
     const rel = reader.entity(relId);
     if (!rel || !Array.isArray(rel.attributes[4]) || !rel.attributes[4].some((r) => refId(r) === roofId)) continue;
-    const set = reader.entity(refId(rel.attributes[5]) ?? -1);
-    if (!set || set.attributes[2] !== ROOF_SYSTEM_PSET) continue;
-    for (const p of Array.isArray(set.attributes[4]) ? set.attributes[4] : []) {
-      const prop = reader.entity(refId(p) ?? -1);
-      if (prop?.attributes[0] !== 'Spec') continue;
-      const v = prop.attributes[2] as unknown;
-      const raw = Array.isArray(v) ? v[1] : v && typeof v === 'object' && 'typed' in v ? (v as { typed: { value: unknown } }).typed.value : v;
-      try { found = { spec: JSON.parse(String(raw)) as RoofSystemSpec, propertyId: refId(p)! }; } catch { found = null; }
-    }
+    const read = roofSpecOfSet(reader, refId(rel.attributes[5]));
+    if (read !== undefined) found = read;
   }
   if (!found) return null;
   let aggregateId: number | null = null;

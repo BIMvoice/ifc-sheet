@@ -12,7 +12,7 @@
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useViewerStore } from '@/store';
-import { layerSetOf } from '@/lib/commands/modeling/authored-kinds';
+import { layerSetOf, relationSnapshot, type RelationReads } from '@/lib/commands/modeling/authored-kinds';
 import { useProjectStore } from './project-store';
 import { materialDrawing, type LayerRef, type MaterialDrawing } from './material-drawing';
 import { MEMBRANE_THICKNESS_M, ifcMaterialName, materialGraphics } from './materials';
@@ -54,6 +54,8 @@ export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null
   const key = `${useViewerStore.getState().mutationVersion}:${JSON.stringify(table)}`;
   const hit = cache.get(drawing);
   if (hit && hit.key === key) return hit.value;
+  // One read of each model's relationships for the whole drawing, not one per element (#154).
+  const relations = new Map<string, RelationReads>();
   const value = materialDrawing(drawing, {
     graphics(p) {
       const m = modelOf(p.entityId);
@@ -62,7 +64,11 @@ export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null
     },
     layers(entityId) {
       const m = modelOf(entityId);
-      const set = m ? layerSetOf({ dataStore: m.dataStore, view: m.view }, m.expressId) : null;
+      if (!m) return null;
+      const live = { dataStore: m.dataStore, view: m.view };
+      let reads = relations.get(m.modelId);
+      if (!reads) relations.set(m.modelId, (reads = relationSnapshot(live)));
+      const set = layerSetOf(live, m.expressId, reads);
       if (!m || !set) return null;
       return set.layers.map((l): LayerRef => ({ materialId: l.materialId, name: (l.materialId !== null ? materialName(m, l.materialId) : null) ?? '', thickness: l.thickness }));
     },

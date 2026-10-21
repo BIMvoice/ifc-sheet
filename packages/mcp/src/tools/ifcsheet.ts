@@ -6,7 +6,8 @@
  * Drawing-set tools (#165, first slice), over the `@bimvoice/ifcsheet` engine:
  * `ifcsheet_open_model` opens an IFC model for drawing, `ifcsheet_generate_set`
  * lays out its starting set of sheets, `ifcsheet_export_pdf` writes the set as
- * one PDF. The `ifcsheet_` prefix keeps them apart from the model tools
+ * one PDF, `ifcsheet_check_readiness` says what the model lacks and which
+ * drawings are weaker for it (the report of `ifcsheet check`, #164). The `ifcsheet_` prefix keeps them apart from the model tools
  * (`model_load`, `export_ifc`, ...): these hold their own handles, not
  * registry models. The engine is imported on first use, so a server that
  * never draws a set does not load the PDF writer or the geometry engine.
@@ -14,7 +15,7 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
-import { paperLabel, paperOf } from '@bimvoice/ifcsheet';
+import { describeReadiness, paperLabel, paperOf } from '@bimvoice/ifcsheet';
 import type { Tool } from './types.js';
 import { okResult } from './util.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
@@ -170,4 +171,29 @@ export const ifcsheetExportPdf: Tool = {
   },
 };
 
-export const ifcsheetTools: Tool[] = [ifcsheetOpenModel, ifcsheetGenerateSet, ifcsheetExportPdf];
+export const ifcsheetCheckReadiness: Tool = {
+  name: 'ifcsheet_check_readiness',
+  description:
+    'Say what an opened model lacks that the drawing set reads (building storeys, rooms, materials, quantity sets, unique GlobalIds) and which drawings or schedules are weaker for it. Returns ready (true when nothing would weaken the drawings) and the findings, each with its kind, what is missing, what is weaker (plain English) and the counts. The same report as `ifcsheet check`. Needs a model_id from ifcsheet_open_model.',
+  scope: 'read',
+  inputSchema: {
+    type: 'object',
+    properties: { model_id: MODEL_ID },
+    required: ['model_id'],
+    additionalProperties: false,
+  },
+  async handler(input, ctx) {
+    const entry = getSheetModel(ctx, input.model_id as string);
+    const { readinessOfModel } = await import('@bimvoice/ifcsheet/headless');
+    const findings = readinessOfModel(entry.model).map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
+    const ready = findings.length === 0;
+    return okResult(
+      ready
+        ? `Model ${entry.id} has what the drawing set reads: storeys, rooms, materials, quantities.`
+        : `Model ${entry.id} lacks ${findings.length} thing${findings.length === 1 ? '' : 's'} the drawings read: ${findings.map((f) => f.missing).join(' ')}`,
+      { model_id: entry.id, ready, findings },
+    );
+  },
+};
+
+export const ifcsheetTools: Tool[] = [ifcsheetOpenModel, ifcsheetGenerateSet, ifcsheetExportPdf, ifcsheetCheckReadiness];
