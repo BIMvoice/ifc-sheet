@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
+import { automaticViewDepth, planDepthBelowCut, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
 
 /**
  * useDrawingGeneration - Custom hook for 2D drawing generation logic
@@ -37,7 +37,6 @@ import { buildProfileEntries, warnAboutSkippedProfiles } from '@/lib/overlay-par
 import { type SymbolicDrawingLine } from '@/lib/overlay-parse/symbolic-drawing-lines.js';
 import * as IfcWasm from '@ifc-lite/wasm';
 import { customPlaneCenter, useViewerStore } from '@/store';
-import { planDepthBelowCut } from '@/project/view-defaults';
 import { notifyDrawing2DSectionConfig, consumeRestoredSectionConfig } from './useDrawing2DPersistence.js';
 import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visibility';
 import { isTypeVisible } from '@/store/typeVisibilityFilter';
@@ -410,9 +409,7 @@ export function useDrawingGeneration({
         aboveDepth = 1e-3;
       }
       if (boundedProjection) {
-        // A plan looking down from above the model top sees its depth into the model, not into the air above it (#226).
-        const looksDown = sectionPlane.axis === 'down' && !sectionPlane.custom && !sectionPlane.flipped && !sectionPlane.reflected;
-        belowDepth = looksDown ? planDepthBelowCut(manualDepth, position, axisMax) : manualDepth;
+        belowDepth = sectionPlane.axis === 'down' && !sectionPlane.custom && !sectionPlane.flipped && !sectionPlane.reflected ? planDepthBelowCut(manualDepth, position, axisMax) : manualDepth; // a plan cut above the model looks its depth into it (#226)
         if (manualDepth === 0 || sectionPlane.axis !== 'down') aboveDepth = 0;
       }
 
