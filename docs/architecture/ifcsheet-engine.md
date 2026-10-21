@@ -56,16 +56,16 @@ The pure layout functions (`buildDrawingSet`, `withViewHung`, `defaultViews`, `n
 
 ## What runs headless, and what does not yet
 
-- **PDF.** jsPDF runs in Node. `exportPdf` draws vector lines and text in the standard Helvetica font, one page per sheet at its paper size. It does not use svg2pdf or a canvas. It is not yet the app's PDF: no pens, hatches, symbols, annotation, layers, embedded fonts or archival metadata. Those come from the sheet SVG, which only the browser renders today.
+- **PDF.** jsPDF runs in Node. `exportPdf` draws vector lines, and text in an embedded Inter (the font the app's issued PDFs embed, shipped in the package's `fonts/` under its OFL licence; a browser client passes the bytes), one page per sheet at its paper size. Romanian diacritics come through; Inter has no CJK glyphs. It does not use svg2pdf or a canvas. It is not yet the app's PDF: no pens, hatches, symbols, annotation, layers, bold or archival metadata. Those come from the sheet SVG, which only the browser renders today.
 - **DXF.** `exportDxf` writes R12 through `@ifc-lite/drawing-2d`'s exporter: the frame, the title block's lines and each drawing's cut outlines and visible lines, in paper millimetres. Text (title block fields, drawing titles) is not in the DXF yet. The app's R2000 writer (`components/viewer/sheets/dxf-r2000.ts`) needs its 2,800-line skeleton file shipped as a package asset before it can move.
-- **Drawings.** Cut by the section generator, unstyled: cut faces and visible lines only, no hidden lines, no styling.
+- **Drawings.** Cut by the section generator from the meshes of what the storeys contain (the building the set is measured on, not the site around it), unstyled: cut faces and visible lines only, no hidden lines, no styling. Each drawing is clipped to the box the layout made for its view (`viewExtent` at the viewport's scale), so a drawing larger than its estimate cannot run into its neighbour.
 - **Raster views.** A 3D view hangs on no sheet of the starting set, so the headless chain has no raster to make. A raster capture needs a WebGPU canvas and stays in the browser.
 
 ## Not the same as the app yet
 
 - `openModel` reads each level's floor from its `IfcBuildingStorey.Elevation`. The app also derives the floor in the drawing frame (`floorY`, from the storey's placement chain, `model-levels.ts`). Levels are matched and the set laid out by elevation in both, so the set is the same; a plan's cut height can differ in a model whose storeys sit in a shifted placement.
 - When no storey holds geometry, the app measures the main body of the model (`draft-set/body.ts`, `mainBodyExtent`). `openModel` returns no extent and `generateDefaultSet` returns `null`.
-- The title block prints the fields the engine knows: the project's typed or model name, sheet number and name, scale, date. Reading the title block from the model (`title-block-model.ts`, `title-block-sources.ts`) is a follow-up.
+- The title block prints the fields the engine knows: the project (a typed `project` field, else the document's name, which `generateDefaultSet` takes from the IfcProject's LongName, else its Name, the app's default source for that field), sheet number and name, scale, date. The app keeps the document's own name "Untitled project" and reads the project field from the model live; the full title block reads (`title-block-model.ts`, `title-block-sources.ts`) are a follow-up.
 
 ## Follow-ups
 
@@ -76,9 +76,18 @@ The pure layout functions (`buildDrawingSet`, `withViewHung`, `defaultViews`, `n
 5. Move project-file reading and writing (`project-file.ts`, `DOCUMENT_FIELDS`, migrations), so a headless client reads and writes the same `.ifclite-project.json` the app saves.
 6. Move the viewer tests of the moved modules (`numbering.test.ts`, `drawing-set.test.ts`, `view-defaults.test.ts` and the others) into the package once they no longer need the app's stores.
 7. Publish the package (`private` is true today, so no changeset or API-surface snapshot yet).
+8. One copy of the Inter font: today the app serves it from `apps/viewer/public/fonts/` and the package ships its own copy.
+
+Seams the CLI (#164) and MCP tools (#165) still need, none of which exist yet:
+
+9. A project-file reader and writer in the package (follow-up 5), so a command can take an existing project rather than only a fresh set.
+10. The drafting standards (graphic standard, text and dimension styles) the sheets print with.
+11. `sheetGraphics` over any `ProjectDocument`, not only a `DefaultSet` from `generateDefaultSet`.
+12. `openModel` taking an already-parsed model (an `IfcDataStore` and meshes), so a host that has loaded the model, such as the MCP server, does not parse it twice.
+13. Schedules and the issue set (`issue/plan.ts`): neither is in the package.
 
 ## What the CLI and MCP slices build on
 
 - `openModel`, `generateDefaultSet`, `sheetGraphics`, `exportPdf` and `exportDxf` are the `ifcsheet build` command (#164) almost as they stand: IFC in, PDF and DXF files out.
-- `generateDefaultSet`'s `notes` (no storeys, a group larger than its paper) are what `ifcsheet check` and an agent report.
+- `generateDefaultSet`'s `notes` say two things only: the model has no storeys, or a group is larger than its paper. They are not a readiness check: the app's readiness checks (`check/`) stay in the app, so `ifcsheet check` needs them moved first.
 - The `ProjectDocument` it returns is plain JSON addressed by ids and IFC GlobalIds: an MCP tool (#165) can return it, and accept a changed one. The pure layout functions (`withViewHung`, `numberSheets`, `scaleOn`, `sheetScaleReason`) are the operations a tool can preview on a copy of the document before it is applied.

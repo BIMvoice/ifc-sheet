@@ -16,8 +16,10 @@
  */
 
 import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
+import { clipPolyline } from './clip.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
-import { frameOf, frameRect, titleBlockRect } from './sheet-frame.js';
+import { viewExtent, type ModelExtent } from './drawing-set.js';
+import { frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
 import { paperOf } from './viewport-fit.js';
 
 export type Polyline = readonly Point2D[];
@@ -38,11 +40,13 @@ export interface SheetGraphic {
   paper: { w: number; h: number };
   /** The frame line, the title block's box and its rule; each rectangle ends where it starts. */
   frame: Polyline[];
-  /** The outlines of cut faces, closed. */
+  /** The outlines of cut faces, clipped to their viewport; a ring wholly inside ends where it starts. */
   cut: Polyline[];
-  /** Every other visible line of the drawings, open. */
+  /** Every other visible line of the drawings, clipped to their viewport. */
   lines: Polyline[];
   texts: SheetText[];
+  /** The box each viewport's drawing is clipped to, paper mm: the room the layout made for it. */
+  viewports: { viewId: string; box: Rect }[];
 }
 
 /** A rectangle as a closed run of points (the first repeated last), so it reads whole in an open-polyline layer. */
@@ -69,32 +73,42 @@ function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: numbe
 }
 
 /** `drawing` mapped onto the paper: centred on the viewport (or on its `center` point), drawing metres to paper mm at the viewport's scale, y up to y down. */
-function placer(drawing: Drawing2D, vp: NonNullable<ProjectSheet['viewports']>[number]): (p: Point2D) => Point2D {
+export function placer(drawing: Pick<Drawing2D, 'bounds'>, vp: NonNullable<ProjectSheet['viewports']>[number]): (p: Point2D) => Point2D {
   const k = 1000 / vp.scale;
   const cx = vp.center?.x ?? (drawing.bounds.min.x + drawing.bounds.max.x) / 2;
   const cy = vp.center?.y ?? (drawing.bounds.min.y + drawing.bounds.max.y) / 2;
   return (p) => ({ x: vp.x + (p.x - cx) * k, y: vp.y - (p.y - cy) * k });
 }
 
-/** `sheet` as shapes on its paper, its drawings taken from `drawings` (by view id); a view without one keeps its title only. */
-export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings: ReadonlyMap<string, Drawing2D>): SheetGraphic {
+const closeRing = (pts: Point2D[]): Point2D[] => (pts.length > 2 ? [...pts, pts[0]] : pts);
+
+/**
+ * `sheet` as shapes on its paper, its drawings taken from `drawings` (by view
+ * id); a view without one keeps its title only. With `extent` (the one the set
+ * was laid out on), each drawing is clipped to the box the layout made for its
+ * view, so a drawing larger than the building (the site around it) cannot run
+ * into its neighbour; without it, to the drawing's own extent.
+ */
+export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings: ReadonlyMap<string, Drawing2D>, extent?: ModelExtent | null): SheetGraphic {
   const paper = paperOf(sheet);
-  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], cut: [], lines: [], texts: [] };
+  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], cut: [], lines: [], texts: [], viewports: [] };
   const vps = sheet.viewports ?? [];
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
     const drawing = drawings.get(vp.viewId);
-    let below = vp.y + 10;
-    if (drawing && Number.isFinite(drawing.bounds.min.x)) {
+    const k = 1000 / vp.scale;
+    const size = view && extent ? viewExtent(view, extent)
+      : drawing ? { w: drawing.bounds.max.x - drawing.bounds.min.x, h: drawing.bounds.max.y - drawing.bounds.min.y } : null;
+    const box: Rect | null = size && Number.isFinite(size.w + size.h) ? { x: vp.x - (size.w * k) / 2, y: vp.y - (size.h * k) / 2, w: size.w * k, h: size.h * k } : null;
+    if (box) out.viewports.push({ viewId: vp.viewId, box });
+    if (drawing && box && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp);
       for (const polygon of drawing.cutPolygons) {
-        out.cut.push(polygon.polygon.outer.map(at));
-        for (const hole of polygon.polygon.holes) out.cut.push(hole.map(at));
+        for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }
-      for (const line of drawing.lines) if (line.visibility !== 'hidden') out.lines.push([at(line.line.start), at(line.line.end)]);
-      below = at({ x: 0, y: drawing.bounds.min.y }).y + 8;
+      for (const line of drawing.lines) if (line.visibility !== 'hidden') out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
     }
-    if (view) out.texts.push({ at: { x: vp.x, y: below }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
+    if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
   }
   const block = titleBlock(sheet, doc, paper, [...new Set(vps.map((v) => v.scale))]);
   out.frame.push(...block.frame);

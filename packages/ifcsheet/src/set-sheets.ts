@@ -20,11 +20,11 @@ export interface SheetGraphicsOptions {
   onDrawingError?: (view: ProjectView, error: unknown) => void;
 }
 
-/** Every sheet of `set` as shapes on its paper, in set order, the drawings cut from `model`'s meshes. */
-export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'meshes' | 'extent'>, options: SheetGraphicsOptions = {}): Promise<SheetGraphic[]> {
+/** Every sheet of `set` as shapes on its paper, in set order, the drawings cut from the building's meshes and clipped to the room the layout made for them. */
+export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'buildingMeshes' | 'extent'>, options: SheetGraphicsOptions = {}): Promise<SheetGraphic[]> {
   const { document: doc, levels } = set;
   const hung = new Set(doc.sheets.flatMap((s) => (s.viewports ?? []).map((vp) => vp.viewId)));
   const drawings = options.drawings === false || !model.extent ? new Map()
-    : await generateViewDrawings(doc.views.filter((v) => hung.has(v.id)), model.meshes, levels, model.extent, options.onDrawingError);
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings));
+    : await generateViewDrawings(doc.views.filter((v) => hung.has(v.id)), model.buildingMeshes, levels, model.extent, options.onDrawingError);
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent));
 }
