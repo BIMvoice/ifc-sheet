@@ -22,6 +22,7 @@ import { wallToolKey } from '@/lib/commands/wall-key-commands';
 import { DRAW_TOOLS, WALL_ALL, WALL_TOOLS } from './wall-actions';
 import { shortcutLabel } from '@/lib/commands/shortcut-label';
 import { keyProps } from './wall-key-title';
+import { useKeyBindings } from '@/lib/commands/key-bindings';
 
 const DRAW_ICONS: Record<string, ReactNode> = {
   line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, circle: <Circle className="size-5" />,
@@ -41,6 +42,8 @@ interface ToolRailProps {
 export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: ToolRailProps) {
   const { t } = useTranslation();
   const ortho = useDraftingSession((o) => o.ortho);
+  useKeyBindings((s) => s.overrides); // a rebinding redraws the keys the tools name
+  const orthoKeys = shortcutLabel('drafting.ortho');
   /** The tooltip: the tool's help line and its key from the keymap; a tool the keymap does not know keeps the bare line and announces no key. */
   const keyed = (name: string, command: string): { title: string; 'aria-keyshortcuts'?: string } => {
     const id = wallToolKey(command);
@@ -121,7 +124,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
         )}
       >
         {t('drafting.ortho')}
-        <kbd className="rounded border border-current/40 px-1 text-xs opacity-80">{shortcutLabel('drafting.ortho')}</kbd>
+        {orthoKeys ? <kbd className="rounded border border-current/40 px-1 text-xs opacity-80">{orthoKeys}</kbd> : null}
       </button>
     </nav>
   );

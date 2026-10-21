@@ -1,0 +1,50 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import type { TranslationValue } from '../types';
+
+/** The Wall's keyboard settings (#166): rebinding its actions, and the names of the actions that ship with no key. */
+export const wallKeysEn = {
+  'wall.keys.customise': 'Customise keys',
+  'wall.keys.title': 'Keyboard',
+  'wall.keys.intro': 'Choose the key or combination that runs each action. A key runs its action at once, with no Enter. Keys do nothing while you type in a field.',
+  'wall.keys.bareHint': 'A key without Ctrl or Alt runs its action only while nothing is typed in the command line.',
+  'wall.keys.done': 'Back to shortcuts',
+  'wall.keys.search': 'Search actions',
+  'wall.keys.searchEmpty': 'No action matches “{query}”.',
+  'wall.keys.category.wall': 'On a sheet',
+  'wall.keys.category.drafting': 'While drawing',
+  'wall.keys.none': 'No key',
+  'wall.keys.changed': 'Changed',
+  'wall.keys.change': 'Change',
+  'wall.keys.changeAria': 'Change the key for {action}',
+  'wall.keys.recording': 'Press a key…',
+  'wall.keys.recordingAria': 'Press the key or combination for {action}. Escape or Tab cancels.',
+  'wall.keys.remove': 'Remove',
+  'wall.keys.removeAria': 'Remove the key for {action}',
+  'wall.keys.reset': 'Reset',
+  'wall.keys.resetAria': 'Reset {action} to its default key',
+  'wall.keys.resetAll': 'Reset all',
+  'wall.keys.resetAllConfirm': 'Put every action back on its default key?',
+  'wall.keys.keep': 'Keep my keys',
+  'wall.keys.export': 'Export to file',
+  'wall.keys.import': 'Import from file',
+  'wall.keys.importChoose': 'Choose a keyboard file',
+  'wall.keys.saved': '{action}: {keys}.',
+  'wall.keys.conflict': '{keys} already runs {other}. Choose another key, or change {other} first.',
+  'wall.keys.reserved': '{keys} moves between controls and cannot run an action.',
+  'wall.keys.removed': '{action} has no key now. Its button still runs it.',
+  'wall.keys.resetOne': '{action} is back on its default key.',
+  'wall.keys.resetAllDone': 'Every action is back on its default key.',
+  'wall.keys.imported': { one: 'Imported the keys of {count} action.', other: 'Imported the keys of {count} actions.' },
+  'wall.keys.importedNone': 'Imported a set with every action on its default key.',
+  'wall.keys.importSkipped': { one: '{count} action in the file is not on this Wall and was left out.', other: '{count} actions in the file are not on this Wall and were left out.' },
+  'wall.keys.importInvalid': 'This file is not an IfcSheet keyboard set. Nothing was changed.',
+  'wall.keys.importConflict': 'The file gives {keys} to both {first} and {second}. Nothing was changed.',
+  'wall.keys.action.back': 'Back to the Wall',
+  'wall.keys.action.comment': 'Place a comment',
+  'wall.keys.action.revisions': 'Revisions',
+  'wall.keys.action.printPreview': 'Preview at paper size',
+  'wall.keys.action.exportDxf': 'Export DXF',
+} as const satisfies Record<string, TranslationValue>;

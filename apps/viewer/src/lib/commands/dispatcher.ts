@@ -5,6 +5,7 @@
 /** One ordered keyboard listener for viewer commands (#5841). */
 import { eventKey, isTextEntryTarget } from '@/lib/keyboard-event';
 import { chordOnPlatform, isApplePlatform, type KeyChord } from './chord';
+import { effectiveKeys } from './key-bindings';
 import { KEY_COMMANDS, type KeyCommandId, type KeyContext } from './keyboard-commands';
 
 export type KeyboardLayer = 'global' | 'tool' | 'popover' | 'modal';
@@ -127,7 +128,11 @@ function syncListener(): void {
   }
 }
 
-/** Bind a displayed command to its live action; the table owns its chords. */
+/**
+ * Bind a displayed command to its live action. The chords are read at each key
+ * press from the bindings in force (`key-bindings.ts`): the table's, or what
+ * the person rebound a Wall action to, so a rebinding works without remounting.
+ */
 export function registerKeyboardCommand(
   id: KeyCommandId,
   run: CommandRun,
@@ -136,7 +141,8 @@ export function registerKeyboardCommand(
   const definition = BUILTIN.get(id);
   if (!definition) throw new Error(`Unknown keyboard command: ${id}`);
   return registerKeyboardBinding({
-    id, when: definition.when, keys: definition.keys,
+    id, when: definition.when,
+    get keys() { return effectiveKeys(id); },
     layer: options.layer ?? layerForContext(definition.when),
     run, active: options.active, priority: options.priority, allowInTextEntry: options.allowInTextEntry,
     ignoreModifiers: options.ignoreModifiers,

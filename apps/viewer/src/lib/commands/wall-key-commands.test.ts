@@ -41,11 +41,12 @@ describe('the Wall in the keymap', () => {
     }
   });
 
-  it('shares no chord with another row of the Wall, and every row has a label in the catalogue and a key to show', () => {
+  it('shares no chord with another row of the Wall, and every row has a label in the catalogue and its keys to show', () => {
     const seen = new Set<string>();
     for (const c of WALL_KEY_COMMANDS) {
       assert.ok(en[c.labelKey], `${c.id}: label ${c.labelKey}`);
-      assert.ok(shortcutLabel(c.id, true) && shortcutLabel(c.id, false), c.id);
+      // A row with no key ships unbound (#166) and shows none.
+      assert.equal(Boolean(shortcutLabel(c.id, true) && shortcutLabel(c.id, false)), c.keys.length > 0, c.id);
       for (const chord of c.keys) {
         const slot = JSON.stringify(chord);
         assert.equal(seen.has(slot), false, `${c.id} repeats ${slot}`);

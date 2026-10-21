@@ -135,3 +135,31 @@ export function chordIdentity(chord: KeyChord): string {
     chord.key,
   ].join('|');
 }
+
+/** Keys that only modify another key: a binding waits for the key they come with. */
+const MODIFIER_KEYS: ReadonlySet<string> = new Set(['shift', 'control', 'alt', 'meta', 'altgraph', 'os', 'capslock', 'fn']);
+
+/**
+ * The chord a keydown makes, as a binding records it (#166); null while only
+ * modifiers are down. Alt (Option on a Mac) and Shift change what a digit, and
+ * Alt what a letter, types (Option+1 is `¡`), so those are recorded by position
+ * (`code:Digit1`), as the keymap's own Alt rows are.
+ */
+export function chordFromEvent(e: KeyboardEvent): KeyChord | null {
+  const raw = (e as { key?: unknown }).key;
+  const key = typeof raw === 'string' ? raw.toLowerCase() : '';
+  if (!key || MODIFIER_KEYS.has(key)) return null;
+  const code = typeof e.code === 'string' ? e.code : '';
+  const positional = (/^Digit[0-9]$/.test(code) && (e.altKey || e.shiftKey)) || (/^Key[A-Z]$/.test(code) && e.altKey);
+  return {
+    key: positional ? `code:${code}` : key,
+    ...(e.ctrlKey || e.metaKey ? { mod: true as const } : {}),
+    ...(e.altKey ? { alt: true as const } : {}),
+    ...(e.shiftKey ? { shift: true as const } : {}),
+  };
+}
+
+/** A chord the drafting view would type into its command line: a bare printable key, shifted or not. */
+export function isTypedChord(chord: KeyChord): boolean {
+  return chord.key.length === 1 && !chord.alt && !chord.mod;
+}
