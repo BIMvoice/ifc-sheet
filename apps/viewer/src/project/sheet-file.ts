@@ -8,13 +8,15 @@
  * value is malformed (a viewport without a view or a positive scale).
  */
 
-import type { PaperSize, ProjectSheet, SheetViewport } from './types';
+import { NUMBER_GROUPS, typedBeforeSchemes } from './numbering';
+import { readPaper } from './paper';
+import { readFrame } from './sheet-frame';
+import type { NumberGroup, ProjectSheet, SheetViewport } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isString = (v: unknown): v is string => typeof v === 'string';
-const PAPERS: readonly PaperSize[] = ['A0', 'A1', 'A2', 'A3', 'A4'];
 
 function fail(path: string, message: string): never {
   throw new Error(`Not a project file: ${path} ${message}`);
@@ -29,16 +31,26 @@ function readViewport(v: unknown, path: string): SheetViewport {
     id: v.id, viewId: v.viewId, scale: v.scale,
     x: num('x', 100), y: num('y', 100), width: Math.max(0, num('width', 0)), height: Math.max(0, num('height', 0)), center,
     ...(Array.isArray(v.hiddenLayers) ? { hiddenLayers: v.hiddenLayers.filter((x): x is string => typeof x === 'string') } : {}),
+    ...(isNumber(v.page) && Number.isInteger(v.page) && v.page > 0 ? { page: v.page } : {}),
     ...(isString(v.keyPlanOf) && v.keyPlanOf ? { keyPlanOf: v.keyPlanOf } : {}),
     ...(isString(v.drawingNumber) && v.drawingNumber.trim() ? { drawingNumber: v.drawingNumber.trim() } : {}),
   };
 }
 
 /** The optional sheet layout fields, read from `v` (already known to be an object). */
-export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber'> {
-  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'viewports' | 'titleBlock' | 'autoNumber'> = {};
+export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'autoNumber' | 'numberOverride' | 'series' | 'revisionIds'> {
+  const out: Pick<ProjectSheet, 'paper' | 'orientation' | 'frame' | 'templateId' | 'viewports' | 'titleBlock' | 'autoNumber' | 'numberOverride' | 'series' | 'revisionIds'> = {};
   if (v.autoNumber === true) out.autoNumber = true;
-  if (PAPERS.includes(v.paper as PaperSize)) out.paper = v.paper as PaperSize;
+  if (v.numberOverride === true) out.numberOverride = true;
+  // Saved before schemes: no series, no override mark. A number outside the old A-nnn series was typed by hand and keeps that protection.
+  else if (v.series === undefined && v.autoNumber !== true && typeof v.number === 'string' && typedBeforeSchemes(v.number)) out.numberOverride = true;
+  if (NUMBER_GROUPS.includes(v.series as NumberGroup)) out.series = v.series as NumberGroup;
+  // A plain `'A1'` (every file saved before elongated and custom sizes) is ISO A1; a paper that is none is left unnamed.
+  const paper = readPaper(v.paper);
+  if (paper) out.paper = paper;
+  const frame = readFrame(v.frame);
+  if (frame) out.frame = frame;
+  if (isString(v.templateId)) out.templateId = v.templateId;
   if (v.orientation === 'portrait' || v.orientation === 'landscape') out.orientation = v.orientation;
   if (v.viewports !== undefined) {
     if (!Array.isArray(v.viewports)) fail(`${path}.viewports`, 'must be an array');
@@ -46,6 +58,7 @@ export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'pape
   }
   const titleBlock = readTitleBlock(v.titleBlock);
   if (titleBlock) out.titleBlock = titleBlock;
+  if (Array.isArray(v.revisionIds)) out.revisionIds = v.revisionIds.filter(isString);
   return out;
 }
 
