@@ -10,6 +10,7 @@
  */
 
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import type { IfcDataStore } from '@ifc-lite/parser';
 import { readRoofSystems, roofGeometry, type RoofGeometry, type RoofSystemSpec } from '@ifc-lite/create';
 import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
 import { storeyOfElement } from '@/project/effective-storey';
@@ -39,8 +40,11 @@ export interface PlanRoof {
   arrows: PlanRoofArrow[];
 }
 
-/** Each model's roof specs, by roof, shared by every plan while the model is unchanged. */
-const specCache = new Map<string, { key: string; specs: Map<number, RoofSystemSpec> }>();
+/**
+ * Each model's roof specs, by roof, shared by every plan while the model is unchanged. Keyed by the
+ * data store and held weakly, so an unloaded model's specs go with it (a model-id key would keep them).
+ */
+const specCache = new WeakMap<IfcDataStore, { key: string; specs: Map<number, RoofSystemSpec> }>();
 
 export function planRoofs(view: ProjectView, plane: SectionPlaneConfig): PlanRoof[] {
   if (view.kind !== 'plan') return [];
@@ -64,10 +68,10 @@ export function planRoofs(view: ProjectView, plane: SectionPlaneConfig): PlanRoo
     // and once for all the plans while the model is unchanged, not once per plan (#154).
     let specs: Map<number, RoofSystemSpec>;
     try {
-      const key = `${idOf(dataStore)}:${mv ? idOf(mv) : 0}:${s.mutationVersion}:${allRoofs.join(',')}`;
-      const held = specCache.get(modelId);
+      const key = `${mv ? idOf(mv) : 0}:${s.mutationVersion}:${allRoofs.join(',')}`;
+      const held = specCache.get(dataStore);
       specs = held && held.key === key ? held.specs : readRoofSystems(dataStore, allRoofs, mv);
-      specCache.set(modelId, { key, specs });
+      specCache.set(dataStore, { key, specs });
     } catch (error) {
       console.warn('[roof-plan] could not read the roof systems', error);
       continue;
