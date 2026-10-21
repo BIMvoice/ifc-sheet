@@ -158,6 +158,7 @@ const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<ProjectSchedule> & {
   types: { id: 'sc5', name: 'Quantities by type', kind: 'types', createdAt: 9, scale: 100 },
   finishes: { id: 'sc6', name: 'Room finishes', kind: 'finishes', createdAt: 10, scale: 100 },
   register: { id: 'sc7', name: 'Drawing register', kind: 'register', createdAt: 11, scale: 100 },
+  urban: { id: 'sc8', name: 'Urban indicators', kind: 'urban', createdAt: 12, scale: 100 },
 };
 const civil: Required<ProjectCivilDrawing> = {
   id: 'c1', name: 'DN1 sections', kind: 'sections', createdAt: 3, corridorGlobalId: '2O2Fr$t4X7Zf8NOew3FLOH', scale: 200, vExaggeration: 10,
