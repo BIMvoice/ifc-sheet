@@ -29,6 +29,7 @@ import type { SectionPlaneAxis } from '@/store/types';
 import type { CustomSectionPlane } from '@/store/section-types';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectIssue } from '@/issue/types';
+import type { ReviewComment } from '@/review/types';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
 
 export type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut, SavedSectionCutPlane } from './project-records';
@@ -294,6 +295,8 @@ export interface ProjectDocument {
   textStyles?: TextStyle[];
   dimStyles?: DimStyle[];
   layerGroups?: LayerGroup[];
+  /** The built-in graphic standard (pens and text sizes) the sheets draw with, by id (`drafting/graphic-standard.ts`); absent: the IfcSheet default. */
+  graphicStandard?: string;
   /** Door and window opening symbols in elevation: apex at the handle (default, window makers' sketches) or at the hinges (DIN 1356). */
   openingLines?: 'handle' | 'hinge';
   /** Plan symbol overrides by element GlobalId: bit 1 hinges a door on its other jamb, bit 2 swings it to the other side. */
@@ -347,6 +350,8 @@ export interface ProjectDocument {
   sheetNumbering?: NumberingScheme;
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
+  /** Review comments pinned on sheets (`review/`). */
+  comments?: ReviewComment[];
 }
 
 // The issue records live with the issue code; re-exported so the document's types stay in one import.

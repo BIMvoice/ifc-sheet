@@ -169,6 +169,7 @@ const FULL: Required<ProjectDocument> = {
     id: 'arch', name: 'Arch', textStyle: 'big', arrow: 'arrow', arrowSize: 2, extGap: 0.5, extOver: 2, placement: 'below', textGap: 0.8, precision: 0, unit: 'mm', color: '#0000aa',
   }],
   layerGroups: [{ id: 'g1', name: 'Annotation', visible: false, locked: true }],
+  graphicStandard: 'ro-practice',
   openingLines: 'hinge',
   symbolFlips: { '2O2Fr$t4X7Zf8NOew3FLOH': 3 },
   joineryTypes: [{ ...defaultDoorSpec('D-1'), id: 'j1' }, { ...defaultWindowSpec('W-1'), id: 'j2', columns: [2, 1], panels: [{ col: 0, row: 0, operation: 'tilt-turn-right' }] }],
@@ -199,6 +200,12 @@ const FULL: Required<ProjectDocument> = {
   issues: [{
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
     sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A3×3', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
+  }],
+  comments: [{
+    id: 'comment-1', sheetId: 'sh1', x: 120.5, y: 80.25, viewportId: 'vp1', viewId: 'v-plan', point: { x: 3.5, y: -2 }, elementGuid: '2O2Fr$t4X7Zf8NOew3FLOH',
+    author: 'Ana Ionescu', createdAt: 1760000000000, status: 'done', text: 'Cota lipsă la ușă', replies: [{ id: 'reply-1', author: 'PC', createdAt: 1760000001000, text: 'Adăugată', bcfGuid: '3f2b1c0e-7d4a-4e8b-9c1d-2a3b4c5d6e7f' }],
+    // The BCF GUIDs it went out with, kept so the next export updates the same topic (PR #127).
+    bcfGuid: '0b9a8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d', bcfViewpointGuid: '5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a',
   }],
   modelState: snapshotFromElements([{ k: '2O2Fr$t4X7Zf8NOew3FLOH', t: 'IfcWall', n: 'Wall', d: 'abcdef0123', g: 'a1b2c3d4e', a: [0, 0, 0, 4, 0.2, 3], p: 'Site/Building/Level 0' }], 7),
   siteArea: 1250.5,

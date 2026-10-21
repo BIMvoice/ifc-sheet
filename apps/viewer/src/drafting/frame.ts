@@ -56,6 +56,20 @@ export function drawingToWorld(plane: SectionPlaneConfig, p: Pt): Vec3 {
   return world;
 }
 
+/**
+ * The world direction a view looks FROM, out of the drawing toward the
+ * viewer: the custom plane's normal when the view has one (the frame
+ * `drawingToWorld` uses), else the cardinal axis; reversed for a flipped view.
+ */
+export function viewNormal(plane: SectionPlaneConfig): Vec3 {
+  const sign = plane.flipped ? -1 : 1;
+  const custom = plane.customPlane;
+  if (custom) return { x: custom.normal.x * sign, y: custom.normal.y * sign, z: custom.normal.z * sign };
+  const n: Vec3 = { x: 0, y: 0, z: 0 };
+  n[plane.axis] = sign;
+  return n;
+}
+
 /** A world point projected onto the view's drawing coordinates (its distance from the plane is dropped). */
 export function worldToDrawing(plane: SectionPlaneConfig, w: Vec3): Pt {
   const custom = plane.customPlane;

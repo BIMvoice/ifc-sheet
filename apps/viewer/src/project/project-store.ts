@@ -15,6 +15,7 @@
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
 import { resetWallView } from '@/wall/wall-view';
@@ -25,6 +26,7 @@ import { findTemplate, templateFields } from './sheet-templates';
 import { nextDetailNumber } from './detail';
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { liftSheetTitleBlocks } from './title-block';
+import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 import type { UrbanSettings } from '@/urban/indicators';
@@ -44,7 +46,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
-  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, siteArea: undefined, urbanSettings: undefined,
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined, siteArea: undefined, urbanSettings: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -74,6 +76,8 @@ const DOCUMENT_FIELDS = {
   titleBlockSources: true,
   sheetNumbering: true,
   phaseSource: true,
+  graphicStandard: true,
+  comments: true,
   siteArea: true,
   urbanSettings: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
@@ -94,6 +98,7 @@ const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[
   cadLayers: () => [],
   details: () => [],
   sheetTemplates: () => [], seriesTemplates: () => ({}),
+  comments: () => [],
 };
 
 /** The persisted part of the store. */
@@ -114,6 +119,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
   const doc = liftSheetTitleBlocks(saved);
+  const standard = knownGraphicStandard(doc.graphicStandard);
   resetWallView();
   useProjectStore.setState({
     ...doc,
@@ -145,8 +151,10 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     issues: doc.issues ?? [],
     tagFields: doc.tagFields,
     sheetNumbering: doc.sheetNumbering,
+    comments: doc.comments ?? [],
     modelState: doc.modelState,
     titleBlockSources: doc.titleBlockSources,
+    graphicStandard: standard.id,
     siteArea: doc.siteArea,
     urbanSettings: doc.urbanSettings,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
@@ -154,6 +162,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     activeItemId: null,
     dirty: options.dirty ?? false,
   });
+  if (standard.unknown) warnUnknownGraphicStandard(standard.unknown);
 }
 
 /**
@@ -282,6 +291,8 @@ export function removeProjectItem(id: string): void {
     schedules: (state.schedules ?? []).filter((s) => s.id !== id),
     civilDrawings: (state.civilDrawings ?? []).filter((d) => d.id !== id),
     legends: (state.legends ?? []).filter((l) => l.id !== id),
+    // A deleted sheet takes the comments pinned on it.
+    comments: (state.comments ?? []).some((c) => c.sheetId === id) ? (state.comments ?? []).filter((c) => c.sheetId !== id) : state.comments,
     // A deleted view takes its own drawing with it, a section's symbol on its plans and a detail's mark on its source.
     drafts: state.drafts.some((d) => d.viewId === id || d.params.sectionOf === id || d.params.detailOf === id) ? state.drafts.filter((d) => d.viewId !== id && d.params.sectionOf !== id && d.params.detailOf !== id) : state.drafts,
     activeItemId: state.activeItemId === id ? null : state.activeItemId,
