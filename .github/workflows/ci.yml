@@ -14,12 +14,11 @@
 #
 # To make these required, add the check names to the `main` ruleset (repository
 # setting, not code): Build wasm, Typecheck, Package tests, Viewer tests
-# (shard 0..7), Gates vs base, Rust.
+# (shard 0..7), Gates vs base, Rust. The Lint job below is not yet in that list.
 #
 # Deliberately out of scope for now (follow-up): the other scripts/check-*
-# gates (`pnpm lint`: changesets, i18n literals, jsx-a11y; check-refwalk-guards,
-# check-api-surface, the docs checks) and the scripts/*.test.mjs files except
-# the gate comparison's own. Only check-module-size, check-test-wiring and
+# gates (check-refwalk-guards, check-api-surface, the docs checks) and the
+# scripts/*.test.mjs files except the gate comparison's own. Only check-module-size, check-test-wiring and
 # check-source-text-assertions are compared here.
 
 name: CI
@@ -96,6 +95,36 @@ jobs:
           path: packages/wasm/pkg
       - run: pnpm turbo run build --filter='./packages/*'
       - run: pnpm typecheck
+
+  # `pnpm lint`: changesets, test-glob coverage, unused locals, i18n literals,
+  # jsx-a11y, type scale, and a check that the linter linted something. NOT yet
+  # a required check: that is a repository ruleset setting, so add "Lint" to the
+  # `main` ruleset by hand once it has been green on a few pull requests. The
+  # unused-locals gate runs tsc in every package, so it needs the same wasm
+  # types and built packages as Typecheck.
+  lint:
+    name: Lint
+    needs: wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+      - run: pnpm turbo run build --filter='./packages/*'
+      - run: pnpm lint
 
   package-tests:
     name: Package tests
