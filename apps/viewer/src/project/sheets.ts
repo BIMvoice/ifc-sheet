@@ -9,7 +9,7 @@
  * 1000 / N mm).
  */
 
-import { draftingFrame } from '@/drafting/drafting-view';
+import { draftingFrame, draftsExtent } from '@/drafting/drafting-view';
 import { numberingScheme, useProjectStore } from './project-store';
 import { nextNumber } from './numbering';
 import { withSources, type TitleSource } from './title-block-sources';
@@ -19,6 +19,8 @@ import { RASTER_BOX_MM } from './view-raster';
 import { freshProjectId } from './view-defaults';
 import { paperMm } from './paper';
 import { templateFromSheet } from './sheet-templates';
+import { isGeometry, type DraftEntity } from '@/drafting/types';
+import { annotationAtFactor, annotationFactor } from './viewport-annotation';
 import type { ProjectSheet, SheetViewport, TemplateSeries } from './types';
 
 /** The scales a viewport offers, most detailed first: details, buildings, sites. */
@@ -141,6 +143,28 @@ export function sheetsShowing(viewId: string, sheets: readonly ProjectSheet[] = 
 export function viewportBox(vp: SheetViewport, bounds: { min: { x: number; y: number }; max: { x: number; y: number } } | null): { width: number; height: number } {
   if (vp.width > 0 && vp.height > 0) return { width: vp.width, height: vp.height };
   return bounds ? fitViewportBox(bounds, vp.scale) : { width: 120, height: 80 };
+}
+
+/** Whether the viewport fits its content by itself (no manual size). A manual size is a crop, and a crop clips. */
+export const autoFits = (vp: Pick<SheetViewport, 'width' | 'height'>): boolean => !(vp.width > 0 && vp.height > 0);
+
+type Extent = { min: { x: number; y: number }; max: { x: number; y: number } };
+
+/**
+ * The extent an auto-fit viewport frames: the drawing's bounds together with
+ * its view's drafts, so a dimension, text or tag drawn beyond the model prints
+ * (#140). A viewport with a manual size keeps `bounds`: it crops on purpose.
+ */
+export function fitExtent(vp: Pick<SheetViewport, 'width' | 'height' | 'scale'>, bounds: Extent, drafts: readonly Pick<DraftEntity, 'shape'>[], viewScale: number | undefined): Extent {
+  // The sheet prints annotation at the viewport's scale (`annotationAtFactor`), so the extent is measured the same way.
+  const factor = annotationFactor(vp.scale, viewScale);
+  const printed = factor === 1 ? drafts : drafts.map((d) => (isGeometry(d.shape) ? d : { ...d, shape: annotationAtFactor(d.shape, factor) }));
+  const extent = autoFits(vp) ? draftsExtent(printed) : null;
+  if (!extent) return bounds;
+  return {
+    min: { x: Math.min(bounds.min.x, extent.min.x), y: Math.min(bounds.min.y, extent.min.y) },
+    max: { x: Math.max(bounds.max.x, extent.max.x), y: Math.max(bounds.max.y, extent.max.y) },
+  };
 }
 
 /** A viewport box that fits a drawing's extent at its scale (plus a margin), in paper mm. */

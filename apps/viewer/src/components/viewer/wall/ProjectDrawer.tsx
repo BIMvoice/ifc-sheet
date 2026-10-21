@@ -36,6 +36,7 @@ import { WALL_SKIN } from '../sheets/set-skin';
 import { TitleBlockForm } from './TitleBlockForm';
 import { stepInto } from './wall-nav';
 import { LibraryPanel } from './LibraryPanel';
+import { CommentsSection } from './CommentsSection';
 import { LegendsAdd } from './LegendsAdd';
 import { ViewportState } from './ViewportState';
 import { TagFieldsPanel } from './TagFieldsPanel';
@@ -142,6 +143,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
       </div>
       <div className="px-4"><RecoveryOffer /></div>
       <LibraryPanel />
+      <CommentsSection onGo={go} />
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         <Group title={t('wall.project.sheets')} add={(
           <>
