@@ -14,14 +14,16 @@
 
 import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { parsePat } from '@/drafting/hatch/pattern';
-import { pressEscape, runningCommand, submitCommandLine, useDraftingSession } from '@/drafting/session';
+import { pressEscape, runningCommand, useDraftingSession } from '@/drafting/session';
 import type { Pt } from '@/drafting/types';
+import { useAutocadMode } from '@/lib/commands/autocad-mode';
 import { capturePointer } from '@/lib/pointer-capture';
 import { useProjectStore } from '@/project/project-store';
 import { paperOf, removeViewport, updateViewport } from '@/project/sheets';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { CommandLine } from '../drafting/CommandLine';
 import { useDraftingKeys } from '../drafting/useDraftingKeys';
+import { submitTypedLine } from '../drafting/typed-line';
 import { useSheetDrafting } from '../sheets/useSheetDrafting';
 import type { SheetContent } from '../sheets/useSheetContent';
 import { isResizable } from '@/project/viewport-resize';
@@ -69,7 +71,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
   const last = useRef<Pt | null>(null);
-  useDraftingKeys({ inputRef, setText, submit: () => submitCommandLine('', last.current) });
+  useDraftingKeys({ inputRef, setText, submit: () => submitTypedLine('', last.current) });
   const draftSelection = useDraftingSession((s) => s.selection);
 
   const toPaper = (clientX: number, clientY: number): Pt => {
@@ -134,7 +136,9 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   // The first sheet's box rules every page, so a continuation sheet has none of its own to drag.
   const chosenFit = chosenVp && (chosenVp.page ?? 0) === 0 ? sheetContent.content(chosenVp).schedule?.fit : undefined;
   const resizing = chosenVp && !drafting.drafting && ((chosenDrawing && isResizable(views.find((v) => v.id === chosenVp.viewId))) || chosenFit) ? chosenVp : null;
-  const showPrompt = drafting.drafting || draftSelection.size > 0;
+  // AutoCAD mode (#168) keeps the command line showing, for typed commands while nothing runs.
+  const autocad = useAutocadMode((s) => s.on);
+  const showPrompt = drafting.drafting || draftSelection.size > 0 || autocad;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -176,7 +180,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
       </div>
       {showPrompt ? (
         <div className="bg-white text-zinc-900">
-          <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={() => { submitCommandLine(text, last.current); setText(''); }} onEscape={() => { setText(''); pressEscape(); }} />
+          <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={() => { submitTypedLine(text, last.current); setText(''); }} onEscape={() => { setText(''); pressEscape(); }} />
         </div>
       ) : null}
     </div>

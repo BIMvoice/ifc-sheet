@@ -57,7 +57,6 @@ import {
   pressEscape,
   runningCommand,
   setCurrentLayer,
-  submitCommandLine,
   toggleOrtho,
   toggleSnap,
   useDraftingSession,
@@ -75,6 +74,7 @@ import { CommandLine } from './CommandLine';
 import { useDraftingPointer } from './useDraftingPointer';
 
 import { useDraftingKeys } from './useDraftingKeys';
+import { submitTypedLine } from './typed-line';
 
 import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 
@@ -258,10 +258,10 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     },
   };
   const submit = () => {
-    submitCommandLine(text, state.cursor);
+    submitTypedLine(text, state.cursor);
     setText('');
   };
-  useDraftingKeys({ inputRef, setText, submit: () => submitCommandLine('', state.cursor) });
+  useDraftingKeys({ inputRef, setText, submit: () => submitTypedLine('', state.cursor) });
 
   const exportDxf = () => exportViewDxf({
     view, drawing: shown, axis, drafts: entities, layers, extraPatterns, symbols: liveSymbols,

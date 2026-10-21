@@ -67,6 +67,9 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET) stay as
 | Key / key combination | Tastă / combinație de taste | "Tasta implicită" for the default key |
 | Shortcut | Comandă rapidă | "Comenzile rapide" for the list |
 | Customise (keys) | Personalizați | |
+| AutoCAD mode | Modul AutoCAD | Typed aliases (Z, U, PLOT…) stay as typed |
+| Ortho (mode) | Modul ortogonal | As `wall.ortho.*` |
+| Snap (to points) | Fixarea pe puncte | |
 
 ## Not translated yet
 

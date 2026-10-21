@@ -19,6 +19,7 @@ import { formatChord, type KeyChord } from '@/lib/commands/chord';
 import { IMPORT_MAX_CHARS, exportKeyBindings, importKeyBindings, isCustomised, rebindAction, resetAction, resetAllBindings, takeDroppedBindings, unbindAction, useKeyBindings, type RebindOutcome } from '@/lib/commands/key-bindings';
 import { KEY_COMMANDS, type KeyCommandCategory } from '@/lib/commands/keyboard-commands';
 import { ariaKeyShortcuts, shortcutLabel } from '@/lib/commands/shortcut-label';
+import { AutocadModeSetting } from './AutocadModeSetting';
 import { KeyActionRow } from './KeyActionRow';
 
 const LABELS = new Map(KEY_COMMANDS.map((c) => [c.id as string, c.labelKey]));
@@ -104,6 +105,7 @@ export function KeyboardSettings({ onDone }: { onDone?: () => void }) {
       </div>
       <p className="m-0 text-muted-foreground">{t('wall.keys.intro')}</p>
       <p className="m-0 text-xs text-muted-foreground">{t('wall.keys.bareHint')}</p>
+      <AutocadModeSetting onChanged={(text) => say(text)} />
       <input
         type="search"
         value={query}

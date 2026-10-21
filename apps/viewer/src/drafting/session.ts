@@ -109,6 +109,11 @@ function say(line: HistoryLine): void {
   set({ history: [...get().history.slice(-(HISTORY_LINES - 1)), line] });
 }
 
+/** Echo a line into the command history from outside a command (an action run by a typed alias, #168). */
+export function echoLine(key: TranslationKey, params?: Record<string, string | number>): void {
+  say({ key, params });
+}
+
 function visibleEntities(viewId: string): DraftEntity[] {
   const { drafts, draftLayers } = useProjectStore.getState();
   const usable = new Set(draftLayers.filter((l) => l.visible && !l.locked).map((l) => l.id));

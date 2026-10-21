@@ -54,6 +54,7 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
         <span className="min-w-0 truncate text-zinc-800 dark:text-zinc-200" title={promptText}>{promptText}</span>
         <input
           ref={ref}
+          data-command-line=""
           aria-label={t('drafting.commandLine')}
           className="min-w-32 flex-1 bg-transparent outline-none text-zinc-900 dark:text-zinc-100"
           value={value}
