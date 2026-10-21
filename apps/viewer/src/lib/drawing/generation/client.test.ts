@@ -38,7 +38,8 @@ const request = (meshes: MeshData[]): DrawingRequest => ({
 type Behaviour = (worker: GenerationWorker, message: Extract<GenerationRequest, { type: 'generate' }>, workers: GenerationWorker[]) => void;
 
 /** Installs workers that only record their traffic; `behave` decides what each does with a job. */
-function install(behave: Behaviour): { generates: () => number; workers: GenerationWorker[]; jobs: Extract<GenerationRequest, { type: 'generate' }>[] } {
+function install(behave: Behaviour): { generates: () => number; workers: GenerationWorker[]; jobs: Extract<GenerationRequest, { type: 'generate' }>[]; requests: GenerationRequest[] } {
+  const requests: GenerationRequest[] = [];
   const workers: GenerationWorker[] = [];
   const jobs: Extract<GenerationRequest, { type: 'generate' }>[] = [];
   let generates = 0;
@@ -46,6 +47,7 @@ function install(behave: Behaviour): { generates: () => number; workers: Generat
     const worker: GenerationWorker = {
       onmessage: null, onerror: null, terminate() {},
       postMessage(message) {
+        requests.push(message);
         if (message.type !== 'generate') return;
         generates++;
         jobs.push(message);
@@ -55,7 +57,7 @@ function install(behave: Behaviour): { generates: () => number; workers: Generat
     workers.push(worker);
     return worker;
   });
-  return { generates: () => generates, workers, jobs };
+  return { generates: () => generates, workers, jobs, requests };
 }
 
 const until = async (done: () => boolean) => { for (let i = 0; i < 500 && !done(); i++) await new Promise((r) => setImmediate(r)); assert.ok(done(), 'timed out waiting'); };
@@ -126,6 +128,26 @@ describe('a worker crash is one failure (#154)', () => {
     await generateDrawing(request([ALL[3]]), undefined);
     assert.equal(stub.generates(), 4, 'one failure, a success, one failure: the workers are still in use');
     warn.mock.restore();
+  });
+});
+
+describe('the packs a worker holds (#154)', () => {
+  it('a worker given the meshes of another model is told to drop the pack it held', async () => {
+    const stub = install((worker, message) => answer(worker, message.id));
+    await generateDrawing(request([ALL[0]]), undefined);
+    const other = [mesh(11), mesh(12)];
+    await generateDrawing({ ...request([other[0]]), allMeshes: other }, undefined);
+    const packs = stub.requests.filter((r) => r.type === 'pack').map((r) => r.packId);
+    assert.equal(packs.length, 2, 'each model\'s meshes were sent once');
+    assert.deepEqual(stub.requests.filter((r) => r.type === 'drop').map((r) => r.packId), [packs[0]], 'the first model\'s pack was dropped when the second arrived');
+  });
+
+  it('the same model\'s meshes are sent once for every view', async () => {
+    const stub = install((worker, message) => answer(worker, message.id));
+    await generateDrawing(request([ALL[0]]), undefined);
+    await generateDrawing(request([ALL[1]]), undefined);
+    assert.equal(stub.requests.filter((r) => r.type === 'pack').length, 1);
+    assert.equal(stub.requests.filter((r) => r.type === 'drop').length, 0);
   });
 });
 
