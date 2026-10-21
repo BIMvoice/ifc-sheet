@@ -5,19 +5,21 @@
 /**
  * The permit's areas and urban indicators, live: the footprints and rooms are
  * read again when the models or the levels change, and the indicators when
- * the site area does. The site area is the project's (`siteArea`), else the
- * model's; every table showing the indicators reads it from here, so a new
- * site area reaches all of them.
+ * the site area does. The site area is the one `urban/site-area.ts` picks
+ * (typed, else the plot drawn on the site plan, else the model's); every
+ * table showing the indicators reads it from here, so a new site area or a
+ * redrawn plot reaches all of them.
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useTranslation } from '@/i18n';
+import { formatLocaleNumber, useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { ensureWasm, wasmLoaded } from '@/lib/wasm/ensure-wasm';
 import { collectUrbanAreas, type UrbanAreas } from '@/urban/urban-models';
 import { urbanIndicators, type UrbanIndicators } from '@/urban/indicators';
 import { signedLevel, type UrbanLabels } from '@/urban/urban-layout';
+import { siteAreaOf, type SiteAreaChoice } from '@/urban/site-area';
 
 /** The footprints, rooms and model site area; null until they can be measured. `enabled` false skips the work. */
 export function useUrbanAreas(enabled = true): UrbanAreas | null {
@@ -47,19 +49,36 @@ export function useUrbanAreas(enabled = true): UrbanAreas | null {
   return areas;
 }
 
-/** The indicators, on the project's site area (else the model's) and its urban settings. */
-export function useUrbanIndicators(enabled = true): { areas: UrbanAreas; result: UrbanIndicators } | null {
+/** The indicators, on the site area `siteAreaOf` picks and the project's urban settings; `site` says which it took. */
+export function useUrbanIndicators(enabled = true): { areas: UrbanAreas; result: UrbanIndicators; site: SiteAreaChoice } | null {
   const areas = useUrbanAreas(enabled);
   const siteArea = useProjectStore((s) => s.siteArea);
+  // The plot boundary drawn on the site plan: a draft edit re-reads the indicators (arithmetic; the areas are not measured again).
+  const views = useProjectStore((s) => s.views);
+  const drafts = useProjectStore((s) => s.drafts);
   const settings = useProjectStore((s) => s.urbanSettings);
-  return useMemo(
-    () => (areas ? { areas, result: urbanIndicators({ ...areas, siteArea: siteArea ?? areas.modelSiteArea, settings }) } : null),
-    [areas, siteArea, settings],
-  );
+  return useMemo(() => {
+    if (!areas) return null;
+    const site = siteAreaOf({ siteArea, views, drafts }, areas.modelSiteArea);
+    return { areas, result: urbanIndicators({ ...areas, siteArea: site.area, settings }), site };
+  }, [areas, siteArea, views, drafts, settings]);
 }
 
-export function useUrbanLabels(title: string, areas: UrbanAreas | null): UrbanLabels {
+/** Where the site area came from, in words: one sentence for every table that prints it. */
+export function useSiteSourceNote(): (site: SiteAreaChoice) => string {
+  const { t, locale } = useTranslation();
+  return useMemo(() => (site: SiteAreaChoice) => {
+    if (site.source === 'typed') {
+      return site.plot === null ? t('urban.siteSource.typedNoPlot') : t('urban.siteSource.typed', { plot: formatLocaleNumber(locale, site.plot, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) });
+    }
+    return t(`urban.siteSource.${site.source ?? 'none'}`);
+  }, [t, locale]);
+}
+
+/** The schedule's labels; `site`, when given, adds the line saying where the site area came from. */
+export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
   const { t } = useTranslation();
+  const siteNote = useSiteSourceNote();
   const assumed = areas?.assumedInterior.join(', ') ?? '';
   const leftOut = areas?.spacesLeftOut ?? null;
   return useMemo(() => ({
@@ -78,10 +97,11 @@ export function useUrbanLabels(title: string, areas: UrbanAreas | null): UrbanLa
         t('urban.rule.ground', { terrain: signedLevel(r.terrainLevel), zero: r.zero.elevation.toFixed(2), source: t(`urban.rule.zero.${r.zero.source}`) }),
       ];
       if (leftOut) out.push(t('urban.rule.au', { external: leftOut.external, gfa: leftOut.gfa, parents: leftOut.parents }));
+      if (site) out.push(siteNote(site));
       return out;
     },
     note: assumed ? t('urban.assumedInterior', { levels: assumed }) : '',
     atLeast: (value: string) => t('urban.atLeast', { value }),
     unmeasured: (count: number, level: string) => t('urban.unmeasured', { count, level }),
-  }), [t, title, assumed, leftOut]);
+  }), [t, title, assumed, leftOut, site, siteNote]);
 }
