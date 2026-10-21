@@ -48,7 +48,7 @@ pub fn prepare_pdf_vector_page_with_clip(
         hash.update(b"conversion-clip-pdf\0");
         hash.update(serde_json::to_vec(&clip).map_err(|e| format!("Cannot bind PDF clip: {e}"))?);
     }
-    let request_sha256 = format!("{:x}", hash.finalize());
+    let request_sha256 = hex::encode(hash.finalize());
     let fidelity = interpreted.report.finish(&request_sha256, interpreted.paths.len());
     Ok(PreparedPdfVectorPage {
         request_sha256,

@@ -132,7 +132,7 @@ impl ReportBuilder {
         hash.update(request_sha256.as_bytes());
         hash.update(serde_json::to_vec(&verdict).unwrap_or_default());
         FidelityReport {
-            sha256: format!("{:x}", hash.finalize()),
+            sha256: hex::encode(hash.finalize()),
             algorithm: FIDELITY_ALGORITHM,
             exact,
             raster_only,
