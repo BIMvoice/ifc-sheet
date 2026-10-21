@@ -12,6 +12,7 @@
  * lives in `open-view.ts` / `project-sync.ts`.
  */
 
+import { resolve } from '@/i18n/registry';
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
@@ -206,7 +207,7 @@ export function setUrbanSettings(patch: Partial<UrbanSettings>): void {
 
 export function resetProject(): void {
   resetWallView();
-  useProjectStore.setState({ ...EMPTY_PROJECT, activeItemId: null, dirty: false });
+  useProjectStore.setState({ ...EMPTY_PROJECT, name: resolve('names.project.untitled'), activeItemId: null, dirty: false });
 }
 
 export function setProjectName(name: string): void {

@@ -21,6 +21,7 @@ import { WallView } from '../wall/WallView';
 import { setDrawer, setPanel, useWallNav } from '../wall/wall-nav';
 import { WhatChanged } from '../whatchanged/WhatChanged';
 import { openDemoModel } from './demo-model';
+import { LanguagePicker } from './LanguagePicker';
 import { useIfcSheetTour } from './useIfcSheetTour';
 
 const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
@@ -55,6 +56,7 @@ export function IfcSheetShell() {
           </>
         ) : null}
         <button type="button" {...tourAnchor(TOUR_ANCHORS.wallDemo)} className={quiet} onClick={() => void openDemoModel().catch((err: unknown) => console.warn('[ifcsheet] could not open the demo project', err))}>{t('wall.shell.demo')}</button>
+        <LanguagePicker />
         <button type="button" className={quiet} onClick={() => void files.handleOpenClick()}>{t('wall.shell.open')}</button>
         {sheets.length > 0 ? (
           <button

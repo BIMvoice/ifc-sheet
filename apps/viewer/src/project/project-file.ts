@@ -9,6 +9,7 @@
  * hand-edited or truncated file fails loudly instead of half-loading.
  */
 
+import { resolve } from '@/i18n/registry';
 import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
@@ -212,7 +213,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     return value;
   };
   return {
-    name: isString(raw.name) && raw.name.trim() ? raw.name : 'Untitled project',
+    name: isString(raw.name) && raw.name.trim() ? raw.name : resolve('names.project.untitled'),
     models: list('models').map((m, i) => readModel(m, `/models/${i}`)),
     views: list('views').map((v, i) => readView(v, `/views/${i}`)),
     sheets: list('sheets').map((s, i) => readSheet(s, `/sheets/${i}`)),
