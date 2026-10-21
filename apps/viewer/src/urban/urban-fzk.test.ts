@@ -43,7 +43,7 @@ import { QuantityType } from '@ifc-lite/data';
 import { collectUrbanAreas, pickArea } from './urban-models';
 import { urbanIndicators } from './indicators';
 
-const FZK = resolve(import.meta.dirname, '../../public/_fixtures/AC20-FZK-Haus.ifc');
+const FZK = resolve(import.meta.dirname, '../../src/test/__fixtures__/AC20-FZK-Haus.ifc');
 /** Footprints come from f32 meshes and a 2D boolean: a millimetre band on a 12 m side is 0.012 m²; allow 0.05 m². */
 const AREA_TOL = 0.05;
 const AC_BY_HAND = 12.0 * 10.0;

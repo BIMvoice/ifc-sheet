@@ -32,7 +32,7 @@ import { ProjectDrawer } from './ProjectDrawer.js';
  * letters arrive as written.
  */
 
-const fzkStep = () => readFileSync(resolve(process.cwd(), 'public/_fixtures/AC20-FZK-Haus.ifc'));
+const fzkStep = () => readFileSync(resolve(process.cwd(), 'src/test/__fixtures__/AC20-FZK-Haus.ifc'));
 
 // Romanian letters as STEP writes them (\X2\ escapes): Ștefan Țăran, Cluj-Napoca, Strada Împăcării, Bulevardul Eroilor Nr. 12 (ș ț ă î â).
 const RO = (s: string): string => [...s].map((c) => (c.charCodeAt(0) > 127 ? `\\X2\\${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}\\X0\\` : c)).join('');

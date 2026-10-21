@@ -22,7 +22,7 @@ import type { ProjectSheet } from '@/project/types';
 import { ScheduleGraphic, useSheetSchedules } from '../joinery/ScheduleGraphic';
 import { UrbanView } from './UrbanView';
 
-const FZK = resolve(import.meta.dirname, '../../../../public/_fixtures/AC20-FZK-Haus.ifc');
+const FZK = resolve(import.meta.dirname, '../../../../src/test/__fixtures__/AC20-FZK-Haus.ifc');
 
 /** A sheet as it draws its placed schedules. */
 function SheetSchedules({ sheet }: { sheet: ProjectSheet }) {

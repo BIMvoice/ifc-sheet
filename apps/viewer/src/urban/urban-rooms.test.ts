@@ -20,7 +20,7 @@ import { loadUrbanModel, urbanWasm } from '@/test/urban-fixture';
 import { collectUrbanAreas } from './urban-models';
 import { urbanIndicators } from './indicators';
 
-const FZK = resolve(import.meta.dirname, '../../public/_fixtures/AC20-FZK-Haus.ifc');
+const FZK = resolve(import.meta.dirname, '../../src/test/__fixtures__/AC20-FZK-Haus.ifc');
 
 const space = (id: number, name: string, longName: string, kind: string, area: number) => [
   `#${id}=IFCSPACE('${String(id).padStart(22, '0')}',$,'${name}',$,$,$,$,'${longName}',.ELEMENT.,${kind},$);`,

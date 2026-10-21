@@ -16,11 +16,20 @@
 # setting, not code): Build wasm, Typecheck, Package tests, Viewer tests
 # (shard 0..7), Gates vs base, Rust.
 #
+# The gates job also runs, directly and not against the base, the checks for
+# what review kept finding by hand: test fixtures under apps/*/public/, tests
+# that read the wasm build without skipping when it is absent, published
+# package changes without a changeset, and changesets naming a non-package.
+# Each passes on the tree as it stands (its exceptions are listed, with
+# reasons, in scripts/*-allowlist.txt), so a pull request fails only for what
+# it adds. Each test file has its own `node --test` step, and each step runs
+# even when an earlier one failed, so one red check does not hide the others.
+#
 # Deliberately out of scope for now (follow-up): the other scripts/check-*
-# gates (`pnpm lint`: changesets, i18n literals, jsx-a11y; check-refwalk-guards,
-# check-api-surface, the docs checks) and the scripts/*.test.mjs files except
-# the gate comparison's own. Only check-module-size, check-test-wiring and
-# check-source-text-assertions are compared here.
+# gates (`pnpm lint`: i18n literals, jsx-a11y; check-refwalk-guards,
+# check-api-surface, the docs checks) and their scripts/*.test.mjs files. Only
+# check-module-size, check-test-wiring and check-source-text-assertions are
+# compared against the base.
 
 name: CI
 
@@ -194,6 +203,36 @@ jobs:
 
       - name: Gates, head against base
         run: node scripts/ci-gates-vs-base.mjs "$RUNNER_TEMP/base"
+
+      - name: The public-fixtures check itself
+        if: ${{ !cancelled() }}
+        run: node --test scripts/check-public-fixtures.test.mjs
+
+      - name: No test fixtures under apps/*/public
+        if: ${{ !cancelled() }}
+        run: node scripts/check-public-fixtures.mjs
+
+      - name: The wasm-test-skip check itself
+        if: ${{ !cancelled() }}
+        run: node --test scripts/check-wasm-test-skip.test.mjs
+
+      - name: Tests that read the wasm build skip without it
+        if: ${{ !cancelled() }}
+        run: node scripts/check-wasm-test-skip.mjs
+
+      - name: The changeset-required check itself
+        if: ${{ !cancelled() }}
+        run: node --test scripts/check-changeset-required.test.mjs
+
+      - name: A published package's src/ change carries a changeset
+        if: ${{ !cancelled() }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: node scripts/check-changeset-required.mjs --base "$BASE_SHA"
+
+      - name: Changesets name workspace packages
+        if: ${{ !cancelled() }}
+        run: node scripts/check-changesets.mjs
 
   rust:
     name: Rust
