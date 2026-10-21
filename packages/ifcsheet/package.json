@@ -39,7 +39,7 @@
   "devDependencies": {
     "@types/node": "^26.6.5",
     "dxf-parser": "1.1.2",
-    "pdfjs-dist": "6.4.299",
+    "pdfjs-dist": "6.3.289",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
   },
