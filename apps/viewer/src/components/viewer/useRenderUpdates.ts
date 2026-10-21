@@ -74,7 +74,6 @@ export function useRenderUpdates(params: UseRenderUpdatesParams): void {
     sectionPlane,
     sectionRange,
     coordinateInfo,
-    sectionPlaneRef,
     sectionRangeRef,
     drawing2D,
     show3DOverlay,

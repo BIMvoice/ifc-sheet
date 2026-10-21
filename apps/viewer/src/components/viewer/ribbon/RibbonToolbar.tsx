@@ -13,7 +13,6 @@
  */
 
 import { ribbonTabAllowed } from '@/edition-policy';
-import React from 'react';
 import { ChevronDown, ChevronUp, HelpCircle, Search } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';

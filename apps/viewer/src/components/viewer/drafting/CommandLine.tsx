@@ -36,7 +36,7 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
         ))}
       </div>
       {prompt?.choices?.length ? (
-        <div className="flex flex-wrap gap-1 px-3 pb-1" role="group" aria-label={promptText}>
+        <fieldset className="m-0 flex min-w-0 flex-wrap gap-1 border-0 px-3 pb-1" aria-label={promptText}>
           {prompt.choices.map((c) => (
             <button
               key={c.value}
@@ -47,7 +47,7 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
               {c.value} <span className="text-zinc-500 dark:text-zinc-400">{c.count}</span>
             </button>
           ))}
-        </div>
+        </fieldset>
       ) : null}
       <label className="flex items-center gap-2 px-3 py-1.5">
         {/* A long prompt truncates (whole in its tooltip): it must never widen the drawing above. */}

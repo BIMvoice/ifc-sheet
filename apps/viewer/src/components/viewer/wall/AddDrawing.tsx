@@ -92,7 +92,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
     <section aria-label={t('wall.add.title')} className="flex items-center gap-8 rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 shadow-2xl backdrop-blur">
       <div className="w-44 shrink-0">
         <h2 className="m-0 text-3xl font-light leading-tight text-white">{t('wall.add.title')}</h2>
-        <p className="mb-4 mt-3 text-[11px] uppercase leading-relaxed tracking-[0.25em] text-cyan-400">{t('wall.add.kinds')}</p>
+        <p className="mb-4 mt-3 text-2xs uppercase leading-relaxed tracking-[0.25em] text-cyan-400">{t('wall.add.kinds')}</p>
         <button type="button" onClick={step === 'kinds' ? onClose : () => { setStep('kinds'); setDiscipline(null); }} className="text-sm text-sky-300 underline-offset-4 hover:underline">{t('wall.add.close')}</button>
       </div>
       {step === 'kinds' ? (

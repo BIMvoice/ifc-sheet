@@ -15,10 +15,7 @@
 
 import * as THREE from 'three';
 
-const PAPER = 0xede4d3;
 const PAPER_DIM = 0x6f6657;
-const TEAL = 0x73daca;
-const SLAB_DIM = 0x222226;
 
 export const ACCENT = 0xd6ff3f;     // chartreuse
 export const ACCENT_2 = 0xff5cdc;   // magenta

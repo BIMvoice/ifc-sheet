@@ -1,8 +1,8 @@
 {
   "apps/autodesk-service": 0,
   "apps/cloud-service": 0,
-  "apps/viewer": 192,
-  "apps/viewer-embed": 194,
+  "apps/viewer": 161,
+  "apps/viewer-embed": 163,
   "examples/babylonjs-viewer": 0,
   "examples/collab-demo": 1,
   "examples/threejs-collab": 1,
@@ -31,6 +31,7 @@
   "packages/flow-nodes": 0,
   "packages/geometry": 5,
   "packages/ids": 9,
+  "packages/ifcsheet": 0,
   "packages/ifcx": 5,
   "packages/lens": 0,
   "packages/lists": 0,

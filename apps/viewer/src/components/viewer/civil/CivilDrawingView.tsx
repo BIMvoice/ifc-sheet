@@ -16,7 +16,6 @@ import { Maximize, ZoomIn, ZoomOut } from 'lucide-react';
 import { IconButton } from '@/components/ui/icon-button';
 import { usePanZoom } from '@/lib/use-pan-zoom';
 import { useTranslation } from '@/i18n';
-import { Button } from '@/components/ui/button';
 import { useViewerStore } from '@/store';
 import type { ProjectCivilDrawing } from '@/project/types';
 import { buildCivilDrawing, layoutCivilDrawing, updateCivilDrawing } from '@/civil/civil-drawings';
