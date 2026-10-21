@@ -70,7 +70,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
     <aside className="w-[340px] rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 text-sky-100 shadow-2xl backdrop-blur">
       {slot ? (
         <>
-          <p className="m-0 text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.vp.eyebrow')}</p>
+          <p className="m-0 text-2xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.vp.eyebrow')}</p>
           <label className="mt-2 block text-sm text-sky-200">
             {t('wall.project.rename')}
             <input key={slot.viewId} className={field} defaultValue={name} onBlur={(e) => renameProjectItem(slot.viewId, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />

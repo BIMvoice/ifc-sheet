@@ -36,9 +36,9 @@ import { clearGlobalRefs, setGlobalRendererRef } from '@/hooks/useBCF.js';
 import { waitFor } from '@/test/render.js';
 import { ClashPanel } from './ClashPanel.js';
 import { Toaster } from '@/components/ui/toast.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 });
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 400 });
+stubBoxSize(400, 600);
 
 const BOUNDS = { min: { x: -10, y: 0, z: -8 }, max: { x: 10, y: 12, z: 8 } };
 

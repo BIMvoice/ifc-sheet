@@ -16,7 +16,6 @@ import { useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useViewerStore } from '@/store';
 import { IfcQuery } from '@ifc-lite/query';
-import type { IfcDataStore } from '@ifc-lite/parser';
 
 // Sub-hooks
 import { useIfcLoader } from './useIfcLoader.js';

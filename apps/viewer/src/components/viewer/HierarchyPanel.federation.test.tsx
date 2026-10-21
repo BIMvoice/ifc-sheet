@@ -23,14 +23,14 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { activate, press } from '@/test/render.js';
 import { computeVisibilityIsolation } from '@/lib/visibility/effective-empty.js';
 import { HierarchyPanel } from './HierarchyPanel.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
 // `@tanstack/react-virtual` measures the scroll container's real
 // `offsetHeight` to decide which rows are in the visible range; happy-dom
 // (no real layout engine) always reports 0, so with no stub every
 // virtualized row silently fails to render. Give it a plausible viewport
 // once, globally (pattern from ClashPanel.test.tsx).
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 });
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 400 });
+stubBoxSize(400, 600);
 
 /** Minimal stub `IfcDataStore` carrying just the fields `buildUnifiedStoreys`
  *  and `buildTreeData`'s MODELS section read: one storey at `storeyId`. */

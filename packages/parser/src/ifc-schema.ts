@@ -177,13 +177,37 @@ export function getAttributeNamesAcrossSchemas(type: string): string[] {
     return info ? [...info.attributes] : [];
 }
 
+type RegistryVersion = Parameters<typeof getSchemaRegistryForVersion>[0];
+type VersionEntity = ReturnType<typeof getSchemaRegistryForVersion>['entities'][string];
+
+/**
+ * Each version's entities by upper-case name, built on first use. The
+ * registries are generated constants, so this never goes stale. It replaces a
+ * scan of every entity name on every lookup, which was paid once per entity
+ * read and dominated reads over a whole model (#154). Where two names differ
+ * only in case the first wins, as the scan's `find` did.
+ */
+const ENTITIES_BY_UPPER_BY_VERSION = new Map<RegistryVersion, Map<string, VersionEntity>>();
+
+function entityOfVersion(version: RegistryVersion, type: string): VersionEntity | undefined {
+    let byUpper = ENTITIES_BY_UPPER_BY_VERSION.get(version);
+    if (!byUpper) {
+        const { entities } = getSchemaRegistryForVersion(version);
+        byUpper = new Map();
+        for (const name of Object.keys(entities)) {
+            const upper = name.toUpperCase();
+            if (!byUpper.has(upper)) byUpper.set(upper, entities[name]);
+        }
+        ENTITIES_BY_UPPER_BY_VERSION.set(version, byUpper);
+    }
+    return byUpper.get(type.toUpperCase());
+}
+
 /** Attribute names in one model schema, falling back to the bundled union. */
 export function getAttributeNamesForSchema(type: string, schema: string | undefined): string[] {
     const normalized = schema?.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (normalized === 'IFC2X3' || normalized === 'IFC4' || normalized === 'IFC4X3') {
-        const registry = getSchemaRegistryForVersion(normalized);
-        const canonical = Object.keys(registry.entities).find(name => name.toUpperCase() === type.toUpperCase());
-        const attributes = canonical ? registry.entities[canonical]?.allAttributes : undefined;
+        const attributes = entityOfVersion(normalized, type)?.allAttributes;
         if (attributes) return attributes.map(attribute => attribute.name);
     }
     return getAttributeNamesAcrossSchemas(type);
@@ -199,9 +223,7 @@ export function getAttributeTypeForSchema(type: string, attribute: string, schem
     const normalized = schema?.toUpperCase().replace(/[^A-Z0-9]/g, '');
     let attributes: ReadonlyArray<{ name: string; type: string }> | undefined;
     if (normalized === 'IFC2X3' || normalized === 'IFC4' || normalized === 'IFC4X3') {
-        const registry = getSchemaRegistryForVersion(normalized);
-        const canonical = Object.keys(registry.entities).find(name => name.toUpperCase() === type.toUpperCase());
-        attributes = canonical ? registry.entities[canonical]?.allAttributes : undefined;
+        attributes = entityOfVersion(normalized, type)?.allAttributes;
     }
     attributes ??= getAllAttributesForEntity(type);
     return attributes.find(a => a.name === attribute)?.type;

@@ -28,12 +28,12 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { PropertiesPanel } from './PropertiesPanel.js';
 import { HierarchyPanel } from './HierarchyPanel.js';
 import { buildTreeData, buildUnifiedStoreys, elevationKey } from './hierarchy/treeDataBuilder.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
 // The hierarchy list is virtualized and happy-dom reports zero layout, so give
 // the scroll container a plausible viewport or no row renders (same stub as
 // HierarchyPanel.federation.test.tsx).
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 });
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 400 });
+stubBoxSize(400, 600);
 
 const STOREY_ID = 41;
 const GROUND_ID = 71;

@@ -11,7 +11,7 @@
  * - Color, line weight, hatch controls
  */
 
-import React, { useCallback, useState, useMemo } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { Palette, Plus, Trash2, ChevronDown, ChevronRight, GripVertical, Eye, EyeOff, Check, Copy, PenTool, Flame, Building2, Wrench, Printer, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';

@@ -16,19 +16,16 @@
 
 import type { MeshData } from '@ifc-lite/geometry';
 import type { ViewerState } from '@/store';
-import { toGlobalIdFromModels } from '@/store/globalId';
 import { commandGhostId } from '@/lib/commands/modeling/ghost';
 import { centredRectOutline, prismGhostMesh, rectOutline, segmentOutline } from '@/lib/commands/modeling/ghost-shapes';
 import { buildStoreyWorkplane, elementStoreyId, isWorkplane } from '@/lib/commands/modeling/workplane';
 import type { Workplane } from '@/lib/commands/modeling/types';
-import { planElementTransform } from '@/lib/element-transform/plan';
 import { readWallMetres } from '@/store/slices/mutation-wall-resize';
 import { authoredElementOf, type ElementId } from './model-authoring-native';
 import { toMetres, type AuthoringOp, type ModelAuthoringBatch } from './model-authoring';
 import type { AuthoringRow, ModelAuthoringPreview } from './model-authoring-preview';
 import { authoringReader } from './model-authoring-read';
 
-const DELETE_COLOR: [number, number, number, number] = [0.95, 0.25, 0.2, 0.45];
 /** Above the `command` channel's ids, so the two channels never remove each other's meshes. */
 const GHOST_INDEX = 4096;
 

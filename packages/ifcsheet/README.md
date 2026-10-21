@@ -29,10 +29,12 @@ writeFileSync('house.drawing-set.json', JSON.stringify(set.document, null, 2));
 ifcsheet build house.ifc --out set.pdf                       # one PDF, a page per sheet
 ifcsheet build house.ifc --out out/set.pdf --dxf out/dxf     # plus A-101.dxf, A-201.dxf, ...
 ifcsheet build house.ifc --out set.pdf --name "House Alpha"  # project name in the title blocks
+ifcsheet check house.ifc                                     # what the model lacks, in plain English
+ifcsheet check house.ifc --json                              # the same as JSON
 ifcsheet --help
 ```
 
-Exit code 0 on success, 1 when the work failed (unreadable file, a model with no geometry), 2 for a wrong command line. It needs the wasm bundle, as `openModel` does. `ifcsheet check` (the model-readiness report) is not available yet, and `--standard` and `--project` are not implemented; both are follow-ups of [#164](https://github.com/BIMvoice/ifcsheet/issues/164). The package is private, so run the built bin: `pnpm --filter @bimvoice/ifcsheet build`, then `node packages/ifcsheet/dist/bin.js build ...`.
+Exit code 0 on success, 1 when the work failed (unreadable file, a model with no geometry), 2 for a wrong command line. `build` needs the wasm bundle, as `openModel` does; `check` does not. `check` exits 0 when nothing would weaken the drawings and 1 when something would (or the file cannot be read): the findings are the model-readiness report of the app, one implementation (`readiness.ts`). `--standard` and `--project` are not implemented; both are follow-ups of [#164](https://github.com/BIMvoice/ifcsheet/issues/164). The package is private, so run the built bin: `pnpm --filter @bimvoice/ifcsheet build`, then `node packages/ifcsheet/dist/bin.js build ...`.
 
 ## What the output is today
 

@@ -57,11 +57,15 @@
 # it adds. Each test file has its own `node --test` step, and each step runs
 # even when an earlier one failed, so one red check does not hide the others.
 #
+# The Lint job runs `pnpm lint` (changesets, test-glob coverage, unused locals,
+# i18n literals, jsx-a11y, type scale, and a check that the linter linted
+# something) whenever `changes` reports code, that is, on anything but a
+# docs-only pull request, and on every push to main.
+#
 # Deliberately out of scope for now (follow-up): the other scripts/check-*
-# gates (`pnpm lint`: i18n literals, jsx-a11y; check-refwalk-guards,
-# check-api-surface, the docs checks) and their scripts/*.test.mjs files. Only
-# check-module-size, check-test-wiring and check-source-text-assertions are
-# compared against the base.
+# gates (check-refwalk-guards, check-api-surface, the docs checks) and their
+# scripts/*.test.mjs files. Only check-module-size, check-test-wiring and
+# check-source-text-assertions are compared against the base.
 
 name: CI
 
@@ -185,7 +189,7 @@ jobs:
       - name: The build produced the runtime and its types
         run: test -f packages/wasm/pkg/ifc-lite_bg.wasm && test -f packages/wasm/pkg/ifc-lite.d.ts
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wasm-pkg
           path: packages/wasm/pkg
@@ -255,6 +259,36 @@ jobs:
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+
+  # `pnpm lint`: changesets, test-glob coverage, unused locals, i18n literals,
+  # jsx-a11y, type scale, and a check that the linter linted something. It is
+  # part of "CI passed" through its `needs`. The unused-locals gate runs tsc in
+  # every package, so it needs the same wasm types and built packages as
+  # Typecheck.
+  lint:
+    name: Lint
+    needs: [changes, wasm]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+      - run: pnpm turbo run build --filter='./packages/*'
+      - run: pnpm lint
 
   package-tests:
     name: Package tests
@@ -516,7 +550,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, wasm, typecheck, package-tests, viewer-tests, viewer-build, gates, rust]
+    needs: [changes, wasm, typecheck, lint, package-tests, viewer-tests, viewer-build, gates, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

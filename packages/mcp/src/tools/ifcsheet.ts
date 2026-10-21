@@ -1,0 +1,199 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Drawing-set tools (#165, first slice), over the `@bimvoice/ifcsheet` engine:
+ * `ifcsheet_open_model` opens an IFC model for drawing, `ifcsheet_generate_set`
+ * lays out its starting set of sheets, `ifcsheet_export_pdf` writes the set as
+ * one PDF, `ifcsheet_check_readiness` says what the model lacks and which
+ * drawings are weaker for it (the report of `ifcsheet check`, #164). The `ifcsheet_` prefix keeps them apart from the model tools
+ * (`model_load`, `export_ifc`, ...): these hold their own handles, not
+ * registry models. The engine is imported on first use, so a server that
+ * never draws a set does not load the PDF writer or the geometry engine.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { basename, dirname } from 'node:path';
+import { describeReadiness, paperLabel, paperOf } from '@bimvoice/ifcsheet';
+import type { Tool } from './types.js';
+import { okResult } from './util.js';
+import { ToolErrorCode, ToolExecutionError } from '../errors.js';
+import { resolveSafePath } from '../safe-path.js';
+import { addSheetModel, addSheetSet, getSheetModel, getSheetSet } from './ifcsheet-store.js';
+
+const MODEL_ID = { type: 'string', description: 'The model_id returned by ifcsheet_open_model.' } as const;
+
+async function modelBytes(input: Record<string, unknown>, ctx: Parameters<Tool['handler']>[1]): Promise<{ name: string; bytes: Uint8Array }> {
+  const { file_path: path, ifc_base64: base64 } = input;
+  if ((typeof path === 'string') === (typeof base64 === 'string')) {
+    throw new ToolExecutionError({
+      code: ToolErrorCode.INVALID_INPUT,
+      message: 'Give exactly one of file_path (an .ifc file on the server) or ifc_base64 (the file\'s bytes, base64).',
+    });
+  }
+  if (typeof base64 === 'string') {
+    return { name: typeof input.name === 'string' ? input.name : 'model.ifc', bytes: new Uint8Array(Buffer.from(base64, 'base64')) };
+  }
+  const filePath = await resolveSafePath(path, ctx, 'read');
+  try {
+    return { name: basename(filePath), bytes: new Uint8Array(await readFile(filePath)) };
+  } catch (err) {
+    throw new ToolExecutionError({
+      code: ToolErrorCode.INVALID_INPUT,
+      message: `Cannot read '${filePath}': ${(err as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (err as Error).message}`,
+    });
+  }
+}
+
+export const ifcsheetOpenModel: Tool = {
+  name: 'ifcsheet_open_model',
+  description:
+    'Open an IFC model for drawing-set work: parses it and meshes its geometry. Returns a model_id handle for ifcsheet_generate_set, plus a summary (project name, storeys with elevations, element and mesh counts). This is a separate handle from model_load; it does not register the model for the query tools. Next step: ifcsheet_generate_set.',
+  scope: 'read',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      file_path: { type: 'string', description: 'Path to an .ifc file on the server (must be inside the allowed paths). Give this or ifc_base64.' },
+      ifc_base64: { type: 'string', description: 'The .ifc file\'s bytes, base64-encoded. Give this or file_path.' },
+      name: { type: 'string', description: 'A display name for the model when ifc_base64 is used. Default "model.ifc".' },
+    },
+    additionalProperties: false,
+  },
+  async handler(input, ctx) {
+    const { name, bytes } = await modelBytes(input, ctx);
+    const { openModel } = await import('@bimvoice/ifcsheet/headless');
+    let model;
+    try {
+      model = await openModel(bytes);
+    } catch (err) {
+      throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `Failed to open '${name}': ${(err as Error).message}` });
+    }
+    if (model.dataStore.entityCount === 0) {
+      throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `'${name}' holds no IFC entities: it is not an IFC STEP file.` });
+    }
+    const entry = addSheetModel(ctx, name, model);
+    const summary = {
+      model_id: entry.id,
+      name,
+      projectName: model.projectName,
+      storeys: [...model.storeys].sort((a, b) => a.elevation - b.elevation).map((s) => ({ name: s.name, elevation: s.elevation })),
+      storeyCount: model.storeys.length,
+      elementCount: model.dataStore.entityCount,
+      meshCount: model.meshes.length,
+      hasGeometry: model.extent !== null,
+    };
+    return okResult(
+      `Opened '${name}' as ${entry.id}: project '${summary.projectName}', ${summary.storeyCount} storeys, ${summary.meshCount} meshes. Next: ifcsheet_generate_set.`,
+      summary,
+    );
+  },
+};
+
+export const ifcsheetGenerateSet: Tool = {
+  name: 'ifcsheet_generate_set',
+  description:
+    'Lay out the default drawing set of an opened model: a floor plan per storey, elevations, and proposed sections, hung on numbered sheets (A-101 plans, A-201/A-202 elevations, A-301 sections). Returns document_id (pass it to ifcsheet_export_pdf), the sheets (number, name, paper, the views on each), the views (kind, level), and the full project document as JSON. Fails if the model has no geometry.',
+  scope: 'read',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      model_id: MODEL_ID,
+      name: { type: 'string', description: 'Project name printed in the title blocks. Default: the model\'s project name.' },
+    },
+    required: ['model_id'],
+    additionalProperties: false,
+  },
+  async handler(input, ctx) {
+    const entry = getSheetModel(ctx, input.model_id as string);
+    const { generateDefaultSet } = await import('@bimvoice/ifcsheet');
+    const set = generateDefaultSet(entry.model, typeof input.name === 'string' ? { name: input.name } : {});
+    if (!set) {
+      throw new ToolExecutionError({
+        code: ToolErrorCode.UNSUPPORTED_OPERATION,
+        message: `Model '${entry.id}' has no geometry inside its storeys, so there is nothing to lay a drawing set out on.`,
+      });
+    }
+    const stored = addSheetSet(ctx, entry.id, set);
+    const { views, sheets } = set.document;
+    const viewInfo = (id: string) => views.find((v) => v.id === id);
+    const summary = {
+      document_id: stored.id,
+      model_id: entry.id,
+      name: set.document.name,
+      sheets: sheets.map((s) => ({
+        id: s.id,
+        number: s.number,
+        name: s.name,
+        paper: paperLabel(s.paper ?? 'A1'),
+        paperMm: paperOf(s),
+        viewports: (s.viewports ?? []).map((vp) => ({ viewId: vp.viewId, view: viewInfo(vp.viewId)?.name, scale: `1:${vp.scale}`, x: vp.x, y: vp.y, width: vp.width, height: vp.height })),
+      })),
+      views: views.map((v) => ({ id: v.id, name: v.name, kind: v.kind, ...(v.kind === 'plan' ? { level: v.level.name } : {}) })),
+      notes: set.notes,
+      document: set.document,
+    };
+    return okResult(
+      `Laid out ${sheets.length} sheets (${sheets.map((s) => s.number).join(', ')}) with ${views.length} views as ${stored.id}. Next: ifcsheet_export_pdf.`,
+      summary,
+    );
+  },
+};
+
+export const ifcsheetExportPdf: Tool = {
+  name: 'ifcsheet_export_pdf',
+  description:
+    'Write a generated drawing set as one PDF, a page per sheet at true scale. Give file_path to write the file on the server and get back the path, page count and size; omit file_path to get the PDF as base64 in the result instead.',
+  scope: 'export',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      document_id: { type: 'string', description: 'The document_id returned by ifcsheet_generate_set.' },
+      file_path: { type: 'string', description: 'Where to write the .pdf (must be inside the allowed paths; missing folders are created). Omit to receive base64 bytes in pdf_base64.' },
+    },
+    required: ['document_id'],
+    additionalProperties: false,
+  },
+  async handler(input, ctx) {
+    const { set, model, id } = getSheetSet(ctx, input.document_id as string);
+    const { exportPdf, sheetGraphics } = await import('@bimvoice/ifcsheet/headless');
+    const sheets = await sheetGraphics(set, model.model);
+    const pdf = await exportPdf(sheets, { title: set.document.name });
+    const pages = sheets.length;
+    const base = { document_id: id, pages, sheets: sheets.map((s) => s.number), bytes: pdf.byteLength };
+    if (typeof input.file_path !== 'string') {
+      return okResult(`Exported ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) as base64.`, { ...base, pdf_base64: Buffer.from(pdf).toString('base64') });
+    }
+    const filePath = await resolveSafePath(input.file_path, ctx, 'write');
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, pdf);
+    return okResult(`Wrote ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) to ${filePath}.`, { ...base, file_path: filePath });
+  },
+};
+
+export const ifcsheetCheckReadiness: Tool = {
+  name: 'ifcsheet_check_readiness',
+  description:
+    'Say what an opened model lacks that the drawing set reads (building storeys, rooms, materials, quantity sets, unique GlobalIds) and which drawings or schedules are weaker for it. Returns ready (true when nothing would weaken the drawings) and the findings, each with its kind, what is missing, what is weaker (plain English) and the counts. The same report as `ifcsheet check`. Needs a model_id from ifcsheet_open_model.',
+  scope: 'read',
+  inputSchema: {
+    type: 'object',
+    properties: { model_id: MODEL_ID },
+    required: ['model_id'],
+    additionalProperties: false,
+  },
+  async handler(input, ctx) {
+    const entry = getSheetModel(ctx, input.model_id as string);
+    const { readinessOfModel } = await import('@bimvoice/ifcsheet/headless');
+    const findings = readinessOfModel(entry.model).map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
+    const ready = findings.length === 0;
+    return okResult(
+      ready
+        ? `Model ${entry.id} has what the drawing set reads: storeys, rooms, materials, quantities.`
+        : `Model ${entry.id} lacks ${findings.length} thing${findings.length === 1 ? '' : 's'} the drawings read: ${findings.map((f) => f.missing).join(' ')}`,
+      { model_id: entry.id, ready, findings },
+    );
+  },
+};
+
+export const ifcsheetTools: Tool[] = [ifcsheetOpenModel, ifcsheetGenerateSet, ifcsheetExportPdf, ifcsheetCheckReadiness];

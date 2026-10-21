@@ -121,6 +121,7 @@ The same `npx` command works as a stdio server in any MCP-aware client.
 | bSDD | `bsdd_search`, `bsdd_class`, `bsdd_property_sets`, `bsdd_match` |
 | Diff | `model_diff` (`by_content` for content-keyed matching), `quantity_diff` |
 | Export | `export_ifc`, `export_csv`, `export_json`, `export_glb`, `export_obj`, `export_ifcx`, `export_pdf_report` |
+| Drawing sets | `ifcsheet_open_model`, `ifcsheet_generate_set`, `ifcsheet_export_pdf`, `ifcsheet_check_readiness` |
 | Viewer | `viewer_ask`, `viewer_open`, `viewer_close`, `viewer_status`, `viewer_colorize`, `viewer_isolate`, `viewer_hide`, `viewer_show`, `viewer_reset`, `viewer_fly_to`, `viewer_set_section`, `viewer_clear_section`, `viewer_color_by_storey`, `viewer_color_by_property`, `viewer_get_selection`, `viewer_wait_for_selection`, `viewer_describe_selection` |
 
 `join_walls` joins two straight walls in the same placement frame through the
@@ -193,6 +194,48 @@ Pre-baked prompts ship the BIM expertise:
 `compare_versions`, `space_program_check`, `clash_review`,
 `prop_quality_pass`, `migrate_to_ifcx`, `visual_audit`,
 `interactive_property_inspect`, `visualize_query`.
+
+## Drawing sets (IfcSheet)
+
+Three tools lay out and print the starting drawing set of a model, on the
+`@bimvoice/ifcsheet` engine (issue #165, first slice). They keep their own
+handles and do not need `model_load`.
+
+| Tool | Input | Returns |
+| --- | --- | --- |
+| `ifcsheet_open_model` | `file_path` or `ifc_base64` (exactly one), optional `name` | `model_id`, project name, storeys with elevations, element and mesh counts |
+| `ifcsheet_generate_set` | `model_id`, optional `name` | `document_id`, the sheets (number, name, paper, viewports), the views (kind, level) and the full project document as JSON |
+| `ifcsheet_export_pdf` | `document_id`, optional `file_path` | page count, sheet numbers, byte size and the written `file_path`; without `file_path` the PDF as `pdf_base64` |
+| `ifcsheet_check_readiness` | `model_id` | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check` |
+
+Add the server to Claude Desktop (`claude_desktop_config.json`) or Cursor with
+`--allow` for the folders it may read and write, and to Claude Code with one
+command:
+
+```json
+{ "mcpServers": { "ifc-lite": { "command": "npx", "args": ["@ifc-lite/mcp", "--allow", "/path/to/project"] } } }
+```
+
+```bash
+claude mcp add ifc-lite -- npx @ifc-lite/mcp --allow /path/to/project
+```
+
+An example conversation:
+
+> **You:** Open `/path/to/project/AC20-FZK-Haus.ifc` and make me a drawing set as PDF.
+>
+> **Claude** calls `ifcsheet_open_model` with `{"file_path": "/path/to/project/AC20-FZK-Haus.ifc"}`
+> and gets `model_id: "sheetmodel-1"`, two storeys (Erdgeschoss, Dachgeschoss).
+>
+> **Claude** calls `ifcsheet_generate_set` with `{"model_id": "sheetmodel-1"}` and gets
+> `document_id: "sheetset-1"` with four sheets: A-101 Floor plans, A-201 Elevations
+> south and north, A-202 Elevations east and west, A-301 Sections.
+>
+> **Claude** calls `ifcsheet_export_pdf` with
+> `{"document_id": "sheetset-1", "file_path": "/path/to/project/fzk-set.pdf"}` and gets
+> `pages: 4`.
+>
+> **Claude:** Done: a four-page set is at `/path/to/project/fzk-set.pdf`.
 
 ## Programmatic embedding
 

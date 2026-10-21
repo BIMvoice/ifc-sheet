@@ -10,14 +10,8 @@
 import type { MutableRefObject } from 'react';
 import type { Renderer, PickResult, SnapTarget } from '@ifc-lite/renderer';
 import type { MeshData } from '@ifc-lite/geometry';
-import type {
-  MeasurePoint,
-  SnapVisualization,
-  ActiveMeasurement,
-  EdgeLockState,
-  SectionPlane,
-} from '@/store';
-import type { MeasurementConstraintEdge, OrthogonalAxis, Vec3 } from '@/store/types.js';
+import type { MeasurePoint, SnapVisualization, ActiveMeasurement, EdgeLockState } from '@/store';
+import type { MeasurementConstraintEdge, OrthogonalAxis } from '@/store/types.js';
 
 export interface MouseState {
   isDragging: boolean;

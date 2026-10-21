@@ -70,6 +70,7 @@ export { hipRoofFaces, weightedSkeletonFaces } from './straight-skeleton.js';
 // Roof systems: per-edge rules → planes, structure, and the IfcRoof block of slabs and members.
 export { offsetEdges, orientRoof, roofGeometry, roofProblem, type RoofEdgeKind, type RoofEdgeRule, type RoofGeometry, type RoofLine, type RoofPlane } from './roof-system.js';
 export { defaultRoofStructure, defaultTruss, roofStructure, type MemberRole, type MemberSection, type RoofMember, type RoofStructureSpec, type TrussSpec } from './roof-structure.js';
+export { readRoofSystems } from './roof-system-specs.js';
 export { addRoofSystemToStore, readRoofSystem, regenerateRoofSystemInStore, removeRoofSystemFromStore, roofSystemOf, roofSystemParts, ROOF_SYSTEM_PSET, type RoofSystemResult, type RoofSystemSpec } from './roof-system-store.js';
 export { deletionClosure, type DeletionPlan } from './element-deletion.js';
 export { END_CUTS, memberSolidFaces, pruneOverrides, shapeMembers, type EndCut, type RoofOverrides, type RoofPartOverride, type ShapedMember } from './roof-overrides.js';
