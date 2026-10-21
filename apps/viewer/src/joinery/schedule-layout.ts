@@ -33,6 +33,8 @@ export interface ScheduleLayout {
   prims: SchedulePrim[];
   /** How many pages the table runs over (a schedule given a `maxHeight` it does not fit continues on further sheets); absent: one. */
   pages?: number;
+  /** A column table's smallest page box (its width; title, header and one row): the box a resize stops at. A joinery schedule has `scheduleMinBox`. */
+  minBox?: { width: number; height: number };
   /**
    * Set when the table is wrapped to a viewport's box (joinery schedules on a sheet): the box, paper mm, it is drawn at the top
    * left of and clipped to, and the smallest box that holds one band whole (a resize stops there).

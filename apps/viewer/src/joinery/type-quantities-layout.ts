@@ -12,7 +12,8 @@
  */
 
 import { escapeCsvCell } from '@ifc-lite/export';
-import type { ScheduleLayout, SchedulePrim } from './schedule-layout';
+import type { ScheduleLayout } from './schedule-layout';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
 import type { Totals, TypeQuantities } from './type-quantities';
 
 export interface TypeQuantityLabels {
@@ -61,45 +62,22 @@ export function typeQuantityLines(data: TypeQuantities, labels: TypeQuantityLabe
   return lines;
 }
 
-const ROW = 6;
-const TEXT = 2.5;
-const PAD = 1.5;
 const COLUMNS = [58, 28, 28, 14, 20, 20, 20, 14] as const;
-const PEN = { frame: 0.35, grid: 0.18 } as const;
 
 const fixed = (v: number | null, digits = 2): string => (v === null ? '–' : v.toFixed(digits));
 
-export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityLabels): ScheduleLayout {
-  const prims: SchedulePrim[] = [];
-  const width = COLUMNS.reduce((a, b) => a + b, 0);
-  const lefts = COLUMNS.map((_, i) => COLUMNS.slice(0, i).reduce((a, b) => a + b, 0));
-  const titleH = 10;
+export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityLabels, paging: PagedOptions = {}): ScheduleLayout {
   const lines = typeQuantityLines(data, labels);
-  const table: { cells: string[]; bold: boolean; rule: boolean; frameBelow?: boolean }[] = [
-    { cells: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], bold: true, rule: true },
-    ...lines.map((l, i) => ({
+  const block: TableBlock = {
+    columns: COLUMNS, header: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], numeric: (c) => c >= 3, skipEmpty: true,
+    rows: lines.map((l, i) => ({
       cells: [l.first ? l.type : '', l.first ? plainClass(l.className) : '', l.level, String(l.totals.count), fixed(l.totals.length), fixed(l.totals.area), fixed(l.totals.volume), l.totals.noQto ? String(l.totals.noQto) : ''],
       bold: l.total,
-      // A rule under the last line of each type.
-      rule: i === lines.length - 1 || lines[i + 1].first,
-      // A frame rule above the class totals.
-      frameBelow: !l.classTotal && lines[i + 1]?.classTotal === true,
+      // A frame rule above the class totals, else a rule under the last line of each type.
+      rule: !l.classTotal && lines[i + 1]?.classTotal === true ? PEN.frame : i === lines.length - 1 || lines[i + 1].first ? PEN.grid : 0,
     })),
-  ];
-  const height = titleH + table.length * ROW;
-  prims.push({ kind: 'text', x: 0, y: titleH - 3, text: labels.title, size: 4, anchor: 'start', bold: true });
-  table.forEach((row, r) => {
-    const top = titleH + r * ROW;
-    row.cells.forEach((text, c) => {
-      const numeric = c >= 3;
-      const x = numeric ? lefts[c] + COLUMNS[c] - PAD : lefts[c] + PAD;
-      if (text) prims.push({ kind: 'text', x, y: top + ROW / 2 + TEXT * 0.35, text, size: TEXT, anchor: numeric ? 'end' : 'start', bold: row.bold });
-    });
-    prims.push({ kind: 'line', x1: 0, y1: top + ROW, x2: width, y2: top + ROW, w: r === 0 || row.frameBelow ? PEN.frame : row.rule ? PEN.grid : 0 });
-  });
-  prims.push({ kind: 'line', x1: 0, y1: titleH, x2: width, y2: titleH, w: PEN.frame });
-  for (const x of [...lefts, width]) prims.push({ kind: 'line', x1: x, y1: titleH, x2: x, y2: height, w: x === 0 || x === width ? PEN.frame : PEN.grid });
-  return { width, height, prims: prims.filter((p) => p.kind !== 'line' || p.w > 0) };
+  };
+  return layoutPagedTable(labels.title, 4, [{ kind: 'table', block }], paging);
 }
 
 /** The table as CSV, numbers unformatted, the type on every line; type names are model text, so every cell is formula-guarded (#1506). */
