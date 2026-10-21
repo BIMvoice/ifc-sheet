@@ -173,7 +173,7 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const boxOf = useCallback((v: SheetViewport) => {
     const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);
     const drawing = drawingOf.get(v.viewId);
-    return placed ? { width: placed.width, height: placed.height } : viewportBox(v, drawing ? fittedBounds(v, drawing.bounds) : null);
+    return placed ? ('fit' in placed && placed.fit ? { width: placed.fit.box.w, height: placed.fit.box.h } : { width: placed.width, height: placed.height }) : viewportBox(v, drawing ? fittedBounds(v, drawing.bounds) : null);
   }, [placedSchedules, placedCivil, placedLegends, drawingOf, fittedBounds]);
   return { content, boxOf };
 }

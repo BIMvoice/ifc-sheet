@@ -19,6 +19,16 @@ export interface SteppedActions {
   print: (() => void) | null;
   previous: (() => void) | null;
   next: (() => void) | null;
+  back: () => void;
+  /** Present only with a drawing in front. */
+  leaveEdit: (() => void) | null;
+  /** The sheet's buttons, absent while a drawing is in front (they are not showing then). */
+  comment: (() => void) | null;
+  paper: (() => void) | null;
+  titleBlock: (() => void) | null;
+  revisions: (() => void) | null;
+  printPreview: (() => void) | null;
+  exportDxf: (() => void) | null;
 }
 
 export function steppedHandlers(a: SteppedActions): WallHandlers {
@@ -42,5 +52,13 @@ export function steppedHandlers(a: SteppedActions): WallHandlers {
     'wall.print': a.print,
     'wall.prevSheet': a.previous,
     'wall.nextSheet': a.next,
+    'wall.back': a.back,
+    'wall.leaveEdit': a.leaveEdit,
+    'wall.comment': a.comment,
+    'wall.paper': a.paper,
+    'wall.titleBlock': a.titleBlock,
+    'wall.revisions': a.revisions,
+    'wall.printPreview': a.printPreview,
+    'wall.exportDxf': a.exportDxf,
   } satisfies Record<WallKeyId, (() => void) | null>;
 }

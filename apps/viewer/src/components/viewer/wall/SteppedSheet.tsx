@@ -40,6 +40,8 @@ import { DRAW_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttach
 import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
+import { ariaKeyShortcuts } from '@/lib/commands/shortcut-label';
+import { useKeyBindings } from '@/lib/commands/key-bindings';
 
 /** The Wall tool that runs as a chain: each click adds the next dimension, until Esc. */
 const CHAINED_TOOL = 'dimaligned';
@@ -223,35 +225,52 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const drafting = commandId !== null || runningCommand() !== null;
   const canStep = !drafting && !focusView;
   const neighbour = (to: number): (() => void) | null => (canStep && sheets[to] ? () => onStep(sheets[to].id) : null);
+  // One function per sheet button, which its key (when the person gave it one, #166) runs too.
+  const toggleComment = () => setPlacing(!useReviewUi.getState().placing);
+  const togglePaper = () => { setPapering((x) => !x); setTitling(false); setRevising(false); };
+  const toggleTitle = () => { setTitling((x) => !x); setPapering(false); setRevising(false); };
+  const toggleRevisions = () => { setRevising((x) => !x); setTitling(false); setPapering(false); };
+  const preview = () => setPreviewing(true);
+  const exportDxf = () => { if (paperRef.current) exportSheetDxf(paperRef.current, sheet); };
+  const onSheet = <T,>(f: T): T | null => (focusView ? null : f);
   useWallKeys(steppedHandlers({
     startTool,
     toggleAdd: () => setAdding((a) => !a),
-    fit: focusView ? null : fit,
-    print: focusView ? null : print,
+    fit: onSheet(fit),
+    print: onSheet(print),
     previous: at > 0 ? neighbour(at - 1) : null,
     next: at >= 0 ? neighbour(at + 1) : null,
+    back: onBack,
+    leaveEdit: focusView ? leaveEditMode : null,
+    comment: onSheet(toggleComment),
+    paper: onSheet(togglePaper),
+    titleBlock: onSheet(toggleTitle),
+    revisions: onSheet(toggleRevisions),
+    printPreview: onSheet(preview),
+    exportDxf: onSheet(exportDxf),
   }));
+  useKeyBindings((s) => s.overrides); // a rebinding redraws the keys the buttons name
 
   return (
     <div ref={root} className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-3 px-6 pb-2 pt-4 text-sky-100">
-        <button type="button" className="text-cyan-400 hover:text-cyan-300" onClick={onBack}>{t('wall.back')}</button>
+        <button type="button" className="text-cyan-400 hover:text-cyan-300" aria-keyshortcuts={ariaKeyShortcuts('wall.back') || undefined} onClick={onBack}>{t('wall.back')}</button>
         <span className="text-sky-200/50">/</span>
         <span className="font-semibold text-white">{sheet.number} {sheet.name}</span>
         {focusView ? <><span className="text-sky-200/50">/</span><span className="text-white">{focusView.name}</span></> : null}
-        {focusView ? <button type="button" className={issue} onClick={leaveEditMode}>{t('wall.leaveEdit')}</button> : null}
+        {focusView ? <button type="button" className={issue} aria-keyshortcuts={ariaKeyShortcuts('wall.leaveEdit') || undefined} onClick={leaveEditMode}>{t('wall.leaveEdit')}</button> : null}
         <span className="flex-1" />
         {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
         {!focusView ? (
           <>
-            <button type="button" className={issue} aria-pressed={commenting} title={t('review.tool.hint')} onClick={() => setPlacing(!commenting)}>{t('review.tool')}</button>
-            <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); setRevising(false); }}>{t('wall.paper.button')}</button>
-            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); setRevising(false); }}>{t('wall.tb.title')}</button>
-            <button type="button" className={issue} aria-pressed={revising} onClick={() => { setRevising((x) => !x); setTitling(false); setPapering(false); }}>{t('revision.title')}</button>
+            <button type="button" className={issue} aria-pressed={commenting} title={t('review.tool.hint')} aria-keyshortcuts={ariaKeyShortcuts('wall.comment') || undefined} onClick={toggleComment}>{t('review.tool')}</button>
+            <button type="button" className={issue} aria-pressed={papering} {...keyProps(t, t('wall.paper.button'), 'wall.paper')} onClick={togglePaper}>{t('wall.paper.button')}</button>
+            <button type="button" className={issue} aria-pressed={titling} {...keyProps(t, t('wall.tb.title'), 'wall.titleBlock')} onClick={toggleTitle}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={revising} {...keyProps(t, t('revision.title'), 'wall.revisions')} onClick={toggleRevisions}>{t('revision.title')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
-            <button type="button" className={issue} onClick={() => setPreviewing(true)}>{t('printPreview.open')}</button>
+            <button type="button" className={issue} {...keyProps(t, t('printPreview.open'), 'wall.printPreview')} onClick={preview}>{t('printPreview.open')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
-            <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
+            <button type="button" className={issue} {...keyProps(t, t('wall.export.dxf'), 'wall.exportDxf')} onClick={exportDxf}>{t('wall.export.dxf')}</button>
           </>
         ) : null}
       </div>

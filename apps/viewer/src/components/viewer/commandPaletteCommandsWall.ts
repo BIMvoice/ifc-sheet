@@ -9,7 +9,7 @@
  * name. Choosing a sheet steps into it.
  */
 
-import { FileText, Maximize, PencilRuler, Plus, Printer, StepBack, StepForward } from 'lucide-react';
+import { ArrowLeft, Download, Eye, FileText, History, Maximize, MessageSquare, PencilRuler, Plus, Printer, StepBack, StepForward } from 'lucide-react';
 import { isDocsEdition } from '@/edition';
 import { resolveEnglish } from '@/i18n/registry';
 import { WALL_KEY_COMMANDS, type WallKeyId } from '@/lib/commands/wall-key-commands';
@@ -24,6 +24,8 @@ const ICONS: Record<WallKeyId, Command['icon']> = {
   'wall.draw.line': PencilRuler, 'wall.draw.polyline': PencilRuler, 'wall.draw.circle': PencilRuler,
   'wall.draw.text': PencilRuler, 'wall.draw.hatch': PencilRuler, 'wall.draw.revcloud': PencilRuler, 'wall.draw.ptext': PencilRuler,
   'wall.addDrawing': Plus, 'wall.fit': Maximize, 'wall.print': Printer, 'wall.prevSheet': StepBack, 'wall.nextSheet': StepForward,
+  'wall.back': ArrowLeft, 'wall.leaveEdit': ArrowLeft, 'wall.comment': MessageSquare, 'wall.paper': FileText, 'wall.titleBlock': FileText,
+  'wall.revisions': History, 'wall.printPreview': Eye, 'wall.exportDxf': Download,
 };
 
 export function buildWallCommands(sheets: readonly ProjectSheet[], open: (sheetId: string) => void = stepInto): Command[] {

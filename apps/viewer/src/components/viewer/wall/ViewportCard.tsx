@@ -14,6 +14,7 @@ import { renameProjectItem, useProjectStore } from '@/project/project-store';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { addViewport, removeViewport, updateViewport } from '@/project/sheets';
 import { isResizable } from '@/project/viewport-resize';
+import { isFittedSchedule } from '@/project/schedule-fit';
 import { drawingNumbers } from '@/drafting/cross-ref';
 import { drawingArea } from '@/project/drawing-set';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
@@ -94,7 +95,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
           <div className="mt-4 flex flex-wrap gap-2">
             {view ? <button type="button" className={quiet} onClick={() => onOpen(slot)}>{t('wall.vp.open')}</button> : null}
-            {isResizable(view) && slot.width > 0 && slot.height > 0 ? (
+            {(isResizable(view) || (isFittedSchedule(schedule) && (slot.page ?? 0) === 0)) && slot.width > 0 && slot.height > 0 ? (
               <button type="button" className={quiet} onClick={() => runAsOneUndoStep(() => updateViewport(sheet.id, slot.id, { width: 0, height: 0, center: null }))}>{t('wall.vp.fit')}</button>
             ) : null}
             {view?.kind === 'plan' && view.site ? <button type="button" className={quiet} onClick={() => { drawPlotBoundary(slot.viewId, startWhenAttached); onOpen(slot); }}>{t('site.drawBoundary')}</button> : null}

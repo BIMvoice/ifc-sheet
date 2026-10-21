@@ -18,6 +18,7 @@ import { issueRo } from '../catalogues/issue.ro';
 import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetsRo } from '../catalogues/sheets.ro';
 import { wallRo } from '../catalogues/wall.ro';
+import { wallKeysRo } from '../catalogues/wall-keys.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
 import { featuresRo } from '../catalogues/features.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
@@ -28,6 +29,7 @@ import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 
 export default {
   ...wallRo,
+  ...wallKeysRo,
   ...sheetsRo,
   ...checkRo,
   ...issueRo,

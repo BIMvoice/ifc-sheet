@@ -13,7 +13,7 @@
  * viewport box.
  */
 
-import { forwardRef, memo, useMemo } from 'react';
+import { forwardRef, memo, useId, useMemo } from 'react';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useTranslation } from '@/i18n';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
@@ -210,13 +210,18 @@ function CivilViewport({ vp, layout, selected }: { vp: SheetViewport; layout: Ci
   );
 }
 
-/** A joinery schedule placed on the sheet, centred on its viewport point. */
+/**
+ * A schedule placed on the sheet. One wrapped to its viewport's box (`layout.fit`, the joinery lists) is drawn at the box's top
+ * left and clipped to it, so nothing of it lies outside what the viewport gives it; another is centred on the viewport point.
+ */
 function ScheduleViewport({ vp, layout, selected }: { vp: SheetViewport; layout: ScheduleLayout; selected: boolean }) {
-  const { width, height } = layout;
+  const clipId = useId();
+  const box = layout.fit?.box ?? { x: vp.x - layout.width / 2, y: vp.y - layout.height / 2, w: layout.width, h: layout.height };
   return (
     <g data-viewport-id={vp.id}>
-      <ScheduleGraphic layout={layout} x={vp.x - width / 2} y={vp.y - height / 2} />
-      <rect x={vp.x - width / 2} y={vp.y - height / 2} width={width} height={height} fill="transparent"
+      {layout.fit ? <clipPath id={clipId}><rect x={box.x} y={box.y} width={box.w} height={box.h} /></clipPath> : null}
+      <g clipPath={layout.fit ? `url(#${clipId})` : undefined}><ScheduleGraphic layout={layout} x={box.x} y={box.y} /></g>
+      <rect x={box.x} y={box.y} width={box.w} height={box.h} fill="transparent"
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined} data-export-ignore={selected ? 'true' : undefined} />
     </g>
   );

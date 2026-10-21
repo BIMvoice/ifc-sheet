@@ -16,9 +16,12 @@ import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { buildDrawingSet, drawingArea, groundPlan, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
-import { paperLabel } from './paper';
 import { addSchedule } from '@/joinery/schedules';
 import { registerHolders, registerSheetFit } from './drawing-register';
+import { withContinuationPages } from './continuation-pages';
+import { isFittedSchedule, isJoinerySchedule, pagesIn, paperHolding, syncSchedulePages } from './schedule-fit';
+import { sheetDrawingArea } from './viewport-resize';
+import { scheduleData, type ScheduleData } from '@/joinery/schedule-data';
 import { proposalInputForLevel } from './model-rooms';
 import { DEFAULT_SCHEME, nextNumber, numberSheets, registerNumberIn } from './numbering';
 import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useProjectStore } from './project-store';
@@ -260,31 +263,44 @@ export function hangView(viewId: string, extent: ModelExtent): string | null {
   return hung.sheetId;
 }
 
-/** Hang a schedule or a legend on a sheet of its own in the A-6xx series: `itemId` centred in the drawing area, the sheet named `name`. */
-function hangOnSheetOfItsOwn(itemId: string, name: string): string {
+/**
+ * Hang a schedule or a legend on a sheet of its own in the A-6xx series, named `name`: `itemId` centred in the drawing area.
+ * A schedule that fits its viewport (`fit`) instead takes the whole drawing area as its box. A joinery schedule (`fit.data`)
+ * is checked to fit: on a paper too small for even one band at its scale the sheet is made the next larger paper that holds
+ * it, and the bands that do not fit the box's height continue on further sheets (`schedule-fit`). A column table's pages are
+ * counted from its rows when the sheet draws it (`useSheetSchedules`).
+ */
+function hangOnSheetOfItsOwn(itemId: string, name: string, fit?: { data?: ScheduleData; scale: number }): string {
   const { sheets } = useProjectStore.getState();
   const placed = sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === itemId));
   if (placed) return placed.id;
   const template = seriesTemplates().schedules;
   const start = template ? templateFields(template) : { paper: SET_PAPER, orientation: 'landscape' as const };
-  const area = drawingArea(start);
-  const sheet: ProjectSheet = {
-    id: freshProjectId('sheet'), number: nextNumber(sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), ...start,
-    viewports: [{ id: freshProjectId('viewport'), viewId: itemId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: 50, width: 0, height: 0, center: null }],
-  };
+  const bare: ProjectSheet = { id: freshProjectId('sheet'), number: nextNumber(sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), ...start };
+  const paper = fit?.data ? paperHolding(bare, fit.data, fit.scale) : bare.paper;
+  const sheet: ProjectSheet = { ...bare, paper };
+  const area = fit ? sheetDrawingArea(sheet) : drawingArea(sheet);
+  const box = fit ? { width: area.w, height: area.h } : { width: 0, height: 0 };
+  sheet.viewports = [{ id: freshProjectId('viewport'), viewId: itemId, x: area.x + area.w / 2, y: area.y + area.h / 2, scale: fit?.scale ?? 50, ...box, center: null }];
   useProjectStore.setState({ sheets: [...sheets, sheet], dirty: true });
+  if (fit?.data) syncSchedulePages(itemId, pagesIn(fit.data, fit.scale, area));
   return sheet.id;
 }
 
 /**
- * Hang a schedule (doors and windows, or the material takeoff) on a sheet of
- * its own in the schedules series (A-6xx by default), its table centred in the drawing area, named
- * after it. Returns the sheet's id; a schedule already on a sheet returns
- * that sheet.
+ * Hang a schedule (doors and windows, the material takeoff, the finishes, the
+ * types or the urban indicators) on a sheet of its own in the schedules series
+ * (A-6xx by default), named after it. Every kind but the register fills the
+ * sheet's drawing area and continues on A-6xx.1… when its bands or rows do not
+ * fit. Returns the sheet's id; a schedule already on a sheet returns that
+ * sheet. `data` stands in for the model's joinery schedule data.
  */
-export function hangSchedule(scheduleId: string): string | null {
+export function hangSchedule(scheduleId: string, data?: ScheduleData): string | null {
   const schedule = useProjectStore.getState().schedules?.find((s) => s.id === scheduleId);
-  return schedule ? hangOnSheetOfItsOwn(scheduleId, schedule.name) : null;
+  if (!schedule) return null;
+  const scale = schedule.scale ?? 50;
+  if (!isFittedSchedule(schedule)) return hangOnSheetOfItsOwn(scheduleId, schedule.name);
+  return hangOnSheetOfItsOwn(scheduleId, schedule.name, { scale, data: isJoinerySchedule(schedule) ? data ?? scheduleData(schedule.kind as 'door' | 'window' | 'all') : undefined });
 }
 
 /** Hang a legend the same way (`hangSchedule`); a legend already on a sheet returns that sheet. */
@@ -339,10 +355,8 @@ export function syncRegisterPages(): void {
   const { sheets, schedules } = useProjectStore.getState();
   const register = schedules?.find((s) => s.kind === 'register');
   if (!register) return;
-  const pageOf = (s: ProjectSheet) => (s.viewports ?? []).find((vp) => vp.viewId === register.id)?.page ?? 0;
   const holders = registerHolders(sheets, register.id);
-  const first = holders[0];
-  if (!first) return;
+  if (!holders[0]) return;
   const others = sheets.length - holders.length;
   // Each continuation sheet is a row of the register too: settle on a count that holds itself.
   let pages = 1;
@@ -351,29 +365,8 @@ export function syncRegisterPages(): void {
     if (need === pages) break;
     pages = need;
   }
-  const keep = holders.slice(0, pages);
-  const gone = new Set(holders.slice(pages).map((s) => s.id));
-  const taken = new Set(sheets.filter((s) => !gone.has(s.id)).map((s) => s.number));
-  const added: ProjectSheet[] = [];
-  for (let page = keep.length; page < pages; page++) {
-    let n = page;
-    while (taken.has(`${first.number}.${n}`)) n++;
-    const number = `${first.number}.${n}`;
-    taken.add(number);
-    const vp = (first.viewports ?? []).find((v) => v.viewId === register.id);
-    added.push({
-      id: freshProjectId('sheet'), number, series: 'general', name: first.name, createdAt: Date.now(), paper: first.paper, orientation: first.orientation,
-      viewports: [{ ...(vp ?? { x: 0, y: 0, scale: 1, width: 0, height: 0, center: null }), id: freshProjectId('viewport'), viewId: register.id, page }],
-    });
-  }
-  // A continuation sheet removed by hand leaves a gap: the ones kept show pages 0, 1, 2… in order.
-  // Every page is fitted to the first sheet's paper (`registerSheetFit`): a continuation sheet takes that paper too, so its page stays on it.
-  const renumbered = new Map(keep.flatMap((s, i) => (pageOf(s) === i && (i === 0 || (paperLabel(s.paper ?? SET_PAPER) === paperLabel(first.paper ?? SET_PAPER) && s.orientation === first.orientation)) ? [] : [[s.id, {
-    ...s, ...(i === 0 ? {} : { paper: first.paper, orientation: first.orientation }),
-    viewports: (s.viewports ?? []).map((vp) => (vp.viewId !== register.id ? vp : i === 0 ? (({ page: _p, ...rest }) => rest)(vp) : { ...vp, page: i })),
-  }] as const])));
-  if (added.length === 0 && gone.size === 0 && renumbered.size === 0) return;
-  useProjectStore.setState({ sheets: [...sheets.filter((s) => !gone.has(s.id)).map((s) => renumbered.get(s.id) ?? s), ...added], dirty: true });
+  const next = withContinuationPages(sheets, register.id, pages);
+  if (next) useProjectStore.setState({ sheets: next, dirty: true });
 }
 
 // The register follows the set: a sheet added or removed may need a page more or less.

@@ -44,7 +44,7 @@ export function useAutosaveRecovery(): void {
         const session = usePackageSession.getState();
         const projectId = session.projectId ?? newProjectId();
         if (!session.projectId) usePackageSession.setState({ projectId });
-        const packaged = await packageCurrentProject(projectId);
+        const packaged = await packageCurrentProject(projectId, { offMainThread: true });
         await writeRecovery({ projectId, name: packaged.doc.name, fileName: session.fileName, savedAt: Date.now(), bytes: new Blob([packaged.bytes as BlobPart]) });
         last = Date.now();
       } catch (err) {

@@ -28,6 +28,8 @@ import { isResizable } from '@/project/viewport-resize';
 import { ViewportHandles } from './ViewportHandles';
 import { CommentLayer } from './CommentLayer';
 import { WallSheet } from './WallSheet';
+import { isDraftingKey } from '../drafting/drafting-key-match';
+import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
 
 interface Pan { x: number; y: number; k: number }
 
@@ -112,7 +114,8 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   // Delete takes the chosen drawing off the sheet (a drafted selection is the drafting keys' own).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!chosenId || (e.key !== 'Delete' && e.key !== 'Backspace')) return;
+      // Erase's keys as bound now (`drafting.erase`), not a key of this sheet's own.
+      if (!chosenId || !isDraftingKey('drafting.erase', e) || openKeyboardOverlay()) return;
       if (e.target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       removeViewport(sheet.id, chosenId);
@@ -127,7 +130,10 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   // the crop's centre is stored against where the drawing is on the paper, which is unknown until it exists.
   const chosenVp = (sheet.viewports ?? []).find((v) => v.id === chosenId) ?? null;
   const chosenDrawing = chosenVp ? sheetContent.content(chosenVp).drawing ?? null : null;
-  const resizing = chosenVp && chosenDrawing && !drafting.drafting && isResizable(views.find((v) => v.id === chosenVp.viewId)) ? chosenVp : null;
+  // A schedule wrapped to its viewport (#186) has grips too: dragging one re-wraps its bands, and the box stops at one band whole.
+  // The first sheet's box rules every page, so a continuation sheet has none of its own to drag.
+  const chosenFit = chosenVp && (chosenVp.page ?? 0) === 0 ? sheetContent.content(chosenVp).schedule?.fit : undefined;
+  const resizing = chosenVp && !drafting.drafting && ((chosenDrawing && isResizable(views.find((v) => v.id === chosenVp.viewId))) || chosenFit) ? chosenVp : null;
   const showPrompt = drafting.drafting || draftSelection.size > 0;
 
   return (
@@ -165,7 +171,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           <WallSheet ref={paperRef} sheet={sheet} width={paper.w * pan.k} selectedViewportId={chosenId} sheetContent={sheetContent} pinned={false} />
         </div>
         {drafting.overlay}
-        {resizing ? <ViewportHandles key={resizing.id} sheet={sheet} vp={resizing} box={sheetContent.boxOf(resizing)} drawing={chosenDrawing} pan={pan} /> : null}
+        {resizing ? <ViewportHandles key={resizing.id} sheet={sheet} vp={resizing} box={sheetContent.boxOf(resizing)} drawing={chosenDrawing} pan={pan} min={chosenFit?.min} /> : null}
         <CommentLayer sheet={sheet} pan={pan} toPaper={toPaper} />
       </div>
       {showPrompt ? (

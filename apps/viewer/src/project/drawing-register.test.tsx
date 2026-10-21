@@ -9,6 +9,7 @@
 import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { escapeCsvCell } from '@ifc-lite/export';
 import { captureSheets } from '@/issue/capture.js';
 import { planIssue } from '@/issue/plan.js';
 import { drawingListCsv } from '@/issue/output.js';
@@ -203,7 +204,7 @@ describe('the register is the drawing list', () => {
     assert.deepEqual(plan.sheets.map((p) => p.register).sort(byNumber), rows().sort(byNumber));
     assert.equal(s.sheets.length, plan.sheets.length);
     const csv = drawingListCsv(plan, { title: 'T', issue: 'I', date: 'D', sheet: 'Sheet', sheetTitle: 'Title', scale: 'Scale', paper: 'Paper', revision: 'Revision' });
-    const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const cell = (v: string) => escapeCsvCell(v);
     for (const r of rows()) assert.ok(csv.includes([r.number, r.title, r.scale].map(cell).join(',')), r.number);
   });
 
