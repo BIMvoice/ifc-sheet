@@ -21,7 +21,7 @@ export function LazyWallSheet({ sheet, width, near }: { sheet: ProjectSheet; wid
       className="flex flex-col items-center justify-center gap-1 border border-sky-300/30 bg-sky-100/5 px-4 text-center"
       style={{ width, height: (width * paper.h) / paper.w }}
     >
-      <span className="text-lg font-semibold text-white">{sheet.number}</span>
+      <span className="text-base font-semibold text-white">{sheet.number}</span>
       <span className="text-sm text-sky-200/80">{sheet.name}</span>
     </div>
   );

@@ -50,7 +50,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
     return id ? keyProps(t, name, id) : { title: name };
   };
   return (
-    <nav aria-label={t('wall.tools.rail')} {...tourAnchor(TOUR_ANCHORS.wallToolRail)} className="flex w-[132px] shrink-0 flex-col gap-2 overflow-y-auto py-2">
+    <nav aria-label={t('wall.tools.rail')} {...tourAnchor(TOUR_ANCHORS.wallToolRail)} className="flex w-[116px] shrink-0 flex-col gap-1.5 overflow-y-auto py-1">
       {WALL_TOOLS.map((tool) => {
         const on = active === tool.command;
         const all = WALL_ALL[tool.command];
@@ -62,11 +62,11 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
               {...keyed(t(toolHelpKey(tool.command)), tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
-                'flex flex-col items-center gap-0.5 rounded-2xl border px-2 py-1.5 text-sm transition-colors',
+                'flex flex-col items-center gap-0.5 rounded-xl border px-2 py-1 text-xs transition-colors',
                 on ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 bg-[#0d2a55] text-sky-50 hover:border-sky-300/60',
               )}
             >
-              <ToolIcon name={tool.icon} size={34} accent={on ? '#0b1f3d' : '#22d3ee'} />
+              <ToolIcon name={tool.icon} size={28} accent={on ? '#0b1f3d' : '#22d3ee'} />
               {t(tool.labelKey)}
             </button>
             {all && viewKind && all.kinds.includes(viewKind) ? (
@@ -83,14 +83,14 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
         {...keyProps(t, t('wall.addDrawing'), 'wall.addDrawing')}
         onClick={onAdd}
         className={cn(
-          'flex items-center gap-2 rounded-2xl border px-3 py-2 text-left text-sm leading-tight',
+          'flex items-center gap-2 rounded-xl border px-3 py-1.5 text-left text-xs leading-tight',
           adding ? 'border-cyan-300 bg-cyan-400 text-[#0b1f3d]' : 'border-cyan-400/60 text-cyan-300 hover:bg-cyan-400/10',
         )}
       >
-        <ToolIcon name="plus" size={22} accent="currentColor" />
+        <ToolIcon name="plus" size={18} accent="currentColor" />
         {t('wall.addDrawing')}
       </button>
-      <p className="m-0 mt-2 text-2xs font-medium uppercase tracking-[0.25em] text-sky-300/70">{t('wall.draw')}</p>
+      <p className="m-0 mt-2 text-2xs font-medium uppercase tracking-widest text-sky-300/70">{t('wall.draw')}</p>
       <div className="grid grid-cols-2 gap-1.5">
         {DRAW_TOOLS.map((tool) => {
           const on = active === tool.command;
@@ -102,7 +102,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
               {...keyed(t(toolHelpKey(tool.command)), tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
-                'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1.5 text-2xs leading-tight',
+                'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1 text-xs leading-tight',
                 on ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
               )}
             >
@@ -119,7 +119,7 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
         {...keyProps(t, t('wall.ortho.help'), 'drafting.ortho')}
         onClick={toggleOrtho}
         className={cn(
-          'flex items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-sm leading-tight',
+          'flex items-center justify-between gap-2 rounded-xl border px-3 py-1 text-xs leading-tight',
           ortho ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
         )}
       >

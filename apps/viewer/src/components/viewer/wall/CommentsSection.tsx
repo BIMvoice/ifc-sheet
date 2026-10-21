@@ -25,8 +25,9 @@ import { reviewerName } from '@/review/identity';
 import { pinSnapshots } from '@/review/snapshot';
 import { setHighlight } from '@/review/ui-store';
 import { useViewerStore } from '@/store';
+import { WALL_PILL } from './wall-type';
 
-const action = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
+const action = WALL_PILL;
 const NONE: never[] = [];
 
 export function CommentsSection({ onGo }: { onGo: (sheetId: string) => void }) {
@@ -78,7 +79,7 @@ export function CommentsSection({ onGo }: { onGo: (sheetId: string) => void }) {
 
   return (
     <section className="border-t border-sky-300/10 px-4 py-3" data-owns-keys>
-      <h3 className="m-0 mb-1.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.25em] text-cyan-400">
+      <h3 className="m-0 mb-1.5 flex items-center gap-2 text-2xs font-medium uppercase tracking-widest text-cyan-400">
         {t('review.title')}
         <span className="rounded-full bg-rose-500 px-1.5 text-xs normal-case tracking-normal text-white" data-open-total>{openCount(comments)}</span>
       </h3>

@@ -25,8 +25,9 @@ import { WhatChanged } from '../whatchanged/WhatChanged';
 import { openDemoModel } from './demo-model';
 import { LanguagePicker } from './LanguagePicker';
 import { useIfcSheetTour } from './useIfcSheetTour';
+import { WALL_PILL } from '../wall/wall-type';
 
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
+const quiet = WALL_PILL;
 
 export function IfcSheetShell() {
   const { t } = useTranslation();
@@ -44,15 +45,15 @@ export function IfcSheetShell() {
   return (
     <div data-ifcsheet-shell className="fixed inset-0 z-50 flex flex-col bg-[#061a36] text-sky-50">
       {files.fileInputs}
-      <header className="flex h-14 shrink-0 items-center gap-4 border-b border-sky-300/10 px-6">
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-sky-300/10 px-6">
         <button type="button" aria-pressed={drawer} className={quiet} onClick={() => setDrawer(!drawer)}>{t('wall.shell.project')}</button>
-        <img src="/logo.png" alt="" className="size-7" />
-        <span className="text-lg font-semibold text-white">IfcSheet</span>
+        <img src="/logo.png" alt="" className="size-6 shrink-0" />
+        <span className="text-base font-semibold text-white">IfcSheet</span>
         <span className="h-5 w-px bg-sky-300/20" />
-        <span className="truncate text-sky-200/80">{modelName ?? t('wall.shell.untitled')}</span>
+        <span className="min-w-0 truncate text-sm text-sky-200/80">{modelName ?? t('wall.shell.untitled')}</span>
         <span className="flex-1" />
         {sheets.length > 0 ? <WhatChanged /> : null}
-        {sheets.length > 0 ? <span className="text-sm text-sky-200/80">{t('wall.shell.sheetsViews', { sheets: sheets.length, views })}</span> : null}
+        {sheets.length > 0 ? <span className="whitespace-nowrap text-xs text-sky-200/80">{t('wall.shell.sheetsViews', { sheets: sheets.length, views })}</span> : null}
         {sheets.length > 0 ? (
           <>
             <button type="button" aria-pressed={panel === 'missing'} className={quiet} onClick={() => setPanel(panel === 'missing' ? null : 'missing')}>{t('check.section')}</button>

@@ -23,7 +23,7 @@ export function SectionTray({ sheet, slotId, proposals }: { sheet: ProjectSheet;
   if (proposals.length === 0) return null;
   return (
     <div className="flex items-center gap-4 rounded-xl border border-sky-300/20 bg-sky-950/60 px-5 py-3">
-      <span className="max-w-[9rem] text-2xs font-medium uppercase leading-relaxed tracking-[0.2em] text-sky-200/70">{t('wall.tray')}</span>
+      <span className="max-w-[9rem] text-2xs font-medium uppercase leading-relaxed tracking-widest text-sky-200/70">{t('wall.tray')}</span>
       <div className="flex flex-wrap gap-2">
         {proposals.map((p) => {
           const shown = onSheet(p);

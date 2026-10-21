@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { WALL_PILL } from '../wall/wall-type';
+
 /** The classes the set's panels (what is missing, issuing) wear on each surface that shows them. */
 export interface SetSkin {
   /** A button. */
@@ -18,7 +20,7 @@ export interface SetSkin {
   check: string;
 }
 
-const wallButton = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70 disabled:opacity-40';
+const wallButton = `${WALL_PILL} disabled:opacity-40`;
 
 /** The Wall's navy panels. */
 export const WALL_SKIN: SetSkin = {

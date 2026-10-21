@@ -42,12 +42,13 @@ import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
 import { ariaKeyShortcuts } from '@/lib/commands/shortcut-label';
 import { useKeyBindings } from '@/lib/commands/key-bindings';
+import { WALL_PILL } from './wall-type';
 
 /** The Wall tool that runs as a chain: each click adds the next dimension, until Esc. */
 const CHAINED_TOOL = 'dimaligned';
 
 /** The sheet's way out: printed or saved, at true paper size. */
-const issue = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
+const issue = WALL_PILL;
 
 interface SteppedSheetProps {
   sheet: ProjectSheet;
@@ -253,10 +254,10 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
 
   return (
     <div ref={root} className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-3 px-6 pb-2 pt-4 text-sky-100">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 px-6 pb-2 pt-3 text-sm text-sky-100">
         <button type="button" className="text-cyan-400 hover:text-cyan-300" aria-keyshortcuts={ariaKeyShortcuts('wall.back') || undefined} onClick={onBack}>{t('wall.back')}</button>
         <span className="text-sky-200/50">/</span>
-        <span className="font-semibold text-white">{sheet.number} {sheet.name}</span>
+        <span className="min-w-0 truncate font-semibold text-white">{sheet.number} {sheet.name}</span>
         {focusView ? <><span className="text-sky-200/50">/</span><span className="text-white">{focusView.name}</span></> : null}
         {focusView ? <button type="button" className={issue} aria-keyshortcuts={ariaKeyShortcuts('wall.leaveEdit') || undefined} onClick={leaveEditMode}>{t('wall.leaveEdit')}</button> : null}
         <span className="flex-1" />
@@ -317,8 +318,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         </div>
       ) : null}
       {!focusView && !tool ? (
-        <footer className="flex shrink-0 items-baseline gap-3 border-t border-zinc-200 bg-white px-6 py-3 text-sm text-zinc-700">
-          <strong className="text-zinc-900">{t('wall.sheetHint.title')}</strong>
+        <footer className="flex shrink-0 items-baseline gap-3 border-t border-zinc-200 bg-white px-6 py-2 text-xs text-zinc-700">
+          <strong className="shrink-0 whitespace-nowrap text-zinc-900">{t('wall.sheetHint.title')}</strong>
           <span>{t('wall.sheetHint.body')}</span>
         </footer>
       ) : null}

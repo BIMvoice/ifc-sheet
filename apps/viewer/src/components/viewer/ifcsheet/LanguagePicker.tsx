@@ -28,7 +28,7 @@ export function LanguagePicker() {
       aria-label={t('wall.shell.language')}
       value={locale}
       onChange={(e) => void chooseLocale(e.target.value)}
-      className="rounded-full border border-sky-300/30 bg-transparent px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70"
+      className="rounded-full border border-sky-300/30 bg-transparent px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70"
     >
       {locales.map((tag) => <option key={tag} value={tag} className="bg-[#061a36]">{endonym(tag)}</option>)}
     </select>
