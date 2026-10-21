@@ -10,6 +10,7 @@
  */
 
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import { sectionPlaneThrough } from '@bimvoice/ifcsheet';
 import { addProjectView, useProjectStore } from '@/project/project-store';
 import { styledParams } from '@/project/drafting-standards';
 import { viewPlaneConfig } from '@/project/view-plane-config';
@@ -17,37 +18,14 @@ import type { SectionProposal } from '@/project/section-proposals';
 import type { PlanProjectView, ProjectLevel } from '@/project/types';
 import { editDrafts, newDraft } from './draft-store';
 import type { CustomSectionPlane } from '@/store/section-types';
-import { drawingToWorld, worldToDrawing, type Vec3 } from './frame';
+import { drawingToWorld, worldToDrawing } from './frame';
 import { nextSectionMark, sectionMarkOf, sectionSymbolShapes, sectionViewName } from './section-symbol';
 import type { DraftParamValue, Pt } from './types';
 
-const cross = (a: Vec3, b: Vec3): Vec3 => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
-const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
-const tuple = (v: Vec3): [number, number, number] => [v.x, v.y, v.z];
-
 /** The vertical section plane through a plan line, looking toward `side`. `null` for a degenerate line. */
 export function sectionPlaneFromLine(plan: SectionPlaneConfig, a: Pt, b: Pt, side: Pt): CustomSectionPlane | null {
-  const p = drawingToWorld(plan, a);
-  const q = drawingToWorld(plan, b);
-  const s = drawingToWorld(plan, side);
-  // Horizontal direction along the line (viewer frame is Y-up).
-  const dx = q.x - p.x;
-  const dz = q.z - p.z;
-  const len = Math.hypot(dx, dz);
-  if (len < 1e-9) return null;
-  let normal: Vec3 = { x: dz / len, y: 0, z: -dx / len };
-  // Keep the picked side: the normal points away from it.
-  if ((s.x - p.x) * normal.x + (s.z - p.z) * normal.z > 0) normal = { x: -normal.x, y: 0, z: -normal.z };
-  const up: Vec3 = { x: 0, y: 1, z: 0 };
-  // Looking along −normal with world up, screen right is (−normal) × up.
-  const tangent = cross({ x: -normal.x, y: 0, z: -normal.z }, up);
-  return {
-    normal: tuple(normal),
-    distance: dot(p, normal),
-    pickedAt: tuple(p),
-    tangent: tuple(tangent),
-    bitangent: tuple(up),
-  };
+  // The plane itself is the engine's (`section-plane.ts`); this maps the plan's drawing points to the world.
+  return sectionPlaneThrough(drawingToWorld(plan, a), drawingToWorld(plan, b), drawingToWorld(plan, side));
 }
 
 export interface SectionOnPlan {

@@ -10,6 +10,7 @@
  * the project are in `drafting/commands/detail.ts`.
  */
 
+import { resolve } from '@/i18n/registry';
 import type { NewProjectView, ProjectView, ViewDetail } from './types';
 
 /** How much larger than its source a detail is drawn, before snapping to an offered scale. */
@@ -37,12 +38,18 @@ export function detailScale(sourceScale: number, offered: readonly number[]): nu
   }, sorted[0]);
 }
 
-/** The next free detail number. */
-export function nextDetailNumber(views: readonly Pick<ProjectView, 'detail'>[]): number {
-  return Math.max(0, ...views.map((v) => v.detail?.number ?? 0)) + 1;
+/** The number a detail mark shows for a view: a detail's own, or a drafting view's once a mark was made for it. */
+export function detailNumberOf(view: ProjectView | undefined): number | undefined {
+  if (!view) return undefined;
+  return view.kind === 'drafting' ? view.number : view.detail?.number;
 }
 
-export const detailViewName = (number: number, sourceName: string): string => `Detail ${number} - ${sourceName}`;
+/** The next free detail number (shared by details of areas and drafting views, so no two marks read alike). */
+export function nextDetailNumber(views: readonly ProjectView[]): number {
+  return Math.max(0, ...views.map((v) => detailNumberOf(v) ?? 0)) + 1;
+}
+
+export const detailViewName = (number: number, sourceName: string): string => resolve('names.view.detail', { number, source: sourceName });
 
 /**
  * The view for a detail of `rect` on `source`: the source's settings, its own

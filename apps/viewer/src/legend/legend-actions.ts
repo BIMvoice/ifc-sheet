@@ -10,9 +10,10 @@
  */
 
 import { DEFAULT_LEGEND, type LegendCategory, type LegendConfig, type ProjectLegend } from '@/catalogue/types';
+import { draftsOfView } from '@/drafting/draft-store';
 import { drawingArea } from '@/project/drawing-set';
 import { useProjectStore } from '@/project/project-store';
-import { addViewport, viewportBox } from '@/project/sheets';
+import { addViewport, fitExtent, viewportBox } from '@/project/sheets';
 import type { ProjectSheet } from '@/project/types';
 import { freshProjectId } from '@/project/view-defaults';
 import { useViewDrawings } from '@/project/view-drawings';
@@ -62,11 +63,14 @@ export function moveLegendCategory(id: string, index: number, by: -1 | 1): void 
 
 /** The paper box of every viewport on `sheet`: a legend's laid-out size, a drawing's fitted box. */
 function takenBoxes(sheet: ProjectSheet, labels: LegendLabels): Rect[] {
-  const { legends } = useProjectStore.getState();
+  const { legends, drafts, views } = useProjectStore.getState();
   const env = readLegendEnv(labels);
   return (sheet.viewports ?? []).map((vp) => {
     const legend = legends?.find((l) => l.id === vp.viewId);
-    const box = legend ? layoutOf(legend, env, sheet.id) : viewportBox(vp, useViewDrawings.getState().byView[vp.viewId]?.drawing?.bounds ?? null);
+    const bounds = useViewDrawings.getState().byView[vp.viewId]?.drawing?.bounds;
+    // The sheet fits an auto-fit viewport to its drafts too (#140), so a legend must not be put on top of them.
+    const fitted = bounds ? fitExtent(vp, bounds, draftsOfView(vp.viewId, drafts), views.find((v) => v.id === vp.viewId)?.scale) : null;
+    const box = legend ? layoutOf(legend, env, sheet.id) : viewportBox(vp, fitted);
     return { x: vp.x - box.width / 2, y: vp.y - box.height / 2, w: box.width, h: box.height };
   });
 }
@@ -82,7 +86,7 @@ export function placeLegend(sheetId: string, legendId: string, labels: LegendLab
   const legend = legends?.find((l) => l.id === legendId);
   if (!sheet || !legend) return null;
   const size = layoutOf(legend, readLegendEnv(labels), sheetId);
-  const at = freeSpot(drawingArea(sheet.paper), takenBoxes(sheet, labels), size);
+  const at = freeSpot(drawingArea(sheet), takenBoxes(sheet, labels), size);
   return addViewport(sheetId, legendId, { x: at.x + size.width / 2, y: at.y + size.height / 2 });
 }
 
@@ -98,7 +102,7 @@ export function keepLegendOnSheets(legendId: string, labels: LegendLabels): void
   const env = readLegendEnv(labels);
   const moved = sheets.map((sheet) => {
     if (!sheet.viewports?.some((vp) => vp.viewId === legendId)) return sheet;
-    const area = drawingArea(sheet.paper);
+    const area = drawingArea(sheet);
     const { width, height } = layoutOf(legend, env, sheet.id);
     const clamp = (centre: number, from: number, length: number, size: number) => Math.min(Math.max(centre, from + size / 2), Math.max(from + size / 2, from + length - size / 2));
     return { ...sheet, viewports: sheet.viewports.map((vp) => (vp.viewId === legendId ? { ...vp, x: clamp(vp.x, area.x, area.w, width), y: clamp(vp.y, area.y, area.h, height) } : vp)) };

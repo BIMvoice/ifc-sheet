@@ -84,6 +84,17 @@ describe('building materials in a cut', () => {
     assert.equal(cutHatches(styled, { categories: { walls: { cutHatch: 'CROSS' } } }).length, 4);
   });
 
+  it('never joins two federated models: the walls\' shared face stays when the second wall is another model\'s (#96)', () => {
+    const { drawing, resolver } = scene();
+    // Wall 2 comes from a second loaded model: its bands and lines carry that model's index.
+    const linked = <T extends { entityId: number; modelIndex: number }>(x: T): T => (x.entityId === 2 ? { ...x, modelIndex: 1 } : x);
+    const federated = { ...drawing, cutPolygons: drawing.cutPolygons.map(linked), lines: drawing.lines.map(linked) } as Drawing2D;
+    const dropped = [...materialDrawing(federated, resolver).dropLines].map((l) => `${l.entityId}:${l.line.start.x},${l.line.start.y}-${l.line.end.x},${l.line.end.y}`);
+    assert.ok(!dropped.includes('1:4,0-4,0.3') && !dropped.includes('2:4,0-4,0.3'), 'both walls keep their x = 4 edge');
+    // Inside one model the same face still goes (the foil's interface too).
+    assert.ok(dropped.includes('1:0,0.2-4,0.2') && dropped.includes('2:4,0.2-8,0.2'));
+  });
+
   it('segments coincide when collinear and mostly overlapping', () => {
     assert.ok(coincide({ a: { x: 0, y: 0 }, b: { x: 2, y: 0 } }, { a: { x: 2, y: 0.001 }, b: { x: 0.2, y: 0 } }));
     assert.ok(!coincide({ a: { x: 0, y: 0 }, b: { x: 2, y: 0 } }, { a: { x: 0, y: 0.01 }, b: { x: 2, y: 0.01 } }));

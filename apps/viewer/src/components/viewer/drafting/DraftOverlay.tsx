@@ -21,6 +21,7 @@ import { isGeometry, type DraftEntity, type DraftLayer, type DraftShape, type Pt
 import { entitySkeleton } from '@/drafting/annotation';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { AnnotationGraphics } from './AnnotationGraphics';
+import type { LiveSymbolContext } from '@/siteplan/live-symbols';
 
 const ARC_STEP = Math.PI / 48;
 
@@ -78,6 +79,8 @@ interface DraftOverlayProps {
   sectionBand?: { cut: SectionCut; depth: number } | null;
   /** A detail's area (drawing metres): the drawn annotations and the highlight show inside it only, as the drawing does. */
   crop?: { min: Pt; max: Pt };
+  /** What the drawing tells the symbols computed from it (`siteplan/live-symbols.ts`). */
+  symbols?: LiveSymbolContext | null;
 }
 
 function SnapMarker({ snap, t, axis }: { snap: SnapHit; t: ViewTransform; axis: SectionAxisName }) {
@@ -119,7 +122,7 @@ function GripPreview({ gripDrag, entities, t, axis, look, paperUnit, extraPatter
 }
 
 export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps) {
-  const { entities, layers, selection, hoverId, preview, snap, cursor, window, highlight, extraPatterns, transform: t, axis, paperUnit = 0.1, hiddenLayers, grips = NO_GRIPS, gripDrag = null, sectionBand = null, crop } = props;
+  const { entities, layers, selection, hoverId, preview, snap, cursor, window, highlight, extraPatterns, transform: t, axis, paperUnit = 0.1, hiddenLayers, grips = NO_GRIPS, gripDrag = null, sectionBand = null, crop, symbols } = props;
   const clipId = useId().replace(/:/g, '');
   const clipPoints = crop ? [crop.min, { x: crop.max.x, y: crop.min.y }, crop.max, { x: crop.min.x, y: crop.max.y }].map((p) => drawingToScreen(p, t, axis)).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') : null;
   const layerById = new Map(layers.map((l) => [l.id, l]));
@@ -145,7 +148,7 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
         if (!isGeometry(e.shape)) {
           return (
             <g key={e.id}>
-              <AnnotationGraphics shape={e.shape} color={color} selected={isSelected} transform={t} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} />
+              <AnnotationGraphics shape={e.shape} color={color} selected={isSelected} transform={t} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={symbols} />
               {isHover || isSelected ? (
                 <path d={entitySkeleton(e.shape).map((s) => shapePath(s, t, axis)).join('')} fill="none" stroke={isSelected ? '#2563eb' : '#60a5fa'} strokeWidth={1} strokeDasharray="4 3" />
               ) : null}

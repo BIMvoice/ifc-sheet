@@ -20,7 +20,8 @@
  */
 
 import { readModelState, withoutModelState, writeModelState } from './autosave-snapshots';
-import { noticeAutosaveFailed } from './autosave-notice';
+import { noticeAutosaveFailed, noticeAutosaveImagesFailed } from './autosave-notice';
+import { copyRasters, withoutRasters, writeRasters } from './autosave-rasters';
 import { parseProjectFile, serializeProject } from './project-file';
 import { ProjectFileTooNewError } from './project-migrations';
 import { AUTOSAVE_PREFIX, projectFingerprint, readSavedMark, safeStorage } from './project-saved';
@@ -75,9 +76,10 @@ export function readAutosave(key: string, storage: Pick<Storage, 'getItem'> | un
   return readSlot(key, storage).autosave;
 }
 
-export function writeAutosave(key: string, doc: ProjectDocument, storage: Pick<Storage, 'setItem'> | undefined = safeStorage(), now = new Date()): void {
-  // The model state is far larger than the drawings: it is kept apart, so it cannot fill the slot.
-  const { slim, modelState } = withoutModelState(doc);
+export async function writeAutosave(key: string, doc: ProjectDocument, storage: Pick<Storage, 'setItem'> | undefined = safeStorage(), now = new Date()): Promise<void> {
+  // The model state and the raster captures are far larger than the drawings: they are kept apart, in IndexedDB, so they cannot fill the slot.
+  const { slim: noState, modelState } = withoutModelState(doc);
+  const { slim, rasters } = withoutRasters(noState);
   try {
     storage?.setItem(key, serializeProject(slim, now));
   } catch (err) {
@@ -86,7 +88,8 @@ export function writeAutosave(key: string, doc: ProjectDocument, storage: Pick<S
     noticeAutosaveFailed(err);
   }
   // Never written empty: a slot restored before its state has been read back must not erase it.
-  if (modelState) void writeModelState(key, modelState);
+  const kept = await Promise.all([modelState ? writeModelState(key, modelState) : true, writeRasters(key, rasters)]);
+  if (kept.includes(false)) noticeAutosaveImagesFailed();
 }
 
 /** Whether a slot written at `savedAt` holding `doc` is work the last project file does not have. */
@@ -124,7 +127,7 @@ function lastSessionDied(key: string, storage: Pick<Storage, 'getItem'>): boolea
 }
 
 /** Copies the autosave of `key` to its recoverable slot and empties the autosave; false when the copy could not be kept. */
-function keepAsRecoverable(key: string, storage: Store): boolean {
+function keepAsRecoverable(key: string, storage: Store, doc: ProjectDocument): boolean {
   try {
     const text = storage.getItem(key);
     if (!text) return false;
@@ -135,6 +138,8 @@ function keepAsRecoverable(key: string, storage: Store): boolean {
     return false;
   }
   void readModelState(key).then((state) => state && writeModelState(recoverableKey(key), state));
+  // Its captures too: the next session's autosave of the same views writes under the live slot.
+  void copyRasters(key, recoverableKey(key), doc);
   return true;
 }
 
@@ -150,7 +155,7 @@ export function planAutosave(key: string, storage: Store | undefined = safeStora
   // A newer build's kept session counts as kept: it is not replaced, only not offered.
   if (!recoverable && !kept.tooNew && autosave && lastSessionDied(key, storage) && isUnsavedWork(key, autosave, storage)) {
     // No copy kept, no offer: the work is put back in front rather than left for the next autosave to replace.
-    if (keepAsRecoverable(key, storage)) return { restore: null, recoverable: autosave, tooNew: false };
+    if (keepAsRecoverable(key, storage, autosave.doc)) return { restore: null, recoverable: autosave, tooNew: false };
   }
   return { restore: autosave, recoverable, tooNew: false };
 }

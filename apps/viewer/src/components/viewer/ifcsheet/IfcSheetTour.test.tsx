@@ -147,19 +147,23 @@ describe('IfcSheet tour: the Wall keys leave the card alone', () => {
     return <TourStepCard tour={tour} step={tour.steps[0]} stepIndex={0} targetEl={null} />;
   };
 
-  it('Esc on the card does not also step out of the sheet (the sheet listens first, in capture)', () => {
+  it('Esc on the card does not also let go of what the sheet holds (the sheet listens first, in capture)', () => {
     const sheet = useProjectStore.getState().sheets[0];
     assert.ok(sheet, 'a sheet to step into');
     let backs = 0;
-    render(<><SteppedSheet sheet={sheet} extent={HOUSE} proposals={[]} onBack={() => { backs += 1; }} onStep={() => {}} />{tourCard()}</>);
+    const ui = render(<><SteppedSheet sheet={sheet} extent={HOUSE} proposals={[]} onBack={() => { backs += 1; }} onStep={() => {}} />{tourCard()}</>);
+    const adding = () => [...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Add a drawing')?.getAttribute('aria-pressed');
+    click([...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Add a drawing')!);
+    assert.equal(adding(), 'true', 'the chooser is open');
     const c = card();
     assert.ok(c);
     press(c, 'Escape');
-    assert.equal(backs, 0, 'the sheet stays open');
+    assert.equal(adding(), 'true', 'the chooser stays open');
 
-    // Control: Esc from the page does step out, so the check above can fail.
+    // Control: Esc from the page closes it, so the check above can fail. Neither leaves the sheet (#142).
     press(document.body, 'Escape');
-    assert.equal(backs, 1);
+    assert.equal(adding(), 'false');
+    assert.equal(backs, 0);
   });
 
   it('Enter on the card does not hang the set from the intro', () => {

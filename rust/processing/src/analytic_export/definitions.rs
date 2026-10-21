@@ -105,7 +105,7 @@ impl SweptDiskDefinition {
 }
 
 pub(super) fn model_sha256(content: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(content))
+    hex::encode(Sha256::digest(content))
 }
 
 pub(super) fn source_key(
