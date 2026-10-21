@@ -1554,6 +1554,9 @@ importers:
 
   packages/mcp:
     dependencies:
+      '@bimvoice/ifcsheet':
+        specifier: workspace:^
+        version: link:../ifcsheet
       '@ifc-lite/bcf':
         specifier: workspace:^
         version: link:../bcf
