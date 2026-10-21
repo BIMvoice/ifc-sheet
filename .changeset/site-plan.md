@@ -1,0 +1,5 @@
+---
+"@ifc-lite/viewer": minor
+---
+
+Site plan, key plan, and symbols computed from the model. "Add a drawing" offers a site plan: the ground storey's cut on its own sheet (A-001, 1:200) with the building footprint drawn heavy, a plot boundary drawn as a closed polyline on the "Plot boundary" layer, a setback dimension from each boundary edge to the nearest footprint vertex, and a provisional site balance (plot area, footprint area, their ratio). `plotAreaOf(project)` gives the drawn plot's area to the urban indicators' site area. The north arrow turns to the model's TrueNorth (IFC2X3 and IFC4 'Model' context; else grid north of the IfcMapConversion; else project north). The scale bar is laid out for the scale of the viewport it is drawn in (0–5–10–20 m at 1:200). A new "Coordinate point" symbol prints its Easting and Northing in the project CRS through the IfcMapConversion, or local X / Y without one. A key plan of any plan viewport places the whole plan above the title block with that viewport's extent outlined.

@@ -14,18 +14,25 @@
 import { readDraftLayer } from '@/drafting/draft-file';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { DraftLayer } from '@/drafting/types';
+import { readCadLayerRule } from '@/project/cad-layers-file';
+import type { CadLayerRule } from '@/project/cad-layers';
 import { readMaterial } from '@/project/project-file';
 import { readStandards } from '@/project/standards-file';
-import type { ProjectMaterial } from '@/project/types';
+import { readTemplate } from '@/project/sheet-templates';
+import type { ProjectMaterial, SheetTemplate } from '@/project/types';
+import { upgradeTagAllTypes } from '@/tagall/types';
+import { readTagFields } from '@/tagfields/tag-fields-file';
+import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import { fail, readAnnotationType, readLegend, readList, readSymbol } from './readers';
-import type { AnnotationType, DraftSymbol, ProjectLegend } from './types';
+import { readLibraryDetail } from './detail-reader';
+import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from './types';
 
 export const CATALOGUE_FILE_SUFFIX = '.bvlib';
 export const CATALOGUE_FILE_FORMAT = 'bvlib';
 export const CATALOGUE_FILE_VERSION = 1;
 
 /** The kinds of definition a catalogue carries, in the order the dialog lists them. */
-export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends'] as const;
+export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details', 'sheetTemplates'] as const;
 export type CatalogueKind = (typeof CATALOGUE_KINDS)[number];
 
 export interface Catalogue {
@@ -40,6 +47,16 @@ export interface Catalogue {
   symbols: DraftSymbol[];
   /** Legend configurations; a legend's `scopeId` is project-specific and never travels. */
   legends: ProjectLegend[];
+  /** A built-in graphic standard (pens and text sizes) the library ships with, by id (`drafting/graphic-standard.ts`), as the file names it. Only built-in library entries carry one. */
+  graphicStandard?: string;
+  /** The CAD layer standard: an ordered rule table, carried and merged as a whole. */
+  cadLayers: CadLayerRule[];
+  /** Which IFC property feeds each field of a tag; absent: the defaults. */
+  tagFields?: TagFieldConfig;
+  /** Details drawn once, placed in any project as a drafting view (`detail-library.ts`). */
+  details: LibraryDetail[];
+  /** The project's own sheet templates (the built-in ones are in every project). */
+  sheetTemplates: SheetTemplate[];
 }
 
 export interface CatalogueFile extends Catalogue {
@@ -50,7 +67,7 @@ export interface CatalogueFile extends Catalogue {
 }
 
 export const emptyCatalogue = (): Catalogue => ({
-  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [],
+  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], cadLayers: [], details: [], sheetTemplates: [],
 });
 
 /** `catalogue` cut down to the chosen kinds (layer groups travel with their layers, text styles with the dimension styles that need them). */
@@ -64,6 +81,10 @@ export function selectKinds(catalogue: Catalogue, kinds: ReadonlySet<CatalogueKi
   if (kinds.has('annotationTypes')) out.annotationTypes = catalogue.annotationTypes;
   if (kinds.has('symbols')) out.symbols = catalogue.symbols;
   if (kinds.has('legends')) out.legends = catalogue.legends.map(({ scopeId: _scopeId, ...rest }) => rest);
+  if (kinds.has('cadLayers')) out.cadLayers = catalogue.cadLayers;
+  if (kinds.has('tagFields') && catalogue.tagFields) out.tagFields = catalogue.tagFields;
+  if (kinds.has('details')) out.details = catalogue.details;
+  if (kinds.has('sheetTemplates')) out.sheetTemplates = catalogue.sheetTemplates;
   return out;
 }
 
@@ -111,14 +132,31 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       dimStyles: standards.dimStyles.filter((d) => dimIds.has(d.id)),
       hatchPatterns: typeof file.hatchPatterns === 'string' ? file.hatchPatterns : '',
       materials: readList(file, 'materials', (v, p) => readMaterialStrict(v, p), WHAT),
-      annotationTypes: readList(file, 'annotationTypes', (v, p) => readAnnotationType(v, p, WHAT), WHAT),
+      // A library written before the room label read the tag name takes the new template, as a project does on load.
+      annotationTypes: upgradeTagAllTypes(readList(file, 'annotationTypes', (v, p) => readAnnotationType(v, p, WHAT), WHAT)),
       symbols: readList(file, 'symbols', (v, p) => readSymbol(v, p, WHAT), WHAT),
       legends: readList(file, 'legends', (v, p) => readLegend(v, p, WHAT), WHAT),
+      cadLayers: readList(file, 'cadLayers', (v, p) => readCadLayerRule(v, p, WHAT), WHAT),
+      ...readTagFieldsEntry(file),
+      details: readList(file, 'details', (v, p) => readLibraryDetail(v, p, WHAT), WHAT),
+      sheetTemplates: readList(file, 'sheetTemplates', (v, p) => readTemplate(v) ?? fail(p, 'must be a sheet template { id, name, paper }', WHAT), WHAT),
+      ...(file.graphicStandard === undefined ? {} : { graphicStandard: knownStandard(file.graphicStandard) }),
     },
   };
+}
+
+/** Kept as named: an id this app does not know is not an error here, it falls back to the default on import (`applyCatalogueImport`). */
+function knownStandard(v: unknown): string {
+  return typeof v === 'string' ? v : fail('/graphicStandard', 'must be a graphic standard id', WHAT);
 }
 
 function readMaterialStrict(v: unknown, path: string): ProjectMaterial {
   const [m] = readMaterial(v);
   return m ?? fail(path, 'must be a material { id, name }', WHAT);
+}
+
+/** `tagFields` as an entry of the catalogue, or nothing when the file holds none. */
+function readTagFieldsEntry(file: Record<string, unknown>): { tagFields?: TagFieldConfig } {
+  const tagFields = readTagFields(file.tagFields, '/tagFields', WHAT);
+  return tagFields ? { tagFields } : {};
 }

@@ -64,7 +64,7 @@ describe('Romanian on the Wall', () => {
     assert.match(buttons, /Etichetează tot/);
     const drawer = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
     const drawerText = drawer.textContent ?? '';
-    for (const word of ['Importă biblioteca', 'Planșe', 'Beneficiar', 'Revizie', 'Cartuș']) assert.ok(drawerText.includes(word), `${word} in the drawer: ${drawerText.slice(0, 300)}`);
+    for (const word of ['Importă biblioteca', 'Planșe', 'Beneficiar', 'Adresă', 'Cartuș']) assert.ok(drawerText.includes(word), `${word} in the drawer: ${drawerText.slice(0, 300)}`);
     assert.doesNotMatch(drawerText, /Client|Revision|Title block|Sheets/);
   });
 

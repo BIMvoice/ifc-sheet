@@ -20,6 +20,10 @@ import { sheetsRo } from '../catalogues/sheets.ro';
 import { wallRo } from '../catalogues/wall.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
 import { featuresRo } from '../catalogues/features.ro';
+import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
+import { revisionsRo } from '../catalogues/revisions.ro';
+import { catalogueRo } from '../catalogues/catalogue.ro';
+import { cadLayersRo } from '../catalogues/cad-layers.ro';
 
 export default {
   ...wallRo,
@@ -31,4 +35,8 @@ export default {
   ...namesRo,
   ...faceRo,
   ...featuresRo,
+  ...titleBlockSourcesRo,
+  ...revisionsRo,
+  ...catalogueRo,
+  ...cadLayersRo,
 } satisfies Catalogue;

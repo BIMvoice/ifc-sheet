@@ -46,10 +46,14 @@ const doc: ProjectDocument = {
   structureProfiles: [],
   savedSectionCuts: [],
   materials: [{ id: 'm1', name: 'Mineral wool', hatch: 'INSULATION', hatchScale: 1.5, fill: null, hatchPen: 'light' }, { id: 'm2', name: 'PE foil', membrane: true }],
+  cadLayers: [{ id: 'c1', source: 'CUT', layer: 'A-WALL-CUT', color: '#7f1d1d' }],
   annotationTypes: [{ id: 'a1', name: 'Door tag', tool: 'tag', textStyle: 'big', tagField: 'name' }],
   symbols: [{ id: 'sy1', name: 'Mark', unit: 'paper', shapes: [{ type: 'circle', c: { x: 0, y: 0 }, r: 4 }] }],
+  details: [],
   legends: [{ id: 'lg1', name: 'Key', createdAt: 1, title: 'Key', showTitle: true, scope: 'project', categories: ['materials', 'symbols'], columns: 1, rowHeight: 7, swatchWidth: 18, textStyle: 'standard', headings: true }],
-  issues: [],
+  issues: [], revisions: [],
+  sheetTemplates: [],
+  seriesTemplates: {},
   typicalSections: [{ id: 't1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: null, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 } } }],
   civilDrawings: [{ id: 'c1', name: 'DN1 profile', kind: 'profile', createdAt: 3, corridorGlobalId: '2O2Fr$t4X7Zf8NOew3FLOH', scale: 1000, vExaggeration: 10 }],
 };
@@ -98,7 +102,7 @@ describe('project file', () => {
 
 // Review of #108: a kind the reader does not list reopens as a joinery list ('all') with no error.
 // The record is keyed by the kind union, so a new kind does not compile until it is listed here.
-const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true };
+const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true, finishes: true, register: true };
 
 describe('schedule kinds', () => {
   for (const kind of Object.keys(SCHEDULE_KINDS) as ProjectSchedule['kind'][]) {
@@ -107,4 +111,12 @@ describe('schedule kinds', () => {
       assert.equal(parseProjectFile(serializeProject(saved)).schedules?.[0]?.kind, kind);
     });
   }
+
+  it('a room finishes schedule on a sheet reopens whole: name, kind, scale and its viewport', () => {
+    const finishes: ProjectSchedule = { id: 'rf', name: 'Room finishes', kind: 'finishes', createdAt: 7, scale: 100 };
+    const saved: ProjectDocument = { ...doc, schedules: [finishes], sheets: [{ ...doc.sheets[0], viewports: [{ id: 'vp-rf', viewId: 'rf', x: 20, y: 20, scale: 100, width: 0, height: 0, center: null }] }] };
+    const reopened = parseProjectFile(serializeProject(saved));
+    assert.deepEqual(reopened.schedules, [finishes]);
+    assert.equal(reopened.sheets[0]?.viewports?.[0]?.viewId, 'rf');
+  });
 });

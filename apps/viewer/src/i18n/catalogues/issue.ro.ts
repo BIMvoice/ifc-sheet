@@ -65,4 +65,5 @@ export const issueRo = {
   'issue.msg.fontMissing': 'Fontul PDF nu a putut fi încărcat, așa că PDF-ul folosește un font standard. Literele din afara textului vest-european, precum ș, ț și ă, pot lipsi din el.',
   'issue.msg.fontReplaced': 'Unele texte cu serife sau monospațiate conțin litere pe care fonturile PDF standard nu le pot afișa, așa că sunt scrise cu Inter.',
   'issue.msg.missingGlyphs': 'Fontul PDF nu are litere pentru aceste caractere, așa că ele lipsesc din PDF: {chars}',
+  'issue.msg.dxfRaster': 'Planșa {number}: fișierul DXF nu poate conține imagini, deci {views} (tipărit ca imagine) este un cadru gol. Emiteți ca PDF pentru a-l păstra.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

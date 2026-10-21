@@ -36,4 +36,6 @@ export const sheetsRo = {
   'sheets.svg': 'SVG',
   'sheets.dxf': 'DXF',
   'sheets.pdf': 'PDF / Tipărire',
+  'sheets.viewportLabelNoScale': '{name}  (fără scară)',
+  'sheets.dxf.rasterOmitted': 'Fișierul DXF nu poate conține imagini: {views} se tipărește ca imagine și a ieșit un cadru gol. Exportați planșa ca PDF pentru a o păstra.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

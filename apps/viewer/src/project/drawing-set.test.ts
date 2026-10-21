@@ -14,9 +14,11 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject, useProjectStore } from './project-store.js';
 import { defaultViews } from './view-defaults.js';
-import { buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fittingScale, groupsThatDoNotFit, overrun, sheetGroup, sheetScaleReason, withViewHung, type ModelExtent } from './drawing-set.js';
+import { buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fittingScale, groupsThatDoNotFit, overrun, sheetGroup, sheetScaleReason, sheetSeries, withViewHung, type ModelExtent } from './drawing-set.js';
 import { addScheduleToSet, groupScale, setGroupScale, startDrawingSet, swapViewportView } from './drawing-set-actions.js';
-import { fitViewportBox, PAPER_MM } from './sheets.js';
+import { PAPER_MM } from './paper.js';
+import { fitViewportBox } from './sheets.js';
+import { nextNumber } from './numbering.js';
 import type { ProjectLevel, ProjectView } from './types';
 
 /** A 10 × 7 m two-storey house, 6 m tall: long along X. */
@@ -86,6 +88,14 @@ describe('buildDrawingSet', () => {
     const sections: ProjectView[] = ['A', 'B', 'C'].map((m, i) => ({ id: `s${i}`, kind: 'section', name: `Section ${m}-${m}`, createdAt: 0, plane: { axis: 'front', offset: 0, flipped: false } }));
     const set = buildDrawingSet({ views: sections, extent: HOUSE });
     assert.deepEqual(set.map((s) => [s.number, s.viewports?.length]), [['A-301', 2], ['A-302', 1]]);
+  });
+});
+
+describe('drawingArea', () => {
+  it('turns the paper for portrait: the frame and the title block come off the turned sheet', () => {
+    assert.deepEqual(drawingArea('A3'), { x: 10, y: 10, w: 400, h: 227 });
+    assert.deepEqual(drawingArea({ paper: 'A3', orientation: 'landscape' }), drawingArea('A3'));
+    assert.deepEqual(drawingArea({ paper: 'A3', orientation: 'portrait' }), { x: 10, y: 10, w: 277, h: 350 });
   });
 });
 
@@ -167,16 +177,33 @@ describe('withViewHung (a drawing added from inside a sheet)', () => {
 describe('a detail on the set', () => {
   const detail: ProjectView = { ...defaultViews(LEVELS).find((v) => v.kind === 'plan') as ProjectView, id: 'det', name: 'Detail 1 - Ground Floor', detail: { of: 'src', min: { x: 1, y: 1 }, max: { x: 3, y: 2.5 }, number: 1 }, scale: 25 };
 
-  it('hangs on a sheet of its own in the A-9xx series, at the scale it was made for, and not in the starting set', () => {
+  it('hangs on a sheet of its own in the A-5xx details series (as drafting views do), at the scale it was made for, and not in the starting set', () => {
     const views = [...defaultViews(LEVELS), detail];
     assert.equal(buildDrawingSet({ views, extent: HOUSE }).some((s) => s.viewports?.some((vp) => vp.viewId === 'det')), false);
     const hung = withViewHung([], views, detail, HOUSE);
     assert.ok(hung);
     const [sheet] = hung.sheets;
-    assert.deepEqual([sheet.number, sheet.name, sheet.paper, sheet.viewports?.[0].scale], ['A-901', detail.name, 'A3', 25]);
+    assert.deepEqual([sheet.number, sheet.name, sheet.paper, sheet.viewports?.[0].scale], ['A-501', detail.name, 'A3', 25]);
     assert.equal(sheetGroup(sheet), null);
     assert.equal(withViewHung(hung.sheets, views, detail, HOUSE), null, 'not twice');
-    assert.equal(withViewHung(hung.sheets, views, { ...detail, id: 'det2' }, HOUSE)?.sheets.at(-1)?.number, 'A-902');
+    assert.equal(withViewHung(hung.sheets, views, { ...detail, id: 'det2' }, HOUSE)?.sheets.at(-1)?.number, 'A-502');
+    assert.equal(sheetSeries(sheet), 'details', 'its series template applies');
+    assert.equal(sheetSeries({ number: 'A-901' }), null, 'A-9xx is other sheets, not details');
+  });
+});
+
+describe('the site plan on the set (#135 review)', () => {
+  const plan = defaultViews(LEVELS).find((v) => v.kind === 'plan');
+  assert.ok(plan?.kind === 'plan');
+  const site: ProjectView = { ...plan, id: 'site', name: 'Site plan', site: true, scale: 200 };
+
+  it('takes the next free number of the general series, A-0xx, through the one numbering helper', () => {
+    const views = [...defaultViews(LEVELS), site];
+    assert.equal(withViewHung([], views, site, HOUSE)?.sheets[0].number, 'A-001');
+    const taken = [{ id: 'g', number: 'A-001', name: 'Cover', createdAt: 0 }, { id: 'h', number: 'A-002', name: 'Notes', createdAt: 0 }];
+    assert.equal(withViewHung(taken, views, site, HOUSE)?.sheets.at(-1)?.number, 'A-003');
+    assert.equal(nextNumber(taken, 'general'), 'A-003');
+    assert.equal(nextNumber([], 'other'), 'A-901');
   });
 });
 

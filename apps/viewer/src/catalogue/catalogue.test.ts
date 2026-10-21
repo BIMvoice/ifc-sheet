@@ -36,6 +36,16 @@ const full: Catalogue = {
     shapes: [{ type: 'polyline', pts: [{ x: 0, y: 0 }, { x: 2, y: 6 }, { x: -2, y: 6 }], closed: true }, { type: 'text', p: { x: 0, y: 8 }, text: 'N', height: 2.5, rotation: 0 }],
   }],
   legends: [{ ...DEFAULT_LEGEND, id: 'lg1', name: 'Plan legend', createdAt: 5, title: 'Key', textStyle: 'big', categories: ['materials', 'symbols'], columns: 2 }],
+  cadLayers: [{ id: 'cad1', source: 'CUT', ifcClasses: ['IfcWall'], layer: 'A-WALL-CUT', color: '#7f1d1d', lineWeight: 0.5 }],
+  details: [{
+    id: 'd1', name: 'Typical parapet', scale: 10,
+    drafts: [{ id: 'e1', layerId: 'l1', shape: { type: 'line', a: { x: 0, y: 0 }, b: { x: 0, y: 0.6 } }, params: {} }],
+    layers: [{ id: 'l1', name: 'A-WALL', color: '#aa0000', visible: true, locked: false }], hatchPatterns: '', symbols: [],
+  }],
+  sheetTemplates: [
+    { id: 'st1', name: 'Long elevations', paper: { kind: 'elongated', base: 'A3', factor: 3 }, orientation: 'landscape', frame: { margins: { top: 10, right: 10, bottom: 10, left: 20 }, titleBlock: 'right' } },
+    { id: 'st2', name: 'Site plan', paper: { kind: 'custom', widthMm: 500, heightMm: 700 }, orientation: 'portrait', frame: { margins: { top: 5, right: 5, bottom: 5, left: 5 }, titleBlock: 'bottom-right' } },
+  ],
 };
 
 describe('catalogue file', () => {
@@ -43,6 +53,14 @@ describe('catalogue file', () => {
     const back = parseCatalogue(serializeCatalogue(full, 'House', new Date(0)));
     assert.equal(back.name, 'House');
     assert.deepEqual(back.catalogue, full);
+  });
+
+  it('carries sheet templates, and a malformed one is refused with the path', () => {
+    const good = JSON.parse(serializeCatalogue(full, 'x'));
+    assert.deepEqual(parseCatalogue(JSON.stringify(good)).catalogue.sheetTemplates, full.sheetTemplates);
+    assert.equal(selectKinds(full, new Set(['sheetTemplates'])).sheetTemplates.length, 2);
+    assert.equal(selectKinds(full, new Set(['layers'])).sheetTemplates.length, 0);
+    assert.throws(() => parseCatalogue(JSON.stringify({ ...good, sheetTemplates: [{ id: 'x', name: 'Bad', paper: 'B5' }] })), /\/sheetTemplates\/0/);
   });
 
   it('does not bring a Standard style the file did not carry', () => {
@@ -84,6 +102,15 @@ const mine: Catalogue = {
 };
 
 describe('catalogue merge', () => {
+  it('merges sheet templates by name under the policy', () => {
+    const theirs: Catalogue = { ...emptyCatalogue(), sheetTemplates: [{ ...full.sheetTemplates[0], paper: 'A0' }] };
+    const own: Catalogue = { ...emptyCatalogue(), sheetTemplates: [{ ...full.sheetTemplates[0], id: 'mine' }] };
+    assert.equal(mergeCatalogues(own, theirs, 'mine', fresh).catalogue.sheetTemplates[0].paper, full.sheetTemplates[0].paper);
+    const replaced = mergeCatalogues(own, theirs, 'theirs', fresh).catalogue.sheetTemplates;
+    assert.deepEqual([replaced.length, replaced[0].id, replaced[0].paper], [1, 'mine', 'A0']);
+    assert.deepEqual(mergeCatalogues(own, theirs, 'both', fresh).catalogue.sheetTemplates.map((t) => t.name), ['Long elevations', 'Long elevations (2)']);
+  });
+
   it('adds what does not clash, whatever the policy, keeping ids that are free and renewing taken ones', () => {
     for (const policy of ['mine', 'theirs', 'both'] as const) {
       const { catalogue, report } = mergeCatalogues(mine, full, policy, fresh);
