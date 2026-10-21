@@ -20,6 +20,8 @@ export interface TakeoffLabels {
   area: string;
   usedIn: string;
   total: string;
+  /** How the table's figures are written as text on the sheet. Default `toFixed`; the CSV never uses it. */
+  number?: (value: number, digits: number) => string;
 }
 
 const ROW = 6;
@@ -28,12 +30,11 @@ const PAD = 1.5;
 const COLUMNS = [62, 18, 24, 24, 70] as const;
 const PEN = { frame: 0.35, grid: 0.18 } as const;
 
-const fixed = (v: number | null, digits = 2): string => (v === null ? '–' : v.toFixed(digits));
-
 /** The `IfcWall` style class names, without the prefix, for people. */
 const plainClass = (c: string): string => c.replace(/^Ifc/, '');
 
 export function layoutMaterialTakeoff(rows: readonly TakeoffRow[], labels: TakeoffLabels): ScheduleLayout {
+  const fixed = (v: number | null, digits = 2): string => (v === null ? '–' : labels.number ? labels.number(v, digits) : v.toFixed(digits));
   const prims: SchedulePrim[] = [];
   const width = COLUMNS.reduce((a, b) => a + b, 0);
   const lefts = COLUMNS.map((_, i) => COLUMNS.slice(0, i).reduce((a, b) => a + b, 0));

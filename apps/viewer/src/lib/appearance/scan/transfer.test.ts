@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import '@/test/setup-dom.js';
 import { test } from 'node:test';
-import { evidenceSkip } from '@/test/evidence-fixture.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { MeshData } from '@ifc-lite/geometry';
@@ -18,7 +17,7 @@ import type { ScanRegistrationRequest, ScanRegistrationReport } from './types';
 
 const settings: ScanTransferSettings = { toleranceMetres: 0.01, reviewed: true, texelsPerMetre: 64, maxDistanceMetres: 0.02, minNormalDot: 0.8, ambiguityDistanceMetres: 0.001, maxBehindMetres: 0.005,
   neighborhoodRadiusMetres: 0.03, minNeighbors: 4, maxNeighbors: 32, surfaceBandMetres: 0.003 };
-test('transfer review rejects the independently wrong actual browser check despite an unchanged fit #4381', { skip: evidenceSkip('scan-alignment-workbench/good.json', 'scan-alignment-workbench/wrong-heldout.json') }, () => {
+test('transfer review rejects the independently wrong actual browser check despite an unchanged fit #4381', () => {
   const load = (name: string) => (JSON.parse(readFileSync(new URL(`../../../../../../docs/architecture/evidence/scan-alignment-workbench/${name}.json`, import.meta.url), 'utf8')) as { result: { request: ScanRegistrationRequest; report: ScanRegistrationReport } }).result;
   const good = load('good'), wrong = load('wrong-heldout');
   assert.doesNotThrow(() => validateTransferReview(good, settings));

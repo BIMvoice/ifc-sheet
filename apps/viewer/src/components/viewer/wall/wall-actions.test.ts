@@ -19,7 +19,7 @@ import { selectedSectionBand } from '@/drafting/section-depth';
 import { sectionSymbolShapes } from '@/drafting/section-symbol';
 import type { DraftEntity } from '@/drafting/types';
 import { updateProjectView } from '@/project/project-store';
-import { CUT_HEIGHT_RANGE, nudgeCutHeight, nudgeViewDepth, setCutHeight } from './wall-actions.js';
+import { CUT_HEIGHT_RANGE, drawTarget, nudgeCutHeight, nudgeViewDepth, setCutHeight } from './wall-actions.js';
 
 const plan: ProjectView = { id: 'p', kind: 'plan', name: 'Ground', createdAt: 0, level: { name: 'Ground', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 };
 const section: ProjectView = { id: 's', kind: 'section', name: 'Section A-A', createdAt: 0, plane: { axis: 'front', offset: 0, flipped: false } };
@@ -82,5 +82,16 @@ describe('one stored depth for the wheel and the section\'s depth band', () => {
     nudgeViewDepth('s', 1);
     assert.equal(view('s')?.viewDepth, 4);
     assert.equal(band()?.depth, 4);
+  });
+});
+
+describe('where a plain drawing tool draws (#143)', () => {
+  it('on the drawing in front, else the sheet\'s paper', () => {
+    assert.equal(drawTarget('line', 'view-1', 'sheet-1'), 'view-1');
+    assert.equal(drawTarget('text', undefined, 'sheet-1'), 'sheet-1');
+  });
+
+  it('parameter text is always on the paper, since only a sheet resolves its names', () => {
+    assert.equal(drawTarget('ptext', 'view-1', 'sheet-1'), 'sheet-1');
   });
 });

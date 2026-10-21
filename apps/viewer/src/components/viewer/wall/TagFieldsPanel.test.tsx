@@ -24,7 +24,7 @@ import { TagFieldsPanel } from './TagFieldsPanel.js';
 
 beforeEach(async () => {
   resetProject();
-  seedModel('fzk', 0, await parseStep(readFileSync(resolve(process.cwd(), 'public/_fixtures/AC20-FZK-Haus.ifc'))), 1);
+  seedModel('fzk', 0, await parseStep(readFileSync(resolve(process.cwd(), 'src/test/__fixtures__/AC20-FZK-Haus.ifc'))), 1);
 });
 afterEach(() => { cancelCommand(); cleanup(); });
 

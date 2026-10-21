@@ -41,6 +41,32 @@ export function registerLocale(locale: Locale, catalogue: Catalogue): void {
   if (locale === activeLocale) notifyLocaleChanged();
 }
 
+/** Names catalogues of every shipped locale, loaded or not (`locales.boot.ts`). */
+const readBackCatalogues: Catalogue[] = [];
+
+/**
+ * Keep a locale's `names.*` strings for reading back, without making the
+ * locale available. A project made in Romanian and opened in English still
+ * has to read `Secțiunea A-A` as mark A, before (or without) the Romanian
+ * catalogue ever loading.
+ */
+export function registerReadBackNames(catalogue: Catalogue): void {
+  readBackCatalogues.push(catalogue);
+}
+
+/** The string every registered or read-back catalogue gives a key, English
+ * first, duplicates dropped. A catalogue that leaves the key out adds
+ * nothing; plural forms are skipped. For reading back text that was
+ * resolved in whichever language was active when it was made. */
+export function registeredTranslations(key: TranslationKey): string[] {
+  const out = new Set<string>();
+  for (const catalogue of [...catalogues.values(), ...readBackCatalogues]) {
+    const value = catalogue[key];
+    if (typeof value === 'string') out.add(value);
+  }
+  return [...out];
+}
+
 /** Switch the active locale. Falls back to 'en' if the locale was never registered. */
 export function setLocale(locale: Locale): void {
   activeLocale = catalogues.has(locale) ? locale : 'en';

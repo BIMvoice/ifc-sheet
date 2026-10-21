@@ -195,7 +195,8 @@ describe('the rail\'s tooltips', () => {
 
   it('shows no key that is not in the keymap: every key in a tooltip belongs to a row', () => {
     const ui = rail();
-    const shown = new Set(WALL_KEY_COMMANDS.map((c) => shortcutLabel(c.id)));
+    // The rail's Ortho lock shows F8, which is the drafting keymap's row (#146).
+    const shown = new Set([...WALL_KEY_COMMANDS, ...DRAFTING_KEY_COMMANDS].map((c) => shortcutLabel(c.id)));
     for (const b of ui.querySelectorAll('button[title]')) {
       const keys = /\(([^)]+)\)$/.exec(b.getAttribute('title') ?? '')?.[1];
       assert.ok(keys && shown.has(keys), `${b.getAttribute('title')}`);

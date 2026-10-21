@@ -27,7 +27,8 @@ import { useTranslation } from '@/i18n';
 
 import { cn } from '@/lib/utils';
 
-import { Spinner } from '@/components/ui/spinner';
+import { viewportState } from '@/project/viewport-state';
+import { ViewportState } from '../wall/ViewportState';
 
 import { IconButton } from '@/components/ui/icon-button';
 
@@ -98,6 +99,7 @@ import { CutHatchLayer } from './CutHatchLayer';
 import { MembraneLayer } from './MembraneLayer';
 
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
+import { GridLayer } from './GridLayer';
 
 import { roofAtPoint } from '@/project/roof-plan';
 
@@ -110,6 +112,7 @@ import { exportViewDxf } from './view-dxf';
 import { viewOmits } from '@/project/discipline-facts';
 
 import { planOverlays } from '@/project/plan-overlays';
+import { graphicStandardOf } from '@/drafting/graphic-standard';
 
 import { viewMaterials } from '@/project/material-resolver';
 
@@ -117,11 +120,14 @@ import { membraneOverlays } from '@/project/membrane-overlays';
 
 import { partHostType } from '@/project/part-host';
 
+import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOverrideRules } from '@/project/view-graphics';
 
 import { capturePointer } from '@/lib/pointer-capture';
 
 import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
+import { useLiveSymbolContext } from '@/siteplan/site-frame';
+import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
 
 
 const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
@@ -155,6 +161,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const fallbackPlane = useMemo(() => viewPlaneConfig(view, levels, mergedSectionBounds(models, legacyGeometry)), [view, levels, models, legacyGeometry]);
   const plane = drawing?.config.plane ?? fallbackPlane ?? undefined;
   const axis: SectionAxisName = plane ? AXIS_NAME[plane.axis] : 'down';
+  const liveSymbols = useLiveSymbolContext(plane, axis, view.scale ?? DEFAULT_VIEW_SCALE);
   const sectionPlane = useMemo(() => ({ axis, position: plane?.position ?? 0, flipped: plane?.flipped ?? false }), [axis, plane]);
   // Pinned: a regenerated drawing (an element added, edited) keeps the user's framing. No
   // automatic fit while a BIM tool is drawing — the clicks would land somewhere else.
@@ -181,11 +188,17 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const graphics = view.graphics;
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
+  const phaseSource = useProjectStore((st) => st.phaseSource);
+  // The view's phases (a Status edit counts): which elements it shows, and each one's phase.
+  const phases = useMemo(() => {
+    void mutationVersionForMaterials;
+    return phaseViewOf(graphics, phaseSource);
+  }, [graphics, phaseSource, mutationVersionForMaterials]);
   const discipline = view.kind === 'plan' ? view.discipline : undefined;
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
-    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing)) : null;
-  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials]);
+    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing), phases) : null;
+  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases]);
   const overrideRules = useMemo(() => viewOverrideRules(graphics), [graphics]);
   const overrideEngine = useMemo(() => new GraphicOverrideEngine(overrideRules), [overrideRules]);
   const useIfcMaterials = (graphics?.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId) === DEFAULT_VIEW_PRESET;
@@ -251,8 +264,8 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   useDraftingKeys({ inputRef, setText, submit: () => submitCommandLine('', state.cursor) });
 
   const exportDxf = () => exportViewDxf({
-    view, drawing: shown, axis, drafts: entities, layers, extraPatterns,
-    overlays: [...(plane ? planOverlays(view, plane, runtimeGeometry?.meshes, useProjectStore.getState().symbolFlips, hidden, shown) : []), ...membraneOverlays(shown)],
+    view, drawing: shown, axis, drafts: entities, layers, extraPatterns, symbols: liveSymbols,
+    overlays: [...(plane ? planOverlays(view, plane, phaseMeshes(runtimeGeometry?.meshes, phases), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens) : []), ...membraneOverlays(shown)],
   });
 
   const command = runningCommand();
@@ -308,6 +321,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
             transform={viewTransform}
             showHiddenLines={showHiddenLines}
             overrideEngine={overrideEngine}
+            graphics={graphics}
             overridesEnabled={overrideRules.length > 0}
             entityColorMap={materialColors}
             useIfcMaterials={useIfcMaterials}
@@ -316,18 +330,10 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         ) : null}
         <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
-        {status === 'generating' ? (
-          <div className="absolute inset-x-0 top-2 flex justify-center pointer-events-none">
-            <div className="flex items-center gap-2 rounded-md bg-background/90 px-3 py-1 text-xs shadow">
-              <Spinner className="size-3.5" /> {entry.phase} {Math.round(entry.progress)}%
-            </div>
-          </div>
-        ) : null}
-        {status === 'error' && entry.error ? (
-          <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-destructive pointer-events-none">{entry.error}</div>
-        ) : null}
-        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} transform={viewTransform} axis={axis} />
+        <ViewportState state={viewportState(entry, view.kind)} />
+        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
+        <GridLayer view={view} plane={plane ?? null} drawing={shown} transform={viewTransform} axis={axis} />
         </div>
         <DraftOverlay
           entities={entities}
@@ -348,6 +354,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           gripDrag={state.gripDrag}
           sectionBand={sectionBand}
           crop={view.detail}
+          symbols={liveSymbols}
         />
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />

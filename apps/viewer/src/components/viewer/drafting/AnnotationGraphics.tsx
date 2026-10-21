@@ -18,7 +18,8 @@
 import { memo, useId, useMemo } from 'react';
 import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M, textLeader } from '@/drafting/annotation';
 import { witnessLine } from '@/drafting/level-mark';
-import { findSymbol, flattenShape, missingSymbolMark, placeSymbol } from '@/drafting/symbols';
+import { flattenShape, missingSymbolMark, placeSymbol } from '@/drafting/symbols';
+import { liveSymbol, type LiveSymbolContext } from '@/siteplan/live-symbols';
 import { drawingToScreen, screenSigns, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { leaderTextRight } from '@/drafting/leader-segments';
 import { findPattern } from '@/drafting/hatch/library';
@@ -52,6 +53,8 @@ interface Props {
   look?: AnnotationLook;
   /** Drawing units per paper millimetre (view scale / 1000; 1 on a sheet). */
   paperUnit?: number;
+  /** What the drawing tells the symbols computed from it (scale bar, north arrow, coordinate point). */
+  symbols?: LiveSymbolContext | null;
 }
 
 /** A drawing-space direction as a screen angle in degrees, folded to read (left → right, bottom → top). */
@@ -162,10 +165,10 @@ function Hatch({ shape, color, t, axis, extraPatterns, k }: { shape: Extract<Ann
 }
 
 /** A symbol instance: the definition's shapes at the instance's place, scale and rotation; text in the project's Standard text style. */
-function Symbol({ shape, color, t, axis, k, look }: { shape: Extract<AnnotationShape, { type: 'symbol' }>; color: string; t: ViewTransform; axis: SectionAxisName; k: number; look: AnnotationLook }) {
-  const def = findSymbol(shape.symbolId);
+function Symbol({ shape, color, t, axis, k, look, live }: { shape: Extract<AnnotationShape, { type: 'symbol' }>; color: string; t: ViewTransform; axis: SectionAxisName; k: number; look: AnnotationLook; live?: LiveSymbolContext | null }) {
+  const { def, at } = liveSymbol(shape, live);
   const up = axis === 'down' ? -1 : 1;
-  const placed = def ? placeSymbol(def, shape, up) : null;
+  const placed = def ? placeSymbol(def, at, up) : null;
   const geometry = placed ? placed.geometry : missingSymbolMark(shape);
   const d = geometry.map((g) => { const f = flattenShape(g); return polyline(f.pts, t, axis, f.closed); }).join('');
   return (
@@ -180,11 +183,11 @@ function Symbol({ shape, color, t, axis, k, look }: { shape: Extract<AnnotationS
 }
 
 export const AnnotationGraphics = memo(function AnnotationGraphics({
-  shape, color: base, selected, transform: t, axis, extraPatterns, strokeScale: k = 1, look = DEFAULT_LOOK, paperUnit = 0.1,
+  shape, color: base, selected, transform: t, axis, extraPatterns, strokeScale: k = 1, look = DEFAULT_LOOK, paperUnit = 0.1, symbols,
 }: Props) {
   const s = (p: Pt) => drawingToScreen(p, t, axis);
   if (shape.type === 'hatch') return <Hatch shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} extraPatterns={extraPatterns} k={k} />;
-  if (shape.type === 'symbol') return <Symbol shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} k={k} look={look} />;
+  if (shape.type === 'symbol') return <Symbol shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} k={k} look={look} live={symbols} />;
   const textColor = selected ? '#2563eb' : look.text.color ?? base;
   const px = shape.height * t.scale;
   /** Paper millimetres → screen px. */

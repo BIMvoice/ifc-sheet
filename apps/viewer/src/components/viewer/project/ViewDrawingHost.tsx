@@ -10,11 +10,12 @@
  * are in front.
  *
  * A view is independent of the 3D view's hide / isolate state, like a Revit
- * view: only the class-level visibility toggles (spaces, openings…) apply.
+ * view: only the class-level visibility toggles (spaces, openings…) apply,
+ * and the phases the view does not show (`project/phases.ts`).
  * Geometry is the federated set `DrawingRuntimeHost` publishes.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactElement } from 'react';
 import { drawingAsViewShows } from '@/project/view-appearance';
 import { useViewerStore } from '@/store';
 import { useIfc } from '@/hooks/useIfc';
@@ -22,15 +23,21 @@ import { useDrawingGeneration } from '@/hooks/useDrawingGeneration';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { useProjectStore } from '@/project/project-store';
+import { phaseHiddenIds, phaseViewOf } from '@/project/phase-view';
 import { sectionPlaneForView } from '@/project/view-plane';
-import { dropViewDrawing, patchViewDrawing, planeKey, useViewDrawings, viewDisplayOverrides } from '@/project/view-drawings';
+import { dropViewDrawing, generatesFromModel, patchViewDrawing, planeKey, useViewDrawings, viewDisplayOverrides } from '@/project/view-drawings';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
 
 const NO_HIDDEN = new Set<number>();
 const FALLBACK_PLANE = { axis: 'down' as const, position: 50, flipped: false };
 
-export function ViewDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }> }): null {
+export function ViewDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }> }): ReactElement | null {
+  // A drafting view has no model behind it: nothing to generate, and no hooks to run for it.
+  return generatesFromModel(view) ? <ModelDrawingHost view={view} /> : null;
+}
+
+function ModelDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }> }): null {
   const viewId = view.id;
   const { geometryResult } = useDrawingRuntime();
   const { ifcDataStore } = useIfc();
@@ -49,6 +56,17 @@ export function ViewDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '
   const planeRef = useRef<{ key: string; plane: typeof FALLBACK_PLANE | NonNullable<typeof resolved> }>({ key: '', plane: FALLBACK_PLANE });
   if (planeRef.current.key !== key) planeRef.current = { key, plane: resolved ?? FALLBACK_PLANE };
   const sectionPlane = planeRef.current.plane;
+
+  // A view that draws by phase leaves the elements of the phases it does not show out of the generator's input
+  // (as a hidden element is), so they occlude, hatch and symbolize nothing. A new set regenerates the drawing.
+  const phaseSource = useProjectStore((s) => s.phaseSource);
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const phases = view.graphics?.phases;
+  const hiddenByPhase = useMemo(
+    () => phaseHiddenIds(geometryResult?.meshes, phaseViewOf(phases ? { phases } : undefined, phaseSource)) ?? NO_HIDDEN,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a Status edit (mutationVersion) changes the phases; `phases` is read by its shown set
+    [geometryResult, phases?.show.join(), phaseSource, mutationVersion],
+  );
 
   const { showConstructionProjection, constructionProjectionDepth } = viewDisplayOverrides(view);
   const displayOptions = useMemo(
@@ -76,7 +94,7 @@ export function ViewDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '
     sectionPlane,
     displayOptions,
     typeVisibility,
-    combinedHiddenIds: NO_HIDDEN,
+    combinedHiddenIds: hiddenByPhase,
     combinedIsolatedIds: null,
     computedIsolatedIds: null,
     models,

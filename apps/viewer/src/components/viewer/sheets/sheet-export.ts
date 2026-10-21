@@ -13,12 +13,21 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 import type { ProjectSheet } from '@/project/types';
 import { paperOf } from '@/project/sheets';
 
-/** The sheet SVG as a standalone document sized in millimetres (selection marks removed). */
-export function sheetSvgText(svg: SVGSVGElement, sheet: ProjectSheet): string {
-  const { w, h } = paperOf(sheet);
+/** A window of the paper, millimetres from its top-left corner. */
+export interface PaperCrop {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** The sheet SVG as a standalone document sized in millimetres (selection marks removed); with `crop`, only that window of the paper. */
+export function sheetSvgText(svg: SVGSVGElement, sheet: ProjectSheet, crop?: PaperCrop): string {
+  const { w, h } = crop ?? paperOf(sheet);
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute('width', `${w}mm`);
   clone.setAttribute('height', `${h}mm`);
+  if (crop) clone.setAttribute('viewBox', `${crop.x} ${crop.y} ${crop.w} ${crop.h}`);
   clone.removeAttribute('class');
   for (const el of Array.from(clone.querySelectorAll('[data-export-ignore="true"]'))) el.remove();
   return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(clone)}`;

@@ -30,5 +30,11 @@ export const modelVersionSwapActive = (): boolean => active;
 
 /** The project now refers to `models`, which replace the ones it knew. */
 export function keepProjectForNewVersion(models: readonly ProjectModelRef[]): void {
-  useProjectStore.setState({ models: [...models], dirty: true });
+  // A new version keeps how its model draws (host or linked, halftone or not, #96): matched by name, else by position.
+  const known = useProjectStore.getState().models;
+  const kept = models.map((m, i) => {
+    const before = known.find((k) => k.name === m.name) ?? known[i];
+    return before ? { ...m, ...(before.role ? { role: before.role } : {}), ...(before.drawStyle ? { drawStyle: before.drawStyle } : {}) } : m;
+  });
+  useProjectStore.setState({ models: kept, dirty: true });
 }

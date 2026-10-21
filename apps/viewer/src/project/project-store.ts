@@ -12,18 +12,27 @@
  * lives in `open-view.ts` / `project-sync.ts`.
  */
 
+import { resolve } from '@/i18n/registry';
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
 import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
-import { nextSheetNumber, sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
+import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
+import { findTemplate, templateFields } from './sheet-templates';
+import { nextDetailNumber } from './detail';
 import { upgradeTagAllTypes } from '@/tagall/types';
+import { liftTypedRevisions, sheetRevisions } from './revisions';
+import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
+import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
-import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView } from './types';
+import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
+import type { UrbanSettings } from '@/urban/indicators';
 
 export interface ProjectState extends ProjectDocument {
   /** Levels of the currently loaded models (derived, never persisted). */
@@ -37,10 +46,10 @@ export interface ProjectState extends ProjectDocument {
 export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visible: true, locked: false } as const;
 
 export const EMPTY_PROJECT: ProjectDocument = {
-  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
+  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, revisions: [], titleBlockParams: undefined, titleBlockTemplate: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
-  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [],
-  annotationTypes: [], symbols: [], legends: [], issues: [], modelState: undefined, tagFields: undefined,
+  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined, siteArea: undefined, urbanSettings: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -63,7 +72,20 @@ const DOCUMENT_FIELDS = {
   typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
   modelState: true,
   cadLayers: true,
+  details: true,
   tagFields: true,
+  sheetTemplates: true,
+  seriesTemplates: true,
+  titleBlockSources: true,
+  titleBlockParams: true,
+  titleBlockTemplate: true,
+  sheetNumbering: true,
+  phaseSource: true,
+  graphicStandard: true,
+  comments: true,
+  revisions: true,
+  siteArea: true,
+  urbanSettings: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -80,6 +102,10 @@ const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[
   structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], savedSectionCuts: () => [],
   annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [],
   cadLayers: () => [],
+  details: () => [],
+  sheetTemplates: () => [], seriesTemplates: () => ({}),
+  comments: () => [],
+  revisions: () => [],
 };
 
 /** The persisted part of the store. */
@@ -99,7 +125,11 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
 export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
-  const doc = liftSheetTitleBlocks(saved);
+  // Saved when the title block's revision was typed: it becomes a revision record (`revisions.ts`). The sheets
+  // print what they printed, so a sheet unchanged since the last issue still reads unchanged at the next one.
+  const titled = liftSheetTitleBlocks(saved);
+  const doc = carryIssueFingerprints(titled, liftTypedRevisions(titled, () => freshProjectId('revision')));
+  const standard = knownGraphicStandard(doc.graphicStandard);
   resetWallView();
   useProjectStore.setState({
     ...doc,
@@ -120,18 +150,32 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     materials: doc.materials ?? [],
     cadLayers: doc.cadLayers ?? [],
     savedSectionCuts: doc.savedSectionCuts ?? [],
+    sheetTemplates: doc.sheetTemplates ?? [],
+    seriesTemplates: doc.seriesTemplates ?? {},
+    phaseSource: doc.phaseSource,
     // A project made before the room label read the tag name takes the new template (`tagall/types.ts`).
     annotationTypes: upgradeTagAllTypes(doc.annotationTypes ?? []),
     symbols: doc.symbols ?? [],
     legends: doc.legends ?? [],
+    details: doc.details ?? [],
     issues: doc.issues ?? [],
     tagFields: doc.tagFields,
+    sheetNumbering: doc.sheetNumbering,
+    comments: doc.comments ?? [],
+    revisions: doc.revisions ?? [],
     modelState: doc.modelState,
+    titleBlockSources: doc.titleBlockSources,
+    titleBlockParams: doc.titleBlockParams,
+    titleBlockTemplate: doc.titleBlockTemplate,
+    graphicStandard: standard.id,
+    siteArea: doc.siteArea,
+    urbanSettings: doc.urbanSettings,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
     dirty: options.dirty ?? false,
   });
+  if (standard.unknown) warnUnknownGraphicStandard(standard.unknown);
 }
 
 /**
@@ -152,9 +196,22 @@ export function syncProjectWithModels(models: ProjectModelRef[], storeys: readon
   });
 }
 
+/** The site area in m², or null to fall back to the model's. */
+export function setProjectSiteArea(area: number | null): void {
+  const siteArea = area !== null && Number.isFinite(area) && area > 0 ? area : undefined;
+  if (siteArea !== useProjectStore.getState().siteArea) useProjectStore.setState({ siteArea, dirty: true });
+}
+
+/** Change the urban indicators' settings; a field set to undefined goes back to its default. */
+export function setUrbanSettings(patch: Partial<UrbanSettings>): void {
+  const merged: UrbanSettings = { ...useProjectStore.getState().urbanSettings, ...patch };
+  for (const key of Object.keys(merged) as (keyof UrbanSettings)[]) if (merged[key] === undefined) delete merged[key];
+  useProjectStore.setState({ urbanSettings: Object.keys(merged).length ? merged : undefined, dirty: true });
+}
+
 export function resetProject(): void {
   resetWallView();
-  useProjectStore.setState({ ...EMPTY_PROJECT, activeItemId: null, dirty: false });
+  useProjectStore.setState({ ...EMPTY_PROJECT, name: resolve('names.project.untitled'), activeItemId: null, dirty: false });
 }
 
 export function setProjectName(name: string): void {
@@ -228,7 +285,11 @@ export function duplicateProjectView(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.views.find((v) => v.id === id);
   if (!source) return null;
-  const copy = { ...structuredClone(source), id: freshProjectId('view'), name: uniqueViewName(`${source.name} Copy`, state.views), auto: false, createdAt: Date.now() };
+  const clone = structuredClone(source);
+  // A detail number names one detail: a copied drafting view takes one when a mark is made for it, a copied area detail the next free one.
+  if (clone.kind === 'drafting') delete clone.number;
+  if (clone.detail) clone.detail = { ...clone.detail, number: nextDetailNumber(state.views) };
+  const copy = { ...clone, id: freshProjectId('view'), name: uniqueViewName(`${source.name} Copy`, state.views), auto: false, createdAt: Date.now() };
   const at = state.views.indexOf(source) + 1;
   useProjectStore.setState({ views: [...state.views.slice(0, at), copy, ...state.views.slice(at)], dirty: true });
   return copy.id;
@@ -243,6 +304,8 @@ export function removeProjectItem(id: string): void {
     schedules: (state.schedules ?? []).filter((s) => s.id !== id),
     civilDrawings: (state.civilDrawings ?? []).filter((d) => d.id !== id),
     legends: (state.legends ?? []).filter((l) => l.id !== id),
+    // A deleted sheet takes the comments pinned on it.
+    comments: (state.comments ?? []).some((c) => c.sheetId === id) ? (state.comments ?? []).filter((c) => c.sheetId !== id) : state.comments,
     // A deleted view takes its own drawing with it, a section's symbol on its plans and a detail's mark on its source.
     drafts: state.drafts.some((d) => d.viewId === id || d.params.sectionOf === id || d.params.detailOf === id) ? state.drafts.filter((d) => d.viewId !== id && d.params.sectionOf !== id && d.params.detailOf !== id) : state.drafts,
     activeItemId: state.activeItemId === id ? null : state.activeItemId,
@@ -250,12 +313,19 @@ export function removeProjectItem(id: string): void {
   });
 }
 
-export { nextSheetNumber };
+/** The project's numbering scheme: its own, else today's A-101 style. */
+export const numberingScheme = (state: Pick<ProjectDocument, 'sheetNumbering'> = useProjectStore.getState()): NumberingScheme => state.sheetNumbering ?? DEFAULT_SCHEME;
 
-/** A new sheet takes the next plan number until a view is placed on it; then it is numbered by what it holds. */
-export function addProjectSheet(name = 'Unnamed'): string {
+/**
+ * A new sheet takes the next number of `group`. Without a group it takes the
+ * next plan number until a view is placed on it, then it is numbered by what
+ * it holds. It starts from the template if one is named.
+ */
+export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateId?: string): string {
   const state = useProjectStore.getState();
-  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets), autoNumber: true, name, createdAt: Date.now() };
+  const series = group ?? 'plans';
+  const template = findTemplate(templateId, state.sheetTemplates);
+  const sheet: ProjectSheet = { id: freshProjectId('sheet'), number: nextNumber(state.sheets, series, numberingScheme(state)), series, ...(group ? {} : { autoNumber: true }), name, createdAt: Date.now(), ...(template ? templateFields(template) : {}) };
   useProjectStore.setState({ sheets: [...state.sheets, sheet], dirty: true });
   return sheet.id;
 }
@@ -266,7 +336,10 @@ export function duplicateProjectSheet(id: string): string | null {
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;
   const held = state.views.find((v) => v.id === source.viewports?.[0]?.viewId);
-  const copy: ProjectSheet = { ...withoutAutoNumber(source), id: freshProjectId('sheet'), number: nextSheetNumber(state.sheets, sheetGroupOfView(held)), name: `${source.name} Copy`, createdAt: Date.now() };
+  const series = sheetGroupOfView(held);
+  const { numberOverride: _typed, ...own } = withoutAutoNumber(source);
+  // The copy has a new id, so clouds drawn on the source sheet do not name its revisions: it chooses them itself.
+  const copy: ProjectSheet = { ...own, id: freshProjectId('sheet'), number: nextNumber(state.sheets, series, numberingScheme(state)), series, name: `${source.name} Copy`, createdAt: Date.now(), revisionIds: sheetRevisions(source, state).map((r) => r.id) };
   const at = state.sheets.indexOf(source) + 1;
   useProjectStore.setState({ sheets: [...state.sheets.slice(0, at), copy, ...state.sheets.slice(at)], dirty: true });
   return copy.id;
@@ -275,7 +348,7 @@ export function duplicateProjectSheet(id: string): string | null {
 export function setSheetNumber(id: string, number: string): void {
   const trimmed = number.trim();
   if (!trimmed) return;
-  useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed } : sh)), dirty: true }));
+  useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed, series: numberGroupOf(sh), numberOverride: true } : sh)), dirty: true }));
 }
 
 /** Whether every loaded model is already in the project's model list. */
@@ -291,7 +364,7 @@ function mergeModels(known: readonly ProjectModelRef[], loaded: readonly Project
 }
 
 function sameLevels(a: readonly ProjectLevel[], b: readonly ProjectLevel[]): boolean {
-  return a.length === b.length && a.every((l, i) => l.name === b[i].name && l.elevation === b[i].elevation);
+  return a.length === b.length && a.every((l, i) => l.name === b[i].name && l.elevation === b[i].elevation && l.floorY === b[i].floorY);
 }
 
 // A detail mark's label is the detail's drawing number on its sheet and that sheet's number: derived, so it follows
