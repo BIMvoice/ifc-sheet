@@ -47,7 +47,8 @@ import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
 import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { keyPlanHighlight, viewportExtent, type Rect } from '@/siteplan/key-plan';
-import { KeyPlanHighlight, SiteBalance, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
+import { KeyPlanHighlight, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
+import { SiteBalance } from '../siteplan/SiteBalance';
 import type { SiteContent } from '../siteplan/useSheetSite';
 import type { EntityStyleOf } from '@/project/model-styles';
 
@@ -182,7 +183,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
       <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (content.drawingNumber ? numberWidth(content.drawingNumber, standard.type.viewTitle) + 2 : 0)} y={top + box.height + standard.type.viewTitle + 1.5} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
         {keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
       </text>
-      {content.site ? <SiteBalance site={content.site} x={left} y={top + box.height + standard.type.viewTitle + 4} /> : null}
+      {content.site ? <SiteBalance x={left} y={top + box.height + standard.type.viewTitle + 4} /> : null}
       {content.site ? <SiteSymbols site={content.site} transform={t} axis={axis} scale={vp.scale} box={{ x: left, y: top, width: box.width, height: box.height }} live={live}
         symbols={drafts.flatMap((e): SymbolInstanceShape[] => {
           const shown = e.shape.type === 'symbol' && layerColor.get(e.layerId) !== null ? annotationAtFactor(e.shape, factor) : null;

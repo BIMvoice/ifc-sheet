@@ -113,7 +113,7 @@ export function layoutUrban(r: UrbanIndicators, labels: UrbanLabels): ScheduleLa
     ...labels.rules(r),
     ...r.storeys.filter((s) => s.unmeasured > 0).map((s) => labels.unmeasured(s.unmeasured, s.name)),
     ...(labels.note ? [labels.note] : []),
-  ].flatMap(wrap);
+  ].flatMap((note) => wrapNote(note));
   for (const note of notes) {
     y += GAP;
     prims.push({ kind: 'text', x: 0, y, text: note, size: 2, anchor: 'start' });
@@ -122,12 +122,12 @@ export function layoutUrban(r: UrbanIndicators, labels: UrbanLabels): ScheduleLa
   return { width: WIDTH, height: y, prims };
 }
 
-/** A note broken at spaces into lines of about `NOTE_CHARS`. */
-function wrap(note: string): string[] {
+/** A note broken at spaces into lines of about `chars` characters (2 mm text). */
+export function wrapNote(note: string, chars = NOTE_CHARS): string[] {
   const lines: string[] = [];
   let line = '';
   for (const word of note.split(' ')) {
-    if (line && line.length + 1 + word.length > NOTE_CHARS) { lines.push(line); line = word; }
+    if (line && line.length + 1 + word.length > chars) { lines.push(line); line = word; }
     else line = line ? `${line} ${word}` : word;
   }
   if (line) lines.push(line);
