@@ -9,13 +9,14 @@
  * the schedule live: it follows model edits and the catalogue.
  */
 
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import type { PanelOperation } from '@ifc-lite/create';
 import { formatLocaleFixed, useTranslation, type TranslationKey } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
-import type { ProjectSchedule, ProjectSheet } from '@/project/types';
-import { scheduleData, type ScheduleData } from '@/joinery/schedule-data';
+import type { ProjectSchedule, ProjectSheet, SheetViewport } from '@/project/types';
+import { layoutJoineryOnSheet, syncSchedulePages } from '@/project/schedule-fit';
+import { scheduleData, type ScheduleData, type ScheduleKind } from '@/joinery/schedule-data';
 import { layoutSchedule, type ScheduleLabels, type ScheduleLayout, type SchedulePrim } from '@/joinery/schedule-layout';
 import { takeoffRows, type TakeoffRow } from '@/joinery/material-takeoff';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
@@ -148,6 +149,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
 /** The layouts of the schedules placed on `sheet`, by schedule id. */
 export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayout> {
   const schedules = useProjectStore((s) => s.schedules);
+  const sheets = useProjectStore((s) => s.sheets);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
   const catalogue = useProjectStore((s) => s.joineryTypes);
@@ -181,12 +183,17 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
   }, [sheet.viewports, schedules, mutationVersion, models, catalogue, mapping]);
   const joineryViews = useElementViews(joinery);
-  return useMemo(() => {
+  const layouts = useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
     // The takeoff parses materials on demand: read once per change, and only when a sheet shows one.
     const rows = placesTakeoff ? takeoffRows(collectTakeoffElements()) : [];
     const finishRooms = placesFinishes ? roomFinishes(collectRoomInputs()) : [];
     const byType = placesTypes ? typeQuantities(collectTypeElements()) : null;
+    // A joinery schedule wraps to its viewport's box (the first sheet's, for every page) and shows its own page.
+    const layoutJoinery = (schedule: ProjectSchedule, kind: ScheduleKind, vp: SheetViewport): ScheduleLayout => layoutJoineryOnSheet({
+      data: joinery.find((r) => r.id === schedule.id)?.data ?? scheduleData(kind), labels: { ...labels, title: schedule.name }, scale: schedule.scale ?? 50,
+      views: joineryViews.get(schedule.id), sheets, sheet, vp,
+    });
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || out.has(schedule.id)) continue;
@@ -203,11 +210,20 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
           ? layoutRoomFinishes(finishRooms, { ...finishLabels, title: schedule.name })
         : schedule.kind === 'types'
           ? layoutTypeQuantities(byType ?? { levels: [], rows: [], classTotals: [] }, { ...typeLabels, title: schedule.name })
-          : layoutSchedule(joinery.find((r) => r.id === schedule.id)?.data ?? scheduleData(schedule.kind), { ...labels, title: schedule.name }, { scale: schedule.scale ?? 50, views: joineryViews.get(schedule.id) }));
+          : layoutJoinery(schedule, schedule.kind, vp));
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet.viewports, schedules, labels, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, urban, urbanLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
+  }, [sheet, sheets, schedules, labels, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, urban, urbanLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
+  // A joinery schedule that runs over several pages has a sheet for each: the sheets follow the layout, from the schedule's first one.
+  // Only once the data is there: before the models load the schedule is empty, and that is not a reason to drop its sheets.
+  useEffect(() => {
+    for (const vp of sheet.viewports ?? []) {
+      const layout = layouts.get(vp.viewId);
+      if (layout?.fit && (vp.page ?? 0) === 0 && joinery.find((r) => r.id === vp.viewId)?.data.entries.length) syncSchedulePages(vp.viewId, layout.pages ?? 1);
+    }
+  }, [layouts, joinery, sheet.viewports]);
+  return layouts;
 }
 
 function Prim({ p }: { p: SchedulePrim }) {
