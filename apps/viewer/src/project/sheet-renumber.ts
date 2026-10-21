@@ -13,11 +13,16 @@
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { planRenumber, renumbered, type OverrideMode, type RenumberRow } from './numbering';
 import { useProjectStore } from './project-store';
-import type { NumberingScheme, ProjectIssue } from './types';
+import type { NumberingScheme, ProjectIssue, ProjectSchedule } from './types';
+
+/** The drawing register's documents: its sheet keeps the register's slot through a renumbering. */
+const registerIds = (schedules: readonly ProjectSchedule[] | undefined): ReadonlySet<string> =>
+  new Set((schedules ?? []).filter((s) => s.kind === 'register').map((s) => s.id));
 
 /** What renumbering the project's sheets by `scheme` would do. */
 export function previewRenumber(scheme: NumberingScheme, overrides: OverrideMode): RenumberRow[] {
-  return planRenumber(useProjectStore.getState().sheets, scheme, overrides);
+  const { sheets, schedules } = useProjectStore.getState();
+  return planRenumber(sheets, scheme, overrides, registerIds(schedules));
 }
 
 /** How many of the rows that change a number already went out in an issue, which keeps the number it went out under. */
@@ -33,8 +38,8 @@ export function issuedAmong(rows: readonly RenumberRow[], issues: readonly Proje
  * the result is `null`.
  */
 export function renumberAll(scheme: NumberingScheme, overrides: OverrideMode, confirmIssued = false): number | null {
-  const { sheets } = useProjectStore.getState();
-  const rows = planRenumber(sheets, scheme, overrides);
+  const { sheets, schedules } = useProjectStore.getState();
+  const rows = planRenumber(sheets, scheme, overrides, registerIds(schedules));
   if (!confirmIssued && issuedAmong(rows) > 0) return null;
   runAsOneUndoStep(() => {
     useProjectStore.setState({ sheetNumbering: scheme, sheets: renumbered(sheets, rows, overrides), dirty: true });

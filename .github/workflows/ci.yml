@@ -172,7 +172,7 @@ jobs:
         run: corepack enable
 
       - if: steps.wasm-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -207,7 +207,7 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -273,7 +273,7 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -322,7 +322,12 @@ jobs:
       - name: Test
         run: |
           args=(); while IFS= read -r a; do args+=("$a"); done < "$RUNNER_TEMP/turbo-scope"
-          pnpm turbo run test "${args[@]}" --concurrency=2
+          # One retry, CI only, for the vitest timeouts under runner load. `--retry=1`
+          # reaches every package's test script; the node:test packages ignore it
+          # (their runner takes no such flag), so only vitest retries. A test that
+          # fails twice still fails the job. The default reporter does not print
+          # retries; `vitest run --reporter=verbose` marks them "(retry x1)".
+          pnpm turbo run test "${args[@]}" --concurrency=2 -- --retry=1
 
   # The viewer suite is about 15k tests, so it is split by test file across
   # eight runners (TEST_SHARD / TEST_SHARDS, see apps/viewer/package.json).
@@ -345,7 +350,7 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -383,7 +388,7 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm

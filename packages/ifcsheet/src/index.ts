@@ -41,7 +41,7 @@ export { DEFAULT_FRAME, FRAME_MARGIN_MM, MARGIN_MM, TITLE_BLOCK_MM, drawingAreaI
 export { BUILT_IN_TEMPLATES, FILING_MARGIN_MM, allTemplates, findTemplate, readSeriesTemplates, readTemplate, templateFields, templateFromSheet } from './sheet-templates.js';
 export {
   DEFAULT_SCHEME, NUMBER_GROUPS, SCHEME_PRESETS, SEQUENTIAL_SCHEME, formatNumber, nextNumber, numberAt, numberGroupOf, numberSheets, planRenumber,
-  readNumberingScheme, renumbered, typedBeforeSchemes, type OverrideMode, type RenumberRow,
+  readNumberingScheme, registerNumberIn, registerSlot, renumbered, typedBeforeSchemes, type OverrideMode, type RenumberRow,
 } from './numbering.js';
 export { SHEET_SCALES, fitViewportBox, mmPerMetre, paperOf } from './viewport-fit.js';
 export {
