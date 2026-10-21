@@ -37,11 +37,11 @@
     "jspdf": "^4.2.1"
   },
   "devDependencies": {
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.5",
     "dxf-parser": "1.1.2",
     "pdfjs-dist": "6.3.289",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.5"
   },
   "license": "MPL-2.0",
   "author": "BIMvoice",
