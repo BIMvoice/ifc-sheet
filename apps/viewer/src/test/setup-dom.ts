@@ -18,7 +18,13 @@
 
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 
-GlobalRegistrator.register({ url: 'http://localhost/' });
+// happy-dom 21 turns iframe page loading off by default (an SSRF guard for
+// untrusted HTML); with it off an appended <iframe> has a null contentDocument.
+// The pop-out and wheel tests append EMPTY iframes (no src) as stand-ins for
+// child windows and read their contentDocument, so opt back in. Nothing here
+// renders untrusted markup or gives an iframe a URL. CSS file loading stays
+// at the new default (off); no test fetches stylesheets.
+GlobalRegistrator.register({ url: 'http://localhost/', settings: { enableIframePageLoading: true } });
 
 // React 19's `act()` (and `createRoot` in tests) requires the environment
 // to opt in explicitly; without this flag every act() call warns and
