@@ -11,7 +11,7 @@
  * storage or in an object store.
  */
 
-import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
+import { strFromU8, strToU8, unzipSync } from 'fflate';
 import type { ProjectDocument } from '../types';
 import { parseProjectFile, PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, type ProjectFileSchema } from '../project-file';
 import {
@@ -19,6 +19,9 @@ import {
   type ModelRole, type PackageManifest, type PackageModel, type PackageVersionInfo,
 } from './format';
 import { mergeParts, splitDocument } from './split';
+import type { PackageFiles } from './package-zip';
+
+export { zipPackage, zipPackageOffThread, type PackageFiles } from './package-zip';
 
 export interface ModelInput {
   id: string;
@@ -42,9 +45,6 @@ export interface PackageInput {
   /** Further parts by path (analytics tables), listed in the manifest like the rest. */
   extras?: ReadonlyMap<string, Uint8Array>;
 }
-
-/** The package as path → bytes, manifest included. */
-export type PackageFiles = Map<string, Uint8Array>;
 
 const json = (value: unknown) => strToU8(JSON.stringify(value));
 
@@ -79,13 +79,6 @@ export async function buildPackage(input: PackageInput): Promise<{ files: Packag
   };
   files.set(MANIFEST_PATH, strToU8(JSON.stringify(manifest, null, 2)));
   return { files, manifest };
-}
-
-/** IFC text compresses well; already-compressed or tiny parts are stored. */
-export function zipPackage(files: PackageFiles): Uint8Array {
-  const entries: Zippable = {};
-  for (const [path, bytes] of files) entries[path] = [bytes, { level: path.endsWith('.ifc') || path.endsWith('.json') ? 6 : 0 }];
-  return zipSync(entries);
 }
 
 export function unzipPackage(bytes: Uint8Array): PackageFiles {

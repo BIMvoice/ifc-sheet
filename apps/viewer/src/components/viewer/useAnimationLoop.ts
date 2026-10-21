@@ -28,6 +28,7 @@ import { getContributionCullConfig } from '../../utils/renderCullConfig.js';
 import { getLodScreenPx } from '../../utils/lodConfig.js';
 import { runGpuUpload } from './gpu-upload-guard';
 import { fieldTelemetry } from '@/lib/perf/fieldTelemetryLoader';
+import { isViewportCovered, onViewportCoverChange } from './viewport-cover';
 /** Sun cast-shadow render options, driven by the Environment panel (#2670). */
 export interface SunShadowSettings {
   enabled: boolean;
@@ -170,6 +171,11 @@ export function useAnimationLoop(params: UseAnimationLoopParams): void {
 
     const animate = (currentTime: number) => {
       if (aborted) return;
+      // Covered (the Wall is in front, #154): draw nothing and arm no further frame; `onViewportCoverChange` re-arms it.
+      if (isViewportCovered()) {
+        animationFrameRef.current = null;
+        return;
+      }
 
       const deltaTime = currentTime - lastFrameTimeRef.current;
       lastFrameTimeRef.current = currentTime;
@@ -384,11 +390,26 @@ export function useAnimationLoop(params: UseAnimationLoopParams): void {
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
+    // Pause while something covers the viewport and pick up on return. Nothing is lost: the renderer keeps its
+    // scene, camera and pending dirty flag; the mesh queue simply waits, and one render is asked for on the way back.
+    const offCover = onViewportCoverChange(() => {
+      if (aborted) return;
+      if (isViewportCovered()) {
+        if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      } else if (animationFrameRef.current === null) {
+        lastFrameTimeRef.current = performance.now(); // no jump in the camera's animation for the time spent hidden
+        renderer.requestRender();
+        animationFrameRef.current = requestAnimationFrame(animate);
+      }
+    });
+
     lastFrameTimeRef.current = performance.now();
-    animationFrameRef.current = requestAnimationFrame(animate);
+    if (!isViewportCovered()) animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
       aborted = true;
+      offCover();
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
