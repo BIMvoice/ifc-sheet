@@ -24,8 +24,8 @@ import { levelResolverFor } from '@/drafting/level-resolver';
 import { isRasterView } from '@/project/axonometric';
 import { isAutosaveRasterRef } from '@/project/autosave-rasters';
 import { drawingNumbers } from '@/drafting/cross-ref';
-import { elevationMarkDrafts, elevationMarkPlan, obstacleBoxes, sectionReferenceDrafts } from '@/drafting/cross-ref-marks';
-import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
+import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
+import { withCrossReferences } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
@@ -115,16 +115,11 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
   const ground = useMemo(() => elevationMarkPlan(views), [views]);
   const draftsFor = useCallback((vp: SheetViewport) => {
-    const own = settledDrafts(vp.viewId);
-    const view = views.find((v) => v.id === vp.viewId);
-    const sections = view?.kind === 'plan' ? sectionReferenceDrafts(own, views, sheets) : [];
-    const bounds = byView[vp.viewId]?.drawing?.bounds;
-    const withSections = sections.length ? [...own, ...sections] : own;
-    const elevations = view && view.id === ground?.id && bounds
-      ? elevationMarkDrafts({ planViewId: view.id, layerId: '0', views, sheets, bounds, paperUnit: viewportPaperUnit(vp.scale), factor: annotationFactor(vp.scale, view.scale), obstacles: obstacleBoxes(withSections) })
-      : [];
-    return elevations.length ? [...withSections, ...elevations] : withSections;
-  }, [settledDrafts, views, sheets, byView, ground]);
+    return withCrossReferences({
+      drafts: settledDrafts(vp.viewId), view: views.find((v) => v.id === vp.viewId), views, sheets, groundPlanId: ground?.id,
+      bounds: byView[vp.viewId]?.drawing?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays,
+    });
+  }, [settledDrafts, views, sheets, byView, ground, styled]);
   const content = useCallback((vp: SheetViewport): ViewportContent => ({
     schedule: placedSchedules.get(vp.viewId),
     civil: placedCivil.get(vp.viewId),
