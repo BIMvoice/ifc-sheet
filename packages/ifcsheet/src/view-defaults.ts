@@ -41,6 +41,18 @@ export function levelFloorY(level: Pick<ProjectLevel, 'elevation' | 'floorY'>): 
 }
 
 /**
+ * How far below its cut a plan looking down sees, metres: its view depth,
+ * plus the empty space between the cut and the model top when the cut is
+ * above it. The cut itself stays where it is, so nothing is cut there (#226);
+ * a plan above everything (a roof plan, the top storey of a model whose
+ * highest element is a slab) still sees as far into the model as its depth
+ * says. A depth of 0 (the plan shows its cut only) stays 0.
+ */
+export function planDepthBelowCut(viewDepth: number, cut: number, modelTop: number): number {
+  return viewDepth > 0 ? viewDepth + Math.max(0, cut - modelTop) : viewDepth;
+}
+
+/**
  * Merge storeys from every model into levels: storeys within
  * {@link LEVEL_MATCH_TOLERANCE_M} of each other are one level (the shortest
  * name wins), sorted top-down like a project browser lists them.

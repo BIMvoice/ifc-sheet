@@ -24,7 +24,7 @@ import type { ElevationDirection, ProjectLevel, ProjectView, SectionProjectPlane
 
 export interface ViewSectionPlane {
   axis: SectionPlaneAxis;
-  /** 0..100 of the merged bounds along `axis`. */
+  /** Percent of the merged bounds along `axis`: below 0 or past 100 for a plane outside them, never clamped onto them (#226). */
   position: number;
   flipped: boolean;
   /** Looks up from the plane but keeps the plan's x/y (a reflected ceiling plan); never with `flipped`. */

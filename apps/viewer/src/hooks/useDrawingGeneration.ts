@@ -37,6 +37,7 @@ import { buildProfileEntries, warnAboutSkippedProfiles } from '@/lib/overlay-par
 import { type SymbolicDrawingLine } from '@/lib/overlay-parse/symbolic-drawing-lines.js';
 import * as IfcWasm from '@ifc-lite/wasm';
 import { customPlaneCenter, useViewerStore } from '@/store';
+import { planDepthBelowCut } from '@/project/view-defaults';
 import { notifyDrawing2DSectionConfig, consumeRestoredSectionConfig } from './useDrawing2DPersistence.js';
 import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visibility';
 import { isTypeVisible } from '@/store/typeVisibilityFilter';
@@ -409,7 +410,9 @@ export function useDrawingGeneration({
         aboveDepth = 1e-3;
       }
       if (boundedProjection) {
-        belowDepth = manualDepth;
+        // A plan looking down from above the model top sees its depth into the model, not into the air above it (#226).
+        const looksDown = sectionPlane.axis === 'down' && !sectionPlane.custom && !sectionPlane.flipped && !sectionPlane.reflected;
+        belowDepth = looksDown ? planDepthBelowCut(manualDepth, position, axisMax) : manualDepth;
         if (manualDepth === 0 || sectionPlane.axis !== 'down') aboveDepth = 0;
       }
 

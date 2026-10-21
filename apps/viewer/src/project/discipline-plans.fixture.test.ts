@@ -144,7 +144,7 @@ describe('a roof plan on a top storey named Roof, over a slab roof wholly below 
     lacks(shown, 'Upper wall');
   });
 
-  it('draws them from any storey: the cut is clamped to the model top, the depth runs down from there', async () => {
+  it('draws them from any storey: the cut stays above the model, the depth runs down from the model top (#226)', async () => {
     for (const name of ['Ground floor', 'Upper floor']) has(m.drawnNames(await m.planOf(view('roof', level(m, name)))), 'Main roof', 'Wing roof');
   });
 });

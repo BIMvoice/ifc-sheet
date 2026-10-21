@@ -16,7 +16,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import type { ModelExtent } from './drawing-set.js';
 import type { ElevationDirection, ProjectLevel, ProjectView, SectionProjectPlane } from './document.js';
 import { customPlaneCenter } from './section-plane.js';
-import { levelFloorY, resolvePlanLevel } from './view-defaults.js';
+import { levelFloorY, planDepthBelowCut, resolvePlanLevel } from './view-defaults.js';
 
 /** Where an elevation stands and which way it looks (`ELEVATION_PLANES` in the app's `project/view-plane.ts`). */
 const ELEVATION_PLANES: Record<ElevationDirection, { axis: 'x' | 'z'; atMax: boolean; flipped: boolean }> = {
@@ -53,8 +53,9 @@ export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLeve
     case 'plan': {
       const level = resolvePlanLevel(view, levels) ?? (levels.length === 0 ? view.level : undefined);
       if (!level) return null;
-      // A plan with no depth of its own shows its cut.
-      return createSectionConfig('y', levelFloorY(level) + view.cutHeight, { projectionDepth: view.viewDepth ?? 0, includeHiddenLines: false });
+      // A plan with no depth of its own shows its cut. A cut above the model stays there and cuts nothing (#226).
+      const cut = levelFloorY(level) + view.cutHeight;
+      return createSectionConfig('y', cut, { projectionDepth: planDepthBelowCut(view.viewDepth ?? 0, cut, extent.max.y), includeHiddenLines: false });
     }
     case 'elevation': {
       if (view.interior) return storedPlane(view.interior.plane, view.viewDepth ?? span);

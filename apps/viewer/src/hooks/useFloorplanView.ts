@@ -21,7 +21,7 @@ import {
   mergedSectionBounds,
   sectionAxisRange,
   storeyCutElevation,
-  worldToPercent,
+  worldToSliderPercent,
   type SectionStorey,
 } from '@/lib/section/section-distance';
 
@@ -46,7 +46,7 @@ export function useFloorplanView() {
     // same conversion the Section bar's distance field uses.
     const range = sectionAxisRange(mergedSectionBounds(models, geometryResult), 'down');
     // Fallback bounds if no coordinate info available
-    const percentage = range ? worldToPercent(storeyCutElevation(storey), range) : 50;
+    const percentage = range ? worldToSliderPercent(storeyCutElevation(storey), range) : 50;
 
     // 2. Set section plane: axis=down (Y), position=calculated, enabled
     setSectionPlaneAxis('down');
