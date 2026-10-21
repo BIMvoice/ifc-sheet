@@ -156,7 +156,7 @@ fn issue_4260_identical_atlases_deduplicate_by_png_digest_and_aggregate_budget_n
     let result = plan_page_appearance(source.as_bytes(), &request, &rgba).unwrap();
     assert_eq!(result.item_images.len(), 2); assert_eq!(result.assets.len(), 1);
     assert_eq!(result.item_images[0].image_uri, result.item_images[1].image_uri);
-    assert_eq!(result.assets[0].image_uri, format!("textures/{:x}.png", Sha256::digest(&result.assets[0].png)));
+    assert_eq!(result.assets[0].image_uri, format!("textures/{}.png", hex::encode(Sha256::digest(&result.assets[0].png))));
     request.texels_per_metre = 2048.;
     assert!(plan_page_appearance(CONTROLLED_IFC.as_bytes(), &request, &rgba).unwrap_err().contains("budget"));
     request.texels_per_metre = 32.;

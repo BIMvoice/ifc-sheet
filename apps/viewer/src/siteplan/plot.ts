@@ -64,8 +64,8 @@ export const isSitePlan = (view: ProjectView | undefined): boolean => view?.kind
 
 /**
  * The plot area, m², from the boundary drawn on the project's site plan, or
- * `null` when no site plan has one. Exposed for the urban indicators' site
- * area to take once both are merged.
+ * `null` when no site plan has one. The urban indicators' site area
+ * (`urban/site-area.ts`) takes it unless a site area is typed in the project.
  */
 export function plotAreaOf(project: Pick<ProjectDocument, 'views' | 'drafts'>): number | null {
   for (const view of project.views) {

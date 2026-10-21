@@ -13,7 +13,9 @@ import { captureSheets } from '@/issue/capture.js';
 import { planIssue } from '@/issue/plan.js';
 import { drawingListCsv } from '@/issue/output.js';
 import { act } from 'react';
-import { drawingRegisterRows, holdsRegister, inSetOrder, registerRowsBuilt, type RegisterRow } from './drawing-register.js';
+import { drawingRegisterRows, holdsRegister, inSetOrder, registerRowCache, registerRowsBuilt, type RegisterRow } from './drawing-register.js';
+import { DEFAULT_SCHEME, SEQUENTIAL_SCHEME } from './numbering.js';
+import { renumberAll } from './sheet-renumber.js';
 import { buildDrawingSet, drawingArea, type ModelExtent } from './drawing-set.js';
 import { layoutRegisterPage, registerFit, REGISTER_MIN_TEXT_MM } from '@/joinery/register-layout.js';
 import { useSheetSchedules } from '@/components/viewer/joinery/ScheduleGraphic';
@@ -22,9 +24,12 @@ import { addSchedule } from '@/joinery/schedules.js';
 import { addRegisterToSet, hangSchedule, registerNumber } from './drawing-set-actions.js';
 import { addProjectSheet, resetProject, setSheetNumber, useProjectStore } from './project-store.js';
 import { renameProjectItem } from './project-store.js';
-import { setTitleBlockField, updateSheet } from './sheets.js';
+import { addSheetRevision, setTitleBlockField, updateSheet } from './sheets.js';
+import { addRevision } from './revision-actions';
 import { defaultViews } from './view-defaults.js';
 import type { ProjectSheet } from './types';
+import { REVISION_ID_PARAM } from './revisions';
+import { cloudDraft } from '@/whatchanged/cloud';
 
 /** The demo project's block of flats: five storeys (Parter, Etaj 1-4) at 2.8 m. */
 const BLOC: ModelExtent = { min: { x: 0, y: 0, z: 0 }, max: { x: 30, y: 14, z: 14 } };
@@ -39,7 +44,7 @@ function demoSet(): void {
 }
 const rows = (): RegisterRow[] => {
   const s = useProjectStore.getState();
-  return drawingRegisterRows({ sheets: s.sheets, titleBlock: s.titleBlock, issues: s.issues, asIndicated: AS_INDICATED, schedules: s.schedules });
+  return drawingRegisterRows({ sheets: s.sheets, titleBlock: s.titleBlock, issues: s.issues, asIndicated: AS_INDICATED, schedules: s.schedules, revisions: s.revisions, drafts: s.drafts });
 };
 const sheetNamed = (name: string): ProjectSheet => {
   const found = useProjectStore.getState().sheets.find((s) => s.name === name);
@@ -111,8 +116,8 @@ describe('the register follows the set', () => {
   it('a new revision on one sheet changes that row only; the others are byte-equal', () => {
     const before = rows();
     const target = sheetNamed('Elevations, east and west');
-    setTitleBlockField(target.id, 'revision', 'B');
-    setTitleBlockField(target.id, 'date', '2026-10-19');
+    // The revision is a record the sheet chooses (`revisions.ts`), no longer typed into its title block.
+    addSheetRevision(target.id, addRevision({ code: 'B', date: '2026-10-19' }));
     const after = rows();
     const diff = after.filter((r, i) => JSON.stringify(r) !== JSON.stringify(before[i]));
     assert.deepEqual(diff, [{ number: 'A-202', title: 'Elevations, east and west', scale: before.find((r) => r.number === 'A-202')?.scale ?? '', revision: 'B', date: '2026-10-19' }]);
@@ -325,5 +330,64 @@ describe('a register longer than its paper (#126 review)', () => {
     });
     assert.equal(registerRowsBuilt() - before, 1);
     assert.equal(rows().find((r) => r.number === target.number)?.scale, '1:50');
+  });
+});
+
+describe('the register reads the sheets\' revisions (#133 review)', () => {
+  const BOX = { x0: 10, y0: 10, x1: 60, y1: 40 };
+  const revisions = [{ id: 'ra', code: 'A', date: '2026-10-01', description: 'First issue', by: 'PC' }];
+  const sheets: ProjectSheet[] = [{ id: 's1', number: 'A-101', name: 'Plan', createdAt: 0, viewports: [] }];
+
+  it('builds a sheet\'s row again when a new cloud names a revision, though the sheet itself is unchanged', () => {
+    const rows = registerRowCache();
+    assert.deepEqual(rows({ sheets, revisions, drafts: [] }).map((r) => [r.revision, r.date]), [['', '']]);
+    const drafts = [cloudDraft('s1', BOX, 1, { [REVISION_ID_PARAM]: 'ra' })];
+    assert.deepEqual(rows({ sheets, revisions, drafts }).map((r) => [r.revision, r.date]), [['A', '2026-10-01']]);
+  });
+
+  it('builds it again when a revision record changes', () => {
+    const rows = registerRowCache();
+    const drafts = [cloudDraft('s1', BOX, 1, { [REVISION_ID_PARAM]: 'ra' })];
+    assert.equal(rows({ sheets, revisions, drafts })[0].revision, 'A');
+    assert.equal(rows({ sheets, revisions: [{ ...revisions[0], code: 'A1' }], drafts })[0].revision, 'A1');
+  });
+});
+
+describe('the register with the numbering scheme (integration of #115 and #126)', () => {
+  const bigSet = (n: number, sheetNumbering = DEFAULT_SCHEME) => {
+    resetProject();
+    useProjectStore.setState({
+      sheetNumbering,
+      sheets: Array.from({ length: n }, (_, i): ProjectSheet => ({
+        id: `s${i}`, number: `A-${101 + i}`, series: 'plans', name: `Sheet ${i + 1}`, createdAt: i, paper: 'A2', orientation: 'landscape',
+        viewports: [{ id: `vp${i}`, viewId: 'v1', x: 200, y: 150, scale: 100, width: 0, height: 0, center: null }],
+      })),
+    });
+    addRegisterToSet('Drawing register');
+  };
+  const registerSheets = () => {
+    const st = useProjectStore.getState();
+    return inSetOrder(st.sheets, st.schedules).filter((s) => holdsRegister(s, st.schedules));
+  };
+
+  it('a renumbering keeps the register on A-000 and its continuation sheet on A-000.1, never a number of the scheme', () => {
+    bigSet(120);
+    assert.deepEqual(registerSheets().map((s) => s.number), ['A-000', 'A-000.1']);
+    renumberAll(DEFAULT_SCHEME, 'renumber');
+    const numbers = useProjectStore.getState().sheets.map((s) => s.number);
+    assert.deepEqual(registerSheets().map((s) => s.number), ['A-000', 'A-000.1']);
+    assert.equal(new Set(numbers).size, numbers.length, 'no two sheets share a number');
+    assert.deepEqual(numbers.filter((n) => /^A-9/.test(n)), [], 'nothing fell into the other series');
+    assert.deepEqual(registerSheets().map((s) => s.series), ['general', 'general']);
+  });
+
+  it('takes the project\'s scheme: A00 and A00.1 under a sequential one, the drawings A01 onwards', () => {
+    bigSet(120, SEQUENTIAL_SCHEME);
+    assert.deepEqual(registerSheets().map((s) => s.number), ['A00', 'A00.1']);
+    renumberAll(SEQUENTIAL_SCHEME, 'renumber');
+    assert.deepEqual(registerSheets().map((s) => s.number), ['A00', 'A00.1']);
+    const drawings = useProjectStore.getState().sheets.filter((s) => s.series === 'plans').map((s) => s.number);
+    assert.equal(drawings[0], 'A01');
+    assert.equal(drawings.at(-1), 'A120');
   });
 });

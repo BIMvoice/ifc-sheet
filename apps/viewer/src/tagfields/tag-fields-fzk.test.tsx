@@ -48,7 +48,7 @@ let view: MutablePropertyView;
 
 beforeEach(async () => {
   resetProject();
-  const store = await parseStep(readFileSync(resolve(process.cwd(), 'public/_fixtures/AC20-FZK-Haus.ifc')));
+  const store = await parseStep(readFileSync(resolve(process.cwd(), 'src/test/__fixtures__/AC20-FZK-Haus.ifc')));
   seedModel('fzk', 0, store, 1);
   view = new MutablePropertyView(store.properties ?? null, 'fzk');
   configureMutationView(view, store);

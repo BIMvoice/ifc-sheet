@@ -81,9 +81,9 @@ jobs:
     # The Vercel secrets are given only to the three steps that call Vercel, so no
     # other step (in particular the third-party action below) can read them.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -148,7 +148,7 @@ jobs:
       github.ref == 'refs/heads/main' && needs.changed.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Delete old deployments
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}

@@ -19,7 +19,7 @@ import { useTranslation } from '@/i18n';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
 import { isGeometry, type DraftEntity, type DraftLayer, type SymbolInstanceShape } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
-import { frameOf, frameRect, titleBlockRect, TITLE_BLOCK_MM } from '@/project/sheet-frame';
+import { frameOf, frameRect, titleBlockRect } from '@/project/sheet-frame';
 import { mmPerMetre, paperOf, viewportBox } from '@/project/sheets';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
@@ -28,10 +28,12 @@ import { shapePath } from '../drafting/DraftOverlay';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
 import { cadKindOf, layerTags, penTags } from './dxf-tags';
 import { layerPen, layerShows, lookOf } from '@/drafting/styles';
-import { notDrawingIds, sheetScaleText } from '@/project/drawing-register';
 import { useProjectStore } from '@/project/project-store';
-import { LOGO_FIELD, titleBlockOf } from '@/project/title-block';
-import { useEffectiveTitleBlock } from '@/project/title-block-model';
+import { resolvedDraft } from '@/project/parametric-text';
+import { TitleBlockGraphic } from './TitleBlockGraphic';
+import { useSheetParamLookup } from './useSheetParams';
+import { currentRevisionOf, printsAtCurrentRevision, sheetRevisions } from '@/project/revisions';
+import { RevisionTable } from './RevisionTable';
 import { viewportPens } from './viewport-pens';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
@@ -45,7 +47,8 @@ import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
 import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { keyPlanHighlight, viewportExtent, type Rect } from '@/siteplan/key-plan';
-import { KeyPlanHighlight, SiteBalance, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
+import { KeyPlanHighlight, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
+import { SiteBalance } from '../siteplan/SiteBalance';
 import type { SiteContent } from '../siteplan/useSheetSite';
 import type { EntityStyleOf } from '@/project/model-styles';
 
@@ -85,6 +88,8 @@ interface SheetPaperProps {
   pxPerMm: number;
   /** Lines and annotations drawn on the sheet itself, paper millimetres. */
   sheetDrafts?: readonly DraftEntity[];
+  /** Print only the clouds of the sheet's current revision (an issue's option); older revisions' clouds are left off. */
+  currentCloudsOnly?: boolean;
 }
 
 /** The viewport's drawing → paper transform: the chosen (or drawing's) centre at the viewport centre. */
@@ -178,7 +183,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
       <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (content.drawingNumber ? numberWidth(content.drawingNumber, standard.type.viewTitle) + 2 : 0)} y={top + box.height + standard.type.viewTitle + 1.5} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
         {keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
       </text>
-      {content.site ? <SiteBalance site={content.site} x={left} y={top + box.height + standard.type.viewTitle + 4} /> : null}
+      {content.site ? <SiteBalance x={left} y={top + box.height + standard.type.viewTitle + 4} /> : null}
       {content.site ? <SiteSymbols site={content.site} transform={t} axis={axis} scale={vp.scale} box={{ x: left, y: top, width: box.width, height: box.height }} live={live}
         symbols={drafts.flatMap((e): SymbolInstanceShape[] => {
           const shown = e.shape.type === 'symbol' && layerColor.get(e.layerId) !== null ? annotationAtFactor(e.shape, factor) : null;
@@ -253,13 +258,16 @@ function PenPath({ layer, d, color }: { layer: DraftLayer | undefined; d: string
 }
 
 /** The sheet's own lines and annotations, on the paper. */
-function SheetDrafts({ entities, layers, extraPatterns }: { entities: readonly DraftEntity[]; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[] }) {
+function SheetDrafts({ sheet, projectName, entities, layers, extraPatterns }: { sheet: ProjectSheet; projectName: string; entities: readonly DraftEntity[]; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[] }) {
   const { book, groups } = useDraftingStandards();
+  const lookup = useSheetParamLookup(sheet, projectName);
   const colour = new Map(layers.map((l) => [l.id, layerShows(l, groups) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));
   return (
     <g>
-      {entities.map((e) => {
+      {entities.map((drafted) => {
+        // A parametric text prints with its parameters filled in.
+        const e = resolvedDraft(drafted, lookup);
         const color = colour.get(e.layerId);
         if (color === null) return null;
         return isGeometry(e.shape)
@@ -270,81 +278,18 @@ function SheetDrafts({ entities, layers, extraPatterns }: { entities: readonly D
   );
 }
 
-/**
- * The title block (180 × 50 mm), in the frame's bottom-right corner or, as a
- * strip, down its right side reading upwards: project / address and client /
- * organisation in halves, the sheet title across, drawn / checked by and date /
- * revision in halves; at the
- * right the logo, the sheet number and its scale. Fields are the project's
- * with the sheet's own on top (`title-block.ts`).
- */
-/** The size of a value in a half-width cell (about 61 mm of text): 3.5 mm, smaller for a longer value so that all of it prints inside its cell. */
-const valueSize = (value: string): number => Math.max(1.6, Math.min(3.5, 61 / (0.55 * Math.max(1, value.length))));
-
-function TitleBlock({ sheet, projectName, w, h }: { sheet: ProjectSheet; projectName: string; w: number; h: number }) {
-  const { t } = useTranslation();
-  const { sheet: line, type } = useGraphicStandard();
-  const projectFields = useEffectiveTitleBlock();
-  const frame = frameOf(sheet);
-  const box = titleBlockRect({ w, h }, frame);
-  // Drawn at its own origin, then set in place (turned a quarter when it is a strip).
-  const x = 0;
-  const y = 0;
-  const fields = titleBlockOf(sheet, projectFields, projectName);
-  const logo = projectFields?.[LOGO_FIELD];
-  const schedules = useProjectStore((s) => s.schedules);
-  const views = useProjectStore((s) => s.views);
-  // A sheet of schedules and tables only has no drawing scale, and a perspective has none to state.
-  const unscaled = new Set(notDrawingIds(schedules));
-  for (const v of sheet.viewports ?? []) if (!hasTrueScale(views.find((x) => x.id === v.viewId))) unscaled.add(v.viewId);
-  const scaleText = sheetScaleText(sheet, unscaled, t('sheets.asIndicated')) || '—';
-  const side = 50;
-  const left = TITLE_BLOCK_MM.w - side;
-  const rowH = TITLE_BLOCK_MM.h / 5;
-  // [label, value, column 0 or 1 of 2, or -1 across]
-  const cells: [string, string, number, number][] = [
-    [t('sheets.tb.project'), fields.project ?? '', 0, 0],
-    [t('sheets.tb.address'), fields.address ?? '', 0, 1],
-    [t('sheets.tb.client'), fields.client ?? '', 1, 0],
-    [t('sheets.tb.organisation'), fields.organisation ?? '', 1, 1],
-    [t('sheets.tb.title'), sheet.name, 2, -1],
-    [t('sheets.tb.drawnBy'), fields.drawnBy ?? '', 3, 0],
-    [t('sheets.tb.checkedBy'), fields.checkedBy ?? '', 3, 1],
-    [t('sheets.tb.date'), fields.date ?? '', 4, 0],
-    [t('sheets.tb.revision'), fields.revision ?? '', 4, 1],
-  ];
-  const font = 'ui-sans-serif, system-ui, sans-serif';
-  const sx = x + left;
-  return (
-    <g {...penTags('TITLEBLOCK', line.titleDivider)} data-title-block={frame.titleBlock} transform={frame.titleBlock === 'right' ? `translate(${box.x} ${box.y + box.h}) rotate(-90)` : `translate(${box.x} ${box.y})`}>
-      <rect x={x} y={y} width={TITLE_BLOCK_MM.w} height={TITLE_BLOCK_MM.h} fill="#fff" stroke="#000" strokeWidth={line.titleOuter} />
-      {[1, 2, 3, 4].map((i) => <line key={i} x1={x} y1={y + rowH * i} x2={sx} y2={y + rowH * i} stroke="#000" strokeWidth={line.titleRule} />)}
-      {[[0, 2], [3, 5]].map(([from, to]) => <line key={from} x1={x + left / 2} y1={y + rowH * from} x2={x + left / 2} y2={y + rowH * to} stroke="#000" strokeWidth={line.titleRule} />)}
-      {cells.map(([label, value, row, col]) => {
-        const cx = x + (col === 1 ? left / 2 : 0);
-        return (
-          <g key={label}>
-            <text x={cx + 2} y={y + rowH * row + 3.2} fontSize={type.caption} fontFamily={font} fill="#52525b">{label}</text>
-            <text x={cx + 2} y={y + rowH * row + 8} fontSize={col < 0 ? type.value : Math.min(type.value, valueSize(value))} fontFamily={font} fill="#000">{value}</text>
-          </g>
-        );
-      })}
-      <line x1={sx} y1={y} x2={sx} y2={y + TITLE_BLOCK_MM.h} stroke="#000" strokeWidth={line.titleDivider} />
-      <line x1={sx} y1={y + 14} x2={x + TITLE_BLOCK_MM.w} y2={y + 14} stroke="#000" strokeWidth={line.titleRule} />
-      <line x1={sx} y1={y + 34} x2={x + TITLE_BLOCK_MM.w} y2={y + 34} stroke="#000" strokeWidth={line.titleRule} />
-      {logo ? <image data-export-ignore-dxf="true" href={logo} x={sx + 2} y={y + 1.5} width={side - 4} height={11} preserveAspectRatio="xMidYMid meet" /> : null}
-      <text x={sx + 2} y={y + 17.2} fontSize={type.caption} fontFamily={font} fill="#52525b">{t('sheets.tb.number')}</text>
-      <text x={sx + 2} y={y + 29.5} fontSize={type.number} fontWeight={700} fontFamily={font} fill="#000">{sheet.number}</text>
-      <text x={sx + 2} y={y + 37.2} fontSize={type.caption} fontFamily={font} fill="#52525b">{t('sheets.tb.scale')}</text>
-      <text x={sx + 2} y={y + 45.5} fontSize={type.scale} fontFamily={font} fill="#000">{scaleText}</text>
-    </g>
-  );
-}
-
 export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function SheetPaper(
-  { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [] }, ref,
+  { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [], currentCloudsOnly = false }, ref,
 ) {
   const { w, h } = paperOf(sheet);
+  const revisions = useProjectStore((s) => s.revisions);
+  const projectDrafts = useProjectStore((s) => s.drafts);
+  const own = useMemo(() => sheetRevisions(sheet, { revisions, drafts: projectDrafts }), [sheet, revisions, projectDrafts]);
+  const shows = useMemo(() => {
+    if (!currentCloudsOnly) return null;
+    const current = currentRevisionOf(sheet, { revisions, drafts: projectDrafts });
+    return (d: DraftEntity) => printsAtCurrentRevision(d, current, { revisions });
+  }, [currentCloudsOnly, sheet, revisions, projectDrafts]);
   const pen = useGraphicStandard().sheet.frame;
   const frame = frameRect({ w, h }, frameOf(sheet));
   return (
@@ -352,15 +297,17 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
       <rect data-export-ignore-dxf="true" x={0} y={0} width={w} height={h} fill="#fff" />
       <rect {...penTags('FRAME', pen)} x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="none" stroke="#000" strokeWidth={pen} />
       {(sheet.viewports ?? []).map((vp) => {
-        const c = content(vp);
+        const c0 = content(vp);
+        const c = shows ? { ...c0, drafts: c0.drafts.filter(shows) } : c0;
         if (c.civil) return <CivilViewport key={vp.id} vp={vp} layout={c.civil} selected={vp.id === selectedViewportId} />;
         if (c.legend) return <LegendViewport key={vp.id} vp={vp} layout={c.legend} selected={vp.id === selectedViewportId} />;
         return c.schedule
           ? <ScheduleViewport key={vp.id} vp={vp} layout={c.schedule} selected={vp.id === selectedViewportId} />
           : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} highlight={keyedExtent(sheet, vp, content, c)} />;
       })}
-      <TitleBlock sheet={sheet} projectName={projectName} w={w} h={h} />
-      <SheetDrafts entities={sheetDrafts} layers={layers} extraPatterns={extraPatterns} />
+      <RevisionTable revisions={own} block={titleBlockRect({ w, h }, frameOf(sheet))} strip={frameOf(sheet).titleBlock === 'right'} />
+      <TitleBlockGraphic sheet={sheet} projectName={projectName} w={w} h={h} />
+      <SheetDrafts sheet={sheet} projectName={projectName} entities={shows ? sheetDrafts.filter(shows) : sheetDrafts} layers={layers} extraPatterns={extraPatterns} />
     </svg>
   );
 });

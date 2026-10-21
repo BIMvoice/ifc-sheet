@@ -12,6 +12,7 @@
  * lives in `open-view.ts` / `project-sync.ts`.
  */
 
+import { resolve } from '@/i18n/registry';
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { setSymbolLibrary } from '@/drafting/symbols';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
@@ -25,10 +26,13 @@ import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { findTemplate, templateFields } from './sheet-templates';
 import { nextDetailNumber } from './detail';
 import { upgradeTagAllTypes } from '@/tagall/types';
+import { liftTypedRevisions, sheetRevisions } from './revisions';
+import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
+import type { UrbanSettings } from '@/urban/indicators';
 
 export interface ProjectState extends ProjectDocument {
   /** Levels of the currently loaded models (derived, never persisted). */
@@ -42,10 +46,10 @@ export interface ProjectState extends ProjectDocument {
 export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visible: true, locked: false } as const;
 
 export const EMPTY_PROJECT: ProjectDocument = {
-  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
+  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, revisions: [], titleBlockParams: undefined, titleBlockTemplate: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
-  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined,
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined, siteArea: undefined, urbanSettings: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -73,10 +77,15 @@ const DOCUMENT_FIELDS = {
   sheetTemplates: true,
   seriesTemplates: true,
   titleBlockSources: true,
+  titleBlockParams: true,
+  titleBlockTemplate: true,
   sheetNumbering: true,
   phaseSource: true,
   graphicStandard: true,
   comments: true,
+  revisions: true,
+  siteArea: true,
+  urbanSettings: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -96,6 +105,7 @@ const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[
   details: () => [],
   sheetTemplates: () => [], seriesTemplates: () => ({}),
   comments: () => [],
+  revisions: () => [],
 };
 
 /** The persisted part of the store. */
@@ -115,7 +125,10 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
 export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
-  const doc = liftSheetTitleBlocks(saved);
+  // Saved when the title block's revision was typed: it becomes a revision record (`revisions.ts`). The sheets
+  // print what they printed, so a sheet unchanged since the last issue still reads unchanged at the next one.
+  const titled = liftSheetTitleBlocks(saved);
+  const doc = carryIssueFingerprints(titled, liftTypedRevisions(titled, () => freshProjectId('revision')));
   const standard = knownGraphicStandard(doc.graphicStandard);
   resetWallView();
   useProjectStore.setState({
@@ -149,9 +162,14 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     tagFields: doc.tagFields,
     sheetNumbering: doc.sheetNumbering,
     comments: doc.comments ?? [],
+    revisions: doc.revisions ?? [],
     modelState: doc.modelState,
     titleBlockSources: doc.titleBlockSources,
+    titleBlockParams: doc.titleBlockParams,
+    titleBlockTemplate: doc.titleBlockTemplate,
     graphicStandard: standard.id,
+    siteArea: doc.siteArea,
+    urbanSettings: doc.urbanSettings,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
@@ -178,9 +196,22 @@ export function syncProjectWithModels(models: ProjectModelRef[], storeys: readon
   });
 }
 
+/** The site area in m², or null to fall back to the model's. */
+export function setProjectSiteArea(area: number | null): void {
+  const siteArea = area !== null && Number.isFinite(area) && area > 0 ? area : undefined;
+  if (siteArea !== useProjectStore.getState().siteArea) useProjectStore.setState({ siteArea, dirty: true });
+}
+
+/** Change the urban indicators' settings; a field set to undefined goes back to its default. */
+export function setUrbanSettings(patch: Partial<UrbanSettings>): void {
+  const merged: UrbanSettings = { ...useProjectStore.getState().urbanSettings, ...patch };
+  for (const key of Object.keys(merged) as (keyof UrbanSettings)[]) if (merged[key] === undefined) delete merged[key];
+  useProjectStore.setState({ urbanSettings: Object.keys(merged).length ? merged : undefined, dirty: true });
+}
+
 export function resetProject(): void {
   resetWallView();
-  useProjectStore.setState({ ...EMPTY_PROJECT, activeItemId: null, dirty: false });
+  useProjectStore.setState({ ...EMPTY_PROJECT, name: resolve('names.project.untitled'), activeItemId: null, dirty: false });
 }
 
 export function setProjectName(name: string): void {
@@ -307,7 +338,8 @@ export function duplicateProjectSheet(id: string): string | null {
   const held = state.views.find((v) => v.id === source.viewports?.[0]?.viewId);
   const series = sheetGroupOfView(held);
   const { numberOverride: _typed, ...own } = withoutAutoNumber(source);
-  const copy: ProjectSheet = { ...own, id: freshProjectId('sheet'), number: nextNumber(state.sheets, series, numberingScheme(state)), series, name: `${source.name} Copy`, createdAt: Date.now() };
+  // The copy has a new id, so clouds drawn on the source sheet do not name its revisions: it chooses them itself.
+  const copy: ProjectSheet = { ...own, id: freshProjectId('sheet'), number: nextNumber(state.sheets, series, numberingScheme(state)), series, name: `${source.name} Copy`, createdAt: Date.now(), revisionIds: sheetRevisions(source, state).map((r) => r.id) };
   const at = state.sheets.indexOf(source) + 1;
   useProjectStore.setState({ sheets: [...state.sheets.slice(0, at), copy, ...state.sheets.slice(at)], dirty: true });
   return copy.id;

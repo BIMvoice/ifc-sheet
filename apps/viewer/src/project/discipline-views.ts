@@ -35,7 +35,9 @@ import { getInheritanceChainAcrossSchemas } from '@ifc-lite/parser';
 import type { CategoryGraphics, NewProjectView, ProjectLevel, ProjectView } from './types';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, freshProjectId, uniqueViewName } from './view-defaults';
 
-export type DisciplineId = 'structural' | 'foundation' | 'roof';
+import type { DisciplineId } from '@bimvoice/ifcsheet';
+
+export type { DisciplineId } from '@bimvoice/ifcsheet';
 
 export const DISCIPLINE_IDS: readonly DisciplineId[] = ['structural', 'foundation', 'roof'];
 

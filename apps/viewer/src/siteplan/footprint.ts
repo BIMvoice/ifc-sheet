@@ -16,7 +16,7 @@
  * Limits, stated: a courtyard or light well is filled too, and a balcony or
  * overhang above the cut is not drawn. The urban indicators' footprint
  * (meshes of the storey, holes told apart by floor) is the permit's measure
- * once merged; this one only places the setbacks and a provisional ratio.
+ * and gives the site balance its built area; this one only places the setbacks.
  */
 
 import type { DrawingPolygon } from '@ifc-lite/drawing-2d';
@@ -72,6 +72,3 @@ export function footprintRings(polygons: readonly DrawingPolygon[], union: RingU
   const rings = enclosureRings(polygons).map((r) => offsetRing(r, CLOSE));
   return rings.length ? outerRings(union(rings)).map((r) => offsetRing(r, -CLOSE)) : [];
 }
-
-/** Their area, m². */
-export const footprintArea = (rings: readonly Pt[][]): number => rings.reduce((s, r) => s + ringArea(r), 0);

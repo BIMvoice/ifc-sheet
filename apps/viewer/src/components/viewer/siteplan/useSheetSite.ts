@@ -5,8 +5,8 @@
 /**
  * What a sheet's site plans show beyond their drawing: the plot boundary the
  * user drew, the building's footprint (the ground storey cut's outer rings,
- * `siteplan/footprint.ts`, united by the kernel's 2D booleans), the setbacks
- * between them, and the two areas.
+ * `siteplan/footprint.ts`, united by the kernel's 2D booleans) and the
+ * setbacks between them. The areas are the urban indicators' (`SiteBalance.tsx`).
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -15,16 +15,14 @@ import { Contours2D, resolve2d } from '@ifc-lite/wasm';
 import { ensureWasm } from '@/lib/wasm/ensure-wasm';
 import type { DraftEntity, Pt } from '@/drafting/types';
 import type { ProjectView } from '@/project/types';
-import { footprintArea, footprintRings, type RingUnion } from '@/siteplan/footprint';
-import { isSitePlan, plotBoundaryOf, ringArea, setbacks, type Setback } from '@/siteplan/plot';
+import { footprintRings, type RingUnion } from '@/siteplan/footprint';
+import { isSitePlan, plotBoundaryOf, setbacks, type Setback } from '@/siteplan/plot';
 
 export interface SiteContent {
   boundary: Pt[] | null;
   /** `null` until the footprint is computed (the wasm module loads once). */
   footprint: Pt[][] | null;
   setbacks: Setback[];
-  plotArea: number | null;
-  footprintArea: number | null;
 }
 
 /** The kernel's self-union (`resolve2d`), outer ring of each shape only. */
@@ -85,8 +83,6 @@ export function useSheetSite(
         boundary,
         footprint,
         setbacks: boundary && footprint ? setbacks(footprint, boundary) : [],
-        plotArea: boundary ? ringArea(boundary) : null,
-        footprintArea: footprint && footprint.length ? footprintArea(footprint) : null,
       });
     }
     return out;
