@@ -84,6 +84,21 @@ describe('buildFeedbackUrl (#148)', () => {
     assert.equal(buildFeedbackUrl({ kind: 'bug', title: 't', description: 'short', parts: NONE }, FACTS).truncated, false);
   });
 
+  it('writes a space as %20 and a plus as %2B, never a bare +, in every field of the link', () => {
+    const draft = { kind: 'bug', title: 'a b+c', description: 'one two+three 1+1', parts: { environment: true, place: false } } as const;
+    const { url } = buildFeedbackUrl(draft, FACTS);
+    const query = url.split('?')[1] ?? '';
+    assert.equal(query.includes('+'), false, `a bare + in ${query}`);
+    assert.ok(query.includes('title=a%20b%2Bc'), query);
+    assert.ok(query.includes('description=one%20two%2Bthree%201%2B1'), query);
+    assert.ok(query.includes('context=-%20IfcSheet%200.1.0'), 'the context lines too');
+    // And it reads back as typed.
+    assert.equal(params(url).get('title'), 'a b+c');
+    assert.equal(params(url).get('description'), 'one two+three 1+1');
+    // A question rides `body`, which is encoded the same way.
+    assert.equal(buildFeedbackUrl({ ...draft, kind: 'question' }, FACTS).url.split('?')[1]?.includes('+'), false);
+  });
+
   it('caps a long title', () => {
     const t = params(buildFeedbackUrl({ kind: 'bug', title: 'y'.repeat(900), description: 'd', parts: NONE }, FACTS).url).get('title') ?? '';
     assert.ok(t.length <= 200);
