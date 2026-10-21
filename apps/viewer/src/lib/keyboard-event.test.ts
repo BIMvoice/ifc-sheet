@@ -4,7 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { eventKey, isTextEntryElement, isTextEntryTarget } from './keyboard-event.js';
+import { eventKey, isTextEntryElement, isTextEntryTarget, producesText } from './keyboard-event.js';
 
 /**
  * Build a KeyboardEvent-shaped stub. The point of these helpers is exactly the
@@ -121,5 +121,33 @@ describe('isTextEntryElement', () => {
     );
     assert.equal(isTextEntryElement({ tagName: 'BUTTON', closest: () => null }), false);
     assert.equal(isTextEntryElement(null), false);
+  });
+});
+
+describe('producesText', () => {
+  const ev = (init: Partial<KeyboardEvent>): KeyboardEvent => init as KeyboardEvent;
+
+  it('is true for Option+letter on a Mac, whose key is the glyph it types, not the letter on the key', () => {
+    assert.equal(producesText(ev({ key: 'ß', code: 'KeyS', altKey: true })), true);
+    assert.equal(producesText(ev({ key: '¡', code: 'Digit1', altKey: true })), true);
+    assert.equal(producesText(ev({ key: 'Í', code: 'KeyS', altKey: true, shiftKey: true })), true);
+    assert.equal(producesText(ev({ key: 'Dead', code: 'KeyE', altKey: true })), true, 'Option+E starts an accent');
+  });
+
+  it('is true for Ctrl+Alt (AltGr on a Windows layout) with a character', () => {
+    assert.equal(producesText(ev({ key: 'ș', code: 'KeyS', ctrlKey: true, altKey: true })), true);
+    assert.equal(producesText(ev({ key: 's', code: 'KeyS', ctrlKey: true, altKey: true })), true);
+    assert.equal(producesText(ev({ key: 'Enter', code: 'Enter', ctrlKey: true, altKey: true })), false);
+  });
+
+  it('is false for Alt+letter that types nothing, a bare key, a named key and Ctrl or Cmd on their own', () => {
+    assert.equal(producesText(ev({ key: 's', code: 'KeyS', altKey: true })), false);
+    assert.equal(producesText(ev({ key: '1', code: 'Digit1', altKey: true })), false);
+    assert.equal(producesText(ev({ key: 's', code: 'KeyS' })), false);
+    assert.equal(producesText(ev({ key: 'ș', code: 'KeyS' })), false, 'a plain keypress is the field\'s own typing, not a modified one');
+    assert.equal(producesText(ev({ key: 'F3', code: 'F3', altKey: true })), false);
+    assert.equal(producesText(ev({ key: 'z', code: 'KeyZ', ctrlKey: true })), false);
+    assert.equal(producesText(ev({ key: 'z', code: 'KeyZ', metaKey: true, altKey: true })), false);
+    assert.equal(producesText(ev({ key: undefined as unknown as string })), false);
   });
 });

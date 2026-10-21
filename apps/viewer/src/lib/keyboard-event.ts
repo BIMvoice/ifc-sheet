@@ -93,3 +93,24 @@ export function isTextEditingElement(target: unknown): boolean {
 export function isTextEntryTarget(e: Event): boolean {
   return isTextEntryElement(e.target);
 }
+
+/**
+ * Whether a modified keypress types a character (so a text field must get it,
+ * not a shortcut): Option+S on a Mac types ß and Option+E starts an accent,
+ * and AltGr on a Windows layout reports as Ctrl+Alt with the
+ * character it types as `key`. Alt+S that types nothing (a Windows layout
+ * without AltGr, where `key` is still `s`) is not text. A plain keypress is
+ * not "modified": it is the field's own typing, and callers decide on that.
+ */
+export function producesText(e: KeyboardEvent): boolean {
+  const key = (e as { key?: unknown }).key;
+  if (typeof key !== 'string' || e.metaKey) return false;
+  if (e.ctrlKey && e.altKey) return key.length === 1;
+  if (!e.altKey || e.ctrlKey) return false;
+  if (key === 'Dead') return true;
+  if (key.length !== 1) return false;
+  // Option+letter / digit types a glyph other than the key's own; any other key: a non-ASCII glyph.
+  const code = typeof e.code === 'string' ? e.code : '';
+  const base = /^Key[A-Z]$/.test(code) ? code.slice(3).toLowerCase() : /^Digit[0-9]$/.test(code) ? code.slice(5) : null;
+  return base !== null ? key.toLowerCase() !== base : key.charCodeAt(0) > 127;
+}

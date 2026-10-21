@@ -11,12 +11,12 @@
  * reaches the Wall or a running tool.
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { downloadFile } from '@/lib/export/download';
 import { WALL_ACTIONS, defaultKeys, type WallActionId } from '@/lib/commands/action-registry';
 import { formatChord, type KeyChord } from '@/lib/commands/chord';
-import { exportKeyBindings, importKeyBindings, isCustomised, rebindAction, resetAction, resetAllBindings, unbindAction, useKeyBindings, type RebindOutcome } from '@/lib/commands/key-bindings';
+import { IMPORT_MAX_CHARS, exportKeyBindings, importKeyBindings, isCustomised, rebindAction, resetAction, resetAllBindings, takeDroppedBindings, unbindAction, useKeyBindings, type RebindOutcome } from '@/lib/commands/key-bindings';
 import { KEY_COMMANDS, type KeyCommandCategory } from '@/lib/commands/keyboard-commands';
 import { ariaKeyShortcuts, shortcutLabel } from '@/lib/commands/shortcut-label';
 import { KeyActionRow } from './KeyActionRow';
@@ -72,16 +72,26 @@ export function KeyboardSettings({ onDone }: { onDone?: () => void }) {
     setConfirmingReset(false);
     say(t('wall.keys.resetAllDone'));
   };
+  const tooLarge = () => say(t('wall.keys.importTooLarge', { kb: IMPORT_MAX_CHARS / 1024 }), true);
   const importText = (text: string) => {
     const outcome = importKeyBindings(text);
     if (!outcome.ok) {
-      say(outcome.reason === 'invalid' ? t('wall.keys.importInvalid')
-        : t('wall.keys.importConflict', { keys: formatChord(outcome.chord), first: name(outcome.first), second: name(outcome.second) }), true);
+      if (outcome.reason === 'conflict') say(t('wall.keys.importConflict', { keys: formatChord(outcome.chord), first: name(outcome.first), second: name(outcome.second) }), true);
+      else if (outcome.reason === 'reserved') say(t('wall.keys.reserved', { keys: formatChord(outcome.chord) }), true);
+      else if (outcome.reason === 'tooMany') say(t('wall.keys.importTooMany', { action: name(outcome.action), max: outcome.max }), true);
+      else if (outcome.reason === 'tooLarge') tooLarge();
+      else say(t('wall.keys.importInvalid'), true);
       return;
     }
     const done = outcome.applied > 0 ? t('wall.keys.imported', { count: outcome.applied }) : t('wall.keys.importedNone');
     say(outcome.skipped > 0 ? `${done} ${t('wall.keys.importSkipped', { count: outcome.skipped })}` : done);
   };
+
+  // Saved keys that collided at load were left out: say so, once.
+  useEffect(() => {
+    const dropped = takeDroppedBindings();
+    if (dropped > 0) setNote({ text: t('wall.keys.storedDropped', { count: dropped }), error: false });
+  }, [t]);
 
   const needle = query.trim().toLowerCase();
   const shown = WALL_ACTIONS.filter((a) => !needle || name(a.id).toLowerCase().includes(needle) || keysOf(a.id).toLowerCase().includes(needle));
@@ -108,7 +118,10 @@ export function KeyboardSettings({ onDone }: { onDone?: () => void }) {
         <input ref={fileInput} type="file" accept=".json,application/json" aria-label={t('wall.keys.importChoose')} className="hidden" onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = '';
-          if (file) void file.text().then(importText, () => say(t('wall.keys.importInvalid'), true));
+          if (!file) return;
+          // A file over the cap is refused unread: it could be any size.
+          if (file.size > IMPORT_MAX_CHARS) tooLarge();
+          else void file.text().then(importText, () => say(t('wall.keys.importInvalid'), true));
         }} />
         {confirmingReset ? (
           <span className="flex flex-wrap items-center gap-1.5">

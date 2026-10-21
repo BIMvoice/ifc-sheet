@@ -110,7 +110,7 @@ describe('rebinding', () => {
   });
 
   it('frees a key when its action is given another, so a third can take it', () => {
-    assert.ok(rebindAction('wall.tool.dimaligned', key('d')).ok);
+    assert.ok(rebindAction('wall.tool.dimaligned', key('n')).ok);
     assert.ok(rebindAction('wall.draw.line', key('code:Digit1', { alt: true })).ok);
   });
 
@@ -130,20 +130,20 @@ describe('rebinding', () => {
 describe('reset', () => {
   it('puts one action back on its default, and all of them back at once', () => {
     rebindAction('wall.draw.line', key('l'));
-    rebindAction('wall.fit', key('f'));
+    rebindAction('wall.fit', key('y'));
     assert.deepEqual(resetAction('wall.draw.line'), { ok: true });
     assert.deepEqual(effectiveKeys('wall.draw.line'), SHIPPED['wall.draw.line']);
-    assert.deepEqual(effectiveKeys('wall.fit'), [key('f')]);
+    assert.deepEqual(effectiveKeys('wall.fit'), [key('y')]);
     resetAllBindings();
     for (const [id, chords] of Object.entries(SHIPPED)) assert.deepEqual(effectiveKeys(id), chords, id);
     assert.equal(localStorage.getItem(KEY_BINDINGS_STORAGE_KEY), null, 'nothing is left in storage');
   });
 
   it('will not reset onto a default another action has taken since, and says which', () => {
-    rebindAction('wall.tool.dimaligned', key('d'));
+    rebindAction('wall.tool.dimaligned', key('n'));
     rebindAction('wall.fit', key('code:Digit1', { alt: true }));
     assert.deepEqual(resetAction('wall.tool.dimaligned'), { ok: false, reason: 'conflict', holder: 'wall.fit' });
-    assert.deepEqual(effectiveKeys('wall.tool.dimaligned'), [key('d')]);
+    assert.deepEqual(effectiveKeys('wall.tool.dimaligned'), [key('n')]);
   });
 });
 
@@ -172,7 +172,7 @@ describe('saving, export and import', () => {
   });
 
   it('refuses a file that is not a keyboard set, or gives one key two actions, and changes nothing', () => {
-    rebindAction('wall.fit', key('f'));
+    rebindAction('wall.fit', key('y'));
     assert.deepEqual(importKeyBindings('not json'), { ok: false, reason: 'invalid' });
     assert.deepEqual(importKeyBindings(JSON.stringify({ format: 'other', version: 1, bindings: {} })), { ok: false, reason: 'invalid' });
     assert.deepEqual(importKeyBindings(JSON.stringify({ format: 'ifcsheet-keyboard', version: 1, bindings: { 'wall.fit': [{ key: 3 }] } })), { ok: false, reason: 'invalid' });
@@ -180,11 +180,11 @@ describe('saving, export and import', () => {
     const outcome = importKeyBindings(clash);
     assert.equal(outcome.ok, false);
     assert.equal(!outcome.ok && outcome.reason, 'conflict');
-    assert.deepEqual(effectiveKeys('wall.fit'), [key('f')]);
+    assert.deepEqual(effectiveKeys('wall.fit'), [key('y')]);
   });
 
   it('leaves out, and counts, actions a file names that this Wall does not have', () => {
-    const file = JSON.stringify({ format: 'ifcsheet-keyboard', version: 1, bindings: { 'wall.someday': [key('q')], 'wall.fit': [key('f')] } });
+    const file = JSON.stringify({ format: 'ifcsheet-keyboard', version: 1, bindings: { 'wall.someday': [key('q')], 'wall.fit': [key('y')] } });
     assert.deepEqual(importKeyBindings(file), { ok: true, applied: 1, skipped: 1 });
   });
 

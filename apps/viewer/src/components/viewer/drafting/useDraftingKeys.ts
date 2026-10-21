@@ -6,7 +6,8 @@
  * Keyboard for the drafting view in front: typing goes to the command line
  * (CAD style — no need to click it first); the keys (undo, redo, snap, ortho,
  * cancel, erase, confirm) are the rows of `lib/commands/drafting-key-commands.ts`,
- * read as bound now (`key-bindings.ts`, #166), as the shortcut list reads them;
+ * read as bound now (`key-bindings.ts`, #166, matched in `drafting-key-match.ts`),
+ * as the shortcut list reads them; an open dialog or menu keeps every key;
  * holding Ctrl locks ortho while down.
  */
 
@@ -14,22 +15,10 @@ import { useEffect, useRef } from 'react';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import { getCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { pressEnter, pressEscape, startDraftCommand, setOrthoHeld, toggleOrtho, toggleSnap, useDraftingSession } from '@/drafting/session';
-import { eventMatchesChords } from '@/lib/commands/dispatcher';
-import { isTypedChord } from '@/lib/commands/chord';
-import { DRAFTING_EXACT_MODIFIERS, type DraftingKeyId } from '@/lib/commands/drafting-key-commands';
-import { effectiveKeys, isCustomised } from '@/lib/commands/key-bindings';
+import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
+import type { DraftingKeyId } from '@/lib/commands/drafting-key-commands';
 import { claimWallKey } from '../wall/wall-key-bus';
-
-/**
- * Whether the event is one of the keys in force for the row `id` (the keymap's,
- * or what the person bound, #166). A key the person chose matches with its
- * modifiers exactly. While text is being typed into the command line (`typing`),
- * a bare printable key is the text's, never an action's.
- */
-function isKeyIn(id: DraftingKeyId, e: KeyboardEvent, typing: boolean): boolean {
-  const keys = effectiveKeys(id).filter((chord) => !(typing && isTypedChord(chord)));
-  return eventMatchesChords(keys, e, !DRAFTING_EXACT_MODIFIERS.has(id) && !isCustomised(id));
-}
+import { isDraftingKey } from './drafting-key-match';
 
 interface Params {
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -56,12 +45,14 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
     const onKey = (e: KeyboardEvent) => {
       const input = inputRef.current;
       if (inOtherField(e.target, input)) return;
+      // An open dialog or menu owns the keyboard, as it does for the viewer's own keys (the dispatcher).
+      if (openKeyboardOverlay()) return;
       // A running BIM tool owns the keys (Enter, Escape, typed lengths: its own bindings).
       if (getCommandRuntime().command) return;
       const mod = e.ctrlKey || e.metaKey;
       // The command line has the keys while it has focus or holds text.
       const typing = e.target === input || (input?.value ?? '') !== '';
-      const isKey = (id: DraftingKeyId) => isKeyIn(id, e, typing);
+      const isKey = (id: DraftingKeyId) => isDraftingKey(id, e, typing);
       if (isKey('drafting.undo')) {
         e.preventDefault();
         undoLatest();

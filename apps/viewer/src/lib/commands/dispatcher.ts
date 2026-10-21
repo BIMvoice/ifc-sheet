@@ -63,10 +63,17 @@ export function eventMatchesChords(keys: readonly KeyChord[], event: KeyboardEve
   return key !== null && keys.some((chord) => matches(chord, event, key, false, ignoreModifiers));
 }
 
-function openLayer(): KeyboardLayer | null {
+function openLayer(): 'modal' | 'popover' | null {
   if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return 'modal';
   if (document.querySelector('[role="menu"], [role="listbox"], [data-state="open"][role="dialog"]')) return 'popover';
   return null;
+}
+
+/** The overlay that owns the keyboard now: a modal (open in the page or registered as active), a popover, or none. */
+export function openKeyboardOverlay(): 'modal' | 'popover' | null {
+  const domLayer = openLayer();
+  return domLayer === 'modal' || [...registrations].some((entry) => entry.layer === 'modal' && (entry.active?.() ?? true))
+    ? 'modal' : domLayer;
 }
 
 /** Dispatch one keydown through the active layer, then stop at the first match. */
@@ -75,9 +82,7 @@ export function dispatchKeyboardDown(event: KeyboardEvent): string | null {
   const key = eventKey(event);
   if (key === null) return null;
   const textEntry = isTextEntryTarget(event);
-  const domLayer = openLayer();
-  const overlay = domLayer === 'modal' || [...registrations].some((entry) => entry.layer === 'modal' && (entry.active?.() ?? true))
-    ? 'modal' : domLayer;
+  const overlay = openKeyboardOverlay();
   const now = Date.now();
   // A tool or modal Escape does not start the global double-Escape gesture.
   const double = key === 'escape' && now - lastGlobalEscapeAt < DOUBLE_PRESS_MS;

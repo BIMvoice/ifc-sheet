@@ -19,7 +19,7 @@
 
 import type { KeyChord } from './chord';
 import { DRAFTING_KEY_COMMANDS } from './drafting-key-commands';
-import type { KeyCommandDefinition, KeyCommandId } from './keyboard-commands';
+import type { KeyCommandDefinition } from './keyboard-commands';
 import { WALL_KEY_COMMANDS } from './wall-key-commands';
 
 export const WALL_ACTIONS = [...WALL_KEY_COMMANDS, ...DRAFTING_KEY_COMMANDS] as const satisfies readonly KeyCommandDefinition[];
@@ -36,9 +36,3 @@ export function isWallAction(id: string): id is WallActionId {
 export function defaultKeys(id: WallActionId): readonly KeyChord[] {
   return BY_ID.get(id)?.keys ?? [];
 }
-
-/**
- * Keys that work on the Wall but belong to no Wall action: the palette and the
- * shortcut list. A binding may not take them, or they would stop opening.
- */
-export const RESERVED_ON_THE_WALL: readonly KeyCommandId[] = ['ui.commandPalette', 'help.shortcuts'];

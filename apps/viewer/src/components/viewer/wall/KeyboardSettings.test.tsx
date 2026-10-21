@@ -168,14 +168,14 @@ describe('resetting', () => {
   it('puts one action back from its row, and every action back with Reset all', () => {
     const ui = render(<Wall handlers={counting().handlers} />);
     record(ui, 'wall.draw.line', 'l', { code: 'KeyL' });
-    record(ui, 'wall.fit', 'f', { code: 'KeyF' });
+    record(ui, 'wall.fit', 'y', { code: 'KeyY' });
     const reset = row(ui, 'wall.draw.line').querySelector<HTMLButtonElement>(`button[aria-label="${t('wall.keys.resetAria', { action: 'Line' })}"]`)!;
     click(reset);
     assert.equal(row(ui, 'wall.draw.line').querySelector('kbd')?.textContent, 'Alt+Shift+1');
-    assert.equal(row(ui, 'wall.fit').querySelector('kbd')?.textContent, 'F');
+    assert.equal(row(ui, 'wall.fit').querySelector('kbd')?.textContent, 'Y');
     const all = () => [...ui.querySelectorAll('button')].filter((b) => b.textContent === t('wall.keys.resetAll'));
     click(all()[0]);
-    assert.equal(row(ui, 'wall.fit').querySelector('kbd')?.textContent, 'F', 'asks first');
+    assert.equal(row(ui, 'wall.fit').querySelector('kbd')?.textContent, 'Y', 'asks first');
     click(all()[0]);
     assert.equal(row(ui, 'wall.fit').querySelector('kbd')?.textContent, 'Alt+0');
     assert.equal(ui.querySelector('output')?.textContent, t('wall.keys.resetAllDone'));
