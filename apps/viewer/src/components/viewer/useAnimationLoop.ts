@@ -172,6 +172,10 @@ export function useAnimationLoop(params: UseAnimationLoopParams): void {
         }
       }
 
+      // 1a. The scene upload held back while the viewport was covered (#154) is owed to the first frame since it lifted.
+      const upDevice = renderer.getGPUDevice(); const upPipeline = renderer.getPipeline();
+      if (upDevice && upPipeline && scene.takeDeferredBatchUpload()
+        && runGpuUpload('rebuildPendingBatches:uncovered', () => { scene.rebuildPendingBatches(upDevice, upPipeline); return true; })) renderer.clearCaches();
       // 1b. Rebuild GPU-evicted batches the last frame asked for (residency
       // budget, issue #1682 phase 3a). Time-budgeted; requests a render so
       // the restored batches appear on the next frame. Guarded like the

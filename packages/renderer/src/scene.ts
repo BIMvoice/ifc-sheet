@@ -411,6 +411,7 @@ export class Scene {
 
   // Streaming optimization: track pending batch rebuilds
   private pendingBatchKeys: Set<string> = new Set();
+  private batchUploadDeferred = false; // appendToBatches(..., deferUpload) left its buckets pending (textured meshes excepted) for takeDeferredBatchUpload()'s caller to rebuild (#154)
   // Temporary fragment batches created during streaming for immediate rendering.
   // Destroyed and replaced by proper merged batches in finalizeStreaming().
   private streamingFragments: BatchedMesh[] = [];
@@ -1220,9 +1221,9 @@ export class Scene {
    * STREAMING OPTIMIZATION: During streaming, creates lightweight "fragment"
    * batches from ONLY the new meshes instead of re-merging all accumulated
    * data. This reduces streaming from O(N²) to O(N). Call finalizeStreaming()
-   * when streaming completes to merge the streamed buckets (only those, #5358).
+   * when streaming completes to merge the streamed buckets (only those, #5358). `deferUpload`: see batchUploadDeferred.
    */
-  appendToBatches(meshDataArray: MeshData[], device: GPUDevice, pipeline: RenderPipeline, isStreaming: boolean = false): void {
+  appendToBatches(meshDataArray: MeshData[], device: GPUDevice, pipeline: RenderPipeline, isStreaming: boolean = false, deferUpload = false): void {
     meshDataArray = meshDataArray.map((mesh) => this.modelTranslations.placeMesh(mesh));
     // Validate every input before cancelling appearance work, publishing a
     // bucket, or touching GPU state. A single impossible f32 frame must leave
@@ -1301,7 +1302,7 @@ export class Scene {
     }
 
     // NON-STREAMING: Rebuild full batches immediately
-    this.rebuildPendingBatches(device, pipeline);
+    if (deferUpload) this.batchUploadDeferred = true; else this.rebuildPendingBatches(device, pipeline);
   }
 
   /** Rebuild pending buckets after streaming or a geometry mutation. */
@@ -1313,15 +1314,16 @@ export class Scene {
     }, device, pipeline);
 
     this.batchedMeshes = [...this.buckets.values()].flatMap(bucket => bucket.batchedMesh ? [bucket.batchedMesh] : []);
-    this.pendingBatchKeys.clear();
+    this.pendingBatchKeys.clear(); this.batchUploadDeferred = false;
     forgetEmptyModelFrames(this.buckets, this.sharedFrameOrigins);
   }
 
-  /**
-   * Check if there are pending batch rebuilds
-   */
-  hasPendingBatches(): boolean {
-    return this.pendingBatchKeys.size > 0;
+  /** Check if there are pending batch rebuilds */
+  hasPendingBatches(): boolean { return this.pendingBatchKeys.size > 0; }
+  /** True once per deferred upload owed (see batchUploadDeferred); the caller then rebuilds the pending batches (#154). */
+  takeDeferredBatchUpload(): boolean {
+    const owed = this.batchUploadDeferred && this.pendingBatchKeys.size > 0;
+    this.batchUploadDeferred = false; return owed;
   }
 
   /**
