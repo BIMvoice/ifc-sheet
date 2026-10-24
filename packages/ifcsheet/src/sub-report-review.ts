@@ -18,6 +18,7 @@
 import { MAX_KEPT_APART, subReportData, type ProjectSchedule, type SplitData, type SubReportFilter } from './sub-reports.js';
 import { partsOf, widened, type CheckEntry, type CheckPart, type ReviewElement, type ReviewStatus, type SubReportCheck } from './sub-report-check.js';
 import type { ContentEntry } from './schedule-content.js';
+import { cutsElements, passesElementFilter } from './schedule-filter.js';
 
 export interface ReviewEdit { partId: string; filter: SubReportFilter }
 
@@ -86,12 +87,15 @@ export function reviewCounts(check: SubReportCheck): Record<ReviewStatus, number
 /**
  * The edits that list the types `keys` in the part `toPartId` and in no other: each other part that lists any of them drops them (a part
  * that picks no types by hand is given the list of what it shows, less these), and the target is widened to name them. Merge and move are
- * this one change; merge offers only the parts that already list the type. No edit for a part that is already right.
+ * this one change; merge offers only the parts that already list the type. No edit for a part that is already right, and none for a target
+ * whose class or property filter refuses some of the elements of those types.
  */
 export function placeTypes(data: SplitData<CheckEntry>, parts: readonly CheckPart[], keys: readonly string[], toPartId: string): ReviewEdit[] {
   const target = parts.find((p) => p.id === toPartId);
   if (!target || keys.length === 0) return [];
   const moving = new Set(keys);
+  // A part that keeps only some classes or property values cannot take a whole type by listing it: the elements its tests refuse would stay out. No edit, rather than a move that moves nothing.
+  if (cutsElements(target.filter) && data.entries.some((e) => moving.has(e.key) && e.occurrences.some((o) => !passesElementFilter(target.filter, o)))) return [];
   const edits: ReviewEdit[] = [];
   for (const p of parts) {
     if (p.id === toPartId) continue;

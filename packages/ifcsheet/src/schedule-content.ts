@@ -3,12 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The content choice of a joinery schedule (#186, section 3): which rows it shows and in which order, how its type columns are
- * sorted, and how its types and elements are numbered. Saved on the `ProjectSchedule` (`content`); absent means the schedule
+ * The content choice of a joinery schedule (#186, section 3): which rows it shows and in which order, which elements it keeps (its filter),
+ * whether the header cells draw the elevation and the plan, how its type columns are sorted, and how its types and elements are numbered. Saved on the `ProjectSchedule` (`content`); absent means the schedule
  * as it always was, so a project saved before it renders exactly as before.
  *
  * It lives here, not in the viewer, so the app, the CLI and the MCP tools build the same table:
- *  - `applyContent` sorts the type columns and numbers them. It runs on the whole schedule, before a sub-report is cut from it
+ *  - `applyContent` keeps what the filter names, sorts the type columns and numbers them. It runs on the whole schedule, before a sub-report is cut from it
  *    (`scheduleOf`), so an element carries the same mark in the schedule and in every part.
  *  - `shownRows` says which rows the layout, the CSV and the XLSX print, and in which order.
  *  - `followedTags` plans the Tag writes that keep the model's tags (what a plan tag reads) on the numbering.
@@ -17,6 +17,7 @@
 
 import type { ProjectSchedule, SplitData, SplitEntry } from './sub-reports.js';
 import { textOwner } from './schedule-text.js';
+import { isOpenFilter, readSubReportFilter, subReportData, type SubReportFilter } from './schedule-filter.js';
 
 /** The model's rows, in the order they print by default. `levels` is the group of rows with the count per storey. */
 export const ROW_IDS = ['name', 'size', 'operation', 'sill', 'levels', 'total', 'u', 'fire'] as const;
@@ -52,11 +53,33 @@ export interface ScheduleNumbering {
   elementStart?: number;
 }
 
+/**
+ * Which drawings of a type show in its header cell. Both show unless named `false`, so a schedule saved before the choice, and one that
+ * chose nothing, draws as it always did. The elevation includes the section beside it, the opening symbol and the dimensions;
+ * the plan is the plan view under it (drawn when the type has views cut from its geometry).
+ */
+export interface ScheduleSymbols {
+  elevation?: false;
+  plan?: false;
+}
+
 export interface ScheduleContent {
   rows?: ScheduleRows;
   sort?: ScheduleSort;
   numbering?: ScheduleNumbering;
+  /**
+   * What the whole schedule keeps (`schedule-filter.ts`): its scope. Applied before the sort and the numbering, so a sub-report is cut
+   * from the scope and the marks are those of the scope; the duplicate and gap check measures the parts against the scope too.
+   */
+  filter?: SubReportFilter;
+  symbols?: ScheduleSymbols;
 }
+
+/** Whether the header cell of a type draws its elevation / its plan under `content`. */
+export const symbolsShown = (content: ScheduleContent | undefined): { elevation: boolean; plan: boolean } => ({
+  elevation: content?.symbols?.elevation !== false,
+  plan: content?.symbols?.plan !== false,
+});
 
 /** The largest start a number can be given. */
 export const MAX_START = 9999;
@@ -91,7 +114,16 @@ export function readScheduleContent(raw: unknown): ScheduleContent | undefined {
     if (elementStart !== undefined) numbering.elementStart = elementStart;
     if (Object.keys(numbering).length) out.numbering = numbering;
   }
-  return out.rows || out.sort || out.numbering ? out : undefined;
+  const filter = readSubReportFilter(o.filter);
+  if (!isOpenFilter(filter)) out.filter = filter;
+  if (typeof o.symbols === 'object' && o.symbols !== null) {
+    const y = o.symbols as Record<string, unknown>;
+    const symbols: ScheduleSymbols = {};
+    if (y.elevation === false) symbols.elevation = false;
+    if (y.plan === false) symbols.plan = false;
+    if (symbols.elevation === false || symbols.plan === false) out.symbols = symbols;
+  }
+  return out.rows || out.sort || out.numbering || out.filter || out.symbols ? out : undefined;
 }
 
 /** Every row, in the order the content puts them, and whether it is shown: what the card lists. `textIds` are the ids of the text rows. */
@@ -142,7 +174,11 @@ function compare(by: SortBy): (a: ContentEntry, b: ContentEntry) => number {
  */
 export function applyContent<E extends ContentEntry>(data: SplitData<E>, content: ScheduleContent | undefined): SplitData<E> {
   const sort = content?.sort, numbering = content?.numbering;
-  if (!sort && !numbering) return data;
+  if (!sort && !numbering && !content?.filter) return data;
+  // The scope first: sorted and numbered over what the schedule keeps (and the same again when applied to its own result).
+  const scoped = content?.filter ? subReportData(data, content.filter) : data;
+  if (!sort && !numbering) return scoped;
+  data = scoped;
   const index = new Map(data.entries.map((e, i) => [e, i]));
   const sign = sort?.descending ? -1 : 1;
   const by = sort ? compare(sort.by) : null;

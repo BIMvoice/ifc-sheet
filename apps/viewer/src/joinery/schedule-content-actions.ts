@@ -12,7 +12,7 @@
  * in one undo step per model. A Tag nobody wrote from the schedule is not touched.
  */
 
-import { applyContent, followedTags, orderedRows, readScheduleContent, textOwner, type ScheduleContent, type ScheduleNumbering, type ScheduleSort } from '@bimvoice/ifcsheet';
+import { applyContent, followedTags, orderedRows, readScheduleContent, textOwner, type ScheduleContent, type ScheduleNumbering, type ScheduleSort, type SubReportFilter } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { isJoinerySchedule } from '@/project/schedule-fit';
 import type { ProjectSchedule } from '@/project/types';
@@ -76,6 +76,24 @@ export function setNumbering(scheduleId: string, patch: { [K in keyof ScheduleNu
       if (value === undefined) delete numbering[key]; else numbering[key] = value;
     }
     return { ...c, numbering };
+  });
+}
+
+/** Show or hide the elevation or the plan in the header cell of every type. Both show unless turned off, so showing removes the mark from the content. */
+export function setSymbolShown(scheduleId: string, symbol: 'elevation' | 'plan', shown: boolean): void {
+  changeContent(scheduleId, (c) => {
+    const symbols = { ...c.symbols };
+    if (shown) delete symbols[symbol]; else symbols[symbol] = false;
+    return { ...c, symbols };
+  });
+}
+
+/** Change what the whole schedule keeps; a dimension set to `undefined` is no longer restricted. The marks move with the scope, and so do the tags of elements numbered by them. */
+export function setScheduleFilter(scheduleId: string, patch: { [K in keyof SubReportFilter]?: SubReportFilter[K] | undefined }): { written: number; errors: string[] } {
+  return changeContent(scheduleId, (c) => {
+    const filter: SubReportFilter = { ...c.filter, ...patch };
+    for (const key of Object.keys(filter) as (keyof SubReportFilter)[]) if (filter[key] === undefined) delete filter[key];
+    return { ...c, filter };
   });
 }
 
