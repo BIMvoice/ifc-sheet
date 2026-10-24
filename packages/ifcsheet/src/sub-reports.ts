@@ -48,6 +48,16 @@ export interface SplitData<E extends SplitEntry> {
   levels: string[];
 }
 
+/** The most decisions a schedule keeps; a damaged file cannot grow the project without bound. */
+export const MAX_KEPT_APART = 5000;
+
+/** Kept-apart ids as saved, read back: strings only, no repeats, bounded; none is `undefined`. */
+export function readKeptApart(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const ids = [...new Set(raw.filter((s): s is string => typeof s === 'string' && s.length > 0 && s.length <= 300))].slice(0, MAX_KEPT_APART);
+  return ids.length > 0 ? ids : undefined;
+}
+
 const strings = (v: unknown): string[] | undefined => (Array.isArray(v) ? [...new Set(v.filter((s): s is string => typeof s === 'string'))] : undefined);
 
 /** A filter as it is saved, read back: unknown fields and wrong types are dropped, so an old or damaged file loads as "no restriction". */
@@ -113,6 +123,8 @@ export interface ProjectSchedule {
   sub?: SubReport;
   /** Rows of text typed by hand into a joinery schedule (#186): a manufacturer, a remark, a note per type. Cells are keyed by the type's identity, never by column. A sub-report prints its parent's (`textRowsOf`). Absent: none. Joinery kinds only. */
   textRows?: ScheduleTextRow[];
+  /** Elements (or types) the parts list together on purpose, so the duplicate check leaves them alone (#186): `keepId`s (`key|GlobalId`). Kept on the schedule that was split. Absent: none. Joinery kinds only. */
+  keptApart?: string[];
   /** What a joinery schedule shows and how (#186): its rows and their order, how its types are sorted and numbered. A sub-report prints its parent's (`contentOf`). Absent: the schedule as it always was. Joinery kinds only. */
   content?: ScheduleContent;
 }
@@ -144,6 +156,9 @@ export function readSchedule(raw: unknown): ProjectSchedule | null {
   // The content choice (#186) belongs to a joinery list only; a project saved before it has none.
   const content = readScheduleContent(o.content);
   if (content && (kind === 'door' || kind === 'window' || kind === 'all')) out.content = content;
+  // What the user kept apart on purpose (#186) belongs to a schedule that can be split; a project saved before it has none.
+  const keptApart = readKeptApart(o.keptApart);
+  if (keptApart && !out.sub && (kind === 'door' || kind === 'window' || kind === 'all')) out.keptApart = keptApart;
   return out;
 }
 

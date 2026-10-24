@@ -19,6 +19,7 @@ import { subReportCheckOf } from '@/check/sub-report-check';
 import { setSubReportFilter } from '@/joinery/schedules';
 import type { ProjectSchedule } from '@/project/types';
 import { WALL_PILL } from './wall-type';
+import { setReview } from './wall-nav';
 
 /** The model's rows for the schedule's kind, whole: what the parts are cut from. */
 export function useParentRows(kind: ProjectSchedule['kind']) {
@@ -47,7 +48,11 @@ export function SubReportChecks({ schedule }: { schedule: ProjectSchedule }) {
   const duplicates = check.duplicates.filter((d) => mine(d.parts.map((p) => p.id)));
   const fixes = check.fixes.filter((f) => mine([f.part.id, ...f.edits.map((e) => e.partId)]));
   const gaps = !schedule.sub || fixes.some((f) => f.kind === 'add') ? check.gaps : [];
-  if (duplicates.length === 0 && gaps.length === 0) return schedule.sub ? null : <p className="m-0 mt-3 text-xs text-sky-200">{t('wall.check.ok')}</p>;
+  // The review lists every type, not only the ones with a problem: it is open from the schedule whether or not the check found any.
+  const review = (
+    <button type="button" className={WALL_PILL} onClick={() => setReview(check.parent.id)}>{t('wall.review.open')}</button>
+  );
+  if (duplicates.length === 0 && gaps.length === 0) return schedule.sub ? null : <><p className="m-0 mt-3 text-xs text-sky-200">{t('wall.check.ok')}</p><div className="mt-2">{review}</div></>;
   const dup = subReportParams(duplicates, check.parent.name);
   const gap = subReportParams(gaps, check.parent.name);
   return (
@@ -61,6 +66,7 @@ export function SubReportChecks({ schedule }: { schedule: ProjectSchedule }) {
             {t(f.kind === 'add' ? 'wall.check.fixAdd' : 'wall.check.fixKeep', { part: f.part.name, types: f.types })}
           </button>
         ))}
+        {review}
       </div>
     </output>
   );

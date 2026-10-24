@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { describe, expect, it } from 'vitest';
-import { checkSubReports, isClean, type CheckEntry, type CheckPart, type SubReportCheck } from './sub-report-check.js';
+import { checkSubReports, isClean, keepId, type CheckEntry, type CheckPart, type SubReportCheck } from './sub-report-check.js';
 import { describeReadiness, modelReadiness, type ModelFacts } from './readiness.js';
 import { subReportData, type SplitData } from './sub-reports.js';
 
@@ -166,5 +166,83 @@ describe('the one-click fixes', () => {
 
   it('offers nothing for a clean check', () => {
     expect(check(part('x', {}), part('y', { levels: [] })).fixes).toEqual([]);
+  });
+});
+
+/** doors + windows are a partition; `extra` lists the four D1 doors again: the one overlap, and no gap. */
+const overlapping = (): CheckPart[] => [part('doors', { kinds: ['door'] }), part('windows', { kinds: ['window'] }), part('extra', { types: ['d1'] })];
+
+describe('the review list: each element with the parts that list it', () => {
+  it('names every element once, in the schedule\'s order, with the exact parts and status (a type with no element yet is one row)', () => {
+    const c = checkSubReports(parent, overlapping());
+    // Written out by hand from the fixture: w1 g1-g3, w2 g4, d1 g5-g8 (listed by doors and extra), d2 g9, w3 has no element.
+    expect(c.elements.map((e) => [e.id, e.element?.mark ?? null, e.element?.level ?? null, e.parts.map((p) => p.id), e.status])).toEqual([
+      ['w1|g1', 'W1.1', 'Ground', ['windows'], 'ok'],
+      ['w1|g2', 'W1.2', 'Ground', ['windows'], 'ok'],
+      ['w1|g3', 'W1.3', 'Level 1', ['windows'], 'ok'],
+      ['w2|g4', 'W2.1', 'Ground', ['windows'], 'ok'],
+      ['d1|g5', 'D1.1', 'Ground', ['doors', 'extra'], 'duplicate'],
+      ['d1|g6', 'D1.2', 'Ground', ['doors', 'extra'], 'duplicate'],
+      ['d1|g7', 'D1.3', 'Level 1', ['doors', 'extra'], 'duplicate'],
+      ['d1|g8', 'D1.4', 'Level 1', ['doors', 'extra'], 'duplicate'],
+      ['d2|g9', 'D2.1', 'Level 1', ['doors'], 'ok'],
+      ['w3|', null, null, ['windows'], 'ok'],
+    ]);
+  });
+
+  it('flags a gap row for an element in no part', () => {
+    const c = checkSubReports(parent, [part('doors', { types: ['d1'] }), part('windows', { kinds: ['window'] })]);
+    expect(c.elements.filter((e) => e.status === 'gap').map((e) => [e.id, e.parts])).toEqual([['d2|g9', []]]);
+  });
+
+  it('lists nothing while there are no parts', () => {
+    expect(check().elements).toEqual([]);
+  });
+
+  it('agrees with the duplicates and gaps it sits beside, for every kind of split', () => {
+    const splits = [overlapping(), [part('a', { levels: ['Ground'] })], [part('a', { kinds: ['door'] }), part('b', { levels: ['Level 1'] })], [part('x', {}), part('y', {})]];
+    for (const parts of splits) {
+      const c = checkSubReports(parent, parts);
+      const ids = (list: { elements: { globalId: string }[]; key: string }[]) => list.flatMap((t) => t.elements.map((e) => keepId(t.key, e.globalId))).sort();
+      expect(c.elements.filter((e) => e.status === 'duplicate' && e.element).map((e) => e.id).sort()).toEqual(ids(c.duplicates));
+      expect(c.elements.filter((e) => e.status === 'gap').map((e) => e.id).sort()).toEqual(ids(c.gaps));
+    }
+  });
+});
+
+describe('keeping elements apart on purpose', () => {
+  const D1 = ['d1|g5', 'd1|g6', 'd1|g7', 'd1|g8'];
+
+  it('stops flagging the elements named, and says "kept" for them', () => {
+    const c = checkSubReports(parent, overlapping(), undefined, D1);
+    expect(c.duplicates).toEqual([]);
+    expect(c.fixes).toEqual([]);
+    expect(isClean(c)).toBe(true);
+    expect(c.elements.filter((e) => e.status === 'kept').map((e) => e.id)).toEqual(D1);
+    expect(modelReadiness(COMPLETE, [c])).toEqual([]);
+  });
+
+  it('keeps flagging the elements that were not named', () => {
+    const c = checkSubReports(parent, overlapping(), undefined, ['d1|g5', 'd1|g6']);
+    expect(c.duplicates.map((d) => [d.key, d.elements.map((e) => e.globalId)])).toEqual([['d1', ['g7', 'g8']]]);
+    expect(c.elements.filter((e) => e.status === 'kept').map((e) => e.id)).toEqual(['d1|g5', 'd1|g6']);
+  });
+
+  it('takes the id of a type to mean all of its elements, and a type with no element yet', () => {
+    expect(isClean(checkSubReports(parent, overlapping(), undefined, ['d1|']))).toBe(true);
+    const c = checkSubReports(parent, [part('a', { types: ['w3', 'w1'] }), part('b', { types: ['w3', 'w2', 'd1', 'd2', 'w1'] })], undefined, ['w3|']);
+    expect(c.duplicates.map((d) => d.key)).toEqual(['w1']);
+  });
+
+  it('does not hide a gap: a kept-apart id names a duplicate, it does not excuse an element nobody lists', () => {
+    const c = checkSubReports(parent, [part('doors', { types: ['d1'] }), part('windows', { kinds: ['window'] })], undefined, ['d2|g9', 'd2|']);
+    expect(c.gaps.map((g) => g.key)).toEqual(['d2']);
+  });
+
+  it('counts the kept elements as kept when it simulates a fix, so a fix that moves only unkept ones is still offered', () => {
+    const parts = [part('windows', { kinds: ['window'] }), part('doors', { kinds: ['door'] }), part('pick', { types: ['w2', 'd2'] })];
+    const c = checkSubReports(parent, parts, undefined, ['d2|']);
+    expect(c.duplicates.map((d) => d.key)).toEqual(['w2']);
+    expect(c.fixes.map((f) => f.kind)).toEqual(['keep']);
   });
 });
