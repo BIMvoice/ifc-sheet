@@ -157,6 +157,15 @@ describe.skipIf(noWasm !== null || !existsSync(FZK))('ifcsheet check, on the FZK
     expect(far?.effect).toContain('--include-far-elements');
   }, 300_000);
 
+  it('says nothing about it when the saved project (--project) has the setting on', async () => {
+    const project = join(mkdtempSync(join(tmpdir(), 'ifcsheet-far-')), 'p.ifclite-project.json');
+    writeFileSync(project, JSON.stringify({ format: 'ifclite-project', version: 1, name: 'Marked', includeFarElements: true }));
+    const { report } = await check(file(), '--project', project);
+    expect(report.findings.some((f) => f.kind === 'farElements')).toBe(false);
+    writeFileSync(project, JSON.stringify({ format: 'ifclite-project', version: 1, name: 'Marked' }));
+    expect((await check(file(), '--project', project)).report.findings.some((f) => f.kind === 'farElements')).toBe(true);
+  }, 300_000);
+
   it('says nothing about it with --include-far-elements', async () => {
     const { report } = await check(file(), '--include-far-elements');
     expect(report.findings.some((f) => f.kind === 'farElements')).toBe(false);
