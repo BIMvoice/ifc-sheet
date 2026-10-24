@@ -12,6 +12,7 @@
  * (a balcony, a cantilevered floor) does not move them.
  */
 
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { addProjectView, useProjectStore } from '@/project/project-store';
 import { planViewFor } from '@/project/view-defaults';
 import { addViewport, updateViewport } from '@/project/sheets';
@@ -79,7 +80,10 @@ export function drawPlotBoundary(viewId: string, start: (viewId: string, command
 export function addKeyPlan(sheet: ProjectSheet, viewport: SheetViewport, bounds: Extent | null): string {
   const existing = (sheet.viewports ?? []).find((v) => v.keyPlanOf === viewport.id);
   if (existing) return existing.id;
-  const id = addViewport(sheet.id, viewport.viewId, keyPlanPlace(sheet), keyPlanScale(bounds));
-  updateViewport(sheet.id, id, { keyPlanOf: viewport.id });
+  let id = '';
+  runAsOneUndoStep(() => {
+    id = addViewport(sheet.id, viewport.viewId, keyPlanPlace(sheet), keyPlanScale(bounds));
+    updateViewport(sheet.id, id, { keyPlanOf: viewport.id });
+  });
   return id;
 }

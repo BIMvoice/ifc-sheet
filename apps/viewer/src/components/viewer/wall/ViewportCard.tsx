@@ -11,8 +11,7 @@
 import { useTranslation } from '@/i18n';
 import { placeLegend } from '@/legend/legend-actions';
 import { renameProjectItem, useProjectStore } from '@/project/project-store';
-import { runAsOneUndoStep } from '@/drafting/draft-store';
-import { addViewport, removeViewport, updateViewport } from '@/project/sheets';
+import { addViewport, editViewport, removeViewport } from '@/project/sheets';
 import { isResizable } from '@/project/viewport-resize';
 import { isFittedSchedule } from '@/project/schedule-fit';
 import { drawingNumbers } from '@/drafting/cross-ref';
@@ -88,7 +87,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
                 <input
                   key={`${slot.id}:${slot.drawingNumber ?? ''}`} className={field} defaultValue={slot.drawingNumber ?? ''}
                   placeholder={drawingNumbers({ viewports: (sheet.viewports ?? []).map((vp) => (vp.id === slot.id ? { ...vp, drawingNumber: undefined } : vp)) }, new Set(views.map((v) => v.id))).get(slot.id) ?? ''}
-                  onBlur={(e) => updateViewport(sheet.id, slot.id, { drawingNumber: e.target.value.trim() || undefined })}
+                  onBlur={(e) => editViewport(sheet.id, slot.id, { drawingNumber: e.target.value.trim() || undefined })}
                   onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                 />
               </label>
@@ -105,7 +104,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
           <div className="mt-4 flex flex-wrap gap-2">
             {view ? <button type="button" className={quiet} onClick={() => onOpen(slot)}>{t('wall.vp.open')}</button> : null}
             {(isResizable(view) || (isFittedSchedule(schedule) && (slot.page ?? 0) === 0)) && slot.width > 0 && slot.height > 0 ? (
-              <button type="button" className={quiet} onClick={() => runAsOneUndoStep(() => updateViewport(sheet.id, slot.id, { width: 0, height: 0, center: null }))}>{t('wall.vp.fit')}</button>
+              <button type="button" className={quiet} onClick={() => editViewport(sheet.id, slot.id, { width: 0, height: 0, center: null })}>{t('wall.vp.fit')}</button>
             ) : null}
             {view?.kind === 'plan' && view.site ? <button type="button" className={quiet} onClick={() => { drawPlotBoundary(slot.viewId, startWhenAttached); onOpen(slot); }}>{t('site.drawBoundary')}</button> : null}
             {view?.kind === 'plan' && !slot.keyPlanOf ? <button type="button" className={quiet} onClick={() => onChoose(addKeyPlan(sheet, slot, drawingBounds))}>{t('site.keyPlan.add')}</button> : null}
