@@ -5,7 +5,7 @@ use super::*;
 pub(super) fn page(ops: Vec<PdfVectorOperator>) -> PdfVectorPage {
     PdfVectorPage {
         pdf_sha256: "a".repeat(64),
-        decoder_version: "6.3.289".into(),
+        decoder_version: "6.4.299".into(),
         pdf_format_version: Some("2.0".into()),
         page_number: 1,
         view_box: [10., 20., 110., 92.],

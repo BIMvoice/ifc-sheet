@@ -20,7 +20,7 @@
     "calibrationKey": "synthetic-control-30-pdf-units-per-metre",
     "toleranceMetres": 0.0001,
     "pdfSha256": "926f9c6229913f0fde6e0c732f37edc3c17b4125e52118b63108f0b718541f92",
-    "decoderVersion": "6.3.289",
+    "decoderVersion": "6.4.299",
     "viewBox": [0, 0, 240, 240],
     "userUnit": 1,
     "intrinsicRotation": 0,

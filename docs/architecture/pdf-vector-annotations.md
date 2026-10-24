@@ -119,7 +119,7 @@ until the complete supported journey has visual and independent-reader evidence.
 `ifc_lite_processing::pdf_vector::prepare_pdf_vector_page` (WASM
 `IfcAPI.preparePdfVectorPage`) consumes the immutable decoded page DTO produced by
 an additional `vectors` job in the existing PDF engine/worker. The decoder is
-pinned to PDF.js 6.3.289. Native preparation validates save/restore, concatenated
+pinned to PDF.js 6.4.299. Native preparation validates save/restore, concatenated
 transforms, solid RGB paints, line width/caps/joins/miter/dash state, packed
 DrawOPS command arities and original operator order. It retains cubic/quadratic
 commands unchanged and snapshots complete affine state for each painted path.

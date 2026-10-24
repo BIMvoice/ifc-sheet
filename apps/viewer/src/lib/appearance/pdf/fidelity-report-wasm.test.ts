@@ -117,7 +117,7 @@ test('an accepted partial conversion plans, exports and reopens with its provena
     assert.match(content, /IFCPROPERTYSINGLEVALUE\('SourceRotation',\$,IFCINTEGER\(90\),\$\)/);
     assert.match(content, /IFCPROPERTYSINGLEVALUE\('SourceUserUnit',\$,IFCREAL\(2\.\),\$\)/);
     assert.match(content, /IFCPROPERTYSINGLEVALUE\('ToleranceMetres',\$,IFCREAL\((0\.0001|1\.E-4)\),\$\)/);
-    assert.match(content, /IFCPROPERTYSINGLEVALUE\('DecoderVersion',\$,IFCLABEL\('PDF\.js 6\.3\.289'\),\$\)/);
+    assert.match(content, /IFCPROPERTYSINGLEVALUE\('DecoderVersion',\$,IFCLABEL\('PDF\.js 6\.4\.299'\),\$\)/);
     assert.match(content, /IFCRELDEFINESBYPROPERTIES\('0cccccccccccccccccccc2',(\$|#\d+),\$,\$,\(#\d+\),#\d+\)/);
     const reopened = await new IfcParser().parseColumnar(new TextEncoder().encode(content).buffer);
     assert.equal(reopened.entities.getTypeName(result.annotationId), 'IfcAnnotation');
