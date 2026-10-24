@@ -92,6 +92,23 @@ describe.skipIf(!existsSync(FZK))('ifcsheet check --project, on AC20-FZK-Haus', 
     ]);
   }, 120_000);
 
+  it('stops reporting an element listed in two parts once the schedule keeps it apart on purpose (#186)', async () => {
+    const parts = [
+      schedule('s2', 'Doors', { parent: 's1', filter: { kinds: ['door'] } }),
+      schedule('s3', 'Pick', { parent: 's1', filter: { types: ['untyped:door:885×2010'] } }),
+      schedule('s4', 'Windows', { parent: 's1', filter: { kinds: ['window'], types: ['untyped:window:1000×1000'] } }),
+    ];
+    const kinds = async (keptApart: unknown) => {
+      const file = write('kept.ifclite-project.json', projectFile({ schedules: [{ ...schedule('s1', 'Joinery'), ...(keptApart ? { keptApart } : {}) }, ...parts] }));
+      return (await findingsOf(['--project', file])).json?.findings.map((f) => f.kind);
+    };
+    expect(await kinds(undefined)).toEqual(['noMaterials', 'subReportDuplicates', 'subReportGaps']);
+    // The type's id keeps all three D1 doors apart; the gap beside it is a different problem and stays.
+    expect(await kinds(['untyped:door:885×2010|'])).toEqual(['noMaterials', 'subReportGaps']);
+    // An id that names no element of the duplicate changes nothing.
+    expect(await kinds(['untyped:door:1010×2010|'])).toEqual(['noMaterials', 'subReportDuplicates', 'subReportGaps']);
+  }, 120_000);
+
   it('says nothing more about a project whose parts add up', async () => {
     const file = write('clean.ifclite-project.json', projectFile({
       schedules: [

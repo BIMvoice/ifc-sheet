@@ -23,6 +23,7 @@ import { DEFAULT_JOINERY_MAPPING } from './joinery-mapping.js';
 import { applyContent, readScheduleContent, symbolsShown } from './schedule-content.js';
 import { EXTERIOR, INTERIOR, readSubReportFilter, type SubReportFilter } from './schedule-filter.js';
 import { checkSubReports, isClean, subReportChecksOf } from './sub-report-check.js';
+import { placeTypes } from './sub-report-review.js';
 import { readSchedule, scheduleFilterProperties, scheduleOf, subReportData, type ProjectSchedule } from './sub-reports.js';
 
 const FIXTURE = fileURLToPath(new URL('./__fixtures__/exterior-interior.ifc', import.meta.url));
@@ -141,6 +142,26 @@ describe('Exterior and interior apart', () => {
   });
   it('the headless chain reads the same property names the schedules name', () => {
     expect(scheduleFilterProperties(schedules({ properties: [{ name: 'FireRating', op: 'present' }] }))).toEqual(['firerating', 'isexternal']);
+  });
+});
+
+describe('moving a type in the review', () => {
+  const parts = [
+    { id: 'ext', name: 'Exterior', filter: EXTERIOR },
+    { id: 'win', name: 'Windows', filter: { kinds: ['window' as const] } },
+  ];
+  it('is refused for a part whose property test would turn some of the type\'s elements away', () => {
+    const windows = whole.entries.filter((e) => e.kind === 'window').map((e) => e.key);
+    // F (internal) is one of the windows: "Exterior" would not list it, so listing the type there moves nothing.
+    expect(placeTypes(whole, parts, windows, 'ext')).toEqual([]);
+  });
+  it('still works for a part without element filters', () => {
+    const doors = whole.entries.filter((e) => e.kind === 'door').map((e) => e.key);
+    const edits = placeTypes(whole, parts, doors, 'win');
+    // Exterior drops the doors it listed, Windows is widened to take the kind.
+    expect(edits.map((e) => e.partId).sort()).toEqual(['ext', 'win']);
+    expect(edits.find((e) => e.partId === 'win')!.filter.kinds).toEqual(['window', 'door']);
+    expect(edits.find((e) => e.partId === 'ext')!.filter.types).toEqual([]);
   });
 });
 

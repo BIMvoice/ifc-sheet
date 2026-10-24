@@ -25,7 +25,8 @@ import { WallIntro } from './WallIntro';
 import { openDemoModel } from '../ifcsheet/demo-model';
 import { ProjectDrawer } from './ProjectDrawer';
 import { IssuePanel, MissingPanel } from './SetPanels';
-import { setDrawer, stepInto, useWallNav } from './wall-nav';
+import { SubReportReview } from './SubReportReview';
+import { setDrawer, setReview, stepInto, useWallNav } from './wall-nav';
 
 export function WallView() {
   const { t } = useTranslation();
@@ -39,7 +40,7 @@ export function WallView() {
   // Measured on the building, not on the site around it; the main body of the model when no storey holds geometry.
   const extent = useMemo(() => setExtent(levels, meshes, mergedSectionBounds(models, legacy)).extent, [levels, meshes, models, legacy]);
   const [intro, setIntro] = useState(false);
-  const { stepped, focus, visit, drawer, panel } = useWallNav();
+  const { stepped, focus, visit, drawer, panel, review } = useWallNav();
 
   // A model on a project with no set sheets (interior elevations alone do not count): lay the set out as soon as the geometry is in.
   const hasSet = sheets.some(isSetSheet);
@@ -79,6 +80,7 @@ export function WallView() {
         <WallGrid extent={extent} onStep={(id) => stepInto(id)} />
       )}
       {drawer ? <ProjectDrawer extent={extent} onClose={() => setDrawer(false)} /> : null}
+      {review ? <SubReportReview scheduleId={review} onClose={() => setReview(null)} /> : null}
       {panel === 'missing' ? <MissingPanel /> : panel === 'issue' ? <IssuePanel /> : null}
     </div>
   );

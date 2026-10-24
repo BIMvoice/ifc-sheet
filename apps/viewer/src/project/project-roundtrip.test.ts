@@ -151,7 +151,7 @@ const sheet: Required<ProjectSheet> = {
   titleBlockParams: { Phase: 'PAC' },
 };
 /** One schedule of every kind: a kind added to `ProjectSchedule['kind']` does not compile until it is listed here. */
-const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<Omit<ProjectSchedule, 'sub' | 'textRows' | 'content'>> & { kind: K } } = {
+const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<Omit<ProjectSchedule, 'sub' | 'textRows' | 'content' | 'keptApart'>> & { kind: K } } = {
   door: { id: 'sc1', name: 'Doors', kind: 'door', createdAt: 5, scale: 25 },
   window: { id: 'sc2', name: 'Windows', kind: 'window', createdAt: 6, scale: 20 },
   all: { id: 'sc3', name: 'Joinery', kind: 'all', createdAt: 7, scale: 50 },
@@ -162,11 +162,11 @@ const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<Omit<ProjectSchedule
   urban: { id: 'sc8', name: 'Urban indicators', kind: 'urban', createdAt: 12, scale: 100 },
 };
 /** A sub-report (#186) with every dimension of its filter set: a field the writer or reader drops fails the comparison. */
-const SUB_REPORT: Required<Omit<ProjectSchedule, 'textRows' | 'content'>> = {
+const SUB_REPORT: Required<Omit<ProjectSchedule, 'textRows' | 'content' | 'keptApart'>> = {
   id: 'sc9', name: 'Ground floor windows', kind: 'all', createdAt: 13, scale: 50, sub: { parent: 'sc3', filter: { kinds: ['window'], levels: ['Ground'], types: ['t1', 't2'] } },
 };
 /** A joinery schedule with text rows (#186): every field of a row and of a cell set, a cell keyed by a type id and one by an untyped group. */
-const TEXT_SCHEDULE: Required<Omit<ProjectSchedule, 'sub' | 'content'>> = {
+const TEXT_SCHEDULE: Required<Omit<ProjectSchedule, 'sub' | 'content' | 'keptApart'>> = {
   id: 'sc10', name: 'Joinery with notes', kind: 'all', createdAt: 14, scale: 50,
   textRows: [
     { id: 'tr1', label: 'Producător', cells: { j1: { text: 'Rehau, ușă ț ă', about: 'D1 Ușă interioară' }, 'untyped:window:900×1200': { text: 'de verificat', about: 'Fereastră 900×1200' } } },
@@ -174,9 +174,13 @@ const TEXT_SCHEDULE: Required<Omit<ProjectSchedule, 'sub' | 'content'>> = {
   ],
 };
 /** A joinery schedule with a content choice (#186): every field of it set to something that is not its default. */
-const CONTENT_SCHEDULE: Required<Omit<ProjectSchedule, 'sub' | 'textRows'>> = {
+const CONTENT_SCHEDULE: Required<Omit<ProjectSchedule, 'sub' | 'textRows' | 'keptApart'>> = {
   id: 'sc11', name: 'Joinery, chosen', kind: 'all', createdAt: 15, scale: 50,
   content: { rows: { order: ['total', 'name', 'size', 'text:tr1'], hidden: ['u', 'text:tr2'] }, sort: { by: 'count', descending: true }, numbering: { marks: 'sequence', typeStart: 4, elementStart: 0 } },
+};
+/** A split schedule that keeps elements apart on purpose (#186): an element and a whole type. */
+const KEPT_SCHEDULE: Required<Omit<ProjectSchedule, 'sub' | 'textRows' | 'content'>> = {
+  id: 'sc12', name: 'Joinery, split', kind: 'all', createdAt: 16, scale: 50, keptApart: ['j1|2O2Fr$t4X7Zf8NOew3FLOH', 'untyped:window:900×1200|'],
 };
 const civil: Required<ProjectCivilDrawing> = {
   id: 'c1', name: 'DN1 sections', kind: 'sections', createdAt: 3, corridorGlobalId: '2O2Fr$t4X7Zf8NOew3FLOH', scale: 200, vExaggeration: 10,
@@ -220,7 +224,7 @@ const FULL: Required<ProjectDocument> = {
   joineryMapping: { ...DEFAULT_JOINERY_MAPPING, byName: false, byDimensions: false, tolerance: 0.07, aliases: { j1: ['Door 90'] } },
   elementTypes: (['wall', 'slab', 'column', 'beam', 'roof', 'opening'] as const).map((kind, i) => ({ ...defaultTypeSpec(kind), kind, id: `t${i}`, name: `Type ${kind}`, mark: `M${i}` }) as never),
   currentTypes: { wall: 't0', slab: 't1', column: 't2' },
-  schedules: [...Object.values(SCHEDULES), SUB_REPORT, TEXT_SCHEDULE, CONTENT_SCHEDULE],
+  schedules: [...Object.values(SCHEDULES), SUB_REPORT, TEXT_SCHEDULE, CONTENT_SCHEDULE, KEPT_SCHEDULE],
   sheetTemplates: [{ id: 'tpl1', name: 'Long elevations', paper: { kind: 'custom', widthMm: 500, heightMm: 700 }, orientation: 'portrait', frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' } }],
   seriesTemplates: { plans: 'builtin:a1-plans', details: 'tpl1' },
   structureProfiles: [profileFromPreset('box-tunnel', 'sp1', 'Culvert 2x2')],
