@@ -19,6 +19,9 @@ import { useSheetSchedules } from '@/components/viewer/joinery/ScheduleGraphic';
 import type { ScheduleLayout, SchedulePrim } from '@/joinery/schedule-layout';
 import { ScheduleContentCard } from '@/components/viewer/wall/ScheduleContentCard';
 import { SubReportCard } from '@/components/viewer/wall/SubReportCard';
+import { ScheduleFilterSection } from '@/components/viewer/wall/ScheduleFilterCard';
+import { openSection } from '@/test/open-section.js';
+import { resetSectionChoices } from '@/components/viewer/wall/card-section-state';
 import { hangSchedule } from './drawing-set-actions.js';
 import { resetProject, useProjectStore } from './project-store.js';
 import { parseProjectFile, serializeProject } from './project-file.js';
@@ -59,13 +62,14 @@ function choose(select: HTMLSelectElement, value: string): void {
   });
 }
 
-beforeEach(() => resetProject());
+beforeEach(() => { resetProject(); resetSectionChoices(); });
 afterEach(() => cleanup());
 
 describe('Exterior and interior apart', () => {
   it('is offered on a joinery schedule and makes two parts, a partition by IsExternal, each hung on a sheet', () => {
     const parent = addSchedule('all', 'Joinery');
     const view = render(<SubReportCard schedule={scheduleById(parent)!} />);
+    openSection(view, 'Sub-reports');
     click(buttonWith(view, 'Exterior and interior apart'));
     const parts = (useProjectStore.getState().schedules ?? []).filter((s) => s.sub);
     assert.deepEqual(parts.map((p) => [p.name, p.sub!.filter]), [
@@ -80,9 +84,10 @@ describe('the filter card of a sub-report', () => {
   it('adds a property test, keeps it with the part, and removes it again', () => {
     const parent = addSchedule('all', 'Joinery');
     const part = addSubReport(parent, 'Part', { kinds: ['door'] })!;
-    // The card takes its schedule as a prop, as on the Wall, where the viewport card renders it again from the store after each change.
-    let view = render(<SubReportCard schedule={scheduleById(part)!} />);
-    const again = () => { cleanup(); view = render(<SubReportCard schedule={scheduleById(part)!} />); };
+    // The section takes its schedule as a prop, as on the Wall, where the viewport card renders it again from the store after each change.
+    let view = render(<ScheduleFilterSection schedule={scheduleById(part)!} />);
+    openSection(view, 'Filter');
+    const again = () => { cleanup(); view = render(<ScheduleFilterSection schedule={scheduleById(part)!} />); };
     assert.ok(buttonWith(view, '+ Add test').disabled, 'nothing to add before a property is named');
     typeInto(field(view, 'Property') as HTMLInputElement, 'FireRating');
     choose(field(view, 'Test') as HTMLSelectElement, 'present');
@@ -122,23 +127,30 @@ describe('the filter card of a sub-report', () => {
 });
 
 describe('the filter of a whole schedule', () => {
-  it('is on the schedule\'s content card and not on a part\'s, which prints its parent\'s', () => {
+  it('is the schedule\'s own filter section, and a part\'s shows its own filter, not the schedule\'s scope', () => {
     const parent = addSchedule('all', 'Joinery');
     const part = addSubReport(parent, 'Part', {})!;
-    const onParent = render(<ScheduleContentCard schedule={scheduleById(parent)!} />);
+    const onParent = render(<ScheduleFilterSection schedule={scheduleById(parent)!} />);
+    openSection(onParent, 'Filter');
     assert.match(onParent.textContent ?? '', /What this schedule lists/);
     typeInto(field(onParent, 'Property') as HTMLInputElement, 'IsExternal');
     typeInto(field(onParent, 'Value') as HTMLInputElement, 'true');
     click(buttonWith(onParent, '+ Add test'));
     assert.deepEqual(scheduleById(parent)!.content, { filter: { properties: [{ name: 'IsExternal', op: 'equals', value: 'true' }] } });
     cleanup();
-    const onPart = render(<ScheduleContentCard schedule={scheduleById(part)!} />);
+    const onPart = render(<ScheduleFilterSection schedule={scheduleById(part)!} />);
+    openSection(onPart, 'Filter');
     assert.doesNotMatch(onPart.textContent ?? '', /What this schedule lists/);
+    cleanup();
+    const content = render(<ScheduleContentCard schedule={scheduleById(parent)!} />);
+    openSection(content, 'Content');
+    assert.doesNotMatch(content.textContent ?? '', /What this schedule lists/, 'the content card no longer carries the filter');
   });
 
   it('clearing it leaves no content behind', () => {
     const parent = addSchedule('all', 'Joinery');
-    const view = render(<ScheduleContentCard schedule={scheduleById(parent)!} />);
+    const view = render(<ScheduleFilterSection schedule={scheduleById(parent)!} />);
+    openSection(view, 'Filter');
     typeInto(field(view, 'Property') as HTMLInputElement, 'IsExternal');
     choose(field(view, 'Test') as HTMLSelectElement, 'present');
     click(buttonWith(view, '+ Add test'));
@@ -156,6 +168,7 @@ describe('the symbols in the header cells', () => {
     const before = printed(id);
     assert.ok(dimensions.every((d) => texts(before).includes(d)) && texts(before).filter((t) => t === '900').length === 2 && drawings(before) > 10);
     const view = render(<ScheduleContentCard schedule={scheduleById(id)!} />);
+    openSection(view, 'Content');
     assert.equal(box(view, 'Elevation').checked, true);
     click(box(view, 'Elevation'));
     assert.deepEqual(scheduleById(id)!.content, { symbols: { elevation: false } });
@@ -172,6 +185,7 @@ describe('the symbols in the header cells', () => {
     const id = hung();
     const before = printed(id);
     const view = render(<ScheduleContentCard schedule={scheduleById(id)!} />);
+    openSection(view, 'Content');
     click(box(view, 'Elevation'));
     click(box(view, 'Elevation'));
     assert.equal(scheduleById(id)!.content, undefined);
@@ -181,6 +195,7 @@ describe('the symbols in the header cells', () => {
   it('is kept with the project: saved, reopened, and printed the same', () => {
     const id = hung();
     const view = render(<ScheduleContentCard schedule={scheduleById(id)!} />);
+    openSection(view, 'Content');
     click(box(view, 'Plan'));
     click(box(view, 'Elevation'));
     cleanup();
@@ -201,6 +216,7 @@ describe('the symbols in the header cells', () => {
     const part = addSubReport(parent, 'Doors', { kinds: ['door'] })!;
     hangSchedule(part);
     const view = render(<ScheduleContentCard schedule={scheduleById(part)!} />);
+    openSection(view, 'Content');
     click(box(view, 'Elevation'));
     assert.deepEqual(scheduleById(parent)!.content, { symbols: { elevation: false } });
     assert.equal(scheduleById(part)!.content, undefined);

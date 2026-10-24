@@ -38,8 +38,16 @@ function apply(fix: SubReportFix): void {
   for (const { partId, filter } of fix.edits) setSubReportFilter(partId, { kinds: filter.kinds, levels: filter.levels, types: filter.types });
 }
 
-export function SubReportChecks({ schedule }: { schedule: ProjectSchedule }) {
-  const { t } = useTranslation();
+/** What the check found for this schedule or part: null while there are no parts to check. */
+export interface FoundChecks {
+  check: SubReportCheck;
+  duplicates: SubReportCheck['duplicates'];
+  gaps: SubReportCheck['gaps'];
+  fixes: SubReportCheck['fixes'];
+}
+
+/** The check of the schedule's parts, as this schedule or part reads it. The card's section and its body read the one result. */
+export function useSubReportCheck(schedule: ProjectSchedule): FoundChecks | null {
   const schedules = useProjectStore((s) => s.schedules ?? []);
   const parent = schedule.sub ? schedules.find((s) => s.id === schedule.sub!.parent) : schedule;
   const rows = useParentRows(parent?.kind ?? schedule.kind);
@@ -50,6 +58,13 @@ export function SubReportChecks({ schedule }: { schedule: ProjectSchedule }) {
   const duplicates = check.duplicates.filter((d) => mine(d.parts.map((p) => p.id)));
   const fixes = check.fixes.filter((f) => mine([f.part.id, ...f.edits.map((e) => e.partId)]));
   const gaps = !schedule.sub || fixes.some((f) => f.kind === 'add') ? check.gaps : [];
+  return { check, duplicates, gaps, fixes };
+}
+
+export function SubReportChecks({ schedule, found }: { schedule: ProjectSchedule; found: FoundChecks | null }) {
+  const { t } = useTranslation();
+  if (!found) return null;
+  const { check, duplicates, gaps, fixes } = found;
   // The review lists every type, not only the ones with a problem: it is open from the schedule whether or not the check found any.
   const review = (
     <button type="button" className={WALL_PILL} onClick={() => setReview(check.parent.id)}>{t('wall.review.open')}</button>

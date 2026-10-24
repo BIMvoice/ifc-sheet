@@ -16,6 +16,8 @@ import { scheduleOf } from '@bimvoice/ifcsheet';
 import { readinessOfModel } from '@bimvoice/ifcsheet/readiness-read';
 import { cleanup, click, press, render } from '@/test/render.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
+import { openSection } from '@/test/open-section.js';
+import { resetSectionChoices } from '@/components/viewer/wall/card-section-state';
 import { useViewerStore } from '@/store';
 import { parseStep } from '@/test/properties-panel-harness.js';
 import { undoDrafts, redoDrafts } from '@/drafting/draft-store';
@@ -34,6 +36,7 @@ let ifcDataStore: Awaited<ReturnType<typeof parseStep>>;
 
 beforeEach(async () => {
   resetProject();
+  resetSectionChoices();
   useWallNav.setState({ review: null });
   ifcDataStore ??= await parseStep(new Uint8Array(readFileSync(new URL('../../../../public/samples/bloc-p4.ifc', import.meta.url))));
   useViewerStore.setState({ models: new Map([['m', { ifcDataStore, name: 'bloc-p4.ifc' }]]) } as never);
@@ -147,7 +150,9 @@ describe('merge, move and keep apart', () => {
     assert.ok(!after.some((f) => f.kind === 'subReportDuplicates'));
     assert.match(head(picked.key).textContent ?? '', /Kept apart/);
     cleanup();
-    assert.match(render(<SubReportCard schedule={scheduleById(parent)!} />).textContent ?? '', /Every element is in exactly one part\./);
+    const card = render(<SubReportCard schedule={scheduleById(parent)!} />);
+    openSection(card, 'Sub-reports'); // the warning is gone, so the section starts closed
+    assert.match(card.textContent ?? '', /Every element is in exactly one part\./);
   });
 
   it('keep apart one element: the others of the type stay flagged', () => {

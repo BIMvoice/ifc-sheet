@@ -23,6 +23,8 @@ import type { ScheduleLayout, SchedulePrim } from '@/joinery/schedule-layout';
 import { ScheduleContentCard } from '@/components/viewer/wall/ScheduleContentCard';
 import { hangSchedule } from './drawing-set-actions.js';
 import { resetProject, useProjectStore } from './project-store.js';
+import { openSection } from '@/test/open-section.js';
+import { resetSectionChoices } from '@/components/viewer/wall/card-section-state';
 import { parseProjectFile, serializeProject } from './project-file.js';
 import type { ProjectSheet } from './types.js';
 
@@ -69,7 +71,7 @@ function change(select: HTMLSelectElement, value: string): void {
   });
 }
 
-beforeEach(() => resetProject());
+beforeEach(() => { resetProject(); resetSectionChoices(); });
 afterEach(() => cleanup());
 
 describe('a schedule saved without a content choice', () => {
@@ -227,6 +229,7 @@ describe('the card', () => {
   it('lists every row, shown, in the order they print', () => {
     const id = hung();
     const view = render(<ScheduleContentCard schedule={scheduleById(id)!} />);
+    openSection(view, 'Content');
     assert.deepEqual([...view.querySelectorAll('ul li label')].map((l) => l.textContent), ['Name', 'Size W × H (mm)', 'Opening', 'Sill height (mm)', 'Count per level', 'Total', 'U (W/m²K)', 'Fire rating']);
     assert.ok([...view.querySelectorAll<HTMLInputElement>('ul input[type="checkbox"]')].every((i) => i.checked));
   });
@@ -234,6 +237,7 @@ describe('the card', () => {
   it('hides and moves a row, and the schedule keeps it', () => {
     const id = hung();
     const view = render(<ScheduleContentCard schedule={scheduleById(id)!} />);
+    openSection(view, 'Content');
     click(box(view, 'Opening'));
     assert.deepEqual(scheduleById(id)!.content, { rows: { hidden: ['operation'] } });
     click(button(view, 'Move Total up'));
@@ -243,6 +247,7 @@ describe('the card', () => {
   it('sorts, reverses, and numbers', () => {
     const id = hung();
     const view = render(<ScheduleContentCard schedule={scheduleById(id)!} />);
+    openSection(view, 'Content');
     const selects = view.querySelectorAll<HTMLSelectElement>('select');
     change(selects[0], 'size');
     assert.deepEqual(scheduleById(id)!.content, { sort: { by: 'size' } });
@@ -265,6 +270,7 @@ describe('the card', () => {
     const id = hung();
     const doors = addSubReport(id, 'Doors', { kinds: ['door'] })!;
     const view = render(<ScheduleContentCard schedule={scheduleById(doors)!} />);
+    openSection(view, 'Content');
     assert.match(view.textContent!, /Chosen on Joinery, the schedule this part is cut from\./);
     click(box(view, 'Fire rating'));
     assert.deepEqual(scheduleById(id)!.content, { rows: { hidden: ['fire'] } });
