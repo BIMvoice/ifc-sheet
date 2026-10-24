@@ -122,6 +122,7 @@ import { revisionsEn } from './catalogues/revisions.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
 import { checkEn } from './catalogues/check.en';
 import { checkReadyEn } from './catalogues/check-ready.en';
+import { wallArrangeEn } from './catalogues/wall-arrange.en';
 import { newProjectEn } from './catalogues/new-project.en';
 import { projectPackageEn } from './catalogues/project-package.en';
 import { projectVersionsEn } from './catalogues/project-versions.en';
@@ -206,6 +207,7 @@ export const en = {
   ...annotateAllEn,
   ...checkEn,
   ...checkReadyEn,
+  ...wallArrangeEn,
   ...newProjectEn,
   ...projectPackageEn,
   ...projectVersionsEn,
