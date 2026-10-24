@@ -23,7 +23,7 @@ import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
-import { shownRows, textCellText, textRowId } from '@bimvoice/ifcsheet';
+import { shownRows, symbolsShown, textCellText, textRowId } from '@bimvoice/ifcsheet';
 import { sheetNumber } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
@@ -142,8 +142,11 @@ function plan(data: ScheduleData, options: ScheduleLayoutOptions) {
   const viewsOf = (e: ScheduleEntry) => options.views?.get(e.key);
   const cardW = (e: ScheduleEntry) => { const v = viewsOf(e); return Math.max(30, (v?.width ?? e.width) * k + 16 + (v ? sectionRoom(v, k) : 0)); };
   // Under the front view and its dimension: the plan, in the room the deepest one needs.
-  const planBlock = Math.max(0, ...data.entries.map((e) => { const v = viewsOf(e); return v ? planRoom(v, k) : 0; }));
-  const drawingH = Math.max(30, ...data.entries.map((e) => (viewsOf(e)?.height ?? e.height) * k + 14 + planBlock));
+  // The header cells draw the elevation and the plan unless the schedule's content turns one off (`symbolsShown`): the cell is as tall as what it draws.
+  const shown = symbolsShown(data.content);
+  const planBlock = shown.plan ? Math.max(0, ...data.entries.map((e) => { const v = viewsOf(e); return v ? planRoom(v, k) : 0; })) : 0;
+  // Without the elevation the plan alone fills the cell (it starts 2 mm under the mark row); without either the cell is the mark row.
+  const drawingH = shown.elevation ? Math.max(30, ...data.entries.map((e) => (viewsOf(e)?.height ?? e.height) * k + 14 + planBlock)) : Math.max(0, planBlock - 6);
   const bandH = MARK_ROW + drawingH + rowCount * ROW;
   const bands: ScheduleEntry[][] = [];
   let band: ScheduleEntry[] = [], used = LABEL_W;
@@ -154,7 +157,7 @@ function plan(data: ScheduleData, options: ScheduleLayoutOptions) {
   }
   if (band.length || bands.length === 0) bands.push(band);
   const perPage = options.maxHeight === undefined ? bands.length : Math.max(1, Math.floor((options.maxHeight - TITLE_H + BAND_GAP) / (bandH + BAND_GAP)));
-  return { k, viewsOf, cardW, planBlock, drawingH, bandH, bands, perPage, pages: Math.max(1, Math.ceil(bands.length / perPage)), maxCard: Math.max(0, ...data.entries.map(cardW)) };
+  return { k, shown, viewsOf, cardW, planBlock, drawingH, bandH, bands, perPage, pages: Math.max(1, Math.ceil(bands.length / perPage)), maxCard: Math.max(0, ...data.entries.map(cardW)) };
 }
 
 /** How many pages `data` runs over in a box `maxWidth` × `maxHeight`: one per sheet the schedule takes. */
@@ -169,7 +172,7 @@ export function scheduleMinBox(data: ScheduleData, options: Pick<ScheduleLayoutO
 }
 
 export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, options: ScheduleLayoutOptions = {}): ScheduleLayout {
-  const { k, viewsOf, cardW, planBlock, drawingH, bandH, perPage, pages, bands: all } = plan(data, options);
+  const { k, shown, viewsOf, cardW, planBlock, drawingH, bandH, perPage, pages, bands: all } = plan(data, options);
   const page = Math.max(0, options.page ?? 0);
   const bands = all.slice(page * perPage, (page + 1) * perPage);
   const prims: SchedulePrim[] = [];
@@ -200,26 +203,30 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
       prims.push({ kind: 'line', x1: x + cw, y1: top, x2: x + cw, y2: top + bandH, w: PEN.grid });
       prims.push({ kind: 'text', x: cx, y: top + 7, text: e.mark, size: 4, anchor: 'middle', bold: true });
       // The elevation, bottom on a baseline that leaves room for the width dimension (and the plan under it).
-      const base = top + MARK_ROW + drawingH - 7 - planBlock;
+      const base = shown.elevation ? top + MARK_ROW + drawingH - 7 - planBlock : top + MARK_ROW - 8;
       const v = viewsOf(e);
       // Views draw to their own extent, centred over the card less the section beside them.
       const w = v?.width ?? e.width, h = v?.height ?? e.height;
       const fx = v ? cx - sectionRoom(v, k) / 2 : cx;
       const x0 = fx - (w * k) / 2, x1 = fx + (w * k) / 2;
       if (v) {
-        prims.push(...viewPrims(v, e.spec, { fx, base }, k, openingConvention()));
-      } else if (e.spec) {
+        // The plan is the plan view; the front, the section beside it and the opening symbol are the elevation.
+        prims.push(...viewPrims(v, e.spec, { fx, base }, k, openingConvention()).filter((p) => p.kind !== 'path' || (p.view === 'plan' ? shown.plan : shown.elevation)));
+      } else if (shown.elevation && e.spec) {
         const strokes = elevationSymbol(e.spec, { hardware: true, convention: openingConvention() });
         const b = strokeBounds(strokes);
         const ox = cx - ((b.min.x + b.max.x) / 2) * k;
         for (const s of strokes) {
           prims.push({ kind: 'path', pts: s.pts.map((p) => ({ x: ox + p.x * k, y: base - p.y * k })), closed: s.closed, w: PEN.drawing[s.weight], dashed: s.dashed });
         }
-      } else {
+      } else if (shown.elevation) {
+        // The generated symbol is an elevation: with it off, a type without views draws nothing.
         prims.push({ kind: 'path', pts: [{ x: x0, y: base }, { x: x1, y: base }, { x: x1, y: base - e.height * k }, { x: x0, y: base - e.height * k }], closed: true, w: PEN.drawing.outline });
       }
-      dimension(prims, { x: x0, y: base + 4.5 }, { x: x1, y: base + 4.5 }, String(Math.round(e.width * 1000)));
-      dimension(prims, { x: x0 - 4, y: base }, { x: x0 - 4, y: base - h * k }, String(Math.round(e.height * 1000)));
+      if (shown.elevation) {
+        dimension(prims, { x: x0, y: base + 4.5 }, { x: x1, y: base + 4.5 }, String(Math.round(e.width * 1000)));
+        dimension(prims, { x: x0 - 4, y: base }, { x: x0 - 4, y: base - h * k }, String(Math.round(e.height * 1000)));
+      }
       tableRows.forEach((row, i) => {
         const value = row.value(e);
         if (row.text) {

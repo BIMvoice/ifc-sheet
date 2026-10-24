@@ -6,7 +6,7 @@
 
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
-import { canSplit, subReportsOf, type SubReportFilter } from '@bimvoice/ifcsheet';
+import { canSplit, EXTERIOR, INTERIOR, subReportsOf, type SubReportFilter } from '@bimvoice/ifcsheet';
 import type { ProjectSchedule } from '@/project/types';
 
 export { canSplit, subReportsOf };
@@ -38,7 +38,7 @@ export function addSubReport(parentId: string, name: string, filter: SubReportFi
 }
 
 /** Change what the sub-report `id` keeps; `undefined` for a dimension removes its restriction. */
-export function setSubReportFilter(id: string, patch: Partial<Record<keyof SubReportFilter, string[] | undefined>>): void {
+export function setSubReportFilter(id: string, patch: { [K in keyof SubReportFilter]?: SubReportFilter[K] | undefined }): void {
   const schedule = scheduleById(id);
   if (!schedule?.sub) return;
   const filter: SubReportFilter = { ...schedule.sub.filter, ...patch } as SubReportFilter;
@@ -55,6 +55,11 @@ export function toggled<T>(list: readonly T[] | undefined, value: T, all: readon
 /** Doors and windows apart: two sub-reports of the schedule `parentId`; returns their ids. */
 export function splitByKind(parentId: string, names: { door: string; window: string }): string[] {
   return [addSubReport(parentId, names.door, { kinds: ['door'] }), addSubReport(parentId, names.window, { kinds: ['window'] })].filter((id): id is string => !!id);
+}
+
+/** Exterior and interior apart (by `IsExternal`): two sub-reports of the schedule `parentId`, a partition; returns their ids. */
+export function splitByExterior(parentId: string, names: { exterior: string; interior: string }): string[] {
+  return [addSubReport(parentId, names.exterior, EXTERIOR), addSubReport(parentId, names.interior, INTERIOR)].filter((id): id is string => !!id);
 }
 
 /** One sub-report per storey, named after it; returns their ids. */

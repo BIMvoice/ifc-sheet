@@ -17,7 +17,7 @@
 import { readJoineryList } from './joinery-spec-read.js';
 import { DEFAULT_JOINERY_MAPPING, readJoineryMapping, type JoineryMapping } from './joinery-mapping.js';
 import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion } from './project-version.js';
-import { readSchedule, type ProjectSchedule } from './sub-reports.js';
+import { readSchedule, scheduleFilterProperties, type ProjectSchedule } from './sub-reports.js';
 import type { JoinerySpec } from '@ifc-lite/create';
 import { joineryScheduleData, type JoineryProject, type ScheduleModel } from './joinery-schedule.js';
 import { subReportChecksOf, type SubReportCheck } from './sub-report-check.js';
@@ -70,7 +70,7 @@ export function readProjectFile(text: string): ProjectFacts {
  * project applied, `joineryScheduleData`) against its parts. What `readinessOfModel` takes as its second argument.
  */
 export function projectSubReportChecks(project: ProjectFacts, models: readonly ScheduleModel[]): SubReportCheck[] {
-  return subReportChecksOf(project.schedules, (kind) => joineryScheduleData(models, project, kind));
+  return subReportChecksOf(project.schedules, (kind) => joineryScheduleData(models, project, kind, undefined, scheduleFilterProperties(project.schedules)));
 }
 
 /**

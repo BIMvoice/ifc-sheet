@@ -10,7 +10,7 @@
  */
 
 import { useMemo } from 'react';
-import { subReportParams, type SubReportCheck, type SubReportFix } from '@bimvoice/ifcsheet';
+import { scheduleFilterProperties, subReportParams, type SubReportCheck, type SubReportFix } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
@@ -26,8 +26,10 @@ export function useParentRows(kind: ProjectSchedule['kind']) {
   const models = useViewerStore((s) => s.models);
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
-  // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
-  return useMemo(() => scheduleData(kind as 'door' | 'window' | 'all'), [kind, mutationVersion, models, catalogue, mapping]);
+  // The properties the filters name: the rows carry only those, so a new property test re-reads the model.
+  const properties = useProjectStore((s) => scheduleFilterProperties(s.schedules ?? []).join(','));
+  // mutationVersion / models / catalogue / mapping / properties: the inputs `scheduleData` reads from the stores.
+  return useMemo(() => scheduleData(kind as 'door' | 'window' | 'all'), [kind, mutationVersion, models, catalogue, mapping, properties]);
 }
 
 /** Apply a fix: each edited part keeps what its new filter names. */

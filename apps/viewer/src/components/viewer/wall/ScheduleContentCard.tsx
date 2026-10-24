@@ -10,14 +10,15 @@
  */
 
 import { useEffect, useState } from 'react';
-import { MAX_START, orderedRows, SORTS, textOwner, type SortBy } from '@bimvoice/ifcsheet';
+import { MAX_START, orderedRows, SORTS, symbolsShown, textOwner, type SortBy } from '@bimvoice/ifcsheet';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { isJoinerySchedule } from '@/project/schedule-fit';
-import { moveRow, resetContent, setNumbering, setRowShown, setSort } from '@/joinery/schedule-content-actions';
+import { moveRow, resetContent, setNumbering, setRowShown, setSort, setSymbolShown } from '@/joinery/schedule-content-actions';
 import type { ProjectSchedule } from '@/project/types';
 import { toast } from '@/components/ui/toast';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
+import { ScheduleFilterCard } from './ScheduleFilterCard';
 
 const ROW_LABELS: Record<string, TranslationKey> = {
   name: 'schedule.row.name', size: 'schedule.row.size', operation: 'schedule.row.operation', sill: 'schedule.row.sill',
@@ -81,6 +82,19 @@ export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule })
         </ul>
       </fieldset>
 
+      <fieldset className="m-0 mt-3 border-0 p-0">
+        <legend className="p-0 text-xs text-sky-200">{t('wall.content.symbols')}</legend>
+        <div className="mt-1 grid grid-cols-2 gap-1.5">
+          {(['elevation', 'plan'] as const).map((symbol) => (
+            <label key={symbol} className="flex items-center gap-2 text-sm text-sky-100">
+              <input type="checkbox" checked={symbolsShown(content)[symbol]} onChange={(e) => setSymbolShown(schedule.id, symbol, e.target.checked)} />
+              {t(`wall.content.symbol.${symbol}` as TranslationKey)}
+            </label>
+          ))}
+        </div>
+        <p className="m-0 mt-1 text-xs text-sky-200">{t('wall.content.symbols.hint')}</p>
+      </fieldset>
+
       <div className="mt-3 grid grid-cols-[1fr_auto] items-end gap-2">
         <label className="block text-xs text-sky-200">
           {t('wall.content.sort')}
@@ -123,6 +137,7 @@ export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule })
       <div className="mt-3">
         <button type="button" className={WALL_PILL} disabled={!content} onClick={() => resetContent(schedule.id)}>{t('wall.content.reset')}</button>
       </div>
+      {inherited ? null : <ScheduleFilterCard schedule={schedule} filter={content?.filter} />}
     </div>
   );
 }

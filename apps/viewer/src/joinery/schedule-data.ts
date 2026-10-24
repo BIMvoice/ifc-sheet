@@ -13,7 +13,7 @@
  * tag, the Elements sheet and `schedule-numbering.ts` share.
  */
 
-import { DEFAULT_JOINERY_MAPPING, type ScheduleContent } from '@bimvoice/ifcsheet';
+import { DEFAULT_JOINERY_MAPPING, scheduleFilterProperties, type ScheduleContent } from '@bimvoice/ifcsheet';
 import { joineryScheduleData, occurrenceMark, type ScheduleData, type ScheduleEntry, type ScheduleKind, type ScheduleModel, type ScheduleOccurrence } from '@bimvoice/ifcsheet/project';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
@@ -24,7 +24,11 @@ import { catalogue } from './catalog';
 export { occurrenceMark };
 export type { ScheduleData, ScheduleEntry, ScheduleKind, ScheduleOccurrence };
 
-/** The rows of the joinery schedule of `kind` over the loaded models, with the open project's catalogue and mapping; sorted and numbered by `content` when given. */
+/**
+ * The rows of the joinery schedule of `kind` over the loaded models, with the open project's catalogue and mapping; sorted and numbered by `content` when given.
+ * The rows carry the properties the project's filters name (`scheduleFilterProperties`, as the headless check reads them) and IsExternal, so a sub-report or a
+ * schedule can be cut by property value.
+ */
 export function scheduleData(kind: ScheduleKind, content?: ScheduleContent): ScheduleData {
   const s = useViewerStore.getState();
   const models: ScheduleModel[] = [];
@@ -35,5 +39,5 @@ export function scheduleData(kind: ScheduleKind, content?: ScheduleContent): Sch
     models.push({ modelId, dataStore, view, nameOf: (id) => entityName({ dataStore, view }, id) });
   }
   const p = useProjectStore.getState();
-  return joineryScheduleData(models, { joineryTypes: catalogue(p), joineryMapping: p.joineryMapping ?? DEFAULT_JOINERY_MAPPING, symbolFlips: p.symbolFlips }, kind, content);
+  return joineryScheduleData(models, { joineryTypes: catalogue(p), joineryMapping: p.joineryMapping ?? DEFAULT_JOINERY_MAPPING, symbolFlips: p.symbolFlips }, kind, content, scheduleFilterProperties(p.schedules ?? []));
 }

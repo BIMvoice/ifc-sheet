@@ -159,3 +159,32 @@ describe.skipIf(!existsSync(FZK))('ifcsheet check --project, on AC20-FZK-Haus', 
     expect(c.err()).toContain('ifcsheet build has no --project');
   });
 });
+
+const EXT_INT = fileURLToPath(new URL('./__fixtures__/exterior-interior.ifc', import.meta.url));
+
+describe('ifcsheet check --project, with filters (#186)', () => {
+  const run3 = async (interior: Record<string, unknown>) => {
+    const file = write('ext-int.ifclite-project.json', projectFile({
+      schedules: [
+        schedule('s1', 'Joinery'),
+        schedule('s2', 'Exterior', { parent: 's1', filter: { properties: [{ name: 'IsExternal', op: 'equals', value: 'true' }] } }),
+        schedule('s3', 'Interior', { parent: 's1', filter: interior }),
+      ],
+    }));
+    const c = capture();
+    const code = await run(['check', EXT_INT, '--json', '--project', file], c.io);
+    const findings = (JSON.parse(c.out()) as { findings: { kind: string; params: Record<string, unknown> }[] }).findings.filter((f) => f.kind.startsWith('subReport'));
+    return { code, err: c.err(), findings };
+  };
+
+  it('finds exterior and interior apart a partition: no duplicate, no gap', async () => {
+    const r = await run3({ properties: [{ name: 'IsExternal', op: 'notEquals', value: 'true' }] });
+    expect(r.err).toBe('');
+    expect(r.findings).toEqual([]);
+  }, 120_000);
+
+  it('reports the store door and the borrowed light, which say nothing, when the interior asks for IsExternal = false', async () => {
+    const r = await run3({ properties: [{ name: 'IsExternal', op: 'equals', value: 'false' }] });
+    expect(r.findings).toEqual([{ kind: 'subReportGaps', missing: expect.any(String), effect: expect.any(String), params: { schedule: 'Joinery', types: 2, count: 2, list: expect.stringContaining('×1') } }]);
+  }, 120_000);
+});

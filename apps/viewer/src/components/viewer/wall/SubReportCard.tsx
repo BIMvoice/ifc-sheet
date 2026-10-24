@@ -14,11 +14,12 @@ import { applyContent, contentOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { hangSchedule } from '@/project/drawing-set-actions';
-import { addSubReport, canSplit, setSubReportFilter, splitByKind, splitByLevel, subReportsOf, toggled } from '@/joinery/schedules';
+import { addSubReport, canSplit, setSubReportFilter, splitByExterior, splitByKind, splitByLevel, subReportsOf, toggled } from '@/joinery/schedules';
 import type { ProjectSchedule } from '@/project/types';
 import { stepInto } from './wall-nav';
 import { WALL_PILL } from './wall-type';
 import { SubReportChecks, useParentRows } from './SubReportChecks';
+import { ScheduleFilterCard } from './ScheduleFilterCard';
 
 const quiet = WALL_PILL;
 const KINDS = ['door', 'window'] as const;
@@ -103,6 +104,7 @@ export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
             ))}
           </ul>
         </fieldset>
+        <ScheduleFilterCard schedule={schedule} filter={sub.filter} />
       </div>
     );
   }
@@ -117,6 +119,7 @@ export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
       <SubReportChecks schedule={schedule} />
       <div className="mt-3 flex flex-wrap gap-2">
         {schedule.kind === 'all' ? <button type="button" className={quiet} onClick={() => placeAll(splitByKind(schedule.id, { door: t('wall.sub.doors'), window: t('wall.sub.windows') }))}>{t('wall.sub.byKind')}</button> : null}
+        <button type="button" className={quiet} onClick={() => placeAll(splitByExterior(schedule.id, { exterior: t('wall.sub.exterior'), interior: t('wall.sub.interior') }))}>{t('wall.sub.byExterior')}</button>
         {data.levels.length > 1 ? <button type="button" className={quiet} onClick={() => placeAll(splitByLevel(schedule.id, data.levels))}>{t('wall.sub.byLevel')}</button> : null}
         <button type="button" className={quiet} onClick={() => { const id = addSubReport(schedule.id, t('wall.sub.newName', { name: schedule.name }), {}); if (id) placeAll([id]); }}>{t('wall.sub.add')}</button>
       </div>
