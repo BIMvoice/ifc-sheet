@@ -17,7 +17,7 @@ import { toast } from '@/components/ui/toast';
 import { useViewerStore } from '@/store';
 import { modelLevels, removeModelLevel, renameModelLevel, type ModelLevel } from '@/project/model-levels';
 import { addProjectView, useProjectStore } from '@/project/project-store';
-import { DEFAULT_PLAN_CUT_HEIGHT_M, resolvePlanLevel, sameElevation } from '@/project/view-defaults';
+import { defaultPlanCutHeight, resolvePlanLevel, sameElevation } from '@/project/view-defaults';
 import { openProjectView } from '@/project/open-view';
 import type { PlanProjectView } from '@/project/types';
 import { ProjectFolderRow, ProjectItemRow } from './ProjectTreeRow';
@@ -39,7 +39,7 @@ function openLevelPlan(level: Row): void {
     kind: 'plan',
     name: level.name,
     level: { name: level.name, elevation: level.elevation, storeyGlobalIds: level.globalId ? [level.globalId] : [] },
-    cutHeight: DEFAULT_PLAN_CUT_HEIGHT_M,
+    cutHeight: defaultPlanCutHeight(projectLevel ?? level, levels),
   });
   openProjectView(id);
 }

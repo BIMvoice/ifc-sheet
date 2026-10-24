@@ -19,6 +19,13 @@ export { freshProjectId } from './ids.js';
 /** Standard architectural plan-cut height above the floor, metres. */
 export const DEFAULT_PLAN_CUT_HEIGHT_M = 1.2;
 
+/**
+ * How far below the next level's floor a default plan cut stays at most,
+ * metres: room for the next floor's build-up (slab, screed, finishes), which
+ * reaches below that level's elevation line, typically 0.15 to 0.30 m.
+ */
+export const NEXT_FLOOR_CLEARANCE_M = 0.5;
+
 /** Levels closer than this are the same level (federated models repeat them). */
 export const LEVEL_MATCH_TOLERANCE_M = 0.25;
 
@@ -38,6 +45,34 @@ export interface StoreyInput {
 /** Where a level's floor is in the drawing frame: the frame plan cuts, work planes and bands are in. */
 export function levelFloorY(level: Pick<ProjectLevel, 'elevation' | 'floorY'>): number {
   return level.floorY ?? level.elevation;
+}
+
+/**
+ * The default cut height above `level`'s floor, metres, given the `levels` of
+ * the project: {@link DEFAULT_PLAN_CUT_HEIGHT_M}, kept below the build-up of
+ * the next level up when that is closer than the cut would reach.
+ *
+ * With `gap` the distance to the next level's floor, the cut is
+ * `min(1.2, max(gap - 0.5, gap / 2))`: a storey 1.0 m below the next is cut
+ * at 0.5 m, 0.6 m below it at 0.3 m (the midpoint: below 1 m the clearance
+ * would leave nothing above the floor). Storeys 1.7 m or more apart keep
+ * exactly 1.2 m. Measured between floors (`levelFloorY`), so a slab whose top
+ * sits above its storey's elevation moves both ends together; the 0.5 m
+ * clearance is what covers the next slab's underside reaching below its
+ * elevation line. The top level, and a project of one level, have no next
+ * level and keep 1.2 m. A cut a user sets is stored in the view and is never
+ * recomputed from this.
+ */
+export function defaultPlanCutHeight(level: Pick<ProjectLevel, 'elevation' | 'floorY'>, levels: readonly Pick<ProjectLevel, 'elevation' | 'floorY'>[] = []): number {
+  const floor = levelFloorY(level);
+  let gap = Infinity;
+  for (const other of levels) {
+    if (sameElevation(other.elevation, level.elevation)) continue;
+    const d = levelFloorY(other) - floor;
+    if (d > 0 && d < gap) gap = d;
+  }
+  if (!Number.isFinite(gap)) return DEFAULT_PLAN_CUT_HEIGHT_M;
+  return Math.min(DEFAULT_PLAN_CUT_HEIGHT_M, Math.max(gap - NEXT_FLOOR_CLEARANCE_M, gap / 2));
 }
 
 /**
@@ -93,14 +128,14 @@ export function uniqueViewName(base: string, views: readonly Pick<ProjectView, '
   }
 }
 
-export function planViewFor(level: ProjectLevel, views: readonly ProjectView[], now = Date.now()): PlanProjectView {
+export function planViewFor(level: ProjectLevel, views: readonly ProjectView[], now = Date.now(), levels: readonly ProjectLevel[] = []): PlanProjectView {
   return {
     id: freshProjectId('view'),
     kind: 'plan',
     name: uniqueViewName(level.name, views),
     // The frame-derived floor stays with the live level (`levelFloorY`), never in the saved view.
     level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] },
-    cutHeight: DEFAULT_PLAN_CUT_HEIGHT_M,
+    cutHeight: defaultPlanCutHeight(level, levels),
     auto: true,
     createdAt: now,
   };
@@ -109,7 +144,7 @@ export function planViewFor(level: ProjectLevel, views: readonly ProjectView[], 
 /** The views a brand-new project gets for `levels`. */
 export function defaultViews(levels: readonly ProjectLevel[], now = Date.now()): ProjectView[] {
   const views: ProjectView[] = [];
-  for (const level of levels) views.push(planViewFor(level, views, now));
+  for (const level of levels) views.push(planViewFor(level, views, now, levels));
   for (const direction of ELEVATION_DIRECTIONS) {
     views.push({ id: freshProjectId('view'), kind: 'elevation', name: elevationName(direction), direction, auto: true, createdAt: now });
   }
@@ -127,6 +162,6 @@ export function syncDefaultViews(views: readonly ProjectView[], levels: readonly
   const missing = levels.filter((level) => !plans.some((p) => resolvePlanLevel(p, [level])));
   if (missing.length === 0) return views;
   const next = [...views];
-  for (const level of missing) next.push(planViewFor(level, next, now));
+  for (const level of missing) next.push(planViewFor(level, next, now, levels));
   return next;
 }

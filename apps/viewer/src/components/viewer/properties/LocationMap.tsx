@@ -41,6 +41,7 @@ import { loadMaplibre, disposeMap, purgeMapContainer, updateOriginMarker } from 
 import { LocationMapSearchBar } from './location-map-search';
 import { useLocationGeoreference } from './use-location-georeference';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useViewportCovered } from '../viewport-cover';
 
 /** Position picked on the map, ready to be applied to IfcMapConversion */
 export interface PickedPosition {
@@ -129,6 +130,7 @@ export function LocationMap({
   const { latLon, mapState, errorKey, geometryDistanceKm, locationKind } = useLocationGeoreference(
     mapConversion, projectedCRS, coordinateInfo, lengthUnitScale,
   );
+  const covered = useViewportCovered();
 
   // Seeded from the session latch, so a remount on a device already known to
   // refuse WebGL paints the fallback immediately — no probe, no construction,
@@ -337,8 +339,8 @@ export function LocationMap({
   // Initialize/update the map when we have a valid lat/lon
   useEffect(() => {
     if (!latLon || !containerRef.current) return;
-    // Already known to be unavailable: never touch the GPU again this session.
-    if (mapUnavailable) return;
+    // Known unavailable: never touch the GPU again this session. Covered (IfcSheet's Wall): nobody would see it (#154).
+    if (mapUnavailable || covered) return;
 
     let cancelled = false;
 
@@ -482,10 +484,8 @@ export function LocationMap({
       degradeMap('map_load_failed', err);
     });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [latLon, locationKind, handleMapClick, mapUnavailable, degradeMap]);
+    return () => { cancelled = true; };
+  }, [latLon, locationKind, handleMapClick, mapUnavailable, covered, degradeMap]);
 
   // Add/update building footprint GeoJSON layer when footprint or style changes
   useEffect(() => {

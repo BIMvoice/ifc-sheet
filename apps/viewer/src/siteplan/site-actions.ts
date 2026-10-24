@@ -36,7 +36,7 @@ export function ensureSitePlan(name: string): string | null {
   const level = groundLevel(levels);
   if (!level) return null;
   ensurePlotBoundaryLayer();
-  return addProjectView({ ...planViewFor(level, views), name, auto: false, site: true, scale: SITE_PLAN_SCALE });
+  return addProjectView({ ...planViewFor(level, views, Date.now(), levels), name, auto: false, site: true, scale: SITE_PLAN_SCALE });
 }
 
 /** The plot boundary layer, added once. */
