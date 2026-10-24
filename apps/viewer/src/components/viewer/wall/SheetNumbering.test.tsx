@@ -41,7 +41,7 @@ const numbers = () => state().sheets.map((s) => s.number);
 
 beforeEach(() => {
   resetProject();
-  useWallNav.setState({ stepped: null, focus: null, visit: 0, drawer: true });
+  useWallNav.setState({ stepped: null, focus: null, visit: 0, panel: 'drawer' });
   useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
   startDrawingSet(null, HOUSE);
   clearDraftHistory();

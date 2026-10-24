@@ -35,6 +35,7 @@ import { ScheduleFitOffer } from './ScheduleFitOffer';
 import { SheetCanvas } from './SheetCanvas';
 import { RevisionsCard } from './RevisionsCard';
 import { TitleBlockCard } from './TitleBlockForm';
+import { useWallNav } from './wall-nav';
 import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
@@ -137,6 +138,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       if (e.target instanceof Element && e.target.closest('[data-owns-keys]')) return;
       // A running tool or a drafted selection lets go first (the drafting keys' own Esc), and that is all this Esc does.
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
+      // A panel in front of the sheet takes this Esc (wall-key-bus `panelEscape`), whichever listener runs first.
+      if (e.defaultPrevented || useWallNav.getState().panel !== null) return;
       // The comment tool lets go first of what is not a drawing tool.
       if (useReviewUi.getState().placing) {
         setPlacing(false);
