@@ -63,6 +63,7 @@ function fakeRenderer(state: FakeRendererState): Renderer {
     hasQueuedMeshes: () => state.queued,
     flushPending: () => { state.uploads++; state.queued = false; return true; },
     hasResidencyRestoreWork: () => false,
+    takeDeferredBatchUpload: () => false,
     getColorOverrides: () => null,
   };
   return {

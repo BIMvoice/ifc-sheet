@@ -80,6 +80,7 @@ function fakeRenderer(state: FakeRendererState): Renderer {
   const scene = {
     hasQueuedMeshes: () => false,
     hasResidencyRestoreWork: () => false,
+    takeDeferredBatchUpload: () => false,
     getColorOverrides: () => null,
   };
   return {
