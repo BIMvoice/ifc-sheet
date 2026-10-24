@@ -44,7 +44,7 @@ function Offer({ sheet, vp, schedule, read }: { sheet: ProjectSheet; vp: SheetVi
     stepInto(sheets.find((id) => id !== null) ?? null);
   };
   return (
-    <section data-owns-keys data-schedule-fit-offer className={`${WALL_CARD} absolute bottom-3 left-3`}>
+    <section data-owns-keys data-schedule-fit-offer className={`${WALL_CARD} absolute bottom-3 left-3 max-h-[calc(100%-1.5rem)]`}>
       <p className={WALL_EYEBROW}>{t('wall.fitOffer.title')}</p>
       <p className="m-0 mt-2 text-sm text-sky-100">{t('wall.fitOffer.body', { name: schedule.name, pages: offer.pages, scale: vp.scale })}</p>
       <div className="mt-3 flex flex-wrap gap-2">
