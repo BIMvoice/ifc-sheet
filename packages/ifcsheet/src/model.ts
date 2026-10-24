@@ -11,11 +11,12 @@
  */
 
 import { IfcTypeEnum, iterateEffectiveEntities, type SpatialNode } from '@ifc-lite/data';
-import { GeometryProcessor, type MeshData } from '@ifc-lite/geometry';
-import { IfcParser, type IfcDataStore } from '@ifc-lite/parser';
+import { GeometryProcessor, type GeometryResult, type MeshData } from '@ifc-lite/geometry';
+import { IfcParser, extractLengthUnitScale, type IfcDataStore } from '@ifc-lite/parser';
 import type { ModelExtent } from './drawing-set.js';
 import type { ProjectLevel } from './document.js';
 import { createEntityBoundsLookup, unionEntityBounds, type BoundingBox3D } from './entity-bounds.js';
+import { storeyFloorY } from './storey-origin.js';
 import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals.js';
 import type { StoreyInput } from './view-defaults.js';
 
@@ -63,15 +64,34 @@ function findStoreys(node: SpatialNode, wanted: (id: number) => boolean, out: Sp
   return out;
 }
 
-/** The model's storeys as the app's level list reads them: every storey of the spatial hierarchy, unsorted. */
-function storeysOf(ds: IfcDataStore): StoreyInput[] {
+/** The model's length unit in metres, the way the app reads it (`getIfcLengthUnitScale`). */
+function lengthUnitScaleOf(ds: IfcDataStore): number {
+  if (ds.lengthUnitScale !== undefined) return ds.lengthUnitScale;
+  if (!ds.source?.length || !ds.entityIndex) return 1;
+  return extractLengthUnitScale(ds.source, ds.entityIndex);
+}
+
+/**
+ * The model's storeys as the app's level list reads them: every storey of the
+ * spatial hierarchy, unsorted, each with its floor in the meshes' frame
+ * (`floorY`) when its placement resolves. `Elevation` alone is not that
+ * height: a model that keeps its real height in the site's placement (the
+ * Skolebygg sample: RefElevation 131.2 m) is meshed at it, and a plan cut at
+ * `elevation + 1.2` would pass below the whole building.
+ */
+function storeysOf(ds: IfcDataStore, frame: GeometryResult['coordinateInfo'] | undefined): StoreyInput[] {
   const hierarchy = ds.spatialHierarchy;
   if (!hierarchy) return [];
-  return [...hierarchy.byStorey.keys()].map((id) => ({
-    name: ds.entities.getName(id) || `Storey #${id}`,
-    elevation: hierarchy.storeyElevations.get(id) ?? 0,
-    globalId: ds.entities.getGlobalId(id) || undefined,
-  }));
+  const unit = lengthUnitScaleOf(ds);
+  return [...hierarchy.byStorey.keys()].map((id) => {
+    const floorY = storeyFloorY(ds, id, unit, frame);
+    return {
+      name: ds.entities.getName(id) || `Storey #${id}`,
+      elevation: hierarchy.storeyElevations.get(id) ?? 0,
+      globalId: ds.entities.getGlobalId(id) || undefined,
+      ...(floorY !== null ? { floorY } : {}),
+    };
+  });
 }
 
 /** The elements the storeys contain: the building without the site around it (`buildingExtent` in `project/model-rooms.ts` reads the same). */
@@ -120,16 +140,19 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   const ds = await new IfcParser().parseColumnar(buffer);
   let meshes: MeshData[] = [];
+  let frame: GeometryResult['coordinateInfo'] | undefined;
   if (options.geometry !== false) {
     const processor = new GeometryProcessor();
     try {
       await processor.init();
-      meshes = (await processor.process(new Uint8Array(buffer))).meshes;
+      const result = await processor.process(new Uint8Array(buffer));
+      meshes = result.meshes;
+      frame = result.coordinateInfo;
     } finally {
       processor.dispose();
     }
   }
-  const storeys = storeysOf(ds);
+  const storeys = storeysOf(ds, frame);
   const ids = buildingIds(ds, storeys);
   const extent = ids.length && meshes.length ? unionEntityBounds(meshes, ids, () => null) : null;
   const inBuilding = new Set(ids);
