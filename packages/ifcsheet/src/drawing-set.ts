@@ -21,7 +21,7 @@ import { templateFields } from './sheet-templates.js';
 import { fitViewportBox, SHEET_SCALES } from './viewport-fit.js';
 import { freshProjectId } from './ids.js';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf, numberSheets } from './numbering.js';
-import type { ElevationDirection, NumberingScheme, Paper, PaperSize, PlanProjectView, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './document.js';
+import type { ElevationDirection, NumberingScheme, Paper, PaperSize, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './document.js';
 
 /** The scales a set chooses among, most detailed first. */
 export const SET_SCALES = [50, 100, 200] as const;
@@ -55,11 +55,7 @@ function startOf(template: SheetTemplate | undefined, paper: PaperSize): Pick<Pr
   return template ? templateFields(template) : { paper, orientation: 'landscape' };
 }
 
-/** The lowest plan: the one a set's sections are drawn on. */
-export function groundPlan(views: readonly ProjectView[]): PlanProjectView | null {
-  const plans = views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.site);
-  return plans.sort((a, b) => a.level.elevation - b.level.elevation)[0] ?? null;
-}
+export { GROUND_TOLERANCE_M, groundPlan } from './ground-plan.js';
 
 /** Width and height a view's drawing takes, metres, estimated from the model's extent. */
 export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number; h: number } {

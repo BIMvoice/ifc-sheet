@@ -58,7 +58,7 @@ function namedSection(d: DraftEntity, views: readonly ProjectView[]): string | n
 /** An elevation the ground plan carries a mark for: every one but a detail. */
 const markedElevation = (v: ProjectView): v is Extract<ProjectView, { kind: 'elevation' }> => v.kind === 'elevation' && !v.detail;
 
-/** The plan that carries the elevation marks: the lowest plan that is not a detail. */
+/** The plan that carries the elevation marks: the ground plan (`groundPlan`) among the views that are not a detail. */
 export function elevationMarkPlan(views: readonly ProjectView[]): ProjectView | null {
   return groundPlan(views.filter((v) => !v.detail));
 }

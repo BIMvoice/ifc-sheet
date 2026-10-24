@@ -33,7 +33,7 @@ import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, elevationName, freshProject
 import { proposeSections, type SectionProposal } from './section-proposals';
 import type { PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
 
-// The lowest plan lives with the set's pure layout (`drawing-set.ts`), so the drafting marks can read it without this module's store.
+// The ground plan lives with the set's pure layout (`drawing-set.ts`), so the drafting marks can read it without this module's store.
 export { groundPlan } from './drawing-set';
 
 /** How many proposed sections the starting set draws; the rest wait in the tray. */
@@ -59,14 +59,14 @@ function withoutClashes(existing: readonly ProjectSheet[], set: readonly Project
   return set.map((s) => ({ ...s, number: numbers.get(s.id) ?? s.number }));
 }
 
-/** The sections the model suggests, cut on its lowest plan. Empty until the geometry is there. */
+/** The sections the model suggests, cut on its ground plan. Empty until the geometry is there. */
 export function sectionProposals(meshes: MeshData[] | null, bounds: AxisBounds | null): SectionProposal[] {
   const plan = groundPlan(useProjectStore.getState().views);
   const input = plan ? proposalInputForLevel(plan.level, meshes, bounds) : null;
   return input ? proposeSections(input) : [];
 }
 
-/** The section already made for `proposal`, else a new one on the lowest plan. */
+/** The section already made for `proposal`, else a new one on the ground plan. */
 export function sectionForProposal(proposal: SectionProposal): string | null {
   const { views, levels } = useProjectStore.getState();
   const existing = views.find((v): v is SectionProjectView => v.kind === 'section' && v.through === proposal.label);
