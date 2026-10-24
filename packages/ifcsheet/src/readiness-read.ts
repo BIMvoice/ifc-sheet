@@ -13,7 +13,7 @@
 
 import { getInheritanceChainAcrossSchemas, resolveAllMaterialDefIds, type IfcDataStore } from '@ifc-lite/parser';
 import type { SubReportCheck } from './sub-report-check.js';
-import { modelReadiness, type ModelFacts, type ReadinessFinding } from './readiness.js';
+import { modelReadiness, type FarElementFact, type ModelFacts, type ReadinessFinding } from './readiness.js';
 
 /**
  * An IFC GlobalId: 22 characters of the base-64 alphabet, the first of them 0-3 (it carries two bits).
@@ -72,6 +72,8 @@ export function readModelFacts(sources: Iterable<FactSource>): ModelFacts {
 }
 
 /** The readiness findings of one opened model (`openModel`'s result), counted and judged: what the command line and the MCP tool report. */
-export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: readonly unknown[] }, subReports: readonly SubReportCheck[] = []): ReadinessFinding[] {
-  return modelReadiness(readModelFacts([{ store: model.dataStore, storeys: model.storeys.length }]), subReports);
+export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[] }, subReports: readonly SubReportCheck[] = []): ReadinessFinding[] {
+  const facts = readModelFacts([{ store: model.dataStore, storeys: model.storeys.length }]);
+  const far = (model.farElements ?? []).map(({ label, distance }) => ({ label, distance }));
+  return modelReadiness(far.length > 0 ? { ...facts, farElements: far } : facts, subReports);
 }

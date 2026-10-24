@@ -49,7 +49,7 @@ export const EMPTY_PROJECT: ProjectDocument = {
   name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, revisions: [], titleBlockParams: undefined, titleBlockTemplate: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
   textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
   joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
-  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined, siteArea: undefined, urbanSettings: undefined,
+  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined, siteArea: undefined, urbanSettings: undefined, includeFarElements: undefined,
 };
 
 export const useProjectStore = create<ProjectState>()(() => ({
@@ -86,6 +86,7 @@ const DOCUMENT_FIELDS = {
   revisions: true,
   siteArea: true,
   urbanSettings: true,
+  includeFarElements: true,
 } as const satisfies Record<keyof ProjectDocument, true>;
 
 /**
@@ -170,6 +171,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     graphicStandard: standard.id,
     siteArea: doc.siteArea,
     urbanSettings: doc.urbanSettings,
+    includeFarElements: doc.includeFarElements === true ? true : undefined,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,
@@ -200,6 +202,11 @@ export function syncProjectWithModels(models: ProjectModelRef[], storeys: readon
 export function setProjectSiteArea(area: number | null): void {
   const siteArea = area !== null && Number.isFinite(area) && area > 0 ? area : undefined;
   if (siteArea !== useProjectStore.getState().siteArea) useProjectStore.setState({ siteArea, dirty: true });
+}
+
+/** "Include far-away elements in framing" (`@bimvoice/ifcsheet` `framing.ts`): off is stored as absent, so a project that never touched it saves exactly as before. */
+export function setIncludeFarElements(on: boolean): void {
+  if (on !== (useProjectStore.getState().includeFarElements === true)) useProjectStore.setState({ includeFarElements: on ? true : undefined, dirty: true });
 }
 
 /** Change the urban indicators' settings; a field set to undefined goes back to its default. */

@@ -286,4 +286,6 @@ export interface ProjectDocument {
   seriesTemplates?: Partial<Record<TemplateSeries, string>>;
   /** How sheets are numbered (`numbering.ts`); absent is the default A-101 style. */
   sheetNumbering?: NumberingScheme;
+  /** "Include far-away elements in framing" (`framing.ts`): frame the views on everything the storeys contain, small elements far from the building too. Absent is off. */
+  includeFarElements?: boolean;
 }

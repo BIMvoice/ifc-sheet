@@ -28,9 +28,17 @@ export interface ModelFacts {
   /** GlobalIds carried by more than one entity, and the entities that share them. */
   duplicateGlobalIds: number;
   duplicatedEntities: number;
+  /** The small elements the views are framed without because they lie far from the building (`framing.ts`), farthest first; absent: none were looked for. */
+  farElements?: readonly FarElementFact[];
 }
 
-export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps';
+/** A far-away element as a message names it: its label (Name, else class and GlobalId) and its distance from the building, metres. */
+export interface FarElementFact {
+  label: string;
+  distance: number;
+}
+
+export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements';
 
 export interface ReadinessFinding {
   kind: ReadinessKind;
@@ -59,11 +67,28 @@ export function modelReadiness(f: ModelFacts, subReports: readonly SubReportChec
     if (f.elementsWithoutQuantities > 0) out.push(finding('noQuantities', { count: f.elementsWithoutQuantities, total: f.elements }));
   }
   if (f.duplicateGlobalIds > 0) out.push(finding('duplicateGlobalIds', { count: f.duplicateGlobalIds, entities: f.duplicatedEntities }));
+  if (f.farElements && f.farElements.length > 0) out.push(finding('farElements', farElementParams(f.farElements)));
   for (const c of subReports) {
     if (c.duplicates.length > 0) out.push(finding('subReportDuplicates', subReportParams(c.duplicates, c.parent.name)));
     if (c.gaps.length > 0) out.push(finding('subReportGaps', subReportParams(c.gaps, c.parent.name)));
   }
   return out;
+}
+
+/** How many far elements the sentence names; the rest are counted. */
+const NAMED_FAR_ELEMENTS = 8;
+
+const metres = (m: number): string => `${m >= 10 ? Math.round(m) : Math.round(m * 10) / 10} m`;
+
+/** The parameters of the far-element finding: the count, the farthest distance and each element named with its distance. */
+function farElementParams(elements: readonly FarElementFact[]): Record<string, number | string> {
+  const named = elements.slice(0, NAMED_FAR_ELEMENTS).map((e) => `'${e.label}' (${metres(e.distance)})`);
+  const rest = elements.length - named.length;
+  return {
+    count: elements.length,
+    distance: metres(Math.max(...elements.map((e) => e.distance))),
+    list: named.join(', ') + (rest > 0 ? `, … +${rest}` : ''),
+  };
 }
 
 /** The English of every finding's two sentences, by catalogue key; the app's English catalogue spreads this, so it is the one copy. */
@@ -83,6 +108,8 @@ export const READINESS_EN = {
   'ready.subReportDuplicates': 'In "{schedule}", more than one part lists the same type or element ({parts}). Types: {types}, elements: {count}: {list}.',
   'ready.subReportDuplicates.effect': 'They are counted twice when the parts are added up, and drawn on two sheets.',
   'ready.subReportGaps': 'In "{schedule}", some elements are in no part. Types: {types}, elements: {count}: {list}.',
+  'ready.farElements': '{count} elements lie up to {distance} from the building: {list}.',
+  'ready.farElements.effect': 'Views are framed without them, so the scale and the paper suit the building. They stay in the model, the schedules and the quantities, and are drawn where they fall inside the frame. The project setting "include far-away elements in framing" (--include-far-elements on the command line) frames them again.',
   'ready.subReportGaps.effect': 'The parts do not add up to the schedule: those doors and windows are on no sheet.',
 } as const;
 
