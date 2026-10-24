@@ -24,7 +24,7 @@ import { DEFAULT_SCHEME } from './numbering.js';
 import { proposeSections, type ProposalInput, type SectionProposal } from './section-proposals.js';
 import { sectionPlaneThrough } from './section-plane.js';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults.js';
-import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, defaultViews, elevationName, levelFloorY, levelsFromStoreys, resolvePlanLevel, sameElevation, uniqueViewName, type StoreyInput } from './view-defaults.js';
+import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, defaultViews, elevationName, levelFloorY, levelsFromStoreys, resolvePlanLevel, sameElevation, uniqueViewName, type StoreyInput } from './view-defaults.js';
 
 /** How many proposed sections the starting set draws (`SET_SECTIONS` in the app). */
 export const SET_SECTIONS = 2;
@@ -108,7 +108,7 @@ class Planner {
     }
     for (const level of levels) {
       if (this.views.some((v) => v.kind === 'plan' && sameElevation(v.level.elevation, level.elevation))) continue;
-      this.add<PlanProjectView>({ kind: 'plan', name: level.name, cutHeight: DEFAULT_PLAN_CUT_HEIGHT_M, level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] } });
+      this.add<PlanProjectView>({ kind: 'plan', name: level.name, cutHeight: defaultPlanCutHeight(level, this.levels), level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] } });
     }
   }
 

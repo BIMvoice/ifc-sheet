@@ -28,7 +28,7 @@ import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useP
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
 import { resolve } from '@/i18n/registry';
-import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, elevationName, freshProjectId, sameElevation } from './view-defaults';
+import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, elevationName, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
 import type { PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
 
@@ -134,7 +134,7 @@ function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
       report.viewsExisting++;
       continue;
     }
-    addProjectView({ kind: 'plan', name: level.name, cutHeight: DEFAULT_PLAN_CUT_HEIGHT_M, level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] } });
+    addProjectView({ kind: 'plan', name: level.name, cutHeight: defaultPlanCutHeight(level, state().levels), level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] } });
     report.viewsAdded++;
   }
 }
