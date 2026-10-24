@@ -12,11 +12,12 @@
  * draw through this, so a sheet looks the same wherever it hangs.
  */
 
-import { useCallback, useDeferredValue, useMemo } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
+import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
 import { viewportBox } from '@/project/sheets';
 import { useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
@@ -169,5 +170,7 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
     const drawing = drawingOf.get(v.viewId);
     return placed ? ('fit' in placed && placed.fit ? { width: placed.fit.box.w, height: placed.fit.box.h } : { width: placed.width, height: placed.height }) : viewportBox(v, drawing ? fittedBounds(v, drawing.bounds) : null);
   }, [placedSchedules, placedCivil, placedLegends, drawingOf, fittedBounds]);
+  // Code outside React (the legend placement) measures the sheet's viewports with this same box (#267).
+  useEffect(() => registerViewportBoxes(sheet.id, boxOf), [sheet.id, boxOf]);
   return { content, boxOf };
 }
