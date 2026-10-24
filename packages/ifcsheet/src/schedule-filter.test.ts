@@ -158,10 +158,10 @@ describe('moving a type in the review', () => {
   it('still works for a part without element filters', () => {
     const doors = whole.entries.filter((e) => e.kind === 'door').map((e) => e.key);
     const edits = placeTypes(whole, parts, doors, 'win');
-    // Exterior drops the doors it listed, Windows is widened to take the kind.
+    // Exterior drops the doors it listed and keeps the window types it lists (those of D and E), Windows is widened to take the kind.
     expect(edits.map((e) => e.partId).sort()).toEqual(['ext', 'win']);
     expect(edits.find((e) => e.partId === 'win')!.filter.kinds).toEqual(['window', 'door']);
-    expect(edits.find((e) => e.partId === 'ext')!.filter.types).toEqual([]);
+    expect(edits.find((e) => e.partId === 'ext')!.filter.types).toEqual(whole.entries.filter((e) => e.kind === 'window' && e.occurrences.some((o) => o.globalId.endsWith('D0') || o.globalId.endsWith('E0'))).map((e) => e.key));
   });
 });
 
