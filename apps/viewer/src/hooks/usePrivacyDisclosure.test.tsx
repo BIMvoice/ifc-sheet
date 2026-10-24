@@ -62,3 +62,33 @@ it('translates the disclosure of a build without analytics and opens Settings â†
   assert.ok(document.querySelector('[data-settings-dialog] #settings-analytics-opt-out'));
   assert.ok(localStorage.getItem('ifclite.extensions.privacy-disclosure.v2'));
 });
+
+it('rewrites the disclosure when the language changes while it is on screen (#231)', async () => {
+  localStorage.removeItem('ifclite.extensions.privacy-disclosure.v2');
+  registerLocale('privacy-late-test', {
+    'settings.privacy.toastDisclosure': 'LATE SENDS ANALYTICS',
+    'settings.privacy.toastDisclosureLocal': 'LATE NO ANALYTICS DISCLOSURE',
+    'settings.privacy.toastAction': 'LATE PRIVACY ACTION',
+  });
+  const host = new ExtensionHostService({
+    sdk: createBimContext({
+      transport: {
+        send: () => Promise.reject(new Error('SDK transport is not exercised by this test')),
+        subscribe: () => () => {},
+        close: () => {},
+      },
+    }),
+  });
+  render(
+    <ExtensionHostContext.Provider value={host}>
+      <Toaster />
+      <Disclosure />
+    </ExtensionHostContext.Provider>,
+  );
+
+  await advance(3550);
+  assert.doesNotMatch(latestToast(), /LATE/, 'the disclosure first appears in English');
+  act(() => setLocale('privacy-late-test'));
+  assert.match(latestToast(), /LATE (NO )?ANALYTICS/);
+  assert.ok([...document.querySelectorAll('button')].some((b) => b.textContent?.includes('LATE PRIVACY ACTION')), 'the action label follows too');
+});

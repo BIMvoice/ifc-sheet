@@ -17,17 +17,21 @@ import { useTranslation } from '@/i18n';
 
 // ─── Store (vanilla, framework-agnostic) ─────────────────────────────────
 
+/** A string, or a function read at render by `toast.infoLive`. */
+type ToastText = string | (() => string);
+const readText = (text: ToastText): string => (typeof text === 'function' ? text() : text);
+
 interface Toast {
   id: number;
   /** Notifications sharing a lifecycle replace one another. */
   key?: string;
   type: 'success' | 'error' | 'info';
-  message: string;
+  message: ToastText;
   /** How many identical toasts were merged into this one. */
   count: number;
   /** Increases every time a toast is shown or merged into; orders by recency. */
   seq: number;
-  action?: { label: string; onClick: () => void };
+  action?: { label: ToastText; onClick: () => void };
 }
 
 type Listener = () => void;
@@ -56,7 +60,7 @@ function clearTimer(id: number) {
  * `MAX_VISIBLE` the oldest toasts are evicted, transient ones before errors:
  * an error stays until dismissed, so newer successes must not push it off.
  */
-function addToast(type: Toast['type'], message: string, durationMs: number | null, action?: Toast['action'], key?: string): number {
+function addToast(type: Toast['type'], message: ToastText, durationMs: number | null, action?: Toast['action'], key?: string): number {
   const existing = toasts.find((t) => key !== undefined ? t.key === key : t.key === undefined && t.type === type && t.message === message);
   const id = existing?.id ?? nextId++;
   const others = toasts.filter((t) => t.id !== id);
@@ -83,7 +87,12 @@ function dismiss(id: number) {
 export const toast = {
   success: (message: string, action?: Toast['action'], key?: string): void => { addToast('success', message, action ? null : 3000, action, key); },
   error: (message: string, key?: string): void => { addToast('error', message, null, undefined, key); },
-  info: (message: string, action?: Toast['action']): void => { addToast('info', message, action ? null : 3000, action); },
+  info: (message: string, action?: { label: string; onClick: () => void }): void => { addToast('info', message, action ? null : 3000, action); },
+  /**
+   * `info` for a notice with an action, whose text is read at render: it stays
+   * until dismissed, so it follows a language chosen while it is showing (#231).
+   */
+  infoLive: (message: () => string, action: { label: () => string; onClick: () => void }): void => { addToast('info', message, null, action); },
   /**
    * An error about an in-progress tool gesture, which means nothing once the
    * tool is gone (#6233): it dismisses itself after `durationMs`, and the
@@ -165,7 +174,7 @@ export function Toaster({ variant = 'fixed' }: ToasterProps = {}) {
         )}
       >
         <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span className="text-xs font-medium flex-1 min-w-0">{item.message}</span>
+        <span className="text-xs font-medium flex-1 min-w-0">{readText(item.message)}</span>
         {item.count > 1 && (
           <span className="shrink-0 text-2xs font-semibold tabular-nums opacity-70" aria-hidden="true">
             ×{item.count}
@@ -179,7 +188,7 @@ export function Toaster({ variant = 'fixed' }: ToasterProps = {}) {
             }}
             className="shrink-0 min-h-6 rounded-sm px-1 text-xs font-semibold underline underline-offset-2 hover:bg-black/10 dark:hover:bg-white/10"
           >
-            {item.action.label}
+            {readText(item.action.label)}
           </button>
         )}
         <button
