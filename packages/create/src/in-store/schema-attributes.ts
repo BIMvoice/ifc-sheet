@@ -36,13 +36,34 @@ export function schemaRegistry(schema: SpatialAnchorSchema | undefined, op: stri
   if (!AUTHORING_SCHEMAS.includes(version)) {
     throw new Error(`${op}: authoring ${version} models is not supported; use IFC2X3, IFC4 or IFC4X3`);
   }
-  return getSchemaRegistryForVersion(version as Schema);
+  // `getSchemaRegistryForVersion` lists every entity name to check the registry is not empty. The bundled registries
+  // are constants, so one check per version is enough; per call it was most of the cost of a drawing's material
+  // lookups (#154).
+  let registry = REGISTRY_BY_VERSION.get(version as Schema);
+  if (!registry) REGISTRY_BY_VERSION.set(version as Schema, (registry = getSchemaRegistryForVersion(version as Schema)));
+  return registry;
 }
+
+const REGISTRY_BY_VERSION = new Map<Schema, SchemaRegistry>();
+
+/**
+ * Each entity table's names by upper case, the first spelling winning as in a scan of `Object.keys`. Keyed by the
+ * table itself and held weakly: a registry's entities are not changed after it is built.
+ */
+const CANONICAL_NAMES = new WeakMap<SchemaRegistry['entities'], Map<string, string>>();
 
 /** The schema's canonical spelling of `type`, or null when the class does not exist in it. */
 export function canonicalEntity(registry: SchemaRegistry, type: string): string | null {
-  const upper = type.toUpperCase();
-  return Object.keys(registry.entities).find((name) => name.toUpperCase() === upper) ?? null;
+  let names = CANONICAL_NAMES.get(registry.entities);
+  if (!names) {
+    names = new Map();
+    for (const name of Object.keys(registry.entities)) {
+      const upper = name.toUpperCase();
+      if (!names.has(upper)) names.set(upper, name);
+    }
+    CANONICAL_NAMES.set(registry.entities, names);
+  }
+  return names.get(type.toUpperCase()) ?? null;
 }
 
 /**
