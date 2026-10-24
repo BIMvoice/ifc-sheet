@@ -8,8 +8,12 @@
  * which stays mounted underneath for its drawing runtime; the 3D view behind
  * it must not render or upload its scene, which on a large model costs seconds
  * of main-thread time that nobody sees. The render loop pauses while this is
- * set and picks up where it left off when it is cleared.
+ * set and picks up where it left off when it is cleared. The cover hides the
+ * panels beside the viewport too, so they hold back their own GPU work (the
+ * Location panel's map) for as long as it is set.
  */
+
+import { useSyncExternalStore } from 'react';
 
 let covers = 0;
 const listeners = new Set<() => void>();
@@ -34,4 +38,9 @@ export function coverViewport(): () => void {
 export function onViewportCoverChange(fn: () => void): () => void {
   listeners.add(fn);
   return () => { listeners.delete(fn); };
+}
+
+/** `isViewportCovered()` as React state: re-renders when the viewport is covered or uncovered. */
+export function useViewportCovered(): boolean {
+  return useSyncExternalStore(onViewportCoverChange, isViewportCovered, isViewportCovered);
 }
