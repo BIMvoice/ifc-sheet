@@ -47,10 +47,18 @@ export {
   readNumberingScheme, registerNumberIn, registerSlot, renumbered, typedBeforeSchemes, type OverrideMode, type RenumberRow,
 } from './numbering.js';
 export {
-  checkSubReports, elementCount, isClean, occurrenceMarkOf, subReportParams, typeLabel, type CheckEntry, type CheckOccurrence, type CheckPart, type DuplicateType, type ElementRef,
+  checkSubReports, elementCount, isClean, occurrenceMarkOf, subReportCheckOf, subReportChecksOf, subReportParams, typeLabel, type CheckEntry, type CheckOccurrence, type CheckPart, type DuplicateType, type ElementRef,
   type GapType, type MarkOf, type PartRef, type SubReportCheck, type SubReportFix,
 } from './sub-report-check.js';
-export { readSubReport, readSubReportFilter, subReportData, type SplitData, type SplitEntry, type SubReport, type SubReportFilter } from './sub-reports.js';
+export {
+  canSplit, readSchedule, readSubReport, readSubReportFilter, subReportData, subReportsOf,
+  type ProjectSchedule, type ScheduleListKind, type SplitData, type SplitEntry, type SubReport, type SubReportFilter,
+} from './sub-reports.js';
+export { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion } from './project-version.js';
+export {
+  DEFAULT_JOINERY_MAPPING, fitToElement, normaliseName, readJoineryMapping, resolveMapping,
+  type ElementFacts, type JoineryMapping, type MappingMatch, type MappingSource,
+} from './joinery-mapping.js';
 export {
   addTextRow, cleanText, MAX_LABEL_LENGTH, MAX_TEXT_LENGTH, MAX_TEXT_ROWS, orphanCells, readScheduleTextRows, removeTextRow, renameTextRow, setTextCell, textCellText, textOwner, textRowsOf,
   type OrphanCell, type ScheduleTextCell, type ScheduleTextRow, type TextHolder,

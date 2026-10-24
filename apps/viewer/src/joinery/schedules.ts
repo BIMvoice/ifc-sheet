@@ -2,12 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** Joinery schedules as project items: create, change their settings. */
+/** Joinery schedules as project items: create, change their settings. `canSplit` and `subReportsOf` are the engine's (the headless check reads the same parts). */
 
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
-import type { SubReportFilter } from '@bimvoice/ifcsheet';
+import { canSplit, subReportsOf, type SubReportFilter } from '@bimvoice/ifcsheet';
 import type { ProjectSchedule } from '@/project/types';
+
+export { canSplit, subReportsOf };
 
 export function addSchedule(kind: ProjectSchedule['kind'], name: string): string {
   const id = freshProjectId('schedule');
@@ -23,11 +25,6 @@ export function updateSchedule(id: string, patch: Partial<Omit<ProjectSchedule, 
 
 export function scheduleById(id: string): ProjectSchedule | undefined {
   return (useProjectStore.getState().schedules ?? []).find((s) => s.id === id);
-}
-
-/** Whether a schedule can be split: a joinery list that is not itself a part (parts do not nest: a part is cut from the model's rows). */
-export function canSplit(schedule: Pick<ProjectSchedule, 'kind' | 'sub'> | undefined): boolean {
-  return !!schedule && !schedule.sub && (schedule.kind === 'door' || schedule.kind === 'window' || schedule.kind === 'all');
 }
 
 /** A sub-report of the schedule `parentId` that keeps what `filter` names, named `name`; returns its id, or null when the parent cannot be split. Same kind and scale as the parent. */
@@ -53,11 +50,6 @@ export function setSubReportFilter(id: string, patch: Partial<Record<keyof SubRe
 export function toggled<T>(list: readonly T[] | undefined, value: T, all: readonly T[]): T[] {
   const base = list ?? all;
   return base.includes(value) ? base.filter((v) => v !== value) : all.filter((v) => v === value || base.includes(v));
-}
-
-/** The sub-reports of `parentId`, in the order they were made. */
-export function subReportsOf(schedules: readonly ProjectSchedule[], parentId: string): ProjectSchedule[] {
-  return schedules.filter((s) => s.sub?.parent === parentId);
 }
 
 /** Doors and windows apart: two sub-reports of the schedule `parentId`; returns their ids. */

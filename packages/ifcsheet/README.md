@@ -31,10 +31,11 @@ ifcsheet build house.ifc --out out/set.pdf --dxf out/dxf     # plus A-101.dxf, A
 ifcsheet build house.ifc --out set.pdf --name "House Alpha"  # project name in the title blocks
 ifcsheet check house.ifc                                     # what the model lacks, in plain English
 ifcsheet check house.ifc --json                              # the same as JSON
+ifcsheet check house.ifc --project house.ifclite-project.json  # also the project's split schedules: an element in two parts, or in none
 ifcsheet --help
 ```
 
-Exit code 0 on success, 1 when the work failed (unreadable file, a model with no geometry), 2 for a wrong command line. `build` needs the wasm bundle, as `openModel` does; `check` does not. `check` exits 0 when nothing would weaken the drawings and 1 when something would (or the file cannot be read): the findings are the model-readiness report of the app, one implementation (`readiness.ts`). `--standard` and `--project` are not implemented; both are follow-ups of [#164](https://github.com/BIMvoice/ifcsheet/issues/164). The package is private, so run the built bin: `pnpm --filter @bimvoice/ifcsheet build`, then `node packages/ifcsheet/dist/bin.js build ...`.
+Exit code 0 on success, 1 when the work failed (unreadable file, a model with no geometry), 2 for a wrong command line. `build` needs the wasm bundle, as `openModel` does; `check` does not. `check` exits 0 when nothing would weaken the drawings and 1 when something would (or the file cannot be read): the findings are the model-readiness report of the app, one implementation (`readiness.ts`). `--project` (#260) reads a saved `.ifclite-project.json`: its schedules and sub-reports, and the joinery catalogue and symbol mapping the schedule rows depend on; the rows are built by `joineryScheduleData`, the one function the app also calls to list a model's doors and windows, and the findings carry the app's sentences. What it cannot see: edits made in the app and not yet exported to the IFC (the CLI reads the file as saved), and the project's title block, views and sheets (no finding reads them yet). `build` does not take `--project`. `--standard` is not implemented ([#164](https://github.com/BIMvoice/ifcsheet/issues/164)). The package is private, so run the built bin: `pnpm --filter @bimvoice/ifcsheet build`, then `node packages/ifcsheet/dist/bin.js build ...`.
 
 ## What the output is today
 
