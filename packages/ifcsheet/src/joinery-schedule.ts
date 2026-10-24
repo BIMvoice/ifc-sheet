@@ -1,0 +1,290 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * What a joinery schedule lists, read from IFC models (#186, #260): each configured type (one row per
+ * catalogue entry, merged across models) with its occurrences counted per level, with the doors and
+ * windows the project's symbol mapping assigns to it, and the rest grouped by class and size, each group
+ * marked D1, W1... Levels are merged by name and ordered by elevation, top floor last. Every occurrence is
+ * numbered within its type, level by level (`occurrenceMark`: W1.3).
+ *
+ * This is the one copy of that rule. The web app's `joinery/schedule-data.ts` calls it with the live models
+ * (and their edit overlay); `ifcsheet check --project` calls it with parsed models and the catalogue and
+ * mapping read from a project file, so both build the same rows. Only what the models are read from differs:
+ * `ScheduleModel.view` is the edit overlay (the app's unsaved edits), `nameOf` the app's overlay-aware name read.
+ *
+ * Its own entry, `@bimvoice/ifcsheet/project`: it loads the modelling library.
+ */
+
+import { getModelLengthUnitScale, joineryTypesInStore, occurrencesOfTypeInStore, readJoineryFlips, readJoineryType, readRelatedLists, type JoinerySpec, type JoineryTypeRead } from '@ifc-lite/create';
+import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
+import { getAttributeNamesForSchema, type IfcDataStore } from '@ifc-lite/parser';
+import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
+
+export type ScheduleKind = 'door' | 'window' | 'all';
+
+export interface ScheduleOccurrence {
+  modelId: string;
+  expressId: number;
+  globalId: string;
+  level: string;
+  /** The element's Tag as it is in the model. */
+  tag: string | null;
+  /** 1-based, within the type, lowest level first. */
+  number: number;
+}
+
+export interface ScheduleEntry {
+  key: string;
+  kind: 'door' | 'window';
+  /** The configured type; null for elements without one. */
+  spec: JoinerySpec | null;
+  mark: string;
+  name: string;
+  /** Metres. */
+  width: number;
+  height: number;
+  /** Count per level name. */
+  counts: Record<string, number>;
+  total: number;
+  occurrences: ScheduleOccurrence[];
+}
+
+export interface ScheduleData {
+  entries: ScheduleEntry[];
+  /** Level names, lowest first. */
+  levels: string[];
+}
+
+/** An occurrence's mark: its type's mark and its number (`W1.3`); the type's name and the number for an untyped element. */
+export function occurrenceMark(entry: Pick<ScheduleEntry, 'mark' | 'name'>, o: Pick<ScheduleOccurrence, 'number'>): string {
+  return entry.mark && entry.mark !== '—' ? `${entry.mark}.${o.number}` : `${entry.name}-${o.number}`;
+}
+
+/** A model as the reads see it: the parsed store and, in the app, the edit overlay on top of it. */
+export interface Live { dataStore: IfcDataStore; view: MutablePropertyView | null }
+
+export interface ScheduleModel extends Live {
+  modelId: string;
+  /** An entity's Name. Default: the one the store holds (`storedName`); the app passes its overlay-aware read. */
+  nameOf?: (id: number) => string;
+}
+
+/** What the project contributes to a joinery schedule. */
+export interface JoineryProject {
+  /** The project's joinery catalogue. */
+  joineryTypes: readonly JoinerySpec[];
+  joineryMapping: JoineryMapping;
+  /** Flips per element GlobalId, for the app's drawings; absent in a headless read. */
+  symbolFlips?: Record<string, number>;
+}
+
+/** The entity's attributes with the overlay's positional edits applied; null for a deleted or unknown entity. */
+export function attributes({ dataStore, view }: Live, id: number): unknown[] | null {
+  if (view?.isDeleted(id)) return null;
+  const entity = view?.getNewEntity(id) ?? dataStore.getEntity(id);
+  if (!entity) return null;
+  const attrs = [...entity.attributes] as unknown[];
+  for (const [index, value] of view?.getPositionalMutationsForEntity(id) ?? []) attrs[index] = value;
+  return attrs;
+}
+
+/** The Name the store holds: the entity table's (IfcRoot entities), else the Name slot of the source record. */
+export function storedName(dataStore: IfcDataStore, expressId: number): string {
+  const indexed = dataStore.entities.getName(expressId);
+  if (indexed) return indexed;
+  const entity = dataStore.getEntity(expressId);
+  const slot = entity ? getAttributeNamesForSchema(entity.type, dataStore.schemaVersion).indexOf('Name') : -1;
+  const value = slot < 0 ? undefined : entity?.attributes[slot];
+  return typeof value === 'string' ? value : '';
+}
+
+const real = (v: unknown): number => (typeof v === 'number' ? v : v && typeof v === 'object' && 'real' in v ? Number((v as { real: number }).real) : NaN);
+const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
+
+/** Every typed occurrence's type, by one read of the model's IfcRelDefinesByType. Where an element is in more than one, the first wins. */
+export function typeIndex({ dataStore, view }: Live): Map<number, number | null> {
+  const index = new Map<number, number | null>();
+  for (const rel of readRelatedLists(dataStore, 'IfcRelDefinesByType', view)) {
+    for (const id of rel.relatedIds) if (!index.has(id)) index.set(id, rel.relatingId ?? null);
+  }
+  return index;
+}
+
+/** A configured element: its type, and how it is turned in its opening. */
+export interface JoineryElement extends JoineryTypeRead {
+  flips: number;
+}
+
+/** The configured joinery type behind a door or window, or null when its type carries none. */
+export function joineryOfElement(live: Live, expressId: number, types: ReadonlyMap<number, number | null>): JoineryElement | null {
+  try {
+    const typeId = types.get(expressId) ?? null;
+    const type = typeId === null ? null : readJoineryType(live.dataStore, typeId, live.view);
+    return type ? { ...type, flips: readJoineryFlips(live.dataStore, expressId, live.view) } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What the mapping matches a door or window by; null for anything else. `typeIdOf` finds the element's type; a
+ * caller reading many elements passes one backed by a `typeIndex`, so the model's types are read once.
+ */
+export function elementFacts(live: Live, expressId: number, typeIdOf: (live: Live, expressId: number) => number | null): ElementFacts | null {
+  const { dataStore, view } = live;
+  const entity = view?.getNewEntity(expressId) ?? dataStore.getEntity(expressId);
+  const cls = String(entity?.type ?? '').toUpperCase();
+  if (!/^IFC(DOOR|WINDOW)(STANDARDCASE)?$/.test(cls)) return null;
+  const attrs = attributes(live, expressId);
+  if (!attrs) return null;
+  const unit = getModelLengthUnitScale(dataStore) || 1;
+  const height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
+  let typeId: number | null = null;
+  try { typeId = typeIdOf(live, expressId); } catch { typeId = null; }
+  const typeAttrs = typeId === null ? null : attributes(live, typeId);
+  const names = [text(typeAttrs?.[2]), text(attrs[4]), text(attrs[2])].filter((n): n is string => n !== null);
+  return {
+    kind: cls.startsWith('IFCDOOR') ? 'door' : 'window',
+    globalId: text(attrs[0]),
+    typeGlobalId: text(typeAttrs?.[0]),
+    names,
+    width: Number.isFinite(width) && width > 0 ? width : null,
+    height: Number.isFinite(height) && height > 0 ? height : null,
+  };
+}
+
+export interface DrawnJoinery {
+  spec: JoinerySpec;
+  /** How the body is turned in its opening (the model's own flips, or the project's per-element flips for a mapped one). */
+  flips: number;
+  /** 'model': the IFC's configured type; otherwise how the mapping found the entry. */
+  source: 'model' | MappingSource;
+  /** The catalogue entry (mapped elements), unfitted. */
+  entry?: JoinerySpec;
+}
+
+/**
+ * The joinery a door or window is DRAWN with: the configured type the model gives it, else the catalogue entry the
+ * project's symbol mapping picks, fitted to the element's size. `types` is the model's `typeIndex`.
+ */
+export function drawnJoineryOf(live: Live, expressId: number, project: JoineryProject, types: ReadonlyMap<number, number | null>): DrawnJoinery | null {
+  const own = joineryOfElement(live, expressId, types);
+  if (own) return { spec: own.spec, flips: own.flips, source: 'model' };
+  const facts = elementFacts(live, expressId, (_, id) => types.get(id) ?? null);
+  const match = facts ? resolveMapping(project.joineryMapping, [...project.joineryTypes], facts) : null;
+  if (!facts || !match) return null;
+  const flips = facts.globalId ? project.symbolFlips?.[facts.globalId] ?? 0 : 0;
+  return { spec: fitToElement(match.entry, facts), flips, source: match.source, entry: match.entry };
+}
+
+/**
+ * The groups of doors and windows the model gives no type (class and size) have no mark to read, so the Mark row would
+ * be blank for every column. Mark each D1, D2... / W1, W2... in schedule order, skipping a mark a configured type holds.
+ */
+function markUntyped(entries: ScheduleEntry[]): void {
+  const taken = new Set(entries.filter((e) => e.spec).map((e) => e.mark));
+  const last = { door: 0, window: 0 };
+  for (const e of entries) {
+    if (e.spec) continue;
+    const prefix = e.kind === 'door' ? 'D' : 'W';
+    let mark: string;
+    do mark = `${prefix}${++last[e.kind]}`; while (taken.has(mark));
+    e.mark = mark;
+  }
+}
+
+/** The rows of the joinery schedule of `kind` over `models`, the project's catalogue and mapping applied. */
+export function joineryScheduleData(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind = 'all'): ScheduleData {
+  const byKey = new Map<string, ScheduleEntry>();
+  const levelElevation = new Map<string, number>();
+  const wanted = (k: 'door' | 'window') => kind === 'all' || kind === k;
+  const fromCatalogue = new Map(project.joineryTypes.map((spec) => [spec.id, spec]));
+
+  for (const model of models) {
+    const { modelId, dataStore, view } = model;
+    const live: Live = { dataStore, view };
+    const nameOf = model.nameOf ?? ((id: number) => storedName(dataStore, id));
+    const hierarchy = dataStore.spatialHierarchy;
+    const levelOf = (id: number): string => {
+      const storey = hierarchy?.elementToStorey.get(id);
+      if (storey === undefined) return '—';
+      const name = nameOf(storey) || `#${storey}`;
+      levelElevation.set(name, hierarchy?.storeyElevations.get(storey) ?? 0);
+      return name;
+    };
+    const count = (entry: ScheduleEntry, id: number) => {
+      const level = levelOf(id);
+      entry.counts[level] = (entry.counts[level] ?? 0) + 1;
+      entry.total++;
+      const attrs = attributes(live, id);
+      const tag = attrs?.[7];
+      entry.occurrences.push({ modelId, expressId: id, globalId: String(attrs?.[0] ?? ''), level, tag: typeof tag === 'string' ? tag : null, number: 0 });
+    };
+    const typed = new Set<number>();
+    let configured: ReturnType<typeof joineryTypesInStore> = [];
+    try { configured = joineryTypesInStore(dataStore, view); } catch { configured = []; }
+    for (const type of configured) {
+      if (!wanted(type.spec.kind)) continue;
+      // The catalogue's current entry wins over the copy stored in the model.
+      const spec = (type.spec.id && fromCatalogue.get(type.spec.id)) || type.spec;
+      const key = spec.id ?? `${modelId}:${type.typeId}`;
+      const entry = byKey.get(key) ?? { key, kind: spec.kind, spec, mark: spec.mark, name: spec.name, width: spec.width, height: spec.height, counts: {}, total: 0, occurrences: [] };
+      byKey.set(key, entry);
+      for (const id of occurrencesOfTypeInStore(dataStore, type.typeId, view)) {
+        if (view?.isDeleted(id)) continue;
+        typed.add(id);
+        count(entry, id);
+      }
+    }
+    // Doors and windows without a configured type, by class and size.
+    const unit = getModelLengthUnitScale(dataStore) || 1;
+    let types: Map<number, number | null> | undefined;
+    for (const { expressId: id, type } of iterateEffectiveEntityIds(dataStore, view, ['IFCDOOR', 'IFCWINDOW', 'IFCDOORSTANDARDCASE', 'IFCWINDOWSTANDARDCASE'])) {
+      if (typed.has(id)) continue;
+      const k: 'door' | 'window' = String(type).toUpperCase().startsWith('IFCDOOR') ? 'door' : 'window';
+      if (!wanted(k)) continue;
+      const attrs = attributes(live, id);
+      if (!attrs) continue;
+      // Mapped to a catalogue entry by the project (`joinery-mapping.ts`): listed with that entry.
+      types ??= typeIndex(live);
+      const mapped = drawnJoineryOf(live, id, project, types)?.entry;
+      const mappedSpec = mapped?.id ? fromCatalogue.get(mapped.id) : undefined;
+      if (mappedSpec?.id) {
+        const entry = byKey.get(mappedSpec.id) ?? { key: mappedSpec.id, kind: mappedSpec.kind, spec: mappedSpec, mark: mappedSpec.mark, name: mappedSpec.name, width: mappedSpec.width, height: mappedSpec.height, counts: {}, total: 0, occurrences: [] };
+        byKey.set(mappedSpec.id, entry);
+        count(entry, id);
+        continue;
+      }
+      const height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
+      const size = Number.isFinite(width) && Number.isFinite(height) ? `${Math.round(width * 1000)}×${Math.round(height * 1000)}` : '?';
+      const key = `untyped:${k}:${size}`;
+      const entry = byKey.get(key) ?? {
+        key, kind: k, spec: null, mark: '—', name: k === 'door' ? 'Door' : 'Window',
+        width: Number.isFinite(width) ? width : 0, height: Number.isFinite(height) ? height : 0, counts: {}, total: 0, occurrences: [],
+      };
+      byKey.set(key, entry);
+      count(entry, id);
+    }
+  }
+  // Catalogue types not placed yet still belong in the schedule (with no count).
+  for (const spec of fromCatalogue.values()) {
+    if (!spec.id || byKey.has(spec.id) || !wanted(spec.kind)) continue;
+    byKey.set(spec.id, { key: spec.id, kind: spec.kind, spec, mark: spec.mark, name: spec.name, width: spec.width, height: spec.height, counts: {}, total: 0, occurrences: [] });
+  }
+  const entries = [...byKey.values()]
+    .filter((e) => e.total > 0 || e.spec)
+    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'window' ? -1 : 1) || (a.spec ? 0 : 1) - (b.spec ? 0 : 1)
+      || a.mark.localeCompare(b.mark, undefined, { numeric: true }) || a.width - b.width);
+  markUntyped(entries);
+  const levels = [...levelElevation.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name);
+  if (entries.some((e) => e.counts['—'])) levels.push('—');
+  // Number each type's occurrences: lowest level first, then by model and id, so the numbering is stable.
+  const order = new Map(levels.map((l, i) => [l, i]));
+  for (const e of entries) {
+    e.occurrences.sort((a, b) => (order.get(a.level) ?? 99) - (order.get(b.level) ?? 99) || a.modelId.localeCompare(b.modelId) || a.expressId - b.expressId);
+    e.occurrences.forEach((o, i) => { o.number = i + 1; });
+  }
+  return { entries, levels };
+}

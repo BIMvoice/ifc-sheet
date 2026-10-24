@@ -30,6 +30,11 @@
       "import": "./dist/readiness-read.js",
       "default": "./dist/readiness-read.js"
     },
+    "./project": {
+      "types": "./dist/project.d.ts",
+      "import": "./dist/project.js",
+      "default": "./dist/project.js"
+    },
     "./headless": {
       "types": "./dist/headless.d.ts",
       "import": "./dist/headless.js",
@@ -43,9 +48,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ifc-lite/create": "workspace:^",
     "@ifc-lite/data": "workspace:^",
     "@ifc-lite/drawing-2d": "workspace:^",
     "@ifc-lite/geometry": "workspace:^",
+    "@ifc-lite/mutations": "workspace:^",
     "@ifc-lite/parser": "workspace:^",
     "jspdf": "^4.2.1"
   },

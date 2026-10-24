@@ -1448,6 +1448,9 @@ importers:
 
   packages/ifcsheet:
     dependencies:
+      '@ifc-lite/create':
+        specifier: workspace:^
+        version: link:../create
       '@ifc-lite/data':
         specifier: workspace:^
         version: link:../data
@@ -1457,6 +1460,9 @@ importers:
       '@ifc-lite/geometry':
         specifier: workspace:^
         version: link:../geometry
+      '@ifc-lite/mutations':
+        specifier: workspace:^
+        version: link:../mutations
       '@ifc-lite/parser':
         specifier: workspace:^
         version: link:../parser

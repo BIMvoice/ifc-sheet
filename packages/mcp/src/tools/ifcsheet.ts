@@ -16,6 +16,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { describeReadiness, paperLabel, paperOf } from '@bimvoice/ifcsheet';
+import type { ProjectFacts } from '@bimvoice/ifcsheet/project';
 import type { Tool } from './types.js';
 import { okResult } from './util.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
@@ -171,27 +172,62 @@ export const ifcsheetExportPdf: Tool = {
   },
 };
 
+/** The saved project a check reads, from `project_path` (a file on the server) or `project_json` (its text); undefined when neither is given. */
+async function projectOf(input: Record<string, unknown>, ctx: Parameters<Tool['handler']>[1]): Promise<{ source: string; project: ProjectFacts } | undefined> {
+  const { project_path: path, project_json: json } = input;
+  if (path !== undefined && json !== undefined) {
+    throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'Give project_path or project_json, not both.' });
+  }
+  if (path === undefined && json === undefined) return undefined;
+  if (path !== undefined && typeof path !== 'string') throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'project_path must be a string.' });
+  if (json !== undefined && typeof json !== 'string') throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'project_json must be a string: the text of the project file.' });
+  let source: string;
+  let text: string;
+  if (typeof path === 'string') {
+    source = await resolveSafePath(path, ctx, 'read');
+    try {
+      text = await readFile(source, 'utf8');
+    } catch (err) {
+      throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: `Cannot read '${source}': ${(err as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (err as Error).message}` });
+    }
+  } else {
+    source = 'project_json';
+    text = json as string;
+  }
+  const { readProjectFile } = await import('@bimvoice/ifcsheet/headless');
+  try {
+    return { source, project: readProjectFile(text) };
+  } catch (err) {
+    throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: `${source} cannot be used as a project: ${(err as Error).message}` });
+  }
+}
+
 export const ifcsheetCheckReadiness: Tool = {
   name: 'ifcsheet_check_readiness',
   description:
-    'Say what an opened model lacks that the drawing set reads (building storeys, rooms, materials, quantity sets, unique GlobalIds) and which drawings or schedules are weaker for it. Returns ready (true when nothing would weaken the drawings) and the findings, each with its kind, what is missing, what is weaker (plain English) and the counts. The same report as `ifcsheet check`. Needs a model_id from ifcsheet_open_model.',
+    'Say what an opened model lacks that the drawing set reads (building storeys, rooms, materials, quantity sets, unique GlobalIds) and which drawings or schedules are weaker for it. Returns ready (true when nothing would weaken the drawings) and the findings, each with its kind, what is missing, what is weaker (plain English) and the counts. The same report as `ifcsheet check`. Needs a model_id from ifcsheet_open_model. Optionally also reads a saved IfcSheet project (project_path, or project_json with the file\'s text): then a schedule split into parts is checked as the app checks it, for an element listed in more than one part or in none (kinds subReportDuplicates and subReportGaps), using the project\'s joinery catalogue and symbol mapping.',
   scope: 'read',
   inputSchema: {
     type: 'object',
-    properties: { model_id: MODEL_ID },
+    properties: {
+      model_id: MODEL_ID,
+      project_path: { type: 'string', description: 'Path to a saved project (.ifclite-project.json) on the server (must be inside the allowed paths). Give this or project_json, or neither to check the model alone.' },
+      project_json: { type: 'string', description: 'The text of a saved project file. Give this or project_path.' },
+    },
     required: ['model_id'],
     additionalProperties: false,
   },
   async handler(input, ctx) {
     const entry = getSheetModel(ctx, input.model_id as string);
-    const { readinessOfModel } = await import('@bimvoice/ifcsheet/headless');
-    const findings = readinessOfModel(entry.model).map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
+    const read = await projectOf(input, ctx);
+    const { readinessWithProject } = await import('@bimvoice/ifcsheet/headless');
+    const findings = readinessWithProject(entry.model, read?.project, entry.id).map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
     const ready = findings.length === 0;
     return okResult(
       ready
         ? `Model ${entry.id} has what the drawing set reads: storeys, rooms, materials, quantities.`
         : `Model ${entry.id} lacks ${findings.length} thing${findings.length === 1 ? '' : 's'} the drawings read: ${findings.map((f) => f.missing).join(' ')}`,
-      { model_id: entry.id, ready, findings },
+      { model_id: entry.id, ...(read ? { project: read.source } : {}), ready, findings },
     );
   },
 };

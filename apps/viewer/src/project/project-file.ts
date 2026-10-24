@@ -36,9 +36,9 @@ import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
-import { readSubReport } from '@bimvoice/ifcsheet';
+import { readSchedule } from '@bimvoice/ifcsheet';
 import { readTagFields } from '@/tagfields/tag-fields-file';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
+import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
 import { HEX, WEIGHTS, readGraphics, readPhaseSource } from './view-graphics-file';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
@@ -235,7 +235,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     ...(raw.joineryMapping !== undefined ? { joineryMapping: readJoineryMapping(raw.joineryMapping) } : {}),
     elementTypes: readElementTypeList(raw.elementTypes),
     currentTypes: readCurrentTypes(raw.currentTypes),
-    schedules: list('schedules').flatMap((v) => readSchedule(v)),
+    schedules: list('schedules').flatMap((v) => readSchedule(v) ?? []),
     structureProfiles: readStructureProfileList(raw.structureProfiles),
     civilDrawings: list('civilDrawings').flatMap((v) => readCivilDrawing(v)),
     typicalSections: list('typicalSections').flatMap((v) => readTypicalSection(v)),
@@ -342,13 +342,3 @@ function readCivilDrawing(raw: unknown): ProjectCivilDrawing[] {
   return [out];
 }
 
-function readSchedule(raw: unknown): ProjectSchedule[] {
-  if (!isObject(raw) || !isString(raw.id)) return [];
-  const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' || raw.kind === 'finishes' || raw.kind === 'register' || raw.kind === 'urban' ? raw.kind : 'all';
-  const out: ProjectSchedule = { id: raw.id, name: isString(raw.name) && raw.name ? raw.name : 'Schedule', kind, createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0 };
-  if (typeof raw.scale === 'number' && raw.scale > 0) out.scale = raw.scale;
-  // A project saved before sub-reports has no `sub`: it stays an ordinary schedule. Only a joinery list can be split.
-  const sub = readSubReport(raw.sub);
-  if (sub && (kind === 'door' || kind === 'window' || kind === 'all')) out.sub = sub;
-  return [out];
-}

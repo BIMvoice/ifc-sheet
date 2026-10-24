@@ -15,9 +15,11 @@
  * and commit a file saved at the old version beside `fixtures/`.
  */
 
+import { PROJECT_FILE_VERSION } from '@bimvoice/ifcsheet';
 import type { TranslatableMessage } from '@/i18n/types';
 
-export const PROJECT_FILE_VERSION = 1;
+// One copy, with the headless project reader (`@bimvoice/ifcsheet`); a bump is made there.
+export { PROJECT_FILE_VERSION, declaredVersion } from '@bimvoice/ifcsheet';
 
 export type RawProject = Record<string, unknown>;
 export type ProjectMigration = (doc: RawProject) => RawProject;
@@ -37,12 +39,6 @@ export class ProjectFileTooNewError extends Error {
     this.supported = supported;
     this.translatable = { labelKey: 'project.file.tooNew', params: { found, supported } };
   }
-}
-
-/** The version a file declares: a whole number from 1, or 1 when it declares none. Null when it declares something else. */
-export function declaredVersion(raw: RawProject): number | null {
-  if (raw.version === undefined) return 1;
-  return typeof raw.version === 'number' && Number.isInteger(raw.version) && raw.version >= 1 ? raw.version : null;
 }
 
 /**

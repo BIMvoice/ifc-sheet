@@ -13,7 +13,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { generateDefaultSet } from './index.js';
-import { exportDxf, exportPdf, openModel, readinessOfModel, sheetGraphics } from './headless.js';
+import { exportDxf, exportPdf, openModel, readProjectFile, readinessWithProject, sheetGraphics, type ProjectFacts } from './headless.js';
 import { describeReadiness } from './readiness.js';
 
 /** Where `run` writes its messages; defaults to the process streams. */
@@ -34,7 +34,7 @@ const USAGE = `ifcsheet: drawing sets from IFC models
 
 Usage:
   ifcsheet build <model.ifc> --out <set.pdf> [--dxf <dir>] [--name <project name>]
-  ifcsheet check <model.ifc> [--json]
+  ifcsheet check <model.ifc> [--project <file>] [--json]
 
 Commands:
   build   Lay out the starting drawing set of the model (a plan per level, the
@@ -42,13 +42,16 @@ Commands:
           sheet. With --dxf, also write one DXF per sheet into that directory.
   check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
-          weaker for it. Plain English, or JSON with --json.
+          weaker for it. Plain English, or JSON with --json. With --project, also what the
+          saved project's split schedules get wrong: an element listed in more than one
+          part, or in no part.
 
 Options:
   --out <file>     The PDF to write (required for build).
   --dxf <dir>      Also write a DXF per sheet into this directory (created if absent).
   --name <name>    The project name for the title blocks (default: the model's).
-  --json           Print the check as JSON: { file, ready, findings: [{ kind, missing, effect, params }] }.
+  --project <file> A saved project (.ifclite-project.json) for check: its schedules, joinery catalogue and symbol mapping.
+  --json           Print the check as JSON: { file, ready, findings: [{ kind, missing, effect, params }] } (with --project, also project).
   -h, --help       Show this help.
   -v, --version    Show the version.
 
@@ -110,7 +113,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 }
 
 /** `ifcsheet check`: exit 0 when the model lacks nothing the drawings read, 1 when something would weaken them. */
-async function check(file: string, json: boolean, io: CliIo): Promise<number> {
+async function check(file: string, json: boolean, projectFile: string | undefined, io: CliIo): Promise<number> {
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await readFile(file));
@@ -118,10 +121,26 @@ async function check(file: string, json: boolean, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: cannot read ${file}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
     return EXIT.failed;
   }
+  let project: ProjectFacts | undefined;
+  if (projectFile !== undefined) {
+    let projectText: string;
+    try {
+      projectText = await readFile(projectFile, 'utf8');
+    } catch (error) {
+      io.stderr(`ifcsheet: cannot read ${projectFile}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
+      return EXIT.failed;
+    }
+    try {
+      project = readProjectFile(projectText);
+    } catch (error) {
+      io.stderr(`ifcsheet: ${projectFile} cannot be used as a project: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
   // The counts read the entity tables, not the meshes: no wasm, and a model with no geometry is still reported on.
-  const findings = readinessOfModel(await openModel(bytes, { geometry: false })).map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
+  const findings = readinessWithProject(await openModel(bytes, { geometry: false }), project).map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
   if (json) {
-    io.stdout(`${JSON.stringify({ file, ready: findings.length === 0, findings }, null, 2)}\n`);
+    io.stdout(`${JSON.stringify({ file, ...(projectFile !== undefined ? { project: projectFile } : {}), ready: findings.length === 0, findings }, null, 2)}\n`);
   } else if (findings.length === 0) {
     io.stdout(`${file}: the model has what the drawing set reads: storeys, rooms, materials, quantities.\n`);
   } else {
@@ -142,6 +161,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         out: { type: 'string' },
         dxf: { type: 'string' },
         name: { type: 'string' },
+        project: { type: 'string' },
         json: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
@@ -167,11 +187,11 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
   }
   if (command === 'check') {
     if (rest.length !== 1 || values.out || values.dxf || values.name) {
-      io.stderr('ifcsheet check takes one model and --json only: ifcsheet check <model.ifc> [--json]\n');
+      io.stderr('ifcsheet check takes one model, --project and --json only: ifcsheet check <model.ifc> [--project <file>] [--json]\n');
       return EXIT.usage;
     }
     try {
-      return await check(rest[0], values.json === true, io);
+      return await check(rest[0], values.json === true, values.project, io);
     } catch (error) {
       io.stderr(`ifcsheet: check of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;
@@ -179,6 +199,10 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
   }
   if (values.json) {
     io.stderr('ifcsheet build has no --json; it is an option of check.\n');
+    return EXIT.usage;
+  }
+  if (values.project !== undefined) {
+    io.stderr('ifcsheet build has no --project yet: nothing in the starting set reads the project. --project is an option of check.\n');
     return EXIT.usage;
   }
   if (rest.length !== 1 || !values.out) {

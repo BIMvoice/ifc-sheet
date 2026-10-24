@@ -17,7 +17,7 @@
  * neither re-derives it. Pure and generic over the entry shape, like `sub-reports.ts`.
  */
 
-import { subReportData, type SplitData, type SplitEntry, type SubReportFilter } from './sub-reports.js';
+import { canSplit, subReportData, subReportsOf, type ProjectSchedule, type SplitData, type SplitEntry, type SubReportFilter } from './sub-reports.js';
 
 export interface CheckOccurrence {
   level: string;
@@ -203,4 +203,19 @@ export function subReportParams(types: readonly (DuplicateType | GapType)[], sch
   const say = (t: DuplicateType | GapType) => `${t.label}${t.elements.length > 0 ? ` ×${t.elements.length}` : ''}${t.levels.length > 0 ? ` (${t.levels.join(', ')})` : ''}`;
   const list = types.slice(0, SHOWN).map(say).join('; ') + (types.length > SHOWN ? '; …' : '');
   return { schedule, types: types.length, count: elementCount(types), list, ...(types.some((t) => 'parts' in t) ? { parts: unique(types.flatMap((t) => ('parts' in t ? t.parts.map((p) => p.name) : []))).join(', ') } : {}) };
+}
+
+/**
+ * The check of one split schedule: its rows (as `read` gives them, for the schedule's kind) against its parts. Parts read
+ * their parent's whole rows, never a part of a part.
+ */
+export function subReportCheckOf<E extends CheckEntry>(parent: ProjectSchedule, schedules: readonly ProjectSchedule[], read: (kind: 'door' | 'window' | 'all') => SplitData<E>, markWith?: MarkOf<E>): SubReportCheck {
+  const parts = subReportsOf(schedules, parent.id).map((p) => ({ id: p.id, name: p.name, filter: p.sub!.filter }));
+  const data: SplitData<E> = parts.length > 0 ? read(parent.kind as 'door' | 'window' | 'all') : { entries: [], levels: [] };
+  return checkSubReports({ id: parent.id, name: parent.name, data }, parts, markWith);
+}
+
+/** The checks of every schedule that has parts, in the order of the schedules. The app and the headless readiness both gather them here. */
+export function subReportChecksOf<E extends CheckEntry>(schedules: readonly ProjectSchedule[], read: (kind: 'door' | 'window' | 'all') => SplitData<E>, markWith?: MarkOf<E>): SubReportCheck[] {
+  return schedules.filter((s) => canSplit(s) && subReportsOf(schedules, s.id).length > 0).map((s) => subReportCheckOf(s, schedules, read, markWith));
 }

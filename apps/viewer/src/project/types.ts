@@ -7,7 +7,7 @@ import type { TitleBlockParam } from './title-block-params';
 import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
-import type { SubReport } from '@bimvoice/ifcsheet';
+import type { ProjectSchedule } from '@bimvoice/ifcsheet';
 import type { UrbanSettings } from '@/urban/indicators';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
@@ -53,18 +53,8 @@ export type ProjectViewPatch = ProjectView extends infer V
   ? V extends ProjectView ? Partial<Omit<V, 'id' | 'kind'>> : never
   : never;
 
-/** A joinery schedule (door / window list): a project document of its own, placeable on sheets. */
-export interface ProjectSchedule {
-  id: string;
-  name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, the set's own sheets (the drawing register, derived from the sheets on every draw), or the permit's areas and urban indicators (`urban/`). */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register' | 'urban';
-  createdAt: number;
-  /** Scale of its drawings (50 = 1:50). */
-  scale?: number;
-  /** Set when this schedule is a part of another one (#186): the parent's id and what it keeps of the parent's content. Absent: the schedule lists everything its kind lists. Joinery kinds only. */
-  sub?: SubReport;
-}
+/** A joinery schedule (door / window list): a project document of its own, placeable on sheets. The engine's type, so the headless project reader and the app read the same shape. */
+export type { ProjectSchedule } from '@bimvoice/ifcsheet';
 
 export interface ProjectDocument extends EngineDocument {
   /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
