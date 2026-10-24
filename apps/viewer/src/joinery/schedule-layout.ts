@@ -23,7 +23,7 @@ import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
-import { textCellText } from '@bimvoice/ifcsheet';
+import { shownRows, textCellText, textRowId } from '@bimvoice/ifcsheet';
 
 export type SchedulePrim =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number }
@@ -93,20 +93,30 @@ export function operationText(entry: ScheduleEntry, labels: ScheduleLabels): str
 
 interface TableRowSpec { label: string; value: (e: ScheduleEntry) => string; strong?: boolean; /** Typed in by hand (`ScheduleData.textRows`): fitted to its cell instead of shrunk by length. */ text?: boolean }
 
+/**
+ * The rows of the table in the order the schedule's content choice puts them (`shownRows`, the engine's: the layout, and every
+ * reader of the choice, agree). By default: name, size, operation, sill, the count per level, total, U value, fire rating, then the
+ * user's own text rows.
+ */
 function rows(data: ScheduleData, labels: ScheduleLabels): TableRowSpec[] {
-  const out: TableRowSpec[] = [
-    { label: labels.name, value: (e) => e.name },
-    { label: labels.size, value: (e) => `${Math.round(e.width * 1000)} × ${Math.round(e.height * 1000)}` },
-    { label: labels.operation, value: (e) => operationText(e, labels) },
-  ];
-  if (data.entries.some((e) => e.kind === 'window')) out.push({ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(Math.round(e.spec.sillHeight * 1000)) : '—') });
-  for (const level of data.levels) out.push({ label: level, value: (e) => String(e.counts[level] ?? '') });
-  out.push({ label: labels.total, value: (e) => String(e.total), strong: true });
-  out.push({ label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? String(e.spec.props.thermalTransmittance) : '—') });
-  out.push({ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—' });
-  // The user's own rows, after the model's: each type's text by the type's key, so a column that moves takes its text with it.
-  for (const row of data.textRows ?? []) out.push({ label: row.label, value: (e) => textCellText(row, e.key), text: true });
-  return out;
+  const typed = data.textRows ?? [];
+  const model: Record<string, () => TableRowSpec[]> = {
+    name: () => [{ label: labels.name, value: (e) => e.name }],
+    size: () => [{ label: labels.size, value: (e) => `${Math.round(e.width * 1000)} × ${Math.round(e.height * 1000)}` }],
+    operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels) }],
+    sill: () => [{ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(Math.round(e.spec.sillHeight * 1000)) : '—') }],
+    levels: () => data.levels.map((level) => ({ label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? '') })),
+    total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true }],
+    u: () => [{ label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? String(e.spec.props.thermalTransmittance) : '—') }],
+    fire: () => [{ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—' }],
+  };
+  const ids = shownRows(data.content, { windows: data.entries.some((e) => e.kind === 'window'), textIds: typed.map((r) => r.id) });
+  // The user's own rows: each type's text by the type's key, so a column that moves takes its text with it.
+  const own = new Map(typed.map((row) => [textRowId(row.id), row]));
+  return ids.flatMap((id): TableRowSpec[] => {
+    const row = own.get(id);
+    return row ? [{ label: row.label, value: (e) => textCellText(row, e.key), text: true }] : model[id]?.() ?? [];
+  });
 }
 
 /** A dimension line between `a` and `b` (paper mm), its value written above (or left of) the line. */

@@ -15,7 +15,8 @@
  * type with occurrences counted per storey (a door or window type).
  */
 
-import { readScheduleTextRows, type ScheduleTextRow } from './schedule-text.js';
+import { applyContent, contentOf, readScheduleContent, type ContentEntry, type ScheduleContent } from './schedule-content.js';
+import { readScheduleTextRows, textRowsOf, type ScheduleTextRow } from './schedule-text.js';
 
 /** What a sub-report keeps of its parent's content. Absent dimension: no restriction. */
 export interface SubReportFilter {
@@ -112,6 +113,8 @@ export interface ProjectSchedule {
   sub?: SubReport;
   /** Rows of text typed by hand into a joinery schedule (#186): a manufacturer, a remark, a note per type. Cells are keyed by the type's identity, never by column. A sub-report prints its parent's (`textRowsOf`). Absent: none. Joinery kinds only. */
   textRows?: ScheduleTextRow[];
+  /** What a joinery schedule shows and how (#186): its rows and their order, how its types are sorted and numbered. A sub-report prints its parent's (`contentOf`). Absent: the schedule as it always was. Joinery kinds only. */
+  content?: ScheduleContent;
 }
 
 /** Whether a schedule can be split: a joinery list that is not itself a part (parts do not nest: a part is cut from the model's rows). */
@@ -138,5 +141,25 @@ export function readSchedule(raw: unknown): ProjectSchedule | null {
   // Text rows (#186) belong to a joinery list only; a project saved before them has none.
   const textRows = readScheduleTextRows(o.textRows);
   if (textRows && (kind === 'door' || kind === 'window' || kind === 'all')) out.textRows = textRows;
+  // The content choice (#186) belongs to a joinery list only; a project saved before it has none.
+  const content = readScheduleContent(o.content);
+  if (content && (kind === 'door' || kind === 'window' || kind === 'all')) out.content = content;
   return out;
+}
+
+/**
+ * The table of `schedule` from the model's rows for its kind (`whole`): sorted and numbered by its content choice, then cut by its
+ * sub-report filter, with the text rows and the row choice it prints. The one way a joinery schedule's content is assembled, for the
+ * app and for the checks, so every reader sees the same table. Numbering comes before the cut: an element has the same mark in the
+ * schedule and in every part.
+ */
+export function scheduleOf<E extends ContentEntry>(
+  schedules: readonly (Pick<ProjectSchedule, 'id' | 'sub' | 'content'> & { textRows?: ScheduleTextRow[] })[],
+  schedule: Pick<ProjectSchedule, 'id' | 'sub'>,
+  whole: SplitData<E>,
+): SplitData<E> & { textRows?: ScheduleTextRow[]; content?: ScheduleContent } {
+  const content = contentOf(schedules, schedule);
+  const data = subReportData(applyContent(whole, content), schedule.sub?.filter);
+  const textRows = textRowsOf(schedules, schedule);
+  return { ...data, ...(textRows ? { textRows } : {}), ...(content ? { content } : {}) };
 }

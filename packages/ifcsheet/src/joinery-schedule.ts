@@ -20,6 +20,7 @@
 import { getModelLengthUnitScale, joineryTypesInStore, occurrencesOfTypeInStore, readJoineryFlips, readJoineryType, readRelatedLists, type JoinerySpec, type JoineryTypeRead } from '@ifc-lite/create';
 import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
 import { getAttributeNamesForSchema, type IfcDataStore } from '@ifc-lite/parser';
+import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
 import type { ScheduleTextRow } from './schedule-text.js';
 import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 
@@ -58,12 +59,12 @@ export interface ScheduleData {
   levels: string[];
   /** Rows of text typed in by hand, one cell per type by entry key (#186): not read from the model, attached by the app's `scheduleDataOf`. */
   textRows?: ScheduleTextRow[];
+  /** The schedule's content choice, for the layout's row choice (#186): not read from the model, attached by `scheduleOf`. */
+  content?: ScheduleContent;
 }
 
 /** An occurrence's mark: its type's mark and its number (`W1.3`); the type's name and the number for an untyped element. */
-export function occurrenceMark(entry: Pick<ScheduleEntry, 'mark' | 'name'>, o: Pick<ScheduleOccurrence, 'number'>): string {
-  return entry.mark && entry.mark !== '—' ? `${entry.mark}.${o.number}` : `${entry.name}-${o.number}`;
-}
+export const occurrenceMark: (entry: Pick<ScheduleEntry, 'mark' | 'name'>, o: Pick<ScheduleOccurrence, 'number'>) => string = occurrenceMarkOf;
 
 /** A model as the reads see it: the parsed store and, in the app, the edit overlay on top of it. */
 export interface Live { dataStore: IfcDataStore; view: MutablePropertyView | null }
@@ -198,8 +199,16 @@ function markUntyped(entries: ScheduleEntry[]): void {
   }
 }
 
-/** The rows of the joinery schedule of `kind` over `models`, the project's catalogue and mapping applied. */
-export function joineryScheduleData(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind = 'all'): ScheduleData {
+/**
+ * The rows of the joinery schedule of `kind` over `models`, the project's catalogue and mapping applied; with `content`, sorted and numbered
+ * as that choice says (`applyContent`, the one rule), which a schedule saved with a choice prints and a project without one does not.
+ */
+export function joineryScheduleData(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind = 'all', content?: ScheduleContent): ScheduleData {
+  return applyContent(modelRows(models, project, kind), content);
+}
+
+/** The model's rows, in the order and with the marks the models give them. */
+function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind): ScheduleData {
   const byKey = new Map<string, ScheduleEntry>();
   const levelElevation = new Map<string, number>();
   const wanted = (k: 'door' | 'window') => kind === 'all' || kind === k;
