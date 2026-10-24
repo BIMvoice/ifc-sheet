@@ -268,7 +268,8 @@ export function elevationMarkDrafts(input: ElevationMarkInput): DraftEntity[] {
     // Along the outward axis: the arrow's tip, its base, then the label's middle. Across it: the middle of the facade, plus `shift`.
     const half = (ARROW_MM / 2) * paperUnit;
     const label = referenceLabel(ref);
-    const rotation = o.x !== 0 ? Math.PI / 2 : 0;
+    // Bottom to top, the way a plan draws it: a quarter turn the other way is folded about its anchor by `readableDeg`, so it prints a label length from its box (#245).
+    const rotation = o.x !== 0 ? -Math.PI / 2 : 0;
     const labelBox = textBox({ x: 0, y: 0 }, label, textH, rotation);
     const at = (along: number, across: number): Pt => (o.x !== 0 ? { x: along, y: across } : { x: across, y: along });
     const centre = horizontal ? mid.x : mid.y;
