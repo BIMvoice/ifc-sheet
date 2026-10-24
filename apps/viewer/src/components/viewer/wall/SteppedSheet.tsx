@@ -12,7 +12,7 @@
  * sheet" button and the sheet with the Back link (#142).
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, type ComponentProps, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { patchDraftSettings, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { setPlacing, useReviewUi } from '@/review/ui-store';
@@ -31,6 +31,7 @@ import { PrintPreview } from './PrintPreview';
 import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
+import { ScheduleFitOffer } from './ScheduleFitOffer';
 import { SheetCanvas } from './SheetCanvas';
 import { RevisionsCard } from './RevisionsCard';
 import { TitleBlockCard } from './TitleBlockForm';
@@ -59,9 +60,11 @@ interface SteppedSheetProps {
   initialFocus?: string | null;
   /** Step into another sheet (a drawing just added landed there). */
   onStep: (sheetId: string) => void;
+  /** The model's joinery rows (default: the loaded models'); what the offer to split a schedule that does not fit reads. */
+  scheduleRows?: ComponentProps<typeof ScheduleFitOffer>['read'];
 }
 
-export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, onBack, onStep }: SteppedSheetProps) {
+export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, onBack, onStep, scheduleRows }: SteppedSheetProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const sheets = useProjectStore((s) => s.sheets);
@@ -77,6 +80,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [revising, setRevising] = useState(false);
   const [papering, setPapering] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [settingsKey, setSettingsKey] = useState(0);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
@@ -210,7 +214,19 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const open = useCallback((vp: SheetViewport): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
     if (v && v.kind !== '3d') setFocusId(v.id);
-  }, []);
+    // A schedule (or a legend) has no drawing to open: its settings are the card, which comes forward with the name ready to type over.
+    else if (!v) {
+      choose(vp.id);
+      setSettingsKey((k) => k + 1);
+    }
+  }, [choose]);
+  const cardHost = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (settingsKey === 0) return;
+    const name = cardHost.current?.querySelector<HTMLInputElement>('aside input');
+    name?.focus();
+    name?.select();
+  }, [settingsKey]);
   const nudge = useCallback((vp: SheetViewport, steps: number): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
     if (v?.kind === 'plan') nudgeCutHeight(v.id, steps);
@@ -287,7 +303,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
               <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} />
             </div>
           )}
-          <div className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
+          <div ref={cardHost} className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
               : focusView ? null
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
@@ -295,6 +311,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
                   : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
                   : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
           </div>
+          {focusView || tool ? null : <ScheduleFitOffer sheet={sheet} read={scheduleRows} />}
           {adding ? (
             <div className="absolute inset-x-3 bottom-3 flex justify-center">
               <AddDrawing

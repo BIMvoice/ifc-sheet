@@ -5,7 +5,8 @@
 /**
  * A stepped-into sheet to work on: the wheel zooms about the cursor, a drag
  * on empty paper (or with the middle button) pans; a click chooses a drawing
- * (viewport) and a drag moves it; a double-click opens it to draw in; Delete
+ * (viewport) and a drag moves it, snapping to the frame, the title block and the other drawings (guides show while it does, one
+ * drag is one undo step); the arrow keys nudge it 1 mm (10 with Shift); a double-click opens it to draw in; Delete
  * takes it off the sheet; its grips resize the crop (`ViewportHandles`). Alt and the wheel over a drawing move its cut (a
  * plan) or its depth (a section, an elevation). Plain drawing on the paper
  * (lines, text, hatched zones) goes through the same drafting session as a
@@ -20,6 +21,8 @@ import { useAutocadMode } from '@/lib/commands/autocad-mode';
 import { capturePointer } from '@/lib/pointer-capture';
 import { useProjectStore } from '@/project/project-store';
 import { paperOf, removeViewport, updateViewport } from '@/project/sheets';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
+import { NUDGE_MM, nudgeViewport, snapMove, snapTargets, snapTolerance, type SnapLine } from '@/project/viewport-snap';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { CommandLine } from '../drafting/CommandLine';
 import { useDraftingKeys } from '../drafting/useDraftingKeys';
@@ -30,6 +33,7 @@ import { isResizable } from '@/project/viewport-resize';
 import { ViewportHandles } from './ViewportHandles';
 import { CommentLayer } from './CommentLayer';
 import { WallSheet } from './WallSheet';
+import { keysBelongElsewhere } from './wall-key-bus';
 import { isDraftingKey } from '../drafting/drafting-key-match';
 import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
 
@@ -49,6 +53,7 @@ interface SheetCanvasProps {
 }
 
 const ZOOM = { min: 0.05, max: 40 } as const;
+const ARROWS: Record<string, { x: number; y: number }> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } };
 
 export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function SheetCanvas({ sheet, sheetContent, chosenId, onChoose, onOpen, onNudge, fitKey }, paperRef) {
   const host = useRef<HTMLDivElement>(null);
@@ -127,7 +132,37 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
     return () => window.removeEventListener('keydown', onKey);
   }, [chosenId, sheet.id, onChoose]);
 
-  const drag = useRef<{ kind: 'pan' | 'move'; sx: number; sy: number; start: Pan; vp?: SheetViewport } | null>(null);
+  // The arrow keys nudge the chosen drawing by a whole millimetre (10 with Shift), one undo step a press. They belong to
+  // anything else that wants them: a text field (the command line included, as `keysBelongElsewhere` says for AutoCAD mode), a
+  // panel with its own keys (a focused grip resizes), a running tool or a drafted selection, an open overlay.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const arrow = ARROWS[e.key];
+      const vp = chosenId ? (sheet.viewports ?? []).find((v) => v.id === chosenId) : undefined;
+      if (!arrow || !vp || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (keysBelongElsewhere(e.target) || openKeyboardOverlay()) return;
+      if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
+      e.preventDefault();
+      const step = e.shiftKey ? NUDGE_MM.big : NUDGE_MM.step;
+      nudgeViewport(sheet.id, vp, arrow.x * step, arrow.y * step);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [chosenId, sheet]);
+
+  const drag = useRef<{ kind: 'pan' | 'move'; sx: number; sy: number; start: Pan; vp?: SheetViewport; sheet?: ProjectSheet; targets?: SnapLine[]; last?: { x: number; y: number } } | null>(null);
+  const [guides, setGuides] = useState<SnapLine[]>([]);
+  const endDrag = (): void => {
+    const d = drag.current;
+    drag.current = null;
+    setGuides([]);
+    // The live drag wrote the sheet step by step; the history gets the one change, from the start to the end.
+    if (d?.kind === 'move' && d.vp && d.sheet && d.last) {
+      const { vp: from, last } = d;
+      useProjectStore.setState((s) => ({ sheets: s.sheets.map((o) => (o.id === d.sheet?.id ? d.sheet : o)) }));
+      runAsOneUndoStep(() => updateViewport(sheet.id, from.id, last));
+    }
+  };
   // The chosen drawing shows grips to resize its crop, unless a tool is drawing (its clicks are the tool's) or the drawing is not generated yet:
   // the crop's centre is stored against where the drawing is on the paper, which is unknown until it exists.
   const chosenVp = (sheet.viewports ?? []).find((v) => v.id === chosenId) ?? null;
@@ -153,7 +188,8 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           if (e.button === 0 && drafting.down(p, e.shiftKey)) return;
           const vp = e.button === 0 ? viewportAt(p) : null;
           if (vp) onChoose(vp.id);
-          drag.current = { kind: vp ? 'move' : 'pan', sx: e.clientX, sy: e.clientY, start: pan, vp: vp ?? undefined };
+          const others = vp ? (sheet.viewports ?? []).filter((o) => o.id !== vp.id).map((o) => ({ x: o.x, y: o.y, ...sheetContent.boxOf(o) })) : [];
+          drag.current = { kind: vp ? 'move' : 'pan', sx: e.clientX, sy: e.clientY, start: pan, vp: vp ?? undefined, sheet, targets: vp ? snapTargets(sheet, others) : undefined };
         }}
         onPointerMove={(e) => {
           last.current = toPaper(e.clientX, e.clientY);
@@ -163,9 +199,15 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           const dx = e.clientX - d.sx;
           const dy = e.clientY - d.sy;
           if (d.kind === 'pan') setPan({ ...d.start, x: d.start.x + dx, y: d.start.y + dy });
-          else if (d.vp && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) updateViewport(sheet.id, d.vp.id, { x: d.vp.x + dx / pan.k, y: d.vp.y + dy / pan.k });
+          else if (d.vp && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
+            const snapped = snapMove({ ...sheetContent.boxOf(d.vp), x: d.vp.x + dx / pan.k, y: d.vp.y + dy / pan.k }, d.targets ?? [], snapTolerance(pan.k));
+            d.last = { x: snapped.x, y: snapped.y };
+            setGuides(snapped.guides);
+            updateViewport(sheet.id, d.vp.id, d.last);
+          }
         }}
-        onPointerUp={() => { drag.current = null; }}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
         onDoubleClick={(e) => {
           const vp = viewportAt(toPaper(e.clientX, e.clientY));
           if (vp && !runningCommand()) onOpen(vp);
@@ -174,6 +216,13 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
         <div className="absolute left-0 top-0" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
           <WallSheet ref={paperRef} sheet={sheet} width={paper.w * pan.k} selectedViewportId={chosenId} sheetContent={sheetContent} pinned={false} />
         </div>
+        {guides.length > 0 ? (
+          <svg data-snap-guides className="pointer-events-none absolute left-0 top-0 overflow-visible" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }} width={paper.w * pan.k} height={paper.h * pan.k} viewBox={`0 0 ${paper.w} ${paper.h}`} aria-hidden="true">
+            {guides.map((g) => (
+              <line key={`${g.axis}${g.at}`} data-snap-guide={g.axis} x1={g.axis === 'x' ? g.at : g.from} x2={g.axis === 'x' ? g.at : g.to} y1={g.axis === 'x' ? g.from : g.at} y2={g.axis === 'x' ? g.to : g.at} stroke="#e11d8f" strokeWidth={1} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />
+            ))}
+          </svg>
+        ) : null}
         {drafting.overlay}
         {resizing ? <ViewportHandles key={resizing.id} sheet={sheet} vp={resizing} box={sheetContent.boxOf(resizing)} drawing={chosenDrawing} pan={pan} min={chosenFit?.min} /> : null}
         <CommentLayer sheet={sheet} pan={pan} toPaper={toPaper} />
