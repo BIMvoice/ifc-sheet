@@ -47,6 +47,6 @@ describe('describeReadiness', () => {
       expect(effect, f.kind).not.toMatch(/^ready\.|\{/);
     }
     expect(describeReadiness(all[3]).missing).toBe('4 of 10 elements have no material.');
-    expect(Object.keys(READINESS_EN)).toHaveLength(12);
+    expect(Object.keys(READINESS_EN)).toHaveLength(16);
   });
 });

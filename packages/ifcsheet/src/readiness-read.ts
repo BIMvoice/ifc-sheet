@@ -12,6 +12,7 @@
  */
 
 import { getInheritanceChainAcrossSchemas, resolveAllMaterialDefIds, type IfcDataStore } from '@ifc-lite/parser';
+import type { SubReportCheck } from './sub-report-check.js';
 import { modelReadiness, type ModelFacts, type ReadinessFinding } from './readiness.js';
 
 /**
@@ -71,6 +72,6 @@ export function readModelFacts(sources: Iterable<FactSource>): ModelFacts {
 }
 
 /** The readiness findings of one opened model (`openModel`'s result), counted and judged: what the command line and the MCP tool report. */
-export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: readonly unknown[] }): ReadinessFinding[] {
-  return modelReadiness(readModelFacts([{ store: model.dataStore, storeys: model.storeys.length }]));
+export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: readonly unknown[] }, subReports: readonly SubReportCheck[] = []): ReadinessFinding[] {
+  return modelReadiness(readModelFacts([{ store: model.dataStore, storeys: model.storeys.length }]), subReports);
 }

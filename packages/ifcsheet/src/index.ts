@@ -46,6 +46,10 @@ export {
   DEFAULT_SCHEME, NUMBER_GROUPS, SCHEME_PRESETS, SEQUENTIAL_SCHEME, formatNumber, nextNumber, numberAt, numberGroupOf, numberSheets, planRenumber,
   readNumberingScheme, registerNumberIn, registerSlot, renumbered, typedBeforeSchemes, type OverrideMode, type RenumberRow,
 } from './numbering.js';
+export {
+  checkSubReports, elementCount, isClean, occurrenceMarkOf, subReportParams, typeLabel, type CheckEntry, type CheckOccurrence, type CheckPart, type DuplicateType, type ElementRef,
+  type GapType, type MarkOf, type PartRef, type SubReportCheck, type SubReportFix,
+} from './sub-report-check.js';
 export { readSubReport, readSubReportFilter, subReportData, type SplitData, type SplitEntry, type SubReport, type SubReportFilter } from './sub-reports.js';
 export { SHEET_SCALES, fitViewportBox, mmPerMetre, paperOf } from './viewport-fit.js';
 export {

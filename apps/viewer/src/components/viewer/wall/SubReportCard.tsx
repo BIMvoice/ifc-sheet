@@ -9,16 +9,14 @@
  * placed on another sheet from the card's place list.
  */
 
-import { useMemo } from 'react';
 import { useTranslation } from '@/i18n';
-import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { hangSchedule } from '@/project/drawing-set-actions';
 import { addSubReport, canSplit, setSubReportFilter, splitByKind, splitByLevel, subReportsOf, toggled } from '@/joinery/schedules';
-import { scheduleData } from '@/joinery/schedule-data';
 import type { ProjectSchedule } from '@/project/types';
 import { stepInto } from './wall-nav';
 import { WALL_PILL } from './wall-type';
+import { SubReportChecks, useParentRows } from './SubReportChecks';
 
 const quiet = WALL_PILL;
 const KINDS = ['door', 'window'] as const;
@@ -33,16 +31,6 @@ function Toggle({ label, on, onClick }: { label: string; on: boolean; onClick: (
       {label}
     </button>
   );
-}
-
-/** The model's rows for the schedule's kind, whole: the choices a sub-report picks from. */
-function useParentRows(kind: ProjectSchedule['kind']) {
-  const mutationVersion = useViewerStore((s) => s.mutationVersion);
-  const models = useViewerStore((s) => s.models);
-  const catalogue = useProjectStore((s) => s.joineryTypes);
-  const mapping = useProjectStore((s) => s.joineryMapping);
-  // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
-  return useMemo(() => scheduleData(kind as 'door' | 'window' | 'all'), [kind, mutationVersion, models, catalogue, mapping]);
 }
 
 /** Hang each new sub-report on its own sheet and step into the first. */
@@ -69,6 +57,7 @@ export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
       <div data-owns-keys className="mt-4 border-t border-sky-300/20 pt-4">
         <p className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.sub.title')}</p>
         {parent ? <p className="m-0 mt-1 text-xs text-sky-200">{t('wall.sub.partOf', { name: parent.name })}</p> : null}
+        <SubReportChecks schedule={schedule} />
         {schedule.kind === 'all' ? (
           <fieldset className="m-0 mt-3 border-0 p-0">
             <legend className="p-0 text-xs text-sky-200">{t('wall.sub.kinds')}</legend>
@@ -121,6 +110,7 @@ export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
       {parts.length === 0 ? <p className="m-0 mt-1 text-xs text-sky-200">{t('wall.sub.none')}</p> : (
         <ul className="m-0 mt-1 list-none p-0 text-sm text-sky-100">{parts.map((p) => <li key={p.id}>{p.name}</li>)}</ul>
       )}
+      <SubReportChecks schedule={schedule} />
       <div className="mt-3 flex flex-wrap gap-2">
         {schedule.kind === 'all' ? <button type="button" className={quiet} onClick={() => placeAll(splitByKind(schedule.id, { door: t('wall.sub.doors'), window: t('wall.sub.windows') }))}>{t('wall.sub.byKind')}</button> : null}
         {data.levels.length > 1 ? <button type="button" className={quiet} onClick={() => placeAll(splitByLevel(schedule.id, data.levels))}>{t('wall.sub.byLevel')}</button> : null}

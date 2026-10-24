@@ -277,4 +277,10 @@ export const wallRo = {
   'wall.sub.types': 'Tipuri',
   'wall.sub.all': 'Toate',
   'wall.sub.keeps': '{count} din {total} tipuri',
+  'wall.check.title': 'Dubluri și goluri',
+  'wall.check.ok': 'Fiecare element este într-o singură parte.',
+  'wall.check.duplicates': 'Mai multe părți conțin același tip sau element ({parts}). Tipuri: {types}, elemente: {count}: {list}.',
+  'wall.check.gaps': 'Unele elemente nu sunt în nicio parte. Tipuri: {types}, elemente: {count}: {list}.',
+  'wall.check.fixAdd': 'Adaugă tipurile lipsă în „{part}” ({types})',
+  'wall.check.fixKeep': 'Păstrează tipurile repetate doar în „{part}” ({types})',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;
