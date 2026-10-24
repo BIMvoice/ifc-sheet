@@ -11,9 +11,12 @@
  * {@link setNameResolver}; the web app installs its translation catalogue
  * (`apps/viewer/src/i18n/registry.ts`), whose English names are these.
  *
- * Also its own entry, `@bimvoice/ifcsheet/names`: it imports nothing, so a
- * translation catalogue can install its resolver without loading the engine.
+ * Also its own entry, `@bimvoice/ifcsheet/names`: it imports nothing but the
+ * pure number formatter it re-exports, so a translation catalogue can install
+ * its resolver without loading the engine.
  */
+
+export { sheetNumber, sheetLevel, type SheetNumberOptions, type SheetLevelOptions } from './sheet-number.js';
 
 export const ENGINE_NAMES_EN = {
   'names.project.untitled': 'Untitled project',

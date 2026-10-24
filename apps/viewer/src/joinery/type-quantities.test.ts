@@ -15,7 +15,7 @@ import { collectTypeElements } from './type-quantities-models';
 import { typeQuantitiesCsv, typeQuantityLines, type TypeQuantityLabels } from './type-quantities-layout';
 
 const LABELS: TypeQuantityLabels = {
-  title: 'Quantities', type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³',
+  locale: 'en', title: 'Quantities', type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³',
   noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey',
 };
 

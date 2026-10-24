@@ -16,6 +16,7 @@ import { labelElementByGlobalId } from '@/labels/label-element';
 import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
 import { planTagAll } from '@/tagall/plan';
+import { getLocale } from '@/i18n';
 import { MARK_TYPE_ID, ROOM_TYPE_ID, TAGALL_TYPES } from '@/tagall/types';
 import { editDrafts } from '../draft-store';
 import type { DraftCommandDef, DraftContext } from './types';
@@ -46,7 +47,7 @@ export function tagAll(ctx: DraftContext, read: ElementReader): void {
     targets: labelTargets(elements),
     rooms: ctx.rooms(),
     existing: ctx.entities(),
-    placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId) },
+    placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId), locale: getLocale() },
     types: { mark: types.mark, room: types.room },
     read,
     crop: ctx.view()?.detail,

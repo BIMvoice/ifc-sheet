@@ -9,6 +9,7 @@
  */
 
 import { escapeCsvCell } from '@ifc-lite/export';
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
 import type { TakeoffRow } from './material-takeoff';
@@ -21,8 +22,8 @@ export interface TakeoffLabels {
   area: string;
   usedIn: string;
   total: string;
-  /** How the table's figures are written as text on the sheet. Default `toFixed`; the CSV never uses it. */
-  number?: (value: number, digits: number) => string;
+  /** The language the figures on paper are written in; the CSV never uses it. */
+  locale: string;
 }
 
 const COLUMNS = [62, 18, 24, 24, 70] as const;
@@ -31,7 +32,7 @@ const COLUMNS = [62, 18, 24, 24, 70] as const;
 const plainClass = (c: string): string => c.replace(/^Ifc/, '');
 
 export function layoutMaterialTakeoff(rows: readonly TakeoffRow[], labels: TakeoffLabels, paging: PagedOptions = {}): ScheduleLayout {
-  const fixed = (v: number | null, digits = 2): string => (v === null ? '–' : labels.number ? labels.number(v, digits) : v.toFixed(digits));
+  const fixed = (v: number | null, digits = 2): string => (v === null ? '–' : sheetNumber(labels.locale, v, digits));
   const sum = (key: 'volume' | 'area'): number | null => (rows.some((r) => r[key] !== null) ? rows.reduce((s, r) => s + (r[key] ?? 0), 0) : null);
   const table: string[][] = [
     ...rows.map((r) => [r.material, String(r.elements), fixed(r.volume), fixed(r.area), r.classes.map(plainClass).join(', ')]),

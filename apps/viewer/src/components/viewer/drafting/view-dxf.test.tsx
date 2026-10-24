@@ -17,6 +17,9 @@ import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectView } from '@/project/types';
 import { COORDINATE_POINT_ID } from '@/siteplan/live-symbols';
 import { liveSymbolContext } from '@/siteplan/site-frame';
+import { registerLocale, setLocale } from '@/i18n';
+import ro from '@/i18n/locales/ro';
+import { checkCatalogue } from '@/i18n/catalogue-problems';
 import { viewDxf } from './view-dxf';
 
 const PLAN: SectionPlaneConfig = { axis: 'y', position: 1.2, flipped: false };
@@ -51,5 +54,32 @@ describe('a view\'s DXF (#135 review)', () => {
     }
     // No georeference and no frame shift: the label is the point's project x / y.
     assert.ok(texts.includes('X 3.00') && texts.includes('Y 4.00'), `texts in the DXF: ${texts.join(' | ')}`);
+  });
+  it('writes the dimension and level texts in the language and every coordinate the same (#269)', () => {
+    registerLocale('ro', checkCatalogue(ro).catalogue);
+    const dimension: DraftEntity = { id: 'd', viewId: 'v', layerId: 'L', params: {}, shape: { type: 'dimension', variant: 'aligned', a: { x: 0, y: 0 }, b: { x: 3.25, y: 0 }, at: { x: 0, y: 1 }, height: 0.25 } };
+    const level: DraftEntity = { id: 'l', viewId: 'v', layerId: 'L', params: {}, shape: { type: 'level', p: { x: 5, y: 2 }, value: 3.06, height: 0.25 } as DraftEntity['shape'] };
+    const dxfIn = (locale: string) => {
+      setLocale(locale);
+      try {
+        const bytes = viewDxf({ view, drawing: null, axis: 'down', drafts: [dimension, level], layers: [layer], extraPatterns: [], overlays: [], symbols: null });
+        const lines = new TextDecoder('latin1').decode(bytes).split(/\r?\n/);
+        const pairs: [string, string][] = [];
+        for (let i = 0; i + 1 < lines.length; i += 2) pairs.push([lines[i].trim(), lines[i + 1]]);
+        return pairs;
+      } finally {
+        setLocale('en');
+      }
+    };
+    const romanian = dxfIn('ro');
+    const english = dxfIn('en');
+    const textsOf = (pairs: [string, string][]) => pairs.filter(([c]) => c === '1').map(([, v]) => v);
+    assert.ok(textsOf(romanian).includes('3,25') && textsOf(romanian).includes('+3,06'), textsOf(romanian).join(' | '));
+    assert.ok(textsOf(english).includes('3.25') && textsOf(english).includes('+3.06'), textsOf(english).join(' | '));
+    // Group codes, coordinates and every other value are the same numbers in both: only the TEXT strings differ.
+    const strip = (pairs: [string, string][]) => pairs.map(([c, v]) => (c === '1' ? [c, ''] : [c, v]));
+    assert.deepEqual(strip(romanian), strip(english));
+    assert.ok(romanian.some(([c, v]) => c === '10' && /^-?\d+\.\d+$/.test(v)), 'coordinates keep the decimal point');
+    assert.ok(!romanian.some(([c, v]) => c !== '1' && /\d,\d/.test(v)), 'no comma outside a TEXT string');
   });
 });

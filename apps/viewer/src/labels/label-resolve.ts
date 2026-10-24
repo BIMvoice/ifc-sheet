@@ -104,11 +104,11 @@ export const readField = (ref: FieldRef, el: LabelElement): unknown => readField
 
 const LENGTH_UNITS: Record<string, number> = { mm: 0.001, cm: 0.01, m: 1, km: 1000 };
 
-function readFormatted(field: TemplateField, el: LabelElement): string | null {
+function readFormatted(field: TemplateField, el: LabelElement, locale: string): string | null {
   const refs = [field.ref, ...(field.alternatives ?? [])];
   const { value, length } = refs.map((r) => readFieldValue(r, el)).find((v) => present(v.value)) ?? readFieldValue(field.ref, el);
   const factor = length && field.format ? LENGTH_UNITS[field.format.unit] : undefined;
-  return formatValue(factor !== undefined && typeof value === 'number' ? value / factor : value, field.format);
+  return formatValue(factor !== undefined && typeof value === 'number' ? value / factor : value, field.format, locale);
 }
 
 function placeholder(field: TemplateField, missing: MissingMode): string {
@@ -116,9 +116,10 @@ function placeholder(field: TemplateField, missing: MissingMode): string {
   return missing === 'question' ? '?' : missing === 'field' ? field.source : '';
 }
 
-export function resolveTemplate(template: ParsedTemplate, el: LabelElement, missing: MissingMode = 'question'): string {
+/** The text of a label for `el`, its numbers written in `locale`'s separators. */
+export function resolveTemplate(template: ParsedTemplate, el: LabelElement, locale: string, missing: MissingMode = 'question'): string {
   return template.segments.map((s) => {
     if (s.type === 'text') return s.text;
-    return readFormatted(s, el) ?? placeholder(s, missing);
+    return readFormatted(s, el, locale) ?? placeholder(s, missing);
   }).join('');
 }

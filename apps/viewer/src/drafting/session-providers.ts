@@ -14,6 +14,7 @@ import type { PlanPart } from '@/dimall/types';
 import type { RoomOfPlan } from '@/tagall/footprint';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
+import type { Box } from './cross-ref-marks';
 import type { LevelResolver } from './level-mark';
 import type { DraftShape, LevelRef, Pt } from './types';
 
@@ -104,3 +105,10 @@ export function setRoomsProvider(provider: (() => RoomOfPlan[]) | null): void {
   roomsProvider = provider ?? (() => []);
 }
 export const roomsOf = (): RoomOfPlan[] => roomsProvider();
+
+/** The boxes of what the plan in front draws over its cut (door leaves and swings, window frames, roofs, grid): what a tag keeps clear of (`rcp/ceiling-tag-obstacles.ts`). */
+let planObstaclesProvider: () => Box[] = () => [];
+export function setPlanObstaclesProvider(provider: (() => Box[]) | null): void {
+  planObstaclesProvider = provider ?? (() => []);
+}
+export const planObstaclesOf = (): Box[] => planObstaclesProvider();

@@ -36,7 +36,7 @@ function withComputedArea(el: LabelElement, area: number): LabelElement {
 }
 
 /** The text of a label for `el`: the template read from the element, else (where it comes out empty) the running number. */
-export function resolveWithExtras(template: ParsedTemplate, el: LabelElement, missing: MissingMode, extras: LabelExtras = {}): string {
-  const text = resolveTemplate(template, extras.computedArea === undefined ? el : withComputedArea(el, extras.computedArea), missing);
+export function resolveWithExtras(template: ParsedTemplate, el: LabelElement, locale: string, missing: MissingMode, extras: LabelExtras = {}): string {
+  const text = resolveTemplate(template, extras.computedArea === undefined ? el : withComputedArea(el, extras.computedArea), locale, missing);
   return text === '' && extras.numbered !== undefined ? String(extras.numbered) : text;
 }

@@ -20,13 +20,13 @@ import type { Totals, TypeQuantities } from './type-quantities';
 import type { UrbanIndicators } from '@/urban/indicators';
 import type { ScheduleLayout } from './schedule-layout';
 
-export const TAKEOFF_LABELS: TakeoffLabels = { title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume', area: 'Area', usedIn: 'Used in', total: 'Total' };
-export const FINISH_LABELS: RoomFinishLabels = { title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms' };
+export const TAKEOFF_LABELS: TakeoffLabels = { locale: 'en', title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume', area: 'Area', usedIn: 'Used in', total: 'Total' };
+export const FINISH_LABELS: RoomFinishLabels = { locale: 'en', title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms' };
 export const TYPE_LABELS: TypeQuantityLabels = {
-  title: 'Quantities', type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³', noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey',
+  locale: 'en', title: 'Quantities', type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³', noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey',
 };
 export const URBAN_LABELS: UrbanLabels = {
-  title: 'Urban indicators', level: 'Level', elevation: 'Elevation', built: 'Built', useful: 'Useful', inCut: 'In CUT', yes: 'yes', no: 'no', belowGround: (n) => n, ground: (n) => n, category: 'Category', area: 'Area',
+  locale: 'en', title: 'Urban indicators', level: 'Level', elevation: 'Elevation', built: 'Built', useful: 'Useful', inCut: 'In CUT', yes: 'yes', no: 'no', belowGround: (n) => n, ground: (n) => n, category: 'Category', area: 'Area',
   ac: 'Ac', ad: 'Ad', adCut: 'Ad for CUT', au: 'Au', site: 'Site', pot: 'POT', cut: 'CUT', rules: () => ['Ac is the footprint of the ground storey measured to the outer face of the external walls.'], note: '',
   atLeast: (v) => `>= ${v}`, unmeasured: (count, level) => `${count} unmeasured on ${level}`,
 };

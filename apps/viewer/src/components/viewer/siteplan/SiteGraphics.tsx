@@ -10,7 +10,8 @@
  * another viewport shows.
  */
 
-import { useTranslation, formatLocaleNumber } from '@/i18n';
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { useTranslation } from '@/i18n';
 import { drawingToScreen, screenToDrawing, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import type { AnnotationShape, SymbolInstanceShape } from '@/drafting/types';
 import type { Rect } from '@/siteplan/key-plan';
@@ -30,7 +31,7 @@ const ENCROACHMENT_COLOR = PLOT_BOUNDARY_LAYER.color;
 export function SiteOverlay({ site, transform: t, axis, scale }: { site: SiteContent; transform: ViewTransform; axis: SectionAxisName; scale: number }) {
   const { locale } = useTranslation();
   const height = (DIM_TEXT_MM * scale) / 1000;
-  const fmt = (v: number) => formatLocaleNumber(locale, v, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (v: number) => sheetNumber(locale, v);
   return (
     <g data-site-plan="true">
       {site.footprint?.map((ring, i) => (
@@ -68,7 +69,7 @@ export function SiteSymbols({ site, transform: t, axis, scale, box, live, symbol
   const places = siteSymbolPlaces({
     viewport: { x0: box.x, y0: box.y, x1: box.x + box.width, y1: box.y + box.height }, scale, toPaper,
     boundary: site.boundary, footprint: site.footprint, setbacks: site.setbacks, labels,
-    setbackText: (v) => formatLocaleNumber(locale, v, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    setbackText: (v) => sheetNumber(locale, v),
   });
   const arrow: AnnotationShape = { type: 'symbol', symbolId: NORTH_ARROW_ID, p: screenToDrawing(places.arrow, t, axis), scale: SITE_ARROW_SCALE / t.scale, rotation: 0, followsNorth: true };
   const bar: AnnotationShape = { type: 'symbol', symbolId: SCALE_BAR_ID, p: screenToDrawing(places.bar, t, axis), scale: 1, rotation: 0 };

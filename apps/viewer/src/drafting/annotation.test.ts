@@ -45,9 +45,9 @@ describe('dimensionLayout', () => {
 
 describe('formatLevel', () => {
   it('signs levels the architectural way', () => {
-    assert.equal(formatLevel(0), '±0.00');
-    assert.equal(formatLevel(3.06), '+3.06');
-    assert.equal(formatLevel(-3.98), '−3.98');
+    assert.equal(formatLevel('en', 0), '±0.00');
+    assert.equal(formatLevel('en', 3.06), '+3.06');
+    assert.equal(formatLevel('en', -3.98), '−3.98');
   });
 });
 

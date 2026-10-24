@@ -14,7 +14,11 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { act } from 'react';
 import { cleanup, render, waitFor } from '@/test/render.js';
+import { registerLocale, setLocale } from '@/i18n';
+import ro from '@/i18n/locales/ro';
+import { checkCatalogue } from '@/i18n/catalogue-problems';
 import { loadUrbanModel, urbanWasm } from '@/test/urban-fixture';
 import { useViewerStore } from '@/store';
 import { loadProjectDocument, projectDocument, resetProject, setProjectSiteArea, useProjectStore } from '@/project/project-store';
@@ -46,7 +50,7 @@ const figure = (el: Element | null, label: string) => {
 
 describe('the site balance on the site plan (#48)', () => {
   beforeEach(() => { resetProject(); useViewerStore.setState({ models: new Map() }); });
-  afterEach(() => cleanup());
+  afterEach(() => { cleanup(); act(() => setLocale('en')); });
 
   it('with no plot boundary drawn, says so plainly and gives no ratio', () => {
     const ui = render(<svg><SiteBalance x={0} y={0} /></svg>);
@@ -106,5 +110,28 @@ describe('the site balance on the site plan (#48)', () => {
     setProjectSiteArea(null);
     await waitFor(() => value(balance(), 'POT (Ac / plot area)') === '10.00 %', 'the reopened project keeps the drawn plot');
     assert.equal(value(balance(), 'Plot area'), '1,200.00 m²');
+  });
+  it('in Română the balance and the urban sheet print the same figures, with a decimal comma (#269)', async (t) => {
+    if (!urbanWasm(t)) return;
+    await loadUrbanModel('fzk', new Uint8Array(readFileSync(FZK)));
+    const siteId = ensureSitePlan('Site plan');
+    assert.ok(siteId, 'a site plan on the ground storey');
+    drawPlot(siteId, rect(20, 30));
+    registerLocale('ro', checkCatalogue(ro).catalogue);
+    act(() => setLocale('ro'));
+    const schedule = { id: 'u', name: 'Indicators', kind: 'urban' as const, createdAt: 0 };
+    const ui = render(<><svg data-testid="sheet"><SiteBalance x={0} y={0} /></svg><UrbanView schedule={schedule} /></>);
+    const balance = () => [...ui.querySelectorAll('[data-site-balance] [data-value]')].map((n) => n.textContent ?? '');
+    const tab = () => textsOf(ui.querySelector('svg:not([data-testid])'));
+    await waitFor(() => balance().some((v) => v.startsWith('20,00')), 'the balance measures the model on the 600 m² plot, in Romanian');
+    for (const v of balance().filter((x) => /\d/.test(x))) assert.doesNotMatch(v, /\d\.\d/, `${v}: a figure written the English way`);
+    assert.ok(balance().includes('120,00 m²'), balance().join(' | '));
+    assert.ok(balance().includes('600,00 m²'), balance().join(' | '));
+    // The urban sheet prints the same numbers for the same values, and none with a point.
+    await waitFor(() => tab().includes('120,00'), 'the urban sheet prints Ac with a comma');
+    for (const figure of ['120,00', '240,00', '600,00', '20,00 %', '0,40']) assert.ok(tab().includes(figure), `${figure} on the urban sheet: ${tab().join(' | ')}`);
+    for (const text of tab()) assert.doesNotMatch(text, /^[+-]?\d+\.\d{2}( %)?$/, `${text}: a figure written the English way`);
+    // The elevation column reads ±0,00 for the ground storey.
+    assert.ok(tab().includes('±0,00'), tab().join(' | '));
   });
 });

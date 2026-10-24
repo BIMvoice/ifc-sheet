@@ -15,7 +15,7 @@ import { elementQuantities, materialShares, takeoffRows } from './material-takeo
 import { layoutMaterialTakeoff, takeoffCsv } from './material-takeoff-layout.js';
 
 const near = (a: number | null, b: number) => assert.ok(a !== null && Math.abs(a - b) < 1e-9, `${a} ≉ ${b}`);
-const LABELS = { title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume m³', area: 'Area m²', usedIn: 'Used in', total: 'Total' };
+const LABELS = { locale: 'en', title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume m³', area: 'Area m²', usedIn: 'Used in', total: 'Total' };
 
 describe('materialShares', () => {
   it('shares a layer set by layer thickness', () => {

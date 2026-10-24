@@ -12,7 +12,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { formatLocaleNumber, useTranslation } from '@/i18n';
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { ensureWasm, wasmLoaded } from '@/lib/wasm/ensure-wasm';
@@ -69,7 +70,7 @@ export function useSiteSourceNote(): (site: SiteAreaChoice) => string {
   const { t, locale } = useTranslation();
   return useMemo(() => (site: SiteAreaChoice) => {
     if (site.source === 'typed') {
-      return site.plot === null ? t('urban.siteSource.typedNoPlot') : t('urban.siteSource.typed', { plot: formatLocaleNumber(locale, site.plot, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) });
+      return site.plot === null ? t('urban.siteSource.typedNoPlot') : t('urban.siteSource.typed', { plot: sheetNumber(locale, site.plot) });
     }
     return t(`urban.siteSource.${site.source ?? 'none'}`);
   }, [t, locale]);
@@ -77,11 +78,12 @@ export function useSiteSourceNote(): (site: SiteAreaChoice) => string {
 
 /** The schedule's labels; `site`, when given, adds the line saying where the site area came from. */
 export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const siteNote = useSiteSourceNote();
   const assumed = areas?.assumedInterior.join(', ') ?? '';
   const leftOut = areas?.spacesLeftOut ?? null;
   return useMemo(() => ({
+    locale,
     title,
     level: t('urban.level'), elevation: t('urban.elevation'), built: t('urban.built'), useful: t('urban.useful'),
     inCut: t('urban.inCut'), yes: t('urban.yes'), no: t('urban.no'),
@@ -94,7 +96,7 @@ export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: S
       const out = [
         t('urban.rule.areas', { level: r.storeys.find((s) => s.ground)?.name ?? '—' }),
         t('urban.rule.cut', { levels: left.length ? left.join(', ') : t('urban.rule.cutNone') }),
-        t('urban.rule.ground', { terrain: signedLevel(r.terrainLevel), zero: r.zero.elevation.toFixed(2), source: t(`urban.rule.zero.${r.zero.source}`) }),
+        t('urban.rule.ground', { terrain: signedLevel(locale, r.terrainLevel), zero: sheetNumber(locale, r.zero.elevation, 2, { group: false }), source: t(`urban.rule.zero.${r.zero.source}`) }),
       ];
       if (leftOut) out.push(t('urban.rule.au', { external: leftOut.external, gfa: leftOut.gfa, parents: leftOut.parents }));
       if (site) out.push(siteNote(site));
@@ -103,5 +105,5 @@ export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: S
     note: assumed ? t('urban.assumedInterior', { levels: assumed }) : '',
     atLeast: (value: string) => t('urban.atLeast', { value }),
     unmeasured: (count: number, level: string) => t('urban.unmeasured', { count, level }),
-  }), [t, title, assumed, leftOut, site, siteNote]);
+  }), [t, locale, title, assumed, leftOut, site, siteNote]);
 }
