@@ -14,6 +14,7 @@ import { draftCommandByName } from '@/drafting/commands/registry';
 import { startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { activateDocumentTab } from '@/project/open-view';
 import { useViewDrawings } from '@/project/view-drawings';
+import { requestFocus } from './focus';
 import type { Finding } from './types';
 
 /** How a surface brings a finding's place in front. False when there is nothing to open. */
@@ -63,10 +64,11 @@ export async function whenInView(viewId: string, drawn: boolean): Promise<boolea
   return (await waitForView(viewId, drawn)) === 'ready';
 }
 
-/** Opens the place a finding is about and selects its annotation. False when there is nothing to open. */
+/** Opens the place a finding is about; selects its annotation, or zooms to and highlights its model elements. False when there is nothing to open. */
 export function goToFinding(f: Finding, nav: FindingNav): boolean {
   if (!nav.open(f)) return false;
   const { viewId, draftId } = f;
+  if (viewId && !draftId && f.guids?.length) requestFocus(viewId, f.guids);
   if (viewId && draftId) void whenInView(viewId, false).then((ok) => ok && useDraftingSession.setState({ selection: new Set([draftId]) }));
   return true;
 }

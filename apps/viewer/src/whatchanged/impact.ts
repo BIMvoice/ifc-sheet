@@ -4,7 +4,7 @@
 
 /**
  * Which annotations lost or changed their element when the model changed: a
- * tag (`tagOf`), a label (`labelOf`; both a GlobalId) and a level mark that
+ * tag (`tagOf`), a label (`labelOf`), a DIMALL dimension of a door or window width (`measures`; each a GlobalId) and a level mark that
  * reads a storey (`ref.storey`, a GlobalId or the storey's name). Section marks
  * name views (`sectionOf`), not model elements, so they have no element to lose
  * (`main` has no detail marks). Pure.
@@ -24,7 +24,7 @@ export interface AnnotationImpact {
 }
 
 function elementOf(d: DraftEntity): string | null {
-  const guid = [d.params.labelOf, d.params.tagOf].find((g): g is string => typeof g === 'string');
+  const guid = [d.params.labelOf, d.params.tagOf, d.params.measures].find((g): g is string => typeof g === 'string');
   if (guid) return guid;
   return d.shape.type === 'level' && typeof d.shape.ref?.storey === 'string' ? d.shape.ref.storey : null;
 }

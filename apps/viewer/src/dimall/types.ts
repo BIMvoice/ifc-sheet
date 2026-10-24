@@ -45,6 +45,8 @@ export interface PlannedString {
   points: Pt[];
   /** Drawing units from the outer face to the string's line. */
   offset: number;
+  /** Per span: the part (door or window) whose width the span measures, else null. */
+  measures: (number | null)[];
 }
 
 export interface DimensionPlan {

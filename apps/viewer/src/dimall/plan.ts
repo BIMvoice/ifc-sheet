@@ -61,7 +61,9 @@ export function planDimensions(parts: readonly PlanPart[], settings: DimensionSe
     sets.forEach(([kind, values], i) => {
       const along = distinct(values);
       if (along.length < 2) return;
-      strings.push({ key: key(f, kind), kind, along: back(f.u), outward: back(f.n), points: along.map(at), offset: first + step * i });
+      // A span between the two edges of a door or window measures that element.
+      const measures = along.slice(1).map((s1, k) => (kind === 'inner' ? c.openingParts.find((o) => Math.abs(o.s0 - along[k]) <= SAME && Math.abs(o.s1 - s1) <= SAME)?.id ?? null : null));
+      strings.push({ key: key(f, kind), kind, along: back(f.u), outward: back(f.n), points: along.map(at), offset: first + step * i, measures });
     });
   }
   return { strings, skippedFacades: skipped, angle, outline: loop.map(back) };
