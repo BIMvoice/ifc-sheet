@@ -9,6 +9,8 @@
  * placed on another sheet from the card's place list.
  */
 
+import { useMemo } from 'react';
+import { applyContent, contentOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { hangSchedule } from '@/project/drawing-set-actions';
@@ -42,7 +44,9 @@ function placeAll(ids: readonly string[]): void {
 export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
   const { t } = useTranslation();
   const schedules = useProjectStore((s) => s.schedules ?? []);
-  const data = useParentRows(schedule.kind);
+  const whole = useParentRows(schedule.kind);
+  // The parent's types as the schedule prints them (its numbering): the labels here are the marks on the sheet.
+  const data = useMemo(() => applyContent(whole, contentOf(schedules, schedule)), [whole, schedules, schedule]);
   const parts = subReportsOf(schedules, schedule.id);
   const sub = schedule.sub;
 

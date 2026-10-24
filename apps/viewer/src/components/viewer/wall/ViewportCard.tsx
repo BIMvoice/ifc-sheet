@@ -22,6 +22,7 @@ import { useLegendLabels } from '../legend/LegendGraphic';
 import { LegendCard } from './LegendCard';
 import { hasTrueScale } from '@/project/axonometric';
 import { ScaleField } from './ScaleField';
+import { ScheduleContentCard } from './ScheduleContentCard';
 import { ScheduleTextCard } from './ScheduleTextCard';
 import { SubReportCard } from './SubReportCard';
 import { ThreeDControls } from './ThreeDControls';
@@ -94,6 +95,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
             </>
           )}
           {schedule ? <SubReportCard schedule={schedule} /> : null}
+          {schedule ? <ScheduleContentCard schedule={schedule} /> : null}
           {schedule ? <ScheduleTextCard schedule={schedule} /> : null}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
