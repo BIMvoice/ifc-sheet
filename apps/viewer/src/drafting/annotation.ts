@@ -153,6 +153,23 @@ export function setAnnotationScreenUp(sign: 1 | -1): void {
   screenUp = sign;
 }
 
+/**
+ * Run `fn` with the screen-up direction of the view an entity lives in, then
+ * put the session's back. Anything derived from an entity's text box (a
+ * leader's tip, a section symbol's letter) is measured with this, so it comes
+ * out the same whichever view the session happens to be looking at: on a page
+ * that has just opened a project, none.
+ */
+export function withAnnotationScreenUp<T>(sign: 1 | -1, fn: () => T): T {
+  const was = screenUp;
+  screenUp = sign;
+  try {
+    return fn();
+  } finally {
+    screenUp = was;
+  }
+}
+
 /** Which way drawing x runs on screen for the view being annotated (-1: mirrored, as in a side view). */
 let screenRight: 1 | -1 = 1;
 export function setAnnotationScreenRight(sign: 1 | -1): void {
