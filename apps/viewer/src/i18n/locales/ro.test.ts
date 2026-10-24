@@ -67,6 +67,16 @@ describe('Romanian catalogue (#53)', () => {
     assert.deepEqual(untranslatedFaceKeys(without), ['revision.title (components/viewer/wall/RevisionsCard.tsx, components/viewer/wall/SteppedSheet.tsx)']);
   });
 
+  // #258: the site balance and the urban indicators printed English under Română because their folders were not in the face list.
+  it('the face check reaches the site plan, the urban indicators and the schedules a sheet prints (#258)', () => {
+    const { 'site.balance.title': _a, 'urban.ac': _b, 'finishes.room': _c, ...without } = catalogue;
+    assert.deepEqual(untranslatedFaceKeys(without), [
+      'finishes.room (components/viewer/joinery/ScheduleGraphic.tsx)',
+      'site.balance.title (components/viewer/siteplan/SiteBalance.tsx)',
+      'urban.ac (components/viewer/urban/useUrban.ts)',
+    ]);
+  });
+
   it('keeps every placeholder of the English message', () => {
     assert.deepEqual(placeholderProblems(catalogue), []);
     assert.deepEqual(checkCatalogue(catalogue).problems, []);

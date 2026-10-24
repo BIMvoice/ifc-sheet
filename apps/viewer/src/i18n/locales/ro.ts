@@ -13,6 +13,7 @@
 import type { Catalogue } from '../registry';
 import { checkRo } from '../catalogues/check.ro';
 import { faceRo } from '../catalogues/face.ro';
+import { sheetTablesRo } from '../catalogues/sheet-tables.ro';
 import { namesRo } from '../catalogues/names.ro';
 import { issueRo } from '../catalogues/issue.ro';
 import { sheetContentRo } from '../catalogues/sheet-content.ro';
@@ -41,6 +42,7 @@ export default {
   ...sheetContentRo,
   ...namesRo,
   ...faceRo,
+  ...sheetTablesRo,
   ...featuresRo,
   ...titleBlockSourcesRo,
   ...revisionsRo,
