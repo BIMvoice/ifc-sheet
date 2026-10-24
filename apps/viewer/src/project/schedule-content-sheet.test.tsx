@@ -18,7 +18,8 @@ import { blur, cleanup, click, render, type as typeInto } from '@/test/render.js
 import { addSchedule, addSubReport, scheduleById } from '@/joinery/schedules.js';
 import { addScheduleTextRow, setScheduleTextCell } from '@/joinery/schedule-text-actions.js';
 import { moveRow, resetContent, setNumbering, setRowShown, setSort } from '@/joinery/schedule-content-actions.js';
-import { useSheetSchedules, type ScheduleLayout } from '@/components/viewer/joinery/ScheduleGraphic';
+import { useSheetSchedules } from '@/components/viewer/joinery/ScheduleGraphic';
+import type { ScheduleLayout, SchedulePrim } from '@/joinery/schedule-layout';
 import { ScheduleContentCard } from '@/components/viewer/wall/ScheduleContentCard';
 import { hangSchedule } from './drawing-set-actions.js';
 import { resetProject, useProjectStore } from './project-store.js';
@@ -42,7 +43,7 @@ function drawn(sheet: ProjectSheet) {
 }
 const printed = (id: string): ScheduleLayout => { const l = drawn(holder(id)).get(id)!; cleanup(); return l; };
 
-type Text = { kind: 'text'; text: string; x: number; y: number };
+type Text = Extract<SchedulePrim, { kind: 'text' }>;
 
 /** The table as it prints: each row of the label column (x = 2) with the cells on its line, left to right. The drawings above the table are not part of it. */
 function table(layout: ScheduleLayout): string[][] {

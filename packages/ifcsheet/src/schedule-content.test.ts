@@ -191,7 +191,7 @@ describe('contentOf and scheduleOf', () => {
 
   it('a part whose parent is gone uses its own', () => {
     const own: ScheduleContent = { sort: { by: 'size' } };
-    expect(contentOf([{ ...doors, content: own }], { ...doors, content: own })).toBe(own);
+    expect(contentOf([{ ...doors, content: own }], doors)).toBe(own);
     expect(contentOf([doors], doors)).toBeUndefined();
   });
 
@@ -218,9 +218,15 @@ describe('contentOf and scheduleOf', () => {
     expect(w3.occurrences.map((o) => occurrenceMarkOf(w3, o))).toEqual(['W1.4', 'W1.5']);
   });
 
+  it('a schedule with no choice and no text is the model\'s rows themselves', () => {
+    const whole = fixture();
+    const plain: ProjectSchedule = { id: 'x', name: 'Joinery', kind: 'all', createdAt: 1 };
+    expect(scheduleOf([plain], plain, whole)).toBe(whole);
+  });
+
   it('hands the row choice on, with the text rows, so the layout needs nothing else', () => {
     expect(scheduleOf(schedules, doors, fixture()).content).toBe(content);
-    expect(scheduleOf([{ ...parent, content: undefined }], { ...parent, content: undefined }, fixture()).content).toBeUndefined();
+    expect(scheduleOf([{ ...parent, content: undefined }], parent, fixture()).content).toBeUndefined();
   });
 });
 

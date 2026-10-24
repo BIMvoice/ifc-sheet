@@ -161,5 +161,6 @@ export function scheduleOf<E extends ContentEntry>(
   const content = contentOf(schedules, schedule);
   const data = subReportData(applyContent(whole, content), schedule.sub?.filter);
   const textRows = textRowsOf(schedules, schedule);
-  return { ...data, ...(textRows ? { textRows } : {}), ...(content ? { content } : {}) };
+  // A schedule with nothing chosen and no text is the model's rows themselves (callers memoise on that).
+  return textRows || content ? { ...data, ...(textRows ? { textRows } : {}), ...(content ? { content } : {}) } : data;
 }

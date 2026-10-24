@@ -101,8 +101,8 @@ export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule })
         </label>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <label className="block text-xs text-sky-200">
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <label className="col-span-2 block text-xs text-sky-200">
           {t('wall.content.marks')}
           <select className={WALL_FIELD} value={sequence ? 'sequence' : 'catalogue'} onChange={(e) => report(setNumbering(schedule.id, { marks: e.target.value === 'sequence' ? 'sequence' : undefined }))}>
             <option value="catalogue">{t('wall.content.marks.catalogue')}</option>
