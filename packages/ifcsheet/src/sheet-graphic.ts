@@ -18,7 +18,7 @@
 import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
 import { clipPolyline } from './clip.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
-import { viewExtent, type ModelExtent } from './drawing-set.js';
+import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
 import { paperOf } from './viewport-fit.js';
 
@@ -72,12 +72,30 @@ function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: numbe
   };
 }
 
-/** `drawing` mapped onto the paper: centred on the viewport (or on its `center` point), drawing metres to paper mm at the viewport's scale, y up to y down. */
-export function placer(drawing: Pick<Drawing2D, 'bounds'>, vp: NonNullable<ProjectSheet['viewports']>[number]): (p: Point2D) => Point2D {
+/**
+ * Which way each drawing axis runs on the paper, by the axis the drawing is cut
+ * along: a plan (`y`) keeps its second axis pointing down the paper (a point
+ * further south is lower), an elevation or section (`z`, `x`) points it up; a
+ * drawing looking along `x` (east and west elevations) also mirrors its first
+ * axis. The sheet in the app reads the same signs (`screenSigns` in
+ * `drafting/frame.ts`), so a drawing is on the sheet the way it is in the PDF.
+ */
+export function paperSigns(axis: 'x' | 'y' | 'z'): { kx: 1 | -1; ky: 1 | -1 } {
+  return { kx: axis === 'x' ? -1 : 1, ky: axis === 'y' ? 1 : -1 };
+}
+
+/**
+ * `drawing` mapped onto the paper: its centre (the viewport's `center`, a plan's
+ * extent centre from `viewCentre`, else the middle of its bounds) at the
+ * viewport's position, drawing metres to paper mm at the viewport's scale, the
+ * axes signed by the cut (`paperSigns`).
+ */
+export function placer(drawing: Pick<Drawing2D, 'bounds'> & { config: Pick<Drawing2D['config'], 'plane'> }, vp: NonNullable<ProjectSheet['viewports']>[number], centre: Point2D | null = null): (p: Point2D) => Point2D {
   const k = 1000 / vp.scale;
-  const cx = vp.center?.x ?? (drawing.bounds.min.x + drawing.bounds.max.x) / 2;
-  const cy = vp.center?.y ?? (drawing.bounds.min.y + drawing.bounds.max.y) / 2;
-  return (p) => ({ x: vp.x + (p.x - cx) * k, y: vp.y - (p.y - cy) * k });
+  const { kx, ky } = paperSigns(drawing.config.plane.axis);
+  const cx = vp.center?.x ?? centre?.x ?? (drawing.bounds.min.x + drawing.bounds.max.x) / 2;
+  const cy = vp.center?.y ?? centre?.y ?? (drawing.bounds.min.y + drawing.bounds.max.y) / 2;
+  return (p) => ({ x: vp.x + (p.x - cx) * kx * k, y: vp.y + (p.y - cy) * ky * k });
 }
 
 const closeRing = (pts: Point2D[]): Point2D[] => (pts.length > 2 ? [...pts, pts[0]] : pts);
@@ -102,7 +120,7 @@ export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings
     const box: Rect | null = size && Number.isFinite(size.w + size.h) ? { x: vp.x - (size.w * k) / 2, y: vp.y - (size.h * k) / 2, w: size.w * k, h: size.h * k } : null;
     if (box) out.viewports.push({ viewId: vp.viewId, box });
     if (drawing && box && Number.isFinite(drawing.bounds.min.x)) {
-      const at = placer(drawing, vp);
+      const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
       for (const polygon of drawing.cutPolygons) {
         for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }

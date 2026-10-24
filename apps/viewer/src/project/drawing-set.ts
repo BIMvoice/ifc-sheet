@@ -6,7 +6,7 @@
 
 import type { TranslationKey } from '@/i18n';
 
-export { PER_SHEET, SET_PAPER, SET_PAPERS, SET_SCALES, TARGET_SCALE, buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fitsScale, fittingScale, groundPlan, groupOfView, groupsThatDoNotFit, isSetSheet, overrun, placeViewports, scaleOn, sheetGroup, sheetScaleReason, sheetSeries, viewExtent, withViewHung } from '@bimvoice/ifcsheet';
+export { PER_SHEET, SET_PAPER, SET_PAPERS, SET_SCALES, TARGET_SCALE, buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fitsScale, fittingScale, groundPlan, groupOfView, groupsThatDoNotFit, isSetSheet, overrun, placeViewports, scaleOn, sheetGroup, sheetScaleReason, sheetSeries, viewCentre, viewExtent, withViewHung } from '@bimvoice/ifcsheet';
 export type { Arrangement, ModelExtent, SetGroup, SetInput, SheetLayout } from '@bimvoice/ifcsheet';
 
 /** A sentence kept as data: a catalogue key and its parameters, translated where it is shown (any app key, wider than the engine's own scale reasons). */

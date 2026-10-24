@@ -24,9 +24,9 @@ import { sheetGraphic, type SheetGraphic } from './sheet-graphic.js';
 
 const DxfParser = DxfParserModule as unknown as new () => DxfParserInstance;
 
-/** A 10 × 4 m drawing: one diagonal line corner to corner, one hidden line, one 1 m cut square. */
-const drawing = (): Drawing2D => ({
-  config: { plane: { axis: 'y', position: 0, flipped: false }, projectionDepth: 0, includeHiddenLines: false, creaseAngle: 30, scale: 50 },
+/** A 10 × 4 m drawing, cut along `axis` (an elevation by default): one diagonal line corner to corner, one hidden line, one 1 m cut square. */
+const drawing = (axis: 'x' | 'y' | 'z' = 'z'): Drawing2D => ({
+  config: { plane: { axis, position: 0, flipped: false }, projectionDepth: 0, includeHiddenLines: false, creaseAngle: 30, scale: 50 },
   lines: [
     { line: { start: { x: 0, y: 0 }, end: { x: 10, y: 4 } }, category: 'projection', visibility: 'visible', entityId: 1, ifcType: 'IfcWall', modelIndex: 0, depth: 0 },
     { line: { start: { x: 0, y: 4 }, end: { x: 10, y: 0 } }, category: 'hidden', visibility: 'hidden', entityId: 2, ifcType: 'IfcWall', modelIndex: 0, depth: 0 },
@@ -54,6 +54,12 @@ describe('a sheet laid out as shapes', () => {
   it('puts a drawing point where its scale and the viewport say, y up turned to y down', () => {
     // 1:50 is 20 mm a metre; the drawing's centre (5, 2) sits on the viewport's (200, 150).
     expect(graphic().lines).toEqual([[{ x: 100, y: 190 }, { x: 300, y: 110 }]]);
+  });
+
+  it('a plan keeps its second axis pointing down the paper, an east elevation mirrors its first (the sheet in the app does the same, #279)', () => {
+    const lines = (axis: 'x' | 'y' | 'z') => sheetGraphic(sheet(), doc([sheet()]), new Map([['v1', drawing(axis)]])).lines;
+    expect(lines('y')).toEqual([[{ x: 100, y: 110 }, { x: 300, y: 190 }]]);
+    expect(lines('x')).toEqual([[{ x: 300, y: 190 }, { x: 100, y: 110 }]]);
   });
 
   it('closes a cut ring and leaves hidden lines out', () => {

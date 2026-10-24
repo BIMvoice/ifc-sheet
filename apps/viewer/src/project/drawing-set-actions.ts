@@ -233,7 +233,7 @@ export function setGroupScale(group: SetGroup, scale: number, extent: ModelExten
       if (sheetGroup(sheet) !== group) return sheet;
       const members = (sheet.viewports ?? []).flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []);
       const sizes = members.map((v) => viewExtent(v, extent));
-      return { ...sheet, viewports: placeViewports(members, sizes, scale, sheet) };
+      return { ...sheet, viewports: placeViewports(members, sizes, scale, sheet, extent) };
     }),
     dirty: true,
   });
