@@ -9,7 +9,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { useTranslation } from '@/i18n';
 import { styleInterpolatedValues } from '@/i18n/richInterpolate';
 import { IfcSheetShell } from './ifcsheet/IfcSheetShell';
-import { useViewportCovered } from './viewport-cover';
+import { CoveredEngine } from './ifcsheet/CoveredEngine';
 import { MobileToolbar } from './MobileToolbar';
 import { RibbonToolbar } from './ribbon/RibbonToolbar';
 import { HierarchyPanel } from './HierarchyPanel';
@@ -247,7 +247,6 @@ export function ViewerLayout() {
 
   useThemeDocumentClass();
   const safeMode = isSafeMode();
-  const engineCovered = useViewportCovered();
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex flex-col h-screen h-[100dvh] w-screen overflow-hidden bg-background text-foreground">
@@ -277,10 +276,7 @@ export function ViewerLayout() {
             dropdown is open. Same host pattern as `FlavorDialog` in
             `StatusBar.tsx`; `toolbar/export-commands.ts` owns the `trigger` one. */}
         <AnonymizedExportDialog surface="context_menu" />
-        {/* The engine's own interface. While the IfcSheet face or any cover hides it (`viewport-cover`), it is inert:
-            no Tab stop, no screen-reader node, no click (#295). `contents` keeps its children in this flex column.
-            Dialogs and the palette stay outside it (above) or portal to the body. */}
-        <div className="contents" data-engine-root inert={engineCovered}>
+        <CoveredEngine>
         {/* The compact mobile controls and the desktop ribbon share command homes. */}
         {isMobile
           ? <MobileToolbar />
@@ -453,7 +449,7 @@ export function ViewerLayout() {
         {/* Panels popped out into OS / PiP windows (#1208) — portalled into the
             child documents; live-synced via the shared store. */}
         <PanelWindowHost />
-        </div>
+        </CoveredEngine>
 
         {/* IfcSheet's own face over the engine's interface, which stays mounted underneath for its
             drawing runtime (#20).
