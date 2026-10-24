@@ -152,6 +152,7 @@ export interface SectionSlice extends SectionBoxSlice {
   // Actions
   setSectionPlaneAxis: (axis: SectionPlaneAxis) => void;
   setSectionPlanePosition: (position: number) => void;
+  placeSectionPlane: (position: number) => void;
   toggleSectionPlane: () => void;
   setSectionPlaneEnabled: (enabled: boolean) => void;
   flipSectionPlane: () => void;
@@ -233,28 +234,8 @@ export const createSectionSlice: StateCreator<SectionSlice, [], [], SectionSlice
     (get() as unknown as { setSectionVisible?: (visible: boolean) => void }).setSectionVisible?.(true);
   };
 
-  return {
-  ...createSectionBoxSlice(set, get, api),
-  // Initial state
-  sectionPlane: getDefaultSectionPlane(),
-  sectionPickMode: false,
-  sectionPickPreview: null,
-
-  // Actions
-  setSectionPlaneAxis: (axis) => {
+  const writePosition = (clampedPosition: number): void => {
     const state = get();
-    // Persist axis + position + flipped so reopening the tool restores it
-    // (issue #243). Position/flipped come from current state — picking an
-    // axis just switches which axis the slider walks along. Also enable
-    // the clip (picking an axis implicitly means "cut now") and drop any
-    // custom (face-picked) plane so the cardinal preset takes over cleanly.
-    saveLastSectionMode({ kind: 'cardinal', axis, position: state.sectionPlane.position, flipped: state.sectionPlane.flipped });
-    enableSectionPlane({ axis, custom: undefined, box: undefined });
-  },
-
-  setSectionPlanePosition: (position) => {
-    const state = get();
-    const clampedPosition = Math.min(100, Math.max(0, Number(position) || 0));
     // Cardinal: percentage along the axis between bounds extents, persisted
     // (issue #243) for reopen. Custom: percentage along the picked normal
     // between the bounds-diagonal extents centred on `pickedAt` — not
@@ -276,6 +257,33 @@ export const createSectionSlice: StateCreator<SectionSlice, [], [], SectionSlice
       planePatch.custom = { ...c, distance: c.distance + dPct * fallbackSpan, alignment: undefined };
     }
     enableSectionPlane(planePatch);
+  };
+
+  return {
+  ...createSectionBoxSlice(set, get, api),
+  // Initial state
+  sectionPlane: getDefaultSectionPlane(),
+  sectionPickMode: false,
+  sectionPickPreview: null,
+
+  // Actions
+  setSectionPlaneAxis: (axis) => {
+    const state = get();
+    // Persist axis + position + flipped so reopening the tool restores it
+    // (issue #243). Position/flipped come from current state — picking an
+    // axis just switches which axis the slider walks along. Also enable
+    // the clip (picking an axis implicitly means "cut now") and drop any
+    // custom (face-picked) plane so the cardinal preset takes over cleanly.
+    saveLastSectionMode({ kind: 'cardinal', axis, position: state.sectionPlane.position, flipped: state.sectionPlane.flipped });
+    enableSectionPlane({ axis, custom: undefined, box: undefined });
+  },
+
+  // The slider/API entry: a percentage of the model, kept inside 0..100.
+  setSectionPlanePosition: (position) => writePosition(Math.min(100, Math.max(0, Number(position) || 0))),
+
+  // The world-metres entry: the caller already converted metres with `worldToPercent`, so a plane above or below the model (a top storey's plan cut) keeps its height. Finite values only.
+  placeSectionPlane: (position) => {
+    if (Number.isFinite(position)) writePosition(position);
   },
 
   toggleSectionPlane: () => {

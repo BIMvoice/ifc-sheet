@@ -26,6 +26,8 @@ import {
   collectStoreys,
   mergedSectionBounds,
   percentToWorld,
+  sliderWorldRange,
+  worldToPercent,
   sectionAxisRange,
   storeyCutElevation,
   worldToSliderPercent,
@@ -64,6 +66,7 @@ export function useSectionDistance(): SectionDistance {
   const sectionPlane = useViewerStore((s) => s.sectionPlane);
   const setSectionPlaneAxis = useViewerStore((s) => s.setSectionPlaneAxis);
   const setSectionPlanePosition = useViewerStore((s) => s.setSectionPlanePosition);
+  const placeSectionPlane = useViewerStore((s) => s.placeSectionPlane);
   const setSectionCustomDistance = useViewerStore((s) => s.setSectionCustomDistance);
 
   // The merged box as a CoordinateInfo, so the placement hook can shift it
@@ -90,14 +93,15 @@ export function useSectionDistance(): SectionDistance {
     const state = useViewerStore.getState();
     if (state.sectionPlane.custom || state.sectionPlane.axis !== 'down') setSectionPlaneAxis('down');
     const r = sectionAxisRange(placed?.shiftedBounds ?? null, 'down');
-    if (r) setSectionPlanePosition(worldToSliderPercent(storeyCutElevation(storey), r));
-  }, [placed, setSectionPlaneAxis, setSectionPlanePosition]);
+    // The storey's real cut height, even above/below the model: the same conversion the sheet plan uses.
+    if (r) placeSectionPlane(worldToPercent(storeyCutElevation(storey), r));
+  }, [placed, setSectionPlaneAxis, placeSectionPlane]);
 
   const bounds = placed?.shiftedBounds ?? null;
   const custom = sectionPlane.custom;
   const onChangeWorld = useCallback((next: number) => {
-    if (range) setSectionPlanePosition(worldToSliderPercent(next, range));
-  }, [range, setSectionPlanePosition]);
+    if (range) placeSectionPlane(worldToSliderPercent(next, range, sectionPlane.position));
+  }, [range, placeSectionPlane, sectionPlane.position]);
 
   if (custom) {
     if (custom.alignment) return {
@@ -112,9 +116,11 @@ export function useSectionDistance(): SectionDistance {
     };
   }
   if (range) {
+    // The slider spans the model, widened to the plane it holds (a top storey's cut above the model).
+    const span = sliderWorldRange(range, sectionPlane.position);
     return {
       kind: 'world', value: percentToWorld(sectionPlane.position, range), onChange: onChangeWorld,
-      step: 0.1, min: range.min, max: range.max,
+      step: 0.1, min: span.min, max: span.max,
       snaps: sectionPlane.axis === 'down' ? storeys.map(storeyCutElevation) : [],
       storeys, range, bounds, cutAtStorey,
     };

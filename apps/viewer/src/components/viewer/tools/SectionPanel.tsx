@@ -28,7 +28,7 @@ export function SectionOverlay() {
   useEffect(startAlignmentTool, []);
   const sectionEnabled = useViewerStore((s) => s.sectionPlane.enabled);
   const setSectionPlaneAxis = useViewerStore((s) => s.setSectionPlaneAxis);
-  const setSectionPlanePosition = useViewerStore((s) => s.setSectionPlanePosition);
+  const placeSectionPlane = useViewerStore((s) => s.placeSectionPlane);
   const flipSectionPlane = useViewerStore((s) => s.flipSectionPlane);
   const setSectionPickMode = useViewerStore((s) => s.setSectionPickMode);
   const setPreviewStride = useViewerStore((s) => s.setPointCloudPreviewStride);
@@ -72,7 +72,7 @@ export function SectionOverlay() {
       // every flip and clobber the restore on each interaction).
       const currentFlipped = useViewerStore.getState().sectionPlane.flipped;
       setSectionPlaneAxis(mode.axis);
-      setSectionPlanePosition(mode.position);
+      placeSectionPlane(mode.position);
       if (currentFlipped !== mode.flipped) flipSectionPlane();
     } else if (mode.kind === 'pick' || !useViewerStore.getState().sectionPlane.box) {
       armTimer = setTimeout(() => {
@@ -92,7 +92,7 @@ export function SectionOverlay() {
     // current state via getState() so it's intentionally NOT in the dep
     // array (would cause the restore to re-run on every flip).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setSectionPickMode, setSectionPlaneAxis, setSectionPlanePosition, flipSectionPlane]);
+  }, [setSectionPickMode, setSectionPlaneAxis, placeSectionPlane, flipSectionPlane]);
 
   return (
     <>
