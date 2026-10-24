@@ -36,6 +36,7 @@ import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
+import { readSubReport } from '@bimvoice/ifcsheet';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
 import { HEX, WEIGHTS, readGraphics, readPhaseSource } from './view-graphics-file';
@@ -346,5 +347,8 @@ function readSchedule(raw: unknown): ProjectSchedule[] {
   const kind = raw.kind === 'door' || raw.kind === 'window' || raw.kind === 'materials' || raw.kind === 'types' || raw.kind === 'finishes' || raw.kind === 'register' || raw.kind === 'urban' ? raw.kind : 'all';
   const out: ProjectSchedule = { id: raw.id, name: isString(raw.name) && raw.name ? raw.name : 'Schedule', kind, createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0 };
   if (typeof raw.scale === 'number' && raw.scale > 0) out.scale = raw.scale;
+  // A project saved before sub-reports has no `sub`: it stays an ordinary schedule. Only a joinery list can be split.
+  const sub = readSubReport(raw.sub);
+  if (sub && (kind === 'door' || kind === 'window' || kind === 'all')) out.sub = sub;
   return [out];
 }

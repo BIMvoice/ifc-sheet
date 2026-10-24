@@ -46,6 +46,7 @@ export {
   DEFAULT_SCHEME, NUMBER_GROUPS, SCHEME_PRESETS, SEQUENTIAL_SCHEME, formatNumber, nextNumber, numberAt, numberGroupOf, numberSheets, planRenumber,
   readNumberingScheme, registerNumberIn, registerSlot, renumbered, typedBeforeSchemes, type OverrideMode, type RenumberRow,
 } from './numbering.js';
+export { readSubReport, readSubReportFilter, subReportData, type SplitData, type SplitEntry, type SubReport, type SubReportFilter } from './sub-reports.js';
 export { SHEET_SCALES, fitViewportBox, mmPerMetre, paperOf } from './viewport-fit.js';
 export {
   DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, LEVEL_MATCH_TOLERANCE_M, defaultViews, elevationName, levelFloorY, levelsFromStoreys, planDepthBelowCut, planViewFor,

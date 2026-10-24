@@ -21,7 +21,8 @@ import { registerHolders, registerSheetFit } from './drawing-register';
 import { withContinuationPages } from './continuation-pages';
 import { isFittedSchedule, isJoinerySchedule, pagesIn, paperHolding, syncSchedulePages } from './schedule-fit';
 import { sheetDrawingArea } from './viewport-resize';
-import { scheduleData, type ScheduleData } from '@/joinery/schedule-data';
+import type { ScheduleData } from '@/joinery/schedule-data';
+import { scheduleDataOf } from '@/joinery/schedule-split';
 import { proposalInputForLevel } from './model-rooms';
 import { DEFAULT_SCHEME, nextNumber, numberSheets, registerNumberIn } from './numbering';
 import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useProjectStore } from './project-store';
@@ -300,7 +301,7 @@ export function hangSchedule(scheduleId: string, data?: ScheduleData): string | 
   if (!schedule) return null;
   const scale = schedule.scale ?? 50;
   if (!isFittedSchedule(schedule)) return hangOnSheetOfItsOwn(scheduleId, schedule.name);
-  return hangOnSheetOfItsOwn(scheduleId, schedule.name, { scale, data: isJoinerySchedule(schedule) ? data ?? scheduleData(schedule.kind as 'door' | 'window' | 'all') : undefined });
+  return hangOnSheetOfItsOwn(scheduleId, schedule.name, { scale, data: isJoinerySchedule(schedule) ? scheduleDataOf(schedule, data ? () => data : undefined) : undefined });
 }
 
 /** Hang a legend the same way (`hangSchedule`); a legend already on a sheet returns that sheet. */
