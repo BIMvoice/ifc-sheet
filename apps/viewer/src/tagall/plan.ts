@@ -92,7 +92,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   }
   const gap = LABEL_GAP_MM * at.paperUnit;
   const items = todo.flatMap((t) => {
-    const size = labelSize(input.types.mark, t.guid, at.textHeight, extrasOf.get(t.guid), read);
+    const size = labelSize(input.types.mark, t.guid, at.textHeight, at.locale, extrasOf.get(t.guid), read);
     return size ? [{ id: String(t.renderId), ring: t.ring, ...size, ...(/^ifcdoor/i.test(t.className) ? { preferred: beyondSwing(t.ring, size.w, size.h, gap) } : { fallback: beyondSwing(t.ring, size.w, size.h, gap).slice(2) }) }] : [];
   });
   // What a label keeps clear of besides the elements' outlines: the room a door swings through, and the section symbols on the plan.
@@ -130,7 +130,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     if (roomed.has(room.guid)) { summary.already++; continue; }
     const fromModel = modelArea(read, room.guid) !== undefined;
     const extras: LabelExtras = fromModel ? {} : { computedArea: ringArea(room.ring) };
-    const size = labelSize(input.types.room, room.guid, at.textHeight, extras, read);
+    const size = labelSize(input.types.room, room.guid, at.textHeight, at.locale, extras, read);
     if (!size) continue;
     const spot = roomLabelPoint(shown, size.w, size.h, { rects: [], rings: [], rectIndex: roomIndex, ringIndex }, clear);
     const draft = labelDraft(input.types.room, room.guid, spot.centre, at, undefined, extras, read);

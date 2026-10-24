@@ -23,6 +23,7 @@
 
 import type { DraftLayer, DraftParamValue } from './types';
 import { fontFamilyOf } from './text-width';
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
 
 export type FontKind = 'sans' | 'serif' | 'mono';
 export type TextPlacement = 'above' | 'centered' | 'below';
@@ -127,9 +128,10 @@ export function overriddenFields(params: Params): string[] {
 export const fontFamily = (font: FontKind): string => fontFamilyOf(font);
 
 /** A length in a dimension style's unit and precision (the value is metres). */
-export function formatDimension(metres: number, style: Pick<DimStyle, 'unit' | 'precision'>): string {
+export function formatDimension(locale: string, metres: number, style: Pick<DimStyle, 'unit' | 'precision'>): string {
   const factor = style.unit === 'mm' ? 1000 : style.unit === 'cm' ? 100 : 1;
-  return (metres * factor).toFixed(Math.max(0, Math.min(6, Math.round(style.precision))));
+  // Never grouped: on a dimension a dot or a comma means the decimal and nothing else.
+  return sheetNumber(locale, metres * factor, Math.max(0, Math.min(6, Math.round(style.precision))), { group: false });
 }
 
 /**

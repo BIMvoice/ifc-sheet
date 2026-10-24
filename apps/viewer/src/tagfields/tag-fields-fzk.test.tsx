@@ -69,7 +69,7 @@ function tagAll(viewId: string): DraftEntity[] {
   const elements: ViewElement[] = openings.map((g, i) => ({ renderId: i + 1, anchor: { x: i * 3 + 0.45, y: 0.15 }, ring: box(i * 3, 0) }));
   const targets: LabelTarget[] = openings.map((g, i) => ({ guid: g, className: el(g).className(), anchor: elements[i].anchor, renderId: i + 1, ring: elements[i].ring }));
   const rooms = guids.room.map((g, i) => ({ renderId: 100 + i, guid: g, ring: box(i * 12, 8, 10, 8), at: 'cut' as const }));
-  const placement = { viewId, layerId: '0', textHeight: 0.25, textStyle: 'standard', dimStyle: 'standard', paperUnit: 0.1 };
+  const placement = { viewId, layerId: '0', textHeight: 0.25, textStyle: 'standard', dimStyle: 'standard', paperUnit: 0.1, locale: 'en' };
   const { drafts } = planTagAll({ elements, targets, rooms, existing: [], placement, types: { mark: markType, room: roomType }, read: labelElementByGlobalId });
   return drafts.map((d) => ({ ...d, id: `${viewId}:${d.id}` }));
 }
@@ -125,7 +125,7 @@ describe('tag fields on FZK-Haus', () => {
 
   it('changes every door tag on every sheet when the door mark is mapped to a property', () => {
     const sheets = seedDrawing();
-    refreshParametricLabels();
+    refreshParametricLabels('en');
     refreshElementTags();
     const before = sheets.map((s) => textsOf(`view-${s.id}`, 'door'));
     for (const t of before) {
@@ -134,7 +134,7 @@ describe('tag fields on FZK-Haus', () => {
     }
 
     setFieldSources('door', 'mark', [{ kind: 'pset', pset: DOOR_SET, property: DOOR_PROP }, { kind: 'attribute', name: 'Name' }]);
-    refreshParametricLabels();
+    refreshParametricLabels('en');
     refreshElementTags();
 
     for (const s of sheets) {
@@ -154,7 +154,7 @@ describe('tag fields on FZK-Haus', () => {
 
     // Back to the default: the tags are what they were.
     setFieldSources('door', 'mark', null);
-    refreshParametricLabels();
+    refreshParametricLabels('en');
     assert.deepEqual([...textsOf('view-s1', 'door')], [...before[0]]);
     assert.equal(useProjectStore.getState().tagFields, undefined);
   });
@@ -167,7 +167,7 @@ describe('tag fields on FZK-Haus', () => {
     edited();
     const sheets = seedDrawing();
     setFieldSources('door', 'mark', [{ kind: 'pset', pset: 'Pset_DoorCommon', property: 'Reference' }, { kind: 'attribute', name: 'Mark' }]);
-    refreshParametricLabels();
+    refreshParametricLabels('en');
     refreshElementTags();
     for (const s of sheets) {
       assert.equal(textsOf(`view-${s.id}`, 'door').get(door), ro);

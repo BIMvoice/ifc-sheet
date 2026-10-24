@@ -49,7 +49,7 @@ const targets: LabelTarget[] = [
   { guid: 'W1', className: 'IfcWindow', anchor: els[2].anchor, renderId: 3, ring: els[2].ring },
   { guid: 'W2', className: 'IfcWindow', anchor: els[3].anchor, renderId: 4, ring: els[3].ring },
 ];
-const placement = { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', paperUnit: 0.1 };
+const placement = { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', paperUnit: 0.1, locale: 'en' };
 const rooms = [{ renderId: 10, guid: 'R1', ring: L, at: 'cut' as const }, { renderId: 11, guid: 'R2', ring: box(12, 1, 15, 4), at: 'cut' as const }];
 const run = (existing: DraftEntity[] = [], over: Partial<Parameters<typeof planTagAll>[0]> = {}) => planTagAll({ elements: els, targets, rooms, existing, placement, types: { mark, room }, read, ...over });
 const text = (d: DraftEntity) => (d.shape.type === 'text' ? d.shape.text : '');
@@ -100,9 +100,9 @@ describe('TAGALL marks', () => {
     const { drafts } = run();
     const win = byGuid(drafts, 'W1');
     assert.equal(win.params.numbered, 1);
-    const tagged = settleLabels([win], [mark], () => opening('IfcWindow', { Tag: 'F-9' }));
+    const tagged = settleLabels([win], [mark], () => opening('IfcWindow', { Tag: 'F-9' }), 'en');
     assert.equal(text(tagged[0]), 'F-9');
-    const still = settleLabels([win], [mark], () => opening('IfcWindow', {}));
+    const still = settleLabels([win], [mark], () => opening('IfcWindow', {}), 'en');
     assert.equal(text(still[0]), '1');
   });
 });
@@ -131,7 +131,7 @@ describe('TAGALL rooms', () => {
   });
   it('a room follows the model: the area quantity wins over the footprint once the model has it', () => {
     const r2 = byGuid(run().drafts, 'R2');
-    const later = settleLabels([r2], [room], () => space({ Name: '5', LongName: 'Flur' }, 8.2));
+    const later = settleLabels([r2], [room], () => space({ Name: '5', LongName: 'Flur' }, 8.2), 'en');
     assert.equal(text(later[0]), 'Flur\n8.20 m²');
   });
   it('is not labelled twice, and its label is not put over the marks', () => {

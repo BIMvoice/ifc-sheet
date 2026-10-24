@@ -11,7 +11,7 @@
 
 import { memo, useEffect, useMemo } from 'react';
 import type { PanelOperation } from '@ifc-lite/create';
-import { formatLocaleFixed, useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule, ProjectSheet, SheetViewport } from '@/project/types';
@@ -38,13 +38,13 @@ import { useElementViews, type ViewRequest } from './useElementViews';
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
 
 export function useScheduleLabels(title: string): ScheduleLabels {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return useMemo(() => ({
-    title,
+    locale, title,
     mark: t('schedule.row.mark'), name: t('schedule.row.name'), size: t('schedule.row.size'), operation: t('schedule.row.operation'),
     sill: t('schedule.row.sill'), total: t('schedule.row.total'), uValue: t('schedule.row.uValue'), fire: t('schedule.row.fire'),
     op: (op: PanelOperation) => t(`joinery.op.${op}` as TranslationKey),
-  }), [t, title]);
+  }), [t, locale, title]);
 }
 
 export function useTakeoffLabels(title: string): TakeoffLabels {
@@ -52,8 +52,7 @@ export function useTakeoffLabels(title: string): TakeoffLabels {
   return useMemo(() => ({
     title, material: t('takeoff.material'), elements: t('takeoff.elements'), volume: t('takeoff.volume'),
     area: t('takeoff.area'), usedIn: t('takeoff.usedIn'), total: t('takeoff.total'),
-    // English keeps the plain `toFixed` text it always printed; other locales write their own separators.
-    number: locale === 'en' ? undefined : (value, digits) => formatLocaleFixed(locale, value, digits),
+    locale,
   }), [t, locale, title]);
 }
 
@@ -96,12 +95,12 @@ export function useRegisterRows(wanted = true): RegisterRow[] {
 }
 
 export function useRoomFinishLabels(title: string): RoomFinishLabels {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return useMemo(() => ({
-    title, number: t('finishes.number'), room: t('finishes.room'), level: t('finishes.level'),
+    locale, title, number: t('finishes.number'), room: t('finishes.room'), level: t('finishes.level'),
     floor: t('finishes.floor'), wall: t('finishes.wall'), ceiling: t('finishes.ceiling'), area: t('finishes.area'),
     sharedNote: t('finishes.sharedNote'),
-  }), [t, title]);
+  }), [t, locale, title]);
 }
 
 /** The rooms with their finishes, read from the loaded models again only when they change. */
@@ -113,12 +112,12 @@ export function useRoomFinishes(): RoomFinishes[] {
 }
 
 export function useTypeQuantityLabels(title: string): TypeQuantityLabels {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return useMemo(() => ({
-    title, type: t('typeQty.type'), class: t('typeQty.class'), level: t('typeQty.level'), count: t('typeQty.count'),
+    locale, title, type: t('typeQty.type'), class: t('typeQty.class'), level: t('typeQty.level'), count: t('typeQty.count'),
     length: t('typeQty.length'), area: t('typeQty.area'), volume: t('typeQty.volume'), noQto: t('typeQty.noQto'),
     total: t('typeQty.total'), noType: t('typeQty.noType'), noLevel: t('typeQty.noLevel'),
-  }), [t, title]);
+  }), [t, locale, title]);
 }
 
 /** The quantities by type, read from the loaded models again only when they change. */

@@ -33,6 +33,8 @@ export interface LabelPlacement {
   dimStyle: string;
   /** Drawing units per paper millimetre. */
   paperUnit: number;
+  /** The language the label's numbers are written in. */
+  locale: string;
 }
 
 /** The elements of a view with their GlobalId and class; one a loaded model does not have is left out. */
@@ -48,16 +50,16 @@ export function labelTargets(elements: readonly ViewElement[]): LabelTarget[] {
 /** How a label finds its element by GlobalId: the loaded models'. */
 export type ElementReader = (globalId: string) => LabelElement | null;
 
-function labelText(type: AnnotationType, guid: string, extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): string | null {
+function labelText(type: AnnotationType, guid: string, locale: string, extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): string | null {
   const spec = type.label;
   const element = read(guid);
-  return spec && element ? resolveWithExtras(parseTemplate(spec.template), element, spec.missing, extras) : null;
+  return spec && element ? resolveWithExtras(parseTemplate(spec.template), element, locale, spec.missing, extras) : null;
 }
 
 /** The label of `type` for the element `guid`, centred on `centre`; `ring` is the element's outline, which a leader runs to. Null when the element is not loaded or the type is no label type. */
 export function labelDraft(type: AnnotationType, guid: string, centre: Pt, at: LabelPlacement, ring?: readonly Pt[], extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): DraftEntity | null {
   const spec = type.label;
-  const text = labelText(type, guid, extras, read);
+  const text = labelText(type, guid, at.locale, extras, read);
   if (!spec || text === null) return null;
   const plain = { type: 'text' as const, p: centredAnchor(centre, text, at.textHeight, spec.frame, annotationScreenUp()), text, height: at.textHeight, rotation: 0, ...(spec.frame ? { frame: spec.frame } : {}) };
   const shape = withLeader(plain, ring ?? null, spec.leader, at.paperUnit);
@@ -66,8 +68,8 @@ export function labelDraft(type: AnnotationType, guid: string, centre: Pt, at: L
 }
 
 /** The size a label of `type` for `guid` fills; null as for `labelDraft`. */
-export function labelSize(type: AnnotationType, guid: string, textHeight: number, extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): { w: number; h: number } | null {
-  const text = labelText(type, guid, extras, read);
+export function labelSize(type: AnnotationType, guid: string, textHeight: number, locale: string, extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): { w: number; h: number } | null {
+  const text = labelText(type, guid, locale, extras, read);
   if (text === null) return null;
   const { outer } = textBlock(text, textHeight, type.label?.frame);
   return { w: outer.x1 - outer.x0, h: outer.y1 - outer.y0 };
@@ -76,7 +78,7 @@ export function labelSize(type: AnnotationType, guid: string, textHeight: number
 /** Where a label of `type` for `target` goes beside the element, clear of `others` (the view's elements), the annotations on the view and the labels placed before it. */
 export function defaultCentres(type: AnnotationType, targets: readonly LabelTarget[], elements: readonly ViewElement[], existing: readonly DraftEntity[], at: LabelPlacement): Map<string, Pt> {
   const items = targets.flatMap((t) => {
-    const size = labelSize(type, t.guid, at.textHeight);
+    const size = labelSize(type, t.guid, at.textHeight, at.locale);
     return size ? [{ id: String(t.renderId), ring: t.ring, ...size }] : [];
   });
   const scene = {

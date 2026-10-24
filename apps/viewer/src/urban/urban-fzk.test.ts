@@ -99,7 +99,7 @@ const asPieces = (meshes: readonly MeshData[]): MeshData[] => meshes.map((m) => 
 });
 
 const LABELS: UrbanLabels = {
-  title: 'T', level: 'Level', elevation: 'Elevation', built: 'Built', useful: 'Useful', inCut: 'In CUT', yes: 'yes', no: 'no',
+  locale: 'en', title: 'T', level: 'Level', elevation: 'Elevation', built: 'Built', useful: 'Useful', inCut: 'In CUT', yes: 'yes', no: 'no',
   belowGround: (n) => n, ground: (n) => n, category: 'Category', area: 'Area',
   ac: 'Ac', ad: 'Ad', adCut: 'Ad for CUT', au: 'Au', site: 'Site', pot: 'POT', cut: 'CUT', rules: () => [], note: '',
   atLeast: (v) => `>= ${v}`, unmeasured: (count, level) => `${count} unmeasured on ${level}`,

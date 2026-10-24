@@ -27,7 +27,7 @@ import { resizedFrame, sheetDrawingArea } from './viewport-resize.js';
 import type { ProjectSheet } from './types';
 
 const labels: ScheduleLabels = {
-  title: 'Doors and windows', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
+  locale: 'en', title: 'Doors and windows', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
   op: (op) => op,
 };
 const sheets = () => useProjectStore.getState().sheets;

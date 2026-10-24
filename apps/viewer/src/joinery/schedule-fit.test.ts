@@ -15,7 +15,7 @@ import { layoutSchedule, scheduleMinBox, schedulePages, type ScheduleLabels, typ
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
 
 const labels: ScheduleLabels = {
-  title: 'Doors and windows', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
+  locale: 'en', title: 'Doors and windows', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
   op: (op) => op,
 };
 
