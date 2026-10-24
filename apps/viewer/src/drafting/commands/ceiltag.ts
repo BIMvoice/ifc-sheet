@@ -10,6 +10,7 @@
 
 import { annotationScreenUp } from '@/drafting/annotation';
 import { obstacleBoxes } from '@/drafting/cross-ref-marks';
+import { getLocale } from '@/i18n';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { labelElementByGlobalId } from '@/labels/label-element';
 import { centredAnchor } from '@/labels/label-place';
@@ -47,7 +48,7 @@ export function ceilTag(
   // The soffit is read off the meshes, so the floors are taken in their frame, not from the Elevation attribute;
   // only this storey's ceilings (above the cut, below the next level) are tagged.
   const plan = { level: resolvePlanLevel(view, levels) ?? view.level, cutHeight: view.cutHeight };
-  const tags = ceilingPlanTags(geometry?.meshes ?? [], plan, levels, loadedDataStores(), geometry?.coordinateInfo, isCeiling);
+  const tags = ceilingPlanTags(geometry?.meshes ?? [], plan, levels, loadedDataStores(), geometry?.coordinateInfo, isCeiling, getLocale());
   // A tag is for its ceiling and for the ceilings that share it (`ceilingShared`), so a covering met later is not tagged again.
   const done = new Set(ctx.entities().flatMap((d) => [...(typeof d.params.ceilingOf === 'string' ? [d.params.ceilingOf] : []), ...(typeof d.params.ceilingShared === 'string' ? d.params.ceilingShared.split(',') : [])]));
   // A ceiling with no GlobalId cannot be recognised on the next run, so it is not tagged.
@@ -63,7 +64,7 @@ export function ceilTag(
     const at = clearTagSpot(t.at, t.extent, t.text, height, up, obstacles);
     return newDraft(ctx.viewId, ctx.layerId, {
       type: 'text' as const, p: centredAnchor(at, t.text, height, undefined, up), text: t.text, height, rotation: 0,
-    }, { ...styledParams(ctx.viewId, { type: 'text', p: at, text: t.text, height, rotation: 0 }, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }), ceilingOf: t.guid, ...(t.shared.length > 1 ? { ceilingShared: t.shared.slice(1).join(',') } : {}) });
+    }, { ...styledParams(ctx.viewId, { type: 'text', p: at, text: t.text, height, rotation: 0 }, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }), ceilingOf: t.guid, ceilingHeight: t.height, ...(t.shared.length > 1 ? { ceilingShared: t.shared.slice(1).join(',') } : {}) });
   });
   if (drafts.length) editDrafts({ add: drafts });
   ctx.say(drafts.length ? 'drafting.msg.ceilTagDone' : 'drafting.msg.ceilTagNone', { count: drafts.length, already: groups.length - drafts.length });

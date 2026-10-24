@@ -56,6 +56,7 @@ export function ceilingPlanTags(
   stores: readonly IfcDataStore[],
   frame: CoordinateInfo | undefined,
   isCeiling: (renderId: number) => boolean,
+  locale = 'en',
 ): CeilingTag[] {
   const { level, cutHeight } = plan;
   const floor = levelFloorMeshY(level, stores, frame);
@@ -65,5 +66,5 @@ export function ceilingPlanTags(
     if (!next || l.elevation < next.elevation) next = l;
   }
   const below = next ? levelFloorMeshY(next, stores, frame) : Infinity;
-  return ceilingTags(meshes, floor, isCeiling, { above: floor + cutHeight, below });
+  return ceilingTags(meshes, floor, isCeiling, { above: floor + cutHeight, below }, locale);
 }
