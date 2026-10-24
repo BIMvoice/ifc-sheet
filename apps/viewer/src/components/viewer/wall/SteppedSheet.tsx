@@ -43,7 +43,7 @@ import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
 import { ariaKeyShortcuts } from '@/lib/commands/shortcut-label';
 import { useKeyBindings } from '@/lib/commands/key-bindings';
-import { WALL_PILL } from './wall-type';
+import { WALL_CARD_HOST, WALL_PILL } from './wall-type';
 
 /** The Wall tool that runs as a chain: each click adds the next dimension, until Esc. */
 const CHAINED_TOOL = 'dimaligned';
@@ -303,7 +303,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
               <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} />
             </div>
           )}
-          <div ref={cardHost} className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
+          <div ref={cardHost} className={WALL_CARD_HOST}>
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
               : focusView ? null
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
