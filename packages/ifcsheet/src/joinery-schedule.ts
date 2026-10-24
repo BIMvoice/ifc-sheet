@@ -20,6 +20,7 @@
 import { getModelLengthUnitScale, joineryTypesInStore, occurrencesOfTypeInStore, readJoineryFlips, readJoineryType, readRelatedLists, type JoinerySpec, type JoineryTypeRead } from '@ifc-lite/create';
 import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
 import { getAttributeNamesForSchema, type IfcDataStore } from '@ifc-lite/parser';
+import type { ScheduleTextRow } from './schedule-text.js';
 import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 
 export type ScheduleKind = 'door' | 'window' | 'all';
@@ -55,6 +56,8 @@ export interface ScheduleData {
   entries: ScheduleEntry[];
   /** Level names, lowest first. */
   levels: string[];
+  /** Rows of text typed in by hand, one cell per type by entry key (#186): not read from the model, attached by the app's `scheduleDataOf`. */
+  textRows?: ScheduleTextRow[];
 }
 
 /** An occurrence's mark: its type's mark and its number (`W1.3`); the type's name and the number for an untyped element. */

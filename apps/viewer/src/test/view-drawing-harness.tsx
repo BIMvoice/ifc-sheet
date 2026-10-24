@@ -7,7 +7,7 @@
  * meshes. It takes the steps `ViewDrawingHost` takes: the view's plane
  * (`sectionPlaneForView`), its display overrides (`viewDisplayOverrides`) over
  * the store's default display options, the real `useDrawingGeneration` hook,
- * and `drawingAsViewShows`. Nothing is mocked; an IFC file is meshed with the
+ * and `drawingShownBy`. Nothing is mocked; an IFC file is meshed with the
  * engine the viewer loads.
  */
 
@@ -25,7 +25,7 @@ import type { TypeVisibilityGate } from '@/store/typeVisibilityFilter';
 import { TYPE_VISIBILITY_SEMANTIC_DEFAULTS } from '@/store/constants';
 import { sectionPlaneForView } from '@/project/view-plane';
 import { viewDisplayOverrides } from '@/project/view-drawings';
-import { drawingAsViewShows } from '@/project/view-appearance';
+import { drawingShownBy } from '@/project/view-shown';
 import type { ProjectView } from '@/project/types';
 
 const WASM = new URL('../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
@@ -86,7 +86,7 @@ export async function viewDrawing(view: Exclude<ProjectView, { kind: '3d' }>, ge
     container.remove();
   }
   const generated = drawing as Drawing2D | null;
-  return generated ? drawingAsViewShows(generated, view) : null;
+  return generated ? drawingShownBy(view, generated) : null;
 }
 
 /**

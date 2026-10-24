@@ -15,6 +15,8 @@
  * type with occurrences counted per storey (a door or window type).
  */
 
+import { readScheduleTextRows, type ScheduleTextRow } from './schedule-text.js';
+
 /** What a sub-report keeps of its parent's content. Absent dimension: no restriction. */
 export interface SubReportFilter {
   /** Only these kinds of element: doors, windows. */
@@ -108,6 +110,8 @@ export interface ProjectSchedule {
   scale?: number;
   /** Set when this schedule is a part of another one (#186): the parent's id and what it keeps of the parent's content. Absent: the schedule lists everything its kind lists. Joinery kinds only. */
   sub?: SubReport;
+  /** Rows of text typed by hand into a joinery schedule (#186): a manufacturer, a remark, a note per type. Cells are keyed by the type's identity, never by column. A sub-report prints its parent's (`textRowsOf`). Absent: none. Joinery kinds only. */
+  textRows?: ScheduleTextRow[];
 }
 
 /** Whether a schedule can be split: a joinery list that is not itself a part (parts do not nest: a part is cut from the model's rows). */
@@ -131,5 +135,8 @@ export function readSchedule(raw: unknown): ProjectSchedule | null {
   // A project saved before sub-reports has no `sub`: it stays an ordinary schedule. Only a joinery list can be split.
   const sub = readSubReport(o.sub);
   if (sub && (kind === 'door' || kind === 'window' || kind === 'all')) out.sub = sub;
+  // Text rows (#186) belong to a joinery list only; a project saved before them has none.
+  const textRows = readScheduleTextRows(o.textRows);
+  if (textRows && (kind === 'door' || kind === 'window' || kind === 'all')) out.textRows = textRows;
   return out;
 }

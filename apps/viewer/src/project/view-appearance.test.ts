@@ -45,3 +45,31 @@ describe('what an elevation shows', () => {
     assert.equal(lines.filter((l) => l.line.start.x >= 1 && l.line.start.x <= 2 && l.line.start.y >= 1 && l.line.end.y <= 2).every((l) => l.category === 'projection'), true);
   });
 });
+
+describe('a discipline plan is framed on what it keeps (#257)', () => {
+  const far = (id: number): Partial<DrawingLine> => ({ entityId: id, ifcType: 'IfcBuildingElementProxy' });
+  /** A roof 2 x 2 at the origin and a proxy 30 m away; the generator's bounds hold both. */
+  const site = (): Drawing2D => ({
+    lines: [line(0, 0, 2, 0, { entityId: 5, ifcType: 'IfcSlab' }), line(2, 0, 2, 2, { entityId: 5, ifcType: 'IfcSlab' }), line(-30, -20, -28, -20, far(9))],
+    cutPolygons: [],
+    projectionPolygons: [],
+    bounds: { min: { x: -30, y: -20 }, max: { x: 2, y: 2 } },
+  } as unknown as Drawing2D);
+  const dropsProxy = (_id: number, type: string | undefined) => type === 'IfcBuildingElementProxy';
+
+  it('takes the bounds from the lines its filter leaves, not from the model', () => {
+    assert.deepEqual(drawingAsViewShows(site(), { kind: 'plan', omits: dropsProxy }).bounds, { min: { x: 0, y: 0 }, max: { x: 2, y: 2 } });
+  });
+
+  it('counts the cut faces it keeps and ignores the ones it drops', () => {
+    const drawing = site();
+    const polygon = (id: number, type: string, x: number) => ({ polygon: { outer: [{ x, y: 0 }, { x: x + 1, y: 0 }, { x: x + 1, y: 1 }], holes: [] }, entityId: id, ifcType: type, modelIndex: 0, isCut: true });
+    drawing.cutPolygons = [polygon(5, 'IfcSlab', 3), polygon(9, 'IfcBuildingElementProxy', -25)] as unknown as Drawing2D['cutPolygons'];
+    assert.deepEqual(drawingAsViewShows(drawing, { kind: 'plan', omits: dropsProxy }).bounds, { min: { x: 0, y: 0 }, max: { x: 4, y: 2 } });
+  });
+
+  it('keeps the generator\'s bounds for a view that has no filter, and when the filter leaves nothing', () => {
+    assert.deepEqual(drawingAsViewShows(site(), { kind: 'plan' }).bounds, site().bounds);
+    assert.deepEqual(drawingAsViewShows(site(), { kind: 'plan', omits: () => true }).bounds, site().bounds);
+  });
+});

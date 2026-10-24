@@ -59,6 +59,10 @@ export {
   DEFAULT_JOINERY_MAPPING, fitToElement, normaliseName, readJoineryMapping, resolveMapping,
   type ElementFacts, type JoineryMapping, type MappingMatch, type MappingSource,
 } from './joinery-mapping.js';
+export {
+  addTextRow, cleanText, MAX_LABEL_LENGTH, MAX_TEXT_LENGTH, MAX_TEXT_ROWS, orphanCells, readScheduleTextRows, removeTextRow, renameTextRow, setTextCell, textCellText, textOwner, textRowsOf,
+  type OrphanCell, type ScheduleTextCell, type ScheduleTextRow, type TextHolder,
+} from './schedule-text.js';
 export { SHEET_SCALES, fitViewportBox, mmPerMetre, paperOf } from './viewport-fit.js';
 export {
   DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, LEVEL_MATCH_TOLERANCE_M, NEXT_FLOOR_CLEARANCE_M, defaultPlanCutHeight, defaultViews, elevationName, levelFloorY, levelsFromStoreys, planDepthBelowCut, planViewFor,
