@@ -12,6 +12,11 @@ import { Spinner } from '@/components/ui/spinner';
  * that open those surfaces keep them interactive and un-dimmed. The layer is
  * pointer-events-none; only the step card re-enables pointer events. The
  * IfcSheet face's own tour sits at z-[60]: its full-screen shell is z-50.
+ *
+ * A modal dialog pauses the tour (#285): while one is open the card is not
+ * rendered, so it cannot sit over the dialog, be clicked through the modal's
+ * pointer lock, or take focus from the modal's trap. It comes back when the
+ * modal closes. Non-modal surfaces (menus, popovers) are not affected.
  */
 
 import { createPortal } from 'react-dom';
@@ -25,6 +30,7 @@ import { useTourStore } from '@/lib/tours/tour-store';
 import type { TourDefinition } from '@/lib/tours/types';
 import { TourSpotlight } from './TourSpotlight';
 import { TourStepCard } from './TourStepCard';
+import { useModalOpen } from './useModalOpen';
 
 function PrereqCard({ tour }: { tour: TourDefinition }) {
   const { t } = useTranslation();
@@ -65,7 +71,9 @@ export function TourHost() {
   const stepIndex = useTourStore((s) => s.stepIndex);
   const stepPhase = useTourStore((s) => s.stepPhase);
   const targetEl = useTourStore((s) => s.targetEl);
+  const modalOpen = useModalOpen();
 
+  if (modalOpen) return null;
   if (status === 'idle' || !tourId) return null;
   const tour = getTour(tourId);
   if (!tour) return null;
