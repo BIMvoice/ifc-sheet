@@ -209,6 +209,15 @@ describe('contentOf and scheduleOf', () => {
     for (const part of [d, w]) for (const [id, mark] of markOfId(part)) expect(all.get(id)).toBe(mark);
   });
 
+  it('a part cut by storey names an element as the whole does: the number counts the elements below it too', () => {
+    const upstairs: ProjectSchedule = { id: 'u', name: 'Level 1', kind: 'all', createdAt: 4, sub: { parent: 'p', filter: { levels: ['Level 1'] } } };
+    const all = [...schedules, upstairs];
+    const part = scheduleOf(all, upstairs, fixture());
+    // W3 has three elements on Ground and two on Level 1: those two are W3.4 and W3.5 in the whole, so in the part.
+    const w3 = part.entries.find((e) => e.key === 'w3')!;
+    expect(w3.occurrences.map((o) => occurrenceMarkOf(w3, o))).toEqual(['W1.4', 'W1.5']);
+  });
+
   it('hands the row choice on, with the text rows, so the layout needs nothing else', () => {
     expect(scheduleOf(schedules, doors, fixture()).content).toBe(content);
     expect(scheduleOf([{ ...parent, content: undefined }], { ...parent, content: undefined }, fixture()).content).toBeUndefined();
