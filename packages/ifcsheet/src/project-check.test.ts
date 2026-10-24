@@ -92,6 +92,23 @@ describe.skipIf(!existsSync(FZK))('ifcsheet check --project, on AC20-FZK-Haus', 
     ]);
   }, 120_000);
 
+  it('stops reporting an element listed in two parts once the schedule keeps it apart on purpose (#186)', async () => {
+    const parts = [
+      schedule('s2', 'Doors', { parent: 's1', filter: { kinds: ['door'] } }),
+      schedule('s3', 'Pick', { parent: 's1', filter: { types: ['untyped:door:885×2010'] } }),
+      schedule('s4', 'Windows', { parent: 's1', filter: { kinds: ['window'], types: ['untyped:window:1000×1000'] } }),
+    ];
+    const kinds = async (keptApart: unknown) => {
+      const file = write('kept.ifclite-project.json', projectFile({ schedules: [{ ...schedule('s1', 'Joinery'), ...(keptApart ? { keptApart } : {}) }, ...parts] }));
+      return (await findingsOf(['--project', file])).json?.findings.map((f) => f.kind);
+    };
+    expect(await kinds(undefined)).toEqual(['noMaterials', 'subReportDuplicates', 'subReportGaps']);
+    // The type's id keeps all three D1 doors apart; the gap beside it is a different problem and stays.
+    expect(await kinds(['untyped:door:885×2010|'])).toEqual(['noMaterials', 'subReportGaps']);
+    // An id that names no element of the duplicate changes nothing.
+    expect(await kinds(['untyped:door:1010×2010|'])).toEqual(['noMaterials', 'subReportDuplicates', 'subReportGaps']);
+  }, 120_000);
+
   it('says nothing more about a project whose parts add up', async () => {
     const file = write('clean.ifclite-project.json', projectFile({
       schedules: [
@@ -158,4 +175,33 @@ describe.skipIf(!existsSync(FZK))('ifcsheet check --project, on AC20-FZK-Haus', 
     expect(await run(['build', FZK, '--out', join(scratch(), 'x.pdf'), '--project', 'p.json'], c.io)).toBe(EXIT.usage);
     expect(c.err()).toContain('ifcsheet build has no --project');
   });
+});
+
+const EXT_INT = fileURLToPath(new URL('./__fixtures__/exterior-interior.ifc', import.meta.url));
+
+describe('ifcsheet check --project, with filters (#186)', () => {
+  const run3 = async (interior: Record<string, unknown>) => {
+    const file = write('ext-int.ifclite-project.json', projectFile({
+      schedules: [
+        schedule('s1', 'Joinery'),
+        schedule('s2', 'Exterior', { parent: 's1', filter: { properties: [{ name: 'IsExternal', op: 'equals', value: 'true' }] } }),
+        schedule('s3', 'Interior', { parent: 's1', filter: interior }),
+      ],
+    }));
+    const c = capture();
+    const code = await run(['check', EXT_INT, '--json', '--project', file], c.io);
+    const findings = (JSON.parse(c.out()) as { findings: { kind: string; params: Record<string, unknown> }[] }).findings.filter((f) => f.kind.startsWith('subReport'));
+    return { code, err: c.err(), findings };
+  };
+
+  it('finds exterior and interior apart a partition: no duplicate, no gap', async () => {
+    const r = await run3({ properties: [{ name: 'IsExternal', op: 'notEquals', value: 'true' }] });
+    expect(r.err).toBe('');
+    expect(r.findings).toEqual([]);
+  }, 120_000);
+
+  it('reports the store door and the borrowed light, which say nothing, when the interior asks for IsExternal = false', async () => {
+    const r = await run3({ properties: [{ name: 'IsExternal', op: 'equals', value: 'false' }] });
+    expect(r.findings).toEqual([{ kind: 'subReportGaps', missing: expect.any(String), effect: expect.any(String), params: { schedule: 'Joinery', types: 2, count: 2, list: expect.stringContaining('×1') } }]);
+  }, 120_000);
 });

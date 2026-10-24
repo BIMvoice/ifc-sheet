@@ -20,9 +20,11 @@ import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetsRo } from '../catalogues/sheets.ro';
 import { wallRo } from '../catalogues/wall.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
+import { wallReviewRo } from '../catalogues/wall-review.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
 import { featuresRo } from '../catalogues/features.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
+import { wallArrangeRo } from '../catalogues/wall-arrange.ro';
 import { revisionsRo } from '../catalogues/revisions.ro';
 import { catalogueRo } from '../catalogues/catalogue.ro';
 import { cadLayersRo } from '../catalogues/cad-layers.ro';
@@ -35,6 +37,7 @@ import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 export default {
   ...wallRo,
   ...wallKeysRo,
+  ...wallReviewRo,
   ...sheetsRo,
   ...checkRo,
   ...issueRo,
@@ -45,6 +48,7 @@ export default {
   ...sheetTablesRo,
   ...featuresRo,
   ...titleBlockSourcesRo,
+  ...wallArrangeRo,
   ...revisionsRo,
   ...catalogueRo,
   ...cadLayersRo,

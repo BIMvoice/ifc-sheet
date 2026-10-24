@@ -144,3 +144,22 @@ describe('CEILTAG remembers the ceilings that share a tag (#271)', () => {
     assert.equal(ceilingTexts().length, 2);
   });
 });
+
+describe('CEILTAG height text follows the language (#269)', () => {
+  it('prints +2,70 in ro and +2.70 in en, and re-writes when the language changes', async () => {
+    const { setLocale, registerLocale } = await import('@/i18n');
+    registerLocale('ro', {});
+    const { refreshCeilingTags } = await import('@/rcp/ceiling-tag-sync');
+    loadCeiling(100);
+    setLocale('ro');
+    ceilTag(context(), () => true, SAME_GUID);
+    const text = () => { const s = ceilingTexts()[0].shape; return s.type === 'text' ? s.text : ''; };
+    assert.equal(text(), '+2,70');
+    setLocale('en');
+    refreshCeilingTags('en');
+    assert.equal(text(), '+2.70');
+    refreshCeilingTags('ro');
+    assert.equal(text(), '+2,70');
+    setLocale('en');
+  });
+});

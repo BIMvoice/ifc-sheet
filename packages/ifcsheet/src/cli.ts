@@ -33,8 +33,8 @@ export const EXIT = { ok: 0, failed: 1, usage: 2 } as const;
 const USAGE = `ifcsheet: drawing sets from IFC models
 
 Usage:
-  ifcsheet build <model.ifc> --out <set.pdf> [--dxf <dir>] [--name <project name>]
-  ifcsheet check <model.ifc> [--project <file>] [--json]
+  ifcsheet build <model.ifc> --out <set.pdf> [--dxf <dir>] [--name <project name>] [--include-far-elements]
+  ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
 
 Commands:
   build   Lay out the starting drawing set of the model (a plan per level, the
@@ -51,6 +51,8 @@ Options:
   --dxf <dir>      Also write a DXF per sheet into this directory (created if absent).
   --name <name>    The project name for the title blocks (default: the model's).
   --project <file> A saved project (.ifclite-project.json) for check: its schedules, joinery catalogue and symbol mapping.
+  --include-far-elements  Frame the views on everything the storeys contain, small elements far from the building too
+                   (a survey point, an origin cube). By default they are left out of the framing only and named by check.
   --json           Print the check as JSON: { file, ready, findings: [{ kind, missing, effect, params }] } (with --project, also project).
   -h, --help       Show this help.
   -v, --version    Show the version.
@@ -79,6 +81,7 @@ interface BuildArgs {
   out: string;
   dxf?: string;
   name?: string;
+  includeFarElements?: boolean;
 }
 
 async function build(args: BuildArgs, io: CliIo): Promise<number> {
@@ -89,7 +92,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: cannot read ${args.model}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
     return EXIT.failed;
   }
-  const model = await openModel(bytes);
+  const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
   const set = generateDefaultSet(model, args.name ? { name: args.name } : {});
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
@@ -113,7 +116,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 }
 
 /** `ifcsheet check`: exit 0 when the model lacks nothing the drawings read, 1 when something would weaken them. */
-async function check(file: string, json: boolean, projectFile: string | undefined, io: CliIo): Promise<number> {
+async function check(file: string, json: boolean, projectFile: string | undefined, includeFarElements: boolean, io: CliIo): Promise<number> {
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await readFile(file));
@@ -137,8 +140,16 @@ async function check(file: string, json: boolean, projectFile: string | undefine
       return EXIT.failed;
     }
   }
-  // The counts read the entity tables, not the meshes: no wasm, and a model with no geometry is still reported on.
-  const findings = readinessWithProject(await openModel(bytes, { geometry: false }), project).map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
+  // The counts read the entity tables; the elements the views are framed without are measured on the meshes, so the geometry is read too (a model with none is still reported on). The project's own setting counts as the flag.
+  const include = includeFarElements || project?.includeFarElements === true;
+  let opened;
+  try {
+    opened = await openModel(bytes, { includeFarElements: include });
+  } catch (error) {
+    io.stderr(`ifcsheet: the geometry could not be read (${(error as Error).message}); the far-away elements are not checked\n`);
+    opened = await openModel(bytes, { geometry: false });
+  }
+  const findings = readinessWithProject(opened, project).map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
   if (json) {
     io.stdout(`${JSON.stringify({ file, ...(projectFile !== undefined ? { project: projectFile } : {}), ready: findings.length === 0, findings }, null, 2)}\n`);
   } else if (findings.length === 0) {
@@ -163,6 +174,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         name: { type: 'string' },
         project: { type: 'string' },
         json: { type: 'boolean' },
+        'include-far-elements': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
       },
@@ -187,11 +199,11 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
   }
   if (command === 'check') {
     if (rest.length !== 1 || values.out || values.dxf || values.name) {
-      io.stderr('ifcsheet check takes one model, --project and --json only: ifcsheet check <model.ifc> [--project <file>] [--json]\n');
+      io.stderr('ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n');
       return EXIT.usage;
     }
     try {
-      return await check(rest[0], values.json === true, values.project, io);
+      return await check(rest[0], values.json === true, values.project, values['include-far-elements'] === true, io);
     } catch (error) {
       io.stderr(`ifcsheet: check of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;
@@ -210,7 +222,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.usage;
   }
   try {
-    return await build({ model: rest[0], out: values.out, dxf: values.dxf, name: values.name }, io);
+    return await build({ model: rest[0], out: values.out, dxf: values.dxf, name: values.name, includeFarElements: values['include-far-elements'] === true }, io);
   } catch (error) {
     io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
     return EXIT.failed;

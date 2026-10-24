@@ -17,12 +17,12 @@
 import { readJoineryList } from './joinery-spec-read.js';
 import { DEFAULT_JOINERY_MAPPING, readJoineryMapping, type JoineryMapping } from './joinery-mapping.js';
 import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion } from './project-version.js';
-import { readSchedule, type ProjectSchedule } from './sub-reports.js';
+import { readSchedule, scheduleFilterProperties, type ProjectSchedule } from './sub-reports.js';
 import type { JoinerySpec } from '@ifc-lite/create';
 import { joineryScheduleData, type JoineryProject, type ScheduleModel } from './joinery-schedule.js';
 import { subReportChecksOf, type SubReportCheck } from './sub-report-check.js';
 import { readinessOfModel } from './readiness-read.js';
-import type { ReadinessFinding } from './readiness.js';
+import type { FarElementFact, ReadinessFinding } from './readiness.js';
 import type { IfcDataStore } from '@ifc-lite/parser';
 
 /** What the checks read of a project file. */
@@ -34,6 +34,8 @@ export interface ProjectFacts extends JoineryProject {
   schedules: ProjectSchedule[];
   joineryTypes: JoinerySpec[];
   joineryMapping: JoineryMapping;
+  /** The project's setting "include far-away elements in framing" (`framing.ts`); false when the file does not say so. */
+  includeFarElements: boolean;
 }
 
 type Json = Record<string, unknown>;
@@ -58,6 +60,7 @@ export function readProjectFile(text: string): ProjectFacts {
     schedules: list(parsed.schedules).flatMap((s) => readSchedule(s) ?? []),
     joineryTypes: readJoineryList(parsed.joineryTypes),
     joineryMapping: parsed.joineryMapping !== undefined ? readJoineryMapping(parsed.joineryMapping) : { ...DEFAULT_JOINERY_MAPPING },
+    includeFarElements: parsed.includeFarElements === true,
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }
@@ -67,14 +70,14 @@ export function readProjectFile(text: string): ProjectFacts {
  * project applied, `joineryScheduleData`) against its parts. What `readinessOfModel` takes as its second argument.
  */
 export function projectSubReportChecks(project: ProjectFacts, models: readonly ScheduleModel[]): SubReportCheck[] {
-  return subReportChecksOf(project.schedules, (kind) => joineryScheduleData(models, project, kind));
+  return subReportChecksOf(project.schedules, (kind) => joineryScheduleData(models, project, kind, undefined, scheduleFilterProperties(project.schedules)));
 }
 
 /**
  * The readiness findings of an opened model with a project: the model's own, then a pair for each split schedule
  * whose parts overlap or leave elements out. Without a project, `readinessOfModel` alone.
  */
-export function readinessWithProject(model: { dataStore: IfcDataStore; storeys: readonly unknown[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
+export function readinessWithProject(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
   const checks = project ? projectSubReportChecks(project, [{ modelId, dataStore: model.dataStore, view: null }]) : [];
   return readinessOfModel(model, checks);
 }

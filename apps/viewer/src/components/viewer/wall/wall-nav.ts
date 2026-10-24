@@ -21,9 +21,11 @@ interface WallNav {
   drawer: boolean;
   /** The panel from the top bar that is open: what is missing from the set, or issuing it. */
   panel: 'missing' | 'issue' | null;
+  /** The split schedule whose parts are being reviewed element by element (#186), or null. */
+  review: string | null;
 }
 
-export const useWallNav = create<WallNav>()(() => ({ stepped: null, focus: null, visit: 0, drawer: false, panel: null }));
+export const useWallNav = create<WallNav>()(() => ({ stepped: null, focus: null, visit: 0, drawer: false, panel: null, review: null }));
 
 export function stepInto(sheetId: string | null, focus: string | null = null): void {
   useWallNav.setState((s) => ({ stepped: sheetId, focus, visit: s.visit + 1 }));
@@ -36,4 +38,9 @@ export function setDrawer(open: boolean): void {
 
 export function setPanel(panel: WallNav['panel']): void {
   useWallNav.setState({ panel });
+}
+
+/** Open the review by element of the split schedule `scheduleId`, or close it with null. */
+export function setReview(scheduleId: string | null): void {
+  useWallNav.setState({ review: scheduleId });
 }

@@ -24,8 +24,18 @@ export const WALL_FIELD = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#
 /** The label above a field. */
 export const WALL_LABEL = 'block text-xs text-sky-200';
 
+/**
+ * The bound every card at the side of a sheet shares: the card shrinks to the room its host
+ * (`WALL_CARD_HOST`) leaves and scrolls inside itself, so a tall card never pushes the page
+ * or the sheet. `min-h-0` lets a flex child go below its content height.
+ */
+export const WALL_CARD_BOUND = 'min-h-0 overflow-y-auto overscroll-contain';
+
+/** Where a card sits over the sheet: top right, no taller than the sheet area less its margins. */
+export const WALL_CARD_HOST = 'pointer-events-none absolute right-3 top-3 flex max-h-[calc(100%-1.5rem)] flex-col [&>*]:pointer-events-auto';
+
 /** The surface of a card at the right of a sheet. */
-export const WALL_CARD = 'w-[340px] rounded-xl border border-sky-300/20 bg-[#0b2348]/95 p-5 text-sm leading-normal text-sky-100 shadow-2xl backdrop-blur';
+export const WALL_CARD = `${WALL_CARD_BOUND} w-[340px] rounded-xl border border-sky-300/20 bg-[#0b2348]/95 p-5 text-sm leading-normal text-sky-100 shadow-2xl backdrop-blur`;
 
 /** A small-caps label: a card's eyebrow, a drawer section. */
 export const WALL_EYEBROW = 'm-0 text-2xs font-medium uppercase tracking-widest text-cyan-400';

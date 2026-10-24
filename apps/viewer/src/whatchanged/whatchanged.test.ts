@@ -86,6 +86,11 @@ describe('annotations and sheets', () => {
   it('finds the tag or label whose element is gone, the ones whose element changed and a level mark', () => {
     assert.deepEqual(impacts.map((i) => [i.guid, i.how]), [['gone', 'lost'], ['moved', 'changed'], ['S1', 'changed']]);
   });
+  it('finds a DIMALL dimension whose door or window was removed or changed', () => {
+    const dim = (measures?: string) => newDraft('p', 'l', { type: 'dimension', variant: 'linear', a: { x: 0, y: 0 }, b: { x: 1, y: 0 }, at: { x: 0, y: 0.5 }, height: 0.25 }, measures ? { dimAll: 'k', measures } : { dimAll: 'k' });
+    const found = annotationImpacts([dim('gone'), dim('edited'), dim('same'), dim()], changes);
+    assert.deepEqual(found.map((i) => [i.guid, i.how]), [['gone', 'lost'], ['edited', 'changed']]);
+  });
   const sheet = (id: string, number: string, views: string[]): ProjectSheet => ({ id, number, name: number, createdAt: 0, viewports: views.map((v) => ({ id: `vp${v}`, viewId: v, x: 0, y: 0, scale: 100, width: 0, height: 0, center: null })) });
   it('counts each changed element once per sheet and says nothing for a sheet that shows nothing that changed', () => {
     const report = sheetChanges([sheet('s1', 'A-101', ['p', 'p2']), sheet('s2', 'A-201', ['q'])], [planBand('p', 0, 1.1), planBand('p2', 0, 1.1), cutBand('q', 'z', 500, 1)], changes, impacts);

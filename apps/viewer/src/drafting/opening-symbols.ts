@@ -164,19 +164,32 @@ export function openingSymbols(
 ): OpeningSymbol[] {
   if (plane.axis !== 'y' || plane.customPlane) return [];
   const cut = plane.position;
-  const byId = new Map<number, { kind: 'door' | 'window'; pts: Pt[]; minY: number; maxY: number; world: number[]; l2w?: number[] }>();
-  for (const mesh of meshes) {
-    const kind = KIND[(mesh.ifcType ?? '').toUpperCase()];
-    if (!kind || (mesh.geometryClass ?? 0) === 2) continue;
+  const joinery = meshes.filter((mesh) => KIND[(mesh.ifcType ?? '').toUpperCase()] && (mesh.geometryClass ?? 0) !== 2);
+  // First each element's height range, over all its meshes: only the elements the cut passes through are
+  // projected, not every door and window of every storey (#154).
+  const range = new Map<number, { minY: number; maxY: number }>();
+  for (const mesh of joinery) {
+    const oy = mesh.origin?.[1] ?? 0;
+    const r = range.get(mesh.expressId) ?? { minY: Infinity, maxY: -Infinity };
+    const p = mesh.positions;
+    for (let i = 0; i + 2 < p.length; i += 3) {
+      const y = oy + p[i + 1];
+      r.minY = Math.min(r.minY, y);
+      r.maxY = Math.max(r.maxY, y);
+    }
+    range.set(mesh.expressId, r);
+  }
+  const byId = new Map<number, { kind: 'door' | 'window'; pts: Pt[]; world: number[]; l2w?: number[] }>();
+  for (const mesh of joinery) {
+    const r = range.get(mesh.expressId)!;
+    if (cut < r.minY || cut > r.maxY) continue;
     // World = the mesh's local-frame origin + its positions.
     const [ox, oy, oz] = mesh.origin ?? [0, 0, 0];
-    const entry = byId.get(mesh.expressId) ?? { kind, pts: [], minY: Infinity, maxY: -Infinity, world: [] };
+    const entry = byId.get(mesh.expressId) ?? { kind: KIND[(mesh.ifcType ?? '').toUpperCase()], pts: [], world: [] };
     entry.l2w ??= mesh.localToWorld;
     const p = mesh.positions;
     for (let i = 0; i + 2 < p.length; i += 3) {
       const y = oy + p[i + 1];
-      entry.minY = Math.min(entry.minY, y);
-      entry.maxY = Math.max(entry.maxY, y);
       entry.pts.push(worldToDrawing(plane, { x: ox + p[i], y, z: oz + p[i + 2] }));
       entry.world.push(ox + p[i], y, oz + p[i + 2]);
     }
@@ -184,7 +197,6 @@ export function openingSymbols(
   }
   const out: OpeningSymbol[] = [];
   for (const [id, entry] of byId) {
-    if (cut < entry.minY || cut > entry.maxY) continue;
     const configured = entry.l2w ? typedOf(id) : null;
     const typed = configured && entry.l2w ? typedPlanSymbol(configured.spec, entry.world, entry.l2w, plane, configured.flips) : null;
     if (typed) {

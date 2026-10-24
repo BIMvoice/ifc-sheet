@@ -21,6 +21,7 @@
  * (`axisFlipForSection`), plus the pan offset.
  */
 
+import { paperSigns } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { Pt } from './types';
 
@@ -92,9 +93,12 @@ export interface ViewTransform {
   scale: number;
 }
 
-/** Screen sign per drawing axis for a cut axis (mirrors `axisFlipForSection`). */
+/** The cut axis of each view kind (`AXIS_NAME` in the sheet inverts it). */
+const CUT_AXIS = { down: 'y', front: 'z', side: 'x' } as const;
+
+/** Screen sign per drawing axis for a cut axis (mirrors `axisFlipForSection`): the engine's `paperSigns`, so the PDF and the sheet are mirrored the same way. */
 export function screenSigns(axis: SectionAxisName): { kx: 1 | -1; ky: 1 | -1 } {
-  return { kx: axis === 'side' ? -1 : 1, ky: axis !== 'down' ? -1 : 1 };
+  return paperSigns(CUT_AXIS[axis]);
 }
 
 export function drawingToScreen(p: Pt, t: ViewTransform, axis: SectionAxisName): Pt {

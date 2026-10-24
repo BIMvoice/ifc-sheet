@@ -288,7 +288,7 @@ function useDrawingExport({
   isPinned = false,
   cachedSheetTransformRef,
 }: UseDrawingExportParams): UseDrawingExportResult {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   // Georef inputs for the DXF export (PR #1871 review, P1): placement edits
   // applied in CesiumPlacementEditor live in `georefMutations` (per model
   // id), not in `ifcDataStore`, and in a federation the georef frame is the
@@ -522,7 +522,7 @@ function useDrawingExport({
         const endT = { x: flipX ? -end.x : end.x, y: flipY ? -end.y : end.y };
         const midX = (startT.x + endT.x) / 2;
         const midY = (startT.y + endT.y) / 2;
-        const labelText = formatDistance(distance);
+        const labelText = formatDistance(distance, undefined, locale);
 
         // Measurement styling (all in mm on paper, converted to model units)
         const measureColor = '#2196F3';
@@ -567,7 +567,7 @@ function useDrawingExport({
         // Label at centroid
         const centroid = computePolygonCentroid(result.points);
         const ct = { x: flipX ? -centroid.x : centroid.x, y: flipY ? -centroid.y : centroid.y };
-        const areaText = formatArea(result.area);
+        const areaText = formatArea(result.area, locale);
         const fontSize = mmToModel(3);
 
         svg += `    <text x="${ct.x.toFixed(4)}" y="${ct.y.toFixed(4)}" font-family="Arial, sans-serif" font-size="${fontSize.toFixed(4)}" fill="#000000" text-anchor="middle" dominant-baseline="middle" font-weight="bold">${escapeXml(areaText)}</text>\n`;
@@ -636,7 +636,7 @@ function useDrawingExport({
 
     svg += '</svg>';
     return svg;
-  }, [drawing, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, measure2DResults, polygonArea2DResults, textAnnotations2D, cloudAnnotations2D, sectionPlane.axis, dxfUnderlays, scanSection, ifcDataStore, storeModels]);
+  }, [drawing, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, measure2DResults, polygonArea2DResults, textAnnotations2D, cloudAnnotations2D, sectionPlane.axis, dxfUnderlays, scanSection, ifcDataStore, storeModels, locale]);
 
   // Generate SVG with drawing sheet (frame, title block, scale bar)
   // This generates coordinates directly in paper mm space (like the canvas rendering)

@@ -19,7 +19,9 @@
 
 import { getModelLengthUnitScale, joineryTypesInStore, occurrencesOfTypeInStore, readJoineryFlips, readJoineryType, readRelatedLists, type JoinerySpec, type JoineryTypeRead } from '@ifc-lite/create';
 import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
-import { getAttributeNamesForSchema, type IfcDataStore } from '@ifc-lite/parser';
+import { extractPropertiesOnDemand, getAttributeNamesForSchema, type IfcDataStore } from '@ifc-lite/parser';
+import { filterPropertyNames, predefinedTypeText, propertyValueText, type PropertyFact } from './schedule-filter.js';
+import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
 import type { ScheduleTextRow } from './schedule-text.js';
 import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 
@@ -34,6 +36,12 @@ export interface ScheduleOccurrence {
   tag: string | null;
   /** 1-based, within the type, lowest level first. */
   number: number;
+  /** The element's IFC class (`IfcDoor`), for the class filter. */
+  ifcClass?: string;
+  /** The element's PredefinedType without dots (`DOOR`); null when it has none (IFC2X3, or `$`). */
+  predefinedType?: string | null;
+  /** The properties the schedule was asked to read (`IsExternal`, and those the project's filters name), for the property filter. */
+  properties?: PropertyFact[];
 }
 
 export interface ScheduleEntry {
@@ -58,12 +66,12 @@ export interface ScheduleData {
   levels: string[];
   /** Rows of text typed in by hand, one cell per type by entry key (#186): not read from the model, attached by the app's `scheduleDataOf`. */
   textRows?: ScheduleTextRow[];
+  /** The schedule's content choice, for the layout's row choice (#186): not read from the model, attached by `scheduleOf`. */
+  content?: ScheduleContent;
 }
 
 /** An occurrence's mark: its type's mark and its number (`W1.3`); the type's name and the number for an untyped element. */
-export function occurrenceMark(entry: Pick<ScheduleEntry, 'mark' | 'name'>, o: Pick<ScheduleOccurrence, 'number'>): string {
-  return entry.mark && entry.mark !== '—' ? `${entry.mark}.${o.number}` : `${entry.name}-${o.number}`;
-}
+export const occurrenceMark: (entry: Pick<ScheduleEntry, 'mark' | 'name'>, o: Pick<ScheduleOccurrence, 'number'>) => string = occurrenceMarkOf;
 
 /** A model as the reads see it: the parsed store and, in the app, the edit overlay on top of it. */
 export interface Live { dataStore: IfcDataStore; view: MutablePropertyView | null }
@@ -105,6 +113,28 @@ export function storedName(dataStore: IfcDataStore, expressId: number): string {
 
 const real = (v: unknown): number => (typeof v === 'number' ? v : v && typeof v === 'object' && 'real' in v ? Number((v as { real: number }).real) : NaN);
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
+
+const CLASS_NAMES: Record<string, string> = { IFCDOOR: 'IfcDoor', IFCDOORSTANDARDCASE: 'IfcDoorStandardCase', IFCWINDOW: 'IfcWindow', IFCWINDOWSTANDARDCASE: 'IfcWindowStandardCase' };
+
+/** The element's property sets: the edit overlay's when there is one, else the store's table, else read from the source on demand (a headless open keeps no table). */
+function propertySetsOf({ dataStore, view }: Live, id: number): { name: string; properties: { name: string; value: unknown }[] }[] {
+  try {
+    if (view) return view.getForEntity(id);
+    const table = dataStore.properties?.getForEntity(id) ?? [];
+    return table.length > 0 || !(dataStore.source?.length > 0) ? table : extractPropertiesOnDemand(dataStore, id);
+  } catch {
+    return [];
+  }
+}
+
+/** The properties of an element whose name is in `names` (lower case), as text; empty and unreadable values are kept as empty text. */
+export function readPropertyFacts(live: Live, id: number, names: ReadonlySet<string>): PropertyFact[] {
+  const out: PropertyFact[] = [];
+  for (const pset of propertySetsOf(live, id)) {
+    for (const p of pset.properties) if (names.has(p.name.toLowerCase())) out.push({ pset: pset.name, name: p.name, value: propertyValueText(p.value) ?? '' });
+  }
+  return out;
+}
 
 /** Every typed occurrence's type, by one read of the model's IfcRelDefinesByType. Where an element is in more than one, the first wins. */
 export function typeIndex({ dataStore, view }: Live): Map<number, number | null> {
@@ -198,8 +228,18 @@ function markUntyped(entries: ScheduleEntry[]): void {
   }
 }
 
-/** The rows of the joinery schedule of `kind` over `models`, the project's catalogue and mapping applied. */
-export function joineryScheduleData(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind = 'all'): ScheduleData {
+/**
+ * The rows of the joinery schedule of `kind` over `models`, the project's catalogue and mapping applied; with `content`, sorted and numbered
+ * as that choice says (`applyContent`, the one rule), which a schedule saved with a choice prints and a project without one does not.
+ */
+export function joineryScheduleData(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind = 'all', content?: ScheduleContent, propertyNames: readonly string[] = []): ScheduleData {
+  // The properties read are the ones a filter names (the project's, given by the caller, and this content's own) and IsExternal.
+  const names = new Set(filterPropertyNames([content?.filter]).concat(propertyNames.map((n) => n.toLowerCase())));
+  return applyContent(modelRows(models, project, kind, names), content);
+}
+
+/** The model's rows, in the order and with the marks the models give them. */
+function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind, propertyNames: ReadonlySet<string>): ScheduleData {
   const byKey = new Map<string, ScheduleEntry>();
   const levelElevation = new Map<string, number>();
   const wanted = (k: 'door' | 'window') => kind === 'all' || kind === k;
@@ -223,7 +263,13 @@ export function joineryScheduleData(models: Iterable<ScheduleModel>, project: Jo
       entry.total++;
       const attrs = attributes(live, id);
       const tag = attrs?.[7];
-      entry.occurrences.push({ modelId, expressId: id, globalId: String(attrs?.[0] ?? ''), level, tag: typeof tag === 'string' ? tag : null, number: 0 });
+      const cls = String(dataStore.getEntity(id)?.type ?? view?.getNewEntity(id)?.type ?? '').toUpperCase();
+      // PredefinedType follows OverallWidth in both classes (IFC4 and later); IFC2X3 has none.
+      const predefined = dataStore.schemaVersion === 'IFC2X3' ? null : predefinedTypeText(attrs?.[10]);
+      entry.occurrences.push({
+        modelId, expressId: id, globalId: String(attrs?.[0] ?? ''), level, tag: typeof tag === 'string' ? tag : null, number: 0,
+        ifcClass: CLASS_NAMES[cls] ?? cls, predefinedType: predefined, properties: readPropertyFacts(live, id, propertyNames),
+      });
     };
     const typed = new Set<number>();
     let configured: ReturnType<typeof joineryTypesInStore> = [];

@@ -15,6 +15,7 @@
  * x and z, as `tagall/footprint.ts` reads a plan). Pure: meshes in, tags out.
  */
 
+import { sheetLevel } from '@bimvoice/ifcsheet/names';
 import type { Pt } from '@/drafting/types';
 
 export interface CeilingMesh {
@@ -33,14 +34,15 @@ export interface CeilingTag {
   extent: { x0: number; y0: number; x1: number; y1: number };
   /** The soffit's height above the level's floor, metres. */
   height: number;
-  /** What the tag says, e.g. `+2.70`. */
+  /** What the tag says in the language it was made in, e.g. `+2.70` / `+2,70`. */
   text: string;
 }
 
 /** A face this close to the lowest point counts as the soffit (metres). */
 const SOFFIT_TOLERANCE = 1e-4;
 
-export const ceilingHeightText = (height: number): string => `${height >= 0 ? '+' : '-'}${Math.abs(height).toFixed(2)}`;
+/** The height as a sheet writes a level, in the language's separators (#269). */
+export const ceilingHeightText = (height: number, locale = 'en'): string => sheetLevel(locale, height);
 
 /** Soffit heights a tag is kept for, in the mesh frame: strictly above `above` and strictly below `below`. */
 export interface SoffitBand { above: number; below: number }
@@ -51,7 +53,7 @@ const ANY_HEIGHT: SoffitBand = { above: -Infinity, below: Infinity };
  * The tags of the coverings among `meshes` that `isCeiling` accepts (by renderer id), heights measured from `floor`.
  * One tag per covering, ordered by id; a covering with no lowest face, or whose soffit lies outside `band`, is left out.
  */
-export function ceilingTags(meshes: readonly CeilingMesh[], floor: number, isCeiling: (renderId: number) => boolean, band: SoffitBand = ANY_HEIGHT): CeilingTag[] {
+export function ceilingTags(meshes: readonly CeilingMesh[], floor: number, isCeiling: (renderId: number) => boolean, band: SoffitBand = ANY_HEIGHT, locale = 'en'): CeilingTag[] {
   const byId = new Map<number, CeilingMesh[]>();
   for (const m of meshes) {
     if (m.ifcType !== 'IfcCovering' || !isCeiling(m.expressId)) continue;
@@ -83,7 +85,7 @@ export function ceilingTags(meshes: readonly CeilingMesh[], floor: number, isCei
     }
     if (!Number.isFinite(low) || area <= 0 || !(low > band.above && low < band.below)) return [];
     const height = low - floor;
-    return [{ renderId, at: { x: cx / area, y: cz / area }, extent, height, text: ceilingHeightText(height) }];
+    return [{ renderId, at: { x: cx / area, y: cz / area }, extent, height, text: ceilingHeightText(height, locale) }];
   });
 }
 

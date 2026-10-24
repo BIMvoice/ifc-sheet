@@ -116,8 +116,11 @@ export function addViewport(sheetId: string, viewId: string, at: { x: number; y:
   return id;
 }
 
+/** A move of a continuation page (`page` above 0) marks it `placed`: it is then the user's, and keeps its place (`syncSchedulePages`). */
+const movesPage = (v: SheetViewport, patch: Partial<SheetViewport>): boolean => (v.page ?? 0) > 0 && ((patch.x !== undefined && patch.x !== v.x) || (patch.y !== undefined && patch.y !== v.y));
+
 export function updateViewport(sheetId: string, viewportId: string, patch: Partial<Omit<SheetViewport, 'id' | 'viewId'>>): void {
-  patchSheet(sheetId, (s) => ({ ...s, viewports: (s.viewports ?? []).map((v) => (v.id === viewportId ? { ...v, ...patch } : v)) }));
+  patchSheet(sheetId, (s) => ({ ...s, viewports: (s.viewports ?? []).map((v) => (v.id === viewportId ? { ...v, ...patch, ...(movesPage(v, patch) ? { placed: true } : {}) } : v)) }));
 }
 
 export function removeViewport(sheetId: string, viewportId: string): void {

@@ -156,6 +156,8 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
   const labels = useScheduleLabels('');
+  // The word a page after the first says in its title, in the user's language.
+  const continued = useTranslation().t('schedule.continued');
   const takeoffLabels = useTakeoffLabels('');
   const registerLabels = useRegisterLabels('');
   const placesRegister = (sheet.viewports ?? []).some((vp) => schedules?.some((s) => s.id === vp.viewId && s.kind === 'register'));
@@ -172,7 +174,10 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   // The indicators measure footprints: only when the sheet shows them.
   const urban = useUrbanIndicators(places('urban'));
   const urbanLabels = useUrbanLabels('', urban?.areas ?? null, urban?.site);
-  // The joinery schedules on this sheet: their data once, for the layout and for the views cut from the models.
+  // The joinery schedules on this sheet: their data once, for the layout and for the views cut from the models. Keyed on WHICH
+  // schedules the sheet holds, not on its viewports: a viewport written (a continuation page added or moved) must not drop the views,
+  // or the page count flips between "with" and "without" them and the continuation sheets are removed and made again without end.
+  const heldKey = (sheet.viewports ?? []).map((vp) => vp.viewId).join('|');
   const joinery = useMemo(() => {
     const out: ViewRequest[] = [];
     for (const vp of sheet.viewports ?? []) {
@@ -182,7 +187,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
-  }, [sheet.viewports, schedules, mutationVersion, models, catalogue, mapping]);
+  }, [heldKey, schedules, mutationVersion, models, catalogue, mapping]);
   const joineryViews = useElementViews(joinery);
   const { layouts, loaded } = useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
@@ -194,12 +199,12 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     const byType = placesTypes ? typeQuantities(collectTypeElements()) : null;
     const layoutJoinery = (schedule: ProjectSchedule, vp: SheetViewport): ScheduleLayout => layoutJoineryOnSheet({
       data: joinery.find((r) => r.id === schedule.id)?.data ?? scheduleDataOf(schedule), labels: { ...labels, title: schedule.name }, scale: schedule.scale ?? 50,
-      views: joineryViews.get(schedule.id), sheets, sheet, vp,
+      views: joineryViews.get(schedule.id), continued, sheets, sheet, vp,
     });
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || out.has(schedule.id)) continue;
-      const place = { sheets, sheet, vp };
+      const place = { continued, sheets, sheet, vp };
       // A schedule wraps to its viewport's box (the first sheet's, for every page) and shows its own page: a joinery list by bands, a column table by rows.
       const table = (has: boolean, layout: (paging: { maxHeight: number; page: number }) => ScheduleLayout): ScheduleLayout => {
         if (has) loaded.add(schedule.id);
@@ -223,7 +228,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     }
     return { layouts: out, loaded };
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet, sheets, schedules, labels, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, urban, urbanLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
+  }, [sheet, sheets, schedules, labels, continued, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, urban, urbanLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
   // A schedule that runs over several pages has a sheet for each: the sheets follow the layout, from the schedule's first one.
   useEffect(() => {
     for (const vp of sheet.viewports ?? []) {

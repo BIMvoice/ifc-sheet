@@ -75,7 +75,7 @@ export function mainBodyExtent(whole: Box3 | null, meshes: readonly MeshData[] =
  * for DRAFTSET.
  */
 export function setExtent(levels: readonly ProjectLevel[], meshes: MeshData[] | null, whole: AxisBounds | null): { extent: AxisBounds | null; leftOut: number } {
-  const building = buildingExtent(levels, meshes);
+  const building = buildingExtent(levels, meshes, useProjectStore.getState().includeFarElements === true);
   if (building) return { extent: building, leftOut: 0 };
   const body = mainBodyExtent(whole, meshes ?? modelMeshes());
   return { extent: body.bounds, leftOut: body.leftOut };

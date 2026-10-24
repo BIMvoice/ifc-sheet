@@ -47,6 +47,29 @@ describe('describeReadiness', () => {
       expect(effect, f.kind).not.toMatch(/^ready\.|\{/);
     }
     expect(describeReadiness(all[3]).missing).toBe('4 of 10 elements have no material.');
-    expect(Object.keys(READINESS_EN)).toHaveLength(16);
+    expect(Object.keys(READINESS_EN)).toHaveLength(18);
+  });
+});
+
+describe('the far-away elements finding (#268)', () => {
+  const far = (n: number) => Array.from({ length: n }, (_, i) => ({ label: `Marker ${i + 1}`, distance: 100 + i }));
+
+  it('names each element with its distance, after the model\'s own gaps', () => {
+    const found = modelReadiness({ ...COMPLETE, duplicateGlobalIds: 1, duplicatedEntities: 2, farElements: [{ label: 'NUS - 0,0 - Kake', distance: 108.3 }, { label: 'IfcBuildingElementProxy 1cHGmPSXzFhOqVxhbE1HnR', distance: 7.46 }] });
+    expect(found.map((f) => f.kind)).toEqual(['duplicateGlobalIds', 'farElements']);
+    expect(found[1].params).toEqual({ count: 2, distance: '108 m', list: "'NUS - 0,0 - Kake' (108 m), 'IfcBuildingElementProxy 1cHGmPSXzFhOqVxhbE1HnR' (7.5 m)" });
+    expect(describeReadiness(found[1]).missing).toBe("2 elements lie up to 108 m from the building: 'NUS - 0,0 - Kake' (108 m), 'IfcBuildingElementProxy 1cHGmPSXzFhOqVxhbE1HnR' (7.5 m).");
+  });
+
+  it('is absent when there are none, or when none were looked for', () => {
+    expect(kinds({})).toEqual([]);
+    expect(kinds({ farElements: [] })).toEqual([]);
+  });
+
+  it('names the first eight and counts the rest', () => {
+    const [finding] = modelReadiness({ ...COMPLETE, farElements: far(11) });
+    expect(finding.params.count).toBe(11);
+    expect(String(finding.params.list).split("), '")).toHaveLength(8);
+    expect(String(finding.params.list)).toMatch(/\(107 m\), … \+3$/);
   });
 });

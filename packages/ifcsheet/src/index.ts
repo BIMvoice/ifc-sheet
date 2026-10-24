@@ -47,13 +47,24 @@ export {
   readNumberingScheme, registerNumberIn, registerSlot, renumbered, typedBeforeSchemes, type OverrideMode, type RenumberRow,
 } from './numbering.js';
 export {
-  checkSubReports, elementCount, isClean, occurrenceMarkOf, subReportCheckOf, subReportChecksOf, subReportParams, typeLabel, type CheckEntry, type CheckOccurrence, type CheckPart, type DuplicateType, type ElementRef,
-  type GapType, type MarkOf, type PartRef, type SubReportCheck, type SubReportFix,
+  checkSubReports, elementCount, isClean, keepId, occurrenceMarkOf, partsOf, subReportCheckOf, subReportChecksOf, subReportParams, typeLabel, type CheckEntry, type CheckOccurrence, type CheckPart, type DuplicateType, type ElementRef,
+  type GapType, type MarkOf, type PartRef, type ReviewElement, type ReviewStatus, type SubReportCheck, type SubReportFix,
 } from './sub-report-check.js';
 export {
-  canSplit, readSchedule, readSubReport, readSubReportFilter, subReportData, subReportsOf,
+  filterReview, keepApart, placeTypes, placeTypesOf, resumeChecking, reviewCounts, reviewTypes, type ReviewEdit, type ReviewFilter, type ReviewType,
+} from './sub-report-review.js';
+export {
+  canSplit, MAX_KEPT_APART, readKeptApart, readSchedule, readSubReport, readSubReportFilter, scheduleFilterProperties, scheduleOf, subReportData, subReportsOf,
   type ProjectSchedule, type ScheduleListKind, type SplitData, type SplitEntry, type SubReport, type SubReportFilter,
 } from './sub-reports.js';
+export {
+  EXTERIOR, INTERIOR, PROPERTY_OPS, filterPropertyNames, isOpenFilter, passesElementFilter, passesPropertyTest, predefinedTypeText, propertyValueText, readPropertyTest,
+  type OccurrenceFacts, type PropertyFact, type PropertyOp, type PropertyTest,
+} from './schedule-filter.js';
+export {
+  MARK_SCHEMES, MAX_START, ROW_IDS, SORTS, applyContent, contentOf, followedTags, orderedRows, readScheduleContent, shownRows, symbolsShown, textRowId,
+  type ContentEntry, type RowId, type ScheduleContent, type ScheduleNumbering, type ScheduleSymbols, type ScheduleRows, type ScheduleSort, type SortBy, type TagWrite, type TaggedEntry,
+} from './schedule-content.js';
 export { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion } from './project-version.js';
 export {
   DEFAULT_JOINERY_MAPPING, fitToElement, normaliseName, readJoineryMapping, resolveMapping,
@@ -64,6 +75,7 @@ export {
   type OrphanCell, type ScheduleTextCell, type ScheduleTextRow, type TextHolder,
 } from './schedule-text.js';
 export { SHEET_SCALES, fitViewportBox, mmPerMetre, paperOf } from './viewport-fit.js';
+export { paperSigns, placer } from './sheet-graphic.js';
 export {
   DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, LEVEL_MATCH_TOLERANCE_M, NEXT_FLOOR_CLEARANCE_M, defaultPlanCutHeight, defaultViews, elevationName, levelFloorY, levelsFromStoreys, planDepthBelowCut, planViewFor,
   resolvePlanLevel, sameElevation, syncDefaultViews, uniqueViewName, type StoreyInput,
@@ -73,11 +85,13 @@ export { CUT_OVERHANG_M, SAME_CUT_M, SMALLEST_ROOM_M2, proposeSections, type Foo
 export { customPlaneCenter, sectionPlaneThrough, type WorldPoint } from './section-plane.js';
 export {
   PER_SHEET, SET_PAPER, SET_PAPERS, SET_SCALES, TARGET_SCALE, buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fitsScale, fittingScale,
-  groundPlan, groupOfView, groupsThatDoNotFit, isSetSheet, overrun, placeViewports, scaleOn, sheetGroup, sheetScaleReason, sheetSeries, viewExtent,
+  groundPlan, groupOfView, groupsThatDoNotFit, isSetSheet, overrun, placeViewports, scaleOn, sheetGroup, sheetScaleReason, sheetSeries, viewCentre, viewExtent,
   withViewHung, type Arrangement, type ModelExtent, type Reason, type SetGroup, type SetInput, type SheetLayout,
 } from './drawing-set.js';
 export { resolveStoreyOriginMeters, storeyFloorY, type Point3 } from './storey-origin.js';
 export { boundsFromIndex, createEntityBoundsLookup, getEntityBounds, indexMeshesByEntity, isValidCoord, unionEntityBounds, type BoundingBox3D, type Point3D } from './entity-bounds.js';
+
+export { FRAMING_RULE, boxGap, farElementLabel, frameElements, frameEntities, type FarElement, type FramedElement, type Framing, type FramingOptions } from './framing.js';
 
 // The starting set (pure: an opened model's facts in, a document out)
 export { SET_SECTIONS, generateDefaultSet, type DefaultSet, type DefaultSetOptions, type SetModel, type SetNote } from './default-set.js';

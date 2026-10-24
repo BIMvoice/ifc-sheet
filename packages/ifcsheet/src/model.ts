@@ -15,7 +15,8 @@ import { GeometryProcessor, type GeometryResult, type MeshData } from '@ifc-lite
 import { IfcParser, extractLengthUnitScale, type IfcDataStore } from '@ifc-lite/parser';
 import type { ModelExtent } from './drawing-set.js';
 import type { ProjectLevel } from './document.js';
-import { createEntityBoundsLookup, unionEntityBounds, type BoundingBox3D } from './entity-bounds.js';
+import { createEntityBoundsLookup, type BoundingBox3D } from './entity-bounds.js';
+import { farElementLabel, frameEntities } from './framing.js';
 import { storeyFloorY } from './storey-origin.js';
 import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals.js';
 import type { StoreyInput } from './view-defaults.js';
@@ -27,6 +28,17 @@ export interface OpenModelOptions {
    * a model is all it is good for.
    */
   geometry?: boolean;
+  /** Frame the views on everything the storeys contain, small far-away elements too (the project setting "include far-away elements in framing", `framing.ts`). Default false. */
+  includeFarElements?: boolean;
+}
+
+/** A small element the views are framed without, because it lies far from the building (`framing.ts`). */
+export interface FarElementInfo {
+  expressId: number;
+  /** Its Name, else its class and GlobalId: what a message calls it. */
+  label: string;
+  /** Metres from the building (the frame without it). */
+  distance: number;
 }
 
 /** A model opened by {@link openModel}. */
@@ -39,8 +51,12 @@ export interface OpenedModel {
   meshes: MeshData[];
   /** The meshes of what the storeys contain (the building the set is measured on, without the site around it): what the sheets' drawings are cut from. */
   buildingMeshes: MeshData[];
-  /** The box of what the storeys contain, the set is measured on; `null` without geometry or when no storey holds any. */
+  /** The box of the building (what the storeys contain, without the small elements far from it, `farElements`) the set is measured on; `null` without geometry or when no storey holds any. */
   extent: ModelExtent | null;
+  /** The elements the extent leaves out, farthest first; they are still in `meshes`, `buildingMeshes` and the schedules. Empty with `includeFarElements`. */
+  farElements: FarElementInfo[];
+  /** Whether the model was opened with `includeFarElements`. */
+  includeFarElements: boolean;
   /** The rooms and stairs of `level` and the building's footprint, for the proposed sections; `null` without an extent. */
   proposalInput(level: ProjectLevel): ProposalInput | null;
   /** The parsed model, for reads the engine does not make itself. */
@@ -94,7 +110,7 @@ function storeysOf(ds: IfcDataStore, frame: GeometryResult['coordinateInfo'] | u
   });
 }
 
-/** The elements the storeys contain: the building without the site around it (`buildingExtent` in `project/model-rooms.ts` reads the same). */
+/** The elements the storeys contain: the building without the site around it (`buildingExtent` in `project/model-rooms.ts` reads the same, and frames it through `frameEntities` too). */
 function buildingIds(ds: IfcDataStore, storeys: readonly StoreyInput[]): number[] {
   const hierarchy = ds.spatialHierarchy;
   if (!hierarchy) return [];
@@ -154,7 +170,14 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
   }
   const storeys = storeysOf(ds, frame);
   const ids = buildingIds(ds, storeys);
-  const extent = ids.length && meshes.length ? unionEntityBounds(meshes, ids, () => null) : null;
+  const includeFarElements = options.includeFarElements === true;
+  const framing = ids.length && meshes.length ? frameEntities(meshes, ids, { includeFar: includeFarElements }) : null;
+  const extent = framing?.extent ?? null;
+  const farElements = (framing?.farElements ?? []).map((f): FarElementInfo => ({
+    expressId: f.key,
+    label: farElementLabel({ name: ds.entities.getName(f.key), type: ds.entities.getTypeName(f.key), globalId: ds.entities.getGlobalId(f.key) }),
+    distance: f.distance,
+  }));
   const inBuilding = new Set(ids);
   const project = ds.spatialHierarchy?.project;
   return {
@@ -163,6 +186,8 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
     meshes,
     buildingMeshes: meshes.filter((m) => inBuilding.has(m.expressId)),
     extent,
+    farElements,
+    includeFarElements,
     proposalInput: (level) => proposalInputOf(ds, meshes, extent, level),
     dataStore: ds,
   };

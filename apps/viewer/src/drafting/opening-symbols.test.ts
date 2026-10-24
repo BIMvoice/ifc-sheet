@@ -78,4 +78,30 @@ describe('openingSymbols', () => {
     assert.ok(arcs.every((a) => a.type === 'arc' && Math.abs(a.r - 0.8) < 1e-6));
     assert.deepEqual(arcs.map((a) => (a.type === 'arc' ? Math.round(a.c.x * 100) / 100 : 0)).sort(), [4.2, 5.8]);
   });
+
+  it('takes an element by its height over all its meshes: a door split across the cut is drawn', () => {
+    const lower = box('IfcDoor', [-0.45, 0, -0.03], [0.45, 1, 0.03], [5, 0, 2]);
+    const upper = box('IfcDoor', [-0.45, 1.4, -0.03], [0.45, 2.1, 0.03], [5, 0, 2]);
+    const [door] = openingSymbols([lower, upper], plan);
+    assert.equal(door?.kind, 'door', 'neither mesh alone spans the cut at 1.2, the element does');
+    assert.equal(door.heavy?.length, 1);
+  });
+
+  it('reads no more than the heights of a door on another storey (#154)', () => {
+    // Every read of a position that is not a height (x or z) counts: projecting the mesh needs them, its height range does not.
+    let planReads = 0;
+    const upstairs = box('IfcDoor', [-0.45, 4, -0.03], [0.45, 6, 0.03], [9, 0, 2]);
+    const raw = upstairs.positions as Float32Array;
+    const counted = new Proxy(raw, {
+      get(target, key) {
+        if (typeof key === 'string' && /^\d+$/.test(key) && Number(key) % 3 !== 1) planReads++;
+        const v = Reflect.get(target, key, target);
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    });
+    const here = box('IfcDoor', [-0.45, -1.05, -0.03], [0.45, 1.05, 0.03], [5, 1.05, 2]);
+    const symbols = openingSymbols([{ ...upstairs, expressId: 9, positions: counted } as unknown as MeshData, here], plan);
+    assert.deepEqual(symbols.map((s) => s.id), [7], 'only the door the cut passes through');
+    assert.equal(planReads, 0, 'the door upstairs is not projected onto the plan');
+  });
 });

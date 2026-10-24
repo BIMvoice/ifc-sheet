@@ -37,8 +37,8 @@ afterEach(() => {
 
 const door = (id: string, name: string, mark: string, width: number, height: number) => ({ id, kind: 'door', name, mark, width, height });
 
-function projectText(mapping: Record<string, unknown>): string {
-  const schedule = (id: string, name: string, sub?: unknown) => ({ id, name, kind: 'all', createdAt: 1, scale: 50, ...(sub ? { sub } : {}) });
+function projectText(mapping: Record<string, unknown>, content?: unknown): string {
+  const schedule = (id: string, name: string, sub?: unknown) => ({ id, name, kind: 'all', createdAt: 1, scale: 50, ...(sub ? { sub } : {}), ...(content && !sub ? { content } : {}) });
   return JSON.stringify({
     format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, name: 'Bloc P4',
     // The catalogue: 800x2100 and 900x2100 doors. The mapping decides which element takes which (the file's doors are all named "Door").
@@ -92,6 +92,38 @@ describe('the engine and the app read the same project and build the same rows',
       assert.deepEqual(headless.map((f) => [f.kind, f.params, describeReadiness(f)]), inApp.map((f) => [f.kind, f.params, describeReadiness(f)]));
     });
   }
+
+  it('agree on a schedule with a content choice: the rows sorted and numbered, and the marks the findings name', () => {
+    const [first, second] = scheduleData('all').entries.filter((e) => e.kind === 'door').flatMap((e) => e.occurrences.map((o) => o.globalId));
+    const content = { sort: { by: 'count', descending: true }, numbering: { marks: 'sequence', typeStart: 40, elementStart: 5 }, rows: { hidden: ['u'] } };
+    const text = projectText({ elements: { [first]: null, [second]: 'd900' } }, content);
+    const doc = parseProjectFile(text);
+    loadProjectDocument(doc);
+    const project = readProjectFile(text);
+    assert.deepEqual(project.schedules, doc.schedules);
+    assert.deepEqual(project.schedules[0].content, content, 'the choice survives both readers');
+    const chosen = project.schedules[0].content;
+    for (const kind of ['all', 'door', 'window'] as const) {
+      const engine = joineryScheduleData([{ modelId: 'm', dataStore: ifcDataStore, view: null }], project, kind, chosen);
+      assert.deepEqual(engine, scheduleData(kind, chosen), `rows of ${kind}`);
+    }
+    // The choice did something, checked on its own terms: most numerous first, doors marked D40, D41..., windows W40, W41..., elements from 5.
+    const rows = scheduleData('all', chosen).entries;
+    const totals = rows.map((e) => e.total);
+    assert.deepEqual(totals, [...totals].sort((a, b) => b - a));
+    for (const kind of ['door', 'window'] as const) {
+      assert.deepEqual(rows.filter((e) => e.kind === kind).map((e) => e.mark), rows.filter((e) => e.kind === kind).map((_, i) => `${kind === 'door' ? 'D' : 'W'}${40 + i}`));
+    }
+    for (const e of rows) assert.deepEqual(e.occurrences.map((o) => o.number), e.occurrences.map((_, i) => 5 + i));
+
+    // The checks name the marks the schedule prints, in the app and headless alike.
+    const inApp = readinessOfModel({ dataStore: ifcDataStore, storeys: [] }, subReportChecks(useProjectStore.getState().schedules ?? []));
+    const headless = readinessWithProject({ dataStore: ifcDataStore, storeys: [] }, project, 'm');
+    assert.ok(inApp.length > 0);
+    assert.deepEqual(headless.map((f) => [f.kind, f.params, describeReadiness(f)]), inApp.map((f) => [f.kind, f.params, describeReadiness(f)]));
+    const named = inApp.flatMap((f) => describeReadiness(f).missing.match(/\b[DW]\d+/g) ?? []).map((m) => Number(m.slice(1)));
+    assert.ok(named.length > 0 && named.every((n) => n >= 40), `the findings name the schedule's marks: ${named.join(',')}`);
+  });
 
   it('reads an old project the way the app does: without a version, a sub-report or a catalogue', () => {
     const text = JSON.stringify({ format: PROJECT_FILE_FORMAT, name: 'Old', schedules: [{ id: 's1', name: 'Joinery', kind: 'door' }, { id: 's2', kind: 'materials', sub: { parent: 's1' } }, 'junk'] });
