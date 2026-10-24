@@ -17,6 +17,7 @@ import { viewPlaneConfig } from '@/project/view-plane-config';
 import type { PlanProjectView, ProjectView } from '@/project/types';
 import { useViewerStore } from '@/store';
 import type { MeshData } from '@ifc-lite/geometry';
+import { planSymbolObstacles } from '@/rcp/ceiling-tag-obstacles';
 import { ceilTag } from './ceiltag.js';
 
 /**
@@ -62,6 +63,8 @@ describe('CEILTAG keeps a tag off the door leaves and swings the plan draws (#27
     const ctx = {
       viewId: 'rcp', layerId: '0', settings: { textHeight: 0.25, currentTextStyle: 'Standard', currentDimStyle: 'Standard' },
       view: () => view as ProjectView, entities: () => useProjectStore.getState().drafts, say: () => {},
+      // What `useDraftingProviders` installs for the command.
+      planObstacles: () => planSymbolObstacles(view, useProjectStore.getState().levels, meshes, undefined),
     } as unknown as Parameters<typeof ceilTag>[0];
     ceilTag(ctx, (id) => id === 999999, () => 'FZKCEIL0000000000000001');
     const tag = useProjectStore.getState().drafts.find((d) => d.params.ceilingOf !== undefined);

@@ -40,6 +40,7 @@ function context(): Parameters<typeof ceilTag>[0] {
     settings: { textHeight: 0.25, currentTextStyle: 'Standard', currentDimStyle: 'Standard' },
     view: () => view,
     entities: () => useProjectStore.getState().drafts,
+    planObstacles: () => [],
     say: () => {},
   } as unknown as Parameters<typeof ceilTag>[0];
 }

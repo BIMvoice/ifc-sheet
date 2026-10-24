@@ -6,33 +6,19 @@
  * Where a ceiling tag stands once the plan's own drawing is taken into account: the centroid of the soffit, or,
  * when a door leaf, a swing or a drafted line is there, the nearest place on the same ceiling that is clear (#271).
  * The things to keep clear of are the ones the cross-reference marks keep clear of (`overlayObstacleBoxes`,
- * `obstacleBoxes`), so a tag and a mark agree on what is in the way. Pure.
+ * `obstacleBoxes`), so a tag and a mark agree on what is in the way. Pure; it must not reach the sheet UI, which
+ * `plan-overlays` does (`ceiling-tag-obstacles.ts` is the part that does, installed by the view).
  */
 
 import { textBox } from '@/drafting/annotation';
-import { boxOf, overlaps, obstacleBoxes, overlayObstacleBoxes, type Box } from '@/drafting/cross-ref-marks';
-import type { DraftEntity, Pt } from '@/drafting/types';
+import { boxOf, overlaps, type Box } from '@/drafting/cross-ref-marks';
+import type { Pt } from '@/drafting/types';
 import { centredAnchor } from '@/labels/label-place';
-import { planOverlays } from '@/project/plan-overlays';
-import { viewPlaneConfig } from '@/project/view-plane-config';
-import { hiddenClasses } from '@/project/view-graphics';
-import type { ProjectLevel, ProjectView } from '@/project/types';
-import type { MeshData } from '@ifc-lite/geometry';
 
 /** Clear space kept round a tag, as a share of its text height. */
 const MARGIN_SHARE = 0.3;
 /** The step the search walks by, as a share of the text height. */
 const STEP_SHARE = 0.5;
-
-/**
- * What the plan in front draws where a tag could stand: its door and window symbols (leaf and swing), roof lines and
- * grid, and the texts and lines already drafted on it.
- */
-export function tagObstacles(view: ProjectView, levels: readonly ProjectLevel[], meshes: readonly MeshData[], flips: Record<string, number> | undefined, drafts: readonly DraftEntity[]): Box[] {
-  const plane = viewPlaneConfig(view, levels, null);
-  const overlays = plane ? planOverlays(view, plane, meshes, flips, hiddenClasses(view.graphics)) : [];
-  return [...overlayObstacleBoxes(overlays), ...obstacleBoxes(drafts)];
-}
 
 /**
  * The centre to put a tag reading `text` at (drawing metres): `at` when its box is clear of `obstacles`, otherwise

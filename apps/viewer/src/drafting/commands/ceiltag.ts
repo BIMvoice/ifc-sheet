@@ -9,6 +9,7 @@
  */
 
 import { annotationScreenUp } from '@/drafting/annotation';
+import { obstacleBoxes } from '@/drafting/cross-ref-marks';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { labelElementByGlobalId } from '@/labels/label-element';
 import { centredAnchor } from '@/labels/label-place';
@@ -17,7 +18,7 @@ import { styledParams } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import { ceilingPlanTags, loadedDataStores } from '@/rcp/ceiling-floor';
-import { clearTagSpot, tagObstacles } from '@/rcp/ceiling-tag-spot';
+import { clearTagSpot } from '@/rcp/ceiling-tag-spot';
 import { stackedGroups } from '@/rcp/ceiling-tags';
 import { editDrafts, newDraft } from '../draft-store';
 import type { DraftCommandDef, DraftContext } from './types';
@@ -57,8 +58,7 @@ export function ceilTag(
   const height = ctx.settings.textHeight;
   const up = annotationScreenUp();
   // A tag stands at the centroid of its ceiling unless the plan draws a door leaf or swing (or a drafted line) there.
-  const { symbolFlips } = useProjectStore.getState();
-  const obstacles = todo.length ? tagObstacles(view, levels, geometry?.meshes ?? [], symbolFlips, ctx.entities()) : [];
+  const obstacles = todo.length ? [...ctx.planObstacles(), ...obstacleBoxes(ctx.entities())] : [];
   const drafts = todo.map((t) => {
     const at = clearTagSpot(t.at, t.extent, t.text, height, up, obstacles);
     return newDraft(ctx.viewId, ctx.layerId, {
