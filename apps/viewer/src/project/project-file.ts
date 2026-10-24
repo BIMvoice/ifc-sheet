@@ -133,7 +133,7 @@ function readView(v: unknown, path: string): ProjectView {
   if (!isObject(v) || !isString(v.id) || !isString(v.name)) fail(path, 'must have a string id and name');
   if (!VIEW_KINDS.includes(v.kind as ProjectViewKind)) fail(`${path}.kind`, `must be one of ${VIEW_KINDS.join(', ')}`);
   const base = {
-    id: v.id, name: v.name, auto: v.auto === true, createdAt: isNumber(v.createdAt) ? v.createdAt : 0,
+    id: v.id, name: v.name, ...(typeof v.auto === 'boolean' ? { auto: v.auto } : {}), createdAt: isNumber(v.createdAt) ? v.createdAt : 0,
     ...(isNumber(v.viewDepth) && v.viewDepth >= 0 ? { viewDepth: v.viewDepth } : {}),
     ...(typeof v.showHidden === 'boolean' ? { showHidden: v.showHidden } : {}),
     ...(v.detail !== undefined ? { detail: readDetail(v.detail, `${path}.detail`) } : {}),

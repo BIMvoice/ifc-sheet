@@ -15,7 +15,9 @@
 import { useEffect } from 'react';
 import type { AnnotationType } from '@/catalogue/types';
 import type { DraftEntity } from '@/drafting/types';
+import { withAnnotationScreenUp } from '@/drafting/annotation';
 import { paperUnitOf } from '@/project/drafting-standards';
+import { viewScreenUp } from '@/project/view-screen-up';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { useTranslation } from '@/i18n';
@@ -40,7 +42,7 @@ function templateOf(text: string): ParsedTemplate {
 }
 
 /** `drafts` with every parametric label brought in line with its element and type; the same array when nothing changed. */
-export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationType[], element: (globalId: string) => LabelElement | null, locale: string, paperUnit: (viewId: string) => number = () => 0.1): DraftEntity[] {
+export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationType[], element: (globalId: string) => LabelElement | null, locale: string, paperUnit: (viewId: string) => number = () => 0.1, screenUp: (viewId: string) => 1 | -1 = () => -1): DraftEntity[] {
   let changed = false;
   const next = drafts.map((d) => {
     if (!isParametricLabel(d) || d.shape.type !== 'text') return d;
@@ -56,7 +58,8 @@ export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationTy
       }
     }
     // Where the label is, and how big its text now makes it, decide whether it has a leader.
-    out = settleLeader(out, spec.leader, paperUnit(d.viewId));
+    // ...measured in the label's own view, not the one the session is in: opening a project must not move a leader (#297).
+    out = withAnnotationScreenUp(screenUp(d.viewId), () => settleLeader(out, spec.leader, paperUnit(d.viewId)));
     if (out !== d) changed = true;
     return out;
   });
@@ -65,7 +68,7 @@ export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationTy
 
 export function refreshParametricLabels(locale: string): void {
   const { drafts, annotationTypes } = useProjectStore.getState();
-  const next = settleLabels(drafts, annotationTypes ?? [], labelElementByGlobalId, locale, (viewId) => paperUnitOf(viewId));
+  const next = settleLabels(drafts, annotationTypes ?? [], labelElementByGlobalId, locale, (viewId) => paperUnitOf(viewId), (viewId) => viewScreenUp(viewId));
   if (next !== drafts) useProjectStore.setState({ drafts: next, dirty: true });
 }
 
