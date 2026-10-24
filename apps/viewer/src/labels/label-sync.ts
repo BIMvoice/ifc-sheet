@@ -19,6 +19,7 @@ import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { useTranslation } from '@/i18n';
+import { refreshCeilingTags } from '@/rcp/ceiling-tag-sync';
 import { settleLeader } from './label-attach';
 import { labelElementByGlobalId } from './label-element';
 import { extrasOf, resolveWithExtras } from './label-extras';
@@ -82,4 +83,6 @@ export function useParametricLabelSync(): void {
   useEffect(() => {
     if (count > 0) refreshParametricLabels(locale);
   }, [mutationVersion, models, types, count, drafts, tagFields, locale]);
+  // The ceiling tags' heights follow the language the same way (#269).
+  useEffect(() => { refreshCeilingTags(locale); }, [locale, drafts]);
 }
