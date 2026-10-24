@@ -35,9 +35,9 @@ function sheetWithLabels(texts: string[]): ProjectSheet {
   return sheet as unknown as ProjectSheet;
 }
 
-/** Every content stream of the file, inflated, as text. */
+/** Every content stream of the file, inflated, as text. Node's own latin1 keeps every byte (TextDecoder's 'latin1' is windows-1252 and does not). */
 function contentStreams(bytes: Uint8Array): string[] {
-  const raw = new TextDecoder('latin1').decode(bytes);
+  const raw = Buffer.from(bytes).toString('latin1');
   const out: string[] = [];
   for (const m of raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
     try { out.push(inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1')); } catch { /* an image or a font: not a content stream */ }
@@ -45,7 +45,7 @@ function contentStreams(bytes: Uint8Array): string[] {
   return out;
 }
 
-async function issuedPdf(texts: string[]): Promise<Uint8Array> {
+async function issued(texts: string[]): Promise<{ bytes: Uint8Array; svgs: string[] }> {
   useProjectStore.setState({ sheets: [sheetWithLabels(texts)] });
   const plan = planFor({ name: 'P01', date: '2026-10-24', listFirst: false });
   const drawn = await captureSheets(plan.sheets.map((s) => s.sheet));
@@ -54,7 +54,8 @@ async function issuedPdf(texts: string[]): Promise<Uint8Array> {
   const prior = window.jspdf;
   window.jspdf = jspdf;
   try {
-    return await buildIssuePdf(plan, drawn.svgs, 'House', pdfLabels(), { loadFont, created: new Date(2026, 9, 24, 12, 0, 0) });
+    const bytes = await buildIssuePdf(plan, drawn.svgs, 'House', pdfLabels(), { loadFont, created: new Date(2026, 9, 24, 12, 0, 0) });
+    return { bytes, svgs: [...drawn.svgs.values()] };
   } finally {
     window.jspdf = prior;
   }
@@ -65,16 +66,26 @@ beforeEach(() => {
   useViewDrawings.setState({ byView: {} });
 });
 
+/** The `<text>` elements of the sheets whose text is `text`, as their opening tags. */
+const textTags = (svgs: string[], text: string): string[] => svgs.flatMap((svg) => [...svg.matchAll(new RegExp(`<text\\b[^>]*>${text}</text>`, 'g'))].map((m) => m[0]));
+
 describe('the issued PDF and one-character labels (#292)', () => {
   it('writes no Infinity or NaN into any content stream when a label is a single character', async () => {
-    const streams = contentStreams(await issuedPdf(['A', 'B', 'Section']));
-    assert.ok(streams.some((s) => s.includes(' Tf')), 'the page carries text');
+    const { bytes } = await issued(['A', 'B', 'Section']);
+    const streams = contentStreams(bytes);
+    assert.ok(streams.some((s) => s.includes(' Tf')), `the page carries text (${streams.length} streams read)`);
     for (const s of streams) assert.doesNotMatch(s, /Infinity|NaN/, 'a number the PDF cannot hold');
   });
 
-  it('still spaces a label of two or more characters to the width it was measured for', async () => {
-    const streams = contentStreams(await issuedPdf(['A1']));
-    assert.ok(streams.some((s) => /\n-?\d[\d.]* Tc\n/.test(s)), 'a label of two characters keeps its character spacing');
-    for (const s of streams) assert.doesNotMatch(s, /Infinity|NaN/);
+  it('gives a label of two or more characters the width it was measured for, and a single character none', async () => {
+    const { svgs } = await issued(['A', 'A1', 'Section']);
+    const one = textTags(svgs, 'A');
+    assert.ok(one.length > 0, 'the one-character label is on the sheet');
+    for (const tag of one) assert.doesNotMatch(tag, /textLength/, tag);
+    for (const word of ['A1', 'Section']) {
+      const tags = textTags(svgs, word);
+      assert.ok(tags.length > 0, `${word} is on the sheet`);
+      for (const tag of tags) assert.match(tag, /textLength="[\d.]+"/, tag);
+    }
   });
 });
