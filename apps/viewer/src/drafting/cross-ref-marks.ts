@@ -164,11 +164,11 @@ export interface Box {
   y1: number;
 }
 
-const boxOf = (pts: readonly Pt[]): Box => ({
+export const boxOf = (pts: readonly Pt[]): Box => ({
   x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)),
   x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)),
 });
-const overlaps = (a: Box, b: Box, m: number): boolean => a.x0 - m < b.x1 && a.x1 + m > b.x0 && a.y0 - m < b.y1 && a.y1 + m > b.y0;
+export const overlaps = (a: Box, b: Box, m: number): boolean => a.x0 - m < b.x1 && a.x1 + m > b.x0 && a.y0 - m < b.y1 && a.y1 + m > b.y0;
 
 /** The boxes of what an elevation mark must keep clear of on a plan: section lines and their labels, grid axes and their bubbles, any other line or text. */
 export function obstacleBoxes(drafts: readonly DraftEntity[]): Box[] {

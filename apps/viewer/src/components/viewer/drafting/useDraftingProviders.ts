@@ -11,11 +11,13 @@ import { pickModelElement, type ReferenceSet } from '@/drafting/references';
 import { syncLevelMarks } from '@/drafting/level-sync';
 import { levelResolverFor, storeyOf } from '@/drafting/level-resolver';
 import {
-  setElementPicker, setViewElementsProvider, setPlanPartsProvider, setRoomsProvider, setAnnotationProviders, setLevelReferenceProviders, setModelPicker, setWorkPlaneProvider,
+  setElementPicker, setViewElementsProvider, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setAnnotationProviders, setLevelReferenceProviders, setModelPicker, setWorkPlaneProvider,
 } from '@/drafting/session';
 import type { DraftEntity } from '@/drafting/types';
 import { viewElements } from '@/labels/view-elements';
 import { planParts } from '@/dimall/parts';
+import { useProjectStore } from '@/project/project-store';
+import { planSymbolObstacles } from '@/rcp/ceiling-tag-obstacles';
 import { roomsOfPlan } from '@/tagall/rooms';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { roofAtPoint } from '@/project/roof-plan';
@@ -61,6 +63,11 @@ export function useDraftingProviders({ view, drawing, references, entities, plan
     setPlanPartsProvider(() => planParts(drawing));
     return () => setPlanPartsProvider(null);
   }, [drawing]);
+  // CEILTAG: the door leaves, swings and window frames this plan draws, which a tag keeps clear of (the same symbols the marks keep clear of).
+  useEffect(() => {
+    setPlanObstaclesProvider(() => planSymbolObstacles(view, levels, currentDrawingRuntime().geometryResult?.meshes ?? [], useProjectStore.getState().symbolFlips));
+    return () => setPlanObstaclesProvider(null);
+  }, [view, levels]);
   // TAGALL: the rooms of this plan, each space cut at the plan's height (read as the check reads them).
   useEffect(() => {
     setRoomsProvider(() => roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult));

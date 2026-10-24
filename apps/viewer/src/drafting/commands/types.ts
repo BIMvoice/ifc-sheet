@@ -14,6 +14,7 @@ import type { ViewElement } from '@/labels/view-elements';
 import type { PlanPart } from '@/dimall/types';
 import type { RoomOfPlan } from '@/tagall/footprint';
 import type { ProjectView } from '@/project/types';
+import type { Box } from '../cross-ref-marks';
 import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
 
 export type StepResult = 'continue' | 'done';
@@ -56,6 +57,8 @@ export interface DraftContext {
   viewElements(): ViewElement[];
   /** The walls, doors and windows the plan is cut through, for DIMALL. */
   planParts(): PlanPart[];
+  /** The boxes of what the plan draws over its cut (door leaves and swings, window frames, roofs, grid): what a ceiling tag keeps clear of. */
+  planObstacles(): Box[];
   /** The rooms of the plan in front. */
   rooms(): RoomOfPlan[];
   /** +1, or −1 when the drawing is mirrored on screen (a user CCW angle is CW in drawing space). */
