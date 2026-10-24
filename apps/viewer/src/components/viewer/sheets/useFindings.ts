@@ -6,13 +6,15 @@
 
 import { useState } from 'react';
 import { currentFindings } from '@/check/collect';
-import { fixFinding, type FindingNav } from '@/check/go';
+import { fixOutcome, type FindingNav, type FixOutcome } from '@/check/go';
 import type { Finding } from '@/check/types';
 
 export interface FindingsState {
   /** `null` until it was read once. */
   findings: Finding[] | null;
   busy: boolean;
+  /** Why the last fix did not run; null when it did, or none was tried. */
+  failure: Exclude<FixOutcome, 'done'> | null;
   refresh: () => void;
   /** Open the finding's place and run its command there, then read again. */
   fix: (finding: Finding, nav: FindingNav) => Promise<void>;
@@ -21,15 +23,17 @@ export interface FindingsState {
 export function useFindings(): FindingsState {
   const [findings, setFindings] = useState<Finding[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<FindingsState['failure']>(null);
   const refresh = () => setFindings(currentFindings());
   const fix = async (finding: Finding, nav: FindingNav) => {
     setBusy(true);
     try {
-      await fixFinding(finding, nav);
+      const outcome = await fixOutcome(finding, nav);
+      setFailure(outcome === 'done' ? null : outcome);
     } finally {
       setBusy(false);
       refresh();
     }
   };
-  return { findings, busy, refresh, fix };
+  return { findings, busy, failure, refresh, fix };
 }

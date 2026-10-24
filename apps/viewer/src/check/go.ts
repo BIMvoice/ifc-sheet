@@ -36,22 +36,31 @@ const SETTLE_MS = 500;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const attached = (viewId: string) => useDraftingSession.getState().viewId === viewId;
-const drawn = (viewId: string) => useViewDrawings.getState().byView[viewId]?.status === 'ready';
+const drawing = (viewId: string) => useViewDrawings.getState().byView[viewId]?.status;
+
+/** How a wait for a view ended: ready, the drawing failed (it will not become ready), or time ran out. */
+export type ViewWait = 'ready' | 'error' | 'timeout';
 
 /**
- * Resolves true once the session is on `viewId` (and, with `drawing`, its drawing is made and the view has
- * settled), false after `WAIT_MS`.
+ * Resolves `ready` once the session is on `viewId` (and, with `drawn`, its drawing is made and the view has
+ * settled), `error` as soon as the drawing fails, `timeout` after `WAIT_MS`.
  */
-export async function whenInView(viewId: string, drawing: boolean): Promise<boolean> {
+export async function waitForView(viewId: string, drawn: boolean): Promise<ViewWait> {
   for (let waited = 0; waited < WAIT_MS; waited += POLL_MS) {
-    if (attached(viewId) && (!drawing || drawn(viewId))) {
-      if (!drawing) return true;
+    if (drawn && drawing(viewId) === 'error') return 'error';
+    if (attached(viewId) && (!drawn || drawing(viewId) === 'ready')) {
+      if (!drawn) return 'ready';
       await sleep(SETTLE_MS);
-      return attached(viewId);
+      return attached(viewId) ? 'ready' : 'timeout';
     }
     await sleep(POLL_MS);
   }
-  return false;
+  return 'timeout';
+}
+
+/** True once the session is on `viewId` (and, with `drawn`, its drawing is made); false when the drawing failed or time ran out. */
+export async function whenInView(viewId: string, drawn: boolean): Promise<boolean> {
+  return (await waitForView(viewId, drawn)) === 'ready';
 }
 
 /** Opens the place a finding is about and selects its annotation. False when there is nothing to open. */
@@ -62,15 +71,24 @@ export function goToFinding(f: Finding, nav: FindingNav): boolean {
   return true;
 }
 
+/** What came of a fix: done, or why not (each has its message, `check.fix.<outcome>`). */
+export type FixOutcome = 'done' | 'noFix' | 'noPlace' | 'drawingFailed' | 'drawingLate' | 'notStarted';
+
 /**
- * Opens the finding's drawing and starts its fix command there; true only when the command started. The command is
- * started, not typed: text typed at the command line goes to the command that is running (LINE reads a name as a
- * coordinate), a start cancels it first.
+ * Opens the finding's drawing and starts its fix command there. The command is started, not typed: text typed at the
+ * command line goes to the command that is running (LINE reads a name as a coordinate), a start cancels it first.
  */
-export async function fixFinding(f: Finding, nav: FindingNav): Promise<boolean> {
+export async function fixOutcome(f: Finding, nav: FindingNav): Promise<FixOutcome> {
   const { viewId, fix } = f;
-  if (!fix || !viewId || !nav.open(f)) return false;
-  if (!(await whenInView(viewId, true))) return false;
+  if (!fix || !viewId) return 'noFix';
+  if (!nav.open(f)) return 'noPlace';
+  const waited = await waitForView(viewId, true);
+  if (waited !== 'ready') return waited === 'error' ? 'drawingFailed' : 'drawingLate';
   const def = draftCommandByName(fix);
-  return def !== undefined && startDraftCommand(def.id);
+  return def !== undefined && startDraftCommand(def.id) ? 'done' : 'notStarted';
+}
+
+/** True only when the fix command started. */
+export async function fixFinding(f: Finding, nav: FindingNav): Promise<boolean> {
+  return (await fixOutcome(f, nav)) === 'done';
 }
