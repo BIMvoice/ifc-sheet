@@ -7,6 +7,7 @@ import type { TitleBlockParam } from './title-block-params';
 import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
+import type { SubReport } from '@bimvoice/ifcsheet';
 import type { UrbanSettings } from '@/urban/indicators';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
@@ -61,6 +62,8 @@ export interface ProjectSchedule {
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
   scale?: number;
+  /** Set when this schedule is a part of another one (#186): the parent's id and what it keeps of the parent's content. Absent: the schedule lists everything its kind lists. Joinery kinds only. */
+  sub?: SubReport;
 }
 
 export interface ProjectDocument extends EngineDocument {

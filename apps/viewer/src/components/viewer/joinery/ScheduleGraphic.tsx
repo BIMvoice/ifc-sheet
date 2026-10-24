@@ -16,7 +16,8 @@ import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule, ProjectSheet, SheetViewport } from '@/project/types';
 import { isJoinerySchedule, layoutJoineryOnSheet, layoutTableOnSheet, syncSchedulePages } from '@/project/schedule-fit';
-import { scheduleData, type ScheduleData, type ScheduleKind } from '@/joinery/schedule-data';
+import type { ScheduleData } from '@/joinery/schedule-data';
+import { scheduleDataOf } from '@/joinery/schedule-split';
 import { layoutSchedule, type ScheduleLabels, type ScheduleLayout, type SchedulePrim } from '@/joinery/schedule-layout';
 import { takeoffRows, type TakeoffRow } from '@/joinery/material-takeoff';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
@@ -137,9 +138,9 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const labels = useScheduleLabels(schedule?.name ?? '');
   const data = useMemo(() => {
     if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register' || schedule.kind === 'urban') return null;
-    return scheduleData(schedule.kind);
+    return scheduleDataOf(schedule);
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
-  }, [schedule?.kind, mutationVersion, models, catalogue, mapping]);
+  }, [schedule?.kind, schedule?.sub, mutationVersion, models, catalogue, mapping]);
   const scale = schedule?.scale ?? 50;
   const requests = useMemo<ViewRequest[]>(() => (data ? [{ id: 'self', data, scale }] : []), [data, scale]);
   const views = useElementViews(requests).get('self');
@@ -177,7 +178,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || (schedule.kind !== 'door' && schedule.kind !== 'window' && schedule.kind !== 'all') || out.some((r) => r.id === schedule.id)) continue;
-      out.push({ id: schedule.id, data: scheduleData(schedule.kind), scale: schedule.scale ?? 50 });
+      out.push({ id: schedule.id, data: scheduleDataOf(schedule), scale: schedule.scale ?? 50 });
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
@@ -191,8 +192,8 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     const rows = placesTakeoff ? takeoffRows(collectTakeoffElements()) : [];
     const finishRooms = placesFinishes ? roomFinishes(collectRoomInputs()) : [];
     const byType = placesTypes ? typeQuantities(collectTypeElements()) : null;
-    const layoutJoinery = (schedule: ProjectSchedule, kind: ScheduleKind, vp: SheetViewport): ScheduleLayout => layoutJoineryOnSheet({
-      data: joinery.find((r) => r.id === schedule.id)?.data ?? scheduleData(kind), labels: { ...labels, title: schedule.name }, scale: schedule.scale ?? 50,
+    const layoutJoinery = (schedule: ProjectSchedule, vp: SheetViewport): ScheduleLayout => layoutJoineryOnSheet({
+      data: joinery.find((r) => r.id === schedule.id)?.data ?? scheduleDataOf(schedule), labels: { ...labels, title: schedule.name }, scale: schedule.scale ?? 50,
       views: joineryViews.get(schedule.id), sheets, sheet, vp,
     });
     for (const vp of sheet.viewports ?? []) {
@@ -217,7 +218,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
           ? table(finishRooms.length > 0, (paging) => layoutRoomFinishes(finishRooms, { ...finishLabels, title: schedule.name }, paging))
         : schedule.kind === 'types'
           ? table((byType?.rows.length ?? 0) > 0, (paging) => layoutTypeQuantities(byType ?? { levels: [], rows: [], classTotals: [] }, { ...typeLabels, title: schedule.name }, paging))
-          : layoutJoinery(schedule, schedule.kind, vp));
+          : layoutJoinery(schedule, vp));
       if (schedule.kind !== 'register' && isJoinerySchedule(schedule) && joinery.find((r) => r.id === schedule.id)?.data.entries.length) loaded.add(schedule.id);
     }
     return { layouts: out, loaded };

@@ -151,7 +151,7 @@ const sheet: Required<ProjectSheet> = {
   titleBlockParams: { Phase: 'PAC' },
 };
 /** One schedule of every kind: a kind added to `ProjectSchedule['kind']` does not compile until it is listed here. */
-const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<ProjectSchedule> & { kind: K } } = {
+const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<Omit<ProjectSchedule, 'sub'>> & { kind: K } } = {
   door: { id: 'sc1', name: 'Doors', kind: 'door', createdAt: 5, scale: 25 },
   window: { id: 'sc2', name: 'Windows', kind: 'window', createdAt: 6, scale: 20 },
   all: { id: 'sc3', name: 'Joinery', kind: 'all', createdAt: 7, scale: 50 },
@@ -160,6 +160,10 @@ const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<ProjectSchedule> & {
   finishes: { id: 'sc6', name: 'Room finishes', kind: 'finishes', createdAt: 10, scale: 100 },
   register: { id: 'sc7', name: 'Drawing register', kind: 'register', createdAt: 11, scale: 100 },
   urban: { id: 'sc8', name: 'Urban indicators', kind: 'urban', createdAt: 12, scale: 100 },
+};
+/** A sub-report (#186) with every dimension of its filter set: a field the writer or reader drops fails the comparison. */
+const SUB_REPORT: Required<ProjectSchedule> = {
+  id: 'sc9', name: 'Ground floor windows', kind: 'all', createdAt: 13, scale: 50, sub: { parent: 'sc3', filter: { kinds: ['window'], levels: ['Ground'], types: ['t1', 't2'] } },
 };
 const civil: Required<ProjectCivilDrawing> = {
   id: 'c1', name: 'DN1 sections', kind: 'sections', createdAt: 3, corridorGlobalId: '2O2Fr$t4X7Zf8NOew3FLOH', scale: 200, vExaggeration: 10,
@@ -203,7 +207,7 @@ const FULL: Required<ProjectDocument> = {
   joineryMapping: { ...DEFAULT_JOINERY_MAPPING, byName: false, byDimensions: false, tolerance: 0.07, aliases: { j1: ['Door 90'] } },
   elementTypes: (['wall', 'slab', 'column', 'beam', 'roof', 'opening'] as const).map((kind, i) => ({ ...defaultTypeSpec(kind), kind, id: `t${i}`, name: `Type ${kind}`, mark: `M${i}` }) as never),
   currentTypes: { wall: 't0', slab: 't1', column: 't2' },
-  schedules: Object.values(SCHEDULES),
+  schedules: [...Object.values(SCHEDULES), SUB_REPORT],
   sheetTemplates: [{ id: 'tpl1', name: 'Long elevations', paper: { kind: 'custom', widthMm: 500, heightMm: 700 }, orientation: 'portrait', frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' } }],
   seriesTemplates: { plans: 'builtin:a1-plans', details: 'tpl1' },
   structureProfiles: [profileFromPreset('box-tunnel', 'sp1', 'Culvert 2x2')],
