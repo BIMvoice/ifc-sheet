@@ -20,9 +20,9 @@ import { en } from './en';
  * under Română with this test green. The second way in is a SCREEN, not a
  * prefix: every English key that a source file of the IfcSheet face names as a
  * string literal must have a Romanian entry. The files are the Wall, the shell
- * around it, the sheet renderers and the first-launch privacy notice.
+ * around it, the sheet renderers, the first-launch privacy notice and the tour's own step card. The card was missed at first: it sits in `components/tours`, outside the Wall's folders, and its skip label is a key of the shared tours catalogue (the host, which asks for a model first, is gated with it).
  */
-const FACE_SOURCES = ['components/viewer/wall', 'components/viewer/ifcsheet', 'components/viewer/sheets', 'hooks/usePrivacyDisclosure.ts', 'lib/tours/tours/ifcsheet.ts'];
+const FACE_SOURCES = ['components/viewer/wall', 'components/viewer/ifcsheet', 'components/viewer/sheets', 'hooks/usePrivacyDisclosure.ts', 'lib/tours/tours/ifcsheet.ts', 'components/tours/TourStepCard.tsx', 'components/tours/TourHost.tsx'];
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 function faceFiles(rel: string): string[] {
   const path = join(SRC_ROOT, rel);

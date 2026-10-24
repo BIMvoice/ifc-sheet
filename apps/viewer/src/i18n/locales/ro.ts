@@ -25,6 +25,7 @@ import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
 import { revisionsRo } from '../catalogues/revisions.ro';
 import { catalogueRo } from '../catalogues/catalogue.ro';
 import { cadLayersRo } from '../catalogues/cad-layers.ro';
+import { toursRo } from '../catalogues/tours.ro';
 import { reviewRo } from '../catalogues/review.ro';
 import { printPreviewRo } from '../catalogues/print-preview.ro';
 import { tagFieldsRo } from '../catalogues/tag-fields.ro';
@@ -47,6 +48,7 @@ export default {
   ...cadLayersRo,
   ...titleBlockParamsRo,
   ...reviewRo,
+  ...toursRo,
   ...printPreviewRo,
   ...tagFieldsRo,
 } satisfies Catalogue;

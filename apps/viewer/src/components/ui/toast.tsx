@@ -168,13 +168,13 @@ export function Toaster({ variant = 'fixed' }: ToasterProps = {}) {
         key={item.id}
         data-toast-seq={item.seq}
         className={cn(
-          'pointer-events-auto flex items-center gap-2 border-2 px-3 py-2 shadow-lg',
+          'pointer-events-auto flex flex-wrap items-center gap-x-2 gap-y-1 border-2 px-3 py-2 shadow-lg',
           'animate-in slide-in-from-bottom-2 fade-in-0 duration-200',
           colorMap[item.type],
         )}
       >
         <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span className="text-xs font-medium flex-1 min-w-0">{readText(item.message)}</span>
+        <span className="text-xs font-medium flex-1 min-w-[14rem]">{readText(item.message)}</span>
         {item.count > 1 && (
           <span className="shrink-0 text-2xs font-semibold tabular-nums opacity-70" aria-hidden="true">
             ×{item.count}
