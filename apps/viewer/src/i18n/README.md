@@ -55,7 +55,7 @@ back when it is opened in another.
 ## Coverage
 
 Romanian coverage is gated by `locales/ro.test.ts` two ways: a prefix list
-(`IN_SCOPE`) and, since #231, the source files of the sheet view (`FACE_SOURCES`:
+(`IN_SCOPE`) and, since #231, the source files of the sheet view (`FACE_SOURCES` in `face-keys.ts`:
 the Wall, the shell, the sheet renderers, the privacy notice and the tour). Every
 English key such a file names, as a string literal or as the part before `${` in a
 template literal, needs a Romanian entry; a key under a prefix the list does not

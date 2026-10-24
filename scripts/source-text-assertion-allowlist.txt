@@ -130,4 +130,3 @@ packages/create/src/in-store/cut-priority.e2e.test.ts  # 1 hit -- toMatch on the
 packages/create/src/in-store/element-flip.e2e.test.ts  # 1 hit -- a `startsWith('#')` on an entity reference value inside the in-memory model, not a file's text.
 packages/create/src/in-store/joinery.e2e.test.ts  # 6 hits -- toContain/toMatch on the exported STEP text and on remesh ids; the only file read is the wasm engine itself.
 packages/create/src/in-store/roof-system.e2e.test.ts  # 22 hits -- toContain/toMatch on the exported STEP text and part ids; the only file read is the wasm engine itself.
-apps/viewer/src/i18n/locales/ro.test.ts  # 1 hit -- the sheet view's source files are read as DATA, to list the English keys they name (a coverage gate, #231); the assertion is on the Romanian catalogue, not on what the source text says. A behavioural version would have to mount every Wall screen in every state.

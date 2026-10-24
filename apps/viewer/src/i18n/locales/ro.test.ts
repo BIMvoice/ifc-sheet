@@ -3,10 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
 import { checkCatalogue } from '../catalogue-problems';
+import { untranslatedFaceKeys } from '../face-keys';
 import { en, type TranslationKey } from '../en';
 import type { TranslationValue } from '../types';
 import ro from './ro';
@@ -23,44 +21,6 @@ import ro from './ro';
 const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'settings.privacy.toast', 'viewerShell.toast.dismiss'];
 const keys = (Object.keys(en) as TranslationKey[]).filter((k) => IN_SCOPE.some((p) => k.startsWith(p)));
 const catalogue = ro as Readonly<Record<string, TranslationValue>>;
-
-/**
- * #231: the prefix list above misses a screen whose keys sit under another
- * prefix (`revision.`, `review.`, `printPreview.`), and `settings.privacy.toast`
- * never named the toast's own rows either, so the sheet toolbar read English
- * under Română with this test green. The second way in is a SCREEN, not a
- * prefix: every English key that a source file of the IfcSheet face names as a
- * string literal must have a Romanian entry. The files are the Wall, the shell
- * around it, the sheet renderers and the first-launch privacy notice.
- */
-const FACE_SOURCES = ['components/viewer/wall', 'components/viewer/ifcsheet', 'components/viewer/sheets', 'hooks/usePrivacyDisclosure.ts', 'lib/tours/tours/ifcsheet.ts'];
-const SRC_ROOT = fileURLToPath(new URL('../../', import.meta.url));
-const KEY_LITERAL = /['"`]([A-Za-z0-9_]+(?:\.[A-Za-z0-9_-]+)+)['"`]/g;
-/** A key built at render, `t(`tagFields.kind.${k}`)`: the part before `${` names every key the call can reach. */
-const KEY_PREFIX = /`([A-Za-z0-9_]+(?:\.[A-Za-z0-9_-]+)*\.)\$\{/g;
-
-function faceFiles(rel: string): string[] {
-  const path = join(SRC_ROOT, rel);
-  if (/\.tsx?$/.test(path)) return [path];
-  return readdirSync(path, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? faceFiles(join(rel, e.name)) : /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [join(path, e.name)] : []));
-}
-
-/** `key (file)` for every English key a face file names that `cat` lacks. */
-function untranslatedFaceKeys(cat: Readonly<Record<string, TranslationValue>>): string[] {
-  const found = new Map<string, Set<string>>();
-  for (const rel of FACE_SOURCES) {
-    for (const file of faceFiles(rel)) {
-      const source = readFileSync(file, 'utf8');
-      const named = new Set([...source.matchAll(KEY_LITERAL)].map((m) => m[1]));
-      for (const m of source.matchAll(KEY_PREFIX)) for (const key of Object.keys(en)) if (key.startsWith(m[1])) named.add(key);
-      for (const key of named) {
-        if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
-        found.set(key, (found.get(key) ?? new Set()).add(file.slice(SRC_ROOT.length)));
-      }
-    }
-  }
-  return [...found].map(([key, files]) => `${key} (${[...files].join(', ')})`).sort();
-}
 
 const PLACEHOLDER = /\{([A-Za-z][A-Za-z0-9_]*)\}/g;
 const forms = (v: TranslationValue): Record<string, string> => (typeof v === 'string' ? { other: v } : { ...v });
