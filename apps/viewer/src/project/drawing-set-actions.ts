@@ -12,7 +12,7 @@
 
 import type { MeshData } from '@ifc-lite/geometry';
 import { createProposedSection } from '@/drafting/section-create';
-import { runAsOneUndoStep } from '@/drafting/draft-store';
+import { runAsOneUndoStep, runAsStartingState } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { buildDrawingSet, drawingArea, groundPlan, groupsThatDoNotFit, isSetSheet, placeViewports, SET_PAPER, sheetGroup, viewExtent, withViewHung, type ModelExtent, type Reason, type SetGroup } from './drawing-set';
 import { findTemplate, templateFields } from './sheet-templates';
@@ -86,7 +86,10 @@ export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | 
   const { name, dirty } = useProjectStore.getState();
   const untitled = resolve('names.project.untitled');
   if (!dirty && name === EMPTY_PROJECT.name && untitled !== name) useProjectStore.setState({ name: untitled });
-  return ensureDrawingSet(meshes, bounds, { onOpen: true }).sheetsAdded > 0;
+  // The set a model opens with is the project's starting state, not something the person did: it is no undo step (#293).
+  let added = 0;
+  runAsStartingState(() => { added = ensureDrawingSet(meshes, bounds, { onOpen: true }).sheetsAdded; });
+  return added > 0;
 }
 
 // ---- Make the set whole (the one planner behind the Wall's start and DRAFTSET) ----
@@ -228,7 +231,7 @@ export function ensureDrawingSet(meshes: MeshData[] | null, extent: AxisBounds, 
 /** Lay every sheet of `group` out again at `scale`. */
 export function setGroupScale(group: SetGroup, scale: number, extent: ModelExtent): void {
   const { sheets, views } = useProjectStore.getState();
-  useProjectStore.setState({
+  runAsOneUndoStep(() => useProjectStore.setState({
     sheets: sheets.map((sheet) => {
       if (sheetGroup(sheet) !== group) return sheet;
       const members = (sheet.viewports ?? []).flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []);
@@ -236,7 +239,7 @@ export function setGroupScale(group: SetGroup, scale: number, extent: ModelExten
       return { ...sheet, viewports: placeViewports(members, sizes, scale, sheet, extent) };
     }),
     dirty: true,
-  });
+  }));
 }
 
 /** The scale the sheets of `group` are drawn at, when they all share one. */
@@ -248,10 +251,10 @@ export function groupScale(group: SetGroup, sheets: readonly ProjectSheet[] = us
 /** Show `viewId` in the slot of `viewportId`, keeping the slot's place and scale. */
 export function swapViewportView(sheetId: string, viewportId: string, viewId: string): void {
   const { sheets } = useProjectStore.getState();
-  useProjectStore.setState({
+  runAsOneUndoStep(() => useProjectStore.setState({
     sheets: sheets.map((s) => (s.id !== sheetId ? s : { ...s, viewports: (s.viewports ?? []).map((v) => (v.id === viewportId ? { ...v, viewId, width: 0, height: 0, center: null } : v)) })),
     dirty: true,
-  });
+  }));
 }
 
 /** Hang `viewId` on the set (`withViewHung`); returns the sheet it went on, or null when it already hangs or cannot. */

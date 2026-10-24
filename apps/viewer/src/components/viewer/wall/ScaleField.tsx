@@ -12,9 +12,9 @@
 import { useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { detailedScaleThatFits, overrun } from '@/project/drawing-set';
-import { updateProjectView, useProjectStore } from '@/project/project-store';
+import { useProjectStore } from '@/project/project-store';
 import { setScheduleScale } from '@/project/schedule-scale-actions';
-import { SHEET_SCALES, updateViewport, viewportBox } from '@/project/sheets';
+import { SHEET_SCALES, setViewportScale, viewportBox } from '@/project/sheets';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
 
@@ -52,8 +52,7 @@ export function ScaleField({ sheet, slot, view, bounds }: ScaleFieldProps) {
   const apply = (scale: number): void => {
     if (isSchedule) { setScheduleScale(slot.viewId, scale); return; }
     // The box fits the drawing again at the new scale; the view's annotation sizes follow it.
-    updateViewport(sheet.id, slot.id, { scale, width: 0, height: 0 });
-    if (view) updateProjectView(view.id, { scale });
+    setViewportScale(sheet.id, slot.id, view?.id ?? null, scale);
   };
   const box = viewportBox(slot, bounds);
   const area = bounds ? overrun(box, sheet) : null;

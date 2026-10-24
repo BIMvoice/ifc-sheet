@@ -42,7 +42,7 @@ type Step =
  * back the value from before the step only while the field is still the value the step left, the same identity rule the
  * deltas follow, so a step never overwrites what came after it, nor a project opened since.
  */
-const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate', 'schedules'] as const;
+const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate', 'schedules', 'titleBlock', 'titleBlockSources'] as const;
 type StepField = (typeof STEP_FIELDS)[number];
 type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; after: ProjectDocument[K] } }[StepField];
 
@@ -98,6 +98,20 @@ export function runAsOneUndoStep(change: () => void): void {
     fields,
   };
   if (!isEmptyDelta(group.drafts) || !isEmptyDelta(group.views) || !isEmptyDelta(group.sheets) || !isEmptyDelta(group.revisions) || fields.length > 0) pushStep({ group });
+}
+
+/**
+ * Run `change` as the project's starting state: it changes views, sheets and drafts through the ordinary functions but leaves
+ * no undo step, so Undo at the bottom of the history has nothing to take back (the set built when a model opens, #293).
+ */
+export function runAsStartingState(change: () => void): void {
+  const wasGrouping = grouping;
+  grouping = true;
+  try {
+    change();
+  } finally {
+    grouping = wasGrouping;
+  }
 }
 
 /** The fields `changes` set back to `to`, each only where it still holds the value the step moved it `from`. */

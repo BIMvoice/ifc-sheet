@@ -5,6 +5,7 @@
 /** Writing a schedule's scale (#186); the rule is in `schedule-scale`. */
 
 import { bandFits, isJoinerySchedule, scheduleBox } from './schedule-fit';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { useProjectStore } from './project-store';
 import { scheduleDataOf } from '@/joinery/schedule-split';
 import type { ScheduleData } from '@/joinery/schedule-data';
@@ -27,5 +28,5 @@ export function setScheduleScale(scheduleId: string, scale: number, data?: Sched
       return { ...v, scale, ...(refit ? { width: 0, height: 0 } : {}) };
     }),
   }));
-  useProjectStore.setState({ schedules: (schedules ?? []).map((s) => (s.id === scheduleId ? { ...s, scale } : s)), sheets: scaled, dirty: true });
+  runAsOneUndoStep(() => useProjectStore.setState({ schedules: (schedules ?? []).map((s) => (s.id === scheduleId ? { ...s, scale } : s)), sheets: scaled, dirty: true }));
 }

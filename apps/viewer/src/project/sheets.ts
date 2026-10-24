@@ -10,7 +10,8 @@
  */
 
 import { draftingFrame, draftsExtent } from '@/drafting/drafting-view';
-import { numberingScheme, useProjectStore } from './project-store';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
+import { numberingScheme, updateProjectView, useProjectStore } from './project-store';
 import { nextNumber } from './numbering';
 import { withSources, type TitleSource } from './title-block-sources';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
@@ -33,7 +34,9 @@ function patchSheet(id: string, patch: (sheet: ProjectSheet) => ProjectSheet): v
 }
 
 export function updateSheet(id: string, patch: Partial<Omit<ProjectSheet, 'id' | 'viewports'>>): void {
-  patchSheet(id, (s) => ({ ...s, ...patch }));
+  runAsOneUndoStep(() => {
+    patchSheet(id, (s) => ({ ...s, ...patch }));
+  });
 }
 
 /** Save how a sheet is set up (paper, orientation, frame) as a project template under `name`; the sheet then counts as started from it. Returns the template's id. */
@@ -56,37 +59,47 @@ export function setSeriesTemplate(series: TemplateSeries, id: string | null): vo
 
 /** `sheet` says otherwise for `key` than the project's title block (`title-block.ts`). */
 export function setTitleBlockField(id: string, key: string, value: string): void {
-  patchSheet(id, (s) => ({ ...s, titleBlock: { ...s.titleBlock, [key]: value } }));
+  runAsOneUndoStep(() => {
+    patchSheet(id, (s) => ({ ...s, titleBlock: { ...s.titleBlock, [key]: value } }));
+  });
 }
 
 /** Stop `sheet` saying otherwise for `key`: it prints the project's value again. */
 export function clearTitleBlockField(id: string, key: string): void {
-  patchSheet(id, (s) => {
-    if (!s.titleBlock || !(key in s.titleBlock)) return s;
-    const titleBlock = { ...s.titleBlock };
-    delete titleBlock[key];
-    return { ...s, titleBlock };
+  runAsOneUndoStep(() => {
+    patchSheet(id, (s) => {
+      if (!s.titleBlock || !(key in s.titleBlock)) return s;
+      const titleBlock = { ...s.titleBlock };
+      delete titleBlock[key];
+      return { ...s, titleBlock };
+    });
   });
 }
 
 /** Set a title block field on every sheet: the project's value. Empty clears it. */
 export function setProjectTitleBlockField(key: string, value: string): void {
-  const titleBlock = { ...useProjectStore.getState().titleBlock };
-  if (value) titleBlock[key] = value;
-  else delete titleBlock[key];
-  useProjectStore.setState({ titleBlock, dirty: true });
+  runAsOneUndoStep(() => {
+    const titleBlock = { ...useProjectStore.getState().titleBlock };
+    if (value) titleBlock[key] = value;
+    else delete titleBlock[key];
+    useProjectStore.setState({ titleBlock, dirty: true });
+  });
 }
 
 /** Choose the model sources a title block field reads (the order is the priority); `undefined` puts back the default. */
 export function setTitleBlockSources(key: string, sources: readonly TitleSource[] | undefined): void {
-  useProjectStore.setState({ titleBlockSources: withSources(useProjectStore.getState().titleBlockSources, key, sources), dirty: true });
+  runAsOneUndoStep(() => {
+    useProjectStore.setState({ titleBlockSources: withSources(useProjectStore.getState().titleBlockSources, key, sources), dirty: true });
+  });
 }
 
 /** Put a field back to the model: the typed value is dropped and its sources are the default. */
 export function resetTitleBlockField(key: string): void {
-  const titleBlock = { ...useProjectStore.getState().titleBlock };
-  delete titleBlock[key];
-  useProjectStore.setState({ titleBlock, titleBlockSources: withSources(useProjectStore.getState().titleBlockSources, key, undefined), dirty: true });
+  runAsOneUndoStep(() => {
+    const titleBlock = { ...useProjectStore.getState().titleBlock };
+    delete titleBlock[key];
+    useProjectStore.setState({ titleBlock, titleBlockSources: withSources(useProjectStore.getState().titleBlockSources, key, undefined), dirty: true });
+  });
 }
 
 /** Fill the project title block fields not set yet (from the model when a set is laid out); set ones stay. */
@@ -106,13 +119,13 @@ export function addViewport(sheetId: string, viewId: string, at: { x: number; y:
   const box = view?.kind === 'drafting' ? draftingFrame(drafts.filter((d) => d.viewId === viewId), scale)
     : view && isRasterView(view) ? { width: RASTER_BOX_MM.width, height: RASTER_BOX_MM.height, center: null } : { width: 0, height: 0, center: null };
   const viewport: SheetViewport = { id, viewId, x: at.x, y: at.y, scale, ...box };
-  patchSheet(sheetId, (s) => {
+  runAsOneUndoStep(() => patchSheet(sheetId, (s) => {
     // A number the program chose follows what the sheet comes to hold, once.
     const renumber = s.autoNumber && (s.viewports ?? []).length === 0;
     const series = renumber ? sheetGroupOfView(view) : s.series;
     const number = renumber && series ? nextNumber(useProjectStore.getState().sheets.filter((o) => o.id !== s.id), series, numberingScheme()) : s.number;
     return { ...withoutAutoNumber(s), number, ...(series ? { series } : {}), viewports: [...(s.viewports ?? []), viewport] };
-  });
+  }));
   return id;
 }
 
@@ -123,8 +136,23 @@ export function updateViewport(sheetId: string, viewportId: string, patch: Parti
   patchSheet(sheetId, (s) => ({ ...s, viewports: (s.viewports ?? []).map((v) => (v.id === viewportId ? { ...v, ...patch, ...(movesPage(v, patch) ? { placed: true } : {}) } : v)) }));
 }
 
+/** `updateViewport` as ONE undo step: the edit of a field, a size or a fit made once, not the live writes of a drag (those group themselves at the end of the drag). */
+export function editViewport(sheetId: string, viewportId: string, patch: Partial<Omit<SheetViewport, 'id' | 'viewId'>>): void {
+  runAsOneUndoStep(() => updateViewport(sheetId, viewportId, patch));
+}
+
+/** Draw a viewport at `scale`: its box fits the drawing again, and the view's annotation sizes follow (`view`, when it has one). One undo step. */
+export function setViewportScale(sheetId: string, viewportId: string, viewId: string | null, scale: number): void {
+  runAsOneUndoStep(() => {
+    updateViewport(sheetId, viewportId, { scale, width: 0, height: 0 });
+    if (viewId) updateProjectView(viewId, { scale });
+  });
+}
+
 export function removeViewport(sheetId: string, viewportId: string): void {
-  patchSheet(sheetId, (s) => ({ ...s, viewports: (s.viewports ?? []).filter((v) => v.id !== viewportId) }));
+  runAsOneUndoStep(() => {
+    patchSheet(sheetId, (s) => ({ ...s, viewports: (s.viewports ?? []).filter((v) => v.id !== viewportId) }));
+  });
 }
 
 /** The sheets a view is placed on (a view usually sits on one sheet, as in Revit). */
