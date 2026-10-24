@@ -21,6 +21,8 @@ import { textRowsOf } from '@bimvoice/ifcsheet';
 import { buildPackage, readPackage, unzipPackage, zipPackage } from './package/package-io.js';
 import { hangSchedule } from './drawing-set-actions.js';
 import { resetProject, useProjectStore } from './project-store.js';
+import { openSection, sectionHeading } from '@/test/open-section.js';
+import { resetSectionChoices } from '@/components/viewer/wall/card-section-state';
 import { parseProjectFile, serializeProject } from './project-file.js';
 import type { ProjectDocument, ProjectSchedule, ProjectSheet } from './types.js';
 
@@ -53,7 +55,7 @@ function typed(): { id: string; row: string } {
   return { id, row };
 }
 
-beforeEach(() => resetProject());
+beforeEach(() => { resetProject(); resetSectionChoices(); });
 afterEach(() => cleanup());
 
 describe('typing text into a schedule', () => {
@@ -120,6 +122,7 @@ describe('the card', () => {
     useProjectStore.setState({ joineryTypes: [door, win] });
     const id = addSchedule('all', 'Joinery');
     const view = render(<ScheduleTextCard schedule={scheduleById(id)!} />);
+    openSection(view, 'Text rows');
     click([...view.querySelectorAll('button')].find((b) => b.textContent === '+ Add a text row')!);
     const row = scheduleById(id)!.textRows![0];
     assert.equal(row.label, 'Remarks');
@@ -134,6 +137,7 @@ describe('the card', () => {
   it('renames and removes a row', () => {
     const { id } = typed();
     const view = render(<ScheduleTextCard schedule={scheduleById(id)!} />);
+    openSection(view, 'Text rows');
     const name = input(view, 'Row name')!;
     typeInto(name, 'Maker');
     blur(name);
@@ -146,7 +150,11 @@ describe('the card', () => {
     const { id, row } = typed();
     useProjectStore.setState({ joineryTypes: [door, win2] });
     const view = render(<ScheduleTextCard schedule={scheduleById(id)!} />);
+    openSection(view, 'Text rows');
     assert.match(view.textContent ?? '', /Text for types no longer in the model/);
+    click(sectionHeading(view, 'Text rows'));
+    assert.equal((sectionHeading(view, 'Text rows').textContent ?? '').replace(/^▸/, ''), 'Text rows1 row, 1 text for a type no longer in the model', 'closed, the heading counts the orphan too');
+    click(sectionHeading(view, 'Text rows'));
     assert.match(view.textContent ?? '', /Velux/);
     assert.match(view.textContent ?? '', /W1 Fixed window/);
     assert.equal(input(view, 'Manufacturer, W1 Fixed window'), null, 'an orphan is not an editable cell');

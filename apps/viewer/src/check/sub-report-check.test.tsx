@@ -13,6 +13,8 @@ import { readFileSync } from 'node:fs';
 import { checkSubReports, describeReadiness, typeLabel } from '@bimvoice/ifcsheet';
 import { readinessOfModel } from '@bimvoice/ifcsheet/readiness-read';
 import { cleanup, click, render } from '@/test/render.js';
+import { openSection, sectionHeading } from '@/test/open-section.js';
+import { resetSectionChoices } from '@/components/viewer/wall/card-section-state';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { parseStep } from '@/test/properties-panel-harness.js';
@@ -29,6 +31,7 @@ let ifcDataStore: Awaited<ReturnType<typeof parseStep>>;
 
 beforeEach(async () => {
   resetProject();
+  resetSectionChoices();
   ifcDataStore ??= await parseStep(new Uint8Array(readFileSync(new URL('../../public/samples/bloc-p4.ifc', import.meta.url))));
   useViewerStore.setState({ models: new Map([['m', { ifcDataStore, name: 'bloc-p4.ifc' }]]) } as never);
 });
@@ -62,6 +65,7 @@ describe('a schedule split into parts that do not overlap', () => {
   it('says every element is in exactly one part, and the readiness list says nothing about it', () => {
     const { parent } = split();
     const card = render(<SubReportCard schedule={scheduleById(parent)!} />);
+    openSection(card, 'Sub-reports'); // nothing to warn of: the section starts closed
     assert.match(text(card), /Every element is in exactly one part\./);
     assert.doesNotMatch(text(card), /More than one part|in no part/);
     cleanup();
@@ -98,6 +102,56 @@ describe('an overlap', () => {
     click(fix);
     assert.deepEqual(scheduleById(pick)!.sub!.filter.types, []);
     assert.match(text(card), /Every element is in exactly one part\./);
+  });
+});
+
+describe('the Sub-reports section (#290)', () => {
+  const open = (el: HTMLElement) => sectionHeading(el, 'Sub-reports').getAttribute('aria-expanded');
+  const said = (el: HTMLElement) => (sectionHeading(el, 'Sub-reports').textContent ?? '').replace(/^▸/, '');
+
+  it('is closed with "N sub-reports" when the parts cover every element once, and open with the warning when two parts overlap', () => {
+    const { parent } = split();
+    assert.equal(open(render(<SubReportCard schedule={scheduleById(parent)!} />)), 'false');
+    assert.equal(said(document.body), 'Sub-reports2 sub-reports');
+    cleanup();
+    const w = windows()[0];
+    addSubReport(parent, 'Pick', { types: [w.key] });
+    const card = render(<SubReportCard schedule={scheduleById(parent)!} />);
+    assert.equal(open(card), 'true', 'a warning opens the section');
+    assert.match(text(card), /More than one part lists the same type or element/);
+    click(sectionHeading(card, 'Sub-reports'));
+    assert.equal(said(card), 'Sub-reports3 sub-reports, duplicates', 'closed, it still names the problem');
+  });
+
+  it('opens a part that keeps everything when its overlap is the warning (its own settings are the defaults)', () => {
+    const { parent } = split();
+    const rest = addSubReport(parent, 'Rest', {})!;
+    const card = render(<SubReportCard schedule={scheduleById(rest)!} />);
+    assert.equal(open(card), 'true');
+    click(sectionHeading(card, 'Sub-reports'));
+    assert.equal(said(card), 'Sub-reportsKeeps everything, duplicates');
+  });
+
+  it('keeps open the section a warning opened once the warning is fixed, so the result is seen', () => {
+    const { parent } = split();
+    const w = windows()[0];
+    const pick = addSubReport(parent, 'Pick', { types: [w.key] })!;
+    const card = render(<SubReportCard schedule={scheduleById(parent)!} />);
+    assert.equal(open(card), 'true');
+    click([...card.querySelectorAll('button')].find((b) => /^Keep the repeated types in "Windows" only/.test(b.textContent ?? ''))!);
+    assert.deepEqual(scheduleById(pick)!.sub!.filter.types, []);
+    assert.equal(open(card), 'true');
+    assert.match(text(card), /Every element is in exactly one part\./);
+  });
+
+  it('opens on a gap and names it when closed', () => {
+    const parent = addSchedule('all', 'Joinery');
+    addSubReport(parent, 'Doors', { types: [doors()[0].key] });
+    addSubReport(parent, 'Windows', { kinds: ['window'] });
+    const card = render(<SubReportCard schedule={scheduleById(parent)!} />);
+    assert.equal(open(card), 'true');
+    click(sectionHeading(card, 'Sub-reports'));
+    assert.equal(said(card), 'Sub-reports2 sub-reports, gaps');
   });
 });
 

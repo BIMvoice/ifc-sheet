@@ -19,8 +19,9 @@ import type { ProjectSchedule } from '@/project/types';
 import { SideBySideToggle } from './SideBySideToggle';
 import { stepInto } from './wall-nav';
 import { WALL_PILL } from './wall-type';
-import { SubReportChecks, useParentRows } from './SubReportChecks';
-import { ScheduleFilterCard } from './ScheduleFilterCard';
+import { SubReportChecks, useParentRows, useSubReportCheck } from './SubReportChecks';
+import { CardSection } from './CardSection';
+import { subSummary } from './card-section-summary';
 
 const quiet = WALL_PILL;
 const KINDS = ['door', 'window'] as const;
@@ -51,6 +52,7 @@ export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
   const parts = subReportsOf(schedules, schedule.id);
   const [sideBySide, setSideBySide] = useState(false);
   const sub = schedule.sub;
+  const found = useSubReportCheck(schedule);
 
   if (sub) {
     const kinds = sub.filter.kinds ?? KINDS;
@@ -59,11 +61,12 @@ export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
     // The types it could list: those of the kinds it keeps.
     const choices = data.entries.filter((e) => kinds.includes(e.kind));
     const parent = schedules.find((s) => s.id === sub.parent);
+    const summary = subSummary({ sub, parts: 0, levels: data.levels.length, types: data.entries.length, duplicates: (found?.duplicates.length ?? 0) > 0, gaps: (found?.gaps.length ?? 0) > 0 }, t);
+    const warned = (found?.duplicates.length ?? 0) > 0 || (found?.gaps.length ?? 0) > 0;
     return (
-      <div data-owns-keys className="mt-4 border-t border-sky-300/20 pt-4">
-        <p className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.sub.title')}</p>
+      <CardSection id="sub" title={t('wall.sub.title')} summary={summary.text} defaultOpen={summary.changed || warned} warn={warned}>
         {parent ? <p className="m-0 mt-1 text-xs text-sky-200">{t('wall.sub.partOf', { name: parent.name })}</p> : null}
-        <SubReportChecks schedule={schedule} />
+        <SubReportChecks schedule={schedule} found={found} />
         {schedule.kind === 'all' ? (
           <fieldset className="m-0 mt-3 border-0 p-0">
             <legend className="p-0 text-xs text-sky-200">{t('wall.sub.kinds')}</legend>
@@ -105,19 +108,19 @@ export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
             ))}
           </ul>
         </fieldset>
-        <ScheduleFilterCard schedule={schedule} filter={sub.filter} />
-      </div>
+      </CardSection>
     );
   }
 
   if (!canSplit(schedule)) return null;
+  const warned = (found?.duplicates.length ?? 0) > 0 || (found?.gaps.length ?? 0) > 0;
+  const summary = subSummary({ sub: undefined, parts: parts.length, levels: 0, types: 0, duplicates: (found?.duplicates.length ?? 0) > 0, gaps: (found?.gaps.length ?? 0) > 0 }, t);
   return (
-    <div data-owns-keys className="mt-4 border-t border-sky-300/20 pt-4">
-      <p className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.sub.title')}</p>
+    <CardSection id="sub" title={t('wall.sub.title')} summary={summary.text} defaultOpen={warned} warn={warned}>
       {parts.length === 0 ? <p className="m-0 mt-1 text-xs text-sky-200">{t('wall.sub.none')}</p> : (
         <ul className="m-0 mt-1 list-none p-0 text-sm text-sky-100">{parts.map((p) => <li key={p.id}>{p.name}</li>)}</ul>
       )}
-      <SubReportChecks schedule={schedule} />
+      <SubReportChecks schedule={schedule} found={found} />
       <div className="mt-3 flex flex-wrap gap-2">
         {schedule.kind === 'all' ? <button type="button" className={quiet} onClick={() => placeAll(splitByKind(schedule.id, { door: t('wall.sub.doors'), window: t('wall.sub.windows') }), sideBySide)}>{t('wall.sub.byKind')}</button> : null}
         <button type="button" className={quiet} onClick={() => placeAll(splitByExterior(schedule.id, { exterior: t('wall.sub.exterior'), interior: t('wall.sub.interior') }), sideBySide)}>{t('wall.sub.byExterior')}</button>
@@ -125,6 +128,6 @@ export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
         <button type="button" className={quiet} onClick={() => { const id = addSubReport(schedule.id, t('wall.sub.newName', { name: schedule.name }), {}); if (id) placeAll([id], sideBySide); }}>{t('wall.sub.add')}</button>
         <SideBySideToggle on={sideBySide} onChange={setSideBySide} />
       </div>
-    </div>
+    </CardSection>
   );
 }

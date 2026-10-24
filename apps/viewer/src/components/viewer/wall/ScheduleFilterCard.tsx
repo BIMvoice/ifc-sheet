@@ -10,13 +10,17 @@
  */
 
 import { useState } from 'react';
-import { PROPERTY_OPS, type PropertyOp, type PropertyTest, type SubReportFilter } from '@bimvoice/ifcsheet';
+import { PROPERTY_OPS, textOwner, type PropertyOp, type PropertyTest, type SubReportFilter } from '@bimvoice/ifcsheet';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { setScheduleFilter } from '@/joinery/schedule-content-actions';
 import { setSubReportFilter, toggled } from '@/joinery/schedules';
+import { useProjectStore } from '@/project/project-store';
+import { isJoinerySchedule } from '@/project/schedule-fit';
 import type { ProjectSchedule } from '@/project/types';
 import { useParentRows } from './SubReportChecks';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
+import { CardSection } from './CardSection';
+import { filterActive, filterSummary, say } from './card-section-summary';
 
 /** A large toggle, pressed while its value is kept. */
 function Toggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
@@ -30,10 +34,17 @@ function Toggle({ label, on, onClick }: { label: string; on: boolean; onClick: (
   );
 }
 
-/** A test as one line: `IsExternal is true`. */
-const say = (t: PropertyTest, op: string): string => `${t.pset ? `${t.pset}.` : ''}${t.name} ${op}${t.op === 'present' ? '' : ` ${t.value ?? ''}`}`;
+/** The card's filter section where the schedule has a filter of its own: a part's, or a whole joinery schedule's (not a part's inherited content). */
+export function ScheduleFilterSection({ schedule: given }: { schedule: ProjectSchedule }) {
+  const schedules = useProjectStore((s) => s.schedules ?? []);
+  // The store's schedule, so the section follows its own edits whichever copy the caller holds.
+  const schedule = schedules.find((s) => s.id === given.id) ?? given;
+  if (schedule.sub) return <ScheduleFilterCard schedule={schedule} filter={schedule.sub.filter} />;
+  if (!isJoinerySchedule(schedule) || textOwner(schedules, schedule)?.id !== schedule.id) return null;
+  return <ScheduleFilterCard schedule={schedule} filter={schedule.content?.filter} />;
+}
 
-export function ScheduleFilterCard({ schedule, filter }: { schedule: ProjectSchedule; filter: SubReportFilter | undefined }) {
+function ScheduleFilterCard({ schedule, filter }: { schedule: ProjectSchedule; filter: SubReportFilter | undefined }) {
   const { t } = useTranslation();
   const whole = useParentRows(schedule.kind);
   const [draft, setDraft] = useState<{ pset: string; name: string; op: PropertyOp; value: string }>({ pset: '', name: '', op: 'equals', value: '' });
@@ -45,7 +56,8 @@ export function ScheduleFilterCard({ schedule, filter }: { schedule: ProjectSche
   const tests = filter?.properties ?? [];
   const set = (patch: { [K in keyof SubReportFilter]?: SubReportFilter[K] | undefined }) => (schedule.sub ? setSubReportFilter(schedule.id, patch) : void setScheduleFilter(schedule.id, patch));
   const opLabel = (op: PropertyOp) => t(`wall.filter.op.${op}` as TranslationKey);
-  const active = !!(filter?.classes || filter?.predefined || filter?.properties?.length);
+  const active = filterActive(filter);
+  const summary = filterSummary(filter, opLabel, t);
   const canAdd = draft.name.trim() !== '' && (draft.op === 'present' || draft.value.trim() !== '');
   const add = () => {
     if (!canAdd) return;
@@ -55,8 +67,7 @@ export function ScheduleFilterCard({ schedule, filter }: { schedule: ProjectSche
   };
 
   return (
-    <div data-owns-keys className="mt-4 border-t border-sky-300/20 pt-4">
-      <p className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.filter.title')}</p>
+    <CardSection id="filter" title={t('wall.filter.title')} summary={summary.text} defaultOpen={summary.changed}>
       <p className="m-0 mt-1 text-xs text-sky-200">{schedule.sub ? t('wall.filter.hint') : t('wall.filter.scope')}</p>
 
       {classes.length > 0 ? (
@@ -119,6 +130,6 @@ export function ScheduleFilterCard({ schedule, filter }: { schedule: ProjectSche
           <button type="button" className={WALL_PILL} disabled={!active} onClick={() => set({ classes: undefined, predefined: undefined, properties: undefined })}>{t('wall.filter.reset')}</button>
         </div>
       </fieldset>
-    </div>
+    </CardSection>
   );
 }

@@ -14,6 +14,7 @@ import { blur, cleanup, click, render, type as typeInto } from '@/test/render.js
 import { useSheetSchedules } from '@/components/viewer/joinery/ScheduleGraphic';
 import { ScheduleTextCard } from '@/components/viewer/wall/ScheduleTextCard';
 import { addSchedule, scheduleById } from '@/joinery/schedules.js';
+import { openSection } from '@/test/open-section.js';
 import { hangSchedule } from './drawing-set-actions.js';
 import { resetProject, useProjectStore } from './project-store.js';
 import type { ProjectSheet } from './types.js';
@@ -38,6 +39,7 @@ describe('text cells beside bound cells', () => {
     const id = addSchedule('all', 'Joinery');
     hangSchedule(id);
     const card = render(<ScheduleTextCard schedule={scheduleById(id)!} />);
+    openSection(card, 'Text rows');
     click([...card.querySelectorAll('button')].find((b) => b.textContent === '+ Add a text row')!);
     const row = scheduleById(id)!.textRows![0];
     const rename = card.querySelector<HTMLInputElement>('input[aria-label="Row name"]')!;

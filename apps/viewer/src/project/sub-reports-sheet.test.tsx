@@ -20,6 +20,8 @@ import type { ProjectSheet } from './types.js';
 import { SubReportCard } from '@/components/viewer/wall/SubReportCard';
 import { hangSchedule } from './drawing-set-actions.js';
 import { resetProject, useProjectStore } from './project-store.js';
+import { openSection } from '@/test/open-section.js';
+import { resetSectionChoices } from '@/components/viewer/wall/card-section-state';
 import { frameOf, frameRect } from './sheet-frame.js';
 import { paperOf } from './sheets.js';
 import { layoutJoineryOnSheet, pagesIn, syncSchedulePages } from './schedule-fit.js';
@@ -50,7 +52,7 @@ function model(n: number): ScheduleData {
 const sheets = () => useProjectStore.getState().sheets;
 const holders = (id: string) => sheets().filter((s) => (s.viewports ?? []).some((v) => v.viewId === id)).sort((a, b) => a.number.localeCompare(b.number));
 
-beforeEach(() => resetProject());
+beforeEach(() => { resetProject(); resetSectionChoices(); });
 afterEach(() => cleanup());
 
 describe('a sub-report on the sheets', () => {
@@ -158,6 +160,7 @@ describe('the Wall card', () => {
   it('splits a joinery schedule into doors and windows, each hung on a sheet of its own', () => {
     const parent = addSchedule('all', 'Joinery');
     const view = render(<SubReportCard schedule={scheduleById(parent)!} />);
+    openSection(view, 'Sub-reports');
     const button = [...view.querySelectorAll('button')].find((b) => b.textContent === 'Doors and windows apart');
     assert.ok(button, 'the card offers the split');
     click(button);
@@ -170,6 +173,7 @@ describe('the Wall card', () => {
     const parent = addSchedule('all', 'Joinery');
     const part = addSubReport(parent, 'Part', {})!;
     const view = render(<SubReportCard schedule={scheduleById(part)!} />);
+    openSection(view, 'Sub-reports');
     const doors = [...view.querySelectorAll('button')].find((b) => b.textContent === 'Doors');
     assert.ok(doors);
     assert.equal(doors.getAttribute('aria-pressed'), 'true', 'a part with no restriction keeps both kinds');
@@ -182,6 +186,7 @@ describe('the Wall card', () => {
     const parent = addSchedule('all', 'Joinery');
     const part = addSubReport(parent, 'Doors', { kinds: ['door'] })!;
     const view = render(<SubReportCard schedule={scheduleById(part)!} />);
+    openSection(view, 'Sub-reports');
     const labelsShown = [...view.querySelectorAll('li label')].map((l) => l.textContent ?? '');
     assert.equal(labelsShown.length, 1, labelsShown.join('|'));
     assert.match(labelsShown[0], /^D1 /);

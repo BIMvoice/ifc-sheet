@@ -18,7 +18,8 @@ import { moveRow, resetContent, setNumbering, setRowShown, setSort, setSymbolSho
 import type { ProjectSchedule } from '@/project/types';
 import { toast } from '@/components/ui/toast';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
-import { ScheduleFilterCard } from './ScheduleFilterCard';
+import { CardSection } from './CardSection';
+import { contentSummary } from './card-section-summary';
 
 const ROW_LABELS: Record<string, TranslationKey> = {
   name: 'schedule.row.name', size: 'schedule.row.size', operation: 'schedule.row.operation', sill: 'schedule.row.sill',
@@ -61,9 +62,9 @@ export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule })
   const sequence = content?.numbering?.marks === 'sequence';
   // The tags of elements the schedule had numbered follow a change of marks; where they cannot (Edit mode is off), say so.
   const report = (out: { errors: string[] }) => { if (out.errors.length > 0) toast.error(t('wall.content.tagsFailed', { reason: out.errors.join('; ') })); };
+  const summary = contentSummary(content, typed.map((r) => r.id), t);
   return (
-    <div data-owns-keys className="mt-4 border-t border-sky-300/20 pt-4">
-      <p className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.content.title')}</p>
+    <CardSection id="content" title={t('wall.content.title')} summary={summary.text} defaultOpen={summary.changed}>
       <p className="m-0 mt-1 text-xs text-sky-200">{inherited ? t('wall.content.inherited', { name: inherited.name }) : t('wall.content.hint')}</p>
 
       <fieldset className="m-0 mt-3 border-0 p-0">
@@ -137,7 +138,6 @@ export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule })
       <div className="mt-3">
         <button type="button" className={WALL_PILL} disabled={!content} onClick={() => resetContent(schedule.id)}>{t('wall.content.reset')}</button>
       </div>
-      {inherited ? null : <ScheduleFilterCard schedule={schedule} filter={content?.filter} />}
-    </div>
+    </CardSection>
   );
 }
