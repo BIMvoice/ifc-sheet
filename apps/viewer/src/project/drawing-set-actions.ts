@@ -264,6 +264,13 @@ export function hangView(viewId: string, extent: ModelExtent): string | null {
   return hung.sheetId;
 }
 
+/** A new sheet in the schedules series, named `name` and numbered after the sheets there are, on the series' template; it holds no viewport yet. */
+export function bareScheduleSheet(name: string): ProjectSheet {
+  const template = seriesTemplates().schedules;
+  const start = template ? templateFields(template) : { paper: SET_PAPER, orientation: 'landscape' as const };
+  return { id: freshProjectId('sheet'), number: nextNumber(state().sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), ...start };
+}
+
 /**
  * Hang a schedule or a legend on a sheet of its own in the A-6xx series, named `name`: `itemId` centred in the drawing area.
  * A schedule that fits its viewport (`fit`) instead takes the whole drawing area as its box. A joinery schedule (`fit.data`)
@@ -275,9 +282,7 @@ function hangOnSheetOfItsOwn(itemId: string, name: string, fit?: { data?: Schedu
   const { sheets } = useProjectStore.getState();
   const placed = sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === itemId));
   if (placed) return placed.id;
-  const template = seriesTemplates().schedules;
-  const start = template ? templateFields(template) : { paper: SET_PAPER, orientation: 'landscape' as const };
-  const bare: ProjectSheet = { id: freshProjectId('sheet'), number: nextNumber(sheets, 'schedules', numberingScheme()), series: 'schedules', name, createdAt: Date.now(), ...start };
+  const bare = bareScheduleSheet(name);
   const paper = fit?.data ? paperHolding(bare, fit.data, fit.scale) : bare.paper;
   const sheet: ProjectSheet = { ...bare, paper };
   const area = fit ? sheetDrawingArea(sheet) : drawingArea(sheet);

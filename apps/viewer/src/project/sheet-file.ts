@@ -23,6 +23,12 @@ function fail(path: string, message: string): never {
   throw new Error(`Not a project file: ${path} ${message}`);
 }
 
+/** The positions kept for continuation pages that are not there (`SheetViewport.placedPages`): only whole entries survive. */
+function readPlacedPages(v: unknown): { placedPages?: { page: number; x: number; y: number }[] } {
+  const kept = (Array.isArray(v) ? v : []).flatMap((e) => (isObject(e) && isNumber(e.page) && Number.isInteger(e.page) && e.page > 0 && isNumber(e.x) && isNumber(e.y) ? [{ page: e.page, x: e.x, y: e.y }] : []));
+  return kept.length ? { placedPages: kept } : {};
+}
+
 function readViewport(v: unknown, path: string): SheetViewport {
   if (!isObject(v) || !isString(v.id) || !isString(v.viewId)) fail(path, 'must be a viewport { id, viewId }');
   if (!isNumber(v.scale) || v.scale <= 0) fail(`${path}.scale`, 'must be a positive scale denominator');
@@ -33,6 +39,8 @@ function readViewport(v: unknown, path: string): SheetViewport {
     x: num('x', 100), y: num('y', 100), width: Math.max(0, num('width', 0)), height: Math.max(0, num('height', 0)), center,
     ...(Array.isArray(v.hiddenLayers) ? { hiddenLayers: v.hiddenLayers.filter((x): x is string => typeof x === 'string') } : {}),
     ...(isNumber(v.page) && Number.isInteger(v.page) && v.page > 0 ? { page: v.page } : {}),
+    ...(v.placed === true && isNumber(v.page) && v.page > 0 ? { placed: true } : {}),
+    ...readPlacedPages(v.placedPages),
     ...(isString(v.keyPlanOf) && v.keyPlanOf ? { keyPlanOf: v.keyPlanOf } : {}),
     ...(isString(v.drawingNumber) && v.drawingNumber.trim() ? { drawingNumber: v.drawingNumber.trim() } : {}),
   };

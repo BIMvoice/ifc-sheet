@@ -9,13 +9,14 @@
  * placed on another sheet from the card's place list.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { applyContent, contentOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
-import { hangSchedule } from '@/project/drawing-set-actions';
+import { hangScheduleParts } from '@/project/schedule-hang';
 import { addSubReport, canSplit, setSubReportFilter, splitByExterior, splitByKind, splitByLevel, subReportsOf, toggled } from '@/joinery/schedules';
 import type { ProjectSchedule } from '@/project/types';
+import { SideBySideToggle } from './SideBySideToggle';
 import { stepInto } from './wall-nav';
 import { WALL_PILL } from './wall-type';
 import { SubReportChecks, useParentRows } from './SubReportChecks';
@@ -36,10 +37,9 @@ function Toggle({ label, on, onClick }: { label: string; on: boolean; onClick: (
   );
 }
 
-/** Hang each new sub-report on its own sheet and step into the first. */
-function placeAll(ids: readonly string[]): void {
-  const sheets = ids.map((id) => hangSchedule(id));
-  stepInto(sheets.find((s): s is string => !!s) ?? null);
+/** Hang the new sub-reports (each on a sheet of its own, or side by side on as few as they fit) and step into the first sheet. */
+function placeAll(ids: readonly string[], sideBySide = false): void {
+  stepInto(hangScheduleParts(ids, { sideBySide })[0] ?? null);
 }
 
 export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
@@ -49,6 +49,7 @@ export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
   // The parent's types as the schedule prints them (its numbering): the labels here are the marks on the sheet.
   const data = useMemo(() => applyContent(whole, contentOf(schedules, schedule)), [whole, schedules, schedule]);
   const parts = subReportsOf(schedules, schedule.id);
+  const [sideBySide, setSideBySide] = useState(false);
   const sub = schedule.sub;
 
   if (sub) {
@@ -118,10 +119,11 @@ export function SubReportCard({ schedule }: { schedule: ProjectSchedule }) {
       )}
       <SubReportChecks schedule={schedule} />
       <div className="mt-3 flex flex-wrap gap-2">
-        {schedule.kind === 'all' ? <button type="button" className={quiet} onClick={() => placeAll(splitByKind(schedule.id, { door: t('wall.sub.doors'), window: t('wall.sub.windows') }))}>{t('wall.sub.byKind')}</button> : null}
-        <button type="button" className={quiet} onClick={() => placeAll(splitByExterior(schedule.id, { exterior: t('wall.sub.exterior'), interior: t('wall.sub.interior') }))}>{t('wall.sub.byExterior')}</button>
-        {data.levels.length > 1 ? <button type="button" className={quiet} onClick={() => placeAll(splitByLevel(schedule.id, data.levels))}>{t('wall.sub.byLevel')}</button> : null}
-        <button type="button" className={quiet} onClick={() => { const id = addSubReport(schedule.id, t('wall.sub.newName', { name: schedule.name }), {}); if (id) placeAll([id]); }}>{t('wall.sub.add')}</button>
+        {schedule.kind === 'all' ? <button type="button" className={quiet} onClick={() => placeAll(splitByKind(schedule.id, { door: t('wall.sub.doors'), window: t('wall.sub.windows') }), sideBySide)}>{t('wall.sub.byKind')}</button> : null}
+        <button type="button" className={quiet} onClick={() => placeAll(splitByExterior(schedule.id, { exterior: t('wall.sub.exterior'), interior: t('wall.sub.interior') }), sideBySide)}>{t('wall.sub.byExterior')}</button>
+        {data.levels.length > 1 ? <button type="button" className={quiet} onClick={() => placeAll(splitByLevel(schedule.id, data.levels), sideBySide)}>{t('wall.sub.byLevel')}</button> : null}
+        <button type="button" className={quiet} onClick={() => { const id = addSubReport(schedule.id, t('wall.sub.newName', { name: schedule.name }), {}); if (id) placeAll([id], sideBySide); }}>{t('wall.sub.add')}</button>
+        <SideBySideToggle on={sideBySide} onChange={setSideBySide} />
       </div>
     </div>
   );

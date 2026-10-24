@@ -75,17 +75,19 @@ export function paperHolding(sheet: ProjectSheet, data: ScheduleData, scale: num
 
 /**
  * Put the schedule `scheduleId` over `pages` sheets, continuation sheets added or removed after its own, and
- * each continuation sheet's viewport on the first one's box and scale. One write, and none when nothing changes.
+ * each continuation sheet's viewport on the first one's box and scale. A continuation page follows the first
+ * sheet's position too, until the user moves it (`placed`): from then on it keeps the place it was given. One write,
+ * and none when nothing changes.
  */
 export function syncSchedulePages(scheduleId: string, pages: number): void {
   const { sheets } = useProjectStore.getState();
   const counted = withContinuationPages(sheets, scheduleId, pages) ?? sheets;
   const home = registerHolders(counted, scheduleId)[0]?.viewports?.find((v) => v.viewId === scheduleId);
-  const same = (v: SheetViewport) => !home || (v.x === home.x && v.y === home.y && v.width === home.width && v.height === home.height && v.scale === home.scale);
+  const same = (v: SheetViewport) => !home || ((v.placed || (v.x === home.x && v.y === home.y)) && v.width === home.width && v.height === home.height && v.scale === home.scale);
   const followed = home
     ? counted.map((s) => (!(s.viewports ?? []).some((v) => v.viewId === scheduleId && (v.page ?? 0) > 0 && !same(v))
       ? s
-      : { ...s, viewports: (s.viewports ?? []).map((v) => ((v.page ?? 0) > 0 && v.viewId === scheduleId ? { ...v, x: home.x, y: home.y, width: home.width, height: home.height, scale: home.scale } : v)) }))
+      : { ...s, viewports: (s.viewports ?? []).map((v) => ((v.page ?? 0) > 0 && v.viewId === scheduleId ? { ...v, ...(v.placed ? {} : { x: home.x, y: home.y }), width: home.width, height: home.height, scale: home.scale } : v)) }))
     : counted;
   if (followed.some((s, i) => s !== sheets[i]) || followed.length !== sheets.length) useProjectStore.setState({ sheets: followed, dirty: true });
 }
@@ -113,16 +115,17 @@ export function layoutOnSheet(
 
 /** A joinery schedule's page: wrapped to the first sheet's box at its scale (`layoutSchedule`). */
 export function layoutJoineryOnSheet(
-  input: { data: ScheduleData; labels: ScheduleLabels; scale: number; views?: ReadonlyMap<string, ElementViews>; sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
+  input: { data: ScheduleData; labels: ScheduleLabels; scale: number; views?: ReadonlyMap<string, ElementViews>; continued?: string; sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
 ): ScheduleLayout {
-  const { data, labels, scale, views, ...place } = input;
-  return layoutOnSheet(place, (wrap, page) => layoutSchedule(data, labels, { ...boxOptions(wrap, scale), views, page }), scheduleMinBox(data, { scale, views }));
+  const { data, labels, scale, views, continued, ...place } = input;
+  return layoutOnSheet(place, (wrap, page) => layoutSchedule(data, labels, { ...boxOptions(wrap, scale), views, page, continued }), scheduleMinBox(data, { scale, views }));
 }
 
 /** A column table's page (takeoff, finishes, types, urban): `layout` lays out the rows that fit the first sheet's box height. */
 export function layoutTableOnSheet(
-  input: { sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
-  layout: (paging: { maxHeight: number; page: number }) => ScheduleLayout,
+  input: { continued?: string; sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
+  layout: (paging: { maxHeight: number; page: number; continued?: string }) => ScheduleLayout,
 ): ScheduleLayout {
-  return layoutOnSheet(input, (wrap, page) => layout({ maxHeight: wrap.h, page }));
+  const { continued, ...place } = input;
+  return layoutOnSheet(place, (wrap, page) => layout({ maxHeight: wrap.h, page, continued }));
 }

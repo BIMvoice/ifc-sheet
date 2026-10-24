@@ -44,7 +44,18 @@ export type TableItem =
   /** A line of text `h` tall whose baseline is `dy` below its top. */
   | { kind: 'text'; h: number; dy: number; size: number; text: string; bold?: boolean };
 
+/**
+ * A table's title over `pages` pages: the title alone on one page, else with its page counter, and `continued` (the language's
+ * word for it) on every page after the first: "Doors (continued, 2/3)". Without that word the counter alone, as before.
+ */
+export function pageTitle(title: string, page: number, pages: number, continued?: string): string {
+  if (pages <= 1) return title;
+  return `${title} (${page > 0 && continued ? `${continued}, ` : ''}${page + 1}/${pages})`;
+}
+
 export interface PagedOptions {
+  /** The word for "continued" in the user's language, written in the title of every page after the first. */
+  continued?: string;
   /** A page holds the lines that fit this height (mm); at least one row is kept per page. Absent: all on one page. */
   maxHeight?: number;
   /** The page to lay out, from 0. */
@@ -125,7 +136,7 @@ export function layoutPagedTable(title: string, titleSize: number, items: readon
   const lines = pages[page];
   const width = widthOf(items);
   const prims: SchedulePrim[] = [{
-    kind: 'text', x: 0, y: TITLE_H - 3, text: pages.length > 1 ? `${title} (${page + 1}/${pages.length})` : title, size: titleSize, anchor: 'start', bold: true,
+    kind: 'text', x: 0, y: TITLE_H - 3, text: pageTitle(title, page, pages.length, options.continued), size: titleSize, anchor: 'start', bold: true,
   }];
   let y = TITLE_H;
   let segment: { block: TableBlock; top: number } | null = null;

@@ -23,6 +23,7 @@ import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
+import { pageTitle } from './paged-table';
 import { shownRows, symbolsShown, textCellText, textRowId } from '@bimvoice/ifcsheet';
 import { sheetNumber } from '@bimvoice/ifcsheet/names';
 
@@ -71,6 +72,8 @@ export interface ScheduleLayoutOptions {
   maxHeight?: number;
   /** The page to lay out, from 0 (`pages` of the result says how many there are). */
   page?: number;
+  /** The word for "continued" in the user's language, written in the title of every page after the first. */
+  continued?: string;
   /**
    * Front, plan and section cut from the real geometry, by entry key. An entry
    * with views draws them (with the opening symbol overlaid); one without draws
@@ -178,7 +181,7 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
   const prims: SchedulePrim[] = [];
   const tableRows = rows(data, labels);
 
-  prims.push({ kind: 'text', x: 0, y: 6, text: pages > 1 ? `${labels.title} (${page + 1}/${pages})` : labels.title, size: 5, anchor: 'start', bold: true });
+  prims.push({ kind: 'text', x: 0, y: 6, text: pageTitle(labels.title, page, pages, options.continued), size: 5, anchor: 'start', bold: true });
   let top = TITLE_H, width = LABEL_W;
   for (const cards of bands) {
     const w = LABEL_W + cards.reduce((s, e) => s + cardW(e), 0);
