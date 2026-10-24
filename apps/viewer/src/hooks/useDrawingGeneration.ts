@@ -912,7 +912,7 @@ export function useDrawingGeneration({
     // A degenerate (zero-extent) bounding box has no meaningful percentage —
     // fall back to the slider's own default centre rather than divide by ~0.
     const position = span > 1e-9
-      ? Math.min(100, Math.max(0, ((restored.plane.position - axisMin) / span) * 100))
+      ? ((restored.plane.position - axisMin) / span) * 100
       : 50;
 
     const customPlane = restored.plane.customPlane;

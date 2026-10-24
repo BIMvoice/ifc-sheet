@@ -290,4 +290,10 @@ export const wallRo = {
   'wall.text.orphans': 'Text pentru tipuri care nu mai sunt în model',
   'wall.text.orphanHint': 'Păstrat pentru cazul în care tipul revine. Nu se tipărește.',
   'wall.text.orphanRemove': 'Șterge',
+  'wall.check.title': 'Dubluri și goluri',
+  'wall.check.ok': 'Fiecare element este într-o singură parte.',
+  'wall.check.duplicates': 'Mai multe părți conțin același tip sau element ({parts}). Tipuri: {types}, elemente: {count}: {list}.',
+  'wall.check.gaps': 'Unele elemente nu sunt în nicio parte. Tipuri: {types}, elemente: {count}: {list}.',
+  'wall.check.fixAdd': 'Adaugă tipurile lipsă în „{part}” ({types})',
+  'wall.check.fixKeep': 'Păstrează tipurile repetate doar în „{part}” ({types})',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

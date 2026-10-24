@@ -120,12 +120,25 @@ export function worldToPercent(world: number, range: AxisRange): number {
 }
 
 /**
- * A world coordinate as the Section bar slider's 0..100 position: the one
- * clamped conversion, for a cut the user places with the slider. A view's
- * plane goes through `worldToPercent`, never this.
+ * A world coordinate as the Section bar slider's position: the one clamped
+ * conversion, for a cut the user drags. The slider spans the model (0..100)
+ * widened to include the plane it already holds (`current`, a position), so a
+ * plane standing beyond the model stays reachable and a drag cannot push it
+ * further out. A programmatic placement (a storey's plan cut, an alignment
+ * station) goes through `worldToPercent`, never this.
  */
-export function worldToSliderPercent(world: number, range: AxisRange): number {
-  return Math.min(100, Math.max(0, worldToPercent(world, range)));
+export function worldToSliderPercent(world: number, range: AxisRange, current = 50): number {
+  const lo = Math.min(0, current);
+  const hi = Math.max(100, current);
+  return Math.min(hi, Math.max(lo, worldToPercent(world, range)));
+}
+
+/** The world span the Section bar slider walks: the model's, widened to the plane it holds. */
+export function sliderWorldRange(range: AxisRange, current: number): AxisRange {
+  return {
+    min: Math.min(range.min, percentToWorld(current, range)),
+    max: Math.max(range.max, percentToWorld(current, range)),
+  };
 }
 
 /**

@@ -15,6 +15,8 @@
  * MCP tool say it in English with {@link describeReadiness}.
  */
 
+import { subReportParams, type SubReportCheck } from './sub-report-check.js';
+
 /** What the loaded models hold, counted once. "Elements" are the products that have geometry, rooms (IfcSpace) apart. */
 export interface ModelFacts {
   storeys: number;
@@ -28,23 +30,25 @@ export interface ModelFacts {
   duplicatedEntities: number;
 }
 
-export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey';
+export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps';
 
 export interface ReadinessFinding {
   kind: ReadinessKind;
   /** Catalogue keys: what is missing (`ready.<kind>`) and what is weaker because of it (`ready.<kind>.effect`). */
   key: `ready.${ReadinessKind}`;
   effectKey: `ready.${ReadinessKind}.effect`;
-  params: Record<string, number>;
+  params: Record<string, number | string>;
 }
 
-const finding = (kind: ReadinessKind, params: Record<string, number>): ReadinessFinding => ({ kind, key: `ready.${kind}`, effectKey: `ready.${kind}.effect`, params });
+const finding = (kind: ReadinessKind, params: Record<string, number | string>): ReadinessFinding => ({ kind, key: `ready.${kind}`, effectKey: `ready.${kind}.effect`, params });
 
 /**
  * The findings, in the order the draft set depends on them: levels first (a plan per level),
  * then rooms, then what the schedules read. An empty model (no element, no room) has nothing to report.
+ * `subReports` are the checks of the schedules that are split into parts (`checkSubReports`): a duplicated or
+ * missing element is said after the model's own findings, one pair of findings per split schedule.
  */
-export function modelReadiness(f: ModelFacts): ReadinessFinding[] {
+export function modelReadiness(f: ModelFacts, subReports: readonly SubReportCheck[] = []): ReadinessFinding[] {
   if (f.elements === 0 && f.spaces === 0 && f.storeys === 0) return [];
   const out: ReadinessFinding[] = [];
   if (f.storeys === 0) out.push(finding('noStoreys', {}));
@@ -55,6 +59,10 @@ export function modelReadiness(f: ModelFacts): ReadinessFinding[] {
     if (f.elementsWithoutQuantities > 0) out.push(finding('noQuantities', { count: f.elementsWithoutQuantities, total: f.elements }));
   }
   if (f.duplicateGlobalIds > 0) out.push(finding('duplicateGlobalIds', { count: f.duplicateGlobalIds, entities: f.duplicatedEntities }));
+  for (const c of subReports) {
+    if (c.duplicates.length > 0) out.push(finding('subReportDuplicates', subReportParams(c.duplicates, c.parent.name)));
+    if (c.gaps.length > 0) out.push(finding('subReportGaps', subReportParams(c.gaps, c.parent.name)));
+  }
   return out;
 }
 
@@ -72,6 +80,10 @@ export const READINESS_EN = {
   'ready.noQuantities.effect': 'The material takeoff has no volume or area for them.',
   'ready.duplicateGlobalIds': '{count} GlobalIds are shared by {entities} entities.',
   'ready.duplicateGlobalIds.effect': 'A tag or label finds its element by GlobalId, so it can point at the wrong one of those that share it.',
+  'ready.subReportDuplicates': 'In "{schedule}", more than one part lists the same type or element ({parts}). Types: {types}, elements: {count}: {list}.',
+  'ready.subReportDuplicates.effect': 'They are counted twice when the parts are added up, and drawn on two sheets.',
+  'ready.subReportGaps': 'In "{schedule}", some elements are in no part. Types: {types}, elements: {count}: {list}.',
+  'ready.subReportGaps.effect': 'The parts do not add up to the schedule: those doors and windows are on no sheet.',
 } as const;
 
 /** A finding in English: what is missing, and what is weaker for it. */

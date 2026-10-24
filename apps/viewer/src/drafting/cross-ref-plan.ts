@@ -10,7 +10,8 @@
  * swings reach past the wall) and of the marks placed before it. Pure.
  */
 
-import type { ProjectSheet, ProjectView } from '@/project/types';
+import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
+import { fitExtent } from '@/project/sheets';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import { elevationMarkDrafts, MARK_MARGIN_MM, obstacleBoxes, overlayObstacleBoxes, sectionReferenceDrafts } from './cross-ref-marks';
@@ -49,4 +50,15 @@ export function withCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
     })
     : [];
   return elevations.length ? [...withSections, ...elevations] : withSections;
+}
+
+/**
+ * The extent an auto-fit viewport frames, measured on the drafts the sheet
+ * draws: the view's own drafts and the cross-references added to them, so a
+ * mark lifted past the building's edge to clear a door swing is inside the
+ * viewport and not clipped (#243). `fitBounds` is the drawing's bounds, plus
+ * a site plan's plot.
+ */
+export function fitWithCrossReferences(vp: Pick<SheetViewport, 'width' | 'height' | 'scale'>, fitBounds: { min: Pt; max: Pt }, input: PlanCrossRefInput): { min: Pt; max: Pt } {
+  return fitExtent(vp, fitBounds, withCrossReferences(input), input.view?.scale);
 }

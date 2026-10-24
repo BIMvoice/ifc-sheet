@@ -307,4 +307,10 @@ export const wallEn = {
   'wall.text.orphans': 'Text for types no longer in the model',
   'wall.text.orphanHint': 'Kept in case the type comes back. It is not printed.',
   'wall.text.orphanRemove': 'Remove',
+  'wall.check.title': 'Duplicates and gaps',
+  'wall.check.ok': 'Every element is in exactly one part.',
+  'wall.check.duplicates': 'More than one part lists the same type or element ({parts}). Types: {types}, elements: {count}: {list}.',
+  'wall.check.gaps': 'Some elements are in no part. Types: {types}, elements: {count}: {list}.',
+  'wall.check.fixAdd': 'Add the missing types to "{part}" ({types})',
+  'wall.check.fixKeep': 'Keep the repeated types in "{part}" only ({types})',
 } as const satisfies Record<string, TranslationValue>;

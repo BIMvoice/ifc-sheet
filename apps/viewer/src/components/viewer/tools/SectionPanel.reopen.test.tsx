@@ -74,6 +74,14 @@ describe('Section tool reopen (#4910)', () => {
     assert.equal(s().sectionPlane.position, 35);
   });
 
+  it('reopening keeps a cut that stands above the model (#232)', async () => {
+    await tool('section');
+    await act(async () => { s().setSectionPlaneAxis('down'); s().placeSectionPlane(127.5); });
+    await tool('select');
+    await tool('section');
+    assert.equal(s().sectionPlane.position, 127.5, 'BUG: the panel restore clamped the cut onto the model top');
+  });
+
   it('an explicit clear stays cleared when the Section tool reopens', async () => {
     await cutAt('down', 40);
     await tool('select');
