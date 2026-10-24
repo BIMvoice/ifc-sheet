@@ -18,6 +18,7 @@ import { withContinuationPages } from './continuation-pages';
 import { sheetDrawingArea } from './viewport-resize';
 import { useProjectStore } from './project-store';
 import { registerHolders } from './drawing-register';
+import { scheduleScaleOf, withScheduleScale } from './schedule-scale';
 import { layoutSchedule, scheduleMinBox, schedulePages, type ScheduleLabels, type ScheduleLayout, type ScheduleLayoutOptions } from '@/joinery/schedule-layout';
 import type { ElementViews } from '@/joinery/element-views';
 import type { ScheduleData } from '@/joinery/schedule-data';
@@ -80,7 +81,10 @@ export function paperHolding(sheet: ProjectSheet, data: ScheduleData, scale: num
  * and none when nothing changes.
  */
 export function syncSchedulePages(scheduleId: string, pages: number): void {
-  const { sheets } = useProjectStore.getState();
+  const { sheets: held, schedules } = useProjectStore.getState();
+  // The schedule's scale is the one the layout read (`schedule-scale`): a viewport's copy that drifted from it is put back with the pages.
+  const schedule = schedules?.find((s) => s.id === scheduleId);
+  const sheets = schedule ? withScheduleScale(held, scheduleId, scheduleScaleOf(schedule)) : held;
   const counted = withContinuationPages(sheets, scheduleId, pages) ?? sheets;
   const home = registerHolders(counted, scheduleId)[0]?.viewports?.find((v) => v.viewId === scheduleId);
   const same = (v: SheetViewport) => !home || ((v.placed || (v.x === home.x && v.y === home.y)) && v.width === home.width && v.height === home.height && v.scale === home.scale);
@@ -89,7 +93,7 @@ export function syncSchedulePages(scheduleId: string, pages: number): void {
       ? s
       : { ...s, viewports: (s.viewports ?? []).map((v) => ((v.page ?? 0) > 0 && v.viewId === scheduleId ? { ...v, ...(v.placed ? {} : { x: home.x, y: home.y }), width: home.width, height: home.height, scale: home.scale } : v)) }))
     : counted;
-  if (followed.some((s, i) => s !== sheets[i]) || followed.length !== sheets.length) useProjectStore.setState({ sheets: followed, dirty: true });
+  if (followed.some((s, i) => s !== held[i]) || followed.length !== held.length) useProjectStore.setState({ sheets: followed, dirty: true });
 }
 
 /** How many sheets `data` takes in `box` at `scale`. */
@@ -113,12 +117,29 @@ export function layoutOnSheet(
   return floor ? { ...layout, fit: { box: scheduleBox(sheet, vp), min: floor } } : layout;
 }
 
+/**
+ * What a joinery schedule's layout reads, whoever asks: the box of the schedule's first sheet at the schedule's scale, with the
+ * element views its cards draw. The sheet's pages (`layoutJoineryOnSheet`) and the count the split offer quotes (`joineryPages`) both
+ * take their options from here, so they cannot count differently.
+ */
+function joineryOptions(wrap: Rect, scale: number, views: ReadonlyMap<string, ElementViews> | undefined): ScheduleLayoutOptions {
+  return { ...boxOptions(wrap, scale), views };
+}
+
+/** How many sheets a joinery schedule takes as the Wall lays it out: exactly the `pages` of `layoutJoineryOnSheet` for the same input. */
+export function joineryPages(
+  input: { data: ScheduleData; scale: number; views?: ReadonlyMap<string, ElementViews>; sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
+): number {
+  const { data, scale, views, sheets, sheet, vp } = input;
+  return schedulePages(data, joineryOptions(scheduleHomeBox(sheets, vp.viewId, sheet, vp), scale, views));
+}
+
 /** A joinery schedule's page: wrapped to the first sheet's box at its scale (`layoutSchedule`). */
 export function layoutJoineryOnSheet(
   input: { data: ScheduleData; labels: ScheduleLabels; scale: number; views?: ReadonlyMap<string, ElementViews>; continued?: string; sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
 ): ScheduleLayout {
   const { data, labels, scale, views, continued, ...place } = input;
-  return layoutOnSheet(place, (wrap, page) => layoutSchedule(data, labels, { ...boxOptions(wrap, scale), views, page, continued }), scheduleMinBox(data, { scale, views }));
+  return layoutOnSheet(place, (wrap, page) => layoutSchedule(data, labels, { ...joineryOptions(wrap, scale, views), page, continued }), scheduleMinBox(data, { scale, views }));
 }
 
 /** A column table's page (takeoff, finishes, types, urban): `layout` lays out the rows that fit the first sheet's box height. */

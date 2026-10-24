@@ -13,12 +13,14 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { hangScheduleParts } from '@/project/schedule-hang';
-import { scheduleBox } from '@/project/schedule-fit';
+import { joineryPages } from '@/project/schedule-fit';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule, ProjectSheet, SheetViewport } from '@/project/types';
 import { splitOfferFor, type SplitOffer } from '@/joinery/schedule-split-offer';
 import { splitByKind, splitByLevel } from '@/joinery/schedules';
+import { scheduleDataOf } from '@/joinery/schedule-split';
 import { scheduleData, type ScheduleData, type ScheduleKind } from '@/joinery/schedule-data';
+import { useElementViews, type ViewRequest } from '@/components/viewer/joinery/useElementViews';
 import { useViewerStore } from '@/store';
 import { SideBySideToggle } from './SideBySideToggle';
 import { stepInto } from './wall-nav';
@@ -37,7 +39,14 @@ function Offer({ sheet, vp, schedule, read }: { sheet: ProjectSheet; vp: SheetVi
   const [sideBySide, setSideBySide] = useState(false);
   // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
   const data = useMemo(() => read(schedule.kind as ScheduleKind), [read, schedule.kind, mutationVersion, models, catalogue, mapping]);
-  const offer: SplitOffer | null = splitOfferFor(schedule, schedules, data, vp.scale, scheduleBox(sheet, vp));
+  // The count the sheet itself draws (`joineryPages`): the schedule's own scale and content (what its card chose), its first sheet's box
+  // and the element views of its cards, not the whole kind's rows, the viewport's scale or a bare table.
+  const scale = schedule.scale ?? 50;
+  const shown = useMemo(() => scheduleDataOf(schedule, () => data, schedules), [schedule, schedules, data]);
+  const requests = useMemo<ViewRequest[]>(() => [{ id: schedule.id, data: shown, scale }], [schedule.id, shown, scale]);
+  const views = useElementViews(requests).get(schedule.id);
+  const sheets = useProjectStore((s) => s.sheets);
+  const offer: SplitOffer | null = splitOfferFor(schedule, schedules, shown, joineryPages({ data: shown, scale, views, sheets, sheet, vp }));
   if (!offer || kept) return null;
 
   /** Make the parts, hang each on a sheet of its own, and step into the first: all one undo step. */
@@ -49,7 +58,7 @@ function Offer({ sheet, vp, schedule, read }: { sheet: ProjectSheet; vp: SheetVi
   return (
     <section data-owns-keys data-schedule-fit-offer className={`${WALL_CARD} absolute bottom-3 left-3 max-h-[calc(100%-1.5rem)]`}>
       <p className={WALL_EYEBROW}>{t('wall.fitOffer.title')}</p>
-      <p className="m-0 mt-2 text-sm text-sky-100">{t('wall.fitOffer.body', { name: schedule.name, pages: offer.pages, scale: vp.scale })}</p>
+      <p className="m-0 mt-2 text-sm text-sky-100">{t('wall.fitOffer.body', { name: schedule.name, pages: offer.pages, scale })}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {offer.byKind ? <button type="button" className={WALL_PILL} onClick={() => split(() => splitByKind(schedule.id, { door: t('wall.sub.doors'), window: t('wall.sub.windows') }))}>{t('wall.sub.byKind')}</button> : null}
         {offer.levels.length > 0 ? <button type="button" className={WALL_PILL} onClick={() => split(() => splitByLevel(schedule.id, offer.levels))}>{t('wall.sub.byLevel')}</button> : null}

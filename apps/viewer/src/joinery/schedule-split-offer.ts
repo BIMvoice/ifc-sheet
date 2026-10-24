@@ -9,8 +9,6 @@
  */
 
 import { canSplit, subReportsOf } from '@bimvoice/ifcsheet';
-import { pagesIn } from '@/project/schedule-fit';
-import type { Rect } from '@/project/sheet-frame';
 import type { ProjectSchedule } from '@/project/types';
 import type { ScheduleData } from './schedule-data';
 
@@ -24,12 +22,12 @@ export interface SplitOffer {
 }
 
 /**
- * The offer for `schedule` listing `data` at `scale` in `box`: null while it fits one sheet, once it has sub-reports (the checks
- * on its card take over), when it cannot be split, or when no split would divide it.
+ * The offer for `schedule` listing `data`, which takes `pages` sheets as the Wall lays it out (`joineryPages`: the same input as the
+ * sheet, with the element views): null while it fits one sheet, once it has sub-reports (the checks on its card take over), when it
+ * cannot be split, or when no split would divide it.
  */
-export function splitOfferFor(schedule: ProjectSchedule, schedules: readonly ProjectSchedule[], data: ScheduleData, scale: number, box: Rect): SplitOffer | null {
+export function splitOfferFor(schedule: ProjectSchedule, schedules: readonly ProjectSchedule[], data: ScheduleData, pages: number): SplitOffer | null {
   if (!canSplit(schedule) || subReportsOf(schedules, schedule.id).length > 0) return null;
-  const pages = pagesIn(data, scale, box);
   if (pages <= 1) return null;
   const kinds = new Set(data.entries.map((e) => e.kind));
   const byKind = schedule.kind === 'all' && kinds.size > 1;
