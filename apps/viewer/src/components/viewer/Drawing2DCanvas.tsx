@@ -6,6 +6,7 @@ import { drawDxfUnderlaysScreenSpace } from './drawing-underlays';
 import { drawReferenceImages } from './drawing-reference-images';
 import { useReferenceImagesForDrawing } from '@/hooks/useReferenceImagesForDrawing';
 import React, { useRef, useState, useEffect } from 'react';
+import { useTranslation } from '@/i18n';
 import {
   GraphicOverrideEngine,
   type Drawing2D,
@@ -277,6 +278,8 @@ export function Drawing2DCanvas({
   unitDisplayOverrides = EMPTY_UNIT_DISPLAY_OVERRIDES,
   paperTheme = DEFAULT_PAPER_THEME,
 }: Drawing2DCanvasProps): React.ReactElement {
+  // The measure labels are written in the language, as the exported drawing's are (#269).
+  const { locale } = useTranslation();
   const referenceImages = useReferenceImagesForDrawing(drawing.config.plane);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -1268,7 +1271,7 @@ export function Drawing2DCanvas({
       const midY = (screenStart.y + screenEnd.y) / 2;
 
       // Format distance using shared utility
-      const labelText = formatDistance(distance, unitDisplayOverrides);
+      const labelText = formatDistance(distance, unitDisplayOverrides, locale);
 
       // Background for label
       ctx.font = '12px system-ui, sans-serif';
@@ -1384,8 +1387,8 @@ export function Drawing2DCanvas({
       const centroid = computePolygonCentroid(result.points);
       const cx = drawingToScreenX(centroid.x);
       const cy = drawingToScreenY(centroid.y);
-      const areaText = formatArea(result.area);
-      const perimText = `P: ${formatDistance(result.perimeter, unitDisplayOverrides)}`;
+      const areaText = formatArea(result.area, locale);
+      const perimText = `P: ${formatDistance(result.perimeter, unitDisplayOverrides, locale)}`;
 
       ctx.font = 'bold 12px system-ui, sans-serif';
       const areaMetrics = ctx.measureText(areaText);
@@ -1673,7 +1676,7 @@ export function Drawing2DCanvas({
       }
     }
     markActiveDrawingCanvasRendered(canvas, snapshotSourceDrawing, textAnnotationEditing === null);
-  }, [referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, graphics, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, scanOutline, unitDisplayOverrides, paperTheme]);
+  }, [referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, graphics, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, scanOutline, unitDisplayOverrides, locale, paperTheme]);
 
   return (
     <canvas

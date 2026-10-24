@@ -196,7 +196,7 @@ describe('DocumentPanel over a parsed model (#4594)', () => {
     await change(textarea, '{IfcBuildingStorey["Authored level"].Name}: {IfcBuildingStorey["Authored level"].Elevation}; {IfcBuildingStorey["Authored level"].Elements} wall');
     await settle();
     const preview = ui.querySelectorAll('[data-preview-block] [data-block-text]')[1]!;
-    assert.equal(preview.textContent, 'Authored level: 6.00 m; 1 wall');
+    assert.equal(preview.textContent, 'Authored level: +6.00 m; 1 wall');
   });
 
   it('blocks move and delete, a preset adds a document, and the page setup is saved on the document', async () => {

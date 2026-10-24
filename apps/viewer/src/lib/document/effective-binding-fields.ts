@@ -4,6 +4,7 @@
 
 /** Document field reads over the same parsed model plus overlay as charts (#5249). */
 import type { ElementFieldBinding } from '@ifc-lite/charts';
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import { createElementFieldReader, type ElementFieldReader } from '../charts/element-field-reader.js';
 import type { BindingModel } from './bindings.js';
 
@@ -19,11 +20,16 @@ function readerFor(model: BindingModel): ElementFieldReader {
   return reader;
 }
 
-function format(value: unknown): string {
+/**
+ * A bound value as a document prints it (#269): a whole number plain, any other
+ * up to two decimals in `locale`'s separators ("12,5" in Romanian). The one
+ * formatter for both read paths (parsed and edited), so they cannot disagree.
+ */
+export function formatBoundValue(value: unknown, locale = 'en'): string {
   if (value === null || value === undefined) return '';
-  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
+  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : sheetNumber(locale, value, 2, { trim: true });
   if (typeof value === 'boolean') return value ? 'true' : 'false';
-  if (Array.isArray(value)) return value.map(format).join(', ');
+  if (Array.isArray(value)) return value.map((v) => formatBoundValue(v, locale)).join(', ');
   return String(value);
 }
 
@@ -61,11 +67,12 @@ export function effectivePropertyPaths(model: BindingModel, id: number): Array<{
 
 export function effectiveAttribute(model: BindingModel, id: number, attributeName: string): string {
   const binding: ElementFieldBinding = { kind: 'attribute', attributeName, valueKind: 'category' };
-  return format(readerFor(model).read(id, binding));
+  // Read back by `Elevation` as a number, so never in a locale's separators.
+  return formatBoundValue(readerFor(model).read(id, binding));
 }
 
 /** Undefined means the field does not exist on the effective element. */
-export function effectiveProperty(model: BindingModel, id: number, setName: string, name: string): string | undefined {
+export function effectiveProperty(model: BindingModel, id: number, setName: string, name: string, locale = 'en'): string | undefined {
   const catalog = readerFor(model).discover([id]);
   const property = catalog.properties.get(setName)?.find((option) => option.binding.kind === 'property' && option.binding.propertyName === name);
   const quantity = catalog.quantities.get(setName)?.find((option) => option.binding.kind === 'quantity' && option.binding.quantityName === name);
@@ -73,6 +80,6 @@ export function effectiveProperty(model: BindingModel, id: number, setName: stri
   if (!option) return undefined;
   const resolved = readerFor(model).readResolved(id, option.binding);
   if (resolved.status === 'unsupported') return undefined;
-  const value = format(resolved.value);
+  const value = formatBoundValue(resolved.value, locale);
   return resolved.unit && value ? `${value} ${resolved.unit}` : value;
 }
