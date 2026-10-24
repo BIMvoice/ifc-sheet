@@ -47,11 +47,14 @@ export {
   readNumberingScheme, registerNumberIn, registerSlot, renumbered, typedBeforeSchemes, type OverrideMode, type RenumberRow,
 } from './numbering.js';
 export {
-  checkSubReports, elementCount, isClean, occurrenceMarkOf, subReportCheckOf, subReportChecksOf, subReportParams, typeLabel, type CheckEntry, type CheckOccurrence, type CheckPart, type DuplicateType, type ElementRef,
-  type GapType, type MarkOf, type PartRef, type SubReportCheck, type SubReportFix,
+  checkSubReports, elementCount, isClean, keepId, occurrenceMarkOf, partsOf, subReportCheckOf, subReportChecksOf, subReportParams, typeLabel, type CheckEntry, type CheckOccurrence, type CheckPart, type DuplicateType, type ElementRef,
+  type GapType, type MarkOf, type PartRef, type ReviewElement, type ReviewStatus, type SubReportCheck, type SubReportFix,
 } from './sub-report-check.js';
 export {
-  canSplit, readSchedule, readSubReport, readSubReportFilter, scheduleOf, subReportData, subReportsOf,
+  filterReview, keepApart, placeTypes, placeTypesOf, resumeChecking, reviewCounts, reviewTypes, type ReviewEdit, type ReviewFilter, type ReviewType,
+} from './sub-report-review.js';
+export {
+  canSplit, MAX_KEPT_APART, readKeptApart, readSchedule, readSubReport, readSubReportFilter, scheduleOf, subReportData, subReportsOf,
   type ProjectSchedule, type ScheduleListKind, type SplitData, type SplitEntry, type SubReport, type SubReportFilter,
 } from './sub-reports.js';
 export {

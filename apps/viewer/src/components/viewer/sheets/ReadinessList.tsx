@@ -18,8 +18,13 @@ import { useViewerStore } from '@/store';
 import { setIncludeFarElements, useProjectStore } from '@/project/project-store';
 import { subReportChecks } from '@/check/sub-report-check';
 import type { SetSkin } from './set-skin';
+import { setReview } from '../wall/wall-nav';
 
-/** The findings of the models open now; null while none is open (nothing to say yet). */
+/**
+ * The findings of the models open now; null while none is open (nothing to say yet). `owners` names, for each sub-report finding in
+ * the order they come, the schedule it is about (`modelReadiness` emits a duplicates finding then a gaps finding per check), so a
+ * finding can open the review of that schedule.
+ */
 function useModelReadiness() {
   const models = useViewerStore((s) => s.models);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
@@ -31,7 +36,10 @@ function useModelReadiness() {
   return useMemo(() => {
     void mutationVersion; // an edit can add or remove what the facts count
     // A schedule split into parts must list every element once: the same check the card on the Wall shows.
-    return models.size === 0 ? null : modelReadiness(currentModelFacts(), subReportChecks(schedules ?? []));
+    if (models.size === 0) return null;
+    const checks = subReportChecks(schedules ?? []);
+    const owners = checks.flatMap((c) => [...(c.duplicates.length > 0 ? [c.parent.id] : []), ...(c.gaps.length > 0 ? [c.parent.id] : [])]);
+    return { findings: modelReadiness(currentModelFacts(), checks), owners };
   }, [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels]);
 }
 
@@ -50,10 +58,21 @@ function FramingSetting({ skin }: { skin: SetSkin }) {
   );
 }
 
+/** Opens the review by element of the schedule a sub-report finding is about (#186). */
+function ReviewLink({ scheduleId, skin }: { scheduleId: string | undefined; skin: SetSkin }) {
+  const { t } = useTranslation();
+  if (!scheduleId) return null;
+  return (
+    <button type="button" className={`${skin.note} underline`} onClick={() => setReview(scheduleId)}>{t('wall.review.open')}</button>
+  );
+}
+
 export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compact?: boolean }) {
   const { t } = useTranslation();
-  const findings = useModelReadiness();
-  if (findings === null) return null;
+  const readiness = useModelReadiness();
+  if (readiness === null) return null;
+  const { findings, owners } = readiness;
+  let nextOwner = 0;
   if (findings.length === 0) return compact ? null : <><p className={skin.note}>{t('ready.none')}</p><FramingSetting skin={skin} /></>;
   return (
     <>
@@ -62,6 +81,7 @@ export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compac
         <li key={`${f.kind}-${f.params.schedule ?? ''}`} className="py-0.5">
           <p className={`m-0 ${compact ? skin.note : skin.heading}`}>{describeMissing(f)}</p>
           {compact ? null : <p className={`m-0 ${skin.note}`}>{describeEffect(f)}</p>}
+          {f.kind === 'subReportDuplicates' || f.kind === 'subReportGaps' ? <ReviewLink scheduleId={owners[nextOwner++]} skin={skin} /> : null}
         </li>
       ))}
     </ul>

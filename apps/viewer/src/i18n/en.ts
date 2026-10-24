@@ -84,6 +84,7 @@ import { ifcsheetTourEn } from './catalogues/ifcsheet-tour.en';
 import { reviewEn } from './catalogues/review.en';
 import { wallFindEn } from './catalogues/wall-find.en';
 import { wallKeysEn } from './catalogues/wall-keys.en';
+import { wallReviewEn } from './catalogues/wall-review.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
 import { landXmlEn } from './catalogues/landxml.en';
@@ -287,6 +288,7 @@ export const en = {
   ...reviewEn,
   ...wallFindEn,
   ...wallKeysEn,
+  ...wallReviewEn,
   ...whatChangedEn,
   ...hierarchyEn,
   ...propertiesEn,
