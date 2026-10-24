@@ -20,6 +20,7 @@ import { drawingAreaIn, frameOf, type Rect } from './sheet-frame.js';
 import { templateFields } from './sheet-templates.js';
 import { fitViewportBox, SHEET_SCALES } from './viewport-fit.js';
 import { freshProjectId } from './ids.js';
+import { viewCentre } from './view-centre.js';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf, numberSheets } from './numbering.js';
 import type { ElevationDirection, NumberingScheme, Paper, PaperSize, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './document.js';
 
@@ -56,6 +57,7 @@ function startOf(template: SheetTemplate | undefined, paper: PaperSize): Pick<Pr
 }
 
 export { GROUND_TOLERANCE_M, groundPlan } from './ground-plan.js';
+export { viewCentre } from './view-centre.js';
 
 /** Width and height a view's drawing takes, metres, estimated from the model's extent. */
 export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number; h: number } {
@@ -79,22 +81,6 @@ export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number;
     default:
       return { w: dx, h: dy };
   }
-}
-
-/**
- * The drawing point (metres) a view's viewport is centred on, so that its
- * drawing lines up with the room the layout reserved for it (`viewExtent`, the
- * box the sheet clips to): the centre of the model's extent in the view's own
- * drawing coordinates. A plan is drawn from what its level cuts, so its own
- * bounds are those of one storey, or include a far element the framing left
- * out; centred on those, it lands beside its box and the box clips it. Every
- * plan centred on the extent also lies over the others. `null` for the views
- * that stay centred on their drawing: elevations, sections and details.
- */
-export function viewCentre(view: Pick<ProjectView, 'kind'> & { detail?: unknown }, extent: ModelExtent): { x: number; y: number } | null {
-  // A plan's drawing is (x, z) of the viewer frame (`getProjectionAxes('y')`).
-  if (view.kind !== 'plan' || view.detail) return null;
-  return { x: (extent.min.x + extent.max.x) / 2, y: (extent.min.z + extent.max.z) / 2 };
 }
 
 /**
