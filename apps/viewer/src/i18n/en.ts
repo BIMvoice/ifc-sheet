@@ -85,6 +85,7 @@ import { reviewEn } from './catalogues/review.en';
 import { wallFindEn } from './catalogues/wall-find.en';
 import { wallKeysEn } from './catalogues/wall-keys.en';
 import { wallReviewEn } from './catalogues/wall-review.en';
+import { wallSectionsEn } from './catalogues/wall-sections.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
 import { landXmlEn } from './catalogues/landxml.en';
@@ -289,6 +290,7 @@ export const en = {
   ...wallFindEn,
   ...wallKeysEn,
   ...wallReviewEn,
+  ...wallSectionsEn,
   ...whatChangedEn,
   ...hierarchyEn,
   ...propertiesEn,

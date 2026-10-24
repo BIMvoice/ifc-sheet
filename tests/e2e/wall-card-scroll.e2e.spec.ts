@@ -27,6 +27,13 @@ test('the tallest viewport card scrolls inside itself and the shell stays put', 
   await page.mouse.click(450, 200);
   const card = page.locator('aside').first();
   await expect(card).toBeVisible();
+  // The card's sections start folded (#290); open every one to make the tallest card the test is about.
+  for (const title of ['Sub-reports', 'Content', 'Filter', 'Text rows']) {
+    // CSS, not roles: the guided tour is modal and takes the page behind it out of the accessibility tree.
+    const heading = card.locator('button[aria-expanded]', { hasText: title }).first();
+    if ((await heading.getAttribute('aria-expanded')) === 'false') await heading.click();
+    await expect(heading).toHaveAttribute('aria-expanded', 'true');
+  }
   const rail = page.locator('nav[aria-label]').filter({ hasText: 'Dimension' }).first();
   const railTop = (await rail.boundingBox())!.top ?? (await rail.boundingBox())!.y;
   const help = page.locator('footer').filter({ hasText: 'Inside a sheet' });

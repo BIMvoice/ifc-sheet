@@ -20,6 +20,8 @@ import { scheduleDataOf } from '@/joinery/schedule-split';
 import { addScheduleTextRow, removeScheduleTextCell, removeScheduleTextRow, renameScheduleTextRow, setScheduleTextCell } from '@/joinery/schedule-text-actions';
 import type { ProjectSchedule } from '@/project/types';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
+import { CardSection } from './CardSection';
+import { textSummary } from './card-section-summary';
 
 /** What a type is called in the card, and what a cell remembers of it for when the type is gone. */
 export function describeEntry(e: Pick<ScheduleEntry, 'mark' | 'name' | 'width' | 'height'>): string {
@@ -62,9 +64,9 @@ export function ScheduleTextCard({ schedule }: { schedule: ProjectSchedule }) {
   const rows = shown.textRows ?? [];
   const orphans = orphanCells(owner?.textRows, new Set(whole.entries.map((e) => e.key)));
   const inherited = owner && owner.id !== schedule.id ? owner : null;
+  const summary = textSummary(rows.length, orphans.length, t);
   return (
-    <div data-owns-keys className="mt-4 border-t border-sky-300/20 pt-4">
-      <p className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.text.title')}</p>
+    <CardSection id="text" title={t('wall.text.title')} summary={summary.text} defaultOpen={summary.changed} warn={orphans.length > 0}>
       <p className="m-0 mt-1 text-xs text-sky-200">{inherited ? t('wall.text.inherited', { name: inherited.name }) : rows.length === 0 ? t('wall.text.none') : t('wall.text.hint')}</p>
       {rows.map((row) => (
         <fieldset key={row.id} className="m-0 mt-3 border-0 p-0">
@@ -103,6 +105,6 @@ export function ScheduleTextCard({ schedule }: { schedule: ProjectSchedule }) {
           </ul>
         </div>
       ) : null}
-    </div>
+    </CardSection>
   );
 }
