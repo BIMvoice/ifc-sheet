@@ -18,6 +18,7 @@ import type { DraftEntity } from '@/drafting/types';
 import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
+import { useTranslation } from '@/i18n';
 import { settleLeader } from './label-attach';
 import { labelElementByGlobalId } from './label-element';
 import { extrasOf, resolveWithExtras } from './label-extras';
@@ -38,7 +39,7 @@ function templateOf(text: string): ParsedTemplate {
 }
 
 /** `drafts` with every parametric label brought in line with its element and type; the same array when nothing changed. */
-export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationType[], element: (globalId: string) => LabelElement | null, paperUnit: (viewId: string) => number = () => 0.1): DraftEntity[] {
+export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationType[], element: (globalId: string) => LabelElement | null, locale: string, paperUnit: (viewId: string) => number = () => 0.1): DraftEntity[] {
   let changed = false;
   const next = drafts.map((d) => {
     if (!isParametricLabel(d) || d.shape.type !== 'text') return d;
@@ -47,7 +48,7 @@ export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationTy
     if (!spec) return d;
     let out = d;
     if (el) {
-      const text = resolveWithExtras(templateOf(spec.template), el, spec.missing, extrasOf(d.params));
+      const text = resolveWithExtras(templateOf(spec.template), el, locale, spec.missing, extrasOf(d.params));
       if (text !== d.shape.text || spec.frame !== d.shape.frame) {
         const { frame: _old, ...rest } = d.shape;
         out = { ...d, shape: { ...rest, text, ...(spec.frame ? { frame: spec.frame } : {}) } };
@@ -61,13 +62,15 @@ export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationTy
   return changed ? next : drafts;
 }
 
-export function refreshParametricLabels(): void {
+export function refreshParametricLabels(locale: string): void {
   const { drafts, annotationTypes } = useProjectStore.getState();
-  const next = settleLabels(drafts, annotationTypes ?? [], labelElementByGlobalId, (viewId) => paperUnitOf(viewId));
+  const next = settleLabels(drafts, annotationTypes ?? [], labelElementByGlobalId, locale, (viewId) => paperUnitOf(viewId));
   if (next !== drafts) useProjectStore.setState({ drafts: next, dirty: true });
 }
 
 export function useParametricLabelSync(): void {
+  // A language switch re-writes the labels' numbers ("12,50" / "12.50"): the text is derived, like the rest of the label.
+  const { locale } = useTranslation();
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
   const types = useProjectStore((s) => s.annotationTypes);
@@ -77,6 +80,6 @@ export function useParametricLabelSync(): void {
   const count = useProjectStore((s) => s.drafts.filter(isParametricLabel).length);
   // `drafts` too: a label dragged by hand gains or loses its leader. Settling twice changes nothing, so this cannot loop.
   useEffect(() => {
-    if (count > 0) refreshParametricLabels();
-  }, [mutationVersion, models, types, count, drafts, tagFields]);
+    if (count > 0) refreshParametricLabels(locale);
+  }, [mutationVersion, models, types, count, drafts, tagFields, locale]);
 }

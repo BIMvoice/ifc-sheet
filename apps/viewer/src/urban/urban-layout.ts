@@ -14,9 +14,12 @@
 
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem } from '@/joinery/paged-table';
+import { sheetLevel, sheetNumber } from '@bimvoice/ifcsheet/names';
 import type { UrbanIndicators } from './indicators';
 
 export interface UrbanLabels {
+  /** The language the figures are written in ("120,00" in Romanian); passed in, never read from a global. */
+  locale: string;
   title: string;
   level: string;
   elevation: string;
@@ -49,9 +52,8 @@ export interface UrbanLabels {
 }
 
 /** An elevation as drawings write it: +2.70, -1.50, ±0.00. */
-export function signedLevel(v: number): string {
-  const text = Math.abs(v).toFixed(2);
-  return text === '0.00' ? '±0.00' : `${v < 0 ? '-' : '+'}${text}`;
+export function signedLevel(locale: string, v: number): string {
+  return sheetLevel(locale, v);
 }
 
 const GAP = 4;
@@ -63,7 +65,7 @@ const WIDTH = STOREY_COLUMNS.reduce((a, b) => a + b, 0);
 const PAIR_COLUMNS = [WIDTH - 30, 30] as const;
 
 export const NONE = '—';
-const m2 = (v: number | null): string => (v === null ? NONE : v.toFixed(2));
+const m2Of = (locale: string, v: number | null): string => (v === null ? NONE : sheetNumber(locale, v));
 
 /** One ruled table; columns after the first are right-aligned figures; the last row closes it with the frame pen. */
 function figures(columns: readonly number[], rows: readonly string[][], header: boolean): TableItem {
@@ -76,12 +78,14 @@ function figures(columns: readonly number[], rows: readonly string[][], header: 
 }
 
 export function layoutUrban(r: UrbanIndicators, labels: UrbanLabels, paging: PagedOptions = {}): ScheduleLayout {
+  const { locale } = labels;
+  const m2 = (v: number | null) => m2Of(locale, v);
   const low = (text: string, atLeast: boolean) => (atLeast && text !== NONE ? labels.atLeast(text) : text);
   const items: TableItem[] = [figures(STOREY_COLUMNS, [
     [labels.level, labels.elevation, labels.built, labels.useful, labels.inCut],
     ...r.storeys.map((s) => [
       s.belowGround ? labels.belowGround(s.name) : s.ground ? labels.ground(s.name) : s.name,
-      signedLevel(s.elevation), low(m2(s.builtArea), s.unmeasured > 0), m2(s.usefulArea), s.inCut ? labels.yes : labels.no,
+      signedLevel(locale, s.elevation), low(m2(s.builtArea), s.unmeasured > 0), m2(s.usefulArea), s.inCut ? labels.yes : labels.no,
     ]),
   ], true)];
   if (r.auByCategory.length) {
@@ -93,8 +97,8 @@ export function layoutUrban(r: UrbanIndicators, labels: UrbanLabels, paging: Pag
     [labels.adCut, low(m2(r.adCut), r.adCutAtLeast)],
     [labels.au, m2(r.au)],
     [labels.site, m2(r.siteArea)],
-    [labels.pot, low(r.pot === null ? NONE : `${r.pot.toFixed(2)} %`, r.acAtLeast)],
-    [labels.cut, low(r.cut === null ? NONE : r.cut.toFixed(2), r.adCutAtLeast)],
+    [labels.pot, low(r.pot === null ? NONE : `${sheetNumber(locale, r.pot)} %`, r.acAtLeast)],
+    [labels.cut, low(r.cut === null ? NONE : sheetNumber(locale, r.cut), r.adCutAtLeast)],
   ], false));
   const notes = [
     ...labels.rules(r),

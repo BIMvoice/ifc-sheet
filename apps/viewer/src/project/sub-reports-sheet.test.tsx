@@ -28,7 +28,7 @@ import { parseProjectFile, serializeProject } from './project-file.js';
 import type { ProjectDocument, ProjectSchedule } from './types.js';
 
 const labels: ScheduleLabels = {
-  title: 'T', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire', op: (op) => op,
+  locale: 'en', title: 'T', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire', op: (op) => op,
 };
 const LEVELS = ['Ground', 'Level 1'];
 

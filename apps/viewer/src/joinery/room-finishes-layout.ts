@@ -10,11 +10,14 @@
  */
 
 import { escapeCsvCell } from '@ifc-lite/export';
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import { layoutPagedTable, PEN, ROW, TEXT, type PagedOptions, type TableBlock, type TableItem } from './paged-table';
 import { finishLines, hasSharedFinish, SURFACES, type Finish, type FinishLine, type RoomFinishes } from './room-finishes';
 
 export interface RoomFinishLabels {
+  /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */
+  locale: string;
   title: string;
   number: string;
   room: string;
@@ -30,9 +33,9 @@ export interface RoomFinishLabels {
 
 const COLUMNS = [14, 34, 22, 40, 14, 40, 14, 40, 14] as const;
 
-const fixed = (v: number | null, digits = 2): string => (v === null ? '–' : v.toFixed(digits));
+const fixed = (locale: string, v: number | null): string => (v === null ? '–' : sheetNumber(locale, v));
 /** A finish's area on paper: a `*` marks a share of a covering several rooms use. */
-const paperArea = (f: Finish): string => `${fixed(f.area)}${f.sharedBy > 1 && f.area !== null ? '*' : ''}`;
+const paperArea = (locale: string, f: Finish): string => `${fixed(locale, f.area)}${f.sharedBy > 1 && f.area !== null ? '*' : ''}`;
 
 /** The header cells: three room columns, then a finish and an area per surface. */
 export function finishHeader(labels: RoomFinishLabels): string[] {
@@ -40,10 +43,10 @@ export function finishHeader(labels: RoomFinishLabels): string[] {
 }
 
 /** A line's cells as text: room, then name and area of each surface. */
-function cells(l: FinishLine): string[] {
+function cells(l: FinishLine, locale: string): string[] {
   return [
     l.first ? l.number : '', l.first ? l.name : '', l.first ? l.level : '',
-    ...SURFACES.flatMap((s) => { const f = l[s]; return f ? [f.name, paperArea(f)] : ['', '']; }),
+    ...SURFACES.flatMap((s) => { const f = l[s]; return f ? [f.name, paperArea(locale, f)] : ['', '']; }),
   ];
 }
 
@@ -52,7 +55,7 @@ export function layoutRoomFinishes(rooms: readonly RoomFinishes[], labels: RoomF
   const block: TableBlock = {
     columns: COLUMNS, header: finishHeader(labels), numeric: (c) => c >= 3 && c % 2 === 0, skipEmpty: true,
     // A rule under the last line of each room.
-    rows: lines.map((l, i) => ({ cells: cells(l), rule: i === lines.length - 1 || lines[i + 1].first ? PEN.grid : 0 })),
+    rows: lines.map((l, i) => ({ cells: cells(l, labels.locale), rule: i === lines.length - 1 || lines[i + 1].first ? PEN.grid : 0 })),
   };
   const note: TableItem[] = hasSharedFinish(rooms) ? [{ kind: 'text', h: ROW, dy: ROW / 2 + TEXT * 0.35, size: TEXT, text: labels.sharedNote, bold: false }] : [];
   return layoutPagedTable(labels.title, 4, [{ kind: 'table', block }, ...note], paging);

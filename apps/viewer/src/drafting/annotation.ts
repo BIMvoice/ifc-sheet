@@ -17,6 +17,7 @@ import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
 import { figureUp, leaderOf } from './figure-layout';
 import { leaderTextRight } from './leader-segments';
 import { leaderStart } from '@/labels/label-leader';
+import { sheetLevel, sheetNumber } from '@bimvoice/ifcsheet/names';
 import { textBlock, type TextFrame } from './text-block';
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
 
@@ -34,13 +35,13 @@ export interface DimensionLayout {
 const EXT_GAP = 0.1;
 const EXT_OVER = 0.15;
 
-export function formatLength(m: number): string {
-  return m.toFixed(2);
+export function formatLength(locale: string, m: number): string {
+  return sheetNumber(locale, m, 2, { group: false });
 }
 
-export function formatLevel(m: number): string {
-  if (Math.abs(m) < 0.005) return '±0.00';
-  return `${m > 0 ? '+' : '−'}${Math.abs(m).toFixed(2)}`;
+/** A level mark: +2,70, −1,50 (the true minus), ±0,00. */
+export function formatLevel(locale: string, m: number): string {
+  return sheetLevel(locale, m, { minus: '−' });
 }
 
 function unit(v: Pt): Pt {
@@ -64,11 +65,17 @@ export interface LayoutOptions {
   extGap?: number;
   extOver?: number;
   format?: (metres: number) => string;
+  /**
+   * The language of the default `format`. Left out by the callers that read
+   * only the lines and the text position of a layout; whatever draws the
+   * label passes `format` itself.
+   */
+  locale?: string;
 }
 
 /** A linear / aligned dimension: extension lines from the points to the dimension line through `at`. */
 function linearLayout(a: Pt, b: Pt, at: Pt, variant: 'aligned' | 'linear', text: string | undefined, o: LayoutOptions): DimensionLayout {
-  const gap = o.extGap ?? EXT_GAP, over = o.extOver ?? EXT_OVER, format = o.format ?? formatLength;
+  const gap = o.extGap ?? EXT_GAP, over = o.extOver ?? EXT_OVER, format = o.format ?? ((m: number) => formatLength(o.locale ?? 'en', m));
   let dir: Pt;
   if (variant === 'aligned') {
     dir = unit(sub(b, a));
@@ -96,7 +103,7 @@ function linearLayout(a: Pt, b: Pt, at: Pt, variant: 'aligned' | 'linear', text:
 }
 
 export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimension' | 'radial' | 'angular' }>, o: LayoutOptions = {}): DimensionLayout {
-  const format = o.format ?? formatLength;
+  const format = o.format ?? ((m: number) => formatLength(o.locale ?? 'en', m));
   if (shape.type === 'dimension') {
     const layout = linearLayout(shape.a, shape.b, shape.at, shape.variant, shape.text, o);
     return shape.textAt ? { ...layout, lines: [...layout.lines, ...figureLeader(layout, shape.textAt, shape.height)], textAt: shape.textAt } : layout;
@@ -132,7 +139,7 @@ export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimensi
     ticks: [],
     textAt: { x: shape.c.x + r * Math.cos(mid), y: shape.c.y + r * Math.sin(mid) },
     textAngle: mid + Math.PI / 2,
-    label: `${((Math.abs(sweep) * 180) / Math.PI).toFixed(1)}°`,
+    label: `${sheetNumber(o.locale ?? 'en', (Math.abs(sweep) * 180) / Math.PI, 1, { group: false })}°`,
   };
 }
 

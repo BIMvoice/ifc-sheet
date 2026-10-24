@@ -17,7 +17,7 @@ import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import { textWidthEm } from '@/project/text-width';
 
 const labels: ScheduleLabels = {
-  title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire', op: (op) => op,
+  locale: 'en', title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire', op: (op) => op,
 };
 
 function model(n: number): ScheduleData {

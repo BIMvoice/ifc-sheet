@@ -14,7 +14,7 @@ import { QuantityType, type QuantitySet } from '@ifc-lite/data';
 import { coveringArea, coveringPredefinedType, finishLines, roomFinishes, surfaceOf, type CoveringInput, type RoomInput } from './room-finishes.js';
 import { layoutRoomFinishes, roomFinishesCsv } from './room-finishes-layout.js';
 
-const LABELS = { title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms: area split equally.' };
+const LABELS = { locale: 'en', title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms: area split equally.' };
 const cov = (id: number, name: string, predefinedType: string, area: number | null = null): CoveringInput => ({ id: `m#${id}`, name, predefinedType, area });
 const room = (over: Partial<RoomInput>): RoomInput => ({ number: '1', name: 'Room', level: 'L1', elevation: 0, covers: [], boundary: [], contained: [], properties: {}, ...over });
 const qset = (name: string, quantities: [string, number, QuantityType?][]): QuantitySet => ({

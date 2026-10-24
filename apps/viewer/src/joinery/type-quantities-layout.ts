@@ -12,11 +12,14 @@
  */
 
 import { escapeCsvCell } from '@ifc-lite/export';
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
 import type { Totals, TypeQuantities } from './type-quantities';
 
 export interface TypeQuantityLabels {
+  /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */
+  locale: string;
   title: string;
   type: string;
   class: string;
@@ -64,14 +67,14 @@ export function typeQuantityLines(data: TypeQuantities, labels: TypeQuantityLabe
 
 const COLUMNS = [58, 28, 28, 14, 20, 20, 20, 14] as const;
 
-const fixed = (v: number | null, digits = 2): string => (v === null ? '–' : v.toFixed(digits));
+const fixed = (locale: string, v: number | null): string => (v === null ? '–' : sheetNumber(locale, v));
 
 export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityLabels, paging: PagedOptions = {}): ScheduleLayout {
   const lines = typeQuantityLines(data, labels);
   const block: TableBlock = {
     columns: COLUMNS, header: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], numeric: (c) => c >= 3, skipEmpty: true,
     rows: lines.map((l, i) => ({
-      cells: [l.first ? l.type : '', l.first ? plainClass(l.className) : '', l.level, String(l.totals.count), fixed(l.totals.length), fixed(l.totals.area), fixed(l.totals.volume), l.totals.noQto ? String(l.totals.noQto) : ''],
+      cells: [l.first ? l.type : '', l.first ? plainClass(l.className) : '', l.level, String(l.totals.count), fixed(labels.locale, l.totals.length), fixed(labels.locale, l.totals.area), fixed(labels.locale, l.totals.volume), l.totals.noQto ? String(l.totals.noQto) : ''],
       bold: l.total,
       // A frame rule above the class totals, else a rule under the last line of each type.
       rule: !l.classTotal && lines[i + 1]?.classTotal === true ? PEN.frame : i === lines.length - 1 || lines[i + 1].first ? PEN.grid : 0,

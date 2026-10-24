@@ -23,7 +23,7 @@ import { useViewerStore } from '@/store';
 const INPUT = 'h-7 w-40 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1 text-xs';
 
 export function LabelTypeFields({ label, onChange }: { label: LabelSpec; onChange: (next: LabelSpec) => void }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const area = useRef<HTMLTextAreaElement>(null);
   const selected = useViewerStore((s) => s.selectedEntity);
   // Re-read when the model changes, so an edited property shows its new value here too.
@@ -31,7 +31,7 @@ export function LabelTypeFields({ label, onChange }: { label: LabelSpec; onChang
   const element = useMemo(() => (selected ? labelElementOf(selected.modelId, selected.expressId) : null), [selected, version]);
   const groups = useMemo(() => (element ? listFields(element) : []), [element]);
   const parsed = useMemo(() => parseTemplate(label.template), [label.template]);
-  const preview = element ? resolveTemplate(parsed, element, label.missing) : null;
+  const preview = element ? resolveTemplate(parsed, element, locale, label.missing) : null;
 
   const insert = (token: string) => {
     const el = area.current;

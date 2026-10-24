@@ -16,7 +16,7 @@ import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import type { ProjectSchedule } from '@/project/types';
 
 const labels: ScheduleLabels = {
-  title: 'Doors and windows', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
+  locale: 'en', title: 'Doors and windows', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
   op: (op) => op,
 };
 const LEVELS = ['Ground', 'Level 1', 'Level 2'];

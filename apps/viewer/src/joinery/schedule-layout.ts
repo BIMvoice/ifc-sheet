@@ -24,6 +24,7 @@ import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import { textCellText } from '@bimvoice/ifcsheet';
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number }
@@ -46,6 +47,8 @@ export interface ScheduleLayout {
 }
 
 export interface ScheduleLabels {
+  /** The language the U value is written in on paper ("1,1" in Romanian); the CSV and XLSX keep the plain number. */
+  locale: string;
   title: string;
   mark: string;
   name: string;
@@ -102,7 +105,7 @@ function rows(data: ScheduleData, labels: ScheduleLabels): TableRowSpec[] {
   if (data.entries.some((e) => e.kind === 'window')) out.push({ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(Math.round(e.spec.sillHeight * 1000)) : '—') });
   for (const level of data.levels) out.push({ label: level, value: (e) => String(e.counts[level] ?? '') });
   out.push({ label: labels.total, value: (e) => String(e.total), strong: true });
-  out.push({ label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? String(e.spec.props.thermalTransmittance) : '—') });
+  out.push({ label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? sheetNumber(labels.locale, e.spec.props.thermalTransmittance, 3, { trim: true, group: false }) : '—') });
   out.push({ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—' });
   // The user's own rows, after the model's: each type's text by the type's key, so a column that moves takes its text with it.
   for (const row of data.textRows ?? []) out.push({ label: row.label, value: (e) => textCellText(row, e.key), text: true });
@@ -119,7 +122,7 @@ function dimension(prims: SchedulePrim[], a: { x: number; y: number }, b: { x: n
 }
 
 /** Labels for a measurement: only the number of rows depends on the data, never their text. */
-const NO_LABELS: ScheduleLabels = { title: '', mark: '', name: '', size: '', operation: '', sill: '', total: '', uValue: '', fire: '', op: () => '' };
+const NO_LABELS: ScheduleLabels = { locale: 'en', title: '', mark: '', name: '', size: '', operation: '', sill: '', total: '', uValue: '', fire: '', op: () => '' };
 
 /** The cards' sizes and how they split into bands and pages; what `layoutSchedule` draws and `schedulePages` counts, so they cannot disagree. */
 function plan(data: ScheduleData, options: ScheduleLayoutOptions) {

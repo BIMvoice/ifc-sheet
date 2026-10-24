@@ -64,7 +64,7 @@ describe('TAGALL at a large size', () => {
     const started = performance.now();
     const { drafts, summary } = planTagAll({
       elements, targets, rooms, existing: [],
-      placement: { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', paperUnit: 0.1 },
+      placement: { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', paperUnit: 0.1, locale: 'en' },
       types: { mark, room }, read: (g) => model.get(g) ?? null,
     });
     const ms = performance.now() - started;

@@ -8,6 +8,8 @@
  * never leaves a unit standing alone.
  */
 
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
+
 export interface FormatSpec {
   /** Digits after the point; null keeps the number as it is (up to three). */
   decimals: number | null;
@@ -40,39 +42,32 @@ export function formatSpecText(spec: FormatSpec): string {
 
 const NUMERIC = /^-?\d+(?:\.\d+)?$/;
 
-function groupThousands(digits: string): string {
-  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-function writeNumber(value: number, spec: FormatSpec | undefined): string {
+/** The number as a person on `locale`'s sheet reads it; a negative that rounds to zero loses its sign. */
+function writeNumber(locale: string, value: number, spec: FormatSpec | undefined): string {
   const decimals = spec?.decimals ?? null;
-  let text = decimals === null ? String(Math.round(value * 1000) / 1000) : value.toFixed(decimals);
-  
-  if (/^-0(\.0*)?$/.test(text)) text = text.slice(1);
-  if (!spec?.thousands) return text;
-  const negative = text.startsWith('-');
-  const [whole, fraction] = text.replace('-', '').split('.');
-  return `${negative ? '-' : ''}${groupThousands(whole)}${fraction === undefined ? '' : `.${fraction}`}`;
+  const group = spec?.thousands ?? false;
+  // No pattern keeps the number as it is, to three decimals: "2,5", "12".
+  return decimals === null ? sheetNumber(locale, value, 3, { trim: true, group }) : sheetNumber(locale, value, decimals, { group });
 }
 
 /** The value as text, or null when there is nothing to show (no value, an empty string). */
-export function formatValue(value: unknown, spec?: FormatSpec): string | null {
+export function formatValue(value: unknown, spec: FormatSpec | undefined, locale: string): string | null {
   if (value === null || value === undefined) return null;
   if (Array.isArray(value)) {
-    const parts = value.map((v) => formatValue(v, spec ? { ...spec, unit: '' } : undefined)).filter((v): v is string => v !== null);
+    const parts = value.map((v) => formatValue(v, spec ? { ...spec, unit: '' } : undefined, locale)).filter((v): v is string => v !== null);
     return parts.length === 0 ? null : withUnit(parts.join(', '), spec);
   }
-  if (typeof value === 'object') return 'value' in value ? formatValue((value as { value: unknown }).value, spec) : null;
+  if (typeof value === 'object') return 'value' in value ? formatValue((value as { value: unknown }).value, spec, locale) : null;
   let text: string;
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) return null;
-    text = writeNumber(value, spec);
+    text = writeNumber(locale, value, spec);
   } else if (typeof value === 'boolean') {
     text = value ? 'Yes' : 'No';
   } else {
     const raw = String(value).trim();
     if (raw === '') return null;
-    text = spec && spec.decimals !== null && NUMERIC.test(raw) ? writeNumber(Number(raw), spec) : raw;
+    text = spec && spec.decimals !== null && NUMERIC.test(raw) ? writeNumber(locale, Number(raw), spec) : raw;
   }
   return withUnit(text, spec);
 }

@@ -16,6 +16,7 @@
  */
 
 import { memo, useId, useMemo } from 'react';
+import { useTranslation } from '@/i18n';
 import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M, textLeader } from '@/drafting/annotation';
 import { witnessLine } from '@/drafting/level-mark';
 import { flattenShape, missingSymbolMark, placeSymbol } from '@/drafting/symbols';
@@ -185,6 +186,7 @@ function Symbol({ shape, color, t, axis, k, look, live }: { shape: Extract<Annot
 export const AnnotationGraphics = memo(function AnnotationGraphics({
   shape, color: base, selected, transform: t, axis, extraPatterns, strokeScale: k = 1, look = DEFAULT_LOOK, paperUnit = 0.1, symbols,
 }: Props) {
+  const { locale } = useTranslation();
   const s = (p: Pt) => drawingToScreen(p, t, axis);
   if (shape.type === 'hatch') return <Hatch shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} extraPatterns={extraPatterns} k={k} />;
   if (shape.type === 'symbol') return <Symbol shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} k={k} look={look} live={symbols} />;
@@ -240,7 +242,7 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
             <path d={`M${p.x} ${p.y}L${p.x - h} ${p.y - h}L${p.x + h} ${p.y - h}Z`} fill={lineColor} fillOpacity={0.25} />
             <path d={`M${p.x - h} ${p.y}L${p.x + h * 5} ${p.y}`} />
           </g>
-          <Label at={{ x: p.x + h * 1.3, y: p.y - h * 1.15 }} text={formatLevel(shape.value)} px={px} deg={0} color={textColor} style={look.text} anchor="start" />
+          <Label at={{ x: p.x + h * 1.3, y: p.y - h * 1.15 }} text={formatLevel(locale, shape.value)} px={px} deg={0} color={textColor} style={look.text} anchor="start" />
         </g>
       );
     }
@@ -273,7 +275,8 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
       const layout = dimensionLayout(shape, {
         extGap: dim.extGap * paperUnit,
         extOver: dim.extOver * paperUnit,
-        format: (m) => formatDimension(m, dim),
+        format: (m) => formatDimension(locale, m, dim),
+        locale,
       });
       const lineColor = selected ? '#2563eb' : dim.color ?? base;
       const lines = layout.lines.map((l) => polyline([l.a, l.b], t, axis)).join('');

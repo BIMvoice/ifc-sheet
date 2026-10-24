@@ -14,6 +14,7 @@
  */
 
 import type { AnnotationType } from '@/catalogue/types';
+import { getLocale } from '@/i18n';
 import { classesOf, planTagAll, type LabelTarget } from '@/labels/label-place';
 import { defaultCentres, labelDraft, labelTargets, type LabelPlacement } from '@/labels/label-all';
 import { paperUnitOf } from '@/project/drafting-standards';
@@ -31,7 +32,7 @@ function currentLabelType(ctx: DraftContext): AnnotationType | null {
 }
 
 const placement = (ctx: DraftContext): LabelPlacement => ({
-  viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId),
+  viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId), locale: getLocale(),
 });
 
 /** A cursor this near the element picked (paper millimetres) has not been moved yet: the label shows at its default place. */

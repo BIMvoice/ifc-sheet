@@ -11,7 +11,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { elementViews } from './element-views';
 
 const labels: ScheduleLabels = {
-  title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
+  locale: 'en', title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
   op: (op) => op,
 };
 
