@@ -257,6 +257,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     ...(raw.modelState !== undefined ? { modelState: readSnapshot(raw.modelState, '/modelState') } : {}),
     ...(typeof raw.siteArea === 'number' && Number.isFinite(raw.siteArea) && raw.siteArea > 0 ? { siteArea: raw.siteArea } : {}),
     ...readUrbanSettings(raw.urbanSettings),
+    ...(raw.includeFarElements === true ? { includeFarElements: true } : {}),
   };
 }
 

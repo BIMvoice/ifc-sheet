@@ -15,7 +15,7 @@ import { describeEffect, describeMissing } from '@/check/readiness-say';
 import { modelReadiness } from '@/check/readiness';
 import { currentModelFacts } from '@/check/readiness-read';
 import { useViewerStore } from '@/store';
-import { useProjectStore } from '@/project/project-store';
+import { setIncludeFarElements, useProjectStore } from '@/project/project-store';
 import { subReportChecks } from '@/check/sub-report-check';
 import type { SetSkin } from './set-skin';
 
@@ -26,19 +26,37 @@ function useModelReadiness() {
   const schedules = useProjectStore((s) => s.schedules);
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
+  const includeFar = useProjectStore((s) => s.includeFarElements);
+  const levels = useProjectStore((s) => s.levels);
   return useMemo(() => {
     void mutationVersion; // an edit can add or remove what the facts count
     // A schedule split into parts must list every element once: the same check the card on the Wall shows.
     return models.size === 0 ? null : modelReadiness(currentModelFacts(), subReportChecks(schedules ?? []));
-  }, [models, mutationVersion, schedules, catalogue, mapping]);
+  }, [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels]);
+}
+
+/** The project setting that frames the views on everything again, the small far-away elements too (`framing.ts` in the engine). */
+function FramingSetting({ skin }: { skin: SetSkin }) {
+  const { t } = useTranslation();
+  const on = useProjectStore((s) => s.includeFarElements === true);
+  return (
+    <div className="mt-2">
+      <label className={`flex items-center gap-2 ${skin.heading}`}>
+        <input type="checkbox" checked={on} aria-describedby="framing-far-hint" onChange={(e) => setIncludeFarElements(e.target.checked)} />
+        <span>{t('ready.framing.label')}</span>
+      </label>
+      <p id="framing-far-hint" className={`m-0 ${skin.note}`}>{t('ready.framing.hint')}</p>
+    </div>
+  );
 }
 
 export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compact?: boolean }) {
   const { t } = useTranslation();
   const findings = useModelReadiness();
   if (findings === null) return null;
-  if (findings.length === 0) return compact ? null : <p className={skin.note}>{t('ready.none')}</p>;
+  if (findings.length === 0) return compact ? null : <><p className={skin.note}>{t('ready.none')}</p><FramingSetting skin={skin} /></>;
   return (
+    <>
     <ul className="m-0 list-none p-0">
       {findings.map((f) => (
         <li key={`${f.kind}-${f.params.schedule ?? ''}`} className="py-0.5">
@@ -47,5 +65,7 @@ export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compac
         </li>
       ))}
     </ul>
+    {compact ? null : <FramingSetting skin={skin} />}
+    </>
   );
 }

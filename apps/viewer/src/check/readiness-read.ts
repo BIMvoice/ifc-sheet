@@ -7,6 +7,9 @@
 import { readModelFacts, type FactSource } from '@bimvoice/ifcsheet/readiness-read';
 import { useViewerStore } from '@/store';
 import { modelLevels } from '@/project/model-levels';
+import { buildingFraming } from '@/project/model-rooms';
+import { useProjectStore } from '@/project/project-store';
+import { modelMeshes } from '@/draft-set/body';
 import type { ModelFacts } from './readiness';
 
 export { IFC_GUID, isPhysicalElement, readModelFacts } from '@bimvoice/ifcsheet/readiness-read';
@@ -17,5 +20,9 @@ export function currentModelFacts(): ModelFacts {
   const s = useViewerStore.getState();
   const sources: FactSource[] = [];
   for (const [modelId, model] of s.models) if (model.ifcDataStore) sources.push({ store: model.ifcDataStore, storeys: modelLevels(modelId).length });
-  return readModelFacts(sources);
+  const facts = readModelFacts(sources);
+  // The small elements the views are framed without (`buildingFraming`, the rule the command line frames by); none when the project frames on everything.
+  const project = useProjectStore.getState();
+  const far = project.includeFarElements === true ? [] : buildingFraming(project.levels, modelMeshes()).far;
+  return far.length > 0 ? { ...facts, farElements: far } : facts;
 }

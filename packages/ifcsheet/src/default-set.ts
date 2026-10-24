@@ -35,6 +35,8 @@ export interface SetModel {
   projectName?: string;
   storeys: readonly StoreyInput[];
   extent: ModelExtent | null;
+  /** The extent was framed on everything, far-away small elements included; the document records the setting. */
+  includeFarElements?: boolean;
   proposalInput(level: ProjectLevel): ProposalInput | null;
 }
 
@@ -184,6 +186,7 @@ export function generateDefaultSet(model: SetModel, options: DefaultSetOptions =
       sheets,
       titleBlock: { date: new Date(now).toISOString().slice(0, 10) },
       ...(options.scheme ? { sheetNumbering: options.scheme } : {}),
+      ...(model.includeFarElements ? { includeFarElements: true } : {}),
     },
     levels,
     notes,
