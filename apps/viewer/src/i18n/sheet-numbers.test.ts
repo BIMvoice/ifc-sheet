@@ -4,7 +4,7 @@
 
 /**
  * #269: every number a sheet prints for people goes through one formatter and
- * follows the language: dimensions, level marks, label tags 
+ * follows the language: dimensions, level marks, label tags,
  * quantities and schedules. The numbers a machine reads (CSV, DXF, SVG
  * coordinates, parsing) do not.
  */
