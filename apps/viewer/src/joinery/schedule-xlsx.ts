@@ -10,6 +10,7 @@
  */
 
 import { neutralizeSpreadsheetFormula } from '@/lib/lists/export/model';
+import { textCellText } from '@bimvoice/ifcsheet';
 import { operationText, type ScheduleLabels } from './schedule-layout';
 import { occurrenceMark, type ScheduleData } from './schedule-data';
 
@@ -49,12 +50,14 @@ export async function scheduleXlsx(data: ScheduleData, labels: ScheduleXlsxLabel
   };
 
   const mm = (m: number) => Math.round(m * 1000);
-  const header = [labels.mark, labels.name, 'Width (mm)', 'Height (mm)', labels.operation, labels.sill, ...data.levels, labels.total, labels.uValue, labels.fire];
+  const typed = data.textRows ?? [];
+  const header = [labels.mark, labels.name, 'Width (mm)', 'Height (mm)', labels.operation, labels.sill, ...data.levels, labels.total, labels.uValue, labels.fire, ...typed.map((r) => r.label)];
   const types = sheet(labels.types, header, data.entries.map((e) => [
     e.mark, e.name, mm(e.width), mm(e.height), operationText(e, labels),
     e.kind === 'window' && e.spec ? mm(e.spec.sillHeight) : null,
     ...data.levels.map((l) => e.counts[l] ?? 0), e.total,
     e.spec?.props.thermalTransmittance ?? null, e.spec?.props.fireRating ?? null,
+    ...typed.map((r) => textCellText(r, e.key) || null),
   ]), [2, 3, 5, ...data.levels.map((_, i) => 6 + i), 6 + data.levels.length, 7 + data.levels.length]);
   const total = types.addRow([labels.total, null, null, null, null, null, ...data.levels.map((l) => data.entries.reduce((s, e) => s + (e.counts[l] ?? 0), 0)), data.entries.reduce((s, e) => s + e.total, 0)]);
   total.font = { bold: true };

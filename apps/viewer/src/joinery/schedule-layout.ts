@@ -22,6 +22,8 @@ import { elevationSymbol, strokeBounds } from './symbols';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
+import { fitText } from '@/project/title-block-template';
+import { textCellText } from '@bimvoice/ifcsheet';
 
 export type SchedulePrim =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number }
@@ -89,8 +91,10 @@ export function operationText(entry: ScheduleEntry, labels: ScheduleLabels): str
   return ops.map(labels.op).join(' + ');
 }
 
-function rows(data: ScheduleData, labels: ScheduleLabels): { label: string; value: (e: ScheduleEntry) => string; strong?: boolean }[] {
-  const out: { label: string; value: (e: ScheduleEntry) => string; strong?: boolean }[] = [
+interface TableRowSpec { label: string; value: (e: ScheduleEntry) => string; strong?: boolean; /** Typed in by hand (`ScheduleData.textRows`): fitted to its cell instead of shrunk by length. */ text?: boolean }
+
+function rows(data: ScheduleData, labels: ScheduleLabels): TableRowSpec[] {
+  const out: TableRowSpec[] = [
     { label: labels.name, value: (e) => e.name },
     { label: labels.size, value: (e) => `${Math.round(e.width * 1000)} × ${Math.round(e.height * 1000)}` },
     { label: labels.operation, value: (e) => operationText(e, labels) },
@@ -100,6 +104,8 @@ function rows(data: ScheduleData, labels: ScheduleLabels): { label: string; valu
   out.push({ label: labels.total, value: (e) => String(e.total), strong: true });
   out.push({ label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? String(e.spec.props.thermalTransmittance) : '—') });
   out.push({ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—' });
+  // The user's own rows, after the model's: each type's text by the type's key, so a column that moves takes its text with it.
+  for (const row of data.textRows ?? []) out.push({ label: row.label, value: (e) => textCellText(row, e.key), text: true });
   return out;
 }
 
@@ -170,7 +176,9 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
     tableRows.forEach((row, i) => {
       const y = yRows + i * ROW;
       prims.push({ kind: 'line', x1: 0, y1: y, x2: w, y2: y, w: i === 0 ? PEN.frame : PEN.grid });
-      prims.push({ kind: 'text', x: 2, y: y + 4.2, text: row.label, size: TEXT, anchor: 'start', bold: row.strong });
+      // A row the user named is fitted to the label column like its cells are to theirs (the title block's measure, #220).
+      const label = row.text ? fitText({ size: TEXT, fit: LABEL_W - 4, bold: row.strong }, row.label) : { size: TEXT, text: row.label };
+      prims.push({ kind: 'text', x: 2, y: y + 4.2, text: label.text, size: label.size, anchor: 'start', bold: row.strong });
     });
     let x = LABEL_W;
     for (const e of cards) {
@@ -201,6 +209,11 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
       dimension(prims, { x: x0 - 4, y: base }, { x: x0 - 4, y: base - h * k }, String(Math.round(e.height * 1000)));
       tableRows.forEach((row, i) => {
         const value = row.value(e);
+        if (row.text) {
+          // Typed text: shrunk to fit its card down to the smallest caption height, cut with an ellipsis only beyond that; never wider than the card.
+          if (value) { const fitted = fitText({ size: TEXT, fit: cw - 3 }, value); prims.push({ kind: 'text', x: cx, y: yRows + i * ROW + 4.2, text: fitted.text, size: fitted.size, anchor: 'middle' }); }
+          return;
+        }
         const size = value.length > cw / 1.6 ? Math.max(1.6, (cw - 2) / value.length * 1.7) : TEXT;
         prims.push({ kind: 'text', x: cx, y: yRows + i * ROW + 4.2, text: value, size, anchor: 'middle', bold: row.strong });
       });
@@ -219,12 +232,14 @@ export function scheduleCsv(data: ScheduleData, labels: ScheduleLabels): string 
     const cell = escapeCsvCell(v);
     return cell.startsWith('"') || !cell.includes(';') ? cell : `"${cell}"`;
   };
-  const header = [labels.mark, labels.name, 'Width (mm)', 'Height (mm)', labels.operation, labels.sill, ...data.levels, labels.total, labels.uValue, labels.fire];
+  const text = data.textRows ?? [];
+  const header = [labels.mark, labels.name, 'Width (mm)', 'Height (mm)', labels.operation, labels.sill, ...data.levels, labels.total, labels.uValue, labels.fire, ...text.map((r) => r.label)];
   const lines = data.entries.map((e) => [
     e.mark, e.name, String(Math.round(e.width * 1000)), String(Math.round(e.height * 1000)), operationText(e, labels),
     e.kind === 'window' && e.spec ? String(Math.round(e.spec.sillHeight * 1000)) : '',
     ...data.levels.map((l) => String(e.counts[l] ?? 0)), String(e.total),
     e.spec?.props.thermalTransmittance !== undefined ? String(e.spec.props.thermalTransmittance) : '', e.spec?.props.fireRating ?? '',
+    ...text.map((r) => textCellText(r, e.key)),
   ]);
   return [header, ...lines].map((r) => r.map(quote).join(',')).join('\n') + '\n';
 }

@@ -36,7 +36,7 @@ import { readSavedSectionCuts } from './saved-cuts-file';
 import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
-import { readSubReport } from '@bimvoice/ifcsheet';
+import { readScheduleTextRows, readSubReport } from '@bimvoice/ifcsheet';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSchedule, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
 import { HEX, WEIGHTS, readGraphics, readPhaseSource } from './view-graphics-file';
@@ -350,5 +350,8 @@ function readSchedule(raw: unknown): ProjectSchedule[] {
   // A project saved before sub-reports has no `sub`: it stays an ordinary schedule. Only a joinery list can be split.
   const sub = readSubReport(raw.sub);
   if (sub && (kind === 'door' || kind === 'window' || kind === 'all')) out.sub = sub;
+  // Text rows (#186) belong to a joinery list only; a project saved before them has none.
+  const textRows = readScheduleTextRows(raw.textRows);
+  if (textRows && (kind === 'door' || kind === 'window' || kind === 'all')) out.textRows = textRows;
   return [out];
 }
