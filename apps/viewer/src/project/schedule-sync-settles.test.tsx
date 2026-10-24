@@ -27,6 +27,13 @@ import { updateViewport } from './sheets.js';
 const SCALE = 20;
 const BOX = { width: 300, height: 350 };
 
+/** The Wall's own sheet: read from the store each render, so a write reaches the hook as it does there. */
+function Probe({ sheetId }: { sheetId: string }) {
+  const sheet = useProjectStore((s) => s.sheets.find((x) => x.id === sheetId)!);
+  useSheetSchedules(sheet);
+  return null;
+}
+
 beforeEach(() => resetProject());
 afterEach(() => cleanup());
 
@@ -52,13 +59,7 @@ describe('a paging schedule on a sheet settles', { skip: planModelMissing(FZK_HA
       if (counts[counts.length - 1] !== holders()) counts.push(holders());
     });
     try {
-      // The Wall's own sheet: read from the store each render, so a write reaches the hook as it does there.
-      function Probe() {
-        const sheet = useProjectStore((s) => s.sheets.find((x) => x.id === first)!);
-        useSheetSchedules(sheet);
-        return null;
-      }
-      render(<Probe />);
+      render(<Probe sheetId={first} />);
       await waitFor(() => holders() === 3, 'the sheets to follow the layout with the views (3 pages)', 30_000);
       // The loop's trigger: a page the user moved is kept in a memory on the FIRST sheet's viewport when its sheet goes, and read back
       // when it returns, so every round of the flip rewrote that viewport. One nudge of the first viewport starts it.
