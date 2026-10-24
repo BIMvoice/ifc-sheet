@@ -7,7 +7,7 @@
  * configured type (one row per catalogue entry, merged across models) with
  * its occurrences counted per level — with the doors / windows the
  * project's symbol mapping assigns to it — and the rest grouped by class and
- * size. Levels are merged by name and
+ * size, each group marked D1, W1… (`markUntyped`). Levels are merged by name and
  * ordered by elevation, top floor last. Every occurrence is numbered within
  * its type, level by level (`occurrenceMark`: W1.3), the numbering a plan
  * tag, the Elements sheet and `schedule-numbering.ts` share.
@@ -74,6 +74,22 @@ function attributes({ dataStore, view }: Live, id: number): unknown[] | null {
 }
 
 const real = (v: unknown): number => (typeof v === 'number' ? v : v && typeof v === 'object' && 'real' in v ? Number((v as { real: number }).real) : NaN);
+
+/**
+ * The groups of doors and windows the model gives no type (class and size) have no mark to read, so the Mark row would
+ * be blank for every column. Mark each D1, D2… / W1, W2… in schedule order, skipping a mark a configured type holds.
+ */
+function markUntyped(entries: ScheduleEntry[]): void {
+  const taken = new Set(entries.filter((e) => e.spec).map((e) => e.mark));
+  const last = { door: 0, window: 0 };
+  for (const e of entries) {
+    if (e.spec) continue;
+    const prefix = e.kind === 'door' ? 'D' : 'W';
+    let mark: string;
+    do mark = `${prefix}${++last[e.kind]}`; while (taken.has(mark));
+    e.mark = mark;
+  }
+}
 
 export function scheduleData(kind: ScheduleKind): ScheduleData {
   const s = useViewerStore.getState();
@@ -155,6 +171,7 @@ export function scheduleData(kind: ScheduleKind): ScheduleData {
     .filter((e) => e.total > 0 || e.spec)
     .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'window' ? -1 : 1) || (a.spec ? 0 : 1) - (b.spec ? 0 : 1)
       || a.mark.localeCompare(b.mark, undefined, { numeric: true }) || a.width - b.width);
+  markUntyped(entries);
   const levels = [...levelElevation.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name);
   if (entries.some((e) => e.counts['—'])) levels.push('—');
   // Number each type's occurrences: lowest level first, then by model and id, so the numbering is stable.
