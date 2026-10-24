@@ -221,9 +221,16 @@ describe('Section bar controls drive the store', () => {
     assert.equal(menu.querySelector('button[aria-current="true"]'), null);
     assert.equal(menu.querySelector('button[aria-current="true"]'), null, '1.00 m is 0.2 m off the ground-floor cut: nothing current');
     click(rows[0].querySelector('button')!);
-    // 2.8 + 1.2 = 4 m is the top of the Y range: 100 %.
-    assert.equal(s().sectionPlane.position, 100);
+    // The menu places the cut unclamped (#232b): first floor 2.8 m + 1.2 m plan cut = 4.0 m,
+    // which is above the model top (Y max 3 m) on the [-1, 3] range: (4.0 - (-1)) / (3 - (-1)) * 100 = 125 %.
+    assert.ok(Math.abs(s().sectionPlane.position - ((2.8 + 1.2 - -1) / (3 - -1)) * 100) < 1e-9);
     assert.equal(s().sectionPlane.axis, 'down');
+    // A storey whose cut is inside the model is unchanged: ground floor 0 m + 1.2 m = 1.2 m, (1.2 + 1) / 4 * 100 = 55 %.
+    // The popover stays open after a pick; reopen it only if it closed.
+    if (!document.querySelector('[data-testid="section-storeys"]')) click(bar().querySelector('button[aria-label="Cut at a storey"]')!);
+    const again = [...document.querySelectorAll<HTMLElement>('[data-testid="section-storeys"] li')];
+    click(again[1].querySelector('button')!);
+    assert.ok(Math.abs(s().sectionPlane.position - ((0 + 1.2 - -1) / (3 - -1)) * 100) < 1e-9);
   });
 
   it('the storey menu is absent for a vertical cut and without storeys', () => {
