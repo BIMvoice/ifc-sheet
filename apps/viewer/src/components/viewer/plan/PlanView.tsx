@@ -4,7 +4,7 @@
 
 /**
  * The Model workspace's editable plan (charter #6232, M2 §1.5): the session
- * storey cut 1.2 m above its floor (`usePlanCut`), drawn in workplane-local
+ * storey cut above its floor (`usePlanCut`, the sheet plans' default cut), drawn in workplane-local
  * metres beside the 3D view.
  *
  * - A running command takes the pointer: the plan cursor goes through the

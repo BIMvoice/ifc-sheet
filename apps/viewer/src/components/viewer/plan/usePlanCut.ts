@@ -4,7 +4,7 @@
 
 /**
  * The one plan-cut path (charter #6232, M2 §1.5): `Drawing2DGenerator` over
- * the model meshes, cut horizontally 1.2 m above a storey floor, mapped into
+ * the model meshes, cut horizontally above a storey floor (the sheet plans' default cut), mapped into
  * whatever 2D frame the caller draws in. The Model workspace's plan pane
  * (`usePlanCut`, workplane-local metres) runs on it.
  *
@@ -24,16 +24,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Drawing2DGenerator, createSectionConfig, type Drawing2D } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
+import type { MutablePropertyView } from '@ifc-lite/mutations';
+import type { IfcDataStore } from '@ifc-lite/parser';
 import { useViewerStore } from '@/store';
 import { selectModelMeshes } from '@/lib/type-view-visibility';
 import type { Vec2 } from '@/lib/snap/types';
 import type { Workplane } from '@/lib/commands/modeling/types';
 import { displayedTranslation, placementFor, type PlacementState } from '@/lib/model-placement/state';
 import { modelPointToWorkspacePoint, workspacePointToModelFrame, type PointPlacement } from '@/lib/model-placement/rotation';
+import { effectiveStoreyElevation, effectiveStoreyIds } from '@/lib/commands/modeling/effective-storeys';
+import { defaultPlanCutHeight, DEFAULT_PLAN_CUT_HEIGHT_M } from '@bimvoice/ifcsheet';
 import { fromRenderTranslation, toRenderTranslation } from '@/lib/model-placement/translation';
 
-/** Cut height above the storey floor, metres (the architectural plan convention). */
-export const PLAN_CUT_HEIGHT = 1.2;
 export const PLAN_CUT_DEBOUNCE_MS = 150;
 /**
  * Above this many model meshes the plan draws wall axes only. Measured on the
@@ -203,12 +205,28 @@ export function modelPlacementOf(placements: PlacementState, modelId: string): P
 }
 
 /**
- * The cut height and the 2D → local map for a storey plan on `plane`. The
- * cut sits `PLAN_CUT_HEIGHT` above the storey floor, whatever the
- * workplane's own offset (`offset` is subtracted back out).
+ * The cut height above `storeyId`'s floor, metres: the sheet plans' rule
+ * (`defaultPlanCutHeight`, 1.2 m, lower when the next storey is close, #256)
+ * over the storeys the model's live session holds. A storey the model cannot
+ * place keeps the plain default.
  */
-export function planCutFrame(plane: Workplane, placement: PointPlacement, offset: number): { cutY: number; map: PlanCutRequest['map'] } {
-  const cut = plane.localToRender([0, 0, PLAN_CUT_HEIGHT - offset]);
+export function storeyPlanCutHeight(store: IfcDataStore, view: MutablePropertyView | null | undefined, storeyId: number): number {
+  const elevation = (id: number): number | null => {
+    try { return effectiveStoreyElevation(store, view, id) ?? null; } catch { return null; }
+  };
+  const own = elevation(storeyId);
+  if (own === null || !Number.isFinite(own)) return DEFAULT_PLAN_CUT_HEIGHT_M;
+  const levels = effectiveStoreyIds(store, view).flatMap((id) => { const e = elevation(id); return e !== null && Number.isFinite(e) ? [{ elevation: e }] : []; });
+  return defaultPlanCutHeight({ elevation: own }, levels);
+}
+
+/**
+ * The cut height and the 2D → local map for a storey plan on `plane`. The
+ * cut sits `cutHeight` above the storey floor, whatever the workplane's own
+ * offset (`offset` is subtracted back out).
+ */
+export function planCutFrame(plane: Workplane, placement: PointPlacement, offset: number, cutHeight: number): { cutY: number; map: PlanCutRequest['map'] } {
+  const cut = plane.localToRender([0, 0, cutHeight - offset]);
   const vertex = toRenderTranslation(workspacePointToModelFrame(fromRenderTranslation({ x: cut[0], y: cut[1], z: cut[2] }), placement));
   const cutY = vertex[1];
   return {
@@ -231,7 +249,10 @@ export function usePlanCut(modelId: string | null, storeyId: number | null, plan
 
   const request = useMemo<PlanCutRequest | null>(() => {
     if (!modelId || storeyId === null || !plane || !geometry?.meshes) return null;
-    const { cutY, map } = planCutFrame(plane, modelPlacementOf(placements, modelId), offset);
+    const live = useViewerStore.getState();
+    const store = live.models.get(modelId)?.ifcDataStore;
+    const cutHeight = store ? storeyPlanCutHeight(store, live.mutationViews.get(modelId), storeyId) : DEFAULT_PLAN_CUT_HEIGHT_M;
+    const { cutY, map } = planCutFrame(plane, modelPlacementOf(placements, modelId), offset, cutHeight);
     // Building elements only — the type library never belongs in a plan (#2058).
     const meshes = selectModelMeshes(geometry.meshes);
     return {

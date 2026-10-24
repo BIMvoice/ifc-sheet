@@ -264,7 +264,7 @@ export function SectionToolbar() {
           <HudPopoverContent align="start" className="p-1" data-testid="section-storeys">
             <ul aria-label={t('sectionTool.storeys.aria')} className="max-h-64 overflow-y-auto">
               {distance.storeys.map((storey) => {
-                const active = Math.abs(distance.value - storeyCutElevation(storey)) <= STOREY_SNAP_TOLERANCE_M;
+                const active = Math.abs(distance.value - storeyCutElevation(storey, distance.storeys)) <= STOREY_SNAP_TOLERANCE_M;
                 return (
                   <li key={`${storey.modelId}:${storey.expressId}`}>
                     <button

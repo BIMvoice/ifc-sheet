@@ -14,7 +14,7 @@
  *  - the raw percentage while no usable bounds exist yet (nothing loaded).
  *
  * A `down` cut also carries the storeys as scrub snaps: a plan cut through a
- * storey sits `PLAN_CUT_HEIGHT_M` above its floor, the floor-plan convention.
+ * storey sits `defaultPlanCutHeight` above its floor, the sheet plans' rule (#256).
  */
 
 import { useCallback, useMemo } from 'react';
@@ -94,8 +94,8 @@ export function useSectionDistance(): SectionDistance {
     if (state.sectionPlane.custom || state.sectionPlane.axis !== 'down') setSectionPlaneAxis('down');
     const r = sectionAxisRange(placed?.shiftedBounds ?? null, 'down');
     // The storey's real cut height, even above/below the model: the same conversion the sheet plan uses.
-    if (r) placeSectionPlane(worldToPercent(storeyCutElevation(storey), r));
-  }, [placed, setSectionPlaneAxis, placeSectionPlane]);
+    if (r) placeSectionPlane(worldToPercent(storeyCutElevation(storey, storeys), r));
+  }, [placed, storeys, setSectionPlaneAxis, placeSectionPlane]);
 
   const bounds = placed?.shiftedBounds ?? null;
   const custom = sectionPlane.custom;
@@ -121,7 +121,7 @@ export function useSectionDistance(): SectionDistance {
     return {
       kind: 'world', value: percentToWorld(sectionPlane.position, range), onChange: onChangeWorld,
       step: 0.1, min: span.min, max: span.max,
-      snaps: sectionPlane.axis === 'down' ? storeys.map(storeyCutElevation) : [],
+      snaps: sectionPlane.axis === 'down' ? storeys.map((s) => storeyCutElevation(s, storeys)) : [],
       storeys, range, bounds, cutAtStorey,
     };
   }

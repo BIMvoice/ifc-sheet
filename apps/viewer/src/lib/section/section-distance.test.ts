@@ -108,7 +108,19 @@ describe('collectStoreys', () => {
     assert.deepEqual(collectStoreys(new Map(), null), []);
   });
 
-  it('a plan cut sits 1.2 m above the floor', () => {
-    assert.equal(storeyCutElevation({ elevation: 2.8 }), 4);
+  it('a plan cut sits 1.2 m above the floor of an ordinary storey (#256)', () => {
+    // 2.8 m to the next storey is more than 1.7 m, so the rule keeps exactly 1.2 m.
+    assert.equal(storeyCutElevation({ elevation: 2.8 }, [{ elevation: 0 }, { elevation: 2.8 }]), 4);
+    assert.equal(storeyCutElevation({ elevation: 0 }, [{ elevation: 0 }, { elevation: 3 }]), 1.2);
+    assert.equal(storeyCutElevation({ elevation: 0 }, [{ elevation: 0 }, { elevation: 1.7 }]), 1.2);
+    assert.equal(storeyCutElevation({ elevation: 0 }, [{ elevation: 0 }]), 1.2, 'a lone storey keeps 1.2 m');
+  });
+
+  it('a plan cut stays below a close next storey, as the sheet plan does (#256)', () => {
+    // min(1.2, max(gap - 0.5, gap / 2)): gap 1.0 -> 0.5, gap 0.6 -> 0.3 (the midpoint), gap 1.25 -> 0.75.
+    assert.equal(storeyCutElevation({ elevation: 0 }, [{ elevation: 0 }, { elevation: 1 }]), 0.5);
+    assert.equal(storeyCutElevation({ elevation: -1.25 }, [{ elevation: -1.25 }, { elevation: 0 }]), -0.5, 'the Duplex T/FDN storey');
+    assert.ok(Math.abs(storeyCutElevation({ elevation: 0 }, [{ elevation: 0 }, { elevation: 0.6 }]) - 0.3) < 1e-12);
+    assert.equal(storeyCutElevation({ elevation: 1 }, [{ elevation: 0 }, { elevation: 1 }]), 2.2, 'the top storey has no next one');
   });
 });
