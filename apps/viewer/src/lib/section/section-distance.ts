@@ -17,11 +17,12 @@
  *
  * Storeys are collected here too (shared with the floor-plan command,
  * `useFloorplanView`), because a storey is the bar's snap target: a plan cut
- * sits `PLAN_CUT_HEIGHT_M` above its floor, the same architectural
- * convention the floor plan applies.
+ * sits `defaultPlanCutHeight` above its floor, the one rule the sheet plans
+ * use too (#256), so the live cut and the sheet cannot disagree.
  */
 
 import type { GeometryResult } from '@ifc-lite/geometry';
+import { defaultPlanCutHeight } from '@bimvoice/ifcsheet';
 import type { SectionPlaneAxis } from '@/store/types';
 
 interface Vec3Like { x: number; y: number; z: number }
@@ -52,9 +53,6 @@ export interface SectionStorey {
   /** Floor elevation, metres, in the model's (Z-up) frame. */
   elevation: number;
 }
-
-/** Height of a plan cut above its storey's floor (the architectural convention). */
-export const PLAN_CUT_HEIGHT_M = 1.2;
 
 /** Viewer is Y-up: `down` cuts along viewer Y (IFC Z), `front` along viewer Z (IFC Y), `side` along X. */
 export function sectionAxisKey(axis: SectionPlaneAxis): 'x' | 'y' | 'z' {
@@ -174,7 +172,13 @@ export function collectStoreys(
   return Array.from(seen.values()).sort((a, b) => b.elevation - a.elevation);
 }
 
-/** Where a plan cut through `storey` sits: its floor plus the plan-cut height. */
-export function storeyCutElevation(storey: Pick<SectionStorey, 'elevation'>): number {
-  return storey.elevation + PLAN_CUT_HEIGHT_M;
+/**
+ * Where a plan cut through `storey` sits: its floor plus
+ * {@link defaultPlanCutHeight}, the sheet plans' rule (1.2 m, kept below the
+ * next storey's floor build-up when that is closer). `storeys` is every storey
+ * of the model(s), the list the rule looks the next storey up in; it is
+ * required so a caller cannot fall back to a plain floor + 1.2 m (#256).
+ */
+export function storeyCutElevation(storey: Pick<SectionStorey, 'elevation'>, storeys: readonly Pick<SectionStorey, 'elevation'>[]): number {
+  return storey.elevation + defaultPlanCutHeight(storey, storeys);
 }
