@@ -174,11 +174,11 @@ export function TourStepCard({ tour, step, stepIndex, targetEl }: TourStepCardPr
         </p>
       )}
 
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-xs tabular-nums text-muted-foreground">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
+        <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
           {stepIndex + 1} / {total}
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
           {step.action && (
             <Button
               variant="outline"

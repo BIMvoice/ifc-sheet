@@ -54,6 +54,16 @@ back when it is opened in another.
 
 ## Coverage
 
+Romanian coverage is gated by `locales/ro.test.ts` two ways: a prefix list
+(`IN_SCOPE`) and, since #231, the source files of the sheet view (`FACE_SOURCES` in `face-keys.ts`:
+the Wall, the shell, the sheet renderers, the privacy notice and the tour). Every
+English key such a file names, as a string literal or as the part before `${` in a
+template literal, needs a Romanian entry; a key under a prefix the list does not
+name used to read English with the suite green. Panels outside those files
+(drafting, joinery, project navigator, civil, urban, site plan and legend editors)
+stay English by design and are not gated yet; add their directory to
+`FACE_SOURCES` when their catalogues are translated.
+
 The ribbon toolbar catalogue covers the default toolbar's own chrome: tab
 strip, group names, button labels, tooltips and aria-labels on all six tabs,
 and the ribbon switch notice. Labels owned by shared registries (camera

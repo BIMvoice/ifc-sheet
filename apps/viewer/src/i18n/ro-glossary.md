@@ -1,7 +1,7 @@
 # Romanian glossary (ro)
 
 One place to correct term choices. Edit the term here and in `catalogues/*.ro.ts`
-(`wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`); the tests in
+(`wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`, `review`, `print-preview`, `tag-fields`, `revisions`, `face`); the tests in
 `locales/ro.test.ts` keep keys, placeholders and diacritics honest.
 
 Rules: comma-below diacritics only (ș ț, never ş ţ), plus ă â î. Polite plural
@@ -40,6 +40,9 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET) stay as
 | Issue the set | Emite setul | "Emitere" for the act; the issue record is "Emitere" in the drawing list |
 | Revision | Revizie | |
 | Revision cloud | Nor de revizie | |
+| Comment (on a sheet) | Comentariu | "Comentarii" for the list; resolved is "Rezolvat" |
+| Site plan / key plan | Plan de situație / Plan de încadrare | |
+| Print preview | Previzualizare la tipărire | The toolbar button: "Previzualizare la dimensiunea hârtiei" |
 | What is missing | Ce lipsește | |
 | Client | Beneficiar | Title block |
 | Title (of a sheet, in the title block) | Titlu planșă | |

@@ -4,6 +4,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkCatalogue } from '../catalogue-problems';
+import { untranslatedFaceKeys } from '../face-keys';
 import { en, type TranslationKey } from '../en';
 import type { TranslationValue } from '../types';
 import ro from './ro';
@@ -53,6 +54,17 @@ describe('Romanian catalogue (#53)', () => {
     assert.ok(keys.length > 300, `the scope found ${keys.length} English keys`);
     assert.deepEqual(keys.filter((k) => !Object.hasOwn(catalogue, k)), []);
     assert.deepEqual(Object.keys(catalogue).filter((k) => !Object.hasOwn(en, k)), []);
+  });
+
+  it('has an entry for every English key a source file of the IfcSheet face names (#231)', () => {
+    const missing = untranslatedFaceKeys(catalogue);
+    if (missing.length > 0) assert.fail(`${missing.length} English-only key(s):\n${missing.join('\n')}`);
+  });
+
+  it('the face check catches a key that is only English', () => {
+    const { 'revision.title': _dropped, ...without } = catalogue;
+    assert.deepEqual(untranslatedFaceKeys(catalogue), []);
+    assert.deepEqual(untranslatedFaceKeys(without), ['revision.title (components/viewer/wall/RevisionsCard.tsx, components/viewer/wall/SteppedSheet.tsx)']);
   });
 
   it('keeps every placeholder of the English message', () => {
