@@ -7,7 +7,7 @@ import type { TitleBlockParam } from './title-block-params';
 import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
-import type { SubReport } from '@bimvoice/ifcsheet';
+import type { ScheduleTextRow, SubReport } from '@bimvoice/ifcsheet';
 import type { UrbanSettings } from '@/urban/indicators';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
@@ -64,6 +64,8 @@ export interface ProjectSchedule {
   scale?: number;
   /** Set when this schedule is a part of another one (#186): the parent's id and what it keeps of the parent's content. Absent: the schedule lists everything its kind lists. Joinery kinds only. */
   sub?: SubReport;
+  /** Rows of text typed by hand into a joinery schedule (#186): a manufacturer, a remark, a note per type. Cells are keyed by the type's identity, never by column. A sub-report prints its parent's (`textRowsOf`). Absent: none. */
+  textRows?: ScheduleTextRow[];
 }
 
 export interface ProjectDocument extends EngineDocument {

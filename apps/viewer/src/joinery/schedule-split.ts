@@ -9,11 +9,21 @@
  * so a sub-report is the same table on the Wall, on the sheet and when hung.
  */
 
-import { subReportData } from '@bimvoice/ifcsheet';
+import { subReportData, textRowsOf } from '@bimvoice/ifcsheet';
+import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule } from '@/project/types';
 import { scheduleData, type ScheduleData, type ScheduleKind } from './schedule-data';
 
-/** The content of the joinery schedule `schedule`: its kind's rows, whole, or the part its sub-report keeps. */
-export function scheduleDataOf(schedule: Pick<ProjectSchedule, 'kind' | 'sub'>, read: (kind: ScheduleKind) => ScheduleData = scheduleData): ScheduleData {
-  return subReportData(read(schedule.kind as ScheduleKind), schedule.sub?.filter);
+/**
+ * The content of the joinery schedule `schedule`: its kind's rows, whole, or the part its sub-report keeps, with the text rows it
+ * prints (its own, or its parent's: `textRowsOf`) from `schedules` (the project's by default).
+ */
+export function scheduleDataOf(
+  schedule: Pick<ProjectSchedule, 'kind' | 'sub'> & Partial<Pick<ProjectSchedule, 'id'>>,
+  read: (kind: ScheduleKind) => ScheduleData = scheduleData,
+  schedules: readonly ProjectSchedule[] = useProjectStore.getState().schedules ?? [],
+): ScheduleData {
+  const data = subReportData(read(schedule.kind as ScheduleKind), schedule.sub?.filter);
+  const textRows = textRowsOf(schedules, { id: schedule.id ?? '', sub: schedule.sub });
+  return textRows ? { ...data, textRows } : data;
 }

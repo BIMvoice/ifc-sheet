@@ -135,12 +135,13 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const models = useViewerStore((s) => s.models);
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
+  const schedules = useProjectStore((s) => s.schedules);
   const labels = useScheduleLabels(schedule?.name ?? '');
   const data = useMemo(() => {
     if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register' || schedule.kind === 'urban') return null;
-    return scheduleDataOf(schedule);
-    // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
-  }, [schedule?.kind, schedule?.sub, mutationVersion, models, catalogue, mapping]);
+    return scheduleDataOf(schedule, undefined, schedules ?? []);
+    // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores; schedules: the text rows.
+  }, [schedule?.kind, schedule?.sub, schedules, mutationVersion, models, catalogue, mapping]);
   const scale = schedule?.scale ?? 50;
   const requests = useMemo<ViewRequest[]>(() => (data ? [{ id: 'self', data, scale }] : []), [data, scale]);
   const views = useElementViews(requests).get('self');

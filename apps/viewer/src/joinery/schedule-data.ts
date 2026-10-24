@@ -16,6 +16,7 @@
 import { joineryTypesInStore, occurrencesOfTypeInStore, type JoinerySpec } from '@ifc-lite/create';
 import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import type { ScheduleTextRow } from '@bimvoice/ifcsheet';
 import { useViewerStore } from '@/store';
 import { entityName } from '@/lib/commands/modeling/authored-kinds';
 import { getModelLengthUnitScale } from '@/lib/length-unit-scale';
@@ -60,6 +61,8 @@ export interface ScheduleData {
   entries: ScheduleEntry[];
   /** Level names, lowest first. */
   levels: string[];
+  /** Rows of text typed in by hand, one cell per type by entry key (#186): not read from the model, attached by `scheduleDataOf`. */
+  textRows?: ScheduleTextRow[];
 }
 
 interface Live { dataStore: IfcDataStore; view: MutablePropertyView | null }
