@@ -145,7 +145,7 @@ class Planner {
     return this.add<SectionProjectView>({ kind: 'section', name, plane: { axis: 'front', offset: custom.distance, flipped: false, custom }, through: proposal.label });
   }
 
-  /** The proposed sections the set draws, on the lowest plan, each seeing to the far side of the building. */
+  /** The proposed sections the set draws, on the ground plan (`groundPlan`), each seeing to the far side of the building. */
   sections(model: SetModel): void {
     if (this.views.some((v) => v.kind === 'section')) return;
     const plan = groundPlan(this.views);
