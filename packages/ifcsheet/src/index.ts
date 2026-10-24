@@ -68,6 +68,7 @@ export {
   groundPlan, groupOfView, groupsThatDoNotFit, isSetSheet, overrun, placeViewports, scaleOn, sheetGroup, sheetScaleReason, sheetSeries, viewExtent,
   withViewHung, type Arrangement, type ModelExtent, type Reason, type SetGroup, type SetInput, type SheetLayout,
 } from './drawing-set.js';
+export { resolveStoreyOriginMeters, storeyFloorY, type Point3 } from './storey-origin.js';
 export { boundsFromIndex, createEntityBoundsLookup, getEntityBounds, indexMeshesByEntity, isValidCoord, unionEntityBounds, type BoundingBox3D, type Point3D } from './entity-bounds.js';
 
 // The starting set (pure: an opened model's facts in, a document out)
