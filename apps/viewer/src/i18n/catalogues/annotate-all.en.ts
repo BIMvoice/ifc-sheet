@@ -17,7 +17,7 @@ export const annotateAllEn = {
   'drafting.tool.ceilTag': 'Tag ceiling heights',
   'drafting.msg.ceilTagCeilingPlanOnly': 'CEILTAG works on a reflected ceiling plan.',
   'drafting.msg.ceilTagDone': 'Tagged {count} ceilings with their height above the level. Already tagged: {already}.',
-  'drafting.msg.ceilTagStacked': '{stacked} ceilings lie exactly under another one (same spot, same height) and share its tag: {tags} tags in all.',
+  'drafting.msg.ceilTagStacked': 'Ceilings that share another one\'s tag, lying exactly under it (same spot, same height): {stacked}. Tags in all: {tags}.',
   'drafting.msg.ceilTagNone': 'Every ceiling of this plan has its height already ({already}), or the plan has none.',
   'drafting.tool.tagAll': 'Tag doors, windows and rooms',
   'drafting.msg.tagAllPlanOnly': 'TAGALL works on a plan.',
