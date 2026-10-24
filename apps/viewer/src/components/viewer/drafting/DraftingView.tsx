@@ -34,6 +34,7 @@ import { IconButton } from '@/components/ui/icon-button';
 
 import { Drawing2DCanvas } from '@/components/viewer/Drawing2DCanvas';
 
+import { useFocusOnFinding } from './useFocusOnFinding';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 
 import { useViewControls } from '@/hooks/useViewControls';
@@ -173,6 +174,9 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     // Opened on a model with no geometry yet: the first element drawn must not move the view under the cursor.
     initialFit: !openedEmpty,
   });
+
+  // What is missing: a finding about model elements brings the view here, zoomed to them and with them highlighted.
+  useFocusOnFinding(view.id, drawing, axis, containerRef, setViewTransform);
 
   // No drawing to fit to: start at 1 m ≈ 40 px around the origin of the work plane.
   useEffect(() => {

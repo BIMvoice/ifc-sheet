@@ -87,10 +87,13 @@ export function detailsOnNoSheet(input: CheckInput): Finding[] {
   return input.views.filter((v) => isDetail(v) && !onSheet(input, v)).map((v): Finding => ({ kind: 'detailOffSheet', key: 'check.detailOffSheet', viewId: v.id, params: { view: v.name } }));
 }
 
-/** A tag or label whose element is no longer in the model. (A dimension is measured from drawn points and names no element.) */
+/**
+ * A tag or label whose element is no longer in the model, and a dimension DIMALL placed to measure a door or window that is gone
+ * (it is stamped with what it measures: `params.measures`). A dimension drawn by hand names no element.
+ */
 export function danglingAnnotations(input: CheckInput): Finding[] {
   return input.drafts.flatMap((d): Finding[] => {
-    const guid = [d.params.labelOf, d.params.tagOf].find((g): g is string => typeof g === 'string');
+    const guid = [d.params.labelOf, d.params.tagOf, d.params.measures].find((g): g is string => typeof g === 'string');
     if (!guid || input.elementExists(guid)) return [];
     const view = input.views.find((v) => v.id === d.viewId);
     return [{ kind: 'danglingAnnotation', key: 'check.danglingAnnotation', viewId: d.viewId, sheetId: view ? onSheet(input, view)?.id : undefined, draftId: d.id, guids: [guid], params: { view: view?.name ?? '' } }];

@@ -13,6 +13,7 @@ import { EMPTY_VIEW_DRAWING, patchViewDrawing, useViewDrawings } from '@/project
 import type { ProjectView } from '@/project/types';
 import { house } from '@/dimall/fixture.js';
 import { fixFinding, fixOutcome, goToFinding, waitForView, type FindingNav } from './go.js';
+import { clearFocus, useFocusRequest } from './focus.js';
 import type { Finding } from './types';
 
 const view = { id: 'v1', kind: 'plan', scale: 100 } as unknown as ProjectView;
@@ -81,6 +82,23 @@ describe('a drawing that fails to be made', () => {
     assert.equal(await fixOutcome(finding({ fix: undefined }), nav), 'noFix');
     assert.equal(await fixOutcome(finding({}), { open: () => false }), 'noPlace');
     assert.equal(await fixOutcome(finding({ fix: 'TAGALL' }), nav), 'done');
+  });
+});
+
+describe('goToFinding on elements', () => {
+  it('asks the drawing to zoom to the elements a finding is about', () => {
+    clearFocus();
+    goToFinding(finding({ guids: ['G1', 'G2'] }), nav);
+    const request = useFocusRequest.getState().request;
+    assert.deepEqual([request?.viewId, request?.guids], ['v1', ['G1', 'G2']]);
+    clearFocus();
+  });
+
+  it('does not, for a finding about an annotation or one with no elements', () => {
+    clearFocus();
+    goToFinding(finding({ draftId: 'd1', guids: ['G1'] }), nav);
+    goToFinding(finding({}), nav);
+    assert.equal(useFocusRequest.getState().request, null);
   });
 });
 
