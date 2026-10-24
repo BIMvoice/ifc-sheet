@@ -199,6 +199,10 @@ export interface SheetViewport {
   hiddenLayers?: string[];
   /** The page of a document split over several sheets (the drawing register's continuation sheets), from 0; absent is 0. */
   page?: number;
+  /** A continuation page the user moved: it keeps its own position when the schedule is laid out again, instead of following the first sheet's (`syncSchedulePages`). */
+  placed?: boolean;
+  /** On a schedule's first page: where the user put continuation pages that are not there now (the schedule shrank to fewer pages and grew again), so a page comes back where it was. */
+  placedPages?: { page: number; x: number; y: number }[];
   /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
   keyPlanOf?: string;
   /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */

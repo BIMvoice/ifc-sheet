@@ -5,13 +5,14 @@
 /**
  * On a sheet stepped into: a joinery schedule that does not fit the paper at its scale says so and offers to split (#186), the
  * way the schedule's card does by hand: doors and windows apart, or one per storey, each part hung on a sheet of its own. Or to
- * keep it as it is, paging on A-6xx.1… (the default, which nothing here changes until a split is chosen). The split is one undo step.
+ * keep it as it is, paging on A-6xx.1… (the default, which nothing here changes until a split is chosen). The parts can instead be
+ * placed side by side on as few sheets as they fit (`hangScheduleParts`). The split is one undo step.
  */
 
 import { useMemo, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
-import { hangSchedule } from '@/project/drawing-set-actions';
+import { hangScheduleParts } from '@/project/schedule-hang';
 import { scheduleBox } from '@/project/schedule-fit';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule, ProjectSheet, SheetViewport } from '@/project/types';
@@ -19,6 +20,7 @@ import { splitOfferFor, type SplitOffer } from '@/joinery/schedule-split-offer';
 import { splitByKind, splitByLevel } from '@/joinery/schedules';
 import { scheduleData, type ScheduleData, type ScheduleKind } from '@/joinery/schedule-data';
 import { useViewerStore } from '@/store';
+import { SideBySideToggle } from './SideBySideToggle';
 import { stepInto } from './wall-nav';
 import { WALL_CARD, WALL_EYEBROW, WALL_PILL } from './wall-type';
 
@@ -32,6 +34,7 @@ function Offer({ sheet, vp, schedule, read }: { sheet: ProjectSheet; vp: SheetVi
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
   const [kept, setKept] = useState(false);
+  const [sideBySide, setSideBySide] = useState(false);
   // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
   const data = useMemo(() => read(schedule.kind as ScheduleKind), [read, schedule.kind, mutationVersion, models, catalogue, mapping]);
   const offer: SplitOffer | null = splitOfferFor(schedule, schedules, data, vp.scale, scheduleBox(sheet, vp));
@@ -39,9 +42,9 @@ function Offer({ sheet, vp, schedule, read }: { sheet: ProjectSheet; vp: SheetVi
 
   /** Make the parts, hang each on a sheet of its own, and step into the first: all one undo step. */
   const split = (make: () => string[]): void => {
-    let sheets: (string | null)[] = [];
-    runAsOneUndoStep(() => { sheets = make().map((id) => hangSchedule(id, data)); });
-    stepInto(sheets.find((id) => id !== null) ?? null);
+    let sheets: string[] = [];
+    runAsOneUndoStep(() => { sheets = hangScheduleParts(make(), { sideBySide, data }); });
+    stepInto(sheets[0] ?? null);
   };
   return (
     <section data-owns-keys data-schedule-fit-offer className={`${WALL_CARD} absolute bottom-3 left-3 max-h-[calc(100%-1.5rem)]`}>
@@ -50,6 +53,7 @@ function Offer({ sheet, vp, schedule, read }: { sheet: ProjectSheet; vp: SheetVi
       <div className="mt-3 flex flex-wrap gap-2">
         {offer.byKind ? <button type="button" className={WALL_PILL} onClick={() => split(() => splitByKind(schedule.id, { door: t('wall.sub.doors'), window: t('wall.sub.windows') }))}>{t('wall.sub.byKind')}</button> : null}
         {offer.levels.length > 0 ? <button type="button" className={WALL_PILL} onClick={() => split(() => splitByLevel(schedule.id, offer.levels))}>{t('wall.sub.byLevel')}</button> : null}
+        <SideBySideToggle on={sideBySide} onChange={setSideBySide} />
         <button type="button" className={WALL_PILL} onClick={() => setKept(true)}>{t('wall.fitOffer.keep')}</button>
       </div>
     </section>
