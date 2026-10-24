@@ -17,7 +17,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
-import { fitExtent, viewportBox } from '@/project/sheets';
+import { viewportBox } from '@/project/sheets';
 import { useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
@@ -26,7 +26,7 @@ import { isRasterView } from '@/project/axonometric';
 import { isAutosaveRasterRef } from '@/project/autosave-rasters';
 import { drawingNumbers } from '@/drafting/cross-ref';
 import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
-import { withCrossReferences } from '@/drafting/cross-ref-plan';
+import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
@@ -129,9 +129,19 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   // A site plan's plot and footprint; its viewport fits and centres on the whole plot (`siteBounds`).
   const rawDrawing = useCallback((viewId: string) => drawingOf.get(viewId) ?? null, [drawingOf]);
   const sites = useSheetSite(placedViewIds, views, drafts, rawDrawing);
-  // What an auto-fit viewport frames: the drawing, the plot of a site plan and the view's own drafts (#140).
+  // Cross-references are derived here, at draw time, from the sheets as they are: nothing of them is stored on the plan.
+  const sheets = useProjectStore((s) => s.sheets);
+  const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
+  const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
+  const ground = useMemo(() => elevationMarkPlan(views), [views]);
+  const crossRefInput = useCallback((vp: SheetViewport): PlanCrossRefInput => ({
+    drafts: settledDrafts(vp.viewId), view: views.find((v) => v.id === vp.viewId), views, sheets, groundPlanId: ground?.id,
+    bounds: drawingOf.get(vp.viewId)?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays,
+  }), [settledDrafts, views, sheets, drawingOf, ground, styled]);
+  const draftsFor = useCallback((vp: SheetViewport) => withCrossReferences(crossRefInput(vp)), [crossRefInput]);
+  // What an auto-fit viewport frames: the drawing, the plot of a site plan and the drafts the sheet draws, the cross-references included (#140, #243).
   // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
-  const fittedBounds = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => fitExtent(vp, siteBounds(bounds, sites.get(vp.viewId)), settledDrafts(vp.viewId), views.find((v) => v.id === vp.viewId)?.scale), [sites, settledDrafts, views]);
+  const fittedBounds = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => fitWithCrossReferences(vp, siteBounds(bounds, sites.get(vp.viewId)), crossRefInput(vp)), [sites, crossRefInput]);
   // The same refitted drawing object while its bounds are the same, so a viewport's pens (memoised on it) are kept.
   const siteDrawing = useCallback((vp: SheetViewport): Drawing2D | null => {
     const drawing = styled.get(vp.viewId)?.drawing ?? null;
@@ -140,17 +150,6 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
     if (bounds === drawing.bounds) return drawing;
     return memoOn(fittedMemo, drawing, [bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y], () => ({ ...drawing, bounds }));
   }, [styled, fittedBounds]);
-  // Cross-references are derived here, at draw time, from the sheets as they are: nothing of them is stored on the plan.
-  const sheets = useProjectStore((s) => s.sheets);
-  const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
-  const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
-  const ground = useMemo(() => elevationMarkPlan(views), [views]);
-  const draftsFor = useCallback((vp: SheetViewport) => {
-    return withCrossReferences({
-      drafts: settledDrafts(vp.viewId), view: views.find((v) => v.id === vp.viewId), views, sheets, groundPlanId: ground?.id,
-      bounds: drawingOf.get(vp.viewId)?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays,
-    });
-  }, [settledDrafts, views, sheets, drawingOf, ground, styled]);
   const content = useCallback((vp: SheetViewport): ViewportContent => ({
     schedule: placedSchedules.get(vp.viewId),
     civil: placedCivil.get(vp.viewId),
