@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
 import { cleanup, click, render } from '@/test/render.js';
 import { SubReportCard } from '@/components/viewer/wall/SubReportCard';
+import { openSection } from '@/test/open-section.js';
 import { addSchedule, addSubReport, scheduleById } from '@/joinery/schedules.js';
 import { manyTypes } from '@/joinery/schedule-fit.test.js';
 import { layoutPagedTable, type TableBlock } from '@/joinery/paged-table.js';
@@ -259,6 +260,7 @@ describe('the Wall card places the parts side by side (#186)', () => {
     catalogue();
     const parent = addSchedule('all', 'Joinery');
     const view = render(<SubReportCard schedule={scheduleById(parent)!} />);
+    openSection(view, 'Sub-reports');
     press(view, 'Place parts side by side');
     assert.equal([...view.querySelectorAll('[data-side-by-side]')][0].getAttribute('aria-pressed'), 'true');
     press(view, 'Doors and windows apart');
@@ -268,7 +270,9 @@ describe('the Wall card places the parts side by side (#186)', () => {
     resetProject();
     catalogue();
     const plain = addSchedule('all', 'Joinery');
-    press(render(<SubReportCard schedule={scheduleById(plain)!} />), 'Doors and windows apart');
+    const plainView = render(<SubReportCard schedule={scheduleById(plain)!} />);
+    openSection(plainView, 'Sub-reports');
+    press(plainView, 'Doors and windows apart');
     assert.equal(sheets().length, 2, 'two sheets, as before');
   });
 
