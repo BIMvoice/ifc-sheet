@@ -4,6 +4,7 @@
 
 import { QuantityType } from '@ifc-lite/data';
 import { ProjectUnits } from '@ifc-lite/parser';
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import { resolveQuantityDisplay, formatConverted } from '@/lib/units/display';
 
 // Constructed once rather than per call: every measure-tool distance readout
@@ -14,15 +15,17 @@ const EMPTY_UNITS = ProjectUnits.empty();
 
 /** Auto-scaled metric string (mm / cm / m / km), the fallback used when no
  *  LENGTHUNIT override is set. */
-function formatAutoScaledMetric(meters: number): string {
+function formatAutoScaledMetric(meters: number, locale?: string): string {
+  // Without a locale the digits are the plain `toFixed` ones the on-screen panels have always shown.
+  const digits = (value: number, n: number): string => (locale === undefined ? value.toFixed(n) : sheetNumber(locale, value, n, { group: false }));
   if (meters < 0.01) {
-    return `${(meters * 1000).toFixed(1)} mm`;
+    return `${digits(meters * 1000, 1)} mm`;
   } else if (meters < 1) {
-    return `${(meters * 100).toFixed(1)} cm`;
+    return `${digits(meters * 100, 1)} cm`;
   } else if (meters < 1000) {
-    return `${meters.toFixed(3)} m`;
+    return `${digits(meters, 3)} m`;
   } else {
-    return `${(meters / 1000).toFixed(2)} km`;
+    return `${digits(meters / 1000, 2)} km`;
   }
 }
 
@@ -40,6 +43,10 @@ function formatAutoScaledMetric(meters: number): string {
  * result. Folding the override handling in here removes that choice instead
  * of guarding it.
  *
+ * `locale` (#269) writes the number in that language's separators ("3,000 m"
+ * in Romanian) for text that lands on a drawing; left out, the text is as it
+ * always was. It never changes which unit is shown: the override decides that.
+ *
  * `meters` is always already SI: every distance the measure tool produces —
  * drag endpoints, axis deltas, picked-point offsets — is renderer/model
  * space, which is metres throughout (geometry is unit-scaled to metres at
@@ -48,10 +55,10 @@ function formatAutoScaledMetric(meters: number): string {
  * handing it a file's declared millimetres would scale an already-metre
  * value a second time.
  */
-export function formatDistance(meters: number, overrides: Record<string, string> = {}): string {
+export function formatDistance(meters: number, overrides: Record<string, string> = {}, locale?: string): string {
   const disp = resolveQuantityDisplay(meters, QuantityType.Length, EMPTY_UNITS, overrides);
-  if (disp.converted === null) return formatAutoScaledMetric(meters);
-  const formatted = formatConverted(disp.converted);
+  if (disp.converted === null) return formatAutoScaledMetric(meters, locale);
+  const formatted = locale === undefined ? formatConverted(disp.converted) : sheetNumber(locale, disp.converted, 4, { trim: true, group: false });
   return disp.unit ? `${formatted} ${disp.unit}` : formatted;
 }
 
