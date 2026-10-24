@@ -40,7 +40,7 @@ errors are typed; retain the selected File in the UI while prompting for retry.
 
 ## Decoder and limits
 
-Pinned PDF.js `pdfjs-dist` 6.3.289, Apache-2.0. Parsing/rasterization is lazy and
+Pinned PDF.js `pdfjs-dist` 6.4.299, Apache-2.0. Parsing/rasterization is lazy and
 runs inside a dedicated cancellable worker; cancellation terminates the job,
 including stalled decoding. Only a selected page is rendered. File size, page
 count, output/intermediate pixels, dimensions and runtime have limits; these do

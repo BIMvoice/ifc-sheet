@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 
 const limits = { bytes: 64 * 1024 * 1024, operations: 100_000, pathNumbers: 2_000_000, deadlineMs: 60_000 };
-const expectedVersion = '6.3.289';
+const expectedVersion = '6.4.299';
 const requireViewer = createRequire(new URL('../../apps/viewer/package.json', import.meta.url));
 
 async function inspect(input, pageNumber) {

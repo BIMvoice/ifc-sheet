@@ -72,7 +72,7 @@ fn validate_page(page: &PdfVectorPage) -> Result<(), String> {
     {
         return Err("PDF source identity must be a lowercase SHA-256".into());
     }
-    if page.decoder_version != "6.3.289" {
+    if page.decoder_version != "6.4.299" {
         return Err("Unqualified PDF decoder version".into());
     }
     if page.pdf_format_version.as_ref().is_some_and(|version| {

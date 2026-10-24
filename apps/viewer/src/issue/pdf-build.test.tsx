@@ -262,7 +262,7 @@ describe('the issued PDF', () => {
   it('draws serif and monospace text in Times and Courier, and sans-serif text in Inter', async () => {
     const extraText = `<text x="50" y="50" font-size="5" font-family="${fontFamilyOf('serif')}">Facade Nord</text>`
       + `<text x="50" y="60" font-size="5" font-family="${fontFamilyOf('mono')}">W-01 mono</text>`;
-    const { pdf, close } = await openPdf(await issued({ extraText }));
+    const { pdf, close } = await openPdf(await issued({ extraText }), { fontExtraProperties: true });
     try {
       const page = await pdf.getPage(2);
       const items = (await page.getTextContent()).items.filter((i) => 'str' in i);
