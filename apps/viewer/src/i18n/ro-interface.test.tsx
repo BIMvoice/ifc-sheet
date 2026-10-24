@@ -45,7 +45,7 @@ const texts = (ui: HTMLElement, selector: string) => [...ui.querySelectorAll(sel
 
 beforeEach(() => {
   resetProject();
-  useWallNav.setState({ stepped: null, focus: null, visit: 0, drawer: true });
+  useWallNav.setState({ stepped: null, focus: null, visit: 0, panel: 'drawer' });
   useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
   startDrawingSet(null, HOUSE);
   registerLocale('ro', checkCatalogue(ro).catalogue);

@@ -20,7 +20,8 @@ import { useFileCommands } from '../toolbar/useFileCommands';
 import { FeedbackButton } from '../feedback/FeedbackDialog';
 import { coverViewport } from '../viewport-cover';
 import { WallView } from '../wall/WallView';
-import { setDrawer, setPanel, useWallNav } from '../wall/wall-nav';
+import { registerPanelEscape } from '../wall/wall-key-bus';
+import { setPanel, useDrawerOpen, useWallNav } from '../wall/wall-nav';
 import { WhatChanged } from '../whatchanged/WhatChanged';
 import { openDemoModel } from './demo-model';
 import { LanguagePicker } from './LanguagePicker';
@@ -36,17 +37,19 @@ export function IfcSheetShell() {
   const sheets = useProjectStore((s) => s.sheets);
   const dirty = useProjectStore((s) => s.dirty);
   const modelName = useViewerStore((s) => [...s.models.values()][0]?.name ?? null);
-  const drawer = useWallNav((s) => s.drawer);
+  const drawer = useDrawerOpen();
   const panel = useWallNav((s) => s.panel);
   // The 3D viewport underneath is hidden by this face: it stops rendering until the face goes (#154).
   useEffect(() => coverViewport(), []);
+  // Esc closes the panel in front, once no tool or selection wants it (#296).
+  useEffect(() => registerPanelEscape(), []);
   const views = new Set(sheets.flatMap((s) => (s.viewports ?? []).map((v) => v.viewId))).size;
 
   return (
     <div data-ifcsheet-shell className="fixed inset-0 z-50 flex flex-col bg-[#061a36] text-sky-50">
       {files.fileInputs}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-sky-300/10 px-4">
-        <button type="button" aria-pressed={drawer} className={quiet} onClick={() => setDrawer(!drawer)}>{t('wall.shell.project')}</button>
+        <button type="button" aria-pressed={drawer} className={quiet} onClick={() => setPanel(drawer ? null : 'drawer')}>{t('wall.shell.project')}</button>
         <img src="/logo.png" alt="" className="size-6 shrink-0" />
         <span className="text-base font-semibold text-white">IfcSheet</span>
         <span className="h-5 w-px bg-sky-300/20" />

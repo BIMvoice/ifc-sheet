@@ -12,11 +12,13 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { eventMatchesChords, registerKeyboardCommand } from '@/lib/commands/dispatcher';
+import { eventMatchesChords, openKeyboardOverlay, registerKeyboardCommand } from '@/lib/commands/dispatcher';
 import { effectiveKeys } from '@/lib/commands/key-bindings';
 import { WALL_KEY_COMMANDS, type WallKeyId } from '@/lib/commands/wall-key-commands';
 import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import { isTextEntryElement } from '@/lib/keyboard-event';
+import { runningCommand, useDraftingSession } from '@/drafting/session';
+import { closeFrontPanel } from './wall-nav';
 
 export type WallHandlers = Readonly<Record<WallKeyId, (() => void) | null>>;
 
@@ -84,4 +86,29 @@ export function useWallKeys(handlers: WallHandlers): void {
   const ref = useRef(handlers);
   ref.current = handlers;
   useEffect(() => registerWallHandlers(ref), []);
+}
+
+/**
+ * Esc and the Wall's panels (#296). The ORDER of what Esc lets go of, one thing per press: a running drafting tool,
+ * then the selection (both the drafting keys' own Esc, left alone here), a modal or popover (theirs), a panel that
+ * keeps its own keys (`data-owns-keys`), then THE panel in front (`wall-nav`'s `panel`: the drawer, what is missing,
+ * issuing, what changed), which hands focus back to the control that opened it.
+ *
+ * It listens in the capture phase, before the drafting keys cancel a tool, so it sees the state as the key found it;
+ * it marks the event handled so the stepped sheet's own local Esc (chooser, title card) waits for the next press.
+ */
+export function panelEscape(event: KeyboardEvent): boolean {
+  if (event.key !== 'Escape' || event.defaultPrevented) return false;
+  if (runningCommand() || useDraftingSession.getState().selection.size > 0) return false;
+  if (openKeyboardOverlay() !== null) return false;
+  if (event.target instanceof Element && event.target.closest('[data-owns-keys]')) return false;
+  if (!closeFrontPanel()) return false;
+  event.preventDefault();
+  return true;
+}
+
+/** Bind {@link panelEscape} for as long as the Wall's face is up. */
+export function registerPanelEscape(): () => void {
+  window.addEventListener('keydown', panelEscape, true);
+  return () => window.removeEventListener('keydown', panelEscape, true);
 }

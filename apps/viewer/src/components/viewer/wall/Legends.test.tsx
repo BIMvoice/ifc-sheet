@@ -88,7 +88,7 @@ const printed = (ui: HTMLElement, number: string) => {
 
 beforeEach(() => {
   resetProject();
-  useWallNav.setState({ stepped: null, focus: null, visit: 0, drawer: true });
+  useWallNav.setState({ stepped: null, focus: null, visit: 0, panel: 'drawer' });
   useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
   startDrawingSet(null, HOUSE);
 });

@@ -14,7 +14,7 @@ import { FindingList } from '../sheets/FindingList';
 import { IssueForm } from '../sheets/IssueForm';
 import { WALL_SKIN } from '../sheets/set-skin';
 import { wallNav } from './finding-actions';
-import { setPanel } from './wall-nav';
+import { closeFrontPanel, setPanel } from './wall-nav';
 
 const frame = 'absolute inset-y-0 right-0 z-20 flex w-96 flex-col border-l border-sky-300/20 bg-[#08214a] text-sky-50 shadow-2xl';
 
@@ -23,7 +23,7 @@ function Header({ title }: { title: string }) {
   return (
     <header className="flex items-center gap-2 px-4 pb-2 pt-4">
       <p className="m-0 min-w-0 flex-1 truncate text-base text-white">{title}</p>
-      <button type="button" aria-label={t('wall.add.close')} onClick={() => setPanel(null)} className="rounded p-1 text-sky-200 hover:bg-sky-400/20"><X className="size-4" /></button>
+      <button type="button" aria-label={t('wall.add.close')} onClick={closeFrontPanel} className="rounded p-1 text-sky-200 hover:bg-sky-400/20"><X className="size-4" /></button>
     </header>
   );
 }

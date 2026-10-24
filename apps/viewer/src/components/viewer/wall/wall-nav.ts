@@ -11,6 +11,8 @@
 import { create } from 'zustand';
 import { emitWallStepped } from '@/lib/tours/events';
 
+export type WallPanel = 'drawer' | 'missing' | 'issue' | 'changed';
+
 interface WallNav {
   /** The sheet stepped into, or null on the wall. */
   stepped: string | null;
@@ -18,26 +20,50 @@ interface WallNav {
   focus: string | null;
   /** Bumped on every step, so arriving at the same sheet again starts it fresh. */
   visit: number;
-  drawer: boolean;
-  /** The panel from the top bar that is open: what is missing from the set, or issuing it. */
-  panel: 'missing' | 'issue' | null;
+  /**
+   * The ONE panel open on the right of the Wall, or null: the project drawer, what is missing from the set, issuing
+   * it, or what changed in the model. They share one place, so opening one replaces the one in front (#296).
+   */
+  panel: WallPanel | null;
   /** The split schedule whose parts are being reviewed element by element (#186), or null. */
   review: string | null;
 }
 
-export const useWallNav = create<WallNav>()(() => ({ stepped: null, focus: null, visit: 0, drawer: false, panel: null, review: null }));
+export const useWallNav = create<WallNav>()(() => ({ stepped: null, focus: null, visit: 0, panel: null, review: null }));
 
 export function stepInto(sheetId: string | null, focus: string | null = null): void {
   useWallNav.setState((s) => ({ stepped: sheetId, focus, visit: s.visit + 1 }));
   if (sheetId) emitWallStepped(sheetId);
 }
 
-export function setDrawer(open: boolean): void {
-  useWallNav.setState({ drawer: open });
+/** The control that had focus when the panel in front opened (it replaces the one before's): Esc hands focus back to it. */
+let opener: HTMLElement | null = null;
+
+/** Open `panel` (replacing any other), or close the one in front with null. Focus is left where it is. */
+export function setPanel(panel: WallPanel | null): void {
+  if (panel !== null && useWallNav.getState().panel !== panel) {
+    const active = document.activeElement;
+    opener = active instanceof HTMLElement && active !== document.body ? active : null;
+  }
+  useWallNav.setState({ panel });
+  if (panel === null) opener = null;
 }
 
-export function setPanel(panel: WallNav['panel']): void {
-  useWallNav.setState({ panel });
+/** Whether the project drawer is the panel in front. */
+export const useDrawerOpen = (): boolean => useWallNav((s) => s.panel === 'drawer');
+
+export function setDrawer(open: boolean): void {
+  if (open) setPanel('drawer');
+  else if (useWallNav.getState().panel === 'drawer') setPanel(null);
+}
+
+/** Close the panel in front and return focus to the control that opened it. False when none is open. */
+export function closeFrontPanel(): boolean {
+  if (useWallNav.getState().panel === null) return false;
+  const back = opener;
+  setPanel(null);
+  if (back?.isConnected) back.focus();
+  return true;
 }
 
 /** Open the review by element of the split schedule `scheduleId`, or close it with null. */
