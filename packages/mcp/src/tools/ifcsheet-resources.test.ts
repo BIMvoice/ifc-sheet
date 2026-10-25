@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
-import Ajv2020 from 'ajv/dist/2020.js';
+import { Ajv2020 } from 'ajv/dist/2020.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IfcParser } from '@ifc-lite/parser';
 import { serializeSetTemplate } from '@bimvoice/ifcsheet';

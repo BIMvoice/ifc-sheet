@@ -32,7 +32,6 @@ const bool: Schema = { type: 'boolean' };
 const obj: Schema = { type: 'object' };
 const positive: Schema = { type: 'number', exclusiveMinimum: 0 };
 const strings: Schema = { type: 'array', items: str };
-const point3: Schema = { type: 'array', items: num, minItems: 3, maxItems: 3 };
 const nullable = (schema: Schema): Schema => ({ anyOf: [{ type: 'null' }, schema] });
 
 const paper: Schema = {
@@ -62,6 +61,9 @@ const viewBase: Record<string, Schema> = {
   id: str, name: str, auto: bool, createdAt: num, viewDepth: nullable(num), showHidden: bool, detail: obj, graphics: obj, templateId: str, scale: positive, hiddenLayers: strings,
 };
 
+/** A view of `kind` must have `required` (written without if/then: a view of another kind passes). */
+const kindNeeds = (kind: string, required: string[]): Schema => ({ anyOf: [{ not: { properties: { kind: { const: kind } }, required: ['kind'] } }, { required }] });
+
 const view: Schema = {
   type: 'object',
   description: 'A view of the model: a plan, section, elevation, 3D (axonometric) view or a drafting view with no model behind it.',
@@ -76,10 +78,10 @@ const view: Schema = {
     number: num,
   },
   allOf: [
-    { if: { properties: { kind: { const: 'plan' } }, required: ['kind'] }, then: { required: ['level', 'cutHeight'] } },
-    { if: { properties: { kind: { const: 'section' } }, required: ['kind'] }, then: { required: ['plane'] } },
-    { if: { properties: { kind: { const: 'elevation' } }, required: ['kind'] }, then: { required: ['direction'] } },
-    { if: { properties: { kind: { const: '3d' } }, required: ['kind'] }, then: { required: ['viewpoint'] } },
+    kindNeeds('plan', ['level', 'cutHeight']),
+    kindNeeds('section', ['plane']),
+    kindNeeds('elevation', ['direction']),
+    kindNeeds('3d', ['viewpoint']),
   ],
 };
 

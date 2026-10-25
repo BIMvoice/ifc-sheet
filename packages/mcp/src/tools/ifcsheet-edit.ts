@@ -20,7 +20,7 @@ import {
 import { ifcsheetAddView } from './ifcsheet-add-view.js';
 import { getSheetSet, replaceSheetDocument } from './ifcsheet-store.js';
 import {
-  DOCUMENT_ID, DRY_RUN, dryPrefix, extentOf, findSheet, findView, invalid, optBoolean, optChoice, optNumber, optText, sheetListing, sheetsOf, text, unplacedViews, workingEntry,
+  DOCUMENT_ID, DRY_RUN, dryPrefix, extentOf, findSheet, findView, invalid, optBoolean, optChoice, optNumber, optText, sheetListing, sheetsOf, text, workingEntry,
 } from './ifcsheet-shared.js';
 import type { Tool } from './types.js';
 import { okResult } from './util.js';
