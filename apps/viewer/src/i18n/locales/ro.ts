@@ -40,6 +40,7 @@ import { tagFieldsRo } from '../catalogues/tag-fields.ro';
 import { roomScheduleRo } from '../catalogues/room-schedule.ro';
 import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { annotateAllRo } from '../catalogues/annotate-all.ro';
+import { setTemplateRo } from '../catalogues/set-template.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
 import { sheetTemplatesRo } from '../catalogues/sheet-templates.ro';
@@ -73,6 +74,7 @@ export default {
   ...printPreviewRo,
   ...tagFieldsRo,
   ...annotateAllRo,
+  ...setTemplateRo,
   ...draftingRo,
   ...keyboardShortcutsRo,
   ...sheetTemplatesRo,

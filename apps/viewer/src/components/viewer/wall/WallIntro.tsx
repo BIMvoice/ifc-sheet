@@ -14,6 +14,7 @@ import type { ModelExtent } from '@/project/drawing-set';
 import { useProjectStore } from '@/project/project-store';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 import { RecoveryOffer } from './RecoveryOffer';
+import { TemplateReport } from './SetTemplate';
 import { ReadinessList } from '../sheets/ReadinessList';
 import { WALL_SKIN } from '../sheets/set-skin';
 
@@ -56,6 +57,7 @@ export function WallIntro({ modelName, extent, onHang }: { modelName: string; ex
           <Chip>{t('wall.intro.sheets', { count: sheets.length })}</Chip>
           <Chip>{t('wall.intro.views', { count: views })}</Chip>
         </div>
+        <TemplateReport />
         <div className="mt-6 max-w-lg"><ReadinessList skin={WALL_SKIN} compact /></div>
         <button type="button" {...tourAnchor(TOUR_ANCHORS.wallHang)} onClick={onHang} className="mt-8 inline-flex items-center gap-3 rounded-md bg-sky-600 px-5 py-2.5 text-base text-white hover:bg-sky-500">
           {t('wall.intro.hang')} <ArrowRight className="size-4" />

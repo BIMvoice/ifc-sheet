@@ -99,6 +99,15 @@ export { boundsFromIndex, createEntityBoundsLookup, getEntityBounds, indexMeshes
 
 export { FRAMING_RULE, boxGap, farElementLabel, frameElements, frameEntities, type FarElement, type FramedElement, type Framing, type FramingOptions } from './framing.js';
 
+// Set templates (#21): a set's sheets as rules, applied to another model
+export {
+  ANNOTATION_COMMANDS, RULED_SERIES, captureSetTemplate, findByRule, layoutOf, planStoreys, ruleOf, ruledViews,
+  type AnnotationCommand, type Annotations, type CaptureInput, type RuledSeries, type ScheduleRule, type SetTemplate, type SheetLayoutRule, type SheetRule, type SlotRule, type ViewRule,
+} from './set-template.js';
+export { applySetTemplate, type TemplateSet, type TemplateSetInput } from './set-template-apply.js';
+export { SET_TEMPLATE_FILE_FORMAT, SET_TEMPLATE_FILE_SUFFIX, SET_TEMPLATE_FILE_VERSION, parseSetTemplate, serializeSetTemplate } from './set-template-file.js';
+export { SET_TEMPLATE_EN, describeTemplateNote, type TemplateNote, type TemplateNoteKey } from './set-template-notes.js';
+
 // The starting set (pure: an opened model's facts in, a document out)
 export { SET_SECTIONS, generateDefaultSet, type DefaultSet, type DefaultSetOptions, type SetModel, type SetNote } from './default-set.js';
 
