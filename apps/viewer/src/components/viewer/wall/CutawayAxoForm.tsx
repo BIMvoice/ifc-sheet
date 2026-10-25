@@ -11,12 +11,14 @@
 
 import { useState } from 'react';
 import { useTranslation } from '@/i18n';
+import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { AXONOMETRIC_PRESETS, DEFAULT_AXONOMETRIC_PRESET } from '@/project/axonometric';
 import { updateProjectView, useProjectStore } from '@/project/project-store';
 import { sameElevation } from '@/project/view-defaults';
 import { defaultPlanCutHeight } from '@/project/view-defaults';
 import type { AxonometricPreset, NewProjectView, ProjectLevel, ThreeDProjectView } from '@/project/types';
 import { WALL_FIELD } from './wall-type';
+import { SectionBoxFields } from './SectionBoxFields';
 
 /** The new cut-away view's settings, as `addProjectView` takes them. */
 export function cutawayAxoView(name: string, level: ProjectLevel, cutHeight: number, preset: AxonometricPreset): NewProjectView {
@@ -70,14 +72,18 @@ export function CutawayAxoForm({ onAdd }: { onAdd: (view: NewProjectView) => voi
 export function CutawayCard({ view }: { view: ThreeDProjectView }) {
   const { t } = useTranslation();
   const levels = useProjectStore((s) => s.levels);
+  const meshes = useDrawingRuntime().geometryResult?.meshes ?? null;
   const storey = view.cutaway?.storey;
   const [height, setHeight] = useState<string | null>(null);
-  if (!storey) return null;
+  if (!view.cutaway) return null;
+  const box = <SectionBoxFields view={view} meshes={meshes} />;
+  if (!storey) return box;
   const index = levels.findIndex((l) => sameElevation(l.elevation, storey.level.elevation));
   const set = (patch: { level?: ProjectLevel; cutHeight?: number }): void => {
     updateProjectView(view.id, { cutaway: { ...view.cutaway, storey: { ...storey, ...patch } } });
   };
   return (
+    <>
     <fieldset className="space-y-2">
       <legend>{t('cutawayAxo.card')}</legend>
       <label className="block">
@@ -103,5 +109,7 @@ export function CutawayCard({ view }: { view: ThreeDProjectView }) {
       </label>
       <p className="m-0 text-xs text-sky-300">{t('cutawayAxo.scaleNote', { scale: view.scale ?? 100 })}</p>
     </fieldset>
+    {box}
+    </>
   );
 }
