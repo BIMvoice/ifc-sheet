@@ -18,6 +18,7 @@ import { boqRo } from '../catalogues/boq.ro';
 import { cadLayersRo } from '../catalogues/cad-layers.ro';
 import { catalogueRo } from '../catalogues/catalogue.ro';
 import { checkRo } from '../catalogues/check.ro';
+import { classificationRo } from '../catalogues/classification.ro';
 import { colourSchemeRo } from '../catalogues/colour-scheme.ro';
 import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
@@ -65,6 +66,7 @@ export default {
   ...cadLayersRo,
   ...catalogueRo,
   ...checkRo,
+  ...classificationRo,
   ...colourSchemeRo,
   ...cutawayAxoRo,
   ...draftingRo,

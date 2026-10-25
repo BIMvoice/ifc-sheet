@@ -4,11 +4,9 @@
 
 import type { TranslationKey } from '../en';
 import type { TranslationValue } from '../types';
-import { classificationRo } from './classification.ro';
 
 /** Romanian for `catalogue.en.ts`. Term choices: `../ro-glossary.md`. */
 export const catalogueRo = {
-  ...classificationRo,
   'library.standard.title': 'Standard grafic',
   'library.standard.hint': 'Grosimile liniilor și dimensiunile textelor de pe toate planșele, pe ecran, la tipărire și în DXF. Alegerea unui standard adaugă stilurile lui de text și de cotare și le selectează pentru adnotările noi; stilurile dumneavoastră, inclusiv Standard, rămân neschimbate.',
   'library.standard.unknown': 'Fișierul indică standardul grafic „{id}”, pe care această versiune nu îl are. Planșele folosesc în schimb {fallback}.',

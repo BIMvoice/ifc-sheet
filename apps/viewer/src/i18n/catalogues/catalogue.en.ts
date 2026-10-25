@@ -2,11 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import type { TranslationValue } from '../types';
-import { classificationEn } from './classification.en';
 
 export const catalogueEn = {
-  // The classification mapping's editor, schedule card and tag fields (#89): its own file, part of the library's words.
-  ...classificationEn,
   'standards.tab.types': 'Annotation types',
   'standards.tab.symbols': 'Symbols',
   'standards.tab.library': 'Library',
