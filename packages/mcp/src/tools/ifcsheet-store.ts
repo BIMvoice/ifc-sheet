@@ -9,7 +9,7 @@
  * the session and one session never sees another's handles.
  */
 
-import type { DefaultSet } from '@bimvoice/ifcsheet';
+import type { BoqArticle, DefaultSet, ProjectDocument } from '@bimvoice/ifcsheet';
 import type { OpenedModel } from '@bimvoice/ifcsheet/headless';
 import type { ModelRegistry, ToolContext } from '../context.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
@@ -21,12 +21,30 @@ export interface SheetModelEntry {
   id: string;
   name: string;
   model: OpenedModel;
+  /** The IFC as read (the handover package carries it unchanged). */
+  bytes: Uint8Array;
+  /** Where the IFC was read from, when it came from a file: no tool writes to this path. */
+  sourcePath?: string;
 }
 
+/** A schedule on its own sheet. Its rows are read from the model when the set is drawn, so it is never stale. */
+export interface SetSchedule {
+  id: string;
+  kind: 'rooms' | 'boq';
+  sheetId: string;
+  locale: string;
+  /** The project's articles, for a bill of quantities (read from the project file the tool was given). */
+  boqArticles?: readonly BoqArticle[];
+}
+
+/** The session's copy of one drawing set. `set` is replaced by every tool that edits it (the document is never mutated in place). */
 export interface SheetSetEntry {
   id: string;
   modelId: string;
+  /** The model the set is drawn from (kept with the set, so a tool that edits the entry edits the one the next call reads). */
+  model: SheetModelEntry;
   set: DefaultSet;
+  schedules: SetSchedule[];
 }
 
 interface SheetStore {
@@ -47,9 +65,9 @@ function storeOf(ctx: ToolContext): SheetStore {
   return store;
 }
 
-export function addSheetModel(ctx: ToolContext, name: string, model: OpenedModel): SheetModelEntry {
+export function addSheetModel(ctx: ToolContext, name: string, model: OpenedModel, source: { bytes: Uint8Array; path?: string }): SheetModelEntry {
   const store = storeOf(ctx);
-  const entry = { id: `sheetmodel-${store.nextModel++}`, name, model };
+  const entry: SheetModelEntry = { id: `sheetmodel-${store.nextModel++}`, name, model, bytes: source.bytes, ...(source.path ? { sourcePath: source.path } : {}) };
   store.models.set(entry.id, entry);
   while (store.models.size > MAX_SHEET_MODELS) {
     const oldest = store.models.keys().next().value as string;
@@ -61,7 +79,9 @@ export function addSheetModel(ctx: ToolContext, name: string, model: OpenedModel
 
 export function addSheetSet(ctx: ToolContext, modelId: string, set: DefaultSet): SheetSetEntry {
   const store = storeOf(ctx);
-  const entry = { id: `sheetset-${store.nextSet++}`, modelId, set };
+  const model = store.models.get(modelId);
+  if (!model) throw new ToolExecutionError({ code: ToolErrorCode.MODEL_NOT_FOUND, message: `No drawing-set model '${modelId}'.` });
+  const entry: SheetSetEntry = { id: `sheetset-${store.nextSet++}`, modelId, model, set, schedules: [] };
   store.sets.set(entry.id, entry);
   return entry;
 }
@@ -77,14 +97,23 @@ export function getSheetModel(ctx: ToolContext, id: string): SheetModelEntry {
   });
 }
 
-export function getSheetSet(ctx: ToolContext, id: string): SheetSetEntry & { model: SheetModelEntry } {
+export function getSheetSet(ctx: ToolContext, id: string): SheetSetEntry {
   const store = storeOf(ctx);
   const found = store.sets.get(id);
-  const model = found ? store.models.get(found.modelId) : undefined;
-  if (found && model) return { ...found, model };
+  if (found && store.models.has(found.modelId)) return found;
   throw new ToolExecutionError({
     code: ToolErrorCode.ENTITY_NOT_FOUND,
     message: `No drawing set '${id}'. Call ifcsheet_generate_set and pass the document_id it returns.`,
     details: { available: [...store.sets.keys()] },
   });
+}
+
+/** Puts `document` in the set (the levels and notes stay) and returns the entry; the next tool call sees it. */
+export function replaceSheetDocument(entry: SheetSetEntry, document: ProjectDocument): void {
+  entry.set = { ...entry.set, document };
+}
+
+/** Every path an opened model was read from: what no tool may write over. */
+export function sourcePaths(ctx: ToolContext): string[] {
+  return [...storeOf(ctx).models.values()].flatMap((m) => (m.sourcePath ? [m.sourcePath] : []));
 }

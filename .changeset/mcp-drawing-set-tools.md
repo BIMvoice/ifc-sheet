@@ -1,0 +1,6 @@
+---
+"@bimvoice/ifcsheet": minor
+"@ifc-lite/mcp": minor
+---
+
+The drawing-set MCP tools can build and edit a set, not only print the starting one (#165, second slice). New tools: `ifcsheet_list_sheets`, `ifcsheet_add_view` (plan, elevation, section by plane or by line, axonometric with a storey or box cut-away), `ifcsheet_place_view` (on a sheet, at a scale and slot, with a fit check), `ifcsheet_set_title_block`, `ifcsheet_renumber` (with a dry run), `ifcsheet_add_schedule` (rooms, bill of quantities), `ifcsheet_apply_template` (`.bvset`), `ifcsheet_export_dxf`, `ifcsheet_issue_set` (PDF, DXF, drawing register, schedules as CSV, optional handover ZIP) and `ifcsheet_save_project` / `ifcsheet_load_project` (`.ifclite-project.json`). The session keeps the engine's project document and every editing tool replaces it, so the PDF, DXF and issue draw the latest edit. `ifcsheet_export_pdf` now also draws schedule sheets, and refuses to write over an `.ifc` file or the model that was opened. The engine gains `roomScheduleRows` (the room schedule as cells, which `roomScheduleText` now uses), `boqResult` (the one bill-of-quantities sum, used by `ifcsheet boq`) and `dxfName` (the DXF file name of `ifcsheet build --dxf`), exported for the tools; the command line's output is unchanged.

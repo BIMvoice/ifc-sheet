@@ -147,7 +147,7 @@ export { SET_SECTIONS, generateDefaultSet, type DefaultSet, type DefaultSetOptio
 // Rooms and their areas (#42): the one rule for which space is a room and what its area is, and the room and area schedule built on it
 export { ROOM_AREA_NAMES, ROOM_AREA_QTO, meshFootprintArea, pickArea, roomArea, spaceRole, type AreaSource, type FootprintMesh, type RoomArea, type SpaceRole } from './room-areas.js';
 export {
-  ROOM_SCHEDULE_EN, ROOM_SCHEDULE_RO, roomSchedule, roomScheduleCsv, roomScheduleLines, roomScheduleText, roomScheduleWords,
+  ROOM_SCHEDULE_EN, ROOM_SCHEDULE_RO, roomSchedule, roomScheduleCsv, roomScheduleLines, roomScheduleRows, roomScheduleText, roomScheduleWords,
   type RoomRecord, type RoomSchedule, type RoomScheduleLevel, type RoomScheduleLine, type RoomScheduleWords, type ScheduleLevelInfo,
 } from './room-schedule.js';
 export { estimatedAreas, type EstimatedAreas } from './room-estimates.js';

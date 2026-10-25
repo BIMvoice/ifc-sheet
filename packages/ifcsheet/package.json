@@ -65,6 +65,16 @@
       "import": "./dist/headless.js",
       "default": "./dist/headless.js"
     },
+    "./sheet-file-name": {
+      "types": "./dist/sheet-file-name.d.ts",
+      "import": "./dist/sheet-file-name.js",
+      "default": "./dist/sheet-file-name.js"
+    },
+    "./cli-boq": {
+      "types": "./dist/cli-boq.d.ts",
+      "import": "./dist/cli-boq.js",
+      "default": "./dist/cli-boq.js"
+    },
     "./handover": {
       "types": "./dist/handover.d.ts",
       "import": "./dist/handover.js",

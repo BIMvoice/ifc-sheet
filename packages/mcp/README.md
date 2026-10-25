@@ -121,7 +121,7 @@ The same `npx` command works as a stdio server in any MCP-aware client.
 | bSDD | `bsdd_search`, `bsdd_class`, `bsdd_property_sets`, `bsdd_match` |
 | Diff | `model_diff` (`by_content` for content-keyed matching), `quantity_diff` |
 | Export | `export_ifc`, `export_csv`, `export_json`, `export_glb`, `export_obj`, `export_ifcx`, `export_pdf_report` |
-| Drawing sets | `ifcsheet_open_model`, `ifcsheet_generate_set`, `ifcsheet_export_pdf`, `ifcsheet_check_readiness` |
+| Drawing sets | `ifcsheet_open_model`, `ifcsheet_generate_set`, `ifcsheet_apply_template`, `ifcsheet_list_sheets`, `ifcsheet_add_view`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_renumber`, `ifcsheet_add_schedule`, `ifcsheet_export_pdf`, `ifcsheet_export_dxf`, `ifcsheet_issue_set`, `ifcsheet_save_project`, `ifcsheet_load_project`, `ifcsheet_check_readiness` |
 | Viewer | `viewer_ask`, `viewer_open`, `viewer_close`, `viewer_status`, `viewer_colorize`, `viewer_isolate`, `viewer_hide`, `viewer_show`, `viewer_reset`, `viewer_fly_to`, `viewer_set_section`, `viewer_clear_section`, `viewer_color_by_storey`, `viewer_color_by_property`, `viewer_get_selection`, `viewer_wait_for_selection`, `viewer_describe_selection` |
 
 `join_walls` joins two straight walls in the same placement frame through the
@@ -197,15 +197,33 @@ Pre-baked prompts ship the BIM expertise:
 
 ## Drawing sets (IfcSheet)
 
-Three tools lay out and print the starting drawing set of a model, on the
-`@bimvoice/ifcsheet` engine (issue #165, first slice). They keep their own
-handles and do not need `model_load`.
+These tools lay out, edit and print the drawing set of a model, on the
+`@bimvoice/ifcsheet` engine (issue #165). They keep their own handles and do
+not need `model_load`. A set is held by the session as the engine's project
+document: `ifcsheet_generate_set`, `ifcsheet_apply_template` and
+`ifcsheet_load_project` each make one (a `document_id`), and the editing tools
+replace it, so the PDF, DXF and issue always draw the latest edit. Lengths are
+metres in the viewer frame (X east, Y up, Z south), paper sizes millimetres, a
+scale is its denominator (100 is 1:100). The tools write only to paths the
+caller gives, inside `--allow`, and never to an `.ifc` file or the model that
+was opened.
 
 | Tool | Input | Returns |
 | --- | --- | --- |
-| `ifcsheet_open_model` | `file_path` or `ifc_base64` (exactly one), optional `name` | `model_id`, project name, storeys with elevations, element and mesh counts |
+| `ifcsheet_open_model` | `file_path` or `ifc_base64` (exactly one), optional `name` | `model_id`, project name, storeys with elevations, element and mesh counts, the building's `extent` |
 | `ifcsheet_generate_set` | `model_id`, optional `name` | `document_id`, the sheets (number, name, paper, viewports), the views (kind, level) and the full project document as JSON |
 | `ifcsheet_export_pdf` | `document_id`, optional `file_path` | page count, sheet numbers, byte size and the written `file_path`; without `file_path` the PDF as `pdf_base64` |
+| `ifcsheet_apply_template` | `model_id`, `template_path` or `template_json` (a `.bvset`), optional `name` | a new `document_id`, the sheets and the notes of what the rules met; as `ifcsheet build --template` |
+| `ifcsheet_list_sheets` | `document_id` | per sheet: id, number, name, paper, the views on it (slot, kind, scale); the views not placed; the title block fields |
+| `ifcsheet_add_view` | `document_id`, `kind` (`plan` with `level`, `elevation` with `direction`, `section` by `axis` and `offset_m` or by a line `from`/`to`, `axonometric` with `preset`, optionally cut away by `cut_level` and `cut_height_m` or a box) | the new view; it is not on a sheet yet |
+| `ifcsheet_place_view` | `document_id`, `view`, optional `sheet`, `scale`, `slot` | the sheet it is on; without `sheet` the engine's rule picks or makes one; errors when the views do not fit at the scale |
+| `ifcsheet_set_title_block` | `document_id`, `fields` (client, drawnBy, project, date...), optional `sheet` | the fields in force; project-wide, or one sheet's own |
+| `ifcsheet_renumber` | `document_id`, optional `preset` (`default`, `sequential`), `discipline`, `overrides`, `dry_run` | the old to new numbers |
+| `ifcsheet_add_schedule` | `document_id`, `kind` (`rooms`, or `boq` with `project_path`/`project_json`), optional `paper`, `locale` | a schedule sheet (A-601...); the rows come from the model each time the set is drawn |
+| `ifcsheet_export_dxf` | `document_id`, `directory`, optional `sheet` | a DXF per sheet, named like `ifcsheet build --dxf` |
+| `ifcsheet_issue_set` | `document_id`, `directory`, optional `handover`, `pattern` | the PDF, a DXF per sheet, `register.csv`, the schedules as CSV and, with `handover`, `handover.zip` (with the IFC as opened) |
+| `ifcsheet_save_project` | `document_id`, `file_path` (`.json`) | writes `.ifclite-project.json`; what a loaded file held besides the set is written back unchanged |
+| `ifcsheet_load_project` | `model_id`, `project_path` or `project_json` | a new `document_id` from a saved project |
 | `ifcsheet_check_readiness` | `model_id` | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check` |
 
 Add the server to Claude Desktop (`claude_desktop_config.json`) or Cursor with
