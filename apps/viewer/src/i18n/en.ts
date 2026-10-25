@@ -84,7 +84,6 @@ import { ifcsheetTourEn } from './catalogues/ifcsheet-tour.en';
 import { reviewEn } from './catalogues/review.en';
 import { sheetTemplatesEn } from './catalogues/sheet-templates.en';
 import { boqEn } from './catalogues/boq.en';
-import { listScheduleEn } from './catalogues/list-schedule.en';
 import { wallFindEn } from './catalogues/wall-find.en';
 import { wallKeysEn } from './catalogues/wall-keys.en';
 import { wallKeyPresetsEn } from './catalogues/wall-key-presets.en';
@@ -319,7 +318,6 @@ export const en = {
   ...reviewEn,
   ...sheetTemplatesEn,
   ...boqEn,
-  ...listScheduleEn,
   ...wallFindEn,
   ...wallKeysEn,
   ...wallKeyPresetsEn,

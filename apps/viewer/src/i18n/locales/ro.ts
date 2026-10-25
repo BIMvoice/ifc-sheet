@@ -54,7 +54,6 @@ import { draftingRo } from '../catalogues/drafting.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
 import { sheetTemplatesRo } from '../catalogues/sheet-templates.ro';
 import { boqRo } from '../catalogues/boq.ro';
-import { listScheduleRo } from '../catalogues/list-schedule.ro';
 
 export default {
   ...wallRo,
@@ -99,6 +98,5 @@ export default {
   ...keyboardShortcutsRo,
   ...sheetTemplatesRo,
   ...boqRo,
-  ...listScheduleRo,
   ...roomScheduleRo,
 } satisfies Catalogue;
