@@ -30,7 +30,7 @@ interface Props {
 export function FindingList({ nav, skin, readOnMount = false, onLeave }: Props) {
   const { t } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
-  const { findings, busy, failure, refresh, fix } = useFindings();
+  const { findings, busy, failure, refresh, fix, remove, reattach } = useFindings();
   useEffect(() => { if (readOnMount) refresh(); }, []);
   return (
     <>
@@ -46,6 +46,12 @@ export function FindingList({ nav, skin, readOnMount = false, onLeave }: Props) 
                 {g.findings.map((f, i) => (
                   <li key={`${f.kind}-${f.viewId ?? ''}-${f.draftId ?? ''}-${i}`} className="flex items-start justify-between gap-2 py-0.5">
                     <button type="button" className={skin.link} onClick={() => { if (goToFinding(f, nav)) onLeave?.(); }}>{describeFinding(f)}</button>
+                    {f.remedies?.length ? (
+                      <span className="flex shrink-0 gap-1">
+                        {f.remedies.includes('reattach') ? <button type="button" className={skin.fixButton} disabled={busy} title={t('check.remedy.reattachHint')} onClick={() => { onLeave?.(); void reattach(f, nav); }}>{t('check.remedy.reattach')}</button> : null}
+                        {f.remedies.includes('delete') ? <button type="button" className={skin.fixButton} disabled={busy} title={t('check.remedy.deleteHint')} onClick={() => remove(f)}>{t('check.remedy.delete')}</button> : null}
+                      </span>
+                    ) : null}
                     {f.fix ? <button type="button" className={skin.fixButton} disabled={busy} onClick={() => { onLeave?.(); void fix(f, nav); }}>{t('check.fix')} {f.fix}</button> : null}
                   </li>
                 ))}

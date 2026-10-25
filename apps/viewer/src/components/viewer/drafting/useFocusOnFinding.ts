@@ -32,6 +32,12 @@ export function useFocusOnFinding(
     const timer = setTimeout(() => {
       const el = containerRef.current;
       if (!el) return;
+      if (request.box) {
+        clearFocus();
+        const fit = focusBox([[request.box.min, request.box.max]]);
+        if (fit) setViewTransform(fitBox(fit, el.getBoundingClientRect(), axis));
+        return;
+      }
       const wanted = new Set(request.guids);
       const found = [
         ...viewElementsOf().filter((e) => wanted.has(renderIdGlobalId(e.renderId) ?? '')).map((e) => ({ id: e.renderId, ring: e.ring })),

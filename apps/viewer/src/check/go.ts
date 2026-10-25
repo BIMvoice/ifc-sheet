@@ -10,6 +10,7 @@
  * annotation it is about, or start the one-action command that fixes it.
  */
 
+import { editDrafts } from '@/drafting/draft-store';
 import { draftCommandByName } from '@/drafting/commands/registry';
 import { startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { activateDocumentTab } from '@/project/open-view';
@@ -69,8 +70,33 @@ export function goToFinding(f: Finding, nav: FindingNav): boolean {
   if (!nav.open(f)) return false;
   const { viewId, draftId } = f;
   if (viewId && !draftId && f.guids?.length) requestFocus(viewId, f.guids);
-  if (viewId && draftId) void whenInView(viewId, false).then((ok) => ok && useDraftingSession.setState({ selection: new Set([draftId]) }));
+  if (viewId && draftId) {
+    // An annotation whose element is gone has no element to zoom to: zoom to the annotation itself.
+    if (f.box) requestFocus(viewId, [], f.box);
+    void whenInView(viewId, false).then((ok) => ok && useDraftingSession.setState({ selection: new Set([draftId]) }));
+  }
   return true;
+}
+
+/** Takes the annotation a finding is about off the drawing, as one undo step; the finding is gone when the set is read again. False when there is none. */
+export function removeFindingAnnotation(f: Finding): boolean {
+  const { draftId } = f;
+  if (!draftId || !f.remedies?.includes('delete')) return false;
+  editDrafts({ remove: new Set([draftId]) });
+  useDraftingSession.setState({ selection: new Set() });
+  return true;
+}
+
+/** Goes to the annotation and starts REATTACH there: the next click on an element points it at that element. */
+export async function reattachOutcome(f: Finding, nav: FindingNav): Promise<FixOutcome> {
+  const { viewId, draftId } = f;
+  if (!viewId || !draftId || !f.remedies?.includes('reattach')) return 'noFix';
+  if (!goToFinding(f, nav)) return 'noPlace';
+  const waited = await waitForView(viewId, true);
+  if (waited !== 'ready') return waited === 'error' ? 'drawingFailed' : 'drawingLate';
+  useDraftingSession.setState({ selection: new Set([draftId]) });
+  const def = draftCommandByName('REATTACH');
+  return def !== undefined && startDraftCommand(def.id) ? 'done' : 'notStarted';
 }
 
 /** What came of a fix: done, or why not (each has its message, `check.fix.<outcome>`). */
