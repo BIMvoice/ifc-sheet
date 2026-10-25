@@ -13,6 +13,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from './index.js';
+import { dxfName } from './sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from './handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, readinessWithProject, sheetGraphics, type ProjectFacts } from './headless.js';
 import { describeReadiness } from './readiness.js';
@@ -88,15 +89,6 @@ async function packageVersion(): Promise<string> {
   const text = await readFile(new URL('../package.json', import.meta.url), 'utf8');
   return (JSON.parse(text) as { version: string }).version;
 }
-
-/** A file name made of the sheet number (A-101), safe on every file system. */
-const dxfName = (number: string, used: Set<string>): string => {
-  const base = number.replace(/[^A-Za-z0-9._-]+/g, '_') || 'sheet';
-  let name = base;
-  for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base}-${n}`;
-  used.add(name.toLowerCase());
-  return `${name}.dxf`;
-};
 
 interface BuildArgs {
   model: string;

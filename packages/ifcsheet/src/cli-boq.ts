@@ -10,12 +10,12 @@
 
 import { readFile } from 'node:fs/promises';
 import { escapeCsvCell } from '@ifc-lite/export';
-import { BOQ_UNIT_TEXT, boqPropertyNames } from './boq.js';
+import { BOQ_UNIT_TEXT, boqPropertyNames, type BoqArticle } from './boq.js';
 import { boqMissing, computeBoq, type BoqResult } from './boq-compute.js';
 import { boqLineText, boqNotes, boqTable, describeBoqProblem, tidy, type BoqCell, type BoqTable } from './boq-table.js';
 import { boqSayFor } from './boq-words.js';
 import { readBoqElements, storeSource } from './boq-read.js';
-import { openModel } from './model.js';
+import { openModel, type OpenedModel } from './model.js';
 import { readProjectFile } from './project-read.js';
 import type { CliIo } from './cli.js';
 
@@ -46,6 +46,11 @@ export function boqCsv(table: BoqTable, locale: string): string {
   return `﻿${[line(table.header), ...table.rows.map(line), ...table.notes.map((n) => line([n]))].join('\r\n')}\r\n`;
 }
 
+/** The sums of `articles` over a model's entity tables: the one computation of `ifcsheet boq` and the MCP schedule. */
+export function boqResult(dataStore: OpenedModel['dataStore'], articles: readonly BoqArticle[]): BoqResult {
+  return computeBoq(readBoqElements(storeSource('model', dataStore), new Set(boqPropertyNames(articles))), articles);
+}
+
 function resultJson(file: string, project: string, result: BoqResult, locale: string): string {
   const say = boqSayFor(locale);
   return JSON.stringify({
@@ -74,7 +79,7 @@ export async function boq(args: BoqArgs, io: CliIo): Promise<number> {
   }
   // The quantities are read from the entity tables: no geometry is needed or measured.
   const model = await openModel(bytes, { geometry: false });
-  const result = computeBoq(readBoqElements(storeSource('model', model.dataStore), new Set(boqPropertyNames(project.boqArticles))), project.boqArticles);
+  const result = boqResult(model.dataStore, project.boqArticles);
   const say = boqSayFor(args.locale);
   if (args.json) io.stdout(`${resultJson(args.model, args.project, result, args.locale)}\n`);
   else if (args.csv) io.stdout(boqCsv(boqTable(result, say, { detail: args.detail }), args.locale));

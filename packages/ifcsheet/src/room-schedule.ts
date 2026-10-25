@@ -133,10 +133,15 @@ export function roomScheduleLines(schedule: RoomSchedule, words: RoomScheduleWor
 
 const NONE = '–';
 
+/** The table as cells of text, the header row first: number, room, level, area (figures written for `locale`, `–` for a room with none). What the text, and a sheet that prints the schedule, are made of. */
+export function roomScheduleRows(schedule: RoomSchedule, locale: SheetLocale = 'en'): string[][] {
+  const words = roomScheduleWords(languageOf(locale));
+  return [[words.number, words.room, words.level, words.area], ...roomScheduleLines(schedule, words).map((l) => [l.number, l.name, l.kind === 'room' ? l.level : '', l.area === null ? NONE : sheetNumber(locale, l.area, 2, { kind: 'area' })])];
+}
+
 /** The table as aligned text, areas written in `locale` ("12,50" in Romanian). */
 export function roomScheduleText(schedule: RoomSchedule, locale: SheetLocale = 'en'): string {
-  const words = roomScheduleWords(languageOf(locale));
-  const rows = [[words.number, words.room, words.level, words.area], ...roomScheduleLines(schedule, words).map((l) => [l.number, l.name, l.kind === 'room' ? l.level : '', l.area === null ? NONE : sheetNumber(locale, l.area, 2, { kind: 'area' })])];
+  const rows = roomScheduleRows(schedule, locale);
   const widths = rows[0].map((_, c) => Math.max(...rows.map((r) => [...r[c]].length)));
   const pad = (text: string, c: number) => (c === 3 ? text.padStart(widths[c]) : text.padEnd(widths[c]));
   return rows.map((r) => r.map((text, c) => pad(text, c)).join('  ').trimEnd()).join('\n');
