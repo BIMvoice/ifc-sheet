@@ -12,7 +12,9 @@
  *   1. the view's graphic override preset (`presetId`), including its property rules (`FireRating >= 60`): they read the
  *      element's properties through `propertiesOf`;
  *   2. the cut face's building material (`materialFill`, a fill only);
- *   3. the view's category graphics, its template's under them (the caller passes `resolveViewGraphics`'s result);
+ *   3. the view's category graphics, its template's under them (the caller passes `resolveViewGraphics`'s result), and between
+ *      the two the template's mapping (#31): its class rules, then its material rules (a material says a fill only). The template's
+ *      own category graphics are the fallback for what is unmapped; the view's own category graphics beat the mapping;
  *   4. the element's phase (`phaseStyle`, the web app's; the command line draws no phases);
  *   5. the element's own override (#32), from `resolveElementGraphics`;
  *   6. a colour scheme's fill (#92), the strongest word on a face;
@@ -28,7 +30,8 @@
 import { BUILT_IN_PRESETS, GraphicOverrideEngine, ifcTypeCriterion, type ElementData, type GraphicOverrideRule, type OverrideCriteria, type OverrideCriterion } from '@ifc-lite/drawing-2d';
 import { elementShown, lineHidden, resolveElementGraphics, type ElementStyle } from './element-graphics.js';
 import { VIEW_CATEGORY_CLASSES } from './view-templates.js';
-import type { CategoryGraphics, CategoryLineWeight, PhaseId, PhaseStyle, ViewGraphics } from './view-graphics-types.js';
+import { itemRules } from './style-rules.js';
+import type { CategoryGraphics, CategoryLineWeight, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRuleStyle, ViewGraphics } from './view-graphics-types.js';
 
 /** A weight word as a pen pair: the cut line and the line seen beyond the cut, paper mm. */
 export interface WeightPair {
@@ -127,6 +130,8 @@ export interface StyleItem {
   schemeColour?: string;
   /** The fill its building material gives a cut face (null: none, the paper shows). */
   materialFill?: string | null;
+  /** The IfcMaterial a cut face is a band of (the drawing's `materialId`): what a template's material rules are matched on, through `materialOf`. */
+  materialId?: number;
 }
 
 /** Which pen a line draws with. A cut face's outline is `cut`. */
@@ -148,7 +153,7 @@ export interface ItemStyle {
 
 export interface ViewStyleInputs {
   /** The view's graphics as `resolveViewGraphics` gives them (its template's, then its own). */
-  graphics: ViewGraphics | undefined;
+  graphics: ResolvedViewGraphics | undefined;
   /** Default: `PEN_TABLE`. A project's graphic standard brings its own. */
   pens?: PenTable;
   /** An element's properties, for the preset's property rules. */
@@ -157,6 +162,8 @@ export interface ViewStyleInputs {
   globalIdOf?: (entityId: number) => string | null | undefined;
   /** How a phase draws in this view (the web app's `phaseStyle`). */
   phaseStyle?: (phase: PhaseId) => PhaseStyle;
+  /** The name of the IfcMaterial `materialId` of an element is: what a template's material rules match. Without it material rules say nothing. */
+  materialOf?: (entityId: number, materialId: number) => string | null | undefined;
   /** The last word on a colour (a linked model drawn halftone). */
   ink?: (colour: string, entityId: number | undefined) => string;
 }
@@ -179,6 +186,10 @@ const NO_ELEMENT = Object.freeze({}) as ElementStyle['own'];
 interface Entity {
   visible: boolean;
   category: CategoryGraphics | undefined;
+  /** The view's own word on the category, which the template's mapping does not beat (the category itself when there is no mapping). */
+  viewCategory: CategoryGraphics | undefined;
+  classStyle: StyleRuleStyle;
+  materialStyle: StyleRuleStyle;
   own: ElementStyle['own'];
   phase: PhaseStyle | null;
   rule: Ruled;
@@ -192,6 +203,7 @@ export function viewStyler(inputs: ViewStyleInputs): ViewStyler {
   const { graphics, propertiesOf, globalIdOf, phaseStyle, ink } = inputs;
   const pens = inputs.pens ?? PEN_TABLE;
   const rules = presetRules(graphics);
+  const styleRules = graphics?.styleRules?.length ? graphics.styleRules : undefined;
   const engine = rules.length ? new GraphicOverrideEngine(rules) : null;
   const readsProperties = rulesReadProperties(rules);
   const linesHidden = (graphics?.hiddenLines?.length ?? 0) > 0;
@@ -211,16 +223,22 @@ export function viewStyler(inputs: ViewStyleInputs): ViewStyler {
   const entityOf = (item: StyleItem): Entity => {
     let byKey = entities.get(item.entityId);
     if (!byKey) entities.set(item.entityId, (byKey = new Map()));
-    const key = `${item.ifcType ?? ''}|${item.phase ?? ''}`;
+    const key = `${item.ifcType ?? ''}|${item.phase ?? ''}|${styleRules && item.materialId !== undefined ? item.materialId : ''}`;
     let e = byKey.get(key);
     if (e) return e;
     const categoryId = item.ifcType ? CATEGORY_OF.get(item.ifcType.toUpperCase()) : undefined;
     const globalId = item.entityId !== undefined && globalIdOf ? globalIdOf(item.entityId) : undefined;
     // `styledDrawing` stamps the element's style on each of its items; the same answer for all of them.
     const element = item.elementStyle ?? (globalId ? resolveElementGraphics(graphics, globalId, item.ifcType) : null);
+    const materialName = styleRules && item.materialId !== undefined && item.entityId !== undefined ? inputs.materialOf?.(item.entityId, item.materialId) : null;
+    const { classStyle, materialStyle } = itemRules(styleRules, item.ifcType, materialName);
+    const category = categoryId ? graphics?.categories?.[categoryId] : undefined;
     e = {
       visible: element ? element.visible : elementShown(graphics, globalId, item.ifcType),
-      category: categoryId ? graphics?.categories?.[categoryId] : undefined,
+      category,
+      viewCategory: styleRules ? (categoryId ? graphics?.ownCategories?.[categoryId] : undefined) : category,
+      classStyle,
+      materialStyle,
       own: element?.own ?? NO_ELEMENT,
       phase: item.phase && phaseStyle ? phaseStyle(item.phase) : null,
       rule: byRules(item),
@@ -233,23 +251,23 @@ export function viewStyler(inputs: ViewStyleInputs): ViewStyler {
   const mm = (weight: CategoryLineWeight | number, kind: 'cut' | 'projection') => (typeof weight === 'number' ? (kind === 'cut' ? weight : weight / 2) : pens.weights[weight][kind]);
 
   const resolve = (e: Entity, item: StyleItem, isFace: boolean, kind: PenKind, visible: boolean): ItemStyle => {
-    const { own, phase, category, rule } = e;
+    const { own, phase, category, viewCategory, classStyle, materialStyle, rule } = e;
     const colour = (c: string) => (ink ? ink(c, item.entityId) : c);
-    const stroke = colour(own.lineColor ?? phase?.lineColor ?? category?.lineColor ?? rule.stroke ?? DEFAULT_INK);
+    const stroke = colour(own.lineColor ?? phase?.lineColor ?? viewCategory?.lineColor ?? classStyle.lineColor ?? category?.lineColor ?? rule.stroke ?? DEFAULT_INK);
     let weight: number;
     let dash: readonly number[];
     if (kind === 'hidden') {
       weight = pens.pens.hidden;
       dash = HIDDEN_DASH_MM;
     } else {
-      const word = (kind === 'cut' ? own.cutWeight : own.projectionWeight) ?? phase?.lineWeight ?? category?.lineWeight ?? rule.weight;
+      const word = (kind === 'cut' ? own.cutWeight : own.projectionWeight) ?? phase?.lineWeight ?? viewCategory?.lineWeight ?? classStyle.lineWeight ?? category?.lineWeight ?? rule.weight;
       weight = word !== undefined ? mm(word, kind) : kind === 'cut' ? pens.pens.cut : item.category === 'silhouette' ? pens.pens.outline : pens.pens.seen;
       dash = own.lineStyle ? (own.lineStyle === 'dashed' ? DASH_MM : []) : phase?.dashed ? DASH_MM : [];
     }
     let fill: string | null = null;
     if (isFace) {
       const material = item.materialFill === undefined ? undefined : item.materialFill ?? '#ffffff';
-      fill = colour(item.schemeColour ?? own.fillColor ?? phase?.fillColor ?? category?.fillColor ?? material ?? rule.fill ?? DEFAULT_FACE_FILL);
+      fill = colour(item.schemeColour ?? own.fillColor ?? phase?.fillColor ?? viewCategory?.fillColor ?? materialStyle.fillColor ?? classStyle.fillColor ?? category?.fillColor ?? material ?? rule.fill ?? DEFAULT_FACE_FILL);
     }
     return { visible, kind, stroke, weight, dash, fill, scheme: isFace && !!item.schemeColour };
   };

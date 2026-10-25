@@ -10,8 +10,8 @@
  */
 
 import {
-  freshProjectId, resolveViewGraphics, templateGraphicsOf, templateKindOf, templateOf, untemplatedGraphics,
-  type CategoryGraphics, type ProjectViewTemplate, type TemplateGraphics,
+  freshProjectId, ownGraphicsOf, resolveViewGraphics, templateGraphicsOf, templateKindOf, templateOf, untemplatedGraphics,
+  type CategoryGraphics, type ProjectViewTemplate, type StyleRule, type TemplateGraphics,
 } from '@bimvoice/ifcsheet';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { toggleViewportLayer } from './drafting-standards';
@@ -110,7 +110,7 @@ export function applyViewTemplate(viewIds: readonly string[], templateId: string
 export function detachViewTemplate(viewId: string): void {
   const view = viewOf(viewId);
   if (!view || !templateOf(view, templatesOf())) return;
-  runAsOneUndoStep(() => setGraphics(viewId, resolveViewGraphics(view, templatesOf()), null));
+  runAsOneUndoStep(() => setGraphics(viewId, ownGraphicsOf(resolveViewGraphics(view, templatesOf())), null));
 }
 
 /** Drop the view's own overrides of its template: it draws as the template says (colour scheme and phases are not overrides and stay). */
@@ -180,11 +180,51 @@ export function deleteViewTemplate(templateId: string): void {
     setViews((v) => {
       if (v.templateId !== templateId) return v;
       const { graphics: _g, templateId: _t, ...rest } = v;
-      const own = resolveViewGraphics(v, before);
+      const own = ownGraphicsOf(resolveViewGraphics(v, before));
       return { ...rest, ...(own && Object.keys(own).length > 0 ? { graphics: own } : {}) } as ProjectView;
     });
     useProjectStore.setState({ viewTemplates: before.filter((t) => t.id !== templateId), dirty: true });
   });
+}
+
+// ---- The class and material mapping (#31) ----
+
+/** A template's graphics with its rules changed by `change` (none left: the field goes, so a template without a mapping saves as it did). */
+function withRules(graphics: TemplateGraphics, change: (rules: StyleRule[]) => StyleRule[]): TemplateGraphics {
+  const rules = change(graphics.styleRules ?? []);
+  const { styleRules: _old, ...others } = graphics;
+  return rules.length > 0 ? { ...others, styleRules: rules } : others;
+}
+
+function setRules(templateId: string, change: (rules: StyleRule[]) => StyleRule[]): void {
+  if (!templatesOf().some((t) => t.id === templateId)) return;
+  runAsOneUndoStep(() => {
+    useProjectStore.setState({ viewTemplates: templatesOf().map((t) => (t.id === templateId ? { ...t, graphics: withRules(t.graphics, change) } : t)), dirty: true });
+  });
+}
+
+/** Map `match` (an IFC class, or a material name) of `by` to `style` in a template. Returns the rule's id; `null` for a template that is gone or nothing to match. */
+export function addStyleRule(templateId: string, by: StyleRule['by'], match: readonly string[], style: StyleRule['style'] = {}): string | null {
+  const names = match.map((m) => m.trim()).filter(Boolean);
+  if (names.length === 0 || !templatesOf().some((t) => t.id === templateId)) return null;
+  const id = freshProjectId('stylerule');
+  setRules(templateId, (rules) => [...rules, { id, by, match: names, style }]);
+  return id;
+}
+
+/** Change a rule: what it matches, and/or its style (a style field set to `undefined` or empty is taken off). */
+export function updateStyleRule(templateId: string, ruleId: string, patch: { match?: readonly string[]; style?: Partial<StyleRule['style']> }): void {
+  setRules(templateId, (rules) => rules.map((r) => {
+    if (r.id !== ruleId) return r;
+    const style = { ...r.style, ...patch.style } as StyleRule['style'];
+    for (const key of Object.keys(style) as (keyof StyleRule['style'])[]) if (style[key] === undefined || style[key] === '') delete style[key];
+    const match = patch.match ? patch.match.map((m) => m.trim()).filter(Boolean) : r.match;
+    return { ...r, match: match.length > 0 ? match : r.match, style };
+  }));
+}
+
+export function removeStyleRule(templateId: string, ruleId: string): void {
+  setRules(templateId, (rules) => rules.filter((r) => r.id !== ruleId));
 }
 
 /** The layers `viewportId` hides on its sheet: show or hide `layerId` there (one step). */

@@ -13,6 +13,7 @@ export const boqEn = {
   ...BOQ_WORDS_EN,
   'boq.newName': 'Bill of quantities',
   'wall.project.addBoq': '+ Bill of quantities (antemăsurătoare)',
+  'library.kind.viewTemplates': 'View templates',
   'library.kind.boqArticles': 'Bill of quantities articles',
   'boq.card.title': 'Bill of quantities',
   'boq.card.summary': '{count} articles',

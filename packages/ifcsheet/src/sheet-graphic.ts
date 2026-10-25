@@ -151,6 +151,8 @@ export function sheetGraphic(
   /** An element's properties, for a preset's property rules (`view-style.ts`). */
   propertiesOf?: ViewStyleInputs['propertiesOf'],
   pens: PenTable = PEN_TABLE,
+  /** The IfcMaterial a cut band is, for a template's material rules (#31). */
+  materialOf?: ViewStyleInputs['materialOf'],
 ): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], viewports: [] };
@@ -170,7 +172,7 @@ export function sheetGraphic(
       // How the view draws (its template's graphics, then its own, `resolveViewGraphics`; its single elements and lines, `element-graphics.ts`; its preset's
       // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by
       // GlobalId (`globalIdOf`), never by the express id the drawing carries.
-      const styler = viewStyler({ graphics: resolveViewGraphics(view, doc.viewTemplates), pens, globalIdOf, propertiesOf });
+      const styler = viewStyler({ graphics: resolveViewGraphics(view, doc.viewTemplates), pens, globalIdOf, propertiesOf, materialOf });
       for (const polygon of drawing.cutPolygons.filter((p) => styler.face(p).visible)) {
         for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }
