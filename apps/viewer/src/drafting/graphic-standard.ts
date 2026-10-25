@@ -10,6 +10,7 @@
  * SVG (`SheetPaper`), its print / PDF (the same SVG) and the DXF exports
  * (which read the pen tags the SVG carries) all take their widths from
  * `viewportPens(…, standard)` and the sheet's own marks from `standard.sheet`
+ * (and the drafting view draws with the same pens, through the same styler, #34)
  * / `standard.type`. A standard's text and dimension styles are added to the
  * project's style book under their own names and selected for new
  * annotations (`setGraphicStandard`); the project's own styles, Standard
@@ -25,7 +26,7 @@
  * No standard here is certified by any body.
  */
 
-import type { CategoryLineWeight } from '@/project/types';
+import { PEN_TABLE, type PenTable, type WeightPair } from '@bimvoice/ifcsheet';
 import { DEFAULT_DIM_STYLE, STANDARD, type DimStyle, type TextStyle } from './styles';
 
 /** ISO 128 line widths in paper millimetres (the series 0.13 … 2, ratio of √2 between members). */
@@ -34,21 +35,12 @@ export const ISO_128_LINE_WIDTHS: readonly number[] = [0.13, 0.18, 0.25, 0.35, 0
 /** ISO 3098 nominal lettering heights in paper millimetres. */
 export const ISO_3098_HEIGHTS: readonly number[] = [1.8, 2.5, 3.5, 5, 7, 10, 14, 20];
 
-/** A category weight as a pen pair: the cut line and the line seen beyond the cut. */
-export interface WeightPair {
-  cut: number;
-  projection: number;
-}
+export type { WeightPair };
 
-export interface GraphicStandard {
+/** A standard's pens (`pens`, `weights`, `materialHatch`) are a pen table of the engine's (`view-style.ts`): the drafting view, the sheets and every export read them through one styler (#34). */
+export interface GraphicStandard extends PenTable {
   id: string;
   name: string;
-  /** The pens of the generated drawing, paper mm. */
-  pens: { cut: number; outline: number; seen: number; hidden: number; hatch: number };
-  /** What a view-graphics category weight means as a pen, paper mm. */
-  weights: Record<CategoryLineWeight, WeightPair>;
-  /** Hatch pen of a material's drawing settings, paper mm. */
-  materialHatch: Record<CategoryLineWeight, number>;
   /** The sheet's own linework, paper mm. */
   sheet: { frame: number; titleOuter: number; titleDivider: number; titleRule: number };
   /** The sheet's own text, paper mm: title block captions and values, sheet number, scale, and the view title under a viewport. */
@@ -64,12 +56,10 @@ export interface GraphicStandard {
 export const DEFAULT_GRAPHIC_STANDARD: GraphicStandard = {
   id: 'default',
   name: 'IfcSheet default',
-  pens: { cut: 0.5, outline: 0.5, seen: 0.25, hidden: 0.18, hatch: 0.13 },
-  weights: {
-    heavy: { cut: 0.7, projection: 0.35 }, medium: { cut: 0.5, projection: 0.25 },
-    light: { cut: 0.25, projection: 0.125 }, hairline: { cut: 0.13, projection: 0.065 },
-  },
-  materialHatch: { heavy: 0.35, medium: 0.25, light: 0.18, hairline: 0.13 },
+  // THE pen table (the engine's `PEN_TABLE`): the one the printed sheets have always drawn with.
+  pens: PEN_TABLE.pens,
+  weights: PEN_TABLE.weights,
+  materialHatch: PEN_TABLE.materialHatch,
   sheet: { frame: 0.7, titleOuter: 0.5, titleDivider: 0.35, titleRule: 0.18 },
   type: { caption: 2, value: 3.5, number: 9, scale: 4.5, viewTitle: 3.5 },
   // The default brings no styles: the project's own Standard styles are what it draws with.

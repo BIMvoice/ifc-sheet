@@ -117,12 +117,18 @@ describe.skipIf(missing !== null)('the drawing set of AC20-FZK-Haus, from Node (
   });
 
   it('writes each sheet as a DXF a reader parses, its drawings in ENTITIES', () => {
+    const all = new Set<string>();
     for (const sheet of sheets) {
       const text = exportDxf(sheet);
       expect(text).toContain('ENTITIES');
       const parsed = new DxfParser().parseSync(text);
       expect(parsed?.entities.length, sheet.number).toBeGreaterThan(sheet.frame.length);
-      expect(Object.keys(parsed?.tables.layer.layers ?? {})).toEqual(expect.arrayContaining(['SHEET-FRAME', 'VIEW-CUT', 'VIEW-LINES']));
+      const layers = Object.keys(parsed?.tables.layer.layers ?? {});
+      expect(layers).toContain('SHEET-FRAME');
+      expect(layers.some((l) => /^VIEW-(CUT|SEEN|HIDDEN)-\d{3}$/.test(l)), sheet.number).toBe(true);
+      for (const l of layers) all.add(l);
     }
+    // The drawings by pen, as the app's sheet pens them (#34): the cut pen 0.5 mm, the seen pen 0.25 mm.
+    expect([...all]).toEqual(expect.arrayContaining(['VIEW-CUT-050', 'VIEW-SEEN-025']));
   });
 });

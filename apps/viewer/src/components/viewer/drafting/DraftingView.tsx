@@ -10,7 +10,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { GraphicOverrideEngine } from '@ifc-lite/drawing-2d';
 import { isGeometry } from '@/drafting/types';
 import { type SectionAxisName } from '@/drafting/frame';
 import { parsePat } from '@/drafting/hatch/pattern';
@@ -123,7 +122,8 @@ import { partHostType } from '@/project/part-host';
 
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { resolveViewGraphics } from '@bimvoice/ifcsheet';
-import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOverrideRules } from '@/project/view-graphics';
+import { cutHatches, hiddenClasses, styledDrawing } from '@/project/view-graphics';
+import { useViewCanvasStyler } from './useViewCanvasStyler';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
 import { useHiddenElementsUi } from './useHiddenElementsUi';
@@ -213,16 +213,10 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     void materialsTable; void mutationVersionForMaterials;
     return viewDrawing ? styledDrawing(viewDrawing, graphics, partHostType, viewOmits(view), viewMaterials(viewDrawing), phases, schemeResultOf(view, viewDrawing, runtimeGeometry?.meshes), renderIdGlobalId) : null;
   }, [viewDrawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases, runtimeGeometry]);
-  const overrideRules = useMemo(() => viewOverrideRules(graphics), [graphics]);
-  const overrideEngine = useMemo(() => new GraphicOverrideEngine(overrideRules), [overrideRules]);
-  const useIfcMaterials = (graphics?.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId) === DEFAULT_VIEW_PRESET;
+  // Each face's and line's style: the view's one styler, its sheets' too (#34).
+  const canvasStyler = useViewCanvasStyler(graphics, shown);
   const hidden = useMemo(() => hiddenClasses(graphics), [graphics]);
   const hatches = useMemo(() => (shown ? cutHatches(shown, graphics) : []), [shown, graphics]);
-  const materialColors = useMemo(() => {
-    const map = new Map<number, [number, number, number, number]>();
-    for (const mesh of runtimeGeometry?.meshes ?? []) if (mesh.expressId && mesh.color) map.set(mesh.expressId, mesh.color);
-    return map;
-  }, [runtimeGeometry]);
 
   useEffect(() => {
     // Annotation sizes are paper sizes at the view's scale (the settings read as at 1:100).
@@ -338,11 +332,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
             drawing={shown}
             transform={viewTransform}
             showHiddenLines={showHiddenLines}
-            overrideEngine={overrideEngine}
-            graphics={graphics}
-            overridesEnabled={overrideRules.length > 0}
-            entityColorMap={materialColors}
-            useIfcMaterials={useIfcMaterials}
+            styler={canvasStyler}
             sectionAxis={axis}
           />
         ) : null}

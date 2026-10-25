@@ -14,12 +14,24 @@ import { resolveScheme, planHeights, type SchemeResult } from './colour-fills.js
 import { propertyValueReader } from './colour-scheme-read.js';
 import { sheetGraphic, type SheetGraphic } from './sheet-graphic.js';
 import { generateViewDrawings } from './view-drawings.js';
+import { propertySetsOf } from './joinery-schedule.js';
+import { elementProperties } from './view-style.js';
 
 export interface SheetGraphicsOptions {
   /** Cut each view's drawing from the meshes (default true); without it the sheets carry their frames and titles only. */
   drawings?: boolean;
   /** A view whose drawing could not be made; the sheet keeps its title. */
   onDrawingError?: (view: ProjectView, error: unknown) => void;
+}
+
+/** An element's properties as a preset's property rules read them (`view-style.ts`), from a model opened here: each element's sets read once, only when a view's rules ask. */
+export function headlessPropertiesOf(dataStore: NonNullable<OpenedModel['dataStore']>): (expressId: number) => Record<string, Record<string, unknown>> {
+  const props = new Map<number, Record<string, Record<string, unknown>>>();
+  return (id) => {
+    let p = props.get(id);
+    if (!p) props.set(id, (p = elementProperties(propertySetsOf({ dataStore, view: null }, id))));
+    return p;
+  };
 }
 
 /** Every sheet of `set` as shapes on its paper, in set order, the drawings cut from the building's meshes and clipped to the room the layout made for them. */
@@ -41,5 +53,6 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   // The drawings carry express ids; a view names its elements by GlobalId (#32, #33).
   const entities = model.dataStore?.entities;
   const globalIdOf = entities ? (id: number) => entities.getGlobalId(id) || undefined : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf));
+  const propertiesOf = model.dataStore ? headlessPropertiesOf(model.dataStore) : undefined;
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf));
 }

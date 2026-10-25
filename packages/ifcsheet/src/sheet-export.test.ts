@@ -131,8 +131,19 @@ describe('the PDF', () => {
 describe('the DXF', () => {
   it('writes the same points in paper millimetres with y up from the paper\'s bottom edge', () => {
     const parsed = new DxfParser().parseSync(exportDxf(graphic()));
-    const lines = (parsed?.entities ?? []).filter((e): e is IPolylineEntity => e.layer === 'VIEW-LINES');
+    const lines = (parsed?.entities ?? []).filter((e): e is IPolylineEntity => e.layer === 'VIEW-SEEN-025');
     // The paper is 297 mm high: y 190 from the top is 107 from the bottom.
     expect(lines.map((e) => e.vertices.map((v) => [v.x, v.y]))).toEqual([[[100, 107], [300, 187]]]);
+  });
+
+  it('carries the app\'s pens (#34): the line seen beyond on the seen pen, the hidden line on the hidden pen, a category colour in its layer', () => {
+    const layers = (g: SheetGraphic) => Object.keys(new DxfParser().parseSync(exportDxf(g))?.tables.layer.layers ?? {});
+    expect(layers(graphic())).toEqual(expect.arrayContaining(['VIEW-SEEN-025', 'VIEW-HIDDEN-018']));
+    const s = sheet();
+    const red = sheetGraphic(s, { ...doc([s]), views: doc([s]).views.map((v) => ({ ...v, graphics: { categories: { walls: { lineColor: '#cc0000', lineWeight: 'heavy' } } } })) }, new Map([['v1', drawing()]]));
+    expect(red.pens.find((p) => p.layer === 'SEEN')).toMatchObject({ stroke: '#cc0000', width: 0.35 });
+    expect(red.pens.find((p) => p.layer === 'HIDDEN')).toMatchObject({ stroke: '#cc0000', width: 0.18, dash: [1.5, 1] });
+    expect(red.pens.find((p) => p.layer === 'FILL')).toMatchObject({ fill: '#d4d4d8' });
+    expect(layers(red)).toEqual(expect.arrayContaining(['VIEW-SEEN-035-CC0000', 'VIEW-HIDDEN-018-CC0000']));
   });
 });
