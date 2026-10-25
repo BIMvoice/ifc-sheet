@@ -60,4 +60,7 @@ export const wallKeysRo = {
   'wall.keys.autocad.orthoOff': '<Modul ortogonal oprit>',
   'wall.keys.autocad.snapOn': '<Fixarea pe puncte pornită>',
   'wall.keys.autocad.snapOff': '<Fixarea pe puncte oprită>',
+  // The undo and redo the Wall's history keys name (`useWallHistoryKeys.ts`, #51).
+  'drafting.undo': 'Anulează desenarea',
+  'drafting.redo': 'Refă desenarea',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

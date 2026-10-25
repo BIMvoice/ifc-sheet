@@ -16,6 +16,7 @@ import { useTranslation } from '@/i18n';
 import { ELEVATION_DIRECTIONS, elevationName, planViewFor, resolvePlanLevel } from '@/project/view-defaults';
 import { defaultDisciplineLevel, disciplineViewFor, DISCIPLINE_IDS, type DisciplineId } from '@/project/discipline-views';
 import { addProjectView, useProjectStore } from '@/project/project-store';
+import { runAsOneUndoStep as inOneStep } from '@/drafting/draft-store';
 import { draftingViewOf } from '@/drafting/drafting-view';
 import { placeLibraryDetail } from '@/catalogue/detail-actions';
 import type { ElevationDirection, PlanProjectView, ProjectLevel } from '@/project/types';
@@ -59,7 +60,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
   const disciplinePlanOf = (id: DisciplineId, level: ProjectLevel): void => {
     const { views } = useProjectStore.getState();
     const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && v.discipline === id && resolvePlanLevel(v, [level]) !== undefined);
-    onView(existing?.id ?? addProjectView(disciplineViewFor(id, level, views)));
+    inOneStep(() => onView(existing?.id ?? addProjectView(disciplineViewFor(id, level, views))));
   };
   const pickDiscipline = (id: DisciplineId): void => {
     const level = defaultDisciplineLevel(id, levels);
@@ -75,17 +76,19 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
       onView(existing.id);
       return;
     }
-    onView(addProjectView({ ...planViewFor(level, views, Date.now(), levels), auto: false }));
+    inOneStep(() => onView(addProjectView({ ...planViewFor(level, views, Date.now(), levels), auto: false })));
   };
   const sideOf = (direction: ElevationDirection): void => {
     const existing = useProjectStore.getState().views.find((v) => v.kind === 'elevation' && v.direction === direction && !v.interior);
-    onView(existing?.id ?? addProjectView({ kind: 'elevation', name: elevationName(direction), direction }));
+    inOneStep(() => onView(existing?.id ?? addProjectView({ kind: 'elevation', name: elevationName(direction), direction })));
   };
 
-  const draftingBlank = (): void => onView(addProjectView(draftingViewOf(t('wall.add.draftingName'))));
+  const draftingBlank = (): void => inOneStep(() => onView(addProjectView(draftingViewOf(t('wall.add.draftingName')))));
   const draftingFromLibrary = (entryId: string): void => {
-    const id = placeLibraryDetail(entryId);
-    if (id) onView(id);
+    inOneStep(() => {
+      const id = placeLibraryDetail(entryId);
+      if (id) onView(id);
+    });
   };
 
   return (
@@ -103,7 +106,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
           <Choice icon="cube" title={t('wall.add.discipline')} hint={t('wall.add.disciplineHint')} onClick={() => setStep('discipline')} disabled={levels.length === 0} />
           <Choice icon="plus" title={t('wall.add.detail')} hint={t('wall.add.detailHint')} onClick={onDetail} />
           <Choice icon="symbol" title={t('wall.add.drafting')} hint={t('wall.add.draftingHint')} onClick={() => setStep('drafting')} />
-          <Choice icon="cube" title={t('site.add')} hint={t('site.addHint')} disabled={levels.length === 0} onClick={() => { const id = ensureSitePlan(t('site.viewName')); if (id) onView(id); }} />
+          <Choice icon="cube" title={t('site.add')} hint={t('site.addHint')} disabled={levels.length === 0} onClick={() => inOneStep(() => { const id = ensureSitePlan(t('site.viewName')); if (id) onView(id); })} />
         </div>
       ) : step === 'discipline' ? (
         <Picks>{DISCIPLINE_IDS.map((id) => <button key={id} type="button" className={pick} onClick={() => pickDiscipline(id)}>{t(`wall.add.discipline.${id}`)}</button>)}</Picks>

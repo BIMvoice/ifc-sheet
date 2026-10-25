@@ -59,6 +59,11 @@
       "types": "./dist/headless.d.ts",
       "import": "./dist/headless.js",
       "default": "./dist/headless.js"
+    },
+    "./handover": {
+      "types": "./dist/handover.d.ts",
+      "import": "./dist/handover.js",
+      "default": "./dist/handover.js"
     }
   },
   "scripts": {
@@ -74,6 +79,7 @@
     "@ifc-lite/geometry": "workspace:^",
     "@ifc-lite/mutations": "workspace:^",
     "@ifc-lite/parser": "workspace:^",
+    "fflate": "^0.8.3",
     "jspdf": "^4.2.1"
   },
   "devDependencies": {
