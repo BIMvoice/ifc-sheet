@@ -49,6 +49,7 @@ import {
 } from './projection-bands.js';
 import { windingSign } from './mesh-winding.js';
 import { weldIndices } from './mesh-weld.js';
+import { onClipPlane, type ClipPlane } from './clip-rim.js';
 
 /**
  * Dot-product deadband for the silhouette test (issue #979).
@@ -236,11 +237,13 @@ export class EdgeExtractor {
    * at least one front-facing face. A crease whose faces both turn away from the viewer is
    * on the far side of the solid and left out (the omitted back edges of a
    * box), so only the hidden-line pass has to deal with what OTHER elements
-   * cover. Open (boundary) edges are silhouettes already.
+   * cover. Open (boundary) edges are silhouettes already, except those lying
+   * in one of `clipPlanes`: the rim of a clip, which its caller draws.
    */
-  extractExteriorEdges(edges: EdgeData[], viewDirection: Vec3, includeCreases = false): EdgeData[] {
+  extractExteriorEdges(edges: EdgeData[], viewDirection: Vec3, includeCreases = false, clipPlanes?: readonly ClipPlane[]): EdgeData[] {
     const view = vec3Normalize(viewDirection);
-    const silhouettes = this.extractSilhouettes(edges, view);
+    const all = this.extractSilhouettes(edges, view);
+    const silhouettes = clipPlanes?.length ? all.filter((e) => !onClipPlane(e, clipPlanes)) : all;
     if (!includeCreases) return silhouettes;
     const silhouetteSet = new Set(silhouettes);
     return edges.filter((edge) => {

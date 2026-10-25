@@ -97,6 +97,7 @@ const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').Pro
     viewpoint: { position: { x: 1, y: 2, z: 3 }, target: { x: 0, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 }, fov: 50, projectionMode: 'orthographic', orthoSize: 12 },
     projection: 'axonometric', preset: 'sw', shaded: true,
     raster: { href: 'data:image/png;base64,AAAA', widthPx: 1772, heightPx: 1182, widthMm: 150, heightMm: 100 },
+    cutaway: { storey: { level: { name: 'Ground', elevation: 0, storeyGlobalIds: ['G'] }, cutHeight: 1.2 }, box: { min: { x: -1, y: -0.5, z: -2 }, max: { x: 8, y: 6, z: 4 } } },
   } satisfies Required<ThreeDProjectView>,
   drafting: { ...base, id: 'v-draft', name: 'Typical parapet', kind: 'drafting', number: 4 } satisfies Required<DraftingProjectView>,
 };
