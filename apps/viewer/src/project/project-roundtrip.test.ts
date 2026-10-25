@@ -67,6 +67,7 @@ const category: Required<CategoryGraphics> = {
 const graphics: Required<ViewGraphics> = {
   presetId: 'structure', categories: { walls: category, doors: { visible: false } }, grid: { visible: false, ends: 'start' },
   phases: { show: ['existing', 'demolish'], styles: { demolish: { lineColor: '#ffcc00', lineWeight: 'heavy', dashed: false, fillColor: '#fff2a8' } } },
+  colourScheme: { property: 'Pset_SpaceCommon.Category', target: 'elements', classes: ['IfcSpace', 'IfcWall'], colours: { office: '#aabbcc' }, palette: 'okabe-ito' },
 };
 
 const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'] };
@@ -259,6 +260,7 @@ const FULL: Required<ProjectDocument> = {
   siteArea: 1250.5,
   urbanSettings: { terrainLevel: -0.6, zeroElevation: 245.2, cutExcluded: { Subsol: true, Demisol: false } },
   includeFarElements: true,
+  handoverPattern: '{project} {number} {sheet} rev {revision}',
   savedSectionCuts: [{
     id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,
     plane: { axis: 'side', position: 4.2, flipped: true, capStyle: { fillColor: [1, 0.5, 0, 1], strokeColor: [0, 0, 0, 1], pattern: 'brick', spacingPx: 6, angleRad: 0.5, widthPx: 2, secondaryAngleRad: -0.5 }, showCap: false, showOutlines: false },

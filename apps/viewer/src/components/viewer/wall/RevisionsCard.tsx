@@ -14,6 +14,7 @@ import { useProjectStore } from '@/project/project-store';
 import { addRevision, removeRevision, revisionCloudCount, updateRevision } from '@/project/revision-actions';
 import { chooseCloudRevision, cloudRevisionNow, useRevisionTool } from '@/project/revision-tool';
 import { sheetRevisions } from '@/project/revisions';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { addSheetRevision, removeSheetRevision } from '@/project/sheets';
 import type { ProjectRevision, ProjectSheet } from '@/project/types';
 import { WALL_CARD, WALL_FIELD, WALL_PILL } from './wall-type';
@@ -76,7 +77,7 @@ export function RevisionsCard({ sheet, onClose }: { sheet: ProjectSheet; onClose
       {revisions.length === 0 ? <p className="m-0 text-sm">{t('revision.empty')}</p> : null}
       <ul className="m-0 list-none p-0">{revisions.map((r) => <Record key={r.id} record={r} sheet={sheet} byCloud={named.has(r.id)} />)}</ul>
       <div className="mt-4 flex gap-2">
-        <button type="button" className={quiet} onClick={() => { const id = addRevision(); addSheetRevision(sheet.id, id); }}>{t('revision.add')}</button>
+        <button type="button" className={quiet} onClick={() => runAsOneUndoStep(() => addSheetRevision(sheet.id, addRevision()))}>{t('revision.add')}</button>
         <button type="button" className={quiet} onClick={onClose}>{t('revision.done')}</button>
       </div>
     </aside>

@@ -298,4 +298,6 @@ export interface ProjectDocument {
   sheetNumbering?: NumberingScheme;
   /** "Include far-away elements in framing" (`framing.ts`): frame the views on everything the storeys contain, small elements far from the building too. Absent is off. */
   includeFarElements?: boolean;
+  /** How the files of the handover package are named (`handover.ts`): tokens `{project} {number} {sheet} {revision} {date} {issue}`. Absent is the default pattern. */
+  handoverPattern?: string;
 }

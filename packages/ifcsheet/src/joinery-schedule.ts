@@ -117,7 +117,7 @@ const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ?
 const CLASS_NAMES: Record<string, string> = { IFCDOOR: 'IfcDoor', IFCDOORSTANDARDCASE: 'IfcDoorStandardCase', IFCWINDOW: 'IfcWindow', IFCWINDOWSTANDARDCASE: 'IfcWindowStandardCase' };
 
 /** The element's property sets: the edit overlay's when there is one, else the store's table, else read from the source on demand (a headless open keeps no table). */
-function propertySetsOf({ dataStore, view }: Live, id: number): { name: string; properties: { name: string; value: unknown }[] }[] {
+export function propertySetsOf({ dataStore, view }: Live, id: number): { name: string; properties: { name: string; value: unknown }[] }[] {
   try {
     if (view) return view.getForEntity(id);
     const table = dataStore.properties?.getForEntity(id) ?? [];

@@ -29,6 +29,7 @@ import { liftTypedRevisions, sheetRevisions } from './revisions';
 import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
+import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 import type { UrbanSettings } from '@/urban/indicators';
@@ -134,6 +135,12 @@ export function setIncludeFarElements(on: boolean): void {
   if (on !== (useProjectStore.getState().includeFarElements === true)) useProjectStore.setState({ includeFarElements: on ? true : undefined, dirty: true });
 }
 
+/** The pattern the handover package names its files by (`@bimvoice/ifcsheet/handover`); empty or unusable goes back to the default, stored as absent. */
+export function setHandoverPattern(pattern: string): void {
+  const next = readHandoverPattern(pattern);
+  if (next !== useProjectStore.getState().handoverPattern) useProjectStore.setState({ handoverPattern: next, dirty: true });
+}
+
 /** Change the urban indicators' settings; a field set to undefined goes back to its default. */
 export function setUrbanSettings(patch: Partial<UrbanSettings>): void {
   const merged: UrbanSettings = { ...useProjectStore.getState().urbanSettings, ...patch };
@@ -174,12 +181,15 @@ export const updateProjectView = (id: string, patch: ProjectViewPatch): void => 
 export const removeProjectItem = (id: string): void => asStep(() => removeProjectItemNow(id));
 export const addProjectSheet = (name = 'Unnamed', group?: NumberGroup, templateId?: string): string => asStep(() => addProjectSheetNow(name, group, templateId));
 export const duplicateProjectSheet = (id: string): string | null => asStep(() => duplicateProjectSheetNow(id));
+export const addProjectView = (view: NewProjectView): string => asStep(() => addProjectViewNow(view));
+export const duplicateProjectView = (id: string): string | null => asStep(() => duplicateProjectViewNow(id));
+export const setSheetNumber = (id: string, number: string): void => asStep(() => setSheetNumberNow(id, number));
 
 export function setActiveProjectItem(id: string | null): void {
   useProjectStore.setState({ activeItemId: id });
 }
 
-export function addProjectView(view: NewProjectView): string {
+function addProjectViewNow(view: NewProjectView): string {
   const state = useProjectStore.getState();
   const id = view.id ?? freshProjectId('view');
   const created = { ...view, id, name: uniqueViewName(view.name, state.views), createdAt: Date.now() } as ProjectView;
@@ -225,7 +235,7 @@ function updateProjectViewNow(id: string, patch: ProjectViewPatch): void {
   });
 }
 
-export function duplicateProjectView(id: string): string | null {
+function duplicateProjectViewNow(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.views.find((v) => v.id === id);
   if (!source) return null;
@@ -289,7 +299,7 @@ function duplicateProjectSheetNow(id: string): string | null {
   return copy.id;
 }
 
-export function setSheetNumber(id: string, number: string): void {
+function setSheetNumberNow(id: string, number: string): void {
   const trimmed = number.trim();
   if (!trimmed) return;
   useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed, series: numberGroupOf(sh), numberOverride: true } : sh)), dirty: true }));

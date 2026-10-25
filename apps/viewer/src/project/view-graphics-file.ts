@@ -8,6 +8,7 @@
  * never fatal.
  */
 
+import { readColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
 import { PHASES, type PhaseSource } from './phases';
 import type { CategoryGraphics, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics } from './types';
 
@@ -58,6 +59,8 @@ export function readGraphics(raw: Record<string, unknown>): ViewGraphics {
       ...(Object.keys(styles).length ? { styles } : {}),
     };
   }
+  const scheme = readColourScheme(raw.colourScheme);
+  if (scheme) out.colourScheme = scheme;
   if (isObject(raw.grid)) {
     const grid: ViewGridGraphics = {};
     if (typeof raw.grid.visible === 'boolean') grid.visible = raw.grid.visible;

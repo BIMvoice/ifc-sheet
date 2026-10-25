@@ -8,6 +8,8 @@
  * (`document.ts`, which re-exports them).
  */
 
+import type { ColourScheme } from './colour-scheme.js';
+
 export type CategoryLineWeight = 'heavy' | 'medium' | 'light' | 'hairline';
 
 /** How one element category draws in a view. Absent fields keep the preset's look. */
@@ -61,4 +63,6 @@ export interface ViewGraphics {
   phases?: ViewPhases;
   /** By category id (`VIEW_CATEGORIES`). */
   categories?: Record<string, CategoryGraphics>;
+  /** The view coloured by a property (`colour-scheme.ts`, #92). Absent: not coloured. */
+  colourScheme?: ColourScheme;
 }
