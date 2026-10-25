@@ -16,6 +16,10 @@ import { defaultViews } from '@/project/view-defaults';
 import type { ModelExtent } from '@/project/drawing-set';
 import { click } from '@/test/render.js';
 import { WallGrid } from './WallGrid.js';
+import { useState } from 'react';
+import { SteppedSheet } from './SteppedSheet.js';
+import { paperOf } from '@/project/sheets';
+import { SET_SCALES } from '@/project/drawing-set';
 import { SheetCanvas } from './SheetCanvas.js';
 import { ScaleField } from './ScaleField.js';
 import { useSheetContent } from '../sheets/useSheetContent.js';
@@ -116,6 +120,75 @@ describe('undo and redo on the whole wall (#51)', () => {
     assert.equal(numbers().includes('A-202'), false);
     ctrlZ();
     ctrlShiftZ();
+    assert.equal(numbers().includes('A-202'), false);
+  });
+});
+
+/** The Wall as the app shows it: the grid, or a sheet stepped into from it. */
+function WallAndSheet() {
+  const [stepped, setStepped] = useState<string | null>(null);
+  const sheet = useProjectStore((s) => s.sheets.find((x) => x.id === stepped));
+  return sheet
+    ? <SteppedSheet sheet={sheet} extent={HOUSE} proposals={[]} onBack={() => setStepped(null)} onStep={setStepped} />
+    : <WallGrid extent={HOUSE} onStep={setStepped} />;
+}
+
+describe('the Done-when of #51, on the demo set', () => {
+  it('remove A-202, change the plans\' scale, move a viewport: three Ctrl+Z bring each back in reverse order, and redo replays them', () => {
+    const ui = render(<WallAndSheet />);
+    const plans = () => state().sheets.find((s) => s.number === 'A-101')!;
+    const vps = () => plans().viewports!;
+    const start = { numbers: numbers(), scale: vps()[0].scale, at: vps().map((v) => [v.x, v.y]) };
+    clearDraftHistory();
+
+    // 1. Remove A-202 with its cross, on the whole Wall.
+    click(ui.querySelector<HTMLButtonElement>('button[aria-label^="Remove A-202"]')!);
+    assert.equal(numbers().includes('A-202'), false);
+
+    // 2. The plans' scale, on the scale chips.
+    const chips = [...ui.querySelectorAll<HTMLButtonElement>('fieldset button')];
+    const plansChips = chips.filter((b) => b.closest('fieldset')?.querySelector('legend')?.textContent?.toLowerCase().includes('plan'));
+    assert.ok(plansChips.length > 0, 'the plans\' scale chips');
+    const other = SET_SCALES.find((n) => n !== start.scale)!;
+    click(plansChips.find((b) => b.textContent === `1 : ${other}`)!);
+    assert.equal(vps()[0].scale, other);
+    const scaled = vps().map((v) => [v.x, v.y]);
+
+    // 3. Step into the plans sheet, choose its first drawing with a click, and move it with the arrow key.
+    act(() => { ui.querySelector('button[aria-label^="A-101"]')!.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true })); });
+    const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]');
+    assert.ok(canvas, 'stepped into the sheet');
+    const paper = paperOf(plans());
+    const k = Math.min((1280 - 24) / paper.w, (800 - 24) / paper.h);
+    const x0 = (1280 - paper.w * k) / 2;
+    const y0 = (800 - paper.h * k) / 2;
+    const first = vps()[0];
+    const at = { clientX: x0 + first.x * k, clientY: y0 + first.y * k };
+    for (const type of ['pointerdown', 'pointerup']) act(() => { canvas.dispatchEvent(new window.PointerEvent(type, { ...at, bubbles: true, button: 0, pointerId: 1 })); });
+    press(window, 'ArrowRight');
+    assert.equal(vps()[0].x, first.x + 1, 'the drawing moved by 1 mm');
+    const moved = vps().map((v) => [v.x, v.y]);
+
+    // Three Ctrl+Z, in reverse order.
+    ctrlZ();
+    assert.deepEqual(vps().map((v) => [v.x, v.y]), scaled, 'the move is undone first');
+    assert.equal(vps()[0].scale, other);
+    ctrlZ();
+    assert.equal(vps()[0].scale, start.scale, 'then the scale');
+    assert.deepEqual(vps().map((v) => [v.x, v.y]), start.at);
+    assert.equal(numbers().includes('A-202'), false);
+    ctrlZ();
+    assert.deepEqual(numbers(), start.numbers, 'then A-202 is back, in its place');
+
+    // Redo with Ctrl+Shift+Z, as the Done-when says: the removal, the scale, the move.
+    ctrlShiftZ();
+    assert.equal(numbers().includes('A-202'), false);
+    assert.equal(vps()[0].scale, start.scale);
+    ctrlShiftZ();
+    assert.equal(vps()[0].scale, other);
+    assert.deepEqual(vps().map((v) => [v.x, v.y]), scaled);
+    ctrlShiftZ();
+    assert.deepEqual(vps().map((v) => [v.x, v.y]), moved);
     assert.equal(numbers().includes('A-202'), false);
   });
 });
