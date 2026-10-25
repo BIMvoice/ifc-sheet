@@ -84,8 +84,29 @@ export function issueRecord(plan: IssuePlan, id: string, createdAt: number): Pro
   return { id, name: plan.name, date: plan.date, createdAt, sheets: plan.sheets.map((s) => s.row) };
 }
 
-/** The default name of the next issue: `Issue 1`, `Issue 2`… */
-export function nextIssueName(existing: readonly Pick<ProjectIssue, 'name'>[]): string {
-  const taken = new Set(existing.map((i) => i.name));
-  for (let n = existing.length + 1; ; n++) if (!taken.has(`Issue ${n}`)) return `Issue ${n}`;
+/** The number in a default issue name (`Issue 3`, `Emitere 3`), read against the template of every language; null for a name typed by hand. */
+function defaultIssueNumber(name: string, templates: readonly string[]): number | null {
+  for (const template of templates) {
+    const [head, tail = ''] = template.split('{n}');
+    if (name.startsWith(head) && name.endsWith(tail) && name.length > head.length + tail.length) {
+      const digits = name.slice(head.length, name.length - tail.length);
+      if (/^\d+$/.test(digits)) return Number(digits);
+    }
+  }
+  return null;
+}
+
+/**
+ * The default name of the next issue: `Issue 1`, `Issue 2`… in the language `nameFor` speaks. The count is the
+ * number of issues recorded, and a number already used is skipped whichever language named it (`templates` are
+ * the default-name templates of every language), so a language switch neither restarts nor repeats the count (#294).
+ */
+export function nextIssueName(
+  existing: readonly Pick<ProjectIssue, 'name'>[],
+  nameFor: (n: number) => string = (n) => `Issue ${n}`,
+  templates: readonly string[] = ['Issue {n}'],
+): string {
+  const taken = new Set(existing.map((i) => defaultIssueNumber(i.name, templates)));
+  const names = new Set(existing.map((i) => i.name));
+  for (let n = existing.length + 1; ; n++) if (!taken.has(n) && !names.has(nameFor(n))) return nameFor(n);
 }

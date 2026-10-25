@@ -40,6 +40,10 @@ export const issueEn = {
   'issue.list.sheetTitle': 'Title',
   'issue.list.scale': 'Scale',
   'issue.list.paper': 'Paper',
+  'issue.list.landscape': 'landscape',
+  'issue.list.portrait': 'portrait',
+  // #294: the words of the issued file names. Plain ASCII in every language (no diacritics: zip tools, mail gateways and older file systems mangle them).
+  'issue.file.drawingList': 'drawing list',
   'issue.list.revision': 'Revision',
   'issue.reason.empty': 'Sheet {number} has nothing on it, so it is not in the issue.',
   'issue.msg.nothing': 'There is nothing to issue: no sheet has a drawing on it.',

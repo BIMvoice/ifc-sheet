@@ -203,7 +203,7 @@ describe('the register is the drawing list', () => {
     const byNumber = (a: RegisterRow, b: RegisterRow) => a.number.localeCompare(b.number, 'en', { numeric: true });
     assert.deepEqual(plan.sheets.map((p) => p.register).sort(byNumber), rows().sort(byNumber));
     assert.equal(s.sheets.length, plan.sheets.length);
-    const csv = drawingListCsv(plan, { title: 'T', issue: 'I', date: 'D', sheet: 'Sheet', sheetTitle: 'Title', scale: 'Scale', paper: 'Paper', revision: 'Revision' });
+    const csv = drawingListCsv(plan, { title: 'T', issue: 'I', date: 'D', sheet: 'Sheet', sheetTitle: 'Title', scale: 'Scale', paper: 'Paper', revision: 'Revision', landscape: 'landscape', portrait: 'portrait', drawingList: 'drawing list' });
     const cell = (v: string) => escapeCsvCell(v);
     for (const r of rows()) assert.ok(csv.includes([r.number, r.title, r.scale].map(cell).join(',')), r.number);
   });

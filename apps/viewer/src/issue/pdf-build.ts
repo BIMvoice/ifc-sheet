@@ -14,7 +14,7 @@
 import type { jsPDF } from 'jspdf';
 import { paperOf } from '@/project/sheets';
 import type { IssuePlan } from './plan';
-import type { ListLabels } from './output';
+import { paperText, type ListLabels } from './output';
 import { archival } from './pdf-archival';
 import { embedFonts, FALLBACK_FAMILY, FONT_FAMILY, missingGlyphs, useEmbeddedFont, type FontLoader } from './pdf-fonts';
 import { layerRuns, type LayerGroup, type LayerRef } from './pdf-layers';
@@ -59,7 +59,7 @@ export function layerName(layer: LayerRef, labels: Pick<PdfLabels, 'groups' | 'r
 function listPage(doc: jsPDF, plan: IssuePlan, projectName: string, labels: PdfLabels, family: string): void {
   const head = [labels.sheet, labels.sheetTitle, labels.scale, labels.paper, labels.revision];
   const cols = [20, 60, 25, 35, 30];
-  const rows = plan.sheets.map(({ row }) => [row.number, row.title, row.scale, `${row.paper} ${row.orientation}`, row.revision]);
+  const rows = plan.sheets.map(({ row }) => [row.number, row.title, row.scale, paperText(row, labels), row.revision]);
   doc.setFont(family, 'bold');
   doc.setFontSize(18);
   doc.text(labels.title, 20, 28);
