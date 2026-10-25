@@ -125,9 +125,8 @@ import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOverrideRules } from '@/project/view-graphics';
 import { renderIdGlobalId } from '@/project/element-guid';
-import { hiddenGhosts, withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
-import { hideLine, showElements, showLine } from '@/project/element-graphics-actions';
-import { nearestModelLine } from '@/project/line-pick';
+import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
+import { useHiddenElementsUi } from './useHiddenElementsUi';
 import { ElementGraphicsBar } from './ElementGraphicsBar';
 import { HiddenGhostLayer } from './HiddenGhostLayer';
 import { schemeResultOf } from '@/project/view-colour-scheme';
@@ -198,13 +197,8 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   // The view's graphics (its template's, then its own preset and category overrides over them, #44), applied to its drawing.
   const viewTemplates = useProjectStore((st) => st.viewTemplates);
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
-  // Without the elements and lines the view hides (#33): nothing is derived from, picked on or snapped to what it hides.
   const viewDrawing = useMemo(() => (drawing ? withoutHiddenElements(drawing, graphics, renderIdGlobalId) : null), [drawing, graphics, models]);
   const references = useMemo(() => (viewDrawing ? referenceSet(viewDrawing, false) : null), [viewDrawing]);
-  // "Show hidden" greys in what the view hides; "Hide a line" takes the next click for the line under it (#33).
-  const [showHidden, setShowHidden] = useState(false);
-  const [pickingLine, setPickingLine] = useState(false);
-  const ghosts = useMemo(() => (showHidden && drawing ? hiddenGhosts(drawing, graphics, renderIdGlobalId) : null), [showHidden, drawing, graphics, models]);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
   const phaseSource = useProjectStore((st) => st.phaseSource);
@@ -260,21 +254,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const { state, handlers } = useDraftingPointer({ containerRef, transform: viewTransform, setTransform: setViewTransform, axis, entityShapes, references, grips });
   const workPlane = useMemo(() => viewWorkPlane(view, plane ?? null, levels), [view, plane, levels]);
   const bim = useModelCommandBridge({ view, plane: workPlane, transform: viewTransform, axis, containerRef });
-  // The click of "Hide a line": the line of the drawing under it, hidden by its element's GlobalId and where it lies.
-  const hideLineAt = (e: React.PointerEvent) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    const p = screenToDrawing({ x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) }, viewTransform, axis);
-    const hit = nearestModelLine(shown, p, 8 / viewTransform.scale);
-    const globalId = hit ? renderIdGlobalId(hit.entityId) : null;
-    if (hit && globalId) hideLine(view.id, globalId, hit.line);
-    setPickingLine(false);
-  };
-  useEffect(() => {
-    if (!pickingLine) return undefined;
-    const stop = (e: KeyboardEvent) => { if (e.key === 'Escape') setPickingLine(false); };
-    window.addEventListener('keydown', stop);
-    return () => window.removeEventListener('keydown', stop);
-  }, [pickingLine]);
+  const { showHidden, setShowHidden, pickingLine, setPickingLine, ghosts, hideLineAt, showElement, showLineEntry } = useHiddenElementsUi({ view, drawing, shown, graphics, models, containerRef, transform: viewTransform, axis });
   // A running BIM tool takes the left button; panning, zoom and the cursor stay the drafting view's.
   const pointer = {
     ...handlers,
@@ -368,7 +348,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         ) : null}
         <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
-        {ghosts ? <HiddenGhostLayer ghosts={ghosts} transform={viewTransform} axis={axis} onShowElement={(id) => showElements(view.id, [id])} onShowLine={(entry) => showLine(view.id, entry)} /> : null}
+        {ghosts ? <HiddenGhostLayer ghosts={ghosts} transform={viewTransform} axis={axis} onShowElement={showElement} onShowLine={showLineEntry} /> : null}
         <ViewportState state={viewportState(entry, view.kind)} />
         <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} graphics={graphics} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
