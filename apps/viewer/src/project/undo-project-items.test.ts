@@ -11,7 +11,9 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { clearDraftHistory, redoDrafts, undoDrafts } from '@/drafting/draft-store';
 import { addProjectSheet, duplicateProjectSheet, removeProjectItem, renameProjectItem, resetProject, syncProjectWithModels, updateProjectView, useProjectStore } from './project-store.js';
-import { startDrawingSet } from './drawing-set-actions.js';
+import { setGroupScale, startDrawingSet } from './drawing-set-actions.js';
+import { nudgeViewport } from './viewport-snap.js';
+import { redoEarliest, undoLatest } from './unified-undo.js';
 import { inSetOrder } from './drawing-register.js';
 import type { ProjectSheet } from './types';
 
@@ -146,5 +148,29 @@ describe('views (#51)', () => {
     useProjectStore.setState({ schedules: [{ id: 'later', name: 'Later', kind: 'door', createdAt: 2 } as never] });
     undoDrafts();
     assert.deepEqual(state().schedules?.map((s) => s.id).sort(), ['later', 'sc']);
+  });
+});
+
+describe('the issue\'s done-when (#51)', () => {
+  it('remove A-202, change the plans\' scale, move a viewport: three Undos bring each back in reverse order, three Redos redo them', () => {
+    const a202 = state().sheets.find((s) => s.number === 'A-202');
+    assert.ok(a202, 'the demo set has A-202');
+    const s0 = everything();
+    removeProjectItem(a202.id);
+    const s1 = everything();
+    setGroupScale('plans' as never, 200, { min: { x: 100, z: 200 }, max: { x: 112, z: 210 } } as never);
+    const s2 = everything();
+    const plan = state().sheets.find((s) => (s.viewports ?? []).length >= 2);
+    assert.ok(plan);
+    nudgeViewport(plan.id, (plan.viewports ?? [])[0], 7, 3);
+    const s3 = everything();
+    assert.deepEqual([s0, s1, s2].includes(s3), false);
+    undoLatest(); assert.equal(everything(), s2);
+    undoLatest(); assert.equal(everything(), s1);
+    undoLatest(); assert.equal(everything(), s0);
+    assert.equal(state().sheets.find((s) => s.id === a202.id)?.number, 'A-202');
+    redoEarliest(); assert.equal(everything(), s1);
+    redoEarliest(); assert.equal(everything(), s2);
+    redoEarliest(); assert.equal(everything(), s3);
   });
 });
