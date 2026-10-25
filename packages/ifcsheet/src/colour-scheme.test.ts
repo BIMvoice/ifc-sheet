@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { PALETTES, assignColours, compareKeys, readColourScheme, schemeEntries, valueKey, valueText } from './colour-scheme.js';
 import { clipPolygon } from './clip.js';
+import { schemeLegend } from './sheet-colours.js';
 
 const VALUES = ['Schlafzimmer', 'Bad', 'Buero', 'Wohnen', 'Flur', 'Küche', 'Galerie', 'Technik', 'Keller'];
 const shuffled = (list: readonly string[], seed: number): string[] => [...list].sort((a, b) => ((a.charCodeAt(0) * seed) % 7) - ((b.charCodeAt(0) * seed) % 7) || (a < b ? -1 : 1));
@@ -97,5 +98,17 @@ describe('a fill clipped to its viewport (#92)', () => {
     expect(Math.max(...across.map((p) => p.x))).toBe(10);
     expect(across.length).toBe(4);
     expect(clipPolygon([{ x: 20, y: 20 }, { x: 30, y: 20 }, { x: 30, y: 30 }], box)).toEqual([]);
+  });
+});
+
+describe('the title of a scheme legend on the sheet (#92)', () => {
+  const entries = [{ key: 'bad', label: 'Bad', colour: '#77aadd', count: 1 }];
+  const area = { x: 0, y: 0, w: 400, h: 300 };
+  const titleOf = (heading?: string) => schemeLegend(entries, 'Pset_SpaceCommon.Category', area, [], heading)!.texts[0]!.text;
+
+  it('is the property name, or the title the scheme carries', () => {
+    expect(titleOf()).toBe('Category');
+    expect(titleOf('Use of rooms')).toBe('Use of rooms');
+    expect(titleOf('  ')).toBe('Category');
   });
 });
