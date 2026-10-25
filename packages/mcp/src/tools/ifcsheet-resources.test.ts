@@ -25,7 +25,7 @@ import { StdioTransport } from '../transport/stdio.js';
 
 const FZK = fileURLToPath(new URL('../../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
-const ENGINE = fileURLToPath(new URL('../../../ifcsheet/dist/index.js', import.meta.url));
+const ENGINE = fileURLToPath(new URL('../../../ifcsheet/dist/', import.meta.url));
 const missing = !existsSync(FZK) ? 'AC20-FZK-Haus.ifc not found' : !existsSync(WASM) ? 'wasm bundle not built: run `pnpm build:wasm:fetch`' : !existsSync(ENGINE) ? 'the engine is not built: run `pnpm --filter @bimvoice/ifcsheet build`' : null;
 if (missing) console.warn(`[mcp] skipping the ifcsheet resource tests: ${missing}`);
 
