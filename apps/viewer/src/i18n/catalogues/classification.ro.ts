@@ -62,5 +62,8 @@ export const classificationRo = {
   'typeQty.unclassified': 'Fără clasificare',
   'atype.tag.classification': 'Codul de clasificare',
   'atype.tag.classificationTitle': 'Titlul clasificării',
+  'class.list.group': 'Clasificarea biroului',
+  'class.list.code': 'Codul de clasificare',
+  'class.list.title': 'Titlul clasificării',
   'library.kind.classificationMappings': 'Coduri de clasificare',
 } as const satisfies Record<string, TranslationValue>;

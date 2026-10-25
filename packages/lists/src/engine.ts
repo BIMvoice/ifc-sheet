@@ -595,6 +595,12 @@ function extractColumnValues(
         values[i] = codes.length > 0 ? uniqueJoin(codes) : null;
         break;
       }
+      case 'officeClassification': {
+        const answer = provider.getOfficeClassification?.(entityId, col.psetName);
+        const cell = col.propertyName === 'Title' ? answer?.title : answer?.code;
+        values[i] = cell ? cell : null;
+        break;
+      }
       case 'spatial': values[i] = getSpatialValue(entityId, col.propertyName, provider); break;
       case 'model': values[i] = provider.getModelName?.() || null; break;
       case 'zone':

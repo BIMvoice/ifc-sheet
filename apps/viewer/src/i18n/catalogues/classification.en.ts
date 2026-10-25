@@ -62,5 +62,8 @@ export const classificationEn = {
   'typeQty.unclassified': 'No classification',
   'atype.tag.classification': 'Classification code',
   'atype.tag.classificationTitle': 'Classification title',
+  'class.list.group': 'Office classification',
+  'class.list.code': 'Classification code',
+  'class.list.title': 'Classification title',
   'library.kind.classificationMappings': 'Classification codes',
 } as const satisfies Record<string, TranslationValue>;

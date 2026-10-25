@@ -17,9 +17,10 @@ import { executeList, type ColumnDefinition, type ListDataProvider, type ListDef
 import type { ProjectUnits } from '@ifc-lite/parser';
 import {
   LIST_COUNT_ID, listFigureKind, passesElementFilter, predefinedTypeText, propertyValueText,
-  type ListCell, type ListScheduleDef, type ListTableSource, type OccurrenceFacts, type PropertyFact, type SubReportFilter,
+  withOfficeClassification, type ListClassificationContext, type ListCell, type ListScheduleDef, type ListTableSource, type OccurrenceFacts, type PropertyFact, type SubReportFilter,
 } from '@bimvoice/ifcsheet';
 import type { ViewerState } from '@/store';
+import { listClassificationContext } from '@/classification/classification-model';
 import { listExportModel } from '../document/prepare-list-table';
 import { evaluatorModelsFromState } from '../model-tags/evaluator-models';
 import type { ExportModel } from './export/model';
@@ -112,9 +113,14 @@ function listDefinitionOf(schedule: ListScheduleInput, pairs: readonly ModelProv
 /** Run the schedule's list over the loaded models and project it as the Lists panel exports it. */
 export async function runListSchedule(
   schedule: ListScheduleInput, pairs: readonly ModelProviderPair[], modelUnits: Map<string, ProjectUnits>, state: ViewerState,
-  options: { signal?: AbortSignal; today?: Date } = {},
+  options: { signal?: AbortSignal; today?: Date; classification?: ListClassificationContext } = {},
 ): Promise<ListScheduleRun> {
   options.signal?.throwIfAborted();
+  // The office classification (#351) comes through the run context: each provider answers it with the project's mappings (`classificationOf`).
+  if (schedule.list.columns.some((c) => c.source === 'officeClassification')) {
+    const context = options.classification ?? listClassificationContext();
+    pairs = pairs.map((p) => ({ ...p, provider: withOfficeClassification(p.provider, p.modelId, context) }));
+  }
   const definition = listDefinitionOf(schedule, pairs);
   const result = await runListFederated(definition, pairs, state, { evaluatorModels: evaluatorModelsFromState(state), signal: options.signal });
   options.signal?.throwIfAborted();

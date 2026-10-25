@@ -91,6 +91,12 @@ export interface ListDataProvider {
   getMaterialNames?(expressId: number): string[];
   /** Classification references associated with the element. */
   getClassifications?(expressId: number): ListClassificationRef[];
+  /**
+   * The element's office classification (#351): the code and title the project's classification mapping gives it, the model's own reference
+   * first (the app's `classificationOf`). `mappingId` names the mapping; absent, the first. Optional: a provider that does not know the
+   * office's mappings leaves the column empty.
+   */
+  getOfficeClassification?(expressId: number, mappingId?: string): { code: string; title: string } | null;
   /** Building-storey name the element belongs to, or '' when unplaced. */
   getStoreyName?(expressId: number): string;
   /** The element's `IfcRelAggregates` parents (whole of which it is a part), for `inherit: 'aggregation'` (#5433). */
@@ -276,7 +282,7 @@ export interface PropertyCondition {
   /** Attribute / property / quantity name, the spatial level for `spatial`
    *  (`Container` | `Storey` | `Building` | `Site` | `Project`), or the zone
    *  display mode for `zone` (`Zone` (default) | `Straddles`). Ignored for
-   *  material/classification/model. */
+   *  material/classification/model. `officeClassification`: `Code` (default) or `Title`. */
   propertyName: string;
   operator: ConditionOperator;
   value: string | number | boolean;
@@ -305,8 +311,8 @@ export interface ColumnDefinition {
    * `PropertyCondition.source` for the exact `psetName`/`propertyName`
    * contract, shared verbatim between conditions and columns.
    */
-  source: 'attribute' | 'property' | 'quantity' | 'material' | 'classification' | 'spatial' | 'model' | 'zone' | 'geometry';
-  /** For property: pset name. For quantity: qset name. For zone: the zone-SET id. */
+  source: 'attribute' | 'property' | 'quantity' | 'material' | 'classification' | 'officeClassification' | 'spatial' | 'model' | 'zone' | 'geometry';
+  /** For property: pset name. For quantity: qset name. For zone: the zone-SET id. For officeClassification: the id of the classification mapping (absent: the first). */
   psetName?: string;
   /** Attribute / property / quantity name, the spatial level for `spatial`
    *  (`Container` | `Storey` | `Building` | `Site` | `Project`), or the zone
