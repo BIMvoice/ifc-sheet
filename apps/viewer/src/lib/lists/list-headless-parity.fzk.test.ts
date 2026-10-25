@@ -136,7 +136,7 @@ describe('the headless run gives the app\'s rows, groups, totals and files (#78)
   it('reads a value defined once on the type for every wall of the type', async () => {
     const { modelUnits } = prepareListProviders(state(), {});
     const head = runListScheduleHeadless({ id: 's', name: 'Type only', list: TYPE_ONLY }, [{ modelId: 'fzk', provider: headless() }], modelUnits);
-    const leaves = (head.result.groups ?? []).filter((g) => g.level === 1 && g.path[1] === 'TYPE-R60');
+    const leaves = (head.result.groups ?? []).filter((g) => g.level === 1 && g.path?.[1] === 'TYPE-R60');
     assert.equal(leaves.length, 1);
     assert.equal(leaves[0].count, 8);
     assert.equal(leaves[0].sums.tarea, 20);
