@@ -111,7 +111,7 @@ export const wallRo = {
   'wall.export.dxf': 'DXF',
   'wall.sheetHint.title': 'În interiorul unei planșe.',
   'wall.sheetHint.body': 'Rotița mouse-ului face zoom, trageți planșa pentru a o deplasa. Clic pe un desen pentru a-l alege, trageți-l pentru a-l muta, dublu clic pentru a desena în el. Alt + rotița într-un plan mută secționarea, într-o secțiune îi schimbă adâncimea. Esc revine la panou. Butonul Tastatură de sus arată scurtăturile și vă lasă să le schimbați; tasta ? îl deschide și ea.',
-  'wall.drawHint': 'Esc încheie instrumentul, încă o dată Esc revine la planșă.',
+  'wall.drawHint': 'Gata, Esc sau Enter încheie instrumentul. Înapoi la planșă părăsește desenul.',
   'wall.add.title': 'Adaugă un desen',
   'wall.add.kinds': 'Aici au sens patru feluri de desene.',
   'wall.add.plan': 'Planul unui nivel',

@@ -190,6 +190,7 @@ export function startDraftCommand(id: string, args = ''): boolean {
   const viewId = get().viewId ?? (def?.projectWide ? '' : null);
   if (!def || viewId === null) return false;
   cancelCommand();
+  endedByUser = false;
   say({ key: def.labelKey });
   // Enter repeats a drawing command; it must not issue the set again.
   if (!def.projectWide) set({ lastCommandId: def.id });
@@ -311,6 +312,28 @@ export function pressEnter(): void {
     return;
   }
   if (lastCommandId) startDraftCommand(lastCommandId);
+}
+
+let endedByUser = false;
+
+/**
+ * Done: the visible way to end the running command or the object selection it waits for, for
+ * a person without Esc or Enter at hand (an iPad, #166). What the command has drafted stays,
+ * as Enter leaves it; a command that Enter would only advance is cancelled. Does nothing when
+ * nothing runs (Enter on an idle line would repeat the last command).
+ */
+export function endCommand(): void {
+  if (!command && !pending) return;
+  endedByUser = true;
+  pressEnter();
+  if (command || pending) cancelCommand();
+}
+
+/** Whether the last command was ended by {@link endCommand} (a tool that chains must not start again), read once. */
+export function takeEndedByUser(): boolean {
+  const was = endedByUser;
+  endedByUser = false;
+  return was;
 }
 
 /** Escape: cancel the command, else clear the selection. */

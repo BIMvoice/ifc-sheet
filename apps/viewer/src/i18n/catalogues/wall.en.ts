@@ -125,7 +125,7 @@ export const wallEn = {
   'wall.export.dxf': 'DXF',
   'wall.sheetHint.title': 'Inside a sheet.',
   'wall.sheetHint.body': 'Wheel zooms, drag the paper to pan. Click a drawing to choose it, drag to move it, double-click to draw in it. Alt + wheel inside a plan moves its cut, inside a section its depth. Esc cancels the running tool, then clears the selection; the Wall link above returns to the wall. The Keyboard button above lists the shortcuts and lets you change them; the ? key opens it too.',
-  'wall.drawHint': 'Esc ends the tool. Back to sheet leaves the drawing.',
+  'wall.drawHint': 'Done, Esc or Enter ends the tool. Back to sheet leaves the drawing.',
   'wall.add.title': 'Add a drawing',
   'wall.add.kinds': 'Pick the kind of drawing.',
   'wall.add.plan': 'Plan of a storey',

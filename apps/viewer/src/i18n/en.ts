@@ -86,6 +86,8 @@ import { sheetTemplatesEn } from './catalogues/sheet-templates.en';
 import { boqEn } from './catalogues/boq.en';
 import { wallFindEn } from './catalogues/wall-find.en';
 import { wallKeysEn } from './catalogues/wall-keys.en';
+import { wallKeyPresetsEn } from './catalogues/wall-key-presets.en';
+import { wallExitsEn } from './catalogues/wall-exits.en';
 import { wallReviewEn } from './catalogues/wall-review.en';
 import { wallSectionsEn } from './catalogues/wall-sections.en';
 import { scheduleExportEn } from './catalogues/schedule-export.en';
@@ -318,6 +320,8 @@ export const en = {
   ...boqEn,
   ...wallFindEn,
   ...wallKeysEn,
+  ...wallKeyPresetsEn,
+  ...wallExitsEn,
   ...wallReviewEn,
   ...wallSectionsEn,
   ...scheduleExportEn,

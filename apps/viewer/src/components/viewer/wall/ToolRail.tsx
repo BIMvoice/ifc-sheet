@@ -22,7 +22,7 @@ import { wallToolKey } from '@/lib/commands/wall-key-commands';
 import { DRAW_TOOLS, WALL_ALL, WALL_TOOLS } from './wall-actions';
 import { shortcutLabel } from '@/lib/commands/shortcut-label';
 import { keyProps } from './wall-key-title';
-import { useKeyBindings } from '@/lib/commands/key-bindings';
+import { useKeyBindingsRevision } from '@/lib/commands/key-bindings';
 
 const DRAW_ICONS: Record<string, ReactNode> = {
   line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, circle: <Circle className="size-5" />,
@@ -42,7 +42,7 @@ interface ToolRailProps {
 export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: ToolRailProps) {
   const { t } = useTranslation();
   const ortho = useDraftingSession((o) => o.ortho);
-  useKeyBindings((s) => s.overrides); // a rebinding redraws the keys the tools name
+  useKeyBindingsRevision(); // a rebinding or preset switch redraws the keys the tools name
   const orthoKeys = shortcutLabel('drafting.ortho');
   /** The tooltip: the tool's help line and its key from the keymap; a tool the keymap does not know keeps the bare line and announces no key. */
   const keyed = (name: string, command: string): { title: string; 'aria-keyshortcuts'?: string } => {
