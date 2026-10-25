@@ -117,3 +117,11 @@ export function replaceSheetDocument(entry: SheetSetEntry, document: ProjectDocu
 export function sourcePaths(ctx: ToolContext): string[] {
   return [...storeOf(ctx).models.values()].flatMap((m) => (m.sourcePath ? [m.sourcePath] : []));
 }
+
+/** The set the session made or loaded last (the one `ifcsheet://session/project` shows), or undefined when it holds none. */
+export function currentSheetSet(ctx: ToolContext): SheetSetEntry | undefined {
+  const store = storeOf(ctx);
+  let found: SheetSetEntry | undefined;
+  for (const set of store.sets.values()) if (store.models.has(set.modelId)) found = set;
+  return found;
+}

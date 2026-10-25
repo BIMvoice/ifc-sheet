@@ -21,8 +21,10 @@ import { buildHandoverZip, asciiStem, type HandoverPart } from '@bimvoice/ifcshe
 import { dxfName } from '@bimvoice/ifcsheet/sheet-file-name';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import type { ToolContext } from '../context.js';
+import { annotatedCopy } from './ifcsheet-annotated.js';
 import { drawSet } from './ifcsheet-draw.js';
-import { DOCUMENT_ID, findSheet, invalid, optBoolean, optText, outputPath, pathOrInline, sheetsOf, text, unplacedViews } from './ifcsheet-shared.js';
+import { SCHEDULES_KEY, VIEW_KINDS, projectFileBody } from './ifcsheet-project-file.js';
+import { DOCUMENT_ID, DRY_RUN, dryPrefix, findSheet, invalid, optBoolean, optText, outputPath, pathOrInline, sheetsOf, text, unplacedViews } from './ifcsheet-shared.js';
 import { addSheetSet, getSheetModel, getSheetSet, type SetSchedule } from './ifcsheet-store.js';
 import type { Tool } from './types.js';
 import { okResult } from './util.js';
@@ -30,8 +32,8 @@ import { okResult } from './util.js';
 const MODEL_ID = { type: 'string', description: 'The model_id returned by ifcsheet_open_model.' } as const;
 
 /** Writes `data` to `path` (made to exist), after the same checks as every path these tools write. */
-async function write(path: string, ctx: ToolContext, data: Uint8Array | string): Promise<{ file: string; bytes: number }> {
-  const file = await outputPath(path, ctx);
+async function write(path: string, ctx: ToolContext, data: Uint8Array | string, want?: { extension: string }): Promise<{ file: string; bytes: number }> {
+  const file = await outputPath(path, ctx, want);
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, data);
   return { file, bytes: typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength };
@@ -42,7 +44,7 @@ async function write(path: string, ctx: ToolContext, data: Uint8Array | string):
 export const ifcsheetApplyTemplate: Tool = {
   name: 'ifcsheet_apply_template',
   description:
-    'Lay out the drawing set of an opened model by a set template (.bvset, the file the app saves from a finished set): which sheets, which views on them, at which scale, on which paper, numbered by the template\'s scheme. The same as `ifcsheet build --template`. Give template_path (a .bvset file on the server) or template_json (its text). A rule that finds no view in this model (a third storey it does not have) is skipped and said in notes; so are views the template did not foresee and schedules it carries (add those with ifcsheet_add_schedule). Returns a new document_id, the sheets and the notes. Fails if the model has no geometry.',
+    'Lay out the drawing set of an opened model by a set template (.bvset, the file the app saves from a finished set): which sheets, which views on them, at which scale, on which paper, numbered by the template\'s scheme. The same as `ifcsheet build --template`. Give template_path (a .bvset file on the server) or template_json (its text). A rule that finds no view in this model (a third storey it does not have) is skipped and said in notes; so are views the template did not foresee and schedules it carries (add those with ifcsheet_add_schedule). Returns a new document_id, the sheets and the notes. Fails if the model has no geometry. With dry_run true no set is made (document_id is null): the sheets and notes it would give are returned.',
   scope: 'read',
   inputSchema: {
     type: 'object',
@@ -50,6 +52,7 @@ export const ifcsheetApplyTemplate: Tool = {
       model_id: MODEL_ID,
       template_path: { type: 'string', description: 'A .bvset file on the server (inside the allowed paths). Give this or template_json.' },
       template_json: { type: 'string', description: 'The text of a .bvset file.' },
+      dry_run: DRY_RUN,
       name: { type: 'string', description: 'The project name printed in the title blocks. Default: the model\'s.' },
     },
     required: ['model_id'],
@@ -67,12 +70,14 @@ export const ifcsheetApplyTemplate: Tool = {
     const name = optText(input, 'name');
     const set = generateDefaultSet(entry.model, { ...(name ? { name } : {}), setTemplate });
     if (!set) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: `Model '${entry.id}' has no geometry inside its storeys, so there is nothing to lay a drawing set out on.` });
-    const stored = addSheetSet(ctx, entry.id, set);
+    const dry = optBoolean(input, 'dry_run') ?? false;
+    // A dry run lays the set out and reports it, but never enters it in the session (no document_id is made).
+    const stored = dry ? { id: '', modelId: entry.id, model: entry, set, schedules: [] } : addSheetSet(ctx, entry.id, set);
     const notes = set.notes.filter((n) => n.key.startsWith('setTemplate.')).map((n) => describeTemplateNote({ key: n.key as TemplateNoteKey, params: n.params }));
     const sheets = sheetsOf(stored);
     return okResult(
-      `Laid out ${sheets.length} sheets (${sheets.map((s) => s.number).join(', ')}) from the template as ${stored.id}.`,
-      { document_id: stored.id, model_id: entry.id, name: set.document.name, sheets, unplaced_views: unplacedViews(set.document), notes },
+      dryPrefix(dry, `${dry ? 'Would lay out' : 'Laid out'} ${sheets.length} sheets (${sheets.map((s) => s.number).join(', ')}) from the template${dry ? '' : ` as ${stored.id}`}.`),
+      { document_id: dry ? null : stored.id, dry_run: dry, model_id: entry.id, name: set.document.name, sheets, unplaced_views: unplacedViews(set.document), notes },
     );
   },
 };
@@ -119,7 +124,7 @@ const REGISTER_HEADER = ['Number', 'Name', 'Paper', 'Scale', 'Views'];
 export const ifcsheetIssueSet: Tool = {
   name: 'ifcsheet_issue_set',
   description:
-    'Issue the set: write into a directory on the server the PDF (a page per sheet, true scale; <project>.pdf), a DXF per sheet (dxf/A-101.dxf, ...), the drawing register as CSV (register.csv: number, name, paper, scale, views, one row per sheet), and the CSV of every schedule sheet (schedules/). With handover true also handover.zip: the PDF, the DXFs, the register, the schedules and the IFC as it was opened, named by pattern (tokens {project} {number} {sheet} {revision} {date} {issue}, default "{number} {sheet}"; plain ASCII), the package `ifcsheet build --handover` writes. The directory is created if absent, must be inside the allowed paths, and the opened IFC is never written to. Returns every file with its size, the page count and the sheet numbers.',
+    'Issue the set: write into a directory on the server the PDF (a page per sheet, true scale; <project>.pdf), a DXF per sheet (dxf/A-101.dxf, ...), the drawing register as CSV (register.csv: number, name, paper, scale, views, one row per sheet), and the CSV of every schedule sheet (schedules/). With annotated_ifc true also <model>.annotated.ifc, the annotated copy of the IFC (#82): the headless tools hold no drafts (dimensions, tags and notes are the app\'s), so the copy carries no annotations, and the result says so; it is a new file, the opened IFC is never written. With handover true also handover.zip: the PDF, the DXFs, the register, the schedules and the IFC as it was opened (and the annotated copy, with annotated_ifc), named by pattern (tokens {project} {number} {sheet} {revision} {date} {issue}, default "{number} {sheet}"; plain ASCII), the package `ifcsheet build --handover` writes. The directory is created if absent, must be inside the allowed paths, and the opened IFC is never written to. Returns every file with its size, the page count and the sheet numbers.',
   scope: 'export',
   inputSchema: {
     type: 'object',
@@ -128,6 +133,7 @@ export const ifcsheetIssueSet: Tool = {
       directory: { type: 'string', description: 'The directory to write into.' },
       handover: { type: 'boolean', description: 'Also write handover.zip. Default false.' },
       pattern: { type: 'string', description: 'handover: how its files are named. Default "{number} {sheet}".' },
+      annotated_ifc: { type: 'boolean', description: 'Also write <model>.annotated.ifc, a copy of the IFC made by the annotated-IFC export (and put it in handover.zip). This build holds no drafts, so the copy has no annotations; the result says so. Default false.' },
     },
     required: ['document_id', 'directory'],
     additionalProperties: false,
@@ -139,9 +145,12 @@ export const ifcsheetIssueSet: Tool = {
     const handover = optBoolean(input, 'handover') ?? false;
     const pattern = optText(input, 'pattern');
     if (pattern !== undefined && !handover) throw invalid('pattern is for handover: true.');
+    const annotate = optBoolean(input, 'annotated_ifc') ?? false;
     const { exportDxf, exportPdf } = await import('@bimvoice/ifcsheet/headless');
     const drawn = await drawSet(entry, entry.model);
     const pdf = await exportPdf(drawn.sheets, { title: doc.name });
+    // Built before anything is written, so a copy that cannot be made leaves the directory as it was.
+    const annotated = annotate ? await annotatedCopy(entry) : undefined;
     const dxfs = drawn.sheets.map((sheet) => ({ sheet, text: exportDxf(sheet) }));
     const register = [REGISTER_HEADER, ...sheetsOf(entry).map((s) => [s.number, s.name, s.paper, [...new Set(s.views.map((v) => v.scale))].join(' '), s.views.map((v) => v.view ?? '').join('; ')])].map((row) => row.map((cell) => escapeCsvCell(cell)).join(',')).join('\r\n') + '\r\n';
 
@@ -153,6 +162,7 @@ export const ifcsheetIssueSet: Tool = {
     const dxfNames = dxfs.map((d) => dxfName(d.sheet.number, used));
     for (const [i, d] of dxfs.entries()) await put('dxf', join('dxf', dxfNames[i]), d.text);
     await put('register', 'register.csv', register);
+    if (annotated) files.push({ kind: 'annotated_ifc', ...(await write(join(directory, annotated.name), ctx, annotated.bytes, { extension: '.ifc' })) });
     const scheduleFiles: { schedule: SetSchedule; name: string; csv: string; sheetName: string; number: string }[] = [];
     for (const s of drawn.schedules) {
       const sheet = doc.sheets.find((x) => x.id === s.schedule.sheetId)!;
@@ -170,6 +180,7 @@ export const ifcsheetIssueSet: Tool = {
         { kind: 'register', extension: 'csv', tokens: { ...tokens, sheet: 'Drawing register' }, data: enc.encode(register) },
         ...scheduleFiles.map((s): HandoverPart => ({ kind: 'schedule', extension: 'csv', tokens: { ...tokens, number: s.number, sheet: s.sheetName }, data: enc.encode(s.csv) })),
         { kind: 'ifc', extension: 'ifc', tokens: { ...tokens, sheet: entry.model.name.replace(/\.ifc$/i, '') }, data: entry.model.bytes },
+        ...(annotated ? [{ kind: 'ifc' as const, extension: 'ifc', tokens: { ...tokens, sheet: `${entry.model.name.replace(/\.ifc$/i, '')} annotated` }, data: annotated.bytes }] : []),
       ];
       const built = buildHandoverZip(pattern, parts);
       const written = await write(join(directory, 'handover.zip'), ctx, built.zip);
@@ -178,16 +189,13 @@ export const ifcsheetIssueSet: Tool = {
     }
     return okResult(
       `Issued ${drawn.sheets.length} sheets to ${directory}: ${files.length} files${handover ? ' (with handover.zip)' : ''}.`,
-      { document_id: entry.id, directory, pages: drawn.sheets.length, sheets: drawn.sheets.map((s) => s.number), files, ...(zip ? { handover: zip } : {}) },
+      { document_id: entry.id, directory, pages: drawn.sheets.length, sheets: drawn.sheets.map((s) => s.number), files, ...(zip ? { handover: zip } : {}), ...(annotated ? { annotated_ifc: annotated.report(files.find((f) => f.kind === 'annotated_ifc')!) } : {}) },
     );
   },
 };
 
 // ---- ifcsheet_save_project / ifcsheet_load_project ----
 
-/** The keys the session writes itself; every other key of a loaded file is carried back unchanged. */
-const SCHEDULES_KEY = 'ifcsheetSchedules';
-const VIEW_KINDS = ['plan', 'section', 'elevation', '3d', 'drafting'];
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 export const ifcsheetSaveProject: Tool = {
@@ -207,7 +215,7 @@ export const ifcsheetSaveProject: Tool = {
   async handler(input, ctx) {
     const entry = getSheetSet(ctx, text(input, 'document_id'));
     const path = await outputPath(input.file_path, ctx, { extension: '.json' });
-    const body = { ...entry.set.document, format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, savedAt: new Date().toISOString(), [SCHEDULES_KEY]: entry.schedules };
+    const body = { ...projectFileBody(entry), savedAt: new Date().toISOString() };
     const written = await write(path, ctx, JSON.stringify(body, null, 2));
     return okResult(`Saved ${entry.set.document.sheets.length} sheets and ${entry.set.document.views.length} views to ${written.file}.`, { document_id: entry.id, ...written, sheets: entry.set.document.sheets.map((s) => s.number) });
   },
@@ -222,7 +230,7 @@ function readDocument(raw: unknown, modelName: string): { document: ProjectDocum
   if (!Array.isArray(raw.views) || !Array.isArray(raw.sheets)) throw invalid('Not a project file: "views" and "sheets" must be arrays.');
   const ids = new Set<string>();
   for (const [i, v] of raw.views.entries()) {
-    if (!isObject(v) || typeof v.id !== 'string' || typeof v.name !== 'string' || !VIEW_KINDS.includes(v.kind as string)) throw invalid(`views[${i}] must have a string id and name and a kind of ${VIEW_KINDS.join(', ')}.`);
+    if (!isObject(v) || typeof v.id !== 'string' || typeof v.name !== 'string' || !(VIEW_KINDS as readonly string[]).includes(v.kind as string)) throw invalid(`views[${i}] must have a string id and name and a kind of ${VIEW_KINDS.join(', ')}.`);
     ids.add(v.id);
   }
   const sheetIds = new Set<string>();

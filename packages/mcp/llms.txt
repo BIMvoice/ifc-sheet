@@ -1,0 +1,69 @@
+# @ifc-lite/mcp
+
+> A Model Context Protocol server for IFC models. Besides the model tools of ifc-lite, it carries the IfcSheet tools (names starting `ifcsheet_`): open an IFC, lay out a drawing set (plans, elevations, sections, schedules on numbered sheets), edit it, and issue it as PDF, DXF, a drawing register and a handover package. Runs over stdio (Claude Desktop, Claude Code, Cursor) or Streamable HTTP.
+
+Start it with the folders it may read and write:
+
+    npx @ifc-lite/mcp --allow /path/to/project
+
+Every path an `ifcsheet_*` tool reads or writes must lie inside `--allow`. The tools never write an `.ifc` file or the model that was opened; the one exception is the annotated copy `ifcsheet_issue_set` writes as a new file when `annotated_ifc` is true. Details: README.md, section "Drawing sets (IfcSheet)".
+
+## How a session works
+
+- `ifcsheet_open_model` gives a `model_id`. The drawing-set tools keep their own handles; they do not need `model_load`.
+- `ifcsheet_generate_set`, `ifcsheet_apply_template` and `ifcsheet_load_project` each make a drawing set and give a `document_id`. The editing tools change that set in the session's memory; the PDF, DXF and issue always draw the latest edit. Nothing is on disk until `ifcsheet_save_project` or an export.
+- Lengths are metres in the viewer frame (X east, Y up, Z south). Paper sizes are millimetres. A scale is its denominator: 100 means 1:100.
+- `dry_run: true` on `ifcsheet_add_view`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_add_schedule`, `ifcsheet_apply_template` and `ifcsheet_renumber` reports what the call would change and changes nothing. Ids a dry run reports are not kept.
+- There is no undo tool. Save the project (`ifcsheet_save_project`) before a series of edits.
+
+## Tools
+
+- `ifcsheet_open_model`: parse an IFC (`file_path` or `ifc_base64`); returns `model_id`, storeys with elevations, counts and the building's extent.
+- `ifcsheet_check_readiness`: what the model lacks that the drawings read (storeys, rooms, materials, quantities, unique GlobalIds); `ready` and the findings.
+- `ifcsheet_generate_set`: the default set (a plan per storey, elevations, proposed sections); returns `document_id`, sheets, views.
+- `ifcsheet_apply_template`: lay the set out by a `.bvset` template; returns a new `document_id` and the notes of what its rules met.
+- `ifcsheet_load_project`: a set from a saved `.ifclite-project.json` on an opened model.
+- `ifcsheet_list_sheets`: the sheets (number, name, paper, views with slot and scale), the views not placed, the title block fields.
+- `ifcsheet_add_view`: add a plan (by `level`), elevation (by `direction`), section (by `axis` and `offset_m`, or a line `from`/`to`) or axonometric (by `preset`, optionally cut away); not on a sheet until placed.
+- `ifcsheet_place_view`: put a view on a sheet at a scale; without `sheet` the engine's rule chooses or makes one; errors when the views do not fit.
+- `ifcsheet_set_title_block`: set title block fields, project-wide or for one sheet (client, drawnBy, checkedBy, date, phase, projectNumber, projectManager, designer, address...); returns the fields in force and the ones that changed.
+- `ifcsheet_renumber`: renumber the sheets by a scheme (`default` A-101 style, `sequential` A01, A02...).
+- `ifcsheet_add_schedule`: a room and area schedule (`rooms`, with the building total Au as `total_row`) or a bill of quantities (`boq`, from a saved project's articles) on a sheet of its own.
+- `ifcsheet_export_pdf`: the set as one PDF, a page per sheet at true scale.
+- `ifcsheet_export_dxf`: one DXF per sheet into a directory.
+- `ifcsheet_issue_set`: the PDF, a DXF per sheet, `register.csv`, the schedules as CSV and, with `handover: true`, `handover.zip` (with the IFC as opened); `annotated_ifc: true` adds the annotated copy of the IFC.
+- `ifcsheet_save_project`: write the set as `.ifclite-project.json`; what a loaded file held besides the set is written back unchanged.
+
+## Resources
+
+- `ifcsheet://project/schema`: the JSON Schema of the project document the tools save and load.
+- `ifcsheet://session/project`: the project document of the set the session made or loaded last, as `ifcsheet_save_project` would write it. Read-only; listed once the session holds a set.
+- `ifcsheet://session/sheets`: the sheets of that set, as `ifcsheet_list_sheets` returns them. Read-only.
+
+## Prompts
+
+- `prepare_permit_set`: open, lay out, title block, room schedule and Au, readiness, save, issue with handover (arguments: `model_path`, `output_dir`, and optionally the title block fields).
+- `update_set_for_new_model`: open a new model version, load the saved project on it, add plans for storeys that have none, check readiness, issue again.
+- `check_readiness_and_fix`: check readiness and say what only the model's author can fix.
+
+## Limits
+
+- The DXF files hold lines and no text.
+- The plain title block of the PDF prints the project, the sheet number and name, the scale and the date. The other title block fields are kept in the project for the app's title block layouts.
+- A schedule's rows are read from the model each time the set is drawn. Rows beyond what fits the sheet's paper are left off the drawn sheet (`rows_left_off` says how many); the CSV of the issue has all of them.
+- `annotated_ifc` writes no annotations: dimensions, tags and notes are drafts of the app, and these tools hold none. The result says so.
+- A session keeps at most 8 opened models in memory; the oldest is dropped, with its sets.
+
+## Example session
+
+A user asks: "Open /work/AC20-FZK-Haus.ifc and issue a drawing set into /work/issue, with the room schedule."
+
+1. `ifcsheet_open_model` `{"file_path": "/work/AC20-FZK-Haus.ifc"}` returns `model_id: "sheetmodel-1"`, project 'Projekt-FZK-Haus', storeys Erdgeschoss (0) and Dachgeschoss (2.7 m).
+2. `ifcsheet_check_readiness` `{"model_id": "sheetmodel-1"}` returns `ready: false` with one finding, `noMaterials`: 4 of 82 elements have no material.
+3. `ifcsheet_generate_set` `{"model_id": "sheetmodel-1"}` returns `document_id: "sheetset-1"` with sheets A-101, A-201, A-202 and A-301 and 9 views.
+4. `ifcsheet_set_title_block` `{"document_id": "sheetset-1", "fields": {"phase": "DTAC", "projectNumber": "42/2026"}, "dry_run": true}` reports the two fields it would set. The same call without `dry_run` sets them.
+5. `ifcsheet_add_schedule` `{"document_id": "sheetset-1", "kind": "rooms", "locale": "ro"}` adds sheet A-601 and returns the table and `total_row`, the building total (Au).
+6. `ifcsheet_save_project` `{"document_id": "sheetset-1", "file_path": "/work/issue/fzk.ifclite-project.json"}` writes the project.
+7. `ifcsheet_issue_set` `{"document_id": "sheetset-1", "directory": "/work/issue", "handover": true}` writes the PDF, five DXF files, `register.csv`, `schedules/A-601.csv` and `handover.zip`, and lists them with their sizes.
+
+To resume later: open the new or same IFC, then `ifcsheet_load_project` with the saved file.

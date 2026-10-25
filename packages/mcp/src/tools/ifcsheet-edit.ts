@@ -12,25 +12,18 @@
  */
 
 import {
-  DEFAULT_SCHEME, FIELD_PARAMS, SCHEME_PRESETS, SHEET_SCALES, defaultPlanCutHeight, drawingArea, elevationDepth, elevationName, elevationPlaneOffset,
-  fitsScale, freshProjectId, nameOf, placeViewports, planRenumber, planViewFor, renumbered, scaleOn, sectionPlaneThrough, sheetFields, uniqueViewName,
+  DEFAULT_SCHEME, FIELD_PARAMS, SCHEME_PRESETS, SHEET_SCALES, drawingArea,
+  fitsScale, placeViewports, planRenumber, renumbered, scaleOn, sheetFields,
   viewExtent, withViewHung,
-  type ElevationDirection, type ModelExtent, type NumberingScheme, type ProjectDocument, type ProjectLevel, type ProjectSheet, type ProjectView, type SectionProjectView,
+  type ModelExtent, type NumberingScheme, type ProjectDocument, type ProjectSheet, type ProjectView,
 } from '@bimvoice/ifcsheet';
-import { ToolErrorCode, ToolExecutionError } from '../errors.js';
-import { getSheetSet, replaceSheetDocument, type SheetSetEntry } from './ifcsheet-store.js';
+import { ifcsheetAddView } from './ifcsheet-add-view.js';
+import { getSheetSet, replaceSheetDocument } from './ifcsheet-store.js';
 import {
-  DOCUMENT_ID, findSheet, findView, invalid, optBoolean, optChoice, optNumber, optText, sheetsOf, text, unplacedViews,
+  DOCUMENT_ID, DRY_RUN, dryPrefix, extentOf, findSheet, findView, invalid, optBoolean, optChoice, optNumber, optText, sheetListing, sheetsOf, text, unplacedViews, workingEntry,
 } from './ifcsheet-shared.js';
 import type { Tool } from './types.js';
 import { okResult } from './util.js';
-
-/** The model's extent, which every view and placement is measured on. A set exists only for a model that has one. */
-function extentOf(entry: SheetSetEntry): ModelExtent {
-  const extent = entry.model.model.extent;
-  if (!extent) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The model has no geometry, so views cannot be measured.' });
-  return extent;
-}
 
 const sheetsPatch = (doc: ProjectDocument, sheets: ProjectSheet[]): ProjectDocument => ({ ...doc, sheets });
 
@@ -45,151 +38,10 @@ export const ifcsheetListSheets: Tool = {
   async handler(input, ctx) {
     const entry = getSheetSet(ctx, text(input, 'document_id'));
     const doc = entry.set.document;
-    const sheets = sheetsOf(entry);
+    const listing = sheetListing(entry);
     return okResult(
-      `${doc.sheets.length} sheet${doc.sheets.length === 1 ? '' : 's'} (${doc.sheets.map((s) => s.number).join(', ')}), ${doc.views.length} views, ${unplacedViews(doc).length} not placed.`,
-      { document_id: entry.id, name: doc.name, sheets, unplaced_views: unplacedViews(doc), title_block: doc.titleBlock ?? {} },
-    );
-  },
-};
-
-// ---- ifcsheet_add_view ----
-
-const KINDS = ['plan', 'elevation', 'section', 'axonometric'] as const;
-const DIRECTIONS: readonly ElevationDirection[] = ['north', 'south', 'east', 'west'];
-const PRESETS = ['se', 'sw', 'ne', 'nw'] as const;
-
-/** `[x, z]` or `[x, y, z]` metres in the viewer frame from an input array. */
-function point(input: Record<string, unknown>, key: string, length: 2 | 3): number[] | undefined {
-  const v = input[key];
-  if (v === undefined) return undefined;
-  if (!Array.isArray(v) || v.length !== length || v.some((n) => typeof n !== 'number' || !Number.isFinite(n))) {
-    throw invalid(`${key} must be [${length === 2 ? 'x, z' : 'x, y, z'}]: ${length} finite numbers, metres in the viewer frame (X east, Y up, Z south).`);
-  }
-  return v as number[];
-}
-
-function levelNamed(entry: SheetSetEntry, name: string): ProjectLevel {
-  const key = name.trim().toLowerCase();
-  const found = entry.set.levels.find((l) => l.name.trim().toLowerCase() === key);
-  if (found) return found;
-  throw new ToolExecutionError({
-    code: ToolErrorCode.ENTITY_NOT_FOUND,
-    message: `No storey '${name}'. Give one of the storey names ifcsheet_open_model lists.`,
-    details: { storeys: entry.set.levels.map((l) => l.name) },
-  });
-}
-
-/** The first mark (A, B, ... Z) no section is named with. */
-function sectionName(views: readonly ProjectView[]): string {
-  const taken = new Set(views.map((v) => v.name.toLowerCase()));
-  for (let i = 0; i < 26; i++) {
-    const name = nameOf('names.view.section', { mark: String.fromCharCode(65 + i) });
-    if (!taken.has(name.toLowerCase())) return name;
-  }
-  return uniqueViewName(nameOf('names.view.section', { mark: 'Z' }), views);
-}
-
-function newView(entry: SheetSetEntry, input: Record<string, unknown>): ProjectView {
-  const kind = optChoice(input, 'kind', KINDS);
-  if (!kind) throw invalid(`kind is required: one of ${KINDS.join(', ')}.`);
-  const views = entry.set.document.views;
-  const now = Date.now();
-  const name = optText(input, 'name')?.trim() || undefined;
-  const extent = extentOf(entry);
-  const base = { id: freshProjectId('view'), createdAt: now };
-  switch (kind) {
-    case 'plan': {
-      const level = levelNamed(entry, text(input, 'level'));
-      const cut = optNumber(input, 'cut_height_m', 0.1, 50);
-      const plan = planViewFor(level, views, now, entry.set.levels);
-      const { auto: _auto, ...rest } = plan;
-      return { ...rest, ...(name ? { name: uniqueViewName(name, views) } : {}), ...(cut !== undefined ? { cutHeight: cut } : {}) };
-    }
-    case 'elevation': {
-      const direction = optChoice(input, 'direction', DIRECTIONS);
-      if (!direction) throw invalid(`direction is required for an elevation: one of ${DIRECTIONS.join(', ')}.`);
-      return {
-        ...base, kind: 'elevation', direction, name: uniqueViewName(name ?? elevationName(direction), views),
-        planeOffset: elevationPlaneOffset(direction, extent), viewDepth: elevationDepth(direction, extent),
-      };
-    }
-    case 'section': {
-      const from = point(input, 'from', 2);
-      const to = point(input, 'to', 2);
-      const flipped = optBoolean(input, 'flipped') ?? false;
-      const depth = optNumber(input, 'depth_m', 0.1, 10_000);
-      const sectionBase = { ...base, kind: 'section' as const, name: uniqueViewName(name ?? sectionName(views), views), ...(depth !== undefined ? { viewDepth: depth } : {}) };
-      if (from || to) {
-        if (!from || !to) throw invalid('A section along a line needs both from and to: [x, z] points in plan, metres, viewer frame (X east, Z south).');
-        const side = point(input, 'look_towards', 2) ?? [from[0] - (to[1] - from[1]), from[1] + (to[0] - from[0])];
-        const custom = sectionPlaneThrough({ x: from[0], y: 0, z: from[1] }, { x: to[0], y: 0, z: to[1] }, { x: side[0], y: 0, z: side[1] });
-        if (!custom) throw invalid('from and to are the same point: a section needs a line.');
-        return { ...sectionBase, plane: { axis: 'front', offset: custom.distance, flipped: false, custom } } satisfies SectionProjectView;
-      }
-      const axis = optChoice(input, 'axis', ['front', 'side'] as const);
-      if (!axis) throw invalid('A section needs axis ("front": plane perpendicular to Z, "side": perpendicular to X) with offset_m, or a line from/to.');
-      const centre = axis === 'front' ? (extent.min.z + extent.max.z) / 2 : (extent.min.x + extent.max.x) / 2;
-      return { ...sectionBase, plane: { axis, offset: optNumber(input, 'offset_m', -1e6, 1e6) ?? centre, flipped } } satisfies SectionProjectView;
-    }
-    case 'axonometric': {
-      const preset = optChoice(input, 'preset', PRESETS) ?? 'se';
-      const cutLevel = optText(input, 'cut_level');
-      const cutHeight = optNumber(input, 'cut_height_m', 0.1, 50);
-      const min = point(input, 'box_min', 3);
-      const max = point(input, 'box_max', 3);
-      if ((min === undefined) !== (max === undefined)) throw invalid('A cut-away box needs both box_min and box_max: [x, y, z] metres, viewer frame.');
-      if (min && max && min.some((n, i) => n >= max[i])) throw invalid('box_min must be below box_max on every axis.');
-      if (cutHeight !== undefined && !cutLevel) throw invalid('cut_height_m needs cut_level: the storey the cut is measured from.');
-      const level = cutLevel ? levelNamed(entry, cutLevel) : undefined;
-      const cutaway = level || min
-        ? {
-            ...(level ? { storey: { level, cutHeight: cutHeight ?? defaultPlanCutHeight(level, entry.set.levels) } } : {}),
-            ...(min && max ? { box: { min: { x: min[0], y: min[1], z: min[2] }, max: { x: max[0], y: max[1], z: max[2] } } } : {}),
-          }
-        : undefined;
-      return { ...base, kind: '3d', name: uniqueViewName(name ?? (cutaway ? 'Cut-away axonometric' : 'Axonometric'), views), viewpoint: null, projection: 'axonometric', preset, ...(cutaway ? { cutaway } : {}) };
-    }
-  }
-}
-
-export const ifcsheetAddView: Tool = {
-  name: 'ifcsheet_add_view',
-  description:
-    'Add a view to a drawing set; it is not on any sheet until ifcsheet_place_view. All lengths are metres in the viewer frame: X east, Y up, Z south (the building\'s box is "extent" in ifcsheet_open_model). kind "plan": give level (a storey name) and optionally cut_height_m (above the floor, default about 1.2). kind "elevation": give direction (north, south, east or west; the facade it looks at). kind "section": either axis ("front": a plane perpendicular to Z, "side": perpendicular to X) with offset_m (the plane\'s coordinate on that axis, default the middle of the building) and flipped, or a line in plan from [x, z] to [x, z] (optional look_towards [x, z], the side the section looks to); optional depth_m, how far past the cut it sees. kind "axonometric": preset se, sw, ne or nw (default se); optional cut-away: cut_level (a storey) with cut_height_m, nothing above that height is drawn, and/or box_min and box_max [x, y, z] (only what lies inside is drawn). name is optional (made unique). Returns the new view (id, name, kind) and how many views are unplaced.',
-  scope: 'read',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      document_id: DOCUMENT_ID,
-      kind: { type: 'string', enum: [...KINDS], description: 'The kind of view.' },
-      name: { type: 'string', description: 'The view\'s name. Default: the storey, the facade, "Section A", "Axonometric".' },
-      level: { type: 'string', description: 'plan: the storey name.' },
-      cut_height_m: { type: 'number', description: 'plan, axonometric cut-away: the cut height in metres above the storey\'s floor.' },
-      direction: { type: 'string', enum: [...DIRECTIONS], description: 'elevation: the facade it looks at.' },
-      axis: { type: 'string', enum: ['front', 'side'], description: 'section: "front" cuts perpendicular to the Z axis, "side" perpendicular to X.' },
-      offset_m: { type: 'number', description: 'section: the plane\'s coordinate on its axis, metres. Default: the middle of the building.' },
-      flipped: { type: 'boolean', description: 'section: look the other way. Default false.' },
-      from: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2, description: 'section along a line: start [x, z], metres.' },
-      to: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2, description: 'section along a line: end [x, z], metres.' },
-      look_towards: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2, description: 'section along a line: a point [x, z] on the side the section looks to.' },
-      depth_m: { type: 'number', description: 'section: how far beyond the cut the view sees, metres. Default: the whole building.' },
-      preset: { type: 'string', enum: [...PRESETS], description: 'axonometric: the corner it is seen from. Default se.' },
-      cut_level: { type: 'string', description: 'axonometric cut-away: the storey whose cut height removes everything above.' },
-      box_min: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 3, description: 'axonometric cut-away: [x, y, z] corner of the box that is kept.' },
-      box_max: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 3, description: 'axonometric cut-away: the opposite corner.' },
-    },
-    required: ['document_id', 'kind'],
-    additionalProperties: false,
-  },
-  async handler(input, ctx) {
-    const entry = getSheetSet(ctx, text(input, 'document_id'));
-    const view = newView(entry, input);
-    replaceSheetDocument(entry, { ...entry.set.document, views: [...entry.set.document.views, view] });
-    const unplaced = unplacedViews(entry.set.document).length;
-    return okResult(
-      `Added ${view.kind} view '${view.name}' (${view.id}); ${unplaced} view${unplaced === 1 ? '' : 's'} not on a sheet. Next: ifcsheet_place_view.`,
-      { document_id: entry.id, view: { id: view.id, name: view.name, kind: view.kind }, unplaced_views: unplaced },
+      `${doc.sheets.length} sheet${doc.sheets.length === 1 ? '' : 's'} (${doc.sheets.map((s) => s.number).join(', ')}), ${doc.views.length} views, ${listing.unplaced_views.length} not placed.`,
+      listing,
     );
   },
 };
@@ -214,12 +66,13 @@ export const ifcsheetPlaceView: Tool = {
   description:
     'Put a view on a sheet. Without sheet: the engine\'s own rule hangs it beside the others on the last sheet of its series (plans, elevations, sections) while there is room, else on a new sheet numbered next in that series; a 3D view belongs to no series, so it needs a sheet. With sheet (an id or number from ifcsheet_list_sheets): it is added to that sheet at slot (0-based position among the views on it, default last). scale is the denominator of the drawing scale, 100 for 1:100, one of ' +
     SHEET_SCALES.join(', ') +
-    '; a sheet draws all its views at one scale, so every view on it is laid out again at it. Without scale the most detailed of 1:50, 1:100, 1:200 that fits is used. Errors, without changing anything, when the views do not fit the sheet\'s drawing area at that scale. A view already on another sheet is moved. Returns the sheet (number, views with slot and scale).',
+    '; a sheet draws all its views at one scale, so every view on it is laid out again at it. Without scale the most detailed of 1:50, 1:100, 1:200 that fits is used. Errors, without changing anything, when the views do not fit the sheet\'s drawing area at that scale. With dry_run true nothing is placed: the sheet it would give is returned (a new sheet\'s id is not kept). A view already on another sheet is moved. Returns the sheet (number, views with slot and scale).',
   scope: 'read',
   inputSchema: {
     type: 'object',
     properties: {
       document_id: DOCUMENT_ID,
+      dry_run: DRY_RUN,
       view: { type: 'string', description: 'The view\'s id or name.' },
       sheet: { type: 'string', description: 'The sheet\'s id or number. Omit to let the engine choose or make one.' },
       scale: { type: 'number', description: 'Scale denominator: 100 means 1:100.' },
@@ -229,7 +82,9 @@ export const ifcsheetPlaceView: Tool = {
     additionalProperties: false,
   },
   async handler(input, ctx) {
-    const entry = getSheetSet(ctx, text(input, 'document_id'));
+    const session = getSheetSet(ctx, text(input, 'document_id'));
+    const dry = optBoolean(input, 'dry_run') ?? false;
+    const entry = workingEntry(session, dry);
     const doc = entry.set.document;
     const extent = extentOf(entry);
     const view = findView(doc, text(input, 'view'));
@@ -280,8 +135,8 @@ export const ifcsheetPlaceView: Tool = {
     replaceSheetDocument(entry, sheetsPatch(doc, sheets));
     const reported = sheetsOf(entry).find((s) => s.id === placedOn.id)!;
     return okResult(
-      `Placed '${view.name}' on ${reported.number} (${reported.name}, ${reported.paper}) at ${reported.views.find((v) => v.viewId === view.id)?.scale}.`,
-      { document_id: entry.id, sheet: reported, new_sheet: !doc.sheets.some((s) => s.id === placedOn.id) },
+      dryPrefix(dry, `${dry ? 'Would place' : 'Placed'} '${view.name}' on ${reported.number} (${reported.name}, ${reported.paper}) at ${reported.views.find((v) => v.viewId === view.id)?.scale}.`),
+      { document_id: entry.id, dry_run: dry, sheet: reported, new_sheet: !doc.sheets.some((s) => s.id === placedOn.id) },
     );
   },
 };
@@ -294,12 +149,13 @@ const FIELD_MAX = 200;
 export const ifcsheetSetTitleBlock: Tool = {
   name: 'ifcsheet_set_title_block',
   description:
-    `Set title block fields. fields is an object of text values, keys among: ${FIELDS.join(', ')} (date is ISO, YYYY-MM-DD; each value at most ${FIELD_MAX} characters; an empty string blanks the field). Without sheet the fields are the project's, printed on every sheet; with sheet (an id or number) they are that sheet's own and win over the project's. The sheet number and name are not fields: they are the sheet's. A set with no title block layout prints project, sheet number and name, scale and date on a sheet; the other fields are kept in the project (ifcsheet_save_project) for the app's title block layouts. Returns the fields the sheet or the project has afterwards.`,
+    `Set title block fields. fields is an object of text values, keys among: ${FIELDS.join(', ')} (date is ISO, YYYY-MM-DD; each value at most ${FIELD_MAX} characters; an empty string blanks the field). Without sheet the fields are the project's, printed on every sheet; with sheet (an id or number) they are that sheet's own and win over the project's. The sheet number and name are not fields: they are the sheet's. A set with no title block layout prints project, sheet number and name, scale and date on a sheet; the other fields are kept in the project (ifcsheet_save_project) for the app's title block layouts. Returns the fields the sheet or the project has afterwards and changed (each field that differs: from, to). With dry_run true nothing is set and these are what the call would give.`,
   scope: 'read',
   inputSchema: {
     type: 'object',
     properties: {
       document_id: DOCUMENT_ID,
+      dry_run: DRY_RUN,
       fields: { type: 'object', description: 'Field name to text, e.g. {"client": "Muster AG", "drawnBy": "AB"}.', additionalProperties: { type: 'string' } },
       sheet: { type: 'string', description: 'A sheet\'s id or number: set the fields for that sheet only. Omit for the whole project.' },
     },
@@ -307,7 +163,9 @@ export const ifcsheetSetTitleBlock: Tool = {
     additionalProperties: false,
   },
   async handler(input, ctx) {
-    const entry = getSheetSet(ctx, text(input, 'document_id'));
+    const session = getSheetSet(ctx, text(input, 'document_id'));
+    const dry = optBoolean(input, 'dry_run') ?? false;
+    const entry = workingEntry(session, dry);
     const doc = entry.set.document;
     const given = input.fields;
     if (typeof given !== 'object' || given === null || Array.isArray(given) || Object.keys(given).length === 0) {
@@ -328,9 +186,11 @@ export const ifcsheetSetTitleBlock: Tool = {
       : { ...doc, titleBlock: { ...doc.titleBlock, ...values } };
     replaceSheetDocument(entry, next);
     const printed = sheetFields(target ? next.sheets.find((s) => s.id === target.id)! : { titleBlock: undefined }, next);
+    const before: Record<string, string> = sheetFields(target ?? { titleBlock: undefined }, doc);
+    const changed = Object.fromEntries(Object.entries(values).filter(([key, value]) => (before[key] ?? '') !== value).map(([key, value]) => [key, { from: before[key] ?? '', to: value }]));
     return okResult(
-      `Set ${Object.keys(values).join(', ')} for ${target ? `sheet ${target.number}` : 'the project'}.`,
-      { document_id: entry.id, scope: target ? target.number : 'project', fields: printed },
+      dryPrefix(dry, `${dry ? 'Would set' : 'Set'} ${Object.keys(values).join(', ')} for ${target ? `sheet ${target.number}` : 'the project'}.`),
+      { document_id: entry.id, dry_run: dry, scope: target ? target.number : 'project', fields: printed, changed },
     );
   },
 };

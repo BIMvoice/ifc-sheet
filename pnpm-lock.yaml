@@ -1648,6 +1648,9 @@ importers:
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
+      ajv:
+        specifier: ^8.17.1
+        version: 8.20.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
