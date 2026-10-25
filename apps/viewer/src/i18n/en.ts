@@ -86,6 +86,7 @@ import { wallFindEn } from './catalogues/wall-find.en';
 import { wallKeysEn } from './catalogues/wall-keys.en';
 import { wallReviewEn } from './catalogues/wall-review.en';
 import { wallSectionsEn } from './catalogues/wall-sections.en';
+import { scheduleExportEn } from './catalogues/schedule-export.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
 import { landXmlEn } from './catalogues/landxml.en';
@@ -118,6 +119,7 @@ import { projectNavigatorEn } from './catalogues/project-navigator.en';
 import { draftingEn } from './catalogues/drafting.en';
 import { sheetsEn } from './catalogues/sheets.en';
 import { titleBlockSourcesEn } from './catalogues/title-block-sources.en';
+import { titleBlockRoEn } from './catalogues/title-block-ro.en';
 import { draftSetEn } from './catalogues/draft-set.en';
 import { issueEn } from './catalogues/issue.en';
 import { revisionsEn } from './catalogues/revisions.en';
@@ -204,6 +206,7 @@ export const en = {
   ...draftingEn,
   ...sheetsEn,
   ...titleBlockSourcesEn,
+  ...titleBlockRoEn,
   ...draftSetEn,
   ...issueEn,
   ...revisionsEn,
@@ -293,6 +296,7 @@ export const en = {
   ...wallKeysEn,
   ...wallReviewEn,
   ...wallSectionsEn,
+  ...scheduleExportEn,
   ...whatChangedEn,
   ...hierarchyEn,
   ...propertiesEn,

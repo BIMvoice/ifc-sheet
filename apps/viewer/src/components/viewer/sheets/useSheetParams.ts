@@ -16,6 +16,7 @@ import { useProjectStore } from '@/project/project-store';
 import { hasTrueScale } from '@/project/axonometric';
 import { titleBlockOf } from '@/project/title-block';
 import { useEffectiveTitleBlock } from '@/project/title-block-model';
+import { fieldBuiltins } from '@bimvoice/ifcsheet';
 import { paramLookup } from '@/project/title-block-params';
 import { currentRevisionOf } from '@/project/revisions';
 import type { ProjectSheet } from '@/project/types';
@@ -42,9 +43,9 @@ export function useSheetParamLookup(sheet: ProjectSheet, projectName: string): (
     const fields = titleBlockOf(sheet, projectFields, projectName);
     const page = inSetOrder(sheets, schedules).findIndex((s) => s.id === sheet.id) + 1;
     return paramLookup(sheet, params, {
-      SheetNumber: sheet.number, SheetName: sheet.name, Scale: scale, Date: fields.date ?? '', Page: `${page}/${sheets.length}`,
-      Project: fields.project ?? '', Address: fields.address ?? '', Client: fields.client ?? '', Organisation: fields.organisation ?? '',
-      DrawnBy: fields.drawnBy ?? '', CheckedBy: fields.checkedBy ?? '', // The revision is never typed: it is the latest the sheet has (`revisions.ts`).
+      ...fieldBuiltins(fields), // the title block fields, by the engine's one table (`FIELD_PARAMS`), so the PDF names them alike
+      SheetNumber: sheet.number, SheetName: sheet.name, Scale: scale, Page: `${page}/${sheets.length}`,
+      // The revision is never typed: it is the latest the sheet has (`revisions.ts`).
       Revision: currentRevisionOf(sheet, { revisions, drafts })?.code ?? '',
     });
   }, [sheet, projectFields, projectName, params, sheets, schedules, scale, revisions, drafts]);

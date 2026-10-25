@@ -15,11 +15,12 @@ import { dimensionLayout, formatLevel } from '@/drafting/annotation';
 import { formatDimension } from '@/drafting/styles';
 import type { AnnotationShape } from '@/drafting/types';
 import { formatValue, parseFormatSpec } from '@/labels/label-format';
-import { layoutTypeQuantities, typeQuantitiesCsv, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
-import { layoutMaterialTakeoff, takeoffCsv } from '@/joinery/material-takeoff-layout';
-import { layoutRoomFinishes, roomFinishesCsv, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
+import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
+import { joineryCsv, tableCsv } from '@/joinery/export-test-util';
+import { layoutMaterialTakeoff, takeoffTable } from '@/joinery/material-takeoff-layout';
+import { finishTable, layoutRoomFinishes, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
 import { roomFinishes } from '@/joinery/room-finishes';
-import { layoutSchedule, scheduleCsv, type ScheduleLabels } from '@/joinery/schedule-layout';
+import { layoutSchedule, type ScheduleLabels } from '@/joinery/schedule-layout';
 import type { TypeQuantities } from '@/joinery/type-quantities';
 import type { ScheduleData } from '@/joinery/schedule-data';
 import { defaultWindowSpec } from '@ifc-lite/create';
@@ -77,8 +78,9 @@ describe('schedules and quantities follow the language, their CSV does not (#269
     const en = textsOf(layoutTypeQuantities(TQ, TQ_LABELS('en')).prims);
     assert.ok(en.includes('12.50') && en.includes('1,234.50'), en.join(' | '));
     // A file for a machine: plain numbers, the same in both.
-    assert.equal(typeQuantitiesCsv(TQ, TQ_LABELS('ro')), typeQuantitiesCsv(TQ, TQ_LABELS('en')));
-    assert.match(typeQuantitiesCsv(TQ, TQ_LABELS('ro')), /,12\.5,1234\.5,3\.25,/);
+    const csv = (locale: string) => tableCsv(typeQuantityTable(TQ, TQ_LABELS(locale)));
+    assert.equal(csv('ro'), csv('en'));
+    assert.match(csv('ro'), /,12\.5,1234\.5,3\.25,/);
   });
 
   it('material takeoff', () => {
@@ -86,7 +88,7 @@ describe('schedules and quantities follow the language, their CSV does not (#269
     const labels = (locale: string) => ({ locale, title: 'T', material: 'M', elements: 'E', volume: 'V', area: 'A', usedIn: 'U', total: 'Tot' });
     assert.ok(textsOf(layoutMaterialTakeoff(rows, labels('ro')).prims).includes('1.234,50'));
     assert.ok(textsOf(layoutMaterialTakeoff(rows, labels('en')).prims).includes('1,234.50'));
-    assert.equal(takeoffCsv(rows, labels('ro')), takeoffCsv(rows, labels('en')));
+    assert.equal(tableCsv(takeoffTable(rows, labels('ro'))), tableCsv(takeoffTable(rows, labels('en'))));
   });
 
   it('room finishes', () => {
@@ -95,7 +97,7 @@ describe('schedules and quantities follow the language, their CSV does not (#269
     const en = textsOf(layoutRoomFinishes(rooms, FIN_LABELS('en')).prims);
     assert.ok(ro.includes('24,50'), ro.join(' | '));
     assert.ok(en.includes('24.50'), en.join(' | '));
-    assert.equal(roomFinishesCsv(rooms, FIN_LABELS('ro')), roomFinishesCsv(rooms, FIN_LABELS('en')));
+    assert.equal(tableCsv(finishTable(rooms, FIN_LABELS('ro'))), tableCsv(finishTable(rooms, FIN_LABELS('en'))));
   });
 
   it('the joinery schedule\'s U value, and nothing else on it changes', () => {
@@ -110,7 +112,7 @@ describe('schedules and quantities follow the language, their CSV does not (#269
     assert.ok(en.includes('1.1'), en.join(' | '));
     // Sizes and counts are whole numbers: the same text in both.
     assert.ok(ro.includes('1200 × 1500') && en.includes('1200 × 1500'));
-    assert.equal(scheduleCsv(data, labels('ro')), scheduleCsv(data, labels('en')));
-    assert.match(scheduleCsv(data, labels('ro')), /,1\.1,/);
+    assert.equal(joineryCsv(data, labels('ro')), joineryCsv(data, labels('en')));
+    assert.match(joineryCsv(data, labels('ro')), /,1\.1,/);
   });
 });

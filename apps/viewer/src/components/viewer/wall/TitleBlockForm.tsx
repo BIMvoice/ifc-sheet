@@ -26,6 +26,10 @@ const LABELS: Record<TitleBlockField, TranslationKey> = {
   address: 'sheets.tb.address',
   client: 'sheets.tb.client',
   organisation: 'sheets.tb.organisation',
+  phase: 'tbro.phase',
+  projectNumber: 'tbro.projectNumber',
+  projectManager: 'tbro.projectManager',
+  designer: 'tbro.designer',
   drawnBy: 'sheets.tb.drawnBy',
   checkedBy: 'sheets.tb.checkedBy',
   date: 'sheets.tb.date',
@@ -110,7 +114,7 @@ export function TitleBlockForm({ sheet }: { sheet?: ProjectSheet }) {
                 key={`${key}:${value}`}
                 className={field}
                 defaultValue={value}
-                placeholder={key === 'project' && !sheet ? projectName : undefined}
+                placeholder={key === 'project' && !sheet ? projectName : key === 'phase' ? t('wall.tb.phaseHint') : undefined}
                 onBlur={(e) => commit(key, e.target.value)}
                 data-owns-keys
                 onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}

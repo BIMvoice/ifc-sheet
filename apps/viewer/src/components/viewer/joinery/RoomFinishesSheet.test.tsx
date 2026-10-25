@@ -20,7 +20,8 @@ import { resetProject, useProjectStore } from '@/project/project-store';
 import { startDrawingSet, addScheduleToSet } from '@/project/drawing-set-actions';
 import { finishLines, roomFinishes } from '@/joinery/room-finishes';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
-import { roomFinishesCsv } from '@/joinery/room-finishes-layout';
+import { finishTable } from '@/joinery/room-finishes-layout';
+import { csvLines, tableCsv } from '@/joinery/export-test-util';
 import { WallSheet } from '../wall/WallSheet';
 import { sheetSvgText } from '../sheets/sheet-export';
 import { sheetDxf } from '../sheets/sheet-dxf';
@@ -110,7 +111,7 @@ describe('room finishes of the rooms-with-finishes fixture (#77)', () => {
     assert.deepEqual(expected.get('103')!, [['floor', 'Concrete, sealed', null], ['ceiling', 'Acoustic tile', null]]);
     assert.equal(rooms[1].finishes.wall[0].source, 'containment');
     assert.equal(finishLines(rooms).length, 3);
-    assert.equal(roomFinishesCsv(rooms, { locale: 'en', title: 'T', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'm²', sharedNote: '*' }).split('\n')[1], '101,Living room,Level 1,Oak parquet,24.5,"Plaster, painted white",52,Suspended plasterboard,24.8');
+    assert.equal(csvLines(tableCsv(finishTable(rooms, { locale: 'en', title: 'T', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'm²', sharedNote: '*' })))[1], '101,Living room,Level 1,Oak parquet,24.5,"Plaster, painted white",52,Suspended plasterboard,24.8');
   });
 
   it('prints the table into the sheet SVG and the DXF', async () => {

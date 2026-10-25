@@ -57,6 +57,12 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET) stay as
 | Generated names | Planuri, Fațade sud și nord, Fațade est și vest, Secțiuni, Tabele; Fațada nord/est/sud/vest; Secțiunea A-A; Detaliu 1 - … | Resolved once at creation (`names.*`), stored as plain text, never re-translated |
 | Drawn by / Checked by | Desenat / Verificat | As printed in Romanian title blocks |
 | Sheet no. | Nr. planșă | |
+| General designer (title block) | Proiectant general | The firm that holds the design; the title block's organisation |
+| Project manager (title block) | Șef proiect | |
+| Designed by (title block) | Proiectat | With "Desenat" and "Verificat" |
+| Phase (of the design, title block) | Faza | Written as the issue names them: DTAC, PTh, DE; typed, never translated |
+| Project no. (title block) | Proiect nr. | |
+| Stamp (designer's, verifier's) | Ștampilă proiectant / Ștampilă verificator | An empty box on the title block for the stamp and signature |
 | Paper | Hârtie | Paper format: "Format" |
 | Landscape / Portrait | Orizontal / Vertical | |
 | As indicated | Conform indicațiilor | |
