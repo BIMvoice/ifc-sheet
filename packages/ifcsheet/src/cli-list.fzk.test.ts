@@ -8,7 +8,7 @@
  * total 190.4655); `apps/viewer/src/lib/lists/list-headless-parity.fzk.test.tsx` holds the headless run to the app's, row by row.
  */
 
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +29,26 @@ const WALLS_BY_TYPE: ListScheduleDef = {
   columns: [{ id: 'type', source: 'attribute', propertyName: 'Type' }, { id: 'area', source: 'quantity', psetName: 'BaseQuantities', propertyName: 'NetSideArea' }],
   groupBy: ['type'], sum: ['area'],
 };
+const TYPE = WALLS_BY_TYPE.columns[0];
+/** AC20-FZK-Haus with a property set and a quantity set on the type of its eight 300 mm walls ONLY (the fixture's types carry none the Lists engine reads): the Type fallback has something to find. */
+function withTypeSets(text: string): string {
+  const entities = [
+    "#990001= IFCPROPERTYSINGLEVALUE('TypeOnlyRating',$,IFCLABEL('TYPE-R60'),$);",
+    "#990002= IFCPROPERTYSET('0aaaaaaaaaaaaaaaaaaaaa',#12,'Pset_TypeOnly',$,(#990001));",
+    "#990003= IFCQUANTITYAREA('TypeOnlyArea',$,$,2.5);",
+    "#990004= IFCELEMENTQUANTITY('0bbbbbbbbbbbbbbbbbbbbb',#12,'Qto_TypeOnly',$,$,(#990003));",
+  ].join('\n');
+  const patched = text.replace("'Leichtbeton 102890359 300',$,$,$,(", "'Leichtbeton 102890359 300',$,$,(#990002,#990004),(").replace(/\nENDSEC;\s*END-ISO-10303-21;\s*$/, `\n${entities}\nENDSEC;\nEND-ISO-10303-21;\n`);
+  if (patched === text || !patched.includes('#990004')) throw new Error('the fixture could not be patched');
+  return patched;
+}
+
+const TYPE_ONLY: ListScheduleDef = {
+  filter: { classes: ['IfcWallStandardCase'] },
+  columns: [TYPE, { id: 'rating', source: 'property', psetName: 'Pset_TypeOnly', propertyName: 'TypeOnlyRating' }, { id: 'tarea', source: 'quantity', psetName: 'Qto_TypeOnly', propertyName: 'TypeOnlyArea' }],
+  groupBy: ['type', 'rating'], sum: ['tarea'],
+};
+
 const PROJECT = JSON.stringify({ format: 'ifclite-project', version: 1, name: 'Haus', schedules: [{ id: 'walls', name: 'Walls by type', kind: 'list', createdAt: 1, list: WALLS_BY_TYPE }] });
 
 const capture = () => {
@@ -48,7 +68,7 @@ const projectFile = (text = PROJECT): string => {
 
 describe.skipIf(missing !== null)('ifcsheet list, on AC20-FZK-Haus', () => {
   let model: OpenedModel;
-  beforeAll(async () => { model = await openModel(new Uint8Array((await import('node:fs')).readFileSync(FZK)), { geometry: false }); }, 120_000);
+  beforeAll(async () => { model = await openModel(new Uint8Array(readFileSync(FZK)), { geometry: false }); }, 120_000);
 
   it('gives the walls by type with the Lists engine\'s counts, areas and total', () => {
     const table = listScheduleTableOn(model, { id: 'walls', name: 'Walls by type', list: WALLS_BY_TYPE }, 'en');
@@ -72,6 +92,15 @@ describe.skipIf(missing !== null)('ifcsheet list, on AC20-FZK-Haus', () => {
     expect(run1.result.rows).toHaveLength(13);
     expect(run1.grouped).toBe(false);
     for (const row of run1.result.rows) expect(String(row.values[2])).toMatch(/^Leichtbeton/);
+  });
+
+  it('reads what the type defines once (the Type fallback of the provider): a property and a quantity only on the type of the 300 mm walls', async () => {
+    const patched = await openModel(new TextEncoder().encode(withTypeSets(readFileSync(FZK, 'utf8'))), { geometry: false });
+    const table = listScheduleTableOn(patched, { id: 't', name: 'Type only', list: TYPE_ONLY }, 'en');
+    expect(table.header).toEqual(['Type', 'TypeOnlyRating', 'Count', 'TypeOnlyArea (m²)']);
+    const row = table.rows.find((r) => r[1] === 'TYPE-R60');
+    expect(row).toBeDefined();
+    expect(row!.slice(2)).toEqual([8, 20]);
   });
 
   it('writes the CSV of the app (BOM, CRLF, plain figures); Romanian takes ; and its words', () => {

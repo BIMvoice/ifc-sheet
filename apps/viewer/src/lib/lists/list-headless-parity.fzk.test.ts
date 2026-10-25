@@ -47,7 +47,28 @@ const EVERY_SOURCE: ListScheduleDef = {
     { id: 'project', source: 'spatial', propertyName: 'Project' }, { id: 'container', source: 'spatial', propertyName: 'Container' },
   ],
 };
+
+/** AC20-FZK-Haus with a property set and a quantity set on the type of its eight 300 mm walls ONLY (the fixture's types carry none the Lists engine reads): the Type fallback has something to find. */
+function withTypeSets(text: string): string {
+  const entities = [
+    "#990001= IFCPROPERTYSINGLEVALUE('TypeOnlyRating',$,IFCLABEL('TYPE-R60'),$);",
+    "#990002= IFCPROPERTYSET('0aaaaaaaaaaaaaaaaaaaaa',#12,'Pset_TypeOnly',$,(#990001));",
+    "#990003= IFCQUANTITYAREA('TypeOnlyArea',$,$,2.5);",
+    "#990004= IFCELEMENTQUANTITY('0bbbbbbbbbbbbbbbbbbbbb',#12,'Qto_TypeOnly',$,$,(#990003));",
+  ].join('\n');
+  const patched = text.replace("'Leichtbeton 102890359 300',$,$,$,(", "'Leichtbeton 102890359 300',$,$,(#990002,#990004),(").replace(/\nENDSEC;\s*END-ISO-10303-21;\s*$/, `\n${entities}\nENDSEC;\nEND-ISO-10303-21;\n`);
+  if (patched === text || !patched.includes('#990004')) throw new Error('the fixture could not be patched');
+  return patched;
+}
+
+const TYPE_ONLY: ListScheduleDef = {
+  filter: { classes: ['IfcWallStandardCase'] },
+  columns: [TYPE, { id: 'rating', source: 'property', psetName: 'Pset_TypeOnly', propertyName: 'TypeOnlyRating' }, { id: 'tarea', source: 'quantity', psetName: 'Qto_TypeOnly', propertyName: 'TypeOnlyArea' }],
+  groupBy: ['type', 'rating'], sum: ['tarea'],
+};
+
 const DEFINITIONS: Record<string, ListScheduleDef> = {
+  'values defined once on the type (the Type fallback)': TYPE_ONLY,
   'walls by type': WALLS_BY_TYPE,
   'every source, a row per element': EVERY_SOURCE,
   'every class by class and storey': { columns: [{ id: 'class', source: 'attribute', propertyName: 'Class' }, { id: 'storey', source: 'spatial', propertyName: 'Storey' }, { id: 'vol', source: 'quantity', psetName: 'BaseQuantities', propertyName: 'NetVolume' }], groupBy: ['class', 'storey'], sum: ['vol'] },
@@ -59,7 +80,7 @@ const DEFINITIONS: Record<string, ListScheduleDef> = {
 const state = () => useViewerStore.getState();
 async function load(): Promise<void> {
   useViewerStore.setState({ models: new Map(), mutationViews: new Map(), ifcDataStore: null });
-  await loadUrbanModel('fzk', new Uint8Array(readFileSync(FZK)), []);
+  await loadUrbanModel('fzk', new TextEncoder().encode(withTypeSets(readFileSync(FZK, 'utf8'))), []);
 }
 beforeEach(load);
 
@@ -88,6 +109,9 @@ describe('the headless provider answers every question the app\'s provider answe
     // The comparison reads something: the walls have a type with quantities and properties of its own, a storey, a building.
     const wall = app.getEntitiesByType(IfcTypeEnum.IfcWallStandardCase)[0];
     assert.ok(app.getEntityDefiningTypeName!(wall) !== '' && app.getStoreyName!(wall) !== '' && app.getBuildingName!(wall) !== '' && app.getQuantitySets(wall).length > 0);
+    // And the Type fallback has sets to compare: the type of the 300 mm walls carries a property set and a quantity set of its own.
+    const onType = ids.filter((id) => (app.getTypePropertySets!(id).length > 0) && (app.getTypeQuantitySets!(id).length > 0));
+    assert.equal(onType.length, 8, 'the eight 300 mm walls read the sets of their type');
   });
 });
 
@@ -108,6 +132,15 @@ describe('the headless run gives the app\'s rows, groups, totals and files (#78)
       assert.equal(listScheduleCsv(headTable, 'en'), exportCsv({ title: 'Schedule', tables: [listExportTable(appTable)] }));
     });
   }
+
+  it('reads a value defined once on the type for every wall of the type', async () => {
+    const { modelUnits } = prepareListProviders(state(), {});
+    const head = runListScheduleHeadless({ id: 's', name: 'Type only', list: TYPE_ONLY }, [{ modelId: 'fzk', provider: headless() }], modelUnits);
+    const leaves = (head.result.groups ?? []).filter((g) => g.level === 1 && g.path[1] === 'TYPE-R60');
+    assert.equal(leaves.length, 1);
+    assert.equal(leaves[0].count, 8);
+    assert.equal(leaves[0].sums.tarea, 20);
+  });
 
   it('is the walls by type of the issue: groups 136.2761 and 54.1895, total 190.4655, 13 walls', async () => {
     const { modelUnits } = prepareListProviders(state(), {});
