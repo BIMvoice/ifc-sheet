@@ -9,6 +9,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { escapeCsvCell } from '@ifc-lite/export';
 import { BOQ_UNIT_TEXT, boqPropertyNames } from './boq.js';
 import { boqMissing, computeBoq, type BoqResult } from './boq-compute.js';
 import { boqLineText, boqNotes, boqTable, describeBoqProblem, tidy, type BoqCell, type BoqTable } from './boq-table.js';
@@ -31,12 +32,11 @@ export interface BoqArgs {
 const cannotRead = (file: string, error: unknown): string =>
   `ifcsheet: cannot read ${file}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`;
 
-/** A CSV cell: text is guarded against a spreadsheet reading it as a formula, figures are written plain. */
+/** A CSV cell: text is guarded against a spreadsheet reading it as a formula (the one escaper, `@ifc-lite/export`), figures are written plain. */
 function csvCell(v: BoqCell, delimiter: string): string {
   if (v === null) return '';
   if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
-  const text = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
-  return /[",\r\n]/.test(text) || text.includes(delimiter) ? `"${text.replace(/"/g, '""')}"` : text;
+  return escapeCsvCell(v, { delimiter, exemptNumbers: false });
 }
 
 /** The table as CSV: a byte order mark and CRLF ends like the app's file, `;` between columns where the decimal mark is a comma. */

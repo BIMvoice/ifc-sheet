@@ -13,6 +13,7 @@ import { boqProblem, boqPropertyNames, newArticle, quantityDimension, readBoqArt
 import { boqMissing, computeBoq, type BoqElement } from './boq-compute.js';
 import { boqTable, describeBoqProblem } from './boq-table.js';
 import { BOQ_WORDS_EN, BOQ_WORDS_RO, boqSayFor } from './boq-words.js';
+import { boqCsv } from './cli-boq.js';
 import { describeReadiness, modelReadiness } from './readiness.js';
 
 let n = 0;
@@ -172,6 +173,19 @@ describe('the table', () => {
     expect(Object.keys(BOQ_WORDS_RO).sort()).toEqual(Object.keys(BOQ_WORDS_EN).sort());
     for (const key of Object.keys(BOQ_WORDS_EN) as (keyof typeof BOQ_WORDS_EN)[]) {
       expect([...BOQ_WORDS_EN[key].matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort(), key).toEqual([...BOQ_WORDS_RO[key].matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort());
+    }
+  });
+});
+
+describe('the CSV of the command line', () => {
+  const table = (cells: (string | number | null)[]) => ({ name: 't', header: ['A', 'B', 'C', 'D', 'E'], rows: [cells], bold: [], numeric: [], notes: [] });
+  it('leaves normal cells as they were and guards a cell a spreadsheet would read as a formula', () => {
+    const csv = boqCsv(table([1, 'EXAMPLE-01', 'masonry, T240', 'm³', 13.13267]), 'en');
+    expect(csv).toBe('\uFEFFA,B,C,D,E\r\n1,EXAMPLE-01,"masonry, T240",m³,13.13267\r\n');
+    expect(boqCsv(table([null, 'a', 'b', 'c', 2]), 'ro')).toContain('\r\n;a;b;c;2\r\n');
+    for (const bad of ['=1+1', '+cmd', '-cmd', '@SUM(A1)']) {
+      const row = boqCsv(table([1, bad, 'x', 'y', 1]), 'en').split('\r\n')[1].split(',');
+      expect(row[1], bad).toBe(`'${bad}`);
     }
   });
 });

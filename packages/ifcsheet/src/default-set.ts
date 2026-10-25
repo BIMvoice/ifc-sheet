@@ -23,6 +23,9 @@ import { nameOf } from './names.js';
 import { DEFAULT_SCHEME } from './numbering.js';
 import { proposeSections, type ProposalInput, type SectionProposal } from './section-proposals.js';
 import { sectionPlaneThrough } from './section-plane.js';
+import type { SetTemplate } from './set-template.js';
+import { applySetTemplate } from './set-template-apply.js';
+import type { TemplateNote, TemplateNoteKey } from './set-template-notes.js';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults.js';
 import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, defaultViews, elevationName, levelFloorY, levelsFromStoreys, resolvePlanLevel, sameElevation, uniqueViewName, type StoreyInput } from './view-defaults.js';
 
@@ -49,11 +52,13 @@ export interface DefaultSetOptions {
   templates?: Partial<Record<TemplateSeries, SheetTemplate>>;
   /** The project's numbering (default: A-101 style). */
   scheme?: NumberingScheme;
+  /** A set template (#21): the sheets are made by its rules (`applySetTemplate`) instead of the automatic grouping; the views are the same. */
+  setTemplate?: SetTemplate;
 }
 
 /** Something the person should know about the set, as a catalogue key and its parameters. */
 export interface SetNote {
-  key: 'draftSet.note.noStoreys' | 'draftSet.note.noFit';
+  key: 'draftSet.note.noStoreys' | 'draftSet.note.noFit' | TemplateNoteKey;
   params: Record<string, string | number>;
 }
 
@@ -128,9 +133,9 @@ class Planner {
   }
 
   /** A plan with no scale of its own takes the one the set will draw it at. */
-  planScales(templates: Partial<Record<TemplateSeries, SheetTemplate>>): void {
+  planScales(templates: Partial<Record<TemplateSeries, SheetTemplate>>, setTemplate?: SetTemplate): void {
     const plans = this.views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.detail);
-    const planned = buildDrawingSet({ views: plans, extent: this.extent, templates });
+    const planned = setTemplate ? applySetTemplate(setTemplate, { views: plans, extent: this.extent }).sheets : buildDrawingSet({ views: plans, extent: this.extent, templates });
     const scales = new Map(planned.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
     for (const plan of plans) {
       const scale = scales.get(plan.id);
@@ -174,10 +179,15 @@ export function generateDefaultSet(model: SetModel, options: DefaultSetOptions =
   const planner = new Planner(levels, model.extent, now);
   planner.plans();
   planner.elevations();
-  planner.planScales(templates);
+  planner.planScales(templates, options.setTemplate);
   planner.sections(model);
-  const sheets = buildDrawingSet({ views: planner.views, extent: model.extent, now, templates, scheme: options.scheme ?? DEFAULT_SCHEME });
-  const notes = [...planner.notes, ...groupsThatDoNotFit(planner.views, model.extent).map((kind: SetGroup): SetNote => ({ key: 'draftSet.note.noFit', params: { kind } }))];
+  const chosen = options.setTemplate?.numbering ?? options.scheme;
+  const scheme = chosen ?? DEFAULT_SCHEME;
+  const ruled = options.setTemplate ? applySetTemplate(options.setTemplate, { views: planner.views, extent: model.extent, now, scheme }) : null;
+  const sheets = ruled ? ruled.sheets : buildDrawingSet({ views: planner.views, extent: model.extent, now, templates, scheme });
+  // The schedules a template carries are added by the app; the engine says so rather than leave them out silently.
+  const schedules = (options.setTemplate?.schedules ?? []).map((r): TemplateNote => ({ key: 'setTemplate.note.schedule', params: { kind: r.kind, name: r.name } }));
+  const notes = [...planner.notes, ...(ruled?.notes ?? []), ...schedules, ...groupsThatDoNotFit(planner.views, model.extent).map((kind: SetGroup): SetNote => ({ key: 'draftSet.note.noFit', params: { kind } }))];
   return {
     document: {
       name: options.name ?? (model.projectName || nameOf('names.project.untitled')),
@@ -185,7 +195,7 @@ export function generateDefaultSet(model: SetModel, options: DefaultSetOptions =
       views: planner.views,
       sheets,
       titleBlock: { date: new Date(now).toISOString().slice(0, 10) },
-      ...(options.scheme ? { sheetNumbering: options.scheme } : {}),
+      ...(chosen ? { sheetNumbering: chosen } : {}),
       ...(model.includeFarElements ? { includeFarElements: true } : {}),
     },
     levels,

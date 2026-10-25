@@ -1457,6 +1457,9 @@ importers:
       '@ifc-lite/drawing-2d':
         specifier: workspace:^
         version: link:../drawing-2d
+      '@ifc-lite/export':
+        specifier: workspace:^
+        version: link:../export
       '@ifc-lite/geometry':
         specifier: workspace:^
         version: link:../geometry
