@@ -135,6 +135,27 @@ describe.skipIf(missing !== null)('ifcsheet_add_schedule kind "list" over stdio 
     expect(await readFile(join(tmp, 'issue-loaded', 'schedules', 'A-601.csv'), 'utf8')).toContain('Total,13,190.4655');
   }, 300_000);
 
+  it('reads an office classification column with the project\'s mappings, as `ifcsheet list` does (#351)', async () => {
+    const mapping = { id: 'uc', system: { name: 'Uniclass', edition: '2015' }, rules: [{ by: 'type', match: 'Leichtbeton 102890359 240', code: 'EXAMPLE-Ss_25_10', title: 'EXAMPLE: thick walls' }, { by: 'type', match: 'Leichtbeton 102890359 300', code: 'EXAMPLE-Ss_25_20', title: 'EXAMPLE: thickest walls' }] };
+    const list = { filter: { classes: ['IfcWallStandardCase'] }, columns: [{ id: 'code', source: 'officeClassification', propertyName: 'Code' }], groupBy: ['code'], totals: false };
+    const projectText = JSON.stringify({ format: 'ifclite-project', version: 1, classificationMappings: [mapping], schedules: [{ id: 'c', name: 'Schedule', kind: 'list', createdAt: 1, list }] });
+    const document_id = await generate();
+    const added = await ok('ifcsheet_add_schedule', { document_id, kind: 'list', list, project_json: projectText });
+    expect(added.table[0]).toEqual(['Code', 'Count']);
+    const mcpRows = Object.fromEntries(added.table.slice(1));
+    expect(mcpRows).toEqual({ 'EXAMPLE-Ss_25_10': '5', 'EXAMPLE-Ss_25_20': '8' });
+    const project = join(tmp, 'office.ifclite-project.json');
+    await writeFile(project, projectText);
+    const cliRows = Object.fromEntries(JSON.parse((await cli('list', FZK, '--project', project, '--json')).stdout).rows.map(([c, n]: [string, number]) => [c, String(n)]));
+    expect(mcpRows).toEqual(cliRows);
+    // Saved and loaded again, the schedule keeps its mappings and draws the same codes.
+    const file = join(tmp, 'office-saved.ifclite-project.json');
+    await ok('ifcsheet_save_project', { document_id, file_path: file });
+    const loaded = await ok('ifcsheet_load_project', { model_id: modelId, project_path: file });
+    await ok('ifcsheet_issue_set', { document_id: loaded.document_id, directory: join(tmp, 'issue-office') });
+    expect(await readFile(join(tmp, 'issue-office', 'schedules', 'A-601.csv'), 'utf8')).toContain('EXAMPLE-Ss_25_20,8');
+  }, 300_000);
+
   it('refuses a definition it would have to change, and says which part', async () => {
     const document_id = await generate();
     const add = (list: unknown, extra: Record<string, unknown> = {}) => ({ document_id, kind: 'list', ...(list === undefined ? {} : { list }), ...extra });
@@ -148,7 +169,7 @@ describe.skipIf(missing !== null)('ifcsheet_add_schedule kind "list" over stdio 
     await refused('ifcsheet_add_schedule', add({ ...WALLS_BY_TYPE, totals: true }), /list\.totals can only be false/);
     await refused('ifcsheet_add_schedule', add({ ...WALLS_BY_TYPE, filter: { classes: ['IfcNoSuchThing'] } }), /no row|no element of the model matches/);
     await refused('ifcsheet_add_schedule', { document_id, kind: 'rooms', list: WALLS_BY_TYPE }, /for kind "list"/);
-    await refused('ifcsheet_add_schedule', add(WALLS_BY_TYPE, { project_json: '{}' }), /for kind "boq"/);
+    await refused('ifcsheet_add_schedule', add(WALLS_BY_TYPE, { project_json: '{}' }), /cannot be used as a project/);
     expect((await ok('ifcsheet_list_sheets', { document_id })).sheets.some((s: any) => s.number === 'A-601')).toBe(false);
   }, 300_000);
 });

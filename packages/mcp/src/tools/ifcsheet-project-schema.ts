@@ -119,7 +119,7 @@ const schedule: Schema = {
   type: 'object',
   description: 'A schedule printed on a sheet of its own; its rows are read from the model each time the set is drawn.',
   required: ['kind', 'sheetId', 'locale'],
-  properties: { id: str, kind: { enum: ['rooms', 'boq', 'list'] }, sheetId: str, locale: { enum: [...SCHEDULE_LOCALES] }, boqArticles: { type: 'array', items: obj }, list: obj, name: str },
+  properties: { id: str, kind: { enum: ['rooms', 'boq', 'list'] }, sheetId: str, locale: { enum: [...SCHEDULE_LOCALES] }, boqArticles: { type: 'array', items: obj }, classificationMappings: { type: 'array', items: obj }, list: obj, name: str },
 };
 
 /** The JSON Schema (draft 2020-12) of an IfcSheet project file. */

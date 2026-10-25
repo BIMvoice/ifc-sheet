@@ -178,7 +178,8 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
       return EXIT.failed;
     }
     try {
-      for (const { table } of listSchedulesOn(model, readProjectFile(projectText).schedules, 'en', basename(args.model))) io.stdout(`\n${listTableText(table)}`);
+      const project = readProjectFile(projectText);
+      for (const { table } of listSchedulesOn(model, project.schedules, 'en', basename(args.model), project.classificationMappings)) io.stdout(`\n${listTableText(table)}`);
     } catch (error) {
       io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
       return EXIT.failed;

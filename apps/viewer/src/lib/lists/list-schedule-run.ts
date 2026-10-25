@@ -10,7 +10,7 @@
  */
 
 import type { ProjectUnits } from '@ifc-lite/parser';
-import { withOfficeClassification, type ListClassificationContext } from '@bimvoice/ifcsheet';
+import { withListClassification, type ListClassificationContext } from '@bimvoice/ifcsheet';
 import { listDefinitionOf, listRunOf, type ListScheduleInput, type ListScheduleRun } from '@bimvoice/ifcsheet/list-projection';
 import type { ViewerState } from '@/store';
 import { listClassificationContext } from '@/classification/classification-model';
@@ -25,11 +25,8 @@ export async function runListSchedule(
   options: { signal?: AbortSignal; today?: Date; classification?: ListClassificationContext } = {},
 ): Promise<ListScheduleRun> {
   options.signal?.throwIfAborted();
-  // The office classification (#351) comes through the run context: each provider answers it with the project's mappings (`classificationOf`).
-  if (schedule.list.columns.some((c) => c.source === 'officeClassification')) {
-    const context = options.classification ?? listClassificationContext();
-    pairs = pairs.map((p) => ({ ...p, provider: withOfficeClassification(p.provider, p.modelId, context) }));
-  }
+  // The office classification (#351): the one wrapping step the command line and the MCP tools take too (`withListClassification`).
+  pairs = withListClassification(schedule.list, pairs, options.classification ?? listClassificationContext());
   const definition = listDefinitionOf(schedule, pairs);
   const result = await runListFederated(definition, pairs, state, { evaluatorModels: evaluatorModelsFromState(state), signal: options.signal });
   options.signal?.throwIfAborted();

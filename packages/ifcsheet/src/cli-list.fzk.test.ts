@@ -147,6 +147,25 @@ describe.skipIf(missing !== null)('ifcsheet list, on AC20-FZK-Haus', () => {
     expect(c.out()).toMatch(/Total\s+13\s+190\.4655/);
   }, 300_000);
 
+  it('reads an office classification column with the project\'s mappings: `list` and `build --project` (#351)', async () => {
+    const mapping = { id: 'uc', system: { name: 'Uniclass', edition: '2015' }, rules: [{ by: 'type', match: 'Leichtbeton 102890359 240', code: 'EXAMPLE-Ss_25_10', title: 'EXAMPLE: thick walls' }, { by: 'type', match: 'Leichtbeton 102890359 300', code: 'EXAMPLE-Ss_25_20', title: 'EXAMPLE: thickest walls' }] };
+    const list = { filter: { classes: ['IfcWallStandardCase'] }, columns: [{ id: 'code', source: 'officeClassification', propertyName: 'Code' }], groupBy: ['code'], totals: false };
+    const project = (mappings: unknown[]) => projectFile(JSON.stringify({ format: 'ifclite-project', version: 1, classificationMappings: mappings, schedules: [{ id: 'by-code', name: 'Walls by code', kind: 'list', createdAt: 1, list }] }));
+    const json = capture();
+    expect(await run(['list', FZK, '--project', project([mapping]), '--json'], json.io)).toBe(EXIT.ok);
+    expect(Object.fromEntries(JSON.parse(json.out()).rows)).toEqual({ 'EXAMPLE-Ss_25_10': 5, 'EXAMPLE-Ss_25_20': 8 });
+    const dir = mkdtempSync(join(tmpdir(), 'ifcsheet-list-office-'));
+    dirs.push(dir);
+    const built = capture();
+    expect(await run(['build', FZK, '--out', join(dir, 'set.pdf'), '--project', project([mapping])], built.io)).toBe(EXIT.ok);
+    expect(built.out()).toMatch(/EXAMPLE-Ss_25_10\s+5/);
+    expect(built.out()).toMatch(/EXAMPLE-Ss_25_20\s+8/);
+    // No mapping in the project: no office code (the model's own references still answer).
+    const bare = capture();
+    expect(await run(['list', FZK, '--project', project([]), '--json'], bare.io)).toBe(EXIT.ok);
+    expect(JSON.parse(bare.out()).rows.map((r: unknown[]) => r[0]).join()).not.toContain('EXAMPLE');
+  }, 300_000);
+
   it('fails with a reason: no list schedule, an unknown one, a missing file, a class the model lacks', async () => {
     const none = capture();
     expect(await run(['list', FZK, '--project', projectFile(JSON.stringify({ format: 'ifclite-project', version: 1 }))], none.io)).toBe(EXIT.failed);

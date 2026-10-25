@@ -9,7 +9,7 @@
  * the session and one session never sees another's handles.
  */
 
-import type { BoqArticle, DefaultSet, ListScheduleDef, ProjectDocument } from '@bimvoice/ifcsheet';
+import type { BoqArticle, ClassificationMapping, DefaultSet, ListScheduleDef, ProjectDocument } from '@bimvoice/ifcsheet';
 import type { OpenedModel } from '@bimvoice/ifcsheet/headless';
 import type { ModelRegistry, ToolContext } from '../context.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
@@ -36,6 +36,8 @@ export interface SetSchedule {
   /** The project's articles, for a bill of quantities (read from the project file the tool was given). */
   boqArticles?: readonly BoqArticle[];
   /** A table built from the Lists engine (#78): the definition (the elements, the columns, the grouping and the totals) and the schedule's name. */
+  /** The project's classification mappings (#89), for a list with an office classification column (#351); read from the project file the tool was given. */
+  classificationMappings?: readonly ClassificationMapping[];
   list?: ListScheduleDef;
   name?: string;
 }

@@ -12,6 +12,8 @@
  */
 
 import { ProjectUnits, extractProjectUnits } from '@ifc-lite/parser';
+import type { ClassificationMapping } from './classification.js';
+import { storeClassifications } from './classification-read.js';
 import { listScheduleTable, listExportTable, type ListScheduleDef, type ListScheduleTable } from './list-schedule.js';
 import { createHeadlessListProvider } from './list-provider.js';
 import { listTableSourceOf, runListScheduleHeadless, type ListScheduleRun } from './list-schedule-run.js';
@@ -27,6 +29,8 @@ export interface HeadlessListOptions {
   modelName?: string;
   /** The date the export model is stamped with (tests pin it). */
   today?: Date;
+  /** The project's classification mappings (#89): what a column of the office classification (#351) is read with. Absent: the model's own references only. */
+  classificationMappings?: readonly ClassificationMapping[];
 }
 
 /** The list schedule run over the model: the Lists engine's own result and its export model. */
@@ -34,7 +38,8 @@ export function runListScheduleOn(model: OpenedModel, schedule: { id: string; na
   const store = model.dataStore;
   const units = store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty();
   const pairs = [{ modelId: MODEL_ID, provider: createHeadlessListProvider(store, options.modelName ?? '') }];
-  return runListScheduleHeadless(schedule, pairs, new Map([[MODEL_ID, units]]), { ...(options.today ? { today: options.today } : {}) });
+  const classification = { mappings: options.classificationMappings ?? [], model: storeClassifications(new Map([[MODEL_ID, store]])) };
+  return runListScheduleHeadless(schedule, pairs, new Map([[MODEL_ID, units]]), { classification, ...(options.today ? { today: options.today } : {}) });
 }
 
 /** The table of a list schedule on the model, in the words of `locale` (`ro` or English): the table the sheet draws, a row per group and the totals row. */

@@ -14,7 +14,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { escapeCsvCell } from '@ifc-lite/export';
 import {
-  PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion, describeTemplateNote, generateDefaultSet, levelsFromStoreys, parseSetTemplate, readBoqArticles, readListScheduleDef,
+  PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion, describeTemplateNote, generateDefaultSet, levelsFromStoreys, parseSetTemplate, readBoqArticles, readClassificationMappings, readListScheduleDef,
   type ProjectDocument, type SetTemplate, type TemplateNoteKey,
 } from '@bimvoice/ifcsheet';
 import { buildHandoverZip, asciiStem, type HandoverPart } from '@bimvoice/ifcsheet/handover';
@@ -250,7 +250,7 @@ function readDocument(raw: unknown, modelName: string): { document: ProjectDocum
     if (isObject(s) && s.kind === 'list' && typeof s.sheetId === 'string' && sheetIds.has(s.sheetId) && (s.locale === 'en' || s.locale === 'ro')) {
       const list = readListScheduleDef(s.list);
       if (list.columns.length === 0) dropped.push('a saved list schedule with no readable column');
-      else schedules.push({ id: `schedule-${schedules.length + 1}`, kind: 'list', sheetId: s.sheetId, locale: s.locale, list, ...(typeof s.name === 'string' ? { name: s.name } : {}) });
+      else schedules.push({ id: `schedule-${schedules.length + 1}`, kind: 'list', sheetId: s.sheetId, locale: s.locale, list, ...(typeof s.name === 'string' ? { name: s.name } : {}), ...(Array.isArray(s.classificationMappings) ? { classificationMappings: readClassificationMappings(s.classificationMappings) } : {}) });
     } else if (isObject(s) && (s.kind === 'rooms' || s.kind === 'boq') && typeof s.sheetId === 'string' && sheetIds.has(s.sheetId) && (s.locale === 'en' || s.locale === 'ro')) {
       const own = Array.isArray(s.boqArticles) ? readBoqArticles(s.boqArticles) : articles;
       schedules.push({ id: `schedule-${schedules.length + 1}`, kind: s.kind, sheetId: s.sheetId, locale: s.locale, ...(s.kind === 'boq' ? { boqArticles: own } : {}) });

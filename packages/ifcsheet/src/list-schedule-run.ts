@@ -19,6 +19,7 @@ import type { ColumnDefinition, ListDataProvider, ListDefinition, ListResult } f
 import type { ProjectUnits } from '@ifc-lite/parser';
 import { buildExportModel, type ExportModel } from './list-export-model.js';
 import { detectNumericColumns } from './list-numeric-columns.js';
+import { withListClassification, type ListClassificationContext } from './list-classification.js';
 import { listCandidates, listResultOf, type ListProviderPair } from './list-run.js';
 import { LIST_COUNT_ID, listFigureKind, type ListCell, type ListScheduleDef, type ListTableSource } from './list-schedule.js';
 import { passesElementFilter, predefinedTypeText, propertyValueText, type OccurrenceFacts, type PropertyFact, type SubReportFilter } from './schedule-filter.js';
@@ -129,8 +130,10 @@ export function listRunOf(definition: ListDefinition, result: ListResult, modelU
  */
 export function runListScheduleHeadless(
   schedule: ListScheduleInput, pairs: readonly ListProviderPair[], modelUnits: Map<string, ProjectUnits>,
-  options: { unitDisplayOverrides?: Record<string, string>; today?: Date } = {},
+  options: { unitDisplayOverrides?: Record<string, string>; today?: Date; classification?: ListClassificationContext } = {},
 ): ListScheduleRun {
+  // The office classification (#351): the same wrapping step as the app's run (`withListClassification`).
+  pairs = options.classification ? withListClassification(schedule.list, pairs, options.classification) : pairs;
   const definition = listDefinitionOf(schedule, pairs);
   const scope = definition.expressIdsByModel ?? {};
   const result = listResultOf(definition, pairs, (modelId) => scope[modelId] ?? []);

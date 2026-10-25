@@ -45,7 +45,7 @@ export async function scheduleTable(schedule: SetSchedule, model: OpenedModel): 
   if (schedule.kind === 'list') {
     if (!schedule.list) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The list schedule holds no definition.' });
     // The Lists engine's rows over the model, by the steps the app runs: the same numbers as `ifcsheet list` and the app's table.
-    const table = listScheduleTableOn(model, { id: schedule.id, name: schedule.name ?? 'List', list: schedule.list }, schedule.locale);
+    const table = listScheduleTableOn(model, { id: schedule.id, name: schedule.name ?? 'List', list: schedule.list }, schedule.locale, { classificationMappings: schedule.classificationMappings ?? [] });
     if (listTableIsEmpty(table)) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The list has no rows: no element of the model matches its filter.' });
     return { rows: [table.header, ...table.rows.map((r) => r.map((c) => (c === null ? '' : String(c))))], notes: [], csv: listScheduleCsv(table, schedule.locale) };
   }

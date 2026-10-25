@@ -10,6 +10,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
+import type { ClassificationMapping } from './classification.js';
 import { openModel, type OpenedModel } from './model.js';
 import { listScheduleCsv, listScheduleTableOn, listTableIsEmpty } from './list-headless.js';
 import { readProjectFile } from './project-read.js';
@@ -41,8 +42,8 @@ export function listTableText(table: ListScheduleTable): string {
 }
 
 /** The list schedules of a project, each with its table on the model. */
-export function listSchedulesOn(model: OpenedModel, schedules: readonly ProjectSchedule[], locale: string, modelName: string): { schedule: ProjectSchedule; table: ListScheduleTable }[] {
-  return schedules.filter(isList).map((schedule) => ({ schedule, table: listScheduleTableOn(model, { id: schedule.id, name: schedule.name, list: schedule.list }, locale, { modelName }) }));
+export function listSchedulesOn(model: OpenedModel, schedules: readonly ProjectSchedule[], locale: string, modelName: string, classificationMappings: readonly ClassificationMapping[] = []): { schedule: ProjectSchedule; table: ListScheduleTable }[] {
+  return schedules.filter(isList).map((schedule) => ({ schedule, table: listScheduleTableOn(model, { id: schedule.id, name: schedule.name, list: schedule.list }, locale, { modelName, classificationMappings }) }));
 }
 
 /** `ifcsheet list`: exit 0 with the table, 1 when a file cannot be read, the schedule is not found or the list has no rows. */
@@ -65,7 +66,7 @@ export async function list(args: ListArgs, io: CliIo): Promise<number> {
   }
   // The values come from the entity tables: no geometry is needed or measured.
   const model = await openModel(bytes, { geometry: false });
-  const [{ table }] = listSchedulesOn(model, [found], args.locale, basename(args.model));
+  const [{ table }] = listSchedulesOn(model, [found], args.locale, basename(args.model), project.classificationMappings);
   if (listTableIsEmpty(table)) {
     io.stderr(`ifcsheet: nothing to list: the elements of "${found.name}" are not in ${args.model}.\n`);
     return 1;

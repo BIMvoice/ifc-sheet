@@ -4,7 +4,7 @@
 
 /** `ifcsheet_add_schedule` (#165): a room, bill-of-quantities or Lists-engine schedule on a sheet of its own. */
 
-import { DEFAULT_SCHEME, ISO_PAPERS, drawingArea, freshProjectId, nextNumber, readListScheduleDef, type ListScheduleDef } from '@bimvoice/ifcsheet';
+import { DEFAULT_SCHEME, ISO_PAPERS, drawingArea, freshProjectId, nextNumber, readListScheduleDef, type ClassificationMapping, type ListScheduleDef } from '@bimvoice/ifcsheet';
 import { SCHEDULE_LOCALES, scheduleCapacity, scheduleTable } from './ifcsheet-draw.js';
 import { DOCUMENT_ID, DRY_RUN, dryPrefix, invalid, optBoolean, optChoice, optText, pathOrInline, text, workingEntry } from './ifcsheet-shared.js';
 import { getSheetSet, replaceSheetDocument, type SetSchedule } from './ifcsheet-store.js';
@@ -52,8 +52,8 @@ export const ifcsheetAddSchedule: Tool = {
       name: { type: 'string', description: 'The sheet\'s name. Default "Room and area schedule" or "Bill of quantities".' },
       paper: { type: 'string', enum: [...ISO_PAPERS], description: 'The sheet\'s paper, default A3.' },
       locale: { type: 'string', enum: [...SCHEDULE_LOCALES], description: 'The language and number format of the table: "ro" writes 12,50 and Romanian headings. Default en.' },
-      project_path: { type: 'string', description: 'boq: a saved project on the server (inside the allowed paths). Give this or project_json.' },
-      project_json: { type: 'string', description: 'boq: the text of a saved project file.' },
+      project_path: { type: 'string', description: 'boq: a saved project on the server (inside the allowed paths). Give this or project_json. list: optional, the project whose classification mappings an office classification column is read with.' },
+      project_json: { type: 'string', description: 'boq: the text of a saved project file. list: optional, as project_path.' },
       list: { type: 'object', description: 'list: the definition of the table: { filter?, columns, groupBy?, sum?, totals? }.', additionalProperties: true },
     },
     required: ['document_id', 'kind'],
@@ -69,6 +69,7 @@ export const ifcsheetAddSchedule: Tool = {
     const paper = optChoice(input, 'paper', ISO_PAPERS) ?? 'A3';
     const locale = optChoice(input, 'locale', SCHEDULE_LOCALES) ?? 'en';
     let boqArticles;
+    let classificationMappings: readonly ClassificationMapping[] | undefined;
     if (kind === 'boq') {
       const given = await pathOrInline(input, ctx, 'project', 'saved project');
       const { readProjectFile } = await import('@bimvoice/ifcsheet/headless');
@@ -80,13 +81,22 @@ export const ifcsheetAddSchedule: Tool = {
       }
       if (project.boqArticles.length === 0) throw invalid(`${given.source} holds no bill-of-quantities articles; add them in the app (Bill of quantities) and save the project.`);
       boqArticles = project.boqArticles;
+    } else if (kind === 'list' && (input.project_path !== undefined || input.project_json !== undefined)) {
+      // Only the project's classification mappings are used (#351): the list itself is the tool's `list`.
+      const given = await pathOrInline(input, ctx, 'project', 'saved project');
+      const { readProjectFile } = await import('@bimvoice/ifcsheet/headless');
+      try {
+        classificationMappings = readProjectFile(given.text).classificationMappings;
+      } catch (err) {
+        throw invalid(`${given.source} cannot be used as a project: ${(err as Error).message}`);
+      }
     } else if (input.project_path !== undefined || input.project_json !== undefined) {
-      throw invalid('project_path and project_json are for kind "boq".');
+      throw invalid('project_path and project_json are for kind "boq" (and "list", for its classification mappings).');
     }
     if (kind !== 'list' && input.list !== undefined) throw invalid('list is for kind "list".');
     const list = kind === 'list' ? listDefinition(input.list) : undefined;
     const name = optText(input, 'name')?.trim() || (kind === 'rooms' ? 'Room and area schedule' : kind === 'list' ? 'Schedule' : 'Bill of quantities');
-    const schedule: SetSchedule = { id: `schedule-${entry.schedules.length + 1}`, kind, sheetId: freshProjectId('sheet'), locale, ...(boqArticles ? { boqArticles } : {}), ...(list ? { list, name } : {}) };
+    const schedule: SetSchedule = { id: `schedule-${entry.schedules.length + 1}`, kind, sheetId: freshProjectId('sheet'), locale, ...(boqArticles ? { boqArticles } : {}), ...(list ? { list, name } : {}), ...(classificationMappings?.length ? { classificationMappings } : {}) };
     // The table is read now: a model with nothing for the schedule is refused before the sheet is made.
     const table = await scheduleTable(schedule, entry.model.model);
     const sheet = {
