@@ -100,4 +100,30 @@ describe('the annotated copy of AC20-FZK-Haus from a project\'s drafts', { skip:
     assert.ok(out.includes("IFCPROPERTYSINGLEVALUE('TaggedOn',$,IFCTEXT('Ground floor, Roof floor'),$)"));
     assert.ok(out.includes("FILE_NAME('Haus annotated.ifc'"));
   });
+
+  it('gives every dimension, horizontal and vertical, one text literal, the vertical one turned to read bottom to top', async () => {
+    const dims: AnnotationSource = {
+      ...project,
+      views: [plan('p0', 'Ground floor', GROUND, 0)],
+      drafts: [
+        dimension('h', 'p0'),
+        draft('v', 'p0', { type: 'dimension', variant: 'aligned', a: { x: 12, y: 0 }, b: { x: 12, y: -3 }, at: { x: 14, y: -1.5 }, height: 0.25 }),
+        draft('w', 'p0', { type: 'dimension', variant: 'aligned', a: { x: 2, y: 0 }, b: { x: 2, y: -5 }, at: { x: 0.5, y: -2.5 }, height: 0.25 }),
+      ],
+    };
+    const source = new Uint8Array(readFileSync(FZK));
+    const c = collectAnnotations(dims, { x: 0, y: 0 }, 'en');
+    const r = await buildAnnotatedIfc({ source, views: c.views, marks: [] });
+    const lines = new Map([...new TextDecoder().decode(r.bytes).matchAll(/^#(\d+)=([^\n]*);$/gm)].map((m) => [Number(m[1]), m[2]]));
+    const literal = (text: string) => {
+      const found = [...lines.values()].filter((l) => l.startsWith(`IFCTEXTLITERALWITHEXTENT('${text}'`));
+      assert.equal(found.length, 1, `one literal for ${text}`);
+      const placement = lines.get(Number(/,#(\d+),\.RIGHT\./.exec(found[0])![1]))!;
+      const dir = /^IFCAXIS2PLACEMENT2D\(#\d+,(\$|#(\d+))\)$/.exec(placement)!;
+      return dir[2] ? lines.get(Number(dir[2])) : null;
+    };
+    assert.equal(literal('4.00'), null, 'a horizontal figure keeps the placement axis');
+    assert.equal(literal('3.00'), 'IFCDIRECTION((0.,1.))', 'a vertical figure runs up the sheet');
+    assert.equal(literal('5.00'), 'IFCDIRECTION((0.,1.))', 'on the left of a line too');
+  });
 });

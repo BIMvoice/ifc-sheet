@@ -128,8 +128,10 @@ export function addViewAnnotationToStore(editor: StoreEditor, anchor: ViewAnnota
   for (const t of params.texts) {
     const origin = editor.addEntity('IfcCartesianPoint', [[n(t.position.x), n(t.position.y)]]).expressId;
     const d = t.direction;
+    // Float noise from the frame maths (1.1E-16 for 0) is not part of a direction.
+    const clean = (v: number) => Math.round(v * 1e12) / 1e12 + 0;
     const refDirection = d && (Math.abs(d.x - 1) > 1e-9 || Math.abs(d.y) > 1e-9)
-      ? `#${editor.addEntity('IfcDirection', [[d.x, d.y]]).expressId}`
+      ? `#${editor.addEntity('IfcDirection', [[clean(d.x), clean(d.y)]]).expressId}`
       : null;
     const placement = editor.addEntity('IfcAxis2Placement2D', [`#${origin}`, refDirection]).expressId;
     const extent = editor.addEntity('IfcPlanarExtent', [n(Math.abs(t.width)), n(Math.abs(t.height))]).expressId;
