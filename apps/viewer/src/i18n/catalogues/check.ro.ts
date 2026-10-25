@@ -24,7 +24,7 @@ export const checkRo = {
   'check.fix.notStarted': 'Reparația nu a pornit: are nevoie de un desen deschis.',
   'check.refresh': 'Verifică setul',
   'check.go': 'Mergi',
-  'check.fix': 'Repară',
+  'check.fix': 'Repară cu',
   'check.fixing': 'Se deschide {view} pentru a rula {command}.',
   'check.fixFailed': '{view} nu a putut fi deschisă.',
   'check.msg.line': '{text}',

@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { en } from './en';
+import { KEY_COMMANDS } from '../lib/commands/keyboard-commands';
+import { shownOnTheWall } from '../lib/commands/wall-key-commands';
 
 /**
  * #231: the prefix list in `locales/ro.test.ts` misses a screen whose keys sit under another
@@ -26,6 +28,8 @@ const FACE_SOURCES = [
   'components/viewer/wall', 'components/viewer/ifcsheet', 'components/viewer/sheets', 'hooks/usePrivacyDisclosure.ts', 'lib/tours/tours/ifcsheet.ts', 'components/tours/TourStepCard.tsx', 'components/tours/TourHost.tsx',
   // #258: what a sheet prints. The site plan and the urban indicators (the site balance, Ac, Ad, Au, POT and CUT), the legend, the schedules the joinery folder draws (the finishes and type-quantity tables, the drawing register) and the civil profile's band labels.
   'components/viewer/siteplan', 'components/viewer/urban', 'siteplan', 'urban', 'components/viewer/legend/LegendGraphic.tsx', 'legend', 'components/viewer/joinery/ScheduleGraphic.tsx', 'issue', 'components/viewer/joinery/RegisterView.tsx', 'components/viewer/civil/CivilDrawingGraphic.tsx', 'civil/civil-drawings.ts',
+  // #314: the drawing command line (its prompts, results and errors), the commands behind it, and the Info dialog the Keyboard button opens. Command names (LINE, TAGALL) are typed aliases and stay as they are.
+  'drafting', 'components/viewer/drafting/CommandLine.tsx', 'components/viewer/KeyboardShortcutsDialog.tsx', 'components/viewer/KeyboardShortcutsDialogTabs.tsx', 'components/viewer/KeyboardShortcutsWhatsNewTab.tsx', 'components/viewer/ShortcutsTab.tsx', 'components/tours/LearnTab.tsx', 'project/model-command-bridge.ts', 'project/useLinkedElementSync.ts',
 ];
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 function faceFiles(rel: string): string[] {
@@ -65,6 +69,11 @@ export function untranslatedFaceKeys(cat: Readonly<object>): string[] {
         found.set(key, (found.get(key) ?? new Set()).add(file.slice(SRC_ROOT.length)));
       }
     }
+  }
+  // #314: the Shortcuts tab builds its rows from a table, so no source file names their labels; the rows the Wall lists are read off the table itself.
+  for (const row of shownOnTheWall(KEY_COMMANDS)) {
+    if (Object.hasOwn(cat, row.labelKey)) continue;
+    found.set(row.labelKey, (found.get(row.labelKey) ?? new Set()).add('lib/commands/keyboard-commands.ts'));
   }
   return [...found].map(([key, files]) => `${key} (${[...files].join(', ')})`).sort();
 }

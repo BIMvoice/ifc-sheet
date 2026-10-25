@@ -59,10 +59,19 @@ Romanian coverage is gated by `locales/ro.test.ts` two ways: a prefix list
 the Wall, the shell, the sheet renderers, the privacy notice and the tour). Every
 English key such a file names, as a string literal or as the part before `${` in a
 template literal, needs a Romanian entry; a key under a prefix the list does not
-name used to read English with the suite green. Panels outside those files
-(drafting, joinery, project navigator, civil, urban, site plan and legend editors)
-stay English by design and are not gated yet; add their directory to
-`FACE_SOURCES` when their catalogues are translated.
+name used to read English with the suite green. Since #314 the list also holds the
+drawing command line (`CommandLine.tsx` and `drafting/`, where the commands live: its
+prompts, results and errors, DIMALL, TAGALL, CEILTAG and LEVELALL included), the
+bridge from the model commands, and the Info dialog the Keyboard button opens
+(`KeyboardShortcutsDialog*`, `ShortcutsTab`, `LearnTab`): a Romanian user drives the
+drafting tools through them. Command names (`drafting.cmd.*`: LINE, TAGALL) and the
+option words a prompt offers (Close, Undo, SINGLE, MARK / NAME / CLASS) are what a
+person types and stay as they are. Panels outside those files (the ribbon,
+the drafting properties panel and its tool labels, joinery, project navigator, civil
+and the legend editors) still stay English by design and are not gated; add their
+directory to `FACE_SOURCES` when their catalogues are translated. The roof, road,
+bridge, sweep, revolve and door-placement keys of `drafting.en.ts` and the design
+ribbon's toasts are named by no source file here, so they are not gated either.
 
 The ribbon toolbar catalogue covers the default toolbar's own chrome: tab
 strip, group names, button labels, tooltips and aria-labels on all six tabs,

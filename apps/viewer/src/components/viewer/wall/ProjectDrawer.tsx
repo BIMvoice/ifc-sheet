@@ -23,7 +23,7 @@ import { projectOpenErrorText } from '@/project/open-error';
 import { requestNewProject } from '@/project/new-project';
 import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
 import { addProjectSheet, projectDocument, removeProjectItem, renameProjectItem, useProjectStore } from '@/project/project-store';
-import { paperLabel } from '@/project/paper';
+import { templateOptionLabel } from './templateName';
 import { allTemplates } from '@/project/sheet-templates';
 import { sheetsShowing } from '@/project/sheets';
 import type { ProjectViewKind } from '@/project/types';
@@ -160,7 +160,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <>
             <select aria-label={t('wall.paper.newSheetTemplate')} className={`${action} max-w-[9rem] bg-transparent`} value={template} onChange={(e) => setTemplate(e.target.value)}>
               <option value="">{t('wall.paper.noTemplate')}</option>
-              {allTemplates(ownTemplates).map((tpl) => <option key={tpl.id} value={tpl.id}>{`${tpl.name} (${paperLabel(tpl.paper)})`}</option>)}
+              {allTemplates(ownTemplates).map((tpl) => <option key={tpl.id} value={tpl.id}>{templateOptionLabel(tpl, t)}</option>)}
             </select>
             <button type="button" className={action} onClick={newSheet}>{t('wall.project.addSheet')}</button>
           </>
