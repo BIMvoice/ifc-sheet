@@ -19,6 +19,7 @@
  * the model's part of the list is then missing, and the panel says so rather than that nothing changed.
  */
 
+import { fingerprintVersionOf } from '@/project/sheet-fingerprint';
 import type { ModelImpact } from './model-state';
 import type { ChangeReason, ChangedSheet, IssueChangeRecord, IssuedSheet, ProjectIssue } from './types';
 
@@ -39,7 +40,11 @@ export interface IssueChanges {
 }
 
 /** One sheet going out. */
-export type OutgoingSheet = Pick<IssuedSheet, 'number' | 'title' | 'revision' | 'fingerprint'> & { sheetId: string };
+export type OutgoingSheet = Pick<IssuedSheet, 'number' | 'title' | 'revision' | 'fingerprint'> & {
+  sheetId: string;
+  /** The sheet's fingerprint by a given version's algorithm, to compare with a record made with it; absent: `fingerprint` for any. */
+  fingerprintAs?: (version: number) => string;
+};
 
 const FINGERPRINT = /^[0-9a-f]{14}$/;
 const named = (r: { number: string; title: string }): ChangedSheet => ({ number: r.number, title: r.title });
@@ -57,7 +62,7 @@ export function issueChanges(outgoing: readonly OutgoingSheet[], previous: Pick<
     if (!was) { out.added.push(named(sheet)); continue; }
     matched.add(was);
     const reasons: ChangeReason[] = [
-      ...(was.fingerprint === sheet.fingerprint ? [] : ['edited' as const]),
+      ...(was.fingerprint === (sheet.fingerprintAs?.(fingerprintVersionOf(was)) ?? sheet.fingerprint) ? [] : ['edited' as const]),
       ...(model.status === 'compared' && model.sheetIds.has(sheet.sheetId) ? ['model' as const] : []),
     ];
     if (reasons.length === 0) continue;

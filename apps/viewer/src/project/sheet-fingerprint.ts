@@ -15,8 +15,19 @@
 import type { DraftEntity } from '@/drafting/types';
 import { viewReference, type ViewReference } from '@/drafting/cross-ref';
 import { viewsNamedOnPlan } from '@/drafting/cross-ref-marks';
-import { sheetRevisions } from './revisions';
+import { isAutomaticCloud, sheetRevisions } from './revisions';
 import type { ProjectDocument, ProjectRevision, ProjectSheet, ProjectView } from './types';
+
+/**
+ * The algorithm a fingerprint is made with. 1: every draft on the sheet counts. 2: the revision clouds WHATCHANGED
+ * drew (`isAutomaticCloud`) do not, so a new model version that only adds them does not read as an edit; clouds
+ * drawn by hand still count. A record without a version is 1; compare a record with the current sheet by the
+ * record's own version (`sheetFingerprint(..., version)`), and store `FINGERPRINT_VERSION`.
+ */
+export const FINGERPRINT_VERSION = 2;
+
+/** The version a recorded fingerprint was made with. */
+export const fingerprintVersionOf = (row: { fingerprintVersion?: number }): number => row.fingerprintVersion ?? 1;
 
 /** What a sheet's content is looked up in. */
 export interface FingerprintSources {
@@ -52,15 +63,16 @@ export function cyrb53(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, '0');
 }
 
-export function sheetFingerprint(sheet: ProjectSheet, sources: FingerprintSources): string {
+export function sheetFingerprint(sheet: ProjectSheet, sources: FingerprintSources, version: number = FINGERPRINT_VERSION): string {
+  const all = version >= 2 ? sources.drafts.filter((d) => !isAutomaticCloud(d)) : sources.drafts;
   const ids = new Set([sheet.id, ...(sheet.viewports ?? []).map((v) => v.viewId)]);
   const documents = sources.documents.filter((d) => ids.has(d.id)).sort((a, b) => a.id.localeCompare(b.id)).map(({ createdAt: _c, ...rest }: { id: string; createdAt?: unknown }) => rest);
-  const drafts = sources.drafts.filter((d) => ids.has(d.viewId)).sort((a, b) => a.id.localeCompare(b.id));
+  const drafts = all.filter((d) => ids.has(d.viewId)).sort((a, b) => a.id.localeCompare(b.id));
   // When a sheet was made is not what it holds.
   const { createdAt: _created, ...held } = sheet;
-  const references = markReferences(sheet, sources);
+  const references = markReferences(sheet, { ...sources, drafts: all });
   // A sheet in a project with no revisions hashes as it always did.
-  const revisions = sheetRevisions(sheet, { revisions: sources.revisions, drafts: sources.drafts as DraftEntity[] });
+  const revisions = sheetRevisions(sheet, { revisions: sources.revisions, drafts: all as DraftEntity[] });
   return cyrb53(canonicalJson({ sheet: held, documents, drafts, ...(Object.keys(references).length ? { references } : {}), ...(revisions.length > 0 ? { revisions } : {}) }));
 }
 
@@ -99,19 +111,22 @@ export function carryIssueFingerprints(saved: ProjectDocument, after: ProjectDoc
   if (!after.issues?.length || saved === after) return after;
   const before = fingerprintSources(saved);
   const now = fingerprintSources(after);
+  // Each record keeps its own version: the sheet is fingerprinted by it on both sides.
   const moved = new Map<string, string>();
-  for (const sheet of saved.sheets) {
-    const migrated = after.sheets.find((s) => s.id === sheet.id);
-    if (!migrated) continue;
-    const was = sheetFingerprint(sheet, before);
-    const is = sheetFingerprint(migrated, now);
-    if (was !== is) moved.set(`${sheet.number}\u0000${was}`, is);
+  for (const version of [1, FINGERPRINT_VERSION]) {
+    for (const sheet of saved.sheets) {
+      const migrated = after.sheets.find((s) => s.id === sheet.id);
+      if (!migrated) continue;
+      const was = sheetFingerprint(sheet, before, version);
+      const is = sheetFingerprint(migrated, now, version);
+      if (was !== is) moved.set(`${version}\u0000${sheet.number}\u0000${was}`, is);
+    }
   }
   if (moved.size === 0) return after;
   const issues = after.issues.map((issue) => ({
     ...issue,
     sheets: issue.sheets.map((row) => {
-      const is = moved.get(`${row.number}\u0000${row.fingerprint}`);
+      const is = moved.get(`${fingerprintVersionOf(row)}\u0000${row.number}\u0000${row.fingerprint}`);
       return is ? { ...row, fingerprint: is } : row;
     }),
   }));

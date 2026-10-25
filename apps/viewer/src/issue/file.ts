@@ -32,7 +32,7 @@ function readSheet(v: unknown, path: string): IssuedSheet {
   const fingerprint = text(v, 'fingerprint', path);
   if (!/^[0-9a-f]{14}$/.test(fingerprint)) fail(`${path}/fingerprint`, 'must be 14 hex digits');
   if (v.sheetId !== undefined && typeof v.sheetId !== 'string') fail(`${path}/sheetId`, 'must be text');
-  return { ...(typeof v.sheetId === 'string' ? { sheetId: v.sheetId } : {}), number: text(v, 'number', path), title: text(v, 'title', path), scale: text(v, 'scale', path), paper: paper as string, orientation: v.orientation, revision: text(v, 'revision', path), fingerprint };
+  return { ...(typeof v.sheetId === 'string' ? { sheetId: v.sheetId } : {}), number: text(v, 'number', path), title: text(v, 'title', path), scale: text(v, 'scale', path), paper: paper as string, orientation: v.orientation, revision: text(v, 'revision', path), fingerprint, ...(Number.isInteger(v.fingerprintVersion) && (v.fingerprintVersion as number) > 1 ? { fingerprintVersion: v.fingerprintVersion as number } : {}) };
 }
 
 function readSheetList(v: unknown, path: string): ChangedSheet[] {

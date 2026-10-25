@@ -19,6 +19,8 @@ export interface IssuedSheet {
   revision: string;
   /** What the sheet held (`project/sheet-fingerprint.ts`): equal fingerprints mean an unchanged sheet. */
   fingerprint: string;
+  /** The algorithm that made `fingerprint` (`FINGERPRINT_VERSION`). Absent in records from before it was kept: version 1. */
+  fingerprintVersion?: number;
 }
 
 /** A set of sheets sent out together, recorded with the project so a later issue can say what changed. */

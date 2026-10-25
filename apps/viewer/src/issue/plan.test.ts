@@ -30,7 +30,7 @@ describe('planning an issue', () => {
       sheet('a', 'A-101', 'Ground floor', { paper: 'A2', orientation: 'portrait', revisionIds: ['rc'], viewports: [vp('v1', 100), vp('v1', 50), vp('v1', 100)] }),
       sheet('b', 'A-102', 'Blank', { viewports: [] }),
     ], { ...none, revisions: [{ id: 'rc', code: 'C', date: '', description: '', by: '' }] }, input);
-    assert.deepEqual(plan.sheets.map((s) => ({ ...s.row, fingerprint: '' })), [{ number: 'A-101', title: 'Ground floor', scale: 'As indicated', paper: 'A2', orientation: 'portrait', revision: 'C', fingerprint: '', sheetId: 'a' }]);
+    assert.deepEqual(plan.sheets.map((s) => ({ ...s.row, fingerprint: '' })), [{ number: 'A-101', title: 'Ground floor', scale: 'As indicated', paper: 'A2', orientation: 'portrait', revision: 'C', fingerprint: '', fingerprintVersion: 2, sheetId: 'a' }]);
     assert.equal(plan.leftOut.length, 1);
     assert.equal(plan.leftOut[0].reason.key, 'issue.reason.empty');
     assert.equal(scaleText({ viewports: [] }), '');
