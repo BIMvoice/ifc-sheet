@@ -32,6 +32,7 @@ import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 import type { UrbanSettings } from '@/urban/indicators';
+import { readUnitsAndNumbers, type UnitsAndNumbers } from '@bimvoice/ifcsheet/names';
 
 export interface ProjectState extends ProjectDocument {
   /** Levels of the currently loaded models (derived, never persisted). */
@@ -132,6 +133,18 @@ export function setProjectSiteArea(area: number | null): void {
 /** "Include far-away elements in framing" (`@bimvoice/ifcsheet` `framing.ts`): off is stored as absent, so a project that never touched it saves exactly as before. */
 export function setIncludeFarElements(on: boolean): void {
   if (on !== (useProjectStore.getState().includeFarElements === true)) useProjectStore.setState({ includeFarElements: on ? true : undefined, dirty: true });
+}
+
+/**
+ * Change the project's units and number format (#88). A field set to undefined goes back to following the language and the
+ * drawing's own style; a setting with nothing left is stored as absent, so a project that never needed it saves as before.
+ */
+export function setUnitsAndNumbers(patch: Partial<UnitsAndNumbers>): void {
+  const merged: UnitsAndNumbers = { ...useProjectStore.getState().unitsAndNumbers, ...patch };
+  const decimals = Object.fromEntries(Object.entries(merged.decimals ?? {}).filter(([, v]) => v !== undefined));
+  for (const key of Object.keys(merged) as (keyof UnitsAndNumbers)[]) if (merged[key] === undefined) delete merged[key];
+  if (Object.keys(decimals).length) merged.decimals = decimals; else delete merged.decimals;
+  useProjectStore.setState({ unitsAndNumbers: readUnitsAndNumbers(merged), dirty: true });
 }
 
 /** Change the urban indicators' settings; a field set to undefined goes back to its default. */

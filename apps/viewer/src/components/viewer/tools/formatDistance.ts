@@ -4,7 +4,8 @@
 
 import { QuantityType } from '@ifc-lite/data';
 import { ProjectUnits } from '@ifc-lite/parser';
-import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { unitFactor } from '@/drafting/styles';
 import { resolveQuantityDisplay, formatConverted } from '@/lib/units/display';
 
 // Constructed once rather than per call: every measure-tool distance readout
@@ -15,7 +16,7 @@ const EMPTY_UNITS = ProjectUnits.empty();
 
 /** Auto-scaled metric string (mm / cm / m / km), the fallback used when no
  *  LENGTHUNIT override is set. */
-function formatAutoScaledMetric(meters: number, locale?: string): string {
+function formatAutoScaledMetric(meters: number, locale?: SheetLocale): string {
   // Without a locale the digits are the plain `toFixed` ones the on-screen panels have always shown.
   const digits = (value: number, n: number): string => (locale === undefined ? value.toFixed(n) : sheetNumber(locale, value, n, { group: false }));
   if (meters < 0.01) {
@@ -55,8 +56,13 @@ function formatAutoScaledMetric(meters: number, locale?: string): string {
  * handing it a file's declared millimetres would scale an already-metre
  * value a second time.
  */
-export function formatDistance(meters: number, overrides: Record<string, string> = {}, locale?: string): string {
+export function formatDistance(meters: number, overrides: Record<string, string> = {}, locale?: SheetLocale): string {
   const disp = resolveQuantityDisplay(meters, QuantityType.Length, EMPTY_UNITS, overrides);
+  // No LENGTHUNIT override: the project's length unit (#88) when it names one, else the auto-scaled metric.
+  const projectUnit = typeof locale === 'object' ? locale.lengthUnit : undefined;
+  if (disp.converted === null && projectUnit !== undefined && locale !== undefined) {
+    return `${sheetNumber(locale, meters * unitFactor(projectUnit), 4, { trim: true, group: false, kind: 'length' })} ${projectUnit}`;
+  }
   if (disp.converted === null) return formatAutoScaledMetric(meters, locale);
   const formatted = locale === undefined ? formatConverted(disp.converted) : sheetNumber(locale, disp.converted, 4, { trim: true, group: false });
   return disp.unit ? `${formatted} ${disp.unit}` : formatted;

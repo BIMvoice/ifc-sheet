@@ -17,12 +17,14 @@ import { useRegisterLabels, useRoomFinishLabels, useScheduleLabels, useTakeoffLa
 import { urbanLabelsOf } from '../urban/useUrban';
 import { readScheduleExport, type ExportLabelSet } from './schedule-export-read';
 import { WALL_PILL } from './wall-type';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 type Format = 'csv' | 'xlsx';
 
 /** The words of every kind's table, in the interface's language: the sheet's own label hooks, so a file's headings are the sheet's. */
 export function useScheduleExportLabels(): ExportLabelSet {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   const joinery = useScheduleLabels('');
   const takeoff = useTakeoffLabels('');
   const finishes = useRoomFinishLabels('');
@@ -40,7 +42,8 @@ export function useScheduleExportLabels(): ExportLabelSet {
 
 /** What pressing a button does: read the table, write the file in the language's delimiter, hand it to the browser. */
 function useScheduleExport(schedule: ProjectSchedule): (format: Format) => Promise<void> {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   const labels = useScheduleExportLabels();
   return async (format) => {
     try {
@@ -48,7 +51,7 @@ function useScheduleExport(schedule: ProjectSchedule): (format: Format) => Promi
       if (!data) { toast.error(t('wall.export.empty')); return; }
       const name = scheduleFileName(schedule.name, t('wall.export.fileName'), format);
       if (format === 'csv') downloadFile(exportCsv(data, { delimiter: csvDelimiter(locale) }), name, CSV_MIME);
-      else downloadFile(await exportXlsx(data), name, XLSX_MIME);
+      else downloadFile(await exportXlsx(data, { locale }), name, XLSX_MIME);
     } catch (err) {
       console.warn('[schedule export]', err);
       toast.error(t('wall.export.failed', { reason: err instanceof Error ? err.message : String(err) }));

@@ -17,6 +17,7 @@ import type { ThreeDProjectView } from './view-3d-types.js';
 import type { TitleBlockParam } from './title-block-params.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
+import type { UnitsAndNumbers } from './units-and-numbers.js';
 
 export type { CategoryGraphics, CategoryLineWeight, GridEnds, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
 export type { AxonometricPreset, CameraViewpoint, ProjectionMode, ThreeDProjection, ThreeDProjectView, ViewRaster } from './view-3d-types.js';
@@ -298,4 +299,6 @@ export interface ProjectDocument {
   sheetNumbering?: NumberingScheme;
   /** "Include far-away elements in framing" (`framing.ts`): frame the views on everything the storeys contain, small elements far from the building too. Absent is off. */
   includeFarElements?: boolean;
+  /** The project's "Units and numbers" setting (`units-and-numbers.ts`, #88). Absent follows the language and each drawing's own style. */
+  unitsAndNumbers?: UnitsAndNumbers;
 }

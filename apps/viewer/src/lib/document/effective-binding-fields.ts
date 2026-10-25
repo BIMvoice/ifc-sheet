@@ -4,7 +4,7 @@
 
 /** Document field reads over the same parsed model plus overlay as charts (#5249). */
 import type { ElementFieldBinding } from '@ifc-lite/charts';
-import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { createElementFieldReader, type ElementFieldReader } from '../charts/element-field-reader.js';
 import type { BindingModel } from './bindings.js';
 
@@ -25,7 +25,7 @@ function readerFor(model: BindingModel): ElementFieldReader {
  * up to two decimals in `locale`'s separators ("12,5" in Romanian). The one
  * formatter for both read paths (parsed and edited), so they cannot disagree.
  */
-export function formatBoundValue(value: unknown, locale = 'en'): string {
+export function formatBoundValue(value: unknown, locale: SheetLocale = 'en'): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'number') return Number.isInteger(value) ? String(value) : sheetNumber(locale, value, 2, { trim: true });
   if (typeof value === 'boolean') return value ? 'true' : 'false';
@@ -72,7 +72,7 @@ export function effectiveAttribute(model: BindingModel, id: number, attributeNam
 }
 
 /** Undefined means the field does not exist on the effective element. */
-export function effectiveProperty(model: BindingModel, id: number, setName: string, name: string, locale = 'en'): string | undefined {
+export function effectiveProperty(model: BindingModel, id: number, setName: string, name: string, locale: SheetLocale = 'en'): string | undefined {
   const catalog = readerFor(model).discover([id]);
   const property = catalog.properties.get(setName)?.find((option) => option.binding.kind === 'property' && option.binding.propertyName === name);
   const quantity = catalog.quantities.get(setName)?.find((option) => option.binding.kind === 'quantity' && option.binding.quantityName === name);

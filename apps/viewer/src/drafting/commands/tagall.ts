@@ -20,6 +20,7 @@ import { getLocale } from '@/i18n';
 import { MARK_TYPE_ID, ROOM_TYPE_ID, TAGALL_TYPES } from '@/tagall/types';
 import { editDrafts } from '../draft-store';
 import type { DraftCommandDef, DraftContext } from './types';
+import { currentSheetLocale } from '@/project/units-and-numbers';
 
 /** The types TAGALL draws with, adding any that the project does not have. */
 function tagAllTypes() {
@@ -47,7 +48,7 @@ export function tagAll(ctx: DraftContext, read: ElementReader): void {
     targets: labelTargets(elements),
     rooms: ctx.rooms(),
     existing: ctx.entities(),
-    placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId), locale: getLocale() },
+    placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId), locale: currentSheetLocale(getLocale()) },
     types: { mark: types.mark, room: types.room },
     read,
     crop: ctx.view()?.detail,

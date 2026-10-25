@@ -11,9 +11,17 @@
  * CSV is machine-readable: figures are plain numbers (`1234.5`, never `1.234,5`; the sheet's language does not change them).
  * It is UTF-8 with a byte order mark (Excel reads a file without one as the system's ANSI code page and breaks Romanian
  * diacritics), CRLF line ends, and `,` or `;` as the delimiter (`csvDelimiter`). XLSX keeps figures as numeric cells.
+ *
+ * The project's "Units and numbers" (#88) changes neither file's figures: a decimal comma in a CSV or a text cell would turn a number
+ * into a string a spreadsheet cannot add up, so a comma project still gets `1234.5`. It changes what a spreadsheet needs to open them:
+ * the CSV delimiter follows the project's separator (`;` when it is a comma), and an XLSX figure column that names its kind
+ * (`ExportTable.kinds`) shows the project's decimals through the cell's number format. The decimal mark itself is the opening
+ * spreadsheet's regional setting: a number format in the file cannot carry one.
  */
 
 import { escapeCsvCell } from '@ifc-lite/export';
+import { decimalMarkOf, decimalsOf, groupingOff, type NumberKind, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import type ExcelJS from 'exceljs';
 import { neutralizeSpreadsheetFormula } from '@/lib/lists/export/model';
 import { sanitizeFilename } from '@/lib/export/download';
 
@@ -34,6 +42,8 @@ export interface ExportTable {
   bold?: readonly number[];
   /** Columns that hold figures (right-aligned in XLSX). */
   numeric?: readonly number[];
+  /** What a figure column measures, by column index: the XLSX gives its cells the project's decimals for that kind (#88). */
+  kinds?: Readonly<Record<number, NumberKind>>;
   /** Lines the sheet prints under the table (notes, rules), one cell each. */
   notes?: readonly string[];
   /** Rows the file adds that the sheet does not print (a total row), after `rows`. */
@@ -54,8 +64,9 @@ const BOM = '﻿';
  * The delimiter a spreadsheet in `locale` splits a double-clicked .csv on: Excel takes the system's list separator, which is `;`
  * wherever the decimal mark is a comma (Romanian, German, French ...) and `,` elsewhere. The figures stay `.`-decimal either way.
  */
-export function csvDelimiter(locale: string): ',' | ';' {
-  return (1.1).toLocaleString(locale).includes(',') ? ';' : ',';
+export function csvDelimiter(locale: SheetLocale): ',' | ';' {
+  // The project's separator (#88) decides it like the language does: a comma project opens in a spreadsheet that wants `;`.
+  return decimalMarkOf(locale) === ',' ? ';' : ',';
 }
 
 /** One CSV cell: text is guarded (a number-shaped identifier like `-007` too), a figure is written as is. */
@@ -81,7 +92,7 @@ export function exportCsv(data: ScheduleExport, options: { delimiter?: string } 
 const guarded = (v: ExportCell): ExportCell => (typeof v === 'string' ? neutralizeSpreadsheetFormula(v) : v);
 
 /** The workbook of the schedule: a worksheet per table, the title over it, figures as numeric cells. */
-export async function exportXlsx(data: ScheduleExport): Promise<Blob> {
+export async function exportXlsx(data: ScheduleExport, options: { locale?: SheetLocale } = {}): Promise<Blob> {
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'IFC-Lite';
@@ -103,11 +114,24 @@ export async function exportXlsx(data: ScheduleExport): Promise<Blob> {
       if (table.numeric?.includes(i)) col.alignment = { horizontal: 'right' };
     }
     const bold = new Set(table.bold ?? []);
-    table.rows.forEach((r, i) => { const row = ws.addRow(r.map(guarded)); if (bold.has(i)) row.font = { bold: true }; });
-    for (const r of table.footer ?? []) ws.addRow(r.map(guarded)).font = { bold: true };
+    const figures = (row: ExcelJS.Row): void => { for (const [col, kind] of Object.entries(table.kinds ?? {})) { const fmt = options.locale === undefined ? undefined : numberFormatCode(options.locale, kind); const cell = row.getCell(Number(col) + 1); if (fmt && typeof cell.value === 'number') cell.numFmt = fmt; } };
+    table.rows.forEach((r, i) => { const row = ws.addRow(r.map(guarded)); figures(row); if (bold.has(i)) row.font = { bold: true }; });
+    for (const r of table.footer ?? []) { const row = ws.addRow(r.map(guarded)); figures(row); row.font = { bold: true }; }
     for (const n of table.notes ?? []) ws.addRow([neutralizeSpreadsheetFormula(n)]);
   }
   return new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME });
+}
+
+/**
+ * The number format of a figure of `kind` in an XLSX cell: its decimals when the project sets them (`0.00`, with the thousands
+ * grouping the sheet prints for areas and volumes unless the project turned it off), else none, so a project that sets nothing
+ * writes the cells it always wrote.
+ */
+export function numberFormatCode(locale: SheetLocale, kind: NumberKind): string | undefined {
+  const places = decimalsOf(locale, kind, -1);
+  if (places < 0) return undefined;
+  const grouped = !groupingOff(locale) && (kind === 'area' || kind === 'volume');
+  return `${grouped ? '#,##0' : '0'}${places > 0 ? `.${'0'.repeat(places)}` : ''}`;
 }
 
 /** Excel's worksheet names: 31 characters, none of `\ / ? * [ ] :`. */

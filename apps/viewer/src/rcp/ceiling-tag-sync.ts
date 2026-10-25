@@ -13,9 +13,10 @@
 import type { DraftEntity } from '@/drafting/types';
 import { useProjectStore } from '@/project/project-store';
 import { ceilingHeightText } from './ceiling-tags';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 
 /** `drafts` with every ceiling tag that knows its height written in `locale`; the same array when nothing changed. */
-export function settleCeilingTags(drafts: DraftEntity[], locale: string): DraftEntity[] {
+export function settleCeilingTags(drafts: DraftEntity[], locale: SheetLocale): DraftEntity[] {
   let changed = false;
   const next = drafts.map((d) => {
     const height = d.params.ceilingHeight;
@@ -28,7 +29,7 @@ export function settleCeilingTags(drafts: DraftEntity[], locale: string): DraftE
   return changed ? next : drafts;
 }
 
-export function refreshCeilingTags(locale: string): void {
+export function refreshCeilingTags(locale: SheetLocale): void {
   const { drafts } = useProjectStore.getState();
   const next = settleCeilingTags(drafts, locale);
   if (next !== drafts) useProjectStore.setState({ drafts: next, dirty: true });

@@ -21,11 +21,12 @@ import { useAnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
 import { totalYupOffset } from '@/lib/geo/coordinate-frame';
 import type { SectionAxisName, Vec3 } from '@/drafting/frame';
 import type { Pt } from '@/drafting/types';
-import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { useTranslation } from '@/i18n';
 import { gridNorthOf, northArrowRotation, trueNorthOf, type PlanDirection } from './true-north';
 import { drawingPointToLocal, drawingPointToMap, type MapAnchor } from './map-coordinates';
 import type { LiveSymbolContext } from './live-symbols';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 export interface SiteFrame {
   /** True north in project XY: the model's TrueNorth, else grid north of its map conversion, else `null` (project north, +Y). */
@@ -74,7 +75,7 @@ export type CoordinateLabeller = (kind: 'map' | 'local', a: string, b: string) =
  */
 export function liveSymbolContext(
   frame: SiteFrame, plane: SectionPlaneConfig | null | undefined, axis: SectionAxisName, scale: number,
-  locale: string, label: CoordinateLabeller,
+  locale: SheetLocale, label: CoordinateLabeller,
 ): LiveSymbolContext {
   /** Map coordinates are printed to the centimetre, ungrouped. */
   const fmt = (v: number) => sheetNumber(locale, v, 2, { group: false });
@@ -100,7 +101,8 @@ export function liveSymbolContext(
 /** `liveSymbolContext` with the active locale and the coordinate labels translated. */
 export function useLiveSymbolContext(plane: SectionPlaneConfig | null | undefined, axis: SectionAxisName, scale: number): LiveSymbolContext {
   const frame = useSiteFrame();
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   return useMemo(() => liveSymbolContext(frame, plane, axis, scale, locale, (kind, a, b) => (kind === 'map'
     ? [t('site.coordinates.e', { value: a }), t('site.coordinates.n', { value: b })]
     : [t('site.coordinates.x', { value: a }), t('site.coordinates.y', { value: b })])), [frame, plane, axis, scale, locale, t]);

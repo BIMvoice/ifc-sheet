@@ -17,6 +17,7 @@ import { useTranslation } from '@/i18n';
 import { NONE, wrapNote } from '@/urban/urban-layout';
 import { penTags } from '../sheets/dxf-tags';
 import { useSiteSourceNote, useUrbanIndicators } from '../urban/useUrban';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
 const WIDTH = 95;
@@ -27,13 +28,15 @@ const NOTE_CHARS = 88;
 
 /** The site balance, paper millimetres from its top-left corner. */
 export function SiteBalance({ x, y }: { x: number; y: number }) {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   const urban = useUrbanIndicators();
   const sourceNote = useSiteSourceNote();
   const r = urban?.result ?? null;
   const fixed = (v: number) => sheetNumber(locale, v);
+  const areaOf = (v: number) => sheetNumber(locale, v, 2, { kind: 'area' });
   const low = (text: string, atLeast: boolean | undefined) => (atLeast && text !== NONE ? t('urban.atLeast', { value: text }) : text);
-  const area = (v: number | null | undefined) => (v === null || v === undefined ? NONE : t('site.balance.area', { value: fixed(v) }));
+  const area = (v: number | null | undefined) => (v === null || v === undefined ? NONE : t('site.balance.area', { value: areaOf(v) }));
   const noSite = urban !== null && urban.site.source === null;
   const rows: [string, string][] = [
     [t('site.balance.plot'), noSite ? t('site.balance.noPlot') : area(r?.siteArea)],

@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
@@ -21,6 +21,7 @@ import { collectUrbanAreas, type UrbanAreas } from '@/urban/urban-models';
 import { urbanIndicators, type UrbanIndicators } from '@/urban/indicators';
 import { signedLevel, type UrbanLabels } from '@/urban/urban-layout';
 import { siteAreaOf, type SiteAreaChoice } from '@/urban/site-area';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 /** The footprints, rooms and model site area; null until they can be measured. `enabled` false skips the work. */
 export function useUrbanAreas(enabled = true): UrbanAreas | null {
@@ -73,7 +74,7 @@ export function useUrbanIndicators(enabled = true): { areas: UrbanAreas; result:
 type T = ReturnType<typeof useTranslation>['t'];
 
 /** Where the site area came from, in words: one sentence for every table that prints it. */
-export function siteSourceNote(t: T, locale: string, site: SiteAreaChoice): string {
+export function siteSourceNote(t: T, locale: SheetLocale, site: SiteAreaChoice): string {
   if (site.source === 'typed') {
     return site.plot === null ? t('urban.siteSource.typedNoPlot') : t('urban.siteSource.typed', { plot: sheetNumber(locale, site.plot) });
   }
@@ -82,12 +83,13 @@ export function siteSourceNote(t: T, locale: string, site: SiteAreaChoice): stri
 
 /** Where the site area came from, in words: one sentence for every table that prints it. */
 export function useSiteSourceNote(): (site: SiteAreaChoice) => string {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   return useMemo(() => (site: SiteAreaChoice) => siteSourceNote(t, locale, site), [t, locale]);
 }
 
 /** The schedule's labels; `site`, when given, adds the line saying where the site area came from. Pure: the Wall's export builds them too. */
-export function urbanLabelsOf(t: T, locale: string, title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
+export function urbanLabelsOf(t: T, locale: SheetLocale, title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
   const assumed = areas?.assumedInterior.join(', ') ?? '';
   const leftOut = areas?.spacesLeftOut ?? null;
   return {
@@ -118,7 +120,8 @@ export function urbanLabelsOf(t: T, locale: string, title: string, areas: UrbanA
 
 /** The schedule's labels; `site`, when given, adds the line saying where the site area came from. */
 export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   const assumed = areas?.assumedInterior.join(', ') ?? '';
   const leftOut = areas?.spacesLeftOut ?? null;
   return useMemo(() => urbanLabelsOf(t, locale, title, areas, site),

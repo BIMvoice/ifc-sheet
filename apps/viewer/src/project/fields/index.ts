@@ -69,6 +69,8 @@ const DOCUMENT_FIELD_DEFS = [
   optionalField('urbanSettings'),
   // Off is stored as absent, so a project that never touched it saves exactly as before.
   defineField({ key: 'includeFarElements', empty: () => undefined, load: (v) => (v === true ? true : undefined) }),
+  // The project's units and number format (#88); absent follows the language and each drawing's own style, so an old project saves as it was.
+  optionalField('unitsAndNumbers'),
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];

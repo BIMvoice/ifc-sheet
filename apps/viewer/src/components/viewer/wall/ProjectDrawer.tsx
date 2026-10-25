@@ -30,6 +30,7 @@ import type { ProjectViewKind } from '@/project/types';
 import { useViewerStore } from '@/store';
 import { modelSiteArea } from '@/urban/urban-models';
 import { SheetNumberingForm } from './SheetNumberingForm';
+import { UnitsAndNumbersForm } from './UnitsAndNumbersForm';
 import { useViewDrawings } from '@/project/view-drawings';
 import { viewportState, type ViewportState as ViewportStateValue } from '@/project/viewport-state';
 import { RecoveryOffer } from './RecoveryOffer';
@@ -177,6 +178,10 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
         <details className="border-t border-sky-300/10 px-4 py-3">
           <summary className="cursor-pointer text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.num.title')}</summary>
           <SheetNumberingForm />
+        </details>
+        <details className="border-t border-sky-300/10 px-4 py-3">
+          <summary className="cursor-pointer text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.units.title')}</summary>
+          <UnitsAndNumbersForm />
         </details>
         <details className="border-t border-sky-300/10 px-4 py-3">
           <summary className="cursor-pointer text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.tb.title')}</summary>

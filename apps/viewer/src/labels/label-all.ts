@@ -24,6 +24,7 @@ import { resolveWithExtras, type LabelExtras } from './label-extras';
 import type { LabelElement } from './label-resolve';
 import { parseTemplate } from './label-template';
 import type { ViewElement } from './view-elements';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export interface LabelPlacement {
   viewId: string;
@@ -34,7 +35,7 @@ export interface LabelPlacement {
   /** Drawing units per paper millimetre. */
   paperUnit: number;
   /** The language the label's numbers are written in. */
-  locale: string;
+  locale: SheetLocale;
 }
 
 /** The elements of a view with their GlobalId and class; one a loaded model does not have is left out. */
@@ -50,7 +51,7 @@ export function labelTargets(elements: readonly ViewElement[]): LabelTarget[] {
 /** How a label finds its element by GlobalId: the loaded models'. */
 export type ElementReader = (globalId: string) => LabelElement | null;
 
-function labelText(type: AnnotationType, guid: string, locale: string, extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): string | null {
+function labelText(type: AnnotationType, guid: string, locale: SheetLocale, extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): string | null {
   const spec = type.label;
   const element = read(guid);
   return spec && element ? resolveWithExtras(parseTemplate(spec.template), element, locale, spec.missing, extras) : null;
@@ -68,7 +69,7 @@ export function labelDraft(type: AnnotationType, guid: string, centre: Pt, at: L
 }
 
 /** The size a label of `type` for `guid` fills; null as for `labelDraft`. */
-export function labelSize(type: AnnotationType, guid: string, textHeight: number, locale: string, extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): { w: number; h: number } | null {
+export function labelSize(type: AnnotationType, guid: string, textHeight: number, locale: SheetLocale, extras: LabelExtras = {}, read: ElementReader = labelElementByGlobalId): { w: number; h: number } | null {
   const text = labelText(type, guid, locale, extras, read);
   if (text === null) return null;
   const { outer } = textBlock(text, textHeight, type.label?.frame);

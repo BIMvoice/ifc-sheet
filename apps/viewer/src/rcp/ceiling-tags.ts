@@ -15,7 +15,7 @@
  * x and z, as `tagall/footprint.ts` reads a plan). Pure: meshes in, tags out.
  */
 
-import { sheetLevel } from '@bimvoice/ifcsheet/names';
+import { sheetLevel, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { Pt } from '@/drafting/types';
 
 export interface CeilingMesh {
@@ -42,7 +42,7 @@ export interface CeilingTag {
 const SOFFIT_TOLERANCE = 1e-4;
 
 /** The height as a sheet writes a level, in the language's separators (#269). */
-export const ceilingHeightText = (height: number, locale = 'en'): string => sheetLevel(locale, height);
+export const ceilingHeightText = (height: number, locale: SheetLocale = 'en'): string => sheetLevel(locale, height);
 
 /** Soffit heights a tag is kept for, in the mesh frame: strictly above `above` and strictly below `below`. */
 export interface SoffitBand { above: number; below: number }
@@ -53,7 +53,7 @@ const ANY_HEIGHT: SoffitBand = { above: -Infinity, below: Infinity };
  * The tags of the coverings among `meshes` that `isCeiling` accepts (by renderer id), heights measured from `floor`.
  * One tag per covering, ordered by id; a covering with no lowest face, or whose soffit lies outside `band`, is left out.
  */
-export function ceilingTags(meshes: readonly CeilingMesh[], floor: number, isCeiling: (renderId: number) => boolean, band: SoffitBand = ANY_HEIGHT, locale = 'en'): CeilingTag[] {
+export function ceilingTags(meshes: readonly CeilingMesh[], floor: number, isCeiling: (renderId: number) => boolean, band: SoffitBand = ANY_HEIGHT, locale: SheetLocale = 'en'): CeilingTag[] {
   const byId = new Map<number, CeilingMesh[]>();
   for (const m of meshes) {
     if (m.ifcType !== 'IfcCovering' || !isCeiling(m.expressId)) continue;

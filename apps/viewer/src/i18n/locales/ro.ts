@@ -26,6 +26,7 @@ import { scheduleExportRo } from '../catalogues/schedule-export.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
 import { featuresRo } from '../catalogues/features.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
+import { unitsNumbersRo } from '../catalogues/units-numbers.ro';
 import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
 import { wallArrangeRo } from '../catalogues/wall-arrange.ro';
 import { revisionsRo } from '../catalogues/revisions.ro';
@@ -53,6 +54,7 @@ export default {
   ...sheetTablesRo,
   ...featuresRo,
   ...titleBlockSourcesRo,
+  ...unitsNumbersRo,
   ...titleBlockRoRo,
   ...wallArrangeRo,
   ...revisionsRo,

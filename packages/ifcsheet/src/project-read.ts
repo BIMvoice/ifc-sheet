@@ -24,6 +24,7 @@ import { subReportChecksOf, type SubReportCheck } from './sub-report-check.js';
 import { readinessOfModel } from './readiness-read.js';
 import type { FarElementFact, ReadinessFinding } from './readiness.js';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { readUnitsAndNumbers, type UnitsAndNumbers } from './units-and-numbers.js';
 
 /** What the checks read of a project file. */
 export interface ProjectFacts extends JoineryProject {
@@ -36,6 +37,8 @@ export interface ProjectFacts extends JoineryProject {
   joineryMapping: JoineryMapping;
   /** The project's setting "include far-away elements in framing" (`framing.ts`); false when the file does not say so. */
   includeFarElements: boolean;
+  /** The project's "Units and numbers" setting (#88), as the app reads it; absent when the file sets none. Hand it to `sheetFormat` for every figure the command line or an export writes. */
+  unitsAndNumbers?: UnitsAndNumbers;
 }
 
 type Json = Record<string, unknown>;
@@ -61,6 +64,7 @@ export function readProjectFile(text: string): ProjectFacts {
     joineryTypes: readJoineryList(parsed.joineryTypes),
     joineryMapping: parsed.joineryMapping !== undefined ? readJoineryMapping(parsed.joineryMapping) : { ...DEFAULT_JOINERY_MAPPING },
     includeFarElements: parsed.includeFarElements === true,
+    ...(readUnitsAndNumbers(parsed.unitsAndNumbers) ? { unitsAndNumbers: readUnitsAndNumbers(parsed.unitsAndNumbers) } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }

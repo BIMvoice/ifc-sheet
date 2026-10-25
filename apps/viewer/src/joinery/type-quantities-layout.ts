@@ -11,7 +11,7 @@
  * the same lines.
  */
 
-import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import type { ExportTable } from './schedule-export';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
@@ -19,7 +19,7 @@ import type { Totals, TypeQuantities } from './type-quantities';
 
 export interface TypeQuantityLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */
-  locale: string;
+  locale: SheetLocale;
   title: string;
   type: string;
   class: string;
@@ -67,14 +67,14 @@ export function typeQuantityLines(data: TypeQuantities, labels: TypeQuantityLabe
 
 const COLUMNS = [58, 28, 28, 14, 20, 20, 20, 14] as const;
 
-const fixed = (locale: string, v: number | null): string => (v === null ? '–' : sheetNumber(locale, v));
+const fixed = (locale: SheetLocale, v: number | null, kind: 'length' | 'area' | 'volume'): string => (v === null ? '–' : sheetNumber(locale, v, 2, { kind }));
 
 export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityLabels, paging: PagedOptions = {}): ScheduleLayout {
   const lines = typeQuantityLines(data, labels);
   const block: TableBlock = {
     columns: COLUMNS, header: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], numeric: (c) => c >= 3, skipEmpty: true,
     rows: lines.map((l, i) => ({
-      cells: [l.first ? l.type : '', l.first ? plainClass(l.className) : '', l.level, String(l.totals.count), fixed(labels.locale, l.totals.length), fixed(labels.locale, l.totals.area), fixed(labels.locale, l.totals.volume), l.totals.noQto ? String(l.totals.noQto) : ''],
+      cells: [l.first ? l.type : '', l.first ? plainClass(l.className) : '', l.level, String(l.totals.count), fixed(labels.locale, l.totals.length, 'length'), fixed(labels.locale, l.totals.area, 'area'), fixed(labels.locale, l.totals.volume, 'volume'), l.totals.noQto ? String(l.totals.noQto) : ''],
       bold: l.total,
       // A frame rule above the class totals, else a rule under the last line of each type.
       rule: !l.classTotal && lines[i + 1]?.classTotal === true ? PEN.frame : i === lines.length - 1 || lines[i + 1].first ? PEN.grid : 0,
@@ -87,7 +87,7 @@ export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityL
 export function typeQuantityTable(data: TypeQuantities, labels: TypeQuantityLabels): ExportTable {
   const lines = typeQuantityLines(data, labels);
   return {
-    name: labels.title || labels.type, header: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], numeric: [3, 4, 5, 6, 7],
+    name: labels.title || labels.type, header: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], numeric: [3, 4, 5, 6, 7], kinds: { 4: 'length', 5: 'area', 6: 'volume' },
     rows: lines.map((l) => [l.type, plainClass(l.className), l.level, l.totals.count, l.totals.length, l.totals.area, l.totals.volume, l.totals.noQto || null]),
     bold: lines.flatMap((l, i) => (l.total ? [i] : [])),
   };
