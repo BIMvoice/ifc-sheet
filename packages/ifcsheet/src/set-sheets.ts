@@ -15,7 +15,7 @@ import { propertyValueReader } from './colour-scheme-read.js';
 import { sheetGraphic, type SheetGraphic } from './sheet-graphic.js';
 import { generateViewDrawings } from './view-drawings.js';
 import { propertySetsOf } from './joinery-schedule.js';
-import { elementProperties } from './view-style.js';
+import { PEN_TABLE, elementProperties } from './view-style.js';
 
 export interface SheetGraphicsOptions {
   /** Cut each view's drawing from the meshes (default true); without it the sheets carry their frames and titles only. */
@@ -31,6 +31,14 @@ export function headlessPropertiesOf(dataStore: NonNullable<OpenedModel['dataSto
     let p = props.get(id);
     if (!p) props.set(id, (p = elementProperties(propertySetsOf({ dataStore, view: null }, id))));
     return p;
+  };
+}
+
+/** The name of the IfcMaterial `materialId` is (its first attribute), for a template's material rules (#31). */
+export function headlessMaterialOf(dataStore: NonNullable<OpenedModel['dataStore']>): (entityId: number, materialId: number) => string | null {
+  return (_entityId, materialId) => {
+    const raw = dataStore.getEntity(materialId)?.attributes?.[0];
+    return typeof raw === 'string' && raw.trim() ? raw : null;
   };
 }
 
@@ -54,5 +62,6 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   const entities = model.dataStore?.entities;
   const globalIdOf = entities ? (id: number) => entities.getGlobalId(id) || undefined : undefined;
   const propertiesOf = model.dataStore ? headlessPropertiesOf(model.dataStore) : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf));
+  const materialOf = model.dataStore ? headlessMaterialOf(model.dataStore) : undefined;
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, PEN_TABLE, materialOf));
 }

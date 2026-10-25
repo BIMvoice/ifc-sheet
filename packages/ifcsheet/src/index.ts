@@ -29,13 +29,16 @@ export type {
   ProjectView, ProjectViewBase, ProjectViewKind, SectionCustomPlane, SectionPlaneAxis, SectionProjectPlane, SectionProjectView,
   SheetFrame, SheetTemplate, SheetViewport, TemplateSeries, ThreeDProjection, ThreeDProjectView, TitleBlockPosition, ViewDetail,
   ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster, ProjectViewTemplate, TemplateGraphics, ViewTemplateKind,
-  ElementGraphics, ElementLineStyle, GlobalId,
+  ElementGraphics, ElementLineStyle, GlobalId, ResolvedViewGraphics, StyleRule, StyleRuleStyle,
 } from './document.js';
+
+// A view template's class and material mapping (#31)
+export { classKey, itemRules, materialKey, ruleStyleFor, type ItemRules } from './style-rules.js';
 
 // View templates (#44): named graphics many views follow, and the one function that layers them
 export {
   VIEW_CATEGORY_CLASSES, VIEW_TEMPLATE_KINDS, assignDefaultTemplates, defaultViewTemplates, hiddenClassesOf, resolveViewGraphics, resolveViewport,
-  templateGraphicsOf, templateKindOf, templateOf, untemplatedGraphics, viewportHiddenLayers,
+  ownGraphicsOf, templateGraphicsOf, templateKindOf, templateOf, untemplatedGraphics, viewportHiddenLayers,
 } from './view-templates.js';
 
 // Single elements in a view (#32, #33): hidden, drawn differently, one line hidden; all by GlobalId

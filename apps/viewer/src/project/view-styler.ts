@@ -21,8 +21,10 @@ import { fromGlobalIdFromModels } from '@/store/globalId';
 import { memoOn, sharedMemo } from '@/components/viewer/sheets/shared-memo';
 import type { GraphicStandard } from '@/drafting/graphic-standard';
 import { phaseStyle } from './phases';
+import { modelOf } from './material-resolver';
+import { ifcMaterialName } from './materials';
 import { halftoneColor, type EntityStyleOf } from './model-styles';
-import type { ViewGraphics } from './types';
+import type { ResolvedViewGraphics } from './types';
 
 type Properties = ElementData['properties'];
 
@@ -45,20 +47,29 @@ function propertiesReader(): (entityId: number) => Properties {
   };
 }
 
+/** The IfcMaterial a cut band is, read from the loaded model its element belongs to: what a template's material rules match (#31). */
+export function materialOf(entityId: number, materialId: number): string | null {
+  const m = modelOf(entityId);
+  return m ? ifcMaterialName(m.dataStore, m.view, materialId) : null;
+}
+
 const stylers = sharedMemo<ViewStyler>();
 const NO_DRAWING = {};
 
 /** The styler of a view's drawing with `graphics` (`resolveViewGraphics`'s), the project's `standard` and the models' draw styles. */
-export function appViewStyler(graphics: ViewGraphics | undefined, drawing: Drawing2D | object | null, standard: GraphicStandard, styleOf?: EntityStyleOf): ViewStyler {
+export function appViewStyler(graphics: ResolvedViewGraphics | undefined, drawing: Drawing2D | object | null, standard: GraphicStandard, styleOf?: EntityStyleOf): ViewStyler {
   // The models and their property edits only matter to a view whose rules read properties.
   const reads = rulesReadProperties(presetRules(graphics));
+  // So do the material names a template's material rules match.
+  const mapped = !!graphics?.styleRules?.some((r) => r.by === 'material');
   const s = useViewerStore.getState();
-  const deps = [graphics, standard, styleOf, reads ? s.models : null, reads ? s.ifcDataStore : null, reads ? s.mutationVersion : null];
+  const deps = [graphics, standard, styleOf, reads || mapped ? s.models : null, reads ? s.ifcDataStore : null, reads || mapped ? s.mutationVersion : null];
   return memoOn(stylers, drawing ?? NO_DRAWING, deps, () => viewStyler({
     graphics,
     pens: standard,
     phaseStyle: (phase) => phaseStyle(graphics, phase),
     ...(styleOf ? { ink: (colour: string, entityId: number | undefined) => (entityId !== undefined && styleOf(entityId) === 'halftone' ? halftoneColor(colour) : colour) } : {}),
     ...(reads ? { propertiesOf: propertiesReader() } : {}),
+    ...(mapped ? { materialOf } : {}),
   }));
 }

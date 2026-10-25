@@ -11,7 +11,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
-import { paperLabel, paperOf, type ProjectDocument, type ProjectSheet, type ProjectView } from '@bimvoice/ifcsheet';
+import { paperLabel, paperOf, type ModelExtent, type ProjectDocument, type ProjectSheet, type ProjectView } from '@bimvoice/ifcsheet';
 import type { ToolContext } from '../context.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import { resolveSafePath } from '../safe-path.js';
@@ -121,7 +121,8 @@ export function unplacedViews(doc: ProjectDocument) {
  */
 export async function outputPath(raw: unknown, ctx: ToolContext, want?: { extension: string }): Promise<string> {
   const path = await resolveSafePath(raw, ctx, 'write');
-  if (extname(path).toLowerCase() === '.ifc' || sourcePaths(ctx).includes(path)) {
+  // An .ifc file is written only when the caller asks for one by name (the annotated copy of the issue, a new file); an opened model never.
+  if ((extname(path).toLowerCase() === '.ifc' && want?.extension !== '.ifc') || sourcePaths(ctx).includes(path)) {
     throw invalid(`Refusing to write '${path}': the drawing-set tools never write IFC files or the model they opened.`);
   }
   if (want && extname(path).toLowerCase() !== want.extension) throw invalid(`The file must end in ${want.extension}: '${path}'.`);
@@ -142,4 +143,31 @@ export async function pathOrInline(input: Record<string, unknown>, ctx: ToolCont
   } catch (err) {
     throw invalid(`Cannot read '${source}': ${(err as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (err as Error).message}`);
   }
+}
+
+/** The model's extent, which every view and placement is measured on. A set exists only for a model that has one. */
+export function extentOf(entry: SheetSetEntry): ModelExtent {
+  const extent = entry.model.model.extent;
+  if (!extent) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The model has no geometry, so views cannot be measured.' });
+  return extent;
+}
+
+/** The `dry_run` input of the editing tools. */
+export const DRY_RUN = { type: 'boolean', description: 'Report what the call would change, and change nothing in the session. The result is the real call\'s, with dry_run true.' } as const;
+
+/**
+ * The entry an editing tool writes to. A dry run gets a copy of the session's entry (its own `set` and `schedules`), so the tool runs
+ * the same code as the real call and its edit lands on the copy: the session's entry is never touched, by construction.
+ */
+export function workingEntry(entry: SheetSetEntry, dry: boolean): SheetSetEntry {
+  return dry ? { ...entry, set: { ...entry.set }, schedules: [...entry.schedules] } : entry;
+}
+
+/** The words of a result, said as a plan when nothing was changed. */
+export const dryPrefix = (dry: boolean, message: string): string => (dry ? `Dry run, nothing changed. ${message}` : message);
+
+/** What `ifcsheet_list_sheets` and the `ifcsheet://session/sheets` resource say of a set: one function, so they cannot differ. */
+export function sheetListing(entry: SheetSetEntry) {
+  const doc = entry.set.document;
+  return { document_id: entry.id, name: doc.name, sheets: sheetsOf(entry), unplaced_views: unplacedViews(doc), title_block: doc.titleBlock ?? {} };
 }

@@ -13,6 +13,7 @@ import { useProjectStore } from '@/project/project-store';
 import { deleteViewTemplate, renameViewTemplate, setTemplateCategory, usersOf } from '@/project/view-template-actions';
 import type { ViewTemplateKind } from '@bimvoice/ifcsheet';
 import { CategoryGraphicsList } from './CategoryGraphicsList';
+import { StyleRulesEditor } from './StyleRulesEditor';
 
 const KIND_LABEL = { plan: 'wall.group.plans', section: 'wall.group.sections', elevation: 'wall.group.elevations' } as const satisfies Record<ViewTemplateKind, TranslationKey>;
 
@@ -42,6 +43,7 @@ export function ViewTemplatesPanel() {
             <details className="mt-1 px-1.5">
               <summary className="cursor-pointer text-xs text-sky-100">{t('wall.tpl.edit', { name: template.name })}</summary>
               <CategoryGraphicsList graphics={template.graphics.categories} onChange={(category, patch) => setTemplateCategory(template.id, category, patch)} />
+              <StyleRulesEditor template={template} />
             </details>
           </li>
         ))}

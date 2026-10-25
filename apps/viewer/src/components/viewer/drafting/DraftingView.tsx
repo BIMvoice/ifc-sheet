@@ -123,6 +123,7 @@ import { partHostType } from '@/project/part-host';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { cutHatches, hiddenClasses, styledDrawing } from '@/project/view-graphics';
+import { materialOf } from '@/project/view-styler';
 import { useViewCanvasStyler } from './useViewCanvasStyler';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
@@ -215,7 +216,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   // Each face's and line's style: the view's one styler, its sheets' too (#34).
   const canvasStyler = useViewCanvasStyler(graphics, shown);
   const hidden = useMemo(() => hiddenClasses(graphics), [graphics]);
-  const hatches = useMemo(() => (shown ? cutHatches(shown, graphics) : []), [shown, graphics]);
+  const hatches = useMemo(() => (shown ? cutHatches(shown, graphics, undefined, materialOf) : []), [shown, graphics]);
 
   useEffect(() => {
     // Annotation sizes are paper sizes at the view's scale (the settings read as at 1:100).

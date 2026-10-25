@@ -10,7 +10,9 @@
 import { describe, expect, it } from 'vitest';
 import { DASH_MM, DEFAULT_FACE_FILL, HIDDEN_DASH_MM, PEN_TABLE, elementProperties, viewStyler, type StyleItem } from './view-style.js';
 import { penGroups } from './drawing-pens.js';
-import type { ViewGraphics } from './view-graphics-types.js';
+import type { StyleRule, ViewGraphics } from './view-graphics-types.js';
+import type { ProjectView } from './document.js';
+import { resolveViewGraphics, type ProjectViewTemplate, type TemplateGraphics } from './view-templates.js';
 
 const GID = '2O2Fr$t4X7Zf8NOew3FLOH';
 const wallFace: StyleItem = { entityId: 7, ifcType: 'IfcWallStandardCase' };
@@ -116,5 +118,60 @@ describe('penGroups', () => {
 describe('elementProperties', () => {
   it('merges two sets of one name, the earlier winning a property both have', () => {
     expect(elementProperties([{ name: 'P', properties: [{ name: 'a', value: 1 }] }, { name: 'P', properties: [{ name: 'a', value: 2 }, { name: 'b', value: 3 }] }])).toEqual({ P: { a: 1, b: 3 } });
+  });
+});
+
+describe('viewStyler: a template\'s class and material mapping (#31)', () => {
+  const WALL_RULE: StyleRule = { id: 'r1', by: 'class', match: ['IfcWall'], style: { lineWeight: 'heavy', fillColor: '#666666' } };
+  const CONCRETE: StyleRule = { id: 'r2', by: 'material', match: ['Concrete'], style: { fillColor: '#999999' } };
+  const view = (_templateGraphics: TemplateGraphics, own?: ViewGraphics): Pick<ProjectView, 'graphics' | 'templateId'> => ({ templateId: 't1', graphics: own });
+  const template = (graphics: TemplateGraphics): ProjectViewTemplate[] => [{ id: 't1', name: 'Plans', kind: 'plan', graphics }];
+  const styler = (graphics: TemplateGraphics, own?: ViewGraphics) => viewStyler({
+    graphics: resolveViewGraphics(view(graphics, own), template(graphics)), materialOf: (_e, m) => ({ 1: 'Concrete', 2: 'Brick' } as Record<number, string>)[m],
+  });
+  const door: StyleItem = { entityId: 9, ifcType: 'IfcDoor' };
+
+  it('"IfcWall: heavy cut, grey fill" restyles every wall (the standard case too), and nothing else', () => {
+    const s = styler({ styleRules: [WALL_RULE] });
+    expect(s.face(wallFace)).toMatchObject({ weight: 0.7, fill: '#666666' });
+    expect(s.face({ entityId: 8, ifcType: 'IfcWall' })).toMatchObject({ weight: 0.7, fill: '#666666' });
+    expect(s.line(line('cut'))).toMatchObject({ weight: 0.7 });
+    expect(s.line(line('projection'))).toMatchObject({ weight: 0.35 });
+    expect(s.face(door)).toEqual(viewStyler({ graphics: undefined }).face(door));
+  });
+
+  it('a template with no rules draws exactly as it did', () => {
+    const plain = styler({ categories: { walls: { lineWeight: 'light' } } });
+    expect(plain.face(wallFace)).toEqual(viewStyler({ graphics: { categories: { walls: { lineWeight: 'light' } } } }).face(wallFace));
+    expect(resolveViewGraphics(view({}), template({}))).not.toHaveProperty('styleRules');
+  });
+
+  it('a material rule beats a class rule on the fill; the class rule still draws the outline', () => {
+    const s = styler({ styleRules: [WALL_RULE, CONCRETE] });
+    expect(s.face({ ...wallFace, materialId: 1 })).toMatchObject({ fill: '#999999', weight: 0.7 });
+    expect(s.face({ ...wallFace, materialId: 2 })).toMatchObject({ fill: '#666666' });
+    expect(s.face(wallFace)).toMatchObject({ fill: '#666666' });
+    // The list's order does not matter between kinds.
+    expect(styler({ styleRules: [CONCRETE, WALL_RULE] }).face({ ...wallFace, materialId: 1 }).fill).toBe('#999999');
+  });
+
+  it('the template\'s own categories give way to the mapping; the view\'s own categories beat it', () => {
+    const t: TemplateGraphics = { styleRules: [WALL_RULE, CONCRETE], categories: { walls: { fillColor: '#aa0000', lineWeight: 'hairline' } } };
+    expect(styler(t).face({ ...wallFace, materialId: 1 })).toMatchObject({ fill: '#999999', weight: 0.7 });
+    expect(styler(t).face({ entityId: 3, ifcType: 'IfcWallStandardCase' })).toMatchObject({ fill: '#666666', weight: 0.7 });
+    const own = styler(t, { categories: { walls: { fillColor: '#00aa00', lineWeight: 'light' } } });
+    expect(own.face({ ...wallFace, materialId: 1 })).toMatchObject({ fill: '#00aa00', weight: 0.25 });
+    // A field the view leaves alone is still the mapping's.
+    expect(styler(t, { categories: { walls: { lineColor: '#0000ff' } } }).face(wallFace)).toMatchObject({ stroke: '#0000ff', fill: '#666666', weight: 0.7 });
+  });
+
+  it('groups: one rule names several materials, case and spacing aside', () => {
+    const s = styler({ styleRules: [{ id: 'g', by: 'material', match: ['concrete  C30', 'Brick'], style: { fillColor: '#123456' } }] });
+    expect(s.face({ ...wallFace, materialId: 2 }).fill).toBe('#123456');
+  });
+
+  it('without a material reader a material rule says nothing', () => {
+    const s = viewStyler({ graphics: resolveViewGraphics(view({ styleRules: [CONCRETE] }), template({ styleRules: [CONCRETE] })) });
+    expect(s.face({ ...wallFace, materialId: 1 }).fill).toBe(DEFAULT_FACE_FILL);
   });
 });

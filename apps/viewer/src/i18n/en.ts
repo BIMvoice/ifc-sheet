@@ -167,6 +167,7 @@ import { splitToolEn } from './catalogues/split-tool.en';
 import { stairRailingEn } from './catalogues/stair-railing.en';
 import { storeyContextEn } from './catalogues/storey-context.en';
 import { structuralPropertiesEn } from './catalogues/structural-properties.en';
+import { styleRulesEn } from './catalogues/style-rules.en';
 import { sweptDiskInspectionEn } from './catalogues/swept-disk-inspection.en';
 import { tableCorrectionsEn } from './catalogues/table-corrections.en';
 import { tagFieldsEn } from './catalogues/tag-fields.en';
@@ -364,6 +365,7 @@ export const en = {
   ...stairRailingEn,
   ...storeyContextEn,
   ...structuralPropertiesEn,
+  ...styleRulesEn,
   ...sweptDiskInspectionEn,
   ...tableCorrectionsEn,
   ...tagFieldsEn,

@@ -39,6 +39,7 @@ import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetTablesRo } from '../catalogues/sheet-tables.ro';
 import { sheetTemplatesRo } from '../catalogues/sheet-templates.ro';
 import { sheetsRo } from '../catalogues/sheets.ro';
+import { styleRulesRo } from '../catalogues/style-rules.ro';
 import { tagFieldsRo } from '../catalogues/tag-fields.ro';
 import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
@@ -84,6 +85,7 @@ export default {
   ...sheetTablesRo,
   ...sheetTemplatesRo,
   ...sheetsRo,
+  ...styleRulesRo,
   ...tagFieldsRo,
   ...titleBlockParamsRo,
   ...titleBlockRoRo,

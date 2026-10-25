@@ -191,17 +191,18 @@ export function mergeCatalogues(
   const tagFields = mergeTagFields(mine.tagFields, incoming.tagFields, policy);
   const details = mergeNamed(mine.details, incoming.details, policy, 'detail', fresh);
   const templates = mergeNamed(mine.sheetTemplates, incoming.sheetTemplates, policy, 'template', fresh);
+  const viewTemplates = mergeNamed(mine.viewTemplates, incoming.viewTemplates, policy, 'viewtemplate', fresh);
   const boq = mergeBoqArticles(mine.boqArticles, incoming.boqArticles, policy, fresh);
   return {
     maps: { layers: layers.ids, symbols: symbols.ids, patterns: patterns.names },
     catalogue: {
       ...(tagFields.config ? { tagFields: tagFields.config } : {}),
       layers: layers.list, layerGroups: groups.list, textStyles: texts.list, dimStyles: dims.list, hatchPatterns: patterns.text,
-      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, cadLayers: cad.list, details: details.list, sheetTemplates: templates.list, boqArticles: boq.list,
+      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, cadLayers: cad.list, details: details.list, sheetTemplates: templates.list, boqArticles: boq.list, viewTemplates: viewTemplates.list,
     },
     report: {
       layers: layers.report, textStyles: texts.report, dimStyles: dims.report, hatchPatterns: patterns.report,
-      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, cadLayers: cad.report, tagFields: tagFields.report, details: details.report, sheetTemplates: templates.report, boqArticles: boq.report,
+      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, cadLayers: cad.report, tagFields: tagFields.report, details: details.report, sheetTemplates: templates.report, boqArticles: boq.report, viewTemplates: viewTemplates.report,
     },
   };
 }

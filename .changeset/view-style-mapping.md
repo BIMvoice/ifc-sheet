@@ -1,0 +1,6 @@
+---
+"@ifc-lite/viewer": minor
+"@bimvoice/ifcsheet": minor
+---
+
+View templates map IFC classes and materials, and travel in the library (#31). A view template can carry rules: an IFC class (`IfcWall`, which also covers `IfcWallStandardCase`) or a building material (by its IfcMaterial name, several names to a rule) drawn its own way. A class rule sets the line weight and colour, the fill and the cut hatch; a material rule sets the fill and the hatch of the cut band, because a material is a face and its outline stays the element's. Rules plug into the one styler (`viewStyler`) between the template's category graphics and the view's own: template categories < class rules < material rules < the view's own categories, so a drawing's own word still wins and a class or material nothing maps keeps its category, then its preset. Every renderer (drafting view, sheets, PDF, DXF, the view's DXF, the command line) reads the same rules; a template without rules draws exactly as before. The view template list in the project drawer gains a configurator: add, edit and remove rules, a swatch drawn by the same styler, and the classes and materials of the loaded models that no rule maps yet. The `.bvlib` library gains a `viewTemplates` kind, merged by name under the same three policies; importing makes the templates available and moves no drawing onto one.

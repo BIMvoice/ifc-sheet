@@ -10,6 +10,7 @@ export const boqRo = {
   ...BOQ_WORDS_RO,
   'boq.newName': 'Antemăsurătoare',
   'wall.project.addBoq': '+ Antemăsurătoare (liste de cantități)',
+  'library.kind.viewTemplates': 'Șabloane de vedere',
   'library.kind.boqArticles': 'Articole de antemăsurătoare',
   'boq.card.title': 'Antemăsurătoare',
   'boq.card.summary': '{count} articole',
