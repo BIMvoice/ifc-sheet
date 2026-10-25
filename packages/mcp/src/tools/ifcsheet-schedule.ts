@@ -6,7 +6,7 @@
 
 import { DEFAULT_SCHEME, ISO_PAPERS, drawingArea, freshProjectId, nextNumber } from '@bimvoice/ifcsheet';
 import { SCHEDULE_LOCALES, scheduleCapacity, scheduleTable } from './ifcsheet-draw.js';
-import { DOCUMENT_ID, invalid, optChoice, optText, pathOrInline, text } from './ifcsheet-shared.js';
+import { DOCUMENT_ID, DRY_RUN, dryPrefix, invalid, optBoolean, optChoice, optText, pathOrInline, text, workingEntry } from './ifcsheet-shared.js';
 import { getSheetSet, replaceSheetDocument } from './ifcsheet-store.js';
 import type { Tool } from './types.js';
 import { okResult } from './util.js';
@@ -16,12 +16,13 @@ const KINDS = ['rooms', 'boq'] as const;
 export const ifcsheetAddSchedule: Tool = {
   name: 'ifcsheet_add_schedule',
   description:
-    'Add a schedule on a new sheet of its own, in the schedules series (A-601 by default), landscape. kind "rooms": the room and area schedule of the model: every IfcSpace by level with its number, name and area in square metres (the model\'s NetFloorArea, else GrossFloorArea, else the footprint of its geometry), a total per level and for the building; the same rows as `ifcsheet rooms`. kind "boq": the bill of quantities (antemasuratoare) of the articles a saved project holds, summed over the model; give project_path (a .ifclite-project.json on the server) or project_json (its text); the same sums as `ifcsheet boq`. The table is read from the model whenever the set is drawn. Rows beyond what fits the paper are left off the sheet (rows_left_off says how many); a larger paper holds more, and the issue\'s CSV always has all. Returns the sheet, the rows counts and the first rows of the table.',
+    'Add a schedule on a new sheet of its own, in the schedules series (A-601 by default), landscape. kind "rooms": the room and area schedule of the model: every IfcSpace by level with its number, name and area in square metres (the model\'s NetFloorArea, else GrossFloorArea, else the footprint of its geometry), a total per level and for the building; the same rows as `ifcsheet rooms`. kind "boq": the bill of quantities (antemasuratoare) of the articles a saved project holds, summed over the model; give project_path (a .ifclite-project.json on the server) or project_json (its text); the same sums as `ifcsheet boq`. The table is read from the model whenever the set is drawn. Rows beyond what fits the paper are left off the sheet (rows_left_off says how many); a larger paper holds more, and the issue\'s CSV always has all. Returns the sheet, the rows counts and the first rows of the table; for rooms also total_row, the last row of the table: the building total (Au). With dry_run true no sheet is added: the same table and counts are returned.',
   scope: 'read',
   inputSchema: {
     type: 'object',
     properties: {
       document_id: DOCUMENT_ID,
+      dry_run: DRY_RUN,
       kind: { type: 'string', enum: [...KINDS], description: 'The schedule.' },
       name: { type: 'string', description: 'The sheet\'s name. Default "Room and area schedule" or "Bill of quantities".' },
       paper: { type: 'string', enum: [...ISO_PAPERS], description: 'The sheet\'s paper, default A3.' },
@@ -33,7 +34,9 @@ export const ifcsheetAddSchedule: Tool = {
     additionalProperties: false,
   },
   async handler(input, ctx) {
-    const entry = getSheetSet(ctx, text(input, 'document_id'));
+    const session = getSheetSet(ctx, text(input, 'document_id'));
+    const dry = optBoolean(input, 'dry_run') ?? false;
+    const entry = workingEntry(session, dry);
     const doc = entry.set.document;
     const kind = optChoice(input, 'kind', KINDS);
     if (!kind) throw invalid(`kind is required: one of ${KINDS.join(', ')}.`);
@@ -66,8 +69,8 @@ export const ifcsheetAddSchedule: Tool = {
     entry.schedules.push(schedule);
     const left = Math.max(0, table.rows.length - scheduleCapacity(drawingArea(sheet)));
     return okResult(
-      `Added ${kind === 'rooms' ? 'the room schedule' : 'the bill of quantities'} as sheet ${sheet.number} (${table.rows.length - 1} rows${left ? `, ${left} left off the ${paper}` : ''}).`,
-      { document_id: entry.id, sheet: { id: sheet.id, number: sheet.number, name, paper }, kind, rows: table.rows.length - 1, rows_left_off: left, notes: table.notes, table: table.rows.slice(0, 8) },
+      dryPrefix(dry, `${dry ? 'Would add' : 'Added'} ${kind === 'rooms' ? 'the room schedule' : 'the bill of quantities'} as sheet ${sheet.number} (${table.rows.length - 1} rows${left ? `, ${left} left off the ${paper}` : ''}).`),
+      { document_id: entry.id, dry_run: dry, sheet: { id: sheet.id, number: sheet.number, name, paper }, kind, rows: table.rows.length - 1, rows_left_off: left, notes: table.notes, table: table.rows.slice(0, 8), ...(kind === 'rooms' ? { total_row: table.rows[table.rows.length - 1] } : {}) },
     );
   },
 };

@@ -19,6 +19,7 @@ import type { ResourceContents, ResourceDefinition } from '../protocol/index.js'
 import type { LoadedModel, ToolContext } from '../context.js';
 import { modelAllowed } from '../auth/scope.js';
 import type { ResourceProvider } from './types.js';
+import { IfcSheetResources } from './ifcsheet.js';
 
 const URI_PREFIX = 'ifc-lite://';
 
@@ -307,5 +308,6 @@ export function defaultResourceProviders(): ResourceProvider[] {
     new PropertySetsProvider(),
     new ViewerSelectionProvider(),
     new ViewerStatusProvider(),
+    new IfcSheetResources(),
   ];
 }
