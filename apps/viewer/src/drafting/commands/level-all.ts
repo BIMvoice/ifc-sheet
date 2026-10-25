@@ -50,6 +50,6 @@ export const levelAllCommand: DraftCommandDef = {
     }
     const drafts = plan.marks.map((m) => newDraft(ctx.viewId, ctx.layerId, m.shape, { ...styledParams(ctx.viewId, m.shape, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }), levelAll: m.key }));
     editDrafts({ add: drafts });
-    ctx.say('drafting.msg.levelAllDone', { count: drafts.length, already: plan.already, side: plan.side });
+    ctx.say(plan.side === 'left' ? 'drafting.msg.levelAllDoneLeft' : 'drafting.msg.levelAllDoneRight', { count: drafts.length, already: plan.already });
   },
 };
