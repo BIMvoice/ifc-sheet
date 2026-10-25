@@ -16,6 +16,7 @@ import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTem
 import { buildHandoverZip, type HandoverPart } from './handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, readinessWithProject, sheetGraphics, type ProjectFacts } from './headless.js';
 import { describeReadiness } from './readiness.js';
+import { boq } from './cli-boq.js';
 import { rooms } from './cli-rooms.js';
 
 /** Where `run` writes its messages; defaults to the process streams. */
@@ -37,6 +38,7 @@ const USAGE = `ifcsheet: drawing sets from IFC models
 Usage:
   ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
+  ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
   ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]
 
 Commands:
@@ -51,6 +53,9 @@ Commands:
           weaker for it. Plain English, or JSON with --json. With --project, also what the
           saved project's split schedules get wrong: an element listed in more than one
           part, or in no part.
+  boq     The bill of quantities (antemasuratoare): the articles of the project file, each with its total
+          in its own unit, from the quantities the model declares (never zero for a missing one: the elements
+          that lack it are named). Text, CSV with --csv, JSON with --json; --detail adds a row per type.
   rooms   The room and area schedule: every room (IfcSpace) by level with its number, name and
           area, a total per level and for the building (the urban indicators' Au). An area is the
           model's NetFloorArea (else GrossFloorArea), else the footprint of the room's geometry;
@@ -225,6 +230,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         project: { type: 'string' },
         json: { type: 'boolean' },
         csv: { type: 'boolean' },
+        detail: { type: 'boolean' },
         locale: { type: 'string' },
         'include-far-elements': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
@@ -245,12 +251,24 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.ok;
   }
   const [command, ...rest] = positionals;
-  if (command !== 'build' && command !== 'check' && command !== 'rooms') {
+  if (command !== 'build' && command !== 'check' && command !== 'boq' && command !== 'rooms') {
     io.stderr(`ifcsheet: unknown command "${command}"\n\n${USAGE}`);
     return EXIT.usage;
   }
+  if (command === 'boq') {
+    if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values['include-far-elements'] || (values.csv && values.json)) {
+      io.stderr('ifcsheet boq takes one model, --project, --csv or --json, --detail and --locale: ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]\n');
+      return EXIT.usage;
+    }
+    try {
+      return await boq({ model: rest[0], project: values.project, csv: values.csv === true, json: values.json === true, detail: values.detail === true, locale: values.locale ?? 'en' }, io);
+    } catch (error) {
+      io.stderr(`ifcsheet: boq of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
   if (command === 'rooms') {
-    if (rest.length !== 1 || values.out || values.dxf || values.name || values.project || values.handover || values.pattern || values.template !== undefined || values['include-far-elements'] || (values.csv && values.json)) {
+    if (rest.length !== 1 || values.out || values.dxf || values.name || values.project || values.handover || values.pattern || values.template !== undefined || values.detail || values['include-far-elements'] || (values.csv && values.json)) {
       io.stderr('ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n');
       return EXIT.usage;
     }
@@ -262,7 +280,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     }
   }
   if (command === 'check') {
-    if (rest.length !== 1 || values.out || values.dxf || values.name || values.csv || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined) {
+    if (rest.length !== 1 || values.out || values.dxf || values.name || values.csv || values.detail || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined) {
       io.stderr('ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n');
       return EXIT.usage;
     }
@@ -273,8 +291,8 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
       return EXIT.failed;
     }
   }
-  if (values.csv || values.locale !== undefined) {
-    io.stderr('ifcsheet build has no --csv or --locale; they are options of rooms.\n');
+  if (values.csv || values.detail || values.locale !== undefined) {
+    io.stderr('ifcsheet build has no --csv, --detail or --locale; they are options of boq and rooms.\n');
     return EXIT.usage;
   }
   if (values.json) {

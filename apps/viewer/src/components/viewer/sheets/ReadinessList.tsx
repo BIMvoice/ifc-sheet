@@ -17,6 +17,8 @@ import { currentModelFacts } from '@/check/readiness-read';
 import { useViewerStore } from '@/store';
 import { setIncludeFarElements, useProjectStore } from '@/project/project-store';
 import { subReportChecks } from '@/check/sub-report-check';
+import { boqMissing } from '@bimvoice/ifcsheet';
+import { useBoqArticles, useBoqResult } from '../boq/useBoq';
 import type { SetSkin } from './set-skin';
 import { setReview } from '../wall/wall-nav';
 import { goToRoom } from '@/check/room-go';
@@ -34,14 +36,16 @@ function useModelReadiness() {
   const mapping = useProjectStore((s) => s.joineryMapping);
   const includeFar = useProjectStore((s) => s.includeFarElements);
   const levels = useProjectStore((s) => s.levels);
+  // What the bill of quantities could not state (#75); nothing while the project holds no article.
+  const boqResult = useBoqResult(useBoqArticles().length > 0);
   return useMemo(() => {
     void mutationVersion; // an edit can add or remove what the facts count
     // A schedule split into parts must list every element once: the same check the card on the Wall shows.
     if (models.size === 0) return null;
     const checks = subReportChecks(schedules ?? []);
     const owners = checks.flatMap((c) => [...(c.duplicates.length > 0 ? [c.parent.id] : []), ...(c.gaps.length > 0 ? [c.parent.id] : [])]);
-    return { findings: modelReadiness(currentModelFacts(), checks), owners };
-  }, [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels]);
+    return { findings: modelReadiness(currentModelFacts(), checks, boqMissing(boqResult)), owners };
+  }, [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult]);
 }
 
 /** The project setting that frames the views on everything again, the small far-away elements too (`framing.ts` in the engine). */
