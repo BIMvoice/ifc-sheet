@@ -29,6 +29,7 @@ import { liftTypedRevisions, sheetRevisions } from './revisions';
 import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
+import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 import type { UrbanSettings } from '@/urban/indicators';
@@ -132,6 +133,12 @@ export function setProjectSiteArea(area: number | null): void {
 /** "Include far-away elements in framing" (`@bimvoice/ifcsheet` `framing.ts`): off is stored as absent, so a project that never touched it saves exactly as before. */
 export function setIncludeFarElements(on: boolean): void {
   if (on !== (useProjectStore.getState().includeFarElements === true)) useProjectStore.setState({ includeFarElements: on ? true : undefined, dirty: true });
+}
+
+/** The pattern the handover package names its files by (`@bimvoice/ifcsheet/handover`); empty or unusable goes back to the default, stored as absent. */
+export function setHandoverPattern(pattern: string): void {
+  const next = readHandoverPattern(pattern);
+  if (next !== useProjectStore.getState().handoverPattern) useProjectStore.setState({ handoverPattern: next, dirty: true });
 }
 
 /** Change the urban indicators' settings; a field set to undefined goes back to its default. */

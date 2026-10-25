@@ -267,6 +267,7 @@ const FULL: Required<ProjectDocument> = {
     id: 'boq1', code: 'EXAMPLE-ZID-01', description: 'EXEMPLU: zidărie, tip T240', unit: 'm3', typeName: 'T240', material: 'Beton', quantity: 'NetVolume', factor: 1.1, waste: 5,
     filter: { levels: ['Parter'], classes: ['IfcWall'], predefined: ['SOLIDWALL'], properties: [{ pset: 'Pset_WallCommon', name: 'IsExternal', op: 'equals', value: 'true' }] },
   }, { id: 'boq2', code: 'EXAMPLE-UȘI-01', description: 'EXEMPLU: uși', unit: 'buc', quantity: 'Count', factor: 1, filter: { classes: ['IfcDoor'] } }],
+  handoverPattern: '{project} {number} {sheet} rev {revision}',
   savedSectionCuts: [{
     id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,
     plane: { axis: 'side', position: 4.2, flipped: true, capStyle: { fillColor: [1, 0.5, 0, 1], strokeColor: [0, 0, 0, 1], pattern: 'brick', spacingPx: 6, angleRad: 0.5, widthPx: 2, secondaryAngleRad: -0.5 }, showCap: false, showOutlines: false },
