@@ -239,6 +239,18 @@ export function toggleSymbolFlips(globalIds: readonly string[], bit: 1 | 2): voi
   useProjectStore.setState({ symbolFlips: flips, dirty: true });
 }
 
+/** Each edit below is one undo step (#51): `runAsOneUndoStep` keeps a call made inside another step part of it. */
+function asStep<T>(edit: () => T): T {
+  let result!: T;
+  runAsOneUndoStep(() => { result = edit(); });
+  return result;
+}
+export const renameProjectItem = (id: string, name: string): void => asStep(() => renameProjectItemNow(id, name));
+export const updateProjectView = (id: string, patch: ProjectViewPatch): void => asStep(() => updateProjectViewNow(id, patch));
+export const removeProjectItem = (id: string): void => asStep(() => removeProjectItemNow(id));
+export const addProjectSheet = (name = 'Unnamed', group?: NumberGroup, templateId?: string): string => asStep(() => addProjectSheetNow(name, group, templateId));
+export const duplicateProjectSheet = (id: string): string | null => asStep(() => duplicateProjectSheetNow(id));
+
 export function setActiveProjectItem(id: string | null): void {
   useProjectStore.setState({ activeItemId: id });
 }
@@ -249,10 +261,6 @@ export function addProjectView(view: NewProjectView): string {
   const created = { ...view, id, name: uniqueViewName(view.name, state.views), createdAt: Date.now() } as ProjectView;
   useProjectStore.setState({ views: [...state.views, created], dirty: true });
   return id;
-}
-
-export function renameProjectItem(id: string, name: string): void {
-  runAsOneUndoStep(() => renameProjectItemNow(id, name));
 }
 
 function renameProjectItemNow(id: string, name: string): void {
@@ -284,10 +292,6 @@ function renameProjectItemNow(id: string, name: string): void {
 }
 
 /** Change a view's settings (cut height, view depth, section plane…). Its id and kind never change. */
-export function updateProjectView(id: string, patch: ProjectViewPatch): void {
-  runAsOneUndoStep(() => updateProjectViewNow(id, patch));
-}
-
 function updateProjectViewNow(id: string, patch: ProjectViewPatch): void {
   const state = useProjectStore.getState();
   if (!state.views.some((v) => v.id === id)) return;
@@ -309,10 +313,6 @@ export function duplicateProjectView(id: string): string | null {
   const at = state.views.indexOf(source) + 1;
   useProjectStore.setState({ views: [...state.views.slice(0, at), copy, ...state.views.slice(at)], dirty: true });
   return copy.id;
-}
-
-export function removeProjectItem(id: string): void {
-  runAsOneUndoStep(() => removeProjectItemNow(id));
 }
 
 function removeProjectItemNow(id: string): void {
@@ -341,12 +341,6 @@ export const numberingScheme = (state: Pick<ProjectDocument, 'sheetNumbering'> =
  * next plan number until a view is placed on it, then it is numbered by what
  * it holds. It starts from the template if one is named.
  */
-export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateId?: string): string {
-  let id = '';
-  runAsOneUndoStep(() => { id = addProjectSheetNow(name, group, templateId); });
-  return id;
-}
-
 function addProjectSheetNow(name: string, group: NumberGroup | undefined, templateId: string | undefined): string {
   const state = useProjectStore.getState();
   const series = group ?? 'plans';
@@ -357,12 +351,6 @@ function addProjectSheetNow(name: string, group: NumberGroup | undefined, templa
 }
 
 /** Copy a sheet under the next free number, right after it. */
-export function duplicateProjectSheet(id: string): string | null {
-  let copy: string | null = null;
-  runAsOneUndoStep(() => { copy = duplicateProjectSheetNow(id); });
-  return copy;
-}
-
 function duplicateProjectSheetNow(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.sheets.find((s) => s.id === id);
