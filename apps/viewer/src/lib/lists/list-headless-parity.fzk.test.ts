@@ -57,6 +57,7 @@ function withTypeSets(text: string): string {
     "#990004= IFCELEMENTQUANTITY('0bbbbbbbbbbbbbbbbbbbbb',#12,'Qto_TypeOnly',$,$,(#990003));",
   ].join('\n');
   const patched = text.replace("'Leichtbeton 102890359 300',$,$,$,(", "'Leichtbeton 102890359 300',$,$,(#990002,#990004),(").replace(/\nENDSEC;\s*END-ISO-10303-21;\s*$/, `\n${entities}\nENDSEC;\nEND-ISO-10303-21;\n`);
+  // @source-text-assertion-ok mutation anchor guard, not a subject assertion
   if (patched === text || !patched.includes('#990004')) throw new Error('the fixture could not be patched');
   return patched;
 }
