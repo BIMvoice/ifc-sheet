@@ -14,8 +14,9 @@ import { X } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
-import { addTemplateItem, clearTemplateFit, customiseTitleBlock, removeTemplateItem, resetTitleBlockTemplate, setTemplateField } from '@/project/title-block-template-actions';
+import { addTemplateItem, clearTemplateFit, customiseTitleBlock, removeTemplateItem, resetTitleBlockTemplate, setTemplateField, applyRomanianTitleBlock } from '@/project/title-block-template-actions';
 import { standardTitleBlock, type TemplateItem } from '@/project/title-block-template';
+import { romanianTitleBlock } from '@/project/title-block-ro';
 import { WALL_PILL } from './wall-type';
 
 const quiet = WALL_PILL;
@@ -118,6 +119,8 @@ export function TitleBlockLayout() {
     <section aria-label={t('tblayout.title')} className="mt-4 border-t border-sky-300/10 pt-3">
       <h4 className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('tblayout.title')}</h4>
       <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('tblayout.intro')}</p>
+      <button type="button" className={`${quiet} mt-2`} onClick={() => applyRomanianTitleBlock(romanianTitleBlock(t, standard))}>{t('tblayout.useRo')}</button>
+      <p className="m-0 mt-1 text-xs leading-relaxed text-sky-200/80">{t('tblayout.roHint')}</p>
       {!template ? (
         <button type="button" className={`${quiet} mt-2`} onClick={() => customiseTitleBlock(standardTitleBlock(t, standard))}>{t('tblayout.edit')}</button>
       ) : (

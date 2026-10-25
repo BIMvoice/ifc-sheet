@@ -14,7 +14,7 @@ import { X } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { addTitleBlockParam, clearSheetParam, deleteTitleBlockParam, renameTitleBlockParam, setSheetParam, setTitleBlockParamValue } from '@/project/title-block-param-actions';
-import { BUILTIN_PARAMS, type ParamNameProblem } from '@/project/title-block-params';
+import { FILLED_PARAMS, type ParamNameProblem } from '@/project/title-block-params';
 import type { ProjectSheet } from '@/project/types';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
 
@@ -80,7 +80,7 @@ export function ProjectParams() {
     <section aria-label={t('tbparams.title')} className="mt-4 border-t border-sky-300/10 pt-3">
       <h4 className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('tbparams.title')}</h4>
       <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('tbparams.hint', { token: token('Name') })}</p>
-      <p className="m-0 mt-1 text-xs leading-relaxed text-sky-200/80">{t('tbparams.builtin', { names: BUILTIN_PARAMS.map(token).join(' ') })}</p>
+      <p className="m-0 mt-1 text-xs leading-relaxed text-sky-200/80">{t('tbparams.builtin', { names: FILLED_PARAMS.map(token).join(' ') })}</p>
       {params.length === 0 ? <p className="m-0 mt-2 text-xs text-sky-200/80">{t('tbparams.none')}</p> : null}
       <ul className="m-0 list-none p-0">{params.map((p) => <ParamRow key={p.name} name={p.name} value={p.value} />)}</ul>
       <button type="button" className={`${quiet} mt-2`} onClick={add}>{t('tbparams.add')}</button>

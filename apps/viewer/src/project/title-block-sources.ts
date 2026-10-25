@@ -56,6 +56,10 @@ export const DEFAULT_SOURCES: Readonly<Record<string, readonly TitleSource[]>> =
   project: [attr('IfcProject', 'LongName'), attr('IfcProject', 'Name')],
   address: [attr('IfcSite', 'SiteAddress'), attr('IfcBuilding', 'BuildingAddress')],
   organisation: [{ kind: 'owner', part: 'organisation' }],
+  // The Romanian block's (#54): IfcProject.Phase, and the actors the model assigns to the project by IfcRoleEnum.
+  phase: [attr('IfcProject', 'Phase')],
+  projectManager: [{ kind: 'actor', role: 'PROJECTMANAGER' }],
+  designer: [{ kind: 'actor', role: 'ARCHITECT' }],
 };
 
 /** The sources the picker offers for any field, in the order shown. */
@@ -64,7 +68,7 @@ export const PRESET_SOURCES: readonly TitleSource[] = [
   attr('IfcSite', 'Name'), attr('IfcSite', 'SiteAddress'), attr('IfcSite', 'LandTitleNumber'),
   attr('IfcBuilding', 'Name'), attr('IfcBuilding', 'BuildingAddress'),
   { kind: 'owner', part: 'organisation' }, { kind: 'owner', part: 'person' }, { kind: 'owner', part: 'application' }, { kind: 'owner', part: 'developer' },
-  { kind: 'actor', role: 'CLIENT' }, { kind: 'actor', role: 'ARCHITECT' },
+  { kind: 'actor', role: 'CLIENT' }, { kind: 'actor', role: 'ARCHITECT' }, { kind: 'actor', role: 'PROJECTMANAGER' },
 ];
 
 /** Placeholder names authoring tools write where nobody was named; printing them would be wrong. */
