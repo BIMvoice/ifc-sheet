@@ -3,11 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import type { TranslationValue } from '../types';
-import { listScheduleEn } from './list-schedule.en';
 
 /** What the CSV and XLSX export of a schedule says on the Wall's card and in its drawer (#80). Romanian: `schedule-export.ro.ts`. */
 export const scheduleExportEn = {
-  ...listScheduleEn,
   'wall.export.title': 'Export',
   'wall.export.summary': 'CSV and XLSX of the table',
   'wall.export.hint': 'The table as the sheet prints it: the same rows, order and numbering. Figures are plain numbers; CSV separates the columns with {delimiter}.',
