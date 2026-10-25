@@ -55,7 +55,7 @@ type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; aft
  * a legend leaves the sheets, a sheet takes its comments. Kept as deltas like the views and sheets, so undo brings back what the step took
  * and leaves what was added after it.
  */
-const LIST_FIELDS = ['schedules', 'legends', 'civilDrawings', 'comments'] as const;
+const LIST_FIELDS = ['schedules', 'legends', 'civilDrawings', 'comments', 'viewTemplates'] as const;
 type ListField = (typeof LIST_FIELDS)[number];
 type ListChange = { [K in ListField]: { key: K; delta: Delta<NonNullable<ProjectDocument[K]>[number]> } }[ListField];
 

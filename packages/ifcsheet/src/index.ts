@@ -28,8 +28,14 @@ export type {
   Paper, PaperSize, PhaseId, PhaseStyle, PlanProjectView, ProjectDocument, ProjectionMode, ProjectLevel, ProjectModelRef, ProjectSheet,
   ProjectView, ProjectViewBase, ProjectViewKind, SectionCustomPlane, SectionPlaneAxis, SectionProjectPlane, SectionProjectView,
   SheetFrame, SheetTemplate, SheetViewport, TemplateSeries, ThreeDProjection, ThreeDProjectView, TitleBlockPosition, ViewDetail,
-  ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster,
+  ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster, ProjectViewTemplate, TemplateGraphics, ViewTemplateKind,
 } from './document.js';
+
+// View templates (#44): named graphics many views follow, and the one function that layers them
+export {
+  VIEW_CATEGORY_CLASSES, VIEW_TEMPLATE_KINDS, assignDefaultTemplates, defaultViewTemplates, hiddenClassesOf, resolveViewGraphics, resolveViewport,
+  templateGraphicsOf, templateKindOf, templateOf, untemplatedGraphics, viewportHiddenLayers,
+} from './view-templates.js';
 
 // What the model lacks (the counting, `readModelFacts`, is in `/headless` and `/readiness-read`: it loads the parser)
 export { READINESS_EN, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from './readiness.js';

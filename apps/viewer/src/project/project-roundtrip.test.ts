@@ -70,7 +70,7 @@ const graphics: Required<ViewGraphics> = {
   colourScheme: { property: 'Pset_SpaceCommon.Category', target: 'elements', classes: ['IfcSpace', 'IfcWall'], colours: { office: '#aabbcc' }, palette: 'okabe-ito' },
 };
 
-const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'] };
+const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'], templateId: 'vt-plans' };
 
 const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').ProjectView, { kind: K }>> } = {
   plan: {
@@ -229,6 +229,7 @@ const FULL: Required<ProjectDocument> = {
   schedules: [...Object.values(SCHEDULES), SUB_REPORT, TEXT_SCHEDULE, CONTENT_SCHEDULE, KEPT_SCHEDULE],
   sheetTemplates: [{ id: 'tpl1', name: 'Long elevations', paper: { kind: 'custom', widthMm: 500, heightMm: 700 }, orientation: 'portrait', frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' } }],
   seriesTemplates: { plans: 'builtin:a1-plans', details: 'tpl1' },
+  viewTemplates: [{ id: 'vt-plans', name: 'Plans', kind: 'plan', graphics: { presetId: 'structure', grid: { visible: false, ends: 'end' }, categories: { furniture: { visible: false }, walls: category } } }],
   structureProfiles: [profileFromPreset('box-tunnel', 'sp1', 'Culvert 2x2')],
   civilDrawings: [civil],
   typicalSections: [{ id: 'ts1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: { width: 1, slope: -4 }, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 }, nominalDepth: 0.6 } }],
