@@ -6,6 +6,7 @@
 
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { newDraft } from '@/drafting/draft-store';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet } from '@/project/drawing-set-actions';
@@ -138,6 +139,18 @@ describe('a run against the reference', () => {
     assert.equal(useProjectStore.getState().modelState, v2);
     assert.equal(useWhatChanged.getState().result, null);
     assert.match((await run('compare', v2))[0], /0 elements changed/);
+  });
+  it('carries the label of a wall that moved with it, once however often the run is repeated', async () => {
+    const plan = useProjectStore.getState().views.find((v) => v.kind === 'plan')!;
+    const at = { x: 2, y: -1 };
+    const label = newDraft(plan.id, '0', { type: 'text', p: at, text: 'Wall 1', height: 0.25, rotation: 0 }, { labelOf: 'W1', atype: 'tagall-mark' });
+    useProjectStore.setState({ modelState: v1, drafts: [...useProjectStore.getState().drafts, label] });
+    const place = () => (useProjectStore.getState().drafts.find((d) => d.id === label.id)!.shape as { p: { x: number; y: number } }).p;
+    await run('compare', v2);
+    const moved = place();
+    assert.ok(Math.abs(Math.hypot(moved.x - at.x, moved.y - at.y) - 0.5) < 1e-6, `half a metre, got ${JSON.stringify(moved)}`);
+    await run('compare', v2);
+    assert.deepEqual(place(), moved, 'the second run adds nothing');
   });
   it('says there is no model rather than comparing with nothing, and a failure is said and does not leave the run locked', async () => {
     useProjectStore.setState({ modelState: v1 });
