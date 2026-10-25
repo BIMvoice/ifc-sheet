@@ -16,7 +16,7 @@ import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { DraftLayer } from '@/drafting/types';
 import { readCadLayerRule } from '@/project/cad-layers-file';
 import type { CadLayerRule } from '@/project/cad-layers';
-import { readBoqArticle, type BoqArticle, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
+import { readBoqArticle, readClassificationMapping, type BoqArticle, type ClassificationMapping, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { readMaterial } from '@/project/project-file';
 import { readViewTemplate } from '@/project/view-templates-file';
 import { readStandards } from '@/project/standards-file';
@@ -34,7 +34,7 @@ export const CATALOGUE_FILE_FORMAT = 'bvlib';
 export const CATALOGUE_FILE_VERSION = 1;
 
 /** The kinds of definition a catalogue carries, in the order the dialog lists them. */
-export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details', 'sheetTemplates', 'boqArticles', 'viewTemplates'] as const;
+export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details', 'sheetTemplates', 'boqArticles', 'viewTemplates', 'classificationMappings'] as const;
 export type CatalogueKind = (typeof CATALOGUE_KINDS)[number];
 
 export interface Catalogue {
@@ -63,6 +63,8 @@ export interface Catalogue {
   boqArticles: BoqArticle[];
   /** The office's view templates (#44): graphics for plans, sections and elevations, with their class and material mapping (#31). Importing does not assign them to any view. */
   viewTemplates: ProjectViewTemplate[];
+  /** The office's classification mappings (#89): class, type and material to the codes of its systems. IfcSheet ships no code table; the mapping travels with the office library. */
+  classificationMappings: ClassificationMapping[];
 }
 
 export interface CatalogueFile extends Catalogue {
@@ -73,7 +75,7 @@ export interface CatalogueFile extends Catalogue {
 }
 
 export const emptyCatalogue = (): Catalogue => ({
-  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], cadLayers: [], details: [], sheetTemplates: [], boqArticles: [], viewTemplates: [],
+  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], cadLayers: [], details: [], sheetTemplates: [], boqArticles: [], viewTemplates: [], classificationMappings: [],
 });
 
 /** `catalogue` cut down to the chosen kinds (layer groups travel with their layers, text styles with the dimension styles that need them). */
@@ -93,6 +95,7 @@ export function selectKinds(catalogue: Catalogue, kinds: ReadonlySet<CatalogueKi
   if (kinds.has('sheetTemplates')) out.sheetTemplates = catalogue.sheetTemplates;
   if (kinds.has('boqArticles')) out.boqArticles = catalogue.boqArticles;
   if (kinds.has('viewTemplates')) out.viewTemplates = catalogue.viewTemplates;
+  if (kinds.has('classificationMappings')) out.classificationMappings = catalogue.classificationMappings;
   return out;
 }
 
@@ -150,6 +153,7 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       sheetTemplates: readList(file, 'sheetTemplates', (v, p) => readTemplate(v) ?? fail(p, 'must be a sheet template { id, name, paper }', WHAT), WHAT),
       boqArticles: readList(file, 'boqArticles', (v, p) => readBoqArticle(v) ?? fail(p, 'must be a bill of quantities article { id, code }', WHAT), WHAT),
       viewTemplates: readList(file, 'viewTemplates', (v, p) => readViewTemplate(v) ?? fail(p, 'must be a view template { id, name, kind }', WHAT), WHAT),
+      classificationMappings: readList(file, 'classificationMappings', (v, p) => readClassificationMapping(v) ?? fail(p, 'must be a classification mapping { id, system: { name }, rules }', WHAT), WHAT),
       ...(file.graphicStandard === undefined ? {} : { graphicStandard: knownStandard(file.graphicStandard) }),
     },
   };

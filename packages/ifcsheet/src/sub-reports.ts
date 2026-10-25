@@ -83,6 +83,23 @@ export interface ProjectSchedule {
   content?: ScheduleContent;
   /** A bill of quantities (#75) prints a row per type under each article. Absent: the articles alone. `boq` only. */
   detail?: boolean;
+  /** The quantities by type (#89) with a classification column, and optionally grouped by it. Absent: the table as it was. `types` only. */
+  classification?: ScheduleClassification;
+}
+
+/** How a quantities-by-type schedule shows classification (#89): which mapping's codes (absent: the model's own references alone) and whether the rows are grouped by code. */
+export interface ScheduleClassification {
+  /** The `id` of a `ClassificationMapping`; absent: only the model's own IfcClassificationReferences are shown. */
+  mapping?: string;
+  /** Group the types under their code, the unclassified last. */
+  group?: boolean;
+}
+
+/** A schedule's classification choice as saved; undefined when it chooses nothing. */
+export function readScheduleClassification(raw: unknown): ScheduleClassification | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  return { ...(typeof o.mapping === 'string' && o.mapping ? { mapping: o.mapping } : {}), ...(o.group === true ? { group: true } : {}) };
 }
 
 /** Whether a schedule can be split: a joinery list that is not itself a part (parts do not nest: a part is cut from the model's rows). */
@@ -117,6 +134,8 @@ export function readSchedule(raw: unknown): ProjectSchedule | null {
   if (keptApart && !out.sub && (kind === 'door' || kind === 'window' || kind === 'all')) out.keptApart = keptApart;
   // The rows per type of a bill of quantities (#75).
   if (kind === 'boq' && o.detail === true) out.detail = true;
+  // The classification column of the quantities by type (#89).
+  if (kind === 'types') { const classification = readScheduleClassification(o.classification); if (classification) out.classification = classification; }
   return out;
 }
 

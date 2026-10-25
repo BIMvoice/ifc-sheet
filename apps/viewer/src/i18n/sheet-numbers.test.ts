@@ -67,7 +67,7 @@ const TQ: TypeQuantities = {
   classTotals: [],
 } as unknown as TypeQuantities;
 const TQ_LABELS = (locale: string): TypeQuantityLabels => ({
-  locale, title: 'T', type: 'Type', class: 'Class', level: 'Level', count: 'Count', length: 'Length', area: 'Area', volume: 'Volume', noQto: 'None', total: 'Total', noType: 'no type', noLevel: 'no level',
+  locale, title: 'T', type: 'Type', class: 'Class', level: 'Level', count: 'Count', length: 'Length', area: 'Area', volume: 'Volume', noQto: 'None', total: 'Total', noType: 'no type', noLevel: 'no level', classification: 'Classification', classificationTitle: 'Title', unclassified: 'No classification',
 });
 const FIN_LABELS = (locale: string): RoomFinishLabels => ({ locale, title: 'T', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area', sharedNote: '*' });
 
