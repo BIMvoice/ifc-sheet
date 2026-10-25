@@ -52,7 +52,7 @@ const TQ = {
   classTotals: [],
 } as unknown as TypeQuantities;
 const TQ_LABELS = (locale: SheetLocale): TypeQuantityLabels => ({
-  locale, title: 'T', type: 'Type', class: 'Class', level: 'Level', count: 'Count', length: 'Length', area: 'Area', volume: 'Volume', noQto: 'None', total: 'Total', noType: 'no type', noLevel: 'no level',
+  locale, title: 'T', type: 'Type', class: 'Class', level: 'Level', count: 'Count', length: 'Length', area: 'Area', volume: 'Volume', noQto: 'None', total: 'Total', noType: 'no type', noLevel: 'no level', classification: 'Classification', classificationTitle: 'Title', unclassified: 'No classification',
 });
 const DIM: Extract<AnnotationShape, { type: 'dimension' }> = { type: 'dimension', variant: 'aligned', a: { x: 0, y: 0 }, b: { x: 3.5, y: 0 }, at: { x: 0, y: 1 }, height: 0.25 };
 

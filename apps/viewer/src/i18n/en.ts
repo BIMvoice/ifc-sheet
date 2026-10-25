@@ -93,6 +93,7 @@ import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { landXmlEn } from './catalogues/landxml.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
 import { lensPanelEn } from './catalogues/lens-panel.en';
+import { listScheduleEn } from './catalogues/list-schedule.en';
 import { listsEn } from './catalogues/lists.en';
 import { manualValidationEn } from './catalogues/manual-validation.en';
 import { materialsEn } from './catalogues/materials.en';
@@ -291,6 +292,7 @@ export const en = {
   ...landXmlEn,
   ...layersPanelEn,
   ...lensPanelEn,
+  ...listScheduleEn,
   ...listsEn,
   ...manualValidationEn,
   ...materialsEn,

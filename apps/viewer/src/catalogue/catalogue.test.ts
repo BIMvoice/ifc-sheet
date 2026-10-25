@@ -51,6 +51,10 @@ const full: Catalogue = {
     { id: 'b1', code: 'EXAMPLE-01', description: 'EXAMPLE: masonry', unit: 'm3', typeName: 'T240', quantity: 'NetVolume', factor: 1, waste: 5, filter: { properties: [{ name: 'IsExternal', op: 'equals', value: 'true' }] } },
     { id: 'b2', code: 'EXAMPLE-02', description: 'EXAMPLE: doors', unit: 'buc', quantity: 'Count', factor: 1, filter: { classes: ['IfcDoor'] } },
   ],
+  classificationMappings: [{
+    id: 'cl1', system: { name: 'Uniclass', edition: '2015' },
+    rules: [{ by: 'type', match: 'T240', code: 'EXAMPLE-Ss_25', title: 'EXAMPLE: walls' }, { by: 'class', match: 'IfcDoor', code: 'EXAMPLE-Ss_32' }],
+  }],
   viewTemplates: [
     { id: 'vt1', name: 'Plans, heavy walls', kind: 'plan', graphics: {
       presetId: 'preset-architectural', categories: { doors: { lineWeight: 'light' } },

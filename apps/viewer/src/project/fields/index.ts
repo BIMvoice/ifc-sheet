@@ -25,7 +25,7 @@ import { readComments } from '@/review/file';
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
-import { readBoqArticles, readSchedule } from '@bimvoice/ifcsheet';
+import { readBoqArticles, readClassificationMappings, readSchedule } from '@bimvoice/ifcsheet';
 import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
 import { readUnitsAndNumbers } from '@bimvoice/ifcsheet/names';
 import { readStructureProfileList } from '@ifc-lite/create';
@@ -108,6 +108,8 @@ const DOCUMENT_FIELD_DEFS = [
   listField('boqArticles', (raw) => readBoqArticles(raw.boqArticles), { presentOnly: true }),
   // The project's units and number format (#88); absent follows the language and each drawing's own style, so an old project saves as it was.
   optionalField('unitsAndNumbers', whenUsable('unitsAndNumbers', readUnitsAndNumbers)),
+  // The office's classification mappings (#89).
+  listField('classificationMappings', (raw) => readClassificationMappings(raw.classificationMappings), { presentOnly: true }),
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];

@@ -33,6 +33,11 @@ export type {
 } from './document.js';
 
 // A view template's class and material mapping (#31)
+export {
+  CLASSIFICATION_BY, classificationOf, classifiedTypes, mappingsFor, matchKey, parseClassificationRows, readClassificationMapping, readClassificationMappings, readClassificationRule, classificationRuleOf, systemLabel, withRule,
+  type ClassificationBy, type ClassificationImport, type ClassificationMapping, type ClassificationModel, type ClassificationProblem, type ClassificationProblemKind, type ClassificationResult, type ClassificationRule, type ClassificationSystem,
+  type ClassifiedElement, type ClassifiedType, type ModelClassificationRef,
+} from './classification.js';
 export { classKey, itemRules, materialKey, ruleStyleFor, type ItemRules } from './style-rules.js';
 
 // View templates (#44): named graphics many views follow, and the one function that layers them
@@ -63,6 +68,11 @@ export {
   type BoqArticle, type BoqDimension, type BoqProblem, type BoqProblemKind, type BoqUnit,
 } from './boq.js';
 export { boqMissing, computeBoq, declared, picks, type BoqElement, type BoqElementRef, type BoqLine, type BoqMissing, type BoqQuantity, type BoqResult, type BoqTypeLine } from './boq-compute.js';
+export {
+  LIST_COUNT_ID, listFigureKind, listScheduleTable, readListScheduleDef,
+  type ListCell, type ListFigureKind, type ListScheduleColumn, type ListScheduleDef, type ListScheduleTable, type ListTableSource,
+} from './list-schedule.js';
+export { withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from './list-classification.js';
 export { boqLineText, boqNotes, boqTable, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from './boq-table.js';
 export { BOQ_WORDS_EN, BOQ_WORDS_RO, boqSayFor, fillTemplate, type BoqSay, type BoqWordKey } from './boq-words.js';
 
@@ -93,8 +103,8 @@ export {
   filterReview, keepApart, placeTypes, placeTypesOf, resumeChecking, reviewCounts, reviewTypes, type ReviewEdit, type ReviewFilter, type ReviewType,
 } from './sub-report-review.js';
 export {
-  canSplit, MAX_KEPT_APART, readKeptApart, readSchedule, readSubReport, readSubReportFilter, scheduleFilterProperties, scheduleOf, subReportData, subReportsOf,
-  type ProjectSchedule, type ScheduleListKind, type SplitData, type SplitEntry, type SubReport, type SubReportFilter,
+  canSplit, MAX_KEPT_APART, readKeptApart, readSchedule, readScheduleClassification, readSubReport, readSubReportFilter, scheduleFilterProperties, scheduleOf, subReportData, subReportsOf,
+  type ProjectSchedule, type ScheduleClassification, type ScheduleListKind, type SplitData, type SplitEntry, type SubReport, type SubReportFilter,
 } from './sub-reports.js';
 export {
   EXTERIOR, INTERIOR, PROPERTY_OPS, filterPropertyNames, isOpenFilter, passesElementFilter, passesPropertyTest, predefinedTypeText, propertyValueText, readPropertyTest,

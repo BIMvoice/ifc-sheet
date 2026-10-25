@@ -28,6 +28,7 @@ import { handoverRo } from '../catalogues/handover.ro';
 import { issueChangesRo } from '../catalogues/issue-changes.ro';
 import { issueRo } from '../catalogues/issue.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
+import { listScheduleRo } from '../catalogues/list-schedule.ro';
 import { namesRo } from '../catalogues/names.ro';
 import { printPreviewRo } from '../catalogues/print-preview.ro';
 import { reviewRo } from '../catalogues/review.ro';
@@ -74,6 +75,7 @@ export default {
   ...issueChangesRo,
   ...issueRo,
   ...keyboardShortcutsRo,
+  ...listScheduleRo,
   ...namesRo,
   ...printPreviewRo,
   ...reviewRo,

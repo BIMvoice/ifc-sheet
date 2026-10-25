@@ -13,6 +13,8 @@
  *                                   number pattern (0, 0.0, #,##0.00) and a unit
  *   {Type.Name}                     the element's type; {Type.Pset.Prop} reads the type only
  *   {Material}  {Storey}            the material names, the storey name
+ *   {Classification}                the classification code: the model's own IfcClassificationReference, else
+ *   {ClassificationTitle}           the project's first classification mapping (class, type or material); and its title
  *   {Pset.Prop|n/a}                 text to show when there is no value
  *   {Tag ?? Name}                   the first of these that has a value
  *   {Mark}                          the element's mark: by default the Tag when it is a mark (D-01), not a
@@ -36,6 +38,8 @@ export type FieldRef =
   | { kind: 'typeName' }
   | { kind: 'material' }
   | { kind: 'storey' }
+  /** The classification code or title (#89): the model's own reference, else the project's first mapping. */
+  | { kind: 'classification'; part: 'code' | 'title' }
   /** `from: 'type'` reads the element's type only (`Type.Set.Prop`). */
   | { kind: 'property'; set: string; name: string; from: 'any' | 'type' };
 
@@ -79,6 +83,8 @@ export function parseFieldRef(path: string): FieldRef | null {
     if (lower === 'ifcclass') return { kind: 'class', withPrefix: true };
     if (lower === 'material') return { kind: 'material' };
     if (lower === 'storey') return { kind: 'storey' };
+    if (lower === 'classification' || lower === 'classificationcode') return { kind: 'classification', part: 'code' };
+    if (lower === 'classificationtitle') return { kind: 'classification', part: 'title' };
     return null;
   }
   if (lower === 'type') {
@@ -96,6 +102,7 @@ export function fieldPath(ref: FieldRef): string {
     case 'typeName': return 'Type.Name';
     case 'material': return 'Material';
     case 'storey': return 'Storey';
+    case 'classification': return ref.part === 'code' ? 'Classification' : 'ClassificationTitle';
     case 'property': return `${ref.from === 'type' ? 'Type.' : ''}${ref.set}.${ref.name}`;
   }
 }

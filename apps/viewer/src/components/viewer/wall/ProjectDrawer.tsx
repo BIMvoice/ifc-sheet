@@ -44,7 +44,9 @@ import { LegendsAdd } from './LegendsAdd';
 import { SiteAreaField } from '../urban/SiteAreaField';
 import { ViewportState } from './ViewportState';
 import { ScheduleExportButtons } from './ScheduleExportButtons';
+import { ListScheduleAdd } from '../lists/ListScheduleAdd';
 import { TagFieldsPanel } from './TagFieldsPanel';
+import { ClassificationPanel } from './ClassificationPanel';
 import { ViewTemplatesPanel } from './ViewTemplatesPanel';
 import { WALL_PILL } from './wall-type';
 
@@ -190,6 +192,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <TitleBlockForm />
         </details>
         <TagFieldsPanel />
+        <ClassificationPanel />
         <ViewTemplatesPanel />
         {DRAWING_KINDS.map(({ kind, labelKey }) => (
           <Group key={kind} title={t(labelKey)}>
@@ -208,6 +211,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
               <button type="button" className={action} onClick={() => go(addScheduleToSet('urban', t('urban.newName')))}>{t('urban.add')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('boq', t('boq.newName')))}>{t('wall.project.addBoq')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('rooms', t('roomSched.newName')))}>{t('roomSched.add')}</button>
+              <ListScheduleAdd className={action} go={go} />
               <SiteAreaField
                 modelSiteArea={siteFromModel}
                 className="mt-1 flex w-full items-center justify-between gap-2 text-xs text-sky-200"
