@@ -8,6 +8,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { unzipSync } from 'fflate';
 import DxfParserModule from 'dxf-parser';
 import type { DxfParser as DxfParserInstance } from 'dxf-parser';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -54,6 +55,31 @@ describe.skipIf(missing !== null)('ifcsheet build, on AC20-FZK-Haus', () => {
       const parsed = new DxfParser().parseSync(readFileSync(join(dir, 'dxf', file), 'utf8'));
       expect(parsed?.entities.length, file).toBeGreaterThan(0);
     }
+  }, 300_000);
+});
+
+describe.skipIf(missing !== null)('ifcsheet build --handover, on AC20-FZK-Haus (#83)', () => {
+  it('packs the PDF, a DXF per sheet and the IFC unchanged, named by the pattern', async () => {
+    const dir = scratch();
+    const c = capture();
+    const code = await run(['build', FZK, '--handover', join(dir, 'pkg', 'handover.zip'), '--name', 'Haus Test'], c.io);
+    expect(c.err()).toBe('');
+    expect(code).toBe(EXIT.ok);
+    const entries = unzipSync(new Uint8Array(readFileSync(join(dir, 'pkg', 'handover.zip'))));
+    expect(Object.keys(entries).sort()).toEqual(['A-101 Floor plans.dxf', 'A-201 Elevations south and north.dxf', 'A-202 Elevations east and west.dxf', 'A-301 Sections.dxf', 'AC20-FZK-Haus.ifc', 'Haus Test.pdf']);
+    expect(Buffer.from(entries['AC20-FZK-Haus.ifc']).equals(readFileSync(FZK))).toBe(true);
+    expect(pdfPages(Buffer.from(entries['Haus Test.pdf']))).toBe(4);
+    for (const [name, data] of Object.entries(entries)) if (name.endsWith('.dxf')) expect(new DxfParser().parseSync(new TextDecoder().decode(data))?.entities.length, name).toBeGreaterThan(0);
+  }, 300_000);
+
+  it('names the files by --pattern, and needs --out or --handover', async () => {
+    const dir = scratch();
+    const c = capture();
+    expect(await run(['build', FZK, '--handover', join(dir, 'p.zip'), '--pattern', '{project}_{number}'], c.io)).toBe(EXIT.ok);
+    const names = Object.keys(unzipSync(new Uint8Array(readFileSync(join(dir, 'p.zip'))))).sort();
+    expect(names.filter((n) => n.endsWith('.dxf')).every((n) => /^[A-Za-z0-9 ._-]+_A-\d+\.dxf$/.test(n))).toBe(true);
+    const bad = capture();
+    expect(await run(['build', FZK], bad.io)).toBe(EXIT.usage);
   }, 300_000);
 });
 
@@ -118,7 +144,7 @@ describe('the ifcsheet command line', () => {
   it('prints the usage for --help and exits 0', async () => {
     const c = capture();
     expect(await run(['--help'], c.io)).toBe(EXIT.ok);
-    expect(c.out()).toContain('ifcsheet build <model.ifc> --out <set.pdf>');
+    expect(c.out()).toContain('ifcsheet build <model.ifc> [--out <set.pdf>]');
     expect(c.err()).toBe('');
   });
 
