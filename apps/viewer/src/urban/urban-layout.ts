@@ -15,6 +15,7 @@
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem } from '@/joinery/paged-table';
 import { sheetLevel, sheetNumber } from '@bimvoice/ifcsheet/names';
+import type { ExportCell, ExportTable } from '@/joinery/schedule-export';
 import type { UrbanIndicators } from './indicators';
 
 export interface UrbanLabels {
@@ -120,4 +121,33 @@ export function wrapNote(note: string, chars = NOTE_CHARS): string[] {
   }
   if (line) lines.push(line);
   return lines;
+}
+
+/**
+ * The indicators as the table of the CSV and XLSX: the blocks the sheet prints one under the other (storeys, useful area by category,
+ * Ac to CUT), each with its own heading row, areas as numbers, then the rules and notes. A figure that is a lower bound stays text
+ * (`≥ 120`), as on paper: a bare number would claim more than the model gives.
+ */
+export function urbanTable(r: UrbanIndicators, labels: UrbanLabels): ExportTable {
+  const figure = (v: number | null, atLeast = false): ExportCell => (v === null ? null : atLeast ? labels.atLeast(String(v)) : v);
+  const rows: ExportCell[][] = [[labels.level, labels.elevation, labels.built, labels.useful, labels.inCut]];
+  const bold = [0];
+  for (const s of r.storeys) {
+    rows.push([s.belowGround ? labels.belowGround(s.name) : s.ground ? labels.ground(s.name) : s.name, s.elevation, figure(s.builtArea, s.unmeasured > 0), s.usefulArea, s.inCut ? labels.yes : labels.no]);
+  }
+  if (r.auByCategory.length) {
+    rows.push([], [labels.category, labels.area]);
+    bold.push(rows.length - 1);
+    for (const c of r.auByCategory) rows.push([c.category, c.area]);
+  }
+  rows.push([], [labels.ac, figure(r.ac, r.acAtLeast)], [labels.ad, figure(r.ad, r.adAtLeast)], [labels.adCut, figure(r.adCut, r.adCutAtLeast)], [labels.au, r.au], [labels.site, r.siteArea],
+    [labels.pot, figure(r.pot, r.acAtLeast)], [labels.cut, figure(r.cut, r.adCutAtLeast)]);
+  return {
+    name: labels.title || labels.level, header: [], rows, bold, numeric: [1, 2, 3],
+    notes: [
+      ...labels.rules(r),
+      ...r.storeys.filter((s) => s.unmeasured > 0).map((s) => labels.unmeasured(s.unmeasured, s.name)),
+      ...(labels.note ? [labels.note] : []),
+    ],
+  };
 }

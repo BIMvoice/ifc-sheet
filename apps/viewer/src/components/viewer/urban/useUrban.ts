@@ -50,6 +50,15 @@ export function useUrbanAreas(enabled = true): UrbanAreas | null {
   return areas;
 }
 
+/** What the indicators read from the project besides the measured areas. */
+export type UrbanProject = Pick<ReturnType<typeof useProjectStore.getState>, 'siteArea' | 'views' | 'drafts' | 'urbanSettings'>;
+
+/** The indicators of `areas` on the site area `siteAreaOf` picks and the project's urban settings; `site` says which it took. The hook and the exports share it. */
+export function urbanResultOf(areas: UrbanAreas, project: UrbanProject): { areas: UrbanAreas; result: UrbanIndicators; site: SiteAreaChoice } {
+  const site = siteAreaOf({ siteArea: project.siteArea, views: project.views, drafts: project.drafts }, areas.modelSiteArea);
+  return { areas, result: urbanIndicators({ ...areas, siteArea: site.area, settings: project.urbanSettings }), site };
+}
+
 /** The indicators, on the site area `siteAreaOf` picks and the project's urban settings; `site` says which it took. */
 export function useUrbanIndicators(enabled = true): { areas: UrbanAreas; result: UrbanIndicators; site: SiteAreaChoice } | null {
   const areas = useUrbanAreas(enabled);
@@ -58,32 +67,31 @@ export function useUrbanIndicators(enabled = true): { areas: UrbanAreas; result:
   const views = useProjectStore((s) => s.views);
   const drafts = useProjectStore((s) => s.drafts);
   const settings = useProjectStore((s) => s.urbanSettings);
-  return useMemo(() => {
-    if (!areas) return null;
-    const site = siteAreaOf({ siteArea, views, drafts }, areas.modelSiteArea);
-    return { areas, result: urbanIndicators({ ...areas, siteArea: site.area, settings }), site };
-  }, [areas, siteArea, views, drafts, settings]);
+  return useMemo(() => (areas ? urbanResultOf(areas, { siteArea, views, drafts, urbanSettings: settings }) : null), [areas, siteArea, views, drafts, settings]);
+}
+
+type T = ReturnType<typeof useTranslation>['t'];
+
+/** Where the site area came from, in words: one sentence for every table that prints it. */
+export function siteSourceNote(t: T, locale: string, site: SiteAreaChoice): string {
+  if (site.source === 'typed') {
+    return site.plot === null ? t('urban.siteSource.typedNoPlot') : t('urban.siteSource.typed', { plot: sheetNumber(locale, site.plot) });
+  }
+  return t(`urban.siteSource.${site.source ?? 'none'}`);
 }
 
 /** Where the site area came from, in words: one sentence for every table that prints it. */
 export function useSiteSourceNote(): (site: SiteAreaChoice) => string {
   const { t, locale } = useTranslation();
-  return useMemo(() => (site: SiteAreaChoice) => {
-    if (site.source === 'typed') {
-      return site.plot === null ? t('urban.siteSource.typedNoPlot') : t('urban.siteSource.typed', { plot: sheetNumber(locale, site.plot) });
-    }
-    return t(`urban.siteSource.${site.source ?? 'none'}`);
-  }, [t, locale]);
+  return useMemo(() => (site: SiteAreaChoice) => siteSourceNote(t, locale, site), [t, locale]);
 }
 
-/** The schedule's labels; `site`, when given, adds the line saying where the site area came from. */
-export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
-  const { t, locale } = useTranslation();
-  const siteNote = useSiteSourceNote();
+/** The schedule's labels; `site`, when given, adds the line saying where the site area came from. Pure: the Wall's export builds them too. */
+export function urbanLabelsOf(t: T, locale: string, title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
   const assumed = areas?.assumedInterior.join(', ') ?? '';
   const leftOut = areas?.spacesLeftOut ?? null;
   const estimated = areas?.estimated ?? null;
-  return useMemo(() => ({
+  return {
     locale,
     title,
     level: t('urban.level'), elevation: t('urban.elevation'), built: t('urban.built'), useful: t('urban.useful'),
@@ -101,11 +109,23 @@ export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: S
       ];
       if (estimated) out.push(t('urban.rule.auEstimated', { count: estimated.count, area: sheetNumber(locale, estimated.area, 1), share: sheetNumber(locale, estimated.share, 0), list: estimated.rooms.map((r) => r.name).join(', ') }));
       if (leftOut) out.push(t('urban.rule.au', { external: leftOut.external, gfa: leftOut.gfa, parents: leftOut.parents }));
-      if (site) out.push(siteNote(site));
+      if (site) out.push(siteSourceNote(t, locale, site));
       return out;
     },
     note: assumed ? t('urban.assumedInterior', { levels: assumed }) : '',
     atLeast: (value: string) => t('urban.atLeast', { value }),
     unmeasured: (count: number, level: string) => t('urban.unmeasured', { count, level }),
-  }), [t, locale, title, assumed, leftOut, estimated, site, siteNote]);
+  };
+}
+
+/** The schedule's labels; `site`, when given, adds the line saying where the site area came from. */
+export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
+  const { t, locale } = useTranslation();
+  const assumed = areas?.assumedInterior.join(', ') ?? '';
+  const leftOut = areas?.spacesLeftOut ?? null;
+  const estimated = areas?.estimated ?? null;
+  return useMemo(() => urbanLabelsOf(t, locale, title, areas, site),
+    // assumed / leftOut / estimated: the only parts of `areas` the labels read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t, locale, title, assumed, leftOut, estimated, site]);
 }

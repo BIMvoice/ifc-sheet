@@ -9,9 +9,9 @@
  * same lines (`finishLines`).
  */
 
-import { escapeCsvCell } from '@ifc-lite/export';
 import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
+import type { ExportTable } from './schedule-export';
 import { layoutPagedTable, PEN, ROW, TEXT, type PagedOptions, type TableBlock, type TableItem } from './paged-table';
 import { finishLines, hasSharedFinish, SURFACES, type Finish, type FinishLine, type RoomFinishes } from './room-finishes';
 
@@ -69,8 +69,10 @@ export function finishRows(rooms: readonly RoomFinishes[]): (string | number | n
   ]);
 }
 
-/** The finishes as CSV; room and finish names are model text, so every cell is formula-guarded (#1506). */
-export function roomFinishesCsv(rooms: readonly RoomFinishes[], labels: RoomFinishLabels): string {
-  const lines = [finishHeader(labels), ...finishRows(rooms).map((r) => r.map((v) => (v === null ? '' : String(v))))];
-  return lines.map((l) => l.map((c) => escapeCsvCell(c)).join(',')).join('\n');
+/** The finishes as the table of its CSV and XLSX: `finishRows`, and under them the note the sheet prints when an area is a share of a covering several rooms use. */
+export function finishTable(rooms: readonly RoomFinishes[], labels: RoomFinishLabels): ExportTable {
+  return {
+    name: labels.title || labels.room, header: finishHeader(labels), rows: finishRows(rooms), numeric: SURFACES.map((_, i) => 4 + 2 * i),
+    notes: hasSharedFinish(rooms) ? [labels.sharedNote.replace(/^\*\s*/, '')] : [],
+  };
 }

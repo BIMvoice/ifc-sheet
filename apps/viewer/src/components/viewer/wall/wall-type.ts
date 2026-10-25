@@ -42,3 +42,6 @@ export const WALL_EYEBROW = 'm-0 text-2xs font-medium uppercase tracking-widest 
 
 /** A card's title under its eyebrow. */
 export const WALL_CARD_TITLE = 'mb-3 mt-1.5 text-xl font-light leading-snug text-white';
+
+/** CSV and XLSX in a schedule tab's header bar (outline, as the bar's other buttons). */
+export const TAB_EXPORT = 'h-7 rounded-sm border border-zinc-300 bg-transparent px-2 text-xs hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800';

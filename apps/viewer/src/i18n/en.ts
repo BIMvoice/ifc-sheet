@@ -86,6 +86,7 @@ import { wallFindEn } from './catalogues/wall-find.en';
 import { wallKeysEn } from './catalogues/wall-keys.en';
 import { wallReviewEn } from './catalogues/wall-review.en';
 import { wallSectionsEn } from './catalogues/wall-sections.en';
+import { scheduleExportEn } from './catalogues/schedule-export.en';
 import { whatChangedEn } from './catalogues/whatchanged.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
 import { landXmlEn } from './catalogues/landxml.en';
@@ -295,6 +296,7 @@ export const en = {
   ...wallKeysEn,
   ...wallReviewEn,
   ...wallSectionsEn,
+  ...scheduleExportEn,
   ...whatChangedEn,
   ...hierarchyEn,
   ...propertiesEn,
