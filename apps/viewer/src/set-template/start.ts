@@ -10,27 +10,38 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
-import { ANNOTATION_COMMANDS, type SetTemplate } from '@bimvoice/ifcsheet';
 import type { AxisBounds } from '@/lib/section/section-distance';
+import { annotateSet, type AnnotateRun } from '@/annotate-set/annotate-set';
+import { choicesOfTemplate, hasChoices } from '@/annotate-set/choices';
 import { startDrawingSet } from '@/project/drawing-set-actions';
 import { applyExtras, applyNumbering } from './apply';
 import { takeArmedTemplate, useSetTemplates } from './store';
 
-/** The annotation commands the template asks for, by series: the app runs them on a view when it is open (they read the drawn view), so they are listed, not run. */
-function commandsToRun(template: SetTemplate): { series: string; commands: string[] }[] {
-  return Object.entries(template.annotations).map(([series, commands]) => ({ series, commands: ANNOTATION_COMMANDS.filter((c) => commands?.includes(c)) }));
-}
-
-/** `startDrawingSet`, by the armed template if there is one. Returns whether it laid a set out. */
-export function startSet(meshes: MeshData[] | null, bounds: AxisBounds | null): boolean {
+/**
+ * `startDrawingSet`, by the armed template if there is one. Returns whether it laid a set out. The commands the template records
+ * (TAGALL, DIMALL, LEVELALL) then run on the new set's views through the batch behind "Annotate the set" (#333), each on its own
+ * drawing as the drawings are made; like the set, they are the project's starting state, not an undo step.
+ */
+export function startSet(meshes: MeshData[] | null, bounds: AxisBounds | null, annotate?: Pick<AnnotateRun, 'drawingOf'>): boolean {
   const template = bounds ? takeArmedTemplate() : null;
   if (!template) return startDrawingSet(meshes, bounds);
   applyNumbering(template);
-  return startDrawingSet(meshes, bounds, {
+  const laid = startDrawingSet(meshes, bounds, {
     rules: template,
     extras: (report) => {
       const notes = [...report.notes.filter((n) => n.key.startsWith('setTemplate.')), ...applyExtras(template)];
-      useSetTemplates.setState({ report: { template: template.name, notes, toRun: commandsToRun(template) } });
+      useSetTemplates.setState({ report: { template: template.name, notes, annotated: null } });
     },
   });
+  const choices = choicesOfTemplate(template);
+  if (laid && hasChoices(choices)) {
+    useSetTemplates.setState((s) => ({ report: s.report && { ...s.report, annotated: 'running' } }));
+    void annotateSet({ choices, mode: 'starting', ...annotate })
+      .then((summary) => useSetTemplates.setState((s) => ({ report: s.report && { ...s.report, annotated: summary } })))
+      .catch((error: unknown) => {
+        console.warn('[ifcsheet] the template\'s annotation commands could not be run', error);
+        useSetTemplates.setState((s) => ({ report: s.report && { ...s.report, annotated: null } }));
+      });
+  }
+  return laid;
 }

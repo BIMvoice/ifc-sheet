@@ -21,6 +21,7 @@ import { MODEL_TAB_ID, pruneDocumentTabs, useDocumentTabs, WALL_TAB_ID } from '@
 import { closeProjectTab } from '@/project/open-view';
 import { isDocsEdition } from '@/edition';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
+import { useDrawingDemand } from '@/annotate-set/drawing-demand';
 import { DocumentTabBar } from './DocumentTabBar';
 import { isVectorAxonometric } from '@/project/axonometric';
 import { AxonometricDrawingHost } from './AxonometricDrawingHost';
@@ -72,6 +73,9 @@ export function DocumentWorkspace({ children }: { children: ReactNode }) {
   for (const sheet of sheetsToDraw(sheets, { wall, queue, stepped, open: openIds })) {
     for (const vp of sheet.viewports ?? []) drawn.add(vp.viewId);
   }
+  // The drawings "Annotate the set" is waiting for (#333): made by the same host as a view on a sheet.
+  const demanded = useDrawingDemand((s) => s.counts);
+  for (const id of Object.keys(demanded)) drawn.add(id);
   // A legend lists the cut materials of the drawings in its scope: open as a tab, those drawings are generated.
   for (const legend of legends ?? []) {
     if (!openIds.includes(legend.id)) continue;

@@ -45,6 +45,7 @@ import { tagFieldsRo } from '../catalogues/tag-fields.ro';
 import { roomScheduleRo } from '../catalogues/room-schedule.ro';
 import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { annotateAllRo } from '../catalogues/annotate-all.ro';
+import { annotateSetRo } from '../catalogues/annotate-set.ro';
 import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
 import { setTemplateRo } from '../catalogues/set-template.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
@@ -86,6 +87,7 @@ export default {
   ...printPreviewRo,
   ...tagFieldsRo,
   ...annotateAllRo,
+  ...annotateSetRo,
   ...cutawayAxoRo,
   ...setTemplateRo,
   ...draftingRo,

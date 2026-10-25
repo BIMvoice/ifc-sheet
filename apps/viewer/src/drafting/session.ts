@@ -25,14 +25,13 @@ import type { SectionAxisName } from './frame';
 import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
-import {
-  closedLoopsOfView, hasModelPicker, levelAtPoint, levelRefAt, modelElementAt, pickModel, planObstaclesOf, planPartsOf, referenceShapesIn, roomsOf, resolveLevelRef, setReferenceProvider, viewElementsOf, viewKindOf, activeWorkPlane,
-} from './session-providers';
+import { hasModelPicker, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
+import { annotationFrameOf, makeContext } from './view-context';
 import type { DraftEntity, DraftShape, Pt } from './types';
 
 // What the view in front installs (providers, pickers) lives in `session-providers.ts`; callers keep importing it from here.
 export {
-  activeWorkPlane, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
+  activeWorkPlane, clearViewInputs, installViewInputs, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
 } from './session-providers';
 
 export interface HistoryLine {
@@ -114,39 +113,23 @@ export function echoLine(key: TranslationKey, params?: Record<string, string | n
   say({ key, params });
 }
 
-function visibleEntities(viewId: string): DraftEntity[] {
+/** The view's drafted entities on visible, unlocked layers: what a command sees as already there. */
+export function visibleEntities(viewId: string): DraftEntity[] {
   const { drafts, draftLayers } = useProjectStore.getState();
   const usable = new Set(draftLayers.filter((l) => l.visible && !l.locked).map((l) => l.id));
   return draftsOfView(viewId, drafts).filter((d) => usable.has(d.layerId));
 }
 
 function context(viewId: string): DraftContext {
-  const { axis } = get();
-  const { kx, ky } = { kx: axis === 'side' ? -1 : 1, ky: axis !== 'down' ? -1 : 1 };
-  return {
-    viewId,
+  return makeContext(viewId, { ...installedViewInputs(), referenceShapes: referenceShapesIn, elementAt: modelElementAt }, {
     layerId: currentLayerId(),
+    axis: get().axis,
+    settings: scaledSettings,
     entities: () => visibleEntities(viewId),
-    referenceShapes: referenceShapesIn,
-    closedLoops: closedLoopsOfView,
-    levelAt: levelAtPoint,
-    levelRefAt,
-    resolveLevel: resolveLevelRef,
-    plane: () => activeWorkPlane().plane,
-    viewKind: viewKindOf,
-    view: () => activeWorkPlane().view,
-    elementAt: modelElementAt,
-    viewElements: viewElementsOf,
-    planParts: planPartsOf,
-    planObstacles: planObstaclesOf,
-    rooms: roomsOf,
     selection: () => get().selection,
     setSelection: (ids) => set({ selection: ids }),
-    // userToDrawing is diag(kx, −ky): orientation-reversing when its determinant is negative.
-    orientation: (kx * -ky) > 0 ? 1 : -1,
-    settings: scaledSettings,
     say: (key, params) => say({ key, params }),
-  };
+  });
 }
 
 let activeLayerId = '0';
@@ -189,8 +172,9 @@ export function attachDraftingView(viewId: string | null, axis: SectionAxisName,
   setReferenceProvider(references);
   sizeScale = unitsScale;
   // Plans draw drawing-y downward on screen; text and marks grow up on screen.
-  setAnnotationScreenUp(axis === 'down' ? -1 : 1);
-  setAnnotationScreenRight(axis === 'side' ? -1 : 1);
+  const frame = annotationFrameOf(axis);
+  setAnnotationScreenUp(frame.up);
+  setAnnotationScreenRight(frame.right);
   if (get().viewId === viewId && get().axis === axis) return;
   if (get().viewId !== viewId) cancelCommand();
   set({ viewId, axis, selection: get().viewId === viewId ? get().selection : new Set() });

@@ -36,5 +36,6 @@ export const setTemplateEn = {
   'wall.setTemplate.refused': 'That file cannot be used as a set template: {detail}',
   'wall.setTemplate.report.title': 'Made from the template {name}',
   'wall.setTemplate.report.allMet': 'Every rule of the template found its drawing in this model.',
-  'wall.setTemplate.report.run': 'The template also asks for {commands} on the {series}. Run them on each view once it is open.',
+  'wall.setTemplate.report.annotating': 'The commands the template records (TAGALL, DIMALL, LEVELALL) are running on the new set.',
+  'wall.setTemplate.report.annotated': 'The commands the template records ran on the new set: {added} added on {views} views. Views skipped: {skipped}.',
 } as const satisfies Record<string, TranslationValue>;

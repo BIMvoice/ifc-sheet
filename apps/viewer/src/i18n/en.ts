@@ -131,6 +131,7 @@ import { handoverEn } from './catalogues/handover.en';
 import { annotatedIfcEn } from './catalogues/annotated-ifc.en';
 import { revisionsEn } from './catalogues/revisions.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
+import { annotateSetEn } from './catalogues/annotate-set.en';
 import { cutawayAxoEn } from './catalogues/cutaway-axo.en';
 import { checkEn } from './catalogues/check.en';
 import { checkReadyEn } from './catalogues/check-ready.en';
@@ -227,6 +228,7 @@ export const en = {
   ...annotatedIfcEn,
   ...revisionsEn,
   ...annotateAllEn,
+  ...annotateSetEn,
   ...cutawayAxoEn,
   ...checkEn,
   ...checkReadyEn,
