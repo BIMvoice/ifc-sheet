@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { HANDOVER_DEFAULT_PATTERN, HANDOVER_PATTERN_MAX, HANDOVER_TOKENS, handoverFileName } from '@bimvoice/ifcsheet/handover';
 import { useTranslation } from '@/i18n';
 import { setHandoverPattern, useProjectStore } from '@/project/project-store';
+import { AnnotatedIfcButton } from './AnnotatedIfcButton';
 import type { SetSkin } from './set-skin';
 import { useIssue } from './useIssue';
 
@@ -58,6 +59,7 @@ export function IssueForm({ skin }: { skin: SetSkin }) {
       </div>
       <p className={skin.note}>{t('handover.hint')}</p>
       <HandoverPattern skin={skin} />
+      <AnnotatedIfcButton skin={skin} />
       {lines.map((l, i) => <p key={i} className={skin.note}>{l}</p>)}
     </div>
   );

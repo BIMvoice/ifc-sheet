@@ -23,6 +23,7 @@ import { takeoffRows, type TakeoffRow } from '@/joinery/material-takeoff';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
 import { layoutMaterialTakeoff, type TakeoffLabels } from '@/joinery/material-takeoff-layout';
 import { layoutUrban } from '@/urban/urban-layout';
+import { layoutRoomSchedule } from '@/joinery/room-schedule-layout';
 import { registerFitOn, registerPaper, sharedRegisterRows, type RegisterRow } from '@/project/drawing-register';
 import { layoutRegisterPage, type RegisterLabels } from '@/joinery/register-layout';
 import { roomFinishes, type RoomFinishes } from '@/joinery/room-finishes';
@@ -34,6 +35,7 @@ import { layoutTypeQuantities, type TypeQuantityLabels } from '@/joinery/type-qu
 import { penTags } from '../sheets/dxf-tags';
 import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 import { useElementViews, type ViewRequest } from './useElementViews';
+import { useRoomScheduleData, useRoomScheduleLabels } from './room-schedule-hooks';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
 
@@ -137,7 +139,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const schedules = useProjectStore((s) => s.schedules);
   const labels = useScheduleLabels(schedule?.name ?? '');
   const data = useMemo(() => {
-    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register' || schedule.kind === 'urban') return null;
+    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register' || schedule.kind === 'urban' || schedule.kind === 'rooms') return null;
     return scheduleDataOf(schedule, undefined, schedules ?? []);
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores; schedules: the text rows.
   }, [schedule?.kind, schedule?.sub, schedules, mutationVersion, models, catalogue, mapping]);
@@ -174,6 +176,9 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   // The indicators measure footprints: only when the sheet shows them.
   const urban = useUrbanIndicators(places('urban'));
   const urbanLabels = useUrbanLabels('', urban?.areas ?? null, urban?.site);
+  // The room schedule reads the rooms: only when the sheet shows it.
+  const roomData = useRoomScheduleData(places('rooms'));
+  const roomLabels = useRoomScheduleLabels('', roomData);
   // The joinery schedules on this sheet: their data once, for the layout and for the views cut from the models. Keyed on WHICH
   // schedules the sheet holds, not on its viewports: a viewport written (a continuation page added or moved) must not drop the views,
   // or the page count flips between "with" and "without" them and the continuation sheets are removed and made again without end.
@@ -214,6 +219,10 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
         if (urban) out.set(schedule.id, table(true, (paging) => layoutUrban(urban.result, { ...urbanLabels, title: schedule.name }, paging)));
         continue;
       }
+      if (schedule.kind === 'rooms') {
+        if (roomData) out.set(schedule.id, table(true, (paging) => layoutRoomSchedule(roomData.schedule, { ...roomLabels, title: schedule.name }, paging)));
+        continue;
+      }
       out.set(schedule.id, schedule.kind === 'register'
         // Shrunk to the register's own sheet's drawing area, then split into pages: this viewport shows its own (`syncRegisterPages`).
         ? layoutRegisterPage(registerRows, { ...registerLabels, title: schedule.name }, registerFitOn(registerRows.length, pagePaper ?? registerPaper([sheet], schedule.id)), vp.page ?? 0)
@@ -228,7 +237,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     }
     return { layouts: out, loaded };
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet, sheets, schedules, labels, continued, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, urban, urbanLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
+  }, [sheet, sheets, schedules, labels, continued, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, urban, urbanLabels, roomData, roomLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
   // A schedule that runs over several pages has a sheet for each: the sheets follow the layout, from the schedule's first one.
   useEffect(() => {
     for (const vp of sheet.viewports ?? []) {

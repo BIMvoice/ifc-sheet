@@ -23,6 +23,7 @@ import { nameOf } from './names.js';
 import { DEFAULT_SCHEME } from './numbering.js';
 import { proposeSections, type ProposalInput, type SectionProposal } from './section-proposals.js';
 import { sectionPlaneThrough } from './section-plane.js';
+import { assignDefaultTemplates, defaultViewTemplates } from './view-templates.js';
 import type { SetTemplate } from './set-template.js';
 import { applySetTemplate } from './set-template-apply.js';
 import type { TemplateNote, TemplateNoteKey } from './set-template-notes.js';
@@ -188,11 +189,14 @@ export function generateDefaultSet(model: SetModel, options: DefaultSetOptions =
   // The schedules a template carries are added by the app; the engine says so rather than leave them out silently.
   const schedules = (options.setTemplate?.schedules ?? []).map((r): TemplateNote => ({ key: 'setTemplate.note.schedule', params: { kind: r.kind, name: r.name } }));
   const notes = [...planner.notes, ...(ruled?.notes ?? []), ...schedules, ...groupsThatDoNotFit(planner.views, model.extent).map((kind: SetGroup): SetNote => ({ key: 'draftSet.note.noFit', params: { kind } }))];
+  // The starting view templates (#44): one per kind, named on the views the set drew.
+  const viewTemplates = defaultViewTemplates((kind) => nameOf(`names.viewTemplate.${kind}`), () => freshProjectId('viewtemplate'));
   return {
     document: {
       name: options.name ?? (model.projectName || nameOf('names.project.untitled')),
       models: [],
-      views: planner.views,
+      views: assignDefaultTemplates(planner.views, viewTemplates),
+      viewTemplates,
       sheets,
       titleBlock: { date: new Date(now).toISOString().slice(0, 10) },
       ...(chosen ? { sheetNumbering: chosen } : {}),

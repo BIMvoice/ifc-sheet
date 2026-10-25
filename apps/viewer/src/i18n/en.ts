@@ -125,6 +125,7 @@ import { draftSetEn } from './catalogues/draft-set.en';
 import { setTemplateEn } from './catalogues/set-template.en';
 import { issueEn } from './catalogues/issue.en';
 import { handoverEn } from './catalogues/handover.en';
+import { annotatedIfcEn } from './catalogues/annotated-ifc.en';
 import { revisionsEn } from './catalogues/revisions.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
 import { cutawayAxoEn } from './catalogues/cutaway-axo.en';
@@ -137,6 +138,7 @@ import { projectVersionsEn } from './catalogues/project-versions.en';
 import { roofBlockEn } from './catalogues/roof-block.en';
 import { viewGraphicsEn } from './catalogues/view-graphics.en';
 import { colourSchemeEn } from './catalogues/colour-scheme.en';
+import { viewTemplatesEn } from './catalogues/view-templates.en';
 import { cadLayersEn } from './catalogues/cad-layers.en';
 import { phasesEn } from './catalogues/phases.en';
 import { catalogueEn } from './catalogues/catalogue.en';
@@ -144,6 +146,7 @@ import { tagFieldsEn } from './catalogues/tag-fields.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
 import { roomFinishesEn } from './catalogues/room-finishes.en';
+import { roomScheduleEn } from './catalogues/room-schedule.en';
 import { urbanEn } from './catalogues/urban.en';
 import { elementTypesEn } from './catalogues/element-types.en';
 import { roofEn } from './catalogues/roof.en';
@@ -215,6 +218,7 @@ export const en = {
   ...setTemplateEn,
   ...issueEn,
   ...handoverEn,
+  ...annotatedIfcEn,
   ...revisionsEn,
   ...annotateAllEn,
   ...cutawayAxoEn,
@@ -227,6 +231,7 @@ export const en = {
   ...roofBlockEn,
   ...viewGraphicsEn,
   ...colourSchemeEn,
+  ...viewTemplatesEn,
   ...phasesEn,
   ...catalogueEn,
   ...cadLayersEn,
@@ -234,6 +239,7 @@ export const en = {
   ...draftingStandardsEn,
   ...joineryEn,
   ...roomFinishesEn,
+  ...roomScheduleEn,
   ...urbanEn,
   ...elementTypesEn,
   ...roofEn,

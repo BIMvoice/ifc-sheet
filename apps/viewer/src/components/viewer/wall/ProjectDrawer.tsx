@@ -44,6 +44,7 @@ import { SiteAreaField } from '../urban/SiteAreaField';
 import { ViewportState } from './ViewportState';
 import { ScheduleExportButtons } from './ScheduleExportButtons';
 import { TagFieldsPanel } from './TagFieldsPanel';
+import { ViewTemplatesPanel } from './ViewTemplatesPanel';
 import { WALL_PILL } from './wall-type';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
@@ -184,6 +185,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <TitleBlockForm />
         </details>
         <TagFieldsPanel />
+        <ViewTemplatesPanel />
         {DRAWING_KINDS.map(({ kind, labelKey }) => (
           <Group key={kind} title={t(labelKey)}>
             {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} state={viewportState(byView[v.id], v.kind)} onOpen={() => openDrawing(v.id)} />)}
@@ -199,6 +201,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
               <button type="button" className={action} onClick={() => go(addScheduleToSet('types', t('typeQty.newName')))}>{t('wall.project.addTypeQuantities')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('finishes', t('finishes.newName')))}>{t('wall.project.addFinishes')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('urban', t('urban.newName')))}>{t('urban.add')}</button>
+              <button type="button" className={action} onClick={() => go(addScheduleToSet('rooms', t('roomSched.newName')))}>{t('roomSched.add')}</button>
               <SiteAreaField
                 modelSiteArea={siteFromModel}
                 className="mt-1 flex w-full items-center justify-between gap-2 text-xs text-sky-200"

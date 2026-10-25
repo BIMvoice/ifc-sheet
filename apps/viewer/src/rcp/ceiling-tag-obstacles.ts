@@ -14,9 +14,10 @@ import { overlayObstacleBoxes, type Box } from '@/drafting/cross-ref-marks';
 import { planOverlays } from '@/project/plan-overlays';
 import type { ProjectLevel, ProjectView } from '@/project/types';
 import { hiddenClasses } from '@/project/view-graphics';
+import { liveGraphics } from '@/project/view-graphics-live';
 import { viewPlaneConfig } from '@/project/view-plane-config';
 
 export function planSymbolObstacles(view: ProjectView, levels: readonly ProjectLevel[], meshes: readonly MeshData[], flips: Record<string, number> | undefined): Box[] {
   const plane = viewPlaneConfig(view, levels, null);
-  return plane ? overlayObstacleBoxes(planOverlays(view, plane, meshes, flips, hiddenClasses(view.graphics))) : [];
+  return plane ? overlayObstacleBoxes(planOverlays(view, plane, meshes, flips, hiddenClasses(liveGraphics(view)))) : [];
 }

@@ -62,13 +62,13 @@ export function readSubReport(raw: unknown): SubReport | undefined {
 }
 
 /** The kinds of schedule a project holds. Only the joinery ones (`door`, `window`, `all`) can be split. */
-export type ScheduleListKind = 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register' | 'urban';
+export type ScheduleListKind = 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register' | 'urban' | 'rooms';
 
 /** A schedule as the project saves it: a project document of its own, placeable on sheets. */
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, the set's own sheets (the drawing register, derived from the sheets on every draw), or the permit's areas and urban indicators. */
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, the set's own sheets (the drawing register, derived from the sheets on every draw), the permit's areas and urban indicators, or the rooms with their areas by level (#42). */
   kind: ScheduleListKind;
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
@@ -98,7 +98,7 @@ export function readSchedule(raw: unknown): ProjectSchedule | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   if (typeof o.id !== 'string') return null;
-  const kind: ScheduleListKind = o.kind === 'door' || o.kind === 'window' || o.kind === 'materials' || o.kind === 'types' || o.kind === 'finishes' || o.kind === 'register' || o.kind === 'urban' ? o.kind : 'all';
+  const kind: ScheduleListKind = o.kind === 'door' || o.kind === 'window' || o.kind === 'materials' || o.kind === 'types' || o.kind === 'finishes' || o.kind === 'register' || o.kind === 'urban' || o.kind === 'rooms' ? o.kind : 'all';
   const out: ProjectSchedule = { id: o.id, name: typeof o.name === 'string' && o.name ? o.name : 'Schedule', kind, createdAt: typeof o.createdAt === 'number' ? o.createdAt : 0 };
   if (typeof o.scale === 'number' && o.scale > 0) out.scale = o.scale;
   // A project saved before sub-reports has no `sub`: it stays an ordinary schedule. Only a joinery list can be split.

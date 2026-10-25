@@ -54,6 +54,7 @@ const doc: ProjectDocument = {
   issues: [], revisions: [],
   sheetTemplates: [],
   seriesTemplates: {},
+  viewTemplates: [],
   typicalSections: [{ id: 't1', name: 'Rural', assembly: { lanes: [{ width: 3.5, slope: -2.5 }], shoulder: null, layers: [{ name: 'Asphalt', thickness: 0.1, color: '#333333' }], daylight: { cutSlope: 1, fillSlope: 1.5 } } }],
   civilDrawings: [{ id: 'c1', name: 'DN1 profile', kind: 'profile', createdAt: 3, corridorGlobalId: '2O2Fr$t4X7Zf8NOew3FLOH', scale: 1000, vExaggeration: 10 }],
 };
@@ -102,7 +103,7 @@ describe('project file', () => {
 
 // Review of #108 and #111: a kind the reader does not list reopens as a joinery list ('all') with no error.
 // The record is keyed by the kind union, so a new kind does not compile until it is listed here.
-const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true, finishes: true, register: true, urban: true };
+const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true, finishes: true, register: true, urban: true, rooms: true };
 
 describe('schedule kinds', () => {
   for (const kind of Object.keys(SCHEDULE_KINDS) as ProjectSchedule['kind'][]) {

@@ -28,8 +28,14 @@ export type {
   Paper, PaperSize, PhaseId, PhaseStyle, PlanProjectView, ProjectDocument, ProjectionMode, ProjectLevel, ProjectModelRef, ProjectSheet,
   ProjectView, ProjectViewBase, ProjectViewKind, SectionCustomPlane, SectionPlaneAxis, SectionProjectPlane, SectionProjectView,
   SheetFrame, SheetTemplate, SheetViewport, TemplateSeries, ThreeDProjection, ThreeDProjectView, TitleBlockPosition, ViewDetail,
-  ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster,
+  ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster, ProjectViewTemplate, TemplateGraphics, ViewTemplateKind,
 } from './document.js';
+
+// View templates (#44): named graphics many views follow, and the one function that layers them
+export {
+  VIEW_CATEGORY_CLASSES, VIEW_TEMPLATE_KINDS, assignDefaultTemplates, defaultViewTemplates, hiddenClassesOf, resolveViewGraphics, resolveViewport,
+  templateGraphicsOf, templateKindOf, templateOf, untemplatedGraphics, viewportHiddenLayers,
+} from './view-templates.js';
 
 // What the model lacks (the counting, `readModelFacts`, is in `/headless` and `/readiness-read`: it loads the parser)
 export { READINESS_EN, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from './readiness.js';
@@ -113,3 +119,11 @@ export { SET_SECTIONS, generateDefaultSet, type DefaultSet, type DefaultSetOptio
 
 // Opening an IFC, cutting drawings and writing files live in `@bimvoice/ifcsheet/headless` (`headless.ts`),
 // so a client of the layout alone (the web app) does not load the parser, the geometry engine or the writers through it.
+
+// Rooms and their areas (#42): the one rule for which space is a room and what its area is, and the room and area schedule built on it
+export { ROOM_AREA_NAMES, ROOM_AREA_QTO, meshFootprintArea, pickArea, roomArea, spaceRole, type AreaSource, type FootprintMesh, type RoomArea, type SpaceRole } from './room-areas.js';
+export {
+  ROOM_SCHEDULE_EN, ROOM_SCHEDULE_RO, roomSchedule, roomScheduleCsv, roomScheduleLines, roomScheduleText, roomScheduleWords,
+  type RoomRecord, type RoomSchedule, type RoomScheduleLevel, type RoomScheduleLine, type RoomScheduleWords, type ScheduleLevelInfo,
+} from './room-schedule.js';
+export { estimatedAreas, type EstimatedAreas } from './room-estimates.js';
