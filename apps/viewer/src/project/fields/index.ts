@@ -14,6 +14,7 @@
 import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { upgradeTagAllTypes } from '@/tagall/types';
+import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
 import type { ProjectDocument } from '../types';
 import { defineField, listField, optionalField, recordField, type DocumentField, type FieldKey } from './define';
 
@@ -69,6 +70,8 @@ const DOCUMENT_FIELD_DEFS = [
   optionalField('urbanSettings'),
   // Off is stored as absent, so a project that never touched it saves exactly as before.
   defineField({ key: 'includeFarElements', empty: () => undefined, load: (v) => (v === true ? true : undefined) }),
+  // Absent is the default pattern (`@bimvoice/ifcsheet/handover`); a value that is not usable loads as absent.
+  defineField({ key: 'handoverPattern', empty: () => undefined, load: (v) => readHandoverPattern(v) }),
   // The project's units and number format (#88); absent follows the language and each drawing's own style, so an old project saves as it was.
   optionalField('unitsAndNumbers'),
 ] as const satisfies readonly DocumentField<FieldKey>[];

@@ -26,6 +26,7 @@ import { useDrawingElementPropertiesLookup } from '@/hooks/useDrawingElementProp
 import { markActiveDrawingCanvasRendered, registerActiveDrawingCanvas } from '@/lib/drawing/active-canvas-snapshot';
 import { getFillColorForType } from './drawing/ifc-fill-colors';
 import { itemInk } from '@/project/phases';
+import { fillOrder, schemeColourOf } from '@/project/view-scheme-style';
 import type { ViewGraphics } from '@/project/types';
 import { resolveDrawingPaperTheme, type DrawingPaperTheme } from './drawing/paper-theme';
 import { useSheetLocale } from '@/project/units-and-numbers';
@@ -661,7 +662,7 @@ export function Drawing2DCanvas({
         );
 
         // Fill cut polygons
-        for (const polygon of drawing.cutPolygons) {
+        for (const polygon of fillOrder(drawing)) {
           let fillColor = getFillColorForType(polygon.ifcType), opacity = 1;
 
           if (useIfcMaterials) {
@@ -687,7 +688,7 @@ export function Drawing2DCanvas({
             opacity = result.style.opacity;
           }
 
-          fillColor = itemInk(graphics, polygon)?.fill ?? fillColor; // a phase's fill comes last
+          fillColor = schemeColourOf(polygon) ?? itemInk(graphics, polygon)?.fill ?? fillColor; // a phase's fill, then a colour scheme's (#92), come last
           ctx.globalAlpha = opacity;
           ctx.fillStyle = fillColor;
           ctx.beginPath();
@@ -1029,7 +1030,7 @@ export function Drawing2DCanvas({
       // ═══════════════════════════════════════════════════════════════════════
       // 1. FILL CUT POLYGONS (with color from IFC materials, override engine, or type fallback)
       // ═══════════════════════════════════════════════════════════════════════
-      for (const polygon of drawing.cutPolygons) {
+      for (const polygon of fillOrder(drawing)) {
         // Get fill color - priority: IFC materials > override engine > IFC type fallback.
         // Direct mode only (#5496): the dark-paper analogue applies here, never
         // in sheet mode above, which stays on white paper.
@@ -1060,7 +1061,7 @@ export function Drawing2DCanvas({
           opacity = result.style.opacity;
         }
 
-        fillColor = itemInk(graphics, polygon)?.fill ?? fillColor; // a phase's fill comes last
+        fillColor = schemeColourOf(polygon) ?? itemInk(graphics, polygon)?.fill ?? fillColor; // a phase's fill, then a colour scheme's (#92), come last
         ctx.globalAlpha = opacity;
         ctx.fillStyle = fillColor;
         ctx.beginPath();

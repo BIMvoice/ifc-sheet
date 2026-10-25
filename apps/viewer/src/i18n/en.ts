@@ -82,6 +82,7 @@ import { titleBlockParamsEn } from './catalogues/title-block-params.en';
 import { sitePlanEn } from './catalogues/site-plan.en';
 import { ifcsheetTourEn } from './catalogues/ifcsheet-tour.en';
 import { reviewEn } from './catalogues/review.en';
+import { sheetTemplatesEn } from './catalogues/sheet-templates.en';
 import { wallFindEn } from './catalogues/wall-find.en';
 import { wallKeysEn } from './catalogues/wall-keys.en';
 import { wallReviewEn } from './catalogues/wall-review.en';
@@ -122,7 +123,9 @@ import { titleBlockSourcesEn } from './catalogues/title-block-sources.en';
 import { unitsNumbersEn } from './catalogues/units-numbers.en';
 import { titleBlockRoEn } from './catalogues/title-block-ro.en';
 import { draftSetEn } from './catalogues/draft-set.en';
+import { setTemplateEn } from './catalogues/set-template.en';
 import { issueEn } from './catalogues/issue.en';
+import { handoverEn } from './catalogues/handover.en';
 import { revisionsEn } from './catalogues/revisions.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
 import { checkEn } from './catalogues/check.en';
@@ -133,6 +136,7 @@ import { projectPackageEn } from './catalogues/project-package.en';
 import { projectVersionsEn } from './catalogues/project-versions.en';
 import { roofBlockEn } from './catalogues/roof-block.en';
 import { viewGraphicsEn } from './catalogues/view-graphics.en';
+import { colourSchemeEn } from './catalogues/colour-scheme.en';
 import { cadLayersEn } from './catalogues/cad-layers.en';
 import { phasesEn } from './catalogues/phases.en';
 import { catalogueEn } from './catalogues/catalogue.en';
@@ -209,7 +213,9 @@ export const en = {
   ...unitsNumbersEn,
   ...titleBlockRoEn,
   ...draftSetEn,
+  ...setTemplateEn,
   ...issueEn,
+  ...handoverEn,
   ...revisionsEn,
   ...annotateAllEn,
   ...checkEn,
@@ -220,6 +226,7 @@ export const en = {
   ...projectVersionsEn,
   ...roofBlockEn,
   ...viewGraphicsEn,
+  ...colourSchemeEn,
   ...phasesEn,
   ...catalogueEn,
   ...cadLayersEn,
@@ -292,6 +299,7 @@ export const en = {
   ...sitePlanEn,
   ...ifcsheetTourEn,
   ...reviewEn,
+  ...sheetTemplatesEn,
   ...wallFindEn,
   ...wallKeysEn,
   ...wallReviewEn,

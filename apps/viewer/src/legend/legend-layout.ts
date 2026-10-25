@@ -22,7 +22,8 @@ import type { LegendEntry, LegendGroup } from './legend-data';
 
 export type LegendPrim =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number; color?: string; dash?: boolean }
-  | { kind: 'path'; pts: Pt[]; closed?: boolean; w: number; color?: string; fill?: string; dash?: boolean }
+  /** `solid`: the fill is data (a colour scheme's colour), not decoration, so a DXF carries it as a hatch. */
+  | { kind: 'path'; pts: Pt[]; closed?: boolean; w: number; color?: string; fill?: string; dash?: boolean; solid?: boolean }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; font?: FontKind };
 
 export interface LegendLayout {
@@ -186,6 +187,9 @@ function swatch(out: LegendPrim[], e: LegendEntry, b: Box, ctx: LegendLayoutCont
       break;
     case 'annotations':
       annotationSwatch(out, e.type, b, ctx);
+      break;
+    case 'colours':
+      out.push({ kind: 'path', pts: rect(b), closed: true, w: 0.25, color: INK, fill: e.colour, solid: true });
       break;
   }
 }

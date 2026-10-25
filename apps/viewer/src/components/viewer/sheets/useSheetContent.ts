@@ -30,6 +30,7 @@ import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
+import { schemeResultOf } from '@/project/view-colour-scheme';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { partHostType } from '@/project/part-host';
 import { viewOmits } from '@/project/discipline-facts';
@@ -107,7 +108,7 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
       const raw = drawingOf.get(vp.viewId) ?? null;
       const style = (): StyledViewport => {
         const phases = phaseViewOf(view?.graphics, phaseSource);
-        const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, viewOmits(view), viewMaterials(raw), phases) : null;
+        const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, viewOmits(view), viewMaterials(raw), phases, schemeResultOf(view, raw, geometryResult?.meshes)) : null;
         const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, phaseMeshes(geometryResult?.meshes, phases), flips, hiddenClasses(view.graphics), raw, vp.scale, standard.pens) : []), ...membraneOverlays(drawing)];
         return { drawing, overlays };
       };

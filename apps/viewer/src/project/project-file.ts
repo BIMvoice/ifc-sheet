@@ -9,6 +9,7 @@
  * hand-edited or truncated file fails loudly instead of half-loading.
  */
 
+import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
 import { resolve } from '@/i18n/registry';
 import { readJoineryMapping } from '@/joinery/symbol-mapping';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
@@ -259,6 +260,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     ...(typeof raw.siteArea === 'number' && Number.isFinite(raw.siteArea) && raw.siteArea > 0 ? { siteArea: raw.siteArea } : {}),
     ...readUrbanSettings(raw.urbanSettings),
     ...(raw.includeFarElements === true ? { includeFarElements: true } : {}),
+    ...(readHandoverPattern(raw.handoverPattern) ? { handoverPattern: readHandoverPattern(raw.handoverPattern) } : {}),
     ...(readUnitsAndNumbers(raw.unitsAndNumbers) ? { unitsAndNumbers: readUnitsAndNumbers(raw.unitsAndNumbers) } : {}),
   };
 }

@@ -55,7 +55,7 @@ export function CommentsSection({ onGo }: { onGo: (sheetId: string) => void }) {
       const snapshots = await pinSnapshots(exportableComments(guided.comments), state.sheets);
       const project = commentsToBcf(guided.comments, { snapshots, sheets: state.sheets, drawingOf, worldOffset: bcfWorldOffset(viewer.models, viewer.geometryResult), projectName: state.name, fallbackAuthor: reviewerName() });
       downloadBlob(await writeBCF(project), `${sanitizeFilename(state.name, { fallback: 'project' })}-comments.bcfzip`);
-      setNote(t('review.bcf.exported', { count: onElement.length, total: comments.length }));
+      setNote(t('review.bcf.exported', { count: comments.length, onElement: onElement.length }));
     } catch (err) {
       // The writer refuses what BCF cannot hold (a missing author or date, a number that is not finite) and says which.
       console.warn('[ifcsheet] could not write the BCF file', err);

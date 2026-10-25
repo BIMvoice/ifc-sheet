@@ -4,7 +4,7 @@
 
 /**
  * The Wall: the drawing set as one surface. When a model opens on a project
- * with no sheets, the set is laid out at once (`startDrawingSet`) and the
+ * with no sheets, the set is laid out at once (`startSet`) and the
  * model's arrival is announced; then every sheet hangs in view, and one can be
  * stepped into to be corrected where it hangs.
  */
@@ -14,7 +14,8 @@ import { useTranslation } from '@/i18n';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { isSetSheet } from '@/project/drawing-set';
-import { sectionProposals, startDrawingSet } from '@/project/drawing-set-actions';
+import { sectionProposals } from '@/project/drawing-set-actions';
+import { startSet } from '@/set-template/start';
 import { setExtent } from '@/draft-set/body';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
@@ -24,6 +25,7 @@ import { WallGrid } from './WallGrid';
 import { WallIntro } from './WallIntro';
 import { openDemoModel } from '../ifcsheet/demo-model';
 import { ProjectDrawer } from './ProjectDrawer';
+import { NewFromTemplate } from './SetTemplate';
 import { IssuePanel, MissingPanel } from './SetPanels';
 import { SubReportReview } from './SubReportReview';
 import { closeFrontPanel, setReview, stepInto, useWallNav } from './wall-nav';
@@ -47,7 +49,7 @@ export function WallView() {
   // A model on a project with no set sheets (interior elevations alone do not count): lay the set out as soon as the geometry is in.
   const hasSet = sheets.some(isSetSheet);
   useEffect(() => {
-    if (!hasSet && meshes && meshes.length > 0 && startDrawingSet(meshes, extent)) setIntro(true);
+    if (!hasSet && meshes && meshes.length > 0 && startSet(meshes, extent)) setIntro(true);
   }, [hasSet, meshes, extent]);
 
   // The proposals read the lowest plan's rooms; they change only with the model or the plans.
@@ -71,6 +73,7 @@ export function WallView() {
           <button type="button" className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-500" onClick={() => void openDemoModel().catch((err: unknown) => console.warn('[ifcsheet] could not open the demo project', err))}>
             {t('wall.demo')}
           </button>
+          <NewFromTemplate />
         </div>
       ) : sheets.length === 0 ? (
         <div className="flex h-full items-center justify-center text-base text-sky-200/80">{t('wall.intro.waiting')}</div>
