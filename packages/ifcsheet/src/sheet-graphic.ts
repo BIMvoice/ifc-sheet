@@ -8,7 +8,7 @@
  * viewport's drawing at its scale, each drawing's title under it. The PDF and
  * DXF writers draw from this one layout, so they cannot disagree.
  *
- * Headless and mostly unstyled (a view's hidden categories are applied). The web app draws its sheets as SVG through React
+ * Headless and mostly unstyled (a view's hidden categories, elements and lines are applied). The web app draws its sheets as SVG through React
  * (`components/viewer/sheets/`), with pens, hatches, symbols, annotation and
  * the full title block; this layout carries the geometry of the same sheet
  * and the fields the engine knows (project, sheet number and name, scale,
@@ -23,7 +23,8 @@ import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
 import { printTitleBlock, sheetLookup } from './title-block-print.js';
-import { hiddenClassesOf, resolveViewGraphics } from './view-templates.js';
+import { elementShown, lineHidden } from './element-graphics.js';
+import { resolveViewGraphics } from './view-templates.js';
 import { paperOf } from './viewport-fit.js';
 
 export type Polyline = readonly Point2D[];
@@ -120,7 +121,7 @@ const closeRing = (pts: Point2D[]): Point2D[] => (pts.length > 2 ? [...pts, pts[
  * view, so a drawing larger than the building (the site around it) cannot run
  * into its neighbour; without it, to the drawing's own extent.
  */
-export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings: ReadonlyMap<string, Drawing2D>, extent?: ModelExtent | null, schemes: ReadonlyMap<string, SchemeResult> = new Map()): SheetGraphic {
+export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings: ReadonlyMap<string, Drawing2D>, extent?: ModelExtent | null, schemes: ReadonlyMap<string, SchemeResult> = new Map(), globalIdOf?: (entityId: number) => string | undefined): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], texts: [], viewports: [] };
   const vps = sheet.viewports ?? [];
@@ -136,13 +137,17 @@ export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
       const scheme = schemes.get(vp.viewId);
       if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box));
-      // The categories the view hides (its template's, then its own, `resolveViewGraphics`): their cut faces and lines are not on the sheet, as in the app.
-      const hidden = hiddenClassesOf(resolveViewGraphics(view, doc.viewTemplates));
-      const shown = (ifcType: string | undefined) => !ifcType || !hidden.has(ifcType.toUpperCase());
-      for (const polygon of drawing.cutPolygons.filter((p) => shown(p.ifcType))) {
+      // What the view hides (its template's categories, then its own, `resolveViewGraphics`, and the single elements and lines it hides, `element-graphics.ts`):
+      // not on the sheet, as in the app. Elements are known by GlobalId (`globalIdOf`), never by the express id the drawing carries.
+      const graphics = resolveViewGraphics(view, doc.viewTemplates);
+      const shown = (item: { ifcType?: string; entityId: number }) => elementShown(graphics, globalIdOf?.(item.entityId), item.ifcType);
+      for (const polygon of drawing.cutPolygons.filter(shown)) {
         for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }
-      for (const line of drawing.lines) if (line.visibility !== 'hidden' && shown(line.ifcType)) out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
+      for (const line of drawing.lines) {
+        if (line.visibility === 'hidden' || !shown(line) || lineHidden(graphics, globalIdOf?.(line.entityId), line.line)) continue;
+        out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
+      }
     }
     if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
   }

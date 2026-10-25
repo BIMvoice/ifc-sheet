@@ -31,6 +31,8 @@ import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
+import { renderIdGlobalId } from '@/project/element-guid';
+import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
 import { schemeResultOf } from '@/project/view-colour-scheme';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { partHostType } from '@/project/part-host';
@@ -112,8 +114,11 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
       const style = (): StyledViewport => {
         const graphics = resolveViewGraphics(view, viewTemplates);
         const phases = phaseViewOf(graphics, phaseSource);
-        const drawing = raw ? styledDrawing(raw, graphics, partHostType, viewOmits(view), viewMaterials(raw), phases, schemeResultOf(view, raw, geometryResult?.meshes)) : null;
-        const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, phaseMeshes(geometryResult?.meshes, phases), flips, hiddenClasses(graphics), raw, vp.scale, standard.pens) : []), ...membraneOverlays(drawing)];
+        // What the view hides element by element (#33) is left out first, so no hatch, membrane or symbol is made for it.
+        const kept = raw ? withoutHiddenElements(raw, graphics, renderIdGlobalId) : null;
+        const drawing = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
+        const symbolMeshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult?.meshes, phases), graphics, renderIdGlobalId);
+        const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens) : []), ...membraneOverlays(drawing)];
         return { drawing, overlays };
       };
       out.set(vp.viewId, raw

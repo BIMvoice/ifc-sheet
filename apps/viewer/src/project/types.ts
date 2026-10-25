@@ -35,7 +35,7 @@ import type { ProjectDocument as EngineDocument, NumberingScheme, ProjectView, S
  */
 
 export type {
-  AxonometricPreset, CategoryGraphics, CategoryLineWeight, CustomPaper, DraftingProjectView, ElevationDirection, ElevationProjectView,
+  AxonometricPreset, CategoryGraphics, CategoryLineWeight, CustomPaper, DraftingProjectView, ElementGraphics, ElementLineStyle, ElevationDirection, ElevationProjectView,
   ElongatedPaper, GridEnds, GroupPattern, InteriorElevation, NumberGroup, NumberingScheme, Paper, PaperSize, PhaseId, PhaseStyle,
   PlanProjectView, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, ProjectViewBase, ProjectViewKind, SectionProjectPlane,
   SectionProjectView, SheetFrame, SheetTemplate, SheetViewport, TemplateSeries, ThreeDProjection, ThreeDProjectView, TitleBlockPosition,

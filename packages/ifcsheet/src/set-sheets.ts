@@ -38,5 +38,8 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
     // The rooms are the spaces among the model's meshes: the building's own leave them out (a space is aggregated into its storey, not contained).
     schemes.set(view.id, resolveScheme(scheme, { meshes: model.meshes ?? model.buildingMeshes, cutPolygons: drawing.cutPolygons, plan: planHeights(view, levels), valueOf }));
   }
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes));
+  // The drawings carry express ids; a view names its elements by GlobalId (#32, #33).
+  const entities = model.dataStore?.entities;
+  const globalIdOf = entities ? (id: number) => entities.getGlobalId(id) || undefined : undefined;
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf));
 }

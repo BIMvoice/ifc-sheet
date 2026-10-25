@@ -24,6 +24,8 @@ import { levelsFromStoreys, planDepthBelowCut } from '@/project/view-defaults';
 import { sectionPlaneForView } from '@/project/view-plane';
 import { viewDisplayOverrides } from '@/project/view-drawings';
 import { styledDrawing } from '@/project/view-graphics';
+import { renderIdGlobalId } from '@/project/element-guid';
+import { withoutHiddenElements } from '@/project/view-element-filter';
 import { partHostType } from '@/project/part-host';
 import { viewOmits } from '@/project/discipline-facts';
 import { drawnBySymbol } from '@/project/view-symbols';
@@ -118,7 +120,8 @@ export async function loadPlanModel(path: string): Promise<LoadedPlanModel> {
     const raw = await generator.generate(geometry.meshes, config, { includeHiddenLines: true, includeProjection: true, includeEdges: true, mergeLines: true });
     const omits = options?.omits ?? 'view';
     const omit = omits === 'none' ? undefined : omits === 'main' ? (view.kind === 'plan' ? drawnBySymbol : undefined) : viewOmits(view);
-    return styledDrawing(raw, view.graphics, partHostType, omit, null);
+    // What a drawing tab and a sheet do: the elements and lines the view hides are left out first (#33), the rest styled by GlobalId (#32).
+    return styledDrawing(withoutHiddenElements(raw, view.graphics, renderIdGlobalId), view.graphics, partHostType, omit, null, null, null, renderIdGlobalId);
   };
   const drawnIds = (drawing: Drawing2D) => new Set<number>([...drawing.cutPolygons.map((p) => p.entityId), ...drawing.lines.map((l) => l.entityId)]);
   const drawnNames = (drawing: Drawing2D) => new Set([...drawnIds(drawing)].map(nameOf).filter(Boolean));

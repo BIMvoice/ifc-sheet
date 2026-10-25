@@ -124,6 +124,11 @@ import { partHostType } from '@/project/part-host';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOverrideRules } from '@/project/view-graphics';
+import { renderIdGlobalId } from '@/project/element-guid';
+import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
+import { useHiddenElementsUi } from './useHiddenElementsUi';
+import { ElementGraphicsBar } from './ElementGraphicsBar';
+import { HiddenGhostLayer } from './HiddenGhostLayer';
 import { schemeResultOf } from '@/project/view-colour-scheme';
 
 import { capturePointer } from '@/lib/pointer-capture';
@@ -187,12 +192,13 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     setViewTransform((t) => (t.scale === 1 && t.x === 0 && t.y === 0 ? { scale: 40, x: width / 2, y: height / 2 } : t));
   }, [drawing, setViewTransform]);
 
-  const references = useMemo(() => (drawing ? referenceSet(drawing, false) : null), [drawing]);
   const entities = useMemo(() => draftsOfView(view.id, allDrafts), [allDrafts, view.id]);
   const entityShapes = useMemo(() => entities.flatMap((e) => (isGeometry(e.shape) ? [e.shape] : [])), [entities]);
   // The view's graphics (its template's, then its own preset and category overrides over them, #44), applied to its drawing.
   const viewTemplates = useProjectStore((st) => st.viewTemplates);
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
+  const viewDrawing = useMemo(() => (drawing ? withoutHiddenElements(drawing, graphics, renderIdGlobalId) : null), [drawing, graphics, models]);
+  const references = useMemo(() => (viewDrawing ? referenceSet(viewDrawing, false) : null), [viewDrawing]);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
   const phaseSource = useProjectStore((st) => st.phaseSource);
@@ -205,8 +211,8 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const runtimeGeometry = useDrawingRuntime().geometryResult;
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
-    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing), phases, schemeResultOf(view, drawing, runtimeGeometry?.meshes)) : null;
-  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases, runtimeGeometry]);
+    return viewDrawing ? styledDrawing(viewDrawing, graphics, partHostType, viewOmits(view), viewMaterials(viewDrawing), phases, schemeResultOf(view, viewDrawing, runtimeGeometry?.meshes), renderIdGlobalId) : null;
+  }, [viewDrawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases, runtimeGeometry]);
   const overrideRules = useMemo(() => viewOverrideRules(graphics), [graphics]);
   const overrideEngine = useMemo(() => new GraphicOverrideEngine(overrideRules), [overrideRules]);
   const useIfcMaterials = (graphics?.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId) === DEFAULT_VIEW_PRESET;
@@ -222,7 +228,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     // Annotation sizes are paper sizes at the view's scale (the settings read as at 1:100).
     attachDraftingView(view.id, axis, (min, max) => (references ? referencesIn(references, min, max) : []), (view.scale ?? 100) / 100);
   }, [view.id, axis, references, view.scale]);
-  useDraftingProviders({ view, drawing, references, entities, plane, levels, scale: viewTransform.scale });
+  useDraftingProviders({ view, drawing: viewDrawing, references, entities, plane, levels, scale: viewTransform.scale });
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
   const selectedModelIds = useViewerStore((s) => s.selectedEntityIds);
@@ -248,10 +254,15 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const { state, handlers } = useDraftingPointer({ containerRef, transform: viewTransform, setTransform: setViewTransform, axis, entityShapes, references, grips });
   const workPlane = useMemo(() => viewWorkPlane(view, plane ?? null, levels), [view, plane, levels]);
   const bim = useModelCommandBridge({ view, plane: workPlane, transform: viewTransform, axis, containerRef });
+  const { showHidden, setShowHidden, pickingLine, setPickingLine, ghosts, hideLineAt, showElement, showLineEntry } = useHiddenElementsUi({ view, drawing, shown, graphics, models, containerRef, transform: viewTransform, axis });
   // A running BIM tool takes the left button; panning, zoom and the cursor stay the drafting view's.
   const pointer = {
     ...handlers,
     onPointerDown: (e: React.PointerEvent) => {
+      if (pickingLine && e.button === 0) {
+        hideLineAt(e);
+        return;
+      }
       if (e.button === 0 && bim.feed('down', e)) capturePointer(e.currentTarget as HTMLElement, e.pointerId);
       else handlers.onPointerDown(e);
     },
@@ -272,7 +283,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
 
   const exportDxf = () => exportViewDxf({
     view, drawing: shown, axis, drafts: entities, layers, extraPatterns, symbols: liveSymbols,
-    overlays: [...(plane ? planOverlays(view, plane, phaseMeshes(runtimeGeometry?.meshes, phases), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens) : []), ...membraneOverlays(shown)],
+    overlays: [...(plane ? planOverlays(view, plane, withoutHiddenElementMeshes(phaseMeshes(runtimeGeometry?.meshes, phases), graphics, renderIdGlobalId), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens) : []), ...membraneOverlays(shown)],
   });
 
   const command = runningCommand();
@@ -337,8 +348,9 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         ) : null}
         <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
+        {ghosts ? <HiddenGhostLayer ghosts={ghosts} transform={viewTransform} axis={axis} onShowElement={showElement} onShowLine={showLineEntry} /> : null}
         <ViewportState state={viewportState(entry, view.kind)} />
-        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} transform={viewTransform} axis={axis} />
+        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} graphics={graphics} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
         <GridLayer view={view} plane={plane ?? null} drawing={shown} transform={viewTransform} axis={axis} />
         </div>
@@ -363,6 +375,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           crop={view.detail}
           symbols={liveSymbols}
         />
+        <ElementGraphicsBar viewId={view.id} graphics={graphics} extraPatterns={extraPatterns} showHidden={showHidden} onShowHidden={setShowHidden} pickingLine={pickingLine} onPickLine={setPickingLine} />
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}

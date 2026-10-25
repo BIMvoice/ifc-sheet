@@ -19,7 +19,7 @@ import type { TitleBlockParam } from './title-block-params.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
 
-export type { CategoryGraphics, CategoryLineWeight, GridEnds, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
+export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
 export type { ProjectViewTemplate, TemplateGraphics, ViewTemplateKind } from './view-templates.js';
 export type { AxonometricPreset, CameraViewpoint, ProjectionMode, ThreeDProjection, ThreeDProjectView, ViewRaster } from './view-3d-types.js';
 export type { CustomPaper, ElongatedPaper, Paper, SheetFrame, SheetTemplate, TemplateSeries, TitleBlockPosition } from './sheet-types.js';

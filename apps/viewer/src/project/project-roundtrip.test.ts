@@ -68,6 +68,14 @@ const graphics: Required<ViewGraphics> = {
   presetId: 'structure', categories: { walls: category, doors: { visible: false } }, grid: { visible: false, ends: 'start' },
   phases: { show: ['existing', 'demolish'], styles: { demolish: { lineColor: '#ffcc00', lineWeight: 'heavy', dashed: false, fillColor: '#fff2a8' } } },
   colourScheme: { property: 'Pset_SpaceCommon.Category', target: 'elements', classes: ['IfcSpace', 'IfcWall'], colours: { office: '#aabbcc' }, palette: 'okabe-ito' },
+  // Single elements by GlobalId, including ones the model has not got (kept, #32 #33), and a hidden line.
+  hiddenElements: ['2O2Fr$t4X7Zf8NOew3FLOH', '0000000000000000000000'],
+  elements: {
+    '3cUkl32yn9qRSPvBJVyWYp': {
+      visible: true, lineColor: '#808080', fillColor: '#101010', cutWeight: 'heavy', projectionWeight: 'hairline', lineStyle: 'dashed', cutHatch: 'ANSI31', hatchScale: 1.5, about: 'IfcWall Basement wall',
+    },
+  },
+  hiddenLines: ['2O2Fr$t4X7Zf8NOew3FLOH|0,0,1500,0'],
 };
 
 const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'], templateId: 'vt-plans' };

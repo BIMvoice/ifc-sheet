@@ -22,7 +22,7 @@ import { findPattern } from '@/drafting/hatch/library';
 import { hatchSegments } from '@/drafting/hatch/fill';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { categoryOf, cutHatches, type StyledDrawing } from '@/project/view-graphics';
-import { phaseInk } from '@/project/phases';
+import { itemPen } from '@/project/item-pen';
 import { fillOrder, schemeColourOf } from '@/project/view-scheme-style';
 import { DEFAULT_GRAPHIC_STANDARD, type GraphicStandard } from '@/drafting/graphic-standard';
 import type { ViewGraphics } from '@/project/types';
@@ -87,9 +87,9 @@ export function viewportPens(
   const ink = (colour: string, entityId: number | undefined) => (entityId !== undefined && styleOf?.(entityId) === 'halftone' ? halftoneColor(colour) : colour);
 
   for (const polygon of fillOrder(drawing)) {
-    // A phase's fill, like its line, comes after the category's; a colour scheme's (#92) after the phase's.
-    const phase = 'phase' in polygon ? polygon.phase : undefined;
-    const fill = ink(schemeColourOf(polygon) ?? (phase ? phaseInk(graphics, phase).fill : polygon.color && style(polygon.ifcType)?.fillColor ? hex(polygon.color) : DEFAULT_FILL), polygon.entityId);
+    // An element's own graphics (#32) come last, over its phase's, a phase's fill, like its line, after the category's; a colour scheme's (#92) after those.
+    const pen = itemPen(graphics, polygon, standard.weights);
+    const fill = ink(schemeColourOf(polygon) ?? (pen?.fill ?? (polygon.color && style(polygon.ifcType)?.fillColor ? hex(polygon.color) : DEFAULT_FILL)), polygon.entityId);
     const d = [polygon.polygon.outer, ...polygon.polygon.holes].map(loop).join('');
     if (schemeColourOf(polygon)) add(`scheme:${fill}`, { stroke: null, width: 0, fill, layer: 'COLOUR', solid: true }, d);
     else add(`fill:${fill}`, { stroke: null, width: 0, fill, layer: 'FILL' }, d);
@@ -97,17 +97,17 @@ export function viewportPens(
   for (const line of drawing.lines) {
     const g = style(line.ifcType);
     const d = `M${pt(line.line.start)}L${pt(line.line.end)}`;
-    const phase = 'phase' in line && line.phase ? phaseInk(graphics, line.phase) : null;
-    const color = ink(phase?.color ?? g?.lineColor ?? '#000000', line.entityId);
+    const pen = itemPen(graphics, line, standard.weights);
+    const color = ink(pen?.color ?? g?.lineColor ?? '#000000', line.entityId);
     const who = subject(line.ifcType, line.entityId);
     if (line.visibility === 'hidden' || line.category === 'hidden') {
       add(`hidden:${color}${who.key}`, { stroke: color, width: base.hidden, fill: null, dash: '1.5 1', layer: 'HIDDEN', ...who.tags }, d);
       continue;
     }
     const cut = line.category === 'cut';
-    const weight = phase ? phase.weightMm * (cut ? 1 : 0.5) : g?.lineWeight ? standard.weights[g.lineWeight][cut ? 'cut' : 'projection'] : cut ? base.cut : line.category === 'silhouette' ? base.outline : base.seen;
-    // A dashed phase keeps its layer (CUT / SEEN) and gains the dash; the DXF reads the line type from it.
-    const dash = phase?.dash.length ? phase.dash.join(' ') : undefined;
+    const weight = pen?.mm ?? (g?.lineWeight ? standard.weights[g.lineWeight][cut ? 'cut' : 'projection'] : cut ? base.cut : line.category === 'silhouette' ? base.outline : base.seen);
+    // A dashed pen (a phase's, or an element's) keeps its layer (CUT / SEEN) and gains the dash; the DXF reads the line type from it.
+    const dash = pen?.dash?.length ? pen.dash.join(' ') : undefined;
     add(`${cut ? 'cut' : 'seen'}:${color}:${weight}:${dash ?? ''}${who.key}`, { stroke: color, width: weight, fill: null, layer: cut ? 'CUT' : 'SEEN', ...(dash ? { dash } : {}), ...who.tags }, d);
   }
   for (const h of cutHatches(drawing, graphics, standard.materialHatch)) {
