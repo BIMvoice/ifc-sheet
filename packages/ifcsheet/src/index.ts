@@ -37,6 +37,12 @@ export { READINESS_EN, describeReadiness, modelReadiness, type ModelFacts, type 
 // Names
 export { ENGINE_NAMES_EN, englishName, nameOf, setNameResolver, type EngineNameKey, type NameParams, type NameResolver } from './names.js';
 
+// The title block's layout, parameters and printing
+export { printTitleBlock, sheetFields, sheetLookup } from './title-block-print.js';
+export { BUILTIN_PARAMS, FIELD_PARAMS, fieldBuiltins, paramLookup, resolveParamText, SOFT_BUILTINS, TOKEN, type BuiltinParam, type TitleBlockParam } from './title-block-params.js';
+export { fitText, ITEM_KINDS, TEXT_FIT_MIN, type TemplateItem, type TemplateLine, type TemplateLogo, type TemplateRect, type TemplateText, type TitleBlockTemplate } from './title-block-template.js';
+export { textWidthEm, truncateToWidth } from './text-width.js';
+
 // Pure layout
 export { freshProjectId } from './ids.js';
 export { CUSTOM_MM, ELONGATED_MM, ELONGATED_PAPERS, ISO_PAPERS, PAPER_MM, isCustom, isElongated, paperFromLabel, paperLabel, paperMm, readPaper } from './paper.js';

@@ -13,9 +13,7 @@
  */
 
 import { resolve } from '@/i18n/registry';
-import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
 import { setSymbolLibrary } from '@/drafting/symbols';
-import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
@@ -26,7 +24,7 @@ import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { findTemplate, templateFields } from './sheet-templates';
 import { nextDetailNumber } from './detail';
-import { upgradeTagAllTypes } from '@/tagall/types';
+import { DEFAULT_DRAFT_LAYER, DOCUMENT_FIELDS, emptyDocument, loadedFields } from './fields';
 import { liftTypedRevisions, sheetRevisions } from './revisions';
 import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
@@ -44,14 +42,10 @@ export interface ProjectState extends ProjectDocument {
   dirty: boolean;
 }
 
-export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visible: true, locked: false } as const;
+export { DEFAULT_DRAFT_LAYER };
 
-export const EMPTY_PROJECT: ProjectDocument = {
-  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, revisions: [], titleBlockParams: undefined, titleBlockTemplate: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
-  textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
-  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
-  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined, siteArea: undefined, urbanSettings: undefined, includeFarElements: undefined,
-};
+/** A new project. Built from the field registry (`fields/index.ts`), which says what each field holds in one. */
+export const EMPTY_PROJECT: ProjectDocument = emptyDocument();
 
 export const useProjectStore = create<ProjectState>()(() => ({
   ...EMPTY_PROJECT,
@@ -65,56 +59,21 @@ useProjectStore.subscribe((s, previous) => {
   if (s.symbols !== previous.symbols) setSymbolLibrary(s.symbols);
 });
 
-/** Every field of the project document, once: a field added to `ProjectDocument` and not listed here does not compile. */
-const DOCUMENT_FIELDS = {
-  name: true, models: true, views: true, sheets: true, titleBlock: true, drafts: true, draftLayers: true, hatchPatterns: true,
-  symbolFlips: true, openingLines: true, textStyles: true, dimStyles: true, layerGroups: true, joineryTypes: true, currentJoinery: true,
-  schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
-  typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
-  modelState: true,
-  cadLayers: true,
-  details: true,
-  tagFields: true,
-  sheetTemplates: true,
-  seriesTemplates: true,
-  titleBlockSources: true,
-  titleBlockParams: true,
-  titleBlockTemplate: true,
-  sheetNumbering: true,
-  phaseSource: true,
-  graphicStandard: true,
-  comments: true,
-  revisions: true,
-  siteArea: true,
-  urbanSettings: true,
-  includeFarElements: true,
-} as const satisfies Record<keyof ProjectDocument, true>;
-
 /**
  * The fields the project file, the autosave and the change detection all go by: `projectDocument` builds the
  * document from them and `autosave-watch.ts` saves when any of them changes, so the two cannot name different fields.
+ * Listed once, in file order, in `fields/index.ts`: a field added to `ProjectDocument` and not listed there does not compile.
  */
-export const PROJECT_DOCUMENT_KEYS = Object.keys(DOCUMENT_FIELDS) as (keyof ProjectDocument)[];
+export const PROJECT_DOCUMENT_KEYS = DOCUMENT_FIELDS.map((field) => field.key);
 
-/** What a field holds when the store has none (an older file, a project not yet touched). */
-const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[K] } = {
-  titleBlock: () => ({}), hatchPatterns: () => '', symbolFlips: () => ({}), openingLines: () => 'handle',
-  textStyles: () => [], dimStyles: () => [], layerGroups: () => [], joineryTypes: () => [], currentJoinery: () => ({}),
-  schedules: () => [], joineryMapping: () => ({ ...DEFAULT_JOINERY_MAPPING }), elementTypes: () => [], currentTypes: () => ({}),
-  structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], savedSectionCuts: () => [],
-  annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [],
-  cadLayers: () => [],
-  details: () => [],
-  sheetTemplates: () => [], seriesTemplates: () => ({}),
-  comments: () => [],
-  revisions: () => [],
-};
+/** What a field holds when the store has none (an older file, a project not yet touched): each field's `fallback`. */
+const DOCUMENT_DEFAULTS = new Map(DOCUMENT_FIELDS.flatMap((field) => (field.fallback ? [[field.key, field.fallback] as const] : [])));
 
 /** The persisted part of the store. */
 export function projectDocument(state: ProjectState = useProjectStore.getState()): ProjectDocument {
   const doc: Record<string, unknown> = {};
   for (const key of PROJECT_DOCUMENT_KEYS) {
-    const value = state[key] ?? DOCUMENT_DEFAULTS[key]?.();
+    const value = state[key] ?? DOCUMENT_DEFAULTS.get(key)?.();
     if (value !== undefined) doc[key] = value;
   }
   return doc as unknown as ProjectDocument;
@@ -135,44 +94,9 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
   resetWallView();
   useProjectStore.setState({
     ...doc,
-    symbolFlips: doc.symbolFlips ?? {},
-    openingLines: doc.openingLines ?? 'handle',
-    textStyles: doc.textStyles?.length ? doc.textStyles : [{ ...DEFAULT_TEXT_STYLE }],
-    dimStyles: doc.dimStyles?.length ? doc.dimStyles : [{ ...DEFAULT_DIM_STYLE }],
-    layerGroups: doc.layerGroups ?? [],
-    joineryTypes: doc.joineryTypes ?? [],
-    currentJoinery: doc.currentJoinery ?? {},
-    joineryMapping: doc.joineryMapping ?? { ...DEFAULT_JOINERY_MAPPING },
-    elementTypes: doc.elementTypes ?? [],
-    currentTypes: doc.currentTypes ?? {},
-    schedules: doc.schedules ?? [],
-    structureProfiles: doc.structureProfiles ?? [],
-    civilDrawings: doc.civilDrawings ?? [],
-    typicalSections: doc.typicalSections ?? [],
-    materials: doc.materials ?? [],
-    cadLayers: doc.cadLayers ?? [],
-    savedSectionCuts: doc.savedSectionCuts ?? [],
-    sheetTemplates: doc.sheetTemplates ?? [],
-    seriesTemplates: doc.seriesTemplates ?? {},
-    phaseSource: doc.phaseSource,
-    // A project made before the room label read the tag name takes the new template (`tagall/types.ts`).
-    annotationTypes: upgradeTagAllTypes(doc.annotationTypes ?? []),
-    symbols: doc.symbols ?? [],
-    legends: doc.legends ?? [],
-    details: doc.details ?? [],
-    issues: doc.issues ?? [],
-    tagFields: doc.tagFields,
-    sheetNumbering: doc.sheetNumbering,
-    comments: doc.comments ?? [],
-    revisions: doc.revisions ?? [],
-    modelState: doc.modelState,
-    titleBlockSources: doc.titleBlockSources,
-    titleBlockParams: doc.titleBlockParams,
-    titleBlockTemplate: doc.titleBlockTemplate,
+    // Each field's own load step (`fields/index.ts`): its default when the file has none, and any lift of an older form.
+    ...loadedFields(doc),
     graphicStandard: standard.id,
-    siteArea: doc.siteArea,
-    urbanSettings: doc.urbanSettings,
-    includeFarElements: doc.includeFarElements === true ? true : undefined,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
     views: [...syncDefaultViews(doc.views, levels)],
     activeItemId: null,

@@ -73,7 +73,7 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
     for (const t of sheet.texts) {
       // jsPDF sizes text in points.
       doc.setFontSize((t.size / 25.4) * 72);
-      doc.text(t.text, t.at.x, t.at.y, { align: t.align ?? 'left' });
+      doc.text(t.text, t.at.x, t.at.y, { align: t.align ?? 'left', ...(t.angle ? { angle: t.angle } : {}) });
     }
     doc.outline.add(null, `${sheet.number} ${sheet.name}`, { pageNumber: i + 1 });
   });

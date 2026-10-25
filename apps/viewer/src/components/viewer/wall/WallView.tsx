@@ -33,7 +33,9 @@ export function WallView() {
   const models = useViewerStore((s) => s.models);
   const legacy = useViewerStore((s) => s.geometryResult);
   const { geometryResult } = useDrawingRuntime();
-  const meshes = geometryResult?.meshes ?? null;
+  // The geometry arrives in batches: the starting set is laid out from the whole model, never from its first batch (#313).
+  const streaming = useViewerStore((s) => s.geometryStreamingActive);
+  const meshes = streaming ? null : geometryResult?.meshes ?? null;
   const sheets = useProjectStore((s) => s.sheets);
   const views = useProjectStore((s) => s.views);
   const levels = useProjectStore((s) => s.levels);

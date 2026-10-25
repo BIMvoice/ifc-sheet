@@ -43,6 +43,11 @@ export function customiseTitleBlock(standard: TitleBlockTemplate): void {
   if (!current()) write({ items: standard.items.map((i) => ({ ...i })) });
 }
 
+/** The Romanian layout (`title-block-ro.ts`) becomes the project's own, in place of whatever layout it printed: one undo step. */
+export function applyRomanianTitleBlock(romanian: TitleBlockTemplate): void {
+  write({ items: romanian.items.map((i) => ({ ...i })) });
+}
+
 /** Back to the standard layout. */
 export function resetTitleBlockTemplate(): void {
   write(undefined);
