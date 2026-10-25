@@ -7,6 +7,8 @@
 
 /** One sheet as it stood when a set was issued. */
 export interface IssuedSheet {
+  /** The sheet's id, so a later issue follows it through a renumbering. Absent in records from before it was kept. */
+  sheetId?: string;
   number: string;
   title: string;
   /** The scales of its viewports, as drawn on the list: `1:50`, or `1:50, 1:100`; empty when it holds none. */
@@ -27,4 +29,21 @@ export interface ProjectIssue {
   date: string;
   createdAt: number;
   sheets: IssuedSheet[];
+  /** What differed from the issue before it, as it was when this one went out. Absent for a first issue and when that issue could not be compared. */
+  changes?: IssueChangeRecord;
+}
+
+/** A sheet named in a change list. */
+export interface ChangedSheet {
+  number: string;
+  title: string;
+}
+
+/** What `ProjectIssue.changes` keeps (`issue/changes.ts`). */
+export interface IssueChangeRecord {
+  /** The issue compared against. */
+  against: { id: string; name: string };
+  added: ChangedSheet[];
+  removed: ChangedSheet[];
+  changed: ChangedSheet[];
 }

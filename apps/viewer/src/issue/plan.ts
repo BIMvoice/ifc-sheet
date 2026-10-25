@@ -12,6 +12,7 @@ import type { TranslationKey } from '@/i18n';
 import { paperLabel } from '@/project/paper';
 import type { IssuedSheet, ProjectIssue, ProjectSheet } from '@/project/types';
 import { holdsRegister, registerRow, sheetScaleText, type RegisterInput, type RegisterRow } from '@/project/drawing-register';
+import { changeRecord, issueChanges, type IssueChanges } from './changes';
 import { sheetFingerprint, type FingerprintSources } from '@/project/sheet-fingerprint';
 
 export interface IssueReason {
@@ -34,6 +35,20 @@ export interface IssuePlan extends IssueInput {
   sheets: { sheet: ProjectSheet; row: IssuedSheet; /** The same sheet's line in the drawing register (`project/drawing-register.ts`). */ register: RegisterRow }[];
   /** Sheets that do not go out, with the reason. */
   leftOut: { number: string; title: string; reason: IssueReason }[];
+  /** What differs from the previous issue (`changes.ts`). */
+  changes: IssueChanges;
+}
+
+/** Today as `YYYY-MM-DD` in the person's own time zone (an issue dated at 00:30 is dated that day, not yesterday's UTC). */
+export function todayText(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+/** `text` when it is a real `YYYY-MM-DD` date, else `fallback`. */
+export function validDate(text: string | undefined, fallback: string): string {
+  if (!text || !/^\d{4}-\d{2}-\d{2}$/.test(text)) return fallback;
+  const d = new Date(`${text}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== text ? fallback : text;
 }
 
 /** Sheet numbers in natural order: A-2 before A-10, case ignored, ties by id so the order is fixed. */
@@ -56,9 +71,9 @@ export function sheetIsEmpty(sheet: ProjectSheet, sources: FingerprintSources): 
  */
 export function planIssue(
   sheets: readonly ProjectSheet[], sources: FingerprintSources, input: IssueInput, projectTitleBlock?: Record<string, string>,
-  context: { issues?: RegisterInput['issues']; schedules?: RegisterInput['schedules'] } = {},
+  context: { issues?: readonly ProjectIssue[]; schedules?: RegisterInput['schedules'] } = {},
 ): IssuePlan {
-  const out: IssuePlan = { ...input, sheets: [], leftOut: [] };
+  const out: IssuePlan = { ...input, sheets: [], leftOut: [], changes: issueChanges([], undefined) };
   // The register opens the set, then the sheets by number.
   const first = (s: ProjectSheet) => (holdsRegister(s, context.schedules) ? 0 : 1);
   for (const sheet of [...sheets].sort((a, b) => first(a) - first(b) || bySheetNumber(a, b))) {
@@ -72,16 +87,18 @@ export function planIssue(
       register,
       row: {
         number: register.number, title: register.title, scale: register.scale, paper: paperLabel(sheet.paper ?? 'A1'), orientation: sheet.orientation ?? 'landscape',
-        revision: register.revision, fingerprint: sheetFingerprint(sheet, sources),
+        revision: register.revision, fingerprint: sheetFingerprint(sheet, sources), sheetId: sheet.id,
       },
     });
   }
+  out.changes = issueChanges(out.sheets.map((s) => ({ ...s.row, sheetId: s.sheet.id })), context.issues?.at(-1));
   return out;
 }
 
 /** The record kept with the project. */
 export function issueRecord(plan: IssuePlan, id: string, createdAt: number): ProjectIssue {
-  return { id, name: plan.name, date: plan.date, createdAt, sheets: plan.sheets.map((s) => s.row) };
+  const changes = changeRecord(plan.changes);
+  return { id, name: plan.name, date: plan.date, createdAt, sheets: plan.sheets.map((s) => s.row), ...(changes ? { changes } : {}) };
 }
 
 /** The number in a default issue name (`Issue 3`, `Emitere 3`), read against the template of every language; null for a name typed by hand. */

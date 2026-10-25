@@ -16,6 +16,7 @@ import { faceRo } from '../catalogues/face.ro';
 import { sheetTablesRo } from '../catalogues/sheet-tables.ro';
 import { namesRo } from '../catalogues/names.ro';
 import { issueRo } from '../catalogues/issue.ro';
+import { issueChangesRo } from '../catalogues/issue-changes.ro';
 import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetsRo } from '../catalogues/sheets.ro';
 import { wallRo } from '../catalogues/wall.ro';
@@ -60,6 +61,7 @@ export default {
   ...sheetsRo,
   ...checkRo,
   ...issueRo,
+  ...issueChangesRo,
   ...whatChangedRo,
   ...sheetContentRo,
   ...namesRo,

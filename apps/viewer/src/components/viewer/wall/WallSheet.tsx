@@ -31,6 +31,8 @@ interface WallSheetProps {
   pinned?: boolean;
   /** Print only the clouds of the sheet's current revision (an issue's option). */
   currentCloudsOnly?: boolean;
+  /** The date an issue is dated: the title block prints it as the sheet's date (an issue's option). */
+  issueDate?: string;
   /** Take new drawings in a deferred render (the Wall's sheets; see `SheetContentOptions`). */
   deferDrawings?: boolean;
 }
@@ -44,7 +46,7 @@ function patternsOf(text: string): ReturnType<typeof parsePat>['patterns'] {
   return parsedPatterns.patterns;
 }
 
-export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function WallSheet({ sheet, width, selectedViewportId = null, sheetContent, pinned = true, currentCloudsOnly = false, deferDrawings = false }, ref) {
+export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function WallSheet({ sheet, width, selectedViewportId = null, sheetContent, pinned = true, currentCloudsOnly = false, issueDate, deferDrawings = false }, ref) {
   // What is drawn on the paper itself hangs with it.
   const drafts = useProjectStore((s) => s.drafts);
   const sheetDrafts = useMemo(() => (drafts.some((d) => d.viewId === sheet.id) ? draftsOfView(sheet.id, drafts) : NO_DRAFTS), [drafts, sheet.id]);
@@ -71,6 +73,7 @@ export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function Wall
         pxPerMm={pxPerMm}
         sheetDrafts={sheetDrafts}
         currentCloudsOnly={currentCloudsOnly}
+        issueDate={issueDate}
       />
       {/* Screen only: laid over the paper's SVG, never inside it, so no export reads it. */}
       {(sheet.viewports ?? []).map((vp) => {

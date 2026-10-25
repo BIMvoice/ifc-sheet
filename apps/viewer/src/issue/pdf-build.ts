@@ -14,7 +14,7 @@
 import type { jsPDF } from 'jspdf';
 import { paperOf } from '@/project/sheets';
 import type { IssuePlan } from './plan';
-import { paperText, type ListLabels } from './output';
+import { changeCell, listsChanges, paperText, type ListLabels } from './output';
 import { archival } from './pdf-archival';
 import { embedFonts, FALLBACK_FAMILY, FONT_FAMILY, missingGlyphs, useEmbeddedFont, type FontLoader } from './pdf-fonts';
 import { layerRuns, type LayerGroup, type LayerRef } from './pdf-layers';
@@ -57,9 +57,11 @@ export function layerName(layer: LayerRef, labels: Pick<PdfLabels, 'groups' | 'r
 }
 
 function listPage(doc: jsPDF, plan: IssuePlan, projectName: string, labels: PdfLabels, family: string): void {
-  const head = [labels.sheet, labels.sheetTitle, labels.scale, labels.paper, labels.revision];
-  const cols = [20, 60, 25, 35, 30];
-  const rows = plan.sheets.map(({ row }) => [row.number, row.title, row.scale, paperText(row, labels), row.revision]);
+  const change = listsChanges(plan, labels) ? labels.change : undefined;
+  const head = [labels.sheet, labels.sheetTitle, labels.scale, labels.paper, labels.revision, ...(change ? [change.change] : [])];
+  const cols = change ? [18, 50, 22, 30, 20, 30] : [20, 60, 25, 35, 30];
+  const rows = plan.sheets.map(({ row }) => [row.number, row.title, row.scale, paperText(row, labels), row.revision, ...(change ? [changeCell(plan, row.number, change)] : [])]);
+  if (change) for (const r of plan.changes.removed) rows.push([r.number, r.title, '', '', '', change.removed]);
   doc.setFont(family, 'bold');
   doc.setFontSize(18);
   doc.text(labels.title, 20, 28);
