@@ -23,6 +23,7 @@ import { wallKeysRo } from '../catalogues/wall-keys.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
 import { wallSectionsRo } from '../catalogues/wall-sections.ro';
 import { handoverRo } from '../catalogues/handover.ro';
+import { annotatedIfcRo } from '../catalogues/annotated-ifc.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
 import { featuresRo } from '../catalogues/features.ro';
@@ -51,6 +52,7 @@ export default {
   ...wallSectionsRo,
   ...scheduleExportRo,
   ...handoverRo,
+  ...annotatedIfcRo,
   ...sheetsRo,
   ...checkRo,
   ...issueRo,

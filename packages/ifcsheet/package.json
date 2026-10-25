@@ -64,6 +64,11 @@
       "types": "./dist/handover.d.ts",
       "import": "./dist/handover.js",
       "default": "./dist/handover.js"
+    },
+    "./annotated-ifc": {
+      "types": "./dist/annotated-ifc.d.ts",
+      "import": "./dist/annotated-ifc.js",
+      "default": "./dist/annotated-ifc.js"
     }
   },
   "scripts": {
@@ -76,6 +81,7 @@
     "@ifc-lite/create": "workspace:^",
     "@ifc-lite/data": "workspace:^",
     "@ifc-lite/drawing-2d": "workspace:^",
+    "@ifc-lite/export": "workspace:^",
     "@ifc-lite/geometry": "workspace:^",
     "@ifc-lite/mutations": "workspace:^",
     "@ifc-lite/parser": "workspace:^",
