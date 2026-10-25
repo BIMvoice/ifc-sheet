@@ -9,7 +9,7 @@
  * the session and one session never sees another's handles.
  */
 
-import type { BoqArticle, DefaultSet, ProjectDocument } from '@bimvoice/ifcsheet';
+import type { BoqArticle, DefaultSet, ListScheduleDef, ProjectDocument } from '@bimvoice/ifcsheet';
 import type { OpenedModel } from '@bimvoice/ifcsheet/headless';
 import type { ModelRegistry, ToolContext } from '../context.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
@@ -30,11 +30,14 @@ export interface SheetModelEntry {
 /** A schedule on its own sheet. Its rows are read from the model when the set is drawn, so it is never stale. */
 export interface SetSchedule {
   id: string;
-  kind: 'rooms' | 'boq';
+  kind: 'rooms' | 'boq' | 'list';
   sheetId: string;
   locale: string;
   /** The project's articles, for a bill of quantities (read from the project file the tool was given). */
   boqArticles?: readonly BoqArticle[];
+  /** A table built from the Lists engine (#78): the definition (the elements, the columns, the grouping and the totals) and the schedule's name. */
+  list?: ListScheduleDef;
+  name?: string;
 }
 
 /** The session's copy of one drawing set. `set` is replaced by every tool that edits it (the document is never mutated in place). */

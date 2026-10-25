@@ -14,6 +14,8 @@
       "@bimvoice/ifcsheet/readiness-read": ["../../packages/ifcsheet/src/readiness-read"],
       "@bimvoice/ifcsheet/project": ["../../packages/ifcsheet/src/project"],
       "@bimvoice/ifcsheet/headless": ["../../packages/ifcsheet/src/headless"],
+      "@bimvoice/ifcsheet/list-projection": ["../../packages/ifcsheet/src/list-projection"],
+      "@bimvoice/ifcsheet/list-words": ["../../packages/ifcsheet/src/list-words"],
       "@bimvoice/ifcsheet": ["../../packages/ifcsheet/src"],
       "@ifc-lite/parser": ["../../packages/parser/src"],
       "@ifc-lite/parser/browser": ["../../packages/parser/src/browser"],

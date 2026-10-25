@@ -19,75 +19,16 @@
  * spreadsheet's regional setting: a number format in the file cannot carry one.
  */
 
-import { escapeCsvCell } from '@ifc-lite/export';
-import { decimalMarkOf, decimalsOf, groupingOff, type NumberKind, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { decimalsOf, groupingOff, type NumberKind, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { csvDelimiter, exportCsv, type ExportCell, type ExportTable, type ScheduleExport } from '@bimvoice/ifcsheet';
 import type ExcelJS from 'exceljs';
 import { neutralizeSpreadsheetFormula } from '@/lib/lists/export/model';
 import { sanitizeFilename } from '@/lib/export/download';
 
+export { csvDelimiter, exportCsv, type ExportCell, type ExportTable, type ScheduleExport };
+
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const CSV_MIME = 'text/csv;charset=utf-8';
-
-/** A cell: text, a figure, or empty. */
-export type ExportCell = string | number | null;
-
-export interface ExportTable {
-  /** The worksheet's name (XLSX), cut to Excel's 31 characters. */
-  name: string;
-  /** The column headings; empty for a table that carries its own heading rows (the urban indicators). */
-  header: readonly string[];
-  /** The rows as the sheet prints them: same order, same rows, figures unformatted. An empty row is a gap. */
-  rows: readonly (readonly ExportCell[])[];
-  /** Rows set in bold (totals, a heading row inside the table), by index in `rows`. */
-  bold?: readonly number[];
-  /** Columns that hold figures (right-aligned in XLSX). */
-  numeric?: readonly number[];
-  /** What a figure column measures, by column index: the XLSX gives its cells the project's decimals for that kind (#88). */
-  kinds?: Readonly<Record<number, NumberKind>>;
-  /** Lines the sheet prints under the table (notes, rules), one cell each. */
-  notes?: readonly string[];
-  /** Rows the file adds that the sheet does not print (a total row), after `rows`. */
-  footer?: readonly (readonly ExportCell[])[];
-  /** Part of the workbook only: not in the CSV (the Elements sheet of a joinery schedule). */
-  workbookOnly?: boolean;
-}
-
-export interface ScheduleExport {
-  /** The schedule's title, the bold first row of every worksheet. */
-  title: string;
-  tables: readonly ExportTable[];
-}
-
-const BOM = '﻿';
-
-/**
- * The delimiter a spreadsheet in `locale` splits a double-clicked .csv on: Excel takes the system's list separator, which is `;`
- * wherever the decimal mark is a comma (Romanian, German, French ...) and `,` elsewhere. The figures stay `.`-decimal either way.
- */
-export function csvDelimiter(locale: SheetLocale): ',' | ';' {
-  // The project's separator (#88) decides it like the language does: a comma project opens in a spreadsheet that wants `;`.
-  return decimalMarkOf(locale) === ',' ? ';' : ',';
-}
-
-/** One CSV cell: text is guarded (a number-shaped identifier like `-007` too), a figure is written as is. */
-function csvCell(v: ExportCell, delimiter: string): string {
-  if (v === null) return '';
-  if (typeof v === 'number') return Number.isFinite(v) ? escapeCsvCell(String(v), { delimiter, exemptNumbers: true }) : '';
-  return escapeCsvCell(v, { delimiter, exemptNumbers: false });
-}
-
-/** The CSV of the schedule: the tables that are not workbook-only, a blank line between them, the notes under each. */
-export function exportCsv(data: ScheduleExport, options: { delimiter?: string } = {}): string {
-  const delimiter = options.delimiter ?? ',';
-  const line = (cells: readonly ExportCell[]) => cells.map((c) => csvCell(c, delimiter)).join(delimiter);
-  const blocks = data.tables.filter((t) => !t.workbookOnly).map((t) => [
-    ...(t.header.length ? [line(t.header)] : []),
-    ...t.rows.map(line),
-    ...(t.footer ?? []).map(line),
-    ...(t.notes ?? []).map((n) => line([n])),
-  ].join('\r\n'));
-  return `${BOM}${blocks.join('\r\n\r\n')}\r\n`;
-}
 
 const guarded = (v: ExportCell): ExportCell => (typeof v === 'string' ? neutralizeSpreadsheetFormula(v) : v);
 
