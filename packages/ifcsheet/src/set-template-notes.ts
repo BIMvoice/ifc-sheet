@@ -16,7 +16,8 @@ export type TemplateNoteKey =
   | 'setTemplate.note.defaulted'
   | 'setTemplate.note.unplaced'
   | 'setTemplate.note.rescaled'
-  | 'setTemplate.note.schedule';
+  | 'setTemplate.note.schedule'
+  | 'setTemplate.note.carried';
 
 export interface TemplateNote {
   key: TemplateNoteKey;
@@ -31,6 +32,7 @@ export const SET_TEMPLATE_EN: Record<TemplateNoteKey, string> = {
   'setTemplate.note.defaulted': 'Not in the template, laid out the way the automatic set does, on the paper and at the scale of the last {series} sheet of the template: {names}.',
   'setTemplate.note.unplaced': 'The template has no {series} sheet, so these were left off the sheets: {names}.',
   'setTemplate.note.rescaled': '{sheet} is drawn at 1:{used}, not the template\'s 1:{wanted}: its drawings do not fit the paper at that scale.',
+  'setTemplate.note.carried': 'The template\'s {what} could not be read and was not applied.',
   'setTemplate.note.schedule': 'The template carries the {kind} schedule "{name}". It is added in the app, not by the command line.',
 };
 

@@ -122,6 +122,7 @@ import { sheetsEn } from './catalogues/sheets.en';
 import { titleBlockSourcesEn } from './catalogues/title-block-sources.en';
 import { titleBlockRoEn } from './catalogues/title-block-ro.en';
 import { draftSetEn } from './catalogues/draft-set.en';
+import { setTemplateEn } from './catalogues/set-template.en';
 import { issueEn } from './catalogues/issue.en';
 import { revisionsEn } from './catalogues/revisions.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
@@ -209,6 +210,7 @@ export const en = {
   ...titleBlockSourcesEn,
   ...titleBlockRoEn,
   ...draftSetEn,
+  ...setTemplateEn,
   ...issueEn,
   ...revisionsEn,
   ...annotateAllEn,
