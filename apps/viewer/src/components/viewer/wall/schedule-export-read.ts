@@ -31,6 +31,8 @@ import { collectUrbanAreas } from '@/urban/urban-models';
 import type { SiteAreaChoice } from '@/urban/site-area';
 import type { ScheduleExport } from '@/joinery/schedule-export';
 import { urbanResultOf } from '../urban/useUrban';
+import { boqPropertyNames, boqTable, computeBoq, type BoqSay } from '@bimvoice/ifcsheet';
+import { collectBoqElements } from '@/boq/boq-models';
 
 /** The words of every kind's table, in the user's language; the schedule's name is written over them. */
 export interface ExportLabelSet {
@@ -42,6 +44,8 @@ export interface ExportLabelSet {
   urban: (title: string, areas: UrbanAreas, site: SiteAreaChoice) => UrbanLabels;
   /** The register's "as indicated" scale. */
   asIndicated: string;
+  /** The bill of quantities' words. */
+  boq: BoqSay;
 }
 
 export async function readScheduleExport(schedule: ProjectSchedule, labels: ExportLabelSet): Promise<ScheduleExport | null> {
@@ -58,6 +62,13 @@ export async function readScheduleExport(schedule: ProjectSchedule, labels: Expo
     case 'types': {
       const data = typeQuantities(collectTypeElements());
       return data.rows.length ? { title, tables: [typeQuantityTable(data, { ...labels.types, title })] } : null;
+    }
+    case 'boq': {
+      // The mapping table is the project's; the sum is the engine's, over the models as the session holds them.
+      const articles = useProjectStore.getState().boqArticles ?? [];
+      if (articles.length === 0) return null;
+      const result = computeBoq(collectBoqElements(new Set(boqPropertyNames(articles))), articles);
+      return { title, tables: [boqTable(result, labels.boq, { title, detail: schedule.detail === true })] };
     }
     case 'register': {
       const p = useProjectStore.getState();

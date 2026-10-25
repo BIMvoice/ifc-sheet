@@ -62,13 +62,13 @@ export function readSubReport(raw: unknown): SubReport | undefined {
 }
 
 /** The kinds of schedule a project holds. Only the joinery ones (`door`, `window`, `all`) can be split. */
-export type ScheduleListKind = 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register' | 'urban';
+export type ScheduleListKind = 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register' | 'urban' | 'boq';
 
 /** A schedule as the project saves it: a project document of its own, placeable on sheets. */
 export interface ProjectSchedule {
   id: string;
   name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, the set's own sheets (the drawing register, derived from the sheets on every draw), or the permit's areas and urban indicators. */
+  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, the set's own sheets (the drawing register, derived from the sheets on every draw), the permit's areas and urban indicators, or the bill of quantities (the articles are the project's `boqArticles`). */
   kind: ScheduleListKind;
   createdAt: number;
   /** Scale of its drawings (50 = 1:50). */
@@ -81,6 +81,8 @@ export interface ProjectSchedule {
   keptApart?: string[];
   /** What a joinery schedule shows and how (#186): its rows and their order, how its types are sorted and numbered. A sub-report prints its parent's (`contentOf`). Absent: the schedule as it always was. Joinery kinds only. */
   content?: ScheduleContent;
+  /** A bill of quantities (#75) prints a row per type under each article. Absent: the articles alone. `boq` only. */
+  detail?: boolean;
 }
 
 /** Whether a schedule can be split: a joinery list that is not itself a part (parts do not nest: a part is cut from the model's rows). */
@@ -98,7 +100,7 @@ export function readSchedule(raw: unknown): ProjectSchedule | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   if (typeof o.id !== 'string') return null;
-  const kind: ScheduleListKind = o.kind === 'door' || o.kind === 'window' || o.kind === 'materials' || o.kind === 'types' || o.kind === 'finishes' || o.kind === 'register' || o.kind === 'urban' ? o.kind : 'all';
+  const kind: ScheduleListKind = o.kind === 'door' || o.kind === 'window' || o.kind === 'materials' || o.kind === 'types' || o.kind === 'finishes' || o.kind === 'register' || o.kind === 'urban' || o.kind === 'boq' ? o.kind : 'all';
   const out: ProjectSchedule = { id: o.id, name: typeof o.name === 'string' && o.name ? o.name : 'Schedule', kind, createdAt: typeof o.createdAt === 'number' ? o.createdAt : 0 };
   if (typeof o.scale === 'number' && o.scale > 0) out.scale = o.scale;
   // A project saved before sub-reports has no `sub`: it stays an ordinary schedule. Only a joinery list can be split.
@@ -113,6 +115,8 @@ export function readSchedule(raw: unknown): ProjectSchedule | null {
   // What the user kept apart on purpose (#186) belongs to a schedule that can be split; a project saved before it has none.
   const keptApart = readKeptApart(o.keptApart);
   if (keptApart && !out.sub && (kind === 'door' || kind === 'window' || kind === 'all')) out.keptApart = keptApart;
+  // The rows per type of a bill of quantities (#75).
+  if (kind === 'boq' && o.detail === true) out.detail = true;
   return out;
 }
 

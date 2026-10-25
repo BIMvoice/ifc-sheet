@@ -199,6 +199,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
               <button type="button" className={action} onClick={() => go(addScheduleToSet('types', t('typeQty.newName')))}>{t('wall.project.addTypeQuantities')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('finishes', t('finishes.newName')))}>{t('wall.project.addFinishes')}</button>
               <button type="button" className={action} onClick={() => go(addScheduleToSet('urban', t('urban.newName')))}>{t('urban.add')}</button>
+              <button type="button" className={action} onClick={() => go(addScheduleToSet('boq', t('boq.newName')))}>{t('wall.project.addBoq')}</button>
               <SiteAreaField
                 modelSiteArea={siteFromModel}
                 className="mt-1 flex w-full items-center justify-between gap-2 text-xs text-sky-200"

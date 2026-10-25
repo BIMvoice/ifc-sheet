@@ -16,6 +16,7 @@ import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { DraftLayer } from '@/drafting/types';
 import { readCadLayerRule } from '@/project/cad-layers-file';
 import type { CadLayerRule } from '@/project/cad-layers';
+import { readBoqArticle, type BoqArticle } from '@bimvoice/ifcsheet';
 import { readMaterial } from '@/project/project-file';
 import { readStandards } from '@/project/standards-file';
 import { readTemplate } from '@/project/sheet-templates';
@@ -32,7 +33,7 @@ export const CATALOGUE_FILE_FORMAT = 'bvlib';
 export const CATALOGUE_FILE_VERSION = 1;
 
 /** The kinds of definition a catalogue carries, in the order the dialog lists them. */
-export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details', 'sheetTemplates'] as const;
+export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details', 'sheetTemplates', 'boqArticles'] as const;
 export type CatalogueKind = (typeof CATALOGUE_KINDS)[number];
 
 export interface Catalogue {
@@ -57,6 +58,8 @@ export interface Catalogue {
   details: LibraryDetail[];
   /** The project's own sheet templates (the built-in ones are in every project). */
   sheetTemplates: SheetTemplate[];
+  /** The bill of quantities' mapping table: the office's own articles (code, description, unit, what they pick and the formula). IfcSheet ships none (#75). */
+  boqArticles: BoqArticle[];
 }
 
 export interface CatalogueFile extends Catalogue {
@@ -67,7 +70,7 @@ export interface CatalogueFile extends Catalogue {
 }
 
 export const emptyCatalogue = (): Catalogue => ({
-  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], cadLayers: [], details: [], sheetTemplates: [],
+  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], cadLayers: [], details: [], sheetTemplates: [], boqArticles: [],
 });
 
 /** `catalogue` cut down to the chosen kinds (layer groups travel with their layers, text styles with the dimension styles that need them). */
@@ -85,6 +88,7 @@ export function selectKinds(catalogue: Catalogue, kinds: ReadonlySet<CatalogueKi
   if (kinds.has('tagFields') && catalogue.tagFields) out.tagFields = catalogue.tagFields;
   if (kinds.has('details')) out.details = catalogue.details;
   if (kinds.has('sheetTemplates')) out.sheetTemplates = catalogue.sheetTemplates;
+  if (kinds.has('boqArticles')) out.boqArticles = catalogue.boqArticles;
   return out;
 }
 
@@ -140,6 +144,7 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
       ...readTagFieldsEntry(file),
       details: readList(file, 'details', (v, p) => readLibraryDetail(v, p, WHAT), WHAT),
       sheetTemplates: readList(file, 'sheetTemplates', (v, p) => readTemplate(v) ?? fail(p, 'must be a sheet template { id, name, paper }', WHAT), WHAT),
+      boqArticles: readList(file, 'boqArticles', (v, p) => readBoqArticle(v) ?? fail(p, 'must be a bill of quantities article { id, code }', WHAT), WHAT),
       ...(file.graphicStandard === undefined ? {} : { graphicStandard: knownStandard(file.graphicStandard) }),
     },
   };

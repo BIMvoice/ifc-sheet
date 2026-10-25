@@ -41,6 +41,7 @@ import { annotateAllRo } from '../catalogues/annotate-all.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
 import { sheetTemplatesRo } from '../catalogues/sheet-templates.ro';
+import { boqRo } from '../catalogues/boq.ro';
 
 export default {
   ...wallRo,
@@ -73,4 +74,5 @@ export default {
   ...draftingRo,
   ...keyboardShortcutsRo,
   ...sheetTemplatesRo,
+  ...boqRo,
 } satisfies Catalogue;

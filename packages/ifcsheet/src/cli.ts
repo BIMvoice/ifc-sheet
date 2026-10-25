@@ -15,6 +15,7 @@ import { parseArgs } from 'node:util';
 import { generateDefaultSet } from './index.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, readinessWithProject, sheetGraphics, type ProjectFacts } from './headless.js';
 import { describeReadiness } from './readiness.js';
+import { boq } from './cli-boq.js';
 
 /** Where `run` writes its messages; defaults to the process streams. */
 export interface CliIo {
@@ -35,6 +36,7 @@ const USAGE = `ifcsheet: drawing sets from IFC models
 Usage:
   ifcsheet build <model.ifc> --out <set.pdf> [--dxf <dir>] [--name <project name>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
+  ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
 
 Commands:
   build   Lay out the starting drawing set of the model (a plan per level, the
@@ -45,6 +47,9 @@ Commands:
           weaker for it. Plain English, or JSON with --json. With --project, also what the
           saved project's split schedules get wrong: an element listed in more than one
           part, or in no part.
+  boq     The bill of quantities (antemasuratoare): the articles of the project file, each with its total
+          in its own unit, from the quantities the model declares (never zero for a missing one: the elements
+          that lack it are named). Text, CSV with --csv, JSON with --json; --detail adds a row per type.
 
 Options:
   --out <file>     The PDF to write (required for build).
@@ -174,6 +179,9 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         name: { type: 'string' },
         project: { type: 'string' },
         json: { type: 'boolean' },
+        csv: { type: 'boolean' },
+        detail: { type: 'boolean' },
+        locale: { type: 'string' },
         'include-far-elements': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
@@ -193,8 +201,24 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.ok;
   }
   const [command, ...rest] = positionals;
-  if (command !== 'build' && command !== 'check') {
+  if (command !== 'build' && command !== 'check' && command !== 'boq') {
     io.stderr(`ifcsheet: unknown command "${command}"\n\n${USAGE}`);
+    return EXIT.usage;
+  }
+  if (command === 'boq') {
+    if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values['include-far-elements'] || (values.csv && values.json)) {
+      io.stderr('ifcsheet boq takes one model, --project, --csv or --json, --detail and --locale: ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]\n');
+      return EXIT.usage;
+    }
+    try {
+      return await boq({ model: rest[0], project: values.project, csv: values.csv === true, json: values.json === true, detail: values.detail === true, locale: values.locale ?? 'en' }, io);
+    } catch (error) {
+      io.stderr(`ifcsheet: boq of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
+  if (values.csv || values.detail || values.locale !== undefined) {
+    io.stderr('ifcsheet: --csv, --detail and --locale are options of boq.\n');
     return EXIT.usage;
   }
   if (command === 'check') {

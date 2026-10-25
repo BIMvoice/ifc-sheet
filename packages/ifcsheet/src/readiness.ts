@@ -15,6 +15,7 @@
  * MCP tool say it in English with {@link describeReadiness}.
  */
 
+import type { BoqMissing } from './boq-compute.js';
 import { subReportParams, type SubReportCheck } from './sub-report-check.js';
 
 /** What the loaded models hold, counted once. "Elements" are the products that have geometry, rooms (IfcSpace) apart. */
@@ -38,7 +39,7 @@ export interface FarElementFact {
   distance: number;
 }
 
-export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements';
+export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'boqMissingQuantity';
 
 export interface ReadinessFinding {
   kind: ReadinessKind;
@@ -55,8 +56,9 @@ const finding = (kind: ReadinessKind, params: Record<string, number | string>): 
  * then rooms, then what the schedules read. An empty model (no element, no room) has nothing to report.
  * `subReports` are the checks of the schedules that are split into parts (`checkSubReports`): a duplicated or
  * missing element is said after the model's own findings, one pair of findings per split schedule.
+ * `boq` is what the bill of quantities could not state (`boqMissing`, #75): the elements missing a quantity an article takes, said last.
  */
-export function modelReadiness(f: ModelFacts, subReports: readonly SubReportCheck[] = []): ReadinessFinding[] {
+export function modelReadiness(f: ModelFacts, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing): ReadinessFinding[] {
   if (f.elements === 0 && f.spaces === 0 && f.storeys === 0) return [];
   const out: ReadinessFinding[] = [];
   if (f.storeys === 0) out.push(finding('noStoreys', {}));
@@ -72,6 +74,7 @@ export function modelReadiness(f: ModelFacts, subReports: readonly SubReportChec
     if (c.duplicates.length > 0) out.push(finding('subReportDuplicates', subReportParams(c.duplicates, c.parent.name)));
     if (c.gaps.length > 0) out.push(finding('subReportGaps', subReportParams(c.gaps, c.parent.name)));
   }
+  if (boq && boq.elements > 0) out.push(finding('boqMissingQuantity', { count: boq.elements, articles: boq.articles, list: boq.list }));
   return out;
 }
 
@@ -110,6 +113,8 @@ export const READINESS_EN = {
   'ready.subReportGaps': 'In "{schedule}", some elements are in no part. Types: {types}, elements: {count}: {list}.',
   'ready.farElements': '{count} elements lie up to {distance} from the building: {list}.',
   'ready.farElements.effect': 'Views are framed without them, so the scale and the paper suit the building. They stay in the model, the schedules and the quantities, and are drawn where they fall inside the frame. The project setting "include far-away elements in framing" (--include-far-elements on the command line) frames them again.',
+  'ready.boqMissingQuantity': '{count} elements lack a quantity that an article of the bill of quantities takes: {list}.',
+  'ready.boqMissingQuantity.effect': 'The bill of quantities leaves them out of those articles\' totals. They are not counted as zero: the articles\' quantities are short by what these elements hold.',
   'ready.subReportGaps.effect': 'The parts do not add up to the schedule: those doors and windows are on no sheet.',
 } as const;
 

@@ -34,6 +34,7 @@ import { layoutTypeQuantities, type TypeQuantityLabels } from '@/joinery/type-qu
 import { penTags } from '../sheets/dxf-tags';
 import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 import { useElementViews, type ViewRequest } from './useElementViews';
+import { useBoqSheetLayouts } from '../boq/useBoq';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
 
@@ -137,7 +138,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const schedules = useProjectStore((s) => s.schedules);
   const labels = useScheduleLabels(schedule?.name ?? '');
   const data = useMemo(() => {
-    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register' || schedule.kind === 'urban') return null;
+    if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register' || schedule.kind === 'urban' || schedule.kind === 'boq') return null;
     return scheduleDataOf(schedule, undefined, schedules ?? []);
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores; schedules: the text rows.
   }, [schedule?.kind, schedule?.sub, schedules, mutationVersion, models, catalogue, mapping]);
@@ -203,7 +204,8 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     });
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
-      if (!schedule || out.has(schedule.id)) continue;
+      // The bill of quantities lays itself out (`useBoqSheetLayouts`).
+      if (!schedule || out.has(schedule.id) || schedule.kind === 'boq') continue;
       const place = { continued, sheets, sheet, vp };
       // A schedule wraps to its viewport's box (the first sheet's, for every page) and shows its own page: a joinery list by bands, a column table by rows.
       const table = (has: boolean, layout: (paging: { maxHeight: number; page: number }) => ScheduleLayout): ScheduleLayout => {
@@ -236,7 +238,8 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
       if (layout?.fit && (vp.page ?? 0) === 0 && loaded.has(vp.viewId)) syncSchedulePages(vp.viewId, layout.pages ?? 1);
     }
   }, [layouts, loaded, sheet.viewports]);
-  return layouts;
+  const boq = useBoqSheetLayouts(sheet);
+  return useMemo(() => (boq.size > 0 ? new Map([...layouts, ...boq]) : layouts), [layouts, boq]);
 }
 
 function Prim({ p }: { p: SchedulePrim }) {

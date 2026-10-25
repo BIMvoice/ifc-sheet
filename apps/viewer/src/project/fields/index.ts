@@ -69,6 +69,7 @@ const DOCUMENT_FIELD_DEFS = [
   optionalField('urbanSettings'),
   // Off is stored as absent, so a project that never touched it saves exactly as before.
   defineField({ key: 'includeFarElements', empty: () => undefined, load: (v) => (v === true ? true : undefined) }),
+  listField('boqArticles'),
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];
