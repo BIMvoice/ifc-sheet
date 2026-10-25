@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { useState, useLayoutEffect, useCallback } from 'react';
+import { useState, useLayoutEffect, useCallback, useRef } from 'react';
 import { X, Sparkles, Info, Keyboard, ExternalLink, GraduationCap } from 'lucide-react';
 import { IconButton } from '@/components/ui/icon-button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -39,6 +39,11 @@ interface InfoDialogProps {
  */
 export function KeyboardShortcutsDialog({ open, onClose, initialTab }: InfoDialogProps) {
   const { t } = useTranslation();
+  // Radix hands focus back only to a `DialogTrigger`, and this dialog has none (it opens from a key, an event or a button elsewhere). Remember what had focus when it opened and return there on close (#299).
+  const opener = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (open) opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -55,6 +60,7 @@ export function KeyboardShortcutsDialog({ open, onClose, initialTab }: InfoDialo
           and warn about in dev. */}
       {/* A key being recorded in the keyboard settings (#166) may be Escape: that cancels the recording, not the dialog. */}
       <DialogContent hideCloseButton aria-describedby={undefined} className="max-w-md w-full gap-0 p-0 bg-card"
+        onCloseAutoFocus={() => { if (opener.current?.isConnected) opener.current.focus(); }}
         onEscapeKeyDown={(e) => { if (document.activeElement?.closest('[data-recording]')) e.preventDefault(); }}>
         {/* Header — the MCP CTA lives here, in line with the title, so
             it's a discoverable "what else can this do?" affordance
