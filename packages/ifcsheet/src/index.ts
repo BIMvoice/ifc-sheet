@@ -44,6 +44,13 @@ export {
   type ElementStyle, type OrphanElement,
 } from './element-graphics.js';
 
+// The style of every face and line of a view (#34): one styler and one pen table for the drafting view, the sheets and every export
+export {
+  DASH_MM, DEFAULT_FACE_FILL, DEFAULT_INK, DEFAULT_VIEW_PRESET, HIDDEN_DASH_MM, PEN_TABLE, elementProperties, presetRules, rulesReadProperties, viewOverrideRules, viewStyler,
+  type ItemStyle, type PenKind, type PenTable, type StyleItem, type ViewStyleInputs, type ViewStyler, type WeightPair,
+} from './view-style.js';
+export { penGroups, penOrder, type PenGroup, type PenLayer } from './drawing-pens.js';
+
 // What the model lacks (the counting, `readModelFacts`, is in `/headless` and `/readiness-read`: it loads the parser)
 export { READINESS_EN, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from './readiness.js';
 

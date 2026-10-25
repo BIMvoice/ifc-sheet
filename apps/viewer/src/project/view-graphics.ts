@@ -12,10 +12,10 @@
  * drawing and hatch regions.
  */
 
-import { BUILT_IN_PRESETS, ifcTypeCriterion, type Drawing2D, type DrawingLine, type DrawingPolygon, type GraphicOverrideRule } from '@ifc-lite/drawing-2d';
+import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2d';
 import type { Pt } from '@/drafting/types';
 import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
-import type { CategoryGraphics, CategoryLineWeight, PhaseId, ViewGraphics } from './types';
+import type { CategoryLineWeight, PhaseId, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
 import type { SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
 import { VIEW_CATEGORY_CLASSES, elementShown, hasElementGraphics, hiddenClassesOf, lineHidden, resolveElementGraphics, type ElementStyle } from '@bimvoice/ifcsheet';
@@ -26,8 +26,11 @@ import type { DraftShape } from '@/drafting/types';
 export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
   /** `elementStyle`: how the view draws THIS element (#32), the engine's `resolveElementGraphics`; absent for an element the view says nothing about. */
   lines: (DrawingLine & { phase?: PhaseId; elementStyle?: ElementStyle })[];
-  /** `schemeColour`: the fill a colour scheme (#92) gives the element, `#rrggbb`; it wins over the material's and the phase's. */
-  cutPolygons: (DrawingPolygon & { phase?: PhaseId; schemeColour?: string; elementStyle?: ElementStyle })[];
+  /**
+   * `schemeColour`: the fill a colour scheme (#92) gives the element, `#rrggbb`; it wins over the material's and the phase's.
+   * `materialFill`: the fill its building material gives the face (null: none), which the view's styler reads (`view-style.ts`, #34).
+   */
+  cutPolygons: (DrawingPolygon & { phase?: PhaseId; schemeColour?: string; elementStyle?: ElementStyle; materialFill?: string | null })[];
   /** The rooms a colour scheme fills (#92), drawn under everything else. */
   schemeFills?: (DrawingPolygon & { schemeColour: string })[];
   materialHatches?: (MaterialHatch & HatchSource)[];
@@ -58,9 +61,6 @@ function phased(drawing: StyledDrawing, phases: PhaseView): StyledDrawing {
   };
 }
 
-/** The Drawing panel's default preset (IFC material colours). */
-export const DEFAULT_VIEW_PRESET = 'preset-3d-colors';
-
 export interface ViewCategory {
   id: string;
   labelKey: string;
@@ -83,32 +83,8 @@ export function categoryOf(ifcType: string): string | null {
   return CATEGORY_OF.get(ifcType.toUpperCase()) ?? null;
 }
 
-function presetRules(graphics: ViewGraphics | undefined): GraphicOverrideRule[] {
-  const id = graphics?.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId;
-  return id ? BUILT_IN_PRESETS.find((p) => p.id === id)?.rules ?? [] : [];
-}
-
-/** The view's override rules: its preset's, then one rule per overridden category (winning). */
-export function viewOverrideRules(graphics: ViewGraphics | undefined): GraphicOverrideRule[] {
-  const rules = [...presetRules(graphics)];
-  for (const category of VIEW_CATEGORIES) {
-    const g: CategoryGraphics | undefined = graphics?.categories?.[category.id];
-    if (!g || (!g.lineColor && !g.fillColor && !g.lineWeight)) continue;
-    rules.push({
-      id: `view-category-${category.id}`,
-      name: category.id,
-      enabled: true,
-      priority: 100000,
-      criteria: ifcTypeCriterion([...category.classes]),
-      style: {
-        ...(g.lineColor ? { strokeColor: g.lineColor } : {}),
-        ...(g.fillColor ? { fillColor: g.fillColor } : {}),
-        ...(g.lineWeight ? { lineWeight: g.lineWeight } : {}),
-      },
-    });
-  }
-  return rules;
-}
+/** The view's override rules (its preset's, then one per restyled category) and the default preset: the engine's, which the one styler reads (#34). */
+export { DEFAULT_VIEW_PRESET, viewOverrideRules } from '@bimvoice/ifcsheet';
 
 /** Upper-case IFC classes of the categories the view hides (the engine's, `hiddenClassesOf`). */
 export const hiddenClasses: (graphics: ViewGraphics | undefined) => Set<string> = hiddenClassesOf;
@@ -162,7 +138,7 @@ function styledByGraphics(
       ...drawing,
       cutPolygons: drawing.cutPolygons.filter((p) => !materials.hidePolygons.has(p)).map((p) => {
         const fill = materials.fills.get(p);
-        return fill === undefined ? p : { ...p, color: fill === null ? [1, 1, 1, 1] as [number, number, number, number] : rgba(fill) ?? p.color };
+        return fill === undefined ? p : { ...p, materialFill: fill, color: fill === null ? [1, 1, 1, 1] as [number, number, number, number] : rgba(fill) ?? p.color };
       }),
       lines: materials.dropLines.size ? drawing.lines.filter((l) => !materials.dropLines.has(l)) : drawing.lines,
       materialHatches: materials.hatches.map((h) => ({ ...h, ...(hatchOf.get(h.loops[0]) ?? { ifcType: undefined }) })),

@@ -35,6 +35,8 @@ import { useSheetParamLookup } from './useSheetParams';
 import { currentRevisionOf, printsAtCurrentRevision, sheetRevisions } from '@/project/revisions';
 import { RevisionTable } from './RevisionTable';
 import { viewportPens } from './viewport-pens';
+import { appViewStyler } from '@/project/view-styler';
+import { useViewerStore } from '@/store';
 import { memoOn, sharedMemo } from './shared-memo';
 import { resolveViewGraphics, viewportHiddenLayers } from '@bimvoice/ifcsheet';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
@@ -137,11 +139,15 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   // The graphics the view draws with: its template's, then its own over them (#44).
   const viewTemplates = useProjectStore((s) => s.viewTemplates);
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
+  // The view's one styler (#34), the drafting view's too; a new one whenever what it styles from changes (the models, for property rules).
+  const models = useViewerStore((s) => s.models);
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const styler = useMemo(() => appViewStyler(graphics, drawing, standard, content.styleOf), [graphics, drawing, standard, content.styleOf, models, mutationVersion]);
   // Shared with every other component that pens this drawing the same way (`shared-memo.ts`): opening a sheet reuses the Wall's pens (#154).
   const pens = useMemo(
-    () => (drawing ? memoOn(pensMemo, drawing, [graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
-      () => viewportPens(drawing, graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard)) : []),
-    [drawing, graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
+    () => (drawing ? memoOn(pensMemo, drawing, [graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard, styler],
+      () => viewportPens(drawing, graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard, styler)) : []),
+    [drawing, graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard, styler],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);
   const left = vp.x - box.width / 2;

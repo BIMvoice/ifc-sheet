@@ -8,23 +8,28 @@
  * viewport's drawing at its scale, each drawing's title under it. The PDF and
  * DXF writers draw from this one layout, so they cannot disagree.
  *
- * Headless and mostly unstyled (a view's hidden categories, elements and lines are applied). The web app draws its sheets as SVG through React
- * (`components/viewer/sheets/`), with pens, hatches, symbols, annotation and
- * the full title block; this layout carries the geometry of the same sheet
- * and the fields the engine knows (project, sheet number and name, scale,
- * date). Moving the app's sheet composition here is a follow-up.
+ * Headless. Each viewport's faces and lines carry the pens the web app's sheet
+ * gives them (`pens`): styled by the view's one styler (`view-style.ts`) and
+ * grouped by `penGroups`, as the app's `viewport-pens.ts` does, so the same
+ * view has the same colours, weights, dashes and fills in the app and here.
+ * The web app draws its sheets as SVG through React (`components/viewer/sheets/`),
+ * with hatches, symbols, annotation and the full title block on top; this
+ * layout carries the geometry and pens of the same sheet and the fields the
+ * engine knows (project, sheet number and name, scale, date). Moving the
+ * app's hatches and symbols here is a follow-up.
  */
 
 import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
-import { clipPolyline } from './clip.js';
+import { clipPolygon, clipPolyline } from './clip.js';
 import type { SchemeResult } from './colour-fills.js';
 import { schemeLegend, viewportFills, type SheetFill } from './sheet-colours.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
 import { printTitleBlock, sheetLookup } from './title-block-print.js';
-import { elementShown, lineHidden } from './element-graphics.js';
 import { resolveViewGraphics } from './view-templates.js';
+import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
+import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
 
 export type Polyline = readonly Point2D[];
@@ -37,6 +42,21 @@ export interface SheetText {
   align?: 'left' | 'center';
   /** Degrees counter-clockwise about `at` (a title block strip reads upward); absent is level. */
   angle?: number;
+}
+
+/** One pen of a viewport's drawing on the paper: a fill (its regions, each an outer loop and holes filled even-odd) or a stroke (its runs). */
+export interface SheetPen {
+  layer: PenLayer;
+  stroke: string | null;
+  /** Paper mm; 0 for a fill. */
+  width: number;
+  fill: string | null;
+  /** Paper mm; absent: solid. */
+  dash?: readonly number[];
+  /** A stroke's runs, clipped to the viewport. */
+  runs: Polyline[];
+  /** A fill's regions, clipped to the viewport; each loop ends where it starts. */
+  regions: Polyline[][];
 }
 
 export interface SheetGraphic {
@@ -53,6 +73,10 @@ export interface SheetGraphic {
   cut: Polyline[];
   /** Every other visible line of the drawings, clipped to their viewport. */
   lines: Polyline[];
+  /** What the PDF and DXF draw of the viewports' drawings: their faces and lines by pen, as the app's sheet pens them, in paint order. */
+  pens: SheetPen[];
+  /** The sheet's own marks drawn with a plain pen: a colour legend's frame and swatch outlines. */
+  marks: Polyline[];
   texts: SheetText[];
   /** The box each viewport's drawing is clipped to, paper mm: the room the layout made for it. */
   viewports: { viewId: string; box: Rect }[];
@@ -121,9 +145,15 @@ const closeRing = (pts: Point2D[]): Point2D[] => (pts.length > 2 ? [...pts, pts[
  * view, so a drawing larger than the building (the site around it) cannot run
  * into its neighbour; without it, to the drawing's own extent.
  */
-export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings: ReadonlyMap<string, Drawing2D>, extent?: ModelExtent | null, schemes: ReadonlyMap<string, SchemeResult> = new Map(), globalIdOf?: (entityId: number) => string | undefined): SheetGraphic {
+export function sheetGraphic(
+  sheet: ProjectSheet, doc: ProjectDocument, drawings: ReadonlyMap<string, Drawing2D>, extent?: ModelExtent | null, schemes: ReadonlyMap<string, SchemeResult> = new Map(),
+  globalIdOf?: (entityId: number) => string | undefined,
+  /** An element's properties, for a preset's property rules (`view-style.ts`). */
+  propertiesOf?: ViewStyleInputs['propertiesOf'],
+  pens: PenTable = PEN_TABLE,
+): SheetGraphic {
   const paper = paperOf(sheet);
-  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], texts: [], viewports: [] };
+  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], viewports: [] };
   const vps = sheet.viewports ?? [];
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
@@ -137,16 +167,23 @@ export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
       const scheme = schemes.get(vp.viewId);
       if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box));
-      // What the view hides (its template's categories, then its own, `resolveViewGraphics`, and the single elements and lines it hides, `element-graphics.ts`):
-      // not on the sheet, as in the app. Elements are known by GlobalId (`globalIdOf`), never by the express id the drawing carries.
-      const graphics = resolveViewGraphics(view, doc.viewTemplates);
-      const shown = (item: { ifcType?: string; entityId: number }) => elementShown(graphics, globalIdOf?.(item.entityId), item.ifcType);
-      for (const polygon of drawing.cutPolygons.filter(shown)) {
+      // How the view draws (its template's graphics, then its own, `resolveViewGraphics`; its single elements and lines, `element-graphics.ts`; its preset's
+      // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by
+      // GlobalId (`globalIdOf`), never by the express id the drawing carries.
+      const styler = viewStyler({ graphics: resolveViewGraphics(view, doc.viewTemplates), pens, globalIdOf, propertiesOf });
+      for (const polygon of drawing.cutPolygons.filter((p) => styler.face(p).visible)) {
         for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }
       for (const line of drawing.lines) {
-        if (line.visibility === 'hidden' || !shown(line) || lineHidden(graphics, globalIdOf?.(line.entityId), line.line)) continue;
+        if (line.visibility === 'hidden' || !styler.line(line).visible) continue;
         out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
+      }
+      // A face a colour scheme paints is in `fills` already (`viewportFills`), under the linework.
+      const painted = scheme?.elementColours;
+      for (const g of penGroups(drawing.cutPolygons.filter((p) => !painted?.has(p.entityId)), drawing.lines, styler)) {
+        const regions = g.faces.map((p) => [p.polygon.outer, ...p.polygon.holes].map((l) => clipPolygon(l.map(at), box)).filter((l) => l.length >= 3).map(closeRing)).filter((r) => r.length > 0);
+        const runs = g.lines.flatMap((l) => clipPolyline([at(l.line.start), at(l.line.end)], box));
+        if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions });
       }
     }
     if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
@@ -162,9 +199,10 @@ export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings
     if (!legend) continue;
     taken.push(legend.box);
     out.fills.push(...legend.fills);
-    out.cut.push(...legend.lines);
+    out.marks.push(...legend.lines);
     out.texts.push(...legend.texts);
   }
+  out.pens.sort((a, b) => penOrder(a, pens.pens.cut) - penOrder(b, pens.pens.cut));
   const block = titleBlock(sheet, doc, paper, [...new Set(vps.map((v) => v.scale))]);
   out.frame.push(...block.frame);
   out.texts.push(...block.texts);

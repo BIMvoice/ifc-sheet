@@ -64,7 +64,7 @@ describe.skipIf(missing !== null)('the ground-floor plan of AC20-FZK-Haus colour
   });
 
   it('puts the legend inside the frame, clear of the plans and their titles', () => {
-    const legendLines = sheet.cut.filter((p) => p.length === 5).slice(-(ROOMS.length + 1));
+    const legendLines = sheet.marks.filter((p) => p.length === 5).slice(-(ROOMS.length + 1));
     const frame = sheet.frame[0];
     const [x0, x1] = [Math.min(...frame.map((p) => p.x)), Math.max(...frame.map((p) => p.x))];
     const [y0, y1] = [Math.min(...frame.map((p) => p.y)), Math.max(...frame.map((p) => p.y))];
