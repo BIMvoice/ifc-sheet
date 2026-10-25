@@ -10,13 +10,13 @@
 
 import { zipSync } from 'fflate';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
-import { resolve } from '@/i18n/registry';
+import { registeredTranslations, resolve } from '@/i18n/registry';
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
 import type { TranslationKey } from '@/i18n';
 import { currentFindings } from '@/check/collect';
 import { captureSheets, failureLine } from './capture';
-import { drawingListCsv, uniqueNames, type ListLabels } from './output';
+import { drawingListCsv, issueFileNames, sheetFileStem, uniqueNames, type ListLabels } from './output';
 import { buildIssuePdf, type PdfLabels } from './pdf-build';
 import { titleBlockOf } from '@/project/title-block';
 import { effectiveTitleBlock } from '@/project/title-block-model';
@@ -54,7 +54,10 @@ const say = (r: IssueReason) => ({ key: r.key, params: r.params });
 
 export function listLabels(): ListLabels {
   const t = (k: string) => resolve(`issue.list.${k}` as TranslationKey);
-  return { title: t('title'), issue: t('issue'), date: t('date'), sheet: t('sheet'), sheetTitle: t('sheetTitle'), scale: t('scale'), paper: t('paper'), revision: t('revision') };
+  return {
+    title: t('title'), issue: t('issue'), date: t('date'), sheet: t('sheet'), sheetTitle: t('sheetTitle'), scale: t('scale'), paper: t('paper'), revision: t('revision'),
+    landscape: t('landscape'), portrait: t('portrait'), drawingList: resolve('issue.file.drawingList'),
+  };
 }
 
 export function pdfLabels(): PdfLabels {
@@ -68,7 +71,7 @@ export function pdfLabels(): PdfLabels {
 export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst'>): IssuePlan {
   const project = useProjectStore.getState();
   return planIssue(project.sheets, fingerprintSources(project), {
-    name: options.name?.trim() || nextIssueName(project.issues ?? []),
+    name: options.name?.trim() || nextIssueName(project.issues ?? [], (n) => resolve('names.issue.default', { n }), registeredTranslations('names.issue.default')),
     date: options.date ?? new Date().toISOString().slice(0, 10),
     listFirst: options.listFirst ?? true,
     asIndicated: resolve('sheets.asIndicated'),
@@ -104,9 +107,9 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
     pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival, onWarning: (w) => lines.push(w) });
   } else {
     const ext = options.format;
-    const names = uniqueNames(plan.sheets.map(({ sheet }) => `${sanitizeFilename(`${sheet.number} ${sheet.name}`, { fallback: 'sheet' })}.${ext}`));
+    const names = uniqueNames(plan.sheets.map(({ sheet }) => `${sanitizeFilename(sheetFileStem(sheet.number, sheet.name), { fallback: 'sheet' })}.${ext}`));
     const enc = new TextEncoder();
-    const files: Record<string, Uint8Array> = { 'drawing-list.csv': enc.encode(`﻿${csv}`) };
+    const files: Record<string, Uint8Array> = { [issueFileNames(plan.name, ext, listLabels()).inZipList]: enc.encode(`﻿${csv}`) };
     plan.sheets.forEach(({ sheet }, i) => {
       const data = ext === 'svg' ? enc.encode(svgs.get(sheet.id) ?? '') : dxfs.get(sheet.id);
       if (data) files[names[i]] = data;
@@ -121,10 +124,10 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
 
 /** Hand the result to the person: the PDF (with the CSV beside it), or the zip for the others. */
 export function deliver(result: IssueResult, format: IssueFormat): void {
-  const stem = sanitizeFilename(result.plan.name, { fallback: 'issue' });
-  downloadFile(`﻿${result.csv}`, `${stem} drawing list.csv`, 'text/csv;charset=utf-8');
-  if (result.zip) downloadFile(result.zip, `${stem} ${format}.zip`, 'application/zip');
-  if (result.pdf) downloadFile(result.pdf, `${stem}.pdf`, 'application/pdf');
+  const names = issueFileNames(result.plan.name, format, listLabels());
+  downloadFile(`﻿${result.csv}`, names.list, 'text/csv;charset=utf-8');
+  if (result.zip) downloadFile(result.zip, names.zip, 'application/zip');
+  if (result.pdf) downloadFile(result.pdf, names.pdf, 'application/pdf');
 }
 
 /** What `ISSUE` was given after its name: an optional format, then the issue's name. */

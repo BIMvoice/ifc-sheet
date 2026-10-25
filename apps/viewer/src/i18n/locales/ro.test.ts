@@ -77,6 +77,15 @@ describe('Romanian catalogue (#53)', () => {
     ]);
   });
 
+  // #294: `issue/` was not in the face list, and the English it printed was string literals, which a key check cannot see; the words are keys now and the folder is checked.
+  it('the face check reaches the issue folder (#294)', () => {
+    const { 'issue.file.drawingList': _a, 'issue.list.landscape': _b, ...without } = catalogue;
+    assert.deepEqual(untranslatedFaceKeys(without), [
+      'issue.file.drawingList (issue/run.ts)',
+      'issue.list.landscape (issue/run.ts)',
+    ]);
+  });
+
   it('keeps every placeholder of the English message', () => {
     assert.deepEqual(placeholderProblems(catalogue), []);
     assert.deepEqual(checkCatalogue(catalogue).problems, []);

@@ -5,9 +5,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { IssuePlan } from './plan.js';
-import { drawingListCsv } from './output.js';
+import { drawingListCsv, issueFileNames } from './output.js';
 
-const labels = { title: 'T', issue: 'Issue', date: 'Date', sheet: 'Sheet', sheetTitle: 'Title', scale: 'Scale', paper: 'Paper', revision: 'Rev' };
+const labels = { title: 'T', issue: 'Issue', date: 'Date', sheet: 'Sheet', sheetTitle: 'Title', scale: 'Scale', paper: 'Paper', revision: 'Rev', landscape: 'landscape', portrait: 'portrait', drawingList: 'drawing list' };
 
 const planWith = (title: string, number = 'A-1'): IssuePlan =>
   ({
@@ -36,5 +36,19 @@ describe('drawingListCsv escaping', () => {
     for (const lead of ['=', '+', '-', '@']) {
       assert.ok(secondLine(drawingListCsv(planWith(`${lead}SUM(A1)`), labels)).includes(`'${lead}SUM(A1)`), lead);
     }
+  });
+});
+
+// #294: what leaves the app follows the language of the panel.
+describe('issued text in Romanian', () => {
+  const ro = { ...labels, issue: 'Emitere', paper: 'Format', landscape: 'orizontal', portrait: 'vertical', drawingList: 'lista de planse' };
+  it('prints the paper orientation as a catalogue word', () => {
+    assert.equal(secondLine(drawingListCsv(planWith('Parter'), ro)), 'A-1,Parter,1:50,A3 orizontal,,P01,2026-10-19');
+    assert.equal(secondLine(drawingListCsv(planWith('Parter'), labels)), 'A-1,Parter,1:50,A3 landscape,,P01,2026-10-19');
+  });
+  it('names the issued files in the language, in plain ASCII, and keeps a typed name as typed', () => {
+    assert.deepEqual(issueFileNames('Emitere 1', 'dxf', ro), { list: 'Emitere 1 lista de planse.csv', zip: 'Emitere 1 dxf.zip', pdf: 'Emitere 1.pdf', inZipList: 'lista-de-planse.csv' });
+    assert.deepEqual(issueFileNames('Issue 1', 'svg', labels), { list: 'Issue 1 drawing list.csv', zip: 'Issue 1 svg.zip', pdf: 'Issue 1.pdf', inZipList: 'drawing-list.csv' });
+    assert.equal(issueFileNames('Ediția 2', 'pdf', ro).pdf, 'Ediția 2.pdf');
   });
 });
