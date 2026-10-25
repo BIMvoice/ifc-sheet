@@ -28,6 +28,7 @@ import { ScheduleFilterSection } from './ScheduleFilterCard';
 import { ScheduleTextCard } from './ScheduleTextCard';
 import { SubReportCard } from './SubReportCard';
 import { BoqCard } from '../boq/BoqCard';
+import { ListScheduleCard } from '../lists/ListScheduleCard';
 import { ThreeDControls } from './ThreeDControls';
 import { CutHeightControl, DepthControl } from './ViewControls';
 import { canBeColoured, ColourSchemeCard } from './ColourSchemeCard';
@@ -102,6 +103,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
           )}
           {schedule ? <SubReportCard key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <BoqCard key={`${schedule.id}:boq`} schedule={schedule} /> : null}
+          {schedule ? <ListScheduleCard key={`${schedule.id}:list`} schedule={schedule} /> : null}
           {schedule ? <ScheduleContentCard key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <ScheduleFilterSection key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <ScheduleTextCard key={schedule.id} schedule={schedule} /> : null}

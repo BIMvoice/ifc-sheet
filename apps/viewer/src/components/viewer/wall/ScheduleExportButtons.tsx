@@ -17,6 +17,7 @@ import { useRegisterLabels, useRoomFinishLabels, useScheduleLabels, useTakeoffLa
 import { urbanLabelsOf } from '../urban/useUrban';
 import { readScheduleExport, type ExportLabelSet } from './schedule-export-read';
 import { useBoqSay } from '../boq/useBoq';
+import { useListWords } from '../lists/useListSchedule';
 import { WALL_PILL } from './wall-type';
 import { useSheetLocale } from '@/project/units-and-numbers';
 
@@ -32,14 +33,15 @@ export function useScheduleExportLabels(): ExportLabelSet {
   const types = useTypeQuantityLabels('');
   const register = useRegisterLabels('');
   const boq = useBoqSay();
+  const list = useListWords();
   return useMemo<ExportLabelSet>(() => ({
     joinery: {
       ...joinery, widthMm: t('schedule.export.widthMm'), heightMm: t('schedule.export.heightMm'),
       types: t('schedule.sheet.types'), elements: t('schedule.sheet.elements'), number: t('schedule.col.number'), level: t('schedule.col.level'), globalId: t('schedule.col.globalId'),
     },
-    takeoff, finishes, types, register, boq, asIndicated: t('sheets.asIndicated'),
+    takeoff, finishes, types, register, boq, list, asIndicated: t('sheets.asIndicated'),
     urban: (title, areas, site) => urbanLabelsOf(t, locale, title, areas, site),
-  }), [joinery, takeoff, finishes, types, register, boq, t, locale]);
+  }), [joinery, takeoff, finishes, types, register, boq, list, t, locale]);
 }
 
 /** What pressing a button does: read the table, write the file in the language's delimiter, hand it to the browser. */
