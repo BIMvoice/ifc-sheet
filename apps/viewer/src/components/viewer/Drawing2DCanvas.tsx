@@ -26,7 +26,7 @@ import { resolveSheetTransform } from '@/lib/drawing/sheet-transform';
 import { useDrawingElementPropertiesLookup } from '@/hooks/useDrawingElementPropertiesLookup';
 import { markActiveDrawingCanvasRendered, registerActiveDrawingCanvas } from '@/lib/drawing/active-canvas-snapshot';
 import { getFillColorForType } from './drawing/ifc-fill-colors';
-import { itemInk } from '@/project/phases';
+import { itemPen } from '@/project/item-pen';
 import { fillOrder, schemeColourOf } from '@/project/view-scheme-style';
 import type { ViewGraphics } from '@/project/types';
 import { resolveDrawingPaperTheme, type DrawingPaperTheme } from './drawing/paper-theme';
@@ -688,7 +688,7 @@ export function Drawing2DCanvas({
             opacity = result.style.opacity;
           }
 
-          fillColor = schemeColourOf(polygon) ?? itemInk(graphics, polygon)?.fill ?? fillColor; // a phase's fill, then a colour scheme's (#92), come last
+          fillColor = schemeColourOf(polygon) ?? itemPen(graphics, polygon)?.fill ?? fillColor; // a phase's fill, then a colour scheme's (#92), come last
           ctx.globalAlpha = opacity;
           ctx.fillStyle = fillColor;
           ctx.beginPath();
@@ -733,10 +733,10 @@ export function Drawing2DCanvas({
             lineWeight = result.style.lineWeight;
           }
 
-          const phaseInk = itemInk(graphics, polygon);
+          const phaseInk = itemPen(graphics, polygon);
           ctx.strokeStyle = phaseInk?.color ?? strokeColor;
-          ctx.lineWidth = Math.max(0.5, mmToScreen(phaseInk?.weightMm ?? lineWeight) * 0.3);
-          ctx.setLineDash(phaseInk ? phaseInk.dash.map((d) => Math.max(2, mmToScreen(d) * 0.3)) : []);
+          ctx.lineWidth = Math.max(0.5, mmToScreen(phaseInk?.mm ?? lineWeight) * 0.3);
+          ctx.setLineDash(phaseInk?.dash ? phaseInk.dash.map((d) => Math.max(2, mmToScreen(d) * 0.3)) : []);
           ctx.beginPath();
 
           if (polygon.polygon.outer.length > 0) {
@@ -800,10 +800,10 @@ export function Drawing2DCanvas({
             lineWidth *= 0.7;
           }
 
-          const phaseInk = line.visibility === 'hidden' ? null : itemInk(graphics, line);
+          const phaseInk = line.visibility === 'hidden' ? null : itemPen(graphics, line);
           ctx.strokeStyle = phaseInk?.color ?? strokeColor;
-          ctx.lineWidth = Math.max(0.5, mmToScreen(phaseInk ? phaseInk.weightMm * 0.5 : lineWidth) * 0.3);
-          ctx.setLineDash(phaseInk ? phaseInk.dash.map((d) => Math.max(2, mmToScreen(d) * 0.3)) : dashPattern);
+          ctx.lineWidth = Math.max(0.5, mmToScreen(phaseInk?.mm ?? lineWidth) * 0.3);
+          ctx.setLineDash(phaseInk?.dash ? phaseInk.dash.map((d) => Math.max(2, mmToScreen(d) * 0.3)) : dashPattern);
 
           const screenStart = modelToScreen(start.x, start.y);
           const screenEnd = modelToScreen(end.x, end.y);
@@ -1061,7 +1061,7 @@ export function Drawing2DCanvas({
           opacity = result.style.opacity;
         }
 
-        fillColor = schemeColourOf(polygon) ?? itemInk(graphics, polygon)?.fill ?? fillColor; // a phase's fill, then a colour scheme's (#92), come last
+        fillColor = schemeColourOf(polygon) ?? itemPen(graphics, polygon)?.fill ?? fillColor; // a phase's fill, then a colour scheme's (#92), come last
         ctx.globalAlpha = opacity;
         ctx.fillStyle = fillColor;
         ctx.beginPath();
@@ -1104,10 +1104,10 @@ export function Drawing2DCanvas({
           lineWeight = result.style.lineWeight;
         }
 
-        const phaseInk = itemInk(graphics, polygon);
+        const phaseInk = itemPen(graphics, polygon);
         ctx.strokeStyle = phaseInk?.color ?? strokeColor;
-        ctx.lineWidth = (phaseInk?.weightMm ?? lineWeight) / transform.scale;
-        ctx.setLineDash(phaseInk ? phaseInk.dash.map((d) => d / transform.scale) : []);
+        ctx.lineWidth = (phaseInk?.mm ?? lineWeight) / transform.scale;
+        ctx.setLineDash(phaseInk?.dash ? phaseInk.dash.map((d) => d / transform.scale) : []);
         ctx.beginPath();
         if (polygon.polygon.outer.length > 0) {
           ctx.moveTo(polygon.polygon.outer[0].x, polygon.polygon.outer[0].y);
@@ -1177,10 +1177,10 @@ export function Drawing2DCanvas({
           lineWidth *= 0.7;
         }
 
-        const phaseInk = line.visibility === 'hidden' ? null : itemInk(graphics, line);
+        const phaseInk = line.visibility === 'hidden' ? null : itemPen(graphics, line);
         ctx.strokeStyle = phaseInk?.color ?? strokeColor;
-        ctx.lineWidth = (phaseInk ? phaseInk.weightMm * 0.5 : lineWidth) / transform.scale;
-        ctx.setLineDash((phaseInk ? phaseInk.dash : dashPattern).map((d) => d / transform.scale));
+        ctx.lineWidth = (phaseInk?.mm ?? lineWidth) / transform.scale;
+        ctx.setLineDash((phaseInk?.dash ?? dashPattern).map((d) => d / transform.scale));
 
         ctx.beginPath();
         ctx.moveTo(line.line.start.x, line.line.start.y);

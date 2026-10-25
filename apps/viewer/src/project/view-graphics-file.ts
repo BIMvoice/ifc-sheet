@@ -10,7 +10,7 @@
 
 import { readColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
 import { PHASES, type PhaseSource } from './phases';
-import type { CategoryGraphics, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics } from './types';
+import type { CategoryGraphics, ElementGraphics, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -62,11 +62,43 @@ export function readGraphics(raw: Record<string, unknown>): ViewGraphics {
   }
   const scheme = readColourScheme(raw.colourScheme);
   if (scheme) out.colourScheme = scheme;
+  Object.assign(out, readElementGraphics(raw));
   if (isObject(raw.grid)) {
     const grid: ViewGridGraphics = {};
     if (typeof raw.grid.visible === 'boolean') grid.visible = raw.grid.visible;
     if (raw.grid.ends === 'start' || raw.grid.ends === 'end' || raw.grid.ends === 'both') grid.ends = raw.grid.ends;
     if (Object.keys(grid).length > 0) out.grid = grid;
+  }
+  return out;
+}
+
+const MAX_ABOUT = 200;
+
+/** A view's single elements (#32, #33): hidden ones, per-element overrides and hidden lines, all by GlobalId. Malformed entries are dropped, never fatal; GlobalIds the model no longer has are KEPT (they are listed on the Wall). */
+export function readElementGraphics(raw: Record<string, unknown>): Pick<ViewGraphics, 'hiddenElements' | 'elements' | 'hiddenLines'> {
+  const out: Pick<ViewGraphics, 'hiddenElements' | 'elements' | 'hiddenLines'> = {};
+  const ids = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => isString(x) && x.length > 0))] : []);
+  const hidden = ids(raw.hiddenElements);
+  if (hidden.length > 0) out.hiddenElements = hidden;
+  const lines = ids(raw.hiddenLines).filter((e) => e.includes('|') && e.indexOf('|') > 0);
+  if (lines.length > 0) out.hiddenLines = lines;
+  if (isObject(raw.elements)) {
+    const elements: Record<string, ElementGraphics> = {};
+    for (const [id, value] of Object.entries(raw.elements)) {
+      if (!id || !isObject(value)) continue;
+      const g: ElementGraphics = {};
+      if (typeof value.visible === 'boolean') g.visible = value.visible;
+      if (isString(value.lineColor) && HEX.test(value.lineColor)) g.lineColor = value.lineColor;
+      if (isString(value.fillColor) && HEX.test(value.fillColor)) g.fillColor = value.fillColor;
+      if (isString(value.cutWeight) && WEIGHTS.has(value.cutWeight)) g.cutWeight = value.cutWeight as ElementGraphics['cutWeight'];
+      if (isString(value.projectionWeight) && WEIGHTS.has(value.projectionWeight)) g.projectionWeight = value.projectionWeight as ElementGraphics['projectionWeight'];
+      if (value.lineStyle === 'solid' || value.lineStyle === 'dashed') g.lineStyle = value.lineStyle;
+      if (isString(value.cutHatch) && value.cutHatch) g.cutHatch = value.cutHatch;
+      if (isNumber(value.hatchScale) && value.hatchScale > 0) g.hatchScale = value.hatchScale;
+      if (isString(value.about) && value.about) g.about = value.about.slice(0, MAX_ABOUT);
+      if (Object.keys(g).length > 0) elements[id] = g;
+    }
+    if (Object.keys(elements).length > 0) out.elements = elements;
   }
   return out;
 }

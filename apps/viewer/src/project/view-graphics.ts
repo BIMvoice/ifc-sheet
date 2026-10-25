@@ -18,15 +18,16 @@ import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 import type { CategoryGraphics, CategoryLineWeight, PhaseId, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
 import type { SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
-import { VIEW_CATEGORY_CLASSES, hiddenClassesOf } from '@bimvoice/ifcsheet';
+import { VIEW_CATEGORY_CLASSES, elementShown, hasElementGraphics, hiddenClassesOf, lineHidden, resolveElementGraphics, type ElementStyle } from '@bimvoice/ifcsheet';
 import { withScheme } from './view-scheme-style';
 import type { DraftShape } from '@/drafting/types';
 
 /** A drawing as a view shows it, with its building materials' hatches and membrane lines, and (a view that draws by phase) the phase of each line and cut face. */
 export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
-  lines: (DrawingLine & { phase?: PhaseId })[];
+  /** `elementStyle`: how the view draws THIS element (#32), the engine's `resolveElementGraphics`; absent for an element the view says nothing about. */
+  lines: (DrawingLine & { phase?: PhaseId; elementStyle?: ElementStyle })[];
   /** `schemeColour`: the fill a colour scheme (#92) gives the element, `#rrggbb`; it wins over the material's and the phase's. */
-  cutPolygons: (DrawingPolygon & { phase?: PhaseId; schemeColour?: string })[];
+  cutPolygons: (DrawingPolygon & { phase?: PhaseId; schemeColour?: string; elementStyle?: ElementStyle })[];
   /** The rooms a colour scheme fills (#92), drawn under everything else. */
   schemeFills?: (DrawingPolygon & { schemeColour: string })[];
   materialHatches?: (MaterialHatch & HatchSource)[];
@@ -34,7 +35,7 @@ export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
 };
 
 /** Which element (and layer material) a hatch was cut from: what the CAD layer standard matches it on. */
-export interface HatchSource { ifcType?: string; entityId?: number; materialId?: number }
+export interface HatchSource { ifcType?: string; entityId?: number; materialId?: number; elementStyle?: ElementStyle }
 
 /** The phases a view shows and the phase of an element (by the drawing's entity id; null: not a model element, always shown). */
 export interface PhaseView {
@@ -137,8 +138,10 @@ export function styledDrawing(
   phases?: PhaseView | null,
   /** What the view's colour scheme paints (`view-colour-scheme.ts`, #92). */
   scheme?: SchemeResult | null,
+  /** The GlobalId of a drawing item's element (the drawing carries renderer ids): how the view's hidden elements, lines and per-element graphics (#32, #33) find theirs. */
+  globalIdOf?: (entityId: number) => string | null | undefined,
 ): StyledDrawing {
-  return withScheme(styledByGraphics(drawing, graphics, hostTypeOf, replaced, materials, phases), scheme);
+  return withScheme(styledByGraphics(drawing, graphics, hostTypeOf, replaced, materials, phases, globalIdOf), scheme);
 }
 
 function styledByGraphics(
@@ -151,6 +154,7 @@ function styledByGraphics(
   materials?: MaterialDrawing | null,
   /** A view that draws by phase (`phases.ts`): each element's lines and cut faces carry its phase. */
   phases?: PhaseView | null,
+  globalIdOf?: (entityId: number) => string | null | undefined,
 ): StyledDrawing {
   if (materials) {
     const hatchOf = new Map<unknown, HatchSource>(drawing.cutPolygons.map((p) => [p.polygon.outer, { ifcType: p.ifcType, entityId: p.entityId, ...(p.materialId !== undefined ? { materialId: p.materialId } : {}) }]));
@@ -180,20 +184,35 @@ function styledByGraphics(
     const color = fill ? rgba(fill) : null;
     if (color) for (const k of category.classes) fills.set(k.toUpperCase(), color);
   }
-  if (hidden.size === 0 && fills.size === 0 && !graphics?.categories) return drawing as StyledDrawing;
-  const shown = (type: string | undefined) => !type || !hidden.has(type.toUpperCase());
+  // Single elements and lines (#32, #33) are known by GlobalId; one lookup per element, not per line.
+  const named = hasElementGraphics(graphics) && globalIdOf ? globalIdOf : null;
+  if (hidden.size === 0 && fills.size === 0 && !graphics?.categories && !named) return drawing as StyledDrawing;
+  const ids = new Map<number, string | null | undefined>();
+  const gid = (entityId: number) => {
+    if (!named) return undefined;
+    if (!ids.has(entityId)) ids.set(entityId, named(entityId));
+    return ids.get(entityId);
+  };
+  // The element's own word (hidden, or visible in a hidden category) over its category's.
+  const shown = (item: { entityId: number; ifcType?: string }) => elementShown(graphics, gid(item.entityId), item.ifcType);
   // A layer part takes its host's class here, so a category's graphics reach it.
   const relabel = <T extends { entityId: number; ifcType?: string }>(item: T): T => {
     const host = hostTypeOf(item.entityId, item.ifcType);
     return host ? { ...item, ifcType: host } : item;
   };
+  const stamp = <T extends { entityId?: number; ifcType?: string }>(item: T): T => {
+    const style = named && item.entityId !== undefined ? resolveElementGraphics(graphics, gid(item.entityId), item.ifcType) : null;
+    return style ? { ...item, elementStyle: style } : item;
+  };
+  const styled = drawing as StyledDrawing;
   return {
-    ...(drawing as StyledDrawing),
-    cutPolygons: drawing.cutPolygons.map(relabel).filter((p) => shown(p.ifcType)).map((p) => {
+    ...styled,
+    cutPolygons: styled.cutPolygons.map(relabel).filter(shown).map((p) => {
       const color = fills.get((p.ifcType ?? '').toUpperCase());
-      return color ? { ...p, color } : p;
+      return stamp(color ? { ...p, color } : p);
     }),
-    lines: drawing.lines.map(relabel).filter((l) => shown(l.ifcType)),
+    lines: styled.lines.map(relabel).filter((l) => shown(l) && !lineHidden(graphics, gid(l.entityId), l.line)).map(stamp),
+    ...(styled.materialHatches ? { materialHatches: styled.materialHatches.filter((h) => h.entityId === undefined || shown({ entityId: h.entityId, ifcType: h.ifcType })).map(stamp) } : {}),
   };
 }
 
@@ -208,30 +227,32 @@ export interface CutHatch {
   source?: HatchSource;
 }
 
-/** The cut faces to hatch, by their category's `cutHatch`. */
+/** The cut faces to hatch, by their element's `cutHatch` (#32), else their category's. */
 export function cutHatches(drawing: StyledDrawing, graphics: ViewGraphics | undefined, hatchPens: Record<CategoryLineWeight, number> = DEFAULT_GRAPHIC_STANDARD.materialHatch): CutHatch[] {
   const categories = graphics?.categories;
   const out: CutHatch[] = [];
-  // A category's own cut hatch wins over its elements' materials.
-  const overridden = (ifcType: string | undefined) => {
+  // A category's (or an element's) own cut hatch wins over its elements' materials.
+  const overridden = (ifcType: string | undefined, elementStyle?: ElementStyle) => {
     const id = categoryOf(ifcType ?? '');
     const g = id ? categories?.[id] : undefined;
-    return !!g?.cutHatch || g?.visible === false;
+    return !!g?.cutHatch || g?.visible === false || !!elementStyle?.cutHatch;
   };
   for (const h of drawing.materialHatches ?? []) {
-    if (overridden(h.ifcType)) continue;
+    if (overridden(h.ifcType, h.elementStyle)) continue;
     out.push({ loops: h.loops, pattern: h.pattern, scale: h.scale, color: '#000000', width: hatchPens[h.pen], source: { ifcType: h.ifcType, entityId: h.entityId, materialId: h.materialId } });
   }
-  if (!categories) return out;
   for (const polygon of drawing.cutPolygons) {
     const id = categoryOf(polygon.ifcType ?? '');
-    const g = id ? categories[id] : undefined;
-    if (!g?.cutHatch || g.visible === false) continue;
+    const g = id ? categories?.[id] : undefined;
+    const own = polygon.elementStyle;
+    // The element's style already holds its category's hatch under its own (`resolveElementGraphics`).
+    const pattern = own?.cutHatch ?? (g?.visible === false ? undefined : g?.cutHatch);
+    if (!pattern) continue;
     out.push({
       loops: [polygon.polygon.outer, ...polygon.polygon.holes],
-      pattern: g.cutHatch,
-      scale: g.hatchScale ?? 1,
-      color: g.lineColor ?? '#000000',
+      pattern,
+      scale: own?.hatchScale ?? g?.hatchScale ?? 1,
+      color: own?.lineColor ?? g?.lineColor ?? '#000000',
       source: { ifcType: polygon.ifcType, entityId: polygon.entityId, ...(polygon.materialId !== undefined ? { materialId: polygon.materialId } : {}) },
     });
   }

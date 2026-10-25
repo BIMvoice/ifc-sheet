@@ -54,6 +54,31 @@ export interface ViewGridGraphics {
   ends?: GridEnds;
 }
 
+/** A model element's IFC GlobalId: the key a view uses for anything it says about one element, so it survives a model reload. */
+export type GlobalId = string;
+
+/** How a line is drawn: one pattern, or a dash. */
+export type ElementLineStyle = 'solid' | 'dashed';
+
+/**
+ * How ONE element draws in ONE view (#32). It lies over its category's graphics (and the template's): a field left out keeps what
+ * the category gives. The cut and the projection (the lines seen beyond the cut) take a weight each.
+ */
+export interface ElementGraphics {
+  /** `true` shows an element its category hides; `false` hides it (the same as listing it in `hiddenElements`). */
+  visible?: boolean;
+  lineColor?: string;
+  fillColor?: string;
+  cutWeight?: CategoryLineWeight;
+  projectionWeight?: CategoryLineWeight;
+  lineStyle?: ElementLineStyle;
+  /** A hatch pattern name drawn over the element's cut faces. */
+  cutHatch?: string;
+  hatchScale?: number;
+  /** What the element was called when this was set ("IfcWall Basement wall"): how an orphan is recognised once the model no longer has it. */
+  about?: string;
+}
+
 export interface ViewGraphics {
   /** The structural grid's axes and bubbles. */
   grid?: ViewGridGraphics;
@@ -65,4 +90,10 @@ export interface ViewGraphics {
   categories?: Record<string, CategoryGraphics>;
   /** The view coloured by a property (`colour-scheme.ts`, #92). Absent: not coloured. */
   colourScheme?: ColourScheme;
+  /** Elements hidden in this view, by GlobalId (#33). The 3D view's hide / isolate state is not followed. */
+  hiddenElements?: GlobalId[];
+  /** Per-element overrides, by GlobalId (#32): the most specific layer, over the category's. */
+  elements?: Record<GlobalId, ElementGraphics>;
+  /** Single lines of the model drawing hidden in this view (#33): `<GlobalId>|<key>` (`lineKey`), never an index into the drawing. */
+  hiddenLines?: string[];
 }

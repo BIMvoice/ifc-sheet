@@ -12,6 +12,9 @@
  *   2. the view's own `graphics`, which with a template are its overrides;
  *   3. for what a sheet draws, the viewport's hidden layers on top of the view's (`viewportHiddenLayers`).
  *
+ * Single elements (#32, #33) are a layer above the first two, kept in the view's own graphics and read through
+ * `resolveElementGraphics` (`element-graphics.ts`): template < category graphics < element override.
+ *
  * `resolveViewGraphics` is the one place that does the first two; the web app, the headless sheets (PDF, DXF, the command
  * line) and the tests all call it, so they cannot disagree. A view with no template, or one whose template is gone, resolves to
  * its own `graphics` object unchanged: a project from before templates draws exactly as it did.
@@ -89,6 +92,10 @@ function layered(template: TemplateGraphics, own: ViewGraphics | undefined): Vie
     ...(own?.phases ? { phases: own.phases } : {}),
     ...(categories ? { categories } : {}),
     ...(own?.colourScheme ? { colourScheme: own.colourScheme } : {}),
+    // Single elements are the view's own, never a template's (#32, #33): they ride over whatever the template says.
+    ...(own?.hiddenElements ? { hiddenElements: own.hiddenElements } : {}),
+    ...(own?.elements ? { elements: own.elements } : {}),
+    ...(own?.hiddenLines ? { hiddenLines: own.hiddenLines } : {}),
   };
 }
 
@@ -136,6 +143,10 @@ export function untemplatedGraphics(graphics: ViewGraphics | undefined): ViewGra
   const out: ViewGraphics = {};
   if (graphics?.phases) out.phases = graphics.phases;
   if (graphics?.colourScheme) out.colourScheme = graphics.colourScheme;
+  // Single elements stay with the view: a template cannot carry them, so applying or resetting one never drops them (#32, #33).
+  if (graphics?.hiddenElements) out.hiddenElements = graphics.hiddenElements;
+  if (graphics?.elements) out.elements = graphics.elements;
+  if (graphics?.hiddenLines) out.hiddenLines = graphics.hiddenLines;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
