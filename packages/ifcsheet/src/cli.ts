@@ -12,7 +12,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { generateDefaultSet } from './index.js';
+import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from './index.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, readinessWithProject, sheetGraphics, type ProjectFacts } from './headless.js';
 import { describeReadiness } from './readiness.js';
 
@@ -33,13 +33,16 @@ export const EXIT = { ok: 0, failed: 1, usage: 2 } as const;
 const USAGE = `ifcsheet: drawing sets from IFC models
 
 Usage:
-  ifcsheet build <model.ifc> --out <set.pdf> [--dxf <dir>] [--name <project name>] [--include-far-elements]
+  ifcsheet build <model.ifc> --out <set.pdf> [--dxf <dir>] [--name <project name>] [--template <office.bvset>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
 
 Commands:
   build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
-          sheet. With --dxf, also write one DXF per sheet into that directory.
+          sheet. With --dxf, also write one DXF per sheet into that directory. With
+          --template, the sheets are made by the rules of a set template (a .bvset file
+          saved from a project) instead: the same plan-per-storey, elevation and section
+          rules the app applies, a rule the model cannot meet skipped and said.
   check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain English, or JSON with --json. With --project, also what the
@@ -49,6 +52,7 @@ Commands:
 Options:
   --out <file>     The PDF to write (required for build).
   --dxf <dir>      Also write a DXF per sheet into this directory (created if absent).
+  --template <file> A set template (.bvset) for build: which sheets, which views on them, at which scale.
   --name <name>    The project name for the title blocks (default: the model's).
   --project <file> A saved project (.ifclite-project.json) for check: its schedules, joinery catalogue and symbol mapping.
   --include-far-elements  Frame the views on everything the storeys contain, small elements far from the building too
@@ -82,6 +86,7 @@ interface BuildArgs {
   dxf?: string;
   name?: string;
   includeFarElements?: boolean;
+  template?: string;
 }
 
 async function build(args: BuildArgs, io: CliIo): Promise<number> {
@@ -92,8 +97,17 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: cannot read ${args.model}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
     return EXIT.failed;
   }
+  let setTemplate: SetTemplate | undefined;
+  if (args.template !== undefined) {
+    try {
+      setTemplate = parseSetTemplate(await readFile(args.template, 'utf8'));
+    } catch (error) {
+      io.stderr(`ifcsheet: ${args.template} cannot be used as a set template: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
-  const set = generateDefaultSet(model, args.name ? { name: args.name } : {});
+  const set = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}) });
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
     return EXIT.failed;
@@ -103,6 +117,8 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   await mkdir(resolve(args.out, '..'), { recursive: true });
   await writeFile(args.out, pdf);
   io.stdout(`${args.out}: ${sheets.length} sheet${sheets.length === 1 ? '' : 's'} (${set.document.name})\n`);
+  // What the template's rules met in this model (the other notes are the app's to show).
+  for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params })}\n`);
   if (args.dxf) {
     await mkdir(args.dxf, { recursive: true });
     const used = new Set<string>();
@@ -172,6 +188,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         out: { type: 'string' },
         dxf: { type: 'string' },
         name: { type: 'string' },
+        template: { type: 'string' },
         project: { type: 'string' },
         json: { type: 'boolean' },
         'include-far-elements': { type: 'boolean' },
@@ -198,7 +215,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.usage;
   }
   if (command === 'check') {
-    if (rest.length !== 1 || values.out || values.dxf || values.name) {
+    if (rest.length !== 1 || values.out || values.dxf || values.name || values.template !== undefined) {
       io.stderr('ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n');
       return EXIT.usage;
     }
@@ -222,7 +239,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.usage;
   }
   try {
-    return await build({ model: rest[0], out: values.out, dxf: values.dxf, name: values.name, includeFarElements: values['include-far-elements'] === true }, io);
+    return await build({ model: rest[0], out: values.out, dxf: values.dxf, name: values.name, template: values.template, includeFarElements: values['include-far-elements'] === true }, io);
   } catch (error) {
     io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
     return EXIT.failed;
