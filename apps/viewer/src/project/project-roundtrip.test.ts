@@ -67,6 +67,7 @@ const category: Required<CategoryGraphics> = {
 const graphics: Required<ViewGraphics> = {
   presetId: 'structure', categories: { walls: category, doors: { visible: false } }, grid: { visible: false, ends: 'start' },
   phases: { show: ['existing', 'demolish'], styles: { demolish: { lineColor: '#ffcc00', lineWeight: 'heavy', dashed: false, fillColor: '#fff2a8' } } },
+  colourScheme: { property: 'Pset_SpaceCommon.Category', target: 'elements', classes: ['IfcSpace', 'IfcWall'], colours: { office: '#aabbcc' }, palette: 'okabe-ito' },
 };
 
 const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'] };

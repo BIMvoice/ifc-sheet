@@ -12,8 +12,9 @@
  * tagged ancestor names (`dxf-tags.ts`): drafted lines and annotations on
  * their drafting layer — with its colour, line weight and line type — the
  * generated drawing on CUT / SEEN / HIDDEN / HATCH / SYMBOLS with its pens,
- * the sheet on FRAME / TITLEBLOCK / VIEWPORT-LABELS. Fills are left out,
- * and so are raster images (a 3D view captured as one): `exportSheetDxf` and
+ * the sheet on FRAME / TITLEBLOCK / VIEWPORT-LABELS. Fills are left out, but a
+ * colour scheme's (#92: its rooms, elements and legend swatches, tagged
+ * `data-dxf-fill="solid"`), which go out as solid hatches; so are raster images (a 3D view captured as one): `exportSheetDxf` and
  * the issue say which.
  */
 
@@ -27,6 +28,7 @@ import { resolve } from '@/i18n/registry';
 import type { ProjectSheet } from '@/project/types';
 import type { CadLayerRule } from '@/project/cad-layers';
 import { layerAndPens } from './dxf-cad-layers';
+import { clipLoop } from './dxf-hatch';
 
 type P = { x: number; y: number };
 type Rect = { x0: number; y0: number; x1: number; y1: number };
@@ -212,8 +214,28 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
     }
   };
 
+  // A solid fill: every loop of the path, clipped as a shape to its viewport, as one hatch in the fill's own colour.
+  const hatch = (el: SVGGraphicsElement, subpaths: { pts: P[]; closed: boolean }[]) => {
+    const map = mapper(el);
+    const colour = getComputedStyle(el).fill;
+    if (!colour || colour === 'none') return;
+    const pens = layerAndPens(cad, (n) => tag(el, n), layerOf(el), colour);
+    const clip = clipOf(el);
+    const loops = subpaths.filter((s) => s.pts.length > 2).map((s) => (clip ? clipLoop(s.pts.map(map), clip) : s.pts.map(map)));
+    writer.hatch(loops, writer.layer(pens.name, pens.layer), pens.own);
+  };
+
   for (const el of Array.from(svg.querySelectorAll<SVGGraphicsElement>('path, line, rect, circle, ellipse, polyline, polygon, text'))) {
     if (skip(el)) continue;
+    if (el.getAttribute('data-dxf-fill') === 'solid') {
+      const d = el instanceof SVGPathElement ? el.getAttribute('d') ?? '' : '';
+      if (el instanceof SVGPathElement) {
+        const subpaths = STRAIGHT.test(d) ? straightSubpaths(d) : sampledSubpaths(el, d);
+        hatch(el, subpaths);
+        emit(el, subpaths); // the outline, where the path has a stroke
+      }
+      continue;
+    }
     if (el instanceof SVGTextElement) {
       const text = el.textContent?.trim();
       if (!text) continue;

@@ -18,7 +18,7 @@
  */
 
 import { exportToDXF, type Drawing2D } from '@ifc-lite/drawing-2d';
-import type { SheetGraphic } from './sheet-graphic.js';
+import type { Polyline, SheetGraphic } from './sheet-graphic.js';
 
 /** jsPDF line widths, mm: the frame heavier than the drawing, cut faces heavier than what is seen beyond. */
 const PEN = { frame: 0.5, cut: 0.35, line: 0.18 } as const;
@@ -67,6 +67,12 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
       }
     };
     // Every run is open: a closed ring repeats its first point (`sheet-graphic.ts`), a clipped one must not be closed across the cut.
+    // A colour scheme's fills go down first, under every line; each region is one even-odd path, so a hole stays open.
+    for (const fill of sheet.fills) {
+      const ops = fill.loops.flatMap((pts) => [{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]);
+      doc.setFillColor(fill.colour);
+      doc.path(ops).fillEvenOdd();
+    }
     stroke(sheet.frame, PEN.frame);
     stroke(sheet.cut, PEN.cut);
     stroke(sheet.lines, PEN.line);
@@ -90,6 +96,16 @@ function emptyDrawing(paper: { w: number; h: number }): Drawing2D {
   };
 }
 
+/**
+ * A colour scheme's fills as DXF layers (#92), one per colour (`COLOUR-77AADD`): R12 has no hatch, so each region is the closed
+ * polylines of its boundary, as the exporter writes a cut face's hatch region, in the colour's nearest ACI colour.
+ */
+function colourLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
+  const byColour = new Map<string, Polyline[]>();
+  for (const fill of sheet.fills) byColour.set(fill.colour, [...(byColour.get(fill.colour) ?? []), ...fill.loops.map((l) => l.slice(0, -1))]);
+  return [...byColour].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([colour, polylines]) => ({ name: `COLOUR-${colour.slice(1).toUpperCase()}`, color: colour, polylines, closed: true }));
+}
+
 /** One sheet as DXF text (R12), paper millimetres with y up and the origin at the paper's bottom-left corner. */
 export function exportDxf(sheet: SheetGraphic): string {
   const flip = (p: { x: number; y: number }) => ({ x: p.x, y: sheet.paper.h - p.y });
@@ -100,6 +116,7 @@ export function exportDxf(sheet: SheetGraphic): string {
       { name: 'SHEET-FRAME', color: '#000000', polylines: sheet.frame, closed: false },
       { name: 'VIEW-CUT', color: '#000000', polylines: sheet.cut, closed: false },
       { name: 'VIEW-LINES', color: '#808080', polylines: sheet.lines, closed: false },
+      ...colourLayers(sheet),
     ],
   });
 }

@@ -125,6 +125,23 @@ export class DxfR2000 {
     for (const p of pts) this.out.push('10', fmt(p.x), '20', fmt(p.y));
   }
 
+  /**
+   * A solid fill of `loops` (the outer boundary and any holes, filled even-odd), in the colour `pen` gives: a HATCH on `layer`.
+   * Loops of fewer than three points are left out.
+   */
+  hatch(loops: readonly (readonly P[])[], layer: string, pen?: PenSpec): void {
+    const paths = loops.filter((l) => l.length >= 3);
+    if (paths.length === 0) return;
+    this.out.push(...this.head('HATCH', layer, pen), '100', 'AcDbHatch', '10', '0', '20', '0', '30', '0', '210', '0', '220', '0', '230', '1', '2', 'SOLID', '70', '1', '71', '0', '91', String(paths.length));
+    paths.forEach((path, i) => {
+      // A polyline boundary (bit 2); the first is the external one (bit 1).
+      this.out.push('92', i === 0 ? '3' : '2', '72', '0', '73', '1', '93', String(path.length));
+      for (const p of path) this.out.push('10', fmt(p.x), '20', fmt(p.y));
+      this.out.push('97', '0');
+    });
+    this.out.push('75', '0', '76', '1', '98', '0');
+  }
+
   text(at: P, value: string, height: number, layer: string, options: { rotationDeg?: number; align?: 'left' | 'center' | 'right'; pen?: PenSpec } = {}): void {
     const clean = value.replace(/[\r\n]+/g, ' ').trim();
     if (!clean || !(height > 0)) return;

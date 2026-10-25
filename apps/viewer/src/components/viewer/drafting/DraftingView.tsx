@@ -123,6 +123,7 @@ import { partHostType } from '@/project/part-host';
 
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOverrideRules } from '@/project/view-graphics';
+import { schemeResultOf } from '@/project/view-colour-scheme';
 
 import { capturePointer } from '@/lib/pointer-capture';
 
@@ -199,16 +200,16 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     return phaseViewOf(graphics, phaseSource);
   }, [graphics, phaseSource, mutationVersionForMaterials]);
   const discipline = view.kind === 'plan' ? view.discipline : undefined;
+  const runtimeGeometry = useDrawingRuntime().geometryResult;
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
-    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing), phases) : null;
-  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases]);
+    return drawing ? styledDrawing(drawing, graphics, partHostType, viewOmits(view), viewMaterials(drawing), phases, schemeResultOf(view, drawing, runtimeGeometry?.meshes)) : null;
+  }, [drawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases, runtimeGeometry]);
   const overrideRules = useMemo(() => viewOverrideRules(graphics), [graphics]);
   const overrideEngine = useMemo(() => new GraphicOverrideEngine(overrideRules), [overrideRules]);
   const useIfcMaterials = (graphics?.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId) === DEFAULT_VIEW_PRESET;
   const hidden = useMemo(() => hiddenClasses(graphics), [graphics]);
   const hatches = useMemo(() => (shown ? cutHatches(shown, graphics) : []), [shown, graphics]);
-  const runtimeGeometry = useDrawingRuntime().geometryResult;
   const materialColors = useMemo(() => {
     const map = new Map<number, [number, number, number, number]>();
     for (const mesh of runtimeGeometry?.meshes ?? []) if (mesh.expressId && mesh.color) map.set(mesh.expressId, mesh.color);
