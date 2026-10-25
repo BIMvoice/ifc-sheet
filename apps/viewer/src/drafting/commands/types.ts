@@ -9,6 +9,7 @@
  */
 
 import type { TranslationKey } from '@/i18n';
+import type { TagFieldName } from '@/catalogue/types';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ViewElement } from '@/labels/view-elements';
 import type { PlanPart } from '@/dimall/types';
@@ -99,7 +100,7 @@ export interface DraftSettings {
   currentTextStyle: string;
   currentDimStyle: string;
   /** TAG: what the label shows. */
-  tagField: 'mark' | 'name' | 'class';
+  tagField: TagFieldName;
   /** The annotation type the next annotation of its tool is stamped with (`params.atype`), or null. */
   annotationType: { id: string; tool: string } | null;
   /** SYMBOL: the symbol placed, its scale factor and rotation (degrees). */

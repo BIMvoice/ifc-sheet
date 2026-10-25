@@ -14,3 +14,4 @@ export {
 } from './joinery-schedule.js';
 export { projectSubReportChecks, readProjectFile, readinessWithProject, type ProjectFacts } from './project-read.js';
 export { boqScales, boqQuantities, materialNamesOf, readBoqElements, storeSource, type BoqScales, type BoqSource } from './boq-read.js';
+export { storeClassifications } from './classification-read.js';

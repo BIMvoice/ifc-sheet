@@ -21,7 +21,9 @@ export function ListScheduleColumns({ draft, facts, set }: { draft: ListDraft; f
     const [source, pset, name] = JSON.parse(value) as [ListScheduleColumn['source'], string | null, string];
     const id = columnIdOf(source, pset ?? undefined, name);
     if (taken.has(id)) return;
-    set({ columns: [...draft.columns, { id, source, ...(pset ? { psetName: pset } : {}), propertyName: name }] });
+    // The office classification's headings are the app's words, not the property names `Code` and `Title` (#351).
+    const label = source === 'officeClassification' ? t(name === 'Title' ? 'class.list.title' : 'class.list.code') : undefined;
+    set({ columns: [...draft.columns, { id, source, ...(pset ? { psetName: pset } : {}), propertyName: name, ...(label ? { label } : {}) }] });
   };
   const move = (i: number, by: -1 | 1): void => {
     const columns = [...draft.columns];
@@ -30,8 +32,8 @@ export function ListScheduleColumns({ draft, facts, set }: { draft: ListDraft; f
   };
   const remove = (id: string): void => set({ columns: draft.columns.filter((c) => c.id !== id), groupBy: draft.groupBy.filter((g) => g !== id), sum: draft.sum.filter((g) => g !== id) });
   const flip = (list: readonly string[], id: string): string[] => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
-  const option = (source: ListScheduleColumn['source'], pset: string | undefined, name: string) => (
-    <option key={encode(source, pset, name)} value={encode(source, pset, name)} disabled={taken.has(columnIdOf(source, pset, name))}>{name}</option>
+  const option = (source: ListScheduleColumn['source'], pset: string | undefined, name: string, text = name) => (
+    <option key={encode(source, pset, name)} value={encode(source, pset, name)} disabled={taken.has(columnIdOf(source, pset, name))}>{text}</option>
   );
   return (
     <fieldset className="m-0 mt-4 border-0 p-0">
@@ -67,6 +69,7 @@ export function ListScheduleColumns({ draft, facts, set }: { draft: ListDraft; f
         <select className={WALL_FIELD} value="" onChange={(e) => { if (e.target.value) add(e.target.value); }}>
           <option value="">{t('listSched.builder.pick')}</option>
           <optgroup label={t('listSched.builder.attributes')}>{facts.attributes.map((a) => option('attribute', undefined, a))}</optgroup>
+          <optgroup label={t('class.list.group')}>{option('officeClassification', undefined, 'Code', t('class.list.code'))}{option('officeClassification', undefined, 'Title', t('class.list.title'))}</optgroup>
           {[...facts.quantities].map(([set, names]) => <optgroup key={`q:${set}`} label={t('listSched.builder.quantities', { set })}>{names.map((n) => option('quantity', set, n))}</optgroup>)}
           {[...facts.properties].map(([set, names]) => <optgroup key={`p:${set}`} label={t('listSched.builder.properties', { set })}>{names.map((n) => option('property', set, n))}</optgroup>)}
         </select>

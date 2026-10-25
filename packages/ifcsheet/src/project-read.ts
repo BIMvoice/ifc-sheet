@@ -27,6 +27,7 @@ import { readBoqElements, storeSource } from './boq-read.js';
 import { readinessOfModel } from './readiness-read.js';
 import type { FarElementFact, ReadinessFinding } from './readiness.js';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { readClassificationMappings, type ClassificationMapping } from './classification.js';
 import { readUnitsAndNumbers, type UnitsAndNumbers } from './units-and-numbers.js';
 import type { MeshData } from '@ifc-lite/geometry';
 
@@ -43,6 +44,8 @@ export interface ProjectFacts extends JoineryProject {
   includeFarElements: boolean;
   /** The bill of quantities' articles (#75); empty when the file has none. */
   boqArticles: BoqArticle[];
+  /** The office's classification mappings (#89); empty when the file has none. */
+  classificationMappings: ClassificationMapping[];
   /** The project's "Units and numbers" setting (#88), as the app reads it; absent when the file sets none. Hand it to `sheetFormat` for every figure the command line or an export writes. */
   unitsAndNumbers?: UnitsAndNumbers;
 }
@@ -71,6 +74,7 @@ export function readProjectFile(text: string): ProjectFacts {
     joineryMapping: parsed.joineryMapping !== undefined ? readJoineryMapping(parsed.joineryMapping) : { ...DEFAULT_JOINERY_MAPPING },
     includeFarElements: parsed.includeFarElements === true,
     boqArticles: readBoqArticles(parsed.boqArticles),
+    classificationMappings: readClassificationMappings(parsed.classificationMappings),
     ...(readUnitsAndNumbers(parsed.unitsAndNumbers) ? { unitsAndNumbers: readUnitsAndNumbers(parsed.unitsAndNumbers) } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };

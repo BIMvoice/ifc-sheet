@@ -29,8 +29,9 @@ import { layoutRegisterPage, type RegisterLabels } from '@/joinery/register-layo
 import { roomFinishes, type RoomFinishes } from '@/joinery/room-finishes';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
 import { layoutRoomFinishes, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
-import { typeQuantities, type TypeQuantities } from '@/joinery/type-quantities';
-import { collectTypeElements } from '@/joinery/type-quantities-models';
+import type { TypeQuantities } from '@/joinery/type-quantities';
+import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
+import type { ScheduleClassification } from '@bimvoice/ifcsheet';
 import { layoutTypeQuantities, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
 import { penTags } from '../sheets/dxf-tags';
 import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
@@ -125,15 +126,17 @@ export function useTypeQuantityLabels(title: string): TypeQuantityLabels {
     locale, title, type: t('typeQty.type'), class: t('typeQty.class'), level: t('typeQty.level'), count: t('typeQty.count'),
     length: t('typeQty.length'), area: t('typeQty.area'), volume: t('typeQty.volume'), noQto: t('typeQty.noQto'),
     total: t('typeQty.total'), noType: t('typeQty.noType'), noLevel: t('typeQty.noLevel'),
+    classification: t('typeQty.classification'), classificationTitle: t('typeQty.classificationTitle'), unclassified: t('typeQty.unclassified'),
   }), [t, locale, title]);
 }
 
 /** The quantities by type, read from the loaded models again only when they change. */
-export function useTypeQuantities(): TypeQuantities {
+export function useTypeQuantities(choice?: ScheduleClassification): TypeQuantities {
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
-  // mutationVersion / models: what `collectTypeElements` reads.
-  return useMemo(() => typeQuantities(collectTypeElements()), [mutationVersion, models]);
+  const mappings = useProjectStore((s) => s.classificationMappings);
+  // mutationVersion / models / mappings: what `typeQuantitiesOf` reads.
+  return useMemo(() => typeQuantitiesOf(choice), [mutationVersion, models, mappings, choice?.mapping, choice?.group, choice !== undefined]);
 }
 
 /** The schedule's data and layout, recomputed when the models or the catalogue change; the cards get their views once cut. */
@@ -163,6 +166,8 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const models = useViewerStore((s) => s.models);
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
+  // The codes the quantities by type show (#89).
+  const classificationMappings = useProjectStore((s) => s.classificationMappings);
   const labels = useScheduleLabels('');
   // The word a page after the first says in its title, in the user's language.
   const continued = useTranslation().t('schedule.continued');
@@ -207,7 +212,14 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     // The takeoff parses materials on demand: read once per change, and only when a sheet shows one.
     const rows = placesTakeoff ? takeoffRows(collectTakeoffElements()) : [];
     const finishRooms = placesFinishes ? roomFinishes(collectRoomInputs()) : [];
-    const byType = placesTypes ? typeQuantities(collectTypeElements()) : null;
+    // One read per distinct classification choice: two quantities-by-type schedules on a sheet may choose differently.
+    const byTypeCache = new Map<string, TypeQuantities>();
+    const byTypeOf = (choice: ScheduleClassification | undefined): TypeQuantities => {
+      const key = choice ? `${choice.mapping ?? ''}|${choice.group === true}` : '';
+      let read = byTypeCache.get(key);
+      if (!read) byTypeCache.set(key, (read = typeQuantitiesOf(choice)));
+      return read;
+    };
     const layoutJoinery = (schedule: ProjectSchedule, vp: SheetViewport): ScheduleLayout => layoutJoineryOnSheet({
       data: joinery.find((r) => r.id === schedule.id)?.data ?? scheduleDataOf(schedule), labels: { ...labels, title: schedule.name }, scale: schedule.scale ?? 50,
       views: joineryViews.get(schedule.id), continued, sheets, sheet, vp,
@@ -238,13 +250,13 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
         : schedule.kind === 'finishes'
           ? table(finishRooms.length > 0, (paging) => layoutRoomFinishes(finishRooms, { ...finishLabels, title: schedule.name }, paging))
         : schedule.kind === 'types'
-          ? table((byType?.rows.length ?? 0) > 0, (paging) => layoutTypeQuantities(byType ?? { levels: [], rows: [], classTotals: [] }, { ...typeLabels, title: schedule.name }, paging))
+          ? ((byType) => table(byType.rows.length > 0, (paging) => layoutTypeQuantities(byType, { ...typeLabels, title: schedule.name }, paging)))(placesTypes ? byTypeOf(schedule.classification) : { levels: [], rows: [], classTotals: [] })
           : layoutJoinery(schedule, vp));
       if (schedule.kind !== 'register' && isJoinerySchedule(schedule) && joinery.find((r) => r.id === schedule.id)?.data.entries.length) loaded.add(schedule.id);
     }
     return { layouts: out, loaded };
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet, sheets, schedules, labels, continued, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, urban, urbanLabels, roomData, roomLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
+  }, [sheet, sheets, schedules, labels, continued, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, classificationMappings, urban, urbanLabels, roomData, roomLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
   // A schedule that runs over several pages has a sheet for each: the sheets follow the layout, from the schedule's first one.
   useEffect(() => {
     for (const vp of sheet.viewports ?? []) {

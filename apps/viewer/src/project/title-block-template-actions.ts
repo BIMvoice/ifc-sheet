@@ -13,10 +13,11 @@
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { useProjectStore } from './project-store';
 import { freshProjectId } from './view-defaults';
-import { ITEM_KINDS, type TemplateItem, type TitleBlockTemplate } from './title-block-template';
+import { ITEM_KINDS, MAX_TEXT, type TemplateItem, type TitleBlockTemplate } from './title-block-template';
+
+export { MAX_TEXT };
 
 const MAX_ITEMS = 500;
-export const MAX_TEXT = 200;
 
 /** The numeric fields an item has, and whether zero or less is allowed. */
 const NUMBERS: Record<TemplateItem['kind'], Record<string, boolean>> = {

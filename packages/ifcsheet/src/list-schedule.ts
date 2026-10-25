@@ -20,7 +20,7 @@ import type { ExportTable } from './schedule-csv.js';
 import type { NumberKind } from './units-and-numbers.js';
 
 /** Where a column's value comes from (the Lists engine's sources a schedule can read from a model's elements). */
-const LIST_COLUMN_SOURCES = ['attribute', 'property', 'quantity', 'material', 'classification', 'spatial'] as const;
+const LIST_COLUMN_SOURCES = ['attribute', 'property', 'quantity', 'material', 'classification', 'officeClassification', 'spatial'] as const;
 type ListColumnSource = (typeof LIST_COLUMN_SOURCES)[number];
 
 /** The most columns a list schedule keeps; a damaged file cannot grow the project without bound. */
@@ -30,9 +30,9 @@ export interface ListScheduleColumn {
   /** Unique among the columns; grouping and sums name it. */
   id: string;
   source: ListColumnSource;
-  /** The property set or quantity set (`Qto_WallBaseQuantities`); property and quantity columns. */
+  /** The property set or quantity set (`Qto_WallBaseQuantities`); property and quantity columns. For `officeClassification`: the id of the classification mapping (absent: the project's first). */
   psetName?: string;
-  /** The attribute (`Name`, `Type`), property or quantity (`NetSideArea`), or the spatial level (`Storey`). */
+  /** The attribute (`Name`, `Type`), property or quantity (`NetSideArea`), the spatial level (`Storey`), or `Code` / `Title` of the office classification (#351). */
   propertyName: string;
   /** The heading, when it is not the property's name. */
   label?: string;

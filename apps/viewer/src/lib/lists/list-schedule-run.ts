@@ -10,8 +10,10 @@
  */
 
 import type { ProjectUnits } from '@ifc-lite/parser';
+import { withOfficeClassification, type ListClassificationContext } from '@bimvoice/ifcsheet';
 import { listDefinitionOf, listRunOf, type ListScheduleInput, type ListScheduleRun } from '@bimvoice/ifcsheet/list-projection';
 import type { ViewerState } from '@/store';
+import { listClassificationContext } from '@/classification/classification-model';
 import { evaluatorModelsFromState } from '../model-tags/evaluator-models';
 import { runListFederated, type ModelProviderPair } from './run-list';
 
@@ -20,9 +22,14 @@ export { listTableSourceOf, type ListScheduleInput, type ListScheduleRun, type L
 /** Run the schedule's list over the loaded models and project it as the Lists panel exports it. */
 export async function runListSchedule(
   schedule: ListScheduleInput, pairs: readonly ModelProviderPair[], modelUnits: Map<string, ProjectUnits>, state: ViewerState,
-  options: { signal?: AbortSignal; today?: Date } = {},
+  options: { signal?: AbortSignal; today?: Date; classification?: ListClassificationContext } = {},
 ): Promise<ListScheduleRun> {
   options.signal?.throwIfAborted();
+  // The office classification (#351) comes through the run context: each provider answers it with the project's mappings (`classificationOf`).
+  if (schedule.list.columns.some((c) => c.source === 'officeClassification')) {
+    const context = options.classification ?? listClassificationContext();
+    pairs = pairs.map((p) => ({ ...p, provider: withOfficeClassification(p.provider, p.modelId, context) }));
+  }
   const definition = listDefinitionOf(schedule, pairs);
   const result = await runListFederated(definition, pairs, state, { evaluatorModels: evaluatorModelsFromState(state), signal: options.signal });
   options.signal?.throwIfAborted();

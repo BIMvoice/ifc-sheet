@@ -4,11 +4,9 @@
 
 import type { TranslationKey } from '../en';
 import type { TranslationValue } from '../types';
-import { listScheduleRo } from './list-schedule.ro';
 
 /** Romanian for the export of a schedule (`schedule-export.en.ts`). Term choices: `../ro-glossary.md`. */
 export const scheduleExportRo = {
-  ...listScheduleRo,
   'wall.export.title': 'Export',
   'wall.export.summary': 'CSV și XLSX ale tabelului',
   'wall.export.hint': 'Tabelul așa cum îl tipărește planșa: aceleași rânduri, aceeași ordine și numerotare. Cifrele sunt numere simple; CSV separă coloanele cu {delimiter}.',
