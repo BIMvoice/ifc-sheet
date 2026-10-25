@@ -86,6 +86,29 @@ describe('Romanian catalogue (#53)', () => {
     ]);
   });
 
+  // #314: the command line and the Info dialog read English under Română because `drafting/` and the dialog were not in the face list, with this suite green.
+  it('the face check reaches the command line, the commands behind it and the Info dialog (#314)', () => {
+    const { 'drafting.prompt.firstPoint': _a, 'drafting.msg.tagAllDone': _b, 'keyboardShortcuts.header.title': _c, 'drafting.commandLine': _d, 'commands.wall.nextSheet': _e, ...without } = catalogue;
+    assert.deepEqual(untranslatedFaceKeys(without).sort(), [
+      'drafting.commandLine (components/viewer/drafting/CommandLine.tsx)',
+      'drafting.msg.tagAllDone (drafting/commands/tagall.ts)',
+      'drafting.prompt.firstPoint (drafting/commands/draw.ts)',
+      'keyboardShortcuts.header.title (components/viewer/KeyboardShortcutsDialog.tsx)',
+      'commands.wall.nextSheet (lib/commands/keyboard-commands.ts)',
+    ].sort());
+  });
+
+  it('gives every plural message of the catalogue the forms Romanian counts with (#314)', () => {
+    const lacking = Object.entries(catalogue).filter(([, v]) => typeof v !== 'string' && (v.one === undefined || v.few === undefined)).map(([k]) => k);
+    assert.deepEqual(lacking, []);
+  });
+
+  it('keeps the typed names of the commands (#314)', () => {
+    const names = Object.keys(catalogue).filter((k) => k.startsWith('drafting.cmd.'));
+    assert.ok(names.length > 30);
+    assert.deepEqual(names.filter((k) => catalogue[k] !== en[k as TranslationKey]), []);
+  });
+
   it('keeps every placeholder of the English message', () => {
     assert.deepEqual(placeholderProblems(catalogue), []);
     assert.deepEqual(checkCatalogue(catalogue).problems, []);

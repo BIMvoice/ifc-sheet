@@ -1,13 +1,13 @@
 # Romanian glossary (ro)
 
 One place to correct term choices. Edit the term here and in `catalogues/*.ro.ts`
-(`wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`, `review`, `print-preview`, `tag-fields`, `revisions`, `face`); the tests in
+(`wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`, `review`, `print-preview`, `tag-fields`, `revisions`, `face`, `drafting`, `annotate-all`, `keyboard-shortcuts`, `sheet-templates`); the tests in
 `locales/ro.test.ts` keep keys, placeholders and diacritics honest.
 
 Rules: comma-below diacritics only (ș ț, never ş ţ), plus ă â î. Polite plural
 imperative for instructions ("Deschideți…"). Romanian quotation marks „…”.
 Product and format names stay as they are: IfcSheet, IFC, DXF, PDF, SVG, CSV, BIMvoice.
-Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET) stay as typed.
+Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, TAGALL) stay as typed, and so do the option words a command line prompt offers (Close, Undo, SINGLE, MARK / NAME / CLASS). Where a figure counts one kind of thing, the entry has the forms Romanian counts with (1 subiect, 2 subiecte, 20 de subiecte); where it counts several, the figure follows a colon.
 
 | English | Romanian | Note |
 |---|---|---|
@@ -87,11 +87,25 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET) stay as
 | AutoCAD mode | Modul AutoCAD | Typed aliases (Z, U, PLOT…) stay as typed |
 | Ortho (mode) | Modul ortogonal | As `wall.ortho.*` |
 | Snap (to points) | Fixarea pe puncte | |
+| Command line | Linia de comandă | Prompt: "Comandă:"; `*Anulat*` for `*Cancel*` |
+| Specify (a point) | Specificați | Polite plural imperative, as in "Specificați primul punct:" |
+| Select (objects) / pick | Selectați / Alegeți | Selectați obiectele; Alegeți un punct |
+| Polyline | Polilinie | |
+| Dimension (the figure) / string of dimensions | Cotă / șir de cote | "Cotare" is the act; 1 cotă, 2 cote, 20 de cote |
+| Extension line / dimension line | Linie de ajutor / linie de cotă | |
+| Leader | Linie de indicație | |
+| Revision cloud (REVCLOUD) | Nor de revizie | |
+| Grid axis / bubble | Axă / bulă | |
+| Offset / Trim / Extend / Fillet / Mirror | Decalare / Tăiere / Prelungire / Racordare / Oglindire | Commands stay OFFSET, TRIM, EXTEND, FILLET, MIRROR |
+| Erase / Move / Copy / Rotate | Ștergere / Mutare / Copiere / Rotire | Commands stay ERASE, MOVE, COPY, ROTATE |
+| Ceiling plan (reflected) | Plan de plafoane (reflectat) | CEILTAG |
+| Info (the dialog behind Keyboard) | Informații | Tabs: Despre, Noutăți, Comenzi rapide, Învățare |
+| Sheet template | Șablon de planșă | The built-in ones: Planuri, Detalii, Fațade în format lung, Tabele; the paper follows in parentheses |
 
 ## Not translated yet
 
-The 3D viewer around the Wall (ribbon, panels, dialogs), the drafting tools you
-use inside a sheet (`drafting.*`), the PDF export dialogs (`sheetsPdf.*`) and the
+The 3D viewer around the Wall (ribbon, panels, dialogs), the drafting tools' panels
+and ribbon labels (`drafting.tool.*`, `drafting.props.*`; the command line and its messages are Romanian since #314), the PDF export dialogs (`sheetsPdf.*`) and the
 drafting standards stay English; a missing key falls back to English one by one.
 The "Detail marks" drafting layer name, the sheet name of a new blank schedule
 sheet made before this change, and anything a person typed are stored text and stay

@@ -21,6 +21,7 @@ import { setSheetFormat } from '@/project/drawing-set-actions';
 import { CUSTOM_MM, ELONGATED_PAPERS, ISO_PAPERS, isCustom, paperFromLabel, paperLabel, paperMm } from '@/project/paper';
 import { useProjectStore } from '@/project/project-store';
 import { DEFAULT_FRAME, frameOf, type FrameProblem } from '@/project/sheet-frame';
+import { templateOptionLabel } from './templateName';
 import { allTemplates, findTemplate, templateFields } from '@/project/sheet-templates';
 import { saveSheetTemplate, setSeriesTemplate } from '@/project/sheets';
 import type { ProjectSheet, SheetFrame, TemplateSeries } from '@/project/types';
@@ -98,7 +99,7 @@ export function PaperCard({ sheet, extent, boxOf, onClose }: { sheet: ProjectShe
         {t('wall.paper.template')}
         <select className={field} value={sheet.templateId ?? ''} onChange={(e) => { const tpl = findTemplate(e.target.value, own); if (tpl) { setAsCustom(isCustom(tpl.paper)); set(templateFields(tpl)); } }}>
           <option value="">{t('wall.paper.templatePick')}</option>
-          {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{`${tpl.name} (${paperLabel(tpl.paper)})`}</option>)}
+          {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{templateOptionLabel(tpl, t)}</option>)}
         </select>
       </label>
 
