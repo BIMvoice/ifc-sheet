@@ -4,28 +4,16 @@
 
 /** What the drawing in front installs into the drafting session: the pickers, and the model data the one-action commands read. */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { drawingToWorld } from '@/drafting/frame';
 import { pickModelElement, type ReferenceSet } from '@/drafting/references';
 import { syncLevelMarks } from '@/drafting/level-sync';
-import { levelResolverFor, storeyOf } from '@/drafting/level-resolver';
-import {
-  setElementPicker, setViewElementsProvider, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setAnnotationProviders, setLevelReferenceProviders, setModelPicker, setWorkPlaneProvider,
-} from '@/drafting/session';
+import { clearViewInputs, installViewInputs, setElementPicker, setModelPicker } from '@/drafting/session';
+import { viewInputs } from '@/drafting/view-inputs';
 import type { DraftEntity } from '@/drafting/types';
-import { viewElements } from '@/labels/view-elements';
-import { planParts } from '@/dimall/parts';
-import { useProjectStore } from '@/project/project-store';
-import { planSymbolObstacles } from '@/rcp/ceiling-tag-obstacles';
-import { roomsOfPlan } from '@/tagall/rooms';
-import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { roofAtPoint } from '@/project/roof-plan';
-import { resolvePlanLevel } from '@/project/view-defaults';
-import { viewWorkPlane } from '@/project/view-plane-config';
 import type { ProjectLevel, ProjectView } from '@/project/types';
 import { selectFromPlan } from '@/components/viewer/plan/PlanPointer';
-import { closedLoopsOf } from './drafting-shapes';
 
 interface Providers {
   view: Exclude<ProjectView, { kind: '3d' }>;
@@ -53,44 +41,14 @@ export function useDraftingProviders({ view, drawing, references, entities, plan
     setElementPicker((p) => (drawing && references ? pickModelElement(drawing, references, p, 6 / scale) : null));
     return () => setElementPicker(null);
   }, [drawing, references, scale]);
-  // LABELALL: the elements this view draws, each with a point to label it at.
+  // Everything the one-action commands (LABELALL, DIMALL, TAGALL, CEILTAG, LEVELALL, hatch, level marks) read from this view
+  // and its drawing is one function of them (`viewInputs`), the one the batch that annotates the whole set calls too.
+  const inputs = useMemo(() => viewInputs({ view, drawing, entities, plane, levels }), [view, drawing, entities, plane, levels]);
+  useEffect(() => installViewInputs(inputs), [inputs]);
+  useEffect(() => clearViewInputs, []);
+  // Level marks keep their references in step with the model: when the view, its levels or its plane change, not on every drafted entity.
   useEffect(() => {
-    setViewElementsProvider(() => (drawing ? viewElements(drawing) : []));
-    return () => setViewElementsProvider(null);
-  }, [drawing]);
-  // DIMALL: the walls, doors and windows this plan is cut through.
-  useEffect(() => {
-    setPlanPartsProvider(() => planParts(drawing));
-    return () => setPlanPartsProvider(null);
-  }, [drawing]);
-  // CEILTAG: the door leaves, swings and window frames this plan draws, which a tag keeps clear of (the same symbols the marks keep clear of).
-  useEffect(() => {
-    setPlanObstaclesProvider(() => planSymbolObstacles(view, levels, currentDrawingRuntime().geometryResult?.meshes ?? [], useProjectStore.getState().symbolFlips));
-    return () => setPlanObstaclesProvider(null);
-  }, [view, levels]);
-  // TAGALL: the rooms of this plan, each space cut at the plan's height (read as the check reads them).
-  useEffect(() => {
-    setRoomsProvider(() => roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult));
-    return () => setRoomsProvider(null);
-  }, [view, levels]);
-  // Hatch boundaries: drafted closed shapes and the drawing's cut outlines. Level marks: the
-  // plan's level, or the point's height on a section / elevation.
-  useEffect(() => {
-    setAnnotationProviders(
-      () => closedLoopsOf(entities, drawing),
-      (p) => {
-        if (view.kind === 'plan') return (resolvePlanLevel(view, levels) ?? view.level).elevation;
-        return plane ? drawingToWorld(plane, p).y : 0;
-      },
-    );
-  }, [entities, drawing, view, levels, plane]);
-  // Level marks: a plan's mark reads its storey, a section's the height of its reference.
-  useEffect(() => {
-    const resolve = levelResolverFor(view, levels, plane);
-    setLevelReferenceProviders((p) => (view.kind === 'plan' ? { at: p, storey: storeyOf(view, levels) } : { at: p }), resolve);
-    syncLevelMarks(view.id, resolve);
+    syncLevelMarks(view.id, inputs.resolveLevel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `inputs` is rebuilt on every draft edit; its resolver reads only the view, levels and plane
   }, [view, levels, plane]);
-  useEffect(() => {
-    setWorkPlaneProvider(() => viewWorkPlane(view, plane ?? null, levels), () => view);
-  }, [plane, view, levels]);
 }

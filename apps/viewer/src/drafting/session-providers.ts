@@ -16,6 +16,7 @@ import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
 import type { Box } from './cross-ref-marks';
 import type { LevelResolver } from './level-mark';
+import type { ViewInputs } from './view-inputs';
 import type { DraftShape, LevelRef, Pt } from './types';
 
 let referenceProvider: (min: Pt, max: Pt) => DraftShape[] = () => [];
@@ -112,3 +113,33 @@ export function setPlanObstaclesProvider(provider: (() => Box[]) | null): void {
   planObstaclesProvider = provider ?? (() => []);
 }
 export const planObstaclesOf = (): Box[] => planObstaclesProvider();
+
+/** The view in front gives the session all it reads from the view and its drawing (`view-inputs.ts`). */
+export function installViewInputs(inputs: ViewInputs): void {
+  setViewElementsProvider(inputs.viewElements);
+  setPlanPartsProvider(inputs.planParts);
+  setPlanObstaclesProvider(inputs.planObstacles);
+  setRoomsProvider(inputs.rooms);
+  setAnnotationProviders(inputs.closedLoops, inputs.levelAt);
+  setLevelReferenceProviders(inputs.levelRefAt, inputs.resolveLevel);
+  planeProvider = inputs.plane;
+  viewProvider = inputs.view;
+  viewKindProvider = inputs.viewKind;
+}
+
+/** The view in front goes: the session reads no view's data until another is installed. */
+export function clearViewInputs(): void {
+  setViewElementsProvider(null);
+  setPlanPartsProvider(null);
+  setPlanObstaclesProvider(null);
+  setRoomsProvider(null);
+}
+
+/** What the commands read from the view in front, as the session holds it. */
+export function installedViewInputs(): ViewInputs {
+  return {
+    closedLoops: closedLoopsOfView, levelAt: levelAtPoint, levelRefAt, resolveLevel: resolveLevelRef,
+    plane: () => activeWorkPlane().plane, viewKind: viewKindOf, view: () => activeWorkPlane().view,
+    viewElements: viewElementsOf, planParts: planPartsOf, planObstacles: planObstaclesOf, rooms: roomsOf,
+  };
+}

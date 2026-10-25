@@ -140,7 +140,7 @@ export function TemplateReport() {
       <h2 className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.setTemplate.report.title', { name: report.template })}</h2>
       <ul className="m-0 mt-2 list-none space-y-1 p-0 text-xs leading-relaxed text-sky-100/80">
         {report.notes.length === 0 ? <li>{t('wall.setTemplate.report.allMet')}</li> : report.notes.map((n, i) => <li key={`${n.key}:${i}`}>{say(n.key, n.params)}</li>)}
-        {report.toRun.map((r) => <li key={r.series}>{t('wall.setTemplate.report.run', { commands: r.commands.map((c) => c.toUpperCase()).join(', '), series: t(`draftSet.kind.${r.series}` as TranslationKey) })}</li>)}
+        {report.annotated === 'running' ? <li>{t('wall.setTemplate.report.annotating')}</li> : report.annotated ? <li data-testid="set-template-annotated">{t('wall.setTemplate.report.annotated', { added: report.annotated.added, views: report.annotated.views.length, skipped: report.annotated.views.filter((v) => v.skipped).length })}</li> : null}
       </ul>
     </section>
   );

@@ -87,6 +87,9 @@ export function worldToDrawing(plane: SectionPlaneConfig, w: Vec3): Pt {
 
 export type SectionAxisName = 'down' | 'front' | 'side';
 
+/** The drafting name of each cut axis (a plan cuts on y, a front view on z, a side view on x). */
+export const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const satisfies Record<'x' | 'y' | 'z', SectionAxisName>;
+
 export interface ViewTransform {
   x: number;
   y: number;

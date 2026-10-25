@@ -23,6 +23,7 @@ import { WallView } from '../wall/WallView';
 import { registerPanelEscape } from '../wall/wall-key-bus';
 import { setPanel, useDrawerOpen, useWallNav } from '../wall/wall-nav';
 import { WhatChanged } from '../whatchanged/WhatChanged';
+import { AnnotateSet } from '../annotate/AnnotateSet';
 import { openDemoModel } from './demo-model';
 import { LanguagePicker } from './LanguagePicker';
 import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
@@ -57,6 +58,7 @@ export function IfcSheetShell() {
         <span className="min-w-0 truncate text-sm text-sky-200/80">{modelName ?? t('wall.shell.untitled')}</span>
         <span className="flex-1" />
         {sheets.length > 0 ? <WhatChanged /> : null}
+        {sheets.length > 0 ? <AnnotateSet /> : null}
         {sheets.length > 0 ? <span className="whitespace-nowrap text-xs text-sky-200/80">{t('wall.shell.sheetsViews', { sheets: sheets.length, views })}</span> : null}
         {sheets.length > 0 ? (
           <>

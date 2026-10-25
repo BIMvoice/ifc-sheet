@@ -175,6 +175,18 @@ let screenRight: 1 | -1 = 1;
 export function setAnnotationScreenRight(sign: 1 | -1): void {
   screenRight = sign;
 }
+export const annotationScreenRight = (): 1 | -1 => screenRight;
+
+/** Run `fn` as drafting on a view whose screen-up and screen-right are these, then put the session's back (the batch annotating views that are not open, #333). */
+export function withAnnotationFrame<T>(up: 1 | -1, right: 1 | -1, fn: () => T): T {
+  const [wasUp, wasRight] = [screenUp, screenRight];
+  [screenUp, screenRight] = [up, right];
+  try {
+    return fn();
+  } finally {
+    [screenUp, screenRight] = [wasUp, wasRight];
+  }
+}
 
 /** Model metres per hatch-pattern unit at scale 1: patterns are drawn in paper millimetres, views default to 1:100. */
 export const HATCH_UNIT_M = 0.1;
