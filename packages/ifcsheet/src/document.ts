@@ -14,6 +14,8 @@
 
 import type { ViewGraphics } from './view-graphics-types.js';
 import type { ThreeDProjectView } from './view-3d-types.js';
+import type { TitleBlockParam } from './title-block-params.js';
+import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
 
 export type { CategoryGraphics, CategoryLineWeight, GridEnds, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
@@ -284,6 +286,10 @@ export interface ProjectDocument {
   sheets: ProjectSheet[];
   /** Title block fields every sheet prints (project, client, drawn by, date…). */
   titleBlock?: Record<string, string>;
+  /** The layout every sheet's title block prints, as edited or chosen (the Romanian one); absent: the standard layout (the app) or the plain block below the frame (this package). */
+  titleBlockTemplate?: TitleBlockTemplate;
+  /** The project's own title block parameters (`{Name}` in a layout). */
+  titleBlockParams?: TitleBlockParam[];
   /** The project's own sheet templates (the built-in ones are in code, `sheet-templates.ts`). */
   sheetTemplates?: SheetTemplate[];
   /** The template new sheets of a series start from, by template id. */

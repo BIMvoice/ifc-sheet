@@ -20,6 +20,7 @@ import { clipPolyline } from './clip.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
+import { printTitleBlock, sheetLookup } from './title-block-print.js';
 import { paperOf } from './viewport-fit.js';
 
 export type Polyline = readonly Point2D[];
@@ -30,6 +31,8 @@ export interface SheetText {
   /** Text height, paper mm. */
   size: number;
   align?: 'left' | 'center';
+  /** Degrees counter-clockwise about `at` (a title block strip reads upward); absent is level. */
+  angle?: number;
 }
 
 export interface SheetGraphic {
@@ -52,15 +55,20 @@ export interface SheetGraphic {
 /** A rectangle as a closed run of points (the first repeated last), so it reads whole in an open-polyline layer. */
 const rect = (r: { x: number; y: number; w: number; h: number }): Polyline => [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }, { x: r.x, y: r.y }];
 
-/** The title block: its box, a rule under the project, and the fields the engine knows. */
+/**
+ * The title block. A project that keeps a layout (`doc.titleBlockTemplate`: the
+ * Romanian one, or any the app edited) prints that layout, as the app does; one
+ * that does not gets the box, a rule under the project, and the fields below.
+ */
 function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scales: readonly number[]): { frame: Polyline[]; texts: SheetText[] } {
   const tb = titleBlockRect(paper, frameOf(sheet));
+  const scale = scales.length ? scales.map((s) => `1:${s}`).join(', ') : '';
+  if (doc.titleBlockTemplate) return printTitleBlock(doc.titleBlockTemplate, sheetLookup(sheet, doc, scale), tb, frameOf(sheet).titleBlock === 'right');
   const fields = { ...doc.titleBlock, ...sheet.titleBlock };
   const pad = 4;
   const strip = tb.h > tb.w;
   const ruleY = tb.y + (strip ? 40 : 16);
   const line = (i: number) => ruleY + 8 + i * 7;
-  const scale = scales.length ? scales.map((s) => `1:${s}`).join(', ') : '';
   return {
     frame: [rect(tb), [{ x: tb.x, y: ruleY }, { x: tb.x + tb.w, y: ruleY }]],
     texts: [

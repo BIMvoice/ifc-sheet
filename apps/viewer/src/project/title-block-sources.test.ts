@@ -65,8 +65,11 @@ describe('resolveField', () => {
 });
 
 describe('the defaults', () => {
-  it('cover project, address and organisation; drawn by and client only when picked (#114 review)', () => {
-    assert.deepEqual(Object.keys(DEFAULT_SOURCES).sort(), ['address', 'organisation', 'project']);
+  it('cover project, address and organisation, and the Romanian block\'s phase, project manager and designer (#54); drawn by and client only when picked (#114 review)', () => {
+    assert.deepEqual(Object.keys(DEFAULT_SOURCES).sort(), ['address', 'designer', 'organisation', 'phase', 'project', 'projectManager']);
+    assert.equal(resolveField('phase', {}, undefined, facts({ 'IfcProject.Phase': 'DTAC' })).value, 'DTAC');
+    assert.equal(resolveField('projectManager', {}, undefined, facts({ 'actor.PROJECTMANAGER': 'Ion Ionescu' })).value, 'Ion Ionescu');
+    assert.equal(resolveField('designer', {}, undefined, facts({ 'actor.ARCHITECT': 'Ana Popescu' })).value, 'Ana Popescu');
     for (const field of ['client', 'drawnBy', 'checkedBy', 'date', 'revision']) assert.equal(DEFAULT_SOURCES[field], undefined);
   });
 
