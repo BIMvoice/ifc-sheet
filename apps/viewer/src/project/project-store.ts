@@ -19,6 +19,7 @@ import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
@@ -251,6 +252,10 @@ export function addProjectView(view: NewProjectView): string {
 }
 
 export function renameProjectItem(id: string, name: string): void {
+  runAsOneUndoStep(() => renameProjectItemNow(id, name));
+}
+
+function renameProjectItemNow(id: string, name: string): void {
   const trimmed = name.trim();
   if (!trimmed) return;
   const state = useProjectStore.getState();
@@ -280,6 +285,10 @@ export function renameProjectItem(id: string, name: string): void {
 
 /** Change a view's settings (cut height, view depth, section plane…). Its id and kind never change. */
 export function updateProjectView(id: string, patch: ProjectViewPatch): void {
+  runAsOneUndoStep(() => updateProjectViewNow(id, patch));
+}
+
+function updateProjectViewNow(id: string, patch: ProjectViewPatch): void {
   const state = useProjectStore.getState();
   if (!state.views.some((v) => v.id === id)) return;
   useProjectStore.setState({
@@ -303,6 +312,10 @@ export function duplicateProjectView(id: string): string | null {
 }
 
 export function removeProjectItem(id: string): void {
+  runAsOneUndoStep(() => removeProjectItemNow(id));
+}
+
+function removeProjectItemNow(id: string): void {
   const state = useProjectStore.getState();
   useProjectStore.setState({
     views: state.views.filter((v) => v.id !== id),
@@ -329,6 +342,12 @@ export const numberingScheme = (state: Pick<ProjectDocument, 'sheetNumbering'> =
  * it holds. It starts from the template if one is named.
  */
 export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateId?: string): string {
+  let id = '';
+  runAsOneUndoStep(() => { id = addProjectSheetNow(name, group, templateId); });
+  return id;
+}
+
+function addProjectSheetNow(name: string, group: NumberGroup | undefined, templateId: string | undefined): string {
   const state = useProjectStore.getState();
   const series = group ?? 'plans';
   const template = findTemplate(templateId, state.sheetTemplates);
@@ -339,6 +358,12 @@ export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateI
 
 /** Copy a sheet under the next free number, right after it. */
 export function duplicateProjectSheet(id: string): string | null {
+  let copy: string | null = null;
+  runAsOneUndoStep(() => { copy = duplicateProjectSheetNow(id); });
+  return copy;
+}
+
+function duplicateProjectSheetNow(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;
