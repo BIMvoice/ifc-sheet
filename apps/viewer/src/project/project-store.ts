@@ -19,6 +19,7 @@ import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
@@ -238,6 +239,18 @@ export function toggleSymbolFlips(globalIds: readonly string[], bit: 1 | 2): voi
   useProjectStore.setState({ symbolFlips: flips, dirty: true });
 }
 
+/** Each edit below is one undo step (#51): `runAsOneUndoStep` keeps a call made inside another step part of it. */
+function asStep<T>(edit: () => T): T {
+  let result!: T;
+  runAsOneUndoStep(() => { result = edit(); });
+  return result;
+}
+export const renameProjectItem = (id: string, name: string): void => asStep(() => renameProjectItemNow(id, name));
+export const updateProjectView = (id: string, patch: ProjectViewPatch): void => asStep(() => updateProjectViewNow(id, patch));
+export const removeProjectItem = (id: string): void => asStep(() => removeProjectItemNow(id));
+export const addProjectSheet = (name = 'Unnamed', group?: NumberGroup, templateId?: string): string => asStep(() => addProjectSheetNow(name, group, templateId));
+export const duplicateProjectSheet = (id: string): string | null => asStep(() => duplicateProjectSheetNow(id));
+
 export function setActiveProjectItem(id: string | null): void {
   useProjectStore.setState({ activeItemId: id });
 }
@@ -250,7 +263,7 @@ export function addProjectView(view: NewProjectView): string {
   return id;
 }
 
-export function renameProjectItem(id: string, name: string): void {
+function renameProjectItemNow(id: string, name: string): void {
   const trimmed = name.trim();
   if (!trimmed) return;
   const state = useProjectStore.getState();
@@ -279,7 +292,7 @@ export function renameProjectItem(id: string, name: string): void {
 }
 
 /** Change a view's settings (cut height, view depth, section plane…). Its id and kind never change. */
-export function updateProjectView(id: string, patch: ProjectViewPatch): void {
+function updateProjectViewNow(id: string, patch: ProjectViewPatch): void {
   const state = useProjectStore.getState();
   if (!state.views.some((v) => v.id === id)) return;
   useProjectStore.setState({
@@ -302,7 +315,7 @@ export function duplicateProjectView(id: string): string | null {
   return copy.id;
 }
 
-export function removeProjectItem(id: string): void {
+function removeProjectItemNow(id: string): void {
   const state = useProjectStore.getState();
   useProjectStore.setState({
     views: state.views.filter((v) => v.id !== id),
@@ -328,7 +341,7 @@ export const numberingScheme = (state: Pick<ProjectDocument, 'sheetNumbering'> =
  * next plan number until a view is placed on it, then it is numbered by what
  * it holds. It starts from the template if one is named.
  */
-export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateId?: string): string {
+function addProjectSheetNow(name: string, group: NumberGroup | undefined, templateId: string | undefined): string {
   const state = useProjectStore.getState();
   const series = group ?? 'plans';
   const template = findTemplate(templateId, state.sheetTemplates);
@@ -338,7 +351,7 @@ export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateI
 }
 
 /** Copy a sheet under the next free number, right after it. */
-export function duplicateProjectSheet(id: string): string | null {
+function duplicateProjectSheetNow(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;

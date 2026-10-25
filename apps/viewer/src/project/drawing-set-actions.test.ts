@@ -128,7 +128,9 @@ describe('ensureDrawingSet', () => {
   it('undoing the set removes only what it added; what came after stays, and Redo puts the set back', () => {
     run();
     const mine = makeHallSection();
-    const sheet = addProjectSheet('Details');
+    // Added outside the history (addProjectSheet is a step of its own since #51), as anything that is not an undo step is.
+    const sheet = 'later-sheet';
+    useProjectStore.setState((s) => ({ sheets: [...s.sheets, { id: sheet, number: 'Z-1', series: 'other', name: 'Details', createdAt: 1 } as never] }));
     assert.equal(undoDrafts(), true, 'the section');
     assert.equal(undoDrafts(), true, 'the set');
     assert.deepEqual(sections().map((v) => v.id), [mine], 'the set\'s section is gone, the person\'s own stays');
