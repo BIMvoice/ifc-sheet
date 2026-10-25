@@ -9,7 +9,7 @@
  */
 
 import { paperFromLabel } from '@/project/paper';
-import type { ChangedSheet, IssueChangeRecord, IssuedSheet, ProjectIssue } from './types';
+import type { ChangeReason, ChangedSheet, IssueChangeRecord, IssuedModel, IssuedSheet, ProjectIssue } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -39,8 +39,19 @@ function readSheetList(v: unknown, path: string): ChangedSheet[] {
   if (!Array.isArray(v)) fail(path, 'must be an array');
   return v.map((s, i) => {
     if (!isObject(s)) fail(`${path}/${i}`, 'must be a sheet');
-    return { number: text(s, 'number', `${path}/${i}`), title: text(s, 'title', `${path}/${i}`) };
+    const reasons = s.reasons;
+    if (reasons !== undefined && (!Array.isArray(reasons) || !reasons.every((r) => r === 'edited' || r === 'model'))) fail(`${path}/${i}/reasons`, 'must list edited and/or model');
+    return { number: text(s, 'number', `${path}/${i}`), title: text(s, 'title', `${path}/${i}`), ...(reasons ? { reasons: reasons as ChangeReason[] } : {}) };
   });
+}
+
+function readModel(v: unknown, path: string): IssuedModel {
+  if (!isObject(v)) fail(path, 'must be the model as issued');
+  const hash = text(v, 'hash', path);
+  if (!/^[0-9a-f]{14}$/.test(hash)) fail(`${path}/hash`, 'must be 14 hex digits');
+  if (!Number.isInteger(v.count) || (v.count as number) < 0) fail(`${path}/count`, 'must be a whole number');
+  if (typeof v.takenAt !== 'number' || !Number.isFinite(v.takenAt)) fail(`${path}/takenAt`, 'must be a number');
+  return { hash, count: v.count as number, takenAt: v.takenAt };
 }
 
 function readChanges(v: unknown, path: string): IssueChangeRecord {
@@ -65,6 +76,6 @@ export function readIssues(raw: unknown): ProjectIssue[] {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail(`${path}/date`, 'must be YYYY-MM-DD');
     if (typeof v.createdAt !== 'number' || !Number.isFinite(v.createdAt)) fail(`${path}/createdAt`, 'must be a number');
     if (!Array.isArray(v.sheets)) fail(`${path}/sheets`, 'must be an array');
-    return { id, name: text(v, 'name', path), date, createdAt: v.createdAt, sheets: v.sheets.map((s, j) => readSheet(s, `${path}/sheets/${j}`)), ...(v.changes !== undefined ? { changes: readChanges(v.changes, `${path}/changes`) } : {}) };
+    return { id, name: text(v, 'name', path), date, createdAt: v.createdAt, sheets: v.sheets.map((s, j) => readSheet(s, `${path}/sheets/${j}`)), ...(v.changes !== undefined ? { changes: readChanges(v.changes, `${path}/changes`) } : {}), ...(v.model !== undefined ? { model: readModel(v.model, `${path}/model`) } : {}) };
   });
 }

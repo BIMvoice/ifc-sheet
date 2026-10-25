@@ -108,7 +108,7 @@ describe('the record and the drawing list', () => {
   it('records the comparison with the issue, and reads it back', () => {
     const first = issueOf(SET);
     const next = issueOf(SET.slice(1), sources([dimension('d1', 'v2')]), [first.record]);
-    assert.deepEqual(next.record.changes, { against: { id: 'i1', name: 'Issue' }, added: [], removed: [{ number: 'A-101', title: 'Sheet A-101' }], changed: [{ number: 'A-102', title: 'Sheet A-102' }] });
+    assert.deepEqual(next.record.changes, { against: { id: 'i1', name: 'Issue' }, added: [], removed: [{ number: 'A-101', title: 'Sheet A-101' }], changed: [{ number: 'A-102', title: 'Sheet A-102', reasons: ['edited'] }] });
     assert.deepEqual(readIssues(JSON.parse(JSON.stringify([first.record, next.record]))), [first.record, next.record]);
   });
 
