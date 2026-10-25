@@ -11,9 +11,9 @@
  * the same lines.
  */
 
-import { escapeCsvCell } from '@ifc-lite/export';
 import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
+import type { ExportTable } from './schedule-export';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
 import type { Totals, TypeQuantities } from './type-quantities';
 
@@ -83,10 +83,12 @@ export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityL
   return layoutPagedTable(labels.title, 4, [{ kind: 'table', block }], paging);
 }
 
-/** The table as CSV, numbers unformatted, the type on every line; type names are model text, so every cell is formula-guarded (#1506). */
-export function typeQuantitiesCsv(data: TypeQuantities, labels: TypeQuantityLabels): string {
-  const num = (v: number | null) => (v === null ? '' : String(v));
-  const lines = [[labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto]];
-  for (const l of typeQuantityLines(data, labels)) lines.push([l.type, l.className, l.level, String(l.totals.count), num(l.totals.length), num(l.totals.area), num(l.totals.volume), String(l.totals.noQto)]);
-  return lines.map((l) => l.map((c) => escapeCsvCell(c)).join(',')).join('\n');
+/** The quantities as the table of its CSV and XLSX: the lines the sheet prints (totals in bold), the type and class (as printed, without `Ifc`) on every line, figures unformatted. */
+export function typeQuantityTable(data: TypeQuantities, labels: TypeQuantityLabels): ExportTable {
+  const lines = typeQuantityLines(data, labels);
+  return {
+    name: labels.title || labels.type, header: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], numeric: [3, 4, 5, 6, 7],
+    rows: lines.map((l) => [l.type, plainClass(l.className), l.level, l.totals.count, l.totals.length, l.totals.area, l.totals.volume, l.totals.noQto || null]),
+    bold: lines.flatMap((l, i) => (l.total ? [i] : [])),
+  };
 }

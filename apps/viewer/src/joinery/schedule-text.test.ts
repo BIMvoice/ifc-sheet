@@ -12,7 +12,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
 import { addTextRow, setTextCell, textCellText, type ScheduleTextRow } from '@bimvoice/ifcsheet';
-import { layoutSchedule, scheduleCsv, scheduleMinBox, schedulePages, type ScheduleLabels, type SchedulePrim } from './schedule-layout';
+import { layoutSchedule, scheduleMinBox, schedulePages, type ScheduleLabels, type SchedulePrim } from './schedule-layout';
+import { csvLines, joineryCsv } from './export-test-util';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import { textWidthEm } from '@/project/text-width';
 
@@ -129,7 +130,7 @@ describe('long text still fits the paper', () => {
 
 describe('the CSV carries the text', () => {
   it('one column per text row, each type\'s text on its line', () => {
-    const csv = scheduleCsv(withText(model(3), manufacturer()), labels).trim().split('\n');
+    const csv = csvLines(joineryCsv(withText(model(3), manufacturer()), labels));
     assert.ok(csv[0].endsWith(',Manufacturer'));
     assert.ok(csv[1].endsWith(',Rehau'));
     assert.ok(csv[2].endsWith(',Velux'));

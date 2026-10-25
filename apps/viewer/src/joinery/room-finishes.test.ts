@@ -12,7 +12,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
 import { coveringArea, coveringPredefinedType, finishLines, roomFinishes, surfaceOf, type CoveringInput, type RoomInput } from './room-finishes.js';
-import { layoutRoomFinishes, roomFinishesCsv } from './room-finishes-layout.js';
+import { finishTable, layoutRoomFinishes } from './room-finishes-layout.js';
+import { csvLines, tableCsv } from './export-test-util.js';
 
 const LABELS = { locale: 'en', title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms: area split equally.' };
 const cov = (id: number, name: string, predefinedType: string, area: number | null = null): CoveringInput => ({ id: `m#${id}`, name, predefinedType, area });
@@ -139,7 +140,7 @@ describe('finishLines and the table', () => {
   it('prints the figures in the layout and writes unformatted numbers, a blank where the model gives none, to the CSV', () => {
     const texts = layoutRoomFinishes(rooms, LABELS).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
     for (const t of ['Room finishes', 'Parquet', '24.50', '52.00', '4.25', 'Store']) assert.ok(texts.includes(t), t);
-    assert.deepEqual(roomFinishesCsv(rooms, LABELS).split('\n'), [
+    assert.deepEqual(csvLines(tableCsv(finishTable(rooms, LABELS))), [
       'No.,Room,Level,Floor,Area m²,Wall,Area m²,Ceiling,Area m²',
       '101,Living,L1,Parquet,24.5,Paint,52,,',
       '101,Living,L1,,,Veneer,4.25,,',
@@ -159,7 +160,7 @@ describe('finishLines and the table', () => {
   });
 
   it('guards a model text that would run as a spreadsheet formula', () => {
-    const csv = roomFinishesCsv(roomFinishes([room({ covers: [cov(1, '=HYPERLINK("x")', 'FLOORING', 1)] })]), LABELS);
-    assert.ok(!csv.split('\n')[1].includes(',=HYPERLINK'), csv);
+    const csv = tableCsv(finishTable(roomFinishes([room({ covers: [cov(1, '=HYPERLINK("x")', 'FLOORING', 1)] })]), LABELS));
+    assert.ok(!csvLines(csv)[1].includes(',=HYPERLINK'), csv);
   });
 });

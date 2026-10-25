@@ -13,6 +13,8 @@ import { useTranslation } from '@/i18n';
 import { layoutUrban } from '@/urban/urban-layout';
 import type { ProjectSchedule } from '@/project/types';
 import { ScheduleGraphic } from '../joinery/ScheduleGraphic';
+import { ScheduleExportButtons } from '../wall/ScheduleExportButtons';
+import { TAB_EXPORT } from '../wall/wall-type';
 import { SiteAreaField } from './SiteAreaField';
 import { CutLevelToggles, UrbanLevelFields } from './UrbanSettingsFields';
 import { useUrbanIndicators, useUrbanLabels } from './useUrban';
@@ -33,6 +35,7 @@ export function UrbanView({ schedule }: { schedule: ProjectSchedule }) {
         <span className="flex-1" />
         <UrbanLevelFields result={urban?.result ?? null} />
         <SiteAreaField modelSiteArea={urban?.areas.modelSiteArea ?? null} />
+        <ScheduleExportButtons schedule={schedule} className={TAB_EXPORT} />
       </div>
       {urban && urban.result.storeys.length > 0 ? <CutLevelToggles result={urban.result} /> : null}
       <div className="min-h-0 flex-1 overflow-auto bg-zinc-200 p-4 dark:bg-zinc-900">

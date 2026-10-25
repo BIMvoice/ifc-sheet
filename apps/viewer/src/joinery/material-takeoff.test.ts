@@ -12,7 +12,8 @@ import assert from 'node:assert/strict';
 import type { MaterialInfo } from '@ifc-lite/parser';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
 import { elementQuantities, materialShares, takeoffRows } from './material-takeoff.js';
-import { layoutMaterialTakeoff, takeoffCsv } from './material-takeoff-layout.js';
+import { layoutMaterialTakeoff, takeoffTable } from './material-takeoff-layout.js';
+import { csvLines, tableCsv } from './export-test-util.js';
 
 const near = (a: number | null, b: number) => assert.ok(a !== null && Math.abs(a - b) < 1e-9, `${a} ≉ ${b}`);
 const LABELS = { locale: 'en', title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume m³', area: 'Area m²', usedIn: 'Used in', total: 'Total' };
@@ -81,7 +82,7 @@ describe('takeoffRows', () => {
   });
 
   it('guards a material name against spreadsheet formulas in the CSV (#1506)', () => {
-    const csv = takeoffCsv(takeoffRows([{ className: 'IfcWall', materials: [{ name: '=HYPERLINK("x")', share: 1 }], volume: 1, area: null }]), LABELS);
-    assert.ok(!csv.split('\n')[1].startsWith('='), csv);
+    const csv = tableCsv(takeoffTable(takeoffRows([{ className: 'IfcWall', materials: [{ name: '=HYPERLINK("x")', share: 1 }], volume: 1, area: null }]), LABELS));
+    assert.ok(!csvLines(csv)[1].startsWith('='), csv);
   });
 });

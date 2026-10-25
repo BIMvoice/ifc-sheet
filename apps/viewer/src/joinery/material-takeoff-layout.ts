@@ -8,9 +8,9 @@
  * the same way: title, a header, one row per material, a total.
  */
 
-import { escapeCsvCell } from '@ifc-lite/export';
 import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
+import type { ExportTable } from './schedule-export';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
 import type { TakeoffRow } from './material-takeoff';
 
@@ -46,10 +46,15 @@ export function layoutMaterialTakeoff(rows: readonly TakeoffRow[], labels: Takeo
   return layoutPagedTable(labels.title, 4, [{ kind: 'table', block }], paging);
 }
 
-/** The takeoff as CSV, numbers unformatted; material names are model text, so every cell is formula-guarded (#1506). */
-export function takeoffCsv(rows: readonly TakeoffRow[], labels: TakeoffLabels): string {
-  const cell = (v: string) => escapeCsvCell(v);
-  const lines = [[labels.material, labels.elements, labels.volume, labels.area, labels.usedIn]];
-  for (const r of rows) lines.push([r.material, String(r.elements), r.volume === null ? '' : String(r.volume), r.area === null ? '' : String(r.area), r.classes.join(' ')]);
-  return lines.map((l) => l.map(cell).join(',')).join('\n');
+/** The takeoff as the table of its CSV and XLSX: the rows and the total line the sheet prints, volumes and areas unformatted, a figure the model does not give left empty. */
+export function takeoffTable(rows: readonly TakeoffRow[], labels: TakeoffLabels): ExportTable {
+  const sum = (key: 'volume' | 'area'): number | null => (rows.some((r) => r[key] !== null) ? rows.reduce((s, r) => s + (r[key] ?? 0), 0) : null);
+  return {
+    name: labels.title || labels.material, header: [labels.material, labels.elements, labels.volume, labels.area, labels.usedIn], numeric: [1, 2, 3],
+    rows: [
+      ...rows.map((r) => [r.material, r.elements, r.volume, r.area, r.classes.map(plainClass).join(', ')]),
+      [labels.total, rows.reduce((s, r) => s + r.elements, 0), sum('volume'), sum('area'), null],
+    ],
+    bold: [rows.length],
+  };
 }
