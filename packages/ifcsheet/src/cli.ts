@@ -18,6 +18,7 @@ import { buildHandoverZip, type HandoverPart } from './handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, readinessWithProject, sheetGraphics, type ProjectFacts } from './headless.js';
 import { describeReadiness } from './readiness.js';
 import { boq } from './cli-boq.js';
+import { classify } from './cli-classify.js';
 import { rooms } from './cli-rooms.js';
 
 /** Where `run` writes its messages; defaults to the process streams. */
@@ -41,6 +42,7 @@ Usage:
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
   ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]
+  ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]
 
 Commands:
   build   Lay out the starting drawing set of the model (a plan per level, the
@@ -57,6 +59,9 @@ Commands:
   boq     The bill of quantities (antemasuratoare): the articles of the project file, each with its total
           in its own unit, from the quantities the model declares (never zero for a missing one: the elements
           that lack it are named). Text, CSV with --csv, JSON with --json; --detail adds a row per type.
+  classify  The model's types with their classification code: the model's own IfcClassificationReference first, else the
+          project's mapping (a type, a material or a class to the office's code). --system picks one of the project's
+          systems (default: the first). Text, CSV with --csv, JSON with --json.
   rooms   The room and area schedule: every room (IfcSpace) by level with its number, name and
           area, a total per level and for the building (the urban indicators' Au). An area is the
           model's NetFloorArea (else GrossFloorArea), else the footprint of the room's geometry;
@@ -220,6 +225,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         name: { type: 'string' },
         template: { type: 'string' },
         project: { type: 'string' },
+        system: { type: 'string' },
         json: { type: 'boolean' },
         csv: { type: 'boolean' },
         detail: { type: 'boolean' },
@@ -243,7 +249,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.ok;
   }
   const [command, ...rest] = positionals;
-  if (command !== 'build' && command !== 'check' && command !== 'boq' && command !== 'rooms') {
+  if (command !== 'build' && command !== 'check' && command !== 'boq' && command !== 'rooms' && command !== 'classify') {
     io.stderr(`ifcsheet: unknown command "${command}"\n\n${USAGE}`);
     return EXIT.usage;
   }
@@ -256,6 +262,18 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
       return await boq({ model: rest[0], project: values.project, csv: values.csv === true, json: values.json === true, detail: values.detail === true, locale: values.locale ?? 'en' }, io);
     } catch (error) {
       io.stderr(`ifcsheet: boq of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
+  if (command === 'classify') {
+    if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values['include-far-elements'] || values.detail || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined || (values.csv && values.json)) {
+      io.stderr('ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n');
+      return EXIT.usage;
+    }
+    try {
+      return await classify({ model: rest[0], project: values.project, ...(values.system !== undefined ? { system: values.system } : {}), csv: values.csv === true, json: values.json === true }, io);
+    } catch (error) {
+      io.stderr(`ifcsheet: classify of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;
     }
   }

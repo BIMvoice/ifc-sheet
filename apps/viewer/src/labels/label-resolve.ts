@@ -36,6 +36,8 @@ export interface LabelElement {
   typeQuantitySets(): QuantitySetLike[];
   materials(): string[];
   storey(): string;
+  /** The classification (#89): the model's own code, else the project's first mapping; null for none. Absent: no classification is read. */
+  classification?(): { code: string; title: string } | null;
   /** Metres in one model length unit (0.001 for a model in millimetres). */
   lengthUnitScale(): number;
   /** Which property feeds the tag fields `Mark` and `TagName` (`tagfields/tag-fields.ts`); absent: the defaults. */
@@ -91,6 +93,7 @@ export function readStored(ref: FieldRef, el: LabelElement): FieldValue {
     case 'typeName': return plain(el.typeName() || undefined);
     case 'material': return plain(el.materials().join(' / ') || undefined);
     case 'storey': return plain(el.storey() || undefined);
+    case 'classification': return plain(el.classification?.()?.[ref.part === 'code' ? 'code' : 'title'] || undefined);
     case 'property': {
       const scale = el.lengthUnitScale();
       const type = [plain(propertyOf(el.typePropertySets(), ref.set, ref.name)), quantityOf(el.typeQuantitySets(), ref.set, ref.name, scale)];

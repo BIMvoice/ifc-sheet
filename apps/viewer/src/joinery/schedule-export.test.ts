@@ -56,7 +56,7 @@ describe('the room finishes', () => {
 
 describe('the quantities by type', () => {
   const el = (p: Partial<TypeElement>): TypeElement => ({ className: 'IfcWall', typeClass: 'IfcWallType', typeName: 'W1', level: 'L0', elevation: 0, length: null, area: null, volume: null, ...p });
-  const labels = { locale: 'en', title: TITLE, type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³', noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey' };
+  const labels = { locale: 'en', title: TITLE, type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³', noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey', classification: 'Classification', classificationTitle: 'Title', unclassified: 'No classification' };
   const data = typeQuantities([el({ length: 1.5 }), el({ level: 'L1', elevation: 3, length: 2, area: 4 }), el({ className: 'IfcSlab', typeClass: null, typeName: null, area: 10 })]);
   it('exports every line, the totals in bold, the type on each line', () => {
     const table = typeQuantityTable(data, labels);

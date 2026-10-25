@@ -17,7 +17,7 @@ import { csvLines, tableCsv } from './export-test-util';
 
 const LABELS: TypeQuantityLabels = {
   locale: 'en', title: 'Quantities', type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³',
-  noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey',
+  noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey', classification: 'Classification', classificationTitle: 'Title', unclassified: 'No classification',
 };
 
 const el = (p: Partial<TypeElement>): TypeElement => ({ className: 'IfcWall', typeClass: 'IfcWallType', typeName: 'W1', level: 'L0', elevation: 0, length: null, area: null, volume: null, ...p });

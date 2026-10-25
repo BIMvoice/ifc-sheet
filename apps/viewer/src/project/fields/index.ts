@@ -77,6 +77,8 @@ const DOCUMENT_FIELD_DEFS = [
   listField('boqArticles'),
   // The project's units and number format (#88); absent follows the language and each drawing's own style, so an old project saves as it was.
   optionalField('unitsAndNumbers'),
+  // The office's classification mappings (#89).
+  listField('classificationMappings'),
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];

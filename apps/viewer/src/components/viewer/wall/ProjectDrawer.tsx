@@ -46,6 +46,7 @@ import { ViewportState } from './ViewportState';
 import { ScheduleExportButtons } from './ScheduleExportButtons';
 import { ListScheduleAdd } from '../lists/ListScheduleAdd';
 import { TagFieldsPanel } from './TagFieldsPanel';
+import { ClassificationPanel } from './ClassificationPanel';
 import { ViewTemplatesPanel } from './ViewTemplatesPanel';
 import { WALL_PILL } from './wall-type';
 
@@ -191,6 +192,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <TitleBlockForm />
         </details>
         <TagFieldsPanel />
+        <ClassificationPanel />
         <ViewTemplatesPanel />
         {DRAWING_KINDS.map(({ kind, labelKey }) => (
           <Group key={kind} title={t(labelKey)}>

@@ -21,8 +21,7 @@ import { takeoffTable, type TakeoffLabels } from '@/joinery/material-takeoff-lay
 import { roomFinishes } from '@/joinery/room-finishes';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
 import { finishTable, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
-import { typeQuantities } from '@/joinery/type-quantities';
-import { collectTypeElements } from '@/joinery/type-quantities-models';
+import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
 import { typeQuantityTable, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
 import { registerTable, type RegisterLabels } from '@/joinery/register-layout';
 import { urbanTable, type UrbanLabels } from '@/urban/urban-layout';
@@ -63,7 +62,7 @@ export async function readScheduleExport(schedule: ProjectSchedule, labels: Expo
       return rooms.length ? { title, tables: [finishTable(rooms, { ...labels.finishes, title })] } : null;
     }
     case 'types': {
-      const data = typeQuantities(collectTypeElements());
+      const data = typeQuantitiesOf(schedule.classification);
       return data.rows.length ? { title, tables: [typeQuantityTable(data, { ...labels.types, title })] } : null;
     }
     case 'boq': {

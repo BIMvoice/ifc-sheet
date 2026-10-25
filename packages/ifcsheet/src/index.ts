@@ -33,6 +33,11 @@ export type {
 } from './document.js';
 
 // A view template's class and material mapping (#31)
+export {
+  CLASSIFICATION_BY, classificationOf, classifiedTypes, mappingsFor, matchKey, parseClassificationRows, readClassificationMapping, readClassificationMappings, readClassificationRule, classificationRuleOf, systemLabel, withRule,
+  type ClassificationBy, type ClassificationImport, type ClassificationMapping, type ClassificationModel, type ClassificationProblem, type ClassificationProblemKind, type ClassificationResult, type ClassificationRule, type ClassificationSystem,
+  type ClassifiedElement, type ClassifiedType, type ModelClassificationRef,
+} from './classification.js';
 export { classKey, itemRules, materialKey, ruleStyleFor, type ItemRules } from './style-rules.js';
 
 // View templates (#44): named graphics many views follow, and the one function that layers them
@@ -97,8 +102,8 @@ export {
   filterReview, keepApart, placeTypes, placeTypesOf, resumeChecking, reviewCounts, reviewTypes, type ReviewEdit, type ReviewFilter, type ReviewType,
 } from './sub-report-review.js';
 export {
-  canSplit, MAX_KEPT_APART, readKeptApart, readSchedule, readSubReport, readSubReportFilter, scheduleFilterProperties, scheduleOf, subReportData, subReportsOf,
-  type ProjectSchedule, type ScheduleListKind, type SplitData, type SplitEntry, type SubReport, type SubReportFilter,
+  canSplit, MAX_KEPT_APART, readKeptApart, readSchedule, readScheduleClassification, readSubReport, readSubReportFilter, scheduleFilterProperties, scheduleOf, subReportData, subReportsOf,
+  type ProjectSchedule, type ScheduleClassification, type ScheduleListKind, type SplitData, type SplitEntry, type SubReport, type SubReportFilter,
 } from './sub-reports.js';
 export {
   EXTERIOR, INTERIOR, PROPERTY_OPS, filterPropertyNames, isOpenFilter, passesElementFilter, passesPropertyTest, predefinedTypeText, propertyValueText, readPropertyTest,
