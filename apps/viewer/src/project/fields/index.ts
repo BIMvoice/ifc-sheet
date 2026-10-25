@@ -18,7 +18,7 @@ import { readDraft, readDraftLayer } from '@/drafting/draft-file';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { resolve } from '@/i18n/registry';
-import { readIssues } from '@/issue/file';
+import { readIssues } from './issues-read';
 import { readJoineryList } from '@/joinery/spec-file';
 import { DEFAULT_JOINERY_MAPPING, readJoineryMapping } from '@/joinery/symbol-mapping';
 import { readComments } from '@/review/file';
