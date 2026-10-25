@@ -146,7 +146,6 @@ import { viewGraphicsEn } from './catalogues/view-graphics.en';
 import { colourSchemeEn } from './catalogues/colour-scheme.en';
 import { viewTemplatesEn } from './catalogues/view-templates.en';
 import { styleRulesEn } from './catalogues/style-rules.en';
-import { classificationEn } from './catalogues/classification.en';
 import { elementGraphicsEn } from './catalogues/element-graphics.en';
 import { cadLayersEn } from './catalogues/cad-layers.en';
 import { phasesEn } from './catalogues/phases.en';
@@ -245,7 +244,6 @@ export const en = {
   ...colourSchemeEn,
   ...viewTemplatesEn,
   ...styleRulesEn,
-  ...classificationEn,
   ...elementGraphicsEn,
   ...phasesEn,
   ...catalogueEn,

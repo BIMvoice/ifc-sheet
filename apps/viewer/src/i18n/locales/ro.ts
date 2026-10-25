@@ -40,7 +40,6 @@ import { cadLayersRo } from '../catalogues/cad-layers.ro';
 import { colourSchemeRo } from '../catalogues/colour-scheme.ro';
 import { viewTemplatesRo } from '../catalogues/view-templates.ro';
 import { styleRulesRo } from '../catalogues/style-rules.ro';
-import { classificationRo } from '../catalogues/classification.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
 import { toursRo } from '../catalogues/tours.ro';
 import { reviewRo } from '../catalogues/review.ro';
@@ -87,7 +86,6 @@ export default {
   ...colourSchemeRo,
   ...viewTemplatesRo,
   ...styleRulesRo,
-  ...classificationRo,
   ...elementGraphicsRo,
   ...titleBlockParamsRo,
   ...reviewRo,
