@@ -11,6 +11,7 @@ import { LearnTab } from '@/components/tours/LearnTab';
 import { navigateToPath } from '@/services/app-navigation';
 import { useTranslation } from '@/i18n';
 import { registerKeyboardCommand } from '@/lib/commands/dispatcher';
+import { INFO_DIALOG, INFO_PANEL } from './keyboard-dialog-layout';
 import { AboutTab } from './KeyboardShortcutsDialogTabs';
 import { ShortcutsTab } from './ShortcutsTab';
 import { WhatsNewTab } from './KeyboardShortcutsWhatsNewTab';
@@ -59,7 +60,7 @@ export function KeyboardShortcutsDialog({ open, onClose, initialTab }: InfoDialo
           unset, which some Radix versions read as "forgot to wire one up"
           and warn about in dev. */}
       {/* A key being recorded in the keyboard settings (#166) may be Escape: that cancels the recording, not the dialog. */}
-      <DialogContent hideCloseButton aria-describedby={undefined} className="max-w-md w-full gap-0 p-0 bg-card"
+      <DialogContent hideCloseButton aria-describedby={undefined} className={INFO_DIALOG}
         onCloseAutoFocus={() => { if (opener.current?.isConnected) opener.current.focus(); }}
         onEscapeKeyDown={(e) => { if (document.activeElement?.closest('[data-recording]')) e.preventDefault(); }}>
         {/* Header — the MCP CTA lives here, in line with the title, so
@@ -87,7 +88,7 @@ export function KeyboardShortcutsDialog({ open, onClose, initialTab }: InfoDialo
         {/* Tabbed Content */}
         {/* The dialog unmounts when closed, so defaultValue re-applies on
             every open - enough for deep-linking without controlled tabs. */}
-        <Tabs defaultValue={initialTab ?? 'about'} className="w-full">
+        <Tabs defaultValue={initialTab ?? 'about'} className="w-full min-w-0 min-h-0 overflow-y-auto">
           <div className="px-4 pt-4">
             <TabsList className="w-full">
               <TabsTrigger value="about" className="flex-1 gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground">
@@ -111,10 +112,10 @@ export function KeyboardShortcutsDialog({ open, onClose, initialTab }: InfoDialo
 
           {/* Each wraps exactly one child — single-line, so a fifth tab
               (Preferences, #5509) didn't need a module-size budget raise. */}
-          <TabsContent value="about" className="p-4 max-h-80 overflow-y-auto"><AboutTab /></TabsContent>
-          <TabsContent value="whatsnew" className="p-4 max-h-96 overflow-y-auto"><WhatsNewTab /></TabsContent>
-          <TabsContent value="shortcuts" className="p-4 max-h-80 overflow-y-auto"><ShortcutsTab /></TabsContent>
-          <TabsContent value="learn" className="p-4 max-h-80 overflow-y-auto"><LearnTab onClose={onClose} /></TabsContent>
+          <TabsContent value="about" className={`${INFO_PANEL} max-h-80`}><AboutTab /></TabsContent>
+          <TabsContent value="whatsnew" className={`${INFO_PANEL} max-h-96`}><WhatsNewTab /></TabsContent>
+          <TabsContent value="shortcuts" className={`${INFO_PANEL} max-h-80`}><ShortcutsTab /></TabsContent>
+          <TabsContent value="learn" className={`${INFO_PANEL} max-h-80`}><LearnTab onClose={onClose} /></TabsContent>
         </Tabs>
 
         {/* Footer */}
