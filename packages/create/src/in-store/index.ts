@@ -272,6 +272,17 @@ export {
   type DrawingMarkupBatchInput,
   type DrawingMarkupBatchResult,
 } from './drawing-markup.js';
+export {
+  VIEW_ANNOTATION_OBJECTTYPE,
+  VIEW_ANNOTATION_PSET,
+  addViewAnnotationToStore,
+  ensurePlanAnnotationContext,
+  type ViewAnnotationAnchor,
+  type ViewAnnotationCurve,
+  type ViewAnnotationParams,
+  type ViewAnnotationResult,
+  type ViewAnnotationText,
+} from './view-annotation.js';
 
 export { reanchorHostedOpeningsInStore } from './hosted-placement-edit.js';
 export { reassignHostedOpeningsInStore, type HostedOpeningReassignment } from './hosted-placement-edit.js';

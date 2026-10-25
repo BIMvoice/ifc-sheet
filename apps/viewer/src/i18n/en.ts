@@ -126,6 +126,7 @@ import { draftSetEn } from './catalogues/draft-set.en';
 import { setTemplateEn } from './catalogues/set-template.en';
 import { issueEn } from './catalogues/issue.en';
 import { handoverEn } from './catalogues/handover.en';
+import { annotatedIfcEn } from './catalogues/annotated-ifc.en';
 import { revisionsEn } from './catalogues/revisions.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
 import { checkEn } from './catalogues/check.en';
@@ -137,6 +138,7 @@ import { projectVersionsEn } from './catalogues/project-versions.en';
 import { roofBlockEn } from './catalogues/roof-block.en';
 import { viewGraphicsEn } from './catalogues/view-graphics.en';
 import { colourSchemeEn } from './catalogues/colour-scheme.en';
+import { viewTemplatesEn } from './catalogues/view-templates.en';
 import { cadLayersEn } from './catalogues/cad-layers.en';
 import { phasesEn } from './catalogues/phases.en';
 import { catalogueEn } from './catalogues/catalogue.en';
@@ -216,6 +218,7 @@ export const en = {
   ...setTemplateEn,
   ...issueEn,
   ...handoverEn,
+  ...annotatedIfcEn,
   ...revisionsEn,
   ...annotateAllEn,
   ...checkEn,
@@ -227,6 +230,7 @@ export const en = {
   ...roofBlockEn,
   ...viewGraphicsEn,
   ...colourSchemeEn,
+  ...viewTemplatesEn,
   ...phasesEn,
   ...catalogueEn,
   ...cadLayersEn,

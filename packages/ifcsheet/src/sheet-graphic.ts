@@ -8,7 +8,7 @@
  * viewport's drawing at its scale, each drawing's title under it. The PDF and
  * DXF writers draw from this one layout, so they cannot disagree.
  *
- * Headless and unstyled. The web app draws its sheets as SVG through React
+ * Headless and mostly unstyled (a view's hidden categories are applied). The web app draws its sheets as SVG through React
  * (`components/viewer/sheets/`), with pens, hatches, symbols, annotation and
  * the full title block; this layout carries the geometry of the same sheet
  * and the fields the engine knows (project, sheet number and name, scale,
@@ -23,6 +23,7 @@ import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
 import { printTitleBlock, sheetLookup } from './title-block-print.js';
+import { hiddenClassesOf, resolveViewGraphics } from './view-templates.js';
 import { paperOf } from './viewport-fit.js';
 
 export type Polyline = readonly Point2D[];
@@ -135,10 +136,13 @@ export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
       const scheme = schemes.get(vp.viewId);
       if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box));
-      for (const polygon of drawing.cutPolygons) {
+      // The categories the view hides (its template's, then its own, `resolveViewGraphics`): their cut faces and lines are not on the sheet, as in the app.
+      const hidden = hiddenClassesOf(resolveViewGraphics(view, doc.viewTemplates));
+      const shown = (ifcType: string | undefined) => !ifcType || !hidden.has(ifcType.toUpperCase());
+      for (const polygon of drawing.cutPolygons.filter((p) => shown(p.ifcType))) {
         for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }
-      for (const line of drawing.lines) if (line.visibility !== 'hidden') out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
+      for (const line of drawing.lines) if (line.visibility !== 'hidden' && shown(line.ifcType)) out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
     }
     if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
   }

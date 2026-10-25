@@ -69,6 +69,11 @@
       "types": "./dist/handover.d.ts",
       "import": "./dist/handover.js",
       "default": "./dist/handover.js"
+    },
+    "./annotated-ifc": {
+      "types": "./dist/annotated-ifc.d.ts",
+      "import": "./dist/annotated-ifc.js",
+      "default": "./dist/annotated-ifc.js"
     }
   },
   "scripts": {
