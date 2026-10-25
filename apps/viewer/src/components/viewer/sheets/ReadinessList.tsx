@@ -21,6 +21,7 @@ import { boqMissing } from '@bimvoice/ifcsheet';
 import { useBoqArticles, useBoqResult } from '../boq/useBoq';
 import type { SetSkin } from './set-skin';
 import { setReview } from '../wall/wall-nav';
+import { goToRoom } from '@/check/room-go';
 
 /**
  * The findings of the models open now; null while none is open (nothing to say yet). `owners` names, for each sub-report finding in
@@ -71,6 +72,12 @@ function ReviewLink({ scheduleId, skin }: { scheduleId: string | undefined; skin
   );
 }
 
+/** Opens the plan of the first room whose area is estimated and zooms to it. */
+function RoomLink({ guid, skin }: { guid: string; skin: SetSkin }) {
+  const { t } = useTranslation();
+  return <button type="button" className={`${skin.note} underline`} onClick={() => goToRoom(guid)}>{t('ready.estimatedAreas.go')}</button>;
+}
+
 export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compact?: boolean }) {
   const { t } = useTranslation();
   const readiness = useModelReadiness();
@@ -85,6 +92,7 @@ export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compac
         <li key={`${f.kind}-${f.params.schedule ?? ''}`} className="py-0.5">
           <p className={`m-0 ${compact ? skin.note : skin.heading}`}>{describeMissing(f)}</p>
           {compact ? null : <p className={`m-0 ${skin.note}`}>{describeEffect(f)}</p>}
+          {f.kind === 'estimatedAreas' ? <RoomLink guid={String(f.params.first)} skin={skin} /> : null}
           {f.kind === 'subReportDuplicates' || f.kind === 'subReportGaps' ? <ReviewLink scheduleId={owners[nextOwner++]} skin={skin} /> : null}
         </li>
       ))}

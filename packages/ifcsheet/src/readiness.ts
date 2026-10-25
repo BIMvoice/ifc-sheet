@@ -17,6 +17,7 @@
 
 import type { BoqMissing } from './boq-compute.js';
 import { subReportParams, type SubReportCheck } from './sub-report-check.js';
+import type { EstimatedAreas } from './room-estimates.js';
 
 /** What the loaded models hold, counted once. "Elements" are the products that have geometry, rooms (IfcSpace) apart. */
 export interface ModelFacts {
@@ -31,6 +32,8 @@ export interface ModelFacts {
   duplicatedEntities: number;
   /** The small elements the views are framed without because they lie far from the building (`framing.ts`), farthest first; absent: none were looked for. */
   farElements?: readonly FarElementFact[];
+  /** The rooms whose area is measured from geometry because the model states none (`room-estimates.ts`); absent: none. */
+  estimatedAreas?: EstimatedAreas;
 }
 
 /** A far-away element as a message names it: its label (Name, else class and GlobalId) and its distance from the building, metres. */
@@ -39,7 +42,7 @@ export interface FarElementFact {
   distance: number;
 }
 
-export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'boqMissingQuantity';
+export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'estimatedAreas' | 'boqMissingQuantity';
 
 export interface ReadinessFinding {
   kind: ReadinessKind;
@@ -70,6 +73,7 @@ export function modelReadiness(f: ModelFacts, subReports: readonly SubReportChec
   }
   if (f.duplicateGlobalIds > 0) out.push(finding('duplicateGlobalIds', { count: f.duplicateGlobalIds, entities: f.duplicatedEntities }));
   if (f.farElements && f.farElements.length > 0) out.push(finding('farElements', farElementParams(f.farElements)));
+  if (f.estimatedAreas && f.estimatedAreas.count > 0) out.push(finding('estimatedAreas', estimatedAreaParams(f.estimatedAreas)));
   for (const c of subReports) {
     if (c.duplicates.length > 0) out.push(finding('subReportDuplicates', subReportParams(c.duplicates, c.parent.name)));
     if (c.gaps.length > 0) out.push(finding('subReportGaps', subReportParams(c.gaps, c.parent.name)));
@@ -94,6 +98,22 @@ function farElementParams(elements: readonly FarElementFact[]): Record<string, n
   };
 }
 
+/** How many estimated rooms the sentence names; the rest are counted. */
+const NAMED_ESTIMATED_ROOMS = 8;
+
+/**
+ * The parameters of the estimated-areas finding: the count, the area they add to Au (m², one decimal) and its share of Au
+ * (per cent, whole), the rooms named, and the first one's GlobalId (what "Go to" opens). Numbers stay numbers: a surface writes them in its language.
+ */
+function estimatedAreaParams(e: EstimatedAreas): Record<string, number | string> {
+  const named = e.rooms.slice(0, NAMED_ESTIMATED_ROOMS).map((r) => `'${r.number ? `${r.number} ` : ''}${r.name}'`);
+  const rest = e.rooms.length - named.length;
+  return {
+    count: e.count, area: Math.round(e.area * 10) / 10, share: Math.round(e.share),
+    list: named.join(', ') + (rest > 0 ? `, … +${rest}` : ''), first: e.rooms[0].id,
+  };
+}
+
 /** The English of every finding's two sentences, by catalogue key; the app's English catalogue spreads this, so it is the one copy. */
 export const READINESS_EN = {
   'ready.noStoreys': 'The model has no building storeys.',
@@ -115,6 +135,8 @@ export const READINESS_EN = {
   'ready.farElements.effect': 'Views are framed without them, so the scale and the paper suit the building. They stay in the model, the schedules and the quantities, and are drawn where they fall inside the frame. The project setting "include far-away elements in framing" (--include-far-elements on the command line) frames them again.',
   'ready.boqMissingQuantity': '{count} elements lack a quantity that an article of the bill of quantities takes: {list}.',
   'ready.boqMissingQuantity.effect': 'The bill of quantities leaves them out of those articles\' totals. They are not counted as zero: the articles\' quantities are short by what these elements hold.',
+  'ready.estimatedAreas': 'Au includes {count} rooms whose area the model doesn\'t state; they are measured from geometry (≈ {area} m², {share} % of Au) and may be wrong under sloped ceilings: {list}.',
+  'ready.estimatedAreas.effect': 'The room and area schedule and the urban sheet count them and mark them. State NetFloorArea (Qto_SpaceBaseQuantities) on these rooms and Au is exact.',
   'ready.subReportGaps.effect': 'The parts do not add up to the schedule: those doors and windows are on no sheet.',
 } as const;
 

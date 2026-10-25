@@ -107,19 +107,19 @@ describe('tag fields on FZK-Haus', () => {
   it('gives with the default configuration the tag text the model gave before: the Tag as a mark, else the Name; the long name and the area', () => {
     const drafts = tagAll('v');
     const byGuid = new Map(drafts.map((d) => [String(d.params.labelOf), text(d)]));
-    // Before the sources could be changed: markOf(Tag), else Name; LongName, else Name, then NetFloorArea.
+    // Before the sources could be changed: markOf(Tag), else Name; LongName, else Name, then NetFloorArea; a room's number (#42) above them.
     const area = (g: string): string => {
       const q = el(g).quantitySets().find((s) => s.name === 'BaseQuantities')?.quantities.find((x) => x.name === 'NetFloorArea');
       return Number(q?.value).toFixed(2);
     };
     for (const g of [...guids.door, ...guids.window]) assert.equal(byGuid.get(g), markOf(el(g).attribute('Tag')) || el(g).attribute('Name'));
-    for (const g of guids.room) assert.equal(byGuid.get(g), `${el(g).attribute('LongName') || el(g).attribute('Name')}\n${area(g)} m²`);
+    for (const g of guids.room) assert.equal(byGuid.get(g), `${el(g).attribute('Name')}\n${el(g).attribute('LongName') || el(g).attribute('Name')}\n${area(g)} m²`);
     // A few of them as the model states them.
     const named = (name: string) => byGuid.get(guids.door.find((g) => el(g).attribute('Name') === name)!);
     assert.equal(named('Innentuer-1'), 'Innentuer-1');
     assert.equal(named('Terrassentuer'), 'Terrassentuer');
-    assert.equal(byGuid.get(guids.room.find((g) => el(g).attribute('LongName') === 'Schlafzimmer')!), 'Schlafzimmer\n21.41 m²');
-    assert.equal(byGuid.get(guids.room.find((g) => el(g).attribute('LongName') === 'Galerie')!), 'Galerie\n74.51 m²');
+    assert.equal(byGuid.get(guids.room.find((g) => el(g).attribute('LongName') === 'Schlafzimmer')!), '4\nSchlafzimmer\n21.41 m²');
+    assert.equal(byGuid.get(guids.room.find((g) => el(g).attribute('LongName') === 'Galerie')!), '7\nGalerie\n74.51 m²');
     assert.equal(drafts.length, 5 + 11 + 7);
   });
 

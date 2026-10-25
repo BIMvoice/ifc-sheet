@@ -17,4 +17,5 @@ export { sheetGraphic, type Polyline, type SheetGraphic, type SheetText } from '
 export { sheetGraphics, type SheetGraphicsOptions } from './set-sheets.js';
 export { exportDxf, exportPdf } from './export.js';
 export { IFC_GUID, isPhysicalElement, readModelFacts, readinessOfModel, type FactSource } from './readiness-read.js';
+export { areaScaleOf, readRooms, type RoomsRead } from './room-read.js';
 export * from './project.js';

@@ -54,6 +54,7 @@ function contextOf(view: ProjectView, say: string[] = []): Parameters<typeof tag
     view: () => view,
     viewElements: () => [],
     rooms: () => rooms,
+    planObstacles: () => [],
     entities: () => useProjectStore.getState().drafts,
     say: (key: string) => { say.push(key); },
   } as unknown as Parameters<typeof tagAll>[0];

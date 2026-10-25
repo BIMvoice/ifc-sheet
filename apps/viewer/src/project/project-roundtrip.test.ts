@@ -162,6 +162,7 @@ const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<Omit<ProjectSchedule
   register: { id: 'sc7', name: 'Drawing register', kind: 'register', createdAt: 11, scale: 100 },
   urban: { id: 'sc8', name: 'Urban indicators', kind: 'urban', createdAt: 12, scale: 100 },
   boq: { id: 'sc13', name: 'Antemăsurătoare', kind: 'boq', createdAt: 17, scale: 100 },
+  rooms: { id: 'sc20', name: 'Room and area schedule', kind: 'rooms', createdAt: 15, scale: 100 },
 };
 /** A bill of quantities that prints the rows per type (#75): `detail`, off by default, set. */
 const BOQ_DETAIL_SCHEDULE: Required<Omit<ProjectSchedule, 'sub' | 'textRows' | 'content' | 'keptApart'>> = { id: 'sc14', name: 'Antemăsurătoare, pe tipuri', kind: 'boq', createdAt: 18, scale: 100, detail: true };
