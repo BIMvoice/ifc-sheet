@@ -11,8 +11,10 @@
 import type { TranslationKey } from '@/i18n';
 import { paperLabel } from '@/project/paper';
 import type { IssuedSheet, ProjectIssue, ProjectSheet } from '@/project/types';
+import type { IssuedModel } from './types';
 import { holdsRegister, registerRow, sheetScaleText, type RegisterInput, type RegisterRow } from '@/project/drawing-register';
 import { changeRecord, issueChanges, type IssueChanges } from './changes';
+import type { ModelImpact } from './model-state';
 import { sheetFingerprint, type FingerprintSources } from '@/project/sheet-fingerprint';
 
 export interface IssueReason {
@@ -71,7 +73,7 @@ export function sheetIsEmpty(sheet: ProjectSheet, sources: FingerprintSources): 
  */
 export function planIssue(
   sheets: readonly ProjectSheet[], sources: FingerprintSources, input: IssueInput, projectTitleBlock?: Record<string, string>,
-  context: { issues?: readonly ProjectIssue[]; schedules?: RegisterInput['schedules'] } = {},
+  { model, ...context }: { issues?: readonly ProjectIssue[]; schedules?: RegisterInput['schedules']; /** What the model says of the sheets (`model-state.ts`); absent: not asked. */ model?: ModelImpact } = {},
 ): IssuePlan {
   const out: IssuePlan = { ...input, sheets: [], leftOut: [], changes: issueChanges([], undefined) };
   // The register opens the set, then the sheets by number.
@@ -91,14 +93,14 @@ export function planIssue(
       },
     });
   }
-  out.changes = issueChanges(out.sheets.map((s) => ({ ...s.row, sheetId: s.sheet.id })), context.issues?.at(-1));
+  out.changes = issueChanges(out.sheets.map((s) => ({ ...s.row, sheetId: s.sheet.id })), context.issues?.at(-1), model);
   return out;
 }
 
 /** The record kept with the project. */
-export function issueRecord(plan: IssuePlan, id: string, createdAt: number): ProjectIssue {
+export function issueRecord(plan: IssuePlan, id: string, createdAt: number, model?: IssuedModel): ProjectIssue {
   const changes = changeRecord(plan.changes);
-  return { id, name: plan.name, date: plan.date, createdAt, sheets: plan.sheets.map((s) => s.row), ...(changes ? { changes } : {}) };
+  return { id, name: plan.name, date: plan.date, createdAt, sheets: plan.sheets.map((s) => s.row), ...(changes ? { changes } : {}), ...(model ? { model } : {}) };
 }
 
 /** The number in a default issue name (`Issue 3`, `Emitere 3`), read against the template of every language; null for a name typed by hand. */

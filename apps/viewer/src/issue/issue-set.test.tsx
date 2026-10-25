@@ -91,7 +91,7 @@ describe('issuing twice with one sheet edited in between', () => {
     const rows = csvRows(files(second.zip));
     assert.equal(rows[0].at(-1), 'Change');
     assert.deepEqual(rows.slice(1).map((r) => [r[0], r.at(-1)]), [['A-101', ''], ['A-102', 'Changed'], ['A-201', '']]);
-    assert.deepEqual(useProjectStore.getState().issues?.at(-1)?.changes?.changed, [{ number: 'A-102', title: 'Second' }]);
+    assert.deepEqual(useProjectStore.getState().issues?.at(-1)?.changes?.changed, [{ number: 'A-102', title: 'Second', reasons: ['edited'] }]);
   });
 
   it('lists nothing when the set is issued again as it was', async () => {

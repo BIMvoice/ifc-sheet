@@ -12,6 +12,7 @@
 
 import { create } from 'zustand';
 import { parseSetTemplate, serializeSetTemplate, type SetTemplate } from '@bimvoice/ifcsheet';
+import type { SetSummary } from '@/annotate-set/annotate-set';
 import type { Reason } from '@/project/drawing-set';
 
 const KEPT_KEY = 'ifcsheet.setTemplates';
@@ -26,8 +27,8 @@ export interface KeptTemplate {
 export interface TemplateReport {
   template: string;
   notes: Reason[];
-  /** Annotation commands the template asks for that the app runs on a view when it is open, not by itself: series and commands. */
-  toRun: { series: string; commands: string[] }[];
+  /** What the annotation commands the template records did on the new set (`running` while they do), or null when it records none. */
+  annotated: SetSummary | 'running' | null;
 }
 
 interface SetTemplateState {

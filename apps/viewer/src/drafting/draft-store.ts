@@ -160,6 +160,40 @@ export function runAsStartingState(change: () => void): void {
   }
 }
 
+/**
+ * Work that happens in several runs with the page free between them (annotating the whole set, #333), made ONE undo step.
+ * Each `run` is synchronous and leaves no step of its own; the drafts it adds, removes or changes are kept, and `close`
+ * records them as one grouped step. Anything the user does between two runs makes its own step and is not in this one, so
+ * Undo takes back just what the runs did.
+ */
+export interface UndoSpan {
+  run(change: () => void): void;
+  close(): void;
+}
+
+export function openUndoSpan(): UndoSpan {
+  const delta: Delta<DraftEntity> = { added: [], removed: [], changed: [] };
+  return {
+    run(change) {
+      const before = useProjectStore.getState().drafts;
+      try {
+        runAsStartingState(change);
+      } finally {
+        // What a run did before it failed is part of the step too.
+        const d = diffById(before, useProjectStore.getState().drafts);
+        delta.added.push(...d.added);
+        delta.removed.push(...d.removed);
+        delta.changed.push(...d.changed);
+      }
+    },
+    close() {
+      if (isEmptyDelta(delta)) return;
+      const none = <T extends { id: string }>(): Delta<T> => ({ added: [], removed: [], changed: [] });
+      pushStep({ group: { drafts: delta, views: none(), sheets: none(), revisions: { ...none<ProjectRevision>(), before: [], after: [] }, lists: [], orders: {}, fields: [] } });
+    },
+  };
+}
+
 /** The fields `changes` set back to `to`, each only where it still holds the value the step moved it `from`. */
 function fieldsBack(s: ProjectDocument, changes: readonly FieldChange[], from: 'before' | 'after', to: 'before' | 'after'): Partial<ProjectDocument> {
   const out: Partial<Record<StepField, unknown>> = {};

@@ -31,12 +31,33 @@ export interface ProjectIssue {
   sheets: IssuedSheet[];
   /** What differed from the issue before it, as it was when this one went out. Absent for a first issue and when that issue could not be compared. */
   changes?: IssueChangeRecord;
+  /** The model as issued (`issue/model-state.ts`). Absent when no model was loaded, and in records from before it was kept: model changes since such an issue cannot be listed. */
+  model?: IssuedModel;
 }
+
+/**
+ * A reference to the model as an issue went out: a fingerprint of its model state (`ModelSnapshot.rows`) and its
+ * size. The state itself is `ProjectDocument.modelState.issued`, kept for the last issue only and not copied
+ * into the record.
+ */
+export interface IssuedModel {
+  /** 14 hex digits: equal to the state's, or the state is not the one issued. */
+  hash: string;
+  /** Elements in the state. */
+  count: number;
+  /** When the state was taken. */
+  takenAt: number;
+}
+
+/** Why a sheet is listed as changed: its project data was `edited`, or the `model` it shows changed (What changed). */
+export type ChangeReason = 'edited' | 'model';
 
 /** A sheet named in a change list. */
 export interface ChangedSheet {
   number: string;
   title: string;
+  /** For a changed sheet: why. Absent in records from before the model was compared; those were edits. */
+  reasons?: ChangeReason[];
 }
 
 /** What `ProjectIssue.changes` keeps (`issue/changes.ts`). */

@@ -43,5 +43,6 @@ export const setTemplateRo = {
   'wall.setTemplate.refused': 'Fișierul nu poate fi folosit ca șablon de set: {detail}',
   'wall.setTemplate.report.title': 'Făcut după șablonul {name}',
   'wall.setTemplate.report.allMet': 'Fiecare regulă a șablonului și-a găsit desenul în acest model.',
-  'wall.setTemplate.report.run': 'Șablonul cere și {commands} pe {series}. Rulați-le pe fiecare vedere după ce o deschideți.',
+  'wall.setTemplate.report.annotating': 'Comenzile înregistrate în șablon (TAGALL, DIMALL, LEVELALL) rulează pe setul nou.',
+  'wall.setTemplate.report.annotated': 'Comenzile înregistrate în șablon au rulat pe setul nou: {added} adăugate pe {views} vederi; vederi omise: {skipped}.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

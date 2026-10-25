@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { isGeometry } from '@/drafting/types';
-import { type SectionAxisName } from '@/drafting/frame';
+import { AXIS_NAME, type SectionAxisName } from '@/drafting/frame';
 import { parsePat } from '@/drafting/hatch/pattern';
 
 import { viewPlaneConfig, viewWorkPlane } from '@/project/view-plane-config';
@@ -138,7 +138,6 @@ import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
 
 
-const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
 const NO_SHEET_TRANSFORM = { current: null };
 
 /**
