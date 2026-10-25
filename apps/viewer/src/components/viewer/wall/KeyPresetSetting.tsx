@@ -53,11 +53,11 @@ export function KeyPresetSetting({ onChanged }: { onChanged: (text: string) => v
         {custom > 0 ? t('wall.keys.preset.custom', { count: custom, preset: name }) : t('wall.keys.preset.noCustom', { preset: name })}
       </p>
       {offering && !autocadMode ? (
-        <div role="group" aria-label={t('wall.keys.autocad.label')} className="flex flex-wrap items-center gap-1.5">
+        <fieldset aria-label={t('wall.keys.autocad.label')} className="m-0 flex min-w-0 flex-wrap items-center gap-1.5 border-0 p-0">
           <span>{t('wall.keys.preset.offerAutocad')}</span>
           <button type="button" className={button} onClick={() => { setAutocadMode(true); setOffering(false); onChanged(t('wall.keys.autocad.turnedOn')); }}>{t('wall.keys.preset.offerAutocadOn')}</button>
           <button type="button" className={button} onClick={() => setOffering(false)}>{t('wall.keys.preset.offerLater')}</button>
-        </div>
+        </fieldset>
       ) : null}
     </div>
   );

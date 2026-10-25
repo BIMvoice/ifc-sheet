@@ -42,6 +42,8 @@ afterEach(() => {
 
 const named = (ui: HTMLElement, label: string) => [...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
 const doneButtons = (ui: HTMLElement) => [...ui.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Done');
+/** The Done on the tool's own card (the aside), not the command line's. */
+const cardDone = (ui: HTMLElement) => [...ui.querySelectorAll('aside button')].find((b) => b.textContent?.trim() === 'Done')!;
 
 function mount(focus: string | null = null): HTMLElement {
   const sheet = useProjectStore.getState().sheets[1];
@@ -54,7 +56,7 @@ describe('a drawing tool without Esc', () => {
     act(() => click(named(ui, 'Polyline')!));
     assert.ok(runningCommand());
     assert.equal(named(ui, 'Polyline')!.getAttribute('aria-pressed'), 'true');
-    act(() => click(doneButtons(ui)[0]));
+    act(() => click(cardDone(ui)));
     assert.equal(runningCommand(), null);
     assert.equal(named(ui, 'Polyline')!.getAttribute('aria-pressed'), 'false');
   });
@@ -64,7 +66,7 @@ describe('a drawing tool without Esc', () => {
     const before = useProjectStore.getState().drafts.length;
     act(() => click(named(ui, 'Polyline')!));
     act(() => { for (const p of [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 30 }]) clickDrawing(p, 0.05, false); });
-    act(() => click(doneButtons(ui)[0]));
+    act(() => click(cardDone(ui)));
     assert.equal(runningCommand(), null);
     assert.equal(useProjectStore.getState().drafts.length, before + 1);
   });

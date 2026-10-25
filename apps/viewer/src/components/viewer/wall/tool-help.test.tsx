@@ -40,7 +40,7 @@ describe('tool help', () => {
     });
     cleanup();
     for (const command of chosen) {
-      const card = render(<InfoCard tool={command} />);
+      const card = render(<InfoCard tool={command} onDone={() => {}} />);
       assert.ok((card.textContent ?? '').includes(resolve(toolHelpKey(command))), `${command} shows its help line once chosen`);
       cleanup();
     }

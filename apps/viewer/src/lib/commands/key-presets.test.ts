@@ -12,6 +12,7 @@ import {
   KEY_PRESET_STORAGE_KEY, currentPreset, effectiveKeys, exportKeyBindings, importKeyBindings, isCustomised, loadKeyBindings,
   presetConflict, rebindAction, resetAction, resetAllBindings, setKeyPreset, unbindAction,
 } from './key-bindings.js';
+import type { KeyChord } from './chord.js';
 import { KEY_PRESETS, presetKeys } from './key-presets.js';
 
 /** The key presets (#166): a table each, the person's own keys on top. */
@@ -80,7 +81,7 @@ describe('switching presets', () => {
   });
 
   it('keeps the person\'s own rebinding across a switch, and "reset to preset" removes it', () => {
-    const own = { key: 'code:KeyF', alt: true };
+    const own: KeyChord = { key: 'code:KeyF', alt: true };
     assert.deepEqual(rebindAction('wall.fit', own), { ok: true });
     setKeyPreset('autocad');
     assert.deepEqual(effectiveKeys('wall.fit'), [own]);

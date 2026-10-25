@@ -152,7 +152,7 @@ describe('the Wall\'s dimension tool (#141)', () => {
       clickDrawing({ x: 4, y: 0 }, TOL, false);
       clickDrawing({ x: 2, y: -1 }, TOL, false);
     });
-    const done = [...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Done');
+    const done = [...ui.querySelectorAll('aside button')].find((b) => b.textContent?.trim() === 'Done');
     assert.ok(done, 'the tool\'s card offers Done');
     act(() => click(done));
     assert.equal(runningCommand(), null, 'the chain is over and no new one started');
