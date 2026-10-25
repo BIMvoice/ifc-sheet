@@ -25,7 +25,7 @@ import { layoutTableOnSheet, syncSchedulePages } from './schedule-fit.js';
 import { resizedFrame, sheetDrawingArea } from './viewport-resize.js';
 import type { ProjectSchedule, ProjectSheet } from './types';
 
-const SCHEDULE_KIND: Record<string, ProjectSchedule['kind']> = { takeoff: 'materials', finishes: 'finishes', types: 'types', urban: 'urban' };
+const SCHEDULE_KIND: Record<string, ProjectSchedule['kind']> = { takeoff: 'materials', finishes: 'finishes', types: 'types', urban: 'urban', rooms: 'rooms' };
 const N = 90;
 const sheets = () => useProjectStore.getState().sheets;
 const holders = (scheduleId: string) => sheets().filter((s) => (s.viewports ?? []).some((v) => v.viewId === scheduleId)).sort((a, b) => a.number.localeCompare(b.number));

@@ -5,6 +5,8 @@
 /** The loaded models counted into `ModelFacts`. The counting moved to the engine package (`packages/ifcsheet/src/readiness-read.ts`, #164); this reads the stores and says how many storeys each model has, the ones created in this session included. */
 
 import { readModelFacts, type FactSource } from '@bimvoice/ifcsheet/readiness-read';
+import { estimatedAreas } from '@bimvoice/ifcsheet';
+import { collectRoomRecords } from '@/urban/urban-models';
 import { useViewerStore } from '@/store';
 import { modelLevels } from '@/project/model-levels';
 import { buildingFraming } from '@/project/model-rooms';
@@ -24,5 +26,7 @@ export function currentModelFacts(): ModelFacts {
   // The small elements the views are framed without (`buildingFraming`, the rule the command line frames by); none when the project frames on everything.
   const project = useProjectStore.getState();
   const far = project.includeFarElements === true ? [] : buildingFraming(project.levels, modelMeshes()).far;
-  return far.length > 0 ? { ...facts, farElements: far } : facts;
+  // The rooms measured from geometry: the same helper the command line asks, over the same rooms Au sums.
+  const estimated = estimatedAreas(collectRoomRecords(project.levels).rooms);
+  return { ...facts, ...(far.length > 0 ? { farElements: far } : {}), ...(estimated ? { estimatedAreas: estimated } : {}) };
 }

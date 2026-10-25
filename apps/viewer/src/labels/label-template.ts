@@ -17,6 +17,8 @@
  *   {Tag ?? Name}                   the first of these that has a value
  *   {Mark}                          the element's mark: by default the Tag when it is a mark (D-01), not a
  *                                   machine identifier (a GUID); the office can map it to any property
+ *   {RoomNumber}                    a room's number: its Name when a LongName names the room, else nothing (the
+ *                                   same rule the room schedules read the number by)
  *   {TagName}                       the name a tag shows: by default the Name (a room's long name first); mappable too
  *
  * `\{`, `\}`, `\|` and `\\` write the character; `\n` and a real line break both
@@ -25,7 +27,7 @@
 
 import { parseFormatSpec, type FormatSpec } from './label-format';
 
-export const ATTRIBUTE_FIELDS = ['Name', 'LongName', 'Tag', 'Mark', 'TagName', 'ObjectType', 'Description', 'PredefinedType', 'GlobalId'] as const;
+export const ATTRIBUTE_FIELDS = ['Name', 'LongName', 'RoomNumber', 'Tag', 'Mark', 'TagName', 'ObjectType', 'Description', 'PredefinedType', 'GlobalId'] as const;
 export type AttributeField = (typeof ATTRIBUTE_FIELDS)[number];
 
 export type FieldRef =
