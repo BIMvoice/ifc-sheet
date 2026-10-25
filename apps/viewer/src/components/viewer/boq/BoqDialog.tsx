@@ -20,7 +20,7 @@ export function BoqDialog({ schedule, onClose }: { schedule: ProjectSchedule; on
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={t('boq.editor.title')} data-owns-keys className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 p-6">
+    <dialog open aria-modal="true" aria-label={t('boq.editor.title')} data-owns-keys className="fixed inset-0 z-50 m-0 flex h-full max-h-none w-full max-w-none items-stretch justify-center border-0 bg-black/60 p-6">
       <div className="flex min-h-0 w-full max-w-6xl flex-col rounded-xl border border-sky-300/20 bg-[#061a36] text-sky-100 shadow-2xl">
         <header className="flex shrink-0 items-center gap-3 border-b border-sky-300/20 px-5 py-3">
           <h2 className="m-0 flex-1 text-xl font-normal text-white">{schedule.name} · {t('boq.editor.title')}</h2>
@@ -31,7 +31,7 @@ export function BoqDialog({ schedule, onClose }: { schedule: ProjectSchedule; on
           <div className="mt-6 border-t border-sky-300/20 pt-4"><BoqPreview schedule={schedule} /></div>
         </div>
       </div>
-    </div>,
+    </dialog>,
     document.body,
   );
 }
