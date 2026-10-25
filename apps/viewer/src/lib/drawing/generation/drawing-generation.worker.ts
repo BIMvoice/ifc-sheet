@@ -21,7 +21,7 @@ import type { Drawing2D, ProfileEntry, SectionConfig } from '@ifc-lite/drawing-2
 import type { MeshData } from '@ifc-lite/geometry';
 import type { MeshOutline2dFn } from '@/hooks/meshOutlineProvider';
 import { unpackMeshes, type PackedMeshes } from './mesh-pack';
-import { runGenerateJob, type GenerateJobOptions } from './generate-job';
+import { runGenerateJob, type AxonometricJob, type GenerateJobOptions } from './generate-job';
 
 export type GenerationRequest =
   | { type: 'pack'; packId: number; pack: PackedMeshes }
@@ -34,6 +34,7 @@ export type GenerationRequest =
     config: SectionConfig;
     options: GenerateJobOptions;
     profiles?: ProfileEntry[];
+    axonometric?: AxonometricJob;
   };
 
 export type GenerationReply =
@@ -110,7 +111,7 @@ async function run(request: GenerationRequest, post: Post): Promise<void> {
     packs.delete(request.packId);
     return;
   }
-  const { id, packId, meshIndices, config, options, profiles } = request;
+  const { id, packId, meshIndices, config, options, profiles, axonometric } = request;
   try {
     const all = packs.get(packId);
     if (!all) throw new Error(`drawing generation: mesh pack ${packId} is not loaded`);
@@ -123,7 +124,7 @@ async function run(request: GenerationRequest, post: Post): Promise<void> {
       // draw differently from the main thread, so the job fails and the client runs it there.
       if (!outline) throw new Error('drawing generation: the meshOutline2d binding is not available in the worker');
     }
-    const drawing = await runGenerateJob({ meshes, config, options, profiles }, outline,
+    const drawing = await runGenerateJob({ meshes, config, options, profiles, axonometric }, outline,
       (stage, progress) => post({ type: 'progress', id, stage, progress }));
     postDrawing(id, drawing, post);
   } catch (error) {

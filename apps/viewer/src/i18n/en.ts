@@ -127,6 +127,7 @@ import { issueEn } from './catalogues/issue.en';
 import { handoverEn } from './catalogues/handover.en';
 import { revisionsEn } from './catalogues/revisions.en';
 import { annotateAllEn } from './catalogues/annotate-all.en';
+import { cutawayAxoEn } from './catalogues/cutaway-axo.en';
 import { checkEn } from './catalogues/check.en';
 import { checkReadyEn } from './catalogues/check-ready.en';
 import { wallArrangeEn } from './catalogues/wall-arrange.en';
@@ -216,6 +217,7 @@ export const en = {
   ...handoverEn,
   ...revisionsEn,
   ...annotateAllEn,
+  ...cutawayAxoEn,
   ...checkEn,
   ...checkReadyEn,
   ...wallArrangeEn,

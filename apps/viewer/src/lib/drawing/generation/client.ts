@@ -242,8 +242,8 @@ export interface DrawingRequest extends Omit<GenerateJob, 'meshes'> {
  * runs here; the workers load their own.
  */
 export async function generateDrawing(request: DrawingRequest, outlineFn: MeshOutline2dFn | undefined): Promise<Drawing2D> {
-  const { allMeshes, meshes, config, options, profiles, onProgress } = request;
-  const job: GenerateJob = { meshes, config, options, profiles };
+  const { allMeshes, meshes, config, options, profiles, axonometric, onProgress } = request;
+  const job: GenerateJob = { meshes, config, options, profiles, axonometric };
   const factory = workerFactory;
   if (!factory || failures >= MAX_FAILURES) return runGenerateJob(job, outlineFn, onProgress);
   try {
@@ -270,7 +270,7 @@ export async function generateDrawing(request: DrawingRequest, outlineFn: MeshOu
     // The worker's silence is timed from here: packing happens in this realm and says nothing about the worker.
     const held = pending.get(id);
     if (held) held.timer = armSilence(id, silenceMs);
-    slot.worker.postMessage({ type: 'generate', id, packId: record.id, meshIndices: indices, config, options, profiles }, [indices.buffer]);
+    slot.worker.postMessage({ type: 'generate', id, packId: record.id, meshIndices: indices, config, options, profiles, axonometric }, [indices.buffer]);
     const drawing = await done;
     failures = 0;
     return drawing;

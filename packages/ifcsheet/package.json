@@ -64,6 +64,11 @@
       "types": "./dist/handover.d.ts",
       "import": "./dist/handover.js",
       "default": "./dist/handover.js"
+    },
+    "./axonometric": {
+      "types": "./dist/axonometric.d.ts",
+      "import": "./dist/axonometric.js",
+      "default": "./dist/axonometric.js"
     }
   },
   "scripts": {
