@@ -6,7 +6,6 @@ import { drawDxfUnderlaysScreenSpace } from './drawing-underlays';
 import { drawReferenceImages } from './drawing-reference-images';
 import { useReferenceImagesForDrawing } from '@/hooks/useReferenceImagesForDrawing';
 import React, { useRef, useState, useEffect } from 'react';
-import { useTranslation } from '@/i18n';
 import {
   GraphicOverrideEngine,
   type Drawing2D,
@@ -30,6 +29,7 @@ import { itemPen } from '@/project/item-pen';
 import { fillOrder, schemeColourOf } from '@/project/view-scheme-style';
 import type { ViewGraphics } from '@/project/types';
 import { resolveDrawingPaperTheme, type DrawingPaperTheme } from './drawing/paper-theme';
+import { useSheetLocale } from '@/project/units-and-numbers';
 export { getFillColorForType } from './drawing/ifc-fill-colors';
 
 // ─── IFC annotation overlay helpers (issue #812) ─────────────────────────────
@@ -280,7 +280,7 @@ export function Drawing2DCanvas({
   paperTheme = DEFAULT_PAPER_THEME,
 }: Drawing2DCanvasProps): React.ReactElement {
   // The measure labels are written in the language, as the exported drawing's are (#269).
-  const { locale } = useTranslation();
+  const locale = useSheetLocale();
   const referenceImages = useReferenceImagesForDrawing(drawing.config.plane);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });

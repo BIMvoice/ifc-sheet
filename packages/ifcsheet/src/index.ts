@@ -58,6 +58,7 @@ export { BOQ_WORDS_EN, BOQ_WORDS_RO, boqSayFor, fillTemplate, type BoqSay, type 
 
 // Names
 export { ENGINE_NAMES_EN, englishName, nameOf, setNameResolver, type EngineNameKey, type NameParams, type NameResolver } from './names.js';
+export { sheetNumber, sheetLevel, sheetFormat, readUnitsAndNumbers, type SheetLocale, type SheetFormat, type UnitsAndNumbers } from './names.js';
 
 // The title block's layout, parameters and printing
 export { printTitleBlock, sheetFields, sheetLookup } from './title-block-print.js';

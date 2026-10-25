@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { BOQ_QUANTITIES, BOQ_UNITS, BOQ_UNIT_TEXT, PROPERTY_OPS, describeBoqProblem, unitDimension, type BoqArticle, type BoqLine, type BoqUnit, type PropertyOp, type PropertyTest, type SubReportFilter } from '@bimvoice/ifcsheet';
 import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { useSheetLocale } from '@/project/units-and-numbers';
 import { removeBoqArticle, setBoqUnit, updateBoqArticle } from '@/boq/boq-actions';
 import { WALL_FIELD, WALL_LABEL, WALL_PILL } from '../wall/wall-type';
 import { say as sayTest } from '../wall/card-section-summary';
@@ -67,7 +68,9 @@ function PropertyTests({ article }: { article: BoqArticle }) {
 
 /** What the article gives on the loaded models, or why it is refused. */
 function Result({ line }: { line: BoqLine | undefined }) {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  // The language with the project's "Units and numbers" (#88): the figures are written as every other sheet's are.
+  const locale = useSheetLocale();
   const sayBoq = useBoqSay();
   if (!line) return null;
   const { article: a } = line;

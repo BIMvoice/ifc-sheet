@@ -38,6 +38,7 @@ import { readJoineryList } from '@/joinery/spec-file';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readBoqArticles, readSchedule } from '@bimvoice/ifcsheet';
+import { readUnitsAndNumbers } from '@bimvoice/ifcsheet/names';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
 import { HEX, WEIGHTS, readGraphics, readPhaseSource } from './view-graphics-file';
@@ -264,6 +265,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     ...(raw.includeFarElements === true ? { includeFarElements: true } : {}),
     ...(raw.boqArticles !== undefined ? { boqArticles: readBoqArticles(raw.boqArticles) } : {}),
     ...(readHandoverPattern(raw.handoverPattern) ? { handoverPattern: readHandoverPattern(raw.handoverPattern) } : {}),
+    ...(readUnitsAndNumbers(raw.unitsAndNumbers) ? { unitsAndNumbers: readUnitsAndNumbers(raw.unitsAndNumbers) } : {}),
   };
 }
 

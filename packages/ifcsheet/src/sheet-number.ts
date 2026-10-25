@@ -6,7 +6,10 @@
  * The one way a number is written for people on a sheet (#269): urban
  * indicators, the site balance, schedules and quantities, level marks,
  * dimensions, room tags. The language decides the separators ("120,00" in
- * Romanian, "120.00" in English); the caller passes the locale, nothing here
+ * Romanian, "120.00" in English) unless the project's "Units and numbers"
+ * setting (#88, `units-and-numbers.ts`) names a separator, decimals or no
+ * grouping, which the caller passes in the same first argument (a
+ * {@link SheetLocale}); nothing here
  * reads a global, so the screen, the PDF, the DXF and the command line agree
  * for the same project and language.
  *
@@ -15,18 +18,10 @@
  * coordinates, anything that is parsed.
  *
  * Re-exported by `@bimvoice/ifcsheet/names` (which the web app already
- * resolves) and imports nothing.
+ * resolves) and imports only the setting's own pure module.
  */
 
-/** A locale Intl rejects falls back to English instead of throwing in the middle of a drawing. */
-function usable(locale: string): string {
-  try {
-    Intl.getCanonicalLocales(locale);
-    return locale;
-  } catch {
-    return 'en';
-  }
-}
+import { decimalsOf, groupingOff, intlLocaleOf, usableLocale, type NumberKind, type SheetLocale } from './units-and-numbers.js';
 
 const formatters = new Map<string, Intl.NumberFormat>();
 
@@ -36,7 +31,7 @@ function formatter(locale: string, digits: number, group: boolean, trim: boolean
   if (!f) {
     // `negative` (no sign on a value that rounds to zero) is in every engine we run on but not in the TypeScript lib we build against.
     const options = { minimumFractionDigits: trim ? 0 : digits, maximumFractionDigits: digits, useGrouping: group, signDisplay: 'negative' };
-    f = new Intl.NumberFormat(usable(locale), options as Intl.NumberFormatOptions);
+    f = new Intl.NumberFormat(usableLocale(locale), options as Intl.NumberFormatOptions);
     formatters.set(key, f);
   }
   return f;
@@ -52,11 +47,19 @@ export interface SheetNumberOptions {
   group?: boolean;
   /** Up to `digits` decimals, no trailing zeros (a scale bar's "2,5" and "5"). */
   trim?: boolean;
+  /**
+   * What the figure measures. A project that sets the decimals of that kind
+   * (#88) replaces `digits` with its own; without a setting, `digits` stands.
+   */
+  kind?: NumberKind;
 }
 
 /** `value` with exactly `digits` decimals in the locale's separators. */
-export function sheetNumber(locale: string, value: number, digits = 2, options: SheetNumberOptions = {}): string {
-  return formatter(locale, digits, options.group ?? true, options.trim ?? false).format(value);
+export function sheetNumber(locale: SheetLocale, value: number, digits = 2, options: SheetNumberOptions = {}): string {
+  const places = options.kind === undefined ? digits : decimalsOf(locale, options.kind, digits);
+  // The project can turn grouping off everywhere; it cannot turn it on where a figure is never grouped (a dimension).
+  const group = groupingOff(locale) ? false : options.group ?? true;
+  return formatter(intlLocaleOf(locale), places, group, options.trim ?? false).format(value);
 }
 
 export interface SheetLevelOptions {
@@ -69,8 +72,8 @@ export interface SheetLevelOptions {
  * An elevation as drawings write it: +2,70, -1,50, ±0,00. A value that
  * rounds to zero at the printed precision is ±0, whichever way it fell.
  */
-export function sheetLevel(locale: string, value: number, options: SheetLevelOptions = {}): string {
-  const digits = options.digits ?? 2;
+export function sheetLevel(locale: SheetLocale, value: number, options: SheetLevelOptions = {}): string {
+  const digits = options.digits ?? decimalsOf(locale, 'level', 2);
   const text = sheetNumber(locale, Math.abs(value), digits, { group: false });
   if (!Number.isFinite(value)) return text;
   if (Number(Math.abs(value).toFixed(digits)) === 0) return `±${sheetNumber(locale, 0, digits, { group: false })}`;

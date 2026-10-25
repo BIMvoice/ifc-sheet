@@ -20,13 +20,14 @@ import { paperUnitOf } from '@/project/drafting-standards';
 import { viewScreenUp } from '@/project/view-screen-up';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
-import { useTranslation } from '@/i18n';
 import { refreshCeilingTags } from '@/rcp/ceiling-tag-sync';
 import { settleLeader } from './label-attach';
 import { labelElementByGlobalId } from './label-element';
 import { extrasOf, resolveWithExtras } from './label-extras';
 import type { LabelElement } from './label-resolve';
 import { parseTemplate, type ParsedTemplate } from './label-template';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 export const isParametricLabel = (d: DraftEntity): boolean => d.shape.type === 'text' && typeof d.params.labelOf === 'string' && typeof d.params.atype === 'string';
 
@@ -42,7 +43,7 @@ function templateOf(text: string): ParsedTemplate {
 }
 
 /** `drafts` with every parametric label brought in line with its element and type; the same array when nothing changed. */
-export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationType[], element: (globalId: string) => LabelElement | null, locale: string, paperUnit: (viewId: string) => number = () => 0.1, screenUp: (viewId: string) => 1 | -1 = () => -1): DraftEntity[] {
+export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationType[], element: (globalId: string) => LabelElement | null, locale: SheetLocale, paperUnit: (viewId: string) => number = () => 0.1, screenUp: (viewId: string) => 1 | -1 = () => -1): DraftEntity[] {
   let changed = false;
   const next = drafts.map((d) => {
     if (!isParametricLabel(d) || d.shape.type !== 'text') return d;
@@ -66,7 +67,7 @@ export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationTy
   return changed ? next : drafts;
 }
 
-export function refreshParametricLabels(locale: string): void {
+export function refreshParametricLabels(locale: SheetLocale): void {
   const { drafts, annotationTypes } = useProjectStore.getState();
   const next = settleLabels(drafts, annotationTypes ?? [], labelElementByGlobalId, locale, (viewId) => paperUnitOf(viewId), (viewId) => viewScreenUp(viewId));
   if (next !== drafts) useProjectStore.setState({ drafts: next, dirty: true });
@@ -74,7 +75,7 @@ export function refreshParametricLabels(locale: string): void {
 
 export function useParametricLabelSync(): void {
   // A language switch re-writes the labels' numbers ("12,50" / "12.50"): the text is derived, like the rest of the label.
-  const { locale } = useTranslation();
+  const locale = useSheetLocale();
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
   const types = useProjectStore((s) => s.annotationTypes);

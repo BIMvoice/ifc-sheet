@@ -14,13 +14,13 @@
 
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem } from '@/joinery/paged-table';
-import { sheetLevel, sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ExportCell, ExportTable } from '@/joinery/schedule-export';
 import type { UrbanIndicators } from './indicators';
 
 export interface UrbanLabels {
   /** The language the figures are written in ("120,00" in Romanian); passed in, never read from a global. */
-  locale: string;
+  locale: SheetLocale;
   title: string;
   level: string;
   elevation: string;
@@ -53,7 +53,7 @@ export interface UrbanLabels {
 }
 
 /** An elevation as drawings write it: +2.70, -1.50, ±0.00. */
-export function signedLevel(locale: string, v: number): string {
+export function signedLevel(locale: SheetLocale, v: number): string {
   return sheetLevel(locale, v);
 }
 
@@ -66,7 +66,7 @@ const WIDTH = STOREY_COLUMNS.reduce((a, b) => a + b, 0);
 const PAIR_COLUMNS = [WIDTH - 30, 30] as const;
 
 export const NONE = '—';
-const m2Of = (locale: string, v: number | null): string => (v === null ? NONE : sheetNumber(locale, v));
+const m2Of = (locale: SheetLocale, v: number | null): string => (v === null ? NONE : sheetNumber(locale, v, 2, { kind: 'area' }));
 
 /** One ruled table; columns after the first are right-aligned figures; the last row closes it with the frame pen. */
 function figures(columns: readonly number[], rows: readonly string[][], header: boolean): TableItem {

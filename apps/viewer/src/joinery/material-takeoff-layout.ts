@@ -8,7 +8,7 @@
  * the same way: title, a header, one row per material, a total.
  */
 
-import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import type { ExportTable } from './schedule-export';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
@@ -23,7 +23,7 @@ export interface TakeoffLabels {
   usedIn: string;
   total: string;
   /** The language the figures on paper are written in; the CSV never uses it. */
-  locale: string;
+  locale: SheetLocale;
 }
 
 const COLUMNS = [62, 18, 24, 24, 70] as const;
@@ -32,11 +32,11 @@ const COLUMNS = [62, 18, 24, 24, 70] as const;
 const plainClass = (c: string): string => c.replace(/^Ifc/, '');
 
 export function layoutMaterialTakeoff(rows: readonly TakeoffRow[], labels: TakeoffLabels, paging: PagedOptions = {}): ScheduleLayout {
-  const fixed = (v: number | null, digits = 2): string => (v === null ? '–' : sheetNumber(labels.locale, v, digits));
+  const fixed = (v: number | null, kind: 'volume' | 'area'): string => (v === null ? '–' : sheetNumber(labels.locale, v, 2, { kind }));
   const sum = (key: 'volume' | 'area'): number | null => (rows.some((r) => r[key] !== null) ? rows.reduce((s, r) => s + (r[key] ?? 0), 0) : null);
   const table: string[][] = [
-    ...rows.map((r) => [r.material, String(r.elements), fixed(r.volume), fixed(r.area), r.classes.map(plainClass).join(', ')]),
-    [labels.total, String(rows.reduce((s, r) => s + r.elements, 0)), fixed(sum('volume')), fixed(sum('area')), ''],
+    ...rows.map((r) => [r.material, String(r.elements), fixed(r.volume, 'volume'), fixed(r.area, 'area'), r.classes.map(plainClass).join(', ')]),
+    [labels.total, String(rows.reduce((s, r) => s + r.elements, 0)), fixed(sum('volume'), 'volume'), fixed(sum('area'), 'area'), ''],
   ];
   const block: TableBlock = {
     columns: COLUMNS, header: [labels.material, labels.elements, labels.volume, labels.area, labels.usedIn], numeric: (c) => c >= 1 && c <= 3,
@@ -50,7 +50,7 @@ export function layoutMaterialTakeoff(rows: readonly TakeoffRow[], labels: Takeo
 export function takeoffTable(rows: readonly TakeoffRow[], labels: TakeoffLabels): ExportTable {
   const sum = (key: 'volume' | 'area'): number | null => (rows.some((r) => r[key] !== null) ? rows.reduce((s, r) => s + (r[key] ?? 0), 0) : null);
   return {
-    name: labels.title || labels.material, header: [labels.material, labels.elements, labels.volume, labels.area, labels.usedIn], numeric: [1, 2, 3],
+    name: labels.title || labels.material, header: [labels.material, labels.elements, labels.volume, labels.area, labels.usedIn], numeric: [1, 2, 3], kinds: { 2: 'volume', 3: 'area' },
     rows: [
       ...rows.map((r) => [r.material, r.elements, r.volume, r.area, r.classes.map(plainClass).join(', ')]),
       [labels.total, rows.reduce((s, r) => s + r.elements, 0), sum('volume'), sum('area'), null],

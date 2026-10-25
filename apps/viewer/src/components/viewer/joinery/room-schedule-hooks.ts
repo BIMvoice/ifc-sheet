@@ -14,6 +14,7 @@ import { roomSchedule, type RoomSchedule } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
+import { useSheetLocale } from '@/project/units-and-numbers';
 import { collectRoomRecords } from '@/urban/urban-models';
 import type { RoomScheduleLabels } from '@/joinery/room-schedule-layout';
 
@@ -36,7 +37,9 @@ export function useRoomScheduleData(enabled = true): RoomScheduleData | null {
 }
 
 export function useRoomScheduleLabels(title: string, data: RoomScheduleData | null): RoomScheduleLabels {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  // The project's "Units and numbers" (#88) as well as the language: the schedule's figures are written like every other sheet's.
+  const locale = useSheetLocale();
   return useMemo(() => {
     const notes = [t('roomSched.note.source')];
     if (data) {

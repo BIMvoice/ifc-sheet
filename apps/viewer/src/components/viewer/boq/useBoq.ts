@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { boqPropertyNames, computeBoq, type BoqArticle, type BoqElement, type BoqResult, type BoqSay } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
+import { useSheetLocale } from '@/project/units-and-numbers';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule, ProjectSheet } from '@/project/types';
@@ -56,7 +57,9 @@ export function useBoqResult(enabled = true): BoqResult {
 export function useBoqSheetLayouts(sheet: ProjectSheet): Map<string, ScheduleLayout> {
   const schedules = useProjectStore((s) => s.schedules);
   const sheets = useProjectStore((s) => s.sheets);
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  // The language with the project's "Units and numbers" (#88): the figures are written as every other sheet's are.
+  const locale = useSheetLocale();
   const say = useBoqSay();
   const placed = (sheet.viewports ?? []).flatMap((vp) => schedules?.find((s) => s.id === vp.viewId && s.kind === 'boq') ?? []);
   const result = useBoqResult(placed.length > 0);

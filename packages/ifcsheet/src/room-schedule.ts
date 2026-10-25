@@ -13,6 +13,7 @@
 
 import { escapeCsvCell } from '@ifc-lite/export';
 import { sheetNumber } from './sheet-number.js';
+import { languageOf, type SheetLocale } from './units-and-numbers.js';
 import type { AreaSource } from './room-areas.js';
 
 export interface RoomRecord {
@@ -133,17 +134,17 @@ export function roomScheduleLines(schedule: RoomSchedule, words: RoomScheduleWor
 const NONE = '–';
 
 /** The table as aligned text, areas written in `locale` ("12,50" in Romanian). */
-export function roomScheduleText(schedule: RoomSchedule, locale = 'en'): string {
-  const words = roomScheduleWords(locale);
-  const rows = [[words.number, words.room, words.level, words.area], ...roomScheduleLines(schedule, words).map((l) => [l.number, l.name, l.kind === 'room' ? l.level : '', l.area === null ? NONE : sheetNumber(locale, l.area)])];
+export function roomScheduleText(schedule: RoomSchedule, locale: SheetLocale = 'en'): string {
+  const words = roomScheduleWords(languageOf(locale));
+  const rows = [[words.number, words.room, words.level, words.area], ...roomScheduleLines(schedule, words).map((l) => [l.number, l.name, l.kind === 'room' ? l.level : '', l.area === null ? NONE : sheetNumber(locale, l.area, 2, { kind: 'area' })])];
   const widths = rows[0].map((_, c) => Math.max(...rows.map((r) => [...r[c]].length)));
   const pad = (text: string, c: number) => (c === 3 ? text.padStart(widths[c]) : text.padEnd(widths[c]));
   return rows.map((r) => r.map((text, c) => pad(text, c)).join('  ').trimEnd()).join('\n');
 }
 
 /** The table as CSV: plain numbers (a machine reads them), a column saying where each area comes from, model text escaped by the one CSV escaper (`@ifc-lite/export`). */
-export function roomScheduleCsv(schedule: RoomSchedule, locale = 'en'): string {
-  const words = roomScheduleWords(locale);
+export function roomScheduleCsv(schedule: RoomSchedule, locale: SheetLocale = 'en'): string {
+  const words = roomScheduleWords(languageOf(locale));
   const lines = roomScheduleLines(schedule, words).map((l) => [l.number, l.name, l.kind === 'room' ? l.level : '', l.area === null ? '' : String(Math.round(l.area * 1e6) / 1e6), l.source === 'quantity' ? words.quantity : l.source === 'geometry' ? words.geometry : '']);
   return [[words.number, words.room, words.level, words.area, words.source], ...lines].map((r) => r.map((v) => escapeCsvCell(v)).join(',')).join('\n');
 }

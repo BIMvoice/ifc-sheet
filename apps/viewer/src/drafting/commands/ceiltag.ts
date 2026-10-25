@@ -23,6 +23,7 @@ import { clearTagSpot } from '@/rcp/ceiling-tag-spot';
 import { stackedGroups } from '@/rcp/ceiling-tags';
 import { editDrafts, newDraft } from '../draft-store';
 import type { DraftCommandDef, DraftContext } from './types';
+import { currentSheetLocale } from '@/project/units-and-numbers';
 
 const isCeilingCovering = (renderId: number): boolean => {
   const guid = renderIdGlobalId(renderId);
@@ -48,7 +49,7 @@ export function ceilTag(
   // The soffit is read off the meshes, so the floors are taken in their frame, not from the Elevation attribute;
   // only this storey's ceilings (above the cut, below the next level) are tagged.
   const plan = { level: resolvePlanLevel(view, levels) ?? view.level, cutHeight: view.cutHeight };
-  const tags = ceilingPlanTags(geometry?.meshes ?? [], plan, levels, loadedDataStores(), geometry?.coordinateInfo, isCeiling, getLocale());
+  const tags = ceilingPlanTags(geometry?.meshes ?? [], plan, levels, loadedDataStores(), geometry?.coordinateInfo, isCeiling, currentSheetLocale(getLocale()));
   // A tag is for its ceiling and for the ceilings that share it (`ceilingShared`), so a covering met later is not tagged again.
   const done = new Set(ctx.entities().flatMap((d) => [...(typeof d.params.ceilingOf === 'string' ? [d.params.ceilingOf] : []), ...(typeof d.params.ceilingShared === 'string' ? d.params.ceilingShared.split(',') : [])]));
   // A ceiling with no GlobalId cannot be recognised on the next run, so it is not tagged.

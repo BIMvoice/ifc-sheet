@@ -10,11 +10,14 @@
 import { boqTable } from '@bimvoice/ifcsheet';
 import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import { useTranslation } from '@/i18n';
+import { useSheetLocale } from '@/project/units-and-numbers';
 import type { ProjectSchedule } from '@/project/types';
 import { useBoqResult, useBoqSay } from './useBoq';
 
 export function BoqPreview({ schedule }: { schedule: ProjectSchedule | undefined }) {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  // The language with the project's "Units and numbers" (#88): the figures are written as every other sheet's are.
+  const locale = useSheetLocale();
   const say = useBoqSay();
   const result = useBoqResult();
   if (result.lines.length === 0) return <p className="m-0 text-sm text-sky-200">{t('boq.preview.empty')}</p>;

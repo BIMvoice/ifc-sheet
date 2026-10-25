@@ -121,6 +121,7 @@ import { projectNavigatorEn } from './catalogues/project-navigator.en';
 import { draftingEn } from './catalogues/drafting.en';
 import { sheetsEn } from './catalogues/sheets.en';
 import { titleBlockSourcesEn } from './catalogues/title-block-sources.en';
+import { unitsNumbersEn } from './catalogues/units-numbers.en';
 import { titleBlockRoEn } from './catalogues/title-block-ro.en';
 import { draftSetEn } from './catalogues/draft-set.en';
 import { setTemplateEn } from './catalogues/set-template.en';
@@ -215,6 +216,7 @@ export const en = {
   ...draftingEn,
   ...sheetsEn,
   ...titleBlockSourcesEn,
+  ...unitsNumbersEn,
   ...titleBlockRoEn,
   ...draftSetEn,
   ...setTemplateEn,

@@ -36,12 +36,14 @@ import { penTags } from '../sheets/dxf-tags';
 import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 import { useElementViews, type ViewRequest } from './useElementViews';
 import { useBoqSheetLayouts } from '../boq/useBoq';
+import { useSheetLocale } from '@/project/units-and-numbers';
 import { useRoomScheduleData, useRoomScheduleLabels } from './room-schedule-hooks';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
 
 export function useScheduleLabels(title: string): ScheduleLabels {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   return useMemo(() => ({
     locale, title,
     mark: t('schedule.row.mark'), name: t('schedule.row.name'), size: t('schedule.row.size'), operation: t('schedule.row.operation'),
@@ -51,7 +53,8 @@ export function useScheduleLabels(title: string): ScheduleLabels {
 }
 
 export function useTakeoffLabels(title: string): TakeoffLabels {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   return useMemo(() => ({
     title, material: t('takeoff.material'), elements: t('takeoff.elements'), volume: t('takeoff.volume'),
     area: t('takeoff.area'), usedIn: t('takeoff.usedIn'), total: t('takeoff.total'),
@@ -98,7 +101,8 @@ export function useRegisterRows(wanted = true): RegisterRow[] {
 }
 
 export function useRoomFinishLabels(title: string): RoomFinishLabels {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   return useMemo(() => ({
     locale, title, number: t('finishes.number'), room: t('finishes.room'), level: t('finishes.level'),
     floor: t('finishes.floor'), wall: t('finishes.wall'), ceiling: t('finishes.ceiling'), area: t('finishes.area'),
@@ -115,7 +119,8 @@ export function useRoomFinishes(): RoomFinishes[] {
 }
 
 export function useTypeQuantityLabels(title: string): TypeQuantityLabels {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   return useMemo(() => ({
     locale, title, type: t('typeQty.type'), class: t('typeQty.class'), level: t('typeQty.level'), count: t('typeQty.count'),
     length: t('typeQty.length'), area: t('typeQty.area'), volume: t('typeQty.volume'), noQto: t('typeQty.noQto'),

@@ -21,6 +21,7 @@ import type { ProjectLevel } from '@/project/types';
 import { sameElevation } from '@/project/view-defaults';
 import { useViewerStore } from '@/store';
 import { ceilingTags, type CeilingMesh, type CeilingTag } from './ceiling-tags';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 
 /**
  * The floor of `level` in `frame`: the first storey of `stores` whose GlobalId the level lists and whose
@@ -56,7 +57,7 @@ export function ceilingPlanTags(
   stores: readonly IfcDataStore[],
   frame: CoordinateInfo | undefined,
   isCeiling: (renderId: number) => boolean,
-  locale = 'en',
+  locale: SheetLocale = 'en',
 ): CeilingTag[] {
   const { level, cutHeight } = plan;
   const floor = levelFloorMeshY(level, stores, frame);

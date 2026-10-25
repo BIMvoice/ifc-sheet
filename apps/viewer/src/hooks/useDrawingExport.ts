@@ -44,6 +44,7 @@ import { computeSvgExportViewport, svgExportMmToWorld } from '@/hooks/svgExportV
 import { makePropertiesGetter } from '@/hooks/drawingElementProperties';
 import { titleBlockWithEffectiveScale } from '@/hooks/titleBlockScaleField';
 import { scanOutlineDxfLayers, type ScanOutlineLayer } from '@/lib/scan-outline/scan-outline';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 function tryDrawingSvg(generate: () => string | null): string | null {
   try { return generate(); }
@@ -288,7 +289,8 @@ function useDrawingExport({
   isPinned = false,
   cachedSheetTransformRef,
 }: UseDrawingExportParams): UseDrawingExportResult {
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   // Georef inputs for the DXF export (PR #1871 review, P1): placement edits
   // applied in CesiumPlacementEditor live in `georefMutations` (per model
   // id), not in `ifcDataStore`, and in a federation the georef frame is the

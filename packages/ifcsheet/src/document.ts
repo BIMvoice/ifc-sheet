@@ -18,6 +18,7 @@ import type { ThreeDProjectView } from './view-3d-types.js';
 import type { TitleBlockParam } from './title-block-params.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
+import type { UnitsAndNumbers } from './units-and-numbers.js';
 
 export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
 export type { ProjectViewTemplate, TemplateGraphics, ViewTemplateKind } from './view-templates.js';
@@ -306,4 +307,6 @@ export interface ProjectDocument {
   includeFarElements?: boolean;
   /** How the files of the handover package are named (`handover.ts`): tokens `{project} {number} {sheet} {revision} {date} {issue}`. Absent is the default pattern. */
   handoverPattern?: string;
+  /** The project's "Units and numbers" setting (`units-and-numbers.ts`, #88). Absent follows the language and each drawing's own style. */
+  unitsAndNumbers?: UnitsAndNumbers;
 }

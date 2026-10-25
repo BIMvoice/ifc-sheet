@@ -10,13 +10,13 @@
  */
 
 import { boqTable, textWidthEm, truncateToWidth, type BoqCell, type BoqResult, type BoqSay } from '@bimvoice/ifcsheet';
-import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import { layoutPagedTable, PEN, TEXT, type PagedOptions, type TableBlock, type TableItem } from './paged-table';
 
 export interface BoqSheetLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */
-  locale: string;
+  locale: SheetLocale;
   title: string;
   say: BoqSay;
   /** A row per type under each article. */
