@@ -130,13 +130,18 @@ export const fontFamily = (font: FontKind): string => fontFamilyOf(font);
 /** Metres to `unit`. */
 export const unitFactor = (unit: 'mm' | 'cm' | 'm'): number => (unit === 'mm' ? 1000 : unit === 'cm' ? 100 : 1);
 
+/** The decimals a length is drawn to in `unit` when nothing says otherwise: metres to the centimetre, centimetres and millimetres whole. */
+export const naturalDecimals = (unit: 'mm' | 'cm' | 'm'): number => (unit === 'm' ? 2 : 0);
+
 /**
  * A length in a dimension style's unit and precision (the value is metres). The project's "Units and numbers" (#88) overrides
- * the style's unit, and its length decimals the style's precision, when it sets them.
+ * the style's unit, and its length decimals the style's precision, when it sets them. A unit that differs from the style's
+ * brings the natural decimals of that unit instead of the style's precision, which was written for the style's own unit
+ * (2 decimals of metres would be "1148.00" in centimetres).
  */
 export function formatDimension(locale: SheetLocale, metres: number, style: Pick<DimStyle, 'unit' | 'precision'>): string {
   const unit = lengthUnitOf(locale, style.unit);
-  const precision = decimalsOf(locale, 'length', style.precision);
+  const precision = decimalsOf(locale, 'length', unit === style.unit ? style.precision : naturalDecimals(unit));
   // Never grouped: on a dimension a dot or a comma means the decimal and nothing else.
   return sheetNumber(locale, metres * unitFactor(unit), Math.max(0, Math.min(6, Math.round(precision))), { group: false });
 }

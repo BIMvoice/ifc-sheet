@@ -103,9 +103,21 @@ describe('the length unit and the decimals (#88)', () => {
     assert.equal(dimensionLayout(DIM, { format: (m) => formatDimension(sheetFormat('en', { lengthUnit: 'cm' }), m, STYLE) }).label, '350');
   });
 
+  it('a unit that is not the style\'s brings that unit\'s natural decimals; an explicit choice wins; no change keeps the style\'s', () => {
+    const METRES = { unit: 'm', precision: 2 } as const;
+    assert.equal(formatDimension('en', 11.48, METRES), '11.48');
+    assert.equal(formatDimension(sheetFormat('en', { lengthUnit: 'cm' }), 11.48, METRES), '1148');
+    assert.equal(formatDimension(sheetFormat('en', { lengthUnit: 'mm' }), 11.48, METRES), '11480');
+    assert.equal(formatDimension(sheetFormat('en', { lengthUnit: 'cm', separator: 'comma', decimals: { length: 1 } }), 11.48, METRES), '1148,0');
+    // The style's own unit: its precision stands.
+    assert.equal(formatDimension(sheetFormat('en', { lengthUnit: 'm' }), 11.48, { unit: 'm', precision: 3 }), '11.480');
+    assert.equal(formatDimension(sheetFormat('en', { lengthUnit: 'mm' }), 11.48, { unit: 'mm', precision: 1 }), '11480.0');
+    assert.equal(formatDimension(sheetFormat('en', { separator: 'comma' }), 11.48, METRES), '11,48');
+  });
+
   it('the default dimension and a measure label follow the unit too', () => {
     assert.equal(formatLength('en', 3.5), '3.50');
-    assert.equal(formatLength(sheetFormat('en', { lengthUnit: 'cm' }), 3.5), '350.0');
+    assert.equal(formatLength(sheetFormat('en', { lengthUnit: 'cm' }), 3.5), '350');
     assert.equal(formatDistance(3.5, {}, sheetFormat('en', { lengthUnit: 'cm' })), '350 cm');
   });
 

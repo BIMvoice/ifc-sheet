@@ -19,7 +19,7 @@ import { leaderTextRight } from './leader-segments';
 import { leaderStart } from '@/labels/label-leader';
 import { decimalsOf, lengthUnitOf, sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { textBlock, type TextFrame } from './text-block';
-import { unitFactor } from './styles';
+import { naturalDecimals, unitFactor } from './styles';
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
 
 export interface DimensionLayout {
@@ -39,7 +39,7 @@ const EXT_OVER = 0.15;
 export function formatLength(locale: SheetLocale, m: number): string {
   // Metres with two decimals unless the project names its length unit (#88): then that unit, with the places such a unit is drawn to.
   const unit = lengthUnitOf(locale, 'm');
-  return sheetNumber(locale, m * unitFactor(unit), decimalsOf(locale, 'length', unit === 'mm' ? 0 : unit === 'cm' ? 1 : 2), { group: false });
+  return sheetNumber(locale, m * unitFactor(unit), decimalsOf(locale, 'length', naturalDecimals(unit)), { group: false });
 }
 
 /** A level mark: +2,70, −1,50 (the true minus), ±0,00. */
