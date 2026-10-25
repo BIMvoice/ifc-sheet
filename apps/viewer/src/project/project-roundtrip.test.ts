@@ -160,6 +160,7 @@ const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<Omit<ProjectSchedule
   finishes: { id: 'sc6', name: 'Room finishes', kind: 'finishes', createdAt: 10, scale: 100 },
   register: { id: 'sc7', name: 'Drawing register', kind: 'register', createdAt: 11, scale: 100 },
   urban: { id: 'sc8', name: 'Urban indicators', kind: 'urban', createdAt: 12, scale: 100 },
+  rooms: { id: 'sc20', name: 'Room and area schedule', kind: 'rooms', createdAt: 15, scale: 100 },
 };
 /** A sub-report (#186) with every dimension of its filter set: a field the writer or reader drops fails the comparison. */
 const SUB_REPORT: Required<Omit<ProjectSchedule, 'textRows' | 'content' | 'keptApart'>> = {

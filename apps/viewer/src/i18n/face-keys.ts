@@ -25,7 +25,7 @@ import { en } from './en';
 const FACE_SOURCES = [
   'components/viewer/wall', 'components/viewer/ifcsheet', 'components/viewer/sheets', 'hooks/usePrivacyDisclosure.ts', 'lib/tours/tours/ifcsheet.ts', 'components/tours/TourStepCard.tsx', 'components/tours/TourHost.tsx',
   // #258: what a sheet prints. The site plan and the urban indicators (the site balance, Ac, Ad, Au, POT and CUT), the legend, the schedules the joinery folder draws (the finishes and type-quantity tables, the drawing register) and the civil profile's band labels.
-  'components/viewer/siteplan', 'components/viewer/urban', 'siteplan', 'urban', 'components/viewer/legend/LegendGraphic.tsx', 'legend', 'components/viewer/joinery/ScheduleGraphic.tsx', 'issue', 'components/viewer/joinery/RegisterView.tsx', 'components/viewer/civil/CivilDrawingGraphic.tsx', 'civil/civil-drawings.ts',
+  'components/viewer/siteplan', 'components/viewer/urban', 'siteplan', 'urban', 'components/viewer/legend/LegendGraphic.tsx', 'legend', 'components/viewer/joinery/ScheduleGraphic.tsx', 'components/viewer/joinery/room-schedule-hooks.ts', 'components/viewer/joinery/RoomScheduleView.tsx', 'issue', 'components/viewer/joinery/RegisterView.tsx', 'components/viewer/civil/CivilDrawingGraphic.tsx', 'civil/civil-drawings.ts',
 ];
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 function faceFiles(rel: string): string[] {

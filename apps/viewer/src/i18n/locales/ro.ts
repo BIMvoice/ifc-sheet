@@ -33,6 +33,7 @@ import { toursRo } from '../catalogues/tours.ro';
 import { reviewRo } from '../catalogues/review.ro';
 import { printPreviewRo } from '../catalogues/print-preview.ro';
 import { tagFieldsRo } from '../catalogues/tag-fields.ro';
+import { roomScheduleRo } from '../catalogues/room-schedule.ro';
 import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 
 export default {
@@ -59,4 +60,5 @@ export default {
   ...toursRo,
   ...printPreviewRo,
   ...tagFieldsRo,
+  ...roomScheduleRo,
 } satisfies Catalogue;

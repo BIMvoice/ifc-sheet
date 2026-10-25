@@ -38,5 +38,7 @@ function withComputedArea(el: LabelElement, area: number): LabelElement {
 /** The text of a label for `el`: the template read from the element, else (where it comes out empty) the running number. */
 export function resolveWithExtras(template: ParsedTemplate, el: LabelElement, locale: string, missing: MissingMode, extras: LabelExtras = {}): string {
   const text = resolveTemplate(template, extras.computedArea === undefined ? el : withComputedArea(el, extras.computedArea), locale, missing);
-  return text === '' && extras.numbered !== undefined ? String(extras.numbered) : text;
+  // A room without a number leaves its first line empty: a label does not start with a blank line.
+  const shown = text.replace(/^\s*\n/, '');
+  return shown === '' && extras.numbered !== undefined ? String(extras.numbered) : shown;
 }
