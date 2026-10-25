@@ -42,6 +42,7 @@ import { readUnitsAndNumbers } from '@bimvoice/ifcsheet/names';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
 import { HEX, WEIGHTS, readGraphics, readPhaseSource } from './view-graphics-file';
+import { readViewTemplates } from './view-templates-file';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -140,6 +141,7 @@ function readView(v: unknown, path: string): ProjectView {
     ...(typeof v.showHidden === 'boolean' ? { showHidden: v.showHidden } : {}),
     ...(v.detail !== undefined ? { detail: readDetail(v.detail, `${path}.detail`) } : {}),
     ...(isObject(v.graphics) ? { graphics: readGraphics(v.graphics) } : {}),
+    ...(isString(v.templateId) && v.templateId ? { templateId: v.templateId } : {}),
     ...(isNumber(v.scale) && v.scale > 0 ? { scale: v.scale } : {}),
     ...(Array.isArray(v.hiddenLayers) ? { hiddenLayers: v.hiddenLayers.filter(isString) } : {}),
   };
@@ -252,6 +254,7 @@ export function parseProjectFile(text: string, schema: ProjectFileSchema = THIS_
     issues: readIssues(raw.issues),
     sheetTemplates: list('sheetTemplates').flatMap((v) => readTemplate(v) ?? []),
     seriesTemplates: readSeriesTemplates(raw.seriesTemplates),
+    viewTemplates: readViewTemplates(raw.viewTemplates),
     ...(raw.sheetNumbering !== undefined ? { sheetNumbering: readNumberingScheme(raw.sheetNumbering) } : {}),
     ...(raw.tagFields !== undefined ? { tagFields: readTagFields(raw.tagFields, '/tagFields') } : {}),
     ...(raw.comments !== undefined ? { comments: readComments(raw.comments) } : {}),

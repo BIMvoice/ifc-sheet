@@ -18,6 +18,7 @@ import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 import type { CategoryGraphics, CategoryLineWeight, PhaseId, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
 import type { SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
+import { VIEW_CATEGORY_CLASSES, hiddenClassesOf } from '@bimvoice/ifcsheet';
 import { withScheme } from './view-scheme-style';
 import type { DraftShape } from '@/drafting/types';
 
@@ -65,20 +66,14 @@ export interface ViewCategory {
   classes: readonly string[];
 }
 
-export const VIEW_CATEGORIES = [
-  { id: 'walls', labelKey: 'viewGraphics.cat.walls', classes: ['IfcWall', 'IfcWallStandardCase', 'IfcCurtainWall'] },
-  { id: 'slabs', labelKey: 'viewGraphics.cat.slabs', classes: ['IfcSlab'] },
-  { id: 'roofs', labelKey: 'viewGraphics.cat.roofs', classes: ['IfcRoof'] },
-  { id: 'columns', labelKey: 'viewGraphics.cat.columns', classes: ['IfcColumn'] },
-  { id: 'beams', labelKey: 'viewGraphics.cat.beams', classes: ['IfcBeam', 'IfcMember'] },
-  { id: 'doors', labelKey: 'viewGraphics.cat.doors', classes: ['IfcDoor'] },
-  { id: 'windows', labelKey: 'viewGraphics.cat.windows', classes: ['IfcWindow'] },
-  { id: 'stairs', labelKey: 'viewGraphics.cat.stairs', classes: ['IfcStair', 'IfcStairFlight', 'IfcRamp', 'IfcRampFlight'] },
-  { id: 'railings', labelKey: 'viewGraphics.cat.railings', classes: ['IfcRailing'] },
-  { id: 'spaces', labelKey: 'viewGraphics.cat.spaces', classes: ['IfcSpace'] },
-  { id: 'furniture', labelKey: 'viewGraphics.cat.furniture', classes: ['IfcFurnishingElement', 'IfcFurniture'] },
-  { id: 'other', labelKey: 'viewGraphics.cat.other', classes: ['IfcBuildingElementProxy', 'IfcCovering', 'IfcPlate', 'IfcFooting', 'IfcPile'] },
-] as const satisfies readonly ViewCategory[];
+const CATEGORY_LABELS = {
+  walls: 'viewGraphics.cat.walls', slabs: 'viewGraphics.cat.slabs', roofs: 'viewGraphics.cat.roofs', columns: 'viewGraphics.cat.columns', beams: 'viewGraphics.cat.beams',
+  doors: 'viewGraphics.cat.doors', windows: 'viewGraphics.cat.windows', stairs: 'viewGraphics.cat.stairs', railings: 'viewGraphics.cat.railings',
+  spaces: 'viewGraphics.cat.spaces', furniture: 'viewGraphics.cat.furniture', other: 'viewGraphics.cat.other',
+} as const satisfies Record<(typeof VIEW_CATEGORY_CLASSES)[number]['id'], string>;
+
+/** The categories, from the engine's table (`VIEW_CATEGORY_CLASSES`), so the app and the headless sheets hide the same classes. */
+export const VIEW_CATEGORIES: readonly ViewCategory[] = VIEW_CATEGORY_CLASSES.map((c) => ({ id: c.id, labelKey: CATEGORY_LABELS[c.id], classes: c.classes }));
 
 /** Upper-case IFC class → category id. */
 const CATEGORY_OF = new Map<string, string>(VIEW_CATEGORIES.flatMap((c) => c.classes.map((k) => [k.toUpperCase(), c.id] as const)));
@@ -114,14 +109,8 @@ export function viewOverrideRules(graphics: ViewGraphics | undefined): GraphicOv
   return rules;
 }
 
-/** Upper-case IFC classes of the categories the view hides. */
-export function hiddenClasses(graphics: ViewGraphics | undefined): Set<string> {
-  const hidden = new Set<string>();
-  for (const category of VIEW_CATEGORIES) {
-    if (graphics?.categories?.[category.id]?.visible === false) for (const k of category.classes) hidden.add(k.toUpperCase());
-  }
-  return hidden;
-}
+/** Upper-case IFC classes of the categories the view hides (the engine's, `hiddenClassesOf`). */
+export const hiddenClasses: (graphics: ViewGraphics | undefined) => Set<string> = hiddenClassesOf;
 
 function rgba(hex: string): [number, number, number, number] | null {
   const m = /^#([0-9a-f]{6})$/i.exec(hex);

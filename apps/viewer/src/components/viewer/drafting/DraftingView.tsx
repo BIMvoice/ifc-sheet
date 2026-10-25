@@ -122,6 +122,7 @@ import { membraneOverlays } from '@/project/membrane-overlays';
 import { partHostType } from '@/project/part-host';
 
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
+import { resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { cutHatches, hiddenClasses, DEFAULT_VIEW_PRESET, styledDrawing, viewOverrideRules } from '@/project/view-graphics';
 import { schemeResultOf } from '@/project/view-colour-scheme';
 
@@ -189,8 +190,9 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const references = useMemo(() => (drawing ? referenceSet(drawing, false) : null), [drawing]);
   const entities = useMemo(() => draftsOfView(view.id, allDrafts), [allDrafts, view.id]);
   const entityShapes = useMemo(() => entities.flatMap((e) => (isGeometry(e.shape) ? [e.shape] : [])), [entities]);
-  // The view's own graphics (preset + category overrides), applied to its drawing.
-  const graphics = view.graphics;
+  // The view's graphics (its template's, then its own preset and category overrides over them, #44), applied to its drawing.
+  const viewTemplates = useProjectStore((st) => st.viewTemplates);
+  const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
   const phaseSource = useProjectStore((st) => st.phaseSource);

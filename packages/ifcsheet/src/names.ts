@@ -39,6 +39,10 @@ export const ENGINE_NAMES_EN = {
   'names.view.south': 'South Elevation',
   'names.view.west': 'West Elevation',
   'names.view.section': 'Section {mark}-{mark}',
+  // The starting view templates (#44), one per kind of view.
+  'names.viewTemplate.plan': 'Plans',
+  'names.viewTemplate.section': 'Sections',
+  'names.viewTemplate.elevation': 'Elevations',
 } as const;
 
 export type EngineNameKey = keyof typeof ENGINE_NAMES_EN;

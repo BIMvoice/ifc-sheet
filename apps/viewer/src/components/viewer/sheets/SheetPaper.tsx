@@ -36,6 +36,7 @@ import { currentRevisionOf, printsAtCurrentRevision, sheetRevisions } from '@/pr
 import { RevisionTable } from './RevisionTable';
 import { viewportPens } from './viewport-pens';
 import { memoOn, sharedMemo } from './shared-memo';
+import { resolveViewGraphics, viewportHiddenLayers } from '@bimvoice/ifcsheet';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
@@ -131,11 +132,14 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const axis: SectionAxisName = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
   const t = viewportTransform(vp, drawing, axis);
   const cadLayers = useProjectStore((s) => s.cadLayers);
+  // The graphics the view draws with: its template's, then its own over them (#44).
+  const viewTemplates = useProjectStore((s) => s.viewTemplates);
+  const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
   // Shared with every other component that pens this drawing the same way (`shared-memo.ts`): opening a sheet reuses the Wall's pens (#154).
   const pens = useMemo(
-    () => (drawing ? memoOn(pensMemo, drawing, [view?.graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
-      () => viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard)) : []),
-    [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
+    () => (drawing ? memoOn(pensMemo, drawing, [graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
+      () => viewportPens(drawing, graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard)) : []),
+    [drawing, graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);
   const left = vp.x - box.width / 2;
@@ -150,8 +154,8 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
       })()
     : { x: left, y: top, width: box.width, height: box.height };
   const { book, groups } = useDraftingStandards();
-  // A layer shows in a viewport by its own switch, its group's, its view's and the viewport's.
-  const layerColor = new Map(layers.map((l) => [l.id, layerShows(l, groups, { view: view?.hiddenLayers, viewport: vp.hiddenLayers }) ? l.color : null]));
+  // A layer shows in a viewport by its own switch, its group's, its view's and the viewport's (`viewportHiddenLayers`).
+  const layerColor = new Map(layers.map((l) => [l.id, layerShows(l, groups, { view: viewportHiddenLayers(view, vp) }) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));
   // Annotation prints at the paper size it was drawn for, whatever scale the viewport shows the view at.
   const paperUnit = viewportPaperUnit(vp.scale);

@@ -29,6 +29,7 @@ import { DEFAULT_SCHEME, nextNumber, numberSheets, registerNumberIn } from './nu
 import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useProjectStore } from './project-store';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
+import { ensureViewTemplates } from './view-template-start';
 import { resolve } from '@/i18n/registry';
 import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, elevationName, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
@@ -130,7 +131,6 @@ export interface EnsureOptions {
   /** Make the sheets by a set template's rules (#21) instead of the automatic grouping; the views are the same. */
   setTemplate?: SetTemplate;
 }
-
 
 /** One plan per storey that has none yet; a model with no storeys gets one cut at mid-height. */
 function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
@@ -238,6 +238,7 @@ export function ensureDrawingSet(meshes: MeshData[] | null, extent: AxisBounds, 
     ensurePlanScales(extent, options.setTemplate);
     ensureSections(meshes, extent, options, report);
     ensureSheets(extent, report, options.setTemplate);
+    if (options.onOpen) ensureViewTemplates();
   });
   for (const group of groupsThatDoNotFit(state().views, extent)) report.notes.push({ key: 'draftSet.note.noFit', params: { kind: group } });
   return report;

@@ -29,7 +29,8 @@ export function readGraphics(raw: Record<string, unknown>): ViewGraphics {
     for (const [id, value] of Object.entries(raw.categories)) {
       if (!isObject(value)) continue;
       const g: CategoryGraphics = {};
-      if (value.visible === false) g.visible = false;
+      // `true` is kept: a view over a template shows what its template hides (#44).
+      if (typeof value.visible === 'boolean') g.visible = value.visible;
       if (isString(value.lineColor) && HEX.test(value.lineColor)) g.lineColor = value.lineColor;
       if (isString(value.fillColor) && HEX.test(value.fillColor)) g.fillColor = value.fillColor;
       if (isString(value.lineWeight) && WEIGHTS.has(value.lineWeight)) g.lineWeight = value.lineWeight as CategoryGraphics['lineWeight'];
