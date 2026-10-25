@@ -130,9 +130,9 @@ export function BoqArticleRow({ article: a, n, line, options }: { article: BoqAr
           <button type="button" className={`${WALL_PILL} self-start`} aria-label={t('boq.editor.remove', { code: a.code || t('boq.editor.unnamed') })} onClick={() => removeBoqArticle(a.id)}>×</button>
         </div>
       </div>
-      <datalist id="boq-types">{options.types.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="boq-materials">{options.materials.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="boq-classes">{options.classes.map((v) => <option key={v} value={v} />)}</datalist>
+      <datalist id="boq-types">{options.types.map((v) => <option key={v} value={v}>{v}</option>)}</datalist>
+      <datalist id="boq-materials">{options.materials.map((v) => <option key={v} value={v}>{v}</option>)}</datalist>
+      <datalist id="boq-classes">{options.classes.map((v) => <option key={v} value={v}>{v}</option>)}</datalist>
     </li>
   );
 }
