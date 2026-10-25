@@ -42,12 +42,12 @@ import { checkAuthoringEn } from '../catalogues/check-authoring.en';
 import { checkReadyEn } from '../catalogues/check-ready.en';
 import { checkEn } from '../catalogues/check.en';
 import { civilDrawingsEn } from '../catalogues/civil-drawings.en';
-import { classificationEn } from '../catalogues/classification.en';
 import { civilEn } from '../catalogues/civil.en';
 import { clashGroupApplyEn } from '../catalogues/clash-group-apply.en';
 import { clashGroupsEn } from '../catalogues/clash-groups.en';
 import { clashPanelEn } from '../catalogues/clash-panel.en';
 import { clashToolsEn } from '../catalogues/clash-tools.en';
+import { classificationEn } from '../catalogues/classification.en';
 import { colourSchemeEn } from '../catalogues/colour-scheme.en';
 import { commandPaletteEn } from '../catalogues/command-palette.en';
 import { commandsEn } from '../catalogues/commands.en';
@@ -71,34 +71,9 @@ import { exportDialogEn } from '../catalogues/export-dialog.en';
 import { extensionsFlavorsEn } from '../catalogues/extensions-flavors.en';
 import { extensionsPanelsEn } from '../catalogues/extensions-panels.en';
 import { extrusionInspectionEn } from '../catalogues/extrusion-inspection.en';
-import { feedbackEn } from '../catalogues/feedback.en';
-import { filterGroupsEn } from '../catalogues/filter-groups.en';
-import { filterOperatorsEn } from '../catalogues/filter-operators.en';
-import { flowAssistantEn } from '../catalogues/flow-assistant.en';
-import { flowPanelEn } from '../catalogues/flow-panel.en';
-import { flowStartupEn } from '../catalogues/flow-startup.en';
-import { ganttWorkCalendarEn } from '../catalogues/gantt-work-calendar.en';
-import { geometryExportDialogsEn } from '../catalogues/geometry-export-dialogs.en';
-import { georeferencingEn } from '../catalogues/georeferencing.en';
-import { groupsEn } from '../catalogues/groups.en';
-import { handoverEn } from '../catalogues/handover.en';
-import { hierarchyEn } from '../catalogues/hierarchy.en';
-import { hostedPlaceEn } from '../catalogues/hosted-place.en';
-import { idsPanelEn } from '../catalogues/ids-panel.en';
-import { ifcsheetTourEn } from '../catalogues/ifcsheet-tour.en';
-import { ionUploadEn } from '../catalogues/ion-upload.en';
-import { issueChangesEn } from '../catalogues/issue-changes.en';
-import { issueEn } from '../catalogues/issue.en';
-import { joineryEn } from '../catalogues/joinery.en';
-import { keyboardShortcutsEn } from '../catalogues/keyboard-shortcuts.en';
-import { landXmlEn } from '../catalogues/landxml.en';
-import { layersPanelEn } from '../catalogues/layers-panel.en';
-import { lensPanelEn } from '../catalogues/lens-panel.en';
-import { listScheduleEn } from '../catalogues/list-schedule.en';
-import { listsEn } from '../catalogues/lists.en';
 
-/** The catalogues from `a` to `l` (#144): a sub-barrel keeps `en.ts` under the module-size limit. Static imports stay, so `TranslationKey` sees every key. */
-export const enA = {
+/** The catalogues whose file starts with `a` to `e` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
+export const enAE = {
   ...aiReportsEn,
   ...alignmentSectionEn,
   ...analysisPanelEn,
@@ -139,12 +114,12 @@ export const enA = {
   ...checkReadyEn,
   ...checkEn,
   ...civilDrawingsEn,
-  ...classificationEn,
   ...civilEn,
   ...clashGroupApplyEn,
   ...clashGroupsEn,
   ...clashPanelEn,
   ...clashToolsEn,
+  ...classificationEn,
   ...colourSchemeEn,
   ...commandPaletteEn,
   ...commandsEn,
@@ -168,29 +143,4 @@ export const enA = {
   ...extensionsFlavorsEn,
   ...extensionsPanelsEn,
   ...extrusionInspectionEn,
-  ...feedbackEn,
-  ...filterGroupsEn,
-  ...filterOperatorsEn,
-  ...flowAssistantEn,
-  ...flowPanelEn,
-  ...flowStartupEn,
-  ...ganttWorkCalendarEn,
-  ...geometryExportDialogsEn,
-  ...georeferencingEn,
-  ...groupsEn,
-  ...handoverEn,
-  ...hierarchyEn,
-  ...hostedPlaceEn,
-  ...idsPanelEn,
-  ...ifcsheetTourEn,
-  ...ionUploadEn,
-  ...issueChangesEn,
-  ...issueEn,
-  ...joineryEn,
-  ...keyboardShortcutsEn,
-  ...landXmlEn,
-  ...layersPanelEn,
-  ...lensPanelEn,
-  ...listScheduleEn,
-  ...listsEn,
 } as const;
