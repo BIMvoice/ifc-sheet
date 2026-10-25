@@ -34,6 +34,7 @@ ifcsheet check house.ifc                                     # what the model la
 ifcsheet check house.ifc --json                              # the same as JSON
 ifcsheet check house.ifc --project house.ifclite-project.json  # also the project's split schedules: an element in two parts, or in none
 ifcsheet boq house.ifc --project house.ifclite-project.json    # the bill of quantities (antemasuratoare): each article's total in its unit; --csv, --json, --detail, --locale ro
+ifcsheet list house.ifc --project house.ifclite-project.json --schedule walls    # a schedule built from the Lists engine: the app's rows and totals; --csv, --json, --locale ro
 ifcsheet --help
 ```
 

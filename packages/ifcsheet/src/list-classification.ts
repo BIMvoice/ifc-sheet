@@ -10,6 +10,7 @@
  * The part of the provider it needs is described here, not imported, so the app's providers and the headless one both take it.
  */
 
+import type { ListScheduleDef } from './list-schedule.js';
 import { classificationOf, mappingsFor, type ClassificationMapping, type ClassificationModel } from './classification.js';
 
 /** What the office classification is resolved with: the project's mappings and the model's own references. */
@@ -56,4 +57,16 @@ export function withOfficeClassification<P extends ClassifiableListProvider>(pro
     return answer;
   };
   return Object.assign(Object.create(provider) as P, { getOfficeClassification });
+}
+
+/**
+ * The providers a schedule runs over: each one answering the office classification when the list has an `officeClassification` column,
+ * else untouched. The ONE place that decides, shared by the app's `runListSchedule` and the headless run (the command line, `build
+ * --project`, the MCP tools), so a surface cannot forget to wrap and read a column of empty cells.
+ */
+export function withListClassification<P extends { modelId: string; provider: ClassifiableListProvider }>(
+  list: Pick<ListScheduleDef, 'columns'>, pairs: readonly P[], context: ListClassificationContext,
+): P[] {
+  if (!list.columns.some((c) => c.source === 'officeClassification')) return [...pairs];
+  return pairs.map((p) => ({ ...p, provider: withOfficeClassification(p.provider, p.modelId, context) }));
 }

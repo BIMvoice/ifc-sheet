@@ -2,16 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { LIST_WORDS_EN } from '@bimvoice/ifcsheet/list-words';
 import type { TranslationValue } from '../types';
 
 /** What a schedule built from the Lists engine says (#78): the drawer's button, the builder, the viewport card and the table. Romanian: `list-schedule.ro.ts`. */
 export const listScheduleEn = {
   'listSched.add': '+ New schedule from the model',
   'listSched.newName': 'Schedule',
-  'listSched.count': 'Count',
-  'listSched.total': 'Total',
-  'listSched.yes': 'Yes',
-  'listSched.no': 'No',
+  ...LIST_WORDS_EN,
   'listSched.empty': 'Nothing to list yet: load a model, or pick classes the model has.',
   'listSched.resolving': 'Reading the model…',
   'listSched.error': 'The list could not run: {reason}',

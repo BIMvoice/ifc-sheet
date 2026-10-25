@@ -28,7 +28,7 @@ Every path an `ifcsheet_*` tool reads or writes must lie inside `--allow`. The t
 - `ifcsheet_place_view`: put a view on a sheet at a scale; without `sheet` the engine's rule chooses or makes one; errors when the views do not fit.
 - `ifcsheet_set_title_block`: set title block fields, project-wide or for one sheet (client, drawnBy, checkedBy, date, phase, projectNumber, projectManager, designer, address...); returns the fields in force and the ones that changed.
 - `ifcsheet_renumber`: renumber the sheets by a scheme (`default` A-101 style, `sequential` A01, A02...).
-- `ifcsheet_add_schedule`: a room and area schedule (`rooms`, with the building total Au as `total_row`) or a bill of quantities (`boq`, from a saved project's articles) on a sheet of its own.
+- `ifcsheet_add_schedule`: a room and area schedule (`rooms`, with the building total Au as `total_row`) a bill of quantities (`boq`, from a saved project's articles) or a table from the Lists engine (`list`, with a definition of columns, grouping and sums; the same rows and totals as the app's Lists panel) on a sheet of its own.
 - `ifcsheet_export_pdf`: the set as one PDF, a page per sheet at true scale.
 - `ifcsheet_export_dxf`: one DXF per sheet into a directory.
 - `ifcsheet_issue_set`: the PDF, a DXF per sheet, `register.csv`, the schedules as CSV and, with `handover: true`, `handover.zip` (with the IFC as opened); `annotated_ifc: true` adds the annotated copy of the IFC.

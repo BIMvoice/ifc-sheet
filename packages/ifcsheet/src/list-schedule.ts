@@ -16,6 +16,7 @@
  */
 
 import { isOpenFilter, readSubReportFilter, type SubReportFilter } from './schedule-filter.js';
+import type { ExportTable } from './schedule-csv.js';
 import type { NumberKind } from './units-and-numbers.js';
 
 /** Where a column's value comes from (the Lists engine's sources a schedule can read from a model's elements). */
@@ -166,4 +167,11 @@ export function listScheduleTable(source: ListTableSource, def: Pick<ListSchedul
     name, header: keep.map((i) => source.columns[i].label), rows, bold,
     numeric: keep.flatMap((i, c) => (source.columns[i].numeric ? [c] : [])), kinds,
   };
+}
+
+/** The table in the shape the CSV and XLSX writers take (`ExportTable`): a count has no decimals of its own, so it names no kind. */
+export function listExportTable(table: ListScheduleTable): ExportTable {
+  const kinds: Record<number, NumberKind> = {};
+  for (const [column, kind] of Object.entries(table.kinds)) if (kind !== 'count') kinds[Number(column)] = kind;
+  return { name: table.name, header: table.header, rows: table.rows, bold: table.bold, numeric: table.numeric, kinds };
 }

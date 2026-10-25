@@ -1463,12 +1463,18 @@ importers:
       '@ifc-lite/geometry':
         specifier: workspace:^
         version: link:../geometry
+      '@ifc-lite/lists':
+        specifier: workspace:^
+        version: link:../lists
       '@ifc-lite/mutations':
         specifier: workspace:^
         version: link:../mutations
       '@ifc-lite/parser':
         specifier: workspace:^
         version: link:../parser
+      '@ifc-lite/rules':
+        specifier: workspace:^
+        version: link:../rules
       fflate:
         specifier: ^0.8.3
         version: 0.8.3

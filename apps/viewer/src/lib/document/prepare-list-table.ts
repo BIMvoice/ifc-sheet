@@ -6,18 +6,13 @@ import type { ProjectUnits } from '@ifc-lite/parser';
 import type { ViewerState } from '@/store';
 import { runListFederated, type ModelProviderPair } from '../lists/run-list';
 import { evaluatorModelsFromState } from '../model-tags/evaluator-models';
-import { buildExportModel, type ExportModel } from '../lists/export/model';
-import { detectNumericColumns } from '@/components/viewer/lists/list-table-utils';
+import type { ExportModel } from '../lists/export/model';
+import { listExportModel as engineListExportModel } from '@bimvoice/ifcsheet/list-projection';
 import type { TableState } from './resolve-table';
 
-/** The export projection of a list's result, as the Lists panel builds it: one function for the document tables and the schedules (#78). */
+/** The export projection of a list's result, as the Lists panel builds it: one function for the document tables and the schedules (#78), the engine's. */
 export function listExportModel(list: ListDefinition, result: ListResult, modelUnits: Map<string, ProjectUnits>, state: ViewerState, today: Date = new Date()): ExportModel {
-  return buildExportModel({
-    title: list.name, columns: result.columns, rows: result.rows, grouping: list.grouping,
-    numericCols: detectNumericColumns(result.columns, result.rows), columnWidths: [],
-    generatedAt: today.toLocaleString(), modelUnits,
-    unitDisplayOverrides: state.unitDisplayOverrides,
-  });
+  return engineListExportModel(list, result, modelUnits, state.unitDisplayOverrides, today);
 }
 
 /** List execution and export projection shared by the subscribed and callable document paths. */

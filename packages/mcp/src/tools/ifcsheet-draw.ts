@@ -17,7 +17,7 @@ import {
   type BoqArticle, type SheetLocale,
 } from '@bimvoice/ifcsheet';
 import { boqCsv, boqResult } from '@bimvoice/ifcsheet/cli-boq';
-import type { OpenedModel, SheetGraphic } from '@bimvoice/ifcsheet/headless';
+import { listScheduleCsv, listScheduleTableOn, listTableIsEmpty, type OpenedModel, type SheetGraphic } from '@bimvoice/ifcsheet/headless';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import type { SetSchedule, SheetModelEntry, SheetSetEntry } from './ifcsheet-store.js';
 
@@ -41,6 +41,13 @@ export async function scheduleTable(schedule: SetSchedule, model: OpenedModel): 
     const rooms = roomSchedule(read.levels, read.rooms);
     if (rooms.rooms === 0) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The model has no rooms (IfcSpace) to list.' });
     return { rows: roomScheduleRows(rooms, schedule.locale as SheetLocale), notes: [], csv: roomScheduleCsv(rooms, schedule.locale as SheetLocale) };
+  }
+  if (schedule.kind === 'list') {
+    if (!schedule.list) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The list schedule holds no definition.' });
+    // The Lists engine's rows over the model, by the steps the app runs: the same numbers as `ifcsheet list` and the app's table.
+    const table = listScheduleTableOn(model, { id: schedule.id, name: schedule.name ?? 'List', list: schedule.list }, schedule.locale, { classificationMappings: schedule.classificationMappings ?? [] });
+    if (listTableIsEmpty(table)) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The list has no rows: no element of the model matches its filter.' });
+    return { rows: [table.header, ...table.rows.map((r) => r.map((c) => (c === null ? '' : String(c))))], notes: [], csv: listScheduleCsv(table, schedule.locale) };
   }
   const articles: readonly BoqArticle[] = schedule.boqArticles ?? [];
   if (articles.length === 0) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The project holds no bill-of-quantities articles.' });

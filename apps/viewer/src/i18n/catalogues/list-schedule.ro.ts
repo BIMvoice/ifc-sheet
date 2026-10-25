@@ -2,16 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { LIST_WORDS_RO } from '@bimvoice/ifcsheet/list-words';
 import type { TranslationValue } from '../types';
 
 /** Romanian (#78): a tabel construit din motorul de liste, as `list-schedule.en.ts` says it. Term choices: `../ro-glossary.md`. */
 export const listScheduleRo = {
   'listSched.add': '+ Tabel nou din model',
   'listSched.newName': 'Tabel',
-  'listSched.count': 'Număr',
-  'listSched.total': 'Total',
-  'listSched.yes': 'Da',
-  'listSched.no': 'Nu',
+  ...LIST_WORDS_RO,
   'listSched.empty': 'Nu e nimic de listat încă: încărcați un model sau alegeți clase pe care le are modelul.',
   'listSched.resolving': 'Se citește modelul…',
   'listSched.error': 'Lista nu a putut rula: {reason}',
