@@ -25,6 +25,7 @@ import { setPanel, useDrawerOpen, useWallNav } from '../wall/wall-nav';
 import { WhatChanged } from '../whatchanged/WhatChanged';
 import { openDemoModel } from './demo-model';
 import { LanguagePicker } from './LanguagePicker';
+import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
 import { useIfcSheetTour } from './useIfcSheetTour';
 import { WALL_PILL } from '../wall/wall-type';
 
@@ -78,6 +79,8 @@ export function IfcSheetShell() {
             {t('wall.shell.saveProject')}{dirty ? ' •' : ''}
           </button>
         ) : null}
+        {/* The shortcut list, "Customise keys" and the AutoCAD mode switch are one dialog, opened on its Shortcuts tab; the layout under the face owns it (#299). */}
+        <button type="button" aria-haspopup="dialog" className={quiet} onClick={() => window.dispatchEvent(new CustomEvent(EVENT_SHOW_SHORTCUTS, { detail: { tab: 'shortcuts' } }))}>{t('wall.keys.title')}</button>
         <FeedbackButton className={quiet} />
         <button type="button" aria-label={t('ifcsheetTour.helpLabel')} className={quiet} onClick={reopenTour}>{t('ifcsheetTour.help')}</button>
       </header>
