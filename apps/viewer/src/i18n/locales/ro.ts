@@ -21,6 +21,8 @@ import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetsRo } from '../catalogues/sheets.ro';
 import { wallRo } from '../catalogues/wall.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
+import { wallKeyPresetsRo } from '../catalogues/wall-key-presets.ro';
+import { wallExitsRo } from '../catalogues/wall-exits.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
 import { wallSectionsRo } from '../catalogues/wall-sections.ro';
 import { handoverRo } from '../catalogues/handover.ro';
@@ -55,6 +57,8 @@ import { boqRo } from '../catalogues/boq.ro';
 export default {
   ...wallRo,
   ...wallKeysRo,
+  ...wallKeyPresetsRo,
+  ...wallExitsRo,
   ...wallReviewRo,
   ...wallSectionsRo,
   ...scheduleExportRo,

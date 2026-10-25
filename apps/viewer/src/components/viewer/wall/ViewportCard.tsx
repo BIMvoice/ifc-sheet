@@ -120,6 +120,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
             {view?.kind === 'plan' && view.site ? <button type="button" className={quiet} onClick={() => { drawPlotBoundary(slot.viewId, startWhenAttached); onOpen(slot); }}>{t('site.drawBoundary')}</button> : null}
             {view?.kind === 'plan' && !slot.keyPlanOf ? <button type="button" className={quiet} onClick={() => onChoose(addKeyPlan(sheet, slot, drawingBounds))}>{t('site.keyPlan.add')}</button> : null}
             <button type="button" className={quiet} onClick={() => { removeViewport(sheet.id, slot.id); onChoose(null); }}>{t('wall.vp.remove')}</button>
+            <button type="button" className={quiet} onClick={() => onChoose(null)}>{t('wall.vp.done')}</button>
           </div>
         </>
       ) : (

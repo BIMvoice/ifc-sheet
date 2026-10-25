@@ -23,11 +23,14 @@ import { create } from 'zustand';
 import { WALL_ACTIONS, defaultKeys, isWallAction, type WallActionId } from './action-registry';
 import type { KeyChord } from './chord';
 import { KEY_COMMANDS } from './keyboard-commands';
+import { isKeyPresetId, presetKeys, type KeyPresetId } from './key-presets';
 
 /** The person's bindings, by action id: an empty list is an action they left without a key. */
 export type BindingOverrides = Readonly<Partial<Record<WallActionId, readonly KeyChord[]>>>;
 
 export const KEY_BINDINGS_STORAGE_KEY = 'ifcsheet:key-bindings';
+/** The chosen preset (#166); absent means the default one. */
+export const KEY_PRESET_STORAGE_KEY = 'ifcsheet:key-preset';
 const FILE_FORMAT = 'ifcsheet-keyboard';
 const FILE_VERSION = 1;
 const BUILTIN: ReadonlyMap<string, readonly KeyChord[]> = new Map(KEY_COMMANDS.map((c) => [c.id, c.keys]));
@@ -69,7 +72,7 @@ function cleanChord(raw: unknown): KeyChord | null {
 }
 
 type ParseResult =
-  | { readonly ok: true; readonly overrides: BindingOverrides; readonly skipped: number }
+  | { readonly ok: true; readonly overrides: BindingOverrides; readonly skipped: number; readonly preset: KeyPresetId }
   | { readonly ok: false; readonly reason: 'invalid' }
   | { readonly ok: false; readonly reason: 'reserved'; readonly chord: KeyChord }
   | { readonly ok: false; readonly reason: 'tooMany'; readonly action: WallActionId; readonly max: number };
@@ -87,6 +90,9 @@ function parse(text: string): ParseResult {
   if (typeof data !== 'object' || data === null) return INVALID;
   const d = data as Record<string, unknown>;
   if (d.format !== FILE_FORMAT || d.version !== FILE_VERSION || typeof d.bindings !== 'object' || d.bindings === null) return INVALID;
+  // A file from before presets has no `preset`: it was made over the shipped keys.
+  if (d.preset !== undefined && !isKeyPresetId(d.preset)) return INVALID;
+  const preset: KeyPresetId = d.preset ?? 'default';
   const overrides: Partial<Record<WallActionId, readonly KeyChord[]>> = {};
   let skipped = 0;
   for (const [id, chords] of Object.entries(d.bindings as Record<string, unknown>)) {
@@ -100,14 +106,19 @@ function parse(text: string): ParseResult {
     if (refused) return { ok: false, reason: 'reserved', chord: refused };
     overrides[id] = shaped as KeyChord[];
   }
-  return { ok: true, overrides, skipped };
+  return { ok: true, overrides, skipped, preset };
 }
 
 function serialise(overrides: BindingOverrides): string {
   return JSON.stringify({ format: FILE_FORMAT, version: FILE_VERSION, bindings: overrides }, null, 2);
 }
 
-interface Stored { overrides: BindingOverrides; dropped: number }
+/** The file's text: the preset the custom layer sits on, then the layer. */
+function serialiseSet(overrides: BindingOverrides, preset: KeyPresetId): string {
+  return JSON.stringify({ format: FILE_FORMAT, version: FILE_VERSION, preset, bindings: overrides }, null, 2);
+}
+
+interface Stored { overrides: BindingOverrides; dropped: number; preset: KeyPresetId }
 
 /**
  * The saved set. A binding that now collides (written by an older build, a new
@@ -115,19 +126,21 @@ interface Stored { overrides: BindingOverrides; dropped: number }
  */
 function stored(): Stored {
   try {
+    const savedPreset = globalThis.localStorage?.getItem(KEY_PRESET_STORAGE_KEY);
+    const preset: KeyPresetId = isKeyPresetId(savedPreset) ? savedPreset : 'default';
     const text = globalThis.localStorage?.getItem(KEY_BINDINGS_STORAGE_KEY);
     const parsed = text ? parse(text) : null;
-    return parsed?.ok ? withoutConflicts(parsed.overrides) : { overrides: {}, dropped: 0 };
+    return { ...(parsed?.ok ? withoutConflicts(parsed.overrides, preset) : { overrides: {}, dropped: 0 }), preset };
   } catch {
-    return { overrides: {}, dropped: 0 };
+    return { overrides: {}, dropped: 0, preset: 'default' };
   }
 }
 
 /** The set with each chord that collides taken out (an action left with none goes back to its default), and how many were. */
-function withoutConflicts(overrides: BindingOverrides): Stored {
+function withoutConflicts(overrides: BindingOverrides, preset: KeyPresetId): { overrides: BindingOverrides; dropped: number } {
   let current: Partial<Record<WallActionId, readonly KeyChord[]>> = { ...overrides };
   let dropped = 0;
-  for (let conflict = firstConflict(current); conflict; conflict = firstConflict(current)) {
+  for (let conflict = firstConflict(current, preset); conflict; conflict = firstConflict(current, preset)) {
     const left = (current[conflict.first] ?? []).filter((c) => slot(c) !== slot(conflict.chord));
     if (left.length > 0) current = { ...current, [conflict.first]: left };
     else { current = { ...current }; delete current[conflict.first]; }
@@ -145,11 +158,13 @@ export function takeDroppedBindings(): number {
 
 export const useKeyBindings = create<Stored>()(() => stored());
 
-function commit(overrides: BindingOverrides): void {
-  useKeyBindings.setState({ overrides });
+function commit(overrides: BindingOverrides, preset: KeyPresetId = useKeyBindings.getState().preset): void {
+  useKeyBindings.setState({ overrides, preset });
   try {
     if (Object.keys(overrides).length === 0) globalThis.localStorage?.removeItem(KEY_BINDINGS_STORAGE_KEY);
     else globalThis.localStorage?.setItem(KEY_BINDINGS_STORAGE_KEY, serialise(overrides));
+    if (preset === 'default') globalThis.localStorage?.removeItem(KEY_PRESET_STORAGE_KEY);
+    else globalThis.localStorage?.setItem(KEY_PRESET_STORAGE_KEY, preset);
   } catch {
     // Storage unavailable: the bindings hold for this session.
   }
@@ -160,19 +175,47 @@ export function loadKeyBindings(): void {
   useKeyBindings.setState(stored());
 }
 
-function keysIn(overrides: BindingOverrides, id: string): readonly KeyChord[] {
-  if (isWallAction(id)) return overrides[id] ?? defaultKeys(id);
+/** The bindings in force: the preset's table with the person's own laid over it. */
+function layered(overrides: BindingOverrides, preset: KeyPresetId): BindingOverrides {
+  return { ...presetKeys(preset), ...overrides };
+}
+
+function keysIn(layers: BindingOverrides, id: string): readonly KeyChord[] {
+  if (isWallAction(id)) return layers[id] ?? defaultKeys(id);
   return BUILTIN.get(id) ?? [];
 }
 
-/** The keys that run a command now: the person's binding for a Wall action, else the keymap's. */
+/** The keys that run a command now: the person's binding for a Wall action, else the preset's, else the keymap's. */
 export function effectiveKeys(id: string): readonly KeyChord[] {
-  return keysIn(useKeyBindings.getState().overrides, id);
+  const { overrides, preset } = useKeyBindings.getState();
+  return keysIn(layered(overrides, preset), id);
+}
+
+/** The chosen preset. */
+export function currentPreset(): KeyPresetId {
+  return useKeyBindings.getState().preset;
+}
+
+/** Re-render on any change of the keys in force: a rebinding or a preset switch. */
+export function useKeyBindingsRevision(): void {
+  useKeyBindings((s) => s.overrides);
+  useKeyBindings((s) => s.preset);
+}
+
+/** The keys the preset alone gives the action (what "reset" returns it to). */
+export function presetBinding(id: WallActionId): readonly KeyChord[] {
+  return presetKeys(currentPreset())[id] ?? defaultKeys(id);
 }
 
 /** Whether the person changed this action's keys. */
 export function isCustomised(id: WallActionId): boolean {
   return useKeyBindings.getState().overrides[id] !== undefined;
+}
+
+/** Whether the action runs on other keys than the shipped ones: the person's own, or its preset's. */
+export function isRebound(id: WallActionId): boolean {
+  const { overrides, preset } = useKeyBindings.getState();
+  return overrides[id] !== undefined || presetKeys(preset)[id] !== undefined;
 }
 
 /**
@@ -181,26 +224,37 @@ export function isCustomised(id: WallActionId): boolean {
  * panel, Delete deletes a selection): the Wall's handler comes first and takes the press, as it
  * always has.
  */
-function holder(overrides: BindingOverrides, chord: KeyChord, except: string | null): string | null {
+function holder(overrides: BindingOverrides, preset: KeyPresetId, chord: KeyChord, except: string | null): string | null {
   const wanted = slot(chord);
+  const layers = layered(overrides, preset);
   for (const action of WALL_ACTIONS) {
-    if (action.id !== except && keysIn(overrides, action.id).some((c) => slot(c) === wanted)) return action.id;
+    if (action.id !== except && keysIn(layers, action.id).some((c) => slot(c) === wanted)) return action.id;
   }
-  if (WALL_ACTIONS.some((a) => defaultKeys(a.id).some((c) => slot(c) === wanted))) return null;
-  for (const id of LIVE_ON_THE_WALL) if (keysIn(overrides, id).some((c) => slot(c) === wanted)) return id;
+  const shipped = presetKeys(preset);
+  if (WALL_ACTIONS.some((a) => (shipped[a.id] ?? defaultKeys(a.id)).some((c) => slot(c) === wanted))) return null;
+  for (const id of LIVE_ON_THE_WALL) if (keysIn(layers, id).some((c) => slot(c) === wanted)) return id;
   return null;
 }
 
 /** The first two actions a set of bindings gives one chord, or null when every chord has one action. Only what the person bound is checked: the defaults ship as they are. */
-function firstConflict(overrides: BindingOverrides): { first: WallActionId; second: string; chord: KeyChord } | null {
+function firstConflict(overrides: BindingOverrides, preset: KeyPresetId): { first: WallActionId; second: string; chord: KeyChord } | null {
   for (const action of WALL_ACTIONS) {
     if (overrides[action.id] === undefined) continue;
-    for (const chord of keysIn(overrides, action.id)) {
-      const other = holder(overrides, chord, action.id);
+    for (const chord of keysIn(layered(overrides, preset), action.id)) {
+      const other = holder(overrides, preset, chord, action.id);
       if (other) return { first: action.id, second: other, chord };
     }
   }
   return null;
+}
+
+/**
+ * The first chord a preset's table gives to two actions (or to an action and a
+ * key the Wall keeps live), or null. The table is checked as a person's set
+ * is, over the shipped keys, so a preset cannot ship a collision.
+ */
+export function presetConflict(table: BindingOverrides): { first: WallActionId; second: string; chord: KeyChord } | null {
+  return firstConflict(table, 'default');
 }
 
 /** Keys that move focus between controls, or are not a key on their own. */
@@ -218,7 +272,7 @@ export function rebindAction(id: WallActionId, chord: KeyChord): RebindOutcome {
   const clean = cleanChord(chord);
   if (!clean) return { ok: false, reason: 'reserved' };
   const overrides = useKeyBindings.getState().overrides;
-  const other = holder(overrides, clean, id);
+  const other = holder(overrides, currentPreset(), clean, id);
   if (other) return { ok: false, reason: 'conflict', holder: other };
   commit({ ...overrides, [id]: [clean] });
   return { ok: true };
@@ -236,21 +290,37 @@ export function unbindAction(id: WallActionId): void {
 export function resetAction(id: WallActionId): RebindOutcome {
   const rest: Partial<Record<WallActionId, readonly KeyChord[]>> = { ...useKeyBindings.getState().overrides };
   delete rest[id];
-  for (const chord of defaultKeys(id)) {
-    const other = holder(rest, chord, id);
+  for (const chord of presetBinding(id)) {
+    const other = holder(rest, currentPreset(), chord, id);
     if (other) return { ok: false, reason: 'conflict', holder: other };
   }
   commit(rest);
   return { ok: true };
 }
 
+/** Drop the person's own layer: every action is on the chosen preset's key. */
 export function resetAllBindings(): void {
   commit({});
 }
 
+export type PresetOutcome = { readonly ok: true; readonly dropped: number };
+
+/**
+ * Choose a preset. The person's own rebindings stay on top of it; one that
+ * would now share a key with an action the new preset moved is dropped (that
+ * action falls back to the preset's key) and counted, so no key runs two
+ * actions.
+ */
+export function setKeyPreset(id: KeyPresetId): PresetOutcome {
+  const kept = withoutConflicts(useKeyBindings.getState().overrides, id);
+  commit(kept.overrides, id);
+  return { ok: true, dropped: kept.dropped };
+}
+
 /** The person's set as a file's text: only what differs from the defaults. */
 export function exportKeyBindings(): string {
-  return serialise(useKeyBindings.getState().overrides);
+  const { overrides, preset } = useKeyBindings.getState();
+  return serialiseSet(overrides, preset);
 }
 
 export type ImportOutcome =
@@ -265,8 +335,8 @@ export function importKeyBindings(text: string): ImportOutcome {
   if (text.length > IMPORT_MAX_CHARS) return { ok: false, reason: 'tooLarge' };
   const parsed = parse(text);
   if (!parsed.ok) return parsed;
-  const conflict = firstConflict(parsed.overrides);
+  const conflict = firstConflict(parsed.overrides, parsed.preset);
   if (conflict) return { ok: false, reason: 'conflict', ...conflict };
-  commit(parsed.overrides);
+  commit(parsed.overrides, parsed.preset);
   return { ok: true, applied: Object.keys(parsed.overrides).length, skipped: parsed.skipped };
 }

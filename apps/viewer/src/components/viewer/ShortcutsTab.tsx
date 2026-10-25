@@ -25,7 +25,7 @@ import {
 import { shownOnTheWall } from '@/lib/commands/wall-key-commands';
 import { formatCommandKeys } from '@/lib/commands/shortcut-label';
 import { isWallAction } from '@/lib/commands/action-registry';
-import { effectiveKeys, useKeyBindings } from '@/lib/commands/key-bindings';
+import { effectiveKeys, useKeyBindingsRevision } from '@/lib/commands/key-bindings';
 import { KeyboardSettings } from './wall/KeyboardSettings';
 
 interface ShortcutRow {
@@ -72,7 +72,7 @@ function rowsByCategory(commands: readonly KeyCommandDefinition[], gestures: typ
 export function ShortcutsTab({ commands }: { commands?: readonly KeyCommandDefinition[] } = {}) {
   const { t } = useTranslation();
   const wall = isDocsEdition();
-  useKeyBindings((s) => s.overrides);
+  useKeyBindingsRevision();
   const [customising, setCustomising] = useState(false);
   if (customising) return <KeyboardSettings onDone={() => setCustomising(false)} />;
   const rows = commands ?? (wall ? shownOnTheWall(KEY_COMMANDS) : KEY_COMMANDS);
