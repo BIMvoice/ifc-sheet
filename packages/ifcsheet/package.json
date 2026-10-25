@@ -30,6 +30,26 @@
       "import": "./dist/readiness-read.js",
       "default": "./dist/readiness-read.js"
     },
+    "./clip": {
+      "types": "./dist/clip.d.ts",
+      "import": "./dist/clip.js",
+      "default": "./dist/clip.js"
+    },
+    "./colour-scheme": {
+      "types": "./dist/colour-scheme.d.ts",
+      "import": "./dist/colour-scheme.js",
+      "default": "./dist/colour-scheme.js"
+    },
+    "./colour-fills": {
+      "types": "./dist/colour-fills.d.ts",
+      "import": "./dist/colour-fills.js",
+      "default": "./dist/colour-fills.js"
+    },
+    "./footprint": {
+      "types": "./dist/footprint.d.ts",
+      "import": "./dist/footprint.js",
+      "default": "./dist/footprint.js"
+    },
     "./project": {
       "types": "./dist/project.d.ts",
       "import": "./dist/project.js",

@@ -17,12 +17,17 @@ import type { Pt } from '@/drafting/types';
 import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 import type { CategoryGraphics, CategoryLineWeight, PhaseId, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
+import type { SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
+import { withScheme } from './view-scheme-style';
 import type { DraftShape } from '@/drafting/types';
 
 /** A drawing as a view shows it, with its building materials' hatches and membrane lines, and (a view that draws by phase) the phase of each line and cut face. */
 export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
   lines: (DrawingLine & { phase?: PhaseId })[];
-  cutPolygons: (DrawingPolygon & { phase?: PhaseId })[];
+  /** `schemeColour`: the fill a colour scheme (#92) gives the element, `#rrggbb`; it wins over the material's and the phase's. */
+  cutPolygons: (DrawingPolygon & { phase?: PhaseId; schemeColour?: string })[];
+  /** The rooms a colour scheme fills (#92), drawn under everything else. */
+  schemeFills?: (DrawingPolygon & { schemeColour: string })[];
   materialHatches?: (MaterialHatch & HatchSource)[];
   membranes?: DraftShape[];
 };
@@ -132,6 +137,22 @@ function rgba(hex: string): [number, number, number, number] | null {
  * view changes nothing.
  */
 export function styledDrawing(
+  drawing: Drawing2D,
+  graphics: ViewGraphics | undefined,
+  hostTypeOf: (entityId: number, ifcType: string | undefined) => string | null = () => null,
+  /** Elements a symbol draws instead (a plan's configured doors and windows): their cut and lines are left out. */
+  replaced?: (entityId: number, ifcType: string | undefined) => boolean,
+  /** The cut by building materials (`material-drawing.ts`), computed on this same drawing. */
+  materials?: MaterialDrawing | null,
+  /** A view that draws by phase (`phases.ts`): each element's lines and cut faces carry its phase. */
+  phases?: PhaseView | null,
+  /** What the view's colour scheme paints (`view-colour-scheme.ts`, #92). */
+  scheme?: SchemeResult | null,
+): StyledDrawing {
+  return withScheme(styledByGraphics(drawing, graphics, hostTypeOf, replaced, materials, phases), scheme);
+}
+
+function styledByGraphics(
   drawing: Drawing2D,
   graphics: ViewGraphics | undefined,
   hostTypeOf: (entityId: number, ifcType: string | undefined) => string | null = () => null,

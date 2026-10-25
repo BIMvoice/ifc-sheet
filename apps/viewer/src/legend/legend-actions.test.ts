@@ -16,7 +16,7 @@ import type { LegendLabels } from './legend-layout.js';
 import { addLegend, keepLegendOnSheets, moveLegendCategory, placeLegend, projectLegends, toggleLegendCategory, updateLegend } from './legend-actions.js';
 
 const LABELS: LegendLabels = {
-  heading: { materials: 'Materials', layers: 'Layers', hatches: 'Hatches', symbols: 'Symbols', annotations: 'Annotations' },
+  heading: { materials: 'Materials', layers: 'Layers', hatches: 'Hatches', symbols: 'Symbols', annotations: 'Annotations', colours: 'Colours' },
   tool: (tool) => tool,
   continued: (heading) => `${heading} (continued)`,
   membrane: 'membrane',

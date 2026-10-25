@@ -23,6 +23,7 @@ import { hatchSegments } from '@/drafting/hatch/fill';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { categoryOf, cutHatches, type StyledDrawing } from '@/project/view-graphics';
 import { phaseInk } from '@/project/phases';
+import { fillOrder, schemeColourOf } from '@/project/view-scheme-style';
 import { DEFAULT_GRAPHIC_STANDARD, type GraphicStandard } from '@/drafting/graphic-standard';
 import type { ViewGraphics } from '@/project/types';
 import { halftoneColor, type EntityStyleOf } from '@/project/model-styles';
@@ -36,6 +37,8 @@ export interface Pen {
   dash?: string;
   /** The DXF layer it exports on. */
   layer: string;
+  /** A colour scheme's fill (#92): the DXF carries it as a solid hatch, which a plain cut-face fill is not. */
+  solid?: boolean;
   /** With a CAD layer standard: the element class and material the pen is split by (`dxf-tags.ts`). */
   ifcType?: string;
   material?: string;
@@ -83,11 +86,13 @@ export function viewportPens(
   };
   const ink = (colour: string, entityId: number | undefined) => (entityId !== undefined && styleOf?.(entityId) === 'halftone' ? halftoneColor(colour) : colour);
 
-  for (const polygon of drawing.cutPolygons) {
-    // A phase's fill, like its line, comes after the category's.
+  for (const polygon of fillOrder(drawing)) {
+    // A phase's fill, like its line, comes after the category's; a colour scheme's (#92) after the phase's.
     const phase = 'phase' in polygon ? polygon.phase : undefined;
-    const fill = ink(phase ? phaseInk(graphics, phase).fill : polygon.color && style(polygon.ifcType)?.fillColor ? hex(polygon.color) : DEFAULT_FILL, polygon.entityId);
-    add(`fill:${fill}`, { stroke: null, width: 0, fill, layer: 'FILL' }, [polygon.polygon.outer, ...polygon.polygon.holes].map(loop).join(''));
+    const fill = ink(schemeColourOf(polygon) ?? (phase ? phaseInk(graphics, phase).fill : polygon.color && style(polygon.ifcType)?.fillColor ? hex(polygon.color) : DEFAULT_FILL), polygon.entityId);
+    const d = [polygon.polygon.outer, ...polygon.polygon.holes].map(loop).join('');
+    if (schemeColourOf(polygon)) add(`scheme:${fill}`, { stroke: null, width: 0, fill, layer: 'COLOUR', solid: true }, d);
+    else add(`fill:${fill}`, { stroke: null, width: 0, fill, layer: 'FILL' }, d);
   }
   for (const line of drawing.lines) {
     const g = style(line.ifcType);

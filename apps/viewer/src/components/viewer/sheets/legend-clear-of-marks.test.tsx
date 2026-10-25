@@ -23,7 +23,7 @@ import { useSheetContent, type SheetContent } from './useSheetContent';
  */
 
 const LABELS: LegendLabels = {
-  heading: { materials: 'Materials', layers: 'Layers', hatches: 'Hatches', symbols: 'Symbols', annotations: 'Annotations' },
+  heading: { materials: 'Materials', layers: 'Layers', hatches: 'Hatches', symbols: 'Symbols', annotations: 'Annotations', colours: 'Colours' },
   tool: (tool) => tool,
   continued: (heading) => `${heading} (continued)`,
   membrane: 'membrane',

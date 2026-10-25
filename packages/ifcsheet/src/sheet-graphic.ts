@@ -17,9 +17,11 @@
 
 import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
 import { clipPolyline } from './clip.js';
+import type { SchemeResult } from './colour-fills.js';
+import { schemeLegend, viewportFills, type SheetFill } from './sheet-colours.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
-import { frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
+import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
 import { paperOf } from './viewport-fit.js';
 
 export type Polyline = readonly Point2D[];
@@ -40,6 +42,8 @@ export interface SheetGraphic {
   paper: { w: number; h: number };
   /** The frame line, the title block's box and its rule; each rectangle ends where it starts. */
   frame: Polyline[];
+  /** The regions a view's colour scheme fills (#92), under every line: its rooms and elements, and the swatches of its legend. */
+  fills: SheetFill[];
   /** The outlines of cut faces, clipped to their viewport; a ring wholly inside ends where it starts. */
   cut: Polyline[];
   /** Every other visible line of the drawings, clipped to their viewport. */
@@ -107,9 +111,9 @@ const closeRing = (pts: Point2D[]): Point2D[] => (pts.length > 2 ? [...pts, pts[
  * view, so a drawing larger than the building (the site around it) cannot run
  * into its neighbour; without it, to the drawing's own extent.
  */
-export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings: ReadonlyMap<string, Drawing2D>, extent?: ModelExtent | null): SheetGraphic {
+export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings: ReadonlyMap<string, Drawing2D>, extent?: ModelExtent | null, schemes: ReadonlyMap<string, SchemeResult> = new Map()): SheetGraphic {
   const paper = paperOf(sheet);
-  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], cut: [], lines: [], texts: [], viewports: [] };
+  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], texts: [], viewports: [] };
   const vps = sheet.viewports ?? [];
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
@@ -121,12 +125,28 @@ export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings
     if (box) out.viewports.push({ viewId: vp.viewId, box });
     if (drawing && box && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
+      const scheme = schemes.get(vp.viewId);
+      if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box));
       for (const polygon of drawing.cutPolygons) {
         for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }
       for (const line of drawing.lines) if (line.visibility !== 'hidden') out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
     }
     if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
+  }
+  // The legend of each coloured view, in the free place of the drawing area nearest its bottom-right corner (the viewports and their titles are not free).
+  const taken = out.viewports.map(({ box }) => ({ x: box.x, y: box.y, w: box.w, h: box.h + 12 }));
+  taken.push(titleBlockRect(paper, frameOf(sheet)));
+  for (const vp of vps) {
+    const view = doc.views.find((v) => v.id === vp.viewId);
+    const entries = schemes.get(vp.viewId)?.entries;
+    const scheme = view?.graphics?.colourScheme;
+    const legend = entries && scheme ? schemeLegend(entries, scheme.property, drawingAreaIn(paper, frameOf(sheet)), taken) : null;
+    if (!legend) continue;
+    taken.push(legend.box);
+    out.fills.push(...legend.fills);
+    out.cut.push(...legend.lines);
+    out.texts.push(...legend.texts);
   }
   const block = titleBlock(sheet, doc, paper, [...new Set(vps.map((v) => v.scale))]);
   out.frame.push(...block.frame);
