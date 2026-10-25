@@ -27,6 +27,7 @@ import { TAB_EXPORT } from '../wall/wall-type';
 import { ScheduleGraphic, useScheduleLayout } from './ScheduleGraphic';
 import { RegisterView } from './RegisterView';
 import { RoomFinishesView } from './RoomFinishesView';
+import { RoomScheduleView } from './RoomScheduleView';
 import { TakeoffView } from './TakeoffView';
 import { UrbanView } from '../urban/UrbanView';
 import { TypeQuantitiesView } from './TypeQuantitiesView';
@@ -40,6 +41,7 @@ export function ScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   if (schedule.kind === 'types') return <TypeQuantitiesView schedule={schedule} />;
   if (schedule.kind === 'finishes') return <RoomFinishesView schedule={schedule} />;
   if (schedule.kind === 'urban') return <UrbanView schedule={schedule} />;
+  if (schedule.kind === 'rooms') return <RoomScheduleView schedule={schedule} />;
   return schedule.kind === 'materials' ? <TakeoffView schedule={schedule} /> : schedule.kind === 'register' ? <RegisterView schedule={schedule} /> : <JoineryScheduleView schedule={schedule} />;
 }
 

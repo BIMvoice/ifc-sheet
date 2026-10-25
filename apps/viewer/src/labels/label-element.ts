@@ -77,6 +77,7 @@ export function labelElementOf(modelId: string, expressId: number): LabelElement
         case 'Name': return p.getEntityName(expressId);
         case 'Tag': return p.getEntityTag(expressId);
         case 'LongName': return longNameOf(modelId, expressId);
+        case 'RoomNumber': return longNameOf(modelId, expressId) ? p.getEntityName(expressId) : '';
         case 'Mark': return markOf(p.getEntityTag(expressId));
         case 'TagName': return '';
         case 'ObjectType': return p.getEntityObjectType(expressId);

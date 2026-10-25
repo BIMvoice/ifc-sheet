@@ -144,6 +144,7 @@ import { tagFieldsEn } from './catalogues/tag-fields.en';
 import { draftingStandardsEn } from './catalogues/drafting-standards.en';
 import { joineryEn } from './catalogues/joinery.en';
 import { roomFinishesEn } from './catalogues/room-finishes.en';
+import { roomScheduleEn } from './catalogues/room-schedule.en';
 import { urbanEn } from './catalogues/urban.en';
 import { elementTypesEn } from './catalogues/element-types.en';
 import { roofEn } from './catalogues/roof.en';
@@ -234,6 +235,7 @@ export const en = {
   ...draftingStandardsEn,
   ...joineryEn,
   ...roomFinishesEn,
+  ...roomScheduleEn,
   ...urbanEn,
   ...elementTypesEn,
   ...roofEn,

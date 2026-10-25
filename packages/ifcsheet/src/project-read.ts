@@ -25,6 +25,7 @@ import { readinessOfModel } from './readiness-read.js';
 import type { FarElementFact, ReadinessFinding } from './readiness.js';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { readUnitsAndNumbers, type UnitsAndNumbers } from './units-and-numbers.js';
+import type { MeshData } from '@ifc-lite/geometry';
 
 /** What the checks read of a project file. */
 export interface ProjectFacts extends JoineryProject {
@@ -81,7 +82,7 @@ export function projectSubReportChecks(project: ProjectFacts, models: readonly S
  * The readiness findings of an opened model with a project: the model's own, then a pair for each split schedule
  * whose parts overlap or leave elements out. Without a project, `readinessOfModel` alone.
  */
-export function readinessWithProject(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
+export function readinessWithProject(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
   const checks = project ? projectSubReportChecks(project, [{ modelId, dataStore: model.dataStore, view: null }]) : [];
   return readinessOfModel(model, checks);
 }

@@ -13,10 +13,14 @@ export const ROOM_TYPE_ID = 'tagall-room';
 export const AREA_FIELDS = ['Qto_SpaceBaseQuantities.NetFloorArea', 'BaseQuantities.NetFloorArea', 'Qto_SpaceBaseQuantities.GrossFloorArea', 'BaseQuantities.GrossFloorArea'] as const;
 
 const AREA_LINE = `{${[...AREA_FIELDS, 'Computed.Area'].join(' ?? ')}:0.00} m²`;
-/** The room label: the tag name (the office's sources for it; by default the long name, else the Name), then the area. */
-export const ROOM_TEMPLATE = `{TagName}\\n${AREA_LINE}`;
-/** What the room label said before the tag name could be mapped; a project that still has it exactly takes the new one. */
+/** The room label: its number (the Name when a long name names the room; nothing otherwise), the tag name (the office's sources for it; by default the long name, else the Name), then the area. */
+export const ROOM_TEMPLATE = `{RoomNumber|}\\n{TagName}\\n${AREA_LINE}`;
+/** What the room label said before the number: the tag name and the area. */
+export const NUMBERLESS_ROOM_TEMPLATE = `{TagName}\\n${AREA_LINE}`;
+/** What the room label said before the tag name could be mapped. */
 export const LEGACY_ROOM_TEMPLATE = `{LongName ?? Name}\\n${AREA_LINE}`;
+/** The templates an office that never changed the room label may still have; a project with one of them exactly takes the current one. */
+const OLD_ROOM_TEMPLATES: readonly string[] = [LEGACY_ROOM_TEMPLATE, NUMBERLESS_ROOM_TEMPLATE];
 
 /**
  * The label types of TAGALL, ordinary label types the Standards dialog lists and edits: a door or window shows its
@@ -29,8 +33,9 @@ export const TAGALL_TYPES: readonly AnnotationType[] = [
 
 /** The types with a room label the office never changed taken to the template that reads the tag name; the same array when none is. */
 export function upgradeTagAllTypes(types: AnnotationType[]): AnnotationType[] {
-  if (!types.some((t) => t.id === ROOM_TYPE_ID && t.label?.template === LEGACY_ROOM_TEMPLATE)) return types;
-  return types.map((t) => (t.id === ROOM_TYPE_ID && t.label?.template === LEGACY_ROOM_TEMPLATE ? { ...t, label: { ...t.label, template: ROOM_TEMPLATE } } : t));
+  const old = (t: AnnotationType) => t.id === ROOM_TYPE_ID && !!t.label && OLD_ROOM_TEMPLATES.includes(t.label.template);
+  if (!types.some(old)) return types;
+  return types.map((t) => (old(t) && t.label ? { ...t, label: { ...t.label, template: ROOM_TEMPLATE } } : t));
 }
 
 export interface TagAllSummary {
