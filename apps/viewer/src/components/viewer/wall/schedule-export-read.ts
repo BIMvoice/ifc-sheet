@@ -32,6 +32,7 @@ import type { ScheduleExport } from '@/joinery/schedule-export';
 import { urbanResultOf } from '../urban/useUrban';
 import { boqPropertyNames, boqTable, computeBoq, type BoqSay } from '@bimvoice/ifcsheet';
 import { collectBoqElements } from '@/boq/boq-models';
+import { listScheduleExport, type ListExportWords } from '@/lib/lists/list-schedule-export';
 
 /** The words of every kind's table, in the user's language; the schedule's name is written over them. */
 export interface ExportLabelSet {
@@ -45,6 +46,8 @@ export interface ExportLabelSet {
   asIndicated: string;
   /** The bill of quantities' words. */
   boq: BoqSay;
+  /** The words of a table built from the Lists engine. */
+  list: ListExportWords;
 }
 
 export async function readScheduleExport(schedule: ProjectSchedule, labels: ExportLabelSet): Promise<ScheduleExport | null> {
@@ -69,6 +72,7 @@ export async function readScheduleExport(schedule: ProjectSchedule, labels: Expo
       const result = computeBoq(collectBoqElements(new Set(boqPropertyNames(articles))), articles);
       return { title, tables: [boqTable(result, labels.boq, { title, detail: schedule.detail === true })] };
     }
+    case 'list': return listScheduleExport(schedule, labels.list);
     case 'register': {
       const p = useProjectStore.getState();
       const rows = sharedRegisterRows({ sheets: p.sheets, titleBlock: p.titleBlock, issues: p.issues, asIndicated: labels.asIndicated, schedules: p.schedules, revisions: p.revisions, drafts: p.drafts });

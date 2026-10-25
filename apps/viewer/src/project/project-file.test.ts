@@ -103,7 +103,7 @@ describe('project file', () => {
 
 // Review of #108 and #111: a kind the reader does not list reopens as a joinery list ('all') with no error.
 // The record is keyed by the kind union, so a new kind does not compile until it is listed here.
-const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true, finishes: true, register: true, urban: true, rooms: true, boq: true };
+const SCHEDULE_KINDS: Record<ProjectSchedule['kind'], true> = { door: true, window: true, all: true, materials: true, types: true, finishes: true, register: true, urban: true, rooms: true, boq: true, list: true };
 
 describe('schedule kinds', () => {
   for (const kind of Object.keys(SCHEDULE_KINDS) as ProjectSchedule['kind'][]) {
