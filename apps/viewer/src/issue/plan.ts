@@ -15,7 +15,7 @@ import type { IssuedModel } from './types';
 import { holdsRegister, registerRow, sheetScaleText, type RegisterInput, type RegisterRow } from '@/project/drawing-register';
 import { changeRecord, issueChanges, type IssueChanges } from './changes';
 import type { ModelImpact } from './model-state';
-import { sheetFingerprint, type FingerprintSources } from '@/project/sheet-fingerprint';
+import { FINGERPRINT_VERSION, sheetFingerprint, type FingerprintSources } from '@/project/sheet-fingerprint';
 
 export interface IssueReason {
   key: TranslationKey;
@@ -89,11 +89,11 @@ export function planIssue(
       register,
       row: {
         number: register.number, title: register.title, scale: register.scale, paper: paperLabel(sheet.paper ?? 'A1'), orientation: sheet.orientation ?? 'landscape',
-        revision: register.revision, fingerprint: sheetFingerprint(sheet, sources), sheetId: sheet.id,
+        revision: register.revision, fingerprint: sheetFingerprint(sheet, sources), fingerprintVersion: FINGERPRINT_VERSION, sheetId: sheet.id,
       },
     });
   }
-  out.changes = issueChanges(out.sheets.map((s) => ({ ...s.row, sheetId: s.sheet.id })), context.issues?.at(-1), model);
+  out.changes = issueChanges(out.sheets.map((s) => ({ ...s.row, sheetId: s.sheet.id, fingerprintAs: (version: number) => sheetFingerprint(s.sheet, sources, version) })), context.issues?.at(-1), model);
   return out;
 }
 

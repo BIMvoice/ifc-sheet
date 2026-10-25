@@ -25,7 +25,7 @@ import { useViewerStore } from '@/store';
 import { setResult, useWhatChanged } from './baseline';
 import { viewBands } from './bands';
 import { cloudBoxes, cloudDraft, ensureRevisionsLayer, groupBoxes, REVISIONS_LAYER } from './cloud';
-import { latestRevisionId, REVISION_ID_PARAM } from '@/project/revisions';
+import { isAutomaticCloud, latestRevisionId, REVISION_ID_PARAM, REVISION_STAMP } from '@/project/revisions';
 import { compareStates, type ModelChange } from './compare';
 import { currentSnapshot } from './current';
 import { renderFrameOffset } from './frame';
@@ -36,7 +36,7 @@ import { sheetLines } from './say';
 import { replaceReference, type ModelSnapshot, type SnapshotBody } from './snapshot';
 import { toRenderFrame, type ViewBand } from './visibility';
 
-export const REVISION_STAMP = 'whatchanged';
+export { REVISION_STAMP };
 export { REVISIONS_LAYER };
 export type Mode = 'compare' | 'clear' | 'accept';
 
@@ -48,7 +48,7 @@ export function parseMode(args: string): Mode | null {
   return arg === '' ? 'compare' : arg === 'clear' ? 'clear' : arg === 'accept' ? 'accept' : null;
 }
 
-const isCloud = (d: DraftEntity) => d.params.revision === REVISION_STAMP;
+const isCloud = isAutomaticCloud;
 
 function removeClouds(): number {
   const ids = new Set(useProjectStore.getState().drafts.filter(isCloud).map((d) => d.id));

@@ -18,6 +18,17 @@ import type { ProjectDocument, ProjectRevision, ProjectSheet } from './types';
 /** The draft parameter that ties a cloud to its revision. */
 export const REVISION_ID_PARAM = 'revisionId';
 
+/**
+ * The `revision` draft parameter WHATCHANGED stamps on the clouds it draws. A cloud carrying it is automatic;
+ * one drawn by hand (the revision cloud tool) does not carry it.
+ */
+export const REVISION_STAMP = 'whatchanged';
+
+/** Whether the cloud was drawn by WHATCHANGED, not by hand. */
+export function isAutomaticCloud(draft: Pick<DraftEntity, 'params'>): boolean {
+  return draft.params.revision === REVISION_STAMP;
+}
+
 /** What the revision functions read of the project. */
 export type RevisionSource = Pick<ProjectDocument, 'drafts'> & { revisions?: readonly ProjectRevision[] };
 
