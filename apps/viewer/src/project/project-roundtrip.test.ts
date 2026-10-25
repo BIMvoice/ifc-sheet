@@ -22,6 +22,7 @@
 
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import type { ListScheduleDef } from '@bimvoice/ifcsheet';
 import { defaultDoorSpec, defaultWindowSpec, profileFromPreset } from '@ifc-lite/create';
@@ -226,13 +227,30 @@ const cadRule: Required<CadLayerRule> = {
   id: 'cad1', source: 'CUT', kind: 'text', ifcClasses: ['IfcWall', 'IfcWallStandardCase'], material: 'Beton armat', layer: 'A-WALL-CUT', color: '#7f1d1d', lineWeight: 0.5, lineType: 'dashed',
 };
 
-/** Every field of the project document set to something that is not its default. */
-const FULL: Required<ProjectDocument> = {
+/**
+ * The samples fields register with their definition (#144): `fields/<name>.sample.ts` exports `sample`, the field's
+ * key set to something that is not its default. A field with a sample file is not listed in `FULL` below, so a
+ * new field adds its sample next to its definition instead of editing this file.
+ */
+async function fieldSamples(): Promise<Partial<ProjectDocument>> {
+  const dir = new URL('./fields/', import.meta.url);
+  const samples: Partial<ProjectDocument> = {};
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.sample.ts')).sort()) {
+    const { sample } = (await import(new URL(file, dir).href)) as { sample: Partial<ProjectDocument> };
+    for (const key of Object.keys(sample)) assert.equal(key in samples, false, `${key} has two samples (${file})`);
+    Object.assign(samples, sample);
+  }
+  return samples;
+}
+const SAMPLES = await fieldSamples();
+
+/** Every field of the project document set to something that is not its default: the fields below, and the ones that bring a sample. */
+const FULL = {
+  ...SAMPLES,
   name: 'Full house',
   models: [{ key: 'hash-arch', name: 'arch.ifc' }],
   views: Object.values(VIEWS),
   sheets: [sheet],
-  revisions: [{ id: 'rev-a', code: 'A', date: '2026-09-01', description: 'Prima emitere: ș ț ă', by: 'PC' }, { id: 'rev-b', code: 'B', date: '2026-10-12', description: 'Pereți noi', by: 'IC' }],
   titleBlock: { project: 'Full house', client: 'Owner', checkedBy: 'PC', logo: 'data:image/png;base64,iVBORw0KGgo=' },
   titleBlockParams: [{ name: 'Phase', value: 'DTAC' }, { name: 'ProjectNumber', value: '2026-014' }],
   titleBlockTemplate: { items: [
@@ -284,37 +302,12 @@ const FULL: Required<ProjectDocument> = {
     id: 'iss1', name: 'Planning issue', date: '2026-10-13', createdAt: 1760000000000,
     sheets: [{ number: 'A-101', title: 'Ground floor', scale: '1:50, 1:100', paper: 'A3×3', orientation: 'portrait', revision: 'B', fingerprint: '0123456789abcd' }],
   }],
-  comments: [{
-    id: 'comment-1', sheetId: 'sh1', x: 120.5, y: 80.25, viewportId: 'vp1', viewId: 'v-plan', point: { x: 3.5, y: -2 }, elementGuid: '2O2Fr$t4X7Zf8NOew3FLOH',
-    author: 'Ana Ionescu', createdAt: 1760000000000, status: 'done', text: 'Cota lipsă la ușă', replies: [{ id: 'reply-1', author: 'PC', createdAt: 1760000001000, text: 'Adăugată', bcfGuid: '3f2b1c0e-7d4a-4e8b-9c1d-2a3b4c5d6e7f' }],
-    // The BCF GUIDs it went out with, kept so the next export updates the same topic (PR #127).
-    bcfGuid: '0b9a8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d', bcfViewpointGuid: '5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a',
-  }],
   modelState: snapshotFromElements([{ k: '2O2Fr$t4X7Zf8NOew3FLOH', t: 'IfcWall', n: 'Wall', d: 'abcdef0123', g: 'a1b2c3d4e', a: [0, 0, 0, 4, 0.2, 3], p: 'Site/Building/Level 0' }], 7),
-  siteArea: 1250.5,
-  urbanSettings: { terrainLevel: -0.6, zeroElevation: 245.2, cutExcluded: { Subsol: true, Demisol: false } },
-  includeFarElements: true,
-  // The bill of quantities' mapping table (#75), every field of an article set and every dimension of its filter. The codes are EXAMPLES, not a norm.
-  boqArticles: [{
-    id: 'boq1', code: 'EXAMPLE-ZID-01', description: 'EXEMPLU: zidărie, tip T240', unit: 'm3', typeName: 'T240', material: 'Beton', quantity: 'NetVolume', factor: 1.1, waste: 5,
-    filter: { levels: ['Parter'], classes: ['IfcWall'], predefined: ['SOLIDWALL'], properties: [{ pset: 'Pset_WallCommon', name: 'IsExternal', op: 'equals', value: 'true' }] },
-  }, { id: 'boq2', code: 'EXAMPLE-UȘI-01', description: 'EXEMPLU: uși', unit: 'buc', quantity: 'Count', factor: 1, filter: { classes: ['IfcDoor'] } }],
-  // The classification mappings (#89): every field of a mapping and of a rule set. The codes are EXAMPLES, not a Uniclass or OmniClass table.
-  classificationMappings: [{
-    id: 'class1', system: { name: 'Uniclass', edition: '2015' },
-    rules: [
-      { by: 'type', match: 'T240', code: 'EXAMPLE-Ss_25', title: 'EXAMPLE: wall systems' },
-      { by: 'material', match: 'Beton', code: 'EXAMPLE-Pr_20' },
-      { by: 'class', match: 'IfcDoor', code: 'EXAMPLE-Ss_32', title: 'EXAMPLE: door systems' },
-    ],
-  }],
-  handoverPattern: '{project} {number} {sheet} rev {revision}',
-  unitsAndNumbers: { lengthUnit: 'cm', decimals: { length: 1, area: 3, volume: 3, level: 3 }, separator: 'comma', group: false },
   savedSectionCuts: [{
     id: 'cut1', name: 'Stair cut', createdAt: 1, updatedAt: 2,
     plane: { axis: 'side', position: 4.2, flipped: true, capStyle: { fillColor: [1, 0.5, 0, 1], strokeColor: [0, 0, 0, 1], pattern: 'brick', spacingPx: 6, angleRad: 0.5, widthPx: 2, secondaryAngleRad: -0.5 }, showCap: false, showOutlines: false },
   }],
-};
+} as Required<ProjectDocument>; // completeness is checked at run time below: every key of the registry must hold a non-default value.
 
 /** Where two JSON values differ, as paths: a failure names the field that was lost. */
 function diffPaths(want: unknown, got: unknown, path = ''): string[] {
@@ -332,6 +325,10 @@ describe('project round trip, one of everything', () => {
     assert.deepEqual(new Set(drafts.map((d) => d.shape.type)), new Set([...Object.keys(GEOMETRY), ...Object.keys(ANNOTATION)]));
     assert.equal(new Set(FULL.views.map((v) => v.kind)).size, Object.keys(VIEWS).length);
     assert.equal(new Set(FULL.schedules?.map((s) => s.kind)).size, Object.keys(SCHEDULES).length);
+  });
+
+  it('every sample belongs to a registered field', () => {
+    assert.deepEqual(Object.keys(SAMPLES).filter((k) => !PROJECT_DOCUMENT_KEYS.includes(k as keyof ProjectDocument)), []);
   });
 
   it('sets every document field to something that is not its default', () => {

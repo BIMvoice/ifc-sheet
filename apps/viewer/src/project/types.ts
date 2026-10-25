@@ -7,8 +7,7 @@ import type { TitleBlockParam } from './title-block-params';
 import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
-import type { BoqArticle, ClassificationMapping, ProjectSchedule } from '@bimvoice/ifcsheet';
-import type { UrbanSettings } from '@/urban/indicators';
+import type { ProjectSchedule } from '@bimvoice/ifcsheet';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
@@ -18,7 +17,6 @@ import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import type { CadLayerRule } from './cad-layers';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectIssue } from '@/issue/types';
-import type { ReviewComment } from '@/review/types';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
 import type { ProjectDocument as EngineDocument, NumberingScheme, ProjectView, SheetTemplate, TemplateSeries } from '@bimvoice/ifcsheet';
 
@@ -56,13 +54,19 @@ export type ProjectViewPatch = ProjectView extends infer V
 /** A joinery schedule (door / window list): a project document of its own, placeable on sheets. The engine's type, so the headless project reader and the app read the same shape. */
 export type { ProjectSchedule } from '@bimvoice/ifcsheet';
 
-export interface ProjectDocument extends EngineDocument {
+/**
+ * The types of the document fields that live with their field (#144): a field file in `./fields/` adds its key here
+ * with `declare module '../types' { interface ProjectFieldTypes { ... } }`, next to its reader and its sample, so a
+ * new field does not edit this file. Type only: nothing runs. A field not yet moved is still declared below.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface ProjectFieldTypes {}
+
+export interface ProjectDocument extends EngineDocument, ProjectFieldTypes {
   /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
   titleBlock?: Record<string, string>;
   /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
   titleBlockSources?: Record<string, TitleSource[]>;
-  /** The project's revisions, oldest first (`revisions.ts`); a sheet's table lists the ones it is named by. */
-  revisions?: ProjectRevision[];
   /** The user's own title block parameters, in order, each with its project-wide value (`title-block-params.ts`). */
   titleBlockParams?: TitleBlockParam[];
   /** The title block's layout once edited; absent: the standard layout (`title-block-template.ts`). */
@@ -97,10 +101,6 @@ export interface ProjectDocument extends EngineDocument {
   sheetTemplates?: SheetTemplate[];
   /** The template new sheets of a series start from, by template id; a series without one is made on the smallest paper that fits. */
   seriesTemplates?: Partial<Record<TemplateSeries, string>>;
-  /** The site (plot) area in m² the user entered; absent: the model's IfcSite area, if it states one (`urban/`). */
-  siteArea?: number;
-  /** The urban indicators' terrain level, ±0.00 and the storeys left out of Ad for CUT (`urban/indicators.ts`). */
-  urbanSettings?: UrbanSettings;
   /** The project's structure profile library (retaining walls, tunnels, decks, barriers… and drawn shapes). */
   structureProfiles?: StructureProfile[];
   /** Road drawings: longitudinal profiles and cross-section sets. */
@@ -131,24 +131,9 @@ export interface ProjectDocument extends EngineDocument {
   sheetNumbering?: NumberingScheme;
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
-  /** Review comments pinned on sheets (`review/`). */
-  comments?: ReviewComment[];
-  /** The bill of quantities' mapping table: type, material or class (with a property filter) to the office's article code, unit and formula (`boq/`). Empty until the office enters its own; also carried in a `.bvlib` library. */
-  boqArticles?: BoqArticle[];
-  /** The office's classification mappings (#89): class, type or material to the code of a system (Uniclass, OmniClass, its own). IfcSheet ships no code table; the office enters codes or imports a CSV. Also carried in a `.bvlib` library. */
-  classificationMappings?: ClassificationMapping[];
 }
 
-/** One revision of the set: a letter or number, when, what changed, who made it. */
-export interface ProjectRevision {
-  id: string;
-  /** `A`, `B`, `01`: what the title block reads. */
-  code: string;
-  /** `YYYY-MM-DD`, or empty. */
-  date: string;
-  description: string;
-  by: string;
-}
+export type { ProjectRevision } from './fields/revisions';
 
 // The issue records live with the issue code; re-exported so the document's types stay in one import.
 export type { IssuedSheet, ProjectIssue } from '@/issue/types';

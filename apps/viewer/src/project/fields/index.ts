@@ -8,6 +8,15 @@
  * needs more than a line); a field added to `ProjectDocument` and not listed here, or listed without a reader, does
  * not compile (`MissingField` below, `read` in `./define.ts`).
  *
+ * A NEW FIELD is three files and one pair of lines (#144):
+ *   - `fields/<key>.ts`: the field (`listField`, `optionalField`, ...), its reader, and its type, declared with
+ *     `declare module '../types' { interface ProjectFieldTypes { <key>?: ... } }` (see `./site-area.ts`);
+ *   - `fields/<key>.sample.ts`: `export const sample = { <key>: <a value that is not the default> }`, which
+ *     `project-roundtrip.test.ts` puts in its full project (see `./site-area.sample.ts`);
+ *   - its import and its entry at the END of the list below. That pair is the one shared edit left: two PRs that both
+ *     append here still meet at the last line. The fields not yet moved to a file of their own keep their type in
+ *     `../types.ts` and their sample in `project-roundtrip.test.ts`; move one when you next touch it.
+ *
  * ORDER IS THE FILE'S KEY ORDER: `serializeProject` writes the document's keys in this order, so a new
  * field goes at the end and an existing one does not move (`fields.test.ts` pins the order of the ones
  * listed when the registry was made).
@@ -21,27 +30,32 @@ import { resolve } from '@/i18n/registry';
 import { readIssues } from './issues-read';
 import { readJoineryList } from '@/joinery/spec-file';
 import { DEFAULT_JOINERY_MAPPING, readJoineryMapping } from '@/joinery/symbol-mapping';
-import { readComments } from '@/review/file';
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
-import { readBoqArticles, readClassificationMappings, readSchedule } from '@bimvoice/ifcsheet';
-import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
-import { readUnitsAndNumbers } from '@bimvoice/ifcsheet/names';
+import { readSchedule } from '@bimvoice/ifcsheet';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readCadLayerRule } from '../cad-layers-file';
 import { readNumberingScheme } from '../numbering';
-import { isString, listAt, readCivilDrawing, readCurrentJoinery, readFlips, readMaterial, readModel, readSheet, readTypicalSection, readUrbanSettings, readView, type Json } from '../project-read';
+import { isString, listAt, readCivilDrawing, readCurrentJoinery, readFlips, readMaterial, readModel, readSheet, readTypicalSection, readView, type Json } from '../project-read';
 import { readSavedSectionCuts } from '../saved-cuts-file';
 import { readTitleBlock } from '../sheet-file';
 import { readSeriesTemplates, readTemplate } from '../sheet-templates';
-import { readRevisions } from '../revision-file';
 import { readDimStyles, readGraphicStandard, readLayerGroups, readTextStyles } from '../standards-file';
 import { readTitleBlockParams, readTitleBlockTemplate } from '../title-block-file';
 import { readTitleSources } from '../title-block-sources';
 import type { ProjectDocument } from '../types';
 import { readPhaseSource } from '../view-graphics-file';
 import { readViewTemplates } from '../view-templates-file';
+import { boqArticlesField } from './boq-articles';
+import { classificationMappingsField } from './classification-mappings';
+import { commentsField } from './comments';
+import { handoverPatternField } from './handover-pattern';
+import { includeFarElementsField } from './include-far-elements';
+import { revisionsField } from './revisions';
+import { siteAreaField } from './site-area';
+import { unitsAndNumbersField } from './units-and-numbers';
+import { urbanSettingsField } from './urban-settings';
 import { defineField, listField, optionalField, recordField, whenPresent, whenUsable, type DocumentField, type FieldKey } from './define';
 import { READ_ORDER } from './read-order';
 
@@ -95,21 +109,21 @@ const DOCUMENT_FIELD_DEFS = [
   optionalField('phaseSource', whenUsable('phaseSource', readPhaseSource)),
   // Loaded through `knownGraphicStandard` in `loadProjectDocument`, which also warns about an unknown one.
   defineField({ key: 'graphicStandard', empty: () => undefined, read: (raw) => { const standard = readGraphicStandard(raw); return standard ? { graphicStandard: standard } : {}; } }),
-  listField('comments', (raw) => readComments(raw.comments), { presentOnly: true }),
-  listField('revisions', (raw) => readRevisions(raw.revisions)),
-  optionalField('siteArea', (raw) => (typeof raw.siteArea === 'number' && Number.isFinite(raw.siteArea) && raw.siteArea > 0 ? { siteArea: raw.siteArea } : {})),
-  optionalField('urbanSettings', (raw) => readUrbanSettings(raw.urbanSettings)),
+  commentsField,
+  revisionsField,
+  siteAreaField,
+  urbanSettingsField,
   // Off is stored as absent, so a project that never touched it saves exactly as before.
-  defineField({ key: 'includeFarElements', empty: () => undefined, load: (v) => (v === true ? true : undefined), read: (raw) => (raw.includeFarElements === true ? { includeFarElements: true } : {}) }),
+  includeFarElementsField,
   // Absent is the default pattern (`@bimvoice/ifcsheet/handover`); a value that is not usable loads as absent.
-  defineField({ key: 'handoverPattern', empty: () => undefined, load: (v) => readHandoverPattern(v), read: whenUsable('handoverPattern', readHandoverPattern) }),
+  handoverPatternField,
   // The project's view templates (#44): named graphics that views follow by `templateId`.
   listField('viewTemplates', (raw) => readViewTemplates(raw.viewTemplates)),
-  listField('boqArticles', (raw) => readBoqArticles(raw.boqArticles), { presentOnly: true }),
+  boqArticlesField,
   // The project's units and number format (#88); absent follows the language and each drawing's own style, so an old project saves as it was.
-  optionalField('unitsAndNumbers', whenUsable('unitsAndNumbers', readUnitsAndNumbers)),
+  unitsAndNumbersField,
   // The office's classification mappings (#89).
-  listField('classificationMappings', (raw) => readClassificationMappings(raw.classificationMappings), { presentOnly: true }),
+  classificationMappingsField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];
