@@ -44,6 +44,7 @@ import { SiteAreaField } from '../urban/SiteAreaField';
 import { ViewportState } from './ViewportState';
 import { ScheduleExportButtons } from './ScheduleExportButtons';
 import { TagFieldsPanel } from './TagFieldsPanel';
+import { MaterialsSection } from './MaterialsSection';
 import { WALL_PILL } from './wall-type';
 
 const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: TranslationKey }[] = [
@@ -184,6 +185,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
           <TitleBlockForm />
         </details>
         <TagFieldsPanel />
+        <MaterialsSection />
         {DRAWING_KINDS.map(({ kind, labelKey }) => (
           <Group key={kind} title={t(labelKey)}>
             {views.filter((v) => v.kind === kind).map((v) => <Row key={v.id} id={v.id} label={v.name} state={viewportState(byView[v.id], v.kind)} onOpen={() => openDrawing(v.id)} />)}

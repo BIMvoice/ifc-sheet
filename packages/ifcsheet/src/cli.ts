@@ -15,6 +15,7 @@ import { parseArgs } from 'node:util';
 import { generateDefaultSet } from './index.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, readinessWithProject, sheetGraphics, type ProjectFacts } from './headless.js';
 import { describeReadiness } from './readiness.js';
+import { materialReport, materialReportText, readProjectMaterials } from './materials-report.js';
 
 /** Where `run` writes its messages; defaults to the process streams. */
 export interface CliIo {
@@ -35,6 +36,7 @@ const USAGE = `ifcsheet: drawing sets from IFC models
 Usage:
   ifcsheet build <model.ifc> --out <set.pdf> [--dxf <dir>] [--name <project name>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
+  ifcsheet materials <model.ifc> [--project <file>] [--json]
 
 Commands:
   build   Lay out the starting drawing set of the model (a plan per level, the
@@ -45,6 +47,9 @@ Commands:
           weaker for it. Plain English, or JSON with --json. With --project, also what the
           saved project's split schedules get wrong: an element listed in more than one
           part, or in no part.
+  materials  The model's materials and how each draws where a view cuts it: hatch, scale,
+          fill, hatch pen, membrane. With --project, the project's own table applies (what the
+          app's Materials section edits); a material it has no row for is guessed from its name.
 
 Options:
   --out <file>     The PDF to write (required for build).
@@ -161,6 +166,31 @@ async function check(file: string, json: boolean, projectFile: string | undefine
   return findings.length === 0 ? EXIT.ok : EXIT.failed;
 }
 
+/** `ifcsheet materials`: the model's materials and how each draws, with the project's table applied. */
+async function materials(file: string, json: boolean, projectFile: string | undefined, io: CliIo): Promise<number> {
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await readFile(file));
+  } catch (error) {
+    io.stderr(`ifcsheet: cannot read ${file}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
+    return EXIT.failed;
+  }
+  let table: ReturnType<typeof readProjectMaterials> = [];
+  if (projectFile !== undefined) {
+    try {
+      table = readProjectMaterials(await readFile(projectFile, 'utf8'));
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      io.stderr(`ifcsheet: ${code === 'ENOENT' ? `cannot read ${projectFile}: no such file` : `${projectFile} cannot be used as a project: ${(error as Error).message}`}\n`);
+      return EXIT.failed;
+    }
+  }
+  const opened = await openModel(bytes, { geometry: false });
+  const rows = materialReport(opened.dataStore, table);
+  io.stdout(json ? `${JSON.stringify({ file, ...(projectFile !== undefined ? { project: projectFile } : {}), materials: rows }, null, 2)}\n` : materialReportText(rows));
+  return EXIT.ok;
+}
+
 /** Runs the command line (without `node` and the script) and returns the exit code. */
 export async function run(argv: readonly string[], io: CliIo = processIo): Promise<number> {
   let parsed;
@@ -193,7 +223,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.ok;
   }
   const [command, ...rest] = positionals;
-  if (command !== 'build' && command !== 'check') {
+  if (command !== 'build' && command !== 'check' && command !== 'materials') {
     io.stderr(`ifcsheet: unknown command "${command}"\n\n${USAGE}`);
     return EXIT.usage;
   }
@@ -206,6 +236,18 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
       return await check(rest[0], values.json === true, values.project, values['include-far-elements'] === true, io);
     } catch (error) {
       io.stderr(`ifcsheet: check of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
+  if (command === 'materials') {
+    if (rest.length !== 1 || values.out || values.dxf || values.name || values['include-far-elements']) {
+      io.stderr('ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n');
+      return EXIT.usage;
+    }
+    try {
+      return await materials(rest[0], values.json === true, values.project, io);
+    } catch (error) {
+      io.stderr(`ifcsheet: materials of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;
     }
   }

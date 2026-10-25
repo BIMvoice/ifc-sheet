@@ -20,6 +20,7 @@ import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetsRo } from '../catalogues/sheets.ro';
 import { wallRo } from '../catalogues/wall.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
+import { wallMaterialsRo } from '../catalogues/wall-materials.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
 import { wallSectionsRo } from '../catalogues/wall-sections.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
@@ -45,6 +46,7 @@ import { sheetTemplatesRo } from '../catalogues/sheet-templates.ro';
 export default {
   ...wallRo,
   ...wallKeysRo,
+  ...wallMaterialsRo,
   ...wallReviewRo,
   ...wallSectionsRo,
   ...scheduleExportRo,

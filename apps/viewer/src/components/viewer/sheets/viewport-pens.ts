@@ -21,7 +21,7 @@ import { HATCH_UNIT_M } from '@/drafting/annotation';
 import { findPattern } from '@/drafting/hatch/library';
 import { hatchSegments } from '@/drafting/hatch/fill';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
-import { categoryOf, cutHatches, type StyledDrawing } from '@/project/view-graphics';
+import { categoryOf, cutHatches, materialFillOf, type StyledDrawing } from '@/project/view-graphics';
 import { phaseInk } from '@/project/phases';
 import { fillOrder, schemeColourOf } from '@/project/view-scheme-style';
 import { DEFAULT_GRAPHIC_STANDARD, type GraphicStandard } from '@/drafting/graphic-standard';
@@ -89,7 +89,7 @@ export function viewportPens(
   for (const polygon of fillOrder(drawing)) {
     // A phase's fill, like its line, comes after the category's; a colour scheme's (#92) after the phase's.
     const phase = 'phase' in polygon ? polygon.phase : undefined;
-    const fill = ink(schemeColourOf(polygon) ?? (phase ? phaseInk(graphics, phase).fill : polygon.color && style(polygon.ifcType)?.fillColor ? hex(polygon.color) : DEFAULT_FILL), polygon.entityId);
+    const fill = ink(schemeColourOf(polygon) ?? (phase ? phaseInk(graphics, phase).fill : polygon.color && style(polygon.ifcType)?.fillColor ? hex(polygon.color) : materialFillOf(polygon) ?? DEFAULT_FILL), polygon.entityId);
     const d = [polygon.polygon.outer, ...polygon.polygon.holes].map(loop).join('');
     if (schemeColourOf(polygon)) add(`scheme:${fill}`, { stroke: null, width: 0, fill, layer: 'COLOUR', solid: true }, d);
     else add(`fill:${fill}`, { stroke: null, width: 0, fill, layer: 'FILL' }, d);

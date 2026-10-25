@@ -16,7 +16,7 @@ import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { DraftLayer } from '@/drafting/types';
 import { readCadLayerRule } from '@/project/cad-layers-file';
 import type { CadLayerRule } from '@/project/cad-layers';
-import { readMaterial } from '@/project/project-file';
+import { readMaterial } from '@bimvoice/ifcsheet/materials';
 import { readStandards } from '@/project/standards-file';
 import { readTemplate } from '@/project/sheet-templates';
 import type { ProjectMaterial, SheetTemplate } from '@/project/types';

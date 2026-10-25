@@ -38,8 +38,9 @@ import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readSchedule } from '@bimvoice/ifcsheet';
 import { readTagFields } from '@/tagfields/tag-fields-file';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
-import { HEX, WEIGHTS, readGraphics, readPhaseSource } from './view-graphics-file';
+import type { ProjectCivilDrawing, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
+import { readMaterial } from '@bimvoice/ifcsheet/materials';
+import { readGraphics, readPhaseSource } from './view-graphics-file';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -296,17 +297,6 @@ function readCurrentJoinery(raw: unknown): { door?: string; window?: string } {
     ...(isString(raw.door) ? { door: raw.door } : {}),
     ...(isString(raw.window) ? { window: raw.window } : {}),
   };
-}
-
-export function readMaterial(raw: unknown): ProjectMaterial[] {
-  if (!isObject(raw) || !isString(raw.id) || !isString(raw.name) || !raw.name.trim()) return [];
-  const out: ProjectMaterial = { id: raw.id, name: raw.name };
-  if (raw.hatch === null || isString(raw.hatch)) out.hatch = raw.hatch;
-  if (isNumber(raw.hatchScale) && raw.hatchScale > 0) out.hatchScale = raw.hatchScale;
-  if (raw.fill === null || (isString(raw.fill) && HEX.test(raw.fill))) out.fill = raw.fill;
-  if (isString(raw.hatchPen) && WEIGHTS.has(raw.hatchPen)) out.hatchPen = raw.hatchPen as ProjectMaterial['hatchPen'];
-  if (raw.membrane === true) out.membrane = true;
-  return [out];
 }
 
 function readTypicalSection(raw: unknown): ProjectTypicalSection[] {

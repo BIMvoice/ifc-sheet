@@ -25,7 +25,7 @@ import type { DraftShape } from '@/drafting/types';
 export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
   lines: (DrawingLine & { phase?: PhaseId })[];
   /** `schemeColour`: the fill a colour scheme (#92) gives the element, `#rrggbb`; it wins over the material's and the phase's. */
-  cutPolygons: (DrawingPolygon & { phase?: PhaseId; schemeColour?: string })[];
+  cutPolygons: (DrawingPolygon & { phase?: PhaseId; schemeColour?: string; materialFill?: string })[];
   /** The rooms a colour scheme fills (#92), drawn under everything else. */
   schemeFills?: (DrawingPolygon & { schemeColour: string })[];
   materialHatches?: (MaterialHatch & HatchSource)[];
@@ -34,6 +34,9 @@ export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
 
 /** Which element (and layer material) a hatch was cut from: what the CAD layer standard matches it on. */
 export interface HatchSource { ifcType?: string; entityId?: number; materialId?: number }
+
+/** The fill the building material of a cut face gives it (`#rrggbb`; white for "none"), if it gives one. */
+export const materialFillOf = (polygon: object): string | undefined => ('materialFill' in polygon && typeof polygon.materialFill === 'string' ? polygon.materialFill : undefined);
 
 /** The phases a view shows and the phase of an element (by the drawing's entity id; null: not a model element, always shown). */
 export interface PhaseView {
@@ -169,7 +172,8 @@ function styledByGraphics(
       ...drawing,
       cutPolygons: drawing.cutPolygons.filter((p) => !materials.hidePolygons.has(p)).map((p) => {
         const fill = materials.fills.get(p);
-        return fill === undefined ? p : { ...p, color: fill === null ? [1, 1, 1, 1] as [number, number, number, number] : rgba(fill) ?? p.color };
+        // `materialFill` is what the sheet's pens read (`viewport-pens.ts`); `color` is what the live view paints.
+        return fill === undefined ? p : { ...p, color: fill === null ? [1, 1, 1, 1] as [number, number, number, number] : rgba(fill) ?? p.color, materialFill: fill ?? '#ffffff' };
       }),
       lines: materials.dropLines.size ? drawing.lines.filter((l) => !materials.dropLines.has(l)) : drawing.lines,
       materialHatches: materials.hatches.map((h) => ({ ...h, ...(hatchOf.get(h.loops[0]) ?? { ifcType: undefined }) })),

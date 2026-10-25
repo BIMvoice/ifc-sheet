@@ -32,6 +32,7 @@ ifcsheet build house.ifc --out set.pdf --name "House Alpha"  # project name in t
 ifcsheet check house.ifc                                     # what the model lacks, in plain English
 ifcsheet check house.ifc --json                              # the same as JSON
 ifcsheet check house.ifc --project house.ifclite-project.json  # also the project's split schedules: an element in two parts, or in none
+ifcsheet materials house.ifc --project house.ifclite-project.json  # how each material draws where a view cuts it, the project's table applied (--json for JSON)
 ifcsheet --help
 ```
 

@@ -45,6 +45,11 @@
       "import": "./dist/colour-fills.js",
       "default": "./dist/colour-fills.js"
     },
+    "./materials": {
+      "types": "./dist/materials.d.ts",
+      "import": "./dist/materials.js",
+      "default": "./dist/materials.js"
+    },
     "./footprint": {
       "types": "./dist/footprint.d.ts",
       "import": "./dist/footprint.js",
