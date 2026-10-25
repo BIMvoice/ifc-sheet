@@ -41,7 +41,7 @@ import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { storeyOfElement } from '@/project/effective-storey';
 import { quantityScales } from '@/joinery/material-takeoff-models';
-import { meshFootprintArea, pickArea, roomArea, spaceRole, type RoomRecord } from '@bimvoice/ifcsheet';
+import { estimatedAreas, meshFootprintArea, pickArea, roomArea, spaceRole, type EstimatedAreas, type RoomRecord } from '@bimvoice/ifcsheet';
 import type { ProjectLevel } from '@/project/types';
 import { getGlobalRenderer } from '@/hooks/useBCF';
 import { storeyFootprint, type PlanMesh } from './footprint';
@@ -56,6 +56,8 @@ export interface UrbanAreas {
   spaces: SpaceInput[];
   /** Spaces that are not rooms: EXTERNAL ones, GFA (area-scheme) ones, and spaces split into spaces of their own. */
   spacesLeftOut: { external: number; gfa: number; parents: number };
+  /** The rooms Au counts with an area measured from their geometry because the model states none; null when there are none (`estimatedAreas`). */
+  estimated: EstimatedAreas | null;
   /** m² the model states for its site, or null. */
   modelSiteArea: number | null;
   /** The first building's ElevationOfRefHeight in metres, or null. */
@@ -271,5 +273,5 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
   });
   const { rooms, leftOut } = collectRoomRecords(levels);
   const spaces: SpaceInput[] = rooms.map((r) => ({ storey: r.level, category: r.category, area: r.area }));
-  return { storeys, spaces, spacesLeftOut: leftOut, modelSiteArea: modelSiteArea(), buildingRefElevation: buildingRefElevation(), assumedInterior };
+  return { storeys, spaces, spacesLeftOut: leftOut, estimated: estimatedAreas(rooms), modelSiteArea: modelSiteArea(), buildingRefElevation: buildingRefElevation(), assumedInterior };
 }

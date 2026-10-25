@@ -19,4 +19,6 @@ export const roomScheduleEn = {
   'roomSched.note.geometry': '* The model states no area for this room: the footprint of its geometry is used ({count} rooms).',
   'roomSched.note.none': '{count} rooms have no area (the model states none and they have no geometry); they are listed and not in the totals.',
   'roomSched.note.leftOut': 'Left out: {external} external (balconies, terraces), {gfa} area-scheme (GFA), {parents} split into rooms of their own.',
+  'ready.estimatedAreas.go': 'Go to the first room',
+  'urban.rule.auEstimated': 'Au includes {count} rooms whose area the model does not state: they are measured from their geometry (≈ {area} m², {share} % of Au) and may be wrong under sloped ceilings: {list}.',
 } as const satisfies Record<string, TranslationValue>;

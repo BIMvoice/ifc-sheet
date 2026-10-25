@@ -82,6 +82,7 @@ export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: S
   const siteNote = useSiteSourceNote();
   const assumed = areas?.assumedInterior.join(', ') ?? '';
   const leftOut = areas?.spacesLeftOut ?? null;
+  const estimated = areas?.estimated ?? null;
   return useMemo(() => ({
     locale,
     title,
@@ -98,6 +99,7 @@ export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: S
         t('urban.rule.cut', { levels: left.length ? left.join(', ') : t('urban.rule.cutNone') }),
         t('urban.rule.ground', { terrain: signedLevel(locale, r.terrainLevel), zero: sheetNumber(locale, r.zero.elevation, 2, { group: false }), source: t(`urban.rule.zero.${r.zero.source}`) }),
       ];
+      if (estimated) out.push(t('urban.rule.auEstimated', { count: estimated.count, area: sheetNumber(locale, estimated.area, 1), share: sheetNumber(locale, estimated.share, 0), list: estimated.rooms.map((r) => r.name).join(', ') }));
       if (leftOut) out.push(t('urban.rule.au', { external: leftOut.external, gfa: leftOut.gfa, parents: leftOut.parents }));
       if (site) out.push(siteNote(site));
       return out;
@@ -105,5 +107,5 @@ export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: S
     note: assumed ? t('urban.assumedInterior', { levels: assumed }) : '',
     atLeast: (value: string) => t('urban.atLeast', { value }),
     unmeasured: (count: number, level: string) => t('urban.unmeasured', { count, level }),
-  }), [t, locale, title, assumed, leftOut, site, siteNote]);
+  }), [t, locale, title, assumed, leftOut, estimated, site, siteNote]);
 }

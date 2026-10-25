@@ -111,3 +111,4 @@ export {
   ROOM_SCHEDULE_EN, ROOM_SCHEDULE_RO, roomSchedule, roomScheduleCsv, roomScheduleLines, roomScheduleText, roomScheduleWords,
   type RoomRecord, type RoomSchedule, type RoomScheduleLevel, type RoomScheduleLine, type RoomScheduleWords, type ScheduleLevelInfo,
 } from './room-schedule.js';
+export { estimatedAreas, type EstimatedAreas } from './room-estimates.js';
