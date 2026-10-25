@@ -23,7 +23,7 @@ import { buildIssuePdf, type PdfLabels } from './pdf-build';
 import { titleBlockOf } from '@/project/title-block';
 import { effectiveTitleBlock } from '@/project/title-block-model';
 import { rasterViewNames } from '@/project/view-raster';
-import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
+import { issueRecord, nextIssueName, planIssue, todayText, validDate, type IssuePlan, type IssueReason } from './plan';
 import { fingerprintSources } from '@/project/sheet-fingerprint';
 import type { ProjectSheet, ProjectView } from '@/project/types';
 
@@ -64,6 +64,7 @@ export function listLabels(): ListLabels {
   return {
     title: t('title'), issue: t('issue'), date: t('date'), sheet: t('sheet'), sheetTitle: t('sheetTitle'), scale: t('scale'), paper: t('paper'), revision: t('revision'),
     landscape: t('landscape'), portrait: t('portrait'), drawingList: resolve('issue.file.drawingList'),
+    change: { change: resolve('issue.changes.column'), new: resolve('issue.changes.cell.new'), changed: resolve('issue.changes.cell.changed'), removed: resolve('issue.changes.cell.removed') },
   };
 }
 
@@ -79,7 +80,7 @@ export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst
   const project = useProjectStore.getState();
   return planIssue(project.sheets, fingerprintSources(project), {
     name: options.name?.trim() || nextIssueName(project.issues ?? [], (n) => resolve('names.issue.default', { n }), registeredTranslations('names.issue.default')),
-    date: options.date ?? new Date().toISOString().slice(0, 10),
+    date: validDate(options.date, todayText()),
     listFirst: options.listFirst ?? true,
     asIndicated: resolve('sheets.asIndicated'),
   }, effectiveTitleBlock(), { issues: project.issues, schedules: project.schedules });
@@ -103,7 +104,7 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   if (missing > 0) lines.unshift({ key: 'check.msg.unfinished', params: { count: missing } });
   if (plan.sheets.length === 0) return { plan, pdf: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.nothing', params: {} }] };
   if (options.format === 'dxf' || options.format === 'handover') lines.push(...dxfRasterLines(plan.sheets.map((s) => s.sheet), useProjectStore.getState().views));
-  const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf' || options.format === 'handover', currentCloudsOnly: options.currentCloudsOnly });
+  const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf' || options.format === 'handover', currentCloudsOnly: options.currentCloudsOnly, issueDate: plan.date });
   if (failed.length > 0) return { plan, pdf: null, csv, zip: null, lines: [...lines, ...failed.map((f) => failureLine(f)), { key: 'issue.msg.notIssued', params: {} }] };
   const project = useProjectStore.getState();
   let pdf: Uint8Array | null = null;

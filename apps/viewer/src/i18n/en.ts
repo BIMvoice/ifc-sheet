@@ -126,6 +126,7 @@ import { titleBlockRoEn } from './catalogues/title-block-ro.en';
 import { draftSetEn } from './catalogues/draft-set.en';
 import { setTemplateEn } from './catalogues/set-template.en';
 import { issueEn } from './catalogues/issue.en';
+import { issueChangesEn } from './catalogues/issue-changes.en';
 import { handoverEn } from './catalogues/handover.en';
 import { annotatedIfcEn } from './catalogues/annotated-ifc.en';
 import { revisionsEn } from './catalogues/revisions.en';
@@ -221,6 +222,7 @@ export const en = {
   ...draftSetEn,
   ...setTemplateEn,
   ...issueEn,
+  ...issueChangesEn,
   ...handoverEn,
   ...annotatedIfcEn,
   ...revisionsEn,

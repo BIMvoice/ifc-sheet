@@ -9,7 +9,7 @@
  */
 
 import { paperFromLabel } from '@/project/paper';
-import type { IssuedSheet, ProjectIssue } from '@/project/types';
+import type { ChangedSheet, IssueChangeRecord, IssuedSheet, ProjectIssue } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -31,7 +31,24 @@ function readSheet(v: unknown, path: string): IssuedSheet {
   if (v.orientation !== 'landscape' && v.orientation !== 'portrait') fail(`${path}/orientation`, 'must be landscape or portrait');
   const fingerprint = text(v, 'fingerprint', path);
   if (!/^[0-9a-f]{14}$/.test(fingerprint)) fail(`${path}/fingerprint`, 'must be 14 hex digits');
-  return { number: text(v, 'number', path), title: text(v, 'title', path), scale: text(v, 'scale', path), paper: paper as string, orientation: v.orientation, revision: text(v, 'revision', path), fingerprint };
+  if (v.sheetId !== undefined && typeof v.sheetId !== 'string') fail(`${path}/sheetId`, 'must be text');
+  return { ...(typeof v.sheetId === 'string' ? { sheetId: v.sheetId } : {}), number: text(v, 'number', path), title: text(v, 'title', path), scale: text(v, 'scale', path), paper: paper as string, orientation: v.orientation, revision: text(v, 'revision', path), fingerprint };
+}
+
+function readSheetList(v: unknown, path: string): ChangedSheet[] {
+  if (!Array.isArray(v)) fail(path, 'must be an array');
+  return v.map((s, i) => {
+    if (!isObject(s)) fail(`${path}/${i}`, 'must be a sheet');
+    return { number: text(s, 'number', `${path}/${i}`), title: text(s, 'title', `${path}/${i}`) };
+  });
+}
+
+function readChanges(v: unknown, path: string): IssueChangeRecord {
+  if (!isObject(v) || !isObject(v.against)) fail(path, 'must be the changes since the issue before');
+  return {
+    against: { id: text(v.against, 'id', `${path}/against`), name: text(v.against, 'name', `${path}/against`) },
+    added: readSheetList(v.added, `${path}/added`), removed: readSheetList(v.removed, `${path}/removed`), changed: readSheetList(v.changed, `${path}/changed`),
+  };
 }
 
 export function readIssues(raw: unknown): ProjectIssue[] {
@@ -48,6 +65,6 @@ export function readIssues(raw: unknown): ProjectIssue[] {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail(`${path}/date`, 'must be YYYY-MM-DD');
     if (typeof v.createdAt !== 'number' || !Number.isFinite(v.createdAt)) fail(`${path}/createdAt`, 'must be a number');
     if (!Array.isArray(v.sheets)) fail(`${path}/sheets`, 'must be an array');
-    return { id, name: text(v, 'name', path), date, createdAt: v.createdAt, sheets: v.sheets.map((s, j) => readSheet(s, `${path}/sheets/${j}`)) };
+    return { id, name: text(v, 'name', path), date, createdAt: v.createdAt, sheets: v.sheets.map((s, j) => readSheet(s, `${path}/sheets/${j}`)), ...(v.changes !== undefined ? { changes: readChanges(v.changes, `${path}/changes`) } : {}) };
   });
 }

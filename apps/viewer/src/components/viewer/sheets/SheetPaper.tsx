@@ -92,6 +92,8 @@ interface SheetPaperProps {
   sheetDrafts?: readonly DraftEntity[];
   /** Print only the clouds of the sheet's current revision (an issue's option); older revisions' clouds are left off. */
   currentCloudsOnly?: boolean;
+  /** The date an issue is dated: the title block prints it as the sheet's date. */
+  issueDate?: string;
 }
 
 /** The viewport's drawing → paper transform: the chosen (or drawing's) centre at the viewport centre. */
@@ -272,9 +274,9 @@ function PenPath({ layer, d, color }: { layer: DraftLayer | undefined; d: string
 }
 
 /** The sheet's own lines and annotations, on the paper. */
-function SheetDrafts({ sheet, projectName, entities, layers, extraPatterns }: { sheet: ProjectSheet; projectName: string; entities: readonly DraftEntity[]; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[] }) {
+function SheetDrafts({ sheet, projectName, issueDate, entities, layers, extraPatterns }: { sheet: ProjectSheet; projectName: string; issueDate?: string; entities: readonly DraftEntity[]; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[] }) {
   const { book, groups } = useDraftingStandards();
-  const lookup = useSheetParamLookup(sheet, projectName);
+  const lookup = useSheetParamLookup(sheet, projectName, issueDate);
   const colour = new Map(layers.map((l) => [l.id, layerShows(l, groups) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));
   return (
@@ -293,7 +295,7 @@ function SheetDrafts({ sheet, projectName, entities, layers, extraPatterns }: { 
 }
 
 export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function SheetPaper(
-  { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [], currentCloudsOnly = false }, ref,
+  { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [], currentCloudsOnly = false, issueDate }, ref,
 ) {
   const { w, h } = paperOf(sheet);
   const revisions = useProjectStore((s) => s.revisions);
@@ -320,8 +322,8 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
           : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} highlight={keyedExtent(sheet, vp, content, c)} />;
       })}
       <RevisionTable revisions={own} block={titleBlockRect({ w, h }, frameOf(sheet))} strip={frameOf(sheet).titleBlock === 'right'} />
-      <TitleBlockGraphic sheet={sheet} projectName={projectName} w={w} h={h} />
-      <SheetDrafts sheet={sheet} projectName={projectName} entities={shows ? sheetDrafts.filter(shows) : sheetDrafts} layers={layers} extraPatterns={extraPatterns} />
+      <TitleBlockGraphic sheet={sheet} projectName={projectName} w={w} h={h} issueDate={issueDate} />
+      <SheetDrafts sheet={sheet} projectName={projectName} issueDate={issueDate} entities={shows ? sheetDrafts.filter(shows) : sheetDrafts} layers={layers} extraPatterns={extraPatterns} />
     </svg>
   );
 });

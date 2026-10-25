@@ -15,6 +15,7 @@ const planWith = (title: string, number = 'A-1'): IssuePlan =>
     date: '2026-10-19',
     sheets: [{ row: { number, title, scale: '1:50', paper: 'A3', orientation: 'landscape', revision: '', fingerprint: '' } }],
     leftOut: [],
+    changes: { status: 'first', against: null, added: [], removed: [], changed: [], unbumped: [] },
   }) as unknown as IssuePlan;
 
 const secondLine = (csv: string) => csv.split('\r\n')[1];

@@ -31,7 +31,7 @@ export function useSheetScaleText(sheet: ProjectSheet): string {
   return sheetScaleText(sheet, unscaled, t('sheets.asIndicated')) || '\u2014';
 }
 
-export function useSheetParamLookup(sheet: ProjectSheet, projectName: string): (name: string) => string | undefined {
+export function useSheetParamLookup(sheet: ProjectSheet, projectName: string, issueDate?: string): (name: string) => string | undefined {
   const projectFields = useEffectiveTitleBlock();
   const params = useProjectStore((s) => s.titleBlockParams);
   const sheets = useProjectStore((s) => s.sheets);
@@ -41,6 +41,8 @@ export function useSheetParamLookup(sheet: ProjectSheet, projectName: string): (
   const scale = useSheetScaleText(sheet);
   return useMemo(() => {
     const fields = titleBlockOf(sheet, projectFields, projectName);
+    // An issue dates its sheets: its date is the sheet's date on the paper it issues.
+    if (issueDate) fields.date = issueDate;
     const page = inSetOrder(sheets, schedules).findIndex((s) => s.id === sheet.id) + 1;
     return paramLookup(sheet, params, {
       ...fieldBuiltins(fields), // the title block fields, by the engine's one table (`FIELD_PARAMS`), so the PDF names them alike
@@ -48,5 +50,5 @@ export function useSheetParamLookup(sheet: ProjectSheet, projectName: string): (
       // The revision is never typed: it is the latest the sheet has (`revisions.ts`).
       Revision: currentRevisionOf(sheet, { revisions, drafts })?.code ?? '',
     });
-  }, [sheet, projectFields, projectName, params, sheets, schedules, scale, revisions, drafts]);
+  }, [sheet, projectFields, projectName, params, sheets, schedules, scale, revisions, drafts, issueDate]);
 }
