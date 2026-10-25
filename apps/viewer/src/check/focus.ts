@@ -13,13 +13,13 @@ import { create } from 'zustand';
 import { drawingToScreen, type SectionAxisName } from '@/drafting/frame';
 import type { Pt } from '@/drafting/types';
 
-export interface FocusRequest { viewId: string; guids: readonly string[]; nonce: number }
+export interface FocusRequest { viewId: string; guids: readonly string[]; nonce: number; /** Zoom to this box (drawing units) instead of to elements: an annotation whose element is gone. */ box?: { min: Pt; max: Pt } }
 
 export const useFocusRequest = create<{ request: FocusRequest | null }>(() => ({ request: null }));
 
 let nonce = 0;
-export function requestFocus(viewId: string, guids: readonly string[]): void {
-  useFocusRequest.setState({ request: { viewId, guids, nonce: ++nonce } });
+export function requestFocus(viewId: string, guids: readonly string[], box?: { min: Pt; max: Pt }): void {
+  useFocusRequest.setState({ request: { viewId, guids, nonce: ++nonce, ...(box ? { box } : {}) } });
 }
 export const clearFocus = (): void => useFocusRequest.setState({ request: null });
 

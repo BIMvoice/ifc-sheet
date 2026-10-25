@@ -14,6 +14,7 @@ export function describeFinding(f: Finding): string {
   const params: Record<string, string | number> = { ...f.params };
   if (typeof params.field === 'string') params.field = resolve(`sheets.tb.${params.field === 'title' ? 'title' : params.field}` as TranslationKey);
   if (typeof params.what === 'string') params.what = resolve(`check.what.${params.what}` as TranslationKey, { count: Number(params.count ?? 1) });
+  if (f.kind === 'danglingAnnotation' && params.sheet === '') params.sheet = resolve('check.noSheetShort' as TranslationKey);
   return resolve(f.key as TranslationKey, params);
 }
 

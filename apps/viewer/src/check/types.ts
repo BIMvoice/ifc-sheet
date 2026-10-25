@@ -13,6 +13,9 @@ export type FindingKind =
   | 'viewOffSheet' | 'emptySheet' | 'titleBlockEmpty' | 'duplicateNumber'
   | 'sectionMarkOffSheet' | 'detailOffSheet' | 'danglingAnnotation';
 
+/** What can be done about a finding on an annotation: take it off the drawing, or point it at another element. */
+export type Remedy = 'delete' | 'reattach';
+
 /** The one-action commands a finding can be fixed with. */
 export type FixCommand = 'TAGALL' | 'DIMALL' | 'LEVELALL';
 
@@ -25,6 +28,10 @@ export interface Finding {
   guids?: string[];
   /** The annotation concerned. */
   draftId?: string;
+  /** Where the annotation is on its view, drawing units: what "go to" zooms to when its element is gone. */
+  box?: { min: { x: number; y: number }; max: { x: number; y: number } };
+  /** What the person can do about the annotation, besides going to it. */
+  remedies?: readonly Remedy[];
   /** Catalogue key of the message (`check.<kind>`), with its parameters. */
   key: `check.${FindingKind}`;
   params: Record<string, string | number>;
@@ -46,4 +53,6 @@ export interface CheckInput {
   /** The doors, windows and rooms a plan shows; null when the plan has not been drawn (it is open in no tab yet). */
   planElements(viewId: string): PlanElement[] | null;
   elementExists(guid: string): boolean;
+  /** What the project last knew of an element that may be gone (the recorded model state), when it knew it. */
+  lastKnown?(guid: string): { name?: string; className?: string } | undefined;
 }

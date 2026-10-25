@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { currentFindings } from '@/check/collect';
-import { fixOutcome, type FindingNav, type FixOutcome } from '@/check/go';
+import { fixOutcome, reattachOutcome, removeFindingAnnotation, type FindingNav, type FixOutcome } from '@/check/go';
 import type { Finding } from '@/check/types';
 
 export interface FindingsState {
@@ -18,6 +18,10 @@ export interface FindingsState {
   refresh: () => void;
   /** Open the finding's place and run its command there, then read again. */
   fix: (finding: Finding, nav: FindingNav) => Promise<void>;
+  /** Take the finding's annotation off the drawing, then read again. */
+  remove: (finding: Finding) => void;
+  /** Go to the finding's annotation and start REATTACH there. */
+  reattach: (finding: Finding, nav: FindingNav) => Promise<void>;
 }
 
 export function useFindings(): FindingsState {
@@ -35,5 +39,18 @@ export function useFindings(): FindingsState {
       refresh();
     }
   };
-  return { findings, busy, failure, refresh, fix };
+  const remove = (finding: Finding) => {
+    removeFindingAnnotation(finding);
+    refresh();
+  };
+  const reattach = async (finding: Finding, nav: FindingNav) => {
+    setBusy(true);
+    try {
+      const outcome = await reattachOutcome(finding, nav);
+      setFailure(outcome === 'done' ? null : outcome);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { findings, busy, failure, refresh, fix, remove, reattach };
 }
