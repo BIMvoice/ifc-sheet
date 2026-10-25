@@ -29,6 +29,7 @@ import { SubReportCard } from './SubReportCard';
 import { ThreeDControls } from './ThreeDControls';
 import { CutHeightControl, DepthControl } from './ViewControls';
 import { canBeColoured, ColourSchemeCard } from './ColourSchemeCard';
+import { GraphicsCard } from './GraphicsCard';
 import { startWhenAttached } from './wall-actions';
 import { addKeyPlan, drawPlotBoundary } from '@/siteplan/site-actions';
 import { WALL_CARD, WALL_FIELD, WALL_PILL } from './wall-type';
@@ -103,6 +104,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
           {schedule ? <ScheduleExportCard key={`${schedule.id}:export`} schedule={schedule} /> : null}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
+          {view ? <GraphicsCard key={`${view.id}:${slot.id}`} sheet={sheet} slot={slot} view={view} /> : null}
           {canBeColoured(view) ? <ColourSchemeCard key={view.id} sheet={sheet} view={view} /> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
           <div className="mt-4 flex flex-wrap gap-2">

@@ -36,7 +36,7 @@ const pdf = await exportPdf(sheets);             // one PDF, a page per sheet at
 const dxf = sheets.map(exportDxf);               // one DXF per sheet, paper mm
 ```
 
-`ProjectDocument` (engine) is the contract: `name`, `models`, `views`, `sheets`, `titleBlock`, `sheetTemplates`, `seriesTemplates`, `sheetNumbering`. It is plain JSON. Views and sheets refer to each other by id, and levels name their storeys by IFC GlobalId.
+`ProjectDocument` (engine) is the contract: `name`, `models`, `views`, `sheets`, `titleBlock`, `sheetTemplates`, `seriesTemplates`, `viewTemplates`, `sheetNumbering`. It is plain JSON. Views and sheets refer to each other by id, and levels name their storeys by IFC GlobalId. A view's graphics are layered by `resolveViewGraphics` (`view-templates.ts`): the template the view names (`templateId`), then the view's own `graphics` over it; the app and the headless sheets both call it. A viewport's hidden drafting layers lie over the view's (`viewportHiddenLayers`).
 
 The main entry holds the contract, the pure layout and `generateDefaultSet`; `@bimvoice/ifcsheet/headless` holds what loads the parser, the wasm geometry engine, the section generator and the writers, so the web app, which uses the layout only, loads none of them through the package.
 

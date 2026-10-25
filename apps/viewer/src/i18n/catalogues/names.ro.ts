@@ -23,6 +23,9 @@ export const namesRo = {
   'names.view.south': 'Fațada sud',
   'names.view.west': 'Fațada vest',
   'names.view.section': 'Secțiunea {mark}-{mark}',
+  'names.viewTemplate.plan': 'Planuri',
+  'names.viewTemplate.section': 'Secțiuni',
+  'names.viewTemplate.elevation': 'Fațade',
   'names.view.detail': 'Detaliu {number} - {source}',
   'names.issue.default': 'Emitere {n}',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;
