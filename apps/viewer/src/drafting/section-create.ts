@@ -16,7 +16,7 @@ import { styledParams } from '@/project/drafting-standards';
 import { viewPlaneConfig } from '@/project/view-plane-config';
 import type { SectionProposal } from '@/project/section-proposals';
 import type { PlanProjectView, ProjectLevel } from '@/project/types';
-import { editDrafts, newDraft } from './draft-store';
+import { editDrafts, newDraft, runAsOneUndoStep } from './draft-store';
 import type { CustomSectionPlane } from '@/store/section-types';
 import { drawingToWorld, worldToDrawing } from './frame';
 import { nextSectionMark, sectionMarkOf, sectionSymbolShapes, sectionViewName } from './section-symbol';
@@ -47,6 +47,13 @@ export interface SectionOnPlan {
 
 /** Make the section and leave its symbol on the plan. `null` for a degenerate line. */
 export function createSectionOnPlan(input: SectionOnPlan): string | null {
+  let made: string | null = null;
+  // The view and its symbol on the plan are one step, as the symbol alone was before the view became one (#51).
+  runAsOneUndoStep(() => { made = makeSectionOnPlan(input); });
+  return made;
+}
+
+function makeSectionOnPlan(input: SectionOnPlan): string | null {
   const custom = sectionPlaneFromLine(input.plan, input.a, input.b, input.side);
   if (!custom) return null;
   const name = sectionViewName(nextSectionMark(useProjectStore.getState().views));

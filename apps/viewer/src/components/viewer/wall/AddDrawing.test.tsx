@@ -10,7 +10,9 @@ import { cleanup, click, render } from '@/test/render.js';
 import { checkCatalogue } from '@/i18n/catalogue-problems';
 import ro from '@/i18n/locales/ro';
 import { registerLocale, setLocale } from '@/i18n/registry';
+import { clearDraftHistory, undoDrafts } from '@/drafting/draft-store';
 import { resetProject, useProjectStore } from '@/project/project-store';
+import { addViewport } from '@/project/sheets';
 import { defaultViews } from '@/project/view-defaults';
 import type { ProjectLevel } from '@/project/types';
 import { disciplineViewFor } from '@/project/discipline-views';
@@ -56,6 +58,21 @@ describe('AddDrawing', () => {
     click(button(again, /Plan of a storey/));
     click(button(again, /^First Floor$/));
     assert.equal(made[1], plan.id, 'the same plan, not a second one');
+  });
+
+  it('is one undo step with the sheet placement that follows it (#51): the new view and its viewport go together', () => {
+    useProjectStore.setState({ sheets: [{ id: 's', number: 'A-101', name: 'Plans', createdAt: 0 }] });
+    clearDraftHistory();
+    const ui = render(<AddDrawing onView={(id) => { addViewport('s', id, { x: 10, y: 10 }); }} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    click(button(ui, /Plan of a storey/));
+    click(button(ui, /^First Floor$/));
+    const s = () => useProjectStore.getState();
+    assert.equal(s().sheets[0].viewports?.length, 1);
+    assert.equal(s().views.some((v) => v.kind === 'plan' && v.level.name === 'First Floor'), true);
+    assert.equal(undoDrafts(), true);
+    assert.equal(s().sheets[0].viewports?.length ?? 0, 0, 'the viewport is gone');
+    assert.equal(s().views.some((v) => v.kind === 'plan' && v.level.name === 'First Floor'), false, 'and the plan with it');
+    assert.equal(undoDrafts(), false, 'in one undo');
   });
 
   it('reuses the elevation of the side picked', () => {

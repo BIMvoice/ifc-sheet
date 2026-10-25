@@ -250,12 +250,15 @@ export const updateProjectView = (id: string, patch: ProjectViewPatch): void => 
 export const removeProjectItem = (id: string): void => asStep(() => removeProjectItemNow(id));
 export const addProjectSheet = (name = 'Unnamed', group?: NumberGroup, templateId?: string): string => asStep(() => addProjectSheetNow(name, group, templateId));
 export const duplicateProjectSheet = (id: string): string | null => asStep(() => duplicateProjectSheetNow(id));
+export const addProjectView = (view: NewProjectView): string => asStep(() => addProjectViewNow(view));
+export const duplicateProjectView = (id: string): string | null => asStep(() => duplicateProjectViewNow(id));
+export const setSheetNumber = (id: string, number: string): void => asStep(() => setSheetNumberNow(id, number));
 
 export function setActiveProjectItem(id: string | null): void {
   useProjectStore.setState({ activeItemId: id });
 }
 
-export function addProjectView(view: NewProjectView): string {
+function addProjectViewNow(view: NewProjectView): string {
   const state = useProjectStore.getState();
   const id = view.id ?? freshProjectId('view');
   const created = { ...view, id, name: uniqueViewName(view.name, state.views), createdAt: Date.now() } as ProjectView;
@@ -301,7 +304,7 @@ function updateProjectViewNow(id: string, patch: ProjectViewPatch): void {
   });
 }
 
-export function duplicateProjectView(id: string): string | null {
+function duplicateProjectViewNow(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.views.find((v) => v.id === id);
   if (!source) return null;
@@ -365,7 +368,7 @@ function duplicateProjectSheetNow(id: string): string | null {
   return copy.id;
 }
 
-export function setSheetNumber(id: string, number: string): void {
+function setSheetNumberNow(id: string, number: string): void {
   const trimmed = number.trim();
   if (!trimmed) return;
   useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed, series: numberGroupOf(sh), numberOverride: true } : sh)), dirty: true }));
