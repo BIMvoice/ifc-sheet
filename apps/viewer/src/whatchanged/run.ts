@@ -29,6 +29,7 @@ import { latestRevisionId, REVISION_ID_PARAM } from '@/project/revisions';
 import { compareStates, type ModelChange } from './compare';
 import { currentSnapshot } from './current';
 import { renderFrameOffset } from './frame';
+import { followMovedElements } from './follow';
 import { annotationImpacts } from './impact';
 import { sheetChanges } from './report';
 import { sheetLines } from './say';
@@ -112,6 +113,9 @@ export async function runWhatChanged(mode: Mode, say: (text: string) => void, re
   const report = sheetChanges(sheets, bands, changes, annotationImpacts(drafts.filter((d) => !isCloud(d)), changes));
   const byGuid = new Map(changes.map((c) => [c.guid, c]));
   for (const line of sheetLines(report, (id) => views.find((v) => v.id === id)?.name ?? '', (g) => byGuid.get(g))) say(line);
+  // Tags and labels of the elements that moved go with them: derived from the model, so no undo step, as the text they read.
+  const followed = followMovedElements(drafts, changes, (id) => bands.find((b) => b.viewId === id));
+  if (followed !== drafts) useProjectStore.setState({ drafts: followed as typeof drafts, dirty: true });
   // Clouds replace the last run's.
   ensureRevisionsLayer();
   const clouds = cloudsFor(changes, bands, latestRevisionId(useProjectStore.getState()));

@@ -72,4 +72,8 @@ export const whatChangedRo = {
   'whatchanged.ui.sheetRow': { one: '{number}: {count} modificare', few: '{number}: {count} modificări', other: '{number}: {count} de modificări' },
   'whatchanged.ui.sheetsUnchanged': { one: 'O planșă nemodificată', few: '{count} planșe nemodificate', other: '{count} de planșe nemodificate' },
   'whatchanged.ui.unchanged': 'Nu s-a modificat nimic din ce arată planșele.',
+  'whatchanged.offer.title': 'O versiune nouă a acestui model?',
+  'whatchanged.offer.description': '{file} are același IfcProject ca {old}, din care este desenat acest proiect. Actualizează proiectul la versiunea nouă: planșele, vederile, adnotările și setările rămân, iar ce s-a schimbat este listat. Anulare deschide {file} ca proiect nou.',
+  'whatchanged.offer.update': 'Actualizează acest proiect',
+  'whatchanged.offer.failed': 'Proiectul nu a putut fi actualizat la versiunea nouă: {reason}',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;
