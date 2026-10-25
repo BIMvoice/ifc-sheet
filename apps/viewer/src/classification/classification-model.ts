@@ -7,7 +7,7 @@
  * elements, read by the engine's `storeClassifications` (the same code the command line uses), plus what a tag resolves with.
  */
 
-import { classificationOf, type ClassificationModel, type ClassificationResult } from '@bimvoice/ifcsheet';
+import { classificationOf, type ClassificationModel, type ClassificationResult, type ListClassificationContext } from '@bimvoice/ifcsheet';
 import { storeClassifications } from '@bimvoice/ifcsheet/project';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { useProjectStore } from '@/project/project-store';
@@ -29,3 +29,9 @@ export const tagClassificationMappings = () => (useProjectStore.getState().class
 export function tagClassification(element: { className: string; typeName: string | null; materials: readonly string[]; modelId: string; expressId: number }): ClassificationResult | null {
   return classificationOf(element, tagClassificationMappings(), loadedClassificationModel());
 }
+
+/** What a list schedule's office classification columns resolve with (#351): the project's mappings and the loaded models' own references. */
+export const listClassificationContext = (): ListClassificationContext => ({
+  mappings: useProjectStore.getState().classificationMappings ?? [],
+  model: loadedClassificationModel(),
+});

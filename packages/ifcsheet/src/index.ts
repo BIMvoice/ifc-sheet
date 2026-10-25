@@ -72,6 +72,7 @@ export {
   LIST_COUNT_ID, listFigureKind, listScheduleTable, readListScheduleDef,
   type ListCell, type ListFigureKind, type ListScheduleColumn, type ListScheduleDef, type ListScheduleTable, type ListTableSource,
 } from './list-schedule.js';
+export { withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from './list-classification.js';
 export { boqLineText, boqNotes, boqTable, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from './boq-table.js';
 export { BOQ_WORDS_EN, BOQ_WORDS_RO, boqSayFor, fillTemplate, type BoqSay, type BoqWordKey } from './boq-words.js';
 
