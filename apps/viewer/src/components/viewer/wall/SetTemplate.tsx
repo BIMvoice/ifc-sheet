@@ -22,7 +22,7 @@ import { libraryAction } from './library-style';
 const FIELD = 'rounded border border-sky-300/40 bg-[#061a36] px-1.5 py-1 text-xs text-white';
 
 /** A note in words: the engine's key and parameters, the series and direction in the installed language. */
-export function useSayNote(): (key: string, params: Record<string, string | number>) => string {
+function useSayNote(): (key: string, params: Record<string, string | number>) => string {
   const { t } = useTranslation();
   return (key, params) => {
     const say = { ...params };
@@ -32,7 +32,7 @@ export function useSayNote(): (key: string, params: Record<string, string | numb
   };
 }
 
-export const templateFileName = (name: string): string => `${sanitizeFilename(name, { fallback: 'set-template' })}${SET_TEMPLATE_FILE_SUFFIX}`;
+const templateFileName = (name: string): string => `${sanitizeFilename(name, { fallback: 'set-template' })}${SET_TEMPLATE_FILE_SUFFIX}`;
 
 /** Save the open project as a set template: a name, what the rules are, a file to download and a copy to keep in this browser. */
 export function SetTemplateSave() {

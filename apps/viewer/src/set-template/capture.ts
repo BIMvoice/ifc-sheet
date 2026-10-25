@@ -17,7 +17,7 @@ import { useProjectStore, type ProjectState } from '@/project/project-store';
 import { MARK_TYPE_ID, ROOM_TYPE_ID } from '@/tagall/types';
 
 /** The annotation commands each view's drafts show they were given: TAGALL's labels, DIMALL's strings, LEVELALL's level marks. */
-export function annotationsByView(drafts: readonly DraftEntity[]): Map<string, AnnotationCommand[]> {
+function annotationsByView(drafts: readonly DraftEntity[]): Map<string, AnnotationCommand[]> {
   const out = new Map<string, Set<AnnotationCommand>>();
   const add = (viewId: string, command: AnnotationCommand): void => { out.set(viewId, (out.get(viewId) ?? new Set()).add(command)); };
   for (const d of drafts) {
@@ -29,7 +29,7 @@ export function annotationsByView(drafts: readonly DraftEntity[]): Map<string, A
 }
 
 /** The schedules of the project that hang on a sheet of their own, by kind: not the parts a schedule was split into, which are cut from one model's rows. */
-export function scheduleRules(s: Pick<ProjectState, 'schedules' | 'sheets'>): ScheduleRule[] {
+function scheduleRules(s: Pick<ProjectState, 'schedules' | 'sheets'>): ScheduleRule[] {
   return (s.schedules ?? []).flatMap((schedule) => {
     const sheet = s.sheets.find((sh) => (sh.viewports ?? []).some((vp) => vp.viewId === schedule.id));
     if (schedule.sub || !sheet || sheetGroup(sheet) !== 'schedules') return [];

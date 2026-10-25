@@ -87,6 +87,17 @@ describe('a set template made in one project makes the set of another (#21)', ()
     assert.deepEqual(report?.notes.filter((n) => n.key === 'setTemplate.note.rescaled').map((n) => [n.params.wanted, n.params.used]), [[50, 100], [50, 100]]);
   });
 
+  it('on a building with a basement: the ground storey keeps its slot, the basement is the storey nobody foresaw', () => {
+    const template = officeTemplate();
+    project([{ name: 'Basement', elevation: -3, storeyGlobalIds: ['B'] }, ...two]);
+    armTemplate(template);
+    assert.ok(startSet(null, { ...HOUSE, min: { ...HOUSE.min, y: -3 } }));
+    assert.deepEqual(rows().slice(0, 2), [
+      ['A-101', 'Office plans', 'A1', 'Ground@200', 'Upper@200'],
+      ['A-102', 'Floor plans', 'A1', 'Basement@200'],
+    ]);
+  });
+
   it('on one storey: the rule with no storey is skipped and said, and the sheet keeps the one it found', () => {
     const template = officeTemplate();
     project([two[0]]);

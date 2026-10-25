@@ -17,7 +17,7 @@ import { applyExtras, applyNumbering } from './apply';
 import { takeArmedTemplate, useSetTemplates } from './store';
 
 /** The annotation commands the template asks for, by series: the app runs them on a view when it is open (they read the drawn view), so they are listed, not run. */
-export function commandsToRun(template: SetTemplate): { series: string; commands: string[] }[] {
+function commandsToRun(template: SetTemplate): { series: string; commands: string[] }[] {
   return Object.entries(template.annotations).map(([series, commands]) => ({ series, commands: ANNOTATION_COMMANDS.filter((c) => commands?.includes(c)) }));
 }
 
