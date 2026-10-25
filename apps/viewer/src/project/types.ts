@@ -7,7 +7,7 @@ import type { TitleBlockParam } from './title-block-params';
 import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
-import type { ProjectSchedule } from '@bimvoice/ifcsheet';
+import type { BoqArticle, ProjectSchedule } from '@bimvoice/ifcsheet';
 import type { UrbanSettings } from '@/urban/indicators';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
@@ -133,6 +133,8 @@ export interface ProjectDocument extends EngineDocument {
   modelState?: ModelSnapshot;
   /** Review comments pinned on sheets (`review/`). */
   comments?: ReviewComment[];
+  /** The bill of quantities' mapping table: type, material or class (with a property filter) to the office's article code, unit and formula (`boq/`). Empty until the office enters its own; also carried in a `.bvlib` library. */
+  boqArticles?: BoqArticle[];
 }
 
 /** One revision of the set: a letter or number, when, what changed, who made it. */

@@ -46,6 +46,11 @@ const full: Catalogue = {
     { id: 'st1', name: 'Long elevations', paper: { kind: 'elongated', base: 'A3', factor: 3 }, orientation: 'landscape', frame: { margins: { top: 10, right: 10, bottom: 10, left: 20 }, titleBlock: 'right' } },
     { id: 'st2', name: 'Site plan', paper: { kind: 'custom', widthMm: 500, heightMm: 700 }, orientation: 'portrait', frame: { margins: { top: 5, right: 5, bottom: 5, left: 5 }, titleBlock: 'bottom-right' } },
   ],
+  // EXAMPLE articles made up for the test: IfcSheet ships no norm or article code (#75).
+  boqArticles: [
+    { id: 'b1', code: 'EXAMPLE-01', description: 'EXAMPLE: masonry', unit: 'm3', typeName: 'T240', quantity: 'NetVolume', factor: 1, waste: 5, filter: { properties: [{ name: 'IsExternal', op: 'equals', value: 'true' }] } },
+    { id: 'b2', code: 'EXAMPLE-02', description: 'EXAMPLE: doors', unit: 'buc', quantity: 'Count', factor: 1, filter: { classes: ['IfcDoor'] } },
+  ],
 };
 
 describe('catalogue file', () => {

@@ -74,6 +74,7 @@ const DOCUMENT_FIELD_DEFS = [
   defineField({ key: 'handoverPattern', empty: () => undefined, load: (v) => readHandoverPattern(v) }),
   // The project's view templates (#44): named graphics that views follow by `templateId`.
   listField('viewTemplates'),
+  listField('boqArticles'),
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];

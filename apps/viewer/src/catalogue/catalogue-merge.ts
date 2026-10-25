@@ -27,6 +27,7 @@ import { freshProjectId } from '@/project/view-defaults';
 import { TAG_FIELD_IDS, TAG_KINDS, withSources, type TagFieldConfig } from '@/tagfields/tag-fields';
 import type { Catalogue, CatalogueKind } from './catalogue-file';
 import { mergeCadLayers } from './cad-layers-merge';
+import { mergeBoqArticles } from './boq-merge';
 
 export type ClashPolicy = 'mine' | 'theirs' | 'both';
 
@@ -190,16 +191,17 @@ export function mergeCatalogues(
   const tagFields = mergeTagFields(mine.tagFields, incoming.tagFields, policy);
   const details = mergeNamed(mine.details, incoming.details, policy, 'detail', fresh);
   const templates = mergeNamed(mine.sheetTemplates, incoming.sheetTemplates, policy, 'template', fresh);
+  const boq = mergeBoqArticles(mine.boqArticles, incoming.boqArticles, policy, fresh);
   return {
     maps: { layers: layers.ids, symbols: symbols.ids, patterns: patterns.names },
     catalogue: {
       ...(tagFields.config ? { tagFields: tagFields.config } : {}),
       layers: layers.list, layerGroups: groups.list, textStyles: texts.list, dimStyles: dims.list, hatchPatterns: patterns.text,
-      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, cadLayers: cad.list, details: details.list, sheetTemplates: templates.list,
+      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, cadLayers: cad.list, details: details.list, sheetTemplates: templates.list, boqArticles: boq.list,
     },
     report: {
       layers: layers.report, textStyles: texts.report, dimStyles: dims.report, hatchPatterns: patterns.report,
-      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, cadLayers: cad.report, tagFields: tagFields.report, details: details.report, sheetTemplates: templates.report,
+      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, cadLayers: cad.report, tagFields: tagFields.report, details: details.report, sheetTemplates: templates.report, boqArticles: boq.report,
     },
   };
 }

@@ -25,6 +25,11 @@
       "import": "./dist/readiness.js",
       "default": "./dist/readiness.js"
     },
+    "./boq-words": {
+      "types": "./dist/boq-words.d.ts",
+      "import": "./dist/boq-words.js",
+      "default": "./dist/boq-words.js"
+    },
     "./readiness-read": {
       "types": "./dist/readiness-read.d.ts",
       "import": "./dist/readiness-read.js",

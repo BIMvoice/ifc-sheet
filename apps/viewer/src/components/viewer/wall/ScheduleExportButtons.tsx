@@ -16,6 +16,7 @@ import { CSV_MIME, csvDelimiter, exportCsv, exportXlsx, scheduleFileName, XLSX_M
 import { useRegisterLabels, useRoomFinishLabels, useScheduleLabels, useTakeoffLabels, useTypeQuantityLabels } from '../joinery/ScheduleGraphic';
 import { urbanLabelsOf } from '../urban/useUrban';
 import { readScheduleExport, type ExportLabelSet } from './schedule-export-read';
+import { useBoqSay } from '../boq/useBoq';
 import { WALL_PILL } from './wall-type';
 
 type Format = 'csv' | 'xlsx';
@@ -28,14 +29,15 @@ export function useScheduleExportLabels(): ExportLabelSet {
   const finishes = useRoomFinishLabels('');
   const types = useTypeQuantityLabels('');
   const register = useRegisterLabels('');
+  const boq = useBoqSay();
   return useMemo<ExportLabelSet>(() => ({
     joinery: {
       ...joinery, widthMm: t('schedule.export.widthMm'), heightMm: t('schedule.export.heightMm'),
       types: t('schedule.sheet.types'), elements: t('schedule.sheet.elements'), number: t('schedule.col.number'), level: t('schedule.col.level'), globalId: t('schedule.col.globalId'),
     },
-    takeoff, finishes, types, register, asIndicated: t('sheets.asIndicated'),
+    takeoff, finishes, types, register, boq, asIndicated: t('sheets.asIndicated'),
     urban: (title, areas, site) => urbanLabelsOf(t, locale, title, areas, site),
-  }), [joinery, takeoff, finishes, types, register, t, locale]);
+  }), [joinery, takeoff, finishes, types, register, boq, t, locale]);
 }
 
 /** What pressing a button does: read the table, write the file in the language's delimiter, hand it to the browser. */

@@ -31,6 +31,7 @@ import { RoomScheduleView } from './RoomScheduleView';
 import { TakeoffView } from './TakeoffView';
 import { UrbanView } from '../urban/UrbanView';
 import { TypeQuantitiesView } from './TypeQuantitiesView';
+import { BoqView } from '../boq/BoqView';
 
 const SELECT = 'h-7 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1 text-xs';
 const SCALES = [10, 20, 25, 50, 100];
@@ -41,6 +42,7 @@ export function ScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   if (schedule.kind === 'types') return <TypeQuantitiesView schedule={schedule} />;
   if (schedule.kind === 'finishes') return <RoomFinishesView schedule={schedule} />;
   if (schedule.kind === 'urban') return <UrbanView schedule={schedule} />;
+  if (schedule.kind === 'boq') return <BoqView schedule={schedule} />;
   if (schedule.kind === 'rooms') return <RoomScheduleView schedule={schedule} />;
   return schedule.kind === 'materials' ? <TakeoffView schedule={schedule} /> : schedule.kind === 'register' ? <RegisterView schedule={schedule} /> : <JoineryScheduleView schedule={schedule} />;
 }
