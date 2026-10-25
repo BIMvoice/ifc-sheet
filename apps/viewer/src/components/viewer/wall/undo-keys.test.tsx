@@ -14,6 +14,8 @@ import { removeProjectItem, resetProject, useProjectStore } from '@/project/proj
 import { startDrawingSet } from '@/project/drawing-set-actions';
 import { defaultViews } from '@/project/view-defaults';
 import type { ModelExtent } from '@/project/drawing-set';
+import { click } from '@/test/render.js';
+import { WallGrid } from './WallGrid.js';
 import { SheetCanvas } from './SheetCanvas.js';
 import { ScaleField } from './ScaleField.js';
 import { useSheetContent } from '../sheets/useSheetContent.js';
@@ -97,4 +99,23 @@ function sequence(redo: () => void): void {
 describe('undo and redo on the Wall (#51)', () => {
   it('three Ctrl+Z undo the removal, the scale and the move in order, and three Ctrl+Y redo them', () => sequence(ctrlY));
   it('the same with Ctrl+Shift+Z as redo', () => sequence(ctrlShiftZ));
+});
+
+describe('undo and redo on the whole wall (#51)', () => {
+  it('Ctrl+Z brings back a sheet taken away with its cross, and Ctrl+Y (and Ctrl+Shift+Z) take it away again', () => {
+    const ui = render(<WallGrid extent={HOUSE} onStep={() => {}} />);
+    const before = numbers();
+    clearDraftHistory();
+    const cross = ui.querySelector<HTMLButtonElement>('button[aria-label^="Remove A-202"]');
+    assert.ok(cross, 'the A-202 cross');
+    click(cross);
+    assert.equal(numbers().includes('A-202'), false);
+    ctrlZ();
+    assert.deepEqual(numbers(), before, 'Ctrl+Z puts A-202 back, in its place');
+    ctrlY();
+    assert.equal(numbers().includes('A-202'), false);
+    ctrlZ();
+    ctrlShiftZ();
+    assert.equal(numbers().includes('A-202'), false);
+  });
 });
