@@ -32,4 +32,11 @@ export const colourSchemeRo = {
   'wall.scheme.addLegend': 'Adaugă legendă',
   'wall.scheme.legendOnSheet': 'Legenda este pe această planșă',
   'wall.scheme.remove': 'Renunță la colorare',
+  'wall.scheme.legendTitle': 'Titlul legendei',
+  'wall.scheme.attr.LongName': 'Denumire încăpere',
+  'wall.scheme.attr.Name': 'Denumire',
+  'wall.scheme.attr.ObjectType': 'Tip',
+  'wall.scheme.attr.Description': 'Descriere',
+  'wall.scheme.attr.PredefinedType': 'Tip predefinit',
+  'wall.scheme.attr.Tag': 'Etichetă',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

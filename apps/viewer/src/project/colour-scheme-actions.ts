@@ -43,7 +43,7 @@ export function patchColourScheme(viewId: string, patch: Partial<ColourScheme>):
   const next: ColourScheme = { ...scheme, ...patch };
   if (patch.property !== undefined && patch.property !== scheme.property) delete next.colours;
   if (patch.target !== undefined && patch.target !== scheme.target) { delete next.colours; delete next.classes; }
-  for (const key of ['classes', 'colours', 'palette'] as const) if (key in patch && patch[key] === undefined) delete next[key];
+  for (const key of ['classes', 'colours', 'palette', 'title'] as const) if (key in patch && patch[key] === undefined) delete next[key];
   setColourScheme(viewId, next);
 }
 

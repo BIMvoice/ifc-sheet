@@ -48,6 +48,8 @@ export interface ColourScheme {
   colours?: Record<string, string>;
   /** Absent: {@link DEFAULT_PALETTE}. */
   palette?: PaletteId;
+  /** The legend's heading when the user wrote one; absent: the property's readable name (`schemeTitle`, or the app's translated label). */
+  title?: string;
 }
 
 export const HEX_COLOUR = /^#[0-9a-f]{6}$/i;
@@ -70,6 +72,7 @@ export function readColourScheme(raw: unknown): ColourScheme | undefined {
   }
   const palette = PALETTE_IDS.find((p) => p === r.palette);
   if (palette && palette !== DEFAULT_PALETTE) out.palette = palette;
+  if (typeof r.title === 'string' && r.title.trim() !== '' && r.title.length <= 200) out.title = r.title.trim();
   return out;
 }
 

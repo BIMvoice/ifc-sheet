@@ -66,9 +66,9 @@ function legendSize(entries: readonly SchemeEntry[], title: string): { w: number
  * The legend of a scheme's entries in the free place of `area` nearest its bottom-right corner that clears every rectangle of
  * `taken` (the viewports and their titles); where no place is free, in that corner. `null` when there is nothing to list.
  */
-export function schemeLegend(entries: readonly SchemeEntry[], property: string, area: Rect, taken: readonly Rect[]): SheetLegend | null {
+export function schemeLegend(entries: readonly SchemeEntry[], property: string, area: Rect, taken: readonly Rect[], heading?: string): SheetLegend | null {
   if (entries.length === 0) return null;
-  const title = schemeTitle(property);
+  const title = heading?.trim() || schemeTitle(property);
   const { w, h } = legendSize(entries, title);
   const step = 4;
   let spot: Rect | null = null;

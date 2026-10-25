@@ -153,7 +153,7 @@ export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings
     const view = doc.views.find((v) => v.id === vp.viewId);
     const entries = schemes.get(vp.viewId)?.entries;
     const scheme = view?.graphics?.colourScheme;
-    const legend = entries && scheme ? schemeLegend(entries, scheme.property, drawingAreaIn(paper, frameOf(sheet)), taken) : null;
+    const legend = entries && scheme ? schemeLegend(entries, scheme.property, drawingAreaIn(paper, frameOf(sheet)), taken, scheme.title) : null;
     if (!legend) continue;
     taken.push(legend.box);
     out.fills.push(...legend.fills);

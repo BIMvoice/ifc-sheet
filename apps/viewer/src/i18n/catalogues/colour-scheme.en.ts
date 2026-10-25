@@ -31,4 +31,11 @@ export const colourSchemeEn = {
   'wall.scheme.addLegend': 'Add legend',
   'wall.scheme.legendOnSheet': 'The legend is on this sheet',
   'wall.scheme.remove': 'Stop colouring',
+  'wall.scheme.legendTitle': 'Legend title',
+  'wall.scheme.attr.LongName': 'Room name',
+  'wall.scheme.attr.Name': 'Name',
+  'wall.scheme.attr.ObjectType': 'Type',
+  'wall.scheme.attr.Description': 'Description',
+  'wall.scheme.attr.PredefinedType': 'Predefined type',
+  'wall.scheme.attr.Tag': 'Tag',
 } as const satisfies Record<string, TranslationValue>;
