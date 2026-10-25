@@ -145,6 +145,7 @@ import { roofBlockEn } from './catalogues/roof-block.en';
 import { viewGraphicsEn } from './catalogues/view-graphics.en';
 import { colourSchemeEn } from './catalogues/colour-scheme.en';
 import { viewTemplatesEn } from './catalogues/view-templates.en';
+import { styleRulesEn } from './catalogues/style-rules.en';
 import { elementGraphicsEn } from './catalogues/element-graphics.en';
 import { cadLayersEn } from './catalogues/cad-layers.en';
 import { phasesEn } from './catalogues/phases.en';
@@ -242,6 +243,7 @@ export const en = {
   ...viewGraphicsEn,
   ...colourSchemeEn,
   ...viewTemplatesEn,
+  ...styleRulesEn,
   ...elementGraphicsEn,
   ...phasesEn,
   ...catalogueEn,

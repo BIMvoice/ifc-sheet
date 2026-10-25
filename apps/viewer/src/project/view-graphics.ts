@@ -15,10 +15,10 @@
 import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2d';
 import type { Pt } from '@/drafting/types';
 import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
-import type { CategoryLineWeight, PhaseId, ViewGraphics } from './types';
+import type { CategoryLineWeight, PhaseId, ResolvedViewGraphics, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
 import type { SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
-import { VIEW_CATEGORY_CLASSES, elementShown, hasElementGraphics, hiddenClassesOf, lineHidden, resolveElementGraphics, type ElementStyle } from '@bimvoice/ifcsheet';
+import { VIEW_CATEGORY_CLASSES, elementShown, itemRules, hasElementGraphics, hiddenClassesOf, lineHidden, resolveElementGraphics, type ElementStyle } from '@bimvoice/ifcsheet';
 import { withScheme } from './view-scheme-style';
 import type { DraftShape } from '@/drafting/types';
 
@@ -203,32 +203,49 @@ export interface CutHatch {
   source?: HatchSource;
 }
 
-/** The cut faces to hatch, by their element's `cutHatch` (#32), else their category's. */
-export function cutHatches(drawing: StyledDrawing, graphics: ViewGraphics | undefined, hatchPens: Record<CategoryLineWeight, number> = DEFAULT_GRAPHIC_STANDARD.materialHatch): CutHatch[] {
+/**
+ * The cut faces to hatch, by their element's `cutHatch` (#32), else the view's own category's, else the template's mapping
+ * (#31: its material rules over its class rules, `materialNameOf` naming the IfcMaterial of a cut band), else the template's category's.
+ */
+export function cutHatches(
+  drawing: StyledDrawing, graphics: ResolvedViewGraphics | undefined, hatchPens: Record<CategoryLineWeight, number> = DEFAULT_GRAPHIC_STANDARD.materialHatch,
+  materialNameOf?: (entityId: number, materialId: number) => string | null | undefined,
+): CutHatch[] {
   const categories = graphics?.categories;
+  const mapping = graphics?.styleRules;
+  // With a mapping the view's own categories (`ownCategories`) are the ones that beat it; the template's are the fallback under it.
+  const viewCategories = mapping ? graphics?.ownCategories : categories;
+  const ruled = (ifcType: string | undefined, entityId: number | undefined, materialId: number | undefined) =>
+    itemRules(mapping, ifcType, mapping && materialId !== undefined && entityId !== undefined ? materialNameOf?.(entityId, materialId) : null);
   const out: CutHatch[] = [];
-  // A category's (or an element's) own cut hatch wins over its elements' materials.
-  const overridden = (ifcType: string | undefined, elementStyle?: ElementStyle) => {
+  // A category's (or an element's) own cut hatch, or a rule's, wins over its elements' materials.
+  const overridden = (ifcType: string | undefined, elementStyle?: ElementStyle, entityId?: number, materialId?: number) => {
     const id = categoryOf(ifcType ?? '');
     const g = id ? categories?.[id] : undefined;
-    return !!g?.cutHatch || g?.visible === false || !!elementStyle?.cutHatch;
+    const r = mapping ? ruled(ifcType, entityId, materialId) : null;
+    return !!g?.cutHatch || g?.visible === false || !!elementStyle?.cutHatch || !!r?.materialStyle.cutHatch || !!r?.classStyle.cutHatch;
   };
   for (const h of drawing.materialHatches ?? []) {
-    if (overridden(h.ifcType, h.elementStyle)) continue;
+    if (overridden(h.ifcType, h.elementStyle, h.entityId, h.materialId)) continue;
     out.push({ loops: h.loops, pattern: h.pattern, scale: h.scale, color: '#000000', width: hatchPens[h.pen], source: { ifcType: h.ifcType, entityId: h.entityId, materialId: h.materialId } });
   }
   for (const polygon of drawing.cutPolygons) {
     const id = categoryOf(polygon.ifcType ?? '');
     const g = id ? categories?.[id] : undefined;
     const own = polygon.elementStyle;
+    const mine = id ? viewCategories?.[id] : undefined;
+    const r = mapping ? ruled(polygon.ifcType, polygon.entityId, polygon.materialId) : null;
     // The element's style already holds its category's hatch under its own (`resolveElementGraphics`).
-    const pattern = own?.cutHatch ?? (g?.visible === false ? undefined : g?.cutHatch);
+    const fromRules = r?.materialStyle.cutHatch ? r.materialStyle : r?.classStyle.cutHatch ? r.classStyle : undefined;
+    const pattern = own?.cutHatch ?? (g?.visible === false ? undefined : mapping ? mine?.cutHatch ?? fromRules?.cutHatch ?? g?.cutHatch : g?.cutHatch);
     if (!pattern) continue;
+    const fromView = !!mapping && !own?.cutHatch && !!mine?.cutHatch;
+    const hatchOwner = own?.cutHatch ? undefined : fromView ? mine : fromRules ?? g;
     out.push({
       loops: [polygon.polygon.outer, ...polygon.polygon.holes],
       pattern,
-      scale: own?.hatchScale ?? g?.hatchScale ?? 1,
-      color: own?.lineColor ?? g?.lineColor ?? '#000000',
+      scale: own?.hatchScale ?? hatchOwner?.hatchScale ?? g?.hatchScale ?? 1,
+      color: own?.lineColor ?? mine?.lineColor ?? r?.classStyle.lineColor ?? g?.lineColor ?? '#000000',
       source: { ifcType: polygon.ifcType, entityId: polygon.entityId, ...(polygon.materialId !== undefined ? { materialId: polygon.materialId } : {}) },
     });
   }

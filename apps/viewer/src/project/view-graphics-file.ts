@@ -10,7 +10,7 @@
 
 import { readColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
 import { PHASES, type PhaseSource } from './phases';
-import type { CategoryGraphics, ElementGraphics, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics } from './types';
+import type { CategoryGraphics, ElementGraphics, PhaseId, PhaseStyle, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics } from './types';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -19,6 +19,28 @@ const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.is
 
 export const WEIGHTS = new Set(['heavy', 'medium', 'light', 'hairline']);
 export const HEX = /^#[0-9a-f]{6}$/i;
+
+/** A template's class and material mapping (#31): a rule without an id, a kind or a name to match is dropped, as is a malformed field of its style. */
+export function readStyleRules(raw: unknown): StyleRule[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: StyleRule[] = [];
+  for (const v of raw) {
+    if (!isObject(v) || !isString(v.id) || !v.id || seen.has(v.id) || (v.by !== 'class' && v.by !== 'material') || !Array.isArray(v.match)) continue;
+    const match = v.match.filter((m): m is string => isString(m) && m.trim() !== '');
+    if (match.length === 0) continue;
+    const style: StyleRuleStyle = {};
+    const s = isObject(v.style) ? v.style : {};
+    if (isString(s.lineColor) && HEX.test(s.lineColor)) style.lineColor = s.lineColor;
+    if (isString(s.fillColor) && HEX.test(s.fillColor)) style.fillColor = s.fillColor;
+    if (isString(s.lineWeight) && WEIGHTS.has(s.lineWeight)) style.lineWeight = s.lineWeight as StyleRuleStyle['lineWeight'];
+    if (isString(s.cutHatch) && s.cutHatch) style.cutHatch = s.cutHatch;
+    if (isNumber(s.hatchScale) && s.hatchScale > 0) style.hatchScale = s.hatchScale;
+    seen.add(v.id);
+    out.push({ id: v.id, by: v.by, match, style });
+  }
+  return out;
+}
 
 /** A view's `graphics`: unknown or malformed fields are dropped, never fatal. */
 export function readGraphics(raw: Record<string, unknown>): ViewGraphics {
@@ -40,6 +62,8 @@ export function readGraphics(raw: Record<string, unknown>): ViewGraphics {
     }
     out.categories = categories;
   }
+  const styleRules = readStyleRules(raw.styleRules);
+  if (styleRules.length > 0) out.styleRules = styleRules;
   if (isObject(raw.phases) && Array.isArray(raw.phases.show)) {
     const styles: NonNullable<ViewGraphics['phases']>['styles'] = {};
     if (isObject(raw.phases.styles)) {

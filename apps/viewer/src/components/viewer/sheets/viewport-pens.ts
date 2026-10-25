@@ -21,9 +21,9 @@ import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { cutHatches, type StyledDrawing } from '@/project/view-graphics';
 import { fillOrder } from '@/project/view-scheme-style';
 import { DEFAULT_GRAPHIC_STANDARD, type GraphicStandard } from '@/drafting/graphic-standard';
-import type { ViewGraphics } from '@/project/types';
+import type { ResolvedViewGraphics } from '@/project/types';
 import { halftoneColor, type EntityStyleOf } from '@/project/model-styles';
-import { appViewStyler } from '@/project/view-styler';
+import { appViewStyler, materialOf } from '@/project/view-styler';
 import { penGroups, penOrder, type ViewStyler } from '@bimvoice/ifcsheet';
 
 export interface Pen {
@@ -52,7 +52,7 @@ export interface CadPenContext {
 export const PEN = DEFAULT_GRAPHIC_STANDARD.pens;
 
 export function viewportPens(
-  drawing: Drawing2D | StyledDrawing, graphics: ViewGraphics | undefined, t: ViewTransform, axis: SectionAxisName, extraPatterns: readonly HatchPattern[], cad?: CadPenContext,
+  drawing: Drawing2D | StyledDrawing, graphics: ResolvedViewGraphics | undefined, t: ViewTransform, axis: SectionAxisName, extraPatterns: readonly HatchPattern[], cad?: CadPenContext,
   /** Each entity's model style; absent: every model draws normally. */
   styleOf?: EntityStyleOf,
   standard: GraphicStandard = DEFAULT_GRAPHIC_STANDARD,
@@ -90,7 +90,7 @@ export function viewportPens(
     if (known) known.d += d;
     else hatches.set(key, { ...pen, d });
   };
-  for (const h of cutHatches(drawing, graphics, standard.materialHatch)) {
+  for (const h of cutHatches(drawing, graphics, standard.materialHatch, materialOf)) {
     const pattern = findPattern(h.pattern, extraPatterns);
     if (!pattern) continue;
     const color = ink(h.color, h.source?.entityId);

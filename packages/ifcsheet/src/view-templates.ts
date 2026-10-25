@@ -19,22 +19,22 @@
  * line) and the tests all call it, so they cannot disagree. A view with no template, or one whose template is gone, resolves to
  * its own `graphics` object unchanged: a project from before templates draws exactly as it did.
  *
- * What a template carries: the graphic override preset, the structural grid and the per-category graphics (visibility, line
- * colour, cut fill, line weight, cut hatch). What it does not, and the view keeps whatever its template: `colourScheme` (a
+ * What a template carries: the graphic override preset, the structural grid, the per-category graphics (visibility, line
+ * colour, cut fill, line weight, cut hatch) and its class and material mapping (`styleRules`, #31). What it does not, and the view keeps whatever its template: `colourScheme` (a
  * scheme paints one view's rooms or elements by one property, and has a legend of its own, #92) and `phases` (a survey or
  * demolition view is a purpose of one view, not a house style), and the drafting layers a view hides (layer ids belong to the
  * project's drafting, not to a kind of drawing).
  */
 
 import type { CategoryGraphics, ProjectView, SheetViewport } from './document.js';
-import type { ViewGraphics } from './view-graphics-types.js';
+import type { ResolvedViewGraphics, ViewGraphics } from './view-graphics-types.js';
 
 /** The kinds of view a template is for: the three the starting set draws. */
 export type ViewTemplateKind = 'plan' | 'section' | 'elevation';
 export const VIEW_TEMPLATE_KINDS: readonly ViewTemplateKind[] = ['plan', 'section', 'elevation'];
 
 /** The part of a view's graphics a template carries. */
-export type TemplateGraphics = Pick<ViewGraphics, 'presetId' | 'grid' | 'categories'>;
+export type TemplateGraphics = Pick<ViewGraphics, 'presetId' | 'grid' | 'categories' | 'styleRules'>;
 
 export interface ProjectViewTemplate {
   id: string;
@@ -71,7 +71,7 @@ export function hiddenClassesOf(graphics: Pick<ViewGraphics, 'categories'> | und
 
 const NONE: ViewGraphics = Object.freeze({});
 /** The last resolution per (view graphics, template graphics), so the same inputs give the same object: a memo keyed on it holds. */
-const resolved = new WeakMap<object, WeakMap<object, ViewGraphics>>();
+const resolved = new WeakMap<object, WeakMap<object, ResolvedViewGraphics>>();
 
 function mergeCategories(base: Record<string, CategoryGraphics> | undefined, over: Record<string, CategoryGraphics> | undefined): Record<string, CategoryGraphics> | undefined {
   if (!base) return over;
@@ -82,12 +82,14 @@ function mergeCategories(base: Record<string, CategoryGraphics> | undefined, ove
 }
 
 /** `template` and `own` layered, `own` winning field by field. */
-function layered(template: TemplateGraphics, own: ViewGraphics | undefined): ViewGraphics {
+function layered(template: TemplateGraphics, own: ViewGraphics | undefined): ResolvedViewGraphics {
   const categories = mergeCategories(template.categories, own?.categories);
   const grid = template.grid || own?.grid ? { ...template.grid, ...own?.grid } : undefined;
   const presetId = own?.presetId !== undefined ? own.presetId : template.presetId;
+  const rules = template.styleRules?.length ? template.styleRules : undefined;
   return {
     ...(grid ? { grid } : {}),
+    ...(rules ? { styleRules: rules, ...(own?.categories ? { ownCategories: own.categories } : {}) } : {}),
     ...(presetId !== undefined ? { presetId } : {}),
     ...(own?.phases ? { phases: own.phases } : {}),
     ...(categories ? { categories } : {}),
@@ -99,6 +101,13 @@ function layered(template: TemplateGraphics, own: ViewGraphics | undefined): Vie
   };
 }
 
+/** `resolved` as a view's own graphics: without the field that exists only on a resolution (`ownCategories`), which its categories already hold. */
+export function ownGraphicsOf(resolved: ResolvedViewGraphics | undefined): ViewGraphics | undefined {
+  if (!resolved || !('ownCategories' in resolved)) return resolved;
+  const { ownCategories: _own, ...rest } = resolved;
+  return rest;
+}
+
 /** The template a view names, when the project has it. */
 export function templateOf(view: Pick<ProjectView, 'templateId'> | undefined, templates: readonly ProjectViewTemplate[] | undefined): ProjectViewTemplate | undefined {
   return view?.templateId === undefined ? undefined : templates?.find((t) => t.id === view.templateId);
@@ -108,7 +117,7 @@ export function templateOf(view: Pick<ProjectView, 'templateId'> | undefined, te
  * The graphics `view` draws with: its template's, then its own over them. Without a template (none named, or the project no
  * longer has it) this is `view.graphics` itself.
  */
-export function resolveViewGraphics(view: Pick<ProjectView, 'graphics' | 'templateId'> | undefined, templates: readonly ProjectViewTemplate[] | undefined): ViewGraphics | undefined {
+export function resolveViewGraphics(view: Pick<ProjectView, 'graphics' | 'templateId'> | undefined, templates: readonly ProjectViewTemplate[] | undefined): ResolvedViewGraphics | undefined {
   const template = templateOf(view, templates);
   if (!template) return view?.graphics;
   const own = view?.graphics ?? NONE;
@@ -125,7 +134,7 @@ export function viewportHiddenLayers(view: Pick<ProjectView, 'hiddenLayers'> | u
 }
 
 /** What a view in a viewport draws with: the layered graphics and the layers hidden. */
-export function resolveViewport(view: Pick<ProjectView, 'graphics' | 'templateId' | 'hiddenLayers'> | undefined, viewport: Pick<SheetViewport, 'hiddenLayers'> | undefined, templates: readonly ProjectViewTemplate[] | undefined): { graphics: ViewGraphics | undefined; hiddenLayers: string[] } {
+export function resolveViewport(view: Pick<ProjectView, 'graphics' | 'templateId' | 'hiddenLayers'> | undefined, viewport: Pick<SheetViewport, 'hiddenLayers'> | undefined, templates: readonly ProjectViewTemplate[] | undefined): { graphics: ResolvedViewGraphics | undefined; hiddenLayers: string[] } {
   return { graphics: resolveViewGraphics(view, templates), hiddenLayers: viewportHiddenLayers(view, viewport) };
 }
 
@@ -135,6 +144,7 @@ export function templateGraphicsOf(graphics: ViewGraphics | undefined): Template
   if (graphics?.presetId !== undefined) out.presetId = graphics.presetId;
   if (graphics?.grid) out.grid = structuredClone(graphics.grid);
   if (graphics?.categories) out.categories = structuredClone(graphics.categories);
+  if (graphics?.styleRules?.length) out.styleRules = structuredClone(graphics.styleRules);
   return out;
 }
 
