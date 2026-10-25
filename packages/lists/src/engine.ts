@@ -13,6 +13,7 @@ import { isWhollyNumeric, parsePropertyValue } from '@ifc-lite/encoding';
 import { compileNameMatcher } from './name-pattern.js';
 import { getWorldCoordinateValue, extractGeometryColumnValue } from './geometry-column.js';
 import { withAggregateInheritance } from './condition-inherit.js';
+import { officeClassificationValue } from './office-classification.js';
 import type {
   ListDataProvider,
   ListDefinition,
@@ -584,23 +585,14 @@ function extractColumnValues(
         if (quant && columnMeta[i].quantityType === undefined) columnMeta[i].quantityType = quant.type;
         break;
       }
-      case 'material': {
-        const names = provider.getMaterialNames?.(entityId) ?? [];
-        values[i] = names.length > 0 ? uniqueJoin(names) : null;
-        break;
-      }
+      case 'material': { const names = provider.getMaterialNames?.(entityId) ?? []; values[i] = names.length > 0 ? uniqueJoin(names) : null; break; }
       case 'classification': {
         const refs = provider.getClassifications?.(entityId) ?? [];
         const codes = refs.map(r => r.code || r.name || '').filter(s => s.length > 0);
         values[i] = codes.length > 0 ? uniqueJoin(codes) : null;
         break;
       }
-      case 'officeClassification': {
-        const answer = provider.getOfficeClassification?.(entityId, col.psetName);
-        const cell = col.propertyName === 'Title' ? answer?.title : answer?.code;
-        values[i] = cell ? cell : null;
-        break;
-      }
+      case 'officeClassification': values[i] = officeClassificationValue(entityId, col, provider); break;
       case 'spatial': values[i] = getSpatialValue(entityId, col.propertyName, provider); break;
       case 'model': values[i] = provider.getModelName?.() || null; break;
       case 'zone':
