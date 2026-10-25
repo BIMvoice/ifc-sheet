@@ -18,7 +18,8 @@ import { WallIntro } from '@/components/viewer/wall/WallIntro';
 import { CutHeightControl } from '@/components/viewer/wall/ViewControls';
 import { useWallNav } from '@/components/viewer/wall/wall-nav';
 import { DxfR2000 } from '@/components/viewer/sheets/dxf-r2000';
-import { layoutMaterialTakeoff, takeoffCsv } from '@/joinery/material-takeoff-layout';
+import { layoutMaterialTakeoff, takeoffTable } from '@/joinery/material-takeoff-layout';
+import { tableCsv } from '@/joinery/export-test-util';
 import { checkCatalogue } from './catalogue-problems';
 import { chooseLocale, provideLocaleActivator } from './locale-service';
 import { LOCALE_STORAGE_KEY, activateStartupLocale, createLocaleActivator } from './locale-activation';
@@ -109,7 +110,7 @@ describe('Figures follow the locale on screen, never in an export', () => {
     const cells = (l: typeof labels) => layoutMaterialTakeoff(rows, l).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
     assert.ok(cells(labels).includes('1,234.50'));
     assert.ok(cells({ ...labels, locale: 'ro' }).includes('1.234,50'));
-    assert.match(takeoffCsv(rows, labels), /,1234\.5,/);
+    assert.match(tableCsv(takeoffTable(rows, labels)), /,1234\.5,/);
 
     const dxf = (locale: string) => {
       act(() => setLocale(locale));

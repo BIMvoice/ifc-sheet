@@ -22,6 +22,7 @@ import { wallRo } from '../catalogues/wall.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
 import { wallSectionsRo } from '../catalogues/wall-sections.ro';
+import { scheduleExportRo } from '../catalogues/schedule-export.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
 import { featuresRo } from '../catalogues/features.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
@@ -41,6 +42,7 @@ export default {
   ...wallKeysRo,
   ...wallReviewRo,
   ...wallSectionsRo,
+  ...scheduleExportRo,
   ...sheetsRo,
   ...checkRo,
   ...issueRo,

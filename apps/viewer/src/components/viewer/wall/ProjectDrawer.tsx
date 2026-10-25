@@ -42,6 +42,7 @@ import { CommentsSection } from './CommentsSection';
 import { LegendsAdd } from './LegendsAdd';
 import { SiteAreaField } from '../urban/SiteAreaField';
 import { ViewportState } from './ViewportState';
+import { ScheduleExportButtons } from './ScheduleExportButtons';
 import { TagFieldsPanel } from './TagFieldsPanel';
 import { WALL_PILL } from './wall-type';
 
@@ -53,6 +54,8 @@ const DRAWING_KINDS: { kind: Exclude<ProjectViewKind, '3d'>; labelKey: Translati
 ];
 
 const action = WALL_PILL;
+/** A schedule's CSV and XLSX in the list: small, quiet, shown on every row. */
+const EXPORT_BUTTON = 'rounded px-1.5 py-1 text-2xs font-medium uppercase tracking-wider text-sky-200 hover:bg-sky-400/20 hover:text-white disabled:opacity-50';
 
 function Group({ title, children, add }: { title: string; children: ReactNode; add?: ReactNode }) {
   return (
@@ -64,7 +67,7 @@ function Group({ title, children, add }: { title: string; children: ReactNode; a
   );
 }
 
-function Row({ id, label, sub, state, onOpen }: { id: string; label: string; sub?: string; state?: ViewportStateValue; onOpen: () => void }) {
+function Row({ id, label, sub, state, onOpen, extra }: { id: string; label: string; sub?: string; state?: ViewportStateValue; onOpen: () => void; extra?: ReactNode }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   return (
@@ -93,6 +96,7 @@ function Row({ id, label, sub, state, onOpen }: { id: string; label: string; sub
         </button>
       )}
       {state ? <ViewportState state={state} compact /> : null}
+      {extra}
       <button type="button" aria-label={t('wall.remove', { name: label })} onClick={() => removeProjectItem(id)} className="mr-1 rounded p-1 text-sky-200 opacity-0 hover:bg-sky-400/20 group-hover:opacity-100 focus-visible:opacity-100">
         <X className="size-3.5" />
       </button>
@@ -203,7 +207,7 @@ export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null;
             </>
           )}
         >
-          {schedules.map((s) => <Row key={s.id} id={s.id} label={s.name} onOpen={() => go(hangSchedule(s.id))} />)}
+          {schedules.map((s) => <Row key={s.id} id={s.id} label={s.name} onOpen={() => go(hangSchedule(s.id))} extra={<ScheduleExportButtons schedule={s} named className={EXPORT_BUTTON} />} />)}
         </Group>
         <div data-owns-keys>
           <Group title={t('wall.group.legends')} add={<LegendsAdd onClose={onClose} />}>

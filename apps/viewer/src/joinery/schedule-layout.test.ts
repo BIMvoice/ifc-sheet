@@ -5,7 +5,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
-import { layoutSchedule, scheduleCsv, type ScheduleLabels } from './schedule-layout';
+import { layoutSchedule, type ScheduleLabels } from './schedule-layout';
+import { csvLines, joineryCsv } from './export-test-util';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import type { MeshData } from '@ifc-lite/geometry';
 import { elementViews } from './element-views';
@@ -52,15 +53,15 @@ describe('joinery schedule layout', () => {
   });
 
   it('exports CSV with a column per level', () => {
-    const csv = scheduleCsv(data, labels).trim().split('\n');
+    const csv = csvLines(joineryCsv(data, labels));
     assert.equal(csv[0], 'Mark,Name,Width (mm),Height (mm),Opening,Sill,Ground,Level 1,Total,U,Fire');
     assert.equal(csv[1], 'W1,W,1200,1500,tilt-turn-left + side-right,900,3,2,5,1.1,');
     assert.equal(csv[3].split(',')[0], '—');
   });
 
-  it('quotes a cell holding a semicolon, so a European-locale Excel keeps the row together', () => {
-    const csv = scheduleCsv({ levels: [], entries: [entry({ key: 's', mark: 'W2', name: 'Sliding; left' })] }, labels).trim().split('\n');
-    assert.equal(csv[1].split(',')[1], '"Sliding; left"');
+  it('quotes a cell holding the delimiter, so a European-locale Excel (which splits on `;`) keeps the row together', () => {
+    const csv = csvLines(joineryCsv({ levels: [], entries: [entry({ key: 's', mark: 'W2', name: 'Sliding; left' })] }, labels, ';'));
+    assert.ok(csv[1].startsWith('W2;"Sliding; left";'), csv[1]);
   });
 });
 

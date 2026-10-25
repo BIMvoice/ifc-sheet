@@ -16,14 +16,14 @@
  */
 
 import { normalisedPanels, type PanelOperation } from '@ifc-lite/create';
-import { escapeCsvCell } from '@ifc-lite/export';
 import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
-import type { ScheduleData, ScheduleEntry } from './schedule-data';
+import { occurrenceMark, type ScheduleData, type ScheduleEntry } from './schedule-data';
 import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import { pageTitle } from './paged-table';
+import type { ExportCell, ExportTable } from './schedule-export';
 import { shownRows, symbolsShown, textCellText, textRowId } from '@bimvoice/ifcsheet';
 import { sheetNumber } from '@bimvoice/ifcsheet/names';
 
@@ -97,31 +97,51 @@ export function operationText(entry: ScheduleEntry, labels: ScheduleLabels): str
   return ops.map(labels.op).join(' + ');
 }
 
-interface TableRowSpec { label: string; value: (e: ScheduleEntry) => string; strong?: boolean; /** Typed in by hand (`ScheduleData.textRows`): fitted to its cell instead of shrunk by length. */ text?: boolean }
+interface TableRowSpec {
+  label: string;
+  value: (e: ScheduleEntry) => string;
+  strong?: boolean;
+  /** Typed in by hand (`ScheduleData.textRows`): fitted to its cell instead of shrunk by length. */
+  text?: boolean;
+  /** The row in the CSV and XLSX: its column headings (the label by default) and, per type, one cell for each, figures unformatted. */
+  heads?: readonly string[];
+  raw?: (e: ScheduleEntry) => ExportCell[];
+  /** The row holds figures (right-aligned in the XLSX); `sum`: the export's total row adds them up. */
+  num?: boolean;
+  sum?: boolean;
+}
+
+const mm = (m: number): number => Math.round(m * 1000);
 
 /**
  * The rows of the table in the order the schedule's content choice puts them (`shownRows`, the engine's: the layout, and every
  * reader of the choice, agree). By default: name, size, operation, sill, the count per level, total, U value, fire rating, then the
- * user's own text rows.
+ * user's own text rows. The CSV and XLSX read the same list (`joineryExport`), so the file has the rows the sheet prints.
  */
-function rows(data: ScheduleData, labels: ScheduleLabels): TableRowSpec[] {
+function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; heightMm?: string }): TableRowSpec[] {
   const typed = data.textRows ?? [];
   const model: Record<string, () => TableRowSpec[]> = {
     name: () => [{ label: labels.name, value: (e) => e.name }],
-    size: () => [{ label: labels.size, value: (e) => `${Math.round(e.width * 1000)} × ${Math.round(e.height * 1000)}` }],
-    operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels) }],
-    sill: () => [{ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(Math.round(e.spec.sillHeight * 1000)) : '—') }],
-    levels: () => data.levels.map((level) => ({ label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? '') })),
-    total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true }],
-    u: () => [{ label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? sheetNumber(labels.locale, e.spec.props.thermalTransmittance, 3, { trim: true, group: false }) : '—') }],
-    fire: () => [{ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—' }],
+    size: () => [{
+      label: labels.size, value: (e) => `${mm(e.width)} × ${mm(e.height)}`,
+      heads: [labels.widthMm ?? 'Width (mm)', labels.heightMm ?? 'Height (mm)'], raw: (e) => [mm(e.width), mm(e.height)], num: true,
+    }],
+    operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec ? operationText(e, labels) : null] }],
+    sill: () => [{ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(mm(e.spec.sillHeight)) : '—'), raw: (e) => [e.kind === 'window' && e.spec ? mm(e.spec.sillHeight) : null], num: true }],
+    levels: () => data.levels.map((level) => ({ label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? ''), raw: (e: ScheduleEntry) => [e.counts[level] ?? null], num: true, sum: true })),
+    total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true, raw: (e) => [e.total], num: true, sum: true }],
+    u: () => [{
+      label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? sheetNumber(labels.locale, e.spec.props.thermalTransmittance, 3, { trim: true, group: false }) : '—'),
+      raw: (e) => [e.spec?.props.thermalTransmittance ?? null], num: true,
+    }],
+    fire: () => [{ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—', raw: (e) => [e.spec?.props.fireRating ?? null] }],
   };
   const ids = shownRows(data.content, { windows: data.entries.some((e) => e.kind === 'window'), textIds: typed.map((r) => r.id) });
   // The user's own rows: each type's text by the type's key, so a column that moves takes its text with it.
   const own = new Map(typed.map((row) => [textRowId(row.id), row]));
   return ids.flatMap((id): TableRowSpec[] => {
     const row = own.get(id);
-    return row ? [{ label: row.label, value: (e) => textCellText(row, e.key), text: true }] : model[id]?.() ?? [];
+    return row ? [{ label: row.label, value: (e) => textCellText(row, e.key), text: true, raw: (e) => [textCellText(row, e.key) || null] }] : model[id]?.() ?? [];
   });
 }
 
@@ -247,22 +267,38 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
   return { width, height: top - BAND_GAP, prims, pages };
 }
 
-/** The schedule as CSV (one line per type), the counts per level as columns. */
-export function scheduleCsv(data: ScheduleData, labels: ScheduleLabels): string {
-  // Also quote a `;`: Excel in a Romanian (or most European) locale splits a
-  // double-clicked .csv on `;`, so an unquoted one would break the row there.
-  const quote = (v: string) => {
-    const cell = escapeCsvCell(v);
-    return cell.startsWith('"') || !cell.includes(';') ? cell : `"${cell}"`;
+export interface JoineryExportLabels extends ScheduleLabels {
+  widthMm: string;
+  heightMm: string;
+  /** The worksheet of the types and the one of every element. */
+  types: string;
+  elements: string;
+  number: string;
+  level: string;
+  globalId: string;
+}
+
+/**
+ * The schedule as the tables of its CSV and XLSX: the Types table, one line per type with the rows the sheet prints (in the order of the
+ * content choice, the sort and the numbering of `data`, the text rows) as columns, figures as numbers, and under it the per-column totals
+ * the sheet does not print; and, in the workbook only, the Elements sheet: every door and window with its number within its type, its level and its GlobalId.
+ */
+export function joineryExport(data: ScheduleData, labels: JoineryExportLabels): { title: string; tables: ExportTable[] } {
+  const specs = rows(data, labels);
+  const columns = specs.flatMap((s) => (s.heads ?? [s.label]).map((head) => ({ head, spec: s })));
+  const body = data.entries.map((e): ExportCell[] => [e.mark, ...specs.flatMap((s) => (s.raw ? s.raw(e) : [s.value(e)]))]);
+  const at = (pick: (s: TableRowSpec) => boolean | undefined) => columns.flatMap((c, i) => (pick(c.spec) ? [i + 1] : []));
+  const sums = at((s) => s.sum);
+  const total = sums.length ? [[labels.total, ...columns.map((_, i) => (sums.includes(i + 1) ? body.reduce((n, r) => n + (typeof r[i + 1] === 'number' ? (r[i + 1] as number) : 0), 0) : null))]] : [];
+  return {
+    title: labels.title,
+    tables: [
+      { name: labels.types, header: [labels.mark, ...columns.map((c) => c.head)], rows: body, numeric: at((s) => s.num), footer: total },
+      {
+        name: labels.elements, workbookOnly: true, numeric: [3, 4],
+        header: [labels.number, labels.mark, labels.name, labels.widthMm, labels.heightMm, labels.level, labels.globalId],
+        rows: data.entries.flatMap((e) => e.occurrences.map((o): ExportCell[] => [occurrenceMark(e, o), e.mark, e.name, mm(e.width), mm(e.height), o.level, o.globalId])),
+      },
+    ],
   };
-  const text = data.textRows ?? [];
-  const header = [labels.mark, labels.name, 'Width (mm)', 'Height (mm)', labels.operation, labels.sill, ...data.levels, labels.total, labels.uValue, labels.fire, ...text.map((r) => r.label)];
-  const lines = data.entries.map((e) => [
-    e.mark, e.name, String(Math.round(e.width * 1000)), String(Math.round(e.height * 1000)), operationText(e, labels),
-    e.kind === 'window' && e.spec ? String(Math.round(e.spec.sillHeight * 1000)) : '',
-    ...data.levels.map((l) => String(e.counts[l] ?? 0)), String(e.total),
-    e.spec?.props.thermalTransmittance !== undefined ? String(e.spec.props.thermalTransmittance) : '', e.spec?.props.fireRating ?? '',
-    ...text.map((r) => textCellText(r, e.key)),
-  ]);
-  return [header, ...lines].map((r) => r.map(quote).join(',')).join('\n') + '\n';
 }

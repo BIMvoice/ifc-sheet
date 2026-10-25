@@ -15,6 +15,7 @@
 
 import type { RegisterRow } from '@/project/drawing-register';
 import type { ScheduleLayout, SchedulePrim } from './schedule-layout';
+import type { ExportTable } from './schedule-export';
 
 export interface RegisterLabels {
   title: string;
@@ -91,4 +92,12 @@ export function layoutRegister(rows: readonly RegisterRow[], labels: RegisterLab
   prims.push({ kind: 'line', x1: 0, y1: titleH, x2: width, y2: titleH, w: PEN.frame });
   for (const x of [...lefts, width]) prims.push({ kind: 'line', x1: x, y1: titleH, x2: x, y2: height, w: x === 0 || x === width ? PEN.frame : PEN.grid });
   return { width, height, prims };
+}
+
+/** The register as the table of its CSV and XLSX: every sheet of the set, whatever pages the table is drawn over. */
+export function registerTable(rows: readonly RegisterRow[], labels: RegisterLabels): ExportTable {
+  return {
+    name: labels.title || labels.number, header: [labels.number, labels.sheetTitle, labels.scale, labels.revision, labels.date],
+    rows: rows.map((r) => [r.number, r.title, r.scale, r.revision, r.date]),
+  };
 }
