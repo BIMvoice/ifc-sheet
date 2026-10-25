@@ -4,7 +4,7 @@
 
 /** Reading a saved model state back: a malformed one is refused with the place of the problem, and changes nothing else. */
 
-import type { ModelSnapshot } from './snapshot';
+import type { ModelSnapshot, SnapshotBody } from './snapshot';
 
 type Json = Record<string, unknown>;
 
@@ -21,6 +21,14 @@ const isRow = (r: unknown, classes: number, paths: number): boolean =>
 
 /** A saved model state read back; a malformed one is refused with the place of the problem. */
 export function readSnapshot(raw: unknown, path: string): ModelSnapshot {
+  const body = readBody(raw, path);
+  const issued = (raw as Json).issued;
+  if (issued === undefined) return body;
+  if (!isObject(issued) || typeof issued.issueId !== 'string') fail(`${path}/issued`, 'must be { issueId, state? }');
+  return { ...body, issued: { issueId: issued.issueId, ...(issued.state !== undefined ? { state: readBody(issued.state, `${path}/issued/state`) } : {}) } };
+}
+
+function readBody(raw: unknown, path: string): SnapshotBody {
   if (!isObject(raw)) fail(path, 'must be a model state { takenAt, count, rows }');
   if (typeof raw.takenAt !== 'number' || !Number.isFinite(raw.takenAt)) fail(`${path}/takenAt`, 'must be a number');
   if (!Number.isInteger(raw.count) || (raw.count as number) < 0) fail(`${path}/count`, 'must be a whole number');

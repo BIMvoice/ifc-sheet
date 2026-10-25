@@ -7,14 +7,38 @@
  * changed against the previous record, and the offer to put a revision on the changed sheets that have none new.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { addRevisionToSheets } from '@/issue/changes-actions';
 import type { IssueChanges as Changes } from '@/issue/changes';
+import { modelFindings, modelImpact, readModel, type ModelFindings } from '@/issue/model-state';
 import { planFor } from '@/issue/run';
 import { useProjectStore } from '@/project/project-store';
+import { useViewerStore } from '@/store';
 import type { ChangedSheet } from '@/issue/types';
+import { resolve } from '@/i18n/registry';
+import type { TranslationKey } from '@/i18n';
 import type { SetSkin } from './set-skin';
+
+/**
+ * The model now against the model as the last issue went out: read when the issues, the reference or the loaded
+ * models change (reading the model is asynchronous), `pending` until then. The sheets it reaches are worked out
+ * from the findings as the project changes (`useIssueChanges`), so an edit does not read the model again.
+ */
+function useModelFindings(): ModelFindings | 'pending' {
+  const issues = useProjectStore((s) => s.issues);
+  const modelState = useProjectStore((s) => s.modelState);
+  const models = useViewerStore((s) => s.models);
+  const loading = useViewerStore((s) => s.loading || s.geometryStreamingActive);
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const [found, setFound] = useState<ModelFindings | 'pending'>('pending');
+  useEffect(() => {
+    let live = true;
+    void readModel().then((current) => { if (live) setFound(modelFindings(useProjectStore.getState().issues?.at(-1), current)); }, () => { if (live) setFound({ status: 'noModel' }); });
+    return () => { live = false; };
+  }, [issues, modelState, models, loading, mutationVersion]);
+  return found;
+}
 
 /** The comparison for the project as it stands, kept current as the project changes. */
 export function useIssueChanges(date: string): Changes {
@@ -26,16 +50,22 @@ export function useIssueChanges(date: string): Changes {
   const drafts = useProjectStore((s) => s.drafts);
   const revisions = useProjectStore((s) => s.revisions);
   const issues = useProjectStore((s) => s.issues);
+  const levels = useProjectStore((s) => s.levels);
+  const found = useModelFindings();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the plan reads the store; these are the parts the comparison depends on.
-  return useMemo(() => planFor({ date }).changes, [date, views, sheets, schedules, legends, civilDrawings, drafts, revisions, issues]);
+  return useMemo(() => planFor({ date }, found === 'pending' ? { status: 'pending' } : modelImpact(found)).changes, [date, views, sheets, schedules, legends, civilDrawings, drafts, revisions, issues, levels, found]);
 }
 
-const listed = (sheets: readonly ChangedSheet[]) => sheets.map((s) => `${s.number} ${s.title}`).join(', ');
+const reasonText = (r: string) => resolve(`issue.changes.reason.${r}` as TranslationKey);
+/** `A-101 Plan` and, for a sheet with reasons, why: `A-101 Plan (edited, model changed)`. */
+const listed = (sheets: readonly ChangedSheet[]) => sheets.map((s) => `${s.number} ${s.title}${s.reasons?.length ? ` (${s.reasons.map(reasonText).join(', ')})` : ''}`).join(', ');
 
 export function IssueChanges({ skin, date }: { skin: SetSkin; date: string }) {
   const { t } = useTranslation();
   const changes = useIssueChanges(date);
-  const { status, against, added, removed, changed, unbumped } = changes;
+  const { status, against, added, removed, changed, unbumped, model } = changes;
+  // Nothing is claimed unchanged while the model's part is missing.
+  const modelMissing = model === 'unknown' || model === 'noModel' || model === 'pending';
   const name = against?.name ?? '';
   const groups = [['issue.changes.added', added], ['issue.changes.removed', removed], ['issue.changes.changed', changed]] as const;
   return (
@@ -43,8 +73,10 @@ export function IssueChanges({ skin, date }: { skin: SetSkin; date: string }) {
       {status === 'first' ? <p className={skin.note}>{t('issue.changes.first')}</p> : null}
       {status === 'unknown' ? <p className={skin.note}>{t('issue.changes.unknown')}</p> : null}
       {status === 'compared' ? <p className={skin.heading}>{t('issue.changes.title', { name })}</p> : null}
-      {status === 'compared' && added.length + removed.length + changed.length === 0 ? <p className={skin.note}>{t('issue.changes.none', { name })}</p> : null}
+      {status === 'compared' && !modelMissing && added.length + removed.length + changed.length === 0 ? <p className={skin.note}>{t('issue.changes.none', { name })}</p> : null}
       {status === 'compared' ? groups.map(([key, list]) => (list.length > 0 ? <p key={key} className={skin.note}>{t(key, { count: list.length, sheets: listed(list) })}</p> : null)) : null}
+      {status === 'compared' && model === 'unknown' ? <p className={skin.note}>{t('issue.changes.model.unknown')}</p> : null}
+      {status === 'compared' && model === 'noModel' ? <p className={skin.note}>{t('issue.changes.model.noModel', { name })}</p> : null}
       {unbumped.length > 0 ? (
         <>
           <button type="button" className={skin.button} onClick={() => addRevisionToSheets(unbumped.map((u) => u.sheetId), date)}>{t('issue.changes.bump', { count: unbumped.length })}</button>

@@ -16,7 +16,11 @@ export const issueChangesRo = {
   'issue.changes.added': { one: 'Adăugată ({count}): {sheets}', few: 'Adăugate ({count}): {sheets}', other: 'Adăugate ({count}): {sheets}' },
   'issue.changes.removed': { one: 'Scoasă ({count}): {sheets}', few: 'Scoase ({count}): {sheets}', other: 'Scoase ({count}): {sheets}' },
   'issue.changes.changed': { one: 'Modificată ({count}): {sheets}', few: 'Modificate ({count}): {sheets}', other: 'Modificate ({count}): {sheets}' },
-  'issue.changes.note': 'Compară ce păstrează proiectul pentru fiecare planșă: setările ei, vederile și desenele de pe ea și reviziile. O schimbare în model este listată de „Ce s-a modificat”.',
+  'issue.changes.note': 'Compară ce păstrează proiectul pentru fiecare planșă (setările ei, vederile și desenele de pe ea și reviziile) și modelul așa cum a fost emis cu planșele pe care s-a schimbat („Ce s-a modificat”).',
+  'issue.changes.reason.edited': 'editată',
+  'issue.changes.reason.model': 'modelul s-a schimbat',
+  'issue.changes.model.unknown': 'Modelul, așa cum a fost emis, nu a fost înregistrat cu acea emitere, deci schimbările modelului de la acea emitere nu pot fi listate.',
+  'issue.changes.model.noModel': 'Niciun model nu este încărcat, deci schimbările modelului de la „{name}” nu pot fi listate.',
   'issue.changes.bump': { one: 'Adaugă o revizie acestei planșe', few: 'Adaugă o revizie acestor {count} planșe', other: 'Adaugă o revizie acestor {count} de planșe' },
   'issue.changes.bumpHint': {
     one: 'A fost modificată fără o revizie nouă. Adaugă o revizie, cu data emiterii.',
