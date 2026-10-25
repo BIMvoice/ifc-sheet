@@ -60,6 +60,10 @@ export {
   type BoqArticle, type BoqDimension, type BoqProblem, type BoqProblemKind, type BoqUnit,
 } from './boq.js';
 export { boqMissing, computeBoq, declared, picks, type BoqElement, type BoqElementRef, type BoqLine, type BoqMissing, type BoqQuantity, type BoqResult, type BoqTypeLine } from './boq-compute.js';
+export {
+  LIST_COUNT_ID, listFigureKind, listScheduleTable, readListScheduleDef,
+  type ListCell, type ListFigureKind, type ListScheduleColumn, type ListScheduleDef, type ListScheduleTable, type ListTableSource,
+} from './list-schedule.js';
 export { boqLineText, boqNotes, boqTable, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from './boq-table.js';
 export { BOQ_WORDS_EN, BOQ_WORDS_RO, boqSayFor, fillTemplate, type BoqSay, type BoqWordKey } from './boq-words.js';
 
