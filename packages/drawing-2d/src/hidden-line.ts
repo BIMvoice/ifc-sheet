@@ -20,6 +20,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import type { Point2D, DrawingLine, Bounds2D, VisibilityState, SectionPlaneConfig } from './types.js';
 import { point2DLerp, point2DDistance, EPSILON } from './math.js';
 import { buildDepthRaster, type DepthRaster } from './hidden-line-raster.js';
+import type { ClipPlane } from './clip-rim.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -57,6 +58,14 @@ export interface ExteriorViewOptions {
    * elevations draw.
    */
   includeFeatureEdges?: boolean;
+  /**
+   * Meshes rasterised into the depth buffer only, drawing nothing: the cut
+   * faces a caller puts on solids it clipped open (a cut-away axonometric),
+   * so an edge inside a clipped wall is hidden by its cut face.
+   */
+  extraOccluders?: MeshData[];
+  /** Half-spaces the meshes were clipped to: their open rim is the caller's to draw, and is left out here (`clip-rim.ts`). */
+  clipPlanes?: readonly ClipPlane[];
 }
 
 export interface HiddenLineOptions {

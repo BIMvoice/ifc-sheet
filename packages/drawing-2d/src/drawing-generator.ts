@@ -297,7 +297,7 @@ export class Drawing2DGenerator {
               );
             } else {
               const edges = this.edgeExtractor.extractEdges(mesh);
-              const silhouettes = this.edgeExtractor.extractExteriorEdges(edges, viewDir, opts.includeFeatureEdges);
+              const silhouettes = this.edgeExtractor.extractExteriorEdges(edges, viewDir, opts.includeFeatureEdges, opts.clipPlanes);
               projectionLines.push(
                 ...this.edgeExtractor.edgesToProjectionLines(silhouettes, config.plane, bands),
               );
@@ -338,7 +338,7 @@ export class Drawing2DGenerator {
         ? meshes.map(mesh => clipMeshToProjectionWindow(mesh, config.plane, 0, occluderDepth))
           .filter((mesh): mesh is MeshData => mesh !== null)
         : meshes;
-      this.hiddenLineClassifier.buildDepthBuffer(occluders, config.plane, occluderDepth, bounds, opts.hiddenLineEdgeTolerancePx ?? 0);
+      this.hiddenLineClassifier.buildDepthBuffer(opts.extraOccluders?.length ? [...occluders, ...opts.extraOccluders] : occluders, config.plane, occluderDepth, bounds, opts.hiddenLineEdgeTolerancePx ?? 0);
 
       // Occlusion only DOWNGRADES visible → hidden; it can never reveal an
       // already-dashed OVERHEAD line. So classify the visible (below-cut)

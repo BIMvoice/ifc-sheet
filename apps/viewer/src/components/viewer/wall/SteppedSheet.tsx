@@ -16,7 +16,8 @@ import { useCallback, type ComponentProps, useEffect, useLayoutEffect, useMemo, 
 import { useTranslation } from '@/i18n';
 import { patchDraftSettings, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { setPlacing, useReviewUi } from '@/review/ui-store';
-import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
+import { drawingArea, sheetGroup, type ModelExtent } from '@/project/drawing-set';
+import { addViewport } from '@/project/sheets';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
 import { useProjectStore } from '@/project/project-store';
 import type { SectionProposal } from '@/project/section-proposals';
@@ -325,6 +326,11 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
                   setAdding(false);
                   const landed = extent ? hangView(viewId, extent) : null;
                   if (landed && landed !== sheet.id) onStep(landed);
+                  // A 3D view (a cut-away axonometric, #97) belongs to no series: it goes on the sheet in front.
+                  if (!landed && useProjectStore.getState().views.find((v) => v.id === viewId)?.kind === '3d') {
+                    const area = drawingArea(sheet);
+                    addViewport(sheet.id, viewId, { x: area.x + area.w / 2, y: area.y + area.h / 2 }, 100);
+                  }
                 }}
               />
             </div>

@@ -6,6 +6,8 @@
  * The drawing of each view on a sheet, cut from the meshes by the section
  * generator (`@ifc-lite/drawing-2d`): a plan at its level's cut height, an
  * elevation on its plane outside the facade, a section on its own plane.
+ * A 3D view that prints as vector lines is drawn as an axonometric, cut away
+ * when it asks (`axonometric.ts`, the same function the app draws it with).
  * Unstyled: cut faces and visible lines only. The app styles its drawings
  * (pens, hatches, symbols, annotation) in `project/view-graphics.ts` and the
  * sheet components; that styling has not moved here yet.
@@ -16,6 +18,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import type { ModelExtent } from './drawing-set.js';
 import type { ElevationDirection, ProjectLevel, ProjectView, SectionProjectPlane } from './document.js';
 import { customPlaneCenter } from './section-plane.js';
+import { drawAxonometricView, isVectorAxonometric } from './axonometric.js';
 import { levelFloorY, planDepthBelowCut, resolvePlanLevel } from './view-defaults.js';
 
 /** Where an elevation stands and which way it looks (`ELEVATION_PLANES` in the app's `project/view-plane.ts`). */
@@ -86,6 +89,16 @@ export async function generateViewDrawings(
   await generator.initialize();
   try {
     for (const view of views) {
+      if (isVectorAxonometric(view)) {
+        try {
+          // Hidden lines are classified and left out unless the view asks, as the app shows a 3D view (`view-appearance.ts`).
+          const drawing = await drawAxonometricView(meshes, view, levels);
+          out.set(view.id, view.showHidden ? drawing : { ...drawing, lines: drawing.lines.filter((l) => l.visibility !== 'hidden' && l.category !== 'hidden') });
+        } catch (err) {
+          onError(view, err);
+        }
+        continue;
+      }
       const config = sectionConfigFor(view, levels, extent);
       if (!config) continue;
       try {
