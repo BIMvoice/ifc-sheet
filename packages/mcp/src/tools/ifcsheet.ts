@@ -26,6 +26,7 @@ import { outputPath } from './ifcsheet-shared.js';
 import { ifcsheetAddSchedule } from './ifcsheet-schedule.js';
 import { ifcsheetEditTools } from './ifcsheet-edit.js';
 import { ifcsheetFileTools } from './ifcsheet-files.js';
+import { ifcsheetHistoryTools } from './ifcsheet-undo.js';
 import { addSheetModel, addSheetSet, getSheetModel, getSheetSet } from './ifcsheet-store.js';
 
 const MODEL_ID = { type: 'string', description: 'The model_id returned by ifcsheet_open_model.' } as const;
@@ -242,5 +243,5 @@ export const ifcsheetCheckReadiness: Tool = {
 
 export const ifcsheetTools: Tool[] = [
   ifcsheetOpenModel, ifcsheetGenerateSet, ifcsheetExportPdf, ifcsheetCheckReadiness,
-  ...ifcsheetEditTools, ifcsheetAddSchedule, ...ifcsheetFileTools,
+  ...ifcsheetEditTools, ifcsheetAddSchedule, ...ifcsheetFileTools, ...ifcsheetHistoryTools,
 ];

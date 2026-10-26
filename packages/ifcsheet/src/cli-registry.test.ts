@@ -5,8 +5,8 @@
 /**
  * The command registry (#144) changed how `run` finds its commands, not what
  * the command line does. Two fixtures were captured from `main` before the
- * move: the help text of its seven commands, and the exit code and both
- * streams of 61 command lines that need no IFC file.
+ * move: the help text of its seven commands (with `--standard`, as #376 wrote it), and the exit code and both
+ * streams of 61 command lines that need no IFC file (#376 added five lines with `--standard`).
  * The help text inside them is a placeholder, so adding a command never edits
  * the fixtures.
  */
@@ -29,6 +29,8 @@ const ARGV_CASES: readonly (readonly string[])[] = [
   ['rooms'], ['rooms', 'm.ifc'], ['rooms', 'm.ifc', '--project', 'p.json'], ['rooms', 'm.ifc', '--csv', '--json'], ['rooms', 'm.ifc', '--detail'], ['rooms', 'm.ifc', '--system', 'x'], ['rooms', 'm.ifc', '--locale', 'ro', '--csv'], ['rooms', 'a.ifc', 'b.ifc'],
   ['list'], ['list', 'm.ifc'], ['list', 'm.ifc', '--project', 'p.json'], ['list', 'm.ifc', '--project', 'p.json', '--schedule', 's', '--csv'], ['list', 'm.ifc', '--project', 'p.json', '--csv', '--json'], ['list', 'm.ifc', '--project', 'p.json', '--detail'], ['list', 'm.ifc', '--project', 'p.json', '--system', 'x'],
   ['classify'], ['classify', 'm.ifc'], ['classify', 'm.ifc', '--project', 'p.json'], ['classify', 'm.ifc', '--project', 'p.json', '--system', 'x', '--csv'], ['classify', 'm.ifc', '--project', 'p.json', '--locale', 'ro'], ['classify', 'm.ifc', '--project', 'p.json', '--schedule', 's'], ['classify', 'm.ifc', '--project', 'p.json', '--csv', '--json'],
+  // Added with #376 (`build --standard`); the 61 lines above are unchanged from main before it.
+  ['build', '--standard', 'ro'], ['build', 'm.ifc', '--out', 'a.pdf', '--standard', 'ro'], ['check', 'm.ifc', '--standard', 'ro'], ['list', 'm.ifc', '--standard', 'ro'], ['frobnicate', 'm.ifc', '--standard', 'ro'],
 ];
 
 const fixture = (name: string) => readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url), 'utf8');

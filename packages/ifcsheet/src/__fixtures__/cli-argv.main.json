@@ -640,5 +640,61 @@
   "code": 2,
   "stdout": "",
   "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+ },
+ {
+  "argv": [
+   "build",
+   "--standard",
+   "ro"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build needs one model and --out or --handover: ifcsheet build <model.ifc> --out <set.pdf>\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--out",
+   "a.pdf",
+   "--standard",
+   "ro"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc",
+   "--standard",
+   "ro"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet check has no --standard; it is an option of build (known: ro).\n"
+ },
+ {
+  "argv": [
+   "list",
+   "m.ifc",
+   "--standard",
+   "ro"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet list has no --standard; it is an option of build (known: ro).\n"
+ },
+ {
+  "argv": [
+   "frobnicate",
+   "m.ifc",
+   "--standard",
+   "ro"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet: unknown command \"frobnicate\"\n\n<USAGE>"
  }
 ]

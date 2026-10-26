@@ -9,8 +9,9 @@ import { basename, join, resolve } from 'node:path';
 import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from '../index.js';
 import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
-import { exportDxf, exportPdf, openModel, readProjectFile, sheetGraphics } from '../headless.js';
+import { exportDxf, exportPdf, openModel, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
 import { listSchedulesOn, listTableText } from '../cli-list.js';
+import { buildStandard, unknownStandardMessage, withTitleBlock } from '../cli-standard.js';
 import { type CliIo } from '../cli-command.js';
 import { EXIT, type CliCommand } from '../cli-command.js';
 
@@ -25,6 +26,8 @@ interface BuildArgs {
   /** A saved project: its list schedules are printed after the build. */
   project?: string;
   includeFarElements?: boolean;
+  /** A drawing standard by id (`ro`): its pens and title block layout. */
+  standard?: string;
 }
 
 async function build(args: BuildArgs, io: CliIo): Promise<number> {
@@ -44,13 +47,33 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
       return EXIT.failed;
     }
   }
+  // The project is read first: its graphic standard and title block layout are what the sheets are drawn with.
+  let project: ProjectFacts | undefined;
+  if (args.project !== undefined) {
+    let projectText: string;
+    try { projectText = await readFile(args.project, 'utf8'); } catch (error) {
+      io.stderr(`ifcsheet: cannot read ${args.project}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
+      return EXIT.failed;
+    }
+    try { project = readProjectFile(projectText); } catch (error) {
+      io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
+  const standard = buildStandard(args.standard, project);
+  if (!standard) {
+    io.stderr(unknownStandardMessage(args.standard ?? ''));
+    return EXIT.usage;
+  }
+  for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
-  const set = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}) });
+  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}) });
+  const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
     return EXIT.failed;
   }
-  const sheets = await sheetGraphics(set, model);
+  const sheets = await sheetGraphics(set, model, standard.pens ? { pens: standard.pens } : {});
   const pdf = await exportPdf(sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params })}\n`);
@@ -82,15 +105,9 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
       io.stdout(`${file}\n`);
     }
   }
-  if (args.project !== undefined) {
+  if (project) {
     // The starting set has no schedule sheet (the app composes those): the project's list schedules are printed as text, the table `ifcsheet list` gives.
-    let projectText: string;
-    try { projectText = await readFile(args.project, 'utf8'); } catch (error) {
-      io.stderr(`ifcsheet: cannot read ${args.project}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
-      return EXIT.failed;
-    }
     try {
-      const project = readProjectFile(projectText);
       for (const { table } of listSchedulesOn(model, project.schedules, 'en', basename(args.model), project.classificationMappings)) io.stdout(`\n${listTableText(table)}`);
     } catch (error) {
       io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
@@ -103,7 +120,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 export const buildCommand: CliCommand = {
   name: 'build',
   usageRank: 100,
-  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--include-far-elements]`,
+  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--standard <id>] [--include-far-elements]`,
   helpRank: 100,
   help: `  build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
@@ -129,7 +146,7 @@ export const buildCommand: CliCommand = {
       return EXIT.usage;
     }
     try {
-      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true }, io);
+      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
     } catch (error) {
       io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;

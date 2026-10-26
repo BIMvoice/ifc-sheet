@@ -16,6 +16,8 @@ const OPTIONS = `Options:
   --pattern <p>    How --handover names its files, with {project} {number} {sheet} {revision} {date} {issue}
                    (default "{number} {sheet}": A-101 Ground floor.dxf). Plain ASCII, no path separators.
   --template <file> A set template (.bvset) for build: which sheets, which views on them, at which scale.
+  --standard <id>  A drawing standard for build: its pens and title block (known: ro, the Romanian pack of the app's "Install standard").
+                   Wins over the project's own graphic standard and title block layout; without it a --project's are used.
   --name <name>    The project name for the title blocks (default: the model's).
   --project <file> A saved project (.ifclite-project.json): for check, its schedules, joinery catalogue and symbol mapping; for build, its list
                    schedules are printed after the build (the PDF has no schedule sheet; the app draws those).

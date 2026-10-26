@@ -9,7 +9,9 @@ import { revisionsRo } from '../catalogues/revisions.ro';
 import { roomScheduleRo } from '../catalogues/room-schedule.ro';
 import { roomSummaryRo } from '../catalogues/room-summary.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
+import { selectionBarRo } from '../catalogues/selection-bar.ro';
 import { setTemplateRo } from '../catalogues/set-template.ro';
+import { settingsRo } from '../catalogues/settings.ro';
 import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetTablesRo } from '../catalogues/sheet-tables.ro';
 import { sheetTemplatesRo } from '../catalogues/sheet-templates.ro';
@@ -42,7 +44,9 @@ export const roMZ = {
   ...roomScheduleRo,
   ...roomSummaryRo,
   ...scheduleExportRo,
+  ...selectionBarRo,
   ...setTemplateRo,
+  ...settingsRo,
   ...sheetContentRo,
   ...sheetTablesRo,
   ...sheetTemplatesRo,

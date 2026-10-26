@@ -14,6 +14,7 @@ import { parseArgs } from 'node:util';
 import { EXIT, type CliIo } from './cli-command.js';
 import { CLI_COMMANDS } from './cli-commands/index.js';
 import { composeUsage } from './cli-usage.js';
+import { COMMAND_LINE_STANDARD_IDS } from './standard-pack.js';
 
 export { EXIT, type CliIo } from './cli-command.js';
 
@@ -45,6 +46,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         name: { type: 'string' },
         template: { type: 'string' },
         project: { type: 'string' },
+        standard: { type: 'string' },
         schedule: { type: 'string' },
         system: { type: 'string' },
         json: { type: 'boolean' },
@@ -73,6 +75,10 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
   const found = CLI_COMMANDS.find((c) => c.name === command);
   if (!found) {
     io.stderr(`ifcsheet: unknown command "${command}"\n\n${USAGE}`);
+    return EXIT.usage;
+  }
+  if (values.standard !== undefined && command !== 'build') {
+    io.stderr(`ifcsheet ${command} has no --standard; it is an option of build (known: ${COMMAND_LINE_STANDARD_IDS.join(', ')}).\n`);
     return EXIT.usage;
   }
   return await found.run(rest, values, io);
