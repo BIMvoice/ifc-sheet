@@ -80,6 +80,7 @@ export { parseSourceHeader } from './source-header.js';
 export type { ExtractedProperty } from './property-value-parser.js';
 export { attachDataStoreAccessors, type IfcStoreData } from './data-store-accessors.js';
 export { buildDropCensus, type DropCensus, type DropCensusInput, type ClassCensusEntry, type DropCategory } from './drop-census.js';
+export { buildIfcxDataStore } from './ifcx-data-store.js';
 export { createSyntheticDataStore, type SyntheticDataStoreOptions, type SyntheticEntity } from './synthetic-data-store.js';
 // WorkerParser is browser-only due to Vite worker imports
 // Import from '@ifc-lite/parser/browser' instead
