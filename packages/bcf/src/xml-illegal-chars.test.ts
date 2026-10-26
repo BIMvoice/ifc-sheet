@@ -28,6 +28,9 @@ describe('characters XML 1.0 cannot carry', () => {
   it('escapeXml drops them and keeps tab, line feed, carriage return and astral characters', () => {
     expect(escapeXml('a\u0000b\u0008c\u000bd\u000ce\u001ff￾￿')).toBe('abcdef');
     expect(escapeXml('a\tb\nc\rd 😀')).toBe('a\tb\nc\rd 😀');
+    // Unpaired surrogates are dropped; the pair in the emoji above survives.
+    expect(escapeXml('x\uD800y\uDC00z')).toBe('xyz');
+    expect(escapeXml('end\uD83D')).toBe('end');
   });
 
   for (const [version, dir] of [['2.1', 'v2_1'], ['3.0', 'v3_0']] as const) {
