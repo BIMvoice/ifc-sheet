@@ -14,6 +14,7 @@ import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { fitExtent } from '@/project/sheets';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
+import { withAnnotationScreenUp } from './annotation';
 import { elevationMarkDrafts, MARK_MARGIN_MM, obstacleBoxes, overlayObstacleBoxes, sectionReferenceDrafts } from './cross-ref-marks';
 import type { DraftEntity, Pt } from './types';
 
@@ -31,10 +32,19 @@ export interface PlanCrossRefInput {
   viewportScale: number;
   /** What the plan draws over its cut: its door and window symbols are kept clear of. */
   overlays?: readonly PlanOverlay[];
+  /**
+   * Which way is up on screen in the plan's drawing y (`viewScreenUp`: -1 on a plan). Every text box the marks are placed
+   * against is measured with it, so the marks are a function of this input and not of the drafting session's current view.
+   */
+  screenUp: 1 | -1;
 }
 
 /** `drafts` with the section references and elevation marks of a plan added; any other view's drafts unchanged. */
 export function withCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
+  return withAnnotationScreenUp(input.screenUp, () => placeCrossReferences(input));
+}
+
+function placeCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
   const { drafts, view, views, sheets, groundPlanId, bounds, viewportScale } = input;
   const symbols = overlayObstacleBoxes(input.overlays ?? []);
   const sections = view?.kind === 'plan' ? sectionReferenceDrafts(drafts, views, sheets, { obstacles: symbols, paperUnit: viewportPaperUnit(viewportScale), factor: annotationFactor(viewportScale, view.scale) }) : [];
@@ -60,5 +70,6 @@ export function withCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
  * a site plan's plot.
  */
 export function fitWithCrossReferences(vp: Pick<SheetViewport, 'width' | 'height' | 'scale'>, fitBounds: { min: Pt; max: Pt }, input: PlanCrossRefInput): { min: Pt; max: Pt } {
-  return fitExtent(vp, fitBounds, withCrossReferences(input), input.view?.scale);
+  // The extent measures the marks' text boxes too, so it is taken with the same screen-up they were placed with.
+  return withAnnotationScreenUp(input.screenUp, () => fitExtent(vp, fitBounds, withCrossReferences(input), input.view?.scale));
 }

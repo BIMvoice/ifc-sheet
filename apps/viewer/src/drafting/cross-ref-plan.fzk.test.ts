@@ -15,7 +15,7 @@ import { planOverlays, type PlanOverlay } from '@/project/plan-overlays';
 import { resetProject, syncProjectWithModels, useProjectStore } from '@/project/project-store';
 import { annotationFactor } from '@/project/viewport-annotation';
 import type { DraftEntity, DraftShape, Pt } from './types';
-import { textBox } from './annotation';
+import { textBox, withAnnotationScreenUp } from './annotation';
 import { elevationMarkPlan } from './cross-ref-marks';
 import { withCrossReferences } from './cross-ref-plan';
 import { draftsOfView } from './draft-store';
@@ -81,7 +81,7 @@ describe('the marks on the ground plan of AC20-FZK-Haus (#221)', { skip: planMod
     overlays = planOverlays(ground, drawing.config.plane, meshes, undefined, new Set(), drawing, vp.scale);
     factor = annotationFactor(vp.scale, ground.scale);
     marks = (o) => withCrossReferences({
-      drafts: draftsOfView(ground.id, drafts), view: ground, views, sheets, groundPlanId: ground.id, bounds, viewportScale: vp.scale, overlays: o,
+      drafts: draftsOfView(ground.id, drafts), view: ground, views, sheets, groundPlanId: ground.id, bounds, viewportScale: vp.scale, overlays: o, screenUp: -1,
     }).filter((d) => d.id.includes('~xref'));
   });
 
@@ -94,7 +94,7 @@ describe('the marks on the ground plan of AC20-FZK-Haus (#221)', { skip: planMod
   /** The paper boxes the marks print in: their text, and each arrow's triangle taken as its box. */
   const boxes = (made: DraftEntity[]): { id: string; box: Pt[] }[] => made.flatMap((d) => {
     const sh = d.shape;
-    if (sh.type === 'text') return [{ id: d.id, box: textBox(sh.p, sh.text, sh.height * factor, sh.rotation) }];
+    if (sh.type === 'text') return [{ id: d.id, box: withAnnotationScreenUp(-1, () => textBox(sh.p, sh.text, sh.height * factor, sh.rotation)) }];
     return [];
   });
 

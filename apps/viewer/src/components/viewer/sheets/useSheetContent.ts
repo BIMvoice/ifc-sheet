@@ -28,6 +28,7 @@ import { isRasterView } from '@/project/axonometric';
 import { isAutosaveRasterRef } from '@/project/autosave-rasters';
 import { drawingNumbers } from '@/drafting/cross-ref';
 import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
+import { viewScreenUp } from '@/project/view-screen-up';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
@@ -147,7 +148,7 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const ground = useMemo(() => elevationMarkPlan(views), [views]);
   const crossRefInput = useCallback((vp: SheetViewport): PlanCrossRefInput => ({
     drafts: settledDrafts(vp.viewId), view: views.find((v) => v.id === vp.viewId), views, sheets, groundPlanId: ground?.id,
-    bounds: drawingOf.get(vp.viewId)?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays,
+    bounds: drawingOf.get(vp.viewId)?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays, screenUp: viewScreenUp(vp.viewId),
   }), [settledDrafts, views, sheets, drawingOf, ground, styled]);
   const draftsFor = useCallback((vp: SheetViewport) => withCrossReferences(crossRefInput(vp)), [crossRefInput]);
   // What an auto-fit viewport frames: the drawing, the plot of a site plan and the drafts the sheet draws, the cross-references included (#140, #243).
