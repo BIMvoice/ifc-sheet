@@ -9,7 +9,7 @@
  * elevations and of the sections is each one tap above the wall.
  */
 
-import { X } from 'lucide-react';
+import { X, ZoomIn } from 'lucide-react';
 import { memo, useEffect, useRef } from 'react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -20,11 +20,14 @@ import type { ProjectSheet } from '@/project/types';
 import { CardMarks } from './CardMarks';
 import { startWallFill } from '@/wall/wall-fill';
 import { useWallView } from '@/wall/wall-view';
+import { SHEET_PX, useWallZoom } from '@/wall/wall-zoom';
 import { LazyWallSheet } from './LazyWallSheet';
 import { useWallHistoryKeys } from './useWallHistoryKeys';
 import { useWallMeasure, WALL_SHEET_ATTR } from './useWallMeasure';
 import { WallFind } from './WallFind';
+import { useWallZoomControls } from './useWallZoom';
 import { WallMiniMap } from './WallMiniMap';
+import { WallZoomControl } from './WallZoomControl';
 
 const GROUPS: { group: SetGroup | null; labelKey: TranslationKey }[] = [
   { group: 'plans', labelKey: 'wall.group.plans' },
@@ -37,9 +40,6 @@ const GROUPS: { group: SetGroup | null; labelKey: TranslationKey }[] = [
 
 /** The groups whose sheets share a scale set above the wall. */
 const SCALED: SetGroup[] = ['plans', 'elevations', 'sections'];
-
-/** Width of a sheet on the wall, px. */
-const SHEET_PX = 340;
 
 const SCALE_LABELS: Partial<Record<SetGroup, TranslationKey>> = {
   plans: 'wall.planScale',
@@ -76,7 +76,7 @@ export function ScaleChips({ group, extent, labelFromWide = false }: { group: Se
   );
 }
 
-const SheetOnWall = memo(function SheetOnWall({ sheet, extent, onStep }: { sheet: ProjectSheet; extent: ModelExtent | null; onStep: (id: string) => void }) {
+const SheetOnWall = memo(function SheetOnWall({ sheet, extent, width, onStep, onZoom }: { sheet: ProjectSheet; extent: ModelExtent | null; width: number; onStep: (id: string) => void; onZoom: (id: string) => void }) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const reason = extent ? sheetScaleReason(sheet, views, extent) : null;
@@ -84,7 +84,7 @@ const SheetOnWall = memo(function SheetOnWall({ sheet, extent, onStep }: { sheet
   const near = useWallView((s) => s.near.includes(sheet.id));
   const flashed = useWallView((s) => s.highlight === sheet.id);
   return (
-    <figure {...{ [WALL_SHEET_ATTR]: sheet.id }} data-flashed={flashed || undefined} className={cn('group relative m-0 rounded-sm transition-shadow duration-500', flashed && 'ring-4 ring-sky-300 shadow-[0_0_28px_rgba(125,211,252,0.7)]')}>
+    <figure {...{ [WALL_SHEET_ATTR]: sheet.id }} style={{ width }} data-flashed={flashed || undefined} className={cn('group relative m-0 rounded-sm transition-shadow duration-500', flashed && 'ring-4 ring-sky-300 shadow-[0_0_28px_rgba(125,211,252,0.7)]')}>
       <button
         type="button"
         aria-label={name}
@@ -94,9 +94,19 @@ const SheetOnWall = memo(function SheetOnWall({ sheet, extent, onStep }: { sheet
           if (e.key === 'Enter') onStep(sheet.id);
         }}
       >
-        <LazyWallSheet sheet={sheet} width={SHEET_PX} near={near} />
+        <LazyWallSheet sheet={sheet} width={width} near={near} />
       </button>
-      <CardMarks sheet={sheet} width={SHEET_PX} />
+      <CardMarks sheet={sheet} width={width} />
+      <button
+        type="button"
+        data-wall-zoom-sheet={sheet.id}
+        aria-label={t('wall.zoom.toSheet', { name })}
+        title={t('wall.zoom.toSheet', { name })}
+        onClick={() => onZoom(sheet.id)}
+        className="absolute left-2 top-2 rounded-full bg-zinc-900/80 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+      >
+        <ZoomIn className="size-4" />
+      </button>
       <button
         type="button"
         aria-label={t('wall.remove', { name })}
@@ -122,6 +132,8 @@ export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onSte
   const { t } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
   const scroller = useRef<HTMLDivElement>(null);
+  const zoom = useWallZoomControls(scroller);
+  const width = SHEET_PX * useWallZoom((s) => s.k);
   useWallHistoryKeys();
   const sheetIds = sheets.map((s) => s.id).join(',');
   // A document loaded with the same sheet ids forgets the Wall without changing them: measure and fill again.
@@ -138,18 +150,19 @@ export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onSte
         </div>
         <WallFind />
       </div>
-      <div ref={scroller} className="min-h-0 flex-1 overflow-auto px-8 pb-10 pt-6">
+      <div ref={scroller} data-wall-scroller className="min-h-0 flex-1 overflow-auto px-8 pb-10 pt-6 data-[panning]:cursor-grab">
         <div className="flex flex-wrap items-start gap-10">
           {columns.map((col) => (
             <section key={col.labelKey} aria-label={t(col.labelKey)} className="flex flex-col gap-8">
               <h2 className="m-0 border-b border-sky-300/20 pb-2 text-xs font-medium uppercase tracking-widest text-sky-400">{t(col.labelKey)}</h2>
-              {col.sheets.map((sheet) => <SheetOnWall key={sheet.id} sheet={sheet} extent={extent} onStep={onStep} />)}
+              {col.sheets.map((sheet) => <SheetOnWall key={sheet.id} sheet={sheet} extent={extent} width={width} onStep={onStep} onZoom={zoom.zoomToSheet} />)}
             </section>
           ))}
         </div>
         <p className="mt-10 max-w-xl text-sm text-sky-200/70">{t('wall.hint')}</p>
       </div>
       <WallMiniMap />
+      <WallZoomControl api={zoom} />
     </div>
   );
 }

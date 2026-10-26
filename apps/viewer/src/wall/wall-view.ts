@@ -12,6 +12,7 @@
 import { create } from 'zustand';
 import type { ProjectSheet, ProjectView } from '@/project/types';
 import type { ViewDrawingEntry } from '@/project/view-drawings';
+import { resetWallZoom } from './wall-zoom';
 import { drawnQueue, sameIds, visibleSheets, type PlacedSheet, type Rect, type Size } from './wall-geometry';
 
 export interface WallLayout {
@@ -119,6 +120,7 @@ export function revealSheet(sheetId: string): void {
 /** Forget the Wall: called when the project is reset or replaced, so no sheet of the last one stays queued. */
 export function resetWallView(): void {
   clearTimeout(flashTimer);
+  resetWallZoom();
   useWallView.setState((s) => ({ layout: null, near: [], queue: [], highlight: null, scroll: null, generation: s.generation + 1 }));
 }
 
