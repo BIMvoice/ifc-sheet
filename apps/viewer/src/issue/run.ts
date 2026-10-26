@@ -19,6 +19,7 @@ import { captureSheets, failureLine } from './capture';
 import { drawingListCsv, issueFileNames, sheetFileStem, uniqueNames, type ListLabels } from './output';
 import { buildHandover, type HandoverWorkbook } from './handover';
 import { loadedModels, registerWorkbook } from './handover-collect';
+import { projectPacOpis } from './pac-opis';
 import { buildIssuePdf, type PdfLabels } from './pdf-build';
 import { titleBlockOf } from '@/project/title-block';
 import { effectiveTitleBlock } from '@/project/title-block-model';
@@ -37,6 +38,8 @@ export interface IssueOptions {
   name?: string;
   date?: string;
   listFirst?: boolean;
+  /** The permit project's submission (#364): the PDF opens with the PAC opis (Anexa 2, Legea 169/2026) in `locale`, then the sheets; no drawing list page. */
+  pac?: { locale: string };
   /** Draw only the clouds of each sheet's current revision; those of older revisions are left off the paper. */
   currentCloudsOnly?: boolean;
   /** PDF: write the archival metadata (XMP, sRGB output intent; no PDF/A claim, see `pdf-archival.ts`). */
@@ -80,12 +83,12 @@ export function pdfLabels(): PdfLabels {
 }
 
 /** The plan for the project as it stands (nothing is drawn or recorded). */
-export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst'>, model?: ModelImpact): IssuePlan {
+export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst' | 'pac'>, model?: ModelImpact): IssuePlan {
   const project = useProjectStore.getState();
   return planIssue(project.sheets, fingerprintSources(project), {
     name: options.name?.trim() || nextIssueName(project.issues ?? [], (n) => resolve('names.issue.default', { n }), registeredTranslations('names.issue.default')),
     date: validDate(options.date, todayText()),
-    listFirst: options.listFirst ?? true,
+    listFirst: options.pac ? false : (options.listFirst ?? true),
     asIndicated: resolve('sheets.asIndicated'),
   }, effectiveTitleBlock(), { issues: project.issues, schedules: project.schedules, model });
 }
@@ -119,7 +122,7 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   if (options.format === 'pdf' || options.format === 'handover') {
     const projectFields = effectiveTitleBlock();
     const projectName = plan.sheets.map((s) => titleBlockOf(s.sheet, projectFields, project.name).project).find((n) => n) || project.name;
-    pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival, onWarning: (w) => lines.push(w) });
+    pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival, onWarning: (w) => lines.push(w), ...(options.pac ? { opis: projectPacOpis(plan.sheets.map((s) => s.sheet), options.pac.locale) } : {}) });
     if (options.format === 'handover') {
       const built = buildHandover({
         pattern: project.handoverPattern, project: projectName, plan, pdf, dxfs, models: loadedModels(),

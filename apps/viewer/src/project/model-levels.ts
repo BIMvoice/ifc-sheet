@@ -34,6 +34,9 @@ const unitScaleCache = new WeakMap<IfcDataStore, number>();
 function lengthUnitScale(ds: IfcDataStore, referenceStorey: number | undefined): number {
   const cached = unitScaleCache.get(ds);
   if (cached !== undefined) return cached;
+  // The parse already read the unit (or the format defines it, as IFCX does): asking the anchor again
+  // would re-derive it from an IfcProject and a geometric context a model without STEP records cannot have.
+  if (ds.lengthUnitScale !== undefined) return ds.lengthUnitScale;
   if (referenceStorey === undefined) return 1;
   try {
     const scale = resolveSpatialAnchor(ds, referenceStorey).lengthUnitScale ?? 1;

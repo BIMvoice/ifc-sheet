@@ -39,7 +39,6 @@ const LONG: Record<string, string> = {
   ReportNumber: 'Referat de verificare nr. 123456/2026-10-20',
   ReportDate: '2026-10-20 / 2026-11-30',
 };
-const words = (s: string): string[] => s.split(/\s+/).filter(Boolean);
 /** The letters of a value, blanks left out: a line may end after a hyphen or a slash, where the blank is not part of the value. */
 const letters = (s: string): string => s.replace(/\s+/g, '');
 

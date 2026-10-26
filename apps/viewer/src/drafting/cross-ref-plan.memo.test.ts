@@ -24,7 +24,7 @@ const sheets: ProjectSheet[] = [{ id: 's1', number: 'A-201', name: 'Elevations',
   { id: 'v1', viewId: 'e-south', x: 100, y: 100, scale: 100, width: 0, height: 0, center: null },
   { id: 'v2', viewId: 'e-north', x: 300, y: 100, scale: 100, width: 0, height: 0, center: null },
 ] }];
-const input = (): PlanCrossRefInput => ({ drafts: [], view: plan, views: [plan, north, south], sheets, groundPlanId: 'plan', bounds: FOOTPRINT, viewportScale: 100 });
+const input = (screenUp: 1 | -1 = -1): PlanCrossRefInput => ({ drafts: [], view: plan, views: [plan, north, south], sheets, groundPlanId: 'plan', bounds: FOOTPRINT, viewportScale: 100, screenUp });
 
 describe('withCrossReferences places a plan\'s marks once per input (#154)', () => {
   it('hands back the same marks for the same input', () => {
@@ -38,14 +38,17 @@ describe('withCrossReferences places a plan\'s marks once per input (#154)', () 
     assert.notEqual(withCrossReferences(input()), withCrossReferences(input()));
   });
 
-  it('measures with the screen-up it is asked under, not the one it was first asked under', () => {
-    const one = input();
-    const up = withAnnotationScreenUp(1, () => withCrossReferences(one));
-    const down = withAnnotationScreenUp(-1, () => withCrossReferences(one));
-    // The fixture is sensitive to the direction, or the next assertion would prove nothing.
+  it('measures with the screen-up its input names, whatever the session is under', () => {
+    const upInput = input(1);
+    const downInput = input(-1);
+    const up = withAnnotationScreenUp(-1, () => withCrossReferences(upInput));
+    const down = withAnnotationScreenUp(1, () => withCrossReferences(downInput));
+    // The fixture is sensitive to the direction, or the next assertions would prove nothing.
     assert.notDeepEqual(down, up);
-    assert.deepEqual(down, withAnnotationScreenUp(-1, () => withCrossReferences(input())));
-    assert.deepEqual(withAnnotationScreenUp(1, () => withCrossReferences(one)), withAnnotationScreenUp(1, () => withCrossReferences(input())));
+    assert.deepEqual(down, withCrossReferences(input(-1)));
+    assert.deepEqual(up, withCrossReferences(input(1)));
+    // Memoised: asked again under the other session direction, the same marks come back.
+    assert.equal(withAnnotationScreenUp(1, () => withCrossReferences(downInput)), down);
   });
 });
 
