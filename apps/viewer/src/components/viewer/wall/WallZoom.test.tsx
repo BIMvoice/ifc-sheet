@@ -358,6 +358,22 @@ describe('zooming with the wheel on the Wall (#188)', () => {
     }
   });
 
+  it('draws every near sheet at once on opening the Wall, with no gesture and no waiting', () => {
+    const steps: number[] = [];
+    let seen = 0;
+    const stop = useWallView.subscribe((st) => {
+      if (st.drawn.length > seen) steps.push(st.drawn.length - seen);
+      seen = st.drawn.length;
+    });
+    const ui = render(<WallGrid extent={null} onStep={() => {}} />);
+    stop();
+    assert.ok(Math.max(0, ...steps) > PROMOTE_BATCH, `in one step, not paced (${steps.join(',')})`);
+    const wide = useWallView.getState().near.filter((id) => frame(ui, id).getBoundingClientRect().width >= 140);
+    assert.ok(wide.length > PROMOTE_BATCH, `more sheets than one promotion step are near and wide enough (${wide.length})`);
+    assert.deepEqual(useWallView.getState().drawn, wide, 'all of them are drawn straight away');
+    for (const id of wide) assert.ok(drawn(ui, id) && !outline(ui, id));
+  });
+
   it('lets a sheet go at once when it falls below the drawn width', async () => {
     const ui = render(<WallGrid extent={null} onStep={() => {}} />);
     await waitFor(() => useWallView.getState().drawn.length > 0, 'sheets are drawn at the default zoom');

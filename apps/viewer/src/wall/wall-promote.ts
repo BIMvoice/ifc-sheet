@@ -20,12 +20,15 @@ export const PROMOTE_BATCH = 2;
 export const GESTURE_QUIET_MS = 150;
 
 let gestureUntil = 0;
+/** A zoom gesture has happened and its sheets are not all in yet: only then are they let in a few at a time. */
+let pacing = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let cancelIdle: (() => void) | null = null;
 
 /** A wheel or pinch zoomed the Wall: no sheet is let in until `GESTURE_QUIET_MS` after the last one. */
 export function noteZoomGesture(): void {
   gestureUntil = Date.now() + GESTURE_QUIET_MS;
+  pacing = true;
 }
 
 const whenIdle = (fn: () => void): (() => void) => {
@@ -54,10 +57,12 @@ export function reconcileDrawn(): void {
   const kept = new Set(keep);
   const missing = want.filter((id) => !kept.has(id));
   const wait = gestureUntil - Date.now();
-  const letIn = wait > 0 ? [] : missing.slice(0, PROMOTE_BATCH);
+  // At rest (no zoom gesture under way) every sheet that qualifies is drawn at once, as on opening the Wall.
+  const letIn = wait > 0 ? [] : pacing ? missing.slice(0, PROMOTE_BATCH) : missing;
   const next = [...keep, ...letIn];
   if (!sameIds(next, drawn)) useWallView.setState({ drawn: next });
-  if (missing.length > letIn.length) {
+  if (missing.length <= letIn.length) pacing = false;
+  else {
     if (wait > 0) timer = setTimeout(reconcileDrawn, wait);
     else cancelIdle = whenIdle(reconcileDrawn);
   }
@@ -65,6 +70,8 @@ export function reconcileDrawn(): void {
 
 /** Follow the Wall's layout for as long as the Wall is up; returns the unfollowing. */
 export function startWallPromotion(): () => void {
+  gestureUntil = 0;
+  pacing = false;
   const stop = useWallView.subscribe((s, prev) => {
     if (s.layout !== prev.layout || s.near !== prev.near) reconcileDrawn();
   });
