@@ -51,7 +51,7 @@ function Pac() {
       <p className="m-0 mt-2 text-2xs text-sky-100/60">{t('pac.notSet')}</p>
       <button type="button" data-pac-submit onClick={submit} className="mt-2 rounded border border-sky-300/30 px-2 py-1 text-xs text-white hover:bg-sky-400/15">{t('pac.submit')}</button>
       <p className="m-0 mt-1 text-2xs text-sky-100/60">{t('pac.submit.hint')}</p>
-      {status ? <p role="status" className="m-0 mt-1 text-2xs text-sky-100">{status}</p> : null}
+      {status ? <output className="m-0 mt-1 block text-2xs text-sky-100">{status}</output> : null}
     </section>
   );
 }
