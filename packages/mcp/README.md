@@ -229,7 +229,7 @@ file when `annotated_ifc` is true.
 | `ifcsheet_undo` | `document_id` | the set as it was before its last edit (add_view, place_view, set_title_block, add_schedule, renumber); `changed`, `undo_steps`, `redo_steps` |
 | `ifcsheet_redo` | `document_id` | re-applies the edit just undone; `changed: false` when there is none |
 | `ifcsheet_load_project` | `model_id`, `project_path` or `project_json` | a new `document_id` from a saved project |
-| `ifcsheet_check_readiness` | `model_id`; optional `project_path` or `project_json`, `ids` (`byggesaksbim`) | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check`; with `ids: "byggesaksbim"` or a project that opted in, also the ByggesaksBIM (Norway) findings |
+| `ifcsheet_check_readiness` | `model_id`; optional `project_path` or `project_json`, `ids` (`byggesaksbim`) | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check`; with `ids: "byggesaksbim"` or a project that opted in, also the ByggesaksBIM (Norway) findings. The opt-in of an earlier `ifcsheet_load_project` is not remembered: pass `project_path`/`project_json` or `ids` on this call. A model that is not IFC4 gets one `byggesaksbimSchema` finding; a check that cannot run is a tool error |
 
 `dry_run: true` on `ifcsheet_add_view`, `ifcsheet_place_view`,
 `ifcsheet_set_title_block`, `ifcsheet_add_schedule`, `ifcsheet_apply_template`

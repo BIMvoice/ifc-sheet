@@ -46,7 +46,16 @@ async function check(file: string, json: boolean, projectFile: string | undefine
     opened = await openModel(bytes, { geometry: false });
   }
   // The requirement set, when the flag asks for it or the project opted in: run over the model, its failures said after the model's own.
-  const norway = ids === 'byggesaksbim' || project?.byggesaksbim === true ? await byggesaksbimReadiness([{ dataStore: opened.dataStore }]) : [];
+  let norway: Awaited<ReturnType<typeof byggesaksbimReadiness>> = [];
+  if (ids === 'byggesaksbim' || project?.byggesaksbim === true) {
+    try {
+      norway = await byggesaksbimReadiness([{ dataStore: opened.dataStore }]);
+    } catch (error) {
+      // Not an empty list: that reads as "all good". The check did not run, so the command fails and says why.
+      io.stderr(`ifcsheet: The ByggesaksBIM check could not run: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
   const findings = [...readinessWithProject(opened, project), ...norway].map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
   if (json) {
     io.stdout(`${JSON.stringify({ file, ...(projectFile !== undefined ? { project: projectFile } : {}), ready: findings.length === 0, findings }, null, 2)}\n`);

@@ -8,8 +8,8 @@
  * (`apps/viewer/src/i18n/catalogues/byggesaksbim.ro.ts`). Norwegian terms are kept where a Norwegian reader looks for them.
  */
 
-/** One kind per requirement of `byggesaksbim.ids` (NO-H1 to NO-H8), and one for a model that lacks the element the requirement is read from. */
-export type ByggesaksbimKind = 'byggesaksbimH1' | 'byggesaksbimH2' | 'byggesaksbimH3' | 'byggesaksbimH4' | 'byggesaksbimH5' | 'byggesaksbimH6' | 'byggesaksbimH7' | 'byggesaksbimH8' | 'byggesaksbimNone';
+/** One kind per requirement of `byggesaksbim.ids` (NO-H1 to NO-H7), and one for a model that lacks the element the requirement is read from. */
+export type ByggesaksbimKind = 'byggesaksbimH1' | 'byggesaksbimH2' | 'byggesaksbimH3' | 'byggesaksbimH4' | 'byggesaksbimH5' | 'byggesaksbimH6' | 'byggesaksbimH7' | 'byggesaksbimNone' | 'byggesaksbimSchema' | 'byggesaksbimError';
 
 const EFFECT = 'Required (Obligatorisk) in the DiBK P13 eByggesak report. This check is IfcSheet\'s own reading of that report, not DiBK\'s validator.';
 
@@ -24,12 +24,14 @@ export const BYGGESAKSBIM_EN = {
   'ready.byggesaksbimH4.effect': EFFECT,
   'ready.byggesaksbimH5': 'BRA (usable area, Pset_BuildingStoreyCommon.NetPlannedArea) missing on {count} of {total} storeys: {list}.',
   'ready.byggesaksbimH5.effect': EFFECT,
-  'ready.byggesaksbimH6': '{count} of {total} zones do not have Pset_ZoneCommon.Reference = "Bruksenhet": {list}.',
+  'ready.byggesaksbimH6': 'BRA (Pset_ZoneCommon.NetPlannedArea) missing on {count} of {total} bruksenhet zones: {list}.',
   'ready.byggesaksbimH6.effect': EFFECT,
-  'ready.byggesaksbimH7': 'BRA (Pset_ZoneCommon.NetPlannedArea) missing on {count} of {total} bruksenhet zones: {list}.',
+  'ready.byggesaksbimH7': 'Lift type (IfcTransportElement.PredefinedType) missing on {count} of {total} lifts: {list}.',
   'ready.byggesaksbimH7.effect': EFFECT,
-  'ready.byggesaksbimH8': 'Lift type (IfcTransportElement.PredefinedType) missing on {count} of {total} lifts: {list}.',
-  'ready.byggesaksbimH8.effect': EFFECT,
   'ready.byggesaksbimNone': 'The model has no {class}, which the ByggesaksBIM requirements are read from.',
   'ready.byggesaksbimNone.effect': EFFECT,
+  'ready.byggesaksbimSchema': 'ByggesaksBIM requires IFC4; this model is {schema} and was not checked.',
+  'ready.byggesaksbimSchema.effect': 'The requirements are written for IFC4 and read IFC4 property sets, so a model in another schema cannot be checked against them.',
+  'ready.byggesaksbimError': 'The ByggesaksBIM check could not run: {reason}',
+  'ready.byggesaksbimError.effect': 'Nothing was checked, so this is not a pass.',
 } as const;

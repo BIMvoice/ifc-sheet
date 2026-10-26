@@ -16,6 +16,7 @@ import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { syntheticByggesaksbimModel } from '@bimvoice/ifcsheet/byggesaksbim';
 import { PROTOCOL_VERSION } from '../protocol/index.js';
 import { createMCPServer } from '../index.js';
 import { StdioTransport } from '../transport/stdio.js';
@@ -94,6 +95,14 @@ describe.skipIf(missing !== null)('ifcsheet_check_readiness, ByggesaksBIM, over 
     expect(byPath.structuredContent.findings).toEqual(await cli('--project', file));
     const inline = await tool('ifcsheet_check_readiness', { model_id, project_json: project(true) });
     expect(inline.structuredContent.findings).toEqual(flag.structuredContent.findings);
+  }, 180_000);
+
+  it('refuses an IFC2X3 model with one finding, the finding the CLI gives', async () => {
+    const old = join(tmp, 'old.ifc');
+    await writeFile(old, syntheticByggesaksbimModel({ schema: 'IFC2X3', without: ['bra'] }));
+    const model_id = (await tool('ifcsheet_open_model', { file_path: old })).structuredContent.model_id as string;
+    const r = await tool('ifcsheet_check_readiness', { model_id, ids: 'byggesaksbim' });
+    expect(norway(r.structuredContent.findings).map((f) => [f.kind, f.missing])).toEqual([['byggesaksbimSchema', 'ByggesaksBIM requires IFC4; this model is IFC2X3 and was not checked.']]);
   }, 180_000);
 
   it('returns none when the project did not opt in, or there is no project, and refuses an unknown set', async () => {

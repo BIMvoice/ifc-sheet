@@ -13,10 +13,10 @@ import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION } from '../project-version.js
 import { syntheticByggesaksbimModel } from '../byggesaksbim/synthetic-model.js';
 
 // The real run, watched: the spy is how the opt-out tests know nothing was started.
-const started = vi.hoisted(() => ({ calls: 0 }));
+const started = vi.hoisted(() => ({ calls: 0, fail: '' }));
 vi.mock('../byggesaksbim/run.js', async (original) => {
   const real = await original<typeof import('../byggesaksbim/run.js')>();
-  return { ...real, byggesaksbimReadiness: (...args: Parameters<typeof real.byggesaksbimReadiness>) => { started.calls++; return real.byggesaksbimReadiness(...args); } };
+  return { ...real, byggesaksbimReadiness: (...args: Parameters<typeof real.byggesaksbimReadiness>) => { started.calls++; if (started.fail) throw new Error(started.fail); return real.byggesaksbimReadiness(...args); } };
 });
 const { EXIT, run } = await import('../cli.js');
 const { readProjectFile } = await import('../project-read.js');
@@ -85,6 +85,24 @@ describe('ifcsheet check, ByggesaksBIM', () => {
     expect(u.err()).toContain('unknown --ids "other"');
     const v = capture();
     expect(await run(['rooms', noBra, '--ids', 'byggesaksbim'], v.io)).toBe(EXIT.usage);
+  });
+
+  it('refuses an IFC2X3 model with one finding', async () => {
+    const r = await kindsOf(['check', file('old.ifc', syntheticByggesaksbimModel({ schema: 'IFC2X3' })), '--ids', 'byggesaksbim', '--json']);
+    expect(r.kinds.filter((k) => k.startsWith('byggesaksbim'))).toEqual(['byggesaksbimSchema']);
+    expect(r.code).toBe(EXIT.failed);
+  });
+
+  it('fails with the reason, and no findings list, when the check cannot run', async () => {
+    started.fail = 'worker died';
+    try {
+      const c = capture();
+      expect(await run(['check', compliant, '--ids', 'byggesaksbim'], c.io)).toBe(EXIT.failed);
+      expect(c.err()).toContain('The ByggesaksBIM check could not run: worker died');
+      expect(c.out()).toBe('');
+    } finally {
+      started.fail = '';
+    }
   });
 
   it.skipIf(!existsSync(FZK))('on FZK reports the matrikkel number and the two storey areas', async () => {

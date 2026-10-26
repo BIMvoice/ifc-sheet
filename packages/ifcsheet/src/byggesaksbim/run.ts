@@ -12,7 +12,7 @@ import { createTranslationService, parseIDS, validateIDS, type IDSDocument, type
 import { createDataAccessor } from '@ifc-lite/ids/bridge';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import type { ReadinessFinding } from '../readiness.js';
-import { byggesaksbimFindings } from './byggesaksbim.js';
+import { byggesaksbimErrorFinding, byggesaksbimFindings, byggesaksbimSchemaFinding, isByggesaksbimSchema } from './byggesaksbim.js';
 import { BYGGESAKSBIM_IDS } from './byggesaksbim-ids.js';
 
 /** The shipped IDS, parsed; every caller gets its own copy. */
@@ -26,10 +26,26 @@ export async function byggesaksbimReport(dataStore: IfcDataStore, modelId = 'mod
   }, { translator: createTranslationService('en'), includePassingEntities: false });
 }
 
-/** The ByggesaksBIM findings of the opened models. */
+/**
+ * The ByggesaksBIM findings of the opened models. A model that is not IFC4 is not checked: one finding says so (the IDS is
+ * IFC4, and a run would read the model as IFC4). A run that fails throws; `byggesaksbimReadinessOrError` turns that into a finding.
+ */
 export async function byggesaksbimReadiness(models: readonly { dataStore: IfcDataStore; modelId?: string }[]): Promise<ReadinessFinding[]> {
   const document = byggesaksbimDocument();
   const reports: IDSValidationReport[] = [];
-  for (const [i, m] of models.entries()) reports.push(await byggesaksbimReport(m.dataStore, m.modelId ?? `model-${i}`, document));
-  return byggesaksbimFindings(reports);
+  const refused: string[] = [];
+  for (const [i, m] of models.entries()) {
+    if (!isByggesaksbimSchema(m.dataStore.schemaVersion)) { refused.push(m.dataStore.schemaVersion || 'of unknown schema'); continue; }
+    reports.push(await byggesaksbimReport(m.dataStore, m.modelId ?? `model-${i}`, document));
+  }
+  return [...(refused.length > 0 ? [byggesaksbimSchemaFinding(refused)] : []), ...byggesaksbimFindings(reports)];
+}
+
+/** `byggesaksbimReadiness`, with a failure said as a finding ("could not run") instead of thrown; for callers that list findings. */
+export async function byggesaksbimReadinessOrError(models: readonly { dataStore: IfcDataStore; modelId?: string }[]): Promise<ReadinessFinding[]> {
+  try {
+    return await byggesaksbimReadiness(models);
+  } catch (error) {
+    return [byggesaksbimErrorFinding(error)];
+  }
 }

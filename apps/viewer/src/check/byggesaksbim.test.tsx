@@ -31,7 +31,7 @@ import { useViewerStore } from '@/store';
 import { ReadinessList } from '@/components/viewer/sheets/ReadinessList';
 import { BYGGESAKSBIM_DEBOUNCE_MS, forgetByggesaksbimRun } from '@/components/viewer/sheets/useByggesaksbim';
 import type { SetSkin } from '@/components/viewer/sheets/set-skin';
-import { runByggesaksbim } from './byggesaksbim';
+import { runByggesaksbim, runByggesaksbimOrError } from './byggesaksbim';
 import { describeMissing } from './readiness-say';
 
 const FZK = new URL('../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url);
@@ -89,6 +89,20 @@ describe('the README\'s compliant model', () => {
     assert.deepEqual((await runByggesaksbim()).map((f) => f.kind), ['byggesaksbimH4']);
   });
 
+  it('checks only the bruksenhet zones: a fire zone is out of scope, a bruksenhet zone without BRA fails', async () => {
+    show({ m: await parse(syntheticByggesaksbimModel({ fireZone: true })) });
+    assert.deepEqual(await runByggesaksbim(), []);
+    show({ m: await parse(syntheticByggesaksbimModel({ fireZone: true, without: ['zoneBra'] })) });
+    assert.deepEqual((await runByggesaksbim()).map((f) => [f.kind, f.params.count, f.params.total]), [['byggesaksbimH6', 1, 1]]);
+  });
+
+  it('refuses an IFC2X3 model with one finding and checks nothing else', async () => {
+    show({ m: await parse(syntheticByggesaksbimModel({ schema: 'IFC2X3', without: ['bra'] })) });
+    const found = await runByggesaksbim();
+    assert.deepEqual(found.map((f) => f.kind), ['byggesaksbimSchema']);
+    assert.equal(describeMissing(found[0]), 'ByggesaksBIM requires IFC4; this model is IFC2X3 and was not checked.');
+  });
+
   it('counts a requirement met by another model: a storey area given in one model and the site in the other', async () => {
     // Discipline models of one building: the architect's model has everything, the structure model has a bare storey.
     const bare = await parse(syntheticByggesaksbimModel({ without: ['bta', 'bra'] }));
@@ -139,6 +153,20 @@ describe('the readiness list', () => {
     show({ m: await parse(syntheticByggesaksbimModel({ without: ['bta'] })) });
     await new Promise((r) => setTimeout(r, BYGGESAKSBIM_DEBOUNCE_MS * 3));
     assert.equal(calls(), before, 'an opted-out project starts nothing');
+  });
+
+  it('shows "could not run" instead of an empty list when the check throws', async () => {
+    show({ m: await parse(syntheticByggesaksbimModel()) });
+    const real = useViewerStore.getState().getMutationView;
+    useViewerStore.setState({ getMutationView: (() => { throw new Error('worker died'); }) as never });
+    try {
+      assert.deepEqual((await runByggesaksbimOrError()).map((f) => f.kind), ['byggesaksbimError']);
+      const page = render(<ReadinessList skin={skin} />);
+      setByggesaksbim(true);
+      await waitFor(() => /The ByggesaksBIM check could not run: worker died/.test(text(page)), `the failure is listed: ${text(page)}`);
+    } finally {
+      useViewerStore.setState({ getMutationView: real });
+    }
   });
 
   it('says it in Romanian', async () => {

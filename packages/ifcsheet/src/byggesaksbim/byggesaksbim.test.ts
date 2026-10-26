@@ -8,14 +8,15 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
+import { validateXML } from 'xmllint-wasm';
 import { fileURLToPath } from 'node:url';
 import type { IDSValidationReport } from '@ifc-lite/ids';
 import { describe, expect, it } from 'vitest';
 import { openModel } from '../model.js';
 import { describeReadiness } from '../readiness.js';
-import { BYGGESAKSBIM_SPECS, byggesaksbimFindings } from './byggesaksbim.js';
+import { BYGGESAKSBIM_SPECS, byggesaksbimErrorFinding, byggesaksbimFindings } from './byggesaksbim.js';
 import { BYGGESAKSBIM_IDS } from './byggesaksbim-ids.js';
-import { byggesaksbimDocument, byggesaksbimReadiness, byggesaksbimReport } from './run.js';
+import { byggesaksbimDocument, byggesaksbimReadiness, byggesaksbimReadinessOrError, byggesaksbimReport } from './run.js';
 import { syntheticByggesaksbimModel, type SyntheticPiece } from './synthetic-model.js';
 
 const FZK = fileURLToPath(new URL('../../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
@@ -33,7 +34,24 @@ describe('the shipped IDS', () => {
     expect(BYGGESAKSBIM_IDS).toMatch(/<!--[\s\S]*DiBK[\s\S]*P13 eByggesak[\s\S]*2026-10-26[\s\S]*-->/);
   });
 
-  it('holds the eight requirements, NO-H1 to NO-H8, in order', () => {
+  it('conforms to the official IDS 1.0 XSD (author an email address, date, version before description)', async () => {
+    const dir = fileURLToPath(new URL('../../../ids/src/audit/__fixtures__/', import.meta.url));
+    // The XSD imports three absolute URLs; point them at the vendored copies, as the engine's own conformance test does.
+    const local = (src: string) => src.replace(/schemaLocation="http:\/\/www\.w3\.org\/2001\/xml\.xsd"/g, 'schemaLocation="xml.xsd"').replace(/schemaLocation="http:\/\/www\.w3\.org\/2001\/XMLSchema\.xsd"/g, 'schemaLocation="XMLSchema.xsd"').replace(/<xs:import namespace="http:\/\/www\.w3\.org\/2001\/XMLSchema-instance"[\s\S]*?\/>/g, '');
+    const result = await validateXML({
+      xml: [{ fileName: 'byggesaksbim.ids', contents: BYGGESAKSBIM_IDS }],
+      schema: [{ fileName: 'ids.xsd', contents: local(readFileSync(`${dir}bsfiles/ids.xsd`, 'utf8')) }],
+      preload: [
+        { fileName: 'XMLSchema.xsd', contents: local(readFileSync(`${dir}w3c/XMLSchema.xsd`, 'utf8')) },
+        { fileName: 'xml.xsd', contents: readFileSync(`${dir}w3c/xml.xsd`, 'utf8') },
+      ],
+    });
+    expect(result.errors.map((e) => (typeof e === 'string' ? e : e.message))).toEqual([]);
+    expect(result.valid).toBe(true);
+    expect(BYGGESAKSBIM_IDS).toContain('<author>petru@bimvoice.com</author>');
+  }, 60_000);
+
+  it('holds the seven requirements, NO-H1 to NO-H7, in order', () => {
     expect(byggesaksbimDocument().specifications.map((s) => s.identifier)).toEqual([...BYGGESAKSBIM_SPECS]);
   });
 });
@@ -44,7 +62,7 @@ describe.skipIf(!existsSync(FZK))('FZK, a German model with no Norwegian data', 
     const report = await byggesaksbimReport(model.dataStore);
     expect(report.specificationResults.map((r) => [r.specification.identifier, r.status, r.applicableCount, r.failedCount])).toEqual([
       ['NO-H1', 'fail', 1, 1], ['NO-H2', 'pass', 1, 0], ['NO-H3', 'pass', 1, 0], ['NO-H4', 'fail', 2, 2],
-      ['NO-H5', 'fail', 2, 2], ['NO-H6', 'pass', 0, 0], ['NO-H7', 'pass', 0, 0], ['NO-H8', 'pass', 0, 0],
+      ['NO-H5', 'fail', 2, 2], ['NO-H6', 'pass', 0, 0], ['NO-H7', 'pass', 0, 0],
     ]);
     const findings = byggesaksbimFindings([report]);
     expect(findings.map((f) => [f.kind, f.params.count, f.params.total])).toEqual([['byggesaksbimH1', 1, 1], ['byggesaksbimH4', 2, 2], ['byggesaksbimH5', 2, 2]]);
@@ -60,13 +78,38 @@ describe('a compliant model', () => {
 
   const cases: [SyntheticPiece, string][] = [
     ['matrikkel', 'byggesaksbimH1'], ['bya', 'byggesaksbimH2'], ['buildingType', 'byggesaksbimH3'], ['bta', 'byggesaksbimH4'],
-    ['bra', 'byggesaksbimH5'], ['zoneReference', 'byggesaksbimH6'], ['zoneBra', 'byggesaksbimH7'], ['liftType', 'byggesaksbimH8'],
+    ['bra', 'byggesaksbimH5'], ['zoneBra', 'byggesaksbimH6'], ['liftType', 'byggesaksbimH7'],
   ];
   for (const [piece, kind] of cases) {
     it(`reports exactly ${kind} when ${piece} is taken away`, async () => {
       expect(await kinds(syntheticByggesaksbimModel({ without: [piece] }))).toEqual([kind]);
     });
   }
+
+  it('checks only the bruksenhet zones: a fire zone with no area is out of scope, a bruksenhet zone without BRA fails', async () => {
+    expect(await kinds(syntheticByggesaksbimModel({ fireZone: true }))).toEqual([]);
+    expect(await kinds(syntheticByggesaksbimModel({ fireZone: true, without: ['zoneBra'] }))).toEqual(['byggesaksbimH6']);
+    const [h6] = await byggesaksbimReadiness([{ dataStore: (await open(syntheticByggesaksbimModel({ fireZone: true, without: ['zoneBra'] }))).dataStore }]);
+    expect(h6.params).toMatchObject({ count: 1, total: 1 });
+    expect(h6.params.list).toBe("'Z'");
+  });
+
+  it('does not check a zone that says nothing about being a bruksenhet', async () => {
+    expect(await kinds(syntheticByggesaksbimModel({ without: ['zoneReference', 'zoneBra'] }))).toEqual([]);
+  });
+
+  it('refuses a model that is not IFC4 with one finding, and checks nothing else', async () => {
+    const found = await byggesaksbimReadiness([{ dataStore: (await open(syntheticByggesaksbimModel({ schema: 'IFC2X3', without: ['bra', 'matrikkel'] }))).dataStore }]);
+    expect(found.map((f) => f.kind)).toEqual(['byggesaksbimSchema']);
+    expect(describeReadiness(found[0]).missing).toBe('ByggesaksBIM requires IFC4; this model is IFC2X3 and was not checked.');
+  });
+
+  it('says a check that threw as a finding, not as an empty list', async () => {
+    const broken = { schemaVersion: 'IFC4', get entityCount(): number { throw new Error('boom'); } } as never;
+    expect(await byggesaksbimReadinessOrError([{ dataStore: broken }])).toEqual([byggesaksbimErrorFinding(new Error('boom'))]);
+    expect(describeReadiness(byggesaksbimErrorFinding(new Error('boom'))).missing).toBe('The ByggesaksBIM check could not run: boom');
+    await expect(byggesaksbimReadiness([{ dataStore: broken }])).rejects.toThrow('boom');
+  });
 
   it('names the element and says what is wrong in words', async () => {
     const [f] = await byggesaksbimReadiness([{ dataStore: (await open(syntheticByggesaksbimModel({ without: ['bra'] }))).dataStore }]);

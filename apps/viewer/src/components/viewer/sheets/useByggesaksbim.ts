@@ -10,10 +10,11 @@
  */
 
 import { useEffect, useState } from 'react';
-import { runByggesaksbim } from '@/check/byggesaksbim';
+import { runByggesaksbimOrError } from '@/check/byggesaksbim';
 import type { ReadinessFinding } from '@/check/readiness';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
+import { byggesaksbimErrorFinding } from '@bimvoice/ifcsheet/byggesaksbim';
 
 export const BYGGESAKSBIM_DEBOUNCE_MS = 250;
 
@@ -21,7 +22,7 @@ let last: { models: unknown; version: number; run: Promise<ReadinessFinding[]> }
 
 /** The run for this state of the models, started once however many lists ask. */
 export function byggesaksbimRun(models: unknown, version: number): Promise<ReadinessFinding[]> {
-  if (!last || last.models !== models || last.version !== version) last = { models, version, run: runByggesaksbim() };
+  if (!last || last.models !== models || last.version !== version) last = { models, version, run: runByggesaksbimOrError() };
   return last.run;
 }
 
@@ -44,7 +45,7 @@ export function useByggesaksbim(): ReadinessFinding[] {
     const timer = setTimeout(() => {
       byggesaksbimRun(models, version).then(
         (findings) => { if (current) setFound(findings); },
-        (error: unknown) => { console.error('[ByggesaksBIM] the check could not be run', error); if (current) setFound([]); },
+        (error: unknown) => { if (current) setFound([byggesaksbimErrorFinding(error)]); },
       );
     }, BYGGESAKSBIM_DEBOUNCE_MS);
     return () => { current = false; clearTimeout(timer); };
