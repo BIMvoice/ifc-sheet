@@ -8,7 +8,7 @@
  * aggregation that powers the in-table (settings-free) grouped view.
  */
 
-import { groupingColumnIds, type CellValue, type ColumnDefinition, type ListRow, type ListGrouping } from '@ifc-lite/lists';
+import { MISSING_QUANTITY, emptyTally, groupingColumnIds, quantityOrMissing, tallyPart, tallyRecords, tallyValue, type SumTally, type CellValue, type ColumnDefinition, type ListRow, type ListGrouping } from '@ifc-lite/lists';
 import { buildNestedGroupBuckets, compareCells, orderGroups, type GroupSort, type OrderableGroup } from '@/lib/lists/group-sort';
 
 // Re-exported so existing consumers keep importing the list-table barrel.
@@ -33,6 +33,13 @@ export function rebuildGrouping(
 ): ListGrouping | undefined {
   if (columnIds.length === 0 && sumColumnIds.length === 0) return undefined;
   return { ...previous, columnId: columnIds[0] ?? '', columnIds, sumColumnIds };
+}
+
+/** A sum as the panel writes it: a dash when no row states the quantity (never 0), "≥ X" when some rows are left out of it. */
+export function formatSumValue(sum: number | null | undefined, missing: number | undefined): string {
+  const q = quantityOrMissing(sum);
+  if (q === null) return MISSING_QUANTITY;
+  return `${(missing ?? 0) > 0 ? '≥ ' : ''}${formatCellValue(q)}`;
 }
 
 export function formatCellValue(value: CellValue): string {
@@ -63,14 +70,14 @@ export function autoColumnWidth(label: string, rows: ListRow[], colIdx: number):
 
 export type DisplayItem =
   | {
-      kind: 'group'; key: string; label: string; count: number; sums: Record<string, number>; level: number;
+      kind: 'group'; key: string; label: string; count: number; sums: Record<string, number | null>; missing: Record<string, number>; level: number;
       /** Every member row under this group, descendants of nested sub-groups
        *  included, so clicking a parent selects its whole subtree (#6368). */
       rows: ListRow[];
     }
   | { kind: 'row'; row: ListRow };
 
-export interface Totals { count: number; sums: Record<string, number> }
+export interface Totals { count: number; sums: Record<string, number | null>; missing: Record<string, number> }
 export interface GroupedView {
   items: DisplayItem[];
   /** Number of top-level groups. */
@@ -117,13 +124,14 @@ export function buildGroupedView(
 
   // Grand totals from the TOP-LEVEL subtotals only (deeper levels re-split the
   // same rows — adding them too would double-count).
-  const totals: Totals = { count: rows.length, sums: Object.fromEntries(sums.map((s) => [s.id, 0])) };
+  const tallies: Record<string, SumTally> = Object.fromEntries(sums.map((s) => [s.id, emptyTally()]));
   let groupCount = 0;
   for (const g of nested) {
     if (g.level !== 0) continue;
     groupCount++;
-    for (const s of sums) totals.sums[s.id] += g.sums[s.id];
+    for (const s of sums) tallyPart(tallies[s.id], g.sums[s.id], g.missing[s.id]);
   }
+  const totals: Totals = { count: rows.length, ...tallyRecords(tallies) };
 
   const items: DisplayItem[] = [];
   const groupKeys: string[] = [];
@@ -136,7 +144,7 @@ export function buildGroupedView(
     groupKeys.push(g.key);
     const parentVisible = g.level === 0 || branchOpen[g.level - 1] === true;
     if (parentVisible) {
-      items.push({ kind: 'group', key: g.key, label: g.label, count: g.count, sums: g.sums, level: g.level, rows: g.rows });
+      items.push({ kind: 'group', key: g.key, label: g.label, count: g.count, sums: g.sums, missing: g.missing, level: g.level, rows: g.rows });
     }
     const open = parentVisible && expanded.has(g.key);
     branchOpen[g.level] = open;
@@ -158,7 +166,8 @@ export interface ScheduleRow {
   /** Group-by values, outermost first — one per active grouping level. */
   path: string[];
   count: number;
-  sums: Record<string, number>;
+  sums: Record<string, number | null>;
+  missing: Record<string, number>;
   /** The member rows this tuple counts — what clicking the row selects (#6368). */
   rows: ListRow[];
 }
@@ -188,7 +197,7 @@ export function buildScheduleRows(
   const leafLevel = levelIndices.length - 1;
   return nested
     .filter((g) => g.level === leafLevel)
-    .map((g) => ({ key: g.key, path: g.path, count: g.count, sums: g.sums, rows: g.rows }));
+    .map((g) => ({ key: g.key, path: g.path, count: g.count, sums: g.sums, missing: g.missing, rows: g.rows }));
 }
 
 /**
@@ -219,12 +228,9 @@ export function blankRepeatedPathValues(rows: { path: string[] }[]): string[][] 
 /** Grand totals for the flat (ungrouped) view when sum columns are active. */
 export function flatTotals(rows: ListRow[], columns: ColumnDefinition[], sumColumnIds: string[]): Totals {
   const sums = sumIndices(columns, sumColumnIds);
-  const acc: Record<string, number> = Object.fromEntries(sums.map((s) => [s.id, 0]));
+  const tallies: Record<string, SumTally> = Object.fromEntries(sums.map((s) => [s.id, emptyTally()]));
   for (const r of rows) {
-    for (const s of sums) {
-      const v = r.values[s.idx];
-      if (typeof v === 'number' && Number.isFinite(v)) acc[s.id] += v;
-    }
+    for (const s of sums) tallyValue(tallies[s.id], r.values[s.idx]);
   }
-  return { count: rows.length, sums: acc };
+  return { count: rows.length, ...tallyRecords(tallies) };
 }

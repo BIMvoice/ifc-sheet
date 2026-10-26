@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import type { CellValue } from '@ifc-lite/lists';
-import { displayCell, groupHeaderLabel, totalsRowCells, type ExportModel } from './model';
+import { displayCell, displaySum, groupHeaderLabel, totalsRowText, type ExportModel } from './model';
 
 /** Quality tabular PDF report: title + meta, dark header, grouped sections
  *  (bold group rows carrying per-group count + subtotals), right-aligned
@@ -36,7 +36,7 @@ export async function toPdf(model: ExportModel): Promise<Blob> {
     // level and carry their own count; member rows sit on leaf groups only.
     for (const g of model.groups) {
       body.push(model.columns.map((c, i) => ({
-        content: i === 0 ? groupHeaderLabel(g) : (c.summed ? displayCell(g.sums[c.id]) : ''),
+        content: i === 0 ? groupHeaderLabel(g) : (c.summed ? displaySum(g.sums[c.id], g.missing[c.id]) : ''),
         styles: { fontStyle: 'bold', fillColor: [226, 232, 240] as unknown as number[] },
       })));
       for (const r of g.rows) body.push(model.columns.map((_, i) => cell(r, i)));
@@ -46,7 +46,7 @@ export async function toPdf(model: ExportModel): Promise<Blob> {
   }
 
   const foot = model.sumColumnIds.length > 0
-    ? [totalsRowCells(model, cols, `Total (${model.totals.count})`).map(displayCell)]
+    ? [totalsRowText(model, cols, `Total (${model.totals.count})`)]
     : undefined;
 
   const columnStyles: Record<number, { halign: 'right' }> = {};
