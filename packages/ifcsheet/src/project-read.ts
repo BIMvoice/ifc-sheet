@@ -7,7 +7,8 @@
  * schedules and their sub-reports, and the joinery catalogue and symbol mapping the schedules' rows depend on.
  * `ifcsheet check --project` and `ifcsheet_check_readiness` build the same findings from it as the app does.
  *
- * Reads only what the checks use. The title block, the views and the sheets are not read: no readiness finding
+ * Reads only what the checks and the build use. The graphic standard and the title block layout are read for `ifcsheet build`
+ * (`graphicStandard`, `titleBlockTemplate`); the views and the sheets are not read: no readiness finding
  * depends on them yet (the set-side checks of the app's Check panel do, and are not in the engine). Everything read
  * is read as the app reads it (`readSchedule`, `readJoinerySpec`, `readJoineryMapping` are the app's own readers),
  * and what is malformed is dropped, so an old file, or one with a damaged section, loads with that section empty.
@@ -30,6 +31,9 @@ import type { IfcDataStore } from '@ifc-lite/parser';
 import { readClassificationMappings, type ClassificationMapping } from './classification.js';
 import { readUnitsAndNumbers, type UnitsAndNumbers } from './units-and-numbers.js';
 import type { MeshData } from '@ifc-lite/geometry';
+import { knownGraphicStandard, graphicStandardOf, type GraphicStandard } from './graphic-standard.js';
+import { readTitleBlockTemplate } from './title-block-template-read.js';
+import type { TitleBlockTemplate } from './title-block-template.js';
 
 /** What the checks read of a project file. */
 export interface ProjectFacts extends JoineryProject {
@@ -48,6 +52,12 @@ export interface ProjectFacts extends JoineryProject {
   classificationMappings: ClassificationMapping[];
   /** The project's "Units and numbers" setting (#88), as the app reads it; absent when the file sets none. Hand it to `sheetFormat` for every figure the command line or an export writes. */
   unitsAndNumbers?: UnitsAndNumbers;
+  /** The graphic standard the project names (#365), a built-in one other than the default; absent when the file names none or the default. A build draws with its pens. */
+  graphicStandard?: GraphicStandard;
+  /** The id of a graphic standard the file names that this build does not have (a file from a newer app); the build falls back to the default and says so. */
+  unknownGraphicStandard?: string;
+  /** The title block layout the project keeps (the Romanian one, or any the app edited); absent: the standard layout. A build prints it on every sheet. */
+  titleBlockTemplate?: TitleBlockTemplate;
 }
 
 type Json = Record<string, unknown>;
@@ -65,6 +75,8 @@ export function readProjectFile(text: string): ProjectFacts {
   const version = declaredVersion(parsed);
   if (version === null) throw new Error('Not a project file: /version must be a whole number from 1');
   if (version > PROJECT_FILE_VERSION) throw new Error(`Project file version ${version} is newer than this build reads (${PROJECT_FILE_VERSION})`);
+  const standard = knownGraphicStandard(parsed.graphicStandard);
+  const titleBlockTemplate = readTitleBlockTemplate(parsed.titleBlockTemplate);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
   return {
     name: typeof parsed.name === 'string' ? parsed.name.trim() : '',
@@ -76,6 +88,9 @@ export function readProjectFile(text: string): ProjectFacts {
     boqArticles: readBoqArticles(parsed.boqArticles),
     classificationMappings: readClassificationMappings(parsed.classificationMappings),
     ...(readUnitsAndNumbers(parsed.unitsAndNumbers) ? { unitsAndNumbers: readUnitsAndNumbers(parsed.unitsAndNumbers) } : {}),
+    ...(standard.id !== undefined ? { graphicStandard: graphicStandardOf(standard.id) } : {}),
+    ...(standard.unknown !== undefined ? { unknownGraphicStandard: standard.unknown } : {}),
+    ...(titleBlockTemplate ? { titleBlockTemplate } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }

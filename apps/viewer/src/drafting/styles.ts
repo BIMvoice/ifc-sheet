@@ -23,41 +23,12 @@
 
 import type { DraftLayer, DraftParamValue } from './types';
 import { fontFamilyOf } from './text-width';
+import { DEFAULT_DIM_STYLE as ENGINE_DEFAULT_DIM_STYLE, STANDARD_STYLE_ID, type ArrowKind, type DimStyle, type DraftLengthUnit, type FontKind, type TextPlacement, type TextStyle } from '@bimvoice/ifcsheet';
 import { decimalsOf, lengthUnitOf, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
-export type FontKind = 'sans' | 'serif' | 'mono';
-export type TextPlacement = 'above' | 'centered' | 'below';
-export type ArrowKind = 'tick' | 'arrow' | 'dot' | 'none';
-export type LengthUnit = 'm' | 'cm' | 'mm';
+export type { ArrowKind, DimStyle, FontKind, TextPlacement, TextStyle } from '@bimvoice/ifcsheet';
+export type LengthUnit = DraftLengthUnit;
 export type LineType = 'continuous' | 'dashed' | 'dotted' | 'dashdot';
-
-export interface TextStyle {
-  id: string;
-  name: string;
-  /** Paper millimetres. */
-  height: number;
-  font: FontKind;
-  bold: boolean;
-  italic: boolean;
-  /** CSS colour; absent = the entity's layer colour. */
-  color?: string;
-}
-
-export interface DimStyle {
-  id: string;
-  name: string;
-  textStyle: string;
-  arrow: ArrowKind;
-  /** Paper millimetres. */
-  arrowSize: number;
-  extGap: number;
-  extOver: number;
-  placement: TextPlacement;
-  textGap: number;
-  precision: number;
-  unit: LengthUnit;
-  color?: string;
-}
 
 export interface LayerGroup {
   id: string;
@@ -66,14 +37,12 @@ export interface LayerGroup {
   locked: boolean;
 }
 
-export const STANDARD = 'standard';
+export const STANDARD = STANDARD_STYLE_ID;
 
 export const DEFAULT_TEXT_STYLE: TextStyle = { id: STANDARD, name: 'Standard', height: 2.5, font: 'sans', bold: false, italic: false };
 
-export const DEFAULT_DIM_STYLE: DimStyle = {
-  id: STANDARD, name: 'Standard', textStyle: STANDARD, arrow: 'tick', arrowSize: 1.5, extGap: 1, extOver: 1.5,
-  placement: 'above', textGap: 0.8, precision: 2, unit: 'm',
-};
+/** The project's own dimension style: the engine's (it is also the base of the dimension styles a graphic standard adds). */
+export const DEFAULT_DIM_STYLE: DimStyle = ENGINE_DEFAULT_DIM_STYLE;
 
 /** The fields an element may override, by kind. */
 export const TEXT_OVERRIDES = ['height', 'font', 'bold', 'italic', 'color'] as const;
