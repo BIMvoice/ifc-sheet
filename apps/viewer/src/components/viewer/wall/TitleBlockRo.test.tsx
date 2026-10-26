@@ -79,6 +79,12 @@ function printed(sheet: ProjectSheet): string[] {
   return out;
 }
 
+/** The F_01 datums (Ordinul 975/2026, Anexa 4) beyond the original fields, by title block field. */
+const F01_VALUES: Record<string, string> = {
+  registrationNumber: 'J40/1234/2020', projectManagerTitle: 'arh. Ionescu', designerTitle: 'arhitect', drawnByTitle: 'desenator', authorsCapacity: 'proiectant de arhitectură',
+  verifierCapacity: 'verificator atestat', verifierRequirement: 'A1', reportNumber: 'RV-77', reportDate: '2026-10-20',
+};
+
 const chooseRomanian = (): void => applyRomanianTitleBlock(romanianTitleBlock(ro as never));
 
 describe('the fields read the model\'s IfcProject and its actors', () => {
@@ -106,7 +112,7 @@ describe('the Romanian layout on every sheet', () => {
     assert.ok(sheets.length >= 2);
     for (const s of sheets) {
       const texts = printed(s);
-      for (const want of ['Proiectant general', 'Birou de arhitectură Alfa', 'Faza', 'DTAC', 'Șef proiect', 'Ion Ionescu', 'Proiectat', 'Ana Popescu', 'Ștampilă proiectant', 'Ștampilă verificator', s.number]) {
+      for (const want of ['Proiectant general', 'Birou de arhitectură Alfa', 'Faza', 'DTAC', 'Șef proiect', 'Ion Ionescu', 'Proiectat', 'Ana Popescu', 'Semnătura', 'Titlu proiect', 'Planșa nr.', s.number]) {
         assert.ok(texts.includes(want), `${s.number} prints "${want}": ${texts.join(' | ')}`);
       }
     }
@@ -130,6 +136,7 @@ describe('the Romanian layout on every sheet', () => {
     await loadModel();
     setProjectTitleBlockField('projectNumber', 'P-2026-014');
     setProjectTitleBlockField('drawnBy', 'D. Marin');
+    for (const [k, v] of Object.entries(F01_VALUES)) setProjectTitleBlockField(k, v);
     chooseRomanian();
     const s = useProjectStore.getState();
     const doc: EngineDocument = { name: s.name, models: [], views: [], sheets: s.sheets, titleBlock: effectiveTitleBlock(), titleBlockTemplate: s.titleBlockTemplate, titleBlockParams: s.titleBlockParams };
@@ -139,6 +146,7 @@ describe('the Romanian layout on every sheet', () => {
       const app = printed(sheet).filter((t) => t !== '');
       assert.deepEqual(app, engine, `${sheet.number}`);
       assert.ok(engine.includes('—'), `${sheet.number} states a dash for the scale it does not have`);
+      for (const v of Object.values(F01_VALUES)) assert.ok(engine.includes(v) && app.includes(v), `${sheet.number} F_01 "${v}" engine=${engine.includes(v)} app=${app.includes(v)}: ${engine.join('|')} // ${app.join('|')}`);
     }
   });
 });

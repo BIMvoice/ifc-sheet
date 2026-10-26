@@ -4,27 +4,29 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitText, frameRect, paperMm, printTitleBlock, resolveParamText, textWidthEm, titleBlockRect, type TemplateItem, type TemplateText, type PaperSize } from '@bimvoice/ifcsheet';
+import { FIELD_PARAMS, STANDARD_CAPTIONS_EN, TITLE_BLOCK_CAPTIONS_RO, type RoCaption, TITLE_BLOCK_FIELDS, fitText, frameRect, paperMm, printTitleBlock, resolveParamText, textWidthEm, titleBlockRect, type TemplateText, type PaperSize } from '@bimvoice/ifcsheet';
 import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 import { titleBlockRoEn } from '@/i18n/catalogues/title-block-ro.en';
 import { titleBlockRoRo } from '@/i18n/catalogues/title-block-ro.ro';
 import { TITLE_BLOCK_MM } from './sheet-frame';
-import { RO_COLUMNS, RO_STAMP_TOP, romanianTitleBlock } from './title-block-ro';
+import { RO_ROWS, romanianTitleBlock } from './title-block-ro';
 import { BUILTIN_PARAMS, SOFT_BUILTINS } from './title-block-params';
 
 /**
  * The Romanian title block (#54): every field sits inside its own cell with a
  * margin, however long the value; the block lies inside the frame at A4 to
- * A0, both ways round and in both positions; the two stamp boxes are empty
- * and big enough to stamp and sign in; captions exist in both languages.
+ * A0, both ways round and in both positions; the signature boxes are empty;
+ * every datum of the model F_01 (Ordinul 975/2026, Anexa 4) has its caption and its value; captions exist in both languages.
  */
 
-const ro = (k: string): string => (titleBlockRoRo as Record<string, string>)[k] ?? k;
-const en = (k: string): string => (titleBlockRoEn as Record<string, string>)[k] ?? k;
+const ro = (k: string): string => TITLE_BLOCK_CAPTIONS_RO[k as RoCaption];
+const en = (k: string): string => (titleBlockRoEn as Record<string, string>)[k] ?? STANDARD_CAPTIONS_EN[k as keyof typeof STANDARD_CAPTIONS_EN] ?? k;
 const layout = romanianTitleBlock(ro as never, DEFAULT_GRAPHIC_STANDARD);
 const texts = layout.items.filter((i): i is TemplateText => i.kind === 'text');
 const lines = layout.items.flatMap((i) => (i.kind === 'line' ? [i] : []));
 const KNOWN = new Set<string>([...BUILTIN_PARAMS, ...SOFT_BUILTINS]);
+/** The datums F_01 requires beyond the original fields: registration number, professional titles, capacities, cerința, report number and date. */
+const F01_PARAMS = ['RegistrationNumber', 'ProjectManagerTitle', 'DesignedByTitle', 'DrawnByTitle', 'AuthorsCapacity', 'VerifierCapacity', 'VerifierRequirement', 'ReportNumber', 'ReportDate'];
 const LONG = 'Ansamblu rezidențial „Șoseaua Ștefan cel Mare și Sfânt”, corpul C1, etapa întâi, Târgu Mureș';
 
 /** The nearest rule to the right of a text's start, on its row: the cell's right edge. */
@@ -41,7 +43,7 @@ function cellRows(t: TemplateText): { top: number; bottom: number } {
 describe('the Romanian title block layout', () => {
   it('prints every field the practice asks for, each from a name the program fills', () => {
     const used = texts.flatMap((t) => [...t.text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]));
-    for (const name of ['ProjectPhase', 'ProjectNumber', 'ProjectManager', 'DesignedBy', 'DrawnBy', 'CheckedBy', 'Organisation', 'Project', 'Address', 'Client', 'SheetNumber', 'SheetName', 'Scale', 'Date', 'Revision']) assert.ok(used.includes(name), name);
+    for (const name of ['ProjectPhase', 'ProjectNumber', 'ProjectManager', 'DesignedBy', 'DrawnBy', 'CheckedBy', 'Organisation', 'Project', 'Address', 'Client', 'SheetNumber', 'SheetName', 'Scale', 'Date', 'Revision', ...F01_PARAMS]) assert.ok(used.includes(name), name);
     for (const name of used) assert.ok(KNOWN.has(name), `${name} is a built-in`);
   });
 
@@ -63,6 +65,7 @@ describe('the Romanian title block layout', () => {
       for (const t of l.items.filter((i): i is TemplateText => i.kind === 'text' && !i.text.startsWith('{'))) {
         const { size, text } = fitText(t, t.text);
         assert.ok(t.x + textWidthEm(text) * size <= cellRight(t) - 1, `"${t.text}" fits`);
+        assert.equal(text, t.text, `"${t.text}" is printed whole, not cut with an ellipsis`);
       }
     }
   });
@@ -89,14 +92,35 @@ describe('the Romanian title block layout', () => {
     }
   });
 
-  it('leaves two empty stamp boxes, each at least 30 x 25 mm, captioned for the designer and the verifier', () => {
-    const inStamps = texts.filter((t) => t.x >= RO_COLUMNS.c && t.y > RO_STAMP_TOP);
-    assert.deepEqual(inStamps.map((t) => t.text), ['Ștampilă proiectant', 'Ștampilă verificator']);
-    const mid = (RO_COLUMNS.c + RO_COLUMNS.end) / 2;
-    assert.ok(mid - RO_COLUMNS.c >= 30 && RO_COLUMNS.end - mid >= 30 && TITLE_BLOCK_MM.h - RO_STAMP_TOP >= 25);
-    // Nothing else is drawn below the stamp captions inside the boxes: only the frame and the divider.
-    const items: TemplateItem[] = layout.items.filter((i) => i.kind === 'text' && i.x >= RO_COLUMNS.c && i.y > RO_STAMP_TOP + 3.2);
-    assert.deepEqual(items, []);
+  it('leaves four empty signature boxes (șef proiect, proiectat, desenat, verificator), captioned "Semnătura", and prints no stamp (F_01 names none)', () => {
+    const boxes = texts.filter((t) => t.text === 'Semnătura');
+    assert.equal(boxes.length, 4);
+    for (const t of boxes) {
+      const { top, bottom } = cellRows(t);
+      assert.ok(cellRight(t) - t.x + 2 >= 20 && bottom - top >= TITLE_BLOCK_MM.h / RO_ROWS - 1e-9, 'a box to sign in');
+      // Nothing else is printed in the box: no other text starts in it.
+      const inside = texts.filter((o) => o !== t && o.x >= t.x - 2 && o.x < cellRight(t) && o.y > top && o.y <= bottom);
+      assert.deepEqual(inside.map((o) => o.text), [], 'the box is empty');
+    }
+    assert.ok(!texts.some((t) => /ștampil/i.test(t.text)), 'no stamp caption');
+    assert.ok(!Object.values(titleBlockRoRo).some((v) => /ștampil/i.test(String(v)) && v !== titleBlockRoRo['tblayout.roHint']), 'no stamp caption in the catalogue');
+  });
+
+  it('prints every datum F_01 requires: its caption, and the value when set (Ordinul 975/2026, Anexa 4)', () => {
+    const captions = new Set(texts.filter((t) => !t.text.startsWith('{')).map((t) => t.text));
+    // F_01's wording where the model has it: Titlu proiect, Titlu planșă, Planșa nr., Proiect nr., Faza, Scara, Data, Beneficiar, Șef proiect, Proiectat, Desenat, Cerința, Semnătura.
+    for (const c of ['Titlu proiect', 'Titlu planșă', 'Planșa nr.', 'Proiect nr.', 'Faza', 'Scara', 'Data', 'Beneficiar', 'Șef proiect', 'Proiectat', 'Desenat', 'Verificator / expert', 'Cerința', 'Semnătura', 'Nr. înmatriculare / autorizație', 'Titlu profesional', 'Calitatea elaboratorilor', 'Calitatea', 'Referat / expertiză nr.']) assert.ok(captions.has(c), `caption "${c}"`);
+    const values: Record<string, string> = {
+      Organisation: 'Birou Alfa SRL', RegistrationNumber: 'J40/1234/2020', Client: 'Familia Popescu', Project: 'Casa Popescu', Address: 'Str. Lalelelor 3', SheetName: 'Plan parter', SheetNumber: 'A-101', Scale: '1:50', Date: '2026-10-26',
+      ProjectPhase: 'PAC', ProjectNumber: 'P-2026-014', Revision: 'B', ProjectManager: 'Ion Ionescu', ProjectManagerTitle: 'arh. Ion Ionescu', DesignedBy: 'Ana Popescu', DesignedByTitle: 'arh.', DrawnBy: 'D. Marin', DrawnByTitle: 'desenator',
+      AuthorsCapacity: 'proiectant arhitectură', CheckedBy: 'Mihai Radu', VerifierCapacity: 'verificator atestat', VerifierRequirement: 'A1', ReportNumber: 'RV-77', ReportDate: '2026-10-20',
+    };
+    const out = printTitleBlock(layout, (n) => values[n] ?? `{${n}?}`, { x: 0, y: 0, ...TITLE_BLOCK_MM }, false);
+    const printedTexts = out.texts.map((t) => t.text);
+    for (const [name, value] of Object.entries(values)) assert.ok(printedTexts.includes(value), `${name} prints "${value}"`);
+    // Every F_01 param has a field that fills it, so a typed value reaches the cell.
+    for (const p of F01_PARAMS) assert.ok(Object.values(FIELD_PARAMS).includes(p as never), `${p} is filled from a title block field`);
+    assert.ok(F01_PARAMS.every((p) => (TITLE_BLOCK_FIELDS as readonly string[]).includes(Object.entries(FIELD_PARAMS).find(([, v]) => v === p)![0])), 'and each field is a title block field');
   });
 
   it('says the practice\'s words in Romanian and has English for each caption', () => {
