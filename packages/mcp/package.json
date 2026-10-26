@@ -101,6 +101,7 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "llms.txt"
   ]
 }

@@ -50,6 +50,11 @@
       "import": "./dist/colour-fills.js",
       "default": "./dist/colour-fills.js"
     },
+    "./materials": {
+      "types": "./dist/materials.d.ts",
+      "import": "./dist/materials.js",
+      "default": "./dist/materials.js"
+    },
     "./footprint": {
       "types": "./dist/footprint.d.ts",
       "import": "./dist/footprint.js",
@@ -105,7 +110,8 @@
     "build": "pnpm exec tsc",
     "typecheck": "node ../../scripts/typecheck-tests.mjs",
     "dev": "pnpm exec tsc --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "benchmark:update": "IFCSHEET_BENCHMARK_UPDATE=1 vitest run src/golden-sheets.models.test.ts"
   },
   "dependencies": {
     "@ifc-lite/create": "workspace:^",

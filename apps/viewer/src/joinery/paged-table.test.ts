@@ -14,13 +14,14 @@ import { layoutMaterialTakeoff, type TakeoffLabels } from './material-takeoff-la
 import { layoutRoomFinishes, type RoomFinishLabels } from './room-finishes-layout';
 import { layoutTypeQuantities, type TypeQuantityLabels } from './type-quantities-layout';
 import { layoutUrban, type UrbanLabels } from '@/urban/urban-layout';
-import { ROOM_SCHEDULE_EN, roomSchedule, type RoomSchedule } from '@bimvoice/ifcsheet';
+import { ROOM_SCHEDULE_EN, ROOM_SCHEDULE_RO, roomSchedule, type RoomSchedule } from '@bimvoice/ifcsheet';
 import { layoutRoomSchedule, type RoomScheduleLabels } from './room-schedule-layout';
 import type { TakeoffRow } from './material-takeoff';
 import type { RoomFinishes } from './room-finishes';
 import type { Totals, TypeQuantities } from './type-quantities';
 import type { UrbanIndicators } from '@/urban/indicators';
 import type { ScheduleLayout } from './schedule-layout';
+import { layoutPagedTable, PAD, textWidth } from './paged-table';
 
 export const TAKEOFF_LABELS: TakeoffLabels = { locale: 'en', title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume', area: 'Area', usedIn: 'Used in', total: 'Total' };
 export const FINISH_LABELS: RoomFinishLabels = { locale: 'en', title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms' };
@@ -88,8 +89,8 @@ function reach(l: ScheduleLayout): { x: number; y: number } {
   return { x, y };
 }
 
-/** What each kind's small fixture drew before the shared engine (the old per-kind layouts), as a digest. The rooms' moved when the perimeter column was added (#42); nothing else about it changed. */
-const BEFORE: Record<string, string> = { takeoff: 'e6b97b5555f2', finishes: '2a53eb006060', types: 'a4a9294e0535', urban: '7b5aef6f4bf9', rooms: '3d2224ee5b44' };
+/** What each kind's small fixture drew before the shared engine (the old per-kind layouts), as a digest. Every digest moved when the title and the notes were inset by the cells' padding (#42); the rooms' also when the perimeter column was added; nothing else changed. */
+const BEFORE: Record<string, string> = { takeoff: '9dbd0ce04a3e', finishes: '276f937907fd', types: 'edf180bf476f', urban: 'dd99a4b04c63', rooms: '433b9ad33bfa' };
 /** A first-column text that exists once per row of the kind's fixture. */
 const ROW_TEXT: Record<string, (i: number) => string> = {
   takeoff: (i) => `Material ${i}`, finishes: (i) => `Room ${i + 1}`, types: (i) => `Type ${i}`, urban: (i) => `Category ${i}`, rooms: (i) => `Room ${i + 1}`,
@@ -165,5 +166,36 @@ describe('the column schedules page their rows to a viewport\'s height (#186)', 
         if (t.includes(FINISH_LABELS.sharedNote)) assert.ok(t.includes('Oak parquet'), `box ${h}, page ${page + 1}: the note has a row beside it`);
       }
     }
+  });
+});
+
+describe('text stays inside the viewport clip, inset like the cells (#42)', () => {
+  /** A note much longer than the table is wide: it wraps, it is not cut. */
+  const LONG = 'Su = aria utilă (Au): suma ariilor încăperilor. Sc = aria construită (Ac): amprenta nivelului care conține ±0,00, măsurată la fața exterioară a pereților exteriori. Sd = aria desfășurată (Ad): suma ariilor construite ale tuturor nivelurilor, subsolurile incluse.';
+  const KINDS_WITH_NOTES: [string, () => ScheduleLayout][] = [
+    ['rooms (ro)', () => layoutRoomSchedule(roomData(4), { ...ROOM_LABELS, ...ROOM_SCHEDULE_RO, locale: 'ro', title: 'Tabel de încăperi și arii', notes: [LONG] })],
+    ['urban', () => layoutUrban(urbanData(3), { ...URBAN_LABELS, rules: () => [LONG] })],
+  ];
+  for (const [kind, layout] of KINDS_WITH_NOTES) {
+    it(`${kind}: every text run, title and notes included, lies between the left and right inset of the table`, () => {
+      const l = layout();
+      const runs = l.prims.flatMap((p) => (p.kind === 'text' ? [p] : []));
+      assert.ok(runs.some((r) => r.text.includes('Su = aria') || r.text.includes('amprenta') || r.text.includes('suma')), 'the long note is on the sheet');
+      for (const r of runs) {
+        const w = textWidth(r.text, r.size);
+        const [left, right] = r.anchor === 'end' ? [r.x - w, r.x] : [r.x, r.x + w];
+        assert.ok(left >= PAD - 1e-9, `"${r.text}" starts at ${left}, left of the inset ${PAD}`);
+        assert.ok(right <= l.width - PAD + 1e-9, `"${r.text}" ends at ${right}, right of ${l.width - PAD}`);
+      }
+    });
+  }
+
+  it('a long note handed to the shared layout unwrapped is wrapped to the table, not cut at its edge', () => {
+    const table = { kind: 'table' as const, block: { columns: [30, 30], header: ['A', 'B'], numeric: (c: number) => c === 1, rows: [{ cells: ['x', '1'], rule: 0.18 }] } };
+    const l = layoutPagedTable('Title', 4, [table, { kind: 'text', h: 4, dy: 4, size: 2, text: LONG }]);
+    const notes = l.prims.flatMap((p) => (p.kind === 'text' && p.size === 2 ? [p] : []));
+    assert.ok(notes.length > 2, 'wrapped to several lines');
+    for (const r of notes) assert.ok(r.x + textWidth(r.text, r.size) <= l.width - PAD + 1e-9, `"${r.text}" runs past the table`);
+    assert.equal(notes.map((r) => r.text).join(' '), LONG, 'nothing is lost');
   });
 });

@@ -21,7 +21,7 @@ import type { ProjectDocument } from './types';
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
 export { PROJECT_FILE_VERSION };
-export { readMaterial } from './project-read';
+export { readMaterial } from '@bimvoice/ifcsheet/materials';
 
 export interface ProjectFile extends ProjectDocument {
   format: typeof PROJECT_FILE_FORMAT;

@@ -17,6 +17,7 @@ import { dxfName } from './sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from './handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, readinessWithProject, sheetGraphics, type ProjectFacts } from './headless.js';
 import { describeReadiness } from './readiness.js';
+import { materialsCommand } from './cli-materials.js';
 import { boq } from './cli-boq.js';
 import { classify } from './cli-classify.js';
 import { rooms } from './cli-rooms.js';
@@ -41,6 +42,7 @@ const USAGE = `ifcsheet: drawing sets from IFC models
 Usage:
   ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
+  ifcsheet materials <model.ifc> [--project <file>] [--json]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
   ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]
   ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]
@@ -58,6 +60,9 @@ Commands:
           weaker for it. Plain English, or JSON with --json. With --project, also what the
           saved project's split schedules get wrong: an element listed in more than one
           part, or in no part.
+  materials  The model's materials and how each draws where a view cuts it: hatch, scale,
+          fill, hatch pen, membrane. With --project, the project's own table applies (what the
+          app's Materials section edits); a material it has no row for is guessed from its name.
   boq     The bill of quantities (antemasuratoare): the articles of the project file, each with its total
           in its own unit, from the quantities the model declares (never zero for a missing one: the elements
           that lack it are named). Text, CSV with --csv, JSON with --json; --detail adds a row per type.
@@ -274,7 +279,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.ok;
   }
   const [command, ...rest] = positionals;
-  if (command !== 'build' && command !== 'check' && command !== 'boq' && command !== 'rooms' && command !== 'list' && command !== 'classify') {
+  if (command !== 'build' && command !== 'check' && command !== 'boq' && command !== 'rooms' && command !== 'list' && command !== 'classify' && command !== 'materials') {
     io.stderr(`ifcsheet: unknown command "${command}"\n\n${USAGE}`);
     return EXIT.usage;
   }
@@ -337,6 +342,9 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
       io.stderr(`ifcsheet: check of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;
     }
+  }
+  if (command === 'materials') {
+    return await materialsCommand({ rest, json: values.json === true, project: values.project, foreignOption: Boolean(values.out || values.dxf || values.name || values['include-far-elements']) }, io);
   }
   if (values.csv || values.detail || values.locale !== undefined) {
     io.stderr('ifcsheet build has no --csv, --detail or --locale; they are options of boq and rooms.\n');

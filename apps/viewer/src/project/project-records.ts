@@ -10,7 +10,6 @@
 
 import type { AssemblySpec } from '@ifc-lite/create';
 import type { SectionCapStyle, SectionPlane, SectionPlaneAxis } from '@/store/types';
-import type { CategoryLineWeight } from './types';
 
 /** A road drawing (longitudinal profile or cross-section set) of a corridor: a project document of its own, placeable on sheets or drawn on a plan. */
 export interface ProjectCivilDrawing {
@@ -33,24 +32,8 @@ export interface ProjectCivilDrawing {
   halfWidth?: number;
 }
 
-/**
- * How a building material draws where a view cuts it (ArchiCAD's Building
- * Materials): matched by IfcMaterial name. `hatch` null draws no hatch,
- * absent takes the default its name suggests; a membrane (or any layer under
- * 2 mm) draws as a heavy dashed line instead of a band.
- */
-export interface ProjectMaterial {
-  id: string;
-  name: string;
-  hatch?: string | null;
-  /** 1 = the pattern's own size. */
-  hatchScale?: number;
-  /** Cut fill colour; null: none (white), absent: the material's IFC colour. */
-  fill?: string | null;
-  /** Pen of the hatch lines. */
-  hatchPen?: CategoryLineWeight;
-  membrane?: boolean;
-}
+/** How a building material draws where a view cuts it: one definition, with the engine (`@bimvoice/ifcsheet/materials`). */
+export type { ProjectMaterial } from '@bimvoice/ifcsheet/materials';
 
 /** The subset of a section plane that defines the cut itself, not its on-screen lifecycle. */
 export interface SavedSectionCutPlane {
