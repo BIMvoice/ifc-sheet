@@ -19,6 +19,24 @@ export const TEXT = 2.5;
 export const PAD = 1.5;
 export const TITLE_H = 10;
 export const PEN = { frame: 0.35, grid: 0.18 } as const;
+/** The average width of a character as a fraction of its size: what a text run's width is estimated by (the line wrapping and the tests). */
+export const TEXT_EM = 0.55;
+
+/** The width (mm) a run of `text` at `size` is estimated to take. */
+export const textWidth = (text: string, size: number): number => [...text].length * size * TEXT_EM;
+
+/** `text` broken at spaces into lines that fit `width` (mm) at `size`; a word longer than a line stays whole. */
+function wrapToWidth(text: string, size: number, width: number): string[] {
+  const chars = Math.max(1, Math.floor(width / (size * TEXT_EM)));
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    if (line && [...line].length + 1 + [...word].length > chars) { lines.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [text];
+}
 
 export interface TableRow {
   cells: readonly string[];
@@ -71,8 +89,10 @@ type Line =
 
 const heightOf = (l: Line): number => (l.kind === 'row' ? ROW : l.h);
 
-function flatten(items: readonly TableItem[]): Line[] {
+function flatten(items: readonly TableItem[], width: number): Line[] {
   return items.flatMap((item): Line[] => {
+    // A line of text is kept inside the table's width, inset like the cells: a longer one wraps, never runs past the clip.
+    if (item.kind === 'text') return wrapToWidth(item.text, item.size, width - 2 * PAD).map((text) => ({ ...item, text }));
     if (item.kind !== 'table') return [item];
     const { block } = item;
     const head: Line[] = block.header ? [{ kind: 'row', block, row: { cells: block.header, bold: true, rule: PEN.frame }, header: true, last: false }] : [];
@@ -131,12 +151,12 @@ export function tableMinBox(items: readonly TableItem[], tail = 0): { width: num
 
 export function layoutPagedTable(title: string, titleSize: number, items: readonly TableItem[], options: PagedOptions = {}): ScheduleLayout {
   const tail = options.tail ?? 0;
-  const pages = paginate(flatten(items), options.maxHeight, tail);
+  const width = widthOf(items);
+  const pages = paginate(flatten(items, width), options.maxHeight, tail);
   const page = Math.min(Math.max(0, options.page ?? 0), pages.length - 1);
   const lines = pages[page];
-  const width = widthOf(items);
   const prims: SchedulePrim[] = [{
-    kind: 'text', x: 0, y: TITLE_H - 3, text: pageTitle(title, page, pages.length, options.continued), size: titleSize, anchor: 'start', bold: true,
+    kind: 'text', x: PAD, y: TITLE_H - 3, text: pageTitle(title, page, pages.length, options.continued), size: titleSize, anchor: 'start', bold: true,
   }];
   let y = TITLE_H;
   let segment: { block: TableBlock; top: number } | null = null;
@@ -166,7 +186,7 @@ export function layoutPagedTable(title: string, titleSize: number, items: readon
       return;
     }
     close(y);
-    if (line.kind === 'text') prims.push({ kind: 'text', x: 0, y: y + line.dy, text: line.text, size: line.size, anchor: 'start', bold: line.bold });
+    if (line.kind === 'text') prims.push({ kind: 'text', x: PAD, y: y + line.dy, text: line.text, size: line.size, anchor: 'start', bold: line.bold });
     y += line.h;
   });
   close(y);
