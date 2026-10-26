@@ -9,6 +9,7 @@
  * time it is wanted.
  */
 
+import { sheetScaleText } from '@bimvoice/ifcsheet';
 import { drawingArea, SET_PAPER, sheetGroup, type SetGroup } from './drawing-set';
 import { registerFit, type RegisterFit } from '@/joinery/register-layout';
 import { currentRevisionOf } from './revisions';
@@ -86,11 +87,7 @@ export function inSetOrder<S extends Pick<ProjectSheet, 'number' | 'viewports'>>
   ];
 }
 
-/** The scale text of one sheet. */
-export function sheetScaleText(sheet: Pick<ProjectSheet, 'viewports'>, notDrawings: ReadonlySet<string> = new Set(), asIndicated = 'As indicated'): string {
-  const scales = [...new Set((sheet.viewports ?? []).filter((v) => !notDrawings.has(v.viewId)).map((v) => v.scale))].sort((a, b) => a - b);
-  return scales.length > 1 ? asIndicated : scales.map((s) => `1:${s}`).join('');
-}
+export { sheetScaleText };
 
 /** The date of the last issue that held a sheet numbered `number`. */
 function lastIssueDate(number: string, issues: RegisterInput['issues']): string {

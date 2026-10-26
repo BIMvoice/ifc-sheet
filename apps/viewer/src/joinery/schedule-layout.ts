@@ -16,6 +16,7 @@
  */
 
 import { normalisedPanels, type PanelOperation } from '@ifc-lite/create';
+import { PAD } from './paged-table';
 import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
 import { occurrenceMark, type ScheduleData, type ScheduleEntry } from './schedule-data';
@@ -201,7 +202,8 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
   const prims: SchedulePrim[] = [];
   const tableRows = rows(data, labels);
 
-  prims.push({ kind: 'text', x: 0, y: 6, text: pageTitle(labels.title, page, pages, options.continued), size: 5, anchor: 'start', bold: true });
+  // Inset like the paged tables' titles: the viewport's frame is drawn on x = 0 and would cover the first letter.
+  prims.push({ kind: 'text', x: PAD, y: 6, text: pageTitle(labels.title, page, pages, options.continued), size: 5, anchor: 'start', bold: true });
   let top = TITLE_H, width = LABEL_W;
   for (const cards of bands) {
     const w = LABEL_W + cards.reduce((s, e) => s + cardW(e), 0);

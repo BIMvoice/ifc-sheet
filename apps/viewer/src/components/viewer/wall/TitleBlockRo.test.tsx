@@ -135,9 +135,10 @@ describe('the Romanian layout on every sheet', () => {
     const doc: EngineDocument = { name: s.name, models: [], views: [], sheets: s.sheets, titleBlock: effectiveTitleBlock(), titleBlockTemplate: s.titleBlockTemplate, titleBlockParams: s.titleBlockParams };
     for (const sheet of s.sheets) {
       const engine = sheetGraphic({ ...sheet, viewports: [] }, doc, new Map()).texts.map((t) => t.text);
-      // Only the scale differs: a sheet with no drawing states none here and a dash on screen (the engine leaves an empty text out).
-      const app = printed(sheet).filter((t) => t !== '—' && t !== '');
-      assert.deepEqual(engine, app, `${sheet.number}`);
+      // The scale is the one shared rule (`sheetScaleLine`): a dash for a sheet with no drawing, on screen and in the engine alike. Only an empty text differs (the engine leaves it out).
+      const app = printed(sheet).filter((t) => t !== '');
+      assert.deepEqual(app, engine, `${sheet.number}`);
+      assert.ok(engine.includes('—'), `${sheet.number} states a dash for the scale it does not have`);
     }
   });
 });
