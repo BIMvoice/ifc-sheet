@@ -13,7 +13,7 @@ import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, describeReadiness } from '@bimvoice/ifcsheet';
+import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, TITLE_BLOCK_CAPTIONS_RO, describeReadiness, romanianTitleBlock, standardTitleBlock } from '@bimvoice/ifcsheet';
 import { joineryScheduleData, readProjectFile, readinessWithProject } from '@bimvoice/ifcsheet/headless';
 import { readinessOfModel } from '@bimvoice/ifcsheet/readiness-read';
 import { PROJECT_MIGRATIONS } from '@/project/project-migrations';
@@ -23,6 +23,8 @@ import { useViewerStore } from '@/store';
 import { parseStep } from '@/test/properties-panel-harness.js';
 import { scheduleData } from '@/joinery/schedule-data';
 import { subReportChecks } from './sub-report-check';
+import { sheetTitleBlockMisfits } from './title-block-fit';
+import { effectiveTitleBlock } from '@/project/title-block-model';
 
 let ifcDataStore: Awaited<ReturnType<typeof parseStep>>;
 
@@ -132,6 +134,39 @@ describe('the engine and the app read the same project and build the same rows',
     assert.deepEqual(project.schedules, doc.schedules);
     assert.deepEqual(project.joineryTypes, doc.joineryTypes);
     assert.equal(project.schedules.find((s) => s.id === 's2')?.sub, undefined, 'only a joinery list can be split');
+  });
+});
+
+describe('the title block that does not fit: the app and the command line list the same findings', () => {
+  const LONG = 'S.C. Societatea Comercială de Construcții și Investiții Imobiliare Reunite S.R.L.';
+  const ABSURD = Array.from({ length: 12 }, () => LONG).join(' ');
+  const sheets = [{ id: 'a', number: 'A-101', name: 'Plan parter', createdAt: 1 }, { id: 'b', number: 'A-102', name: 'Plan etaj', createdAt: 2, titleBlock: { client: 'Alfa SRL' } }, { id: 'c', number: 'A-103', name: 'Sectiune', createdAt: 3 }];
+  const ro = romanianTitleBlock((k) => TITLE_BLOCK_CAPTIONS_RO[k]);
+  const fitOf = (findings: ReturnType<typeof readinessWithProject>) => findings.filter((f) => f.kind === 'titleBlockFit').map((f) => [f.kind, f.params, describeReadiness(f)]);
+
+  /** The findings of one project text, in the app (its store and its title block reader) and headless. */
+  function both(extra: Record<string, unknown>) {
+    const text = JSON.stringify({ format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, name: 'Bloc P4', sheets, ...extra });
+    loadProjectDocument(parseProjectFile(text));
+    const s = useProjectStore.getState();
+    const misfits = sheetTitleBlockMisfits(s.titleBlockTemplate, s.sheets, { projectFields: effectiveTitleBlock(), projectName: s.name, params: s.titleBlockParams, sheets: s.sheets, schedules: s.schedules, revisions: s.revisions, drafts: s.drafts, views: s.views, asIndicated: 'As indicated' });
+    return {
+      inApp: fitOf(readinessOfModel({ dataStore: ifcDataStore, storeys: [] }, [], undefined, misfits)),
+      headless: fitOf(readinessWithProject({ dataStore: ifcDataStore, storeys: [] }, readProjectFile(text), 'm')),
+    };
+  }
+
+  it('say the same for a beneficiary beyond the smallest size, on each sheet that shows it', () => {
+    const { inApp, headless } = both({ titleBlockTemplate: ro, titleBlock: { client: ABSURD } });
+    assert.deepEqual(inApp.map((f) => (f[1] as { sheet: string }).sheet), ['A-101 Plan parter', 'A-103 Sectiune'], 'the sheet that says a short client itself has none');
+    assert.deepEqual(headless, inApp);
+  });
+
+  it('say nothing for a project whose values fit, or whose layout is the standard one', () => {
+    for (const extra of [{ titleBlockTemplate: ro, titleBlock: { client: LONG } }, { titleBlockTemplate: standardTitleBlock(), titleBlock: { client: ABSURD } }]) {
+      const { inApp, headless } = both(extra);
+      assert.deepEqual([inApp, headless], [[], []]);
+    }
   });
 });
 

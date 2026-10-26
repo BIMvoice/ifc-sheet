@@ -19,8 +19,8 @@ Commands:
   check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain English, or JSON with --json. With --project, also what the
-          saved project's split schedules get wrong: an element listed in more than one
-          part, or in no part.
+          saved project's split schedules get wrong (an element listed in more than one
+          part, or in no part) and the title block values its layout cuts short on a sheet.
   materials  The model's materials and how each draws where a view cuts it: hatch, scale,
           fill, hatch pen, membrane. With --project, the project's own table applies (what the
           app's Materials section edits); a material it has no row for is guessed from its name.
