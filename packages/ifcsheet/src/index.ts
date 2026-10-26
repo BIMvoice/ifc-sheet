@@ -165,7 +165,7 @@ export { SET_TEMPLATE_EN, describeTemplateNote, type TemplateNote, type Template
 
 // The Romanian permit project (PAC, Legea 169/2026 Anexa 2): the items it lists and the set that draws the architecture sheets (#364)
 export { PAC_ITEMS, pacCoverage, pacScaleAllowed, pacSetTemplate, type PacCoverageRow, type PacItem, type PacKind, type PacSheetNames } from './pac-set.js';
-export { PAC_RURAL_ITEMS, PAC_RURAL_SCALE, pacRuralSetTemplate } from './pac-rural-set.js';
+export { PAC_RURAL_ITEMS, PAC_RURAL_PAPER, PAC_RURAL_SCALE, PAC_RURAL_STEP_UP, pacRuralSetTemplate } from './pac-rural-set.js';
 
 // The starting set (pure: an opened model's facts in, a document out)
 export { SET_SECTIONS, generateDefaultSet, type DefaultSet, type DefaultSetOptions, type SetModel, type SetNote } from './default-set.js';

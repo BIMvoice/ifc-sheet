@@ -10,13 +10,16 @@
  *   - point 8 a) draws the plans of all levels, the roof plans, the facades and the main sections "la o scară adecvată
  *     1:50", so the drawing slots below ask for 1:50;
  *   - the three situation plans (points 2, 3, 4) are "1:1.000 sau 1:500"; the plan de încadrare (1 a) names no scale;
- *   - the paper is not stated by the text; 1:50 does not fit the automatic set's A2 for a house with several views per
- *     sheet (AC20-FZK-Haus needs A0), so the template names A0, the largest paper the set uses;
+ *   - the paper is not stated by the text. Anexa 3 targets a house of at most P + M and 150 mp developed area, whose plan
+ *     (about 12 x 12 m) is 24 cm at 1:50, so each drawing gets a sheet of its own on A3 landscape. A drawing that does
+ *     not fit A3 at 1:50 (a building larger than the Anexa 3 scope) steps up the paper of that sheet only, to A2 and then
+ *     A1 (`PAC_RURAL_STEP_UP`); the scale is never changed to save paper;
  *   - the fence plans (8 c) and the roof plans have no sheet series in the set, so they are listed to be supplied.
  */
 
 import type { PacItem, PacSheetNames } from './pac-set.js';
-import type { SetTemplate } from './set-template.js';
+import type { PaperSize } from './document.js';
+import type { RuledSeries, SetTemplate, SheetRule, ViewRule } from './set-template.js';
 
 /** The scale of Anexa 3 point 8 a) (1:50). */
 export const PAC_RURAL_SCALE = 50;
@@ -38,18 +41,29 @@ export const PAC_RURAL_ITEMS: readonly PacItem[] = [
   { id: 'rural.structuralExpertise', point: '9 b)', kind: 'existingBuilding', scales: null, drawnBy: null },
 ];
 
-/** The set template that draws the sheets of Anexa 3 point 8 a) from a model, every drawing slot at 1:50. */
+/** The paper of every sheet, unless its drawing does not fit it at 1:50 (see `PAC_RURAL_STEP_UP`). */
+export const PAC_RURAL_PAPER = 'A3' as const;
+
+/** The papers a sheet steps up to, in order, when its drawing does not fit `PAC_RURAL_PAPER` at 1:50. */
+export const PAC_RURAL_STEP_UP: readonly PaperSize[] = ['A2', 'A1'];
+
+/**
+ * The set template that draws the sheets of Anexa 3 point 8 a) from a model: one view per sheet, at 1:50, on A3
+ * landscape, or on the first of A2, A1 that the view fits at 1:50. Sheets of a series are named `<name> 1`, `<name> 2`, ...
+ */
 export function pacRuralSetTemplate(names: PacSheetNames): SetTemplate {
-  const layout = { paper: 'A0' as const, orientation: 'landscape' as const };
+  const layout = { paper: PAC_RURAL_PAPER, orientation: 'landscape' as const };
   const scale = PAC_RURAL_SCALE;
+  const sheets = (name: string, series: RuledSeries, views: ViewRule[]): SheetRule[] =>
+    views.map((view, i) => ({ name: `${name} ${i + 1}`, series, layout: { ...layout, stepUp: [...PAC_RURAL_STEP_UP] }, slots: [{ view, scale }] }));
   return {
     name: names.name,
     schedules: [],
     annotations: {},
     sheets: [
-      { name: names.plans, series: 'plans', layout, slots: [{ view: { kind: 'plan', storey: 0 }, scale }, { view: { kind: 'plan', storey: 1 }, scale }] },
-      { name: names.facades, series: 'elevations', layout, slots: (['north', 'east', 'south', 'west'] as const).map((direction) => ({ view: { kind: 'elevation', direction }, scale })) },
-      { name: names.sections, series: 'sections', layout, slots: [{ view: { kind: 'section', place: 0 }, scale }, { view: { kind: 'section', place: 1 }, scale }] },
+      ...sheets(names.plans, 'plans', [{ kind: 'plan', storey: 0 }, { kind: 'plan', storey: 1 }]),
+      ...sheets(names.facades, 'elevations', (['north', 'east', 'south', 'west'] as const).map((direction) => ({ kind: 'elevation', direction }))),
+      ...sheets(names.sections, 'sections', [{ kind: 'section', place: 0 }, { kind: 'section', place: 1 }]),
     ],
   };
 }

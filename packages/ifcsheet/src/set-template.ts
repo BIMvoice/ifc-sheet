@@ -24,7 +24,7 @@
  */
 
 import { groundPlan, sheetGroup } from './drawing-set.js';
-import type { ElevationDirection, NumberingScheme, Paper, PlanProjectView, ProjectSheet, ProjectView, SheetFrame } from './document.js';
+import type { ElevationDirection, NumberingScheme, Paper, PaperSize, PlanProjectView, ProjectSheet, ProjectView, SheetFrame } from './document.js';
 import type { ScheduleListKind } from './sub-reports.js';
 
 /** The series whose sheets are made by view rules; a room's interior elevations and the schedules are not (see `ScheduleRule`). */
@@ -49,6 +49,12 @@ export interface SheetLayoutRule {
   orientation: 'landscape' | 'portrait';
   frame?: SheetFrame;
   templateId?: string;
+  /**
+   * Larger papers, in the order to try them, for a sheet whose drawings do not fit `paper` at the scale its slots ask
+   * for. The sheet takes the first one the drawings fit at that scale and keeps the scale; only the paper changes. When
+   * none fits, the largest is used and the scale falls back as for any sheet (a `rescaled` note).
+   */
+  stepUp?: PaperSize[];
 }
 
 export interface SheetRule {

@@ -100,5 +100,6 @@ describe('the simplified PAC checklist (Anexa 3)', () => {
   it('asks the set for 1:50 on every drawing slot', () => {
     const template = pacRuralSetTemplate({ name: 'PAC', plans: 'P', facades: 'F', sections: 'S' });
     assert.ok(template.sheets.flatMap((s) => s.slots).every((slot) => slot.scale === 50));
+    assert.ok(template.sheets.every((s) => s.slots.length === 1 && s.layout.paper === 'A3' && s.layout.stepUp?.join() === 'A2,A1'));
   });
 });

@@ -17,7 +17,7 @@
  *   - A view in a series the template has no sheet for is left unhung, and said.
  */
 
-import { groupOfView, placeViewports, scaleOn, setRows, viewExtent, type ModelExtent } from './drawing-set.js';
+import { drawingArea, fitsScale, groupOfView, placeViewports, scaleOn, setRows, viewExtent, type ModelExtent } from './drawing-set.js';
 import type { NumberingScheme, ProjectSheet, ProjectView, SheetViewport } from './document.js';
 import { freshProjectId } from './ids.js';
 import { DEFAULT_SCHEME, numberSheets } from './numbering.js';
@@ -45,6 +45,20 @@ const startOf = (layout: SheetLayoutRule): Pick<ProjectSheet, 'paper' | 'orienta
   paper: layout.paper, orientation: layout.orientation, ...(layout.frame ? { frame: layout.frame } : {}), ...(layout.templateId ? { templateId: layout.templateId } : {}),
 });
 
+/**
+ * The paper a sheet starts on: the layout's own when `sizes` fit it at `wanted`, else the first of its `stepUp` papers
+ * they fit at `wanted` (the scale is never changed to save paper), else the largest of them. A stepped-up sheet drops
+ * the built-in sheet template id, which belongs to the paper it was made for.
+ */
+function paperFor(layout: SheetLayoutRule, sizes: readonly { w: number; h: number }[], wanted: number | undefined): ReturnType<typeof startOf> {
+  const start = startOf(layout);
+  const steps = layout.stepUp ?? [];
+  if (wanted === undefined || steps.length === 0 || fitsScale(sizes, drawingArea(start), wanted)) return start;
+  const { templateId: _own, ...bare } = start;
+  const stepped = steps.map((paper) => ({ ...bare, paper }));
+  return stepped.find((s) => fitsScale(sizes, drawingArea(s), wanted)) ?? stepped[stepped.length - 1];
+}
+
 /** The scale a group of slots asks for: the least detailed of them, as the sheet draws all its views at one scale. */
 const wantedScale = (scales: readonly (number | undefined)[]): number | undefined => {
   const given = scales.filter((s): s is number => s !== undefined);
@@ -71,9 +85,9 @@ function sheetOf(rule: SheetRule, views: readonly ProjectView[], claimed: Set<st
     }
   }
   if (members.length === 0) return null;
-  const start = startOf(rule.layout);
   const sizes = members.map((v) => viewExtent(v, input.extent));
   const wanted = wantedScale(scales);
+  const start = paperFor(rule.layout, sizes, wanted);
   const scale = scaleOn(sizes, start, wanted);
   if (wanted !== undefined && scale !== wanted) notes.push({ key: 'setTemplate.note.rescaled', params: { sheet: rule.name, wanted, used: scale } });
   const viewports: SheetViewport[] = placeViewports(members, sizes, scale, start, input.extent);

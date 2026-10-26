@@ -37,25 +37,40 @@ describe('the Anexa 3 checklist (#364)', () => {
   });
 });
 
+const EXPECTED_PAPERS: [string, string][] = [
+  ['Planuri de nivel 1', 'A2'], ['Planuri de nivel 2', 'A2'],
+  ['Fațade 1', 'A3'], ['Fațade 2', 'A3'], ['Fațade 3', 'A3'], ['Fațade 4', 'A3'],
+  ['Secțiuni principale 1', 'A3'], ['Secțiuni principale 2', 'A3'],
+];
+
 describe.skipIf(missing !== null)('the rural PAC set of AC20-FZK-Haus (#364)', () => {
   let model: OpenedModel;
   let set: DefaultSet;
+
+  const arch = () => set.document.sheets.filter((s) => Object.values(NAMES).some((n) => s.name.startsWith(n)) && s.series !== 'schedules');
 
   beforeAll(async () => {
     model = await openModel(new Uint8Array(readFileSync(FZK)));
     set = generateDefaultSet(model, { setTemplate: pacRuralSetTemplate(NAMES), now: 0 })!;
   });
 
-  it('lists plans, facades, sections in order', () => {
-    const named = set.document.sheets.filter((s) => Object.values(NAMES).includes(s.name)).map((s) => [s.name, s.series]);
-    expect(named).toEqual([['Planuri de nivel', 'plans'], ['Fațade', 'elevations'], ['Secțiuni principale', 'sections']]);
+  it('lists plans, facades, sections in order, one sheet per drawing', () => {
+    const named = arch().map((s) => [s.name, s.series]);
+    expect(named.length).toBeGreaterThanOrEqual(6);
+    expect(named.map(([, series]) => series)).toEqual([...named.map(([, series]) => series)].sort((a, b) => ['plans', 'elevations', 'sections'].indexOf(a as string) - ['plans', 'elevations', 'sections'].indexOf(b as string)));
+    expect(new Set(named.map(([n]) => n)).size).toBe(named.length);
   });
 
-  it('draws every drawing slot at 1:50', () => {
+  it('draws every drawing slot at 1:50, one viewport per sheet, A3 where it fits and a larger paper where it does not', () => {
     expect(pacRuralSetTemplate(NAMES).sheets.flatMap((r) => r.slots).every((slot) => slot.scale === 50)).toBe(true);
-    const arch = set.document.sheets.filter((s) => Object.values(NAMES).includes(s.name));
-    expect(arch.flatMap((s) => s.viewports ?? []).length).toBeGreaterThanOrEqual(8);
-    for (const sheet of arch) for (const vp of sheet.viewports ?? []) expect(vp.scale, sheet.name).toBe(50);
+    for (const sheet of arch()) {
+      expect(sheet.viewports, sheet.name).toHaveLength(1);
+      expect(sheet.viewports![0].scale, sheet.name).toBe(50);
+    }
+    // FZK is larger than the Anexa 3 scope: its plans do not fit the A3 drawing area (400 x 227 mm, drawing plus
+    // 25 mm clearances and title) at 1:50, so they step up to A2; its facades and sections fit A3. The exact sizes the
+    // rule yields are pinned; the 12 m house on A3 is in pac-rural-set.test.ts.
+    expect(arch().map((s) => [s.name, s.paper])).toEqual(EXPECTED_PAPERS);
   });
 
   it('marks plans, facades and sections drawn and the rest to be supplied', () => {

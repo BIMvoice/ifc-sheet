@@ -44,7 +44,7 @@ export const pacEn = {
   'pac.mode.rural': 'Simplified PAC, rural house (Anexa 3)',
   'pac.rural.intro': 'The simplified contents for a rural single-family house (at most P + M, at most 150 mp developed built area), as Anexa 3 of Legea 169/2026 lists them.',
   'pac.rural.point': 'Anexa 3, {point}',
-  'pac.rural.notSet': 'Not stated by the text, so not set here: the paper format (A0 is used so that 1:50 fits) and the order of the sheets.',
+  'pac.rural.notSet': 'Not stated by the text, so not set here: the paper format and the order of the sheets. Each drawing gets its own A3 sheet at 1:50; a drawing that does not fit A3 at 1:50 (a building larger than Anexa 3 covers) moves that sheet up to A2, then A1. The scale is never changed to save paper.',
   'pac.rural.scales': 'Scale 1:{list}',
   'pac.useRuralSet': 'Use the simplified PAC sheets (1:50) for a new project',
   'pac.rural.set.name': 'Simplified PAC',

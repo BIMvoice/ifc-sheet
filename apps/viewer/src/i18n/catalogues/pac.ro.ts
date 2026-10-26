@@ -45,7 +45,7 @@ export const pacRo = {
   'pac.mode.rural': 'PAC simplificat, locuință rurală (Anexa 3)',
   'pac.rural.intro': 'Conținutul simplificat pentru o locuință unifamilială în mediul rural (cel mult P + M, cel mult 150 mp suprafață construită desfășurată), cum îl enumeră Anexa 3 la Legea 169/2026.',
   'pac.rural.point': 'Anexa 3, {point}',
-  'pac.rural.notSet': 'Nu rezultă din text, deci nu este stabilit aici: formatul planșelor (se folosește A0 ca să încapă scara 1:50) și ordinea lor.',
+  'pac.rural.notSet': 'Nu rezultă din text, deci nu este stabilit aici: formatul planșelor și ordinea lor. Fiecare desen are planșa lui, A3 la scara 1:50; un desen care nu încape pe A3 la 1:50 (o clădire mai mare decât cea vizată de Anexa 3) mută planșa respectivă pe A2, apoi A1. Scara nu se schimbă niciodată pentru a economisi hârtie.',
   'pac.rural.scales': 'Scara 1:{list}',
   'pac.useRuralSet': 'Folosește planșele PAC simplificat (1:50) pentru un proiect nou',
   'pac.rural.set.name': 'PAC simplificat',
