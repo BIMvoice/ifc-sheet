@@ -54,4 +54,7 @@ export function fitText(item: Pick<TemplateText, 'size' | 'fit' | 'bold'>, shown
   return { size: TEXT_FIT_MIN, text: truncateToWidth(shown, item.fit / TEXT_FIT_MIN, item.bold) };
 }
 
+/** The longest text an item of the layout holds (the file reader cuts a longer one; an edit refuses it). */
+export const MAX_TEXT = 200;
+
 export const ITEM_KINDS = ['line', 'rect', 'text', 'logo'] as const;

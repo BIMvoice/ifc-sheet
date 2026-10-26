@@ -3,13 +3,16 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { namesRo } from '../catalogues/names.ro';
+import { pacRo } from '../catalogues/pac.ro';
 import { printPreviewRo } from '../catalogues/print-preview.ro';
 import { reviewRo } from '../catalogues/review.ro';
 import { revisionsRo } from '../catalogues/revisions.ro';
 import { roomScheduleRo } from '../catalogues/room-schedule.ro';
 import { roomSummaryRo } from '../catalogues/room-summary.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
+import { selectionBarRo } from '../catalogues/selection-bar.ro';
 import { setTemplateRo } from '../catalogues/set-template.ro';
+import { settingsRo } from '../catalogues/settings.ro';
 import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetTablesRo } from '../catalogues/sheet-tables.ro';
 import { sheetTemplatesRo } from '../catalogues/sheet-templates.ro';
@@ -36,13 +39,16 @@ import { whatChangedRo } from '../catalogues/whatchanged.ro';
 /** The catalogues whose file starts with `m` to `z` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const roMZ = {
   ...namesRo,
+  ...pacRo,
   ...printPreviewRo,
   ...reviewRo,
   ...revisionsRo,
   ...roomScheduleRo,
   ...roomSummaryRo,
   ...scheduleExportRo,
+  ...selectionBarRo,
   ...setTemplateRo,
+  ...settingsRo,
   ...sheetContentRo,
   ...sheetTablesRo,
   ...sheetTemplatesRo,

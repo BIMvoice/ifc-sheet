@@ -1,7 +1,7 @@
 # Romanian glossary (ro)
 
 One place to correct term choices. Edit the term here and in `catalogues/*.ro.ts`
-(`wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`, `review`, `print-preview`, `tag-fields`, `revisions`, `face`, `drafting`, `annotate-all`, `keyboard-shortcuts`, `sheet-templates`, `wall-materials`); the tests in
+(`command-palette`, `feedback`, `selection-bar`, `settings`, `wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`, `review`, `print-preview`, `tag-fields`, `revisions`, `face`, `drafting`, `annotate-all`, `keyboard-shortcuts`, `sheet-templates`, `wall-materials`); the tests in
 `locales/ro.test.ts` keep keys, placeholders and diacritics honest.
 
 Rules: comma-below diacritics only (ș ț, never ş ţ), plus ă â î. Polite plural
@@ -63,7 +63,7 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 | General designer (title block) | Proiectant general | The firm that holds the design; the title block's organisation |
 | Project manager (title block) | Șef proiect | |
 | Designed by (title block) | Proiectat | With "Desenat" and "Verificat" |
-| Phase (of the design, title block) | Faza | Written as the issue names them: DTAC, PTh, DE; typed, never translated |
+| Phase (of the design, title block) | Faza | Written as the issue names them: PAC (DTAC before 25 August 2026), PTh, DE; typed, never translated |
 | Project no. (title block) | Proiect nr. | |
 | Stamp (designer's, verifier's) | Ștampilă proiectant / Ștampilă verificator | An empty box on the title block for the stamp and signature |
 | Paper | Hârtie | Paper format: "Format" |
@@ -106,7 +106,7 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 
 ## Not translated yet
 
-The 3D viewer around the Wall (ribbon, panels, dialogs), the drafting tools' panels
+The 3D viewer around the Wall (ribbon, panels, dialogs; the face covers it and makes it inert, so only what `IfcSheetShell` keeps is translated: the command palette, the Settings dialog, the feedback dialog and a drawing's annotation bar), the drafting tools' panels
 and ribbon labels (`drafting.tool.*`, `drafting.props.*`; the command line and its messages are Romanian since #314), the PDF export dialogs (`sheetsPdf.*`) and the
 drafting standards stay English; a missing key falls back to English one by one.
 The "Detail marks" drafting layer name, the sheet name of a new blank schedule

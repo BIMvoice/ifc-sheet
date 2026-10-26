@@ -150,6 +150,14 @@ export interface ServerConfig {
   autoOpenViewer?: boolean;
   /** Preferred viewer port (0 = auto). */
   viewerPort?: number;
+  /**
+   * Hosted, stateless deployment (#165): the server's file system is not
+   * reachable. Every tool path is refused (`resolveSafePath`); models come in
+   * the request.
+   */
+  hosted?: boolean;
+  /** Largest model, in bytes, a tool accepts inline (`ifc_base64`). Unset: no cap. */
+  maxModelBytes?: number;
 }
 
 export const DEFAULT_CONFIG: ServerConfig = {

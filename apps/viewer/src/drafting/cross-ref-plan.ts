@@ -39,9 +39,20 @@ export interface PlanCrossRefInput {
   screenUp: 1 | -1;
 }
 
+/**
+ * What {@link withCrossReferences} returned for each input object: a mark is placed by its text box, and a
+ * text box is measured with the input's own `screenUp`, so the input alone is the key.
+ * A sheet asks for a viewport's marks three times a render (what it draws, the extent it fits and the
+ * box it frames) and on every render after, so it hands the same input each time and the marks are
+ * placed once (#154). An input is never changed after it is made.
+ */
+const placed = new WeakMap<PlanCrossRefInput, DraftEntity[]>();
+
 /** `drafts` with the section references and elevation marks of a plan added; any other view's drafts unchanged. */
 export function withCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
-  return withAnnotationScreenUp(input.screenUp, () => placeCrossReferences(input));
+  let out = placed.get(input);
+  if (!out) placed.set(input, out = withAnnotationScreenUp(input.screenUp, () => placeCrossReferences(input)));
+  return out;
 }
 
 function placeCrossReferences(input: PlanCrossRefInput): DraftEntity[] {

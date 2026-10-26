@@ -146,10 +146,24 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
   const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
   const ground = useMemo(() => elevationMarkPlan(views), [views]);
-  const crossRefInput = useCallback((vp: SheetViewport): PlanCrossRefInput => ({
-    drafts: settledDrafts(vp.viewId), view: views.find((v) => v.id === vp.viewId), views, sheets, groundPlanId: ground?.id,
-    bounds: drawingOf.get(vp.viewId)?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays, screenUp: viewScreenUp(vp.viewId),
-  }), [settledDrafts, views, sheets, drawingOf, ground, styled]);
+  // One input per view and scale while nothing it reads changes, so `withCrossReferences` places a viewport's marks once,
+  // not once each for what is drawn, the fitted extent and the box (#154).
+  const crossRefInput = useMemo(() => {
+    const made = new Map<string, PlanCrossRefInput>();
+    return (vp: SheetViewport): PlanCrossRefInput => {
+      const screenUp = viewScreenUp(vp.viewId);
+      const key = `${vp.viewId}\u0000${vp.scale}\u0000${screenUp}`;
+      let input = made.get(key);
+      if (!input) {
+        input = {
+          drafts: settledDrafts(vp.viewId), view: views.find((v) => v.id === vp.viewId), views, sheets, groundPlanId: ground?.id,
+          bounds: drawingOf.get(vp.viewId)?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays, screenUp,
+        };
+        made.set(key, input);
+      }
+      return input;
+    };
+  }, [settledDrafts, views, sheets, drawingOf, ground, styled]);
   const draftsFor = useCallback((vp: SheetViewport) => withCrossReferences(crossRefInput(vp)), [crossRefInput]);
   // What an auto-fit viewport frames: the drawing, the plot of a site plan and the drafts the sheet draws, the cross-references included (#140, #243).
   // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
