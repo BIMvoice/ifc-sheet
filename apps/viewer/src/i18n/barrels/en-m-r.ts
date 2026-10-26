@@ -7,6 +7,7 @@ import { materialsEn } from '../catalogues/materials.en';
 import { mcpPlaygroundEn } from '../catalogues/mcp-playground.en';
 import { mcpEn } from '../catalogues/mcp.en';
 import { measureEn } from '../catalogues/measure.en';
+import { measuredQuantitiesEn } from '../catalogues/measured-quantities.en';
 import { mergeLayersBannerEn } from '../catalogues/merge-layers-banner.en';
 import { miscPanelsAEn } from '../catalogues/misc-panels-a.en';
 import { miscPanelsBEn } from '../catalogues/misc-panels-b.en';
@@ -58,6 +59,7 @@ export const enMR = {
   ...mcpPlaygroundEn,
   ...mcpEn,
   ...measureEn,
+  ...measuredQuantitiesEn,
   ...mergeLayersBannerEn,
   ...miscPanelsAEn,
   ...miscPanelsBEn,

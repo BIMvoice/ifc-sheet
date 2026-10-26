@@ -6,18 +6,20 @@
  * The loaded models read into `type-quantities.ts`'s input: every
  * geometry-bearing physical element with its defining type, its storey and its Qto
  * quantities in SI. It reads the quantities the way the material takeoff does
- * (the list provider's `getQuantitySets`, the model's units scaled to SI).
+ * (the list provider's `getQuantitySets`, the model's units scaled to SI, an
+ * area or volume the model does not state measured from the meshes, #74).
  */
 
 import { RelationshipType } from '@ifc-lite/data';
 import { extractAllMaterialsOnDemand, extractProjectUnits, getInheritanceChainAcrossSchemas, ProjectUnits } from '@ifc-lite/parser';
-import { classificationOf, mappingsFor, type ClassificationMapping, type ClassificationModel, type ScheduleClassification } from '@bimvoice/ifcsheet';
+import { classificationOf, mappingsFor, withMeasured, type ClassificationMapping, type ClassificationModel, type ScheduleClassification } from '@bimvoice/ifcsheet';
 import { materialNamesOf } from '@bimvoice/ifcsheet/project';
 import { loadedClassificationModel } from '@/classification/classification-model';
 import { createListDataProvider } from '@/lib/lists';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { quantityScales } from './material-takeoff-models';
+import { elementMeshLookup, type InstancedMeshes } from './element-meshes';
 import { elementTypeQuantities, typeQuantities, type TypeElement, type TypeQuantities } from './type-quantities';
 
 /** Not things a takeoff counts: openings and other features of an element, virtual elements. */
@@ -46,7 +48,7 @@ function isPhysicalElement(className: string): boolean {
  * carries the specific Qto (Qto_SlabBaseQuantities, ...), and the rule is the
  * same whichever parent class it is.
  */
-export function collectTypeElements(classify?: { mappings: readonly ClassificationMapping[]; model: ClassificationModel }): TypeElement[] {
+export function collectTypeElements(classify?: { mappings: readonly ClassificationMapping[]; model: ClassificationModel }, instanced?: InstancedMeshes): TypeElement[] {
   const s = useViewerStore.getState();
   const out: TypeElement[] = [];
   for (const [modelId, model] of s.models) {
@@ -56,6 +58,7 @@ export function collectTypeElements(classify?: { mappings: readonly Classificati
     const provider = createListDataProvider(store, model.name, undefined, view);
     const scales = quantityScales(store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty());
     const hierarchy = store.spatialHierarchy;
+    const meshesOf = elementMeshLookup(model, instanced);
     const listed = new Set((provider.getAllEntityIds?.() ?? []).filter((id) => isPhysicalElement(provider.getEntityTypeName(id))));
     for (const id of listed) {
       const className = provider.getEntityTypeName(id);
@@ -64,13 +67,16 @@ export function collectTypeElements(classify?: { mappings: readonly Classificati
       const typeName = typeId === undefined ? '' : provider.getEntityDefiningTypeName?.(id) ?? '';
       const storey = hierarchy?.elementToStorey.get(id);
       const materials = classify ? [...new Set(extractAllMaterialsOnDemand(store, id).flatMap(materialNamesOf))] : [];
+      const declared = elementTypeQuantities(className, provider.getQuantitySets(id), scales);
+      const q = withMeasured(declared, className, () => meshesOf(id));
       out.push({
         className,
         typeClass: typeId === undefined || !typeName ? null : provider.getEntityTypeName(typeId),
         typeName: typeName || null,
         level: provider.getStoreyName?.(id) ?? '',
         elevation: storey === undefined ? null : hierarchy?.storeyElevations.get(storey) ?? null,
-        ...elementTypeQuantities(className, provider.getQuantitySets(id), scales),
+        length: declared.length, area: q.area, volume: q.volume, areaSource: q.areaSource, volumeSource: q.volumeSource,
+        ...(q.volumeRefusal ? { volumeRefusal: q.volumeRefusal } : {}),
         // The engine's one function (#89): the model's own reference, else the mapping (type, material, class).
         ...(classify ? { classification: classificationOf({ className, typeName: typeName || null, materials, modelId, expressId: id }, classify.mappings, classify.model) } : {}),
       });
