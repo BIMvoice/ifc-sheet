@@ -22,6 +22,7 @@ import { boq } from './cli-boq.js';
 import { classify } from './cli-classify.js';
 import { rooms } from './cli-rooms.js';
 import { list, listSchedulesOn, listTableText } from './cli-list.js';
+import { PAC_INTERVENTIONS, type PacIntervention } from './pac-set.js';
 import { PAC_DEFAULT_LOCALE, pacPages, pacTemplateFor } from './cli-pac.js';
 import { buildStandard, unknownStandardMessage, withTitleBlock } from './cli-standard.js';
 import { COMMAND_LINE_STANDARD_IDS } from './standard-pack.js';
@@ -91,6 +92,8 @@ Options:
                    (default "{number} {sheet}": A-101 Ground floor.dxf). Plain ASCII, no path separators.
   --template <file> A set template (.bvset) for build: which sheets, which views on them, at which scale.
   --pac            Build the submission PDF of the permit project (PAC): the opis page, then the PAC sheets. Not with --template.
+  --intervention <w> With --pac: the works, new (default), existing (an intervention on an existing building: Anexa 2 point 1.4.4 applies) or
+                   interior (interior only: the items 1.4.4 lifts show "Nu este cazul").
   --standard <id>  A drawing standard for build: its pens and title block (known: ro, the Romanian pack of the app's "Install standard").
                    Wins over the project's own graphic standard and title block layout; without it a --project's are used.
   --name <name>    The project name for the title blocks (default: the model's).
@@ -126,6 +129,8 @@ interface BuildArgs {
   /** The permit project (PAC): its set template, and the opis page first in the PDF. */
   pac?: boolean;
   locale?: string;
+  /** With --pac: the works (`PacIntervention`). */
+  intervention?: PacIntervention;
   /** A saved project: its list schedules are printed after the build. */
   project?: string;
   includeFarElements?: boolean;
@@ -177,7 +182,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     return EXIT.failed;
   }
   const sheets = await sheetGraphics(set, model, standard.pens ? { pens: standard.pens } : {});
-  const pdf = await exportPdf(args.pac ? pacPages(sheets, set, args.locale ?? PAC_DEFAULT_LOCALE) : sheets, { title: set.document.name });
+  const pdf = await exportPdf(args.pac ? pacPages(sheets, set, args.locale ?? PAC_DEFAULT_LOCALE, args.intervention) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params })}\n`);
   if (args.out) {
@@ -290,6 +295,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         locale: { type: 'string' },
         'include-far-elements': { type: 'boolean' },
         pac: { type: 'boolean' },
+        intervention: { type: 'string' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
       },
@@ -395,6 +401,11 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     io.stderr('ifcsheet build has no --schedule; it is an option of list.\n');
     return EXIT.usage;
   }
+  const intervention = PAC_INTERVENTIONS.find((i) => i === values.intervention);
+  if (values.intervention !== undefined && (!values.pac || !intervention)) {
+    io.stderr(values.pac ? `ifcsheet build --intervention is one of ${PAC_INTERVENTIONS.join(', ')}.\n` : 'ifcsheet build has --intervention only with --pac.\n');
+    return EXIT.usage;
+  }
   if (values.pac && values.template !== undefined) {
     io.stderr('ifcsheet build --pac sets the sheets itself; it cannot be combined with --template.\n');
     return EXIT.usage;
@@ -404,7 +415,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.usage;
   }
   try {
-    return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
+    return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(intervention ? { intervention } : {}), ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
   } catch (error) {
     io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
     return EXIT.failed;

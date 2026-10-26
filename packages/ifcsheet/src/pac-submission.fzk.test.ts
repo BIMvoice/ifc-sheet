@@ -16,13 +16,19 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { EXIT, run } from './cli.js';
 import { pacTemplateFor } from './cli-pac.js';
-import { PAC_ITEMS, PAC_OPIS_ORDER, PAC_WORDS_EN, PAC_WORDS_RO, generateDefaultSet, pacCoverage, pacOpis, pacOpisTexts } from './index.js';
+import { PAC_WORDS_EN, PAC_WORDS_RO, generateDefaultSet, pacOpis, pacOpisTexts } from './index.js';
 import { openModel } from './headless.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
-const missing = !existsSync(FZK) ? 'AC20-FZK-Haus.ifc not found' : !existsSync(WASM) ? 'wasm bundle not built: run `pnpm build:wasm:fetch`' : null;
+// The FZK model is committed (apps/viewer/src/test/__fixtures__): its absence is a broken checkout and fails below, it is not skipped.
+// The wasm bundle is a build artefact: its absence skips, saying how to get it, as the other model tests do.
+const missing = !existsSync(WASM) ? 'wasm bundle not built: run `pnpm build:wasm:fetch`' : null;
 if (missing) console.warn(`[ifcsheet] skipping the PAC submission test: ${missing}`);
+
+it('has the committed AC20-FZK-Haus fixture', () => {
+  expect(existsSync(FZK), `${FZK} is committed; a missing file is a broken checkout`).toBe(true);
+});
 
 const dirs: string[] = [];
 afterAll(() => { for (const dir of dirs) rmSync(dir, { recursive: true, force: true }); });
@@ -32,14 +38,6 @@ const capture = () => {
   const err: string[] = [];
   return { io: { stdout: (t: string) => void out.push(t), stderr: (t: string) => void err.push(t) }, err: () => err.join('') };
 };
-
-/** Anexa 2's own numbering, written out here so the test does not read the order from the code it tests. */
-const ANEXA_2_ORDER = [
-  ['siteLocation', '1.a, 1.1'], ['situationExisting', '1.b, 1.2'], ['situationProposed', '1.c, 1.3'], ['architectureMemo', '1.4.2'],
-  ['plans', '1.4.3 a)'], ['roof', '1.4.3 a)'], ['facades', '1.4.3 a)'], ['sections', '1.4.3 a)'], ['context', '1.4.3 b)'],
-  ['diagnosis', '1.4.4 a)'], ['structuralExpertise', '1.4.4 b), c)'], ['survey', '1.4.4 d)'], ['utilities', '1.5'],
-  ['specialtyMemos', '1.6.1'], ['neighbourExpertise', '1.6.2'], ['geotechnical', '1.6.3'], ['calculationBrief', '1.6.4'], ['engineeringDrawings', '1.6.5'],
-] as const;
 
 interface Item { str: string; x: number; y: number }
 
@@ -68,20 +66,13 @@ function opisRows(items: Item[], answers: readonly string[]): { point: string; i
     .map((p) => ({ point: p.str, included: items.find((i) => answers.includes(i.str) && Math.abs(i.y - p.y) < 1)?.str ?? '' }));
 }
 
-describe('the PAC opis (no model)', () => {
-  it('lists every Anexa 2 item once, in Anexa 2 order', () => {
-    expect([...PAC_OPIS_ORDER]).toEqual(ANEXA_2_ORDER.map(([id]) => id));
-    expect(PAC_ITEMS.map((i) => [i.id, i.point]).sort()).toEqual(ANEXA_2_ORDER.map((r) => [...r]).sort());
-    const opis = pacOpis([{ series: 'plans' }, { series: 'sections' }], 'ro', 'Casa');
-    expect(opis.rows.map((r) => r.id)).toEqual(ANEXA_2_ORDER.map(([id]) => id));
-    expect(opis.rows.filter((r) => r.included).map((r) => r.id)).toEqual(['plans', 'sections']);
-    expect(pacOpis([], 'ro', '').rows.some((r) => r.included)).toBe(false);
-  });
-
+describe('the PAC opis words and page (no model)', () => {
   it('has the same keys in both languages, with the comma-below letters, and fits one A4 page', () => {
     expect(Object.keys(PAC_WORDS_RO).sort()).toEqual(Object.keys(PAC_WORDS_EN).sort());
     expect(Object.values(PAC_WORDS_RO).join(' ')).not.toMatch(/[şţŞŢ]/);
-    const texts = pacOpisTexts(pacOpis(pacCoverage([]).map(() => ({})), 'ro', 'Casa'));
+    expect(PAC_WORDS_RO['pac.opis.na']).toBe('Nu este cazul');
+    expect(PAC_WORDS_EN['pac.opis.na']).toBe('Not applicable');
+    const texts = pacOpisTexts(pacOpis([], 'ro', 'Casa', { views: [] }));
     expect(Math.max(...texts.map((t) => t.at.y))).toBeLessThan(297 - 10);
   });
 });
@@ -102,14 +93,18 @@ describe.skipIf(missing !== null)('ifcsheet build --pac, on AC20-FZK-Haus (#364)
     expect(set.document.sheets.length).toBeGreaterThanOrEqual(3);
     expect(pages.length).toBe(1 + set.document.sheets.length);
 
-    // Page 1: the opis, the items in Anexa 2 order, the set's drawn ones answered Da.
-    const answers = [PAC_WORDS_RO['pac.opis.yes'], PAC_WORDS_RO['pac.opis.no']];
+    // Page 1: the opis, the items in Anexa 2 order. The answers are the ones Anexa 2 gives for a new building drawn from
+    // this model, written out by hand (not computed): plans, facades and sections are drawn; point 1.4.4 is for works on an
+    // existing building; everything else is for the person to supply.
+    const answers = [PAC_WORDS_RO['pac.opis.yes'], PAC_WORDS_RO['pac.opis.no'], PAC_WORDS_RO['pac.opis.na']];
     expect(pages[0].map((i) => i.str).join(' ')).toContain(PAC_WORDS_RO['pac.opis.title']);
-    const drawn = new Set(pacCoverage(set.document.sheets).filter((r) => r.drawn).map((r) => r.item.id));
-    expect(drawn.size).toBeGreaterThan(0);
-    const rows = opisRows(pages[0], answers);
-    const expected = ANEXA_2_ORDER.map(([id, point]) => ({ point, included: answers[drawn.has(id) ? 0 : 1] }));
-    expect(rows).toEqual(expected);
+    expect(opisRows(pages[0], answers)).toEqual([
+      { point: '1.a, 1.1', included: 'Nu' }, { point: '1.b, 1.2', included: 'Nu' }, { point: '1.c, 1.3', included: 'Nu' }, { point: '1.4.2', included: 'Nu' },
+      { point: '1.4.3 a)', included: 'Da' }, { point: '1.4.3 a)', included: 'Nu' }, { point: '1.4.3 a)', included: 'Da' }, { point: '1.4.3 a)', included: 'Da' },
+      { point: '1.4.3 b)', included: 'Nu' }, { point: '1.4.4 a)', included: 'Nu este cazul' }, { point: '1.4.4 b), c)', included: 'Nu este cazul' },
+      { point: '1.4.4 d)', included: 'Nu este cazul' }, { point: '1.5', included: 'Nu' }, { point: '1.6.1', included: 'Nu' }, { point: '1.6.2', included: 'Nu' },
+      { point: '1.6.3', included: 'Nu' }, { point: '1.6.4', included: 'Nu' }, { point: '1.6.5', included: 'Nu' },
+    ]);
 
     // The sheets follow in the set's order: each page after the opis carries its sheet's number.
     for (const [i, sheet] of set.document.sheets.entries()) expect(pages[i + 1].map((t) => t.str).join(' '), sheet.name).toContain(sheet.number);
@@ -122,6 +117,28 @@ describe.skipIf(missing !== null)('ifcsheet build --pac, on AC20-FZK-Haus (#364)
     expect(await run(['build', FZK, '--pac', '--locale', 'en', '--out', join(dir, 'pac.pdf')], c.io)).toBe(EXIT.ok);
     const [first] = await readPages(new Uint8Array(readFileSync(join(dir, 'pac.pdf'))));
     expect(first.map((i) => i.str).join(' ')).toContain(PAC_WORDS_EN['pac.opis.title']);
+  });
+
+  it('writes "Nu este cazul" for the items 1.4.4 lifts with --intervention interior, and asks 1.4.4 of an intervention on an existing building', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ifcsheet-pac-'));
+    dirs.push(dir);
+    const answers = [PAC_WORDS_RO['pac.opis.yes'], PAC_WORDS_RO['pac.opis.no'], PAC_WORDS_RO['pac.opis.na']];
+    const byPoint = async (works: string) => {
+      const c = capture();
+      expect(await run(['build', FZK, '--pac', '--intervention', works, '--out', join(dir, `${works}.pdf`)], c.io)).toBe(EXIT.ok);
+      return opisRows((await readPages(new Uint8Array(readFileSync(join(dir, `${works}.pdf`)))))[0], answers).map((r) => r.included);
+    };
+    // The order of Anexa 2: 1.1, 1.2, 1.3, 1.4.2, plans, roof, facades, sections, context, 1.4.4 a) b) d), 1.5, 1.6.1 to 1.6.5.
+    expect(await byPoint('existing')).toEqual(['Nu', 'Nu', 'Nu', 'Nu', 'Da', 'Nu', 'Da', 'Da', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu']);
+    // Interior only: the two situation plans, the roof plan, the facades and the photo documentation are not needed.
+    expect(await byPoint('interior')).toEqual(['Nu', 'Nu este cazul', 'Nu este cazul', 'Nu', 'Da', 'Nu este cazul', 'Nu este cazul', 'Da', 'Nu este cazul', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu']);
+  });
+
+  it('refuses --intervention without --pac or with an unknown value', async () => {
+    const a = capture();
+    expect(await run(['build', FZK, '--intervention', 'interior', '--out', 'x.pdf'], a.io)).toBe(EXIT.usage);
+    const b = capture();
+    expect(await run(['build', FZK, '--pac', '--intervention', 'demolition', '--out', 'x.pdf'], b.io)).toBe(EXIT.usage);
   });
 
   it('refuses --pac with --template, and --pac on another command', async () => {
