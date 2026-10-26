@@ -20,6 +20,10 @@ export interface BuildStandard {
   pens?: PenTable;
   /** The layout of every sheet's title block; absent: the standard layout. */
   titleBlockTemplate?: ProjectFacts['titleBlockTemplate'];
+  /** The title block values typed in the project, the model-source mapping and the project's parameters: what the app prints on every sheet over the model's values. Not set by a pack. */
+  titleBlock?: ProjectFacts['titleBlock'];
+  titleBlockSources?: ProjectFacts['titleBlockSources'];
+  titleBlockParams?: ProjectFacts['titleBlockParams'];
   /** What the build says about the choice (a project from a newer app). */
   notes: string[];
 }
@@ -40,10 +44,24 @@ export function buildStandard(standardId: string | undefined, project: ProjectFa
   if (standardId !== undefined && !pack) return null;
   const graphic = pack?.graphicStandard !== undefined ? graphicStandardOf(pack.graphicStandard) : project?.graphicStandard;
   const titleBlockTemplate = pack?.titleBlockTemplate ?? project?.titleBlockTemplate;
-  return { ...(graphic ? { pens: pensOf(graphic) } : {}), ...(titleBlockTemplate ? { titleBlockTemplate } : {}), notes };
+  return {
+    ...(graphic ? { pens: pensOf(graphic) } : {}), ...(titleBlockTemplate ? { titleBlockTemplate } : {}),
+    ...(project?.titleBlock ? { titleBlock: project.titleBlock } : {}), ...(project?.titleBlockSources ? { titleBlockSources: project.titleBlockSources } : {}), ...(project?.titleBlockParams ? { titleBlockParams: project.titleBlockParams } : {}),
+    notes,
+  };
 }
 
-/** `set` with the standard's title block layout on its document. */
+/**
+ * `set` with the standard's title block layout and the project's typed values, mapping and parameters on its document.
+ * The project's values replace the set's starting ones (its date), as loading the project file in the app does.
+ */
 export function withTitleBlock(set: DefaultSet, standard: BuildStandard): DefaultSet {
-  return standard.titleBlockTemplate ? { ...set, document: { ...set.document, titleBlockTemplate: standard.titleBlockTemplate } } : set;
+  const document = {
+    ...set.document,
+    ...(standard.titleBlockTemplate ? { titleBlockTemplate: standard.titleBlockTemplate } : {}),
+    ...(standard.titleBlock ? { titleBlock: standard.titleBlock } : {}),
+    ...(standard.titleBlockSources ? { titleBlockSources: standard.titleBlockSources } : {}),
+    ...(standard.titleBlockParams ? { titleBlockParams: standard.titleBlockParams } : {}),
+  };
+  return { ...set, document };
 }

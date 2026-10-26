@@ -8,7 +8,7 @@
  * value is malformed (a viewport without a view or a positive scale).
  */
 
-import { readSheetParams } from './title-block-file';
+import { readSheetParams, readTitleBlock } from '@bimvoice/ifcsheet';
 import { NUMBER_GROUPS, typedBeforeSchemes } from './numbering';
 import { readPaper } from './paper';
 import { readFrame } from './sheet-frame';
@@ -73,7 +73,4 @@ export function readSheetLayout(v: Json, path: string): Pick<ProjectSheet, 'pape
   return out;
 }
 
-/** A title block's fields (a sheet's or the project's): its string values; `undefined` when absent. */
-export function readTitleBlock(v: unknown): Record<string, string> | undefined {
-  return isObject(v) ? Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => isString(e[1]))) : undefined;
-}
+export { readTitleBlock };

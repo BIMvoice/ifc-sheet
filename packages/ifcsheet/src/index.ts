@@ -98,6 +98,7 @@ export { BUILTIN_PARAMS, FIELD_PARAMS, fieldBuiltins, paramLookup, resolveParamT
 export { fitText, ITEM_KINDS, MAX_TEXT, TEXT_FIT_MIN, type TemplateItem, type TemplateLine, type TemplateLogo, type TemplateRect, type TemplateText, type TitleBlockTemplate } from './title-block-template.js';
 export { textWidthEm, truncateToWidth } from './text-width.js';
 export { readTitleBlockTemplate } from './title-block-template-read.js';
+export { checkParamName, PARAM_NAME, readSheetParams, readTitleBlock, readTitleBlockParams, type ParamNameProblem } from './title-block-file-read.js';
 export { RO_COLUMNS, RO_ONLY_CAPTIONS_EN, RO_ROWS, TITLE_BLOCK_CAPTIONS_RO, romanianTitleBlock, type RoCaption, type RoOnlyCaption } from './title-block-ro.js';
 
 // Drawing standards: the graphic standards (pens, sheet pens, lettering) and the packs that bundle them (#365)
