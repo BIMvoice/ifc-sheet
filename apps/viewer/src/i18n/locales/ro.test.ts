@@ -16,10 +16,28 @@ import ro from './ro';
  * drawer, sheet cards, title block, scales and tool rail; the rest are the
  * catalogues the Wall opens (sheet settings, what is missing, issue the set,
  * what changed, libraries, the takeoff and door and window schedule as they
- * print on a sheet, the draft set report, the title block's parameters and layout).
+ * print on a sheet, the draft set report, the title block's parameters and layout), then what the face reaches
+ * outside the Wall (`IfcSheetShell` covers the engine's interface, and keeps these): the command palette, the Settings
+ * dialog, the feedback dialog and a drawing's annotation bar.
  */
-const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'settings.privacy.toast', 'viewerShell.toast.dismiss'];
-const keys = (Object.keys(en) as TranslationKey[]).filter((k) => IN_SCOPE.some((p) => k.startsWith(p)));
+const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'settings.privacy.toast', 'viewerShell.toast.dismiss',
+  // The palette (Ctrl/Cmd+K) the face keeps, the Settings dialog its privacy notice opens, and the feedback dialog of its top bar.
+  'commandPalette.', 'settings.', 'feedback.'];
+/**
+ * Single keys, matched exactly because their prefix also holds keys the face does not reach: the annotation bar of
+ * a drawing, one toast and one label, and the palette rows whose text lives in another catalogue's prefix (panel
+ * titles, the project, version and export commands).
+ */
+const IN_SCOPE_KEYS = new Set<string>([
+  'standards.open', 'standards.el.style', 'standards.el.height', 'standards.el.editText', 'standards.el.reset', 'standards.text.bold', 'standards.text.italic',
+  'standards.dim.placement.above', 'standards.dim.placement.centered', 'standards.dim.placement.below',
+  'standards.dim.arrow', 'standards.dim.arrow.tick', 'standards.dim.arrow.arrow', 'standards.dim.arrow.dot', 'standards.dim.arrow.none',
+  'drafting.snap', 'drafting.sectionDepth', 'viewerShell.file.ifcxOverlayRequiresIfcx',
+  'lists.panel.title', 'workspacePanels.bottom.document', 'section2d.heading', 'properties.panel.title', 'changesPanel.title', 'measure.panel.title', 'viewportLighting.sunSkyPanel.header.title', 'commands.visibility.showAll',
+  'projectPackage.open', 'projectPackage.save', 'projectPackage.saveAs', 'projectPackage.link', 'projectVersions.save', 'projectVersions.update', 'projectVersions.history',
+  'exportCommands.ifc.menuLabel', 'exportCommands.anonymized.menuLabel', 'exportCommands.modifiedIfc.menuLabel', 'exportCommands.glb.menuLabel', 'exportCommands.kmz.menuLabel', 'exportCommands.ion.menuLabel', 'exportCommands.usd.menuLabel', 'exportCommands.energy.menuLabel', 'exportCommands.json.menuLabel', 'exportCommands.screenshot.menuLabel', 'exportCommands.pdf.menuLabel',
+]);
+const keys = (Object.keys(en) as TranslationKey[]).filter((k) => IN_SCOPE_KEYS.has(k) || IN_SCOPE.some((p) => k.startsWith(p)));
 const catalogue = ro as Readonly<Record<string, TranslationValue>>;
 
 const PLACEHOLDER = /\{([A-Za-z][A-Za-z0-9_]*)\}/g;

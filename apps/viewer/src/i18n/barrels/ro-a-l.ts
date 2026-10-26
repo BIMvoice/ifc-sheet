@@ -11,12 +11,14 @@ import { catalogueRo } from '../catalogues/catalogue.ro';
 import { checkRo } from '../catalogues/check.ro';
 import { classificationRo } from '../catalogues/classification.ro';
 import { colourSchemeRo } from '../catalogues/colour-scheme.ro';
+import { commandPaletteRo } from '../catalogues/command-palette.ro';
 import { creditsRo } from '../catalogues/credits.ro';
 import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
 import { faceRo } from '../catalogues/face.ro';
 import { featuresRo } from '../catalogues/features.ro';
+import { feedbackRo } from '../catalogues/feedback.ro';
 import { handoverRo } from '../catalogues/handover.ro';
 import { issueChangesRo } from '../catalogues/issue-changes.ro';
 import { issueRo } from '../catalogues/issue.ro';
@@ -34,12 +36,14 @@ export const roAL = {
   ...checkRo,
   ...classificationRo,
   ...colourSchemeRo,
+  ...commandPaletteRo,
   ...creditsRo,
   ...cutawayAxoRo,
   ...draftingRo,
   ...elementGraphicsRo,
   ...faceRo,
   ...featuresRo,
+  ...feedbackRo,
   ...handoverRo,
   ...issueChangesRo,
   ...issueRo,
