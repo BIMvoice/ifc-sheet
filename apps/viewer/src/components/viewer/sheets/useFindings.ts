@@ -2,12 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** What is missing from the set, as a list to show: read on demand, with a fix that runs and reads again. */
+/** What is missing from the set, as a list to show: read on demand, then kept up to date while it is shown (`watchFindingInputs`), and read again after a fix. */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { currentFindings } from '@/check/collect';
 import { fixOutcome, reattachOutcome, removeFindingAnnotation, type FindingNav, type FixOutcome } from '@/check/go';
 import type { Finding } from '@/check/types';
+import { watchFindingInputs } from '@/check/watch-findings';
 
 export interface FindingsState {
   /** `null` until it was read once. */
@@ -29,6 +30,9 @@ export function useFindings(): FindingsState {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<FindingsState['failure']>(null);
   const refresh = () => setFindings(currentFindings());
+  // Once read, the list follows what the checks read; before the first read nothing is watched or computed.
+  const read = findings !== null;
+  useEffect(() => (read ? watchFindingInputs(() => setFindings(currentFindings())) : undefined), [read]);
   const fix = async (finding: Finding, nav: FindingNav) => {
     setBusy(true);
     try {
