@@ -58,6 +58,8 @@ export interface ProjectFacts extends JoineryProject {
   unknownGraphicStandard?: string;
   /** The title block layout the project keeps (the Romanian one, or any the app edited); absent: the standard layout. A build prints it on every sheet. */
   titleBlockTemplate?: TitleBlockTemplate;
+  /** The language tag the project's generated names were made in (`language` in the file, `ro`); absent when the file records none. A build names a new set in it. */
+  language?: string;
 }
 
 type Json = Record<string, unknown>;
@@ -91,6 +93,7 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(standard.id !== undefined ? { graphicStandard: graphicStandardOf(standard.id) } : {}),
     ...(standard.unknown !== undefined ? { unknownGraphicStandard: standard.unknown } : {}),
     ...(titleBlockTemplate ? { titleBlockTemplate } : {}),
+    ...(typeof parsed.language === 'string' && parsed.language.trim() ? { language: parsed.language.trim() } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }

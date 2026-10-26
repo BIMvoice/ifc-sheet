@@ -19,7 +19,7 @@
 import { buildDrawingSet, groundPlan, groupsThatDoNotFit, type ModelExtent, type SetGroup } from './drawing-set.js';
 import type { ElevationProjectView, NumberingScheme, PlanProjectView, ProjectDocument, ProjectLevel, ProjectView, SectionProjectView, SheetTemplate, TemplateSeries } from './document.js';
 import { freshProjectId } from './ids.js';
-import { nameOf } from './names.js';
+import { nameLanguageOf, nameOf, withNameLanguage } from './names.js';
 import { DEFAULT_SCHEME } from './numbering.js';
 import { proposeSections, type ProposalInput, type SectionProposal } from './section-proposals.js';
 import { sectionPlaneThrough } from './section-plane.js';
@@ -55,6 +55,12 @@ export interface DefaultSetOptions {
   scheme?: NumberingScheme;
   /** A set template (#21): the sheets are made by its rules (`applySetTemplate`) instead of the automatic grouping; the views are the same. */
   setTemplate?: SetTemplate;
+  /**
+   * The language the set's names are made in (`ro`, `en`; `names.ts`), recorded on the document as `language`. Absent:
+   * the installed resolver names it (the app's catalogue; English without one) and no language is recorded. A tag the
+   * engine has no names in names the set in English.
+   */
+  language?: string;
 }
 
 /** Something the person should know about the set, as a catalogue key and its parameters. */
@@ -173,6 +179,11 @@ class Planner {
  * geometry): there is nothing to measure the sheets on.
  */
 export function generateDefaultSet(model: SetModel, options: DefaultSetOptions = {}): DefaultSet | null {
+  const set = withNameLanguage(options.language, () => generateSet(model, options));
+  return set && options.language !== undefined ? { ...set, document: { ...set.document, language: nameLanguageOf(options.language) ?? 'en' } } : set;
+}
+
+function generateSet(model: SetModel, options: DefaultSetOptions): DefaultSet | null {
   if (!model.extent) return null;
   const now = options.now ?? Date.now();
   const templates = options.templates ?? {};

@@ -9,7 +9,11 @@
  *
  * A client that speaks another language installs its own resolver with
  * {@link setNameResolver}; the web app installs its translation catalogue
- * (`apps/viewer/src/i18n/registry.ts`), whose English names are these.
+ * (`apps/viewer/src/i18n/registry.ts`), whose English and Romanian names are
+ * these ({@link ENGINE_NAMES_EN}, {@link ENGINE_NAMES_RO}), so the app and a
+ * command-line build that names a sheet in the same language write the same
+ * text. A caller without a catalogue (the command line) names one set in a
+ * language with {@link withNameLanguage}.
  *
  * Also its own entry, `@bimvoice/ifcsheet/names`: it imports nothing but the
  * pure number formatter it re-exports, so a translation catalogue can install
@@ -46,6 +50,39 @@ export const ENGINE_NAMES_EN = {
 } as const;
 
 export type EngineNameKey = keyof typeof ENGINE_NAMES_EN;
+
+/** The same names in Romanian (terms: `apps/viewer/src/i18n/ro-glossary.md`). The app's Romanian catalogue spreads this; there is no second copy. */
+export const ENGINE_NAMES_RO: Record<EngineNameKey, string> = {
+  'names.project.untitled': 'Proiect fără titlu',
+  'names.sheet.plans': 'Planuri',
+  'names.sheet.plansN': 'Planuri {n}',
+  'names.sheet.elevations': 'Fațade',
+  'names.sheet.interiors': 'Fațade interioare',
+  'names.sheet.elevationsSouthNorth': 'Fațade sud și nord',
+  'names.sheet.elevationsEastWest': 'Fațade est și vest',
+  'names.sheet.sections': 'Secțiuni',
+  'names.sheet.sectionsN': 'Secțiuni {n}',
+  'names.sheet.schedules': 'Tabele',
+  'names.view.plan': 'Plan',
+  'names.view.north': 'Fațada nord',
+  'names.view.east': 'Fațada est',
+  'names.view.south': 'Fațada sud',
+  'names.view.west': 'Fațada vest',
+  'names.view.section': 'Secțiunea {mark}-{mark}',
+  'names.viewTemplate.plan': 'Planuri',
+  'names.viewTemplate.section': 'Secțiuni',
+  'names.viewTemplate.elevation': 'Fațade',
+};
+
+/** The languages the engine can name a set in without a catalogue. */
+export const NAME_LANGUAGES = ['en', 'ro'] as const;
+export type NameLanguage = (typeof NAME_LANGUAGES)[number];
+
+/** The language a tag (`ro`, `ro-RO`, `RO`) names, or undefined for one the engine has no names in. */
+export function nameLanguageOf(tag: string | undefined): NameLanguage | undefined {
+  const primary = tag?.trim().toLowerCase().split(/[-_]/)[0];
+  return (NAME_LANGUAGES as readonly string[]).includes(primary ?? '') ? (primary as NameLanguage) : undefined;
+}
 export type NameParams = Record<string, string | number>;
 export type NameResolver = (key: EngineNameKey, params?: NameParams) => string;
 
@@ -55,6 +92,28 @@ export function englishName(key: EngineNameKey, params: NameParams = {}): string
 }
 
 let resolver: NameResolver = englishName;
+
+/** The names of `language` as a resolver, `{param}` filled in. */
+export function nameResolverFor(language: NameLanguage): NameResolver {
+  const names: Record<EngineNameKey, string> = language === 'ro' ? ENGINE_NAMES_RO : ENGINE_NAMES_EN;
+  return (key, params = {}) => names[key].replace(/\{(\w+)\}/g, (whole, name: string) => (name in params ? String(params[name]) : whole));
+}
+
+/**
+ * Run `run` with the engine's names in `tag`'s language, then put the installed resolver back (also when `run` throws).
+ * A tag the engine has no names in gives English, the language of a project that says nothing; `undefined` leaves the
+ * installed resolver alone (the app's catalogue).
+ */
+export function withNameLanguage<T>(tag: string | undefined, run: () => T): T {
+  if (tag === undefined) return run();
+  const before = resolver;
+  resolver = nameResolverFor(nameLanguageOf(tag) ?? 'en');
+  try {
+    return run();
+  } finally {
+    resolver = before;
+  }
+}
 
 /** Resolve the engine's names with `next`; `null` puts English back. */
 export function setNameResolver(next: NameResolver | null): void {

@@ -315,6 +315,8 @@ export interface ProjectDocument {
   includeFarElements?: boolean;
   /** How the files of the handover package are named (`handover.ts`): tokens `{project} {number} {sheet} {revision} {date} {issue}`. Absent is the default pattern. */
   handoverPattern?: string;
+  /** The language the project's generated names (sheets, views, view templates) were made in, a language tag (`ro`); absent: not recorded, which a command-line build reads as the language it is told with `--locale`, else English. Recorded so the same set is named the same wherever it is generated; names already stored are never rewritten. */
+  language?: string;
   /** The project's "Units and numbers" setting (`units-and-numbers.ts`, #88). Absent follows the language and each drawing's own style. */
   unitsAndNumbers?: UnitsAndNumbers;
 }

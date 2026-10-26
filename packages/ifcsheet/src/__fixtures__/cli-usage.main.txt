@@ -1,7 +1,7 @@
 ifcsheet: drawing sets from IFC models
 
 Usage:
-  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--standard <id>] [--include-far-elements]
+  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
   ifcsheet materials <model.ifc> [--project <file>] [--json]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
@@ -16,6 +16,8 @@ Commands:
           With --template, the sheets are made by the rules of a set template (a .bvset file
           saved from a project) instead: the same plan-per-storey, elevation and section
           rules the app applies, a rule the model cannot meet skipped and said.
+          The sheets and views are named in the language the project records, else --locale
+          (ro or en), else English.
   check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain English, or JSON with --json. With --project, also what the
@@ -56,7 +58,7 @@ Options:
                    (a survey point, an origin cube). By default they are left out of the framing only and named by check.
   --json           Print the check as JSON: { file, ready, findings: [{ kind, missing, effect, params }] } (with --project, also project).
   --csv            Print the rooms schedule or the list as CSV (plain numbers).
-  --locale <l>     The language of the rooms schedule: ro writes "12,50" and the Romanian headings (default en).
+  --locale <l>     The language of the rooms schedule: ro writes "12,50" and the Romanian headings (default en). On build, the language the sheets and views are named in when the project records none.
   -h, --help       Show this help.
   -v, --version    Show the version.
 

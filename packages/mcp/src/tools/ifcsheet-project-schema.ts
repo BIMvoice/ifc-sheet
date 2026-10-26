@@ -159,6 +159,7 @@ export function projectSchema(): Schema {
       includeFarElements: bool,
       handoverPattern: str,
       unitsAndNumbers: obj,
+      language: { type: 'string', description: 'The language tag the generated names (sheets, views) were made in, e.g. ro; a command-line build names a new set in it.' },
       [SCHEDULES_KEY]: { type: 'array', items: schedule, description: 'The schedule sheets of the set (room schedule, bill of quantities, list from the Lists engine).' },
     },
     additionalProperties: true,

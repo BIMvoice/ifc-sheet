@@ -79,7 +79,7 @@ export { LIST_WORDS_EN, LIST_WORDS_RO, listWordsFor } from './list-words.js';
 export { BOQ_WORDS_EN, BOQ_WORDS_RO, boqSayFor, fillTemplate, type BoqSay, type BoqWordKey } from './boq-words.js';
 
 // Names
-export { ENGINE_NAMES_EN, englishName, nameOf, setNameResolver, type EngineNameKey, type NameParams, type NameResolver } from './names.js';
+export { ENGINE_NAMES_EN, ENGINE_NAMES_RO, NAME_LANGUAGES, englishName, nameLanguageOf, nameOf, nameResolverFor, setNameResolver, withNameLanguage, type NameLanguage, type EngineNameKey, type NameParams, type NameResolver } from './names.js';
 export { sheetNumber, sheetLevel, sheetFormat, readUnitsAndNumbers, type SheetLocale, type SheetFormat, type UnitsAndNumbers } from './names.js';
 
 // The title block's layout, parameters and printing

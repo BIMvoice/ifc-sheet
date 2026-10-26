@@ -26,7 +26,7 @@ const OPTIONS = `Options:
                    (a survey point, an origin cube). By default they are left out of the framing only and named by check.
   --json           Print the check as JSON: { file, ready, findings: [{ kind, missing, effect, params }] } (with --project, also project).
   --csv            Print the rooms schedule or the list as CSV (plain numbers).
-  --locale <l>     The language of the rooms schedule: ro writes "12,50" and the Romanian headings (default en).
+  --locale <l>     The language of the rooms schedule: ro writes "12,50" and the Romanian headings (default en). On build, the language the sheets and views are named in when the project records none.
   -h, --help       Show this help.
   -v, --version    Show the version.
 

@@ -6,7 +6,7 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from '../index.js';
+import { describeTemplateNote, generateDefaultSet, nameLanguageOf, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from '../index.js';
 import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
@@ -28,6 +28,8 @@ interface BuildArgs {
   includeFarElements?: boolean;
   /** A drawing standard by id (`ro`): its pens and title block layout. */
   standard?: string;
+  /** The language the new set's sheets and views are named in, when the project does not record one. */
+  locale?: string;
 }
 
 async function build(args: BuildArgs, io: CliIo): Promise<number> {
@@ -67,7 +69,9 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   }
   for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
-  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}) });
+  // Names are made once and stored, so the set is named in the project's language, else --locale, else English (the same names the app makes under that language).
+  const language = nameLanguageOf(project?.language) ?? nameLanguageOf(args.locale) ?? 'en';
+  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language });
   const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
@@ -108,7 +112,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   if (project) {
     // The starting set has no schedule sheet (the app composes those): the project's list schedules are printed as text, the table `ifcsheet list` gives.
     try {
-      for (const { table } of listSchedulesOn(model, project.schedules, 'en', basename(args.model), project.classificationMappings)) io.stdout(`\n${listTableText(table)}`);
+      for (const { table } of listSchedulesOn(model, project.schedules, language, basename(args.model), project.classificationMappings)) io.stdout(`\n${listTableText(table)}`);
     } catch (error) {
       io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
       return EXIT.failed;
@@ -120,17 +124,19 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 export const buildCommand: CliCommand = {
   name: 'build',
   usageRank: 100,
-  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--standard <id>] [--include-far-elements]`,
+  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]`,
   helpRank: 100,
   help: `  build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
           sheet. With --dxf, also write one DXF per sheet into that directory.
           With --template, the sheets are made by the rules of a set template (a .bvset file
           saved from a project) instead: the same plan-per-storey, elevation and section
-          rules the app applies, a rule the model cannot meet skipped and said.`,
+          rules the app applies, a rule the model cannot meet skipped and said.
+          The sheets and views are named in the language the project records, else --locale
+          (ro or en), else English.`,
   async run(rest, values, io) {
-    if (values.csv || values.detail || values.locale !== undefined) {
-      io.stderr('ifcsheet build has no --csv, --detail or --locale; they are options of boq and rooms.\n');
+    if (values.csv || values.detail) {
+      io.stderr('ifcsheet build has no --csv or --detail; they are options of boq and rooms.\n');
       return EXIT.usage;
     }
     if (values.json) {
@@ -146,7 +152,7 @@ export const buildCommand: CliCommand = {
       return EXIT.usage;
     }
     try {
-      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
+      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, ...(values.standard !== undefined ? { standard: values.standard } : {}), ...(values.locale !== undefined ? { locale: values.locale } : {}) }, io);
     } catch (error) {
       io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;

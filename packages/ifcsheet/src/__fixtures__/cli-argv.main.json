@@ -98,7 +98,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet build has no --csv, --detail or --locale; they are options of boq and rooms.\n"
+  "stderr": "ifcsheet build has no --csv or --detail; they are options of boq and rooms.\n"
  },
  {
   "argv": [
@@ -110,7 +110,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet build has no --csv, --detail or --locale; they are options of boq and rooms.\n"
+  "stderr": "ifcsheet build has no --csv or --detail; they are options of boq and rooms.\n"
  },
  {
   "argv": [
@@ -121,9 +121,9 @@
    "--out",
    "a.pdf"
   ],
-  "code": 2,
+  "code": 1,
   "stdout": "",
-  "stderr": "ifcsheet build has no --csv, --detail or --locale; they are options of boq and rooms.\n"
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
  },
  {
   "argv": [

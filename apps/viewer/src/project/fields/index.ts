@@ -54,6 +54,7 @@ import { classificationMappingsField } from './classification-mappings';
 import { commentsField } from './comments';
 import { handoverPatternField } from './handover-pattern';
 import { includeFarElementsField } from './include-far-elements';
+import { languageField } from './language';
 import { revisionsField } from './revisions';
 import { siteAreaField } from './site-area';
 import { unitsAndNumbersField } from './units-and-numbers';
@@ -128,6 +129,8 @@ const DOCUMENT_FIELD_DEFS = [
   classificationMappingsField,
   // The standards pack installed in the project and the values it replaced (#365); absent: none.
   installedStandardField,
+  // The language the generated names were made in (set when the starting set is made); absent: not recorded.
+  languageField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];
