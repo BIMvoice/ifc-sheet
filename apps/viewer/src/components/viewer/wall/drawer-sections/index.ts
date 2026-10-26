@@ -17,6 +17,7 @@ import { numberingSection } from './numbering';
 import { readinessSection } from './readiness';
 import { schedulesSection } from './schedules';
 import { sheetsSection } from './sheets';
+import { standardsSection } from './standards';
 import { tagFieldsSection } from './tag-fields';
 import { titleBlockSection } from './title-block';
 import { unitsSection } from './units';
@@ -33,6 +34,7 @@ export const DRAWER_SECTIONS: readonly DrawerSection[] = [
   readinessSection,
   schedulesSection,
   sheetsSection,
+  standardsSection,
   tagFieldsSection,
   titleBlockSection,
   unitsSection,
