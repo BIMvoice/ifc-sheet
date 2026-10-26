@@ -8,6 +8,20 @@ Where the IfcSheet code lives: the drawing and documentation layer is in `apps/v
 
 To check a change: build the packages once (`pnpm turbo run build --filter='./packages/*'`), then in `apps/viewer` run `TEST_PATTERN='<paths you touched>' pnpm test` and `pnpm typecheck`. The whole viewer suite takes over ten minutes, so run the part you touched. This is the one exception to the engine note below that says to run tests only through the root `pnpm test` / `pnpm typecheck`: that note exists because a package-local run reads its siblings' built `dist/`, and the build step above is what makes that safe. If a viewer-local result disagrees with the root `pnpm typecheck` / `pnpm test`, rebuild the packages and trust the root run.
 
+## How we work: standing principles
+
+Read these before every task. They apply to every agent and to people.
+
+1. **A goal you can check.** Before you start, write one line, `DONE WHEN:`, naming a test you can run on your own work (a passing test file, a screenshot matching a reference, an IFC that validates). If you can't write it, ask one question to make the goal measurable. Run the test before you report, and report its result, not your opinion of it.
+2. **Use the context, don't guess.** Read the issue, the linked PRs, [LESSONS.md](LESSONS.md) and this file first. If something is missing, say what is missing. Never invent a fact, a number, a file path or a test result.
+3. **Match the example.** When an issue or a maintainer points to an example (a screenshot, an earlier PR, a reference sheet), match its structure and level of detail. Without one, build the smallest version that passes `DONE WHEN`, show it, and wait for feedback before building more.
+4. **Learn from every correction.** When a maintainer corrects you, add one line to [LESSONS.md](LESSONS.md): the date, what was wrong, the rule from now on (in the maintainer's words where possible). A corrected mistake must not come back. A lesson that applies to every agent also goes into the rules below.
+5. **Weekly review.** Once a week, review the last 5 to 10 merged PRs against LESSONS.md, fix the rules or the code so repeated problems can't recur, and summarise what changed in five lines.
+6. **The cheapest model that does the job.** Read-only checks, log reading and recipe work go to the cheapest model; code goes to a mid-tier model; foundations, geometry and performance to the strongest. Move a task to a cheaper model only after it matched the stronger one on 3 real examples, and write the result down.
+7. **A fixed test set.** Before switching models or after a big change, run these three and compare: `packages/mcp/src/tools/ifcsheet-set.test.ts` (open FZK, build, place, issue), `apps/viewer/src/annotate-set/annotate-set.models.test.tsx` (annotate a whole set), `apps/viewer/src/issue/handover.test.tsx` (issue and handover ZIP).
+8. **Prepare, don't publish.** Work on a branch and open a pull request. Agents never merge, deploy, release, post to other repositories or spend money. A maintainer's go is the `ready-to-merge` label or auto-merge set by a maintainer (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+9. **Report short, in this order:** what you did, the `DONE WHEN` result, what is waiting for a maintainer, the one next step.
+
 ## Claiming work
 
 Several agent sessions push to this repository from one GitHub account. The rules here are how they avoid building the same thing twice. They apply to every agent and every session, including short-lived subagents.
