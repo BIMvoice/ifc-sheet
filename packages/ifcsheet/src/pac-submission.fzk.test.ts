@@ -130,8 +130,8 @@ describe.skipIf(missing !== null)('ifcsheet build --pac, on AC20-FZK-Haus (#364)
     };
     // The order of Anexa 2: 1.1, 1.2, 1.3, 1.4.2, plans, roof, facades, sections, context, 1.4.4 a) b) d), 1.5, 1.6.1 to 1.6.5.
     expect(await byPoint('existing')).toEqual(['Nu', 'Nu', 'Nu', 'Nu', 'Da', 'Nu', 'Da', 'Da', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu']);
-    // Interior only: the two situation plans, the roof plan, the facades and the photo documentation are not needed.
-    expect(await byPoint('interior')).toEqual(['Nu', 'Nu este cazul', 'Nu este cazul', 'Nu', 'Da', 'Nu este cazul', 'Nu este cazul', 'Da', 'Nu este cazul', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu']);
+    // Interior only: the roof plan, the facades and the photo documentation (inside point 1.4) are not needed; the situation plans (1.b, 1.c) still are.
+    expect(await byPoint('interior')).toEqual(['Nu', 'Nu', 'Nu', 'Nu', 'Da', 'Nu este cazul', 'Nu este cazul', 'Da', 'Nu este cazul', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu', 'Nu']);
   });
 
   it('refuses --intervention without --pac or with an unknown value', async () => {
