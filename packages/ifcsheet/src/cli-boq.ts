@@ -16,6 +16,8 @@ import { boqLineText, boqNotes, boqTable, describeBoqProblem, tidy, type BoqCell
 import { boqSayFor } from './boq-words.js';
 import { readBoqElements, storeSource } from './boq-read.js';
 import { openModel, type OpenedModel } from './model.js';
+import { sheetNumber } from './sheet-number.js';
+import { sheetFormat } from './units-and-numbers.js';
 import { readProjectFile } from './project-read.js';
 import type { CliIo } from './cli.js';
 
@@ -81,13 +83,15 @@ export async function boq(args: BoqArgs, io: CliIo): Promise<number> {
   const model = await openModel(bytes, { geometry: false });
   const result = boqResult(model.dataStore, project.boqArticles);
   const say = boqSayFor(args.locale);
+  // The figures people read are written as the sheet writes them: the language with the project's "Units and numbers" (#88).
+  const format = sheetFormat(args.locale, project.unitsAndNumbers);
   if (args.json) io.stdout(`${resultJson(args.model, args.project, result, args.locale)}\n`);
   else if (args.csv) io.stdout(boqCsv(boqTable(result, say, { detail: args.detail }), args.locale));
   else {
     io.stdout(`${say('boq.title')}: ${args.model}\n\n`);
     result.lines.forEach((l, i) => {
-      io.stdout(`${i + 1}. ${boqLineText(l, args.locale)}\n`);
-      if (args.detail) for (const t of l.byType) io.stdout(`     ${t.typeName ?? t.className}: ${t.total === null ? '–' : tidy(t.total)}\n`);
+      io.stdout(`${i + 1}. ${boqLineText(l, format)}\n`);
+      if (args.detail) for (const t of l.byType) io.stdout(`     ${t.typeName ?? t.className}: ${t.total === null ? '–' : sheetNumber(format, tidy(t.total))}\n`);
     });
     const notes = result.lines.flatMap((l) => boqNotes(l, say));
     if (notes.length > 0) io.stdout(`\n${notes.join('\n')}\n`);
