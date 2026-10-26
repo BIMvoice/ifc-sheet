@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import '@/test/setup-dom.js';
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -16,6 +16,9 @@ import { posthog } from '@/lib/analytics';
 import { downloadedNames, clearDownloads } from '@/test/download-capture';
 import { waitFor } from '@/test/render';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { registerLocale, setLocale } from '@/i18n/registry';
+import { checkCatalogue } from '@/i18n/catalogue-problems';
+import ro from '@/i18n/locales/ro';
 import { ExportChangesButton } from './ExportChangesButton.js';
 import { FIXTURE_WALL_A, parseFixtureModel } from './anonymized-export/anonymized-export-fixture.test-support';
 
@@ -356,4 +359,56 @@ describe('ExportChangesButton — review/export divergence (issue: detect-and-re
     }
   });
 
+});
+
+describe('ExportChangesButton — Romanian toasts', () => {
+  beforeEach(() => {
+    unmountAll();
+    registerLocale('ro', checkCatalogue(ro).catalogue);
+    useViewerStore.setState({
+      models: new Map([['model-1', makeModel()]]),
+      mutationViews: new Map(),
+      mutationVersion: 0,
+    });
+  });
+  afterEach(() => { act(() => setLocale('en')); });
+
+  it('shows the stale-review refusal in Romanian', async () => {
+    const view = makeView();
+    view.setProperty(7, 'Pset_Base', 'Status', 'Edited', PropertyValueType.Label);
+    useViewerStore.setState({ mutationViews: new Map([['model-1', view]]) });
+    const errorMock = mock.method(toast, 'error', () => {});
+    try {
+      act(() => setLocale('ro'));
+      const container = renderButton();
+      await act(async () => { findToolbarButton(container).click(); });
+      view.setProperty(7, 'Pset_Base', 'Status', 'Sneaky', PropertyValueType.Label);
+      await act(async () => { findDialogExportButton().click(); });
+      assert.equal(
+        errorMock.mock.calls[0].arguments[0],
+        'Modificări făcute de la deschiderea revizuirii: verificați lista actualizată și confirmați din nou.',
+      );
+    } finally {
+      errorMock.mock.restore();
+    }
+  });
+
+  it('shows the export-success toast in Romanian, with the plural form for one change', async () => {
+    const ifcDataStore = await parseFixtureModel();
+    const model = { ...makeModel(), ifcDataStore };
+    const view = new MutablePropertyView(null, model.id);
+    view.setAttribute(FIXTURE_WALL_A, 'Name', 'Reviewed edit');
+    useViewerStore.setState({ models: new Map([[model.id, model]]), mutationViews: new Map([[model.id, view]]), mutationVersion: 1 });
+    const successMock = mock.method(toast, 'success', () => {});
+    try {
+      act(() => setLocale('ro'));
+      const container = renderButton();
+      await act(async () => { findToolbarButton(container).click(); });
+      await act(async () => { findDialogExportButton().click(); });
+      await waitFor(() => successMock.mock.callCount() === 1, 'success toast did not fire');
+      assert.equal(successMock.mock.calls[0].arguments[0], 'Exportat model-1.ifc (o modificare)');
+    } finally {
+      successMock.mock.restore();
+    }
+  });
 });

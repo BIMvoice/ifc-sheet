@@ -70,6 +70,7 @@ import { drawingUnderlayEn } from '../catalogues/drawing-underlay.en';
 import { elementGraphicsEn } from '../catalogues/element-graphics.en';
 import { elementTypesEn } from '../catalogues/element-types.en';
 import { exportDialogEn } from '../catalogues/export-dialog.en';
+import { exportToastsEn } from '../catalogues/export-toasts.en';
 import { extensionsFlavorsEn } from '../catalogues/extensions-flavors.en';
 import { extensionsPanelsEn } from '../catalogues/extensions-panels.en';
 import { extrusionInspectionEn } from '../catalogues/extrusion-inspection.en';
@@ -144,6 +145,7 @@ export const enAE = {
   ...elementGraphicsEn,
   ...elementTypesEn,
   ...exportDialogEn,
+  ...exportToastsEn,
   ...extensionsFlavorsEn,
   ...extensionsPanelsEn,
   ...extrusionInspectionEn,
