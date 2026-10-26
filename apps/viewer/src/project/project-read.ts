@@ -11,8 +11,8 @@
 import { isDisciplineId } from './discipline-views';
 import { readSheetLayout } from './sheet-file';
 import { read3dPrint } from './view-3d-file';
-import { HEX, WEIGHTS, readGraphics } from './view-graphics-file';
-import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
+import { readGraphics } from './view-graphics-file';
+import type { ProjectCivilDrawing, ProjectTypicalSection, ElevationDirection, InteriorElevation, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, ProjectViewKind, SectionProjectPlane, ViewDetail } from './types';
 
 const VIEW_KINDS: readonly ProjectViewKind[] = ['plan', 'section', 'elevation', '3d', 'drafting'];
 const DIRECTIONS: readonly ElevationDirection[] = ['north', 'south', 'east', 'west'];
@@ -148,17 +148,6 @@ export function readCurrentJoinery(raw: unknown): { door?: string; window?: stri
     ...(isString(raw.door) ? { door: raw.door } : {}),
     ...(isString(raw.window) ? { window: raw.window } : {}),
   };
-}
-
-export function readMaterial(raw: unknown): ProjectMaterial[] {
-  if (!isObject(raw) || !isString(raw.id) || !isString(raw.name) || !raw.name.trim()) return [];
-  const out: ProjectMaterial = { id: raw.id, name: raw.name };
-  if (raw.hatch === null || isString(raw.hatch)) out.hatch = raw.hatch;
-  if (isNumber(raw.hatchScale) && raw.hatchScale > 0) out.hatchScale = raw.hatchScale;
-  if (raw.fill === null || (isString(raw.fill) && HEX.test(raw.fill))) out.fill = raw.fill;
-  if (isString(raw.hatchPen) && WEIGHTS.has(raw.hatchPen)) out.hatchPen = raw.hatchPen as ProjectMaterial['hatchPen'];
-  if (raw.membrane === true) out.membrane = true;
-  return [out];
 }
 
 export function readTypicalSection(raw: unknown): ProjectTypicalSection[] {

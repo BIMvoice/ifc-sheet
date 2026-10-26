@@ -1,7 +1,7 @@
 # Romanian glossary (ro)
 
 One place to correct term choices. Edit the term here and in `catalogues/*.ro.ts`
-(`wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`, `review`, `print-preview`, `tag-fields`, `revisions`, `face`, `drafting`, `annotate-all`, `keyboard-shortcuts`, `sheet-templates`); the tests in
+(`wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`, `review`, `print-preview`, `tag-fields`, `revisions`, `face`, `drafting`, `annotate-all`, `keyboard-shortcuts`, `sheet-templates`, `wall-materials`); the tests in
 `locales/ro.test.ts` keep keys, placeholders and diacritics honest.
 
 Rules: comma-below diacritics only (ș ț, never ş ţ), plus ă â î. Polite plural
