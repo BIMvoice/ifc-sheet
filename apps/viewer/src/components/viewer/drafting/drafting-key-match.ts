@@ -12,7 +12,7 @@
 import { eventMatchesChords } from '@/lib/commands/dispatcher';
 import { isTypedChord } from '@/lib/commands/chord';
 import { DRAFTING_EXACT_MODIFIERS, type DraftingKeyId } from '@/lib/commands/drafting-key-commands';
-import { effectiveKeys, isCustomised } from '@/lib/commands/key-bindings';
+import { effectiveKeys, isRebound } from '@/lib/commands/key-bindings';
 import { isTextEntryTarget, producesText } from '@/lib/keyboard-event';
 
 /**
@@ -24,7 +24,7 @@ import { isTextEntryTarget, producesText } from '@/lib/keyboard-event';
  */
 export function isDraftingKey(id: DraftingKeyId, e: KeyboardEvent, typing = false): boolean {
   if (producesText(e) && isTextEntryTarget(e)) return false;
-  const custom = isCustomised(id);
+  const custom = isRebound(id);
   const keys = effectiveKeys(id).filter((chord) => !(typing && custom && isTypedChord(chord)));
   return eventMatchesChords(keys, e, !DRAFTING_EXACT_MODIFIERS.has(id) && !custom);
 }

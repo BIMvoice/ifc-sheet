@@ -10,7 +10,7 @@
 
 import { forwardRef } from 'react';
 import { useTranslation } from '@/i18n';
-import { submitCommandLine, useDraftingSession } from '@/drafting/session';
+import { endCommand, submitCommandLine, useDraftingSession } from '@/drafting/session';
 
 interface CommandLineProps {
   value: string;
@@ -23,6 +23,7 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
   const { t } = useTranslation();
   const history = useDraftingSession((s) => s.history);
   const prompt = useDraftingSession((s) => s.prompt);
+  const running = useDraftingSession((s) => s.commandId !== null);
   const recent = history.slice(-3);
   const promptText = prompt ? t(prompt.key, prompt.params) : t('drafting.prompt.idle');
   return (
@@ -75,6 +76,8 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
             }
           }}
         />
+        {/* Esc and Enter end a command; this button is for a keyboard without them (#166). */}
+        {running ? <button type="button" className="shrink-0 rounded border border-zinc-300 dark:border-zinc-700 px-1.5 py-0.5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800" onClick={endCommand}>{t('drafting.done')}</button> : null}
       </label>
     </div>
   );

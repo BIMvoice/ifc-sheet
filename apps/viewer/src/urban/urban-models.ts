@@ -18,8 +18,12 @@
  *   in the same slot).
  *   The area is NetFloorArea, else GrossFloorArea, from
  *   `Qto_SpaceBaseQuantities` first and then any quantity set (ArchiCAD
- *   writes them to `BaseQuantities`), in SI like the material takeoff. The
- *   category is the room's ObjectType, else its LongName, else its Name.
+ *   writes them to `BaseQuantities`), in SI like the material takeoff; when
+ *   the model states neither, the footprint of the space's geometry. Both
+ *   rules are the engine's (`room-areas.ts` in `@bimvoice/ifcsheet`), and
+ *   `collectRoomRecords` below is the one read of the rooms: Au and the room
+ *   and area schedule both take their rooms from it, so they cannot differ.
+ *   The category is the room's ObjectType, else its LongName, else its Name.
  * - Site area: the IfcSite's GrossArea quantity, when positive.
  * - The building's ElevationOfRefHeight, in metres, for finding ±0.00.
  *
@@ -30,20 +34,21 @@
  */
 
 import { extractAllEntityAttributes, extractProjectUnits, ProjectUnits, type IfcDataStore } from '@ifc-lite/parser';
-import { QuantityType, RelationshipType, type QuantitySet } from '@ifc-lite/data';
+import { RelationshipType } from '@ifc-lite/data';
 import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
 import { createListDataProvider } from '@/lib/lists';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { storeyOfElement } from '@/project/effective-storey';
 import { quantityScales } from '@/joinery/material-takeoff-models';
+import { estimatedAreas, meshFootprintArea, pickArea, roomArea, spaceRole, type EstimatedAreas, type RoomRecord } from '@bimvoice/ifcsheet';
+import type { ProjectLevel } from '@/project/types';
 import { getGlobalRenderer } from '@/hooks/useBCF';
 import { storeyFootprint, type PlanMesh } from './footprint';
 import type { SpaceInput, StoreyInput } from './indicators';
 
 /** What draws a storey's outline. */
 const ENCLOSURE = new Set(['IFCWALL', 'IFCWALLSTANDARDCASE', 'IFCWALLELEMENTEDCASE', 'IFCCOLUMN', 'IFCCOLUMNSTANDARDCASE', 'IFCCURTAINWALL']);
-const AREA_NAMES = ['NetFloorArea', 'GrossFloorArea'];
 
 export interface UrbanAreas {
   storeys: StoreyInput[];
@@ -51,6 +56,8 @@ export interface UrbanAreas {
   spaces: SpaceInput[];
   /** Spaces that are not rooms: EXTERNAL ones, GFA (area-scheme) ones, and spaces split into spaces of their own. */
   spacesLeftOut: { external: number; gfa: number; parents: number };
+  /** The rooms Au counts with an area measured from their geometry because the model states none; null when there are none (`estimatedAreas`). */
+  estimated: EstimatedAreas | null;
   /** m² the model states for its site, or null. */
   modelSiteArea: number | null;
   /** The first building's ElevationOfRefHeight in metres, or null. */
@@ -82,17 +89,8 @@ function textAttr(store: IfcDataStore, view: MutablePropertyView | undefined, id
 }
 const enumAttr = (store: IfcDataStore, view: MutablePropertyView | undefined, id: number, name: string) => textAttr(store, view, id, name).replace(/\./g, '').toUpperCase();
 
-/** The first of `names` found, preferring the set named `preferred`; in SI. */
-export function pickArea(qsets: readonly QuantitySet[], preferred: string, names: readonly string[], siScale: number): number | null {
-  const ordered = [...qsets.filter((s) => s.name === preferred), ...qsets.filter((s) => s.name !== preferred)];
-  for (const name of names) {
-    for (const set of ordered) {
-      const q = set.quantities.find((x) => x.name === name && x.type === QuantityType.Area && Number.isFinite(x.value));
-      if (q) return q.value * siScale;
-    }
-  }
-  return null;
-}
+/** The engine's: the first of `names` found, preferring the set named `preferred`; in SI. */
+export { pickArea };
 
 const scalesByStore = new WeakMap<IfcDataStore, ReturnType<typeof quantityScales> & { length: number }>();
 /** The SI scales of a model's quantities and lengths, read from its source once (an edit does not change the project's units). */
@@ -139,6 +137,69 @@ export function modelSiteArea(): number | null {
   return null;
 }
 
+/** The project level (index into `levels`) of an element of model `modelId`, by its storey; null when it has none. */
+function levelResolver(modelId: string, store: IfcDataStore, levels: readonly ProjectLevel[]): (id: number) => number | null {
+  const levelOfStorey = new Map<number, number>();
+  for (const storeyId of store.spatialHierarchy?.byStorey.keys() ?? []) {
+    const gid = store.entities.getGlobalId(storeyId);
+    const index = levels.findIndex((l) => l.storeyGlobalIds.includes(gid));
+    if (index >= 0) levelOfStorey.set(storeyId, index);
+  }
+  return (id) => {
+    const storey = storeyOfElement(modelId, id);
+    return storey === null ? null : levelOfStorey.get(storey) ?? null;
+  };
+}
+
+/** A room as every table reads it: the engine's record (`RoomRecord`), and the category Au is split by. */
+export interface RoomOfModels extends RoomRecord {
+  category: string;
+}
+
+/**
+ * The rooms of the visible models, the one read behind Au (`collectUrbanAreas`) and the room and area schedule: each
+ * room's level (index into `levels`), number (the Name when a LongName names the room), name and area, decided by the
+ * engine's rules (`room-areas.ts`: the model's NetFloorArea, else GrossFloorArea, else the footprint of the room's
+ * geometry). The spaces that are not rooms are counted in `leftOut`.
+ */
+export function collectRoomRecords(levels: readonly ProjectLevel[]): { rooms: RoomOfModels[]; leftOut: UrbanAreas['spacesLeftOut'] } {
+  const s = useViewerStore.getState();
+  const rooms: RoomOfModels[] = [];
+  const leftOut = { external: 0, gfa: 0, parents: 0 };
+  for (const [modelId, model] of s.models) {
+    const store = model.ifcDataStore;
+    if (!store?.spatialHierarchy || model.visible === false) continue;
+    const offset = model.idOffset ?? 0;
+    const view = s.mutationViews.get(modelId) ?? undefined;
+    const provider = createListDataProvider(store, model.name, undefined, view);
+    const levelOf = levelResolver(modelId, store, levels);
+    const scales = scalesOf(store);
+    const isSpace = (id: number) => !view?.isDeleted(id) && (store.entities.getTypeName(id) ?? '').toUpperCase() === 'IFCSPACE';
+    // The meshes of the spaces, found once and only when a room states no area.
+    let meshesOfSpace: Map<number, PlanMesh[]> | null = null;
+    const footprintOf = (id: number) => () => {
+      if (!meshesOfSpace) {
+        meshesOfSpace = new Map();
+        for (const mesh of model.geometryResult?.meshes ?? []) (meshesOfSpace.get(mesh.expressId) ?? meshesOfSpace.set(mesh.expressId, []).get(mesh.expressId)!).push(mesh);
+      }
+      const held = meshesOfSpace.get(id + offset);
+      return held?.length ? meshFootprintArea(held) : null;
+    };
+    for (const { expressId: id } of iterateEffectiveEntityIds(store, view ?? null, ['IFCSPACE'])) {
+      const role = spaceRole(enumAttr(store, view, id, 'PredefinedType'), store.relationships?.getRelated(id, RelationshipType.Aggregates, 'forward').some(isSpace) ?? false);
+      if (role !== 'room') { leftOut[role === 'external' ? 'external' : role === 'gfa' ? 'gfa' : 'parents']++; continue; }
+      const longName = textAttr(store, view, id, 'LongName');
+      const name = provider.getEntityName(id);
+      const { area, source } = roomArea(provider.getQuantitySets(id), scales.area, footprintOf(id));
+      rooms.push({
+        id: provider.getEntityGlobalId(id) || `${modelId}#${id}`, number: longName ? name : '', name: longName || name || `#${id}`,
+        level: levelOf(id), area, source, category: provider.getEntityObjectType(id) || longName || name || `#${id}`,
+      });
+    }
+  }
+  return { rooms, leftOut };
+}
+
 /** World-space meshes of a GPU-instanced element, by global id; absent from `geometryResult.meshes`. */
 export type InstancedPieces = (globalId: number) => readonly PlanMesh[] | undefined;
 
@@ -170,25 +231,13 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
   const s = useViewerStore.getState();
   const levels = useProjectStore.getState().levels;
   const buckets = levels.map(() => ({ enclosure: [] as PlanMesh[][], floor: [] as PlanMesh[][], slabs: new Set<number>(), missing: 0 }));
-  const spaces: SpaceInput[] = [];
-  const leftOut = { external: 0, gfa: 0, parents: 0 };
   for (const [modelId, model] of s.models) {
     const store = model.ifcDataStore;
     const hierarchy = store?.spatialHierarchy;
     if (!store || !hierarchy || model.visible === false) continue;
     const offset = model.idOffset ?? 0;
     const view = s.mutationViews.get(modelId) ?? undefined;
-    const provider = createListDataProvider(store, model.name, undefined, view);
-    const levelOfStorey = new Map<number, number>();
-    for (const storeyId of hierarchy.byStorey.keys()) {
-      const gid = store.entities.getGlobalId(storeyId);
-      const index = levels.findIndex((l) => l.storeyGlobalIds.includes(gid));
-      if (index >= 0) levelOfStorey.set(storeyId, index);
-    }
-    const levelOf = (id: number): number | null => {
-      const storey = storeyOfElement(modelId, id);
-      return storey === null ? null : levelOfStorey.get(storey) ?? null;
-    };
+    const levelOf = levelResolver(modelId, store, levels);
     const flat = new Map<number, PlanMesh[]>();
     for (const mesh of model.geometryResult?.meshes ?? []) {
       const list = flat.get(mesh.expressId);
@@ -213,16 +262,6 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
         bucket.floor.push([...meshes]);
       }
     }
-    const scales = scalesOf(store);
-    const isSpace = (id: number) => !view?.isDeleted(id) && (store.entities.getTypeName(id) ?? '').toUpperCase() === 'IFCSPACE';
-    for (const { expressId: id } of iterateEffectiveEntityIds(store, view ?? null, ['IFCSPACE'])) {
-      const kind = enumAttr(store, view, id, 'PredefinedType');
-      if (kind === 'EXTERNAL') { leftOut.external++; continue; }
-      if (kind === 'GFA') { leftOut.gfa++; continue; }
-      if (store.relationships?.getRelated(id, RelationshipType.Aggregates, 'forward').some(isSpace)) { leftOut.parents++; continue; }
-      const category = provider.getEntityObjectType(id) || textAttr(store, view, id, 'LongName') || provider.getEntityName(id) || `#${id}`;
-      spaces.push({ storey: levelOf(id), category, area: pickArea(provider.getQuantitySets(id), 'Qto_SpaceBaseQuantities', AREA_NAMES, scales.area) });
-    }
   }
   const assumedInterior: string[] = [];
   const storeys = levels.map((level, i) => {
@@ -232,5 +271,7 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
     const failed = footprint.unmeasured.enclosure.length + footprint.unmeasured.floor.filter((k) => b.slabs.has(k)).length;
     return { name: level.name, elevation: level.elevation, footprint: footprint.shapes.length ? footprint.shapes : null, unmeasured: b.missing + failed };
   });
-  return { storeys, spaces, spacesLeftOut: leftOut, modelSiteArea: modelSiteArea(), buildingRefElevation: buildingRefElevation(), assumedInterior };
+  const { rooms, leftOut } = collectRoomRecords(levels);
+  const spaces: SpaceInput[] = rooms.map((r) => ({ storey: r.level, category: r.category, area: r.area }));
+  return { storeys, spaces, spacesLeftOut: leftOut, estimated: estimatedAreas(rooms), modelSiteArea: modelSiteArea(), buildingRefElevation: buildingRefElevation(), assumedInterior };
 }

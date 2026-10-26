@@ -111,7 +111,7 @@ describe('the library on the Wall', () => {
     cleanup();
 
     // The rail's tag tool offers the imported type and draws with it.
-    const tag = render(<InfoCard tool="tag" />);
+    const tag = render(<InfoCard tool="tag" onDone={() => {}} />);
     const select = tag.querySelector('select');
     assert.ok(select);
     assert.deepEqual([...select.options].map((o) => o.textContent), ['Plain (no type)', 'Door tag']);
@@ -125,7 +125,7 @@ describe('the library on the Wall', () => {
     cleanup();
 
     // The hatch tool: the imported pattern is listed, and the imported type sets pattern, scale and angle.
-    const hatch = render(<InfoCard tool="hatch" />);
+    const hatch = render(<InfoCard tool="hatch" onDone={() => {}} />);
     const [typeSelect, patternSelect] = [...hatch.querySelectorAll('select')];
     assert.ok([...patternSelect.options].some((o) => o.value === 'MY-LINES'));
     const hatchId = (after.annotationTypes ?? []).find((t) => t.name === 'Section fill')?.id ?? '';
@@ -137,7 +137,7 @@ describe('the library on the Wall', () => {
     cleanup();
 
     // The symbol tool lists the imported symbol after the built-in ones.
-    const symbol = render(<InfoCard tool="symbol" />);
+    const symbol = render(<InfoCard tool="symbol" onDone={() => {}} />);
     assert.ok([...(symbol.querySelector('select')?.options ?? [])].some((o) => o.textContent === 'Arrow'));
   });
 

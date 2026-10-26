@@ -11,7 +11,7 @@
 import { create } from 'zustand';
 import { emitWallStepped } from '@/lib/tours/events';
 
-export type WallPanel = 'drawer' | 'missing' | 'issue' | 'changed';
+export type WallPanel = 'drawer' | 'missing' | 'issue' | 'changed' | 'annotate';
 
 interface WallNav {
   /** The sheet stepped into, or null on the wall. */

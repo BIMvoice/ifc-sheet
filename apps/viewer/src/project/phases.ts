@@ -18,7 +18,8 @@
  */
 
 import type { PropertySetLike } from '@/labels/label-resolve';
-import type { CategoryLineWeight, PhaseId, PhaseStyle, ViewGraphics, ViewPhases } from './types';
+import { DASH_MM, PEN_TABLE } from '@bimvoice/ifcsheet';
+import type { PhaseId, PhaseStyle, ViewGraphics, ViewPhases } from './types';
 
 export const PHASES = ['existing', 'demolish', 'new', 'temporary'] as const satisfies readonly PhaseId[];
 
@@ -128,17 +129,15 @@ export function resolvePhase(el: PhaseReader, source?: PhaseSource): PhaseId {
   return statedPhase(el, source) ?? unmarkedPhase(source);
 }
 
-const WEIGHT_MM: Record<CategoryLineWeight, number> = { heavy: 0.7, medium: 0.5, light: 0.25, hairline: 0.13 };
-
 /** A phase's style in a view: the default look with the view's own edits over it. */
 export function phaseStyle(graphics: ViewGraphics | undefined, phase: PhaseId): PhaseStyle {
   return { ...DEFAULT_PHASE_STYLES[phase], ...graphics?.phases?.styles?.[phase] };
 }
 
-/** The ink of a phase: colour, pen in paper millimetres (as a category's weight), dash in paper millimetres. */
+/** The ink of a phase: colour, cut pen in paper millimetres (the pen table's, `PEN_TABLE`, as a category's weight), dash in paper millimetres. The drawings take the phase through the view's styler (`view-styler.ts`), which reads `phaseStyle`. */
 export function phaseInk(graphics: ViewGraphics | undefined, phase: PhaseId): { color: string; weightMm: number; dash: number[]; fill: string } {
   const s = phaseStyle(graphics, phase);
-  return { color: s.lineColor, weightMm: WEIGHT_MM[s.lineWeight], dash: s.dashed ? [3, 1.5] : [], fill: s.fillColor };
+  return { color: s.lineColor, weightMm: PEN_TABLE.weights[s.lineWeight].cut, dash: s.dashed ? [...DASH_MM] : [], fill: s.fillColor };
 }
 
 /** The phases a view shows, or null when it draws every element as the model has it (no phases set up). */

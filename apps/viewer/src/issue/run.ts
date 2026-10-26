@@ -17,15 +17,20 @@ import type { TranslationKey } from '@/i18n';
 import { currentFindings } from '@/check/collect';
 import { captureSheets, failureLine } from './capture';
 import { drawingListCsv, issueFileNames, sheetFileStem, uniqueNames, type ListLabels } from './output';
+import { buildHandover, type HandoverWorkbook } from './handover';
+import { loadedModels, registerWorkbook } from './handover-collect';
 import { buildIssuePdf, type PdfLabels } from './pdf-build';
 import { titleBlockOf } from '@/project/title-block';
 import { effectiveTitleBlock } from '@/project/title-block-model';
 import { rasterViewNames } from '@/project/view-raster';
-import { issueRecord, nextIssueName, planIssue, type IssuePlan, type IssueReason } from './plan';
+import { issueRecord, nextIssueName, planIssue, todayText, validDate, type IssuePlan, type IssueReason } from './plan';
 import { fingerprintSources } from '@/project/sheet-fingerprint';
+import { modelFindings, modelImpact, modelRecord, readModel, withIssuedModel, type ModelImpact } from './model-state';
+import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { ProjectSheet, ProjectView } from '@/project/types';
 
-export type IssueFormat = 'pdf' | 'svg' | 'dxf';
+/** `handover`: the issued PDF, a DXF per sheet, the IFC, the schedules and the drawing list in one ZIP (#83). */
+export type IssueFormat = 'pdf' | 'svg' | 'dxf' | 'handover';
 
 export interface IssueOptions {
   format: IssueFormat;
@@ -36,6 +41,10 @@ export interface IssueOptions {
   currentCloudsOnly?: boolean;
   /** PDF: write the archival metadata (XMP, sRGB output intent; no PDF/A claim, see `pdf-archival.ts`). */
   archival?: boolean;
+  /** The model as it is now, for the sheets it changed and for the record (`model-state.ts`); the viewer's models when absent. */
+  readModel?: () => Promise<ModelSnapshot | null>;
+  /** Handover: the schedules as workbooks, read once the sheets are drawn (`handover-collect.ts`). Without it the package holds none. */
+  handoverSchedules?: () => Promise<HandoverWorkbook[]>;
 }
 
 export interface IssueResult {
@@ -46,6 +55,8 @@ export interface IssueResult {
   csv: string;
   /** The zipped set (SVG and DXF formats). */
   zip: Uint8Array | null;
+  /** The names of the files in the handover ZIP, in order. */
+  files?: string[];
   /** What was said to the person, as catalogue keys. */
   lines: { key: TranslationKey; params: Record<string, string | number> }[];
 }
@@ -57,6 +68,7 @@ export function listLabels(): ListLabels {
   return {
     title: t('title'), issue: t('issue'), date: t('date'), sheet: t('sheet'), sheetTitle: t('sheetTitle'), scale: t('scale'), paper: t('paper'), revision: t('revision'),
     landscape: t('landscape'), portrait: t('portrait'), drawingList: resolve('issue.file.drawingList'),
+    change: { change: resolve('issue.changes.column'), new: resolve('issue.changes.cell.new'), changed: resolve('issue.changes.cell.changed'), removed: resolve('issue.changes.cell.removed') },
   };
 }
 
@@ -68,14 +80,14 @@ export function pdfLabels(): PdfLabels {
 }
 
 /** The plan for the project as it stands (nothing is drawn or recorded). */
-export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst'>): IssuePlan {
+export function planFor(options: Pick<IssueOptions, 'name' | 'date' | 'listFirst'>, model?: ModelImpact): IssuePlan {
   const project = useProjectStore.getState();
   return planIssue(project.sheets, fingerprintSources(project), {
     name: options.name?.trim() || nextIssueName(project.issues ?? [], (n) => resolve('names.issue.default', { n }), registeredTranslations('names.issue.default')),
-    date: options.date ?? new Date().toISOString().slice(0, 10),
+    date: validDate(options.date, todayText()),
     listFirst: options.listFirst ?? true,
     asIndicated: resolve('sheets.asIndicated'),
-  }, effectiveTitleBlock(), { issues: project.issues, schedules: project.schedules });
+  }, effectiveTitleBlock(), { issues: project.issues, schedules: project.schedules, model });
 }
 
 /** What a DXF issue leaves out: each sheet's views that print as images, which DXF cannot carry. */
@@ -88,23 +100,35 @@ export function dxfRasterLines(sheets: readonly ProjectSheet[], views: readonly 
 
 /** Draw the sheets, build the files and record the issue. Nothing is recorded when a sheet could not be drawn. */
 export async function runIssue(options: IssueOptions): Promise<IssueResult> {
-  const plan = planFor(options);
+  // The model once, for both what changed in it since the last issue and the record of it.
+  const current = await readModel(options.readModel);
+  const plan = planFor(options, modelImpact(modelFindings(useProjectStore.getState().issues?.at(-1), current)));
   const csv = drawingListCsv(plan, listLabels());
   const lines: IssueResult['lines'] = plan.leftOut.map((o) => say(o.reason));
   // What is missing is said before issuing; it does not stop the issue.
   const missing = currentFindings().length;
   if (missing > 0) lines.unshift({ key: 'check.msg.unfinished', params: { count: missing } });
   if (plan.sheets.length === 0) return { plan, pdf: null, csv, zip: null, lines: [...lines, { key: 'issue.msg.nothing', params: {} }] };
-  if (options.format === 'dxf') lines.push(...dxfRasterLines(plan.sheets.map((s) => s.sheet), useProjectStore.getState().views));
-  const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf', currentCloudsOnly: options.currentCloudsOnly });
+  if (options.format === 'dxf' || options.format === 'handover') lines.push(...dxfRasterLines(plan.sheets.map((s) => s.sheet), useProjectStore.getState().views));
+  const { svgs, dxfs, failed } = await captureSheets(plan.sheets.map((s) => s.sheet), { dxf: options.format === 'dxf' || options.format === 'handover', currentCloudsOnly: options.currentCloudsOnly, issueDate: plan.date });
   if (failed.length > 0) return { plan, pdf: null, csv, zip: null, lines: [...lines, ...failed.map((f) => failureLine(f)), { key: 'issue.msg.notIssued', params: {} }] };
   const project = useProjectStore.getState();
   let pdf: Uint8Array | null = null;
   let zip: Uint8Array | null = null;
-  if (options.format === 'pdf') {
+  let files: string[] | undefined;
+  if (options.format === 'pdf' || options.format === 'handover') {
     const projectFields = effectiveTitleBlock();
     const projectName = plan.sheets.map((s) => titleBlockOf(s.sheet, projectFields, project.name).project).find((n) => n) || project.name;
     pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival, onWarning: (w) => lines.push(w) });
+    if (options.format === 'handover') {
+      const built = buildHandover({
+        pattern: project.handoverPattern, project: projectName, plan, pdf, dxfs, models: loadedModels(),
+        schedules: await options.handoverSchedules?.() ?? [], register: await registerWorkbook(plan, listLabels()),
+      });
+      zip = built.zip;
+      files = built.files.map((f) => f.name);
+      pdf = null;
+    }
   } else {
     const ext = options.format;
     const names = uniqueNames(plan.sheets.map(({ sheet }) => `${sanitizeFilename(sheetFileStem(sheet.number, sheet.name), { fallback: 'sheet' })}.${ext}`));
@@ -116,15 +140,22 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
     });
     zip = zipSync(files);
   }
-  const issues = [...(project.issues ?? []), issueRecord(plan, freshProjectId('issue'), Date.now())];
-  useProjectStore.setState({ issues, dirty: true });
+  const id = freshProjectId('issue');
+  const issues = [...(project.issues ?? []), issueRecord(plan, id, Date.now(), current ? modelRecord(current) : undefined)];
+  // The model as issued rides with the model state, so the next issue is compared with it.
+  useProjectStore.setState({ issues, dirty: true, ...(current ? { modelState: withIssuedModel(project.modelState, current, id) } : {}) });
   lines.push({ key: 'issue.msg.done', params: { name: plan.name, date: plan.date, count: plan.sheets.length, format: options.format.toUpperCase() } });
-  return { plan, pdf, csv, zip, lines };
+  return { plan, pdf, csv, zip, files, lines };
 }
 
 /** Hand the result to the person: the PDF (with the CSV beside it), or the zip for the others. */
 export function deliver(result: IssueResult, format: IssueFormat): void {
   const names = issueFileNames(result.plan.name, format, listLabels());
+  if (format === 'handover') {
+    // The drawing list is inside the package: one file, nothing beside it.
+    if (result.zip) downloadFile(result.zip, `${sanitizeFilename(result.plan.name, { fallback: 'issue' })} ${resolve('issue.file.handover')}.zip`, 'application/zip');
+    return;
+  }
   downloadFile(`﻿${result.csv}`, names.list, 'text/csv;charset=utf-8');
   if (result.zip) downloadFile(result.zip, names.zip, 'application/zip');
   if (result.pdf) downloadFile(result.pdf, names.pdf, 'application/pdf');

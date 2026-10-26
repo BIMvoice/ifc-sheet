@@ -21,9 +21,15 @@ import { readSchedule, scheduleFilterProperties, type ProjectSchedule } from './
 import type { JoinerySpec } from '@ifc-lite/create';
 import { joineryScheduleData, type JoineryProject, type ScheduleModel } from './joinery-schedule.js';
 import { subReportChecksOf, type SubReportCheck } from './sub-report-check.js';
+import { readBoqArticles, boqPropertyNames, type BoqArticle } from './boq.js';
+import { boqMissing, computeBoq } from './boq-compute.js';
+import { readBoqElements, storeSource } from './boq-read.js';
 import { readinessOfModel } from './readiness-read.js';
 import type { FarElementFact, ReadinessFinding } from './readiness.js';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { readClassificationMappings, type ClassificationMapping } from './classification.js';
+import { readUnitsAndNumbers, type UnitsAndNumbers } from './units-and-numbers.js';
+import type { MeshData } from '@ifc-lite/geometry';
 
 /** What the checks read of a project file. */
 export interface ProjectFacts extends JoineryProject {
@@ -36,6 +42,12 @@ export interface ProjectFacts extends JoineryProject {
   joineryMapping: JoineryMapping;
   /** The project's setting "include far-away elements in framing" (`framing.ts`); false when the file does not say so. */
   includeFarElements: boolean;
+  /** The bill of quantities' articles (#75); empty when the file has none. */
+  boqArticles: BoqArticle[];
+  /** The office's classification mappings (#89); empty when the file has none. */
+  classificationMappings: ClassificationMapping[];
+  /** The project's "Units and numbers" setting (#88), as the app reads it; absent when the file sets none. Hand it to `sheetFormat` for every figure the command line or an export writes. */
+  unitsAndNumbers?: UnitsAndNumbers;
 }
 
 type Json = Record<string, unknown>;
@@ -61,6 +73,9 @@ export function readProjectFile(text: string): ProjectFacts {
     joineryTypes: readJoineryList(parsed.joineryTypes),
     joineryMapping: parsed.joineryMapping !== undefined ? readJoineryMapping(parsed.joineryMapping) : { ...DEFAULT_JOINERY_MAPPING },
     includeFarElements: parsed.includeFarElements === true,
+    boqArticles: readBoqArticles(parsed.boqArticles),
+    classificationMappings: readClassificationMappings(parsed.classificationMappings),
+    ...(readUnitsAndNumbers(parsed.unitsAndNumbers) ? { unitsAndNumbers: readUnitsAndNumbers(parsed.unitsAndNumbers) } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }
@@ -77,7 +92,10 @@ export function projectSubReportChecks(project: ProjectFacts, models: readonly S
  * The readiness findings of an opened model with a project: the model's own, then a pair for each split schedule
  * whose parts overlap or leave elements out. Without a project, `readinessOfModel` alone.
  */
-export function readinessWithProject(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
+export function readinessWithProject(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
   const checks = project ? projectSubReportChecks(project, [{ modelId, dataStore: model.dataStore, view: null }]) : [];
-  return readinessOfModel(model, checks);
+  // What the project's articles take and the model does not state (#75); nothing when the project has no articles.
+  const articles = project?.boqArticles ?? [];
+  const boq = articles.length > 0 ? boqMissing(computeBoq(readBoqElements(storeSource(modelId, model.dataStore), new Set(boqPropertyNames(articles))), articles)) : undefined;
+  return readinessOfModel(model, checks, boq);
 }

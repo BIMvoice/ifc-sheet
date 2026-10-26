@@ -7,7 +7,7 @@
  * Uses the shoelace formula for area calculation.
  */
 
-import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 interface Point2D {
   x: number;
@@ -72,9 +72,9 @@ export function formatSquareMetres(squareMeters: number): string {
 /**
  * Format an area value for display with appropriate units.
  */
-export function formatArea(squareMeters: number, locale?: string): string {
+export function formatArea(squareMeters: number, locale?: SheetLocale): string {
   // `locale` (#269) is for text that lands on a drawing; left out, the plain `toFixed` digits.
-  const digits = (value: number, n: number): string => (locale === undefined ? value.toFixed(n) : sheetNumber(locale, value, n));
+  const digits = (value: number, n: number): string => (locale === undefined ? value.toFixed(n) : sheetNumber(locale, value, n, { kind: 'area' }));
   if (squareMeters < 0.01) {
     return `${digits(squareMeters * 10000, 1)} cm²`;
   } else if (squareMeters < 10000) {

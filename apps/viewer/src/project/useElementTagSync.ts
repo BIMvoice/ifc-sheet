@@ -34,8 +34,10 @@ export function useElementTagSync(): void {
   const models = useViewerStore((s) => s.models);
   // The sources of the tag fields too: a tag takes the text the new sources give.
   const tagFields = useProjectStore((s) => s.tagFields);
+  // The classification mappings too (#89): a tag that shows a code takes a changed one.
+  const classificationMappings = useProjectStore((s) => s.classificationMappings);
   const tagCount = useProjectStore((s) => s.drafts.filter((d) => d.params.tagOf !== undefined).length);
   useEffect(() => {
     if (tagCount > 0) refreshElementTags();
-  }, [mutationVersion, models, tagCount, tagFields]);
+  }, [mutationVersion, models, tagCount, tagFields, classificationMappings]);
 }

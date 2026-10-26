@@ -21,7 +21,7 @@ const ZOOM = 3;
 
 export function TypeQuantitiesView({ schedule }: { schedule: ProjectSchedule }) {
   const { t } = useTranslation();
-  const data = useTypeQuantities();
+  const data = useTypeQuantities(schedule.classification);
   const labels = useTypeQuantityLabels(schedule.name);
   const layout = useMemo(() => layoutTypeQuantities(data, labels), [data, labels]);
   const w = layout.width + 2 * MARGIN, h = layout.height + 2 * MARGIN;

@@ -22,6 +22,7 @@ import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import type { MeshData } from '@ifc-lite/geometry';
 import { schemeResultOf } from '@/project/view-colour-scheme';
 import { legendGroups, scopeViewIds, scopeViews, type LegendMaterial } from './legend-data';
+import { schemeHeading } from '@/project/scheme-heading';
 import { layoutLegend, type LegendLabels, type LegendLayout } from './legend-layout';
 
 export interface LegendEnv {
@@ -51,7 +52,11 @@ export function layoutOf(legend: LegendConfig, env: LegendEnv, placedOn?: string
   const colours = coloursOf(scopeViews(legend, env.views, env.sheets, placedOn), env);
   const groups = legendGroups(legend, { materials, colours, layers: env.layers, drafts: inScope, hiddenLayers: hidden, annotationTypes: env.annotationTypes ?? [], symbols: env.symbols ?? [] });
   const textStyle = (env.textStyles ?? []).find((s) => s.id === legend.textStyle) ?? DEFAULT_TEXT_STYLE;
-  return layoutLegend(groups, legend, { textStyle, patterns: parsePat(env.patterns).patterns, labels: env.labels });
+  // The legend of a view's colours is headed by what the view is coloured by, in the app's language, unless the scheme carries a title of its own.
+  const scheme = legend.scope === 'view' && legend.categories.length === 1 && legend.categories[0] === 'colours'
+    ? env.views.find((v) => v.id === legend.scopeId)?.graphics?.colourScheme : undefined;
+  const config = scheme ? { ...legend, title: schemeHeading(scheme, env.labels.attribute) } : legend;
+  return layoutLegend(groups, config, { textStyle, patterns: parsePat(env.patterns).patterns, labels: env.labels });
 }
 
 /** The values the colour schemes of `views` paint, once each (the first view to show a value gives its colour), in the order the views are listed. */

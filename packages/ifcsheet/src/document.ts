@@ -13,12 +13,15 @@
  */
 
 import type { ViewGraphics } from './view-graphics-types.js';
+import type { ProjectViewTemplate } from './view-templates.js';
 import type { ThreeDProjectView } from './view-3d-types.js';
 import type { TitleBlockParam } from './title-block-params.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
+import type { UnitsAndNumbers } from './units-and-numbers.js';
 
-export type { CategoryGraphics, CategoryLineWeight, GridEnds, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
+export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
+export type { ProjectViewTemplate, TemplateGraphics, ViewTemplateKind } from './view-templates.js';
 export type { AxonometricPreset, CameraViewpoint, ProjectionMode, ThreeDProjection, ThreeDProjectView, ViewRaster } from './view-3d-types.js';
 export type { CustomPaper, ElongatedPaper, Paper, SheetFrame, SheetTemplate, TemplateSeries, TitleBlockPosition } from './sheet-types.js';
 
@@ -93,8 +96,10 @@ export interface ProjectViewBase {
    * same depth), shown at a larger scale and cropped to `min`..`max`.
    */
   detail?: ViewDetail;
-  /** The view's own graphics (Visibility / Graphics): a preset and per-category overrides. */
+  /** The view's own graphics (Visibility / Graphics): a preset and per-category overrides. With a `templateId`, these are the overrides laid over the template's (`resolveViewGraphics`, #44). */
   graphics?: ViewGraphics;
+  /** The view template (`ProjectDocument.viewTemplates`) whose graphics this view follows; absent: none, the view's own `graphics` are all there is. */
+  templateId?: string;
   /** Drawing scale denominator (100 = 1:100). Annotation sizes follow it; absent = 1:100. */
   scale?: number;
   /** Drafting layers this view hides (by id), over their own switches. */
@@ -292,10 +297,16 @@ export interface ProjectDocument {
   titleBlockParams?: TitleBlockParam[];
   /** The project's own sheet templates (the built-in ones are in code, `sheet-templates.ts`). */
   sheetTemplates?: SheetTemplate[];
+  /** The project's view templates (#44): named graphics that views follow by `templateId`. */
+  viewTemplates?: ProjectViewTemplate[];
   /** The template new sheets of a series start from, by template id. */
   seriesTemplates?: Partial<Record<TemplateSeries, string>>;
   /** How sheets are numbered (`numbering.ts`); absent is the default A-101 style. */
   sheetNumbering?: NumberingScheme;
   /** "Include far-away elements in framing" (`framing.ts`): frame the views on everything the storeys contain, small elements far from the building too. Absent is off. */
   includeFarElements?: boolean;
+  /** How the files of the handover package are named (`handover.ts`): tokens `{project} {number} {sheet} {revision} {date} {issue}`. Absent is the default pattern. */
+  handoverPattern?: string;
+  /** The project's "Units and numbers" setting (`units-and-numbers.ts`, #88). Absent follows the language and each drawing's own style. */
+  unitsAndNumbers?: UnitsAndNumbers;
 }

@@ -125,18 +125,23 @@ describe('ensureDrawingSet', () => {
     assert.deepEqual(projectDocument(), after);
   });
 
-  it('undoing the set removes only what it added; what came after stays, and Redo puts the set back', () => {
+  it('undoing the set removes only what it added; a section made after it is a step of its own (view and symbol together), and what came after stays', () => {
     run();
+    const [fromSet] = sections();
     const mine = makeHallSection();
     // Added outside the history (addProjectSheet is a step of its own since #51), as anything that is not an undo step is.
     const sheet = 'later-sheet';
     useProjectStore.setState((s) => ({ sheets: [...s.sheets, { id: sheet, number: 'Z-1', series: 'other', name: 'Details', createdAt: 1 } as never] }));
     assert.equal(undoDrafts(), true, 'the section');
+    assert.deepEqual(sections().map((v) => v.id), [fromSet.id], 'one undo takes the person\'s section view and its symbol, and only that');
+    assert.equal(state().drafts.some((d) => d.params.sectionOf === mine), false, 'its symbol is gone with it');
     assert.equal(undoDrafts(), true, 'the set');
-    assert.deepEqual(sections().map((v) => v.id), [mine], 'the set\'s section is gone, the person\'s own stays');
+    assert.deepEqual(sections().map((v) => v.id), [], 'the set\'s section is gone');
     assert.ok(state().sheets.some((s) => s.id === sheet), 'the sheet added later is still there');
     assert.equal(redoDrafts(), true);
-    assert.equal(sections().length, 2);
+    assert.equal(sections().length, 1);
+    assert.equal(redoDrafts(), true);
+    assert.deepEqual(sections().map((v) => v.id).sort(), [fromSet.id, mine].sort());
     assert.ok(state().sheets.some((s) => s.id === sheet));
   });
 

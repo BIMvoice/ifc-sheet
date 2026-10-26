@@ -6,12 +6,7 @@ import { drawDxfUnderlaysScreenSpace } from './drawing-underlays';
 import { drawReferenceImages } from './drawing-reference-images';
 import { useReferenceImagesForDrawing } from '@/hooks/useReferenceImagesForDrawing';
 import React, { useRef, useState, useEffect } from 'react';
-import { useTranslation } from '@/i18n';
-import {
-  GraphicOverrideEngine,
-  type Drawing2D,
-  type ElementData,
-} from '@ifc-lite/drawing-2d';
+import type { Drawing2D, GraphicOverrideEngine } from '@ifc-lite/drawing-2d';
 import type { DrawingLine2D } from '@ifc-lite/renderer';
 import { formatDistance } from './tools/formatDistance';
 import { formatArea, computePolygonCentroid } from './tools/computePolygonArea';
@@ -25,11 +20,10 @@ import { type CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
 import { resolveSheetTransform } from '@/lib/drawing/sheet-transform';
 import { useDrawingElementPropertiesLookup } from '@/hooks/useDrawingElementPropertiesLookup';
 import { markActiveDrawingCanvasRendered, registerActiveDrawingCanvas } from '@/lib/drawing/active-canvas-snapshot';
-import { getFillColorForType } from './drawing/ifc-fill-colors';
-import { itemInk } from '@/project/phases';
-import { fillOrder, schemeColourOf } from '@/project/view-scheme-style';
-import type { ViewGraphics } from '@/project/types';
+import { fillOrder } from '@/project/view-scheme-style';
+import { legacyCanvasStyler, type CanvasStyler } from './drawing/canvas-item-style';
 import { resolveDrawingPaperTheme, type DrawingPaperTheme } from './drawing/paper-theme';
+import { useSheetLocale } from '@/project/units-and-numbers';
 export { getFillColorForType } from './drawing/ifc-fill-colors';
 
 // ─── IFC annotation overlay helpers (issue #812) ─────────────────────────────
@@ -171,6 +165,7 @@ function drawIfcAnnotationsScreenSpace(
 const CANVAS_STYLE = { imageRendering: 'crisp-edges' as const };
 const EMPTY_MEASURE_RESULTS: Measure2DResultData[] = [];
 const EMPTY_UNIT_DISPLAY_OVERRIDES: Record<string, string> = {};
+const NO_COLOURS = new Map<number, [number, number, number, number]>();
 
 export interface Measure2DResultData {
   id: string;
@@ -184,11 +179,12 @@ interface Drawing2DCanvasProps {
   snapshotSourceDrawing?: Drawing2D;
   transform: { x: number; y: number; scale: number };
   showHiddenLines: boolean;
-  overrideEngine: GraphicOverrideEngine;
-  graphics?: ViewGraphics; // phase styles of the elements `styledDrawing` marked
-  overridesEnabled: boolean;
-  entityColorMap: Map<number, [number, number, number, number]>;
-  useIfcMaterials: boolean;
+  overrideEngine?: GraphicOverrideEngine;
+  /** How each face and line is styled (#34): a project view's styler (`viewCanvasStyler`); absent, the Drawing panel's own look. */
+  styler?: CanvasStyler;
+  overridesEnabled?: boolean;
+  entityColorMap?: Map<number, [number, number, number, number]>;
+  useIfcMaterials?: boolean;
   // Measure tool props
   measureMode?: boolean;
   measureStart?: { x: number; y: number } | null;
@@ -246,10 +242,10 @@ export function Drawing2DCanvas({
   transform,
   showHiddenLines,
   overrideEngine,
-  graphics,
-  overridesEnabled,
-  entityColorMap,
-  useIfcMaterials,
+  styler,
+  overridesEnabled = false,
+  entityColorMap = NO_COLOURS,
+  useIfcMaterials = false,
   measureMode = false,
   measureStart = null,
   measureCurrent = null,
@@ -280,12 +276,12 @@ export function Drawing2DCanvas({
   paperTheme = DEFAULT_PAPER_THEME,
 }: Drawing2DCanvasProps): React.ReactElement {
   // The measure labels are written in the language, as the exported drawing's are (#269).
-  const { locale } = useTranslation();
+  const locale = useSheetLocale();
   const referenceImages = useReferenceImagesForDrawing(drawing.config.plane);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   // Resolved once per (model set, polygon set) change, never per draw frame.
-  const getElementProperties = useDrawingElementPropertiesLookup(drawing, overrideEngine, overridesEnabled);
+  const getElementProperties = useDrawingElementPropertiesLookup(drawing, overrideEngine, overridesEnabled && !styler);
   useEffect(() => canvasRef.current ? registerActiveDrawingCanvas(canvasRef.current, snapshotSourceDrawing) : undefined, [snapshotSourceDrawing]);
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -326,6 +322,8 @@ export function Drawing2DCanvas({
     // print preview always white).
     ctx.fillStyle = sheetEnabled && activeSheet ? paperTheme.desk : paperTheme.paper;
     ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
+    // Each face's and line's style, decided outside the canvas (`canvas-item-style.ts`).
+    const items = styler ?? legacyCanvasStyler({ sheetMode: !!(sheetEnabled && activeSheet), overrideEngine, overridesEnabled, entityColorMap, useIfcMaterials, getElementProperties, paperTheme });
 
     // ═══════════════════════════════════════════════════════════════════════
     // SHEET MODE: Render paper, frame, title block, then drawing in viewport
@@ -663,32 +661,7 @@ export function Drawing2DCanvas({
 
         // Fill cut polygons
         for (const polygon of fillOrder(drawing)) {
-          let fillColor = getFillColorForType(polygon.ifcType), opacity = 1;
-
-          if (useIfcMaterials) {
-            // Per-layer fill (material-layer wall/slab) wins over the per-entity
-          // colour, so each sliced layer paints with its own IfcMaterial colour
-          // instead of one colour for the whole element. Falls back to the
-          // per-entity map for ordinary single-material elements.
-          const materialColor = polygon.color ?? entityColorMap.get(polygon.entityId);
-            if (materialColor) {
-              const r = Math.round(materialColor[0] * 255);
-              const g = Math.round(materialColor[1] * 255);
-              const b = Math.round(materialColor[2] * 255);
-              fillColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-              opacity = materialColor[3];
-            }
-          } else if (overridesEnabled) {
-            const elementData: ElementData = {
-              expressId: polygon.entityId,
-              ifcType: polygon.ifcType, properties: getElementProperties(polygon.entityId),
-            };
-            const result = overrideEngine.applyOverrides(elementData);
-            fillColor = result.style.fillColor;
-            opacity = result.style.opacity;
-          }
-
-          fillColor = schemeColourOf(polygon) ?? itemInk(graphics, polygon)?.fill ?? fillColor; // a phase's fill, then a colour scheme's (#92), come last
+          const { fill: fillColor, opacity } = items.face(polygon);
           ctx.globalAlpha = opacity;
           ctx.fillStyle = fillColor;
           ctx.beginPath();
@@ -720,23 +693,10 @@ export function Drawing2DCanvas({
 
         // Stroke polygon outlines
         for (const polygon of drawing.cutPolygons) {
-          let strokeColor = '#000000';
-          let lineWeight = 0.5;
-
-          if (overridesEnabled) {
-            const elementData: ElementData = {
-              expressId: polygon.entityId,
-              ifcType: polygon.ifcType, properties: getElementProperties(polygon.entityId),
-            };
-            const result = overrideEngine.applyOverrides(elementData);
-            strokeColor = result.style.strokeColor;
-            lineWeight = result.style.lineWeight;
-          }
-
-          const phaseInk = itemInk(graphics, polygon);
-          ctx.strokeStyle = phaseInk?.color ?? strokeColor;
-          ctx.lineWidth = Math.max(0.5, mmToScreen(phaseInk?.weightMm ?? lineWeight) * 0.3);
-          ctx.setLineDash(phaseInk ? phaseInk.dash.map((d) => Math.max(2, mmToScreen(d) * 0.3)) : []);
+          const pen = items.face(polygon);
+          ctx.strokeStyle = pen.stroke;
+          ctx.lineWidth = Math.max(0.5, mmToScreen(pen.weight) * 0.3);
+          ctx.setLineDash([...pen.dash]);
           ctx.beginPath();
 
           if (polygon.polygon.outer.length > 0) {
@@ -781,29 +741,11 @@ export function Drawing2DCanvas({
           if (start.x < lineMinX || start.x > lineMaxX || start.y < lineMinY || start.y > lineMaxY ||
             end.x < lineMinX || end.x > lineMaxX || end.y < lineMinY || end.y > lineMaxY) continue;
 
-          let strokeColor = '#000000';
-          let lineWidth = 0.25;
-          let dashPattern: number[] = [];
-
-          switch (line.category) {
-            case 'projection': lineWidth = 0.25; break;
-            case 'hidden': lineWidth = 0.18; strokeColor = '#666666'; dashPattern = [4, 2]; break;
-            case 'silhouette': lineWidth = 0.5; break;
-            case 'crease': lineWidth = 0.18; break;
-            case 'boundary': lineWidth = 0.25; break;
-            case 'annotation': lineWidth = 0.13; break;
-          }
-
-          if (line.visibility === 'hidden') {
-            strokeColor = '#888888';
-            dashPattern = [4, 2];
-            lineWidth *= 0.7;
-          }
-
-          const phaseInk = line.visibility === 'hidden' ? null : itemInk(graphics, line);
-          ctx.strokeStyle = phaseInk?.color ?? strokeColor;
-          ctx.lineWidth = Math.max(0.5, mmToScreen(phaseInk ? phaseInk.weightMm * 0.5 : lineWidth) * 0.3);
-          ctx.setLineDash(phaseInk ? phaseInk.dash.map((d) => Math.max(2, mmToScreen(d) * 0.3)) : dashPattern);
+          const pen = items.line(line);
+          if (!pen) continue;
+          ctx.strokeStyle = pen.stroke;
+          ctx.lineWidth = Math.max(0.5, mmToScreen(pen.weight) * 0.3);
+          ctx.setLineDash([...pen.dash]);
 
           const screenStart = modelToScreen(start.x, start.y);
           const screenEnd = modelToScreen(end.x, end.y);
@@ -1031,37 +973,7 @@ export function Drawing2DCanvas({
       // 1. FILL CUT POLYGONS (with color from IFC materials, override engine, or type fallback)
       // ═══════════════════════════════════════════════════════════════════════
       for (const polygon of fillOrder(drawing)) {
-        // Get fill color - priority: IFC materials > override engine > IFC type fallback.
-        // Direct mode only (#5496): the dark-paper analogue applies here, never
-        // in sheet mode above, which stays on white paper.
-        let fillColor = getFillColorForType(polygon.ifcType, paperTheme.isDark), opacity = 1;
-
-        // Use actual IFC material colors from the mesh data
-        if (useIfcMaterials) {
-          // Per-layer fill (material-layer wall/slab) wins over the per-entity
-          // colour, so each sliced layer paints with its own IfcMaterial colour
-          // instead of one colour for the whole element. Falls back to the
-          // per-entity map for ordinary single-material elements.
-          const materialColor = polygon.color ?? entityColorMap.get(polygon.entityId);
-          if (materialColor) {
-            // Convert RGBA [0-1] to hex color
-            const r = Math.round(materialColor[0] * 255);
-            const g = Math.round(materialColor[1] * 255);
-            const b = Math.round(materialColor[2] * 255);
-            fillColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-            opacity = materialColor[3];
-          }
-        } else if (overridesEnabled) {
-          const elementData: ElementData = {
-            expressId: polygon.entityId,
-            ifcType: polygon.ifcType, properties: getElementProperties(polygon.entityId),
-          };
-          const result = overrideEngine.applyOverrides(elementData);
-          fillColor = result.style.fillColor;
-          opacity = result.style.opacity;
-        }
-
-        fillColor = schemeColourOf(polygon) ?? itemInk(graphics, polygon)?.fill ?? fillColor; // a phase's fill, then a colour scheme's (#92), come last
+        const { fill: fillColor, opacity } = items.face(polygon);
         ctx.globalAlpha = opacity;
         ctx.fillStyle = fillColor;
         ctx.beginPath();
@@ -1091,23 +1003,10 @@ export function Drawing2DCanvas({
       // 2. STROKE CUT POLYGON OUTLINES (with color from override engine)
       // ═══════════════════════════════════════════════════════════════════════
       for (const polygon of drawing.cutPolygons) {
-        let strokeColor = paperTheme.ink;
-        let lineWeight = 0.5;
-
-        if (overridesEnabled) {
-          const elementData: ElementData = {
-            expressId: polygon.entityId,
-            ifcType: polygon.ifcType, properties: getElementProperties(polygon.entityId),
-          };
-          const result = overrideEngine.applyOverrides(elementData);
-          strokeColor = result.style.strokeColor;
-          lineWeight = result.style.lineWeight;
-        }
-
-        const phaseInk = itemInk(graphics, polygon);
-        ctx.strokeStyle = phaseInk?.color ?? strokeColor;
-        ctx.lineWidth = (phaseInk?.weightMm ?? lineWeight) / transform.scale;
-        ctx.setLineDash(phaseInk ? phaseInk.dash.map((d) => d / transform.scale) : []);
+        const pen = items.face(polygon);
+        ctx.strokeStyle = pen.stroke;
+        ctx.lineWidth = pen.weight / transform.scale;
+        ctx.setLineDash(pen.dash.map((d) => d / transform.scale));
         ctx.beginPath();
         if (polygon.polygon.outer.length > 0) {
           ctx.moveTo(polygon.polygon.outer[0].x, polygon.polygon.outer[0].y);
@@ -1159,28 +1058,12 @@ export function Drawing2DCanvas({
           continue;
         }
 
-        // Set line style based on category. Ink follows the paper (#5496):
-        // direct mode only, sheet mode above stays black-on-white.
-        let strokeColor = paperTheme.ink;
-        let lineWidth = 0.25;
-        let dashPattern: number[] = [];
-
-        // Pen by category (a hidden category is grey and dashed); a category not listed keeps the defaults.
-        const pen: Partial<Record<string, number>> = { projection: 0.25, hidden: 0.18, silhouette: 0.5, crease: 0.18, boundary: 0.25, annotation: 0.13 };
-        lineWidth = pen[line.category] ?? lineWidth;
-        if (line.category === 'hidden') { strokeColor = '#666666'; dashPattern = [2, 1]; }
-
-        // Hidden visibility overrides
-        if (line.visibility === 'hidden') {
-          strokeColor = '#888888';
-          dashPattern = [2, 1];
-          lineWidth *= 0.7;
-        }
-
-        const phaseInk = line.visibility === 'hidden' ? null : itemInk(graphics, line);
-        ctx.strokeStyle = phaseInk?.color ?? strokeColor;
-        ctx.lineWidth = (phaseInk ? phaseInk.weightMm * 0.5 : lineWidth) / transform.scale;
-        ctx.setLineDash((phaseInk ? phaseInk.dash : dashPattern).map((d) => d / transform.scale));
+        // The line's pen (`canvas-item-style.ts`); the Drawing panel's ink follows the paper (#5496).
+        const pen = items.line(line);
+        if (!pen) continue;
+        ctx.strokeStyle = pen.stroke;
+        ctx.lineWidth = pen.weight / transform.scale;
+        ctx.setLineDash(pen.dash.map((d) => d / transform.scale));
 
         ctx.beginPath();
         ctx.moveTo(line.line.start.x, line.line.start.y);
@@ -1677,7 +1560,7 @@ export function Drawing2DCanvas({
       }
     }
     markActiveDrawingCanvasRendered(canvas, snapshotSourceDrawing, textAnnotationEditing === null);
-  }, [referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, graphics, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, scanOutline, unitDisplayOverrides, locale, paperTheme]);
+  }, [referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, styler, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, scanOutline, unitDisplayOverrides, locale, paperTheme]);
 
   return (
     <canvas

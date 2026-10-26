@@ -13,8 +13,9 @@
 
 export { openModel, type FarElementInfo, type OpenedModel, type OpenModelOptions } from './model.js';
 export { generateViewDrawings, sectionConfigFor } from './view-drawings.js';
-export { sheetGraphic, type Polyline, type SheetGraphic, type SheetText } from './sheet-graphic.js';
-export { sheetGraphics, type SheetGraphicsOptions } from './set-sheets.js';
+export { sheetGraphic, type Polyline, type SheetGraphic, type SheetPen, type SheetText } from './sheet-graphic.js';
+export { headlessMaterialOf, headlessPropertiesOf, sheetGraphics, type SheetGraphicsOptions } from './set-sheets.js';
 export { exportDxf, exportPdf } from './export.js';
 export { IFC_GUID, isPhysicalElement, readModelFacts, readinessOfModel, type FactSource } from './readiness-read.js';
+export { areaScaleOf, readRooms, type RoomsRead } from './room-read.js';
 export * from './project.js';

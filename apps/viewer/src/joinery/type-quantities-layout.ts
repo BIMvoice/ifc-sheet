@@ -11,7 +11,7 @@
  * the same lines.
  */
 
-import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import type { ExportTable } from './schedule-export';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
@@ -19,7 +19,7 @@ import type { Totals, TypeQuantities } from './type-quantities';
 
 export interface TypeQuantityLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */
-  locale: string;
+  locale: SheetLocale;
   title: string;
   type: string;
   class: string;
@@ -33,6 +33,10 @@ export interface TypeQuantityLabels {
   noType: string;
   /** The level of an element on no storey. */
   noLevel: string;
+  /** The classification columns (#89) and the heading of the types no code reaches. */
+  classification: string;
+  classificationTitle: string;
+  unclassified: string;
 }
 
 export interface TypeQuantityLine {
@@ -47,16 +51,32 @@ export interface TypeQuantityLine {
   total: boolean;
   /** A total per class of element, after the type rows. */
   classTotal: boolean;
+  /** The classification of the type (#89); absent when the schedule shows none. */
+  code?: string;
+  codeTitle?: string;
+  /** A heading line above the types of one code (grouped by classification): no figures. */
+  heading?: boolean;
 }
+
+const HEADING_TOTALS: Totals = { count: 0, noQto: 0, length: null, area: null, volume: null };
 
 const plainClass = (c: string): string => c.replace(/^Ifc/, '');
 
 /** The table's lines, in print order. */
 export function typeQuantityLines(data: TypeQuantities, labels: TypeQuantityLabels): TypeQuantityLine[] {
   const lines: TypeQuantityLine[] = [];
+  let group: string | null = null;
+  let started = false;
   for (const row of data.rows) {
     const type = row.typeName ?? `${plainClass(row.className)} ${labels.noType}`;
-    const base = { type, className: row.className };
+    const base = { type, className: row.className, ...(data.classified ? { code: row.classification?.code ?? '', codeTitle: row.classification?.title ?? '' } : {}) };
+    // Grouped by classification: a heading when the code changes (rows are in code order), the unclassified last under their own.
+    if (data.grouped && (!started || (row.classification?.code ?? null) !== group)) {
+      started = true;
+      group = row.classification?.code ?? null;
+      const heading = group === null ? labels.unclassified : [group, row.classification?.title].filter(Boolean).join('  ');
+      lines.push({ type: heading, className: '', level: '', totals: HEADING_TOTALS, first: true, total: false, classTotal: false, heading: true });
+    }
     const levels = data.levels.filter((l) => row.byLevel[l]);
     levels.forEach((l, i) => lines.push({ ...base, level: l || labels.noLevel, totals: row.byLevel[l], first: i === 0, total: false, classTotal: false }));
     if (levels.length > 1) lines.push({ ...base, level: labels.total, totals: row.total, first: false, total: true, classTotal: false });
@@ -66,29 +86,47 @@ export function typeQuantityLines(data: TypeQuantities, labels: TypeQuantityLabe
 }
 
 const COLUMNS = [58, 28, 28, 14, 20, 20, 20, 14] as const;
+/** With classification (#89) the code and its title come after the class. */
+const CLASSIFIED_COLUMNS = [58, 28, 24, 44, 28, 14, 20, 20, 20, 14] as const;
 
-const fixed = (locale: string, v: number | null): string => (v === null ? '–' : sheetNumber(locale, v));
+const fixed = (locale: SheetLocale, v: number | null, kind: 'length' | 'area' | 'volume'): string => (v === null ? '–' : sheetNumber(locale, v, 2, { kind }));
+
+/** The header cells: type, class, [classification, title,] level, count, length, area, volume, no quantity. */
+const headerOf = (data: TypeQuantities, labels: TypeQuantityLabels): string[] => [
+  labels.type, labels.class, ...(data.classified ? [labels.classification, labels.classificationTitle] : []), labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto,
+];
 
 export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityLabels, paging: PagedOptions = {}): ScheduleLayout {
   const lines = typeQuantityLines(data, labels);
+  const lead = data.classified ? 4 : 2;
   const block: TableBlock = {
-    columns: COLUMNS, header: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], numeric: (c) => c >= 3, skipEmpty: true,
+    columns: data.classified ? CLASSIFIED_COLUMNS : COLUMNS, header: headerOf(data, labels), numeric: (c) => c >= lead + 1, skipEmpty: true,
     rows: lines.map((l, i) => ({
-      cells: [l.first ? l.type : '', l.first ? plainClass(l.className) : '', l.level, String(l.totals.count), fixed(labels.locale, l.totals.length), fixed(labels.locale, l.totals.area), fixed(labels.locale, l.totals.volume), l.totals.noQto ? String(l.totals.noQto) : ''],
-      bold: l.total,
+      cells: l.heading
+        ? [l.type, ...headerOf(data, labels).slice(1).map(() => '')]
+        : [
+          l.first ? l.type : '', l.first ? plainClass(l.className) : '', ...(data.classified ? [l.first ? l.code ?? '' : '', l.first ? l.codeTitle ?? '' : ''] : []),
+          l.level, String(l.totals.count), fixed(labels.locale, l.totals.length, 'length'), fixed(labels.locale, l.totals.area, 'area'), fixed(labels.locale, l.totals.volume, 'volume'), l.totals.noQto ? String(l.totals.noQto) : '',
+        ],
+      bold: l.total || l.heading === true,
       // A frame rule above the class totals, else a rule under the last line of each type.
-      rule: !l.classTotal && lines[i + 1]?.classTotal === true ? PEN.frame : i === lines.length - 1 || lines[i + 1].first ? PEN.grid : 0,
+      rule: l.heading ? 0 : !l.classTotal && lines[i + 1]?.classTotal === true ? PEN.frame : i === lines.length - 1 || lines[i + 1].first ? PEN.grid : 0,
     })),
   };
   return layoutPagedTable(labels.title, 4, [{ kind: 'table', block }], paging);
 }
 
-/** The quantities as the table of its CSV and XLSX: the lines the sheet prints (totals in bold), the type and class (as printed, without `Ifc`) on every line, figures unformatted. */
+/**
+ * The quantities as the table of its CSV and XLSX: the lines the sheet prints (totals in bold), the type and class (as printed, without `Ifc`) on
+ * every line, figures unformatted. With classification (#89) the code and its title are on every line too, and the grouping headings are left out:
+ * a spreadsheet filters by the code column, the rows stay in code order.
+ */
 export function typeQuantityTable(data: TypeQuantities, labels: TypeQuantityLabels): ExportTable {
-  const lines = typeQuantityLines(data, labels);
+  const lines = typeQuantityLines(data, labels).filter((l) => !l.heading);
+  const shift = data.classified ? 2 : 0;
   return {
-    name: labels.title || labels.type, header: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], numeric: [3, 4, 5, 6, 7],
-    rows: lines.map((l) => [l.type, plainClass(l.className), l.level, l.totals.count, l.totals.length, l.totals.area, l.totals.volume, l.totals.noQto || null]),
+    name: labels.title || labels.type, header: headerOf(data, labels), numeric: [3, 4, 5, 6, 7].map((c) => c + shift), kinds: { [4 + shift]: 'length', [5 + shift]: 'area', [6 + shift]: 'volume' },
+    rows: lines.map((l) => [l.type, plainClass(l.className), ...(data.classified ? [l.code ?? '', l.codeTitle ?? ''] : []), l.level, l.totals.count, l.totals.length, l.totals.area, l.totals.volume, l.totals.noQto || null]),
     bold: lines.flatMap((l, i) => (l.total ? [i] : [])),
   };
 }

@@ -35,7 +35,10 @@ import { useSheetParamLookup } from './useSheetParams';
 import { currentRevisionOf, printsAtCurrentRevision, sheetRevisions } from '@/project/revisions';
 import { RevisionTable } from './RevisionTable';
 import { viewportPens } from './viewport-pens';
+import { appViewStyler } from '@/project/view-styler';
+import { useViewerStore } from '@/store';
 import { memoOn, sharedMemo } from './shared-memo';
+import { resolveViewGraphics, viewportHiddenLayers } from '@bimvoice/ifcsheet';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
@@ -91,6 +94,8 @@ interface SheetPaperProps {
   sheetDrafts?: readonly DraftEntity[];
   /** Print only the clouds of the sheet's current revision (an issue's option); older revisions' clouds are left off. */
   currentCloudsOnly?: boolean;
+  /** The date an issue is dated: the title block prints it as the sheet's date. */
+  issueDate?: string;
 }
 
 /** The viewport's drawing → paper transform: the chosen (or drawing's) centre at the viewport centre. */
@@ -131,11 +136,18 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const axis: SectionAxisName = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
   const t = viewportTransform(vp, drawing, axis);
   const cadLayers = useProjectStore((s) => s.cadLayers);
+  // The graphics the view draws with: its template's, then its own over them (#44).
+  const viewTemplates = useProjectStore((s) => s.viewTemplates);
+  const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
+  // The view's one styler (#34), the drafting view's too; a new one whenever what it styles from changes (the models, for property rules).
+  const models = useViewerStore((s) => s.models);
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const styler = useMemo(() => appViewStyler(graphics, drawing, standard, content.styleOf), [graphics, drawing, standard, content.styleOf, models, mutationVersion]);
   // Shared with every other component that pens this drawing the same way (`shared-memo.ts`): opening a sheet reuses the Wall's pens (#154).
   const pens = useMemo(
-    () => (drawing ? memoOn(pensMemo, drawing, [view?.graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
-      () => viewportPens(drawing, view?.graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard)) : []),
-    [drawing, view?.graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard],
+    () => (drawing ? memoOn(pensMemo, drawing, [graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard, styler],
+      () => viewportPens(drawing, graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard, styler)) : []),
+    [drawing, graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard, styler],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);
   const left = vp.x - box.width / 2;
@@ -150,8 +162,8 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
       })()
     : { x: left, y: top, width: box.width, height: box.height };
   const { book, groups } = useDraftingStandards();
-  // A layer shows in a viewport by its own switch, its group's, its view's and the viewport's.
-  const layerColor = new Map(layers.map((l) => [l.id, layerShows(l, groups, { view: view?.hiddenLayers, viewport: vp.hiddenLayers }) ? l.color : null]));
+  // A layer shows in a viewport by its own switch, its group's, its view's and the viewport's (`viewportHiddenLayers`).
+  const layerColor = new Map(layers.map((l) => [l.id, layerShows(l, groups, { view: viewportHiddenLayers(view, vp) }) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));
   // Annotation prints at the paper size it was drawn for, whatever scale the viewport shows the view at.
   const paperUnit = viewportPaperUnit(vp.scale);
@@ -268,9 +280,9 @@ function PenPath({ layer, d, color }: { layer: DraftLayer | undefined; d: string
 }
 
 /** The sheet's own lines and annotations, on the paper. */
-function SheetDrafts({ sheet, projectName, entities, layers, extraPatterns }: { sheet: ProjectSheet; projectName: string; entities: readonly DraftEntity[]; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[] }) {
+function SheetDrafts({ sheet, projectName, issueDate, entities, layers, extraPatterns }: { sheet: ProjectSheet; projectName: string; issueDate?: string; entities: readonly DraftEntity[]; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[] }) {
   const { book, groups } = useDraftingStandards();
-  const lookup = useSheetParamLookup(sheet, projectName);
+  const lookup = useSheetParamLookup(sheet, projectName, issueDate);
   const colour = new Map(layers.map((l) => [l.id, layerShows(l, groups) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));
   return (
@@ -289,7 +301,7 @@ function SheetDrafts({ sheet, projectName, entities, layers, extraPatterns }: { 
 }
 
 export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function SheetPaper(
-  { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [], currentCloudsOnly = false }, ref,
+  { sheet, projectName, content, layers, extraPatterns, selectedViewportId, pxPerMm, sheetDrafts = [], currentCloudsOnly = false, issueDate }, ref,
 ) {
   const { w, h } = paperOf(sheet);
   const revisions = useProjectStore((s) => s.revisions);
@@ -316,8 +328,8 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
           : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} highlight={keyedExtent(sheet, vp, content, c)} />;
       })}
       <RevisionTable revisions={own} block={titleBlockRect({ w, h }, frameOf(sheet))} strip={frameOf(sheet).titleBlock === 'right'} />
-      <TitleBlockGraphic sheet={sheet} projectName={projectName} w={w} h={h} />
-      <SheetDrafts sheet={sheet} projectName={projectName} entities={shows ? sheetDrafts.filter(shows) : sheetDrafts} layers={layers} extraPatterns={extraPatterns} />
+      <TitleBlockGraphic sheet={sheet} projectName={projectName} w={w} h={h} issueDate={issueDate} />
+      <SheetDrafts sheet={sheet} projectName={projectName} issueDate={issueDate} entities={shows ? sheetDrafts.filter(shows) : sheetDrafts} layers={layers} extraPatterns={extraPatterns} />
     </svg>
   );
 });

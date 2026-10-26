@@ -17,8 +17,11 @@ import { currentModelFacts } from '@/check/readiness-read';
 import { useViewerStore } from '@/store';
 import { setIncludeFarElements, useProjectStore } from '@/project/project-store';
 import { subReportChecks } from '@/check/sub-report-check';
+import { boqMissing } from '@bimvoice/ifcsheet';
+import { useBoqArticles, useBoqResult } from '../boq/useBoq';
 import type { SetSkin } from './set-skin';
 import { setReview } from '../wall/wall-nav';
+import { goToRoom } from '@/check/room-go';
 
 /**
  * The findings of the models open now; null while none is open (nothing to say yet). `owners` names, for each sub-report finding in
@@ -33,14 +36,16 @@ function useModelReadiness() {
   const mapping = useProjectStore((s) => s.joineryMapping);
   const includeFar = useProjectStore((s) => s.includeFarElements);
   const levels = useProjectStore((s) => s.levels);
+  // What the bill of quantities could not state (#75); nothing while the project holds no article.
+  const boqResult = useBoqResult(useBoqArticles().length > 0);
   return useMemo(() => {
     void mutationVersion; // an edit can add or remove what the facts count
     // A schedule split into parts must list every element once: the same check the card on the Wall shows.
     if (models.size === 0) return null;
     const checks = subReportChecks(schedules ?? []);
     const owners = checks.flatMap((c) => [...(c.duplicates.length > 0 ? [c.parent.id] : []), ...(c.gaps.length > 0 ? [c.parent.id] : [])]);
-    return { findings: modelReadiness(currentModelFacts(), checks), owners };
-  }, [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels]);
+    return { findings: modelReadiness(currentModelFacts(), checks, boqMissing(boqResult)), owners };
+  }, [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult]);
 }
 
 /** The project setting that frames the views on everything again, the small far-away elements too (`framing.ts` in the engine). */
@@ -67,6 +72,12 @@ function ReviewLink({ scheduleId, skin }: { scheduleId: string | undefined; skin
   );
 }
 
+/** Opens the plan of the first room whose area is estimated and zooms to it. */
+function RoomLink({ guid, skin }: { guid: string; skin: SetSkin }) {
+  const { t } = useTranslation();
+  return <button type="button" className={`${skin.note} underline`} onClick={() => goToRoom(guid)}>{t('ready.estimatedAreas.go')}</button>;
+}
+
 export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compact?: boolean }) {
   const { t } = useTranslation();
   const readiness = useModelReadiness();
@@ -81,6 +92,7 @@ export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compac
         <li key={`${f.kind}-${f.params.schedule ?? ''}`} className="py-0.5">
           <p className={`m-0 ${compact ? skin.note : skin.heading}`}>{describeMissing(f)}</p>
           {compact ? null : <p className={`m-0 ${skin.note}`}>{describeEffect(f)}</p>}
+          {f.kind === 'estimatedAreas' ? <RoomLink guid={String(f.params.first)} skin={skin} /> : null}
           {f.kind === 'subReportDuplicates' || f.kind === 'subReportGaps' ? <ReviewLink scheduleId={owners[nextOwner++]} skin={skin} /> : null}
         </li>
       ))}

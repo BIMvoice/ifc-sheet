@@ -11,6 +11,7 @@
 import { formatValue } from './label-format';
 import { resolveTagField, tagKindOf, TAG_FIELD_ATTRIBUTES, type TagFieldConfig } from '@/tagfields/tag-fields';
 import type { AttributeField, FieldRef, ParsedTemplate, TemplateField } from './label-template';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export interface PropertySetLike {
   name: string;
@@ -35,6 +36,8 @@ export interface LabelElement {
   typeQuantitySets(): QuantitySetLike[];
   materials(): string[];
   storey(): string;
+  /** The classification (#89): the model's own code, else the project's first mapping; null for none. Absent: no classification is read. */
+  classification?(): { code: string; title: string } | null;
   /** Metres in one model length unit (0.001 for a model in millimetres). */
   lengthUnitScale(): number;
   /** Which property feeds the tag fields `Mark` and `TagName` (`tagfields/tag-fields.ts`); absent: the defaults. */
@@ -90,6 +93,7 @@ export function readStored(ref: FieldRef, el: LabelElement): FieldValue {
     case 'typeName': return plain(el.typeName() || undefined);
     case 'material': return plain(el.materials().join(' / ') || undefined);
     case 'storey': return plain(el.storey() || undefined);
+    case 'classification': return plain(el.classification?.()?.[ref.part === 'code' ? 'code' : 'title'] || undefined);
     case 'property': {
       const scale = el.lengthUnitScale();
       const type = [plain(propertyOf(el.typePropertySets(), ref.set, ref.name)), quantityOf(el.typeQuantitySets(), ref.set, ref.name, scale)];
@@ -104,7 +108,7 @@ export const readField = (ref: FieldRef, el: LabelElement): unknown => readField
 
 const LENGTH_UNITS: Record<string, number> = { mm: 0.001, cm: 0.01, m: 1, km: 1000 };
 
-function readFormatted(field: TemplateField, el: LabelElement, locale: string): string | null {
+function readFormatted(field: TemplateField, el: LabelElement, locale: SheetLocale): string | null {
   const refs = [field.ref, ...(field.alternatives ?? [])];
   const { value, length } = refs.map((r) => readFieldValue(r, el)).find((v) => present(v.value)) ?? readFieldValue(field.ref, el);
   const factor = length && field.format ? LENGTH_UNITS[field.format.unit] : undefined;
@@ -117,7 +121,7 @@ function placeholder(field: TemplateField, missing: MissingMode): string {
 }
 
 /** The text of a label for `el`, its numbers written in `locale`'s separators. */
-export function resolveTemplate(template: ParsedTemplate, el: LabelElement, locale: string, missing: MissingMode = 'question'): string {
+export function resolveTemplate(template: ParsedTemplate, el: LabelElement, locale: SheetLocale, missing: MissingMode = 'question'): string {
   return template.segments.map((s) => {
     if (s.type === 'text') return s.text;
     return readFormatted(s, el, locale) ?? placeholder(s, missing);

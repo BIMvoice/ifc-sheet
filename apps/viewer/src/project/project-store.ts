@@ -29,9 +29,12 @@ import { liftTypedRevisions, sheetRevisions } from './revisions';
 import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
+import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
+import { assignDefaultTemplates, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 import type { UrbanSettings } from '@/urban/indicators';
+import { readUnitsAndNumbers, type UnitsAndNumbers } from '@bimvoice/ifcsheet/names';
 
 export interface ProjectState extends ProjectDocument {
   /** Levels of the currently loaded models (derived, never persisted). */
@@ -83,6 +86,21 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
  * Replace the document (file import, autosave restore). Only the document: noting a file as the last
  * one opened for these models is the caller's (`openProjectDocument` in `project-file.ts`).
  */
+/**
+ * `after` with each view that is not in `before` given the project's default template for its kind (#44), when the project has one
+ * (`assignDefaultTemplates`: a view that has a template, or is of no kind a template is for, is left alone; a project with no
+ * templates, an older one, assigns none). The ONE place a view made after the set was built takes its template: every way a view is
+ * made (`addProjectView`, a copy, a plan for a level that appears later, a section on a plan, Add a drawing, the levels folder, a set
+ * built from a template) ends here, so no path can forget it.
+ */
+export function withDefaultTemplates<V extends ProjectView>(before: readonly ProjectView[], after: readonly V[], templates: readonly ProjectViewTemplate[] | undefined): V[] {
+  if (!templates || templates.length === 0) return [...after];
+  const known = new Set<ProjectView>(before);
+  const fresh = assignDefaultTemplates(after.filter((v) => !known.has(v)), templates);
+  let next = 0;
+  return after.map((v) => (known.has(v) ? v : fresh[next++]!));
+}
+
 export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
@@ -98,7 +116,7 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
     ...loadedFields(doc),
     graphicStandard: standard.id,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
-    views: [...syncDefaultViews(doc.views, levels)],
+    views: withDefaultTemplates(doc.views, syncDefaultViews(doc.views, levels), doc.viewTemplates),
     activeItemId: null,
     dirty: options.dirty ?? false,
   });
@@ -118,7 +136,7 @@ export function syncProjectWithModels(models: ProjectModelRef[], storeys: readon
   useProjectStore.setState({
     levels,
     models: modelsChanged ? mergeModels(state.models, models) : state.models,
-    views: views === state.views ? state.views : [...views],
+    views: views === state.views ? state.views : withDefaultTemplates(state.views, views, state.viewTemplates),
     dirty: state.dirty || views !== state.views || modelsChanged,
   });
 }
@@ -132,6 +150,24 @@ export function setProjectSiteArea(area: number | null): void {
 /** "Include far-away elements in framing" (`@bimvoice/ifcsheet` `framing.ts`): off is stored as absent, so a project that never touched it saves exactly as before. */
 export function setIncludeFarElements(on: boolean): void {
   if (on !== (useProjectStore.getState().includeFarElements === true)) useProjectStore.setState({ includeFarElements: on ? true : undefined, dirty: true });
+}
+
+/** The pattern the handover package names its files by (`@bimvoice/ifcsheet/handover`); empty or unusable goes back to the default, stored as absent. */
+export function setHandoverPattern(pattern: string): void {
+  const next = readHandoverPattern(pattern);
+  if (next !== useProjectStore.getState().handoverPattern) useProjectStore.setState({ handoverPattern: next, dirty: true });
+}
+
+/**
+ * Change the project's units and number format (#88). A field set to undefined goes back to following the language and the
+ * drawing's own style; a setting with nothing left is stored as absent, so a project that never needed it saves as before.
+ */
+export function setUnitsAndNumbers(patch: Partial<UnitsAndNumbers>): void {
+  const merged: UnitsAndNumbers = { ...useProjectStore.getState().unitsAndNumbers, ...patch };
+  const decimals = Object.fromEntries(Object.entries(merged.decimals ?? {}).filter(([, v]) => v !== undefined));
+  for (const key of Object.keys(merged) as (keyof UnitsAndNumbers)[]) if (merged[key] === undefined) delete merged[key];
+  if (Object.keys(decimals).length) merged.decimals = decimals; else delete merged.decimals;
+  useProjectStore.setState({ unitsAndNumbers: readUnitsAndNumbers(merged), dirty: true });
 }
 
 /** Change the urban indicators' settings; a field set to undefined goes back to its default. */
@@ -174,16 +210,19 @@ export const updateProjectView = (id: string, patch: ProjectViewPatch): void => 
 export const removeProjectItem = (id: string): void => asStep(() => removeProjectItemNow(id));
 export const addProjectSheet = (name = 'Unnamed', group?: NumberGroup, templateId?: string): string => asStep(() => addProjectSheetNow(name, group, templateId));
 export const duplicateProjectSheet = (id: string): string | null => asStep(() => duplicateProjectSheetNow(id));
+export const addProjectView = (view: NewProjectView): string => asStep(() => addProjectViewNow(view));
+export const duplicateProjectView = (id: string): string | null => asStep(() => duplicateProjectViewNow(id));
+export const setSheetNumber = (id: string, number: string): void => asStep(() => setSheetNumberNow(id, number));
 
 export function setActiveProjectItem(id: string | null): void {
   useProjectStore.setState({ activeItemId: id });
 }
 
-export function addProjectView(view: NewProjectView): string {
+function addProjectViewNow(view: NewProjectView): string {
   const state = useProjectStore.getState();
   const id = view.id ?? freshProjectId('view');
   const created = { ...view, id, name: uniqueViewName(view.name, state.views), createdAt: Date.now() } as ProjectView;
-  useProjectStore.setState({ views: [...state.views, created], dirty: true });
+  useProjectStore.setState({ views: withDefaultTemplates(state.views, [...state.views, created], state.viewTemplates), dirty: true });
   return id;
 }
 
@@ -225,7 +264,7 @@ function updateProjectViewNow(id: string, patch: ProjectViewPatch): void {
   });
 }
 
-export function duplicateProjectView(id: string): string | null {
+function duplicateProjectViewNow(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.views.find((v) => v.id === id);
   if (!source) return null;
@@ -235,7 +274,7 @@ export function duplicateProjectView(id: string): string | null {
   if (clone.detail) clone.detail = { ...clone.detail, number: nextDetailNumber(state.views) };
   const copy = { ...clone, id: freshProjectId('view'), name: uniqueViewName(`${source.name} Copy`, state.views), auto: false, createdAt: Date.now() };
   const at = state.views.indexOf(source) + 1;
-  useProjectStore.setState({ views: [...state.views.slice(0, at), copy, ...state.views.slice(at)], dirty: true });
+  useProjectStore.setState({ views: withDefaultTemplates(state.views, [...state.views.slice(0, at), copy, ...state.views.slice(at)], state.viewTemplates), dirty: true });
   return copy.id;
 }
 
@@ -289,7 +328,7 @@ function duplicateProjectSheetNow(id: string): string | null {
   return copy.id;
 }
 
-export function setSheetNumber(id: string, number: string): void {
+function setSheetNumberNow(id: string, number: string): void {
   const trimmed = number.trim();
   if (!trimmed) return;
   useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed, series: numberGroupOf(sh), numberOverride: true } : sh)), dirty: true }));

@@ -12,6 +12,7 @@
 import { memo, useMemo } from 'react';
 import type { LegendConfig, ProjectLegend } from '@/catalogue/types';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { ATTRIBUTE_CHOICES } from '@/project/colour-scheme-choices';
 import { useViewerStore } from '@/store';
 import { fontFamily } from '@/drafting/styles';
 import { LEGEND_CATEGORIES } from '@/catalogue/types';
@@ -23,6 +24,10 @@ import { useViewDrawings } from '@/project/view-drawings';
 import type { ProjectSheet } from '@/project/types';
 import { penTags } from '../sheets/dxf-tags';
 
+/** The readable name of an attribute a view can be coloured by, in the app's language. */
+export const attributeLabeller = (t: (key: TranslationKey) => string) => (name: string): string | undefined =>
+  (ATTRIBUTE_CHOICES as readonly string[]).includes(name) ? t(`wall.scheme.attr.${name}` as TranslationKey) : undefined;
+
 export function useLegendLabels(): LegendLabels {
   const { t } = useTranslation();
   return useMemo(() => ({
@@ -31,6 +36,7 @@ export function useLegendLabels(): LegendLabels {
     continued: (heading) => t('legend.continued', { heading }),
     membrane: t('legend.membrane'),
     sampleText: t('legend.sampleText'),
+    attribute: attributeLabeller(t),
   }), [t]);
 }
 

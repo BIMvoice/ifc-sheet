@@ -26,6 +26,8 @@ export interface ListLabels {
   portrait: string;
   /** The words of the drawing list's file name (plain ASCII). */
   drawingList: string;
+  /** The words of the Change column; without them the list has none. */
+  change?: { change: string; new: string; changed: string; removed: string };
 }
 
 const csvCell = (s: string) => escapeCsvCell(s);
@@ -33,11 +35,30 @@ const csvCell = (s: string) => escapeCsvCell(s);
 /** `A3 landscape`, the orientation in the words of `labels`. */
 export const paperText = (p: IssuePlan['sheets'][number]['row'], labels: Pick<ListLabels, 'landscape' | 'portrait'>) => `${p.paper} ${labels[p.orientation]}`;
 
+/** What the Change column says of a sheet: new, changed or nothing; removed sheets are the rows after the sheets. */
+export function changeCell(plan: IssuePlan, number: string, change: NonNullable<ListLabels['change']>): string {
+  if (plan.changes.added.some((s) => s.number === number)) return change.new;
+  return plan.changes.changed.some((s) => s.number === number) ? change.changed : '';
+}
+
+/** Whether the list carries a Change column: the issue was compared with the one before and the words are given. */
+export const listsChanges = (plan: IssuePlan, labels: Pick<ListLabels, 'change'>): boolean => plan.changes.status === 'compared' && labels.change !== undefined;
+
+/**
+ * The drawing list as rows, the heading first: what the CSV and the handover's register workbook both write, so they cannot differ.
+ * An issue compared with the one before adds a Change column, and a row for each sheet it no longer holds.
+ */
+export function drawingListRows(plan: IssuePlan, labels: ListLabels): string[][] {
+  const change = listsChanges(plan, labels) ? labels.change : undefined;
+  const rows = [[labels.sheet, labels.sheetTitle, labels.scale, labels.paper, labels.revision, labels.issue, labels.date, ...(change ? [change.change] : [])]];
+  for (const { row } of plan.sheets) rows.push([row.number, row.title, row.scale, paperText(row, labels), row.revision, plan.name, plan.date, ...(change ? [changeCell(plan, row.number, change)] : [])]);
+  if (change) for (const r of plan.changes.removed) rows.push([r.number, r.title, '', '', '', plan.name, plan.date, change.removed]);
+  return rows;
+}
+
 /** The drawing list as CSV (comma separated, quoted where needed, CRLF line ends, UTF-8 with a byte order mark added by the writer). */
 export function drawingListCsv(plan: IssuePlan, labels: ListLabels): string {
-  const rows = [[labels.sheet, labels.sheetTitle, labels.scale, labels.paper, labels.revision, labels.issue, labels.date]];
-  for (const { row } of plan.sheets) rows.push([row.number, row.title, row.scale, paperText(row, labels), row.revision, plan.name, plan.date]);
-  return rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+  return drawingListRows(plan, labels).map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }
 
 /** `A-101 Ground floor.svg`; a name used twice gets ` (2)` so no file overwrites another. */

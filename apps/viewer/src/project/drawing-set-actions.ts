@@ -11,6 +11,7 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
+import { applySetTemplate, type SetTemplate } from '@bimvoice/ifcsheet';
 import { createProposedSection } from '@/drafting/section-create';
 import { runAsOneUndoStep, runAsStartingState } from '@/drafting/draft-store';
 import type { AxisBounds } from '@/lib/section/section-distance';
@@ -28,6 +29,7 @@ import { DEFAULT_SCHEME, nextNumber, numberSheets, registerNumberIn } from './nu
 import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useProjectStore } from './project-store';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
+import { ensureViewTemplates } from './view-template-start';
 import { resolve } from '@/i18n/registry';
 import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, elevationName, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
@@ -75,12 +77,18 @@ export function sectionForProposal(proposal: SectionProposal): string | null {
   return plan ? createProposedSection(plan, levels, proposal) : null;
 }
 
+/** A set template (#21) the start is made by: its rules, and what the caller does with the rest of it once the set is there. */
+export interface StartTemplate {
+  rules: SetTemplate;
+  extras(report: EnsureReport): void;
+}
+
 /**
  * Lay out the starting set on a project that has no set sheets yet (a room's
  * interior elevations, made first, do not count). Returns whether it did; a
  * project with set sheets is never touched.
  */
-export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | null): boolean {
+export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | null, template?: StartTemplate): boolean {
   if (!bounds || useProjectStore.getState().sheets.some(isSetSheet)) return false;
   // A project still carrying the untouched English default name takes the active language's, once, as it is started.
   const { name, dirty } = useProjectStore.getState();
@@ -88,7 +96,11 @@ export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | 
   if (!dirty && name === EMPTY_PROJECT.name && untitled !== name) useProjectStore.setState({ name: untitled });
   // The set a model opens with is the project's starting state, not something the person did: it is no undo step (#293).
   let added = 0;
-  runAsStartingState(() => { added = ensureDrawingSet(meshes, bounds, { onOpen: true }).sheetsAdded; });
+  runAsStartingState(() => {
+    const report = ensureDrawingSet(meshes, bounds, { onOpen: true, ...(template ? { setTemplate: template.rules } : {}) });
+    added = report.sheetsAdded;
+    template?.extras(report);
+  });
   return added > 0;
 }
 
@@ -116,8 +128,9 @@ export interface EnsureReport {
 export interface EnsureOptions {
   /** On open: a project that already has sections is not given proposed ones. */
   onOpen?: boolean;
+  /** Make the sheets by a set template's rules (#21) instead of the automatic grouping; the views are the same. */
+  setTemplate?: SetTemplate;
 }
-
 
 /** One plan per storey that has none yet; a model with no storeys gets one cut at mid-height. */
 function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
@@ -173,10 +186,10 @@ function ensureSections(meshes: MeshData[] | null, extent: AxisBounds, options: 
 }
 
 /** A plan with no scale of its own takes the one it is drawn at on its sheet, so what is drawn on it is sized for that scale. */
-function ensurePlanScales(extent: AxisBounds): void {
+function ensurePlanScales(extent: AxisBounds, setTemplate?: SetTemplate): void {
   const plans = state().views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.detail);
   const onSheet = new Map(state().sheets.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
-  const planned = state().sheets.some(isSetSheet) ? [] : buildDrawingSet({ views: plans, extent, templates: seriesTemplates() });
+  const planned = state().sheets.some(isSetSheet) ? [] : setTemplate ? applySetTemplate(setTemplate, { views: plans, extent }).sheets : buildDrawingSet({ views: plans, extent, templates: seriesTemplates() });
   const plannedScale = new Map(planned.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
   for (const plan of plans) {
     const scale = onSheet.get(plan.id) ?? plannedScale.get(plan.id);
@@ -185,7 +198,7 @@ function ensurePlanScales(extent: AxisBounds): void {
 }
 
 /** Every drawing not on a sheet yet, hung where it belongs. */
-function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
+function ensureSheets(extent: AxisBounds, report: EnsureReport, setTemplate?: SetTemplate): void {
   const hung = new Set(state().sheets.flatMap((s) => (s.viewports ?? []).map((vp) => vp.viewId)));
   const loose = state().views.filter((v) => !hung.has(v.id));
   const before = state().sheets;
@@ -193,7 +206,9 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport): void {
   let sheets = before;
   if (!before.some(isSetSheet)) {
     // No set yet: lay it all out, beside any interior elevation sheets already there.
-    const set = withoutClashes(before, buildDrawingSet({ views: loose, extent, templates: seriesTemplates(), scheme: numberingScheme() }));
+    const ruled = setTemplate ? applySetTemplate(setTemplate, { views: loose, extent, scheme: numberingScheme() }) : null;
+    report.notes.push(...(ruled?.notes ?? []));
+    const set = withoutClashes(before, ruled ? ruled.sheets : buildDrawingSet({ views: loose, extent, templates: seriesTemplates(), scheme: numberingScheme() }));
     if (set.length > 0) sheets = [...before, ...set];
   } else {
     for (const view of loose) {
@@ -220,9 +235,10 @@ export function ensureDrawingSet(meshes: MeshData[] | null, extent: AxisBounds, 
   runAsOneUndoStep(() => {
     ensurePlans(extent, report);
     ensureElevations(extent, report);
-    ensurePlanScales(extent);
+    ensurePlanScales(extent, options.setTemplate);
     ensureSections(meshes, extent, options, report);
-    ensureSheets(extent, report);
+    ensureSheets(extent, report, options.setTemplate);
+    if (options.onOpen) ensureViewTemplates();
   });
   for (const group of groupsThatDoNotFit(state().views, extent)) report.notes.push({ key: 'draftSet.note.noFit', params: { kind: group } });
   return report;

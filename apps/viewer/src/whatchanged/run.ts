@@ -25,18 +25,18 @@ import { useViewerStore } from '@/store';
 import { setResult, useWhatChanged } from './baseline';
 import { viewBands } from './bands';
 import { cloudBoxes, cloudDraft, ensureRevisionsLayer, groupBoxes, REVISIONS_LAYER } from './cloud';
-import { latestRevisionId, REVISION_ID_PARAM } from '@/project/revisions';
+import { isAutomaticCloud, latestRevisionId, REVISION_ID_PARAM, REVISION_STAMP } from '@/project/revisions';
 import { compareStates, type ModelChange } from './compare';
 import { currentSnapshot } from './current';
 import { renderFrameOffset } from './frame';
 import { followMovedElements } from './follow';
 import { annotationImpacts } from './impact';
-import { sheetChanges } from './report';
+import { sheetChanges, type SheetChanges } from './report';
 import { sheetLines } from './say';
-import type { ModelSnapshot } from './snapshot';
+import { replaceReference, type ModelSnapshot, type SnapshotBody } from './snapshot';
 import { toRenderFrame, type ViewBand } from './visibility';
 
-export const REVISION_STAMP = 'whatchanged';
+export { REVISION_STAMP };
 export { REVISIONS_LAYER };
 export type Mode = 'compare' | 'clear' | 'accept';
 
@@ -48,7 +48,7 @@ export function parseMode(args: string): Mode | null {
   return arg === '' ? 'compare' : arg === 'clear' ? 'clear' : arg === 'accept' ? 'accept' : null;
 }
 
-const isCloud = (d: DraftEntity) => d.params.revision === REVISION_STAMP;
+const isCloud = isAutomaticCloud;
 
 function removeClouds(): number {
   const ids = new Set(useProjectStore.getState().drafts.filter(isCloud).map((d) => d.id));
@@ -57,8 +57,19 @@ function removeClouds(): number {
 }
 
 /** What changed between two snapshots, boxes in the render frame the views are drawn in (the snapshots' own are absolute). */
-export function compareInRenderFrame(base: ModelSnapshot, head: ModelSnapshot, offset = renderFrameOffset()): ModelChange[] {
+export function compareInRenderFrame(base: SnapshotBody, head: SnapshotBody, offset = renderFrameOffset()): ModelChange[] {
   return toRenderFrame(compareStates(base, head), offset);
+}
+
+/**
+ * Which sheets show `changes`, and the annotations they hit: the one answer behind the WHATCHANGED list and
+ * the issue's changed-since-the-last-issue list (#335). The clouds an earlier run drew are not annotations of the model.
+ */
+export function sheetImpact(changes: readonly ModelChange[]): { report: SheetChanges[]; bands: ViewBand[]; unread: string[] } {
+  const { sheets, views, levels, drafts } = useProjectStore.getState();
+  const s = useViewerStore.getState();
+  const { bands, unread } = viewBands(views, levels, mergedSectionBounds(s.models, s.geometryResult));
+  return { report: sheetChanges(sheets, bands, changes, annotationImpacts(drafts.filter((d) => !isCloud(d)), changes)), bands, unread };
 }
 
 /** At most this many clouds in one view: past it, changes that lie near each other share one. */
@@ -94,7 +105,7 @@ export async function runWhatChanged(mode: Mode, say: (text: string) => void, re
   if (!current) { say(t('noModel')); return; }
   if (mode === 'accept') {
     const removed = removeClouds();
-    useProjectStore.setState({ modelState: current, dirty: true });
+    useProjectStore.setState({ modelState: replaceReference(useProjectStore.getState().modelState, current), dirty: true });
     setResult(null);
     say(t('accepted', { count: removed }));
     return;
@@ -107,10 +118,8 @@ export async function runWhatChanged(mode: Mode, say: (text: string) => void, re
   }
   const changes = compareInRenderFrame(reference, current);
   say(t('against', { count: changes.length }));
-  const { sheets, views, levels, drafts } = useProjectStore.getState();
-  const s = useViewerStore.getState();
-  const { bands, unread } = viewBands(views, levels, mergedSectionBounds(s.models, s.geometryResult));
-  const report = sheetChanges(sheets, bands, changes, annotationImpacts(drafts.filter((d) => !isCloud(d)), changes));
+  const { views, drafts } = useProjectStore.getState();
+  const { report, bands, unread } = sheetImpact(changes);
   const byGuid = new Map(changes.map((c) => [c.guid, c]));
   for (const line of sheetLines(report, (id) => views.find((v) => v.id === id)?.name ?? '', (g) => byGuid.get(g))) say(line);
   // Tags and labels of the elements that moved go with them: derived from the model, so no undo step, as the text they read.

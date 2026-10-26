@@ -8,6 +8,7 @@
  * drawing or schedule not yet on this sheet, to place on it.
  */
 
+import { templateKindOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { placeLegend } from '@/legend/legend-actions';
 import { renameProjectItem, useProjectStore } from '@/project/project-store';
@@ -26,9 +27,14 @@ import { ScheduleExportCard } from './ScheduleExportCard';
 import { ScheduleFilterSection } from './ScheduleFilterCard';
 import { ScheduleTextCard } from './ScheduleTextCard';
 import { SubReportCard } from './SubReportCard';
+import { TypeClassificationCard } from './TypeClassificationCard';
+import { BoqCard } from '../boq/BoqCard';
+import { ListScheduleCard } from '../lists/ListScheduleCard';
 import { ThreeDControls } from './ThreeDControls';
 import { CutHeightControl, DepthControl } from './ViewControls';
 import { canBeColoured, ColourSchemeCard } from './ColourSchemeCard';
+import { GraphicsCard } from './GraphicsCard';
+import { HiddenElementsSection } from './HiddenElementsSection';
 import { startWhenAttached } from './wall-actions';
 import { addKeyPlan, drawPlotBoundary } from '@/siteplan/site-actions';
 import { WALL_CARD, WALL_FIELD, WALL_PILL } from './wall-type';
@@ -97,12 +103,17 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
             </>
           )}
           {schedule ? <SubReportCard key={schedule.id} schedule={schedule} /> : null}
+          {schedule ? <BoqCard key={`${schedule.id}:boq`} schedule={schedule} /> : null}
+          {schedule ? <TypeClassificationCard key={`${schedule.id}:class`} schedule={schedule} /> : null}
+          {schedule ? <ListScheduleCard key={`${schedule.id}:list`} schedule={schedule} /> : null}
           {schedule ? <ScheduleContentCard key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <ScheduleFilterSection key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <ScheduleTextCard key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <ScheduleExportCard key={`${schedule.id}:export`} schedule={schedule} /> : null}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
+          {view ? <GraphicsCard key={`${view.id}:${slot.id}`} sheet={sheet} slot={slot} view={view} /> : null}
+          {view && templateKindOf(view) !== null ? <HiddenElementsSection key={`${view.id}:hidden`} view={view} /> : null}
           {canBeColoured(view) ? <ColourSchemeCard key={view.id} sheet={sheet} view={view} /> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
           <div className="mt-4 flex flex-wrap gap-2">
@@ -113,6 +124,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
             {view?.kind === 'plan' && view.site ? <button type="button" className={quiet} onClick={() => { drawPlotBoundary(slot.viewId, startWhenAttached); onOpen(slot); }}>{t('site.drawBoundary')}</button> : null}
             {view?.kind === 'plan' && !slot.keyPlanOf ? <button type="button" className={quiet} onClick={() => onChoose(addKeyPlan(sheet, slot, drawingBounds))}>{t('site.keyPlan.add')}</button> : null}
             <button type="button" className={quiet} onClick={() => { removeViewport(sheet.id, slot.id); onChoose(null); }}>{t('wall.vp.remove')}</button>
+            <button type="button" className={quiet} onClick={() => onChoose(null)}>{t('wall.vp.done')}</button>
           </div>
         </>
       ) : (

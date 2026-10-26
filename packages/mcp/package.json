@@ -53,7 +53,6 @@
     "@ifc-lite/flow": "workspace:^",
     "@ifc-lite/flow-nodes": "workspace:^",
     "@ifc-lite/geometry": "workspace:^",
-    "@ifc-lite/wasm": "workspace:^",
     "@ifc-lite/ids": "workspace:^",
     "@ifc-lite/ifcx": "workspace:^",
     "@ifc-lite/merge": "workspace:^",
@@ -63,10 +62,12 @@
     "@ifc-lite/rules": "workspace:^",
     "@ifc-lite/sdk": "workspace:^",
     "@ifc-lite/viewer-core": "workspace:^",
+    "@ifc-lite/wasm": "workspace:^",
     "yjs": "^13.6.33"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "ajv": "^8.17.1",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
   },

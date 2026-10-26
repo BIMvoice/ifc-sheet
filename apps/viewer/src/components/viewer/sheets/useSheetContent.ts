@@ -15,6 +15,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import { resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
@@ -30,6 +31,8 @@ import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
+import { renderIdGlobalId } from '@/project/element-guid';
+import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
 import { schemeResultOf } from '@/project/view-colour-scheme';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { partHostType } from '@/project/part-host';
@@ -76,6 +79,8 @@ export interface SheetContentOptions {
 
 export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: SheetContentOptions = {}): SheetContent {
   const views = useProjectStore((s) => s.views);
+  // The view templates (#44): a template edited redraws every viewport whose view follows it.
+  const viewTemplates = useProjectStore((s) => s.viewTemplates);
   const drafts = useProjectStore((s) => s.drafts);
   // Only this sheet's drawings: a progress tick, or another sheet's view landing, leaves the sheet as it is (#154).
   const placedViewIds = useMemo(() => (sheet.viewports ?? []).map((vp) => vp.viewId), [sheet.viewports]);
@@ -107,17 +112,21 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
       const view = views.find((v) => v.id === vp.viewId);
       const raw = drawingOf.get(vp.viewId) ?? null;
       const style = (): StyledViewport => {
-        const phases = phaseViewOf(view?.graphics, phaseSource);
-        const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, viewOmits(view), viewMaterials(raw), phases, schemeResultOf(view, raw, geometryResult?.meshes)) : null;
-        const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, phaseMeshes(geometryResult?.meshes, phases), flips, hiddenClasses(view.graphics), raw, vp.scale, standard.pens) : []), ...membraneOverlays(drawing)];
+        const graphics = resolveViewGraphics(view, viewTemplates);
+        const phases = phaseViewOf(graphics, phaseSource);
+        // What the view hides element by element (#33) is left out first, so no hatch, membrane or symbol is made for it.
+        const kept = raw ? withoutHiddenElements(raw, graphics, renderIdGlobalId) : null;
+        const drawing = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
+        const symbolMeshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult?.meshes, phases), graphics, renderIdGlobalId);
+        const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens) : []), ...membraneOverlays(drawing)];
         return { drawing, overlays };
       };
       out.set(vp.viewId, raw
-        ? memoOn(styledMemo, raw, [view, vp.scale, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard], style)
+        ? memoOn(styledMemo, raw, [view, viewTemplates, vp.scale, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard], style)
         : style());
     }
     return out;
-  }, [sheet.viewports, views, drawingOf, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard]);
+  }, [sheet.viewports, views, viewTemplates, drawingOf, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard]);
   const placedSchedules = useSheetSchedules(sheet);
   const placedCivil = useSheetCivilDrawings(sheet);
   // A mark prints the number its reference reads now, not the one cached when the view was last open.

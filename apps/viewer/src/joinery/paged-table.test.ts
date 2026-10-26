@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * #186, second slice: the column schedules (takeoff, finishes, types, urban) page their rows to a viewport's height through one
+ * #186, second slice: the column schedules (takeoff, finishes, types, urban, rooms) page their rows to a viewport's height through one
  * engine. The fixtures here are shared with the sheet-level tests (`project/schedule-kinds-fit.test.tsx`).
  */
 
@@ -14,6 +14,8 @@ import { layoutMaterialTakeoff, type TakeoffLabels } from './material-takeoff-la
 import { layoutRoomFinishes, type RoomFinishLabels } from './room-finishes-layout';
 import { layoutTypeQuantities, type TypeQuantityLabels } from './type-quantities-layout';
 import { layoutUrban, type UrbanLabels } from '@/urban/urban-layout';
+import { ROOM_SCHEDULE_EN, roomSchedule, type RoomSchedule } from '@bimvoice/ifcsheet';
+import { layoutRoomSchedule, type RoomScheduleLabels } from './room-schedule-layout';
 import type { TakeoffRow } from './material-takeoff';
 import type { RoomFinishes } from './room-finishes';
 import type { Totals, TypeQuantities } from './type-quantities';
@@ -23,13 +25,21 @@ import type { ScheduleLayout } from './schedule-layout';
 export const TAKEOFF_LABELS: TakeoffLabels = { locale: 'en', title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume', area: 'Area', usedIn: 'Used in', total: 'Total' };
 export const FINISH_LABELS: RoomFinishLabels = { locale: 'en', title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms' };
 export const TYPE_LABELS: TypeQuantityLabels = {
-  locale: 'en', title: 'Quantities', type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³', noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey',
+  locale: 'en', title: 'Quantities', type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³', noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey', classification: 'Classification', classificationTitle: 'Title', unclassified: 'No classification',
 };
 export const URBAN_LABELS: UrbanLabels = {
   locale: 'en', title: 'Urban indicators', level: 'Level', elevation: 'Elevation', built: 'Built', useful: 'Useful', inCut: 'In CUT', yes: 'yes', no: 'no', belowGround: (n) => n, ground: (n) => n, category: 'Category', area: 'Area',
   ac: 'Ac', ad: 'Ad', adCut: 'Ad for CUT', au: 'Au', site: 'Site', pot: 'POT', cut: 'CUT', rules: () => ['Ac is the footprint of the ground storey measured to the outer face of the external walls.'], note: '',
   atLeast: (v) => `>= ${v}`, unmeasured: (count, level) => `${count} unmeasured on ${level}`,
 };
+
+export const ROOM_LABELS: RoomScheduleLabels = { ...ROOM_SCHEDULE_EN, locale: 'en', title: 'Room and area schedule', notes: ['Area: the model\'s NetFloorArea, else GrossFloorArea.'] };
+
+/** `n` rooms over three levels, a tenth of them with their area from the geometry. */
+export const roomData = (n: number): RoomSchedule => roomSchedule(
+  [{ name: 'Ground', elevation: 0 }, { name: 'Level 1', elevation: 3 }, { name: 'Level 2', elevation: 6 }],
+  Array.from({ length: n }, (_, i) => ({ id: `r${i}`, number: String(i + 1), name: `Room ${i + 1}`, level: i % 3, area: 8 + i, source: i % 10 === 9 ? 'geometry' as const : 'quantity' as const })),
+);
 
 export const takeoffRows = (n: number): TakeoffRow[] => Array.from({ length: n }, (_, i) => ({ material: `Material ${i}`, elements: 1 + (i % 7), volume: i % 4 === 3 ? null : 1 + i / 4, area: 2 + i, classes: ['IfcSlab', ...(i % 2 ? ['IfcWall'] : [])] }));
 
@@ -62,6 +72,7 @@ export const KINDS: { kind: string; layout: (n: number, o?: { maxHeight?: number
   { kind: 'finishes', layout: (n, o) => layoutRoomFinishes(finishRooms(n), FINISH_LABELS, o) },
   { kind: 'types', layout: (n, o) => layoutTypeQuantities(typeData(n), TYPE_LABELS, o) },
   { kind: 'urban', layout: (n, o) => layoutUrban(urbanData(n), URBAN_LABELS, o) },
+  { kind: 'rooms', layout: (n, o) => layoutRoomSchedule(roomData(n), ROOM_LABELS, o) },
 ];
 
 const digest = (l: ScheduleLayout) => createHash('sha1').update(JSON.stringify([l.width, l.height, l.prims])).digest('hex').slice(0, 12);
@@ -78,13 +89,13 @@ function reach(l: ScheduleLayout): { x: number; y: number } {
 }
 
 /** What each kind's small fixture drew before the shared engine (the old per-kind layouts), as a digest. */
-const BEFORE: Record<string, string> = { takeoff: 'e6b97b5555f2', finishes: '2a53eb006060', types: 'a4a9294e0535', urban: '7b5aef6f4bf9' };
+const BEFORE: Record<string, string> = { takeoff: 'e6b97b5555f2', finishes: '2a53eb006060', types: 'a4a9294e0535', urban: '7b5aef6f4bf9', rooms: 'e05b93e4965a' };
 /** A first-column text that exists once per row of the kind's fixture. */
 const ROW_TEXT: Record<string, (i: number) => string> = {
-  takeoff: (i) => `Material ${i}`, finishes: (i) => `Room ${i + 1}`, types: (i) => `Type ${i}`, urban: (i) => `Category ${i}`,
+  takeoff: (i) => `Material ${i}`, finishes: (i) => `Room ${i + 1}`, types: (i) => `Type ${i}`, urban: (i) => `Category ${i}`, rooms: (i) => `Room ${i + 1}`,
 };
 /** What a page of the kind may open with: its table's header (the urban figures table has none: it opens with one of its rows). */
-const HEADER: Record<string, string[]> = { takeoff: ['Material'], finishes: ['Floor'], types: ['Type'], urban: ['Level', 'Category', 'Ac', 'Ad', 'Au', 'Site', 'POT', 'CUT', 'Ad for CUT'] };
+const HEADER: Record<string, string[]> = { takeoff: ['Material'], finishes: ['Floor'], types: ['Type'], rooms: ['Room'], urban: ['Level', 'Category', 'Ac', 'Ad', 'Au', 'Site', 'POT', 'CUT', 'Ad for CUT'] };
 
 describe('the column schedules page their rows to a viewport\'s height (#186)', () => {
   for (const { kind, layout } of KINDS) {

@@ -14,12 +14,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { downloadFile } from '@/lib/export/download';
-import { WALL_ACTIONS, defaultKeys, type WallActionId } from '@/lib/commands/action-registry';
+import { WALL_ACTIONS, type WallActionId } from '@/lib/commands/action-registry';
 import { formatChord, type KeyChord } from '@/lib/commands/chord';
-import { IMPORT_MAX_CHARS, exportKeyBindings, importKeyBindings, isCustomised, rebindAction, resetAction, resetAllBindings, takeDroppedBindings, unbindAction, useKeyBindings, type RebindOutcome } from '@/lib/commands/key-bindings';
+import { IMPORT_MAX_CHARS, exportKeyBindings, importKeyBindings, isCustomised, presetBinding, rebindAction, resetAction, resetAllBindings, takeDroppedBindings, unbindAction, useKeyBindingsRevision, type RebindOutcome } from '@/lib/commands/key-bindings';
 import { KEY_COMMANDS, type KeyCommandCategory } from '@/lib/commands/keyboard-commands';
 import { ariaKeyShortcuts, shortcutLabel } from '@/lib/commands/shortcut-label';
 import { AutocadModeSetting } from './AutocadModeSetting';
+import { KeyPresetSetting } from './KeyPresetSetting';
 import { KeyActionRow } from './KeyActionRow';
 
 const LABELS = new Map(KEY_COMMANDS.map((c) => [c.id as string, c.labelKey]));
@@ -35,7 +36,7 @@ type Note = { readonly text: string; readonly error: boolean } | null;
 
 export function KeyboardSettings({ onDone }: { onDone?: () => void }) {
   const { t } = useTranslation();
-  useKeyBindings((s) => s.overrides);
+  useKeyBindingsRevision();
   const [query, setQuery] = useState('');
   const [recording, setRecording] = useState<WallActionId | null>(null);
   const [note, setNote] = useState<Note>(null);
@@ -62,7 +63,7 @@ export function KeyboardSettings({ onDone }: { onDone?: () => void }) {
   const reset = (id: WallActionId) => {
     const outcome = resetAction(id);
     if (outcome.ok) say(t('wall.keys.resetOne', { action: name(id) }));
-    else refused(outcome, defaultKeys(id).map((c) => formatChord(c)).join(', '));
+    else refused(outcome, presetBinding(id).map((c) => formatChord(c)).join(', '));
   };
   const remove = (id: WallActionId) => {
     unbindAction(id);
@@ -105,6 +106,7 @@ export function KeyboardSettings({ onDone }: { onDone?: () => void }) {
       </div>
       <p className="m-0 text-muted-foreground">{t('wall.keys.intro')}</p>
       <p className="m-0 text-xs text-muted-foreground">{t('wall.keys.bareHint')}</p>
+      <KeyPresetSetting onChanged={(text) => say(text)} />
       <AutocadModeSetting onChanged={(text) => say(text)} />
       <input
         type="search"

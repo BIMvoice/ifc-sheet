@@ -25,6 +25,11 @@
       "import": "./dist/readiness.js",
       "default": "./dist/readiness.js"
     },
+    "./boq-words": {
+      "types": "./dist/boq-words.d.ts",
+      "import": "./dist/boq-words.js",
+      "default": "./dist/boq-words.js"
+    },
     "./readiness-read": {
       "types": "./dist/readiness-read.d.ts",
       "import": "./dist/readiness-read.js",
@@ -64,6 +69,31 @@
       "types": "./dist/headless.d.ts",
       "import": "./dist/headless.js",
       "default": "./dist/headless.js"
+    },
+    "./sheet-file-name": {
+      "types": "./dist/sheet-file-name.d.ts",
+      "import": "./dist/sheet-file-name.js",
+      "default": "./dist/sheet-file-name.js"
+    },
+    "./cli-boq": {
+      "types": "./dist/cli-boq.d.ts",
+      "import": "./dist/cli-boq.js",
+      "default": "./dist/cli-boq.js"
+    },
+    "./handover": {
+      "types": "./dist/handover.d.ts",
+      "import": "./dist/handover.js",
+      "default": "./dist/handover.js"
+    },
+    "./axonometric": {
+      "types": "./dist/axonometric.d.ts",
+      "import": "./dist/axonometric.js",
+      "default": "./dist/axonometric.js"
+    },
+    "./annotated-ifc": {
+      "types": "./dist/annotated-ifc.d.ts",
+      "import": "./dist/annotated-ifc.js",
+      "default": "./dist/annotated-ifc.js"
     }
   },
   "scripts": {
@@ -76,9 +106,11 @@
     "@ifc-lite/create": "workspace:^",
     "@ifc-lite/data": "workspace:^",
     "@ifc-lite/drawing-2d": "workspace:^",
+    "@ifc-lite/export": "workspace:^",
     "@ifc-lite/geometry": "workspace:^",
     "@ifc-lite/mutations": "workspace:^",
     "@ifc-lite/parser": "workspace:^",
+    "fflate": "^0.8.3",
     "jspdf": "^4.2.1"
   },
   "devDependencies": {

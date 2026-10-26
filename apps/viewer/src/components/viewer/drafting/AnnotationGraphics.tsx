@@ -16,7 +16,6 @@
  */
 
 import { memo, useId, useMemo } from 'react';
-import { useTranslation } from '@/i18n';
 import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M, textLeader } from '@/drafting/annotation';
 import { witnessLine } from '@/drafting/level-mark';
 import { flattenShape, missingSymbolMark, placeSymbol } from '@/drafting/symbols';
@@ -33,6 +32,7 @@ import { textBlock, type TextFrame } from '@/drafting/text-block';
 import { textWidthEm } from '@/drafting/text-width';
 import type { AnnotationShape, Pt } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 /** The styles an annotation is drawn with (resolved from its params). */
 export interface AnnotationLook {
@@ -188,7 +188,7 @@ function Symbol({ shape, color, t, axis, k, look, live }: { shape: Extract<Annot
 export const AnnotationGraphics = memo(function AnnotationGraphics({
   shape, color: base, selected, transform: t, axis, extraPatterns, strokeScale: k = 1, look = DEFAULT_LOOK, paperUnit = 0.1, symbols,
 }: Props) {
-  const { locale } = useTranslation();
+  const locale = useSheetLocale();
   const s = (p: Pt) => drawingToScreen(p, t, axis);
   if (shape.type === 'hatch') return <Hatch shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} extraPatterns={extraPatterns} k={k} />;
   if (shape.type === 'symbol') return <Symbol shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} k={k} look={look} live={symbols} />;

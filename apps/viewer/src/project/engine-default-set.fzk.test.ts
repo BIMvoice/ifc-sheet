@@ -16,7 +16,7 @@ import '@/test/setup-dom.js';
 import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { generateDefaultSet, type DefaultSet, type ModelExtent } from '@bimvoice/ifcsheet';
+import { generateDefaultSet, type DefaultSet, type ModelExtent, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { openModel } from '@bimvoice/ifcsheet/headless';
 import { FZK_HAUS, loadPlanModel, planModelMissing } from '@/test/discipline-plan-fixture';
 import { setExtent } from '@/draft-set/body';
@@ -42,7 +42,7 @@ function sheetRows(sheets: readonly ProjectSheet[], views: readonly ProjectView[
 const byName = (views: readonly ProjectView[]) => new Map(views.map((v) => [`${v.kind} ${v.name}`, v]));
 
 describe('the engine and the Wall lay out the same set of AC20-FZK-Haus', { skip: planModelMissing(FZK_HAUS) }, () => {
-  let app: { views: ProjectView[]; sheets: ProjectSheet[]; extent: ModelExtent };
+  let app: { views: ProjectView[]; sheets: ProjectSheet[]; extent: ModelExtent; templates: ProjectViewTemplate[] };
   let engine: DefaultSet;
   let engineExtent: ModelExtent | null;
 
@@ -56,8 +56,8 @@ describe('the engine and the Wall lay out the same set of AC20-FZK-Haus', { skip
     const extent = setExtent(useProjectStore.getState().levels, meshes, mergedSectionBounds(models, geometryResult)).extent;
     assert.ok(extent, 'the app measures the building');
     assert.ok(startDrawingSet(meshes, extent), 'the Wall lays out a set');
-    const { views, sheets } = useProjectStore.getState();
-    app = { views, sheets, extent };
+    const { views, sheets, viewTemplates } = useProjectStore.getState();
+    app = { views, sheets, extent, templates: viewTemplates ?? [] };
 
     const model = await openModel(new Uint8Array(readFileSync(FZK_HAUS)));
     engineExtent = model.extent;
@@ -93,5 +93,14 @@ describe('the engine and the Wall lay out the same set of AC20-FZK-Haus', { skip
         a.plane.custom?.normal.forEach((n, i) => near(n, b.plane.custom?.normal[i], `${key} normal[${i}]`));
       }
     }
+  });
+
+  it('names the same starting view templates (#44) on the same views', () => {
+    const rows = (views: readonly ProjectView[], templates: readonly ProjectViewTemplate[]) => ({
+      templates: templates.map((t) => [t.name, t.kind, t.graphics]),
+      views: views.map((v) => [`${v.kind} ${v.name}`, templates.find((t) => t.id === v.templateId)?.name]).sort(),
+    });
+    assert.deepEqual(rows(engine.document.views, engine.document.viewTemplates ?? []), rows(app.views, app.templates));
+    assert.deepEqual(app.templates.map((t) => t.name), ['Plans', 'Sections', 'Elevations']);
   });
 });

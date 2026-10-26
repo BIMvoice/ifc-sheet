@@ -14,9 +14,10 @@
 
 import { useCallback, type ComponentProps, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
-import { patchDraftSettings, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
+import { endCommand, patchDraftSettings, runningCommand, startDraftCommand, takeEndedByUser, useDraftingSession } from '@/drafting/session';
 import { setPlacing, useReviewUi } from '@/review/ui-store';
-import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
+import { drawingArea, sheetGroup, type ModelExtent } from '@/project/drawing-set';
+import { addViewport } from '@/project/sheets';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
 import { useProjectStore } from '@/project/project-store';
 import type { SectionProposal } from '@/project/section-proposals';
@@ -43,7 +44,7 @@ import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
 import { ariaKeyShortcuts } from '@/lib/commands/shortcut-label';
-import { useKeyBindings } from '@/lib/commands/key-bindings';
+import { useKeyBindingsRevision } from '@/lib/commands/key-bindings';
 import { WALL_CARD_HOST, WALL_PILL } from './wall-type';
 
 /** The Wall tool that runs as a chain: each click adds the next dimension, until Esc. */
@@ -106,7 +107,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     if (ran.current === null) return;
     const ended = ran.current;
     ran.current = null;
-    if (ended === CHAINED_TOOL && toolNow.current === CHAINED_TOOL && !escaped.current && startDraftCommand(CHAINED_TOOL)) return;
+    if (ended === CHAINED_TOOL && toolNow.current === CHAINED_TOOL && !takeEndedByUser() && !escaped.current && startDraftCommand(CHAINED_TOOL)) return;
     setTool(null);
   }, [commandId]);
   useEffect(() => () => cancelStart.current(), []);
@@ -193,6 +194,13 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     cancelStart.current = startWhenAttached(target.id, command);
   };
 
+  /** The tool's Done: ends it and lets the rail go, without Esc or Enter (#166). The dimension chain does not start again. */
+  const stopTool = useCallback((): void => {
+    cancelStart.current();
+    endCommand();
+    setTool(null);
+  }, []);
+
   /** A tool's one-action twin: run it on the drawing in front (or the chosen one), its note appears in the drawing's command line. */
   const runAll = (command: string): void => {
     cancelStart.current();
@@ -269,7 +277,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     printPreview: onSheet(preview),
     exportDxf: onSheet(exportDxf),
   }));
-  useKeyBindings((s) => s.overrides); // a rebinding redraws the keys the buttons name
+  useKeyBindingsRevision(); // a rebinding or preset switch redraws the keys the buttons name
 
   return (
     <div ref={root} className="flex h-full min-h-0 flex-col">
@@ -295,7 +303,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 gap-4 px-6 pb-4">
-        <ToolRail active={tool} onTool={startTool} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
+        <ToolRail active={tool} onTool={(command) => (command === tool ? stopTool() : startTool(command))} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
         <main className="relative min-w-0 flex-1">
           {focusView ? (
             <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">
@@ -307,7 +315,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
             </div>
           )}
           <div ref={cardHost} className={WALL_CARD_HOST}>
-            {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
+            {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} onDone={stopTool} />
               : focusView ? null
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
@@ -325,6 +333,11 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
                   setAdding(false);
                   const landed = extent ? hangView(viewId, extent) : null;
                   if (landed && landed !== sheet.id) onStep(landed);
+                  // A 3D view (a cut-away axonometric, #97) belongs to no series: it goes on the sheet in front.
+                  if (!landed && useProjectStore.getState().views.find((v) => v.id === viewId)?.kind === '3d') {
+                    const area = drawingArea(sheet);
+                    addViewport(sheet.id, viewId, { x: area.x + area.w / 2, y: area.y + area.h / 2 }, 100);
+                  }
                 }}
               />
             </div>

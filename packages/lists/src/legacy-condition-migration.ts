@@ -21,7 +21,7 @@ type Converted = { rule: FilterRule } | { unreadable: UnreadableListCondition };
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const COLUMN_SOURCES = new Set(['attribute', 'property', 'quantity', 'material', 'classification', 'spatial', 'model', 'zone', 'geometry']);
+const COLUMN_SOURCES = new Set(['attribute', 'property', 'quantity', 'material', 'classification', 'officeClassification', 'spatial', 'model', 'zone', 'geometry']);
 const UNREADABLE_REASONS = new Set(['unsupported-source', 'unsupported-attribute', 'name-pattern', 'inherit', 'operator', 'invalid-value', 'mixed-groups']);
 const OPERATORS: ReadonlySet<string> = new Set(LIST_CONDITION_OPERATORS);
 const SOURCES: ReadonlySet<string> = new Set(LIST_CONDITION_SOURCES);

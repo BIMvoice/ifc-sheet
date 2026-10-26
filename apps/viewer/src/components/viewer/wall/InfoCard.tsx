@@ -30,11 +30,13 @@ function Card({ eyebrow, title, children }: { eyebrow: string; title: string; ch
 }
 
 /** `drawingOn`: where a draw tool draws, the drawing's name, or null for the sheet's paper. */
-export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string | null }) {
+export function InfoCard({ tool, drawingOn, onDone }: { tool: string; drawingOn?: string | null; onDone: () => void }) {
   const { t } = useTranslation();
   const ortho = useDraftingSession((o) => o.ortho || o.orthoHeld);
   const chosen = WALL_TOOLS.find((x) => x.command === tool);
   const orthoNote = ortho ? <output className="mb-0 mt-2 block text-xs font-medium text-white">{t('wall.ortho.on')}</output> : null;
+  // Esc is never the only way out (#166): the tool ends from its own card.
+  const done = <button type="button" onClick={onDone} className="mt-3 rounded-full border border-sky-300/40 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/80">{t('wall.tool.done')}</button>;
   const draw = DRAW_TOOLS.find((x) => x.command === tool);
   if (draw) {
     return (
@@ -44,6 +46,7 @@ export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string
         {draw.command === 'revcloud' ? <RevisionPick /> : null}
         <p className="mb-0 mt-3 text-xs text-cyan-300">{t('wall.drawHint')}</p>
         {orthoNote}
+        {done}
       </Card>
     );
   }
@@ -54,6 +57,7 @@ export function InfoCard({ tool, drawingOn }: { tool: string; drawingOn?: string
         <ToolTypes tool={chosen.command} />
         <p className="mb-0 mt-4 flex items-start gap-2 text-cyan-300"><ToolIcon name="cube" size={22} accent="currentColor" />{t(chosen.hintKey ?? 'wall.drawHint')}</p>
         {orthoNote}
+        {done}
       </Card>
     );
   }

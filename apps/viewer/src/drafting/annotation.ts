@@ -17,8 +17,9 @@ import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
 import { figureUp, leaderOf } from './figure-layout';
 import { leaderTextRight } from './leader-segments';
 import { leaderStart } from '@/labels/label-leader';
-import { sheetLevel, sheetNumber } from '@bimvoice/ifcsheet/names';
+import { decimalsOf, lengthUnitOf, sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { textBlock, type TextFrame } from './text-block';
+import { naturalDecimals, unitFactor } from './styles';
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
 
 export interface DimensionLayout {
@@ -35,12 +36,14 @@ export interface DimensionLayout {
 const EXT_GAP = 0.1;
 const EXT_OVER = 0.15;
 
-export function formatLength(locale: string, m: number): string {
-  return sheetNumber(locale, m, 2, { group: false });
+export function formatLength(locale: SheetLocale, m: number): string {
+  // Metres with two decimals unless the project names its length unit (#88): then that unit, with the places such a unit is drawn to.
+  const unit = lengthUnitOf(locale, 'm');
+  return sheetNumber(locale, m * unitFactor(unit), decimalsOf(locale, 'length', naturalDecimals(unit)), { group: false });
 }
 
 /** A level mark: +2,70, −1,50 (the true minus), ±0,00. */
-export function formatLevel(locale: string, m: number): string {
+export function formatLevel(locale: SheetLocale, m: number): string {
   return sheetLevel(locale, m, { minus: '−' });
 }
 
@@ -70,7 +73,7 @@ export interface LayoutOptions {
    * only the lines and the text position of a layout; whatever draws the
    * label passes `format` itself.
    */
-  locale?: string;
+  locale?: SheetLocale;
 }
 
 /** A linear / aligned dimension: extension lines from the points to the dimension line through `at`. */
@@ -174,6 +177,18 @@ export function withAnnotationScreenUp<T>(sign: 1 | -1, fn: () => T): T {
 let screenRight: 1 | -1 = 1;
 export function setAnnotationScreenRight(sign: 1 | -1): void {
   screenRight = sign;
+}
+export const annotationScreenRight = (): 1 | -1 => screenRight;
+
+/** Run `fn` as drafting on a view whose screen-up and screen-right are these, then put the session's back (the batch annotating views that are not open, #333). */
+export function withAnnotationFrame<T>(up: 1 | -1, right: 1 | -1, fn: () => T): T {
+  const [wasUp, wasRight] = [screenUp, screenRight];
+  [screenUp, screenRight] = [up, right];
+  try {
+    return fn();
+  } finally {
+    [screenUp, screenRight] = [wasUp, wasRight];
+  }
 }
 
 /** Model metres per hatch-pattern unit at scale 1: patterns are drawn in paper millimetres, views default to 1:100. */

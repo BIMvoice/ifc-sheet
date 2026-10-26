@@ -11,68 +11,10 @@
  * missing here falls back to English one by one. Term choices: `../ro-glossary.md`.
  */
 import type { Catalogue } from '../registry';
-import { checkRo } from '../catalogues/check.ro';
-import { faceRo } from '../catalogues/face.ro';
-import { sheetTablesRo } from '../catalogues/sheet-tables.ro';
-import { namesRo } from '../catalogues/names.ro';
-import { issueRo } from '../catalogues/issue.ro';
-import { sheetContentRo } from '../catalogues/sheet-content.ro';
-import { sheetsRo } from '../catalogues/sheets.ro';
-import { wallRo } from '../catalogues/wall.ro';
-import { wallKeysRo } from '../catalogues/wall-keys.ro';
-import { wallMaterialsRo } from '../catalogues/wall-materials.ro';
-import { wallReviewRo } from '../catalogues/wall-review.ro';
-import { wallSectionsRo } from '../catalogues/wall-sections.ro';
-import { scheduleExportRo } from '../catalogues/schedule-export.ro';
-import { whatChangedRo } from '../catalogues/whatchanged.ro';
-import { featuresRo } from '../catalogues/features.ro';
-import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
-import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
-import { wallArrangeRo } from '../catalogues/wall-arrange.ro';
-import { revisionsRo } from '../catalogues/revisions.ro';
-import { catalogueRo } from '../catalogues/catalogue.ro';
-import { cadLayersRo } from '../catalogues/cad-layers.ro';
-import { colourSchemeRo } from '../catalogues/colour-scheme.ro';
-import { toursRo } from '../catalogues/tours.ro';
-import { reviewRo } from '../catalogues/review.ro';
-import { printPreviewRo } from '../catalogues/print-preview.ro';
-import { tagFieldsRo } from '../catalogues/tag-fields.ro';
-import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
-import { annotateAllRo } from '../catalogues/annotate-all.ro';
-import { draftingRo } from '../catalogues/drafting.ro';
-import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
-import { sheetTemplatesRo } from '../catalogues/sheet-templates.ro';
+import { roAL } from '../barrels/ro-a-l';
+import { roMZ } from '../barrels/ro-m-z';
 
 export default {
-  ...wallRo,
-  ...wallKeysRo,
-  ...wallMaterialsRo,
-  ...wallReviewRo,
-  ...wallSectionsRo,
-  ...scheduleExportRo,
-  ...sheetsRo,
-  ...checkRo,
-  ...issueRo,
-  ...whatChangedRo,
-  ...sheetContentRo,
-  ...namesRo,
-  ...faceRo,
-  ...sheetTablesRo,
-  ...featuresRo,
-  ...titleBlockSourcesRo,
-  ...titleBlockRoRo,
-  ...wallArrangeRo,
-  ...revisionsRo,
-  ...catalogueRo,
-  ...cadLayersRo,
-  ...colourSchemeRo,
-  ...titleBlockParamsRo,
-  ...reviewRo,
-  ...toursRo,
-  ...printPreviewRo,
-  ...tagFieldsRo,
-  ...annotateAllRo,
-  ...draftingRo,
-  ...keyboardShortcutsRo,
-  ...sheetTemplatesRo,
+  ...roAL,
+  ...roMZ,
 } satisfies Catalogue;

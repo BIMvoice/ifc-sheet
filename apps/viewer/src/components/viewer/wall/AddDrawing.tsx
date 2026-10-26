@@ -3,11 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * "Add a drawing", in seven big choices: a plan of a storey (pick the storey),
+ * "Add a drawing", in eight big choices: a plan of a storey (pick the storey),
  * a section (draw a line on a plan), an elevation (pick a side), a plan of one
  * discipline (structural, foundation, roof: `project/discipline-views.ts`), a
  * detail of an area (mark it on the drawing in front), a drafting view (blank,
- * or a library detail), the site plan (`siteplan/`). A new drawing hangs on
+ * or a library detail), the site plan (`siteplan/`), a cut-away axonometric
+ * of a storey (`CutawayAxoForm`). A new drawing hangs on
  * the set where its kind belongs.
  */
 
@@ -16,11 +17,13 @@ import { useTranslation } from '@/i18n';
 import { ELEVATION_DIRECTIONS, elevationName, planViewFor, resolvePlanLevel } from '@/project/view-defaults';
 import { defaultDisciplineLevel, disciplineViewFor, DISCIPLINE_IDS, type DisciplineId } from '@/project/discipline-views';
 import { addProjectView, useProjectStore } from '@/project/project-store';
+import { runAsOneUndoStep as inOneStep } from '@/drafting/draft-store';
 import { draftingViewOf } from '@/drafting/drafting-view';
 import { placeLibraryDetail } from '@/catalogue/detail-actions';
 import type { ElevationDirection, PlanProjectView, ProjectLevel } from '@/project/types';
 import { ToolIcon, type ToolIconName } from '../ifcsheet/ToolIcon';
 import { ensureSitePlan } from '@/siteplan/site-actions';
+import { CutawayAxoForm } from './CutawayAxoForm';
 
 interface AddDrawingProps {
   /** Hang a view made or found here; the sheet it lands on is stepped into. */
@@ -51,7 +54,7 @@ const pick = 'rounded-full border border-sky-300/40 px-4 py-2 text-sky-50 hover:
 export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingProps) {
   const { t } = useTranslation();
   const levels = useProjectStore((s) => s.levels);
-  const [step, setStep] = useState<'kinds' | 'storey' | 'side' | 'discipline' | 'drafting'>('kinds');
+  const [step, setStep] = useState<'kinds' | 'storey' | 'side' | 'discipline' | 'drafting' | 'cutaway'>('kinds');
   // The discipline plan a storey is being picked for.
   const [discipline, setDiscipline] = useState<DisciplineId | null>(null);
   const details = useProjectStore((s) => s.details);
@@ -59,7 +62,7 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
   const disciplinePlanOf = (id: DisciplineId, level: ProjectLevel): void => {
     const { views } = useProjectStore.getState();
     const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && v.discipline === id && resolvePlanLevel(v, [level]) !== undefined);
-    onView(existing?.id ?? addProjectView(disciplineViewFor(id, level, views)));
+    inOneStep(() => onView(existing?.id ?? addProjectView(disciplineViewFor(id, level, views))));
   };
   const pickDiscipline = (id: DisciplineId): void => {
     const level = defaultDisciplineLevel(id, levels);
@@ -75,17 +78,19 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
       onView(existing.id);
       return;
     }
-    onView(addProjectView({ ...planViewFor(level, views, Date.now(), levels), auto: false }));
+    inOneStep(() => onView(addProjectView({ ...planViewFor(level, views, Date.now(), levels), auto: false })));
   };
   const sideOf = (direction: ElevationDirection): void => {
     const existing = useProjectStore.getState().views.find((v) => v.kind === 'elevation' && v.direction === direction && !v.interior);
-    onView(existing?.id ?? addProjectView({ kind: 'elevation', name: elevationName(direction), direction }));
+    inOneStep(() => onView(existing?.id ?? addProjectView({ kind: 'elevation', name: elevationName(direction), direction })));
   };
 
-  const draftingBlank = (): void => onView(addProjectView(draftingViewOf(t('wall.add.draftingName'))));
+  const draftingBlank = (): void => inOneStep(() => onView(addProjectView(draftingViewOf(t('wall.add.draftingName')))));
   const draftingFromLibrary = (entryId: string): void => {
-    const id = placeLibraryDetail(entryId);
-    if (id) onView(id);
+    inOneStep(() => {
+      const id = placeLibraryDetail(entryId);
+      if (id) onView(id);
+    });
   };
 
   return (
@@ -103,12 +108,15 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
           <Choice icon="cube" title={t('wall.add.discipline')} hint={t('wall.add.disciplineHint')} onClick={() => setStep('discipline')} disabled={levels.length === 0} />
           <Choice icon="plus" title={t('wall.add.detail')} hint={t('wall.add.detailHint')} onClick={onDetail} />
           <Choice icon="symbol" title={t('wall.add.drafting')} hint={t('wall.add.draftingHint')} onClick={() => setStep('drafting')} />
-          <Choice icon="cube" title={t('site.add')} hint={t('site.addHint')} disabled={levels.length === 0} onClick={() => { const id = ensureSitePlan(t('site.viewName')); if (id) onView(id); }} />
+          <Choice icon="cube" title={t('cutawayAxo.add')} hint={t('cutawayAxo.addHint')} disabled={levels.length === 0} onClick={() => setStep('cutaway')} />
+          <Choice icon="cube" title={t('site.add')} hint={t('site.addHint')} disabled={levels.length === 0} onClick={() => inOneStep(() => { const id = ensureSitePlan(t('site.viewName')); if (id) onView(id); })} />
         </div>
       ) : step === 'discipline' ? (
         <Picks>{DISCIPLINE_IDS.map((id) => <button key={id} type="button" className={pick} onClick={() => pickDiscipline(id)}>{t(`wall.add.discipline.${id}`)}</button>)}</Picks>
       ) : step === 'storey' ? (
         <Picks>{levels.map((level, i) => <button key={level.name + level.elevation} type="button" className={pick} onClick={() => planOf(i)}>{level.name}</button>)}</Picks>
+      ) : step === 'cutaway' ? (
+        <CutawayAxoForm onAdd={(view) => inOneStep(() => onView(addProjectView(view)))} />
       ) : step === 'drafting' ? (
         <Picks>
           <button type="button" className={pick} onClick={draftingBlank}>{t('wall.add.draftingBlank')}</button>

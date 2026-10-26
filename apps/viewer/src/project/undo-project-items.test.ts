@@ -10,7 +10,8 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { clearDraftHistory, redoDrafts, undoDrafts } from '@/drafting/draft-store';
-import { addProjectSheet, duplicateProjectSheet, removeProjectItem, renameProjectItem, resetProject, syncProjectWithModels, updateProjectView, useProjectStore } from './project-store.js';
+import { addProjectSheet, addProjectView, duplicateProjectSheet, duplicateProjectView, setSheetNumber, removeProjectItem, renameProjectItem, resetProject, syncProjectWithModels, updateProjectView, useProjectStore } from './project-store.js';
+import { addSheetRevision, removeSheetRevision } from './sheets.js';
 import { setGroupScale, startDrawingSet } from './drawing-set-actions.js';
 import { nudgeViewport } from './viewport-snap.js';
 import { redoEarliest, undoLatest } from './unified-undo.js';
@@ -69,6 +70,12 @@ describe('sheets (#51)', () => {
 
   it('removing a sheet is one step', () => oneStep(() => removeProjectItem(state().sheets[1].id)));
   it('adding a sheet is one step', () => oneStep(() => { addProjectSheet('New'); }));
+  it('typing a sheet number is one step', () => oneStep(() => setSheetNumber(state().sheets[0].id, 'Z-999')));
+  it('listing a revision on a sheet, and taking it off, are one step each', () => {
+    const id = state().sheets[0].id;
+    oneStep(() => addSheetRevision(id, 'r1'));
+    oneStep(() => removeSheetRevision(id, 'r1'));
+  });
   it('renaming a sheet is one step', () => oneStep(() => renameProjectItem(state().sheets[0].id, 'Renamed sheet')));
   it('duplicating a sheet is one step', () => oneStep(() => { duplicateProjectSheet(state().sheets[0].id); }));
   it('add then rename then duplicate: three undos, three redos, in order', () => {
@@ -111,6 +118,9 @@ describe('views (#51)', () => {
     redoDrafts();
     assert.equal(state().views.some((v) => v.id === shared.id), false);
   });
+
+  it('adding a view is one step', () => oneStep(() => { addProjectView({ kind: 'drafting', name: 'Detail' } as never); }));
+  it('duplicating a view is one step', () => oneStep(() => { duplicateProjectView(state().views[0].id); }));
 
   it('removing a view is one step', () => oneStep(() => removeProjectItem(state().views[0].id)));
   it('a view edit is one step', () => oneStep(() => updateProjectView(state().views[0].id, { name: undefined, scale: 77 } as never)));

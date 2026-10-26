@@ -41,6 +41,8 @@ export interface LegendLabels {
   tool: (tool: AnnotationType['tool']) => string;
   membrane: string;
   sampleText: string;
+  /** A known attribute's readable name (`LongName` → "Room name"), or `undefined` for a property with no catalogue label. */
+  attribute?: (name: string) => string | undefined;
 }
 
 export interface LegendLayoutContext {

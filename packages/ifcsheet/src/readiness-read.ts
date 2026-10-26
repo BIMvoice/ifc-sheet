@@ -13,6 +13,10 @@
 
 import { getInheritanceChainAcrossSchemas, resolveAllMaterialDefIds, type IfcDataStore } from '@ifc-lite/parser';
 import type { SubReportCheck } from './sub-report-check.js';
+import type { BoqMissing } from './boq-compute.js';
+import type { MeshData } from '@ifc-lite/geometry';
+import { estimatedAreas } from './room-estimates.js';
+import { readRooms } from './room-read.js';
 import { modelReadiness, type FarElementFact, type ModelFacts, type ReadinessFinding } from './readiness.js';
 
 /**
@@ -72,8 +76,10 @@ export function readModelFacts(sources: Iterable<FactSource>): ModelFacts {
 }
 
 /** The readiness findings of one opened model (`openModel`'s result), counted and judged: what the command line and the MCP tool report. */
-export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[] }, subReports: readonly SubReportCheck[] = []): ReadinessFinding[] {
+export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing): ReadinessFinding[] {
   const facts = readModelFacts([{ store: model.dataStore, storeys: model.storeys.length }]);
   const far = (model.farElements ?? []).map(({ label, distance }) => ({ label, distance }));
-  return modelReadiness(far.length > 0 ? { ...facts, farElements: far } : facts, subReports);
+  // The rooms measured from geometry, through the same helper the app asks (`room-estimates.ts`).
+  const estimated = estimatedAreas(readRooms(model.dataStore, model.meshes ?? []).rooms);
+  return modelReadiness({ ...facts, ...(far.length > 0 ? { farElements: far } : {}), ...(estimated ? { estimatedAreas: estimated } : {}) }, subReports, boq);
 }

@@ -12,10 +12,15 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { generateDefaultSet } from './index.js';
+import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from './index.js';
+import { dxfName } from './sheet-file-name.js';
+import { buildHandoverZip, type HandoverPart } from './handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, readinessWithProject, sheetGraphics, type ProjectFacts } from './headless.js';
 import { describeReadiness } from './readiness.js';
 import { materialReport, materialReportText, readProjectMaterials } from './materials-report.js';
+import { boq } from './cli-boq.js';
+import { classify } from './cli-classify.js';
+import { rooms } from './cli-rooms.js';
 
 /** Where `run` writes its messages; defaults to the process streams. */
 export interface CliIo {
@@ -34,14 +39,20 @@ export const EXIT = { ok: 0, failed: 1, usage: 2 } as const;
 const USAGE = `ifcsheet: drawing sets from IFC models
 
 Usage:
-  ifcsheet build <model.ifc> --out <set.pdf> [--dxf <dir>] [--name <project name>] [--include-far-elements]
+  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
   ifcsheet materials <model.ifc> [--project <file>] [--json]
+  ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
+  ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]
+  ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]
 
 Commands:
   build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
           sheet. With --dxf, also write one DXF per sheet into that directory.
+          With --template, the sheets are made by the rules of a set template (a .bvset file
+          saved from a project) instead: the same plan-per-storey, elevation and section
+          rules the app applies, a rule the model cannot meet skipped and said.
   check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain English, or JSON with --json. With --project, also what the
@@ -50,15 +61,32 @@ Commands:
   materials  The model's materials and how each draws where a view cuts it: hatch, scale,
           fill, hatch pen, membrane. With --project, the project's own table applies (what the
           app's Materials section edits); a material it has no row for is guessed from its name.
+  boq     The bill of quantities (antemasuratoare): the articles of the project file, each with its total
+          in its own unit, from the quantities the model declares (never zero for a missing one: the elements
+          that lack it are named). Text, CSV with --csv, JSON with --json; --detail adds a row per type.
+  classify  The model's types with their classification code: the model's own IfcClassificationReference first, else the
+          project's mapping (a type, a material or a class to the office's code). --system picks one of the project's
+          systems (default: the first). Text, CSV with --csv, JSON with --json.
+  rooms   The room and area schedule: every room (IfcSpace) by level with its number, name and
+          area, a total per level and for the building (the urban indicators' Au). An area is the
+          model's NetFloorArea (else GrossFloorArea), else the footprint of the room's geometry;
+          the last lines say which. Text, or CSV with --csv, or JSON with --json.
 
 Options:
-  --out <file>     The PDF to write (required for build).
+  --out <file>     The PDF to write (required for build unless --handover is given).
   --dxf <dir>      Also write a DXF per sheet into this directory (created if absent).
+  --handover <zip> Also write the handover package: the PDF, a DXF per sheet and the IFC as given, in one ZIP. The app's
+                   package adds the schedules and the drawing list as XLSX; DWG follows with #52.
+  --pattern <p>    How --handover names its files, with {project} {number} {sheet} {revision} {date} {issue}
+                   (default "{number} {sheet}": A-101 Ground floor.dxf). Plain ASCII, no path separators.
+  --template <file> A set template (.bvset) for build: which sheets, which views on them, at which scale.
   --name <name>    The project name for the title blocks (default: the model's).
   --project <file> A saved project (.ifclite-project.json) for check: its schedules, joinery catalogue and symbol mapping.
   --include-far-elements  Frame the views on everything the storeys contain, small elements far from the building too
                    (a survey point, an origin cube). By default they are left out of the framing only and named by check.
   --json           Print the check as JSON: { file, ready, findings: [{ kind, missing, effect, params }] } (with --project, also project).
+  --csv            Print the rooms schedule as CSV (plain numbers).
+  --locale <l>     The language of the rooms schedule: ro writes "12,50" and the Romanian headings (default en).
   -h, --help       Show this help.
   -v, --version    Show the version.
 
@@ -72,20 +100,14 @@ async function packageVersion(): Promise<string> {
   return (JSON.parse(text) as { version: string }).version;
 }
 
-/** A file name made of the sheet number (A-101), safe on every file system. */
-const dxfName = (number: string, used: Set<string>): string => {
-  const base = number.replace(/[^A-Za-z0-9._-]+/g, '_') || 'sheet';
-  let name = base;
-  for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base}-${n}`;
-  used.add(name.toLowerCase());
-  return `${name}.dxf`;
-};
-
 interface BuildArgs {
   model: string;
-  out: string;
+  out?: string;
+  handover?: string;
+  pattern?: string;
   dxf?: string;
   name?: string;
+  template?: string;
   includeFarElements?: boolean;
 }
 
@@ -97,17 +119,44 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: cannot read ${args.model}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
     return EXIT.failed;
   }
+  let setTemplate: SetTemplate | undefined;
+  if (args.template !== undefined) {
+    try {
+      setTemplate = parseSetTemplate(await readFile(args.template, 'utf8'));
+    } catch (error) {
+      io.stderr(`ifcsheet: ${args.template} cannot be used as a set template: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
-  const set = generateDefaultSet(model, args.name ? { name: args.name } : {});
+  const set = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}) });
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
     return EXIT.failed;
   }
   const sheets = await sheetGraphics(set, model);
   const pdf = await exportPdf(sheets, { title: set.document.name });
-  await mkdir(resolve(args.out, '..'), { recursive: true });
-  await writeFile(args.out, pdf);
-  io.stdout(`${args.out}: ${sheets.length} sheet${sheets.length === 1 ? '' : 's'} (${set.document.name})\n`);
+  // What the template's rules met in this model (the other notes are the app's to show).
+  for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params })}\n`);
+  if (args.out) {
+    await mkdir(resolve(args.out, '..'), { recursive: true });
+    await writeFile(args.out, pdf);
+    io.stdout(`${args.out}: ${sheets.length} sheet${sheets.length === 1 ? '' : 's'} (${set.document.name})\n`);
+  }
+  if (args.handover) {
+    // The same builder as the app's package (`handover.ts`): the engine has no schedules or register to add.
+    const tokens = { project: set.document.name, date: new Date().toISOString().slice(0, 10) };
+    const parts: HandoverPart[] = [
+      { kind: 'pdf', extension: 'pdf', tokens: { ...tokens, sheet: set.document.name }, data: pdf },
+      ...sheets.map((sheet) => ({ kind: 'dxf' as const, extension: 'dxf', tokens: { ...tokens, number: sheet.number, sheet: sheet.name }, data: new TextEncoder().encode(exportDxf(sheet)) })),
+      { kind: 'ifc', extension: 'ifc', tokens: { ...tokens, sheet: basename(args.model).replace(/\.ifc$/i, '') }, data: bytes },
+    ];
+    const built = buildHandoverZip(args.pattern, parts);
+    await mkdir(resolve(args.handover, '..'), { recursive: true });
+    await writeFile(args.handover, built.zip);
+    io.stdout(`${args.handover}: ${built.files.length} files\n`);
+    for (const f of built.files) io.stdout(`  ${f.name}\n`);
+  }
   if (args.dxf) {
     await mkdir(args.dxf, { recursive: true });
     const used = new Set<string>();
@@ -201,9 +250,16 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
       options: {
         out: { type: 'string' },
         dxf: { type: 'string' },
+        handover: { type: 'string' },
+        pattern: { type: 'string' },
         name: { type: 'string' },
+        template: { type: 'string' },
         project: { type: 'string' },
+        system: { type: 'string' },
         json: { type: 'boolean' },
+        csv: { type: 'boolean' },
+        detail: { type: 'boolean' },
+        locale: { type: 'string' },
         'include-far-elements': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
@@ -223,12 +279,48 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.ok;
   }
   const [command, ...rest] = positionals;
-  if (command !== 'build' && command !== 'check' && command !== 'materials') {
+  if (command !== 'build' && command !== 'check' && command !== 'boq' && command !== 'rooms' && command !== 'classify' && command !== 'materials') {
     io.stderr(`ifcsheet: unknown command "${command}"\n\n${USAGE}`);
     return EXIT.usage;
   }
+  if (command === 'boq') {
+    if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values['include-far-elements'] || (values.csv && values.json)) {
+      io.stderr('ifcsheet boq takes one model, --project, --csv or --json, --detail and --locale: ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]\n');
+      return EXIT.usage;
+    }
+    try {
+      return await boq({ model: rest[0], project: values.project, csv: values.csv === true, json: values.json === true, detail: values.detail === true, locale: values.locale ?? 'en' }, io);
+    } catch (error) {
+      io.stderr(`ifcsheet: boq of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
+  if (command === 'classify') {
+    if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values['include-far-elements'] || values.detail || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined || (values.csv && values.json)) {
+      io.stderr('ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n');
+      return EXIT.usage;
+    }
+    try {
+      return await classify({ model: rest[0], project: values.project, ...(values.system !== undefined ? { system: values.system } : {}), csv: values.csv === true, json: values.json === true }, io);
+    } catch (error) {
+      io.stderr(`ifcsheet: classify of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
+  if (command === 'rooms') {
+    if (rest.length !== 1 || values.out || values.dxf || values.name || values.project || values.handover || values.pattern || values.template !== undefined || values.detail || values['include-far-elements'] || (values.csv && values.json)) {
+      io.stderr('ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n');
+      return EXIT.usage;
+    }
+    try {
+      return await rooms({ model: rest[0], csv: values.csv === true, json: values.json === true, locale: values.locale ?? 'en' }, io);
+    } catch (error) {
+      io.stderr(`ifcsheet: rooms of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
   if (command === 'check') {
-    if (rest.length !== 1 || values.out || values.dxf || values.name) {
+    if (rest.length !== 1 || values.out || values.dxf || values.name || values.csv || values.detail || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined) {
       io.stderr('ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n');
       return EXIT.usage;
     }
@@ -251,6 +343,10 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
       return EXIT.failed;
     }
   }
+  if (values.csv || values.detail || values.locale !== undefined) {
+    io.stderr('ifcsheet build has no --csv, --detail or --locale; they are options of boq and rooms.\n');
+    return EXIT.usage;
+  }
   if (values.json) {
     io.stderr('ifcsheet build has no --json; it is an option of check.\n');
     return EXIT.usage;
@@ -259,12 +355,12 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     io.stderr('ifcsheet build has no --project yet: nothing in the starting set reads the project. --project is an option of check.\n');
     return EXIT.usage;
   }
-  if (rest.length !== 1 || !values.out) {
-    io.stderr(`ifcsheet build needs one model and --out: ifcsheet build <model.ifc> --out <set.pdf>\n`);
+  if (rest.length !== 1 || (!values.out && !values.handover)) {
+    io.stderr(`ifcsheet build needs one model and --out or --handover: ifcsheet build <model.ifc> --out <set.pdf>\n`);
     return EXIT.usage;
   }
   try {
-    return await build({ model: rest[0], out: values.out, dxf: values.dxf, name: values.name, includeFarElements: values['include-far-elements'] === true }, io);
+    return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, includeFarElements: values['include-far-elements'] === true }, io);
   } catch (error) {
     io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
     return EXIT.failed;

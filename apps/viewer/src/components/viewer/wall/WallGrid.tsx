@@ -21,6 +21,7 @@ import { CardMarks } from './CardMarks';
 import { startWallFill } from '@/wall/wall-fill';
 import { useWallView } from '@/wall/wall-view';
 import { LazyWallSheet } from './LazyWallSheet';
+import { useWallHistoryKeys } from './useWallHistoryKeys';
 import { useWallMeasure, WALL_SHEET_ATTR } from './useWallMeasure';
 import { WallFind } from './WallFind';
 import { WallMiniMap } from './WallMiniMap';
@@ -121,6 +122,7 @@ export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onSte
   const { t } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
   const scroller = useRef<HTMLDivElement>(null);
+  useWallHistoryKeys();
   const sheetIds = sheets.map((s) => s.id).join(',');
   // A document loaded with the same sheet ids forgets the Wall without changing them: measure and fill again.
   const generation = useWallView((s) => s.generation);

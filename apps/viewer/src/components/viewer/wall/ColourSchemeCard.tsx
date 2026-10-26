@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PALETTE_IDS, schemeTitle, type ColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
+import { PALETTE_IDS, type ColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { addColourLegend, colourLegendOf, patchColourScheme, setColourScheme, setValueColour } from '@/project/colour-scheme-actions';
@@ -20,7 +20,8 @@ import { VIEW_CATEGORIES } from '@/project/view-graphics';
 import { propertyReader, schemeResultOf } from '@/project/view-colour-scheme';
 import { useViewDrawings } from '@/project/view-drawings';
 import { useViewerStore } from '@/store';
-import { useLegendLabels } from '../legend/LegendGraphic';
+import { schemeHeading } from '@/project/scheme-heading';
+import { attributeLabeller, useLegendLabels } from '../legend/LegendGraphic';
 import { CardSection } from './CardSection';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
 
@@ -78,7 +79,7 @@ export function ColourSchemeCard({ sheet, view }: { sheet: ProjectSheet; view: P
     return propertyChoices(ids);
   }, [scheme?.target, drawing, meshes, edits]);
   const entries = result?.entries ?? [];
-  const summary = scheme ? `${t('wall.scheme.summary', { property: schemeTitle(scheme.property) })}, ${t('wall.scheme.valueCount', { count: entries.length })}` : t('wall.scheme.summaryOff');
+  const summary = scheme ? `${t('wall.scheme.summary', { property: schemeHeading(scheme, attributeLabeller(t)) })}, ${t('wall.scheme.valueCount', { count: entries.length })}` : t('wall.scheme.summaryOff');
   const start = (): void => setColourScheme(view.id, view.kind === 'plan' ? { property: 'LongName', target: 'rooms' } : { property: 'ObjectType', target: 'elements' });
   const picked = scheme?.classes ?? [];
   const classesValue = picked.length > 0 ? VIEW_CATEGORIES.find((c) => c.classes.length === picked.length && c.classes.every((k) => picked.includes(k)))?.id ?? ALL : ALL;
@@ -126,6 +127,14 @@ export function ColourSchemeCard({ sheet, view }: { sheet: ProjectSheet; view: P
             <input
               ref={typed} key={scheme.property} className={field} defaultValue={scheme.property}
               onBlur={(e) => editedProperty(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') typed.current?.blur(); }}
+            />
+          </label>
+          <label className="mt-3 block text-xs text-sky-200">
+            {t('wall.scheme.legendTitle')}
+            <input
+              key={`${scheme.property}|${scheme.title ?? ''}`} className={field} defaultValue={scheme.title ?? ''} placeholder={schemeHeading({ property: scheme.property }, attributeLabeller(t))}
+              onBlur={(e) => { if (e.target.value.trim() !== (scheme.title ?? '')) patchColourScheme(view.id, { title: e.target.value.trim() || undefined }); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
             />
           </label>
           <label className="mt-3 block text-xs text-sky-200">

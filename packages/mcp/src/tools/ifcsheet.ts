@@ -21,11 +21,16 @@ import type { Tool } from './types.js';
 import { okResult } from './util.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import { resolveSafePath } from '../safe-path.js';
+import { drawSet } from './ifcsheet-draw.js';
+import { outputPath } from './ifcsheet-shared.js';
+import { ifcsheetAddSchedule } from './ifcsheet-schedule.js';
+import { ifcsheetEditTools } from './ifcsheet-edit.js';
+import { ifcsheetFileTools } from './ifcsheet-files.js';
 import { addSheetModel, addSheetSet, getSheetModel, getSheetSet } from './ifcsheet-store.js';
 
 const MODEL_ID = { type: 'string', description: 'The model_id returned by ifcsheet_open_model.' } as const;
 
-async function modelBytes(input: Record<string, unknown>, ctx: Parameters<Tool['handler']>[1]): Promise<{ name: string; bytes: Uint8Array }> {
+async function modelBytes(input: Record<string, unknown>, ctx: Parameters<Tool['handler']>[1]): Promise<{ name: string; bytes: Uint8Array; path?: string }> {
   const { file_path: path, ifc_base64: base64 } = input;
   if ((typeof path === 'string') === (typeof base64 === 'string')) {
     throw new ToolExecutionError({
@@ -38,7 +43,7 @@ async function modelBytes(input: Record<string, unknown>, ctx: Parameters<Tool['
   }
   const filePath = await resolveSafePath(path, ctx, 'read');
   try {
-    return { name: basename(filePath), bytes: new Uint8Array(await readFile(filePath)) };
+    return { name: basename(filePath), bytes: new Uint8Array(await readFile(filePath)), path: filePath };
   } catch (err) {
     throw new ToolExecutionError({
       code: ToolErrorCode.INVALID_INPUT,
@@ -62,7 +67,7 @@ export const ifcsheetOpenModel: Tool = {
     additionalProperties: false,
   },
   async handler(input, ctx) {
-    const { name, bytes } = await modelBytes(input, ctx);
+    const { name, bytes, path } = await modelBytes(input, ctx);
     const { openModel } = await import('@bimvoice/ifcsheet/headless');
     let model;
     try {
@@ -73,7 +78,7 @@ export const ifcsheetOpenModel: Tool = {
     if (model.dataStore.entityCount === 0) {
       throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `'${name}' holds no IFC entities: it is not an IFC STEP file.` });
     }
-    const entry = addSheetModel(ctx, name, model);
+    const entry = addSheetModel(ctx, name, model, { bytes, path });
     const summary = {
       model_id: entry.id,
       name,
@@ -83,6 +88,8 @@ export const ifcsheetOpenModel: Tool = {
       elementCount: model.dataStore.entityCount,
       meshCount: model.meshes.length,
       hasGeometry: model.extent !== null,
+      // The building's box in the viewer frame (X east, Y up, Z south), metres: the coordinates a section plane is given in.
+      extent: model.extent,
     };
     return okResult(
       `Opened '${name}' as ${entry.id}: project '${summary.projectName}', ${summary.storeyCount} storeys, ${summary.meshCount} meshes. Next: ifcsheet_generate_set.`,
@@ -156,16 +163,17 @@ export const ifcsheetExportPdf: Tool = {
     additionalProperties: false,
   },
   async handler(input, ctx) {
-    const { set, model, id } = getSheetSet(ctx, input.document_id as string);
-    const { exportPdf, sheetGraphics } = await import('@bimvoice/ifcsheet/headless');
-    const sheets = await sheetGraphics(set, model.model);
+    const entry = getSheetSet(ctx, input.document_id as string);
+    const { set, model, id } = entry;
+    const { exportPdf } = await import('@bimvoice/ifcsheet/headless');
+    const { sheets } = await drawSet(entry, model);
     const pdf = await exportPdf(sheets, { title: set.document.name });
     const pages = sheets.length;
     const base = { document_id: id, pages, sheets: sheets.map((s) => s.number), bytes: pdf.byteLength };
     if (typeof input.file_path !== 'string') {
       return okResult(`Exported ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) as base64.`, { ...base, pdf_base64: Buffer.from(pdf).toString('base64') });
     }
-    const filePath = await resolveSafePath(input.file_path, ctx, 'write');
+    const filePath = await outputPath(input.file_path, ctx);
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, pdf);
     return okResult(`Wrote ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) to ${filePath}.`, { ...base, file_path: filePath });
@@ -232,4 +240,7 @@ export const ifcsheetCheckReadiness: Tool = {
   },
 };
 
-export const ifcsheetTools: Tool[] = [ifcsheetOpenModel, ifcsheetGenerateSet, ifcsheetExportPdf, ifcsheetCheckReadiness];
+export const ifcsheetTools: Tool[] = [
+  ifcsheetOpenModel, ifcsheetGenerateSet, ifcsheetExportPdf, ifcsheetCheckReadiness,
+  ...ifcsheetEditTools, ifcsheetAddSchedule, ...ifcsheetFileTools,
+];

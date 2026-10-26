@@ -7,7 +7,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
+      "@bimvoice/ifcsheet/handover": ["../../packages/ifcsheet/src/handover"],
       "@bimvoice/ifcsheet/names": ["../../packages/ifcsheet/src/names"],
+      "@bimvoice/ifcsheet/boq-words": ["../../packages/ifcsheet/src/boq-words"],
       "@bimvoice/ifcsheet/readiness": ["../../packages/ifcsheet/src/readiness"],
       "@bimvoice/ifcsheet/readiness-read": ["../../packages/ifcsheet/src/readiness-read"],
       "@bimvoice/ifcsheet/project": ["../../packages/ifcsheet/src/project"],

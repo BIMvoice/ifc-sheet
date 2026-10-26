@@ -4,13 +4,16 @@
 
 import { PromptRegistry } from './types.js';
 import { allPrompts } from './templates.js';
+import { ifcsheetPrompts } from './ifcsheet.js';
 
 export { PromptRegistry } from './types.js';
 export type { Prompt } from './types.js';
 export { allPrompts } from './templates.js';
+export { ifcsheetPrompts } from './ifcsheet.js';
 
 export function buildDefaultPromptRegistry(): PromptRegistry {
   const registry = new PromptRegistry();
   registry.registerAll(allPrompts);
+  registry.registerAll(ifcsheetPrompts);
   return registry;
 }

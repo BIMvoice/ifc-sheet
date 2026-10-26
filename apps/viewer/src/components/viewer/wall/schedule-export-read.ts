@@ -21,8 +21,7 @@ import { takeoffTable, type TakeoffLabels } from '@/joinery/material-takeoff-lay
 import { roomFinishes } from '@/joinery/room-finishes';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
 import { finishTable, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
-import { typeQuantities } from '@/joinery/type-quantities';
-import { collectTypeElements } from '@/joinery/type-quantities-models';
+import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
 import { typeQuantityTable, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
 import { registerTable, type RegisterLabels } from '@/joinery/register-layout';
 import { urbanTable, type UrbanLabels } from '@/urban/urban-layout';
@@ -31,6 +30,9 @@ import { collectUrbanAreas } from '@/urban/urban-models';
 import type { SiteAreaChoice } from '@/urban/site-area';
 import type { ScheduleExport } from '@/joinery/schedule-export';
 import { urbanResultOf } from '../urban/useUrban';
+import { boqPropertyNames, boqTable, computeBoq, type BoqSay } from '@bimvoice/ifcsheet';
+import { collectBoqElements } from '@/boq/boq-models';
+import { listScheduleExport, type ListExportWords } from '@/lib/lists/list-schedule-export';
 
 /** The words of every kind's table, in the user's language; the schedule's name is written over them. */
 export interface ExportLabelSet {
@@ -42,6 +44,10 @@ export interface ExportLabelSet {
   urban: (title: string, areas: UrbanAreas, site: SiteAreaChoice) => UrbanLabels;
   /** The register's "as indicated" scale. */
   asIndicated: string;
+  /** The bill of quantities' words. */
+  boq: BoqSay;
+  /** The words of a table built from the Lists engine. */
+  list: ListExportWords;
 }
 
 export async function readScheduleExport(schedule: ProjectSchedule, labels: ExportLabelSet): Promise<ScheduleExport | null> {
@@ -56,9 +62,17 @@ export async function readScheduleExport(schedule: ProjectSchedule, labels: Expo
       return rooms.length ? { title, tables: [finishTable(rooms, { ...labels.finishes, title })] } : null;
     }
     case 'types': {
-      const data = typeQuantities(collectTypeElements());
+      const data = typeQuantitiesOf(schedule.classification);
       return data.rows.length ? { title, tables: [typeQuantityTable(data, { ...labels.types, title })] } : null;
     }
+    case 'boq': {
+      // The mapping table is the project's; the sum is the engine's, over the models as the session holds them.
+      const articles = useProjectStore.getState().boqArticles ?? [];
+      if (articles.length === 0) return null;
+      const result = computeBoq(collectBoqElements(new Set(boqPropertyNames(articles))), articles);
+      return { title, tables: [boqTable(result, labels.boq, { title, detail: schedule.detail === true })] };
+    }
+    case 'list': return listScheduleExport(schedule, labels.list);
     case 'register': {
       const p = useProjectStore.getState();
       const rows = sharedRegisterRows({ sheets: p.sheets, titleBlock: p.titleBlock, issues: p.issues, asIndicated: labels.asIndicated, schedules: p.schedules, revisions: p.revisions, drafts: p.drafts });

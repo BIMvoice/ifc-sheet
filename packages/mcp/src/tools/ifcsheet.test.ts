@@ -69,9 +69,9 @@ describe.skipIf(missing !== null)('ifcsheet_* tools over stdio on AC20-FZK-Haus'
     await rm(tmp, { recursive: true, force: true });
   });
 
-  it('advertises the four tools with a described input schema', async () => {
+  it('advertises the first four tools with a described input schema (the set tools are in ifcsheet-set.test.ts)', async () => {
     const tools = (await call('tools/list')).result!.tools!.filter((t) => t.name.startsWith('ifcsheet_'));
-    expect(tools.map((t) => t.name).sort()).toEqual(['ifcsheet_check_readiness', 'ifcsheet_export_pdf', 'ifcsheet_generate_set', 'ifcsheet_open_model']);
+    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(['ifcsheet_check_readiness', 'ifcsheet_export_pdf', 'ifcsheet_generate_set', 'ifcsheet_open_model']));
     for (const t of tools) {
       expect(t.description.length).toBeGreaterThan(40);
       expect(t.inputSchema.type).toBe('object');

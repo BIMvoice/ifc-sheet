@@ -25,7 +25,7 @@ import { fitText } from '@/project/title-block-template';
 import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
 import { shownRows, symbolsShown, textCellText, textRowId } from '@bimvoice/ifcsheet';
-import { sheetNumber } from '@bimvoice/ifcsheet/names';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number }
@@ -49,7 +49,7 @@ export interface ScheduleLayout {
 
 export interface ScheduleLabels {
   /** The language the U value is written in on paper ("1,1" in Romanian); the CSV and XLSX keep the plain number. */
-  locale: string;
+  locale: SheetLocale;
   title: string;
   mark: string;
   name: string;

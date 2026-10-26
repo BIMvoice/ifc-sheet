@@ -15,13 +15,17 @@
  * and writes R2000 DXF with CAD layers and text (`sheet-dxf.ts`). Both need
  * the sheet SVG, which only the browser renders today. The DXF here carries
  * linework only; its text is written once the app's DXF writer moves here.
+ *
+ * The drawings carry the app's pens (#34): each viewport's faces and lines as
+ * `sheet-graphic.ts` grouped them through the view's styler, with the colour,
+ * paper-mm width, dash and fill the app's sheet gives the same item.
  */
 
 import { exportToDXF, type Drawing2D } from '@ifc-lite/drawing-2d';
-import type { Polyline, SheetGraphic } from './sheet-graphic.js';
+import type { Polyline, SheetGraphic, SheetPen } from './sheet-graphic.js';
 
-/** jsPDF line widths, mm: the frame heavier than the drawing, cut faces heavier than what is seen beyond. */
-const PEN = { frame: 0.5, cut: 0.35, line: 0.18 } as const;
+/** jsPDF line widths, mm, of the sheet's own marks (the drawings take their pens from `sheet.pens`). */
+const PEN = { frame: 0.5, mark: 0.18 } as const;
 
 /** The font file the package ships (`fonts/Inter-Regular.ttf`, SIL Open Font License), read from disk in Node. */
 async function packagedFont(): Promise<Uint8Array> {
@@ -73,9 +77,21 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
       doc.setFillColor(fill.colour);
       doc.path(ops).fillEvenOdd();
     }
+    // The drawings by pen, in the app's paint order: the cut faces' fills, then the hidden, seen and cut lines.
+    for (const pen of sheet.pens) {
+      if (pen.fill) {
+        doc.setFillColor(pen.fill);
+        for (const region of pen.regions) doc.path(region.flatMap((pts) => [{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }])).fillEvenOdd();
+        continue;
+      }
+      doc.setDrawColor(pen.stroke ?? '#000000');
+      doc.setLineDashPattern(pen.dash ? [...pen.dash] : [], 0);
+      stroke(pen.runs, pen.width);
+    }
+    doc.setLineDashPattern([], 0);
+    doc.setDrawColor('#000000');
     stroke(sheet.frame, PEN.frame);
-    stroke(sheet.cut, PEN.cut);
-    stroke(sheet.lines, PEN.line);
+    stroke(sheet.marks, PEN.mark);
     for (const t of sheet.texts) {
       // jsPDF sizes text in points.
       doc.setFontSize((t.size / 25.4) * 72);
@@ -106,6 +122,23 @@ function colourLayers(sheet: SheetGraphic): { name: string; color: string; polyl
   return [...byColour].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([colour, polylines]) => ({ name: `COLOUR-${colour.slice(1).toUpperCase()}`, color: colour, polylines, closed: true }));
 }
 
+/**
+ * The drawings' stroke pens as DXF layers: R12 has no line weight, so a pen's layer names its kind and width in hundredths of a
+ * millimetre (`VIEW-CUT-050`, `VIEW-SEEN-025`, `VIEW-HIDDEN-018`), and a colour other than black (`VIEW-CUT-050-C62828`); the layer
+ * carries the colour. The cut faces' grey fills are not written: R12 has no hatch, and their outlines are the cut lines already.
+ */
+function penLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
+  const byName = new Map<string, { name: string; color: string; polylines: Polyline[]; closed: boolean }>();
+  for (const pen of sheet.pens.filter((p): p is SheetPen & { stroke: string } => p.stroke !== null && p.runs.length > 0)) {
+    const colour = pen.stroke.toLowerCase() === '#000000' ? '' : `-${pen.stroke.slice(1).toUpperCase()}`;
+    const name = `VIEW-${pen.layer}-${String(Math.round(pen.width * 100)).padStart(3, '0')}${colour}`;
+    const layer = byName.get(name) ?? { name, color: pen.stroke, polylines: [], closed: false };
+    layer.polylines.push(...pen.runs);
+    byName.set(name, layer);
+  }
+  return [...byName.values()];
+}
+
 /** One sheet as DXF text (R12), paper millimetres with y up and the origin at the paper's bottom-left corner. */
 export function exportDxf(sheet: SheetGraphic): string {
   const flip = (p: { x: number; y: number }) => ({ x: p.x, y: sheet.paper.h - p.y });
@@ -114,8 +147,8 @@ export function exportDxf(sheet: SheetGraphic): string {
     coordinateTransform: flip,
     polylineLayers: [
       { name: 'SHEET-FRAME', color: '#000000', polylines: sheet.frame, closed: false },
-      { name: 'VIEW-CUT', color: '#000000', polylines: sheet.cut, closed: false },
-      { name: 'VIEW-LINES', color: '#808080', polylines: sheet.lines, closed: false },
+      ...penLayers(sheet),
+      { name: 'SHEET-MARKS', color: '#000000', polylines: sheet.marks, closed: false },
       ...colourLayers(sheet),
     ],
   });

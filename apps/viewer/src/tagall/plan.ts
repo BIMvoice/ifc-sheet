@@ -19,7 +19,7 @@ import type { DraftEntity, Pt } from '@/drafting/types';
 import { labelDraft, labelSize, type ElementReader, type LabelPlacement } from '@/labels/label-all';
 import { rectsOf } from '@/labels/label-annotations';
 import type { LabelExtras } from '@/labels/label-extras';
-import { growRect, rectAround, ringBounds } from '@/labels/label-geometry';
+import { growRect, rectAround, ringBounds, type Rect } from '@/labels/label-geometry';
 import { layoutLabels, LABEL_CLEAR_MM, LABEL_GAP_MM, type LayoutElement } from '@/labels/label-layout';
 import type { LabelTarget } from '@/labels/label-place';
 import { readFieldValue } from '@/labels/label-resolve';
@@ -42,6 +42,12 @@ export interface TagAllInput {
   placement: LabelPlacement;
   types: { mark: AnnotationType; room: AnnotationType };
   read: ElementReader;
+  /**
+   * What the plan draws over its cut that a room's label keeps clear of: door leaves and swings, window frames, roof lines
+   * and grid, as boxes (the source CEILTAG and the cross-reference marks use: `planSymbolObstacles`). The rooms' labels
+   * keep off them as they keep off the marks placed before.
+   */
+  obstacles?: readonly Rect[];
   /** A detail's area, drawing metres: only what is seen in it is labelled, and every label stands inside it. */
   crop?: { min: Pt; max: Pt };
 }
@@ -107,6 +113,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   // What the rooms keep clear of: the same boxes and the marks drawn (a mark that was placed but not drawn, outside a detail's crop, is not one).
   const roomIndex = new RectIndex(4 * at.textHeight);
   for (const r of base) roomIndex.add(r);
+  for (const r of input.obstacles ?? []) roomIndex.add(r);
   for (const t of todo) {
     const spot = spots.get(String(t.renderId));
     const extras = extrasOf.get(t.guid) ?? {};

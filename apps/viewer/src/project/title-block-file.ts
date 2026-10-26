@@ -9,9 +9,8 @@
  * dropped as the editor would have refused it.
  */
 
-import { MAX_TEXT } from './title-block-template-actions';
 import { checkParamName, PARAM_NAME, type TitleBlockParam } from './title-block-params';
-import { ITEM_KINDS, type TemplateItem, type TitleBlockTemplate } from './title-block-template';
+import { ITEM_KINDS, MAX_TEXT, type TemplateItem, type TitleBlockTemplate } from './title-block-template';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);

@@ -40,11 +40,11 @@ function Item({ item, ox, oy, lookup, logo }: { item: TemplateItem; ox: number; 
   }
 }
 
-export function TitleBlockGraphic({ sheet, projectName, w, h }: { sheet: ProjectSheet; projectName: string; w: number; h: number }) {
+export function TitleBlockGraphic({ sheet, projectName, w, h, issueDate }: { sheet: ProjectSheet; projectName: string; w: number; h: number; issueDate?: string }) {
   const { t } = useTranslation();
   const logo = useEffectiveTitleBlock()?.[LOGO_FIELD];
   const edited = useProjectStore((s) => s.titleBlockTemplate);
-  const lookup = useSheetParamLookup(sheet, projectName);
+  const lookup = useSheetParamLookup(sheet, projectName, issueDate);
   const standard = useGraphicStandard();
   const template = useMemo(() => edited ?? standardTitleBlock(t, standard), [edited, t, standard]);
   const frame = frameOf(sheet);

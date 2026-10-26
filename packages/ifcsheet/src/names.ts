@@ -17,6 +17,10 @@
  */
 
 export { sheetNumber, sheetLevel, type SheetNumberOptions, type SheetLevelOptions } from './sheet-number.js';
+export {
+  LENGTH_UNITS, NUMBER_KINDS, MAX_DECIMALS, readUnitsAndNumbers, sheetFormat, languageOf, decimalMarkOf, decimalsOf, groupingOff, lengthUnitOf, intlLocaleOf,
+  type LengthUnit, type NumberKind, type UnitsAndNumbers, type SheetFormat, type SheetLocale,
+} from './units-and-numbers.js';
 
 export const ENGINE_NAMES_EN = {
   'names.project.untitled': 'Untitled project',
@@ -35,6 +39,10 @@ export const ENGINE_NAMES_EN = {
   'names.view.south': 'South Elevation',
   'names.view.west': 'West Elevation',
   'names.view.section': 'Section {mark}-{mark}',
+  // The starting view templates (#44), one per kind of view.
+  'names.viewTemplate.plan': 'Plans',
+  'names.viewTemplate.section': 'Sections',
+  'names.viewTemplate.elevation': 'Elevations',
 } as const;
 
 export type EngineNameKey = keyof typeof ENGINE_NAMES_EN;

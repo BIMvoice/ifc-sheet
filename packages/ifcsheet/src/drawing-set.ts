@@ -212,14 +212,14 @@ export interface SetInput {
 }
 
 /** One sheet of the set to be: its group, name and the drawings it holds. */
-interface SetRow {
+export interface SetRow {
   group: SetGroup;
   name: string;
   members: ProjectView[];
 }
 
 /** The rows of the starting set, in reading order: plans bottom storey first, elevations in pairs, sections in pairs. A group with nothing to show has no row. */
-function setRows(allViews: readonly ProjectView[]): SetRow[] {
+export function setRows(allViews: readonly ProjectView[]): SetRow[] {
   const rows: SetRow[] = [];
   // A detail, and the site plan, are hung where they are made, not by the starting set.
   const views = allViews.filter((v) => !v.detail && !(v.kind === 'plan' && v.site));

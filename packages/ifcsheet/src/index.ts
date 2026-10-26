@@ -28,14 +28,57 @@ export type {
   Paper, PaperSize, PhaseId, PhaseStyle, PlanProjectView, ProjectDocument, ProjectionMode, ProjectLevel, ProjectModelRef, ProjectSheet,
   ProjectView, ProjectViewBase, ProjectViewKind, SectionCustomPlane, SectionPlaneAxis, SectionProjectPlane, SectionProjectView,
   SheetFrame, SheetTemplate, SheetViewport, TemplateSeries, ThreeDProjection, ThreeDProjectView, TitleBlockPosition, ViewDetail,
-  ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster,
+  ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster, ProjectViewTemplate, TemplateGraphics, ViewTemplateKind,
+  ElementGraphics, ElementLineStyle, GlobalId, ResolvedViewGraphics, StyleRule, StyleRuleStyle,
 } from './document.js';
+
+// A view template's class and material mapping (#31)
+export {
+  CLASSIFICATION_BY, classificationOf, classifiedTypes, mappingsFor, matchKey, parseClassificationRows, readClassificationMapping, readClassificationMappings, readClassificationRule, classificationRuleOf, systemLabel, withRule,
+  type ClassificationBy, type ClassificationImport, type ClassificationMapping, type ClassificationModel, type ClassificationProblem, type ClassificationProblemKind, type ClassificationResult, type ClassificationRule, type ClassificationSystem,
+  type ClassifiedElement, type ClassifiedType, type ModelClassificationRef,
+} from './classification.js';
+export { classKey, itemRules, materialKey, ruleStyleFor, type ItemRules } from './style-rules.js';
+
+// View templates (#44): named graphics many views follow, and the one function that layers them
+export {
+  VIEW_CATEGORY_CLASSES, VIEW_TEMPLATE_KINDS, assignDefaultTemplates, defaultViewTemplates, hiddenClassesOf, resolveViewGraphics, resolveViewport,
+  ownGraphicsOf, templateGraphicsOf, templateKindOf, templateOf, untemplatedGraphics, viewportHiddenLayers,
+} from './view-templates.js';
+
+// Single elements in a view (#32, #33): hidden, drawn differently, one line hidden; all by GlobalId
+export {
+  categoryIdOf, elementShown, hasElementGraphics, hiddenElementIds, hiddenLineElement, hiddenLineEntry, lineHidden, lineKey, orphanElements, resolveElementGraphics, withoutElements,
+  type ElementStyle, type OrphanElement,
+} from './element-graphics.js';
+
+// The style of every face and line of a view (#34): one styler and one pen table for the drafting view, the sheets and every export
+export {
+  DASH_MM, DEFAULT_FACE_FILL, DEFAULT_INK, DEFAULT_VIEW_PRESET, HIDDEN_DASH_MM, PEN_TABLE, elementProperties, presetRules, rulesReadProperties, viewOverrideRules, viewStyler,
+  type ItemStyle, type PenKind, type PenTable, type StyleItem, type ViewStyleInputs, type ViewStyler, type WeightPair,
+} from './view-style.js';
+export { penGroups, penOrder, type PenGroup, type PenLayer } from './drawing-pens.js';
 
 // What the model lacks (the counting, `readModelFacts`, is in `/headless` and `/readiness-read`: it loads the parser)
 export { READINESS_EN, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from './readiness.js';
 
+// The bill of quantities (antemasuratoare, #75). Reading it from models is `/project`: it loads the parser.
+export {
+  BOQ_QUANTITIES, BOQ_UNITS, BOQ_UNIT_TEXT, COUNT_QUANTITY, MAX_WASTE, boqProblem, boqPropertyNames, hasSelector, newArticle, quantityDimension, readBoqArticle, readBoqArticles, unitDimension,
+  type BoqArticle, type BoqDimension, type BoqProblem, type BoqProblemKind, type BoqUnit,
+} from './boq.js';
+export { boqMissing, computeBoq, declared, picks, type BoqElement, type BoqElementRef, type BoqLine, type BoqMissing, type BoqQuantity, type BoqResult, type BoqTypeLine } from './boq-compute.js';
+export {
+  LIST_COUNT_ID, listFigureKind, listScheduleTable, readListScheduleDef,
+  type ListCell, type ListFigureKind, type ListScheduleColumn, type ListScheduleDef, type ListScheduleTable, type ListTableSource,
+} from './list-schedule.js';
+export { withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from './list-classification.js';
+export { boqLineText, boqNotes, boqTable, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from './boq-table.js';
+export { BOQ_WORDS_EN, BOQ_WORDS_RO, boqSayFor, fillTemplate, type BoqSay, type BoqWordKey } from './boq-words.js';
+
 // Names
 export { ENGINE_NAMES_EN, englishName, nameOf, setNameResolver, type EngineNameKey, type NameParams, type NameResolver } from './names.js';
+export { sheetNumber, sheetLevel, sheetFormat, readUnitsAndNumbers, type SheetLocale, type SheetFormat, type UnitsAndNumbers } from './names.js';
 
 // The title block's layout, parameters and printing
 export { printTitleBlock, sheetFields, sheetLookup } from './title-block-print.js';
@@ -60,8 +103,8 @@ export {
   filterReview, keepApart, placeTypes, placeTypesOf, resumeChecking, reviewCounts, reviewTypes, type ReviewEdit, type ReviewFilter, type ReviewType,
 } from './sub-report-review.js';
 export {
-  canSplit, MAX_KEPT_APART, readKeptApart, readSchedule, readSubReport, readSubReportFilter, scheduleFilterProperties, scheduleOf, subReportData, subReportsOf,
-  type ProjectSchedule, type ScheduleListKind, type SplitData, type SplitEntry, type SubReport, type SubReportFilter,
+  canSplit, MAX_KEPT_APART, readKeptApart, readSchedule, readScheduleClassification, readSubReport, readSubReportFilter, scheduleFilterProperties, scheduleOf, subReportData, subReportsOf,
+  type ProjectSchedule, type ScheduleClassification, type ScheduleListKind, type SplitData, type SplitEntry, type SubReport, type SubReportFilter,
 } from './sub-reports.js';
 export {
   EXTERIOR, INTERIOR, PROPERTY_OPS, filterPropertyNames, isOpenFilter, passesElementFilter, passesPropertyTest, predefinedTypeText, propertyValueText, readPropertyTest,
@@ -99,8 +142,25 @@ export { boundsFromIndex, createEntityBoundsLookup, getEntityBounds, indexMeshes
 
 export { FRAMING_RULE, boxGap, farElementLabel, frameElements, frameEntities, type FarElement, type FramedElement, type Framing, type FramingOptions } from './framing.js';
 
+// Set templates (#21): a set's sheets as rules, applied to another model
+export {
+  ANNOTATION_COMMANDS, RULED_SERIES, captureSetTemplate, findByRule, layoutOf, planStoreys, ruleOf, ruledViews,
+  type AnnotationCommand, type Annotations, type CaptureInput, type RuledSeries, type ScheduleRule, type SetTemplate, type SheetLayoutRule, type SheetRule, type SlotRule, type ViewRule,
+} from './set-template.js';
+export { applySetTemplate, type TemplateSet, type TemplateSetInput } from './set-template-apply.js';
+export { SET_TEMPLATE_FILE_FORMAT, SET_TEMPLATE_FILE_SUFFIX, SET_TEMPLATE_FILE_VERSION, parseSetTemplate, serializeSetTemplate } from './set-template-file.js';
+export { SET_TEMPLATE_EN, describeTemplateNote, type TemplateNote, type TemplateNoteKey } from './set-template-notes.js';
+
 // The starting set (pure: an opened model's facts in, a document out)
 export { SET_SECTIONS, generateDefaultSet, type DefaultSet, type DefaultSetOptions, type SetModel, type SetNote } from './default-set.js';
 
 // Opening an IFC, cutting drawings and writing files live in `@bimvoice/ifcsheet/headless` (`headless.ts`),
 // so a client of the layout alone (the web app) does not load the parser, the geometry engine or the writers through it.
+
+// Rooms and their areas (#42): the one rule for which space is a room and what its area is, and the room and area schedule built on it
+export { ROOM_AREA_NAMES, ROOM_AREA_QTO, meshFootprintArea, pickArea, roomArea, spaceRole, type AreaSource, type FootprintMesh, type RoomArea, type SpaceRole } from './room-areas.js';
+export {
+  ROOM_SCHEDULE_EN, ROOM_SCHEDULE_RO, roomSchedule, roomScheduleCsv, roomScheduleLines, roomScheduleRows, roomScheduleText, roomScheduleWords,
+  type RoomRecord, type RoomSchedule, type RoomScheduleLevel, type RoomScheduleLine, type RoomScheduleWords, type ScheduleLevelInfo,
+} from './room-schedule.js';
+export { estimatedAreas, type EstimatedAreas } from './room-estimates.js';
