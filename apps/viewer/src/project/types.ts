@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import type { TitleSource } from './title-block-sources';
 import type { TitleBlockParam } from './title-block-params';
 import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
@@ -65,8 +64,6 @@ export interface ProjectFieldTypes {}
 export interface ProjectDocument extends EngineDocument, ProjectFieldTypes {
   /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
   titleBlock?: Record<string, string>;
-  /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
-  titleBlockSources?: Record<string, TitleSource[]>;
   /** The user's own title block parameters, in order, each with its project-wide value (`title-block-params.ts`). */
   titleBlockParams?: TitleBlockParam[];
   /** The title block's layout once edited; absent: the standard layout (`title-block-template.ts`). */

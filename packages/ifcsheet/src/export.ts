@@ -16,6 +16,8 @@
  * the sheet SVG, which only the browser renders today. The DXF here carries
  * linework only; its text is written once the app's DXF writer moves here.
  *
+ * The title block's logo is drawn when it is a PNG or JPEG (`printableLogo`).
+ *
  * The drawings carry the app's pens (#34): each viewport's faces and lines as
  * `sheet-graphic.ts` grouped them through the view's styler, with the colour,
  * paper-mm width, dash and fill the app's sheet gives the same item.
@@ -96,6 +98,25 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
       // jsPDF sizes text in points.
       doc.setFontSize((t.size / 25.4) * 72);
       doc.text(t.text, t.at.x, t.at.y, { align: t.align ?? 'left', ...(t.angle ? { angle: t.angle } : {}) });
+    }
+    // The logo: fitted whole and centred in its box (the app's `xMidYMid meet`); in a strip it reads upward.
+    for (const image of sheet.images) {
+      try {
+        const { width, height, fileType } = doc.getImageProperties(image.src);
+        const turned = image.angle === 90;
+        // The image's own width runs along the box's height when turned.
+        const k = Math.min(image.box.w / (turned ? height : width), image.box.h / (turned ? width : height));
+        const w = width * k;
+        const h = height * k;
+        const cx = image.box.x + image.box.w / 2;
+        const cy = image.box.y + image.box.h / 2;
+        // jsPDF turns the image about the point it is given; a quarter counter-clockwise puts the picture's x range at [x - h, x] and its y range at [y + h - w, y + h].
+        if (turned) doc.addImage(image.src, fileType, cx + h / 2, cy + w / 2 - h, w, h, 'logo', 'FAST', 90);
+        else doc.addImage(image.src, fileType, cx - w / 2, cy - h / 2, w, h, 'logo', 'FAST');
+      } catch (error) {
+        // A file the browser showed but jsPDF cannot decode: the sheet prints without its logo.
+        console.warn('[ifcsheet] the logo could not be drawn in the PDF', error);
+      }
     }
     doc.outline.add(null, `${sheet.number} ${sheet.name}`, { pageNumber: i + 1 });
   });

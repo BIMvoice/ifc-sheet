@@ -13,9 +13,9 @@
  * grouped by `penGroups`, as the app's `viewport-pens.ts` does, so the same
  * view has the same colours, weights, dashes and fills in the app and here.
  * The web app draws its sheets as SVG through React (`components/viewer/sheets/`),
- * with hatches, symbols, annotation and the full title block on top; this
- * layout carries the geometry and pens of the same sheet and the fields the
- * engine knows (project, sheet number and name, scale, date). Moving the
+ * with hatches, symbols and annotation on top; this
+ * layout carries the geometry and pens of the same sheet and the title block
+ * the app prints (its layout, the fields the model fills, the revision, the logo). Moving the
  * app's hatches and symbols here is a follow-up.
  */
 
@@ -26,7 +26,9 @@ import { schemeLegend, viewportFills, type SheetFill } from './sheet-colours.js'
 import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
+import { LOGO_FIELD } from './title-block-fields.js';
 import { printTitleBlock, sheetLookup } from './title-block-print.js';
+import { standardTitleBlock } from './title-block-standard.js';
 import { resolveViewGraphics } from './view-templates.js';
 import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
@@ -59,6 +61,15 @@ export interface SheetPen {
   regions: Polyline[][];
 }
 
+/** An image on the paper, fitted whole and centred in `box` (paper mm): the title block's logo. */
+export interface SheetImage {
+  /** A PNG or JPEG data URL. */
+  src: string;
+  box: Rect;
+  /** Degrees counter-clockwise: 90 for a logo in a strip down the frame's side, which reads upward; absent is level. */
+  angle?: 90;
+}
+
 export interface SheetGraphic {
   sheetId: string;
   number: string;
@@ -78,6 +89,8 @@ export interface SheetGraphic {
   /** The sheet's own marks drawn with a plain pen: a colour legend's frame and swatch outlines. */
   marks: Polyline[];
   texts: SheetText[];
+  /** The images the sheet carries: the title block's logo. */
+  images: SheetImage[];
   /** The box each viewport's drawing is clipped to, paper mm: the room the layout made for it. */
   viewports: { viewId: string; box: Rect }[];
 }
@@ -85,29 +98,21 @@ export interface SheetGraphic {
 /** A rectangle as a closed run of points (the first repeated last), so it reads whole in an open-polyline layer. */
 const rect = (r: { x: number; y: number; w: number; h: number }): Polyline => [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }, { x: r.x, y: r.y }];
 
+/** The logo as the PDF can draw it: a PNG or JPEG data URL. An SVG logo, which the app shows, is not drawn here yet. */
+export function printableLogo(src: string | undefined): string | undefined {
+  return src && /^data:image\/(png|jpeg);base64,/i.test(src) ? src : undefined;
+}
+
 /**
- * The title block. A project that keeps a layout (`doc.titleBlockTemplate`: the
- * Romanian one, or any the app edited) prints that layout, as the app does; one
- * that does not gets the box, a rule under the project, and the fields below.
+ * The title block: the layout the project keeps (`doc.titleBlockTemplate`: the Romanian one, or any the app edited),
+ * else the standard one, as the app does (`title-block-standard.ts`). `projectFields` are the project's fields
+ * resolved from the model (`title-block-sources.ts`); without them the document's typed values are all there is.
  */
-function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scales: readonly number[]): { frame: Polyline[]; texts: SheetText[] } {
+function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scales: readonly number[], projectFields?: Record<string, string>): { frame: Polyline[]; texts: SheetText[]; images: SheetImage[] } {
   const tb = titleBlockRect(paper, frameOf(sheet));
   const scale = scales.length ? scales.map((s) => `1:${s}`).join(', ') : '';
-  if (doc.titleBlockTemplate) return printTitleBlock(doc.titleBlockTemplate, sheetLookup(sheet, doc, scale), tb, frameOf(sheet).titleBlock === 'right');
-  const fields = { ...doc.titleBlock, ...sheet.titleBlock };
-  const pad = 4;
-  const strip = tb.h > tb.w;
-  const ruleY = tb.y + (strip ? 40 : 16);
-  const line = (i: number) => ruleY + 8 + i * 7;
-  return {
-    frame: [rect(tb), [{ x: tb.x, y: ruleY }, { x: tb.x + tb.w, y: ruleY }]],
-    texts: [
-      { at: { x: tb.x + pad, y: tb.y + 10 }, text: fields.project || doc.name, size: 5 },
-      { at: { x: tb.x + pad, y: line(0) }, text: sheet.number, size: 6 },
-      { at: { x: tb.x + pad, y: line(1) }, text: sheet.name, size: 3.5 },
-      { at: { x: tb.x + pad, y: line(2) }, text: [scale, fields.date ?? ''].filter(Boolean).join('   '), size: 2.5 },
-    ].filter((t) => t.text),
-  };
+  const template = doc.titleBlockTemplate ?? standardTitleBlock();
+  return printTitleBlock(template, sheetLookup(sheet, doc, scale, projectFields), tb, frameOf(sheet).titleBlock === 'right', printableLogo((projectFields ?? doc.titleBlock)?.[LOGO_FIELD]));
 }
 
 /**
@@ -153,9 +158,11 @@ export function sheetGraphic(
   pens: PenTable = PEN_TABLE,
   /** The IfcMaterial a cut band is, for a template's material rules (#31). */
   materialOf?: ViewStyleInputs['materialOf'],
+  /** The project's title block fields as the model fills them (`projectTitleFields`); absent: the document's typed values. */
+  projectFields?: Record<string, string>,
 ): SheetGraphic {
   const paper = paperOf(sheet);
-  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], viewports: [] };
+  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], images: [], viewports: [] };
   const vps = sheet.viewports ?? [];
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
@@ -205,8 +212,9 @@ export function sheetGraphic(
     out.texts.push(...legend.texts);
   }
   out.pens.sort((a, b) => penOrder(a, pens.pens.cut) - penOrder(b, pens.pens.cut));
-  const block = titleBlock(sheet, doc, paper, [...new Set(vps.map((v) => v.scale))]);
+  const block = titleBlock(sheet, doc, paper, [...new Set(vps.map((v) => v.scale))], projectFields);
   out.frame.push(...block.frame);
   out.texts.push(...block.texts);
+  out.images.push(...block.images);
   return out;
 }

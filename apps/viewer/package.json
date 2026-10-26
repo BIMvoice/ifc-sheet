@@ -1,13 +1,17 @@
 {
   "name": "@ifc-lite/viewer",
   "version": "4.0.0",
-  "description": "IFC-Lite viewer application",
+  "description": "IfcSheet viewer app, built on ifc-lite",
   "private": true,
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/LTplus-AG/ifc-lite.git",
+    "url": "https://github.com/BIMvoice/ifcsheet.git",
     "directory": "apps/viewer"
+  },
+  "homepage": "https://github.com/BIMvoice/ifcsheet",
+  "bugs": {
+    "url": "https://github.com/BIMvoice/ifcsheet/issues"
   },
   "scripts": {
     "dev": "vite",

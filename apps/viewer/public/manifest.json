@@ -1,7 +1,7 @@
 {
-  "name": "IFClite Viewer",
-  "short_name": "IFClite",
-  "description": "High-performance web viewer for IFC files",
+  "name": "IfcSheet",
+  "short_name": "IfcSheet",
+  "description": "IfcSheet: drawings and documentation from IFC models",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1b26",

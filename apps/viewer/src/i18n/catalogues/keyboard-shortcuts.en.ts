@@ -46,8 +46,8 @@ export const keyboardShortcutsEn = {
   'keyboardShortcuts.about.versionLabel': 'v{version}',
   'keyboardShortcuts.about.homepageLink': 'ifclite.dev',
   'keyboardShortcuts.about.docsLink': 'Docs',
-  'keyboardShortcuts.about.githubLink': 'GitHub',
-  'keyboardShortcuts.about.reportIssueLink': 'Report issue',
+  'keyboardShortcuts.about.githubLink': 'IfcSheet on GitHub',
+  'keyboardShortcuts.about.reportIssueLink': 'Report an IfcSheet issue',
   'keyboardShortcuts.about.license': 'MPL-2.0',
   'keyboardShortcuts.about.packagesCount': { one: '{count} package', other: '{count} packages' },
 

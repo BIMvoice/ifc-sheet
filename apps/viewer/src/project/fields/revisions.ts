@@ -2,19 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import type { ProjectRevision } from '@bimvoice/ifcsheet';
 import { readRevisions } from '../revision-file';
 import { listField } from './define';
 
-/** One revision of the set: a letter or number, when, what changed, who made it. */
-export interface ProjectRevision {
-  id: string;
-  /** `A`, `B`, `01`: what the title block reads. */
-  code: string;
-  /** `YYYY-MM-DD`, or empty. */
-  date: string;
-  description: string;
-  by: string;
-}
+/** The record is the engine's (`packages/ifcsheet/src/revisions.ts`): the PDF's title block prints the same revision. */
+export type { ProjectRevision };
 
 declare module '../types' {
   interface ProjectFieldTypes {
