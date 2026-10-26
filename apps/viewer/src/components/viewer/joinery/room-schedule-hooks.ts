@@ -11,7 +11,7 @@
  */
 
 import { useMemo } from 'react';
-import type { SheetLocale } from '@bimvoice/ifcsheet/names';
+import { sheetLevel, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { roomSchedule, type RoomSchedule } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
@@ -61,7 +61,7 @@ export function roomScheduleLabelsOf(t: T, locale: SheetLocale, title: string, d
   const words: RoomSummaryWords = {
     heading: t('roomSum.heading'), level: t('roomSum.level'), su: t('roomSum.su'), sc: t('roomSum.sc'), sd: t('roomSum.sd'),
     building: t('roomSum.building'), noLevel: t('roomSched.noLevel'), atLeast: (value) => t('urban.atLeast', { value }),
-    notes: [t('roomSum.note.defs'), ...(lowerBound ? [t('roomSum.note.atLeast')] : [])],
+    notes: [t('roomSum.note.defs', { mark: sheetLevel(locale, 0) }), ...(lowerBound ? [t('roomSum.note.atLeast')] : [])],
   };
   return {
     locale, title, notes, summary: summary ? { summary, words } : null,
