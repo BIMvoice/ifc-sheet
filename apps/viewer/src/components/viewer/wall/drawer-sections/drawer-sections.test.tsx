@@ -28,7 +28,7 @@ describe('the project drawer sections', () => {
   it('keeps the drawer as it was: the library and comments above the list, then the list top to bottom', () => {
     assert.deepEqual(sectionsOf('top').map((s) => s.id), ['library', 'comments']);
     assert.deepEqual(sectionsOf('body').map((s) => s.id), [
-      'sheets', 'readiness', 'numbering', 'units', 'title-block', 'tag-fields', 'classification', 'view-templates', 'drawings', 'schedules', 'legends',
+      'sheets', 'readiness', 'numbering', 'units', 'title-block', 'tag-fields', 'materials', 'classification', 'view-templates', 'drawings', 'schedules', 'legends',
     ]);
   });
 

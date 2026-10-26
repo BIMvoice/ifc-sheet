@@ -52,6 +52,7 @@ import { wallExitsEn } from '../catalogues/wall-exits.en';
 import { wallFindEn } from '../catalogues/wall-find.en';
 import { wallKeyPresetsEn } from '../catalogues/wall-key-presets.en';
 import { wallKeysEn } from '../catalogues/wall-keys.en';
+import { wallMaterialsEn } from '../catalogues/wall-materials.en';
 import { wallReviewEn } from '../catalogues/wall-review.en';
 import { wallSectionsEn } from '../catalogues/wall-sections.en';
 import { wallEn } from '../catalogues/wall.en';
@@ -111,6 +112,7 @@ export const enSZ = {
   ...wallFindEn,
   ...wallKeyPresetsEn,
   ...wallKeysEn,
+  ...wallMaterialsEn,
   ...wallReviewEn,
   ...wallSectionsEn,
   ...wallEn,
