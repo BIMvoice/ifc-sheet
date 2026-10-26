@@ -21,6 +21,7 @@ import type { DraftEntity } from '@/drafting/types';
 import { useViewerStore } from '@/store';
 import { WALL_SKIN } from './set-skin';
 import { FindingList } from './FindingList';
+import { SheetPanel } from './SheetPanel';
 
 /**
  * #24: the list of what is missing follows the set. The model is the real AC20-FZK-Haus, its ground-floor plan drawn by the
@@ -81,6 +82,17 @@ describe('the list of what is missing follows the set (#24)', { skip: planModelM
     await waitFor(() => text(ui) !== before, 'the list changed');
     assert.deepEqual(untaggedDoors(), []);
     assert.doesNotMatch(text(ui), /door/i, 'the finding about doors is gone');
+  });
+
+  it('the sheet panel lists what is missing as it opens, and keeps it current, without a Refresh', async () => {
+    const sheet = useProjectStore.getState().sheets[0]!;
+    const noop = () => {};
+    const ui = render(<SheetPanel sheet={sheet} viewport={null} box={null} viewportName="" onExportSvg={noop} onExportDxf={noop} onPrint={noop} />);
+    assert.match(text(ui), /door/i, 'listed on mount');
+    const before = text(ui);
+    act(() => { useProjectStore.setState({ drafts: [...useProjectStore.getState().drafts, tag(guids.at(-1)!)] }); });
+    await waitFor(() => text(ui) !== before, 'the list changed');
+    assert.doesNotMatch(text(ui), /door/i, 'the door finding is gone');
   });
 
   it('clearing a title-block field adds a finding', async () => {
