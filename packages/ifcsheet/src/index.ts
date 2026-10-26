@@ -69,11 +69,13 @@ export {
 } from './boq.js';
 export { boqMissing, computeBoq, declared, picks, type BoqElement, type BoqElementRef, type BoqLine, type BoqMissing, type BoqQuantity, type BoqResult, type BoqTypeLine } from './boq-compute.js';
 export {
-  LIST_COUNT_ID, listFigureKind, listScheduleTable, readListScheduleDef,
+  LIST_COUNT_ID, listExportTable, listFigureKind, listScheduleTable, readListScheduleDef,
   type ListCell, type ListFigureKind, type ListScheduleColumn, type ListScheduleDef, type ListScheduleTable, type ListTableSource,
 } from './list-schedule.js';
-export { withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from './list-classification.js';
+export { withListClassification, withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from './list-classification.js';
 export { boqLineText, boqNotes, boqTable, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from './boq-table.js';
+export { csvDelimiter, exportCsv, type ExportCell, type ExportTable, type ScheduleExport } from './schedule-csv.js';
+export { LIST_WORDS_EN, LIST_WORDS_RO, listWordsFor } from './list-words.js';
 export { BOQ_WORDS_EN, BOQ_WORDS_RO, boqSayFor, fillTemplate, type BoqSay, type BoqWordKey } from './boq-words.js';
 
 // Names
@@ -158,9 +160,9 @@ export { SET_SECTIONS, generateDefaultSet, type DefaultSet, type DefaultSetOptio
 // so a client of the layout alone (the web app) does not load the parser, the geometry engine or the writers through it.
 
 // Rooms and their areas (#42): the one rule for which space is a room and what its area is, and the room and area schedule built on it
-export { ROOM_AREA_NAMES, ROOM_AREA_QTO, meshFootprintArea, pickArea, roomArea, spaceRole, type AreaSource, type FootprintMesh, type RoomArea, type SpaceRole } from './room-areas.js';
+export { ROOM_AREA_NAMES, ROOM_AREA_QTO, meshFootprintArea, meshFootprintPerimeter, pickArea, roomArea, spaceRole, type AreaSource, type FootprintMesh, type RoomArea, type SpaceRole } from './room-areas.js';
 export {
-  ROOM_SCHEDULE_EN, ROOM_SCHEDULE_RO, roomSchedule, roomScheduleCsv, roomScheduleLines, roomScheduleRows, roomScheduleText, roomScheduleWords,
+  ROOM_SCHEDULE_EN, ROOM_SCHEDULE_RO, roomSchedule, roomScheduleCsv, roomScheduleLines, roomScheduleRows, roomScheduleTable, roomScheduleText, roomScheduleWords,
   type RoomRecord, type RoomSchedule, type RoomScheduleLevel, type RoomScheduleLine, type RoomScheduleWords, type ScheduleLevelInfo,
 } from './room-schedule.js';
 export { estimatedAreas, type EstimatedAreas } from './room-estimates.js';

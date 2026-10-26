@@ -94,6 +94,16 @@
       "types": "./dist/annotated-ifc.d.ts",
       "import": "./dist/annotated-ifc.js",
       "default": "./dist/annotated-ifc.js"
+    },
+    "./list-projection": {
+      "types": "./dist/list-projection.d.ts",
+      "import": "./dist/list-projection.js",
+      "default": "./dist/list-projection.js"
+    },
+    "./list-words": {
+      "types": "./dist/list-words.d.ts",
+      "import": "./dist/list-words.js",
+      "default": "./dist/list-words.js"
     }
   },
   "scripts": {
@@ -108,8 +118,10 @@
     "@ifc-lite/drawing-2d": "workspace:^",
     "@ifc-lite/export": "workspace:^",
     "@ifc-lite/geometry": "workspace:^",
+    "@ifc-lite/lists": "workspace:^",
     "@ifc-lite/mutations": "workspace:^",
     "@ifc-lite/parser": "workspace:^",
+    "@ifc-lite/rules": "workspace:^",
     "fflate": "^0.8.3",
     "jspdf": "^4.2.1"
   },

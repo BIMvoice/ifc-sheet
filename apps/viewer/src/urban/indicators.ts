@@ -120,6 +120,8 @@ export interface UrbanIndicators {
   adAtLeast: boolean;
   adCutAtLeast: boolean;
   au: number | null;
+  /** m² of the rooms on no storey: in `au`, in no storey's `usefulArea`. Null when there are none. */
+  auNoStorey: number | null;
   auByCategory: { category: string; area: number }[];
   siteArea: number | null;
   /** Percent. */
@@ -205,11 +207,13 @@ export function urbanIndicators(input: UrbanInput): UrbanIndicators {
   const useful = new Map<number, number>();
   const byCategory = new Map<string, number>();
   let au: number | null = null;
+  let auNoStorey: number | null = null;
   for (const space of input.spaces) {
     if (space.area === null || !Number.isFinite(space.area)) continue;
     au = (au ?? 0) + space.area;
     byCategory.set(space.category, (byCategory.get(space.category) ?? 0) + space.area);
     if (space.storey !== null) useful.set(space.storey, (useful.get(space.storey) ?? 0) + space.area);
+    else auNoStorey = (auNoStorey ?? 0) + space.area;
   }
   const rows: UrbanStoreyRow[] = input.storeys.map((s, i) => {
     const h = height[i];
@@ -245,6 +249,7 @@ export function urbanIndicators(input: UrbanInput): UrbanIndicators {
     adAtLeast: rows.some((r) => r.unmeasured > 0),
     adCutAtLeast: rows.some((r) => r.inCut && r.unmeasured > 0),
     au,
+    auNoStorey,
     auByCategory: [...byCategory].map(([category, area]) => ({ category, area })).sort((a, b) => a.category.localeCompare(b.category)),
     siteArea,
     pot: siteArea !== null && ac !== null ? (ac / siteArea) * 100 : null,

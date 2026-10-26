@@ -21,6 +21,7 @@ import { materialReport, materialReportText, readProjectMaterials } from './mate
 import { boq } from './cli-boq.js';
 import { classify } from './cli-classify.js';
 import { rooms } from './cli-rooms.js';
+import { list, listSchedulesOn, listTableText } from './cli-list.js';
 
 /** Where `run` writes its messages; defaults to the process streams. */
 export interface CliIo {
@@ -39,11 +40,12 @@ export const EXIT = { ok: 0, failed: 1, usage: 2 } as const;
 const USAGE = `ifcsheet: drawing sets from IFC models
 
 Usage:
-  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--include-far-elements]
+  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
   ifcsheet materials <model.ifc> [--project <file>] [--json]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
   ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]
+  ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]
   ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]
 
 Commands:
@@ -64,6 +66,9 @@ Commands:
   boq     The bill of quantities (antemasuratoare): the articles of the project file, each with its total
           in its own unit, from the quantities the model declares (never zero for a missing one: the elements
           that lack it are named). Text, CSV with --csv, JSON with --json; --detail adds a row per type.
+  list    A schedule built from the Lists engine (the app's Schedule from the model): the elements of the project's list definition by
+          class, storey and property, its columns, grouped and summed, with the total. The rows and totals are the Lists panel's, the CSV
+          is the app's file. --schedule names which one (its id or name; the only one when the project has one). Text, CSV or JSON.
   classify  The model's types with their classification code: the model's own IfcClassificationReference first, else the
           project's mapping (a type, a material or a class to the office's code). --system picks one of the project's
           systems (default: the first). Text, CSV with --csv, JSON with --json.
@@ -81,11 +86,13 @@ Options:
                    (default "{number} {sheet}": A-101 Ground floor.dxf). Plain ASCII, no path separators.
   --template <file> A set template (.bvset) for build: which sheets, which views on them, at which scale.
   --name <name>    The project name for the title blocks (default: the model's).
-  --project <file> A saved project (.ifclite-project.json) for check: its schedules, joinery catalogue and symbol mapping.
+  --project <file> A saved project (.ifclite-project.json): for check, its schedules, joinery catalogue and symbol mapping; for build, its list
+                   schedules are printed after the build (the PDF has no schedule sheet; the app draws those).
+  --schedule <id>  The list schedule that list runs: its id or name.
   --include-far-elements  Frame the views on everything the storeys contain, small elements far from the building too
                    (a survey point, an origin cube). By default they are left out of the framing only and named by check.
   --json           Print the check as JSON: { file, ready, findings: [{ kind, missing, effect, params }] } (with --project, also project).
-  --csv            Print the rooms schedule as CSV (plain numbers).
+  --csv            Print the rooms schedule or the list as CSV (plain numbers).
   --locale <l>     The language of the rooms schedule: ro writes "12,50" and the Romanian headings (default en).
   -h, --help       Show this help.
   -v, --version    Show the version.
@@ -108,6 +115,8 @@ interface BuildArgs {
   dxf?: string;
   name?: string;
   template?: string;
+  /** A saved project: its list schedules are printed after the build. */
+  project?: string;
   includeFarElements?: boolean;
 }
 
@@ -164,6 +173,21 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
       const file = join(args.dxf, dxfName(sheet.number, used));
       await writeFile(file, exportDxf(sheet));
       io.stdout(`${file}\n`);
+    }
+  }
+  if (args.project !== undefined) {
+    // The starting set has no schedule sheet (the app composes those): the project's list schedules are printed as text, the table `ifcsheet list` gives.
+    let projectText: string;
+    try { projectText = await readFile(args.project, 'utf8'); } catch (error) {
+      io.stderr(`ifcsheet: cannot read ${args.project}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
+      return EXIT.failed;
+    }
+    try {
+      const project = readProjectFile(projectText);
+      for (const { table } of listSchedulesOn(model, project.schedules, 'en', basename(args.model), project.classificationMappings)) io.stdout(`\n${listTableText(table)}`);
+    } catch (error) {
+      io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
+      return EXIT.failed;
     }
   }
   return EXIT.ok;
@@ -255,6 +279,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         name: { type: 'string' },
         template: { type: 'string' },
         project: { type: 'string' },
+        schedule: { type: 'string' },
         system: { type: 'string' },
         json: { type: 'boolean' },
         csv: { type: 'boolean' },
@@ -279,12 +304,12 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.ok;
   }
   const [command, ...rest] = positionals;
-  if (command !== 'build' && command !== 'check' && command !== 'boq' && command !== 'rooms' && command !== 'classify' && command !== 'materials') {
+  if (command !== 'build' && command !== 'check' && command !== 'boq' && command !== 'rooms' && command !== 'list' && command !== 'classify' && command !== 'materials') {
     io.stderr(`ifcsheet: unknown command "${command}"\n\n${USAGE}`);
     return EXIT.usage;
   }
   if (command === 'boq') {
-    if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values['include-far-elements'] || (values.csv && values.json)) {
+    if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values.schedule !== undefined || values['include-far-elements'] || (values.csv && values.json)) {
       io.stderr('ifcsheet boq takes one model, --project, --csv or --json, --detail and --locale: ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]\n');
       return EXIT.usage;
     }
@@ -295,8 +320,20 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
       return EXIT.failed;
     }
   }
+  if (command === 'list') {
+    if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values.handover || values.pattern || values.template !== undefined || values.detail || values.system !== undefined || values['include-far-elements'] || (values.csv && values.json)) {
+      io.stderr('ifcsheet list takes one model, --project, --schedule, --csv or --json and --locale: ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]\n');
+      return EXIT.usage;
+    }
+    try {
+      return await list({ model: rest[0], project: values.project, ...(values.schedule !== undefined ? { schedule: values.schedule } : {}), csv: values.csv === true, json: values.json === true, locale: values.locale ?? 'en' }, io);
+    } catch (error) {
+      io.stderr(`ifcsheet: list of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
   if (command === 'classify') {
-    if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values['include-far-elements'] || values.detail || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined || (values.csv && values.json)) {
+    if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values['include-far-elements'] || values.detail || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined || values.schedule !== undefined || (values.csv && values.json)) {
       io.stderr('ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n');
       return EXIT.usage;
     }
@@ -308,7 +345,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     }
   }
   if (command === 'rooms') {
-    if (rest.length !== 1 || values.out || values.dxf || values.name || values.project || values.handover || values.pattern || values.template !== undefined || values.detail || values['include-far-elements'] || (values.csv && values.json)) {
+    if (rest.length !== 1 || values.out || values.dxf || values.name || values.project || values.handover || values.pattern || values.template !== undefined || values.detail || values.schedule !== undefined || values['include-far-elements'] || (values.csv && values.json)) {
       io.stderr('ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n');
       return EXIT.usage;
     }
@@ -320,7 +357,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     }
   }
   if (command === 'check') {
-    if (rest.length !== 1 || values.out || values.dxf || values.name || values.csv || values.detail || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined) {
+    if (rest.length !== 1 || values.out || values.dxf || values.name || values.csv || values.detail || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined || values.schedule !== undefined) {
       io.stderr('ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n');
       return EXIT.usage;
     }
@@ -351,8 +388,8 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     io.stderr('ifcsheet build has no --json; it is an option of check.\n');
     return EXIT.usage;
   }
-  if (values.project !== undefined) {
-    io.stderr('ifcsheet build has no --project yet: nothing in the starting set reads the project. --project is an option of check.\n');
+  if (values.schedule !== undefined) {
+    io.stderr('ifcsheet build has no --schedule; it is an option of list.\n');
     return EXIT.usage;
   }
   if (rest.length !== 1 || (!values.out && !values.handover)) {
@@ -360,7 +397,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.usage;
   }
   try {
-    return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, includeFarElements: values['include-far-elements'] === true }, io);
+    return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true }, io);
   } catch (error) {
     io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
     return EXIT.failed;

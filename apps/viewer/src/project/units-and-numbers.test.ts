@@ -38,7 +38,7 @@ const textsOf = (prims: readonly { kind: string; text?: string }[]) => prims.fla
 const RESULT: UrbanIndicators = {
   storeys: [{ name: 'Ground', elevation: 2.7, height: 2.7, builtArea: 1234.5, usefulArea: 96, belowGround: false, ground: true, inCut: true, inCutByDefault: true, unmeasured: 0 }],
   ac: 120, ad: 240, adCut: 238.5, acAtLeast: false, adAtLeast: false, adCutAtLeast: false,
-  au: 195.25, auByCategory: [], siteArea: 600, pot: 20, cut: 0.4, terrainLevel: 0, zero: { elevation: 0, source: 'model' },
+  au: 195.25, auNoStorey: null, auByCategory: [], siteArea: 600, pot: 20, cut: 0.4, terrainLevel: 0, zero: { elevation: 0, source: 'model' },
 };
 const URBAN_LABELS = (locale: SheetLocale): UrbanLabels => ({
   locale, title: 'T', level: 'Level', elevation: 'Elevation', built: 'Built', useful: 'Useful', inCut: 'In CUT', yes: 'yes', no: 'no',

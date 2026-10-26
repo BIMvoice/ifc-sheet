@@ -170,10 +170,13 @@ describe.skipIf(!existsSync(FZK))('ifcsheet check --project, on AC20-FZK-Haus', 
     expect(c.err()).toMatch(/cannot read .*nope\.json: no such file/);
   }, 120_000);
 
-  it('does not take --project for build, which reads nothing from it', async () => {
+  it('takes --project for build to print the project\'s list schedules, and says when it cannot read it', async () => {
     const c = capture();
-    expect(await run(['build', FZK, '--out', join(scratch(), 'x.pdf'), '--project', 'p.json'], c.io)).toBe(EXIT.usage);
-    expect(c.err()).toContain('ifcsheet build has no --project');
+    expect(await run(['build', FZK, '--out', join(scratch(), 'x.pdf'), '--project', join(scratch(), 'missing.json')], c.io)).toBe(EXIT.failed);
+    expect(c.err()).toContain('no such file');
+    const d = capture();
+    expect(await run(['build', FZK, '--out', join(scratch(), 'x.pdf'), '--schedule', 'a'], d.io)).toBe(EXIT.usage);
+    expect(d.err()).toContain('ifcsheet build has no --schedule');
   });
 });
 

@@ -45,21 +45,7 @@ export function formatCellValue(value: CellValue): string {
   return String(value);
 }
 
-/** A column is numeric (summable) when every sampled non-empty value is a
- *  finite number and at least one such value exists. */
-export function detectNumericColumns(columns: ColumnDefinition[], rows: ListRow[]): boolean[] {
-  const sample = rows.slice(0, 120);
-  return columns.map((_, i) => {
-    let sawNumber = false;
-    for (const r of sample) {
-      const v = r.values[i];
-      if (v === null || v === undefined || v === '') continue;
-      if (typeof v === 'number' && Number.isFinite(v)) { sawNumber = true; continue; }
-      return false;
-    }
-    return sawNumber;
-  });
-}
+export { detectNumericColumns } from '@bimvoice/ifcsheet/list-projection';
 
 /** Content-aware default width: fits the header + the widest sampled value
  *  (≈7px/char), clamped to a readable range. */

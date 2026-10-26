@@ -8,22 +8,15 @@
  * Run when the button is pressed, so the file is the table as it stands. `null` when there is nothing to list.
  */
 
-import { listScheduleTable, type ListScheduleTable } from '@bimvoice/ifcsheet';
-import type { NumberKind } from '@bimvoice/ifcsheet/names';
+import { listExportTable, listScheduleTable } from '@bimvoice/ifcsheet';
 import { useViewerStore } from '@/store';
 import type { ProjectSchedule } from '@/project/types';
-import type { ExportTable, ScheduleExport } from '@/joinery/schedule-export';
+import type { ScheduleExport } from '@/joinery/schedule-export';
 import { prepareListProviders } from './prepare-providers';
 import { listTableSourceOf, runListSchedule, type ListSourceWords } from './list-schedule-run';
 
+export { listExportTable };
 export type ListExportWords = ListSourceWords & { yes: string; no: string };
-
-/** The table in the export writer's shape: a count has no decimals of its own, so it names no kind. */
-export function listExportTable(table: ListScheduleTable): ExportTable {
-  const kinds: Record<number, NumberKind> = {};
-  for (const [column, kind] of Object.entries(table.kinds)) if (kind !== 'count') kinds[Number(column)] = kind;
-  return { name: table.name, header: table.header, rows: table.rows, bold: table.bold, numeric: table.numeric, kinds };
-}
 
 export async function listScheduleExport(schedule: ProjectSchedule, words: ListExportWords): Promise<ScheduleExport | null> {
   if (!schedule.list) return null;
