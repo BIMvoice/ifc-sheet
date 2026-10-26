@@ -14,7 +14,7 @@
 import { IfcTypeEnum, RelationshipType, type QuantitySet, type SpatialNode } from '@ifc-lite/data';
 import type { MeshData } from '@ifc-lite/geometry';
 import { extractAllEntityAttributes, extractProjectUnits, extractQuantitiesOnDemand, ProjectUnits, type IfcDataStore } from '@ifc-lite/parser';
-import { meshFootprintArea, roomArea, spaceRole, type SpaceRole } from './room-areas.js';
+import { meshFootprintArea, meshFootprintPerimeter, roomArea, spaceRole, type SpaceRole } from './room-areas.js';
 import type { RoomRecord, ScheduleLevelInfo } from './room-schedule.js';
 
 export interface RoomsRead {
@@ -72,7 +72,7 @@ export function readRooms(ds: IfcDataStore, meshes: readonly MeshData[] = []): R
     const held = meshesOf.get(id);
     const { area, source } = roomArea(quantitySetsOf(ds, id), scale, held ? () => meshFootprintArea(held) : undefined);
     const level = storey === null ? -1 : storeyIds.indexOf(storey);
-    out.rooms.push({ id: ds.entities.getGlobalId(id) || `#${id}`, number: node.longName ? node.name : '', name: node.longName || node.name, level: level < 0 ? null : level, area, source });
+    out.rooms.push({ id: ds.entities.getGlobalId(id) || `#${id}`, number: node.longName ? node.name : '', name: node.longName || node.name, level: level < 0 ? null : level, area, source, perimeter: held ? meshFootprintPerimeter(held) || null : null });
   }
   return out;
 }

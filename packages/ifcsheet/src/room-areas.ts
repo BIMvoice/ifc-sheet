@@ -18,6 +18,8 @@
  *   the footprint of the space's own geometry (`meshFootprintArea`). The result
  *   says which of the two it is (`source`), and a caller that prints the area
  *   says so.
+ * - Its perimeter (`meshFootprintPerimeter`): the outline of that same footprint, from the geometry alone (the area may be
+ *   the model's own figure; the model's Perimeter quantity is not read).
  */
 
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
@@ -78,6 +80,70 @@ export function meshFootprintArea(meshes: readonly FootprintMesh[]): number {
     }
   }
   return twice / 2;
+}
+
+/** A millimetre: two vertices closer than this are one in a footprint's outline. */
+const OUTLINE_GRID = 1000;
+
+type Corner = readonly [number, number];
+
+/**
+ * The length of a closed solid's footprint outline, metres: the boundary of the same projection `meshFootprintArea` measures
+ * (courtyards of the footprint included). Each projected triangle is turned to face one way and its edges are added with a
+ * direction; an edge two faces share on the plan, one on each side (a fold of the solid), cancels, and what stays is the
+ * outline: the edges the top and the bottom of the solid both lie on the same side of. Faces standing upright project to
+ * nothing and are skipped. An edge is first cut at every vertex that lies on it, since the top and the bottom are not
+ * triangulated alike (a groove in the ceiling puts corners on a wall's line that the floor does not have). Measured from
+ * the geometry, not its bounding box: a U-shaped room has a longer outline than its box.
+ */
+export function meshFootprintPerimeter(meshes: readonly FootprintMesh[]): number {
+  const triangles: (readonly [Corner, Corner, Corner])[] = [];
+  const vertices = new Map<string, Corner>();
+  for (const { positions: p, indices: ix } of meshes) {
+    for (let i = 0; i + 2 < ix.length; i += 3) {
+      const c = [0, 1, 2].map((k): Corner => [Math.round(p[ix[i + k] * 3] * OUTLINE_GRID), Math.round(p[ix[i + k] * 3 + 2] * OUTLINE_GRID)]);
+      const turn = (c[1][0] - c[0][0]) * (c[2][1] - c[0][1]) - (c[2][0] - c[0][0]) * (c[1][1] - c[0][1]);
+      if (turn === 0) continue;
+      const ring: readonly [Corner, Corner, Corner] = turn > 0 ? [c[0], c[1], c[2]] : [c[0], c[2], c[1]];
+      triangles.push(ring);
+      for (const v of ring) vertices.set(`${v[0]},${v[1]}`, v);
+    }
+  }
+  const byX = [...vertices.values()].sort((a, b) => a[0] - b[0]);
+  const firstFrom = (x: number): number => { let lo = 0, hi = byX.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (byX[mid][0] < x) lo = mid + 1; else hi = mid; } return lo; };
+  /** The corners from `a` to `b` (a before b along the edge): `a`, every vertex lying strictly between them, `b`. */
+  const cut = (a: Corner, b: Corner): Corner[] => {
+    const on: { v: Corner; t: number }[] = [];
+    const [dx, dz] = [b[0] - a[0], b[1] - a[1]];
+    const [loZ, hiZ] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
+    for (let k = firstFrom(Math.min(a[0], b[0])); k < byX.length && byX[k][0] <= Math.max(a[0], b[0]); k++) {
+      const v = byX[k];
+      if (v[1] < loZ || v[1] > hiZ || dx * (v[1] - a[1]) - dz * (v[0] - a[0]) !== 0) continue;
+      const t = (v[0] - a[0]) * dx + (v[1] - a[1]) * dz;
+      if (t > 0 && t < dx * dx + dz * dz) on.push({ v, t });
+    }
+    return [a, ...on.sort((m, n) => m.t - n.t).map((o) => o.v), b];
+  };
+  const pieces = new Map<string, Corner[]>();
+  const segments = new Map<string, { net: number; length: number }>();
+  for (const ring of triangles) {
+    for (let k = 0; k < 3; k++) {
+      const [a, b] = [ring[k], ring[(k + 1) % 3]];
+      const forward = a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+      const [lo, hi] = forward ? [a, b] : [b, a];
+      const edge = `${lo[0]},${lo[1]},${hi[0]},${hi[1]}`;
+      const along = pieces.get(edge) ?? pieces.set(edge, cut(lo, hi)).get(edge)!;
+      for (let m = 0; m + 1 < along.length; m++) {
+        const key = `${along[m][0]},${along[m][1]},${along[m + 1][0]},${along[m + 1][1]}`;
+        const seg = segments.get(key) ?? { net: 0, length: Math.hypot(along[m + 1][0] - along[m][0], along[m + 1][1] - along[m][1]) / OUTLINE_GRID };
+        seg.net += forward ? 1 : -1;
+        segments.set(key, seg);
+      }
+    }
+  }
+  let total = 0;
+  for (const { net, length } of segments.values()) if (net !== 0) total += length;
+  return total;
 }
 
 /**

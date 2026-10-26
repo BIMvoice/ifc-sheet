@@ -30,6 +30,12 @@ import { collectUrbanAreas } from '@/urban/urban-models';
 import type { SiteAreaChoice } from '@/urban/site-area';
 import type { ScheduleExport } from '@/joinery/schedule-export';
 import { urbanResultOf } from '../urban/useUrban';
+import { collectRoomRecords } from '@/urban/urban-models';
+import { areaSummary, type AreaSummary } from '@/urban/area-summary';
+import { roomSchedule } from '@bimvoice/ifcsheet';
+import { roomScheduleExport } from '@/joinery/room-schedule-export';
+import type { RoomScheduleLabels } from '@/joinery/room-schedule-layout';
+import type { RoomScheduleData } from '../joinery/room-schedule-hooks';
 import { boqPropertyNames, boqTable, computeBoq, type BoqSay } from '@bimvoice/ifcsheet';
 import { collectBoqElements } from '@/boq/boq-models';
 import { listScheduleExport, type ListExportWords } from '@/lib/lists/list-schedule-export';
@@ -42,6 +48,8 @@ export interface ExportLabelSet {
   types: TypeQuantityLabels;
   register: RegisterLabels;
   urban: (title: string, areas: UrbanAreas, site: SiteAreaChoice) => UrbanLabels;
+  /** The room and area schedule's words; `summary` adds the Su, Sc, Sd block. */
+  rooms: (title: string, data: RoomScheduleData, summary: AreaSummary | null) => RoomScheduleLabels;
   /** The register's "as indicated" scale. */
   asIndicated: string;
   /** The bill of quantities' words. */
@@ -71,6 +79,17 @@ export async function readScheduleExport(schedule: ProjectSchedule, labels: Expo
       if (articles.length === 0) return null;
       const result = computeBoq(collectBoqElements(new Set(boqPropertyNames(articles))), articles);
       return { title, tables: [boqTable(result, labels.boq, { title, detail: schedule.detail === true })] };
+    }
+    case 'rooms': {
+      // The same read the sheet draws from (`collectRoomRecords`, the one behind Au), and the summary from the urban indicators the
+      // urban sheet prints: the footprints are measured by the geometry module, so wait for it.
+      await ensureWasm();
+      const levels = useProjectStore.getState().levels;
+      const { rooms, leftOut } = collectRoomRecords(levels);
+      if (rooms.length === 0) return null;
+      const data: RoomScheduleData = { schedule: roomSchedule(levels, rooms), leftOut };
+      const summary = areaSummary(urbanResultOf(collectUrbanAreas(), useProjectStore.getState()).result);
+      return roomScheduleExport(data.schedule, labels.rooms(title, data, summary));
     }
     case 'list': return listScheduleExport(schedule, labels.list);
     case 'register': {

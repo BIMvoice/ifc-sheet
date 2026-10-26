@@ -50,7 +50,7 @@ describe('a room\'s area', () => {
   });
 });
 
-const room = (id: string, number: string, name: string, level: number | null, area: number | null, source: RoomRecord['source'] = 'quantity'): RoomRecord => ({ id, number, name, level, area, source: area === null ? null : source });
+const room = (id: string, number: string, name: string, level: number | null, area: number | null, source: RoomRecord['source'] = 'quantity'): RoomRecord => ({ id, number, name, level, area, source: area === null ? null : source, perimeter: area === null ? null : 4 * Math.sqrt(area) });
 const LEVELS = [{ name: 'Attic', elevation: 2.7 }, { name: 'Ground', elevation: 0 }];
 
 describe('the room and area schedule', () => {
@@ -92,9 +92,9 @@ describe('the room and area schedule', () => {
   it('writes CSV in plain numbers with where each area comes from, and guards model text against formulas', () => {
     const csv = roomScheduleCsv(roomSchedule(LEVELS, [room('a', '1', '=HYPERLINK("x")', 1, 7.5), room('b', '2', 'Loft, big', 1, 4, 'geometry')]));
     const lines = csv.split('\n');
-    expect(lines[0]).toBe('No.,Room,Level,Useful area m²,Source');
-    expect(lines[1]).toBe('1,"\'=HYPERLINK(""x"")",Ground,7.5,model quantity');
-    expect(lines[2]).toBe('2,"Loft, big",Ground,4,geometry');
-    expect(lines[lines.length - 1]).toBe(',Total building (Au),,11.5,');
+    expect(lines[0]).toBe('No.,Room,Level,Useful area m²,Perimeter m,Source');
+    expect(lines[1]).toBe('1,"\'=HYPERLINK(""x"")",Ground,7.5,10.954451,model quantity');
+    expect(lines[2]).toBe('2,"Loft, big",Ground,4,8,geometry');
+    expect(lines[lines.length - 1]).toBe(',Total building (Au),,11.5,,');
   });
 });

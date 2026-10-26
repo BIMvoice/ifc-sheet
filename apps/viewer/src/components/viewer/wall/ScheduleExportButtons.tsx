@@ -15,6 +15,7 @@ import type { ProjectSchedule } from '@/project/types';
 import { CSV_MIME, csvDelimiter, exportCsv, exportXlsx, scheduleFileName, XLSX_MIME } from '@/joinery/schedule-export';
 import { useRegisterLabels, useRoomFinishLabels, useScheduleLabels, useTakeoffLabels, useTypeQuantityLabels } from '../joinery/ScheduleGraphic';
 import { urbanLabelsOf } from '../urban/useUrban';
+import { roomScheduleLabelsOf } from '../joinery/room-schedule-hooks';
 import { readScheduleExport, type ExportLabelSet } from './schedule-export-read';
 import { useBoqSay } from '../boq/useBoq';
 import { useListWords } from '../lists/useListSchedule';
@@ -41,6 +42,7 @@ export function useScheduleExportLabels(): ExportLabelSet {
     },
     takeoff, finishes, types, register, boq, list, asIndicated: t('sheets.asIndicated'),
     urban: (title, areas, site) => urbanLabelsOf(t, locale, title, areas, site),
+    rooms: (title, data, summary) => roomScheduleLabelsOf(t, locale, title, data, summary),
   }), [joinery, takeoff, finishes, types, register, boq, list, t, locale]);
 }
 

@@ -38,7 +38,7 @@ import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 import { useElementViews, type ViewRequest } from './useElementViews';
 import { useTableSheetLayouts } from './useTableSheetLayouts';
 import { useSheetLocale } from '@/project/units-and-numbers';
-import { useRoomScheduleData, useRoomScheduleLabels } from './room-schedule-hooks';
+import { useRoomScheduleData, useRoomScheduleLabels, useRoomSummary } from './room-schedule-hooks';
 
 const FONT = 'ui-sans-serif, system-ui, sans-serif';
 
@@ -189,7 +189,8 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const urbanLabels = useUrbanLabels('', urban?.areas ?? null, urban?.site);
   // The room schedule reads the rooms: only when the sheet shows it.
   const roomData = useRoomScheduleData(places('rooms'));
-  const roomLabels = useRoomScheduleLabels('', roomData);
+  const roomSummary = useRoomSummary(places('rooms'));
+  const roomLabels = useRoomScheduleLabels('', roomData, roomSummary);
   // The joinery schedules on this sheet: their data once, for the layout and for the views cut from the models. Keyed on WHICH
   // schedules the sheet holds, not on its viewports: a viewport written (a continuation page added or moved) must not drop the views,
   // or the page count flips between "with" and "without" them and the continuation sheets are removed and made again without end.

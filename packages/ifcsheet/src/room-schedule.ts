@@ -15,6 +15,7 @@ import { escapeCsvCell } from '@ifc-lite/export';
 import { sheetNumber } from './sheet-number.js';
 import { languageOf, type SheetLocale } from './units-and-numbers.js';
 import type { AreaSource } from './room-areas.js';
+import type { ExportCell, ExportTable } from './schedule-csv.js';
 
 export interface RoomRecord {
   /** The space's GlobalId (or its model and express id): what two reads of the same room agree on. */
@@ -28,6 +29,8 @@ export interface RoomRecord {
   /** m²; null when neither the model nor the geometry gives one. */
   area: number | null;
   source: AreaSource | null;
+  /** m, the outline of the footprint of the room's geometry (`meshFootprintPerimeter`, the footprint the area falls back to); null without geometry. */
+  perimeter: number | null;
 }
 
 export interface ScheduleLevelInfo {
@@ -86,6 +89,8 @@ export interface RoomScheduleWords {
   room: string;
   level: string;
   area: string;
+  /** The heading of the perimeter column (metres). */
+  perimeter: string;
   /** "Total {level}" and the building's, as the table's total rows say them. */
   levelTotal: (level: string) => string;
   total: string;
@@ -97,13 +102,13 @@ export interface RoomScheduleWords {
 }
 
 export const ROOM_SCHEDULE_EN: RoomScheduleWords = {
-  number: 'No.', room: 'Room', level: 'Level', area: 'Useful area m²', levelTotal: (l) => `Total ${l}`, total: 'Total building (Au)',
+  number: 'No.', room: 'Room', level: 'Level', area: 'Useful area m²', perimeter: 'Perimeter m', levelTotal: (l) => `Total ${l}`, total: 'Total building (Au)',
   source: 'Source', quantity: 'model quantity', geometry: 'geometry', noLevel: 'No level',
 };
 
 /** Romanian, with the terms of `ro-glossary.md` (the app prints the same words). */
 export const ROOM_SCHEDULE_RO: RoomScheduleWords = {
-  number: 'Nr.', room: 'Încăpere', level: 'Nivel', area: 'Arie utilă m²', levelTotal: (l) => `Total ${l}`, total: 'Total clădire (Au)',
+  number: 'Nr.', room: 'Încăpere', level: 'Nivel', area: 'Arie utilă m²', perimeter: 'Perimetru m', levelTotal: (l) => `Total ${l}`, total: 'Total clădire (Au)',
   source: 'Sursă', quantity: 'cantitate din model', geometry: 'geometrie', noLevel: 'Fără nivel',
 };
 
@@ -116,6 +121,8 @@ export interface RoomScheduleLine {
   name: string;
   level: string;
   area: number | null;
+  /** Metres; null for a total and for a room without geometry. */
+  perimeter: number | null;
   source: AreaSource | null;
 }
 
@@ -124,32 +131,49 @@ export function roomScheduleLines(schedule: RoomSchedule, words: RoomScheduleWor
   const out: RoomScheduleLine[] = [];
   for (const level of schedule.levels) {
     const name = level.name || words.noLevel;
-    for (const r of level.rooms) out.push({ kind: 'room', number: r.number, name: r.name, level: name, area: r.area, source: r.source });
-    out.push({ kind: 'levelTotal', number: '', name: words.levelTotal(name), level: name, area: level.total, source: null });
+    for (const r of level.rooms) out.push({ kind: 'room', number: r.number, name: r.name, level: name, area: r.area, perimeter: r.perimeter, source: r.source });
+    out.push({ kind: 'levelTotal', number: '', name: words.levelTotal(name), level: name, area: level.total, perimeter: null, source: null });
   }
-  out.push({ kind: 'total', number: '', name: words.total, level: '', area: schedule.total, source: null });
+  out.push({ kind: 'total', number: '', name: words.total, level: '', area: schedule.total, perimeter: null, source: null });
   return out;
 }
 
 const NONE = '–';
+const round6 = (v: number): number => Math.round(v * 1e6) / 1e6;
 
-/** The table as cells of text, the header row first: number, room, level, area (figures written for `locale`, `–` for a room with none). What the text, and a sheet that prints the schedule, are made of. */
+/** The table as cells of text, the header row first: number, room, level, area, perimeter (figures written for `locale`, `–` for a room with none). What the text, and a sheet that prints the schedule, are made of. */
 export function roomScheduleRows(schedule: RoomSchedule, locale: SheetLocale = 'en'): string[][] {
   const words = roomScheduleWords(languageOf(locale));
-  return [[words.number, words.room, words.level, words.area], ...roomScheduleLines(schedule, words).map((l) => [l.number, l.name, l.kind === 'room' ? l.level : '', l.area === null ? NONE : sheetNumber(locale, l.area, 2, { kind: 'area' })])];
+  return [[words.number, words.room, words.level, words.area, words.perimeter], ...roomScheduleLines(schedule, words).map((l) => [l.number, l.name, l.kind === 'room' ? l.level : '', l.area === null ? NONE : sheetNumber(locale, l.area, 2, { kind: 'area' }), l.kind !== 'room' ? '' : l.perimeter === null ? NONE : sheetNumber(locale, l.perimeter, 2, { kind: 'length' })])];
 }
 
 /** The table as aligned text, areas written in `locale` ("12,50" in Romanian). */
 export function roomScheduleText(schedule: RoomSchedule, locale: SheetLocale = 'en'): string {
   const rows = roomScheduleRows(schedule, locale);
   const widths = rows[0].map((_, c) => Math.max(...rows.map((r) => [...r[c]].length)));
-  const pad = (text: string, c: number) => (c === 3 ? text.padStart(widths[c]) : text.padEnd(widths[c]));
+  const pad = (text: string, c: number) => (c >= 3 ? text.padStart(widths[c]) : text.padEnd(widths[c]));
   return rows.map((r) => r.map((text, c) => pad(text, c)).join('  ').trimEnd()).join('\n');
 }
 
 /** The table as CSV: plain numbers (a machine reads them), a column saying where each area comes from, model text escaped by the one CSV escaper (`@ifc-lite/export`). */
 export function roomScheduleCsv(schedule: RoomSchedule, locale: SheetLocale = 'en'): string {
   const words = roomScheduleWords(languageOf(locale));
-  const lines = roomScheduleLines(schedule, words).map((l) => [l.number, l.name, l.kind === 'room' ? l.level : '', l.area === null ? '' : String(Math.round(l.area * 1e6) / 1e6), l.source === 'quantity' ? words.quantity : l.source === 'geometry' ? words.geometry : '']);
-  return [[words.number, words.room, words.level, words.area, words.source], ...lines].map((r) => r.map((v) => escapeCsvCell(v)).join(',')).join('\n');
+  const lines = roomScheduleLines(schedule, words).map((l) => [l.number, l.name, l.kind === 'room' ? l.level : '', l.area === null ? '' : String(round6(l.area)), l.perimeter === null ? '' : String(round6(l.perimeter)), l.source === 'quantity' ? words.quantity : l.source === 'geometry' ? words.geometry : '']);
+  return [[words.number, words.room, words.level, words.area, words.perimeter, words.source], ...lines].map((r) => r.map((v) => escapeCsvCell(v)).join(',')).join('\n');
+}
+
+/**
+ * The table as an `ExportTable` for the one CSV and XLSX writer (`schedule-csv.ts`): the rows the sheet prints, level headings
+ * and totals in bold, the areas and perimeters as numbers (never text) with their kinds, so the XLSX gives them the project's
+ * decimals (#88).
+ */
+export function roomScheduleTable(schedule: RoomSchedule, words: RoomScheduleWords, notes: readonly string[] = []): ExportTable {
+  const rows: ExportCell[][] = [];
+  const bold: number[] = [];
+  roomScheduleLines(schedule, words).forEach((l, i, lines) => {
+    if (l.kind === 'room' && lines[i - 1]?.kind !== 'room') { bold.push(rows.length); rows.push(['', l.level, '', null, null]); }
+    if (l.kind !== 'room') bold.push(rows.length);
+    rows.push([l.number, l.name, l.kind === 'room' ? l.level : '', l.area === null ? null : round6(l.area), l.perimeter === null ? null : round6(l.perimeter)]);
+  });
+  return { name: words.room, header: [words.number, words.room, words.level, words.area, words.perimeter], rows, bold, numeric: [3, 4], kinds: { 3: 'area', 4: 'length' }, notes };
 }

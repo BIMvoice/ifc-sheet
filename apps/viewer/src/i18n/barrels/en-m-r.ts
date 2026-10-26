@@ -48,6 +48,7 @@ import { roofEn } from '../catalogues/roof.en';
 import { roomFinishesEn } from '../catalogues/room-finishes.en';
 import { roomLayoutEn } from '../catalogues/room-layout.en';
 import { roomScheduleEn } from '../catalogues/room-schedule.en';
+import { roomSummaryEn } from '../catalogues/room-summary.en';
 import { roomToolEn } from '../catalogues/room-tool.en';
 
 /** The catalogues whose file starts with `m` to `r` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
@@ -98,5 +99,6 @@ export const enMR = {
   ...roomFinishesEn,
   ...roomLayoutEn,
   ...roomScheduleEn,
+  ...roomSummaryEn,
   ...roomToolEn,
 } as const;

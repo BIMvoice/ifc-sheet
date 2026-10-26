@@ -41,7 +41,7 @@ import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { storeyOfElement } from '@/project/effective-storey';
 import { quantityScales } from '@/joinery/material-takeoff-models';
-import { estimatedAreas, meshFootprintArea, pickArea, roomArea, spaceRole, type EstimatedAreas, type RoomRecord } from '@bimvoice/ifcsheet';
+import { estimatedAreas, meshFootprintArea, meshFootprintPerimeter, pickArea, roomArea, spaceRole, type EstimatedAreas, type RoomRecord } from '@bimvoice/ifcsheet';
 import type { ProjectLevel } from '@/project/types';
 import { getGlobalRenderer } from '@/hooks/useBCF';
 import { storeyFootprint, type PlanMesh } from './footprint';
@@ -175,25 +175,25 @@ export function collectRoomRecords(levels: readonly ProjectLevel[]): { rooms: Ro
     const levelOf = levelResolver(modelId, store, levels);
     const scales = scalesOf(store);
     const isSpace = (id: number) => !view?.isDeleted(id) && (store.entities.getTypeName(id) ?? '').toUpperCase() === 'IFCSPACE';
-    // The meshes of the spaces, found once and only when a room states no area.
+    // The meshes of the spaces, grouped once per model: the footprint the perimeter is measured on, and the area when a room states none.
     let meshesOfSpace: Map<number, PlanMesh[]> | null = null;
-    const footprintOf = (id: number) => () => {
+    const meshesOf = (id: number): PlanMesh[] | undefined => {
       if (!meshesOfSpace) {
         meshesOfSpace = new Map();
         for (const mesh of model.geometryResult?.meshes ?? []) (meshesOfSpace.get(mesh.expressId) ?? meshesOfSpace.set(mesh.expressId, []).get(mesh.expressId)!).push(mesh);
       }
-      const held = meshesOfSpace.get(id + offset);
-      return held?.length ? meshFootprintArea(held) : null;
+      return meshesOfSpace.get(id + offset);
     };
     for (const { expressId: id } of iterateEffectiveEntityIds(store, view ?? null, ['IFCSPACE'])) {
       const role = spaceRole(enumAttr(store, view, id, 'PredefinedType'), store.relationships?.getRelated(id, RelationshipType.Aggregates, 'forward').some(isSpace) ?? false);
       if (role !== 'room') { leftOut[role === 'external' ? 'external' : role === 'gfa' ? 'gfa' : 'parents']++; continue; }
       const longName = textAttr(store, view, id, 'LongName');
       const name = provider.getEntityName(id);
-      const { area, source } = roomArea(provider.getQuantitySets(id), scales.area, footprintOf(id));
+      const held = meshesOf(id);
+      const { area, source } = roomArea(provider.getQuantitySets(id), scales.area, held?.length ? () => meshFootprintArea(held) : undefined);
       rooms.push({
         id: provider.getEntityGlobalId(id) || `${modelId}#${id}`, number: longName ? name : '', name: longName || name || `#${id}`,
-        level: levelOf(id), area, source, category: provider.getEntityObjectType(id) || longName || name || `#${id}`,
+        level: levelOf(id), area, source, perimeter: held?.length ? meshFootprintPerimeter(held) || null : null, category: provider.getEntityObjectType(id) || longName || name || `#${id}`,
       });
     }
   }

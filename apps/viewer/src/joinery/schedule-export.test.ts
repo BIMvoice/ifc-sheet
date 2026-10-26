@@ -72,7 +72,7 @@ describe('the urban indicators', () => {
       { name: 'Keller', elevation: -2.4, height: 2.4, builtArea: 1234.5, usefulArea: null, belowGround: true, ground: false, inCut: false, inCutByDefault: false, unmeasured: 0 },
     ],
     ac: 120, ad: 240, adCut: 238.5, acAtLeast: true, adAtLeast: false, adCutAtLeast: false,
-    au: 195.25, auByCategory: [{ category: 'Flur', area: 12.5 }],
+    au: 195.25, auNoStorey: null, auByCategory: [{ category: 'Flur', area: 12.5 }],
     siteArea: 600, pot: 20, cut: 0.4, terrainLevel: -1.5, zero: { elevation: 0, source: 'model' },
   };
   const labels: UrbanLabels = {
