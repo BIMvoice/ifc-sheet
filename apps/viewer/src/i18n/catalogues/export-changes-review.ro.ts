@@ -50,4 +50,25 @@ export const exportChangesReviewRo = {
   'exportChangesReviewDialog.cancelButton': 'Anulează',
   'exportChangesReviewDialog.exportingLabel': 'Se exportă...',
   'exportChangesReviewDialog.exportButton': 'Exportă',
+  'exportChangesReviewDialog.toast.changedWhileExporting': 'Modificări făcute în timpul exportului: verificați lista actualizată și confirmați din nou.',
+  'exportChangesReviewDialog.toast.changedSinceReview': 'Modificări făcute de la deschiderea revizuirii: verificați lista actualizată și confirmați din nou.',
+  'exportChangesReviewDialog.toast.exportFailed': 'Exportul a eșuat: {reason}',
+  'exportChangesReviewDialog.toast.unknownError': 'Eroare necunoscută',
+  'exportChangesReviewDialog.toast.noChanges': 'Nu există modificări de exportat',
+  'exportChangesReviewDialog.toast.exportedFile': {
+    one: 'Exportat {name} (o modificare)',
+    few: 'Exportat {name} ({count} modificări)',
+    other: 'Exportat {name} ({count} de modificări)',
+  },
+  'exportChangesReviewDialog.toast.exportedModels': {
+    one: 'Exportat: {models} (o modificare)',
+    few: 'Exportat: {models} ({count} modificări)',
+    other: 'Exportat: {models} ({count} de modificări)',
+  },
+  'exportChangesReviewDialog.toast.exportedPartial': 'Exportate {exported} din {models}; omise: {count} ({reason})',
+  'exportChangesReviewDialog.toast.psetsLeftOut': {
+    one: 'un set de proprietăți gol a fost omis (IFCX nu poate reprezenta un set gol)',
+    few: '{count} seturi de proprietăți goale au fost omise (IFCX nu poate reprezenta un set gol)',
+    other: '{count} de seturi de proprietăți goale au fost omise (IFCX nu poate reprezenta un set gol)',
+  },
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

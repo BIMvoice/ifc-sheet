@@ -128,6 +128,18 @@ export const miscPanelsAEn = {
   'exportChangesReviewDialog.cancelButton': 'Cancel',
   'exportChangesReviewDialog.exportingLabel': 'Exporting...',
   'exportChangesReviewDialog.exportButton': 'Export',
+  'exportChangesReviewDialog.toast.changedWhileExporting': 'Changes were made while exporting — check the updated list and confirm again.',
+  'exportChangesReviewDialog.toast.changedSinceReview': 'Changes were made since you opened this review — check the updated list and confirm again.',
+  'exportChangesReviewDialog.toast.exportFailed': 'Export failed: {reason}',
+  'exportChangesReviewDialog.toast.unknownError': 'Unknown error',
+  'exportChangesReviewDialog.toast.noChanges': 'No changes to export',
+  'exportChangesReviewDialog.toast.exportedFile': { one: 'Exported {name} ({count} change)', other: 'Exported {name} ({count} changes)' },
+  'exportChangesReviewDialog.toast.exportedModels': { one: 'Exported {models} ({count} change)', other: 'Exported {models} ({count} changes)' },
+  'exportChangesReviewDialog.toast.exportedPartial': 'Exported {exported} of {models} — {count} skipped ({reason})',
+  'exportChangesReviewDialog.toast.psetsLeftOut': {
+    one: '{count} empty property set left out (IFCX cannot represent an empty set)',
+    other: '{count} empty property sets left out (IFCX cannot represent an empty set)',
+  },
 
   // ScanSectionPanel
   'scanSectionPanel.showScanPointsLabel': 'Show scan points',
