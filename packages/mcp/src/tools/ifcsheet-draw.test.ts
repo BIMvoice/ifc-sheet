@@ -50,4 +50,26 @@ describe.skipIf(missing !== null)('drawSet on AC20-FZK-Haus', () => {
     for (const row of table.rows) for (const cell of row) if (cell) expect(rooms).toContain(cell);
     expect(table.rows.length).toBeLessThanOrEqual(scheduleCapacity({ h: 277 }));
   }, 120_000);
+
+  it('draws the figures of a schedule in the document\'s Units and numbers, and returns the plain numbers in the rows', async () => {
+    const ctx = { registry: new InMemoryModelRegistry() } as unknown as ToolContext;
+    const bytes = new Uint8Array(readFileSync(FZK));
+    const model = addSheetModel(ctx, 'fzk.ifc', await openModel(bytes), { bytes });
+    const entry = addSheetSet(ctx, model.id, generateDefaultSet(model.model)!);
+    const doc = entry.set.document;
+    const sheet = (id: string, name: string) => ({ id, number: nextNumber(doc.sheets, 'schedules', DEFAULT_SCHEME), series: 'schedules' as const, name, createdAt: 0, paper: 'A3' as const, orientation: 'landscape' as const, viewports: [] });
+    replaceSheetDocument(entry, { ...doc, unitsAndNumbers: { separator: 'comma' }, sheets: [...doc.sheets, sheet('sheet-rooms', 'Rooms'), sheet('sheet-boq', 'Bill')] });
+    entry.schedules.push({ id: 'schedule-1', kind: 'rooms', sheetId: 'sheet-rooms', locale: 'en' });
+    const article = { id: 'a1', code: 'W1', description: 'Walls', unit: 'm2', quantity: 'NetSideArea', factor: 1.5, waste: 5, filter: { classes: ['IfcWallStandardCase'] } } as never;
+    entry.schedules.push({ id: 'schedule-2', kind: 'boq', sheetId: 'sheet-boq', locale: 'en', boqArticles: [article] });
+    const drawn = await drawSet(entry, model);
+
+    const textsOf = (id: string) => drawn.sheets.find((s) => s.sheetId === id)!.texts.map((t) => t.text);
+    expect(textsOf('sheet-rooms')).toContain('11,19');
+    expect(textsOf('sheet-rooms')).not.toContain('11.19');
+    expect(textsOf('sheet-boq')).toContain('299,98');
+    // What the tool returns keeps the plain numbers and the language alone: an agent reads them back.
+    expect(drawn.schedules[0].table.rows.flat()).toContain('11.19');
+    expect(drawn.schedules[1].table.rows.flat().some((c) => /^299\.9\d*$/.test(c))).toBe(true);
+  }, 120_000);
 });

@@ -23,6 +23,7 @@ import { exportCsvFromBytes } from '@/lib/export/csv';
 import { editedModelBytes } from '@/lib/export/edited-model-bytes';
 import { activeModelName, downloadFile, downloadDataUrl, modelExportFilename } from '@/lib/export/download';
 import { toast } from '@/components/ui/toast';
+import { resolve as t } from '@/i18n/registry';
 import { trackExportCompleted } from '@/lib/analytics';
 import type { ExportSurface } from '@/lib/analytics-export-events';
 import { EXPORT_COMMANDS, type CsvExportType, type RegisteredExportCommand } from './export-commands';
@@ -70,10 +71,8 @@ export function useExportCommands(surface: ExportSurface) {
    * federation themselves.
    */
   const otherModelCount = Math.max(0, modelCount - 1);
-  const activeModelOnlyNote =
-    otherModelCount > 0
-      ? ` — active model only, ${otherModelCount} other loaded model${otherModelCount === 1 ? '' : 's'} not included`
-      : '';
+  // Read when the toast is built, so it follows the language at that moment.
+  const activeModelOnlyNote = useCallback(() => (otherModelCount > 0 ? ` — ${t('exportToast.activeModelOnly', { count: otherModelCount })}` : ''), [otherModelCount]);
 
   const handleExportCSV = useCallback(async (type: CsvExportType) => {
     if (!ifcDataStore || ifcDataStore.source.byteLength <= 0) return;
@@ -84,10 +83,10 @@ export function useExportCommands(surface: ExportSurface) {
       const csv = await exportCsvFromBytes(bytes, type, { includeProperties: type === 'entities' });
       downloadFile(csv, modelExportFilename(activeModelName(useViewerStore.getState()), 'csv', CSV_SUFFIX[type]), 'text/csv');
       trackExportCompleted({ format: 'csv', surface });
-      toast.success(`Exported ${type} CSV${activeModelOnlyNote}`);
+      toast.success(t('exportToast.csvDone', { table: t(`exportToast.table.${type}`), note: activeModelOnlyNote() }));
     } catch (err) {
       console.error('CSV export failed:', err);
-      toast.error(`CSV export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      toast.error(t('exportToast.csvFailed', { reason: err instanceof Error ? err.message : t('exportToast.unknownError') }));
     }
   }, [ifcDataStore, activeModelOnlyNote, surface]);
 
@@ -101,10 +100,10 @@ export function useExportCommands(surface: ExportSurface) {
       const json = JSON.stringify({ entities }, null, 2);
       downloadFile(json, modelExportFilename(activeModelName(useViewerStore.getState()), 'json', '_data'), 'application/json');
       trackExportCompleted({ format: 'json', surface, row_count: entities.length });
-      toast.success(`Exported ${entities.length} entities as JSON${activeModelOnlyNote}`);
+      toast.success(t('exportToast.jsonDone', { count: entities.length, note: activeModelOnlyNote() }));
     } catch (err) {
       console.error('JSON export failed:', err);
-      toast.error(`JSON export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      toast.error(t('exportToast.jsonFailed', { reason: err instanceof Error ? err.message : t('exportToast.unknownError') }));
     }
   }, [ifcDataStore, activeModelOnlyNote, surface]);
 
@@ -115,10 +114,10 @@ export function useExportCommands(surface: ExportSurface) {
       if (!canvas) throw new Error('no 3D viewport canvas on screen');
       downloadDataUrl(canvas.toDataURL('image/png'), modelExportFilename(activeModelName(useViewerStore.getState()), 'png', '_screenshot'));
       trackExportCompleted({ format: 'png', surface });
-      toast.success('Screenshot saved');
+      toast.success(t('exportToast.screenshotDone'));
     } catch (err) {
       console.error('Screenshot failed:', err);
-      toast.error('Screenshot failed');
+      toast.error(t('exportToast.screenshotFailed'));
     }
   }, [surface]);
 
