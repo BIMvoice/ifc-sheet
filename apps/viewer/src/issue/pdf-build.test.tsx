@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import * as jspdf from 'jspdf';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import { pacOpis } from '@bimvoice/ifcsheet';
 import { addProjectView, resetProject, useProjectStore } from '@/project/project-store';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import type { ProjectSheet } from '@/project/types';
@@ -78,7 +79,7 @@ function reference(): string {
 /** The fonts as the browser fetches them from `public/`. */
 const loadFont = async (url: string) => new Uint8Array(readFileSync(new URL(`../../public${url}`, import.meta.url)));
 
-async function issued(options: { archival?: boolean; romanian?: boolean; drawnBy?: string; logo?: string; extraText?: string; loadFont?: FontLoader; warnings?: PdfWarning[] } = {}) {
+async function issued(options: { archival?: boolean; romanian?: boolean; drawnBy?: string; logo?: string; extraText?: string; loadFont?: FontLoader; warnings?: PdfWarning[]; permitOpis?: boolean } = {}) {
   const view = reference();
   if (options.logo) useProjectStore.setState({ titleBlock: { logo: options.logo } });
   if (options.romanian) {
@@ -90,8 +91,8 @@ async function issued(options: { archival?: boolean; romanian?: boolean; drawnBy
     sheet('s2', 'A-102', 'Second floor plan', [vp('p3', view, 100, 100)]),
     sheet('s1', 'A-101', options.romanian ? 'Secțiune longitudinală' : 'Ground floor plan', [vp('p1', view, 50, 100), vp('p2', view, 100, 200)]),
   ];
-  useProjectStore.setState({ sheets });
-  const plan = planFor({ name: 'P01', date: '2026-10-19', listFirst: true });
+  useProjectStore.setState({ sheets: options.permitOpis ? sheets.map((x) => (x.id === 's1' ? { ...x, series: 'plans' as const } : x)) : sheets });
+  const plan = planFor({ name: 'P01', date: '2026-10-19', listFirst: !options.permitOpis, pac: options.permitOpis ? { locale: 'ro' } : undefined });
   const drawn = await captureSheets(plan.sheets.map((s) => s.sheet));
   assert.deepEqual(drawn.failed, []);
   const window = globalThis.window as unknown as { jspdf?: typeof jspdf };
@@ -100,6 +101,7 @@ async function issued(options: { archival?: boolean; romanian?: boolean; drawnBy
   try {
     if (options.extraText) for (const [k, v] of drawn.svgs) drawn.svgs.set(k, v.replace(/<\/svg>\s*$/, `${options.extraText}</svg>`));
     return await buildIssuePdf(plan, drawn.svgs, 'House', pdfLabels(), {
+      ...(options.permitOpis ? { opis: pacOpis(plan.sheets.map((x) => x.sheet), 'ro', 'House') } : {}),
       loadFont: options.loadFont ?? loadFont, archival: options.archival, created: new Date(2026, 9, 19, 12, 0, 0), onWarning: (w) => options.warnings?.push(w),
     });
   } finally {
@@ -141,6 +143,21 @@ describe('the issued PDF', () => {
       const pages = await Promise.all(outline.map((o) => pdf.getPageIndex((o.dest as [Parameters<typeof pdf.getPageIndex>[0]])[0])));
       assert.deepEqual(pages, [0, 1, 2]);
     } finally { await close(); }
+  });
+
+  it('opens the permit submission with the PAC opis (A4), then the sheets in set order, and no drawing list (#364)', async () => {
+    const bytes = await issued({ permitOpis: true });
+    const { pdf, close } = await openPdf(bytes);
+    try {
+      assert.equal(pdf.numPages, 3);
+      const mm = async (n: number) => (await pdf.getPage(n)).view.slice(2).map((v) => Math.round((v * 25.4) / 72));
+      assert.deepEqual([await mm(1), await mm(2), await mm(3)], [[210, 297], [420, 297], [420, 297]]);
+      assert.deepEqual(((await pdf.getOutline()) ?? []).map((o) => o.title), ['Opis: proiect pentru autorizarea construirii (PAC)', 'A-101 Ground floor plan', 'A-102 Second floor plan']);
+    } finally { await close(); }
+    const opis = await pageText(bytes, 1);
+    assert.ok(opis.includes('Legea 169/2026, Anexa 2') && opis.includes('Plan de încadrare în zonă') && opis.includes('Planurile tuturor nivelurilor'), opis);
+    assert.ok(!opis.includes('Drawing list'), 'the opis replaces the drawing list');
+    assert.ok((await pageText(bytes, 2)).includes('A-101'));
   });
 
   it('puts each sheet on a page of its own paper size', async () => {
