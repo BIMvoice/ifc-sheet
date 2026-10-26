@@ -26,7 +26,7 @@
  * No standard here is certified by any body.
  */
 
-import { PEN_TABLE, type PenTable, type WeightPair } from '@bimvoice/ifcsheet';
+import { DEFAULT_SHEET_TYPE, DEFAULT_SHEET_WEIGHTS, PEN_TABLE, type PenTable, type WeightPair } from '@bimvoice/ifcsheet';
 import { DEFAULT_DIM_STYLE, STANDARD, type DimStyle, type TextStyle } from './styles';
 
 /** ISO 128 line widths in paper millimetres (the series 0.13 … 2, ratio of √2 between members). */
@@ -60,8 +60,9 @@ export const DEFAULT_GRAPHIC_STANDARD: GraphicStandard = {
   pens: PEN_TABLE.pens,
   weights: PEN_TABLE.weights,
   materialHatch: PEN_TABLE.materialHatch,
-  sheet: { frame: 0.7, titleOuter: 0.5, titleDivider: 0.35, titleRule: 0.18 },
-  type: { caption: 2, value: 3.5, number: 9, scale: 4.5, viewTitle: 3.5 },
+  // The standard layout's pens and letter heights are the engine's (`title-block-standard.ts`), which prints it in the PDF.
+  sheet: DEFAULT_SHEET_WEIGHTS,
+  type: DEFAULT_SHEET_TYPE,
   // The default brings no styles: the project's own Standard styles are what it draws with.
   textStyles: [],
   dimStyles: [],

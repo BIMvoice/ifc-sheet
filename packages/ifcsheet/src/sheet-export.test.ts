@@ -81,7 +81,7 @@ describe('a sheet laid out as shapes', () => {
 
   it('prints the sheet number and name, the project and the scale in the title block', () => {
     const texts = graphic().texts.map((t) => t.text);
-    expect(texts).toEqual(expect.arrayContaining(['A-101', 'Secțiuni și fațade', 'Locuință ș ț', '1:50   2026-10-21', 'Parter  1:50']));
+    expect(texts).toEqual(expect.arrayContaining(['A-101', 'Secțiuni și fațade', 'Locuință ș ț', '1:50', '2026-10-21', 'Parter  1:50']));
   });
 });
 

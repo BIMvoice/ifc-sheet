@@ -16,6 +16,8 @@ import type { ViewGraphics } from './view-graphics-types.js';
 import type { ProjectViewTemplate } from './view-templates.js';
 import type { ThreeDProjectView } from './view-3d-types.js';
 import type { TitleBlockParam } from './title-block-params.js';
+import type { ProjectRevision, RevisionDraft } from './revisions.js';
+import type { TitleSources } from './title-block-sources.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
 import type { UnitsAndNumbers } from './units-and-numbers.js';
@@ -291,7 +293,13 @@ export interface ProjectDocument {
   sheets: ProjectSheet[];
   /** Title block fields every sheet prints (project, client, drawn by, date…). */
   titleBlock?: Record<string, string>;
-  /** The layout every sheet's title block prints, as edited or chosen (the Romanian one); absent: the standard layout (the app) or the plain block below the frame (this package). */
+  /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
+  titleBlockSources?: TitleSources;
+  /** The project's revisions, oldest first (`revisions.ts`); a sheet's title block prints the latest it has. */
+  revisions?: ProjectRevision[];
+  /** Drafted shapes; the engine reads only the revision clouds among them, to know which revisions a sheet has (`revisions.ts`). */
+  drafts?: RevisionDraft[];
+  /** The layout every sheet's title block prints, as edited or chosen (the Romanian one); absent: the standard layout (the app) or, in this package too, the same standard layout (`title-block-standard.ts`). */
   titleBlockTemplate?: TitleBlockTemplate;
   /** The project's own title block parameters (`{Name}` in a layout). */
   titleBlockParams?: TitleBlockParam[];
