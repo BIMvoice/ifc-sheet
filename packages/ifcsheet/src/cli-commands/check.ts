@@ -6,13 +6,13 @@
 
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { openModel, readProjectFile, readinessWithProject, type ProjectFacts } from '../headless.js';
+import { byggesaksbimReadiness, openModel, readProjectFile, readinessWithProject, type ProjectFacts } from '../headless.js';
 import { describeReadiness } from '../readiness.js';
 import { type CliIo } from '../cli-command.js';
 import { EXIT, type CliCommand } from '../cli-command.js';
 
 /** `ifcsheet check`: exit 0 when the model lacks nothing the drawings read, 1 when something would weaken them. */
-async function check(file: string, json: boolean, projectFile: string | undefined, includeFarElements: boolean, io: CliIo): Promise<number> {
+async function check(file: string, json: boolean, projectFile: string | undefined, includeFarElements: boolean, ids: string | undefined, io: CliIo): Promise<number> {
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await readFile(file));
@@ -45,7 +45,9 @@ async function check(file: string, json: boolean, projectFile: string | undefine
     io.stderr(`ifcsheet: the geometry could not be read (${(error as Error).message}); the far-away elements are not checked\n`);
     opened = await openModel(bytes, { geometry: false });
   }
-  const findings = readinessWithProject(opened, project).map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
+  // The requirement set, when the flag asks for it or the project opted in: run over the model, its failures said after the model's own.
+  const norway = ids === 'byggesaksbim' || project?.byggesaksbim === true ? await byggesaksbimReadiness([{ dataStore: opened.dataStore }]) : [];
+  const findings = [...readinessWithProject(opened, project), ...norway].map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
   if (json) {
     io.stdout(`${JSON.stringify({ file, ...(projectFile !== undefined ? { project: projectFile } : {}), ready: findings.length === 0, findings }, null, 2)}\n`);
   } else if (findings.length === 0) {
@@ -60,20 +62,25 @@ async function check(file: string, json: boolean, projectFile: string | undefine
 export const checkCommand: CliCommand = {
   name: 'check',
   usageRank: 200,
-  usage: `  ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]`,
+  usage: `  ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]`,
   helpRank: 200,
   help: `  check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain English, or JSON with --json. With --project, also what the
           saved project's split schedules get wrong: an element listed in more than one
-          part, or in no part.`,
+          part, or in no part. With --ids byggesaksbim (or a project that opted in), also the
+          requirements of Norway's ByggesaksBIM (DiBK) that the model fails.`,
   async run(rest, values, io) {
     if (rest.length !== 1 || values.out || values.dxf || values.name || values.csv || values.detail || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined || values.schedule !== undefined) {
-      io.stderr('ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n');
+      io.stderr('ifcsheet check takes one model, --project, --ids, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]\n');
+      return EXIT.usage;
+    }
+    if (values.ids !== undefined && values.ids !== 'byggesaksbim') {
+      io.stderr(`ifcsheet check: unknown --ids "${values.ids}" (known: byggesaksbim)\n`);
       return EXIT.usage;
     }
     try {
-      return await check(rest[0], values.json === true, values.project, values['include-far-elements'] === true, io);
+      return await check(rest[0], values.json === true, values.project, values['include-far-elements'] === true, values.ids, io);
     } catch (error) {
       io.stderr(`ifcsheet: check of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;

@@ -47,6 +47,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         template: { type: 'string' },
         project: { type: 'string' },
         standard: { type: 'string' },
+        ids: { type: 'string' },
         schedule: { type: 'string' },
         system: { type: 'string' },
         json: { type: 'boolean' },
@@ -79,6 +80,10 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
   }
   if (values.standard !== undefined && command !== 'build') {
     io.stderr(`ifcsheet ${command} has no --standard; it is an option of build (known: ${COMMAND_LINE_STANDARD_IDS.join(', ')}).\n`);
+    return EXIT.usage;
+  }
+  if (values.ids !== undefined && command !== 'check') {
+    io.stderr(`ifcsheet ${command} has no --ids; it is an option of check (known: byggesaksbim).\n`);
     return EXIT.usage;
   }
   return await found.run(rest, values, io);

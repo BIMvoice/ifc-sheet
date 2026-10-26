@@ -18,6 +18,7 @@
 import type { BoqMissing } from './boq-compute.js';
 import { subReportParams, type SubReportCheck } from './sub-report-check.js';
 import type { EstimatedAreas } from './room-estimates.js';
+import { BYGGESAKSBIM_EN, type ByggesaksbimKind } from './byggesaksbim/byggesaksbim-text.js';
 
 /** What the loaded models hold, counted once. "Elements" are the products that have geometry, rooms (IfcSpace) apart. */
 export interface ModelFacts {
@@ -42,7 +43,7 @@ export interface FarElementFact {
   distance: number;
 }
 
-export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'estimatedAreas' | 'boqMissingQuantity';
+export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'estimatedAreas' | 'boqMissingQuantity' | ByggesaksbimKind;
 
 export interface ReadinessFinding {
   kind: ReadinessKind;
@@ -50,6 +51,8 @@ export interface ReadinessFinding {
   key: `ready.${ReadinessKind}`;
   effectKey: `ready.${ReadinessKind}.effect`;
   params: Record<string, number | string>;
+  /** The elements concerned, GlobalIds, when a finding names some (the ByggesaksBIM ones do: "go to" selects the first). Not part of the sentence. */
+  guids?: readonly string[];
 }
 
 const finding = (kind: ReadinessKind, params: Record<string, number | string>): ReadinessFinding => ({ kind, key: `ready.${kind}`, effectKey: `ready.${kind}.effect`, params });
@@ -138,6 +141,8 @@ export const READINESS_EN = {
   'ready.estimatedAreas': 'Au includes {count} rooms whose area the model doesn\'t state; they are measured from geometry (≈ {area} m², {share} % of Au) and may be wrong under sloped ceilings: {list}.',
   'ready.estimatedAreas.effect': 'The room and area schedule and the urban sheet count them and mark them. State NetFloorArea (Qto_SpaceBaseQuantities) on these rooms and Au is exact.',
   'ready.subReportGaps.effect': 'The parts do not add up to the schedule: those doors and windows are on no sheet.',
+  // The ByggesaksBIM (Norway) check, which a project opts into (`byggesaksbim/`).
+  ...BYGGESAKSBIM_EN,
 } as const;
 
 /** A finding in English: what is missing, and what is weaker for it. */

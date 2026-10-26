@@ -2,7 +2,7 @@ ifcsheet: drawing sets from IFC models
 
 Usage:
   ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--standard <id>] [--include-far-elements]
-  ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
+  ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]
   ifcsheet materials <model.ifc> [--project <file>] [--json]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
   ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]
@@ -20,7 +20,8 @@ Commands:
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain English, or JSON with --json. With --project, also what the
           saved project's split schedules get wrong: an element listed in more than one
-          part, or in no part.
+          part, or in no part. With --ids byggesaksbim (or a project that opted in), also the
+          requirements of Norway's ByggesaksBIM (DiBK) that the model fails.
   materials  The model's materials and how each draws where a view cuts it: hatch, scale,
           fill, hatch pen, membrane. With --project, the project's own table applies (what the
           app's Materials section edits); a material it has no row for is guessed from its name.
@@ -52,6 +53,8 @@ Options:
   --project <file> A saved project (.ifclite-project.json): for check, its schedules, joinery catalogue and symbol mapping; for build, its list
                    schedules are printed after the build (the PDF has no schedule sheet; the app draws those).
   --schedule <id>  The list schedule that list runs: its id or name.
+  --ids <name>     For check, also run a requirement set over the model and report what fails (known: byggesaksbim, the Norwegian
+                   ByggesaksBIM requirements; a project that opts in has it run without the flag).
   --include-far-elements  Frame the views on everything the storeys contain, small elements far from the building too
                    (a survey point, an origin cube). By default they are left out of the framing only and named by check.
   --json           Print the check as JSON: { file, ready, findings: [{ kind, missing, effect, params }] } (with --project, also project).

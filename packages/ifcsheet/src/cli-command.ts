@@ -28,6 +28,7 @@ export interface CliValues {
   template?: string;
   project?: string;
   standard?: string;
+  ids?: string;
   schedule?: string;
   system?: string;
   json?: boolean;

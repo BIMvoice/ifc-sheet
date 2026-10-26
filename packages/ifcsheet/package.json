@@ -30,6 +30,11 @@
       "import": "./dist/boq-words.js",
       "default": "./dist/boq-words.js"
     },
+    "./byggesaksbim": {
+      "types": "./dist/byggesaksbim/index.d.ts",
+      "import": "./dist/byggesaksbim/index.js",
+      "default": "./dist/byggesaksbim/index.js"
+    },
     "./readiness-read": {
       "types": "./dist/readiness-read.d.ts",
       "import": "./dist/readiness-read.js",
@@ -120,6 +125,7 @@
     "@ifc-lite/drawing-2d": "workspace:^",
     "@ifc-lite/export": "workspace:^",
     "@ifc-lite/geometry": "workspace:^",
+    "@ifc-lite/ids": "workspace:^",
     "@ifc-lite/lists": "workspace:^",
     "@ifc-lite/mutations": "workspace:^",
     "@ifc-lite/parser": "workspace:^",

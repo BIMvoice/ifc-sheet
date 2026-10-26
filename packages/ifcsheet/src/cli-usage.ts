@@ -22,6 +22,8 @@ const OPTIONS = `Options:
   --project <file> A saved project (.ifclite-project.json): for check, its schedules, joinery catalogue and symbol mapping; for build, its list
                    schedules are printed after the build (the PDF has no schedule sheet; the app draws those).
   --schedule <id>  The list schedule that list runs: its id or name.
+  --ids <name>     For check, also run a requirement set over the model and report what fails (known: byggesaksbim, the Norwegian
+                   ByggesaksBIM requirements; a project that opts in has it run without the flag).
   --include-far-elements  Frame the views on everything the storeys contain, small elements far from the building too
                    (a survey point, an origin cube). By default they are left out of the framing only and named by check.
   --json           Print the check as JSON: { file, ready, findings: [{ kind, missing, effect, params }] } (with --project, also project).

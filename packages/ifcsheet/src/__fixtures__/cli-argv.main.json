@@ -168,7 +168,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]\n"
  },
  {
   "argv": [
@@ -198,7 +198,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]\n"
  },
  {
   "argv": [
@@ -208,7 +208,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]\n"
  },
  {
   "argv": [
@@ -229,7 +229,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]\n"
  },
  {
   "argv": [

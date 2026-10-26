@@ -1463,6 +1463,9 @@ importers:
       '@ifc-lite/geometry':
         specifier: workspace:^
         version: link:../geometry
+      '@ifc-lite/ids':
+        specifier: workspace:^
+        version: link:../ids
       '@ifc-lite/lists':
         specifier: workspace:^
         version: link:../lists

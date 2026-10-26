@@ -6,6 +6,7 @@ import { annotateAllRo } from '../catalogues/annotate-all.ro';
 import { annotateSetRo } from '../catalogues/annotate-set.ro';
 import { annotatedIfcRo } from '../catalogues/annotated-ifc.ro';
 import { boqRo } from '../catalogues/boq.ro';
+import { byggesaksbimRo } from '../catalogues/byggesaksbim.ro';
 import { cadLayersRo } from '../catalogues/cad-layers.ro';
 import { catalogueRo } from '../catalogues/catalogue.ro';
 import { checkRo } from '../catalogues/check.ro';
@@ -31,6 +32,7 @@ export const roAL = {
   ...annotateSetRo,
   ...annotatedIfcRo,
   ...boqRo,
+  ...byggesaksbimRo,
   ...cadLayersRo,
   ...catalogueRo,
   ...checkRo,
