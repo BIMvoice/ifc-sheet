@@ -14,6 +14,6 @@ export const roomSummaryEn = {
   'roomSum.sc': 'Sc m²',
   'roomSum.sd': 'Sd m²',
   'roomSum.building': 'Total building',
-  'roomSum.note.defs': 'Su = usable area (Au): the sum of the rooms\' areas. Sc = built area (Ac): the footprint of the level containing ±0.00, measured to the outer face of the external walls. Sd = gross floor area (Ad): the sum of the built areas of all levels, basements included; a level\'s line is its own built area. The same figures as the urban indicators sheet.',
+  'roomSum.note.defs': 'Su = usable area (Au): the sum of the rooms\' areas. Sc = built area (Ac): the footprint of the level containing {mark}, measured to the outer face of the external walls. Sd = gross floor area (Ad): the sum of the built areas of all levels, basements included; a level\'s line is its own built area. The same figures as the urban indicators sheet.',
   'roomSum.note.atLeast': '≥ marks a level where walls, columns or slabs gave no outline: its built area is at least that much.',
 } as const satisfies Record<string, TranslationValue>;

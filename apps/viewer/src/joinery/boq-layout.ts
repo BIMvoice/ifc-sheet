@@ -9,8 +9,8 @@
  * `boqTable` (the one the XLSX and CSV write), so the file holds the rows the sheet prints.
  */
 
-import { boqTable, textWidthEm, truncateToWidth, type BoqCell, type BoqResult, type BoqSay } from '@bimvoice/ifcsheet';
-import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { boqTable, boqTableCells, textWidthEm, truncateToWidth, type BoqResult, type BoqSay } from '@bimvoice/ifcsheet';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import { layoutPagedTable, PEN, TEXT, type PagedOptions, type TableBlock, type TableItem } from './paged-table';
 
@@ -47,13 +47,13 @@ const fit = (text: string, column: number, bold: boolean): string => (textWidthE
 export function layoutBoq(result: BoqResult, labels: BoqSheetLabels, paging: PagedOptions = {}): ScheduleLayout {
   const table = boqTable(result, labels.say, { title: labels.title, detail: labels.detail });
   const bold = new Set(table.bold);
-  const shown = (v: BoqCell): string => (v === null ? '–' : typeof v === 'number' ? sheetNumber(labels.locale, v) : v);
+  // The cells as text, written by the engine's own function: `ifcsheet boq` and the MCP schedule print the same figures.
+  const texts = boqTableCells(table, labels.locale);
   const block: TableBlock = {
     columns: COLUMNS, header: table.header, numeric: (c) => c === 0 || c === 4, skipEmpty: true,
     rows: table.rows.map((row, i) => {
       const isBold = bold.has(i);
-      // The number is a whole number; only the quantity is a measured figure.
-      const cells = row.map((v, c) => fit(c === 0 ? (v === '' || v === null ? '' : String(v)) : c === 4 ? shown(v) : String(v ?? ''), COLUMNS[c], isBold));
+      const cells = texts[i].map((text, c) => fit(text, COLUMNS[c], isBold));
       // A rule under every article; the detail rows under it are lighter.
       const last = i === table.rows.length - 1;
       return { cells, bold: isBold, rule: last || !table.rows[i + 1] || table.rows[i + 1][0] !== '' ? PEN.grid : 0 };

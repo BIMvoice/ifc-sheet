@@ -15,6 +15,6 @@ export const roomSummaryRo = {
   'roomSum.sc': 'Sc m²',
   'roomSum.sd': 'Sd m²',
   'roomSum.building': 'Total clădire',
-  'roomSum.note.defs': 'Su = aria utilă (Au): suma ariilor încăperilor. Sc = aria construită (Ac): amprenta nivelului care conține ±0,00, măsurată la fața exterioară a pereților exteriori. Sd = aria desfășurată (Ad): suma ariilor construite ale tuturor nivelurilor, subsolurile incluse; linia unui nivel este aria lui construită. Aceleași cifre ca în foaia de indicatori urbanistici.',
+  'roomSum.note.defs': 'Su = aria utilă (Au): suma ariilor încăperilor. Sc = aria construită (Ac): amprenta nivelului care conține {mark}, măsurată la fața exterioară a pereților exteriori. Sd = aria desfășurată (Ad): suma ariilor construite ale tuturor nivelurilor, subsolurile incluse; linia unui nivel este aria lui construită. Aceleași cifre ca în foaia de indicatori urbanistici.',
   'roomSum.note.atLeast': '≥ marchează un nivel la care pereți, stâlpi sau planșee nu au dat contur: aria lui construită este cel puțin atât.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

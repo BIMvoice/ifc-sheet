@@ -9,8 +9,8 @@
  * kind (an area, a volume, a length) decides its decimals, a count is whole.
  */
 
-import { textWidthEm, truncateToWidth, type ListFigureKind, type ListScheduleTable } from '@bimvoice/ifcsheet';
-import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { listTableCells, textWidthEm, truncateToWidth, type ListScheduleTable } from '@bimvoice/ifcsheet';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import { layoutPagedTable, PAD, PEN, TEXT, type PagedOptions, type TableBlock } from './paged-table';
 
@@ -25,20 +25,8 @@ const MAX_COLUMN = 80;
 /** The widest a table is drawn before its columns are narrowed (a drawing area of A3, landscape, less its margins). */
 const MAX_WIDTH = 380;
 
-/** A figure as it is written on paper. */
-function listFigure(locale: SheetLocale, value: number, kind: ListFigureKind | undefined): string {
-  if (kind === 'count') return sheetNumber(locale, value, 0, { group: false });
-  if (kind === undefined) return sheetNumber(locale, value, 2, { trim: true });
-  return sheetNumber(locale, value, 2, { kind });
-}
-
 /** A cell cut at its column's width with "…" (the file keeps it whole). */
 const fit = (text: string, column: number, bold: boolean): string => (textWidthEm(text, bold) * TEXT <= column - 2 * PAD ? text : truncateToWidth(text, (column - 2 * PAD) / TEXT, bold));
-
-/** The cells as text: figures in the sheet's language, a missing value as a dash. */
-function shown(table: ListScheduleTable, locale: SheetLocale): string[][] {
-  return table.rows.map((row) => row.map((v, c) => (v === null ? '–' : typeof v === 'number' ? listFigure(locale, v, table.kinds[c]) : v)));
-}
 
 /** Each column as wide as its widest cell, between a floor and a ceiling; narrowed together when the table would not fit the paper. */
 function columnWidths(header: readonly string[], cells: readonly (readonly string[])[], bold: ReadonlySet<number>): number[] {
@@ -52,7 +40,8 @@ function columnWidths(header: readonly string[], cells: readonly (readonly strin
 
 export function layoutListSchedule(table: ListScheduleTable, labels: ListSheetLabels, paging: PagedOptions = {}): ScheduleLayout {
   const bold = new Set(table.bold);
-  const cells = shown(table, labels.locale);
+  // The cells as text: figures in the sheet's language and the project's format, a missing value as a dash; `ifcsheet list` writes the same (`listTableCells`).
+  const cells = listTableCells(table, labels.locale);
   const columns = columnWidths(table.header, cells, bold);
   const numeric = new Set(table.numeric);
   const block: TableBlock = {

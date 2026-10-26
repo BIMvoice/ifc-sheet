@@ -125,7 +125,8 @@ describe.skipIf(missing !== null)('ifcsheet list, on AC20-FZK-Haus', () => {
     const text = capture();
     expect(await run(['list', FZK, '--project', file], text.io)).toBe(EXIT.ok);
     expect(text.out()).toMatch(/^Walls by type\nType\s+Count\s+NetSideArea \(m²\)\n/);
-    expect(text.out()).toMatch(/Total\s+13\s+190\.4655/);
+    // The text is written like the sheet (two decimals, `listTableCells`); the CSV above keeps the plain number.
+    expect(text.out()).toMatch(/Total\s+13\s+190\.47\b/);
     const csv = capture();
     expect(await run(['list', FZK, '--project', file, '--schedule', 'walls', '--csv'], csv.io)).toBe(EXIT.ok);
     expect(csv.out()).toBe(listScheduleCsv(listScheduleTableOn(model, { id: 'walls', name: 'Walls by type', list: WALLS_BY_TYPE }, 'en'), 'en'));
@@ -144,7 +145,7 @@ describe.skipIf(missing !== null)('ifcsheet list, on AC20-FZK-Haus', () => {
     const c = capture();
     expect(await run(['build', FZK, '--out', join(dir, 'set.pdf'), '--project', projectFile()], c.io)).toBe(EXIT.ok);
     expect(c.out()).toMatch(/Walls by type\nType\s+Count/);
-    expect(c.out()).toMatch(/Total\s+13\s+190\.4655/);
+    expect(c.out()).toMatch(/Total\s+13\s+190\.47\b/);
   }, 300_000);
 
   it('reads an office classification column with the project\'s mappings: `list` and `build --project` (#351)', async () => {

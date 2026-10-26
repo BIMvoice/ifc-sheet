@@ -14,9 +14,13 @@ import type { ClassificationMapping } from './classification.js';
 import { openModel, type OpenedModel } from './model.js';
 import { listScheduleCsv, listScheduleTableOn, listTableIsEmpty } from './list-headless.js';
 import { readProjectFile } from './project-read.js';
+import { listTableText } from './list-figures.js';
+import { sheetFormat } from './units-and-numbers.js';
 import type { ListScheduleTable } from './list-schedule.js';
 import type { ProjectSchedule } from './sub-reports.js';
 import type { CliIo } from './cli.js';
+
+export { listTableText };
 
 export interface ListArgs {
   model: string;
@@ -32,14 +36,6 @@ const cannotRead = (file: string, error: unknown): string =>
   `ifcsheet: cannot read ${file}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`;
 
 const isList = (s: ProjectSchedule): s is ProjectSchedule & { list: NonNullable<ProjectSchedule['list']> } => s.kind === 'list' && !!s.list;
-
-/** A table as aligned text: the heading, a rule, the rows (the totals row last). */
-export function listTableText(table: ListScheduleTable): string {
-  const cells = [table.header, ...table.rows].map((r) => r.map((c) => (c === null ? '' : String(c))));
-  const widths = table.header.map((_, c) => Math.max(...cells.map((r) => [...(r[c] ?? '')].length)));
-  const line = (r: string[]) => r.map((c, i) => (table.numeric.includes(i) ? c.padStart(widths[i]) : c.padEnd(widths[i]))).join('  ').trimEnd();
-  return `${table.name}\n${[line(cells[0]), ...cells.slice(1).map(line)].join('\n')}\n`;
-}
 
 /** The list schedules of a project, each with its table on the model. */
 export function listSchedulesOn(model: OpenedModel, schedules: readonly ProjectSchedule[], locale: string, modelName: string, classificationMappings: readonly ClassificationMapping[] = []): { schedule: ProjectSchedule; table: ListScheduleTable }[] {
@@ -76,6 +72,6 @@ export async function list(args: ListArgs, io: CliIo): Promise<number> {
     io.stdout(`${JSON.stringify({ file: args.model, project: args.project, schedule: { id: found.id, name: found.name }, header: table.header, rows: table.rows.filter((_, i) => i !== total), totals: total >= 0 ? table.rows[total] : null }, null, 2)}\n`);
   }
   else if (args.csv) io.stdout(listScheduleCsv(table, args.locale));
-  else io.stdout(listTableText(table));
+  else io.stdout(listTableText(table, sheetFormat(args.locale, project.unitsAndNumbers)));
   return 0;
 }
