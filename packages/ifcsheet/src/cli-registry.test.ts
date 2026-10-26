@@ -34,6 +34,8 @@ const ARGV_CASES: readonly (readonly string[])[] = [
   // Added with #364 (`build --pac`, `--intervention`); the 66 lines above are unchanged, except that the three that name the refused build options read "--locale only with --pac".
   ['build', '--pac'], ['build', 'm.ifc', '--pac', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac', '--locale', 'ro', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac', '--template', 't.bvset', '--out', 'a.pdf'], ['build', 'm.ifc', '--out', 'a.pdf', '--intervention', 'new'],
   ['build', 'm.ifc', '--pac', '--intervention', 'bogus', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac', '--intervention', 'interior', '--out', 'a.pdf'], ['check', 'm.ifc', '--pac'], ['frobnicate', 'm.ifc', '--pac'],
+  // Added with `--pac-mode`; the 75 lines above are unchanged.
+  ['build', 'm.ifc', '--pac', '--pac-mode', 'rural', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac', '--pac-mode', 'bogus', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac-mode', 'rural', '--out', 'a.pdf'], ['check', 'm.ifc', '--pac-mode', 'rural'],
 ];
 
 const fixture = (name: string) => readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url), 'utf8');

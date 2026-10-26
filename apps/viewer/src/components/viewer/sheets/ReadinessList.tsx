@@ -18,6 +18,8 @@ import { useViewerStore } from '@/store';
 import { setIncludeFarElements, useProjectStore } from '@/project/project-store';
 import { subReportChecks } from '@/check/sub-report-check';
 import { boqMissing } from '@bimvoice/ifcsheet';
+import { ruralScopeOf } from '@bimvoice/ifcsheet/urban';
+import { useUrbanIndicators } from '../urban/useUrban';
 import { useBoqArticles, useBoqResult } from '../boq/useBoq';
 import type { SetSkin } from './set-skin';
 import { setReview } from '../wall/wall-nav';
@@ -38,14 +40,18 @@ function useModelReadiness() {
   const levels = useProjectStore((s) => s.levels);
   // What the bill of quantities could not state (#75); nothing while the project holds no article.
   const boqResult = useBoqResult(useBoqArticles().length > 0);
+  // The model against the simplified PAC's scope, for a project in that mode only: measured from the same indicators as everywhere, and read again as they change.
+  const rural = useProjectStore((s) => s.pacMode === 'rural');
+  const urban = useUrbanIndicators(rural);
+  const scope = rural && urban ? ruralScopeOf(urban.result) : undefined;
   return useMemo(() => {
     void mutationVersion; // an edit can add or remove what the facts count
     // A schedule split into parts must list every element once: the same check the card on the Wall shows.
     if (models.size === 0) return null;
     const checks = subReportChecks(schedules ?? []);
     const owners = checks.flatMap((c) => [...(c.duplicates.length > 0 ? [c.parent.id] : []), ...(c.gaps.length > 0 ? [c.parent.id] : [])]);
-    return { findings: modelReadiness(currentModelFacts(), checks, boqMissing(boqResult)), owners };
-  }, [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult]);
+    return { findings: modelReadiness(currentModelFacts(), checks, boqMissing(boqResult), scope), owners };
+  }, [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult, scope?.levels, scope?.sd, scope?.sdAtLeast]);
 }
 
 /** The project setting that frames the views on everything again, the small far-away elements too (`framing.ts` in the engine). */

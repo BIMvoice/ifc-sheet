@@ -44,11 +44,9 @@ import { quantityScales } from '@/joinery/material-takeoff-models';
 import { estimatedAreas, meshFootprintArea, meshFootprintPerimeter, pickArea, roomArea, spaceRole, type EstimatedAreas, type RoomRecord } from '@bimvoice/ifcsheet';
 import type { ProjectLevel } from '@/project/types';
 import { getGlobalRenderer } from '@/hooks/useBCF';
-import { storeyFootprint, type PlanMesh } from './footprint';
+import { measureStoreys, meshesById, URBAN_FOOTPRINT_CLASSES, type UrbanModelRead } from '@bimvoice/ifcsheet/urban';
+import type { PlanMesh } from './footprint';
 import type { SpaceInput, StoreyInput } from './indicators';
-
-/** What draws a storey's outline. */
-const ENCLOSURE = new Set(['IFCWALL', 'IFCWALLSTANDARDCASE', 'IFCWALLELEMENTEDCASE', 'IFCCOLUMN', 'IFCCOLUMNSTANDARDCASE', 'IFCCURTAINWALL']);
 
 export interface UrbanAreas {
   storeys: StoreyInput[];
@@ -230,7 +228,8 @@ export function collectUrbanAreas(instanced: InstancedPieces = rendererPieces): 
 function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
   const s = useViewerStore.getState();
   const levels = useProjectStore.getState().levels;
-  const buckets = levels.map(() => ({ enclosure: [] as PlanMesh[][], floor: [] as PlanMesh[][], slabs: new Set<number>(), missing: 0 }));
+  // The rule that outlines a level (what stands on it, what counts as unmeasured) is the engine's `measureStoreys`; this reads the loaded models for it.
+  const models: UrbanModelRead[] = [];
   for (const [modelId, model] of s.models) {
     const store = model.ifcDataStore;
     const hierarchy = store?.spatialHierarchy;
@@ -238,39 +237,15 @@ function measureUrbanAreas(instanced: InstancedPieces): UrbanAreas {
     const offset = model.idOffset ?? 0;
     const view = s.mutationViews.get(modelId) ?? undefined;
     const levelOf = levelResolver(modelId, store, levels);
-    const flat = new Map<number, PlanMesh[]>();
-    for (const mesh of model.geometryResult?.meshes ?? []) {
-      const list = flat.get(mesh.expressId);
-      if (list) list.push(mesh); else flat.set(mesh.expressId, [mesh]);
-    }
-    for (const { expressId: id, type } of iterateEffectiveEntityIds(store, view ?? null, [...ENCLOSURE, 'IFCSLAB', 'IFCSPACE'])) {
-      const upper = type.toUpperCase();
-      const room = upper === 'IFCSPACE';
-      if (upper === 'IFCSLAB' && enumAttr(store, view, id, 'PredefinedType') === 'ROOF') continue;
-      const level = levelOf(id);
-      if (level === null) continue;
-      const bucket = buckets[level];
-      const meshes = flat.get(id + offset) ?? instanced(id + offset);
-      if (!meshes?.length) {
-        // A room without a body only helps tell rooms from courtyards; a wall or slab without one is area not measured.
-        if (!room) bucket.missing++;
-        continue;
-      }
-      if (ENCLOSURE.has(upper)) bucket.enclosure.push([...meshes]);
-      else {
-        if (!room) bucket.slabs.add(bucket.floor.length);
-        bucket.floor.push([...meshes]);
-      }
-    }
+    const flat = meshesById(model.geometryResult?.meshes ?? []);
+    models.push({
+      ids: iterateEffectiveEntityIds(store, view ?? null, [...URBAN_FOOTPRINT_CLASSES]),
+      levelOf,
+      isRoofSlab: (id) => enumAttr(store, view, id, 'PredefinedType') === 'ROOF',
+      meshesOf: (id) => flat.get(id + offset) ?? instanced(id + offset),
+    });
   }
-  const assumedInterior: string[] = [];
-  const storeys = levels.map((level, i) => {
-    const b = buckets[i];
-    const footprint = storeyFootprint(b.enclosure, b.floor);
-    if (footprint.assumedInterior) assumedInterior.push(level.name);
-    const failed = footprint.unmeasured.enclosure.length + footprint.unmeasured.floor.filter((k) => b.slabs.has(k)).length;
-    return { name: level.name, elevation: level.elevation, footprint: footprint.shapes.length ? footprint.shapes : null, unmeasured: b.missing + failed };
-  });
+  const { storeys, assumedInterior } = measureStoreys(levels, models);
   const { rooms, leftOut } = collectRoomRecords(levels);
   const spaces: SpaceInput[] = rooms.map((r) => ({ storey: r.level, category: r.category, area: r.area }));
   return { storeys, spaces, spacesLeftOut: leftOut, estimated: estimatedAreas(rooms), modelSiteArea: modelSiteArea(), buildingRefElevation: buildingRefElevation(), assumedInterior };

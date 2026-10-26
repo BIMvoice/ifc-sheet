@@ -44,6 +44,11 @@ export type PacIntervention = 'new' | 'existing' | 'interior';
 export const PAC_INTERVENTIONS: readonly PacIntervention[] = ['new', 'existing', 'interior'];
 export const PAC_DEFAULT_INTERVENTION: PacIntervention = 'new';
 
+/** Which permit project a project makes: the full one (Anexa 2) or the simplified one for a rural house (Anexa 3). Absent in a project file: full. */
+export type PacMode = 'full' | 'rural';
+export const PAC_MODES: readonly PacMode[] = ['full', 'rural'];
+export const PAC_DEFAULT_MODE: PacMode = 'full';
+
 /** How an Anexa 2 item reaches the filing. */
 export type PacKind = 'drawing' | 'written' | 'existingBuilding';
 

@@ -34,6 +34,11 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { knownGraphicStandard, graphicStandardOf, type GraphicStandard } from './graphic-standard.js';
 import { readTitleBlockTemplate } from './title-block-template-read.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
+import { PAC_MODES, type PacMode } from './pac-set.js';
+import { readUrbanSettings } from './urban-settings-read.js';
+import type { UrbanSettings } from './urban-indicators.js';
+import type { StoreyInput } from './view-defaults.js';
+import { ruralScopeOfModel, type RuralScopeModel } from './rural-scope-read.js';
 
 /** What the checks read of a project file. */
 export interface ProjectFacts extends JoineryProject {
@@ -58,9 +63,14 @@ export interface ProjectFacts extends JoineryProject {
   unknownGraphicStandard?: string;
   /** The title block layout the project keeps (the Romanian one, or any the app edited); absent: the standard layout. A build prints it on every sheet. */
   titleBlockTemplate?: TitleBlockTemplate;
+  /** The permit project the project makes (`PacMode`); absent: the full one. Only `rural` changes what is checked and built. */
+  pacMode?: PacMode;
+  /** The urban indicators' terrain level, ±0.00 and storeys left out of Ad for CUT; absent: the defaults. */
+  urbanSettings?: UrbanSettings;
 }
 
 type Json = Record<string, unknown>;
+const isStorey = (s: unknown): s is StoreyInput => isObject(s) && typeof s.name === 'string' && typeof s.elevation === 'number';
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** A project file's text, read. Throws an Error with the app's wording when it is not a project file or is newer than this build reads. */
@@ -77,6 +87,7 @@ export function readProjectFile(text: string): ProjectFacts {
   if (version > PROJECT_FILE_VERSION) throw new Error(`Project file version ${version} is newer than this build reads (${PROJECT_FILE_VERSION})`);
   const standard = knownGraphicStandard(parsed.graphicStandard);
   const titleBlockTemplate = readTitleBlockTemplate(parsed.titleBlockTemplate);
+  const urbanSettings = readUrbanSettings(parsed.urbanSettings);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
   return {
     name: typeof parsed.name === 'string' ? parsed.name.trim() : '',
@@ -91,6 +102,8 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(standard.id !== undefined ? { graphicStandard: graphicStandardOf(standard.id) } : {}),
     ...(standard.unknown !== undefined ? { unknownGraphicStandard: standard.unknown } : {}),
     ...(titleBlockTemplate ? { titleBlockTemplate } : {}),
+    ...(PAC_MODES.find((m) => m === parsed.pacMode) ? { pacMode: PAC_MODES.find((m) => m === parsed.pacMode) } : {}),
+    ...(urbanSettings ? { urbanSettings } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }
@@ -107,10 +120,12 @@ export function projectSubReportChecks(project: ProjectFacts, models: readonly S
  * The readiness findings of an opened model with a project: the model's own, then a pair for each split schedule
  * whose parts overlap or leave elements out. Without a project, `readinessOfModel` alone.
  */
-export function readinessWithProject(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
+export function readinessWithProject(model: Omit<RuralScopeModel, 'storeys'> & { storeys: readonly unknown[]; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
   const checks = project ? projectSubReportChecks(project, [{ modelId, dataStore: model.dataStore, view: null }]) : [];
   // What the project's articles take and the model does not state (#75); nothing when the project has no articles.
   const articles = project?.boqArticles ?? [];
   const boq = articles.length > 0 ? boqMissing(computeBoq(readBoqElements(storeSource(modelId, model.dataStore), new Set(boqPropertyNames(articles))), articles)) : undefined;
-  return readinessOfModel(model, checks, boq);
+  // Against the simplified PAC's scope, for a project in that mode only (measuring the footprints reads the geometry).
+  const rural = project?.pacMode === 'rural' ? ruralScopeOfModel({ ...model, storeys: model.storeys.filter(isStorey) }, project.urbanSettings) : undefined;
+  return readinessOfModel(model, checks, boq, rural);
 }

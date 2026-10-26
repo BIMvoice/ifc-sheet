@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { PAC_ITEMS, PAC_RURAL_ITEMS, generateDefaultSet, pacRuralSetTemplate, pacSetTemplate, type DefaultSet } from '@bimvoice/ifcsheet';
 import { cleanup, render } from '@/test/render.js';
-import { projectDocument, resetProject, setPacIntervention, useProjectStore } from '@/project/project-store';
+import { loadProjectDocument, projectDocument, resetProject, setPacIntervention, setPacMode, useProjectStore } from '@/project/project-store';
 import { parseProjectFile, serializeProject } from '@/project/project-file';
 import { registerLocale, setLocale } from '@/i18n/registry';
 import { checkCatalogue } from '@/i18n/catalogue-problems';
@@ -115,6 +115,31 @@ describe('the PAC checklist', () => {
     setPacIntervention('new');
     assert.equal('pacIntervention' in JSON.parse(serializeProject(projectDocument())), false);
     assert.equal(parseProjectFile(saved.replace('"interior"', '"demolition"')).pacIntervention, undefined);
+  });
+
+  it('keeps the permit project mode in the project file: the switch writes it, a saved project reopens in it, the full one is saved as absent', () => {
+    const ui = mount();
+    const pressed = (mode: string) => ui.querySelector(`[data-pac-mode="${mode}"]`)?.getAttribute('aria-pressed');
+    assert.deepEqual([pressed('standard'), pressed('rural')], ['true', 'false']);
+    act(() => { ui.querySelector<HTMLButtonElement>('[data-pac-mode="rural"]')!.click(); });
+    assert.equal(useProjectStore.getState().pacMode, 'rural', 'the switch writes the project');
+    const saved = serializeProject(projectDocument());
+    assert.equal(JSON.parse(saved).pacMode, 'rural');
+    // Reopen: a fresh project loads the saved file, and a fresh drawer shows the mode it was left in.
+    cleanup();
+    resetProject();
+    assert.equal(useProjectStore.getState().pacMode, undefined);
+    act(() => loadProjectDocument(parseProjectFile(saved)));
+    assert.equal(useProjectStore.getState().pacMode, 'rural');
+    const reopened = mount();
+    assert.equal(reopened.querySelector('[data-pac-mode="rural"]')?.getAttribute('aria-pressed'), 'true');
+    assert.ok(reopened.querySelector('[data-pac-item="rural.plans"]'), 'the Anexa 3 list is shown');
+    // Back to the full one: stored as absent; a value the file should not hold loads as absent.
+    act(() => { reopened.querySelector<HTMLButtonElement>('[data-pac-mode="standard"]')!.click(); });
+    assert.equal('pacMode' in JSON.parse(serializeProject(projectDocument())), false);
+    assert.equal(parseProjectFile(saved.replace('"rural"', '"urban"')).pacMode, undefined);
+    setPacMode('rural');
+    assert.equal(useProjectStore.getState().dirty, true);
   });
 
   it('says beside the button that it records an issue of the set and downloads the PDF and the list, in English and in Romanian', () => {

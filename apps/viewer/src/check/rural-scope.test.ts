@@ -8,16 +8,17 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { registerLocale, setLocale, resolve } from '@/i18n/registry';
+import { registerLocale, setLocale } from '@/i18n/registry';
 import ro from '@/i18n/locales/ro';
 import { urbanIndicators, type FootprintShape } from '@/urban/indicators';
-import { describeRuralScope, ruralScopeFindings } from './rural-scope';
+import { describeMissing } from './readiness-say';
+import { ruralScopeFindings } from './rural-scope';
 
 const rect = (w: number, d: number): FootprintShape[] => [{ outer: [[0, 0], [w, 0], [w, d], [0, d]], holes: [] }];
 const result = (storeys: { name: string; elevation: number; w: number; d: number }[]) => urbanIndicators({
   storeys: storeys.map((s) => ({ name: s.name, elevation: s.elevation, footprint: rect(s.w, s.d) })), spaces: [], siteArea: 600,
 });
-const say = (locale: 'en' | 'ro', r: ReturnType<typeof result>) => { registerLocale('ro', ro); setLocale(locale); return ruralScopeFindings(r).map((f) => describeRuralScope(f, resolve, locale)); };
+const say = (locale: 'en' | 'ro', r: ReturnType<typeof result>) => { registerLocale('ro', ro); setLocale(locale); return ruralScopeFindings(r).map((f) => describeMissing(f)); };
 
 describe('the rural scope check', () => {
   it('a house of ground floor and attic, 10 x 7 m, is inside: no finding', () => {
@@ -34,7 +35,7 @@ describe('the rural scope check', () => {
   it('a basement is not a level (the text names none) but its area is in Sd', () => {
     const r = result([{ name: 'S', elevation: -3, w: 10, d: 8 }, { name: 'P', elevation: 0, w: 10, d: 8 }, { name: 'M', elevation: 3, w: 10, d: 8 }]);
     // Two levels above ground: no levels finding. Sd = 3 x 80 = 240 m²: over 150.
-    assert.deepEqual(ruralScopeFindings(r).map((f) => f.key), ['pac.rural.scope.area']);
+    assert.deepEqual(ruralScopeFindings(r).map((f) => f.key), ['ready.ruralArea']);
   });
 
   it('Sd over 150 m² on two levels: the area finding with the figure, in both languages', () => {
