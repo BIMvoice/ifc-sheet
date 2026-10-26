@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { PAC_ITEMS, pacCoverage, type PacKind } from '@bimvoice/ifcsheet';
+import { pacCoverage, type PacKind } from '@bimvoice/ifcsheet';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import type { DrawerSection } from './types';
