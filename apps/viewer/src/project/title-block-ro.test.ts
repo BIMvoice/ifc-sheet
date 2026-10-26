@@ -4,7 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { FIELD_PARAMS, STANDARD_CAPTIONS_EN, TITLE_BLOCK_CAPTIONS_RO, type RoCaption, TITLE_BLOCK_FIELDS, fitText, frameRect, paperMm, printTitleBlock, resolveParamText, textWidthEm, titleBlockRect, type TemplateText, type PaperSize } from '@bimvoice/ifcsheet';
+import { FIELD_PARAMS, STANDARD_CAPTIONS_EN, TITLE_BLOCK_CAPTIONS_RO, type RoCaption, TITLE_BLOCK_FIELDS, fitCell, fitText, frameRect, paperMm, printTitleBlock, resolveParamText, textWidthEm, titleBlockRect, type TemplateText, type PaperSize } from '@bimvoice/ifcsheet';
 import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 import { titleBlockRoEn } from '@/i18n/catalogues/title-block-ro.en';
 import { titleBlockRoRo } from '@/i18n/catalogues/title-block-ro.ro';
@@ -50,12 +50,15 @@ describe('the Romanian title block layout', () => {
   it('keeps every value inside its cell with a margin, even a very long one, and below the cell\'s top rule', () => {
     for (const t of texts.filter((x) => x.text.startsWith('{'))) {
       const right = cellRight(t);
-      const { size, text } = fitText(t, LONG);
-      const printedRight = t.x + textWidthEm(text, t.bold) * size;
-      assert.ok(printedRight <= right - 1, `${t.text} ends at ${printedRight.toFixed(1)} of ${right}`);
+      // Wrapped or shrunk, every printed line stays in the cell: its right edge, the rule below it, the rule above it.
+      const { size, lines } = fitCell(t, LONG);
       const { top, bottom } = cellRows(t);
-      assert.ok(t.y <= bottom - 0.4, `${t.text} baseline ${t.y} above the rule at ${bottom}`);
-      assert.ok(t.y - t.size * 0.72 >= top + 0.4, `${t.text} cap height clears the rule at ${top}`);
+      for (const { text, dy } of lines) {
+        const printedRight = t.x + textWidthEm(text, t.bold) * size;
+        assert.ok(printedRight <= right - 1, `${t.text} ends at ${printedRight.toFixed(1)} of ${right}`);
+        assert.ok(t.y + dy <= bottom - 0.4, `${t.text} baseline ${t.y + dy} above the rule at ${bottom}`);
+      }
+      assert.ok(t.y + lines[0].dy - size * 0.72 >= top + 0.4, `${t.text} cap height clears the rule at ${top}`);
     }
   });
 
@@ -86,7 +89,7 @@ describe('the Romanian title block layout', () => {
           assert.ok(box.x >= f.x - 1e-9 && box.y >= f.y - 1e-9 && box.x + box.w <= f.x + f.w + 1e-9 && box.y + box.h <= f.y + f.h + 1e-9, `${where}: box in frame`);
           assert.ok(out.frame.flat().every((p) => inBox(p)), `${where}: shapes in the box`);
           assert.ok(out.texts.every((t) => inBox(t.at)), `${where}: texts start in the box`);
-          assert.equal(out.texts.length, texts.length, `${where}: every text prints`);
+          assert.ok(out.texts.length >= texts.length, `${where}: every text prints, a wrapped one in more lines`);
         }
       }
     }
