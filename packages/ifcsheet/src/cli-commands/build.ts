@@ -12,6 +12,7 @@ import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
 import { listSchedulesOn, listTableText } from '../cli-list.js';
+import { sheetFormat } from '../units-and-numbers.js';
 import { buildStandard, unknownStandardMessage, withTitleBlock } from '../cli-standard.js';
 import { type CliIo } from '../cli-command.js';
 import { EXIT, type CliCommand } from '../cli-command.js';
@@ -114,7 +115,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   if (project) {
     // The starting set has no schedule sheet (the app composes those): the project's list schedules are printed as text, the table `ifcsheet list` gives.
     try {
-      for (const { table } of listSchedulesOn(model, project.schedules, language, basename(args.model), project.classificationMappings)) io.stdout(`\n${listTableText(table)}`);
+      for (const { table } of listSchedulesOn(model, project.schedules, language, basename(args.model), project.classificationMappings)) io.stdout(`\n${listTableText(table, sheetFormat(language, standard.unitsAndNumbers))}`);
     } catch (error) {
       io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
       return EXIT.failed;

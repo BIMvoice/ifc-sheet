@@ -28,6 +28,7 @@ import { isRasterView } from '@/project/axonometric';
 import { isAutosaveRasterRef } from '@/project/autosave-rasters';
 import { drawingNumbers } from '@/drafting/cross-ref';
 import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
+import { viewScreenUp } from '@/project/view-screen-up';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
@@ -150,12 +151,13 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const crossRefInput = useMemo(() => {
     const made = new Map<string, PlanCrossRefInput>();
     return (vp: SheetViewport): PlanCrossRefInput => {
-      const key = `${vp.viewId}\u0000${vp.scale}`;
+      const screenUp = viewScreenUp(vp.viewId);
+      const key = `${vp.viewId}\u0000${vp.scale}\u0000${screenUp}`;
       let input = made.get(key);
       if (!input) {
         input = {
           drafts: settledDrafts(vp.viewId), view: views.find((v) => v.id === vp.viewId), views, sheets, groundPlanId: ground?.id,
-          bounds: drawingOf.get(vp.viewId)?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays,
+          bounds: drawingOf.get(vp.viewId)?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays, screenUp,
         };
         made.set(key, input);
       }

@@ -12,13 +12,13 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { ensureWasm, wasmLoaded } from '@/lib/wasm/ensure-wasm';
 import { collectUrbanAreas, type UrbanAreas } from '@/urban/urban-models';
-import { urbanIndicators, type UrbanIndicators } from '@/urban/indicators';
+import { CUT_BASEMENT_MAX_CLEAR_HEIGHT, urbanIndicators, type UrbanIndicators } from '@/urban/indicators';
 import { signedLevel, type UrbanLabels } from '@/urban/urban-layout';
 import { siteAreaOf, type SiteAreaChoice } from '@/urban/site-area';
 import { useSheetLocale } from '@/project/units-and-numbers';
@@ -92,6 +92,9 @@ export function useSiteSourceNote(): (site: SiteAreaChoice) => string {
 export function urbanLabelsOf(t: T, locale: SheetLocale, title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
   const assumed = areas?.assumedInterior.join(', ') ?? '';
   const leftOut = areas?.spacesLeftOut ?? null;
+  // The figures inside a sentence are written like every other figure on the sheet: a literal "±0.00" or "1.80" would keep its point under a comma project.
+  const mark = sheetLevel(locale, 0);
+  const limit = sheetNumber(locale, CUT_BASEMENT_MAX_CLEAR_HEIGHT, 2, { group: false });
   const estimated = areas?.estimated ?? null;
   return {
     locale,
@@ -99,15 +102,15 @@ export function urbanLabelsOf(t: T, locale: SheetLocale, title: string, areas: U
     level: t('urban.level'), elevation: t('urban.elevation'), built: t('urban.built'), useful: t('urban.useful'),
     inCut: t('urban.inCut'), yes: t('urban.yes'), no: t('urban.no'),
     belowGround: (name: string) => t('urban.belowGround', { name }),
-    ground: (name: string) => t('urban.ground', { name }),
+    ground: (name: string) => t('urban.ground', { name, mark }),
     category: t('urban.category'), area: t('urban.area'),
     ac: t('urban.ac'), ad: t('urban.ad'), adCut: t('urban.adCut'), au: t('urban.au'), site: t('urban.site'), pot: t('urban.pot'), cut: t('urban.cut'),
     rules: (r: UrbanIndicators) => {
       const left = r.storeys.filter((s) => !s.inCut).map((s) => s.name);
       const out = [
-        t('urban.rule.areas', { level: r.storeys.find((s) => s.ground)?.name ?? '—' }),
-        t('urban.rule.cut', { levels: left.length ? left.join(', ') : t('urban.rule.cutNone') }),
-        t('urban.rule.ground', { terrain: signedLevel(locale, r.terrainLevel), zero: sheetNumber(locale, r.zero.elevation, 2, { group: false }), source: t(`urban.rule.zero.${r.zero.source}`) }),
+        t('urban.rule.areas', { mark, level: r.storeys.find((s) => s.ground)?.name ?? '—' }),
+        t('urban.rule.cut', { limit, levels: left.length ? left.join(', ') : t('urban.rule.cutNone') }),
+        t('urban.rule.ground', { mark, terrain: signedLevel(locale, r.terrainLevel), zero: sheetNumber(locale, r.zero.elevation, 2, { group: false }), source: t(`urban.rule.zero.${r.zero.source}`) }),
       ];
       if (estimated) out.push(t('urban.rule.auEstimated', { count: estimated.count, area: sheetNumber(locale, estimated.area, 1, { kind: 'area' }), share: sheetNumber(locale, estimated.share, 0), list: estimated.rooms.map((r) => r.name).join(', ') }));
       if (leftOut) out.push(t('urban.rule.au', { external: leftOut.external, gfa: leftOut.gfa, parents: leftOut.parents }));

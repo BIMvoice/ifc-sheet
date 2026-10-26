@@ -18,6 +18,7 @@ import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetTablesRo } from '../catalogues/sheet-tables.ro';
 import { sheetTemplatesRo } from '../catalogues/sheet-templates.ro';
 import { sheetsRo } from '../catalogues/sheets.ro';
+import { sheetsPdfRo } from '../catalogues/sheets-pdf.ro';
 import { standardsPacksRo } from '../catalogues/standards-packs.ro';
 import { styleRulesRo } from '../catalogues/style-rules.ro';
 import { tagFieldsRo } from '../catalogues/tag-fields.ro';
@@ -55,6 +56,7 @@ export const roMZ = {
   ...sheetTablesRo,
   ...sheetTemplatesRo,
   ...sheetsRo,
+  ...sheetsPdfRo,
   ...standardsPacksRo,
   ...styleRulesRo,
   ...tagFieldsRo,

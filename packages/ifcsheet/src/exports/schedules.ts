@@ -17,8 +17,9 @@ export {
   LIST_COUNT_ID, listExportTable, listFigureKind, listScheduleTable, readListScheduleDef,
   type ListCell, type ListFigureKind, type ListScheduleColumn, type ListScheduleDef, type ListScheduleTable, type ListTableSource,
 } from '../list-schedule.js';
+export { listFigure, listTableCells, listTableText } from '../list-figures.js';
 export { withListClassification, withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from '../list-classification.js';
-export { boqLineText, boqNotes, boqTable, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from '../boq-table.js';
+export { boqLineText, boqNotes, boqTable, boqTableCells, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from '../boq-table.js';
 export { csvDelimiter, exportCsv, type ExportCell, type ExportTable, type ScheduleExport } from '../schedule-csv.js';
 export { LIST_WORDS_EN, LIST_WORDS_RO, listWordsFor } from '../list-words.js';
 export { BOQ_WORDS_EN, BOQ_WORDS_RO, boqSayFor, fillTemplate, type BoqSay, type BoqWordKey } from '../boq-words.js';
