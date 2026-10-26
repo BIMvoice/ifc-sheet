@@ -13,12 +13,16 @@ import { openModel, readRooms } from './headless.js';
 import { roomSchedule, roomScheduleCsv, roomScheduleLines, roomScheduleText, roomScheduleWords, type RoomSchedule } from './room-schedule.js';
 import type { CliIo } from './cli.js';
 import type { RoomsRead } from './room-read.js';
+import { readProjectFile } from './project-read.js';
+import { sheetFormat } from './units-and-numbers.js';
 
 export interface RoomsArgs {
   model: string;
   csv: boolean;
   json: boolean;
   locale: string;
+  /** A saved project: its "Units and numbers" setting decides how the text writes a figure (separator, decimals, unit); the CSV and JSON stay plain. */
+  project?: string;
 }
 
 /** The schedule as JSON: plain numbers, each room with where its area comes from, and the rooms the area rule leaves out. */
@@ -38,6 +42,18 @@ function scheduleJson(file: string, schedule: RoomSchedule, read: RoomsRead, loc
 
 /** `ifcsheet rooms`: exit 0 with the schedule, 1 when the file cannot be read or has no rooms. */
 export async function rooms(args: RoomsArgs, io: CliIo): Promise<number> {
+  let units;
+  if (args.project !== undefined) {
+    let projectText: string;
+    try { projectText = await readFile(args.project, 'utf8'); } catch (error) {
+      io.stderr(`ifcsheet: cannot read ${args.project}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
+      return 1;
+    }
+    try { units = readProjectFile(projectText).unitsAndNumbers; } catch (error) {
+      io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
+      return 1;
+    }
+  }
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await readFile(args.model));
@@ -62,7 +78,7 @@ export async function rooms(args: RoomsArgs, io: CliIo): Promise<number> {
   if (args.json) io.stdout(`${scheduleJson(args.model, schedule, read, args.locale)}\n`);
   else if (args.csv) io.stdout(`${roomScheduleCsv(schedule, args.locale)}\n`);
   else {
-    io.stdout(`${roomScheduleText(schedule, args.locale)}\n`);
+    io.stdout(`${roomScheduleText(schedule, sheetFormat(args.locale, units))}\n`);
     const words = roomScheduleWords(args.locale);
     io.stdout(`\n${schedule.rooms} rooms; areas from ${schedule.rooms - schedule.fromGeometry - schedule.withoutArea} ${words.quantity}, ${schedule.fromGeometry} ${words.geometry}${schedule.withoutArea ? `, ${schedule.withoutArea} none` : ''}. Left out: ${read.leftOut.external} external, ${read.leftOut.gfa} area-scheme (GFA), ${read.leftOut.parents} split into rooms of their own.\n`);
   }
