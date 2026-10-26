@@ -17,13 +17,15 @@ import { readStoreFacts } from './title-block-records.js';
 import { projectTitleFields } from './title-block-sources.js';
 import { generateViewDrawings } from './view-drawings.js';
 import { propertySetsOf } from './joinery-schedule.js';
-import { PEN_TABLE, elementProperties } from './view-style.js';
+import { PEN_TABLE, elementProperties, type PenTable } from './view-style.js';
 
 export interface SheetGraphicsOptions {
   /** Cut each view's drawing from the meshes (default true); without it the sheets carry their frames and titles only. */
   drawings?: boolean;
   /** A view whose drawing could not be made; the sheet keeps its title. */
   onDrawingError?: (view: ProjectView, error: unknown) => void;
+  /** The pens the drawings are drawn with (a graphic standard's, #365); default: `PEN_TABLE`, the pens the sheets have always printed with. */
+  pens?: PenTable;
 }
 
 /** An element's properties as a preset's property rules read them (`view-style.ts`), from a model opened here: each element's sets read once, only when a view's rules ask. */
@@ -67,5 +69,5 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   const materialOf = model.dataStore ? headlessMaterialOf(model.dataStore) : undefined;
   // The title block's fields as the app fills them from the model (`title-block-sources.ts`): the phase, the roles, the organisation, the address.
   const projectFields = model.dataStore ? projectTitleFields(doc.titleBlock, doc.titleBlockSources, readStoreFacts(model.dataStore)) : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, PEN_TABLE, materialOf, projectFields));
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields));
 }

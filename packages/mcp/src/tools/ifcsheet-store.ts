@@ -12,6 +12,7 @@
 import type { BoqArticle, ClassificationMapping, DefaultSet, ListScheduleDef, ProjectDocument } from '@bimvoice/ifcsheet';
 import type { OpenedModel } from '@bimvoice/ifcsheet/headless';
 import type { ModelRegistry, ToolContext } from '../context.js';
+import { newHistory, recordEdit, type SetHistory } from './ifcsheet-history.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 
 /** Opened models keep their meshes in memory, so a session holds a bounded number; the oldest is dropped first. */
@@ -50,6 +51,8 @@ export interface SheetSetEntry {
   model: SheetModelEntry;
   set: DefaultSet;
   schedules: SetSchedule[];
+  /** What `ifcsheet_undo` and `ifcsheet_redo` walk. A dry run's working copy has its own, empty one. */
+  history: SetHistory;
 }
 
 interface SheetStore {
@@ -86,7 +89,7 @@ export function addSheetSet(ctx: ToolContext, modelId: string, set: DefaultSet):
   const store = storeOf(ctx);
   const model = store.models.get(modelId);
   if (!model) throw new ToolExecutionError({ code: ToolErrorCode.MODEL_NOT_FOUND, message: `No drawing-set model '${modelId}'.` });
-  const entry: SheetSetEntry = { id: `sheetset-${store.nextSet++}`, modelId, model, set, schedules: [] };
+  const entry: SheetSetEntry = { id: `sheetset-${store.nextSet++}`, modelId, model, set, schedules: [], history: newHistory() };
   store.sets.set(entry.id, entry);
   return entry;
 }
@@ -113,8 +116,9 @@ export function getSheetSet(ctx: ToolContext, id: string): SheetSetEntry {
   });
 }
 
-/** Puts `document` in the set (the levels and notes stay) and returns the entry; the next tool call sees it. */
+/** Puts `document` in the set (the levels and notes stay); the next tool call sees it. The state before is kept for `ifcsheet_undo`. */
 export function replaceSheetDocument(entry: SheetSetEntry, document: ProjectDocument): void {
+  recordEdit(entry);
   entry.set = { ...entry.set, document };
 }
 

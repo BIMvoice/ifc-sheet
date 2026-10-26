@@ -226,6 +226,8 @@ file when `annotated_ifc` is true.
 | `ifcsheet_export_dxf` | `document_id`, `directory`, optional `sheet` | a DXF per sheet, named like `ifcsheet build --dxf` |
 | `ifcsheet_issue_set` | `document_id`, `directory`, optional `handover`, `pattern`, `annotated_ifc` | the PDF, a DXF per sheet, `register.csv`, the schedules as CSV and, with `handover`, `handover.zip` (with the IFC as opened); with `annotated_ifc` also `<model>.annotated.ifc`, which carries no annotations in this build (see below) |
 | `ifcsheet_save_project` | `document_id`, `file_path` (`.json`) | writes `.ifclite-project.json`; what a loaded file held besides the set is written back unchanged |
+| `ifcsheet_undo` | `document_id` | the set as it was before its last edit (add_view, place_view, set_title_block, add_schedule, renumber); `changed`, `undo_steps`, `redo_steps` |
+| `ifcsheet_redo` | `document_id` | re-applies the edit just undone; `changed: false` when there is none |
 | `ifcsheet_load_project` | `model_id`, `project_path` or `project_json` | a new `document_id` from a saved project |
 | `ifcsheet_check_readiness` | `model_id` | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check` |
 
@@ -234,7 +236,7 @@ file when `annotated_ifc` is true.
 and `ifcsheet_renumber` runs the same code as the real call and reports the
 same result, but nothing in the session changes (a dry run of
 `ifcsheet_apply_template` makes no `document_id`). Ids a dry run reports are
-not kept. There is no undo tool: save the project before a series of edits.
+not kept. `ifcsheet_undo` takes back the last edit of a set (`{ "document_id": "sheetset-1" }`), also after several, and `ifcsheet_redo` re-applies it; a dry run is not an edit, a new edit after an undo clears redo, and the last 50 edits are kept. With nothing to undo the result says so (`changed: false`) and is not an error.
 
 Limits, as the tools state them: the engine's DXF holds lines and no text; the
 plain title block of the PDF prints the project, sheet number and name, scale
@@ -323,6 +325,15 @@ and `ifcsheet_place_view` for those, and `ifcsheet_issue_set`.
 An agent can also read `ifcsheet://project/schema` before it writes a project
 file by hand, and `ifcsheet://session/project` to see the set the tools hold.
 `llms.txt` in this package is the short version of this section for agents.
+
+## Hosted endpoint (opt-in)
+
+The web app can serve the drawing-set tools over Streamable HTTP at `/mcp`. It is OFF unless the deployment sets the environment variable `IFCSHEET_HOSTED_MCP=1`; without it the endpoint answers 404 and nothing else changes.
+
+- POST only, JSON in and JSON out (a single message or a batch). No sessions, no resources, no prompts, no server-initiated stream: every request starts from nothing, and a batch (at most 20 messages) shares one state and runs its messages one after the other, in order, so `ifcsheet_open_model` then a tool taking its `model_id` works inside one batch: the ids are sequential within a request (`sheetmodel-1`, `sheetmodel-2`, ...), so the first model a batch opens is `sheetmodel-1`. Across requests nothing carries over. A body that is not a JSON-RPC 2.0 message is answered with -32600 (Invalid Request), invalid JSON with -32700.
+- Only the `ifcsheet_*` tools. The server has no file system for you: every file path (`file_path`, `*_path`, `directory`) is refused with PERMISSION_DENIED. Send the model as `ifc_base64`, a template or project as `template_json` or `project_json`, and read results from the response (`ifcsheet_export_pdf` without `file_path` returns `pdf_base64`). `ifcsheet_generate_set` takes `ifc_base64` directly, so one call turns a model into a set.
+- Nothing is saved: edits are returned in the response, never stored.
+- Limits: a model of at most 25 MB (larger is refused with an error result), a request body to match, and 50 seconds per request (stopped with HTTP 504 and a JSON-RPC error). The 50 s limit is checked between messages and answered when it passes, but it cannot interrupt a synchronous parse or layout already running: such a call runs to its end (the platform's own function limit is then the stop). The hosting platform may set a smaller body limit than 25 MB (Vercel: 4.5 MB), which then applies first.
 
 ## Programmatic embedding
 
