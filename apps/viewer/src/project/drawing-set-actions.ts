@@ -30,7 +30,7 @@ import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useP
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
 import { ensureViewTemplates } from './view-template-start';
-import { resolve } from '@/i18n/registry';
+import { getLocale, resolve } from '@/i18n/registry';
 import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, elevationName, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
 import type { PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
@@ -206,7 +206,7 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport, setTemplate?: Se
   let sheets = before;
   if (!before.some(isSetSheet)) {
     // No set yet: lay it all out, beside any interior elevation sheets already there.
-    const ruled = setTemplate ? applySetTemplate(setTemplate, { views: loose, extent, scheme: numberingScheme() }) : null;
+    const ruled = setTemplate ? applySetTemplate(setTemplate, { views: loose, extent, scheme: numberingScheme(), locale: getLocale() }) : null;
     report.notes.push(...(ruled?.notes ?? []));
     const set = withoutClashes(before, ruled ? ruled.sheets : buildDrawingSet({ views: loose, extent, templates: seriesTemplates(), scheme: numberingScheme() }));
     if (set.length > 0) sheets = [...before, ...set];

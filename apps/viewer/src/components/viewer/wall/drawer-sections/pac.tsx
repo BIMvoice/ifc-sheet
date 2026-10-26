@@ -7,6 +7,8 @@ import { PAC_INTERVENTIONS, PAC_RURAL_ITEMS, pacCoverage, type PacKind } from '@
 import { deliver, runIssue } from '@/issue/run';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { setPacIntervention, useProjectStore } from '@/project/project-store';
+import { describeRuralScope, ruralScopeFindings } from '@/check/rural-scope';
+import { useUrbanIndicators } from '../../urban/useUrban';
 import type { DrawerSection } from './types';
 
 const KINDS: readonly PacKind[] = ['drawing', 'written', 'existingBuilding'];
@@ -22,6 +24,9 @@ function Pac() {
   const views = useProjectStore((s) => s.views);
   const intervention = useProjectStore((s) => s.pacIntervention) ?? 'new';
   const rows = rural ? pacCoverage(sheets, { views, intervention }, PAC_RURAL_ITEMS) : pacCoverage(sheets, { views, intervention });
+  // Anexa 3's scope (P + M, 150 m² Sd) against the model: measured only in that mode, read again as the model changes.
+  const urban = useUrbanIndicators(rural);
+  const outside = rural && urban ? ruralScopeFindings(urban.result) : [];
   const [status, setStatus] = useState<string | null>(null);
   const submit = () => {
     setStatus(t('pac.submit.working'));
@@ -38,6 +43,11 @@ function Pac() {
           <button key={String(mode)} type="button" aria-pressed={rural === mode} data-pac-mode={mode ? 'rural' : 'standard'} onClick={() => setRural(mode)} className={`rounded-full border px-2 py-0.5 text-2xs ${rural === mode ? 'border-cyan-400/60 text-cyan-300' : 'border-sky-300/20 text-sky-100/80'}`}>{t(mode ? 'pac.mode.rural' : 'pac.mode.standard')}</button>
         ))}
       </fieldset>
+      {outside.length > 0 ? (
+        <ul aria-live="polite" data-pac-scope="" className="m-0 mb-2 list-none p-0 text-xs text-amber-200">
+          {outside.map((f) => <li key={f.key}>{describeRuralScope(f, t, locale)}</li>)}
+        </ul>
+      ) : null}
       <p className="m-0 mb-2 text-xs text-sky-100/80">{t(rural ? 'pac.rural.intro' : 'pac.intro')}</p>
       <label className="mb-2 flex flex-col gap-1 text-xs text-sky-100">
         <span className="font-medium text-white">{t('pac.intervention')}</span>

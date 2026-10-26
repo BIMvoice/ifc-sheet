@@ -150,6 +150,7 @@ export {
 } from './schedule-text.js';
 export { SHEET_SCALES, fitViewportBox, mmPerMetre, paperOf } from './viewport-fit.js';
 export { paperSigns, placer } from './sheet-graphic.js';
+export { SHEET_NOTE_SIZE, sheetNoteLines, steppedUpNote, rescaledNote, type SheetNoteLine } from './sheet-notes.js';
 export {
   DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, LEVEL_MATCH_TOLERANCE_M, NEXT_FLOOR_CLEARANCE_M, defaultPlanCutHeight, defaultViews, elevationName, levelFloorY, levelsFromStoreys, planDepthBelowCut, planViewFor,
   resolvePlanLevel, sameElevation, syncDefaultViews, uniqueViewName, type StoreyInput,
