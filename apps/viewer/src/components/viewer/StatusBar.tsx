@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { useMemo, useRef, useState, useEffect } from 'react';
+import { IFCLITE_URL } from '@/lib/credits';
 import { useStreamingThrottled } from '@/hooks/useStreamingThrottled';
 import { sameModelsExceptGeometry } from '@/lib/streaming-refresh';
 import { Boxes, CheckCircle2, AlertCircle, Layers } from 'lucide-react';
@@ -346,7 +347,7 @@ export function StatusBar() {
         <Separator orientation="vertical" className="h-3.5" />
 
         <a
-          href="https://ifclite.dev"
+          href={IFCLITE_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="opacity-60 hover:opacity-100 hover:text-primary transition-opacity"
