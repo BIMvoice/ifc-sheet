@@ -11,6 +11,8 @@
 import { BOQ_UNIT_TEXT, type BoqProblem } from './boq.js';
 import type { BoqLine, BoqResult } from './boq-compute.js';
 import type { BoqSay } from './boq-words.js';
+import { sheetNumber } from './sheet-number.js';
+import type { SheetLocale } from './units-and-numbers.js';
 
 export type BoqCell = string | number | null;
 
@@ -66,8 +68,16 @@ export function boqTable(result: BoqResult, say: BoqSay, options: { title?: stri
   };
 }
 
-/** The article of a line as one text row for the command line. */
-export function boqLineText(line: BoqLine, locale: string): string {
-  const figure = line.total === null ? '–' : (locale.startsWith('ro') ? tidy(line.total).toFixed(2).replace('.', ',') : tidy(line.total).toFixed(2));
+/**
+ * The cells of a table as text, as the sheet prints them and every other reader of people's numbers (the command line, the MCP schedule) must: the number
+ * column as the row number, the quantity written by `sheetNumber` (the language with the project's "Units and numbers"), a missing quantity as a dash.
+ */
+export function boqTableCells(table: BoqTable, locale: SheetLocale): string[][] {
+  return table.rows.map((row) => row.map((v, c) => (c === 0 ? (v === '' || v === null ? '' : String(v)) : c === 4 ? (v === null ? '–' : typeof v === 'number' ? sheetNumber(locale, v) : v) : String(v ?? ''))));
+}
+
+/** The article of a line as one text row for the command line; the figure is written like the sheet's (`sheetNumber`, the project's "Units and numbers"). */
+export function boqLineText(line: BoqLine, locale: SheetLocale): string {
+  const figure = line.total === null ? '–' : sheetNumber(locale, tidy(line.total));
   return `${line.article.code}  ${line.article.description}  ${figure} ${BOQ_UNIT_TEXT[line.article.unit]}`;
 }

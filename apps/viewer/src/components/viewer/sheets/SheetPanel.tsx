@@ -98,7 +98,7 @@ export function SheetPanel({ sheet, viewport, box, viewportName, onExportSvg, on
         <Button variant="outline" size="sm" className="w-full" onClick={onPrint}><Printer className="size-3.5 mr-1" />{t('sheets.pdf')}</Button>
       </div>
       <h3 className="pt-2 font-bold uppercase tracking-wider">{t('check.section')}</h3>
-      <FindingList nav={tabsNav} skin={PANEL_SKIN} />
+      <FindingList nav={tabsNav} skin={PANEL_SKIN} readOnMount />
       <h3 className="pt-2 font-bold uppercase tracking-wider">{t('issue.section')}</h3>
       <IssueForm skin={PANEL_SKIN} />
     </aside>
