@@ -5,18 +5,20 @@
 /**
  * Quantities by element type: for each type (IfcWallType, IfcSlabType, ...)
  * how many elements there are and how much length, area and volume, per
- * storey and in total, read from the model's own quantity sets (Qto_*), never
- * measured off the geometry. Elements without a type are grouped by their IFC
- * class instead. An element whose Qto gives nothing is counted, left out of
- * the sums and noted in `noQto`, so a geometry-measured fill can take it over
- * later.
+ * storey and in total, read from the model's own quantity sets (Qto_*). A
+ * volume or area the model does not state is measured from the element's
+ * geometry (#74, the engine's `withMeasured`: any closed solid's volume, a
+ * wall's side, a slab's top) and counted as measured; length is never
+ * measured. Elements without a type are grouped by their IFC class instead. An
+ * element with no figure at all is counted, left out of the sums and noted in
+ * `noQto`.
  *
  * Pure: elements in, rows out. `collectTypeElements` reads the loaded models
  * into that input.
  */
 
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
-import type { ClassificationResult } from '@bimvoice/ifcsheet';
+import type { ClassificationResult, MeasureRefusal, QuantitySource } from '@bimvoice/ifcsheet';
 
 export interface TypeElement {
   /** IFC class, `IfcWall`. */
@@ -29,10 +31,15 @@ export interface TypeElement {
   level: string;
   /** Storey elevation, used to order levels; null when unknown. */
   elevation: number | null;
-  /** Metres, square metres, cubic metres; null when the model gives none. */
+  /** Metres, square metres, cubic metres; null when the model gives none (and, for area and volume, the geometry cannot). */
   length: number | null;
   area: number | null;
   volume: number | null;
+  /** Where the area and volume come from (#74); absent: declared. */
+  areaSource?: QuantitySource | null;
+  volumeSource?: QuantitySource | null;
+  /** Set when the model states no volume and the geometry could not give one. */
+  volumeRefusal?: MeasureRefusal;
   /** The element's classification (#89, `classificationOf`); `null` when it has none, absent when the schedule shows no classification. */
   classification?: ClassificationResult | null;
 }
@@ -45,6 +52,11 @@ export interface Totals {
   length: number | null;
   area: number | null;
   volume: number | null;
+  /** Elements whose area, volume in the sum is measured from geometry (#74); absent: none. */
+  measuredArea?: number;
+  measuredVolume?: number;
+  /** Elements whose volume the model does not state and the geometry could not give; absent: none. */
+  unmeasuredVolume?: number;
 }
 
 export interface TypeRow {
@@ -161,6 +173,9 @@ function add(t: Totals, e: TypeElement): void {
   if (e.length !== null) t.length = (t.length ?? 0) + e.length;
   if (e.area !== null) t.area = (t.area ?? 0) + e.area;
   if (e.volume !== null) t.volume = (t.volume ?? 0) + e.volume;
+  if (e.area !== null && e.areaSource === 'measured') t.measuredArea = (t.measuredArea ?? 0) + 1;
+  if (e.volume !== null && e.volumeSource === 'measured') t.measuredVolume = (t.measuredVolume ?? 0) + 1;
+  if (e.volumeRefusal) t.unmeasuredVolume = (t.unmeasuredVolume ?? 0) + 1;
 }
 
 /** One row per type (merged across models by class and name), typed rows first by class then name, untyped ones after by class, and a total per class of element; one pass over the elements. */
