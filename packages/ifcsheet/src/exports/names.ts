@@ -1,0 +1,10 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+
+/** Names: the engine's words, the name resolver, sheet numbers and the locale. Add new exports of this area here, not in `../index.ts`. */
+
+// Names
+export { ENGINE_NAMES_EN, englishName, nameOf, setNameResolver, type EngineNameKey, type NameParams, type NameResolver } from '../names.js';
+export { sheetNumber, sheetLevel, sheetFormat, readUnitsAndNumbers, type SheetLocale, type SheetFormat, type UnitsAndNumbers } from '../names.js';
