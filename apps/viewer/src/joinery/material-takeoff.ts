@@ -4,10 +4,11 @@
 
 /**
  * The material takeoff: for each IfcMaterial, how many elements use it and how
- * much of it there is, read from the model's own quantity sets (Qto_*), never
- * measured off the drawing. An element of several materials shares its
- * quantity out: a layer set by layer thickness, a constituent set by its
- * fractions, anything else evenly.
+ * much of it there is, read from the model's own quantity sets (Qto_*); a
+ * figure the model does not state is measured from the element's geometry
+ * (#74, the engine's `withMeasured`) and the row says so. An element of
+ * several materials shares its quantity out: a layer set by layer thickness, a
+ * constituent set by its fractions, anything else evenly.
  *
  * Pure: elements in, rows out. `collectTakeoffElements` reads the loaded
  * models into that input.
@@ -15,6 +16,7 @@
 
 import type { MaterialInfo } from '@ifc-lite/parser';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
+import type { MeasureRefusal, QuantitySource } from '@bimvoice/ifcsheet';
 
 export interface MaterialShare {
   name: string;
@@ -26,9 +28,14 @@ export interface TakeoffElement {
   /** IFC class, `IfcWall`. */
   className: string;
   materials: MaterialShare[];
-  /** Cubic metres, square metres; null when the model gives none. */
+  /** Cubic metres, square metres; null when the model gives none and the geometry cannot. */
   volume: number | null;
   area: number | null;
+  /** Where each figure comes from (#74); absent: declared. */
+  volumeSource?: QuantitySource | null;
+  areaSource?: QuantitySource | null;
+  /** Set when the model states no volume and the geometry could not give one. */
+  volumeRefusal?: MeasureRefusal;
 }
 
 export interface TakeoffRow {
@@ -39,6 +46,11 @@ export interface TakeoffRow {
   area: number | null;
   /** The IFC classes it appears in, sorted. */
   classes: string[];
+  /** Some of the volume, the area, is measured from geometry (#74); absent: none is. */
+  measuredVolume?: boolean;
+  measuredArea?: boolean;
+  /** Elements whose volume the model does not state and the geometry could not give; absent: none. */
+  unmeasuredVolume?: number;
 }
 
 /** How an element's materials share its quantity. Names are trimmed; unnamed parts are left out. */
@@ -96,6 +108,9 @@ export function takeoffRows(elements: readonly TakeoffElement[]): TakeoffRow[] {
       row.elements += 1;
       if (e.volume !== null) row.volume = (row.volume ?? 0) + e.volume * m.share;
       if (e.area !== null) row.area = (row.area ?? 0) + e.area * m.share;
+      if (e.volume !== null && e.volumeSource === 'measured') row.measuredVolume = true;
+      if (e.area !== null && e.areaSource === 'measured') row.measuredArea = true;
+      if (e.volumeRefusal) row.unmeasuredVolume = (row.unmeasuredVolume ?? 0) + 1;
       row.classSet.add(e.className);
       rows.set(m.name, row);
     }
