@@ -99,8 +99,8 @@ describe('a project saved with the Romanian pack, built by the engine', () => {
     assert.equal(facts.graphicStandard?.id, 'ro-practice', 'the engine reads the graphic standard');
     assert.ok(facts.titleBlockTemplate && facts.titleBlockTemplate.items.length > 0, 'the engine reads the title block layout');
     for (const sheet of useProjectStore.getState().sheets) {
-      // Only the scale differs: a sheet with no drawing states none here and a dash on screen (the engine leaves an empty text out).
-      const screen = titleTexts(sheet).filter((t) => t !== '—' && t !== '');
+      // The scale is the one shared rule (sheetScaleLine): a dash for a sheet with no drawing, on screen and in the engine alike. Only an empty text differs (the engine leaves it out).
+      const screen = titleTexts(sheet).filter((t) => t !== '');
       const engine = engineSheet(facts, sheet, false).texts.map((t) => t.text);
       assert.deepEqual(engine, screen, `${sheet.number} title block`);
       assert.ok(engine.includes('Proiectant general') && engine.includes('P-2026-014'));
@@ -114,7 +114,7 @@ describe('a project saved with the Romanian pack, built by the engine', () => {
     assert.equal(facts.graphicStandard, undefined);
     assert.equal(facts.titleBlockTemplate, undefined);
     for (const sheet of useProjectStore.getState().sheets) {
-      const screen = titleTexts(sheet).filter((t) => t !== '—' && t !== '');
+      const screen = titleTexts(sheet).filter((t) => t !== '');
       assert.deepEqual(engineSheet(facts, sheet, false).texts.map((t) => t.text), screen, `${sheet.number} title block`);
       assert.deepEqual(screenCutWidths(sheet), [PEN_TABLE.pens.cut]);
       assert.deepEqual(engineCutWidths(facts, sheet), [PEN_TABLE.pens.cut]);

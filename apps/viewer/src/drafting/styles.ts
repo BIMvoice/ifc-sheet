@@ -23,7 +23,7 @@
 
 import type { DraftLayer, DraftParamValue } from './types';
 import { fontFamilyOf } from './text-width';
-import { DEFAULT_DIM_STYLE as ENGINE_DEFAULT_DIM_STYLE, STANDARD_STYLE_ID, type ArrowKind, type DimStyle, type DraftLengthUnit, type FontKind, type TextPlacement, type TextStyle } from '@bimvoice/ifcsheet';
+import { DEFAULT_DIM_STYLE as ENGINE_DEFAULT_DIM_STYLE, STANDARD_STYLE_ID, type DimStyle, type DraftLengthUnit, type FontKind, type TextStyle } from '@bimvoice/ifcsheet';
 import { decimalsOf, lengthUnitOf, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type { ArrowKind, DimStyle, FontKind, TextPlacement, TextStyle } from '@bimvoice/ifcsheet';
