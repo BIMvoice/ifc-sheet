@@ -10,6 +10,7 @@ import { cleanup, render, waitFor, advance } from '@/test/render.js';
 import { FZK_HAUS, loadPlanModel, planModelMissing } from '@/test/discipline-plan-fixture';
 import { currentFindings } from '@/check/collect';
 import { FINDING_INPUTS } from '@/check/inputs';
+import { labelElementOf } from '@/labels/label-element';
 import { FINDINGS_DEBOUNCE_MS } from '@/check/watch-findings';
 import type { FindingNav } from '@/check/go';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
@@ -135,21 +136,53 @@ describe('the list of what is missing follows the set (#24)', { skip: planModelM
     } finally { spy.stop(); }
   });
 
-  it('reads nothing the declared inputs do not list', () => {
+  /** Runs `body` with every read of the three stores recorded, and returns the keys read that FINDING_INPUTS does not list. */
+  const undeclaredReads = (body: () => void) => {
     const seen = { project: new Set<string>(), viewDrawings: new Set<string>(), viewer: new Set<string>() };
     const real = [useProjectStore.getState, useViewDrawings.getState, useViewerStore.getState] as const;
     const spyOn = (store: { getState: () => object }, into: Set<string>) => {
       const g = store.getState;
       store.getState = (() => new Proxy(g(), { get: (t, k, r) => { if (typeof k === 'string') into.add(k); return Reflect.get(t, k, r); } })) as never;
     };
-    // A dangling tag so the name of a gone element is read from the recorded state too.
-    useProjectStore.setState({ drafts: [...useProjectStore.getState().drafts, { ...tag('GONE000000000000000000'), id: 'gone' }] });
     spyOn(useProjectStore, seen.project); spyOn(useViewDrawings, seen.viewDrawings); spyOn(useViewerStore, seen.viewer);
-    try { currentFindings(); } finally { Object.assign(useProjectStore, { getState: real[0] }); Object.assign(useViewDrawings, { getState: real[1] }); Object.assign(useViewerStore, { getState: real[2] }); }
+    try { body(); } finally { Object.assign(useProjectStore, { getState: real[0] }); Object.assign(useViewDrawings, { getState: real[1] }); Object.assign(useViewerStore, { getState: real[2] }); }
     const undeclared = (name: keyof typeof seen) => [...seen[name]].filter((k) => !(FINDING_INPUTS[name] as readonly string[]).includes(k));
-    assert.deepEqual(undeclared('project'), [], 'project store keys the checks read must be in FINDING_INPUTS.project');
-    assert.deepEqual(undeclared('viewDrawings'), []);
-    assert.deepEqual(undeclared('viewer'), []);
-    assert.ok(seen.project.has('drafts') && seen.viewer.has('models'), 'the spy saw the reads');
+    return { seen, project: undeclared('project'), viewDrawings: undeclared('viewDrawings'), viewer: undeclared('viewer') };
+  };
+  const GONE = { ...tag('GONE000000000000000000'), id: 'gone' };
+
+  it('reads nothing the declared inputs do not list', () => {
+    // A dangling tag so the name of a gone element is read from the recorded state too.
+    useProjectStore.setState({ drafts: [...useProjectStore.getState().drafts, GONE] });
+    const r = undeclaredReads(() => { currentFindings(); });
+    assert.deepEqual(r.project, [], 'project store keys the checks read must be in FINDING_INPUTS.project');
+    assert.deepEqual(r.viewDrawings, []);
+    assert.deepEqual(r.viewer, []);
+    assert.ok(r.seen.project.has('drafts') && r.seen.viewer.has('models'), 'the spy saw the reads');
+  });
+
+  it('reads nothing undeclared with title-block sources and tag fields set, and with no views, drafts or sheets', () => {
+    useProjectStore.setState({
+      drafts: [...useProjectStore.getState().drafts, GONE],
+      titleBlockSources: { drawnBy: [{ kind: 'pset', pset: 'Pset_ProjectCommon', property: 'Author' }, { kind: 'owner', part: 'person' }], client: [{ kind: 'actor', role: 'CLIENT' }] },
+      tagFields: { door: { mark: [{ kind: 'pset', pset: 'Pset_DoorCommon', property: 'Reference' }] } },
+    } as never);
+    const withSources = undeclaredReads(() => { currentFindings(); });
+    assert.deepEqual([withSources.project, withSources.viewDrawings, withSources.viewer], [[], [], []]);
+    useProjectStore.setState({ views: [], drafts: [], sheets: [] });
+    const empty = undeclaredReads(() => { currentFindings(); });
+    assert.deepEqual([empty.project, empty.viewDrawings, empty.viewer], [[], [], []]);
+    useProjectStore.setState({ titleBlockSources: undefined, tagFields: undefined } as never);
+  });
+
+  it('the element the checks read labels from declares what its classification read needs', () => {
+    // Nothing the checks resolve today asks an element for its classification (no title-block or tag source can), so the
+    // default fixture never reaches `classificationMappings`. The element carries the read, so it is held to the list.
+    const [modelId, model] = [...useViewerStore.getState().models][0]!;
+    const door = model.ifcDataStore!.entityIndex.byType.get('IFCDOOR')![0]!;
+    const el = labelElementOf(modelId, door)!;
+    const r = undeclaredReads(() => { el.classification!(); });
+    assert.ok(r.seen.project.has('classificationMappings'), 'the spy saw the mapping read');
+    assert.deepEqual(r.project, [], 'a classification read of an element must read only listed keys');
   });
 });
