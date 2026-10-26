@@ -63,7 +63,7 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 | General designer (title block) | Proiectant general | The firm that holds the design; the title block's organisation |
 | Project manager (title block) | Șef proiect | |
 | Designed by (title block) | Proiectat | With "Desenat" and "Verificat" |
-| Phase (of the design, title block) | Faza | Written as the issue names them: DTAC, PTh, DE; typed, never translated |
+| Phase (of the design, title block) | Faza | Written as the issue names them: PAC (DTAC before 25 August 2026), PTh, DE; typed, never translated |
 | Project no. (title block) | Proiect nr. | |
 | Stamp (designer's, verifier's) | Ștampilă proiectant / Ștampilă verificator | An empty box on the title block for the stamp and signature |
 | Paper | Hârtie | Paper format: "Format" |
