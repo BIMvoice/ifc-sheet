@@ -38,8 +38,8 @@ export const keyboardShortcutsRo = {
   'keyboardShortcuts.about.versionLabel': 'v{version}',
   'keyboardShortcuts.about.homepageLink': 'ifclite.dev',
   'keyboardShortcuts.about.docsLink': 'Documentație',
-  'keyboardShortcuts.about.githubLink': 'GitHub',
-  'keyboardShortcuts.about.reportIssueLink': 'Raportați o problemă',
+  'keyboardShortcuts.about.githubLink': 'IfcSheet pe GitHub',
+  'keyboardShortcuts.about.reportIssueLink': 'Raportați o problemă IfcSheet',
   'keyboardShortcuts.about.license': 'MPL-2.0',
   'keyboardShortcuts.about.packagesCount': { one: '{count} pachet', few: '{count} pachete', other: '{count} de pachete' },
 
