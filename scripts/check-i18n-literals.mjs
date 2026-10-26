@@ -29,6 +29,13 @@
  * `scripts/lib/i18n-literals-scan.mjs`; `scripts/check-i18n-literals.test.mjs`
  * covers it directly with fixtures.
  *
+ * TOAST COPY (user-visible strings passed to `toast(...)` / `toast.error(...)`
+ * etc., message and `description:`) is counted in the same per-file rows, over
+ * every .ts/.tsx under `apps/viewer/src`, with the same allowlist predicate as
+ * JSX text. JSX text/attributes remain scanned under `components/*.tsx` only.
+ * 2026-10-26: toast scanning added; the baseline was seeded with the 162
+ * literal toast strings (42 files) then on main. It only ratchets down.
+ *
  * Flags:
  *   --root <dir>       scan this tree instead of the repo
  *   --baseline <path>  read/write this baseline instead of the committed one
@@ -43,14 +50,17 @@ import { countLiterals } from './lib/i18n-literals-scan.mjs';
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(SCRIPTS_DIR, '..');
-const SCAN_ROOT_REL = 'apps/viewer/src/components';
+const SCAN_ROOT_REL = 'apps/viewer/src';
+/** JSX copy is policed only here (as before); elsewhere only toast calls are. */
+const JSX_ROOT_REL = 'apps/viewer/src/components/';
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage', '.turbo', '.next', '.git']);
 /** Test files carry their own hardcoded strings (fixtures, assertions) that
  *  are not UI copy; the oracle tests this sweep adds are the mechanism that
  *  guards the PRODUCTION files this gate scans. */
-const TEST_RE = /\.(test|spec)\.tsx$/;
-const SOURCE_RE = /\.tsx$/;
+const TEST_RE = /\.(test|spec)\.tsx?$/;
+const SOURCE_RE = /\.tsx?$/;
+const DECL_RE = /\.d\.ts$/;
 
 function fail(message) {
   console.error(`check-i18n-literals: ${message}`);
@@ -112,7 +122,7 @@ function walk(dir, found) {
     if (SKIP_DIRS.has(entry.name) || entry.name.startsWith('.')) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) walk(full, found);
-    else if (SOURCE_RE.test(entry.name) && !TEST_RE.test(entry.name)) found.push(full);
+    else if (SOURCE_RE.test(entry.name) && !TEST_RE.test(entry.name) && !DECL_RE.test(entry.name)) found.push(full);
   }
   return found;
 }
@@ -124,13 +134,14 @@ if (!safeIsDir(scanRoot)) fail(`scan root ${scanRoot} does not exist or is not a
 
 const paths = walk(scanRoot, []);
 if (paths.length === 0) {
-  fail(`no .tsx files found under ${scanRoot}. Exiting 0 here would certify a tree nobody looked at.`);
+  fail(`no .ts/.tsx files found under ${scanRoot}. Exiting 0 here would certify a tree nobody looked at.`);
 }
 
 const counts = {};
 for (const path of paths) {
   const rel = relative(args.root, path).split('\\').join('/');
-  const n = countLiterals(readFileSync(path, 'utf8'), path);
+  const jsx = path.endsWith('.tsx') && rel.startsWith(JSX_ROOT_REL);
+  const n = countLiterals(readFileSync(path, 'utf8'), path, { jsx, toasts: true });
   if (n > 0) counts[rel] = n;
 }
 
