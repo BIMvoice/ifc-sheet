@@ -10,6 +10,7 @@ import { csvLines, joineryCsv } from './export-test-util';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import type { MeshData } from '@ifc-lite/geometry';
 import { elementViews } from './element-views';
+import { PAD } from './paged-table';
 
 const labels: ScheduleLabels = {
   locale: 'en', title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
@@ -130,5 +131,15 @@ describe('joinery schedule with views from the real geometry', () => {
     const views = new Map([['w1', (await elementViews([boxMesh(1.2, 0.2, 1.5)]))!]]);
     const l = layoutSchedule(one, labels, { scale: 20, views });
     assert.ok(l.prims.some((p) => p.kind === 'path' && p.view === 'symbol'));
+  });
+});
+
+describe('the joinery schedule keeps its text inside the viewport clip (#42)', () => {
+  it('the title, and every left-aligned run, starts at least a cell padding from the left edge', () => {
+    for (const options of [{}, { scale: 50, maxWidth: 120 }]) {
+      const runs = layoutSchedule(data, labels, options).prims.flatMap((p) => (p.kind === 'text' ? [p] : []));
+      assert.ok(runs.some((r) => r.text === 'Joinery'), 'the title is on the sheet');
+      for (const r of runs.filter((q) => q.anchor === 'start')) assert.ok(r.x >= PAD - 1e-9, `"${r.text}" starts at ${r.x}, left of the inset ${PAD}`);
+    }
   });
 });
