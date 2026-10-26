@@ -105,12 +105,14 @@ const outline = (ui: HTMLElement, id: string) => frame(ui, id).querySelector('[d
 const k = () => useWallZoom.getState().k;
 const level = (ui: HTMLElement) => ui.querySelector('[data-wall-zoom-level]')?.textContent;
 
+let lastWheel: Event | null = null;
 function wheel(target: Element, init: WheelEventInit): void {
   act(() => {
     const event = new window.WheelEvent('wheel', { bubbles: true, cancelable: true, ...init });
-    // happy-dom's WheelEvent drops the pointer position its MouseEvent parent takes.
-    Object.defineProperties(event, { clientX: { value: init.clientX ?? 0 }, clientY: { value: init.clientY ?? 0 } });
+    // happy-dom's WheelEvent drops the pointer position and modifiers its MouseEvent parent takes.
+    Object.defineProperties(event, { clientX: { value: init.clientX ?? 0 }, clientY: { value: init.clientY ?? 0 }, ctrlKey: { value: init.ctrlKey ?? false }, metaKey: { value: init.metaKey ?? false } });
     target.dispatchEvent(event);
+    lastWheel = event;
   });
 }
 
@@ -128,7 +130,7 @@ describe('zoom on the Wall (#188)', () => {
     const fx = (cursor.x - before.left) / before.width;
     const fy = (cursor.y - before.top) / before.height;
     assert.ok(before.left + before.width > cursor.x && cursor.x < SCREEN.w, 'the cursor is over the sheet, on the screen');
-    wheel(scroller(ui), { deltaY: -300, clientX: cursor.x, clientY: cursor.y });
+    wheel(scroller(ui), { deltaY: -300, ctrlKey: true, clientX: cursor.x, clientY: cursor.y });
     assert.ok(k() > 1.4, `the wheel zoomed in (${k()})`);
     const after = frame(ui, id).getBoundingClientRect();
     assert.ok(after.width > before.width * 1.4, 'the sheet is bigger');
@@ -138,10 +140,19 @@ describe('zoom on the Wall (#188)', () => {
     const out = { x: 300, y: 200 };
     const hit = frame(ui, ids()[0]).getBoundingClientRect();
     const gx = (out.x - hit.left) / hit.width;
-    wheel(scroller(ui), { deltaY: 200, clientX: out.x, clientY: out.y });
+    wheel(scroller(ui), { deltaY: 200, ctrlKey: true, clientX: out.x, clientY: out.y });
     assert.ok(k() < 1.4 * 1.2);
     const back = frame(ui, ids()[0]).getBoundingClientRect();
     assert.ok(Math.abs(back.left + gx * back.width - out.x) < 1 || useWallZoom.getState().left === 0, 'about the new cursor (or held at the Wall\'s edge)');
+  });
+
+  it('leaves a plain wheel to scroll the Wall and zooms on Ctrl/Cmd and the wheel', () => {
+    const ui = render(<WallGrid extent={null} onStep={() => {}} />);
+    wheel(scroller(ui), { deltaY: -300, clientX: 300, clientY: 200 });
+    assert.equal(k(), 1, 'a plain wheel does not zoom');
+    assert.equal(lastWheel?.defaultPrevented, false, 'and is left to scroll natively');
+    wheel(scroller(ui), { deltaY: -300, metaKey: true, clientX: 300, clientY: 200 });
+    assert.ok(k() > 1, 'Cmd and the wheel zooms');
   });
 
   it('steps with + and - and the Ctrl/Cmd chords, and 0 fits every sheet in view', () => {

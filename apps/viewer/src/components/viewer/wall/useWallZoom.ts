@@ -5,7 +5,7 @@
 /**
  * Zoom and pan on the Wall (#188). The zoom multiplies the width every sheet hangs at, so the layout itself changes and the
  * sheets stay sharp; what stays put under the cursor is found again after the layout moved by the point's place in its sheet's
- * frame. The wheel (and a trackpad pinch) zooms about the cursor, `+` `-` and Ctrl/Cmd `+` `-` step, `0` fits the whole set,
+ * frame. A trackpad pinch or Ctrl/Cmd and the wheel zooms about the cursor (a plain wheel scrolls), `+` `-` and Ctrl/Cmd `+` `-` step, `0` fits the whole set,
  * `1` shows a sheet at its paper size, `Z` zooms to one sheet, PageUp/PageDown (and the arrows, after a zoom to a sheet) walk
  * the sheets at that zoom. A drag on the empty Wall, or Space and a drag anywhere, pans; the scroll bars work as they did.
  */
@@ -157,11 +157,11 @@ export function useWallZoomControls(scroller: RefObject<HTMLDivElement | null>):
     if (!el) return;
     const useState = useWallZoom.getState;
     const onWheel = (e: WheelEvent) => {
-      // Shift and the wheel scrolls sideways, as it always did.
-      if (e.shiftKey && !e.ctrlKey) return;
+      // A plain wheel or a two-finger scroll keeps scrolling the Wall; only a pinch (a wheel with ctrlKey) or Ctrl/Cmd and the wheel zooms.
+      if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
       const lines = e.deltaMode === 1 ? 33 : 1;
-      const f = Math.exp(-e.deltaY * lines * (e.ctrlKey ? 0.01 : 0.0015));
+      const f = Math.exp(-e.deltaY * lines * (e.ctrlKey ? 0.01 : 0.004));
       live.current.zoomTo(useState().k * f, { x: e.clientX, y: e.clientY });
     };
     el.addEventListener('wheel', onWheel, { passive: false });
