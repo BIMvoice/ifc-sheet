@@ -108,6 +108,8 @@ export function sectionReferenceDrafts(
   const normals = new Map<string, Pt | null>();
   const factor = options.factor ?? 1;
   const taken: Box[] = [...(options.obstacles ?? [])];
+  // The box every text on the plan prints in, read once for all its letters (#154).
+  let letterBoxes: (Box | null)[] | null = null;
   for (const d of drafts) {
     const id = namedSection(d, views);
     const ref = id ? viewReference(id, viewIds, sheets) : null;
@@ -118,6 +120,7 @@ export function sectionReferenceDrafts(
     }
     const n = normals.get(id);
     if (!n) continue;
+    letterBoxes ??= drafts.map((o) => (o.shape.type === 'text' ? boxOf(textBox(o.shape.p, o.shape.text, o.shape.height * factor, o.shape.rotation)) : null));
     const letter = d.shape;
     const label = referenceLabel(ref);
     const height = letter.height * REF_TEXT_SHARE;
@@ -138,9 +141,12 @@ export function sectionReferenceDrafts(
       }
     }
     // The other letters on the plan are in the way too, the next section's among them.
-    const letters = drafts.flatMap((o) => (o !== d && o.shape.type === 'text' ? [boxOf(textBox(o.shape.p, o.shape.text, o.shape.height * factor, o.shape.rotation))] : []));
-    const blocked = [...taken, ...letters];
-    const best = spots.sort((a, b) => a.cost - b.cost).find(({ p }) => blocked.every((t) => !overlaps(boxAt(p), t, margin)));
+    const blocked = [...taken, ...letterBoxes.filter((b, i): b is Box => b !== null && drafts[i] !== d)];
+    // Each spot's box once, not once per box it is tested against (#154).
+    const best = spots.sort((a, b) => a.cost - b.cost).find(({ p }) => {
+      const box = boxAt(p);
+      return blocked.every((t) => !overlaps(box, t, margin));
+    });
     const p = best?.p ?? home;
     taken.push(boxAt(p));
     out.push({ ...d, id: `${d.id}${XREF}`, params: withoutSectionLink(d.params), shape: { type: 'text', p, text: label, height, rotation: 0 } });
@@ -164,10 +170,15 @@ export interface Box {
   y1: number;
 }
 
-export const boxOf = (pts: readonly Pt[]): Box => ({
-  x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)),
-  x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)),
-});
+/** The box round `pts`. One pass, no spread: it runs for every obstacle segment and every spot a mark tries (#154). */
+export function boxOf(pts: readonly Pt[]): Box {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of pts) {
+    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
+    x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
+  }
+  return { x0, y0, x1, y1 };
+}
 export const overlaps = (a: Box, b: Box, m: number): boolean => a.x0 - m < b.x1 && a.x1 + m > b.x0 && a.y0 - m < b.y1 && a.y1 + m > b.y0;
 
 /** The boxes of what an elevation mark must keep clear of on a plan: section lines and their labels, grid axes and their bubbles, any other line or text. */
@@ -302,7 +313,8 @@ export function elevationMarkDrafts(input: ElevationMarkInput): DraftEntity[] {
       };
       // Just past one of their edges, either side.
       const candidates = taken.flatMap((t) => (horizontal ? [t.x0 - margin - hi, t.x1 + margin - lo] : [t.y0 - margin - hi, t.y1 + margin - lo]));
-      const shift = [0, ...candidates].filter(clear).sort((a, b) => Math.abs(a) - Math.abs(b))[0];
+      // Nearest first (a stable sort, so of two as near the earlier wins), then the first that is clear: testing every candidate against every box was quadratic in the obstacles (#154).
+      const shift = [0, ...candidates].sort((a, b) => Math.abs(a) - Math.abs(b)).find(clear);
       return shift === undefined ? null : { shift, placed: shift === 0 ? start : build(shift, lift) };
     };
     let found: ReturnType<typeof nearestClear> = null;

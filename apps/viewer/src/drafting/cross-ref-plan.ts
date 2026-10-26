@@ -15,6 +15,7 @@ import { fitExtent } from '@/project/sheets';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import { elevationMarkDrafts, MARK_MARGIN_MM, obstacleBoxes, overlayObstacleBoxes, sectionReferenceDrafts } from './cross-ref-marks';
+import { annotationScreenUp } from './annotation';
 import type { DraftEntity, Pt } from './types';
 
 export interface PlanCrossRefInput {
@@ -33,8 +34,26 @@ export interface PlanCrossRefInput {
   overlays?: readonly PlanOverlay[];
 }
 
+/**
+ * What {@link withCrossReferences} returned for each input object, per screen-up direction: a mark is
+ * placed by its text box, and a text box is measured with the session's screen-up (`annotationScreenUp`).
+ * A sheet asks for a viewport's marks three times a render (what it draws, the extent it fits and the
+ * box it frames) and on every render after, so it hands the same input each time and the marks are
+ * placed once (#154). An input is never changed after it is made.
+ */
+const placed = new WeakMap<PlanCrossRefInput, Map<1 | -1, DraftEntity[]>>();
+
 /** `drafts` with the section references and elevation marks of a plan added; any other view's drafts unchanged. */
 export function withCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
+  const up = annotationScreenUp();
+  let byUp = placed.get(input);
+  if (!byUp) placed.set(input, byUp = new Map());
+  let out = byUp.get(up);
+  if (!out) byUp.set(up, out = placeCrossReferences(input));
+  return out;
+}
+
+function placeCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
   const { drafts, view, views, sheets, groundPlanId, bounds, viewportScale } = input;
   const symbols = overlayObstacleBoxes(input.overlays ?? []);
   const sections = view?.kind === 'plan' ? sectionReferenceDrafts(drafts, views, sheets, { obstacles: symbols, paperUnit: viewportPaperUnit(viewportScale), factor: annotationFactor(viewportScale, view.scale) }) : [];
