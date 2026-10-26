@@ -34,11 +34,11 @@ import { sameElevation } from './view-defaults.js';
  *     lifts part of the rest: "În cazul intervențiilor numai la interior nu mai sunt necesare documentele privind
  *     inserarea în sit, volumetria, planul acoperișului/terasei, fațadele, documentațiile grafice sau fotografice
  *     privind încadrarea/inserția."
- * The last sentence names five things, and the items it lifts are those: the two situation plans (inserarea în sit), the
- * roof and terrace plan, the facades, and the graphic and photo documentation (încadrarea/inserția). "Volumetria" has no
- * item of its own. The location plan (1.a, "planul de încadrare în zonă") is NOT lifted: the sentence speaks of
- * "documentațiile ... privind încadrarea/inserția" of the project, and 1.1 defines the location plan as the planning-
- * regulation overlay, not a drawing of the insertion. The floor plans, sections and utility plan stay required.
+ * That sentence closes point 1.4, "proiectul de arhitectură", and lists architecture documents: the items it lifts are those
+ * of 1.4 it names, the roof and terrace plan, the facades and the graphic and photo documentation of the insertion and
+ * context (1.4.3 b). "Inserarea în sit" and "volumetria" have no item of their own in 1.4. The situation plans (1.b and
+ * 1.c, detailed in 1.2 and 1.3) and the location plan (1.a, 1.1) are separate top-level items of point 1, outside 1.4,
+ * so they stay required. The floor plans, sections and utility plan stay required too.
  */
 export type PacIntervention = 'new' | 'existing' | 'interior';
 export const PAC_INTERVENTIONS: readonly PacIntervention[] = ['new', 'existing', 'interior'];
@@ -67,8 +67,8 @@ export interface PacItem {
 /** The items of Anexa 2 point 1, in the order the text lists them. Every `scales` is a quotation (see the research file, 00.1). */
 export const PAC_ITEMS: readonly PacItem[] = [
   { id: 'siteLocation', point: '1.a, 1.1', kind: 'drawing', scales: [25000, 10000, 5000, 2000, 1000], drawnBy: null },
-  { id: 'situationExisting', point: '1.b, 1.2', kind: 'drawing', scales: [1000, 500], drawnBy: null, notForInterior: true },
-  { id: 'situationProposed', point: '1.c, 1.3', kind: 'drawing', scales: [1000, 500], drawnBy: null, notForInterior: true },
+  { id: 'situationExisting', point: '1.b, 1.2', kind: 'drawing', scales: [1000, 500], drawnBy: null },
+  { id: 'situationProposed', point: '1.c, 1.3', kind: 'drawing', scales: [1000, 500], drawnBy: null },
   { id: 'plans', point: '1.4.3 a)', kind: 'drawing', scales: null, drawnBy: 'plans' },
   { id: 'roof', point: '1.4.3 a)', kind: 'drawing', scales: null, drawnBy: null, notForInterior: true },
   { id: 'facades', point: '1.4.3 a)', kind: 'drawing', scales: null, drawnBy: 'elevations', notForInterior: true },

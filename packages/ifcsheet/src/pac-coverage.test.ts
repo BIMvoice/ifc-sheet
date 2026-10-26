@@ -128,9 +128,9 @@ describe('which items apply, per kind of works (Anexa 2 1.4.4)', () => {
     expect(statesOf(made(), 'existing')).toEqual({ ...NEW_BUILDING, diagnosis: 'no', structuralExpertise: 'no', survey: 'no' });
   });
 
-  it('interior only: the situation plans, the roof plan, the facades and the photo documentation are Nu este cazul; the plans, sections, utilities and 1.4.4 stay', () => {
+  it('interior only: the roof plan, the facades and the photo documentation (all inside 1.4) are Nu este cazul; the situation plans (1.b, 1.c), the plans, sections, utilities and 1.4.4 stay', () => {
     expect(statesOf(made(), 'interior')).toEqual({
-      ...NEW_BUILDING, situationExisting: 'na', situationProposed: 'na', roof: 'na', facades: 'na', context: 'na', diagnosis: 'no', structuralExpertise: 'no', survey: 'no',
+      ...NEW_BUILDING, roof: 'na', facades: 'na', context: 'na', diagnosis: 'no', structuralExpertise: 'no', survey: 'no',
     });
   });
 

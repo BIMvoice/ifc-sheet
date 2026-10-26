@@ -100,7 +100,7 @@ describe('the PAC checklist', () => {
     assert.equal(useProjectStore.getState().pacIntervention, 'interior');
     const states = Object.fromEntries(PAC_ITEMS.map((i) => [i.id, stateOf(ui, i.id)]));
     assert.deepEqual(states, {
-      siteLocation: 'no', situationExisting: 'na', situationProposed: 'na', plans: 'yes', roof: 'na', facades: 'na', sections: 'no', context: 'na', utilities: 'no',
+      siteLocation: 'no', situationExisting: 'no', situationProposed: 'no', plans: 'yes', roof: 'na', facades: 'na', sections: 'no', context: 'na', utilities: 'no',
       engineeringDrawings: 'no', architectureMemo: 'no', specialtyMemos: 'no', neighbourExpertise: 'no', geotechnical: 'no', calculationBrief: 'no',
       diagnosis: 'no', structuralExpertise: 'no', survey: 'no',
     });
