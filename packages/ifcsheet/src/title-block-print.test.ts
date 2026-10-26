@@ -97,7 +97,7 @@ describe('the standard layout\'s placements (what the app drew before the engine
 describe('a project without a layout', () => {
   it('prints the app\'s standard layout: captions, then the project, sheet name, date, sheet number and scale', () => {
     expect(texts(doc())).toEqual([
-      'Project', 'Locuință ș ț', 'Address', 'Client', 'Organisation', 'Title', 'Plan parter', 'Drawn by', 'Checked by', 'Date', '2026-10-21', 'Revision', 'Sheet no.', 'A-101', 'Scale',
+      'Project', 'Locuință ș ț', 'Address', 'Client', 'Organisation', 'Title', 'Plan parter', 'Drawn by', 'Checked by', 'Date', '2026-10-21', 'Revision', 'Sheet no.', 'A-101', 'Scale', '\u2014',
     ]);
   });
 
@@ -108,5 +108,31 @@ describe('a project without a layout', () => {
     const same = printTitleBlock(standardTitleBlock(), (n) => ({ SheetNumber: 'A-101' })[n] ?? '', box, false);
     expect(g.frame.slice(1)).toEqual(same.frame);
     expect(g.texts.map((t) => t.at)).toEqual(expect.arrayContaining(same.texts.filter((t) => ['Project', 'Scale', 'Sheet no.'].includes(t.text)).map((t) => t.at)));
+  });
+});
+
+describe('the title block\'s {Scale} is the sheet\'s scale, as in the app (#54)', () => {
+  const vp = (id: string, viewId: string, scale: number) => ({ id, viewId, x: 0, y: 0, scale, width: 100, height: 100, center: null });
+  const plan = (id: string): ProjectDocument['views'][number] => ({ id, name: id, kind: 'plan', levelId: 'l', cutHeight: 1.2 } as unknown as ProjectDocument['views'][number]);
+  const scaleOf = (d: ProjectDocument) => texts(d)[texts(d).indexOf('Scale') + 1];
+
+  it('prints 1:50 for a sheet whose drawings are all at 1:50', () => {
+    const d = doc({ views: [plan('v1'), plan('v2')] }, [sheet({ viewports: [vp('a', 'v1', 50), vp('b', 'v2', 50)] })]);
+    expect(scaleOf(d)).toBe('1:50');
+  });
+
+  it('prints "As indicated" when the drawings differ in scale, not a list', () => {
+    const d = doc({ views: [plan('v1'), plan('v2')] }, [sheet({ viewports: [vp('a', 'v1', 50), vp('b', 'v2', 100)] })]);
+    expect(scaleOf(d)).toBe('As indicated');
+  });
+
+  it('prints a dash for a sheet that states none (no drawings), where the app prints one', () => {
+    expect(scaleOf(doc())).toBe('\u2014');
+  });
+
+  it('a perspective has no scale to state: only the plan\'s counts', () => {
+    const persp = { id: 'p', name: 'p', kind: '3d', projection: 'perspective' } as unknown as ProjectDocument['views'][number];
+    const d = doc({ views: [plan('v1'), persp] }, [sheet({ viewports: [vp('a', 'v1', 50), vp('b', 'p', 1)] })]);
+    expect(scaleOf(d)).toBe('1:50');
   });
 });

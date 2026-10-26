@@ -19,23 +19,19 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import {
   AXONOMETRIC_PRESETS, DEFAULT_AXONOMETRIC_PRESET, asSheetDrawing, axonometricCamera, drawAxonometricView, isVectorAxonometric,
-  presetViewDirection, projectionOf,
+  presetViewDirection, projectionOf, hasTrueScale,
 } from '@bimvoice/ifcsheet/axonometric';
 import type { CameraViewpoint } from '@/store/types';
 import { drawingAsViewShows } from './view-appearance';
 import type { ProjectLevel, ProjectView, ThreeDProjectView } from './types';
 
-export { AXONOMETRIC_PRESETS, DEFAULT_AXONOMETRIC_PRESET, asSheetDrawing, axonometricCamera, isVectorAxonometric, presetViewDirection, projectionOf };
+export { AXONOMETRIC_PRESETS, DEFAULT_AXONOMETRIC_PRESET, asSheetDrawing, axonometricCamera, isVectorAxonometric, presetViewDirection, projectionOf, hasTrueScale };
 
 /** A 3D view that prints as a raster capture: every perspective, and an axonometric asked to be shaded. */
 export function isRasterView(view: ProjectView): view is ThreeDProjectView {
   return view.kind === '3d' && !isVectorAxonometric(view);
 }
 
-/** A 3D view with a scale: the parallel projections. */
-export function hasTrueScale(view: ProjectView | undefined): boolean {
-  return !view || view.kind !== '3d' || projectionOf(view) === 'axonometric';
-}
 
 /** The renderer camera's own field of view, radians. */
 const DEFAULT_FOV = Math.PI / 4;
