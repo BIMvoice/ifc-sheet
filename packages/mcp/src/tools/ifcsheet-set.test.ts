@@ -169,7 +169,7 @@ describe.skipIf(missing !== null)('ifcsheet set tools over stdio on AC20-FZK-Hau
     const schedule = await ok('ifcsheet_add_schedule', { document_id, kind: 'rooms' });
     expect(schedule.sheet.number).toBe('A06');
     expect(schedule.rows).toBeGreaterThan(5);
-    expect(schedule.table[0]).toHaveLength(4);
+    expect(schedule.table[0]).toHaveLength(5);
 
     const out = join(tmp, 'issue');
     const issued = await ok('ifcsheet_issue_set', { document_id, directory: out, handover: true });

@@ -26,7 +26,7 @@ function scheduleJson(file: string, schedule: RoomSchedule, read: RoomsRead, loc
   const words = roomScheduleWords(locale);
   return JSON.stringify({
     file,
-    levels: schedule.levels.map((l) => ({ name: l.name || words.noLevel, total: l.total, rooms: l.rooms.map((r) => ({ number: r.number, name: r.name, area: r.area, source: r.source })) })),
+    levels: schedule.levels.map((l) => ({ name: l.name || words.noLevel, total: l.total, rooms: l.rooms.map((r) => ({ number: r.number, name: r.name, area: r.area, perimeter: r.perimeter, source: r.source })) })),
     total: schedule.total,
     rooms: schedule.rooms,
     areaFromGeometry: schedule.fromGeometry,

@@ -14,7 +14,7 @@ import { modelReadiness, describeReadiness } from './readiness.js';
 import { estimatedAreas } from './room-estimates.js';
 import type { RoomRecord } from './room-schedule.js';
 
-const room = (id: string, number: string, name: string, level: number | null, area: number | null, source: RoomRecord['source'] = 'quantity'): RoomRecord => ({ id, number, name, level, area, source: area === null ? null : source });
+const room = (id: string, number: string, name: string, level: number | null, area: number | null, source: RoomRecord['source'] = 'quantity'): RoomRecord => ({ id, number, name, level, area, source: area === null ? null : source, perimeter: null });
 const FACTS = { storeys: 1, spaces: 3, elements: 0, elementsWithoutStorey: 0, elementsWithoutMaterial: 0, elementsWithoutQuantities: 0, duplicateGlobalIds: 0, duplicatedEntities: 0 };
 
 describe('estimatedAreas', () => {

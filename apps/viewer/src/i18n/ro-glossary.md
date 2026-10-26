@@ -35,6 +35,8 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 | Door / window | Ușă / fereastră | 20 de uși, 20 de ferestre |
 | Area | Arie | In the takeoff column (Arie m²). |
 | Built area (Ac) / Gross developed area (Ad) / Useful area (Au) | Aria construită / Aria desfășurată / Aria utilă | The urban indicators, #258. Ac, Ad, Au, POT and CUT stay as the abbreviations a Romanian drawing prints; "Ad pentru CUT" is Ad counted for CUT |
+| Usable / built / gross floor area (Su, Sc, Sd) | Aria utilă / construită / desfășurată (Su, Sc, Sd) | The area summary under the room schedule, #42: the same figures as Au, Ac, Ad on the urban sheet, under the names of the permit forms. Sd is Ad (all levels, basements included), not Ad pentru CUT; a lower bound reads "≥ 120,00" |
+| Perimeter | Perimetru | The room schedule's column, "Perimetru m" |
 | Room and area schedule | Tabel de încăperi și arii | #42. Heading of the area column: "Arie utilă m²", as on the urban sheet; the building total reads "Total clădire (Au)"; a room on no level is "Fără nivel" |
 | POT / CUT | POT (procent de ocupare a terenului) / CUT (coeficient de utilizare a terenului) | Only the abbreviation is printed on the sheet |
 | Site balance | Bilanț teritorial | The table on the site plan |

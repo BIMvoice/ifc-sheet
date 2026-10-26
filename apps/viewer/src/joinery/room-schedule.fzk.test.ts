@@ -85,13 +85,13 @@ describe('the room and area schedule of AC20-FZK-Haus (#42)', () => {
     await loadUrbanModel('fzk', new Uint8Array(readFileSync(FZK)));
     const s = schedule();
     const en = roomScheduleCells(s, LABELS).map((r) => r.cells.join('|'));
-    assert.equal(en[0], '|Erdgeschoss|');
-    assert.ok(en.includes('4|Schlafzimmer|21.41'));
-    assert.ok(en.includes('|Total Erdgeschoss|98.83'));
-    assert.equal(en[en.length - 1], '|Total building (Au)|173.34');
+    assert.equal(en[0], '|Erdgeschoss||');
+    assert.ok(en.includes('4|Schlafzimmer|21.41|19.00'));
+    assert.ok(en.includes('|Total Erdgeschoss|98.83|'));
+    assert.equal(en[en.length - 1], '|Total building (Au)|173.34|');
     const ro = roomScheduleCells(s, { ...LABELS, locale: 'ro' }).map((r) => r.cells.join('|'));
-    assert.ok(ro.includes('4|Schlafzimmer|21,41'));
-    assert.equal(ro[ro.length - 1], '|Total building (Au)|173,34');
+    assert.ok(ro.includes('4|Schlafzimmer|21,41|19,00'));
+    assert.equal(ro[ro.length - 1], '|Total building (Au)|173,34|');
     // The command line's text and CSV are the same rows.
     assert.ok(roomScheduleText(s, 'ro').includes('Total Dachgeschoss'));
     assert.equal(roomScheduleCsv(s).split('\n').length, roomScheduleLines(s, ROOM_SCHEDULE_EN).length + 1);

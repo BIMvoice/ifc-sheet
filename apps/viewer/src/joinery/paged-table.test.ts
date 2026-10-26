@@ -38,7 +38,7 @@ export const ROOM_LABELS: RoomScheduleLabels = { ...ROOM_SCHEDULE_EN, locale: 'e
 /** `n` rooms over three levels, a tenth of them with their area from the geometry. */
 export const roomData = (n: number): RoomSchedule => roomSchedule(
   [{ name: 'Ground', elevation: 0 }, { name: 'Level 1', elevation: 3 }, { name: 'Level 2', elevation: 6 }],
-  Array.from({ length: n }, (_, i) => ({ id: `r${i}`, number: String(i + 1), name: `Room ${i + 1}`, level: i % 3, area: 8 + i, source: i % 10 === 9 ? 'geometry' as const : 'quantity' as const })),
+  Array.from({ length: n }, (_, i) => ({ id: `r${i}`, number: String(i + 1), name: `Room ${i + 1}`, level: i % 3, area: 8 + i, source: i % 10 === 9 ? 'geometry' as const : 'quantity' as const, perimeter: 12 + i })),
 );
 
 export const takeoffRows = (n: number): TakeoffRow[] => Array.from({ length: n }, (_, i) => ({ material: `Material ${i}`, elements: 1 + (i % 7), volume: i % 4 === 3 ? null : 1 + i / 4, area: 2 + i, classes: ['IfcSlab', ...(i % 2 ? ['IfcWall'] : [])] }));
@@ -88,8 +88,8 @@ function reach(l: ScheduleLayout): { x: number; y: number } {
   return { x, y };
 }
 
-/** What each kind's small fixture drew before the shared engine (the old per-kind layouts), as a digest. */
-const BEFORE: Record<string, string> = { takeoff: 'e6b97b5555f2', finishes: '2a53eb006060', types: 'a4a9294e0535', urban: '7b5aef6f4bf9', rooms: 'e05b93e4965a' };
+/** What each kind's small fixture drew before the shared engine (the old per-kind layouts), as a digest. The rooms' moved when the perimeter column was added (#42); nothing else about it changed. */
+const BEFORE: Record<string, string> = { takeoff: 'e6b97b5555f2', finishes: '2a53eb006060', types: 'a4a9294e0535', urban: '7b5aef6f4bf9', rooms: '3d2224ee5b44' };
 /** A first-column text that exists once per row of the kind's fixture. */
 const ROW_TEXT: Record<string, (i: number) => string> = {
   takeoff: (i) => `Material ${i}`, finishes: (i) => `Room ${i + 1}`, types: (i) => `Type ${i}`, urban: (i) => `Category ${i}`, rooms: (i) => `Room ${i + 1}`,

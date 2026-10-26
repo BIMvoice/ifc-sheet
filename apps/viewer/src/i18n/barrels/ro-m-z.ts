@@ -7,6 +7,7 @@ import { printPreviewRo } from '../catalogues/print-preview.ro';
 import { reviewRo } from '../catalogues/review.ro';
 import { revisionsRo } from '../catalogues/revisions.ro';
 import { roomScheduleRo } from '../catalogues/room-schedule.ro';
+import { roomSummaryRo } from '../catalogues/room-summary.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
 import { setTemplateRo } from '../catalogues/set-template.ro';
 import { sheetContentRo } from '../catalogues/sheet-content.ro';
@@ -37,6 +38,7 @@ export const roMZ = {
   ...reviewRo,
   ...revisionsRo,
   ...roomScheduleRo,
+  ...roomSummaryRo,
   ...scheduleExportRo,
   ...setTemplateRo,
   ...sheetContentRo,

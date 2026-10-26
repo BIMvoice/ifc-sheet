@@ -52,17 +52,22 @@ describe.skipIf(missing !== null)('ifcsheet rooms, on AC20-FZK-Haus', () => {
     const csv = capture();
     expect(await run(['rooms', FZK, '--csv'], csv.io)).toBe(EXIT.ok);
     const rows = csv.out().trim().split('\n');
-    expect(rows[0]).toBe('No.,Room,Level,Useful area m²,Source');
-    expect(rows).toContain('4,Schlafzimmer,Erdgeschoss,21.410325,model quantity');
-    expect(rows[rows.length - 1]).toBe(',Total building (Au),,173.342437,');
+    expect(rows[0]).toBe('No.,Room,Level,Useful area m²,Perimeter m,Source');
+    expect(rows).toContain('4,Schlafzimmer,Erdgeschoss,21.410325,19,model quantity');
+    expect(rows[rows.length - 1]).toBe(',Total building (Au),,173.342437,,');
     const json = capture();
     expect(await run(['rooms', FZK, '--json'], json.io)).toBe(EXIT.ok);
-    const data = JSON.parse(json.out()) as { total: number; rooms: number; areaFromGeometry: number; levels: { name: string; total: number }[]; leftOut: object };
+    const data = JSON.parse(json.out()) as { total: number; rooms: number; areaFromGeometry: number; levels: { name: string; total: number; rooms: { name: string; perimeter: number | null }[] }[]; leftOut: object };
     expect(data.total).toBeCloseTo(21.410325 + 12.127619 + 12.59545 + 25.2088935 + 11.185458 + 16.30545 + 74.5092415823, 6);
     expect(data.rooms).toBe(7);
     expect(data.areaFromGeometry).toBe(0);
     expect(data.levels.map((l) => l.name)).toEqual(['Erdgeschoss', 'Dachgeschoss']);
     expect(data.leftOut).toEqual({ external: 0, gfa: 0, parents: 0 });
+    // The perimeters, by hand from each space's FootPrint polyline in the IFC text (metres; the sum of its segments).
+    const BY_HAND: Record<string, number> = { Schlafzimmer: 2 * (5.45 + 4.05), Bad: 2 * (3.71 + 3.37), Buero: 2 * (3.71 + 3.5), Wohnen: 2 * (3.71 + 7.005), Flur: 2 * (7.11 + 1.5) + 2 * 0.24, 'Küche': 2 * (3.71 + 4.395), Galerie: 2 * (11.4 + 9.4) };
+    const rooms = data.levels.flatMap((l) => l.rooms);
+    expect(rooms).toHaveLength(7);
+    for (const room of rooms) expect(room.perimeter, room.name).toBeCloseTo(BY_HAND[room.name], 2);
   });
 
   it('fails plainly: no file, a model with no room, a wrong command line', async () => {

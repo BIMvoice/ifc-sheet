@@ -13,7 +13,7 @@ import { roomSchedule, ROOM_SCHEDULE_EN, type RoomRecord } from '@bimvoice/ifcsh
 import { sheetFormat } from '@bimvoice/ifcsheet/names';
 import { roomScheduleCells, type RoomScheduleLabels } from './room-schedule-layout';
 
-const ROOM: RoomRecord = { id: 'a', number: '1', name: 'Flur', level: 0, area: 1234.5678, source: 'quantity' };
+const ROOM: RoomRecord = { id: 'a', number: '1', name: 'Flur', level: 0, area: 1234.5678, source: 'quantity', perimeter: 14.16 };
 const SCHEDULE = roomSchedule([{ name: 'EG', elevation: 0 }], [ROOM]);
 const labels = (locale: RoomScheduleLabels['locale']): RoomScheduleLabels => ({ ...ROOM_SCHEDULE_EN, locale, title: 'Rooms', notes: [] });
 const areas = (locale: RoomScheduleLabels['locale']) => roomScheduleCells(SCHEDULE, labels(locale)).map((r) => r.cells[2]).filter(Boolean);
