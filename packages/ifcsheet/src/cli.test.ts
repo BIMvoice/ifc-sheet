@@ -155,7 +155,7 @@ describe('the ifcsheet command line', () => {
   });
 
   it('rejects a build without --out and an unknown command or option as a usage error', async () => {
-    for (const argv of [['build', FZK], ['frobnicate'], ['build', FZK, '--out', 'x.pdf', '--standard', 'ro']]) {
+    for (const argv of [['build', FZK], ['frobnicate'], ['build', FZK, '--out', 'x.pdf', '--bogus']]) {
       const c = capture();
       expect(await run(argv, c.io), argv.join(' ')).toBe(EXIT.usage);
       expect(c.err()).not.toBe('');

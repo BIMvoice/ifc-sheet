@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { PAC_RURAL_ITEMS, pacCoverage, type PacKind } from '@bimvoice/ifcsheet';
+import { deliver, runIssue } from '@/issue/run';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import type { DrawerSection } from './types';
@@ -19,6 +20,14 @@ function Pac() {
   const sheets = useProjectStore((s) => s.sheets);
   const [rural, setRural] = useState(false);
   const rows = rural ? pacCoverage(sheets, PAC_RURAL_ITEMS) : pacCoverage(sheets);
+  const [status, setStatus] = useState<string | null>(null);
+  const submit = () => {
+    setStatus(t('pac.submit.working'));
+    void runIssue({ format: 'pdf', pac: { locale } }).then((result) => {
+      setStatus(result.lines.map((l) => t(l.key, l.params)).join(' '));
+      if (result.pdf) deliver(result, 'pdf');
+    }, (err: unknown) => setStatus(err instanceof Error ? err.message : String(err)));
+  };
   return (
     <section className="border-t border-sky-300/10 px-4 py-3" aria-label={t('pac.title')}>
       <h3 className="m-0 mb-1.5 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('pac.title')}</h3>
@@ -46,6 +55,13 @@ function Pac() {
         </div>
       ))}
       <p className="m-0 mt-2 text-2xs text-sky-100/60">{t(rural ? 'pac.rural.notSet' : 'pac.notSet')}</p>
+      {rural ? null : (
+        <>
+        <button type="button" data-pac-submit onClick={submit} className="mt-2 rounded border border-sky-300/30 px-2 py-1 text-xs text-white hover:bg-sky-400/15">{t('pac.submit')}</button>
+        <p className="m-0 mt-1 text-2xs text-sky-100/60">{t('pac.submit.hint')}</p>
+        {status ? <output className="m-0 mt-1 block text-2xs text-sky-100">{status}</output> : null}
+        </>
+      )}
     </section>
   );
 }

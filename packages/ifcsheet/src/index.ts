@@ -95,8 +95,21 @@ export { readStoreFacts, SILENT_FACTS, type FactOverrides } from './title-block-
 export { cloudRevisionId, currentRevisionOf, REVISION_ID_PARAM, sheetRevisions, type CurrentRevision, type ProjectRevision, type RevisionDraft, type RevisionSource } from './revisions.js';
 export { DEFAULT_SHEET_TYPE, DEFAULT_SHEET_WEIGHTS, DEFAULT_TITLE_BLOCK_METRICS, standardTitleBlock, STANDARD_CAPTIONS_EN, type StandardCaption, type TitleBlockMetrics } from './title-block-standard.js';
 export { BUILTIN_PARAMS, FIELD_PARAMS, fieldBuiltins, paramLookup, resolveParamText, SOFT_BUILTINS, TOKEN, type BuiltinParam, type TitleBlockParam } from './title-block-params.js';
-export { fitText, ITEM_KINDS, TEXT_FIT_MIN, type TemplateItem, type TemplateLine, type TemplateLogo, type TemplateRect, type TemplateText, type TitleBlockTemplate } from './title-block-template.js';
+export { fitText, ITEM_KINDS, MAX_TEXT, TEXT_FIT_MIN, type TemplateItem, type TemplateLine, type TemplateLogo, type TemplateRect, type TemplateText, type TitleBlockTemplate } from './title-block-template.js';
 export { textWidthEm, truncateToWidth } from './text-width.js';
+export { readTitleBlockTemplate } from './title-block-template-read.js';
+export { RO_COLUMNS, RO_ONLY_CAPTIONS_EN, RO_STAMP_TOP, TITLE_BLOCK_CAPTIONS_RO, romanianTitleBlock, type RoCaption, type RoOnlyCaption } from './title-block-ro.js';
+
+// Drawing standards: the graphic standards (pens, sheet pens, lettering) and the packs that bundle them (#365)
+export { DEFAULT_DIM_STYLE, STANDARD_STYLE_ID, type ArrowKind, type DimStyle, type DraftLengthUnit, type FontKind, type TextPlacement, type TextStyle } from './draft-styles.js';
+export {
+  DEFAULT_GRAPHIC_STANDARD, GRAPHIC_STANDARDS, ISO_128_LINE_WIDTHS, ISO_3098_HEIGHTS, ROMANIAN_PRACTICE, graphicStandardOf, knownGraphicStandard, standardValues,
+  type GraphicStandard,
+} from './graphic-standard.js';
+export {
+  COMMAND_LINE_STANDARDS, COMMAND_LINE_STANDARD_IDS, PACK_NOT_SET, PACK_PARTS, ROMANIA_PACK_ID, STANDARD_PACK_VERSION, builtInPacks, packForCommandLine, packPartsOf, romaniaPack,
+  type PackNotSet, type PackPart, type StandardPack,
+} from './standard-pack.js';
 
 // Pure layout
 export { freshProjectId } from './ids.js';
@@ -166,6 +179,8 @@ export { SET_TEMPLATE_EN, describeTemplateNote, type TemplateNote, type Template
 // The Romanian permit project (PAC, Legea 169/2026 Anexa 2): the items it lists and the set that draws the architecture sheets (#364)
 export { PAC_ITEMS, pacCoverage, pacScaleAllowed, pacSetTemplate, type PacCoverageRow, type PacItem, type PacKind, type PacSheetNames } from './pac-set.js';
 export { PAC_RURAL_ITEMS, PAC_RURAL_PAPER, PAC_RURAL_SCALE, PAC_RURAL_STEP_UP, pacRuralSetTemplate } from './pac-rural-set.js';
+export { PAC_OPIS_ORDER, PAC_OPIS_PAPER, pacOpis, pacOpisSheet, pacOpisTexts, pacSubmissionSheets, type PacOpis, type PacOpisRow, type PacSheetRef } from './pac-submission.js';
+export { PAC_WORDS_EN, PAC_WORDS_RO, pacWordsFor, type PacWordKey } from './pac-words.js';
 
 // The starting set (pure: an opened model's facts in, a document out)
 export { SET_SECTIONS, generateDefaultSet, type DefaultSet, type DefaultSetOptions, type SetModel, type SetNote } from './default-set.js';
