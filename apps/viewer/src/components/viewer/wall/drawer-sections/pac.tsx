@@ -31,11 +31,11 @@ function Pac() {
   return (
     <section className="border-t border-sky-300/10 px-4 py-3" aria-label={t('pac.title')}>
       <h3 className="m-0 mb-1.5 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('pac.title')}</h3>
-      <div role="group" aria-label={t('pac.mode.label')} className="mb-2 flex flex-wrap gap-1">
+      <fieldset aria-label={t('pac.mode.label')} className="m-0 mb-2 flex min-w-0 flex-wrap gap-1 border-0 p-0">
         {([false, true] as const).map((mode) => (
           <button key={String(mode)} type="button" aria-pressed={rural === mode} data-pac-mode={mode ? 'rural' : 'standard'} onClick={() => setRural(mode)} className={`rounded-full border px-2 py-0.5 text-2xs ${rural === mode ? 'border-cyan-400/60 text-cyan-300' : 'border-sky-300/20 text-sky-100/80'}`}>{t(mode ? 'pac.mode.rural' : 'pac.mode.standard')}</button>
         ))}
-      </div>
+      </fieldset>
       <p className="m-0 mb-2 text-xs text-sky-100/80">{t(rural ? 'pac.rural.intro' : 'pac.intro')}</p>
       {KINDS.map((kind) => (
         <div key={kind}>
@@ -57,9 +57,9 @@ function Pac() {
       <p className="m-0 mt-2 text-2xs text-sky-100/60">{t(rural ? 'pac.rural.notSet' : 'pac.notSet')}</p>
       {rural ? null : (
         <>
-        <button type="button" data-pac-submit onClick={submit} className="mt-2 rounded border border-sky-300/30 px-2 py-1 text-xs text-white hover:bg-sky-400/15">{t('pac.submit')}</button>
-        <p className="m-0 mt-1 text-2xs text-sky-100/60">{t('pac.submit.hint')}</p>
-        {status ? <output className="m-0 mt-1 block text-2xs text-sky-100">{status}</output> : null}
+          <button type="button" data-pac-submit onClick={submit} className="mt-2 rounded border border-sky-300/30 px-2 py-1 text-xs text-white hover:bg-sky-400/15">{t('pac.submit')}</button>
+          <p className="m-0 mt-1 text-2xs text-sky-100/60">{t('pac.submit.hint')}</p>
+          {status ? <output className="m-0 mt-1 block text-2xs text-sky-100">{status}</output> : null}
         </>
       )}
     </section>
