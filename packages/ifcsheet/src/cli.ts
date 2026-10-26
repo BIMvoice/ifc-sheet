@@ -23,6 +23,8 @@ import { classify } from './cli-classify.js';
 import { rooms } from './cli-rooms.js';
 import { list, listSchedulesOn, listTableText } from './cli-list.js';
 import { PAC_DEFAULT_LOCALE, pacPages, pacTemplateFor } from './cli-pac.js';
+import { buildStandard, unknownStandardMessage, withTitleBlock } from './cli-standard.js';
+import { COMMAND_LINE_STANDARD_IDS } from './standard-pack.js';
 
 /** Where `run` writes its messages; defaults to the process streams. */
 export interface CliIo {
@@ -41,7 +43,7 @@ export const EXIT = { ok: 0, failed: 1, usage: 2 } as const;
 const USAGE = `ifcsheet: drawing sets from IFC models
 
 Usage:
-  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--locale <ro|en>]] [--project <file>] [--include-far-elements]
+  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--locale <ro|en>]] [--project <file>] [--standard <id>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
   ifcsheet materials <model.ifc> [--project <file>] [--json]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
@@ -89,6 +91,8 @@ Options:
                    (default "{number} {sheet}": A-101 Ground floor.dxf). Plain ASCII, no path separators.
   --template <file> A set template (.bvset) for build: which sheets, which views on them, at which scale.
   --pac            Build the submission PDF of the permit project (PAC): the opis page, then the PAC sheets. Not with --template.
+  --standard <id>  A drawing standard for build: its pens and title block (known: ro, the Romanian pack of the app's "Install standard").
+                   Wins over the project's own graphic standard and title block layout; without it a --project's are used.
   --name <name>    The project name for the title blocks (default: the model's).
   --project <file> A saved project (.ifclite-project.json): for check, its schedules, joinery catalogue and symbol mapping; for build, its list
                    schedules are printed after the build (the PDF has no schedule sheet; the app draws those).
@@ -125,6 +129,8 @@ interface BuildArgs {
   /** A saved project: its list schedules are printed after the build. */
   project?: string;
   includeFarElements?: boolean;
+  /** A drawing standard by id (`ro`): its pens and title block layout. */
+  standard?: string;
 }
 
 async function build(args: BuildArgs, io: CliIo): Promise<number> {
@@ -144,13 +150,33 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
       return EXIT.failed;
     }
   }
+  // The project is read first: its graphic standard and title block layout are what the sheets are drawn with.
+  let project: ProjectFacts | undefined;
+  if (args.project !== undefined) {
+    let projectText: string;
+    try { projectText = await readFile(args.project, 'utf8'); } catch (error) {
+      io.stderr(`ifcsheet: cannot read ${args.project}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
+      return EXIT.failed;
+    }
+    try { project = readProjectFile(projectText); } catch (error) {
+      io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
+      return EXIT.failed;
+    }
+  }
+  const standard = buildStandard(args.standard, project);
+  if (!standard) {
+    io.stderr(unknownStandardMessage(args.standard ?? ''));
+    return EXIT.usage;
+  }
+  for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
-  const set = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}) });
+  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}) });
+  const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
     return EXIT.failed;
   }
-  const sheets = await sheetGraphics(set, model);
+  const sheets = await sheetGraphics(set, model, standard.pens ? { pens: standard.pens } : {});
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, args.locale ?? PAC_DEFAULT_LOCALE) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params })}\n`);
@@ -182,15 +208,9 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
       io.stdout(`${file}\n`);
     }
   }
-  if (args.project !== undefined) {
+  if (project) {
     // The starting set has no schedule sheet (the app composes those): the project's list schedules are printed as text, the table `ifcsheet list` gives.
-    let projectText: string;
-    try { projectText = await readFile(args.project, 'utf8'); } catch (error) {
-      io.stderr(`ifcsheet: cannot read ${args.project}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
-      return EXIT.failed;
-    }
     try {
-      const project = readProjectFile(projectText);
       for (const { table } of listSchedulesOn(model, project.schedules, 'en', basename(args.model), project.classificationMappings)) io.stdout(`\n${listTableText(table)}`);
     } catch (error) {
       io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
@@ -261,6 +281,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         name: { type: 'string' },
         template: { type: 'string' },
         project: { type: 'string' },
+        standard: { type: 'string' },
         schedule: { type: 'string' },
         system: { type: 'string' },
         json: { type: 'boolean' },
@@ -293,6 +314,10 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
   }
   if (values.pac && command !== 'build') {
     io.stderr(`ifcsheet ${command} has no --pac; it is an option of build.\n`);
+    return EXIT.usage;
+  }
+  if (values.standard !== undefined && command !== 'build') {
+    io.stderr(`ifcsheet ${command} has no --standard; it is an option of build (known: ${COMMAND_LINE_STANDARD_IDS.join(', ')}).\n`);
     return EXIT.usage;
   }
   if (command === 'boq') {
@@ -379,7 +404,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     return EXIT.usage;
   }
   try {
-    return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale }, io);
+    return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
   } catch (error) {
     io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
     return EXIT.failed;
