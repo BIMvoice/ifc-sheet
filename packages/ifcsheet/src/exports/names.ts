@@ -6,5 +6,5 @@
 /** Names: the engine's words, the name resolver, sheet numbers and the locale. Add new exports of this area here, not in `../index.ts`. */
 
 // Names
-export { ENGINE_NAMES_EN, ENGINE_NAMES_RO, NAME_LANGUAGES, englishName, nameLanguageOf, nameOf, nameResolverFor, setNameResolver, withNameLanguage, type NameLanguage, type EngineNameKey, type NameParams, type NameResolver } from '../names.js';
+export { ENGINE_NAMES_EN, ENGINE_NAMES_RO, NAME_LANGUAGES, englishName, NAME_LANGUAGES_TEXT, nameLanguageOf, nameOf, nameResolverFor, readProjectLanguage, unknownLanguageMessage, unknownLocaleMessage, setNameResolver, withNameLanguage, type NameLanguage, type ProjectLanguageRead, type EngineNameKey, type NameParams, type NameResolver } from '../names.js';
 export { sheetNumber, sheetLevel, sheetFormat, readUnitsAndNumbers, type SheetLocale, type SheetFormat, type UnitsAndNumbers } from '../names.js';

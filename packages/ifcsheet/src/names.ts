@@ -43,6 +43,7 @@ export const ENGINE_NAMES_EN = {
   'names.view.south': 'South Elevation',
   'names.view.west': 'West Elevation',
   'names.view.section': 'Section {mark}-{mark}',
+  'names.view.detail': 'Detail {number} - {source}',
   // The starting view templates (#44), one per kind of view.
   'names.viewTemplate.plan': 'Plans',
   'names.viewTemplate.section': 'Sections',
@@ -69,6 +70,7 @@ export const ENGINE_NAMES_RO: Record<EngineNameKey, string> = {
   'names.view.south': 'Fațada sud',
   'names.view.west': 'Fațada vest',
   'names.view.section': 'Secțiunea {mark}-{mark}',
+  'names.view.detail': 'Detaliu {number} - {source}',
   'names.viewTemplate.plan': 'Planuri',
   'names.viewTemplate.section': 'Secțiuni',
   'names.viewTemplate.elevation': 'Fațade',
@@ -78,11 +80,34 @@ export const ENGINE_NAMES_RO: Record<EngineNameKey, string> = {
 export const NAME_LANGUAGES = ['en', 'ro'] as const;
 export type NameLanguage = (typeof NAME_LANGUAGES)[number];
 
-/** The language a tag (`ro`, `ro-RO`, `RO`) names, or undefined for one the engine has no names in. */
+/** The language a tag names (`ro`, `en`, in any case), or undefined for anything else: the engine has names in exactly these two. */
 export function nameLanguageOf(tag: string | undefined): NameLanguage | undefined {
-  const primary = tag?.trim().toLowerCase().split(/[-_]/)[0];
-  return (NAME_LANGUAGES as readonly string[]).includes(primary ?? '') ? (primary as NameLanguage) : undefined;
+  const exact = tag?.trim().toLowerCase();
+  return (NAME_LANGUAGES as readonly string[]).includes(exact ?? '') ? (exact as NameLanguage) : undefined;
 }
+
+/** What a project file's `language` says: the language when it is `ro` or `en`, else the unaccepted text. The one validator of the app's reader and the command line's. */
+export interface ProjectLanguageRead {
+  language?: NameLanguage;
+  /** A `language` the file records that is not one of {@link NAME_LANGUAGES}; ignored by both readers, with {@link unknownLanguageMessage}. */
+  unknown?: string;
+}
+
+/** Reads `language` from a project file's value: absent, empty or not text is nothing; `ro`/`en` is the language; any other text is `unknown`. */
+export function readProjectLanguage(raw: unknown): ProjectLanguageRead {
+  if (typeof raw !== 'string' || !raw.trim()) return {};
+  const language = nameLanguageOf(raw);
+  return language ? { language } : { unknown: raw.trim() };
+}
+
+/** The accepted values of `language` and `--locale`, as they are named in a message. */
+export const NAME_LANGUAGES_TEXT = NAME_LANGUAGES.join(', ');
+
+/** The message for a project file whose `language` is not accepted; the app's reader and the command line say the same words. */
+export const unknownLanguageMessage = (value: string): string => `the project records the language "${value}", which is not one of ${NAME_LANGUAGES_TEXT}; it is ignored.`;
+
+/** The message for a `--locale` that is not accepted. */
+export const unknownLocaleMessage = (value: string): string => `--locale must be one of ${NAME_LANGUAGES_TEXT}, not "${value}".`;
 export type NameParams = Record<string, string | number>;
 export type NameResolver = (key: EngineNameKey, params?: NameParams) => string;
 

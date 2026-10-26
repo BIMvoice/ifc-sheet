@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ENGINE_NAMES_EN, nameResolverFor, type EngineNameKey } from '@bimvoice/ifcsheet/names';
+import { ENGINE_NAMES_EN, nameOf, nameResolverFor, unknownLanguageMessage, type EngineNameKey } from '@bimvoice/ifcsheet/names';
 import { checkCatalogue } from '@/i18n/catalogue-problems';
 import ro from '@/i18n/locales/ro';
 import { registerLocale, resolve, setLocale } from '@/i18n/registry';
@@ -99,5 +99,42 @@ describe('Generated names', () => {
     assert.equal(useProjectStore.getState().language, undefined);
     start();
     assert.equal(useProjectStore.getState().language, 'en');
+  });
+
+  it('follow the language the project recorded, not the interface language, once there is one (an English project under ro)', () => {
+    setLocale('ro');
+    resetProject();
+    useProjectStore.setState({ language: 'en' });
+    useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
+    // What the command line writes for a project that records en: the same text, sheets, views and details alike.
+    assert.equal(nameOf('names.sheet.plans'), 'Floor plans');
+    assert.equal(nameOf('names.viewTemplate.plan'), 'Plans');
+    assert.equal(sectionViewName('A'), 'Section A-A');
+    assert.equal(detailViewName(1, 'Plan'), 'Detail 1 - Plan');
+    startDrawingSet(null, HOUSE);
+    const { sheets, views, language } = useProjectStore.getState();
+    assert.deepEqual(sheets.map((s) => s.name), ['Floor plans', 'Elevations, south and north', 'Elevations, east and west', 'Sections']);
+    assert.ok(views.some((v) => v.name === 'North Elevation'), views.map((v) => v.name).join(', '));
+    assert.equal(language, 'en');
+    // A project that records none is named in the interface language, and records it.
+    resetProject();
+    assert.equal(nameOf('names.sheet.plans'), 'Planuri');
+    assert.equal(sectionViewName('A'), 'Secțiunea A-A');
+  });
+
+  it('read the project language with the command line\'s validator: ro/en are kept, anything else is ignored with its message', () => {
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => void warned.push(String(args[0]));
+    try {
+      const read = (language: unknown) => parseProjectFile(serializeProject({ ...projectDocument(), language: language as never })).language;
+      assert.equal(read('ro'), 'ro');
+      assert.equal(read('en'), 'en');
+      assert.equal(read('de'), undefined);
+      assert.equal(read('ro-RO'), undefined);
+    } finally {
+      console.warn = warn;
+    }
+    assert.deepEqual(warned, [`[project] ${unknownLanguageMessage('de')}`, `[project] ${unknownLanguageMessage('ro-RO')}`]);
   });
 });

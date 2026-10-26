@@ -30,7 +30,8 @@ import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useP
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
 import { ensureViewTemplates } from './view-template-start';
-import { getLocale, resolve } from '@/i18n/registry';
+import { getLocale, resolve, resolveName } from '@/i18n/registry';
+import { nameLanguageOf } from '@bimvoice/ifcsheet/names';
 import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, elevationName, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
 import type { PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
@@ -94,8 +95,8 @@ export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | 
   const { name, dirty } = useProjectStore.getState();
   const untitled = resolve('names.project.untitled');
   if (!dirty && name === EMPTY_PROJECT.name && untitled !== name) useProjectStore.setState({ name: untitled });
-  // The names about to be stored are in this language: record it, once, so a command-line build of the project names a set the same way. Names already stored are not touched.
-  if (useProjectStore.getState().language === undefined) useProjectStore.setState({ language: getLocale() });
+  // The names about to be stored are in this language (English for an interface language the engine has no names in): record it, once, so a command-line build of the project names a set the same way. Names already stored are not touched.
+  if (useProjectStore.getState().language === undefined) useProjectStore.setState({ language: nameLanguageOf(getLocale()) ?? 'en' });
   // The set a model opens with is the project's starting state, not something the person did: it is no undo step (#293).
   let added = 0;
   runAsStartingState(() => {
@@ -144,7 +145,7 @@ function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
     if (state().views.some((v) => v.kind === 'plan')) return;
     const height = Math.round(((extent.max.y - extent.min.y) / 2) * 10) / 10;
     report.notes.push({ key: 'draftSet.note.noStoreys', params: { height } });
-    addProjectView({ kind: 'plan', name: resolve('names.view.plan'), cutHeight: height, level: { name: resolve('names.view.plan'), elevation: extent.min.y, storeyGlobalIds: [] } });
+    addProjectView({ kind: 'plan', name: resolveName('names.view.plan'), cutHeight: height, level: { name: resolveName('names.view.plan'), elevation: extent.min.y, storeyGlobalIds: [] } });
     report.viewsAdded++;
     return;
   }

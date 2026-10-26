@@ -45,11 +45,11 @@ const project = (dir: string, extra: Record<string, unknown>): string => {
 };
 
 /** The names of the DXF files `ifcsheet build` packs for `args`, sorted. */
-async function builtDxfNames(args: string[]): Promise<string[]> {
+async function builtDxfNames(args: string[], said = ''): Promise<string[]> {
   const dir = scratch();
   const c = capture();
   const code = await run(['build', FZK, '--handover', join(dir, 'h.zip'), '--name', 'Haus Test', ...args], c.io);
-  expect(c.err()).toBe('');
+  expect(c.err()).toBe(said);
   expect(code).toBe(EXIT.ok);
   return Object.keys(unzipSync(new Uint8Array(readFileSync(join(dir, 'h.zip'))))).filter((n) => n.endsWith('.dxf')).sort();
 }
@@ -91,12 +91,26 @@ describe.skipIf(missing !== null)('generated names follow the language, on AC20-
   }, 300_000);
 
   it('build: the project\'s language wins over --locale, and a project that records none follows --locale', async () => {
-    expect(await builtDxfNames(['--project', project(scratch(), { language: 'en' }), '--locale', 'ro'])).toEqual(EN_DXF);
+    expect(await builtDxfNames(['--project', project(scratch(), { language: 'en' }), '--locale', 'ro'], "ifcsheet: --locale ro differs from the project's language en; using en.\n")).toEqual(EN_DXF);
     expect(await builtDxfNames(['--project', project(scratch(), {}), '--locale', 'ro'])).toEqual(RO_DXF);
     expect(await builtDxfNames(['--project', project(scratch(), {})])).toEqual(EN_DXF);
   }, 300_000);
 
-  it('build --locale of a language it has no names in is English', async () => {
-    expect(await builtDxfNames(['--locale', 'de'])).toEqual(EN_DXF);
+  it('build --locale of a language it has no names in is a usage error naming ro and en, and writes nothing', async () => {
+    const c = capture();
+    const out = join(scratch(), 'refused.pdf');
+    expect(await run(['build', FZK, '--out', out, '--locale', 'de'], c.io)).toBe(EXIT.usage);
+    expect(c.err()).toBe('ifcsheet: --locale must be one of en, ro, not "de".\n');
+    expect(existsSync(out)).toBe(false);
+  });
+
+  it('build: a --locale the project overrides is said on stderr in one line, and the project\'s language is used', async () => {
+    const c = capture();
+    const dxf = join(scratch(), 'dxf');
+    expect(await run(['build', FZK, '--out', join(scratch(), 'a.pdf'), '--dxf', dxf, '--project', project(scratch(), { language: 'en' }), '--locale', 'ro'], c.io)).toBe(EXIT.ok);
+    expect(c.err().split('\n').filter((l) => l.includes('--locale'))).toEqual(["ifcsheet: --locale ro differs from the project's language en; using en."]);
+    const quiet = capture();
+    await run(['build', FZK, '--out', join(scratch(), 'b.pdf'), '--project', project(scratch(), { language: 'ro' }), '--locale', 'ro'], quiet.io);
+    expect(quiet.err()).not.toContain('--locale');
   }, 300_000);
 });

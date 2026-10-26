@@ -33,6 +33,7 @@ import { readUnitsAndNumbers, type UnitsAndNumbers } from './units-and-numbers.j
 import type { MeshData } from '@ifc-lite/geometry';
 import { knownGraphicStandard, graphicStandardOf, type GraphicStandard } from './graphic-standard.js';
 import { readTitleBlockTemplate } from './title-block-template-read.js';
+import { readProjectLanguage, type NameLanguage } from './names.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 
 /** What the checks read of a project file. */
@@ -58,8 +59,10 @@ export interface ProjectFacts extends JoineryProject {
   unknownGraphicStandard?: string;
   /** The title block layout the project keeps (the Romanian one, or any the app edited); absent: the standard layout. A build prints it on every sheet. */
   titleBlockTemplate?: TitleBlockTemplate;
-  /** The language tag the project's generated names were made in (`language` in the file, `ro`); absent when the file records none. A build names a new set in it. */
-  language?: string;
+  /** The language the project's generated names were made in (`language` in the file, `ro` or `en`); absent when the file records none or one that is not accepted. A build names a new set in it. */
+  language?: NameLanguage;
+  /** A `language` the file records that is not `ro` or `en` (`readProjectLanguage`); ignored, and the build says so. */
+  unknownLanguage?: string;
 }
 
 type Json = Record<string, unknown>;
@@ -79,6 +82,7 @@ export function readProjectFile(text: string): ProjectFacts {
   if (version > PROJECT_FILE_VERSION) throw new Error(`Project file version ${version} is newer than this build reads (${PROJECT_FILE_VERSION})`);
   const standard = knownGraphicStandard(parsed.graphicStandard);
   const titleBlockTemplate = readTitleBlockTemplate(parsed.titleBlockTemplate);
+  const language = readProjectLanguage(parsed.language);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
   return {
     name: typeof parsed.name === 'string' ? parsed.name.trim() : '',
@@ -93,7 +97,8 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(standard.id !== undefined ? { graphicStandard: graphicStandardOf(standard.id) } : {}),
     ...(standard.unknown !== undefined ? { unknownGraphicStandard: standard.unknown } : {}),
     ...(titleBlockTemplate ? { titleBlockTemplate } : {}),
-    ...(typeof parsed.language === 'string' && parsed.language.trim() ? { language: parsed.language.trim() } : {}),
+    ...(language.language !== undefined ? { language: language.language } : {}),
+    ...(language.unknown !== undefined ? { unknownLanguage: language.unknown } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }

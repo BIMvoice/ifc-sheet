@@ -6,7 +6,8 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import { describeTemplateNote, generateDefaultSet, nameLanguageOf, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from '../index.js';
+import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from '../index.js';
+import { localeProblem, resolveLanguage } from '../cli-language.js';
 import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
@@ -70,7 +71,8 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
   // Names are made once and stored, so the set is named in the project's language, else --locale, else English (the same names the app makes under that language).
-  const language = nameLanguageOf(project?.language) ?? nameLanguageOf(args.locale) ?? 'en';
+  const { language, notes } = resolveLanguage({ project, locale: args.locale });
+  for (const note of notes) io.stderr(note);
   const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language });
   const set = generated && withTitleBlock(generated, standard);
   if (!set) {
@@ -137,6 +139,11 @@ export const buildCommand: CliCommand = {
   async run(rest, values, io) {
     if (values.csv || values.detail) {
       io.stderr('ifcsheet build has no --csv or --detail; they are options of boq and rooms.\n');
+      return EXIT.usage;
+    }
+    const badLocale = localeProblem(values.locale);
+    if (badLocale) {
+      io.stderr(badLocale);
       return EXIT.usage;
     }
     if (values.json) {

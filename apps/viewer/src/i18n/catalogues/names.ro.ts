@@ -10,6 +10,5 @@ import type { TranslationValue } from '../types';
 export const namesRo = {
   // The names the drawing-set engine gives what it makes; its Romanian is the one copy (`@bimvoice/ifcsheet` `names.ts`), so a command-line build names a set the same way.
   ...ENGINE_NAMES_RO,
-  'names.view.detail': 'Detaliu {number} - {source}',
   'names.issue.default': 'Emitere {n}',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

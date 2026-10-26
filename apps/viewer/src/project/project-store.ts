@@ -12,7 +12,7 @@
  * lives in `open-view.ts` / `project-sync.ts`.
  */
 
-import { resolve } from '@/i18n/registry';
+import { resolve, setProjectNameLanguageSource } from '@/i18n/registry';
 import { setSymbolLibrary } from '@/drafting/symbols';
 import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
@@ -56,6 +56,9 @@ export const useProjectStore = create<ProjectState>()(() => ({
   activeItemId: null,
   dirty: false,
 }));
+
+// Names the app generates later are in the language the project recorded when its names were first made, whatever the interface shows.
+setProjectNameLanguageSource(() => useProjectStore.getState().language);
 
 // Symbol instances look their definition up in this library (`drafting/symbols.ts`): keep it the project's.
 useProjectStore.subscribe((s, previous) => {
