@@ -45,14 +45,14 @@ export const sheetTablesRo = {
   'urban.cut': 'CUT (Ad pentru CUT / teren)',
   'urban.atLeast': '≥ {value}',
   'urban.belowGround': '{name} (subsol)',
-  'urban.ground': '{name} (Ac la ±0,00)',
+  'urban.ground': '{name} (Ac la {mark})',
 
   // Urban indicators sheet: the notes printed under the tables.
-  'urban.rule.areas': 'Ac: aria construită la ±0,00, pe {level}. Ad: ariile construite ale tuturor nivelurilor, inclusiv subsolurile (STAS 4908-85).',
+  'urban.rule.areas': 'Ac: aria construită la {mark}, pe {level}. Ad: ariile construite ale tuturor nivelurilor, inclusiv subsolurile (STAS 4908-85).',
   'urban.rule.au': 'Au: toate încăperile (IfcSpace). Excluse: {external} exterioare (balcoane, terase), {gfa} din schema de arii (GFA), {parents} împărțite în încăperi proprii.',
-  'urban.rule.cut': 'Ad pentru CUT exclude: {levels}. Legea 350/2001 nu include subsolurile cu înălțimea liberă de cel mult 1,80 m sau folosite numai pentru parcare, încăperi tehnice ori protecție civilă. Implicit, un subsol de cel mult 1,80 m între pardoseli este exclus; alegerea se face pe fiecare nivel.',
+  'urban.rule.cut': 'Ad pentru CUT exclude: {levels}. Legea 350/2001 nu include subsolurile cu înălțimea liberă de cel mult {limit} m sau folosite numai pentru parcare, încăperi tehnice ori protecție civilă. Implicit, un subsol de cel mult {limit} m între pardoseli este exclus; alegerea se face pe fiecare nivel.',
   'urban.rule.cutNone': 'niciunul',
-  'urban.rule.ground': 'Subsol: mai mult de jumătate din înălțimea nivelului se află sub teren, la {terrain}. ±0,00 este cota {zero} a modelului ({source}).',
+  'urban.rule.ground': 'Subsol: mai mult de jumătate din înălțimea nivelului se află sub teren, la {terrain}. {mark} este cota {zero} a modelului ({source}).',
   'urban.rule.zero.assumed': 'negăsită în model: luată la cel mai de jos nivel, introduceți-o dacă este greșită',
   'urban.rule.zero.building': 'cota de referință a clădirii',
   'urban.rule.zero.model': 'din niveluri',

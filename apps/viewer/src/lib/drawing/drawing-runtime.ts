@@ -39,6 +39,11 @@ export function publishDrawingRuntime(next: DrawingRuntime | null): void {
   listeners.forEach((listener) => listener());
 }
 
+/** Tell `listener` when the runtime is published again; returns the stop function. */
+export function subscribeDrawingRuntime(listener: () => void): () => void {
+  return subscribe(listener);
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);

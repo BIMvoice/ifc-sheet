@@ -11,7 +11,9 @@
 
 import { memo, useMemo } from 'react';
 import type { LegendConfig, ProjectLegend } from '@/catalogue/types';
+import { sheetLevel, sheetNumber } from '@bimvoice/ifcsheet/names';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { useSheetLocale } from '@/project/units-and-numbers';
 import { ATTRIBUTE_CHOICES } from '@/project/colour-scheme-choices';
 import { useViewerStore } from '@/store';
 import { fontFamily } from '@/drafting/styles';
@@ -30,14 +32,17 @@ export const attributeLabeller = (t: (key: TranslationKey) => string) => (name: 
 
 export function useLegendLabels(): LegendLabels {
   const { t } = useTranslation();
+  const locale = useSheetLocale();
   return useMemo(() => ({
     heading: Object.fromEntries(LEGEND_CATEGORIES.map((c) => [c, t(`legend.category.${c}` as TranslationKey)])) as LegendLabels['heading'],
     tool: (tool) => t(`atype.tool.${tool}` as TranslationKey),
     continued: (heading) => t('legend.continued', { heading }),
     membrane: t('legend.membrane'),
     sampleText: t('legend.sampleText'),
+    sampleDimension: sheetNumber(locale, 2.5, 2, { group: false }),
+    sampleLevel: sheetLevel(locale, 0),
     attribute: attributeLabeller(t),
-  }), [t]);
+  }), [t, locale]);
 }
 
 /** Everything a legend lists, as of now; a new object whenever any of it changes. */

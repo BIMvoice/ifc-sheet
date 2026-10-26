@@ -5,6 +5,7 @@
 import { annotateAllRo } from '../catalogues/annotate-all.ro';
 import { annotateSetRo } from '../catalogues/annotate-set.ro';
 import { annotatedIfcRo } from '../catalogues/annotated-ifc.ro';
+import { anonymizedExportRo } from '../catalogues/anonymized-export.ro';
 import { boqRo } from '../catalogues/boq.ro';
 import { cadLayersRo } from '../catalogues/cad-layers.ro';
 import { catalogueRo } from '../catalogues/catalogue.ro';
@@ -16,10 +17,15 @@ import { creditsRo } from '../catalogues/credits.ro';
 import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
+import { exportChangesReviewRo } from '../catalogues/export-changes-review.ro';
+import { exportDialogRo } from '../catalogues/export-dialog.ro';
+import { exportToastsRo } from '../catalogues/export-toasts.ro';
 import { faceRo } from '../catalogues/face.ro';
 import { featuresRo } from '../catalogues/features.ro';
 import { feedbackRo } from '../catalogues/feedback.ro';
+import { geometryExportDialogsRo } from '../catalogues/geometry-export-dialogs.ro';
 import { handoverRo } from '../catalogues/handover.ro';
+import { ionUploadRo } from '../catalogues/ion-upload.ro';
 import { issueChangesRo } from '../catalogues/issue-changes.ro';
 import { issueRo } from '../catalogues/issue.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
@@ -30,6 +36,7 @@ export const roAL = {
   ...annotateAllRo,
   ...annotateSetRo,
   ...annotatedIfcRo,
+  ...anonymizedExportRo,
   ...boqRo,
   ...cadLayersRo,
   ...catalogueRo,
@@ -41,10 +48,15 @@ export const roAL = {
   ...cutawayAxoRo,
   ...draftingRo,
   ...elementGraphicsRo,
+  ...exportChangesReviewRo,
+  ...exportDialogRo,
+  ...exportToastsRo,
   ...faceRo,
   ...featuresRo,
   ...feedbackRo,
+  ...geometryExportDialogsRo,
   ...handoverRo,
+  ...ionUploadRo,
   ...issueChangesRo,
   ...issueRo,
   ...keyboardShortcutsRo,

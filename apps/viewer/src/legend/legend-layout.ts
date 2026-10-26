@@ -41,6 +41,9 @@ export interface LegendLabels {
   tool: (tool: AnnotationType['tool']) => string;
   membrane: string;
   sampleText: string;
+  /** The sample figures the dimension and level entries show, written like the sheet's own (`sheetNumber`, `sheetLevel`: a comma project shows "2,50" and "±0,00"). Absent: "2.50" and "±0.00". */
+  sampleDimension?: string;
+  sampleLevel?: string;
   /** A known attribute's readable name (`LongName` → "Room name"), or `undefined` for a property with no catalogue label. */
   attribute?: (name: string) => string | undefined;
 }
@@ -247,7 +250,7 @@ function annotationSwatch(out: LegendPrim[], type: AnnotationType, b: Box, ctx: 
     case 'dimlinear':
       line(x + 1, midY, x + w - 1, midY);
       for (const tx of [x + 1, x + w - 1]) { line(tx, midY - h * 0.35, tx, midY + h * 0.35); line(tx - 0.8, midY + 0.8, tx + 0.8, midY - 0.8, 0.3); }
-      text(x + w / 2, midY - 0.8, '2.50', 'middle');
+      text(x + w / 2, midY - 0.8, ctx.labels.sampleDimension ?? '2.50', 'middle');
       break;
     case 'dimradius':
     case 'dimdiameter': {
@@ -268,7 +271,7 @@ function annotationSwatch(out: LegendPrim[], type: AnnotationType, b: Box, ctx: 
     case 'level':
       out.push({ kind: 'path', pts: [{ x: x + 3, y: midY + 1 }, { x: x + 1, y: midY - 1.2 }, { x: x + 5, y: midY - 1.2 }], closed: true, w: 0.18, color: INK, fill: INK });
       line(x + 0.5, midY + 1, x + w * 0.5, midY + 1);
-      text(x + w * 0.52, midY + 0.5, '±0.00');
+      text(x + w * 0.52, midY + 0.5, ctx.labels.sampleLevel ?? '±0.00');
       break;
     case 'axis': {
       const axis = type.axis ?? { bubble: 'circle', ends: 'both', size: null, lineType: 'dashdot' };

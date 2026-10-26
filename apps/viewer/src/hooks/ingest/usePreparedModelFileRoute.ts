@@ -6,6 +6,7 @@ import { cacheFileBlobs, getRecentFiles, recordRecentFiles, type RecentFileEntry
 import { resolveGltfModelFiles } from '@/services/gltf-bundle';
 import { resolveGeoRasterBundles } from '@/lib/terrain-imagery/raster-bundle';
 import { toast } from '@/components/ui/toast';
+import { resolve } from '@/i18n/registry';
 
 type Handles = (FileSystemFileHandle | undefined)[];
 type RouteFiles = (files: File[], handles?: Handles) => void;
@@ -32,7 +33,7 @@ export function prepareModelFiles(files: readonly File[], handles: Handles | und
     // together with its orthophoto is loaded before the image is draped on it.
     const rasters = resolveGeoRasterBundles(files);
     if (rasters.orphans.length) {
-      toast.error(`${rasters.orphans.map((file) => file.name).join(', ')}: no image of the same name was selected beside it.`);
+      toast.error(resolve('fileLoad.toast.orphanImages', { names: rasters.orphans.map((file) => file.name).join(', ') }));
     }
     const models = await resolveGltfModelFiles(rasters.rest);
     const resolved = [...models, ...rasters.bundles];
