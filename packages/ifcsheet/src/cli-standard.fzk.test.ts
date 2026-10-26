@@ -59,7 +59,7 @@ describe.skipIf(missing !== null)('ifcsheet build --standard, on AC20-FZK-Haus',
     const ro = await build('--standard', 'ro');
     expect(ro.err).toBe('');
     expect(ro.code).toBe(EXIT.ok);
-    for (const caption of ['Proiectant general', 'Șef proiect', 'Proiectat', 'Faza', 'Proiect nr.', 'Ștampilă proiectant', 'Ștampilă verificator', 'Nr. planșă']) {
+    for (const caption of ['Proiectant general', 'Șef proiect', 'Proiectat', 'Faza', 'Proiect nr.', 'Titlu proiect', 'Semnătura', 'Verificator / expert', 'Cerința', 'Planșa nr.']) {
       expect(ro.texts, caption).toContain(caption);
     }
     expect(ro.layers).toContain('VIEW-CUT-070');

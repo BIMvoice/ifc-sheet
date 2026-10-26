@@ -28,6 +28,32 @@ export function useSheetScaleText(sheet: ProjectSheet): string {
   return sheetScaleLine(sheet, views, new Set(notDrawingIds(schedules)), t('sheets.asIndicated'));
 }
 
+/** What the lookup of one sheet reads from the project; the hook below and the readiness check (`sheetTitleBlockMisfits`) both build it from here, so the check judges what the sheet shows. */
+export interface SheetParamContext {
+  projectFields: Record<string, string> | undefined;
+  projectName: string;
+  params: ReturnType<typeof useProjectStore.getState>['titleBlockParams'];
+  sheets: ProjectSheet[];
+  schedules: ReturnType<typeof useProjectStore.getState>['schedules'];
+  revisions: ReturnType<typeof useProjectStore.getState>['revisions'];
+  drafts: ReturnType<typeof useProjectStore.getState>['drafts'];
+  scale: string;
+  issueDate?: string;
+}
+
+export function sheetParamLookup(sheet: ProjectSheet, c: SheetParamContext): (name: string) => string | undefined {
+  const fields = titleBlockOf(sheet, c.projectFields, c.projectName);
+  // An issue dates its sheets: its date is the sheet's date on the paper it issues.
+  if (c.issueDate) fields.date = c.issueDate;
+  const page = inSetOrder(c.sheets, c.schedules).findIndex((s) => s.id === sheet.id) + 1;
+  return paramLookup(sheet, c.params, {
+    ...fieldBuiltins(fields), // the title block fields, by the engine's one table (`FIELD_PARAMS`), so the PDF names them alike
+    SheetNumber: sheet.number, SheetName: sheet.name, Scale: c.scale, Page: `${page}/${c.sheets.length}`,
+    // The revision is never typed: it is the latest the sheet has (`revisions.ts`).
+    Revision: currentRevisionOf(sheet, { revisions: c.revisions, drafts: c.drafts })?.code ?? '',
+  });
+}
+
 export function useSheetParamLookup(sheet: ProjectSheet, projectName: string, issueDate?: string): (name: string) => string | undefined {
   const projectFields = useEffectiveTitleBlock();
   const params = useProjectStore((s) => s.titleBlockParams);
@@ -36,16 +62,8 @@ export function useSheetParamLookup(sheet: ProjectSheet, projectName: string, is
   const revisions = useProjectStore((s) => s.revisions);
   const drafts = useProjectStore((s) => s.drafts);
   const scale = useSheetScaleText(sheet);
-  return useMemo(() => {
-    const fields = titleBlockOf(sheet, projectFields, projectName);
-    // An issue dates its sheets: its date is the sheet's date on the paper it issues.
-    if (issueDate) fields.date = issueDate;
-    const page = inSetOrder(sheets, schedules).findIndex((s) => s.id === sheet.id) + 1;
-    return paramLookup(sheet, params, {
-      ...fieldBuiltins(fields), // the title block fields, by the engine's one table (`FIELD_PARAMS`), so the PDF names them alike
-      SheetNumber: sheet.number, SheetName: sheet.name, Scale: scale, Page: `${page}/${sheets.length}`,
-      // The revision is never typed: it is the latest the sheet has (`revisions.ts`).
-      Revision: currentRevisionOf(sheet, { revisions, drafts })?.code ?? '',
-    });
-  }, [sheet, projectFields, projectName, params, sheets, schedules, scale, revisions, drafts, issueDate]);
+  return useMemo(
+    () => sheetParamLookup(sheet, { projectFields, projectName, params, sheets, schedules, revisions, drafts, scale, issueDate }),
+    [sheet, projectFields, projectName, params, sheets, schedules, scale, revisions, drafts, issueDate],
+  );
 }

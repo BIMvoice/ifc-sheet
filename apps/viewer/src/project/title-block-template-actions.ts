@@ -100,7 +100,7 @@ export function clearTemplateFit(id: string): void {
   if (!t) return;
   write({ items: t.items.map((i) => {
     if (i.id !== id || i.kind !== 'text') return i;
-    const { fit: _dropped, ...rest } = i;
+    const { fit: _dropped, lines: _lines, top: _top, ...rest } = i;
     return rest;
   }) });
 }

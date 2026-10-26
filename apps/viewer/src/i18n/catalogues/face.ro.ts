@@ -40,6 +40,8 @@ export const faceRo = {
   'ready.subReportDuplicates.effect': 'Sunt numărate de două ori când părțile se adună și desenate pe două planșe.',
   'ready.subReportGaps': 'În „{schedule}”, unele elemente nu sunt în nicio parte. Tipuri: {types}, elemente: {count}: {list}.',
   'ready.subReportGaps.effect': 'Părțile nu se adună la tabelul întreg: acele uși și ferestre nu sunt pe nicio planșă.',
+  'ready.titleBlockFit': 'Cartuș: {field} nu încape în căsuța sa pe {sheet}; scurtați valoarea sau folosiți o abreviere.',
+  'ready.titleBlockFit.effect': 'Valoarea tipărită este tăiată cu puncte de suspensie, deci o parte lipsește de pe planșă.',
   'ready.framing.label': 'Include elementele îndepărtate la încadrare',
   'ready.framing.hint': 'Dezactivat: elementele mici aflate departe de clădire (un punct topografic, un cub de origine) nu lărgesc vederile. Ele rămân în model și în tabele. Se aplică vederilor aranjate de acum înainte.',
   'ready.farElements': '{count} elemente se află la până la {distance} de clădire: {list}.',
