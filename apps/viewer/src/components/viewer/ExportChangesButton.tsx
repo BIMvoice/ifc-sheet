@@ -32,7 +32,8 @@ import {
   type ArtifactFile,
   type ChangedModelsResult,
 } from '@/lib/export/model-changes';
-import { defaultBuildArtifactsDeps, unrepresentedPsetsNote } from '@/lib/export/changed-model-export';
+import { defaultBuildArtifactsDeps } from '@/lib/export/changed-model-export';
+import { exportOutcomeToast } from './export-changes-toast';
 import {
   ExportChangesReviewDialog,
   buildReviewGroups,
@@ -236,7 +237,7 @@ export function ExportChangesButton({ surface, className, trigger }: ExportChang
       if (!reviewGroupsEqual(reviewedGroups, postGroups)) {
         setExportStatus('error');
         setTimeout(() => setExportStatus('idle'), 3000);
-        toast.error('Changes were made while exporting — check the updated list and confirm again.');
+        toast.error(t('exportToast.changesDuringExport'));
         setGroups(postGroups);
         setReviewOpen(true);
         return;
@@ -246,9 +247,9 @@ export function ExportChangesButton({ surface, className, trigger }: ExportChang
         if (skipped.length > 0) {
           setExportStatus('error');
           setTimeout(() => setExportStatus('idle'), 3000);
-          toast.error(`Export failed: ${skipped[0].reason}`);
+          toast.error(t('exportToast.modifiedFailed', { reason: skipped[0].reason }));
         } else {
-          toast.info('No changes to export');
+          toast.info(t('exportToast.noChanges'));
         }
         return;
       }
@@ -273,28 +274,19 @@ export function ExportChangesButton({ surface, className, trigger }: ExportChang
         change_count: exportedChanges,
       });
       const unrepresented = files.reduce((n, f) => n + f.skippedCount, 0);
-      if (skipped.length > 0) {
-        // The empty-pset note rides along: a skipped model must not hide it (#5201).
-        toast.info(
-          `Exported ${files.length} of ${files.length + skipped.length} models — ${skipped.length} skipped (${skipped[0].reason})${unrepresentedPsetsNote(unrepresented)}`,
-        );
-      } else if (unrepresented > 0) {
-        // Not a plain success: part of the edits could not be written (#5201).
-        toast.info(`Exported ${files.length === 1 ? `${files[0].base}.${files[0].ext}` : `${files.length} models`} (${exportedChanges} changes)${unrepresentedPsetsNote(unrepresented)}`);
-      } else if (files.length === 1) {
-        toast.success(`Exported ${files[0].base}.${files[0].ext} (${exportedChanges} changes)`);
-      } else {
-        toast.success(`Exported ${files.length} models (${exportedChanges} changes)`);
-      }
+      // The empty-pset note rides along: a skipped model must not hide it (#5201), and part of the edits
+      // not being written is not a plain success.
+      const outcome = exportOutcomeToast({ files, skipped, exportedChanges, unrepresented }, t);
+      toast[outcome.level](outcome.message);
     } catch (error) {
       console.error('[ExportChangesButton] Export failed:', error);
       setExportStatus('error');
       setTimeout(() => setExportStatus('idle'), 3000);
-      toast.error(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(t('exportToast.modifiedFailed', { reason: error instanceof Error ? error.message : t('exportToast.unknownError') }));
     } finally {
       setIsExporting(false);
     }
-  }, [surface]);
+  }, [surface, t]);
 
   const handleConfirm = useCallback(() => {
     // Re-derive fresh, synchronously, at click time — comparing against
@@ -314,13 +306,13 @@ export function ExportChangesButton({ surface, className, trigger }: ExportChang
       // subsequent confirm click re-compared against the SAME stale value and
       // refused again (maintainer finding on #1967).
       setGroups(freshGroups);
-      toast.error('Changes were made since you opened this review — check the updated list and confirm again.');
+      toast.error(t('exportToast.changesSinceReview'));
       return;
     }
 
     setReviewOpen(false);
     void handleExport(freshGroups);
-  }, [groups, handleExport]);
+  }, [groups, handleExport, t]);
 
   const review = (
     <ExportChangesReviewDialog

@@ -22,7 +22,9 @@ import ro from './ro';
  */
 const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'settings.privacy.toast', 'viewerShell.toast.dismiss',
   // The palette (Ctrl/Cmd+K) the face keeps, the Settings dialog its privacy notice opens, and the feedback dialog of its top bar.
-  'commandPalette.', 'settings.', 'feedback.'];
+  'commandPalette.', 'settings.', 'feedback.',
+  // The toasts of the exports the palette starts and of opening a file (the Open button of the top bar).
+  'exportToast.', 'fileLoad.toast.'];
 /**
  * Single keys, matched exactly because their prefix also holds keys the face does not reach: the annotation bar of
  * a drawing, one toast and one label, and the palette rows whose text lives in another catalogue's prefix (panel

@@ -88,6 +88,7 @@ import { finalizeFederatedSpatialPlacement } from './ingest/federatedSpatialFina
 import { computePointCloudAlignment, unregisterPointCloudAlignment, hasRegisteredPointCloudAlignment, type PointCloudSourceUnit } from './ingest/pointCloudAlignment.js';
 import { realignPointCloudsToAnchor } from './ingest/pointCloudAlignmentRealign.js';
 import { toast } from '../components/ui/toast.js';
+import { resolve } from '../i18n/registry.js';
 import { posthog, showLoadError as reportLoadError } from '../lib/analytics.js';
 import { reportRenderStats } from '../utils/renderStatsReport.js';
 import { nextFrameOrTimeout } from '../utils/frameWait.js';
@@ -267,7 +268,7 @@ export function useIfcLoader() {
       // A newer load superseded this one: the entry is purged; don't yank the
       // user off whatever they loaded next.
       if (loadSessionRef.current !== args.session) return;
-      toast.info(`"${args.file.name}" changed since it was cached — reloading with the current file.`);
+      toast.info(resolve('fileLoad.toast.changedSinceCached', { name: args.file.name }));
       await loadFileRef.current?.(args.file, args.target);
     } catch (err) {
       console.warn('[useIfc] background cache revalidation failed', err);
@@ -426,9 +427,7 @@ export function useIfcLoader() {
       });
       void import('@/components/ui/toast')
         .then((m) => {
-          m.toast.info(
-            `"${file.name}" was too detailed for this device — retrying at lower detail…`,
-          );
+          m.toast.info(resolve('fileLoad.toast.tooDetailed', { name: file.name }));
         })
         // Best-effort notice; a failed chunk load must never turn into an
         // unhandled rejection that masks the retry itself.
@@ -565,10 +564,7 @@ export function useIfcLoader() {
               st.georefMutations.get(modelId),
             );
             if (ownPlacement && computePointCloudAlignment(ownPlacement)) {
-              toast.info(
-                'Point clouds loaded before this model keep their raw coordinates — '
-                + 'reload the scan to align it with the model georeference.',
-              );
+              toast.info(resolve('fileLoad.toast.pointCloudsKeepRaw'));
             }
           }
         }
@@ -656,7 +652,7 @@ export function useIfcLoader() {
             useViewerStore.getState().setPointCloudAlignmentAvailable(hasRegisteredPointCloudAlignment());
           } catch (error) {
             console.error('[useIfc] point-cloud anchor realignment failed:', error);
-            toast.error('Point-cloud realignment failed; existing scan transforms were restored.');
+            toast.error(resolve('fileLoad.toast.pointCloudRealignFailed'));
           }
           // GPU-instancing (#1912): forward this model's shards now — NOT during
           // streaming — because `useGeometryStreaming`'s drain re-homes each
