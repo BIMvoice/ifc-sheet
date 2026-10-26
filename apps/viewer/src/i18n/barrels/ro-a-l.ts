@@ -16,9 +16,11 @@ import { creditsRo } from '../catalogues/credits.ro';
 import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
+import { exportDialogRo } from '../catalogues/export-dialog.ro';
 import { faceRo } from '../catalogues/face.ro';
 import { featuresRo } from '../catalogues/features.ro';
 import { feedbackRo } from '../catalogues/feedback.ro';
+import { geometryExportDialogsRo } from '../catalogues/geometry-export-dialogs.ro';
 import { handoverRo } from '../catalogues/handover.ro';
 import { issueChangesRo } from '../catalogues/issue-changes.ro';
 import { issueRo } from '../catalogues/issue.ro';
@@ -41,9 +43,11 @@ export const roAL = {
   ...cutawayAxoRo,
   ...draftingRo,
   ...elementGraphicsRo,
+  ...exportDialogRo,
   ...faceRo,
   ...featuresRo,
   ...feedbackRo,
+  ...geometryExportDialogsRo,
   ...handoverRo,
   ...issueChangesRo,
   ...issueRo,
