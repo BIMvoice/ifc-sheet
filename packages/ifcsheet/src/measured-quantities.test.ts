@@ -67,7 +67,7 @@ describe('measureElement (#74)', () => {
     expect(measureElement('IfcWall', [box([0, 0, 0], [5, 3, 0.3], { flip: [4] })]).volume).toEqual({ value: null, refusal: 'notOriented' });
   });
 
-  it('refuses two parts wound opposite ways, and a body that encloses nothing', () => {
+  it('refuses a part wound inward with nothing around it, and a body that encloses nothing', () => {
     const two = [box([0, 0, 0], [1, 1, 1]), box([3, 0, 0], [4, 1, 1], { flip: [0, 1, 2, 3, 4, 5] })];
     expect(measureElement('IfcColumn', two).volume.refusal).toBe('notOriented');
     // Two parts wound alike add up.

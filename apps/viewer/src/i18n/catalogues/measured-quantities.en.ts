@@ -11,7 +11,7 @@ import type { TranslationValue } from '../types';
  */
 export const measuredQuantitiesEn = {
   'measuredQty.note': '* Measured from the geometry: the model states no quantity. Volume: the closed solid as drawn, openings cut. Wall area: one side face, openings removed (the two sides averaged). Slab area: the top face, openings removed.',
-  'measuredQty.unmeasured': '{count} element(s) state no volume and their geometry is not a closed solid, so no volume was measured for them.',
+  'measuredQty.unmeasured': '{count} element(s) state no volume and their geometry is not a single closed solid, so no volume was measured for them.',
   'measuredQty.column': 'Measured from geometry',
   'measuredQty.volume': 'volume',
   'measuredQty.area': 'area',

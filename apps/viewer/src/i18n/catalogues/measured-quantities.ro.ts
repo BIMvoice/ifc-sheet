@@ -9,9 +9,9 @@ import type { TranslationValue } from '../types';
 export const measuredQuantitiesRo = {
   'measuredQty.note': '* Măsurat din geometrie: modelul nu declară cantitatea. Volum: solidul închis, așa cum este desenat, cu golurile decupate. Aria peretelui: o singură față laterală, fără goluri (media celor două fețe). Aria plăcii: fața superioară, fără goluri.',
   'measuredQty.unmeasured': {
-    one: 'Un element nu declară volumul, iar geometria lui nu este un solid închis, deci volumul lui nu a fost măsurat.',
-    few: '{count} elemente nu declară volumul, iar geometria lor nu este un solid închis, deci volumul lor nu a fost măsurat.',
-    other: '{count} de elemente nu declară volumul, iar geometria lor nu este un solid închis, deci volumul lor nu a fost măsurat.',
+    one: 'Un element nu declară volumul, iar geometria lui nu este un singur solid închis, deci volumul lui nu a fost măsurat.',
+    few: '{count} elemente nu declară volumul, iar geometria lor nu este un singur solid închis, deci volumul lor nu a fost măsurat.',
+    other: '{count} de elemente nu declară volumul, iar geometria lor nu este un singur solid închis, deci volumul lor nu a fost măsurat.',
   },
   'measuredQty.column': 'Măsurat din geometrie',
   'measuredQty.volume': 'volum',
