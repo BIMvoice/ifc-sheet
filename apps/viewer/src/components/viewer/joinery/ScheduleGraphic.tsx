@@ -33,6 +33,7 @@ import type { TypeQuantities } from '@/joinery/type-quantities';
 import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
 import type { ScheduleClassification } from '@bimvoice/ifcsheet';
 import { layoutTypeQuantities, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
+import type { MeasuredWords } from '@/joinery/measured-marks';
 import { penTags } from '../sheets/dxf-tags';
 import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 import { useElementViews, type ViewRequest } from './useElementViews';
@@ -53,13 +54,21 @@ export function useScheduleLabels(title: string): ScheduleLabels {
   }), [t, locale, title]);
 }
 
+/** The words that explain a figure measured from geometry (#74), shared by the takeoff and the quantities by type. */
+function measuredWords(t: ReturnType<typeof useTranslation>['t']): MeasuredWords {
+  return {
+    note: t('measuredQty.note'), unmeasured: (count: number) => t('measuredQty.unmeasured', { count }),
+    column: t('measuredQty.column'), volume: t('measuredQty.volume'), area: t('measuredQty.area'),
+  };
+}
+
 export function useTakeoffLabels(title: string): TakeoffLabels {
   const { t } = useTranslation();
   const locale = useSheetLocale();
   return useMemo(() => ({
     title, material: t('takeoff.material'), elements: t('takeoff.elements'), volume: t('takeoff.volume'),
     area: t('takeoff.area'), usedIn: t('takeoff.usedIn'), total: t('takeoff.total'),
-    locale,
+    locale, measured: measuredWords(t),
   }), [t, locale, title]);
 }
 
@@ -127,6 +136,7 @@ export function useTypeQuantityLabels(title: string): TypeQuantityLabels {
     length: t('typeQty.length'), area: t('typeQty.area'), volume: t('typeQty.volume'), noQto: t('typeQty.noQto'),
     total: t('typeQty.total'), noType: t('typeQty.noType'), noLevel: t('typeQty.noLevel'),
     classification: t('typeQty.classification'), classificationTitle: t('typeQty.classificationTitle'), unclassified: t('typeQty.unclassified'),
+    measured: measuredWords(t),
   }), [t, locale, title]);
 }
 
