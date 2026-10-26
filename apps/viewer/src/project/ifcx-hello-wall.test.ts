@@ -177,4 +177,27 @@ describe('hello-wall.ifcx answers as hello-wall.ifc does (#184)', { skip: SKIP }
     // No IfcWindow without a storey, which is what "1 of 4 elements on no storey" was.
     assert.deepEqual([...t.expressId].filter((i) => t.getTypeName(i) === 'IfcWindow' && !h.elementToStorey.has(i)), []);
   });
+
+  it('names the windows as the IFC does: the element\'s own name, not its type\'s', () => {
+    const names = (l: Loaded) => {
+      const t = l.ds.entities;
+      return [...t.expressId].filter((i) => t.getTypeName(i) === 'IfcWindow').map((i) => t.getName(i)).sort();
+    };
+    assert.deepEqual(names(ifc), ['Window', 'Window']);
+    assert.deepEqual(names(ifcx), names(ifc));
+  });
+
+  it('gives the storey the elevation the IFC gives it, from its placement (the file states no Elevation)', () => {
+    const ifcLevel = modelLevels('m');
+    show(ifc);
+    const expected = modelLevels('m');
+    show(ifcx);
+    assert.equal(expected.length, 1);
+    assert.equal(ifcLevel.length, 1);
+    assert.ok(Math.abs(ifcLevel[0].elevation - expected[0].elevation) < 0.001, `${ifcLevel[0].elevation} vs ${expected[0].elevation}`);
+    // The hierarchy holds a value for the storey, as the IFC's does, rather than leaving it to a default.
+    assert.equal(ifc.ds.spatialHierarchy!.storeyElevations.has(expected[0].expressId), true);
+    assert.equal(ifcx.ds.spatialHierarchy!.storeyElevations.has(ifcxIds.storey), true);
+    assert.ok(Math.abs(ifcx.ds.spatialHierarchy!.storeyElevations.get(ifcxIds.storey)! - ifc.ds.spatialHierarchy!.storeyElevations.get(expected[0].expressId)!) < 0.001);
+  });
 });

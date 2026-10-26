@@ -9,7 +9,7 @@
 
 import type { ComposedNode, IfcClass } from './types.js';
 import { ATTR } from './types.js';
-import { buildReachableAttributeIndex, collectIncomingEdgeNames } from './traversal.js';
+import { buildReachableAttributeIndex, collectIncomingEdgeNames, collectSiblingEdgeNames } from './traversal.js';
 import { nodeName } from './names.js';
 import { materialDefinitions, typeDefinitions } from './definitions.js';
 import { POINTCLOUD_ATTR_KEYS } from '@ifc-lite/pointcloud';
@@ -55,6 +55,7 @@ export function extractEntities(
   const pathToId = new Map<string, number>();
   const idToPath = new Map<number, string>();
   const incomingEdgeNames = collectIncomingEdgeNames(composed);
+  const siblingEdgeNames = collectSiblingEdgeNames(composed);
   const geometryIndex = buildReachableAttributeIndex(composed, ATTR.MESH);
 
   // A type definition is an IfcXType, a material definition an IfcMaterial:
@@ -99,7 +100,7 @@ export function extractEntities(
     // short name/code no source data backs and pre-empts the viewer's own
     // "Name absent" display convention (`getName(id) || '${type} #${id}'`
     // in treeDataBuilder.ts).
-    const name = nodeName(node, incomingEdgeNames.get(node.path) ?? []) ?? '';
+    const name = nodeName(node, incomingEdgeNames.get(node.path) ?? [], siblingEdgeNames.get(node.path)) ?? '';
 
     // Extract description from attributes (writer.ts writes it to the same
     // `bsi::ifc::prop::Description` attribute it writes name to under

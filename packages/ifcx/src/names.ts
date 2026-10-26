@@ -12,8 +12,22 @@
 
 import type { ComposedNode } from './types.js';
 
-/** A node's Name from its attributes; `null` when none says one. */
-export function nodeName(node: ComposedNode, incomingEdgeNames: readonly string[]): string | null {
+/**
+ * A node's Name from its attributes; `null` when none says one.
+ *
+ * An occurrence composes its type's attributes over its own (`inherits`), so a `TypeName` on an occurrence
+ * belongs to the type, not to the element. The element's own name wins: its Name, then the name of the edge it
+ * hangs under (`Window`), and only when it has neither does the type's name fill in. A type node itself has no
+ * `inherits`, so its `TypeName` is its name as before.
+ *
+ * `siblingEdgeNames` (optional) lets a generator's uniqueness suffix go: edge `Window_001` next to a `Window`
+ * is the second `Window`, whose name is `Window`.
+ */
+export function nodeName(
+  node: ComposedNode,
+  incomingEdgeNames: readonly string[],
+  siblingEdgeNames?: ReadonlySet<string>,
+): string | null {
   // Written by the IFCX exporter/writer.
   const ifcName = node.attributes.get('bsi::ifc::name');
   if (typeof ifcName === 'string') return ifcName;
@@ -21,8 +35,9 @@ export function nodeName(node: ComposedNode, incomingEdgeNames: readonly string[
   const name = node.attributes.get('bsi::ifc::prop::Name');
   if (typeof name === 'string') return name;
 
+  const occurrence = Object.values(node.inherits ?? {}).some(Boolean);
   const typeName = node.attributes.get('bsi::ifc::prop::TypeName');
-  if (typeof typeName === 'string') return typeName;
+  if (!occurrence && typeof typeName === 'string') return typeName;
 
   const objectName = node.attributes.get('bsi::ifc::prop::ObjectName');
   if (typeof objectName === 'string') return objectName;
@@ -33,9 +48,10 @@ export function nodeName(node: ComposedNode, incomingEdgeNames: readonly string[
   // Fall back to a readable edge name (a UUID is not one).
   for (const edgeName of incomingEdgeNames) {
     if (edgeName !== node.path && !edgeName.match(/^[0-9a-f-]{36}$/i)) {
-      return edgeName;
+      const base = edgeName.replace(/_\d{3}$/, '');
+      return base !== edgeName && siblingEdgeNames?.has(base) ? base : edgeName;
     }
   }
 
-  return null;
+  return occurrence && typeof typeName === 'string' ? typeName : null;
 }

@@ -10,7 +10,8 @@
 import type { ComposedNode, IfcClass } from './types.js';
 import { ATTR, SPATIAL_TYPES } from './types.js';
 import { nodeName } from './names.js';
-import { collectIncomingEdgeNames } from './traversal.js';
+import { collectIncomingEdgeNames, collectSiblingEdgeNames } from './traversal.js';
+import { IDENTITY, worldMatrix, worldZ, type Matrix4 } from './placement.js';
 import { IfcTypeEnum, IfcTypeEnumFromString, findStoreyByElevation } from '@ifc-lite/data';
 import type { SpatialHierarchy, SpatialNode } from '@ifc-lite/data';
 
@@ -34,7 +35,8 @@ export function buildHierarchy(
 
   // Build spatial tree
   const incomingEdgeNames = collectIncomingEdgeNames(composed);
-  const projectSpatial = buildSpatialNode(projectNode, pathToId, incomingEdgeNames);
+  const siblingEdgeNames = collectSiblingEdgeNames(composed);
+  const projectSpatial = buildSpatialNode(projectNode, pathToId, incomingEdgeNames, siblingEdgeNames, IDENTITY);
 
   // Build lookup maps
   const byStorey = new Map<number, number[]>();
@@ -139,8 +141,11 @@ function findProjectRoot(composed: Map<string, ComposedNode>): ComposedNode | nu
 function buildSpatialNode(
   node: ComposedNode,
   pathToId: Map<string, number>,
-  incomingEdgeNames: ReadonlyMap<string, string[]>
+  incomingEdgeNames: ReadonlyMap<string, string[]>,
+  siblingEdgeNames: ReadonlyMap<string, Set<string>>,
+  parentWorld: Matrix4,
 ): SpatialNode {
+  const world = worldMatrix(node, parentWorld);
   const ifcClass = node.attributes.get(ATTR.CLASS) as IfcClass | undefined;
   const expressId = pathToId.get(node.path) ?? 0;
   const typeEnum = IfcTypeEnumFromString(ifcClass?.code ?? '');
@@ -151,7 +156,7 @@ function buildSpatialNode(
   // path (a plausible-looking short name no source data backs, which also
   // pre-empts treeDataBuilder.ts's own "Name absent" fallback to the type,
   // e.g. "IfcBuildingStorey", since that only fires on a falsy name).
-  const name = nodeName(node, incomingEdgeNames.get(node.path) ?? []) ?? '';
+  const name = nodeName(node, incomingEdgeNames.get(node.path) ?? [], siblingEdgeNames.get(node.path)) ?? '';
   // Keep LongName as a distinct descriptor (Name "01" / LongName "Main
   // Residence") so the hierarchy panel can show both (issue #1634); drop it when
   // it just duplicates the primary label.
@@ -173,9 +178,10 @@ function buildSpatialNode(
   // Extract elevation for storeys
   if (ifcClass?.code === 'IfcBuildingStorey') {
     const elevation = node.attributes.get('bsi::ifc::prop::Elevation');
-    if (typeof elevation === 'number') {
-      spatialNode.elevation = elevation;
-    }
+    // Elevation is optional; without it the storey's Z through its placement chain stands in, as the STEP
+    // builder does, so the storey orders and levels the same whether the file says an Elevation or not.
+    const placed = worldZ(world);
+    spatialNode.elevation = typeof elevation === 'number' ? elevation : Number.isFinite(placed) ? placed : undefined;
   }
 
   // Process children
@@ -184,7 +190,7 @@ function buildSpatialNode(
 
     if (childClass && SPATIAL_TYPES.has(childClass.code)) {
       // Spatial child - recurse
-      spatialNode.children.push(buildSpatialNode(child, pathToId, incomingEdgeNames));
+      spatialNode.children.push(buildSpatialNode(child, pathToId, incomingEdgeNames, siblingEdgeNames, world));
     } else {
       if (ifcClass?.code === 'IfcSpace' && isSpaceBoundaryRelationshipClass(childClass?.code)) {
         collectSpaceBoundaryElementIds(child, pathToId, elementIds);
