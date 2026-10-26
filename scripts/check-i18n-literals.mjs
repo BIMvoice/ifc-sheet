@@ -35,6 +35,9 @@
  * JSX text. JSX text/attributes remain scanned under `components/*.tsx` only.
  * 2026-10-26: toast scanning added; the baseline was seeded with the 162
  * literal toast strings (42 files) then on main. It only ratchets down.
+ * 2026-10-26: 162 -> 134 (38 files): the toasts of the palette exports (CSV, JSON, screenshot) and of opening a
+ * file moved into the `exportToast.*` / `fileLoad.toast.*` catalogue keys (en + ro), and the toasts of the
+ * modified-IFC export (`ExportChangesButton`) into `exportChangesReviewDialog.toast.*` (en + ro).
  *
  * Flags:
  *   --root <dir>       scan this tree instead of the repo
