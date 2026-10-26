@@ -19,7 +19,7 @@ import { captureSheets, failureLine } from './capture';
 import { drawingListCsv, issueFileNames, sheetFileStem, uniqueNames, type ListLabels } from './output';
 import { buildHandover, type HandoverWorkbook } from './handover';
 import { loadedModels, registerWorkbook } from './handover-collect';
-import { pacOpis } from '@bimvoice/ifcsheet';
+import { projectPacOpis } from './pac-opis';
 import { buildIssuePdf, type PdfLabels } from './pdf-build';
 import { titleBlockOf } from '@/project/title-block';
 import { effectiveTitleBlock } from '@/project/title-block-model';
@@ -122,7 +122,7 @@ export async function runIssue(options: IssueOptions): Promise<IssueResult> {
   if (options.format === 'pdf' || options.format === 'handover') {
     const projectFields = effectiveTitleBlock();
     const projectName = plan.sheets.map((s) => titleBlockOf(s.sheet, projectFields, project.name).project).find((n) => n) || project.name;
-    pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival, onWarning: (w) => lines.push(w), ...(options.pac ? { opis: pacOpis(plan.sheets.map((s) => s.sheet), options.pac.locale, projectName) } : {}) });
+    pdf = await buildIssuePdf(plan, svgs, projectName, pdfLabels(), { archival: options.archival, onWarning: (w) => lines.push(w), ...(options.pac ? { opis: projectPacOpis(plan.sheets.map((s) => s.sheet), options.pac.locale) } : {}) });
     if (options.format === 'handover') {
       const built = buildHandover({
         pattern: project.handoverPattern, project: projectName, plan, pdf, dxfs, models: loadedModels(),

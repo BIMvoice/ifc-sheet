@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import * as jspdf from 'jspdf';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { pacOpis } from '@bimvoice/ifcsheet';
+import { pacOpisOf } from '@bimvoice/ifcsheet';
 import { addProjectView, resetProject, useProjectStore } from '@/project/project-store';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import type { ProjectSheet } from '@/project/types';
@@ -101,7 +101,7 @@ async function issued(options: { archival?: boolean; romanian?: boolean; drawnBy
   try {
     if (options.extraText) for (const [k, v] of drawn.svgs) drawn.svgs.set(k, v.replace(/<\/svg>\s*$/, `${options.extraText}</svg>`));
     return await buildIssuePdf(plan, drawn.svgs, 'House', pdfLabels(), {
-      ...(options.permitOpis ? { opis: pacOpis(plan.sheets.map((x) => x.sheet), 'ro', 'House') } : {}),
+      ...(options.permitOpis ? { opis: pacOpisOf({ name: 'House', sheets: plan.sheets.map((x) => x.sheet), views: useProjectStore.getState().views }, 'ro') } : {}),
       loadFont: options.loadFont ?? loadFont, archival: options.archival, created: new Date(2026, 9, 19, 12, 0, 0), onWarning: (w) => options.warnings?.push(w),
     });
   } finally {

@@ -16,7 +16,9 @@
  * writes one). The research file `ro-permit-requirements.md` (section 00) lists these as UNVERIFIED.
  */
 
-import { pacCoverage } from './pac-set.js';
+import type { ProjectView } from './document.js';
+import { pacCoverage, type PacCoverageSheet, type PacIntervention, type PacState } from './pac-set.js';
+import { titleBlockOf } from './title-block-fields.js';
 import { pacWordsFor, type PacWordKey } from './pac-words.js';
 import type { SheetGraphic, SheetText } from './sheet-graphic.js';
 import { textWidthEm, truncateToWidth } from './text-width.js';
@@ -36,8 +38,8 @@ export interface PacOpisRow {
   /** The Anexa 2 point, as the text numbers it. */
   point: string;
   name: string;
-  /** The sheets of this file draw it. */
-  included: boolean;
+  /** The sheets of this file hold it, do not, or the Code does not ask for it in these works (`PacIntervention`). */
+  state: PacState;
 }
 
 export interface PacOpis {
@@ -48,23 +50,46 @@ export interface PacOpis {
   rows: PacOpisRow[];
   yes: string;
   no: string;
+  na: string;
 }
 
-/** The sheets of the file, in page order after the opis; only the series is read (what they draw). */
-export interface PacSheetRef { series?: string }
+/** The sheets of the file, in page order after the opis: what they draw (their series and views), and the title block fields they say otherwise. */
+export interface PacSheetRef extends PacCoverageSheet { titleBlock?: Record<string, string> }
+
+/** What the opis is made from; the app and the command line both hand their project over in this shape. */
+export interface PacProject {
+  /** The project's name (the set's name on the command line). */
+  name: string;
+  sheets: readonly PacSheetRef[];
+  views: readonly ProjectView[];
+  /** The project's title block fields, as the sheets print them. */
+  titleBlock?: Record<string, string>;
+  /** The works; absent is a new building. */
+  intervention?: PacIntervention;
+}
+
+/** The project name the opis carries: the title block's `project` field of the first sheet that has one, else the project's name. */
+export function pacProjectName(project: Pick<PacProject, 'name' | 'sheets' | 'titleBlock'>): string {
+  return project.sheets.map((s) => titleBlockOf(s, project.titleBlock, project.name).project).find((n) => n) || project.name;
+}
+
+/** The opis of a project, in the words of `locale`: the one function the app's issued PDF and `ifcsheet build --pac` both call. */
+export function pacOpisOf(project: PacProject, locale: string): PacOpis {
+  return pacOpis(project.sheets, locale, pacProjectName(project), { views: project.views, intervention: project.intervention });
+}
 
 /** The opis of a submission whose sheets are `sheets`, in the words of `locale`. */
-export function pacOpis(sheets: readonly PacSheetRef[], locale: string, projectName: string): PacOpis {
+export function pacOpis(sheets: readonly PacSheetRef[], locale: string, projectName: string, context: { views: readonly ProjectView[]; intervention?: PacIntervention }): PacOpis {
   const w = pacWordsFor(locale);
-  const coverage = new Map(pacCoverage(sheets).map((r) => [r.item.id, r]));
+  const coverage = new Map(pacCoverage(sheets, context).map((r) => [r.item.id, r]));
   const rows = PAC_OPIS_ORDER.map((id): PacOpisRow => {
-    const { item, drawn } = coverage.get(id)!;
-    return { id, point: item.point, name: w[`pac.item.${id}` as PacWordKey], included: drawn };
+    const { item, state } = coverage.get(id)!;
+    return { id, point: item.point, name: w[`pac.item.${id}` as PacWordKey], state };
   });
   return {
     title: w['pac.opis.title'], law: w['pac.opis.law'], project: projectName ? w['pac.opis.project'].replace('{name}', projectName) : '',
     head: { point: w['pac.opis.col.point'], item: w['pac.opis.col.item'], included: w['pac.opis.col.included'] },
-    rows, yes: w['pac.opis.yes'], no: w['pac.opis.no'],
+    rows, yes: w['pac.opis.yes'], no: w['pac.opis.no'], na: w['pac.opis.na'],
   };
 }
 
@@ -114,7 +139,7 @@ export function pacOpisTexts(opis: PacOpis): SheetText[] {
     const lines = twoLines(row.name, SIZE.body, ITEM_WIDTH_MM);
     put(row.point, POINT_X, y, SIZE.body);
     lines.forEach((line, i) => put(line, ITEM_X, y + i * LINE, SIZE.body));
-    put(row.included ? opis.yes : opis.no, INCLUDED_X - 11, y, SIZE.body, 'center');
+    put(opis[row.state === 'yes' ? 'yes' : row.state === 'no' ? 'no' : 'na'], INCLUDED_X - 11, y, SIZE.body, 'center');
     y += (lines.length - 1) * LINE;
   }
   return texts;
@@ -129,6 +154,6 @@ export function pacOpisSheet(opis: PacOpis): SheetGraphic {
 }
 
 /** The submission's pages: the opis first, then `sheets` in the order given. */
-export function pacSubmissionSheets(sheets: readonly SheetGraphic[], series: readonly PacSheetRef[], locale: string, projectName: string): SheetGraphic[] {
-  return [pacOpisSheet(pacOpis(series, locale, projectName)), ...sheets];
+export function pacSubmissionSheets(sheets: readonly SheetGraphic[], project: PacProject, locale: string): SheetGraphic[] {
+  return [pacOpisSheet(pacOpisOf(project, locale)), ...sheets];
 }

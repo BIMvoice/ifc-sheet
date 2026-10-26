@@ -8,8 +8,9 @@
  * (`pac-submission.ts`). Everything else in `build` (the PDF writer, the DXF, the handover) is unchanged.
  */
 
+import type { ProjectDocument } from './document.js';
 import type { SetTemplate } from './set-template.js';
-import { pacSetTemplate } from './pac-set.js';
+import { pacSetTemplate, type PacIntervention } from './pac-set.js';
 import { pacSubmissionSheets } from './pac-submission.js';
 import { pacWordsFor } from './pac-words.js';
 import type { SheetGraphic } from './sheet-graphic.js';
@@ -23,8 +24,9 @@ export function pacTemplateFor(locale: string): SetTemplate {
   return pacSetTemplate({ name: w['pac.set.name'], plans: w['pac.set.plans'], facades: w['pac.set.facades'], sections: w['pac.set.sections'] });
 }
 
-/** The pages of the submission: the opis, then the sheets of `set` as drawn. */
-export function pacPages(sheets: readonly SheetGraphic[], set: { document: { name: string; sheets: readonly { id: string; series?: string }[] } }, locale: string): SheetGraphic[] {
-  const seriesOf = new Map(set.document.sheets.map((s) => [s.id, s.series]));
-  return pacSubmissionSheets(sheets, sheets.map((s) => ({ series: seriesOf.get(s.sheetId) })), locale, set.document.name);
+/** The pages of the submission: the opis, then the sheets of `set` as drawn. The opis is the one the app's issued PDF has (`pacOpisOf`). */
+export function pacPages(sheets: readonly SheetGraphic[], set: { document: ProjectDocument }, locale: string, intervention?: PacIntervention): SheetGraphic[] {
+  const drawn = new Set(sheets.map((s) => s.sheetId));
+  const { document } = set;
+  return pacSubmissionSheets(sheets, { name: document.name, sheets: document.sheets.filter((s) => drawn.has(s.id)), views: document.views, titleBlock: document.titleBlock, intervention }, locale);
 }

@@ -74,6 +74,6 @@ describe.skipIf(missing !== null)('the rural PAC set of AC20-FZK-Haus (#364)', (
   });
 
   it('marks plans, facades and sections drawn and the rest to be supplied', () => {
-    expect(pacCoverage(set.document.sheets, PAC_RURAL_ITEMS).filter((r) => r.drawn).map((r) => r.item.id)).toEqual(['rural.plans', 'rural.facades', 'rural.sections']);
+    expect(pacCoverage(set.document.sheets, { views: set.document.views }, PAC_RURAL_ITEMS).filter((r) => r.drawn).map((r) => r.item.id)).toEqual(['rural.plans', 'rural.facades', 'rural.sections']);
   });
 });
