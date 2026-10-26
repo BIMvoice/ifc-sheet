@@ -14,6 +14,7 @@
 
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import type { StandardPreviousValues } from '@/project/fields/installed-standard';
+import { canonicalJson } from '@/project/sheet-fingerprint';
 import { setGraphicStandard } from '@/project/graphic-standard-actions';
 import { setSchemeForNewSheets } from '@/project/sheet-renumber';
 import { applyRomanianTitleBlock, resetTitleBlockTemplate } from '@/project/title-block-template-actions';
@@ -33,7 +34,8 @@ function capture(pack: StandardPack, already: StandardPreviousValues): StandardP
   return out;
 }
 
-const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+/** Structural equality: a project file read back may write an object's keys in another order than the pack lists them (#404), which JSON text would call different. */
+const same = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
 
 /** Whether the project is, right now, as `pack` leaves it: it is the installed version and every part it carries holds the pack's value. */
 export function isApplied(pack: StandardPack, s: ReturnType<typeof state> = state()): boolean {
