@@ -193,3 +193,6 @@ export {
   type RoomRecord, type RoomSchedule, type RoomScheduleLevel, type RoomScheduleLine, type RoomScheduleWords, type ScheduleLevelInfo,
 } from './room-schedule.js';
 export { estimatedAreas, type EstimatedAreas } from './room-estimates.js';
+
+// Quantities measured from geometry when the model states none (#74): closed-mesh volume, a wall's side, a slab's top; the declared figure wins
+export { measureElement, measuredAreaKind, withMeasured, type ElementMeasure, type MeasureMesh, type MeasureRefusal, type MeasuredAreaKind, type MeasuredFigure, type QuantitySource, type SourcedQuantities } from './measured-quantities.js';
