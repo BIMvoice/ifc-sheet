@@ -118,7 +118,7 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
         console.warn('[ifcsheet] the logo could not be drawn in the PDF', error);
       }
     }
-    doc.outline.add(null, `${sheet.number} ${sheet.name}`, { pageNumber: i + 1 });
+    doc.outline.add(null, `${sheet.number} ${sheet.name}`.trim(), { pageNumber: i + 1 });
   });
   return new Uint8Array(doc.output('arraybuffer'));
 }

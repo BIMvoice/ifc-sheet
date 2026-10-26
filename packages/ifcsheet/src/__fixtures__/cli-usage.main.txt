@@ -1,7 +1,7 @@
 ifcsheet: drawing sets from IFC models
 
 Usage:
-  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--standard <id>] [--include-far-elements]
+  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--locale <ro|en>]] [--project <file>] [--standard <id>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
   ifcsheet materials <model.ifc> [--project <file>] [--json]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
@@ -16,6 +16,8 @@ Commands:
           With --template, the sheets are made by the rules of a set template (a .bvset file
           saved from a project) instead: the same plan-per-storey, elevation and section
           rules the app applies, a rule the model cannot meet skipped and said.
+          With --pac, the sheets are the permit project's (PAC, Legea 169/2026 Anexa 2: plans, facades, sections) and the
+          one PDF opens with the opis page: the contents Anexa 2 lists, each with its point and whether the file holds it.
   check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain English, or JSON with --json. With --project, also what the
@@ -46,6 +48,9 @@ Options:
   --pattern <p>    How --handover names its files, with {project} {number} {sheet} {revision} {date} {issue}
                    (default "{number} {sheet}": A-101 Ground floor.dxf). Plain ASCII, no path separators.
   --template <file> A set template (.bvset) for build: which sheets, which views on them, at which scale.
+  --pac            Build the submission PDF of the permit project (PAC): the opis page, then the PAC sheets. Not with --template.
+  --intervention <w> With --pac: the works, new (default), existing (an intervention on an existing building: Anexa 2 point 1.4.4 applies) or
+                   interior (interior only: the items 1.4.4 lifts show "Nu este cazul").
   --standard <id>  A drawing standard for build: its pens and title block (known: ro, the Romanian pack of the app's "Install standard").
                    Wins over the project's own graphic standard and title block layout; without it a --project's are used.
   --name <name>    The project name for the title blocks (default: the model's).

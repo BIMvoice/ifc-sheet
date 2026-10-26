@@ -11,10 +11,9 @@
  */
 
 import type { Drawing2D, DrawingPolygon } from '@ifc-lite/drawing-2d';
-import { liveEntityConforms } from '@ifc-lite/create';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { useViewerStore } from '@/store';
-import { layerSetOf, relationSnapshot, type LiveModel, type RelationReads } from '@/lib/commands/modeling/authored-kinds';
+import { layerSetOf, liveConforms, relationSnapshot, type LiveModel, type RelationReads } from '@/lib/commands/modeling/authored-kinds';
 import { idOf } from '@/joinery/object-id';
 import { useProjectStore } from './project-store';
 import { materialDrawing, type LayerRef, type MaterialDrawing } from './material-drawing';
@@ -24,7 +23,7 @@ export function modelOf(entityId: number) {
   const s = useViewerStore.getState();
   const ref = s.resolveGlobalIdFromModels(entityId);
   const model = ref ? s.models.get(ref.modelId) : undefined;
-  return ref && model?.ifcDataStore ? { ...ref, dataStore: model.ifcDataStore, view: s.mutationViews.get(ref.modelId) ?? null } : null;
+  return ref && model?.ifcDataStore ? { ...ref, dataStore: model.ifcDataStore, view: s.mutationViews.get(ref.modelId) ?? null, readOnly: true as const } : null;
 }
 
 function materialName(m: NonNullable<ReturnType<typeof modelOf>>, materialId: number): string | null {
@@ -38,7 +37,7 @@ type ModelRef = NonNullable<ReturnType<typeof modelOf>>;
  * several materials): its layer set when all the layers are one material, else the material associated with it directly.
  */
 function soleMaterialName(m: ModelRef, relations: RelationReads): string | null {
-  const live = { dataStore: m.dataStore, view: m.view };
+  const live: LiveModel = { dataStore: m.dataStore, view: m.view, readOnly: true };
   const set = layerSetOf(live, m.expressId, relations);
   if (set) {
     const ids = new Set(set.layers.map((l) => l.materialId));
@@ -46,7 +45,7 @@ function soleMaterialName(m: ModelRef, relations: RelationReads): string | null 
     return only === null ? null : materialName(m, only);
   }
   const direct = relations.relatingOf('IfcRelAssociatesMaterial', m.expressId);
-  return direct !== null && liveEntityConforms(m.dataStore, direct, 'IfcMaterial', m.view) ? materialName(m, direct) : null;
+  return direct !== null && liveConforms(m, direct, 'IfcMaterial') ? materialName(m, direct) : null;
 }
 
 /**
@@ -57,7 +56,7 @@ function polygonMaterialName(p: DrawingPolygon, soleToo: boolean): string | null
   const m = modelOf(p.entityId);
   if (!m) return null;
   if (p.materialId !== undefined) return materialName(m, p.materialId);
-  return soleToo ? soleMaterialName(m, relationsFor({ dataStore: m.dataStore, view: m.view })) : null;
+  return soleToo ? soleMaterialName(m, relationsFor(m)) : null;
 }
 
 /** The distinct IfcMaterial names cut in a drawing (empty when there is none). */
@@ -120,7 +119,7 @@ export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null
     layers(entityId) {
       const m = modelOf(entityId);
       if (!m) return null;
-      const live = { dataStore: m.dataStore, view: m.view };
+      const live: LiveModel = { dataStore: m.dataStore, view: m.view, readOnly: true };
       const set = layerSetOf(live, m.expressId, relationsFor(live));
       if (!m || !set) return null;
       return set.layers.map((l): LayerRef => ({ materialId: l.materialId, name: (l.materialId !== null ? materialName(m, l.materialId) : null) ?? '', thickness: l.thickness }));

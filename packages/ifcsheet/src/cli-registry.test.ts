@@ -31,6 +31,9 @@ const ARGV_CASES: readonly (readonly string[])[] = [
   ['classify'], ['classify', 'm.ifc'], ['classify', 'm.ifc', '--project', 'p.json'], ['classify', 'm.ifc', '--project', 'p.json', '--system', 'x', '--csv'], ['classify', 'm.ifc', '--project', 'p.json', '--locale', 'ro'], ['classify', 'm.ifc', '--project', 'p.json', '--schedule', 's'], ['classify', 'm.ifc', '--project', 'p.json', '--csv', '--json'],
   // Added with #376 (`build --standard`); the 61 lines above are unchanged from main before it.
   ['build', '--standard', 'ro'], ['build', 'm.ifc', '--out', 'a.pdf', '--standard', 'ro'], ['check', 'm.ifc', '--standard', 'ro'], ['list', 'm.ifc', '--standard', 'ro'], ['frobnicate', 'm.ifc', '--standard', 'ro'],
+  // Added with #364 (`build --pac`, `--intervention`); the 66 lines above are unchanged, except that the three that name the refused build options read "--locale only with --pac".
+  ['build', '--pac'], ['build', 'm.ifc', '--pac', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac', '--locale', 'ro', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac', '--template', 't.bvset', '--out', 'a.pdf'], ['build', 'm.ifc', '--out', 'a.pdf', '--intervention', 'new'],
+  ['build', 'm.ifc', '--pac', '--intervention', 'bogus', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac', '--intervention', 'interior', '--out', 'a.pdf'], ['check', 'm.ifc', '--pac'], ['frobnicate', 'm.ifc', '--pac'],
 ];
 
 const fixture = (name: string) => readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url), 'utf8');
