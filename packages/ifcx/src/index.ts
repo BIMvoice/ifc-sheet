@@ -20,6 +20,9 @@ import { extractProperties, mirroredFlatPropertyKeys, routesToQuantityTable } fr
 import { extractGeometry } from './geometry-extractor.js';
 import { extractPointClouds } from './pointcloud-extractor.js';
 import { buildHierarchy } from './hierarchy-builder.js';
+import { IFCX_LENGTH_UNIT_SCALE } from './units.js';
+export { IFCX_LENGTH_UNIT_SCALE } from './units.js';
+import { materialAssociations, typeAssociations } from './definitions.js';
 import {
   StringTable,
   RelationshipGraphBuilder,
@@ -199,6 +202,7 @@ export async function parseIfcx(
     pathToId,
     idToPath,
     schemaVersion: 'IFC5',
+    lengthUnitScale: IFCX_LENGTH_UNIT_SCALE,
     fileSize: buffer.byteLength,
     entityCount: entities.count,
     parseTime,
@@ -246,6 +250,20 @@ function buildRelationships(
         }
       }
     }
+  }
+
+  // `inherits` as IFC states it: the material a node is made of
+  // (IfcRelAssociatesMaterial, material to element) and the type an occurrence
+  // takes (IfcRelDefinesByType, type to occurrence).
+  for (const { materialPath, ownerPath } of materialAssociations(composed)) {
+    const materialId = pathToId.get(materialPath);
+    const ownerId = pathToId.get(ownerPath);
+    if (materialId !== undefined && ownerId !== undefined) builder.addEdge(materialId, ownerId, RelationshipType.AssociatesMaterial, relId++);
+  }
+  for (const { typePath, objectPath } of typeAssociations(composed)) {
+    const typeId = pathToId.get(typePath);
+    const objectId = pathToId.get(objectPath);
+    if (typeId !== undefined && objectId !== undefined) builder.addEdge(typeId, objectId, RelationshipType.DefinesByType, relId++);
   }
 
   return builder.build();
@@ -592,6 +610,7 @@ function finalizeFederatedResult(
     pathToId,
     idToPath,
     schemaVersion: 'IFC5',
+    lengthUnitScale: IFCX_LENGTH_UNIT_SCALE,
     fileSize: totalSize,
     entityCount: entities.count,
     parseTime,

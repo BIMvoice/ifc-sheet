@@ -122,8 +122,13 @@ export interface EffectiveEntitySource {
   };
   /** Property atoms may live outside the primary ID index after parsing. */
   readonly deferredEntityIndex?: { get(id: number): { type: string } | undefined };
-  /** Optional type fallback for a caller-supplied columnar source domain. */
-  readonly entities?: { getTypeName(id: number): string };
+  /**
+   * Optional type fallback for a caller-supplied columnar source domain. `expressId` lists the table's
+   * rows: with `schemaVersion` 'IFC5' it is also the source domain when the caller supplies none.
+   */
+  readonly entities?: { getTypeName(id: number): string; readonly expressId?: Iterable<number> };
+  /** The model's schema. An 'IFC5' (IFCX) store has no STEP type index, so its entity table is the source. */
+  readonly schemaVersion?: string;
 }
 
 export interface EffectiveEntity {
@@ -170,6 +175,11 @@ export function* iterateEffectiveEntities(
     ? overlay.getNewEntitiesOfType(only)
     : undefined;
   const created = byClass ? Array.from(byClass) : overlay?.getNewEntities() ?? [];
+
+  // An IFCX store has no STEP records, so its `entityIndex` is empty and every walk of the buckets above finds
+  // nothing: no space, no material, no wall, whoever asks. The entity table is its source then, and is walked
+  // here, once, for every caller, instead of each caller knowing to pass it (#184).
+  if (!sourceIds && byType.size === 0 && source.schemaVersion === 'IFC5' && source.entities?.expressId) sourceIds = source.entities.expressId;
 
   if (sourceIds) {
     for (const expressId of sourceIds) {

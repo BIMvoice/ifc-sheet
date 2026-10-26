@@ -34,6 +34,8 @@ export interface IfcxParseResult {
   idToPath: Map<number, string>;
   /** Schema version */
   schemaVersion: 'IFC5';
+  /** Factor from the file's length unit to metres: always `IFCX_LENGTH_UNIT_SCALE` (1), the unit IFCX defines. */
+  lengthUnitScale: number;
   /** File size in bytes */
   fileSize: number;
   /** Number of entities */

@@ -142,7 +142,10 @@ export class AnchorEntityReader {
     // @raw-entity-enumeration-ok point lookup after effective enumeration; source bytes are needed only for this candidate's attributes
     const ref = created ? undefined : this.store?.entityIndex.byId.get(id);
     const source = ref && this.extractor ? this.extractor.extractEntity(ref) : null;
-    const entity = created ?? source;
+    // An IFCX model has no STEP bytes to extract from: its records are the store's own, which gives an
+    // IfcMaterial its Name, so the material readers that go through here see IFCX materials like IFC ones.
+    const own = created || ref || this.store?.schemaVersion !== 'IFC5' ? null : this.store.getEntity?.(id) ?? null;
+    const entity = created ?? source ?? own;
     if (!entity) return null;
     return resolveEffectiveEntityRecord(entity, {
       retype: this.view?.getEntityTypeMutation(id)?.newType,

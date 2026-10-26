@@ -9,6 +9,7 @@
  * overlay, so a type or relationship authored earlier in the session counts.
  */
 
+import { RelationshipType } from '@ifc-lite/data';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import type { MutablePropertyView } from '@ifc-lite/mutations';
 import type { SpatialAnchorSchema } from './anchor.js';
@@ -53,6 +54,27 @@ export function readRelatedLists(
     if (!Array.isArray(related) || relatingId === null) continue;
     lists.push({ relId, relatingId, relatedIds: related.map(refId).filter((id): id is number => id !== null) });
   }
+  if (store.schemaVersion === 'IFC5') lists.push(...graphRelatedLists(store, relType, view));
+  return lists;
+}
+
+const RELATIONSHIP_OF = {
+  IfcRelDefinesByType: RelationshipType.DefinesByType,
+  IfcRelAssociatesMaterial: RelationshipType.AssociatesMaterial,
+} as const;
+
+/**
+ * The same lists for a model that has no `IfcRel*` records to read, IFCX: its relationship graph holds them
+ * (relating object to related objects, the direction the STEP parser records them in).
+ */
+function graphRelatedLists(store: IfcDataStore, relType: keyof typeof RELATIONSHIP_OF, view?: MutablePropertyView | null): ExistingRelatedList[] {
+  const lists: ExistingRelatedList[] = [];
+  const type = RELATIONSHIP_OF[relType];
+  for (const relatingId of store.entities.expressId) {
+    if (relatingId === 0 || view?.isDeleted(relatingId)) continue;
+    const edges = store.relationships.forward.getEdges(relatingId, type).filter((edge) => !view?.isDeleted(edge.target));
+    if (edges.length > 0) lists.push({ relId: edges[0].relationshipId, relatingId, relatedIds: edges.map((edge) => edge.target) });
+  }
   return lists;
 }
 
@@ -74,6 +96,8 @@ export function liveEntityConforms(
 ): boolean {
   const type = liveEntityType(store, id, view);
   if (type === null) return false;
-  const schema = (store.schemaVersion ?? 'IFC4') as SpatialAnchorSchema;
+  // A read, not authoring: IFCX's classes are IFC 4.3's (its `bsi::ifc::class` URIs say `ifc/4.3/class`), so the
+  // class hierarchy to test against is IFC4X3's. `schemaRegistry` refuses IFC5 because it guards WRITING STEP.
+  const schema = (store.schemaVersion === 'IFC5' ? 'IFC4X3' : store.schemaVersion ?? 'IFC4') as SpatialAnchorSchema;
   return conformsTo(schemaRegistry(schema, 'liveEntityConforms'), type, expected);
 }

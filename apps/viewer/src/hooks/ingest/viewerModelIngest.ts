@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { CompactEntityIndex, parseIfcx, createSyntheticDataStore, attachDataStoreAccessors, contiguousSourceBytes, type IfcDataStore, type IfcSourceBytes, type IfcStoreData, type PointCloudExtraction } from '@ifc-lite/parser';
+import { CompactEntityIndex, parseIfcx, IFCX_LENGTH_UNIT_SCALE, declareLengthUnitScale, createSyntheticDataStore, attachDataStoreAccessors, contiguousSourceBytes, type IfcDataStore, type IfcSourceBytes, type IfcStoreData, type PointCloudExtraction } from '@ifc-lite/parser';
 import { type GeometryResult, type MeshData, type PointCloudAsset } from '@ifc-lite/geometry';
 import { parseGLB, parseGLBToMeshData, parseGLBImageResources } from '@ifc-lite/cache';
 import type { SchemaVersion } from '../../store/types.js';
@@ -151,6 +151,8 @@ export function buildIfcxDataStore(ifcxResult: IfcxStoreInput, buffer: ArrayBuff
   const dataStore = attachDataStoreAccessors({
     fileSize: ifcxResult.fileSize,
     schemaVersion: 'IFC5' as const,
+    // The unit IFCX defines (no IfcUnitAssignment to read): consumers that read `store.lengthUnitScale` get it here ...
+    lengthUnitScale: IFCX_LENGTH_UNIT_SCALE,
     entityCount: ifcxResult.entityCount,
     parseTime: ifcxResult.parseTime,
     source,
@@ -175,6 +177,9 @@ export function buildIfcxDataStore(ifcxResult: IfcxStoreInput, buffer: ArrayBuff
     } : undefined,
   } as unknown as IfcStoreData);
 
+  // ... and the ones that derive it from `source` and `entityIndex` get it from the parser's declared scales.
+  declareLengthUnitScale(dataStore.entityIndex, IFCX_LENGTH_UNIT_SCALE);
+
   const entityTable = ifcxResult.entities;
   const idsByType = new Map<string, number[]>();
   const knownIds = new Set<number>();
@@ -186,9 +191,12 @@ export function buildIfcxDataStore(ifcxResult: IfcxStoreInput, buffer: ArrayBuff
     if (bucket) bucket.push(id);
     else idsByType.set(key, [id]);
   }
+  // The one attribute IFCX records hold: an IfcMaterial's Name (EXPRESS attribute 0, as IfcMaterial has no IfcRoot
+  // before it), which the material readers take from the record the way they do for a STEP IfcMaterial.
+  const attributesOf = (expressId: number, type: string): string[] => (type === 'IfcMaterial' ? [entityTable.getName(expressId)] : []);
   dataStore.getEntity = (expressId) =>
     knownIds.has(expressId)
-      ? { expressId, type: entityTable.getTypeName(expressId), attributes: [] }
+      ? { expressId, type: entityTable.getTypeName(expressId), attributes: attributesOf(expressId, entityTable.getTypeName(expressId)) }
       : null;
   dataStore.getEntitiesByType = (typeName) =>
     (idsByType.get(typeName.toUpperCase()) ?? []).map((expressId) => ({
