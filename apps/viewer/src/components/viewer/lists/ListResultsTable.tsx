@@ -453,7 +453,7 @@ export function ListResultsTable({ result, listName, grouping, onGroupingChange,
                 <div key={col.id} className="flex items-center border-r border-border/30 px-2 py-1 text-xs font-semibold shrink-0" style={{ width: columnWidths[colIdx] }}>
                   {colIdx === 0 && <span className="text-muted-foreground">{t('lists.resultsTable.totalCount', { count: formatLocaleCount(totals.count, locale) })}</span>}
                   {sumColumnIds.includes(col.id) && (
-                    <span className="ml-auto font-mono tabular-nums text-foreground">{formatSumValue(totals.sums[col.id], totals.missing[col.id])}</span>
+                    <span className="ml-auto font-mono tabular-nums text-foreground">{formatSumValue(totals.sums[col.id])}</span>
                   )}
                 </div>
               ))}

@@ -127,7 +127,7 @@ export function flattenExportModel(input: ExportModel, maxRows: number, labels: 
     for (const g of model.groups) {
       if (printed >= cap) break;
       rows.push({
-        cells: model.columns.map((c, i) => (i === 0 ? oneLine(groupHeaderLabel(g, '  ')) : c.summed ? displaySum(g.sums[c.id], g.missing[c.id]) : '')),
+        cells: model.columns.map((c, i) => (i === 0 ? oneLine(groupHeaderLabel(g, '  ')) : c.summed ? displaySum(g.sums[c.id]) : '')),
         role: 'group',
       });
       for (const r of g.rows) {

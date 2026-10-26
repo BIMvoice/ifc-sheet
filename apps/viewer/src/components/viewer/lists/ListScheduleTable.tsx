@@ -210,7 +210,7 @@ export function ListScheduleTable({
                     className="border-r border-border/20 px-2 py-1 text-xs text-right font-mono tabular-nums shrink-0"
                     style={{ width: scheduleColumnWidths[groupChips.length + 1 + i] }}
                   >
-                    {formatSumValue(row.sums[s.id], row.missing[s.id])}
+                    {formatSumValue(row.sums[s.id])}
                   </span>
                 ))}
               </button>
@@ -232,7 +232,7 @@ export function ListScheduleTable({
             {colIdx === 0 && <span className="text-muted-foreground">{t('lists.scheduleTable.totalGroups', { count: scheduleRows.length, countDisplay: formatLocaleCount(scheduleRows.length, locale) })}</span>}
             {col.role === 'count' && <span className="ml-auto font-mono tabular-nums text-foreground">{formatLocaleCount(totals.count, locale)}</span>}
             {col.role === 'sum' && (
-              <span className="ml-auto font-mono tabular-nums text-foreground">{formatSumValue(totals.sums[col.id], totals.missing[col.id])}</span>
+              <span className="ml-auto font-mono tabular-nums text-foreground">{formatSumValue(totals.sums[col.id])}</span>
             )}
           </div>
         ))}

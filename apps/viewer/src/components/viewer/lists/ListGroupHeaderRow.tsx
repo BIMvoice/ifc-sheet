@@ -89,7 +89,7 @@ export function ListGroupHeaderRow({
               </>
             )}
             {sumColumnIds.includes(col.id) && (
-              <span className="ml-auto font-mono tabular-nums">{formatSumValue(item.sums[col.id], item.missing[col.id])}</span>
+              <span className="ml-auto font-mono tabular-nums">{formatSumValue(item.sums[col.id])}</span>
             )}
           </span>
         ))}

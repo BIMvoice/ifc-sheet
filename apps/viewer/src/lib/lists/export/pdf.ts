@@ -36,7 +36,7 @@ export async function toPdf(model: ExportModel): Promise<Blob> {
     // level and carry their own count; member rows sit on leaf groups only.
     for (const g of model.groups) {
       body.push(model.columns.map((c, i) => ({
-        content: i === 0 ? groupHeaderLabel(g) : (c.summed ? displaySum(g.sums[c.id], g.missing[c.id]) : ''),
+        content: i === 0 ? groupHeaderLabel(g) : (c.summed ? displaySum(g.sums[c.id]) : ''),
         styles: { fontStyle: 'bold', fillColor: [226, 232, 240] as unknown as number[] },
       })));
       for (const r of g.rows) body.push(model.columns.map((_, i) => cell(r, i)));
