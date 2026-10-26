@@ -15,6 +15,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { IfcTypeEnum, RelationshipType } from '@ifc-lite/data';
 import { IFCX_LENGTH_UNIT_SCALE, parseIfcx } from './index.js';
+import { typeDefinitions } from './definitions.js';
+import type { ComposedNode } from './types.js';
 
 const SAMPLE = fileURLToPath(new URL('../../../apps/viewer/public/samples/hello-wall.ifcx', import.meta.url));
 const TYPE = '25503984-6605-43a1-8597-eae657ff5bea';
@@ -73,5 +75,20 @@ describe('hello-wall.ifcx is read as hello-wall.ifc is (#184)', () => {
     for (const path of [WALL, SPACE, ...WINDOWS]) assert.equal(r.spatialHierarchy.elementToStorey.get(r.pathToId.get(path)!), storey, path);
     assert.equal(r.spatialHierarchy.elementToStorey.has(r.pathToId.get(TYPE)!), false, 'the type is no element');
     assert.equal(r.entities.getTypeEnum(r.pathToId.get(TYPE)!), IfcTypeEnum.IfcWindowType);
+  });
+});
+
+describe('which edge makes a node a type (#184)', () => {
+  const node = (path: string, code: string, inherits?: Record<string, string>): ComposedNode =>
+    ({ path, attributes: new Map([['bsi::ifc::class', { code }]]), children: new Map(), ...(inherits ? { inherits } : {}) });
+
+  it('takes the class\'s own `<class>Type` edge, as the sample writes it', () => {
+    const composed = new Map([['t', node('t', 'IfcWindow')], ['w', node('w', 'IfcWindow', { windowType: 't' })]]);
+    assert.deepEqual([...typeDefinitions(composed)], [['t', 'IfcWindowType']]);
+  });
+
+  it('does not retype the target of an edge that merely ends in "type"', () => {
+    const composed = new Map([['t', node('t', 'IfcWindow')], ['w', node('w', 'IfcWindow', { prototype: 't' })], ['x', node('x', 'IfcWall', { windowType: 't' })]]);
+    assert.deepEqual([...typeDefinitions(composed)], []);
   });
 });

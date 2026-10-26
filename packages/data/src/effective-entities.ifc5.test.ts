@@ -24,4 +24,18 @@ describe('the effective entity set of an IFCX store (#184)', () => {
     expect([...iterateEffectiveEntities(step, null, ['IFCSPACE'])].map((e) => e.expressId)).toEqual([1]);
     expect([...iterateEffectiveEntities({ entityIndex: emptyIndex, entities, schemaVersion: 'IFC4' }, null, ['IFCSPACE'])]).toEqual([]);
   });
+
+  it('buckets the table once per model: a second filtered call does not rescan it', () => {
+    const rows = 2000;
+    const ids = new Uint32Array(rows).map((_, i) => i + 1);
+    let reads = 0;
+    const table = { expressId: ids, getTypeName: (id: number) => { reads++; return id % 500 === 0 ? 'IfcSpace' : 'IfcWall'; } };
+    const source: EffectiveEntitySource = { entityIndex: emptyIndex, entities: table, schemaVersion: 'IFC5' };
+    expect([...iterateEffectiveEntities(source, null, ['IFCSPACE'])].map((e) => e.expressId)).toEqual([500, 1000, 1500, 2000]);
+    expect(reads).toBeGreaterThanOrEqual(rows);
+    reads = 0;
+    expect([...iterateEffectiveEntities(source, null, ['IFCSPACE'])]).toHaveLength(4);
+    expect([...iterateEffectiveEntities(source, null, ['IFCSPACE'])]).toHaveLength(4);
+    expect(reads).toBeLessThanOrEqual(8 + 8);
+  });
 });

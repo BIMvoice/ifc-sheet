@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { EntityTableBuilder, RelationshipGraphBuilder, RelationshipType, StringTable } from '@ifc-lite/data';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { liveEntityConforms, readRelatedLists } from './resolve-relations.js';
+import { relateOneToManyInStore } from './relate.js';
 
 /** An IFCX store as the viewer builds it: no STEP records (empty index, empty source), the entity table and relationship graph carry the model. */
 function ifcxStore(): IfcDataStore {
@@ -32,13 +33,21 @@ function ifcxStore(): IfcDataStore {
 describe('the material and type readers over an IFCX store (#184)', () => {
   it('reads IfcRelAssociatesMaterial and IfcRelDefinesByType from the relationship graph', () => {
     const store = ifcxStore();
-    expect(readRelatedLists(store, 'IfcRelAssociatesMaterial')).toEqual([{ relId: 10, relatingId: 1, relatedIds: [2] }]);
-    expect(readRelatedLists(store, 'IfcRelDefinesByType')).toEqual([{ relId: 11, relatingId: 3, relatedIds: [4] }]);
+    expect(readRelatedLists(store, 'IfcRelAssociatesMaterial')).toEqual([{ relId: 0, relatingId: 1, relatedIds: [2] }]);
+    expect(readRelatedLists(store, 'IfcRelDefinesByType')).toEqual([{ relId: 0, relatingId: 3, relatedIds: [4] }]);
   });
 
   it('tests an IFCX record against the IFC 4.3 class hierarchy it is written in, not the authoring refusal', () => {
     const store = ifcxStore();
     expect(liveEntityConforms(store, 1, 'IfcMaterial')).toBe(true);
     expect(liveEntityConforms(store, 1, 'IfcWall')).toBe(false);
+  });
+
+  it('hands out the graph\'s lists as read-only: relId 0, and an edit through them is refused', () => {
+    const store = ifcxStore();
+    const existing = readRelatedLists(store, 'IfcRelAssociatesMaterial');
+    const editor = { removeEntity: () => { throw new Error('edited'); }, setPositionalAttribute: () => { throw new Error('edited'); }, addEntity: () => { throw new Error('edited'); } };
+    expect(() => relateOneToManyInStore(editor as never, { relType: 'IfcRelAssociatesMaterial', relatingId: 1, relatedIds: [2], existing, create: () => [] }, 'test'))
+      .toThrow(/derived from its relationship graph/);
   });
 });

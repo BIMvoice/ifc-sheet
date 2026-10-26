@@ -17,7 +17,7 @@ import {
   StringTable,
   EntityTableBuilder,
 } from '@ifc-lite/data';
-import type { EntityTable } from '@ifc-lite/data';
+import type { DerivedEntities, EntityTable } from '@ifc-lite/data';
 
 /**
  * Promote a node to a first-class entity when it carries any of the
@@ -34,6 +34,8 @@ function nodeIsPointCloud(node: ComposedNode): boolean {
 
 export interface EntityExtractionResult {
   entities: EntityTable;
+  /** What the table says that the file does not (see `DerivedEntities`): the exporter writes the file's classes. */
+  derived: DerivedEntities;
   pathToId: Map<string, number>;
   idToPath: Map<number, string>;
 }
@@ -69,6 +71,8 @@ export function extractEntities(
     }
   }
 
+  const retyped = new Map<number, string>();
+  const added = new Set<number>();
   const builder = new EntityTableBuilder(Math.max(entityCount, 100), strings);
   let nextExpressId = 1;
 
@@ -83,6 +87,7 @@ export function extractEntities(
     const typeCode = typeDefs.get(node.path) ?? ifcClass?.code ?? (isPointCloud ? 'IfcGeographicElement' : '');
 
     const expressId = nextExpressId++;
+    if (typeDefs.has(node.path) && ifcClass?.code) retyped.set(expressId, ifcClass.code);
     pathToId.set(node.path, expressId);
     idToPath.set(expressId, node.path);
 
@@ -140,11 +145,13 @@ export function extractEntities(
     const expressId = nextExpressId++;
     pathToId.set(path, expressId);
     idToPath.set(expressId, path);
+    added.add(expressId);
     builder.add(expressId, 'IfcMaterial', path, code, '', '', false, false);
   }
 
   return {
     entities: builder.build(),
+    derived: { retyped, added },
     pathToId,
     idToPath,
   };

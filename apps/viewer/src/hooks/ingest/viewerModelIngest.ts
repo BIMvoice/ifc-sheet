@@ -121,7 +121,7 @@ type IfcxParse = Awaited<ReturnType<typeof parseIfcx>>;
 type IfcxStoreInput = Pick<
   IfcxParse,
   'fileSize' | 'entityCount' | 'parseTime' | 'strings' | 'entities' | 'properties' | 'quantities' | 'relationships' | 'georeferencing'
-> & { spatialHierarchy?: IfcxParse['spatialHierarchy'] };
+> & { spatialHierarchy?: IfcxParse['spatialHierarchy']; derivedEntities?: IfcxParse['derivedEntities'] };
 
 /**
  * Build the `IfcDataStore` for an IFCX import. Exported for regression coverage of
@@ -159,6 +159,7 @@ export function buildIfcxDataStore(ifcxResult: IfcxStoreInput, buffer: ArrayBuff
     entityIndex: { byId: new Map(), byType: new Map() },
     strings: ifcxResult.strings,
     entities: ifcxResult.entities,
+    derivedEntities: ifcxResult.derivedEntities,
     properties: ifcxResult.properties,
     quantities: ifcxResult.quantities,
     relationships: ifcxResult.relationships,

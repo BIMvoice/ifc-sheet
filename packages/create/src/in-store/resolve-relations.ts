@@ -65,7 +65,9 @@ const RELATIONSHIP_OF = {
 
 /**
  * The same lists for a model that has no `IfcRel*` records to read, IFCX: its relationship graph holds them
- * (relating object to related objects, the direction the STEP parser records them in).
+ * (relating object to related objects, the direction the STEP parser records them in). They are READ-ONLY views:
+ * the graph's relationship id is an IFCX counter that collides with real entity ids, so `relId` is 0, which no
+ * entity has, and `relateOneToManyInStore` refuses a list with it rather than editing whatever #N it might be.
  */
 function graphRelatedLists(store: IfcDataStore, relType: keyof typeof RELATIONSHIP_OF, view?: MutablePropertyView | null): ExistingRelatedList[] {
   const lists: ExistingRelatedList[] = [];
@@ -73,7 +75,7 @@ function graphRelatedLists(store: IfcDataStore, relType: keyof typeof RELATIONSH
   for (const relatingId of store.entities.expressId) {
     if (relatingId === 0 || view?.isDeleted(relatingId)) continue;
     const edges = store.relationships.forward.getEdges(relatingId, type).filter((edge) => !view?.isDeleted(edge.target));
-    if (edges.length > 0) lists.push({ relId: edges[0].relationshipId, relatingId, relatedIds: edges.map((edge) => edge.target) });
+    if (edges.length > 0) lists.push({ relId: 0, relatingId, relatedIds: edges.map((edge) => edge.target) });
   }
   return lists;
 }

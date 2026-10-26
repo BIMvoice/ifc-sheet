@@ -23,8 +23,15 @@ import { ATTR } from './types.js';
 const classCode = (node: ComposedNode | undefined): string | undefined =>
   (node?.attributes.get(ATTR.CLASS) as IfcClass | undefined)?.code;
 
-/** An edge name that says "typed by": `windowType`, `wallType`, `type`. */
-const isTypeEdge = (name: string): boolean => /type$/i.test(name);
+/**
+ * The edge that says "typed by" for an occurrence of `occurrenceClass`: the class name, without `Ifc`, lower-camel,
+ * then `Type` (`IfcWindow` gives `windowType`). That is the one spelling the buildingSMART Hello Wall sample uses
+ * (`"inherits": { "windowType": ... }`); no IFC5 document in this repository or reachable from it lists the names,
+ * so this is the sample's convention, matched exactly. A suffix test would retype the target of any edge named
+ * `prototype`.
+ */
+const typeEdgeOf = (occurrenceClass: string | undefined): string | null =>
+  occurrenceClass?.startsWith('Ifc') && occurrenceClass.length > 3 ? `${occurrenceClass[3].toLowerCase()}${occurrenceClass.slice(4)}Type` : null;
 const isMaterialEdge = (name: string): boolean => name.toLowerCase() === 'material';
 
 /**
@@ -39,7 +46,7 @@ export function typeDefinitions(composed: ReadonlyMap<string, ComposedNode>): Ma
   for (const node of composed.values()) {
     if (!classCode(node)) continue;
     for (const [edge, target] of Object.entries(node.inherits ?? {})) {
-      if (!isTypeEdge(edge) || target === node.path || out.has(target)) continue;
+      if (edge !== typeEdgeOf(classCode(node)) || target === node.path || out.has(target)) continue;
       const own = classCode(composed.get(target));
       if (!own || own.toUpperCase().endsWith('TYPE')) continue;
       if (IfcTypeEnumFromString(`${own}Type`) !== IfcTypeEnum.Unknown) out.set(target, `${own}Type`);
@@ -126,7 +133,7 @@ export function typeAssociations(composed: ReadonlyMap<string, ComposedNode>): {
   for (const node of composed.values()) {
     if (!classCode(node)) continue;
     for (const [edge, target] of Object.entries(node.inherits ?? {})) {
-      if (isTypeEdge(edge) && types.has(target) && target !== node.path) out.push({ typePath: target, objectPath: node.path });
+      if (edge === typeEdgeOf(classCode(node)) && types.has(target) && target !== node.path) out.push({ typePath: target, objectPath: node.path });
     }
   }
   return out;

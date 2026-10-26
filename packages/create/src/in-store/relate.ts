@@ -46,6 +46,8 @@ export function relateOneToManyInStore(editor: StoreEditor, spec: OneToManySpec,
   }
   if (ids.includes(spec.relatingId)) throw new Error(`${op}: #${spec.relatingId} cannot relate to itself`);
 
+  if (spec.existing.some((rel) => rel.relId <= 0)) throw new Error(`${op}: the model's relationships are derived from its relationship graph, not records, and cannot be edited`);
+
   const moving = new Set(ids);
   const target = spec.existing.find((rel) => rel.relatingId === spec.relatingId);
   const detachedRelIds: number[] = [];

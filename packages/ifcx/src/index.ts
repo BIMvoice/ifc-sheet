@@ -161,7 +161,7 @@ export async function parseIfcx(
   // Phase 3: Extract entities
   options.onProgress?.({ phase: 'entities', percent: 0 });
   const strings = new StringTable();
-  const { entities, pathToId, idToPath } = extractEntities(composed, strings);
+  const { entities, derived, pathToId, idToPath } = extractEntities(composed, strings);
   options.onProgress?.({ phase: 'entities', percent: 100 });
 
   // Phase 4: Extract properties
@@ -192,6 +192,7 @@ export async function parseIfcx(
   // @raw-entity-enumeration-ok parser construction reports the count of freshly composed IFCX source rows before any live mutation view exists
   return {
     entities,
+    derivedEntities: derived,
     properties,
     quantities,
     relationships,
@@ -563,7 +564,7 @@ function finalizeFederatedResult(
   // Phase 3: Extract entities
   options.onProgress?.({ phase: 'entities', percent: 0 });
   const strings = new StringTable();
-  const { entities, pathToId, idToPath } = extractEntities(composed, strings);
+  const { entities, derived, pathToId, idToPath } = extractEntities(composed, strings);
   options.onProgress?.({ phase: 'entities', percent: 100 });
 
   // Phase 4: Extract properties
@@ -600,6 +601,7 @@ function finalizeFederatedResult(
   // @raw-entity-enumeration-ok federated parser construction reports the count of freshly composed IFCX source rows before any live mutation view exists
   return {
     entities,
+    derivedEntities: derived,
     properties,
     quantities,
     relationships,
