@@ -48,7 +48,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: cannot read ${args.model}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
     return EXIT.failed;
   }
-  let setTemplate: SetTemplate | undefined;
+  let setTemplate: SetTemplate | undefined = args.pac ? pacTemplateFor(args.locale ?? PAC_DEFAULT_LOCALE) : undefined;
   if (args.template !== undefined) {
     try {
       setTemplate = parseSetTemplate(await readFile(args.template, 'utf8'));
