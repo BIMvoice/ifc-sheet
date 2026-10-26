@@ -12,6 +12,7 @@ import { resetProject, useProjectStore } from '@/project/project-store';
 import { useViewDrawings } from '@/project/view-drawings';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import type { DraftEntity } from '@/drafting/types';
+import { sectionSymbolShapes } from '@/drafting/section-symbol';
 import { useSheetContent, type SheetContent } from './useSheetContent.js';
 
 /**
@@ -64,5 +65,37 @@ describe('a sheet places a viewport\'s cross-references once while nothing chang
     render(<Harness />);
     assert.ok(hook);
     assert.notEqual(hook.content({ ...vp, scale: 50 }).drafts, hook.content(vp).drafts);
+  });
+
+  describe('a mark follows the sheets it refers to', () => {
+    const section: ProjectView = { id: 'sec', kind: 'section', name: 'A', createdAt: 0 } as ProjectView;
+    const secVp: SheetViewport = { id: 'vsec', viewId: 'sec', x: 0, y: 0, scale: 100, width: 0, height: 0, center: null };
+    const symbol: DraftEntity[] = sectionSymbolShapes({ x: 4, y: -1 }, { x: 4, y: 9 }, { x: 6, y: 4 }, 'A', 0.35)
+      .map((shape, i) => ({ id: `sym${i}`, viewId: 'p', layerId: '0', shape, params: { sectionOf: 'sec' } }));
+    const target = (number: string, viewports: SheetViewport[] = [secVp]): ProjectSheet => ({ ...sheet, id: 't', number, name: 'Sections', viewports });
+    const marks = (): string[] => {
+      assert.ok(hook);
+      return hook.content(vp).drafts.filter((d) => !symbol.some((s) => s.id === d.id) && d.shape.type === 'text').map((d) => (d.shape.type === 'text' ? d.shape.text : ''));
+    };
+    const open = (target: ProjectSheet) => {
+      useProjectStore.setState({ views: [plan, section], sheets: [sheet, target], drafts: symbol });
+      useViewDrawings.setState({ byView: { p: { drawing, status: 'ready', progress: 100, phase: '', error: null } } });
+      render(<Harness />);
+    };
+
+    it('prints the new number when the sheet that carries the section is renumbered', () => {
+      open(target('A-301'));
+      assert.ok(marks().length > 0 && marks().every((t) => t.includes('A-301')), `marks read A-301: ${marks()}`);
+      act(() => useProjectStore.setState({ sheets: [sheet, target('A-302')] }));
+      assert.ok(marks().length > 0 && marks().every((t) => t.includes('A-302') && !t.includes('A-301')), `marks read A-302: ${marks()}`);
+    });
+
+    it('prints the other sheet\'s number when the section\'s viewport moves to it', () => {
+      open(target('A-301'));
+      assert.ok(marks().every((t) => t.includes('A-301')));
+      const moved: ProjectSheet = { ...target('A-401'), id: 'u' };
+      act(() => useProjectStore.setState({ sheets: [sheet, target('A-301', []), moved] }));
+      assert.ok(marks().length > 0 && marks().every((t) => t.includes('A-401') && !t.includes('A-301')), `marks read A-401: ${marks()}`);
+    });
   });
 });
