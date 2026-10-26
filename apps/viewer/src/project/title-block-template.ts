@@ -12,12 +12,9 @@
 
 import type { TranslationKey } from '@/i18n';
 import { DEFAULT_GRAPHIC_STANDARD, type GraphicStandard } from '@/drafting/graphic-standard';
-import { fitText, ITEM_KINDS, standardTitleBlock as engineStandardTitleBlock, TEXT_FIT_MIN, type TemplateItem, type TemplateLine, type TemplateLogo, type TemplateRect, type TemplateText, type TitleBlockTemplate } from '@bimvoice/ifcsheet';
+import { fitText, ITEM_KINDS, MAX_TEXT, standardTitleBlock as engineStandardTitleBlock, TEXT_FIT_MIN, type TemplateItem, type TemplateLine, type TemplateLogo, type TemplateRect, type TemplateText, type TitleBlockTemplate } from '@bimvoice/ifcsheet';
 
-/** The longest text an item of the layout holds (the file reader cuts a longer one; an edit refuses it). */
-export const MAX_TEXT = 200;
-
-export { fitText, ITEM_KINDS, TEXT_FIT_MIN, type TemplateItem, type TemplateLine, type TemplateLogo, type TemplateRect, type TemplateText, type TitleBlockTemplate };
+export { fitText, ITEM_KINDS, MAX_TEXT, TEXT_FIT_MIN, type TemplateItem, type TemplateLine, type TemplateLogo, type TemplateRect, type TemplateText, type TitleBlockTemplate };
 
 /**
  * The standard layout (180 x 50 mm), built in the engine package
