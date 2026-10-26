@@ -54,29 +54,6 @@ export function readRelatedLists(
     if (!Array.isArray(related) || relatingId === null) continue;
     lists.push({ relId, relatingId, relatedIds: related.map(refId).filter((id): id is number => id !== null) });
   }
-  if (store.schemaVersion === 'IFC5') lists.push(...graphRelatedLists(store, relType, view));
-  return lists;
-}
-
-const RELATIONSHIP_OF = {
-  IfcRelDefinesByType: RelationshipType.DefinesByType,
-  IfcRelAssociatesMaterial: RelationshipType.AssociatesMaterial,
-} as const;
-
-/**
- * The same lists for a model that has no `IfcRel*` records to read, IFCX: its relationship graph holds them
- * (relating object to related objects, the direction the STEP parser records them in). They are READ-ONLY views:
- * the graph's relationship id is an IFCX counter that collides with real entity ids, so `relId` is 0, which no
- * entity has, and `relateOneToManyInStore` refuses a list with it rather than editing whatever #N it might be.
- */
-function graphRelatedLists(store: IfcDataStore, relType: keyof typeof RELATIONSHIP_OF, view?: MutablePropertyView | null): ExistingRelatedList[] {
-  const lists: ExistingRelatedList[] = [];
-  const type = RELATIONSHIP_OF[relType];
-  for (const relatingId of store.entities.expressId) {
-    if (relatingId === 0 || view?.isDeleted(relatingId)) continue;
-    const edges = store.relationships.forward.getEdges(relatingId, type).filter((edge) => !view?.isDeleted(edge.target));
-    if (edges.length > 0) lists.push({ relId: 0, relatingId, relatedIds: edges.map((edge) => edge.target) });
-  }
   return lists;
 }
 
@@ -98,8 +75,50 @@ export function liveEntityConforms(
 ): boolean {
   const type = liveEntityType(store, id, view);
   if (type === null) return false;
-  // A read, not authoring: IFCX's classes are IFC 4.3's (its `bsi::ifc::class` URIs say `ifc/4.3/class`), so the
-  // class hierarchy to test against is IFC4X3's. `schemaRegistry` refuses IFC5 because it guards WRITING STEP.
-  const schema = (store.schemaVersion === 'IFC5' ? 'IFC4X3' : store.schemaVersion ?? 'IFC4') as SpatialAnchorSchema;
+  const schema = (store.schemaVersion ?? 'IFC4') as SpatialAnchorSchema;
   return conformsTo(schemaRegistry(schema, 'liveEntityConforms'), type, expected);
+}
+
+const RELATIONSHIP_OF = {
+  IfcRelDefinesByType: RelationshipType.DefinesByType,
+  IfcRelAssociatesMaterial: RelationshipType.AssociatesMaterial,
+} as const;
+
+/**
+ * `readRelatedLists` for a READER. An IFCX model has no `IfcRel*` records, so for it the lists come from its
+ * relationship graph (relating object to related objects, the direction the STEP parser records them in), with
+ * `relId` 0, which no entity has: they are views, and `relateOneToManyInStore` refuses a list carrying one.
+ * Writers use `readRelatedLists`, which returns nothing for an IFCX model, as it always has.
+ */
+export function readRelatedListsForRead(
+  store: IfcDataStore,
+  relType: 'IfcRelDefinesByType' | 'IfcRelAssociatesMaterial',
+  view?: MutablePropertyView | null,
+): ExistingRelatedList[] {
+  const lists = readRelatedLists(store, relType, view);
+  if (store.schemaVersion !== 'IFC5') return lists;
+  const type = RELATIONSHIP_OF[relType];
+  for (const relatingId of store.entities.expressId) {
+    if (relatingId === 0 || view?.isDeleted(relatingId)) continue;
+    const edges = store.relationships.forward.getEdges(relatingId, type).filter((edge) => !view?.isDeleted(edge.target));
+    if (edges.length > 0) lists.push({ relId: 0, relatingId, relatedIds: edges.map((edge) => edge.target) });
+  }
+  return lists;
+}
+
+/**
+ * `liveEntityConforms` for a READER. An IFCX model's classes are IFC 4.3's (its `bsi::ifc::class` URIs say
+ * `ifc/4.3/class`), so the hierarchy to test against is IFC4X3's. `liveEntityConforms` itself still THROWS for
+ * IFC5: it is the guard that refuses authoring an IFCX model, and the writers (and the viewer's callers that
+ * rely on the refusal) must keep reaching it.
+ */
+export function liveEntityConformsForRead(
+  store: IfcDataStore,
+  id: number,
+  expected: string,
+  view?: MutablePropertyView | null,
+): boolean {
+  if (store.schemaVersion !== 'IFC5') return liveEntityConforms(store, id, expected, view);
+  const type = new AnchorEntityReader(store, view, true).entity(id)?.type.toUpperCase() ?? null;
+  return type !== null && conformsTo(schemaRegistry('IFC4X3', 'liveEntityConformsForRead'), type, expected);
 }

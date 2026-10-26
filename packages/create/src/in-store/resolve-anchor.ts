@@ -83,6 +83,11 @@ export class AnchorEntityReader {
   constructor(
     private readonly store: IfcDataStore | null,
     private readonly view: MutablePropertyView | null | undefined,
+    /**
+     * READ-ONLY use on an IFCX model: its records are the store's own `getEntity` (it has no STEP bytes), which gives
+     * an IfcMaterial its Name. Off by default: a writer's reader sees no records in an IFCX model, as it always has.
+     */
+    private readonly readsIfcxRecords = false,
   ) {
     this.extractor = store && store.source.byteLength > 0 ? new EntityExtractor(store.source) : null;
   }
@@ -142,9 +147,7 @@ export class AnchorEntityReader {
     // @raw-entity-enumeration-ok point lookup after effective enumeration; source bytes are needed only for this candidate's attributes
     const ref = created ? undefined : this.store?.entityIndex.byId.get(id);
     const source = ref && this.extractor ? this.extractor.extractEntity(ref) : null;
-    // An IFCX model has no STEP bytes to extract from: its records are the store's own, which gives an
-    // IfcMaterial its Name, so the material readers that go through here see IFCX materials like IFC ones.
-    const own = created || ref || this.store?.schemaVersion !== 'IFC5' ? null : this.store.getEntity?.(id) ?? null;
+    const own = this.readsIfcxRecords && !created && !ref && this.store?.schemaVersion === 'IFC5' ? this.store.getEntity?.(id) ?? null : null;
     const entity = created ?? source ?? own;
     if (!entity) return null;
     return resolveEffectiveEntityRecord(entity, {
