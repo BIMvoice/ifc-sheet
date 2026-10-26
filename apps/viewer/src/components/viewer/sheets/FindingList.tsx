@@ -5,8 +5,8 @@
 /**
  * What is missing from the set (`check/`): a plain list grouped by sheet. A
  * line goes to its place when clicked; where one command fixes it, a button
- * runs that command on the view. The list is read when asked and again after a
- * fix, so it shrinks as the set is finished. The one list for every surface
+ * runs that command on the view. The list is read when asked (or when it
+ * appears), then follows the set (`useFindings`), so it shrinks as the set is finished. The one list for every surface
  * that shows it; a surface supplies its look and how it opens a place.
  */
 
