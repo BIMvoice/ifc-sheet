@@ -1,7 +1,7 @@
 # Romanian glossary (ro)
 
 One place to correct term choices. Edit the term here and in `catalogues/*.ro.ts`
-(`command-palette`, `feedback`, `selection-bar`, `settings`, `wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`, `review`, `print-preview`, `tag-fields`, `revisions`, `face`, `drafting`, `annotate-all`, `keyboard-shortcuts`, `sheet-templates`, `wall-materials`); the tests in
+(`command-palette`, `feedback`, `selection-bar`, `settings`, `wall`, `wall-keys`, `sheets`, `check`, `issue`, `whatchanged`, `sheet-content`, `review`, `print-preview`, `tag-fields`, `revisions`, `face`, `drafting`, `annotate-all`, `keyboard-shortcuts`, `sheet-templates`, `wall-materials`, `export-dialog`, `geometry-export-dialogs`, `sheets-pdf`, `anonymized-export`, `export-changes-review`, `ion-upload`); the tests in
 `locales/ro.test.ts` keep keys, placeholders and diacritics honest.
 
 Rules: comma-below diacritics only (ș ț, never ş ţ), plus ă â î. Polite plural
@@ -106,8 +106,8 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 
 ## Not translated yet
 
-The 3D viewer around the Wall (ribbon, panels, dialogs; the face covers it and makes it inert, so only what `IfcSheetShell` keeps is translated: the command palette, the Settings dialog, the feedback dialog and a drawing's annotation bar), the drafting tools' panels
-and ribbon labels (`drafting.tool.*`, `drafting.props.*`; the command line and its messages are Romanian since #314), the PDF export dialogs (`sheetsPdf.*`) and the
+The 3D viewer around the Wall (ribbon, panels, dialogs; the face covers it and makes it inert, so only what `IfcSheetShell` keeps is translated: the command palette, the Settings dialog, the feedback dialog and a drawing's annotation bar, and the export dialogs its palette opens: IFC, GLB, KMZ, USD, energy model, the to-scale PDF, the anonymized subset, the review before the modified IFC and the Cesium ion upload), the drafting tools' panels
+and ribbon labels (`drafting.tool.*`, `drafting.props.*`; the command line and its messages are Romanian since #314), the sheet PDF setup and title-block dialogs (`sheetsPdf.sheetSetup.*`, `sheetsPdf.titleBlock.*`) and the
 drafting standards stay English; a missing key falls back to English one by one.
 The "Detail marks" drafting layer name, the sheet name of a new blank schedule
 sheet made before this change, and anything a person typed are stored text and stay

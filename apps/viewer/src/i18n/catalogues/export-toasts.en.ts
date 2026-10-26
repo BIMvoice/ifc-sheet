@@ -5,7 +5,7 @@
 import type { TranslationValue } from '../types';
 
 /**
- * Toasts of the exports the command palette starts (CSV, JSON, screenshot, modified IFC) and of opening a file
+ * Toasts of the exports the command palette starts (CSV, JSON, screenshot) and of opening a file
  * (`exportToast.*`, `fileLoad.toast.*`). Count-bearing messages take `{count}` for the plural forms.
  */
 export const exportToastsEn = {
@@ -27,23 +27,6 @@ export const exportToastsEn = {
   'exportToast.jsonFailed': 'JSON export failed: {reason}',
   'exportToast.screenshotDone': 'Screenshot saved',
   'exportToast.screenshotFailed': 'Screenshot failed',
-  'exportToast.changesDuringExport': 'Changes were made while exporting — check the updated list and confirm again.',
-  'exportToast.changesSinceReview': 'Changes were made since you opened this review — check the updated list and confirm again.',
-  'exportToast.modifiedFailed': 'Export failed: {reason}',
-  'exportToast.noChanges': 'No changes to export',
-  'exportToast.modifiedSkipped': 'Exported {exported} of {total} models — {count} skipped ({reason}){note}',
-  'exportToast.modifiedFile': {
-    one: 'Exported {name} ({count} change){note}',
-    other: 'Exported {name} ({count} changes){note}',
-  },
-  'exportToast.modifiedModels': {
-    one: 'Exported {models} models ({count} change){note}',
-    other: 'Exported {models} models ({count} changes){note}',
-  },
-  'exportToast.emptyPsets': {
-    one: '{count} empty property set left out (IFCX cannot represent an empty set)',
-    other: '{count} empty property sets left out (IFCX cannot represent an empty set)',
-  },
   'fileLoad.toast.changedSinceCached': '"{name}" changed since it was cached — reloading with the current file.',
   'fileLoad.toast.tooDetailed': '"{name}" was too detailed for this device — retrying at lower detail…',
   'fileLoad.toast.pointCloudsKeepRaw': 'Point clouds loaded before this model keep their raw coordinates — reload the scan to align it with the model georeference.',

@@ -18,11 +18,15 @@ import ro from './ro';
  * what changed, libraries, the takeoff and door and window schedule as they
  * print on a sheet, the draft set report, the title block's parameters and layout), then what the face reaches
  * outside the Wall (`IfcSheetShell` covers the engine's interface, and keeps these): the command palette, the Settings
- * dialog, the feedback dialog and a drawing's annotation bar.
+ * dialog, the feedback dialog, a drawing's annotation bar and the export dialogs the palette opens (including the anonymized subset, the modified-IFC review and the Cesium ion upload), and the toasts of the exports the palette starts and of opening a file.
  */
 const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'settings.privacy.toast', 'viewerShell.toast.dismiss',
   // The palette (Ctrl/Cmd+K) the face keeps, the Settings dialog its privacy notice opens, and the feedback dialog of its top bar.
   'commandPalette.', 'settings.', 'feedback.',
+  // The export dialogs the palette's export rows open: IFC, GLB, KMZ, USD, energy model and the to-scale PDF. Not the Properties panel's edit card (`geometryExport.editCard.`) nor the sheet-setup and title-block editors (`sheetsPdf.sheetSetup.`, `sheetsPdf.titleBlock.`), which the face hides.
+  'exportDialog.', 'geometryExport.shared.', 'geometryExport.shell.', 'geometryExport.glb.', 'geometryExport.kmz.', 'geometryExport.usd.', 'geometryExport.energy.', 'sheetsPdf.pdfView.',
+  // The three dialogs the palette's remaining export rows open: the anonymized subset, the review before "Export modified IFC…" and the Cesium ion upload. Not `exportChangesButton.` (the standing toolbar button and its tooltip, which the face hides).
+  'anonymizedExport.', 'exportChangesReviewDialog.', 'ionUpload.',
   // The toasts of the exports the palette starts and of opening a file (the Open button of the top bar).
   'exportToast.', 'fileLoad.toast.'];
 /**

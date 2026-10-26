@@ -33,7 +33,6 @@ import {
   type ChangedModelsResult,
 } from '@/lib/export/model-changes';
 import { defaultBuildArtifactsDeps } from '@/lib/export/changed-model-export';
-import { exportOutcomeToast } from './export-changes-toast';
 import {
   ExportChangesReviewDialog,
   buildReviewGroups,
@@ -237,7 +236,7 @@ export function ExportChangesButton({ surface, className, trigger }: ExportChang
       if (!reviewGroupsEqual(reviewedGroups, postGroups)) {
         setExportStatus('error');
         setTimeout(() => setExportStatus('idle'), 3000);
-        toast.error(t('exportToast.changesDuringExport'));
+        toast.error(t('exportChangesReviewDialog.toast.changedWhileExporting'));
         setGroups(postGroups);
         setReviewOpen(true);
         return;
@@ -247,9 +246,9 @@ export function ExportChangesButton({ surface, className, trigger }: ExportChang
         if (skipped.length > 0) {
           setExportStatus('error');
           setTimeout(() => setExportStatus('idle'), 3000);
-          toast.error(t('exportToast.modifiedFailed', { reason: skipped[0].reason }));
+          toast.error(t('exportChangesReviewDialog.toast.exportFailed', { reason: skipped[0].reason }));
         } else {
-          toast.info(t('exportToast.noChanges'));
+          toast.info(t('exportChangesReviewDialog.toast.noChanges'));
         }
         return;
       }
@@ -274,15 +273,38 @@ export function ExportChangesButton({ surface, className, trigger }: ExportChang
         change_count: exportedChanges,
       });
       const unrepresented = files.reduce((n, f) => n + f.skippedCount, 0);
-      // The empty-pset note rides along: a skipped model must not hide it (#5201), and part of the edits
-      // not being written is not a plain success.
-      const outcome = exportOutcomeToast({ files, skipped, exportedChanges, unrepresented }, t);
-      toast[outcome.level](outcome.message);
+      const unrepresentedNote = unrepresented > 0
+        ? ` — ${t('exportChangesReviewDialog.toast.psetsLeftOut', { count: unrepresented })}`
+        : '';
+      const exportedMessage = () => files.length === 1
+        ? t('exportChangesReviewDialog.toast.exportedFile', { name: `${files[0].base}.${files[0].ext}`, count: exportedChanges })
+        : t('exportChangesReviewDialog.toast.exportedModels', {
+            models: t('exportChangesReviewDialog.modelsCount', { count: files.length }),
+            count: exportedChanges,
+          });
+      if (skipped.length > 0) {
+        // The empty-pset note rides along: a skipped model must not hide it (#5201).
+        toast.info(
+          t('exportChangesReviewDialog.toast.exportedPartial', {
+            exported: files.length,
+            models: t('exportChangesReviewDialog.modelsCount', { count: files.length + skipped.length }),
+            count: skipped.length,
+            reason: skipped[0].reason,
+          }) + unrepresentedNote,
+        );
+      } else if (unrepresented > 0) {
+        // Not a plain success: part of the edits could not be written (#5201).
+        toast.info(exportedMessage() + unrepresentedNote);
+      } else {
+        toast.success(exportedMessage());
+      }
     } catch (error) {
       console.error('[ExportChangesButton] Export failed:', error);
       setExportStatus('error');
       setTimeout(() => setExportStatus('idle'), 3000);
-      toast.error(t('exportToast.modifiedFailed', { reason: error instanceof Error ? error.message : t('exportToast.unknownError') }));
+      toast.error(t('exportChangesReviewDialog.toast.exportFailed', {
+        reason: error instanceof Error ? error.message : t('exportChangesReviewDialog.toast.unknownError'),
+      }));
     } finally {
       setIsExporting(false);
     }
@@ -306,7 +328,7 @@ export function ExportChangesButton({ surface, className, trigger }: ExportChang
       // subsequent confirm click re-compared against the SAME stale value and
       // refused again (maintainer finding on #1967).
       setGroups(freshGroups);
-      toast.error(t('exportToast.changesSinceReview'));
+      toast.error(t('exportChangesReviewDialog.toast.changedSinceReview'));
       return;
     }
 
