@@ -29,7 +29,7 @@
 import { DEFAULT_GRAPHIC_STANDARD, type GraphicStandard } from './graphic-standard.js';
 import { TITLE_BLOCK_MM } from './sheet-frame.js';
 import type { StandardCaption } from './title-block-standard.js';
-import type { TemplateItem, TitleBlockTemplate } from './title-block-template.js';
+import { MAX_CELL_LINES, type TemplateItem, type TitleBlockTemplate } from './title-block-template.js';
 
 /** The captions only the Romanian layout uses, with their keys in the app's catalogue, and their English. */
 export const RO_ONLY_CAPTIONS_EN = {
@@ -87,6 +87,8 @@ export const TITLE_BLOCK_CAPTIONS_RO: Record<RoCaption, string> = {
 
 /** The columns' left edges and the right edge, mm: left (firm, project), middle (who signs, who verifies), right (numbers, sheet). */
 export const RO_COLUMNS = { a: 0, b: 62, c: 138, end: TITLE_BLOCK_MM.w } as const;
+/** Under the caption of a cell, mm from the cell's top: the value's letters reach no higher, so a wrapped value does not touch it. */
+const CAPTION_BOTTOM = 3.4;
 /** The block has six rows. */
 export const RO_ROWS = 6;
 
@@ -106,7 +108,7 @@ export function romanianTitleBlock(t: (key: RoCaption) => string, standard: Grap
   const cell = (caption: RoCaption, param: string | null, x: number, y: number, cw: number, o: { size?: number; dy?: number; bold?: boolean; fit?: number; rows?: number } = {}): void => {
     items.push({ id: id(), kind: 'text', x: x + 2, y: y + 2.9, size: type.caption, text: t(caption), muted: true, fit: cw - 4 });
     if (param === null) return;
-    items.push({ id: id(), kind: 'text', x: x + 2, y: y + (o.dy ?? row - 1.4), size: o.size ?? type.value, text: `{${param}}`, fit: o.fit ?? cw - 4, ...(o.bold ? { bold: true } : {}) });
+    items.push({ id: id(), kind: 'text', x: x + 2, y: y + (o.dy ?? row - 1.4), size: o.size ?? type.value, text: `{${param}}`, fit: o.fit ?? cw - 4, lines: MAX_CELL_LINES, top: y + CAPTION_BOTTOM, ...(o.bold ? { bold: true } : {}) });
   };
 
   // Column dividers.
@@ -123,12 +125,17 @@ export function romanianTitleBlock(t: (key: RoCaption) => string, standard: Grap
   cell('sheets.tb.address', 'Address', a, row * 5, b - a);
 
   // Middle: șef proiect, proiectat, desenat (name, professional title, signature); the authors' capacity; the verifier.
-  const m1 = b + 26;
-  const m2 = m1 + 26;
+  // The name and the professional title are the long values: the signature box, which stays empty, is the narrow one.
+  const m1 = b + 32;
+  const m2 = m1 + 24;
+  // The verifier's row gives its capacity more than the other rows give a title; the report row ends where the date's cell starts.
+  const v1 = b + 26;
+  const d = c - 24;
   for (const r of [1, 2, 3, 4, 5]) hline(row * r, b, c);
-  for (const x of [m1, m2]) { vline(x, 0, 3); vline(x, 4, 5); }
+  for (const x of [m1, m2]) vline(x, 0, 3);
+  for (const x of [v1, m2]) vline(x, 4, 5);
   vline(b + 17, 5, 6);
-  vline(m2, 5, 6);
+  vline(d, 5, 6);
   const people: [RoCaption, string, string][] = [
     ['tbro.projectManager', 'ProjectManager', 'ProjectManagerTitle'], ['tbro.designer', 'DesignedBy', 'DesignedByTitle'], ['sheets.tb.drawnBy', 'DrawnBy', 'DrawnByTitle'],
   ];
@@ -138,12 +145,12 @@ export function romanianTitleBlock(t: (key: RoCaption) => string, standard: Grap
     cell('tbro.signature', null, m2, row * i, c - m2);
   });
   cell('tbro.capacity', 'AuthorsCapacity', b, row * 3, c - b);
-  cell('tbro.verifier', 'CheckedBy', b, row * 4, m1 - b);
-  cell('tbro.verifierCapacity', 'VerifierCapacity', m1, row * 4, m2 - m1);
+  cell('tbro.verifier', 'CheckedBy', b, row * 4, v1 - b);
+  cell('tbro.verifierCapacity', 'VerifierCapacity', v1, row * 4, m2 - v1);
   cell('tbro.signature', null, m2, row * 4, c - m2);
   cell('tbro.requirement', 'VerifierRequirement', b, row * 5, 17);
-  cell('tbro.report', 'ReportNumber', b + 17, row * 5, m2 - b - 17);
-  cell('tbro.reportDate', 'ReportDate', m2, row * 5, c - m2);
+  cell('tbro.report', 'ReportNumber', b + 17, row * 5, d - b - 17);
+  cell('tbro.reportDate', 'ReportDate', d, row * 5, c - d);
 
   // Right: phase and project number, date and revision, sheet number and scale, the sheet's title.
   const big = row * 2 - 2.2;
