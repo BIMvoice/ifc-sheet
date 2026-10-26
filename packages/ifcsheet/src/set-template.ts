@@ -26,6 +26,7 @@
 import { groundPlan, sheetGroup } from './drawing-set.js';
 import type { ElevationDirection, NumberingScheme, Paper, PlanProjectView, ProjectSheet, ProjectView, SheetFrame } from './document.js';
 import type { ScheduleListKind } from './sub-reports.js';
+import { sameElevation } from './view-defaults.js';
 
 /** The series whose sheets are made by view rules; a room's interior elevations and the schedules are not (see `ScheduleRule`). */
 export type RuledSeries = 'plans' | 'elevations' | 'sections';
@@ -34,6 +35,8 @@ export const RULED_SERIES: readonly RuledSeries[] = ['plans', 'elevations', 'sec
 /** What finds a view in the model the template is applied to. */
 export type ViewRule =
   | { kind: 'plan'; storey: number }
+  /** A plan of EVERY storey the model has (`allPlans`), from the lowest up: a slot per storey the model offers, none to count in advance. */
+  | { kind: 'allPlans' }
   | { kind: 'elevation'; direction: ElevationDirection }
   | { kind: 'section'; place: number };
 
@@ -98,9 +101,26 @@ export function planStoreys(views: readonly ProjectView[]): { plans: PlanProject
   return { plans, ground: ground ? plans.indexOf(ground) : -1 };
 }
 
+/**
+ * The floor plans of the building, one per storey, from the lowest up: no site plan, detail, discipline plan or reflected
+ * ceiling plan, and when a storey has several the first. A storey is a level (`sameElevation`), which federated models share.
+ */
+export function allPlans(views: readonly ProjectView[]): PlanProjectView[] {
+  const plans = ruledViews(views).filter((v): v is PlanProjectView => v.kind === 'plan' && !v.discipline && !v.reflected).sort((a, b) => a.level.elevation - b.level.elevation);
+  return plans.filter((plan, i) => plans.findIndex((p) => sameElevation(p.level.elevation, plan.level.elevation)) === i);
+}
+
+/** Every view `rule` finds among `views` (one for a rule that names one storey, direction or section; none when there is no such view). */
+export function findAllByRule(rule: ViewRule, views: readonly ProjectView[]): ProjectView[] {
+  if (rule.kind === 'allPlans') return allPlans(views);
+  const one = findByRule(rule, views);
+  return one ? [one] : [];
+}
+
 /** The view `rule` finds among `views`; null when the model has none (no third storey, a second section it does not offer). */
 export function findByRule(rule: ViewRule, views: readonly ProjectView[]): ProjectView | null {
   const ruled = ruledViews(views);
+  if (rule.kind === 'allPlans') return allPlans(views)[0] ?? null;
   if (rule.kind === 'plan') {
     const { plans, ground } = planStoreys(views);
     return ground < 0 ? null : plans[ground + rule.storey] ?? null;

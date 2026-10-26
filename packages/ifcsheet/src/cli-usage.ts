@@ -16,6 +16,9 @@ const OPTIONS = `Options:
   --pattern <p>    How --handover names its files, with {project} {number} {sheet} {revision} {date} {issue}
                    (default "{number} {sheet}": A-101 Ground floor.dxf). Plain ASCII, no path separators.
   --template <file> A set template (.bvset) for build: which sheets, which views on them, at which scale.
+  --pac            Build the submission PDF of the permit project (PAC): the opis page, then the PAC sheets. Not with --template.
+  --intervention <w> With --pac: the works, new (default), existing (an intervention on an existing building: Anexa 2 point 1.4.4 applies) or
+                   interior (interior only: the items 1.4.4 lifts show "Nu este cazul").
   --standard <id>  A drawing standard for build: its pens and title block (known: ro, the Romanian pack of the app's "Install standard").
                    Wins over the project's own graphic standard and title block layout; without it a --project's are used.
   --name <name>    The project name for the title blocks (default: the model's).
