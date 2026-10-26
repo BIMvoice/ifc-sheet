@@ -16,7 +16,7 @@
  */
 
 import { JsonRpcErrorCode, PROTOCOL_VERSION, type JsonRpcMessage } from '../protocol/index.js';
-import { errorResponse, isJsonRpcRequest } from '../protocol/jsonrpc.js';
+import { errorResponse, isJsonRpcNotification, isJsonRpcRequest } from '../protocol/jsonrpc.js';
 import { PromptRegistry } from '../prompts/index.js';
 import { ResourceRegistry } from '../resources/index.js';
 import { MCPServer } from '../server.js';
@@ -27,6 +27,8 @@ import { fullScope } from '../auth/scope.js';
 export const HOSTED_ENV = 'IFCSHEET_HOSTED_MCP';
 /** Largest model a call may carry, bytes (decoded). */
 export const DEFAULT_MAX_MODEL_BYTES = 25 * 1024 * 1024;
+/** Most messages one batch may carry. */
+export const MAX_BATCH = 20;
 /** Wall time of one request, milliseconds. */
 export const DEFAULT_MAX_MS = 50_000;
 
@@ -101,8 +103,18 @@ export async function handleHostedMcp(req: Request, options: HostedOptions = {})
     return reply(400, errorResponse(null, JsonRpcErrorCode.ParseError, 'The body is not JSON.'));
   }
   const batch = Array.isArray(parsed);
-  const messages = (batch ? parsed : [parsed]) as JsonRpcMessage[];
-  if (messages.length === 0) return reply(400, errorResponse(null, JsonRpcErrorCode.InvalidRequest, 'An empty batch.'));
+  const items = (batch ? parsed : [parsed]) as unknown[];
+  if (batch && items.length === 0) return reply(400, errorResponse(null, JsonRpcErrorCode.InvalidRequest, 'Invalid Request: an empty batch.'));
+  if (items.length > MAX_BATCH) {
+    return reply(400, errorResponse(null, JsonRpcErrorCode.InvalidRequest, `Invalid Request: a batch holds at most ${MAX_BATCH} messages, this one holds ${items.length}.`));
+  }
+  const valid = (m: unknown): m is JsonRpcMessage => isJsonRpcRequest(m) || isJsonRpcNotification(m);
+  if (!batch && !valid(items[0])) {
+    return reply(400, errorResponse(null, JsonRpcErrorCode.InvalidRequest, 'Invalid Request: the body is not a JSON-RPC 2.0 request or notification.'));
+  }
+  const messages = items.filter(valid);
+  const invalid = items.length - messages.length;
+  const invalidResponses = Array.from({ length: invalid }, () => errorResponse(null, JsonRpcErrorCode.InvalidRequest, 'Invalid Request: not a JSON-RPC 2.0 request or notification.'));
 
   const server = buildServer({ maxModelBytes, version: options.version ?? '0.0.0' });
   const timeoutMessage = `The request took longer than ${Math.round(maxMs / 1000)} s and was stopped.`;
@@ -110,15 +122,26 @@ export async function handleHostedMcp(req: Request, options: HostedOptions = {})
   try {
     // The server of a stateless request has no earlier `initialize` to rely on.
     await server.handleMessage({ jsonrpc: '2.0', id: '__hosted_init', method: 'initialize', params: { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'hosted', version: '0' } } });
-    const work = Promise.all(messages.map((m) => server.handleMessage(m)));
+    // One after the other, in order: a later message may rely on what an earlier one registered
+    // (`ifcsheet_open_model`, then a tool taking its `model_id`). `expired` stops the loop once the deadline passed.
+    let expired = false;
+    const work = (async () => {
+      const out: Awaited<ReturnType<typeof server.handleMessage>>[] = [];
+      for (const m of messages) {
+        if (expired) break;
+        out.push(await server.handleMessage(m));
+      }
+      return out;
+    })();
     const deadline = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), maxMs); });
     const done = await Promise.race([work, deadline]);
     if (done === 'timeout') {
+      expired = true;
       const ids = messages.filter(isJsonRpcRequest).map((m) => m.id);
       const errors = ids.map((id) => errorResponse(id, JsonRpcErrorCode.InternalError, timeoutMessage));
       return reply(504, batch ? errors : errors[0] ?? errorResponse(null, JsonRpcErrorCode.InternalError, timeoutMessage));
     }
-    const responses = done.filter((r) => r !== null);
+    const responses = [...invalidResponses, ...done.filter((r) => r !== null)];
     if (responses.length === 0) return new Response(null, { status: 202 });
     return reply(200, batch ? responses : responses[0]);
   } finally {

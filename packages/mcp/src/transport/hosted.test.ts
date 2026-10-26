@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { PROTOCOL_VERSION } from '../protocol/index.js';
-import { handleHostedMcp, type HostedOptions } from './hosted.js';
+import { handleHostedMcp, MAX_BATCH, type HostedOptions } from './hosted.js';
 
 const FZK = fileURLToPath(new URL('../../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -74,6 +74,62 @@ describe('hosted MCP endpoint (#165)', () => {
     const res = await post(rpc(2, 'tools/call', { name: 'ifcsheet_open_model', arguments: { ifc_base64: 'A'.repeat(200_000) } }), { ...ON, maxModelBytes: 1024 });
     expect(res.status).toBe(413);
     expect(((await res.json()) as any).error.message).toContain('larger than the limit');
+  });
+
+  it('answers a malformed body with a JSON-RPC error, not an empty 202', async () => {
+    for (const body of [null, 1, 'x', {}, []]) {
+      const res = await post(body);
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as any).error.code).toBe(-32600);
+    }
+    const res = await post([null]);
+    expect(res.status).toBe(200);
+    const out = (await res.json()) as any[];
+    expect(out).toHaveLength(1);
+    expect(out[0].error.code).toBe(-32600);
+    expect(out[0].id).toBeNull();
+    // Valid messages in a batch still answer next to an invalid one.
+    const mixed = (await (await post([null, rpc(7, 'ping')])).json()) as any[];
+    expect(mixed.map((r) => r.error?.code ?? r.id)).toEqual([-32600, 7]);
+  });
+
+  it('answers invalid JSON with -32700', async () => {
+    const res = await handleHostedMcp(new Request('https://example.test/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{not json' }), ON);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as any).error.code).toBe(-32700);
+  });
+
+  it('caps a batch at 20 messages', async () => {
+    const ok = await post(Array.from({ length: MAX_BATCH }, (_, i) => rpc(i + 1, 'ping')));
+    expect(ok.status).toBe(200);
+    expect((await ok.json()) as unknown[]).toHaveLength(MAX_BATCH);
+    const res = await post(Array.from({ length: MAX_BATCH + 1 }, (_, i) => rpc(i + 1, 'ping')));
+    expect(res.status).toBe(400);
+    const err = ((await res.json()) as any).error;
+    expect(err.code).toBe(-32600);
+    expect(err.message).toContain('at most 20');
+  });
+
+  it('refuses a request whose Content-Length header is over the cap with 413, before reading the body', async () => {
+    // The Request constructor drops a forged content-length; a plain object with the header exercises the branch.
+    const forged = { method: 'POST', headers: new Headers({ 'content-length': '999999999' }), get body(): never { throw new Error('the body must not be read'); } } as unknown as Request;
+    const res = await handleHostedMcp(forged, { ...ON, maxModelBytes: 1024 });
+    expect(res.status).toBe(413);
+    expect(((await res.json()) as any).error.code).toBe(-32600);
+  });
+
+  it.skipIf(missing !== null)('runs a batch in order: open_model, then a tool taking its model_id', async () => {
+    const ifc_base64 = readFileSync(FZK).toString('base64');
+    const res = await post([
+      rpc(1, 'tools/call', { name: 'ifcsheet_open_model', arguments: { ifc_base64 } }),
+      rpc(2, 'tools/call', { name: 'ifcsheet_generate_set', arguments: { model_id: 'sheetmodel-1' } }),
+    ]);
+    expect(res.status).toBe(200);
+    const out = (await res.json()) as { id: number; result: { isError?: boolean; structuredContent: any } }[];
+    expect(out[0].result.isError).toBeFalsy();
+    expect(out[0].result.structuredContent.model_id).toBe('sheetmodel-1');
+    expect(out[1].result.isError).toBeFalsy();
+    expect(out[1].result.structuredContent.sheets.length).toBeGreaterThan(0);
   });
 
   it.skipIf(missing !== null)('stops a request that runs past the wall time', async () => {

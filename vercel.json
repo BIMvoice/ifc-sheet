@@ -57,7 +57,7 @@
     }
   ],
   "functions": {
-    "api/mcp.ts": { "maxDuration": 60, "memory": 3009 }
+    "api/mcp.ts": { "maxDuration": 60 }
   },
   "headers": [
     {
