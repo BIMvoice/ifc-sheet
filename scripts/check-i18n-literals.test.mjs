@@ -208,6 +208,46 @@ test('alt is a policed attribute, same as aria-label/title/placeholder', () => {
   assert.ok(findLiterals(`<img alt="A rendered floor plan" />`).some((l) => l.text === 'A rendered floor plan'));
 });
 
+// ── Toast copy ─────────────────────────────────────────────────────────
+
+const toastCount = (src, file = 'x.ts') => countLiterals(src, file, { jsx: false });
+
+test('a literal toast message is flagged, for every message method', () => {
+  assert.equal(toastCount(`toast('Saved the sheet');`), 1);
+  for (const m of ['success', 'error', 'info', 'warning', 'message']) {
+    assert.equal(toastCount(`toast.${m}('Something happened');`), 1, m);
+  }
+  assert.equal(toastCount('toast.error(`Could not save`);'), 1);
+  assert.equal(toastCount('toast.error(`Failed: ${msg}`);'), 1);
+  assert.equal(toastCount(`toast.error(e ? e.message : 'Failed to load');`), 1);
+  assert.equal(toastCount(`toast.infoLive(() => 'Heads up', { label: () => 'Open', onClick });`), 1);
+});
+
+test('an aliased toast import is followed', () => {
+  assert.equal(toastCount(`import { toast as paletteToast } from '@/components/ui/toast';\npaletteToast.error('Nope');`), 1);
+});
+
+test('toast.error(t("key")) and other non-literal messages are not flagged', () => {
+  assert.equal(toastCount(`toast.error(t('export.failed'));`), 0);
+  assert.equal(toastCount(`toast.success(msg);`), 0);
+  assert.equal(toastCount(`toast.error(err instanceof Error ? err.message : String(err));`), 0);
+});
+
+test('a literal description option is flagged, a t() one is not', () => {
+  assert.equal(toastCount(`toast.error(t('a'), { description: 'Try again later' });`), 1);
+  assert.equal(toastCount(`toast('Saved', { description: 'Written to disk' });`), 2);
+  assert.equal(toastCount(`toast.error(t('a'), { description: t('b'), duration: 3 });`), 0);
+});
+
+test('a non-toast call with a literal is not flagged; allowlisted toast text is spared', () => {
+  assert.equal(toastCount(`console.log('Saved the sheet'); notify.error('Nope'); log.info('hello world');`), 0);
+  assert.equal(toastCount(`toast.info('IfcWall'); toast.info('%');`), 0);
+});
+
+test('toast.ts files parse as TS, not TSX (a generic arrow does not blind the walk)', () => {
+  assert.equal(toastCount(`const id = <T,>(x: T) => x; const y = <string>z; toast.error('Nope here');`), 1);
+});
+
 // ── CLI harness ────────────────────────────────────────────────────────
 
 function run(args, cwd) {
@@ -379,6 +419,28 @@ test('walk() never descends into a directory symlink, even a non-looping one', (
     assert.equal(res.status, 0, res.stderr);
     const baseline = JSON.parse(readFileSync(join(dir, 'scripts', 'i18n-literals-baseline.json'), 'utf8'));
     assert.deepEqual(baseline, {}, 'the symlinked directory\'s content must not be counted at all');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('toast copy outside components/ is baselined per file: today accepted, a new literal refused, JSX there ignored', () => {
+  const { dir } = makeTree();
+  try {
+    const hooks = join(dir, 'apps', 'viewer', 'src', 'hooks');
+    mkdirSync(hooks, { recursive: true });
+    const file = join(hooks, 'useThing.ts');
+    writeFileSync(file, `toast.error('Could not do the thing');\n`);
+    writeFileSync(join(hooks, 'View.tsx'), `export const V = () => <span>Plain English copy</span>;\n`);
+    assert.equal(run(['--root', dir, '--update', '--allow-raise'], dir).status, 0);
+    const baseline = JSON.parse(readFileSync(join(dir, 'scripts', 'i18n-literals-baseline.json'), 'utf8'));
+    assert.deepEqual(baseline, { 'apps/viewer/src/hooks/useThing.ts': 1 });
+    assert.equal(run(['--root', dir], dir).status, 0);
+
+    writeFileSync(file, `toast.error('Could not do the thing');\ntoast.success('A brand new message');\n`);
+    const res = run(['--root', dir], dir);
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /useThing\.ts: 2 \(baseline 1, \+1\)/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
