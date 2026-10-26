@@ -10,6 +10,7 @@
  * never an IFC file and never the model that was opened.
  */
 
+import { newHistory } from './ifcsheet-history.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { escapeCsvCell } from '@ifc-lite/export';
@@ -72,7 +73,7 @@ export const ifcsheetApplyTemplate: Tool = {
     if (!set) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: `Model '${entry.id}' has no geometry inside its storeys, so there is nothing to lay a drawing set out on.` });
     const dry = optBoolean(input, 'dry_run') ?? false;
     // A dry run lays the set out and reports it, but never enters it in the session (no document_id is made).
-    const stored = dry ? { id: '', modelId: entry.id, model: entry, set, schedules: [] } : addSheetSet(ctx, entry.id, set);
+    const stored = dry ? { id: '', modelId: entry.id, model: entry, set, schedules: [], history: newHistory() } : addSheetSet(ctx, entry.id, set);
     const notes = set.notes.filter((n) => n.key.startsWith('setTemplate.')).map((n) => describeTemplateNote({ key: n.key as TemplateNoteKey, params: n.params }));
     const sheets = sheetsOf(stored);
     return okResult(
