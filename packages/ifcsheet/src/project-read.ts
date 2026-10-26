@@ -27,7 +27,6 @@ import { boqMissing, computeBoq } from './boq-compute.js';
 import { readBoqElements, storeSource } from './boq-read.js';
 import { readinessOfModel } from './readiness-read.js';
 import type { FarElementFact, ReadinessFinding } from './readiness.js';
-import type { IfcDataStore } from '@ifc-lite/parser';
 import { readClassificationMappings, type ClassificationMapping } from './classification.js';
 import { readUnitsAndNumbers, type UnitsAndNumbers } from './units-and-numbers.js';
 import type { MeshData } from '@ifc-lite/geometry';
