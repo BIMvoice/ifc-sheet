@@ -27,13 +27,13 @@ export function WallZoomControl({ api }: { api: WallZoomApi }) {
   const ref = sheets.find((s) => s.id === referenceSheetId()) ?? sheets.find((s) => s.id === current) ?? sheets[0];
   const percent = ref ? zoomPercent(SHEET_PX * k, paperOf(ref).w) : null;
   return (
-    <div data-wall-zoom role="group" aria-label={t('wall.zoom.label')} className="absolute bottom-4 left-6 z-10 flex items-center gap-0.5 rounded-md border border-sky-300/30 bg-[#061a36]/90 p-1 shadow-lg">
+    <fieldset data-wall-zoom aria-label={t('wall.zoom.label')} className="m-0 min-w-0 absolute bottom-4 left-6 z-10 flex items-center gap-0.5 rounded-md border border-sky-300/30 bg-[#061a36]/90 p-1 shadow-lg">
       <button type="button" className={button} aria-label={t('wall.zoom.out')} title={t('wall.zoom.out')} onClick={api.zoomOut}><Minus className="size-4" /></button>
       <button type="button" data-wall-zoom-level className={`${button} w-14 tabular-nums`} aria-label={t('wall.zoom.trueSize')} title={t('wall.zoom.trueSize')} onClick={api.trueSize}>
         {percent === null ? '' : t('wall.zoom.percent', { percent })}
       </button>
       <button type="button" className={button} aria-label={t('wall.zoom.in')} title={t('wall.zoom.in')} onClick={api.zoomIn}><Plus className="size-4" /></button>
       <button type="button" className={button} title={t('wall.zoom.fitTitle')} onClick={api.fit}>{t('wall.fit')}</button>
-    </div>
+    </fieldset>
   );
 }
