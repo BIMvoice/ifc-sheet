@@ -5,7 +5,7 @@ import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { act } from 'react';
-import { PAC_ITEMS, pacSetTemplate } from '@bimvoice/ifcsheet';
+import { PAC_ITEMS, PAC_RURAL_ITEMS, pacRuralSetTemplate, pacSetTemplate } from '@bimvoice/ifcsheet';
 import { cleanup, render } from '@/test/render.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { registerLocale, setLocale } from '@/i18n/registry';
@@ -73,5 +73,32 @@ describe('the PAC set template', () => {
     const template = pacSetTemplate({ name: 'PAC', plans: 'P', facades: 'F', sections: 'S' });
     assert.deepEqual(template.sheets.map((s) => s.series), ['plans', 'elevations', 'sections']);
     assert.ok(template.sheets.flatMap((s) => s.slots).every((slot) => slot.scale === undefined));
+  });
+});
+
+describe('the simplified PAC checklist (Anexa 3)', () => {
+  it('has a label in both languages for every item', () => {
+    for (const item of PAC_RURAL_ITEMS) {
+      assert.ok((pacEn as Record<string, string>)[`pac.item.${item.id}`], item.id);
+      assert.ok((pacRo as Record<string, string>)[`pac.item.${item.id}`], item.id);
+    }
+  });
+
+  it('switches from Anexa 2 to Anexa 3 and shows the point numbers and the 1:50 of the text', () => {
+    const Section = pacSection.component;
+    const ui = render(<Section go={() => undefined} onClose={() => undefined} extent={null} />);
+    assert.equal(ui.querySelectorAll('[data-pac-item]').length, PAC_ITEMS.length);
+    const toggle = ui.querySelector('[data-pac-mode="rural"]') as HTMLElement;
+    act(() => toggle.click());
+    const row = (id: string) => ui.querySelector(`[data-pac-item="${id}"]`);
+    assert.equal(ui.querySelectorAll('[data-pac-item]').length, PAC_RURAL_ITEMS.length);
+    assert.match(row('rural.fencePlans')?.textContent ?? '', /Anexa 3, 1 f\), 8 c\)/);
+    assert.match(row('rural.plans')?.textContent ?? '', /Anexa 3, 1 e\), 8 a\).*Scale 1:50/);
+    assert.match(row('rural.situationExisting')?.textContent ?? '', /Anexa 3, 1 b\), 2.*Scale 1:1,000, 1:500/);
+  });
+
+  it('asks the set for 1:50 on every drawing slot', () => {
+    const template = pacRuralSetTemplate({ name: 'PAC', plans: 'P', facades: 'F', sections: 'S' });
+    assert.ok(template.sheets.flatMap((s) => s.slots).every((slot) => slot.scale === 50));
   });
 });

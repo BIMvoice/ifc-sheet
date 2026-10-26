@@ -100,6 +100,6 @@ export interface PacCoverageRow {
 }
 
 /** The checklist against a set: which Anexa 2 items the sheets already draw. Items to be supplied are never "drawn". */
-export function pacCoverage(sheets: readonly { series?: string }[]): PacCoverageRow[] {
-  return PAC_ITEMS.map((item) => ({ item, drawn: item.drawnBy !== null && sheets.some((s) => s.series === item.drawnBy) }));
+export function pacCoverage(sheets: readonly { series?: string }[], items: readonly PacItem[] = PAC_ITEMS): PacCoverageRow[] {
+  return items.map((item) => ({ item, drawn: item.drawnBy !== null && sheets.some((s) => s.series === item.drawnBy) }));
 }
