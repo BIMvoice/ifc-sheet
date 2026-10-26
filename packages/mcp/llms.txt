@@ -19,7 +19,7 @@ Every path an `ifcsheet_*` tool reads or writes must lie inside `--allow`. The t
 ## Tools
 
 - `ifcsheet_open_model`: parse an IFC (`file_path` or `ifc_base64`); returns `model_id`, storeys with elevations, counts and the building's extent.
-- `ifcsheet_check_readiness`: what the model lacks that the drawings read (storeys, rooms, materials, quantities, unique GlobalIds); `ready` and the findings.
+- `ifcsheet_check_readiness`: what the model lacks that the drawings read (storeys, rooms, materials, quantities, unique GlobalIds); `ready` and the findings. With `ids: "byggesaksbim"`, or a project (`project_path`/`project_json`) that opted in, also Norway's ByggesaksBIM requirements (the same findings as `ifcsheet check --ids byggesaksbim`).
 - `ifcsheet_generate_set`: the default set (a plan per storey, elevations, proposed sections); returns `document_id`, sheets, views.
 - `ifcsheet_apply_template`: lay the set out by a `.bvset` template; returns a new `document_id` and the notes of what its rules met.
 - `ifcsheet_load_project`: a set from a saved `.ifclite-project.json` on an opened model.
