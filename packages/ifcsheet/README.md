@@ -53,3 +53,7 @@ Names the engine gives (sheet names, view names) are English. Install another la
 ## Tests
 
 `pnpm --filter @bimvoice/ifcsheet test`. The FZK-Haus tests (headless chain and `ifcsheet build`) need `pnpm fixtures` and the wasm build, and skips with a message without them.
+
+### Golden sheets
+
+`src/golden-sheets.models.test.ts` regenerates the starting drawing set of AC20-FZK-Haus and bloc-p4 and compares a digest of it with `benchmark/accepted/<model>.json`: per sheet the number, name, paper, scales, the count, point count and a hash of the path data (rounded to 0.01 mm) of the frame, the cut, the lines and each pen, a rounded bounding box and the text; per model the storeys, the room count, Au and its per-level totals. A change fails the test with one line per field, `sheet A-201: pens.SEEN stroke=#000000 fill=- #1.width: 0.25 -> 0.3`. When the change is intended, run `pnpm --filter @bimvoice/ifcsheet benchmark:update` and commit the JSON diff. More models (Skolebygg, Duplex, Schependomlaan) can be added locally with `IFCSHEET_BENCHMARK_MODELS=name=/path/model.ifc,...`; CI does not set it.

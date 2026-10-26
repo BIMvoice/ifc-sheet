@@ -110,7 +110,8 @@
     "build": "pnpm exec tsc",
     "typecheck": "node ../../scripts/typecheck-tests.mjs",
     "dev": "pnpm exec tsc --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "benchmark:update": "IFCSHEET_BENCHMARK_UPDATE=1 vitest run src/golden-sheets.models.test.ts"
   },
   "dependencies": {
     "@ifc-lite/create": "workspace:^",
