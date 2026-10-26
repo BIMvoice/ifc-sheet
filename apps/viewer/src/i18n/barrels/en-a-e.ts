@@ -61,6 +61,7 @@ import { dataConnectorEn } from '../catalogues/data-connector.en';
 import { deviationStatsEn } from '../catalogues/deviation-stats.en';
 import { documentMenuEn } from '../catalogues/document-menu.en';
 import { documentEn } from '../catalogues/document.en';
+import { creditsEn } from '../catalogues/credits.en';
 import { draftSetEn } from '../catalogues/draft-set.en';
 import { draftingStandardsEn } from '../catalogues/drafting-standards.en';
 import { draftingEn } from '../catalogues/drafting.en';
@@ -133,6 +134,7 @@ export const enAE = {
   ...deviationStatsEn,
   ...documentMenuEn,
   ...documentEn,
+  ...creditsEn,
   ...draftSetEn,
   ...draftingStandardsEn,
   ...draftingEn,

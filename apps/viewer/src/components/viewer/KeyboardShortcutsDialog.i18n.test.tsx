@@ -107,8 +107,8 @@ describe('KeyboardShortcutsDialog localization (#4918)', () => {
     assert.match(aboutText(), /to toggle this panel/);
     assert.match(aboutText(), /IfcSheet/); // this edition's product name
     assert.match(aboutText(), /v0\.0\.0-test/);
-    assert.match(aboutText(), /GitHub/);
-    assert.match(aboutText(), /Report issue/);
+    assert.match(aboutText(), /IfcSheet on GitHub/);
+    assert.match(aboutText(), /Report an IfcSheet issue/);
     assert.match(aboutText(), /MPL-2\.0/);
     assert.match(aboutText(), /1 package/);
     assert.match(aboutText(), /Local model viewing runs on your device\./);
