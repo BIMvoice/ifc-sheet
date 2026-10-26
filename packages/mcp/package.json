@@ -18,6 +18,10 @@
       "import": "./dist/server.js",
       "types": "./dist/server.d.ts"
     },
+    "./hosted": {
+      "import": "./dist/transport/hosted.js",
+      "types": "./dist/transport/hosted.d.ts"
+    },
     "./protocol": {
       "import": "./dist/protocol/index.js",
       "types": "./dist/protocol/index.d.ts"

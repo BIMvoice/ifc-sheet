@@ -9,6 +9,7 @@
  * paths they write to.
  */
 
+import { newHistory } from './ifcsheet-history.js';
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { paperLabel, paperOf, type ModelExtent, type ProjectDocument, type ProjectSheet, type ProjectView } from '@bimvoice/ifcsheet';
@@ -160,7 +161,7 @@ export const DRY_RUN = { type: 'boolean', description: 'Report what the call wou
  * the same code as the real call and its edit lands on the copy: the session's entry is never touched, by construction.
  */
 export function workingEntry(entry: SheetSetEntry, dry: boolean): SheetSetEntry {
-  return dry ? { ...entry, set: { ...entry.set }, schedules: [...entry.schedules] } : entry;
+  return dry ? { ...entry, set: { ...entry.set }, schedules: [...entry.schedules], history: newHistory() } : entry;
 }
 
 /** The words of a result, said as a plan when nothing was changed. */

@@ -218,6 +218,7 @@ test('a literal toast message is flagged, for every message method', () => {
     assert.equal(toastCount(`toast.${m}('Something happened');`), 1, m);
   }
   assert.equal(toastCount('toast.error(`Could not save`);'), 1);
+  // eslint-disable-next-line no-template-curly-in-string -- the scanned source is a template literal
   assert.equal(toastCount('toast.error(`Failed: ${msg}`);'), 1);
   assert.equal(toastCount(`toast.error(e ? e.message : 'Failed to load');`), 1);
   assert.equal(toastCount(`toast.infoLive(() => 'Heads up', { label: () => 'Open', onClick });`), 1);

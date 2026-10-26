@@ -14,7 +14,7 @@ Every path an `ifcsheet_*` tool reads or writes must lie inside `--allow`. The t
 - `ifcsheet_generate_set`, `ifcsheet_apply_template` and `ifcsheet_load_project` each make a drawing set and give a `document_id`. The editing tools change that set in the session's memory; the PDF, DXF and issue always draw the latest edit. Nothing is on disk until `ifcsheet_save_project` or an export.
 - Lengths are metres in the viewer frame (X east, Y up, Z south). Paper sizes are millimetres. A scale is its denominator: 100 means 1:100.
 - `dry_run: true` on `ifcsheet_add_view`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_add_schedule`, `ifcsheet_apply_template` and `ifcsheet_renumber` reports what the call would change and changes nothing. Ids a dry run reports are not kept.
-- There is no undo tool. Save the project (`ifcsheet_save_project`) before a series of edits.
+- `ifcsheet_undo` takes back the last edit of a set and `ifcsheet_redo` re-applies it. Dry runs are not in the history; a new edit after an undo clears redo; the last 50 edits are kept. Undo with nothing to undo says so and is not an error. `ifcsheet_save_project` still writes the set to disk.
 
 ## Tools
 
@@ -33,6 +33,8 @@ Every path an `ifcsheet_*` tool reads or writes must lie inside `--allow`. The t
 - `ifcsheet_export_dxf`: one DXF per sheet into a directory.
 - `ifcsheet_issue_set`: the PDF, a DXF per sheet, `register.csv`, the schedules as CSV and, with `handover: true`, `handover.zip` (with the IFC as opened); `annotated_ifc: true` adds the annotated copy of the IFC.
 - `ifcsheet_save_project`: write the set as `.ifclite-project.json`; what a loaded file held besides the set is written back unchanged.
+- `ifcsheet_undo`: take back the last edit of a set (add_view, place_view, set_title_block, add_schedule, renumber); `changed` is false when there is nothing to undo.
+- `ifcsheet_redo`: re-apply the edit just undone; a new edit clears it.
 
 ## Resources
 
@@ -53,6 +55,15 @@ Every path an `ifcsheet_*` tool reads or writes must lie inside `--allow`. The t
 - A schedule's rows are read from the model each time the set is drawn. Rows beyond what fits the sheet's paper are left off the drawn sheet (`rows_left_off` says how many); the CSV of the issue has all of them.
 - `annotated_ifc` writes no annotations: dimensions, tags and notes are drafts of the app, and these tools hold none. The result says so.
 - A session keeps at most 8 opened models in memory; the oldest is dropped, with its sets.
+
+## Hosted endpoint (opt-in)
+
+The web app can serve the drawing-set tools over Streamable HTTP at `/mcp`. It is OFF unless the deployment sets the environment variable `IFCSHEET_HOSTED_MCP=1`; without it the endpoint answers 404 and nothing else changes.
+
+- POST only, JSON in and JSON out (a single message or a batch). No sessions, no resources, no prompts, no server-initiated stream: every request starts from nothing, and a batch (at most 20 messages) shares one state and runs its messages one after the other, in order, so `ifcsheet_open_model` then a tool taking its `model_id` works inside one batch: the ids are sequential within a request (`sheetmodel-1`, `sheetmodel-2`, ...), so the first model a batch opens is `sheetmodel-1`. Across requests nothing carries over. A body that is not a JSON-RPC 2.0 message is answered with -32600 (Invalid Request), invalid JSON with -32700.
+- Only the `ifcsheet_*` tools. The server has no file system for you: every file path (`file_path`, `*_path`, `directory`) is refused with PERMISSION_DENIED. Send the model as `ifc_base64`, a template or project as `template_json` or `project_json`, and read results from the response (`ifcsheet_export_pdf` without `file_path` returns `pdf_base64`). `ifcsheet_generate_set` takes `ifc_base64` directly, so one call turns a model into a set.
+- Nothing is saved: edits are returned in the response, never stored.
+- Limits: a model of at most 25 MB (larger is refused with an error result), a request body to match, and 50 seconds per request (stopped with HTTP 504 and a JSON-RPC error). The 50 s limit is checked between messages and answered when it passes, but it cannot interrupt a synchronous parse or layout already running: such a call runs to its end (the platform's own function limit is then the stop). The hosting platform may set a smaller body limit than 25 MB (Vercel: 4.5 MB), which then applies first.
 
 ## Example session
 
