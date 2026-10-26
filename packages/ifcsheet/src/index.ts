@@ -84,6 +84,7 @@ export { sheetNumber, sheetLevel, sheetFormat, readUnitsAndNumbers, type SheetLo
 
 // The title block's layout, parameters and printing
 export { printTitleBlock, sheetFields, sheetLookup } from './title-block-print.js';
+export { sheetScaleLine, sheetScaleText } from './sheet-scale.js';
 export { LOGO_FIELD, LOGO_MAX_BYTES, TITLE_BLOCK_FIELDS, titleBlockOf, type TitleBlockField } from './title-block-fields.js';
 export {
   DEFAULT_SOURCES, effectiveFields, isPlaceholder, MODEL_ENTITIES, OWNER_PARTS, PRESET_SOURCES, projectTitleFields, readTitleSources, resolveField, resolvedTitleBlock, resolveTitleBlock,
