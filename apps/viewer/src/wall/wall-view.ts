@@ -27,6 +27,11 @@ interface WallView {
   layout: WallLayout | null;
   /** Sheets near the screen, nearest first. */
   near: string[];
+  /**
+   * Sheets hung with their drawing rather than as an outline: near, wide enough to read, and let in by `wall-promote` a few at
+   * a time. A sheet leaves this the moment it stops being either.
+   */
+  drawn: string[];
   /** Sheets whose drawings are generated: the near ones first, then those that were near. */
   queue: string[];
   highlight: string | null;
@@ -40,7 +45,7 @@ interface WallView {
   generation: number;
 }
 
-export const useWallView = create<WallView>()(() => ({ layout: null, near: [], queue: [], highlight: null, scroll: null, generation: 0 }));
+export const useWallView = create<WallView>()(() => ({ layout: null, near: [], drawn: [], queue: [], highlight: null, scroll: null, generation: 0 }));
 
 /** How far past the screen a sheet still counts as near: half a screen each way. */
 export function nearMargin(viewport: Size): number {
@@ -121,7 +126,7 @@ export function revealSheet(sheetId: string): void {
 export function resetWallView(): void {
   clearTimeout(flashTimer);
   resetWallZoom();
-  useWallView.setState((s) => ({ layout: null, near: [], queue: [], highlight: null, scroll: null, generation: s.generation + 1 }));
+  useWallView.setState((s) => ({ layout: null, near: [], drawn: [], queue: [], highlight: null, scroll: null, generation: s.generation + 1 }));
 }
 
 /**

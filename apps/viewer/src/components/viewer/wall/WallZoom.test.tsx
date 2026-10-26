@@ -6,7 +6,9 @@ import '@/test/setup-dom.js';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { advance, cleanup, click, press, render } from '@/test/render.js';
+import { advance, cleanup, click, press, render, waitFor } from '@/test/render.js';
+import { registerKeyboardCommand } from '@/lib/commands/dispatcher';
+import { PROMOTE_BATCH } from '@/wall/wall-promote';
 import { addProjectSheet, resetProject, setSheetNumber, useProjectStore } from '@/project/project-store';
 import { paperOf } from '@/project/sheets';
 import { resetWallView, useWallView } from '@/wall/wall-view';
@@ -21,6 +23,7 @@ import { WallGrid } from './WallGrid.js';
 
 const SHEETS = 10;
 const SCREEN = { w: 1000, h: 600 };
+const SMALL = { ...SCREEN };
 const GAP = 40;
 const proto = window.HTMLElement.prototype;
 const saved = {
@@ -94,6 +97,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  Object.assign(SCREEN, SMALL);
   restoreLayout();
 });
 
@@ -269,5 +273,96 @@ describe('zoom on the Wall (#188)', () => {
     assert.equal(k(), zoom);
     assert.equal(scroller(again).scrollLeft, 400);
     assert.equal(frame(again, ids()[0]).style.width, `${SHEET_PX * zoom}px`);
+  });
+});
+
+describe('zoom to a sheet on the Wall (#188)', () => {
+  /** The keyboard dispatcher binds a bare Z (`camera.fitAll`) and listens on the window; here it is there before the Wall is. */
+  function dispatcherHoldsZ(): { calls: () => number; off: () => void } {
+    let n = 0;
+    const off = registerKeyboardCommand('camera.fitAll', () => { n += 1; return true; });
+    return { calls: () => n, off };
+  }
+
+  it('Z zooms to the sheet nearest the middle with nothing focused, ahead of the dispatcher\'s own Z', () => {
+    const z = dispatcherHoldsZ();
+    try {
+      const ui = render(<WallGrid extent={null} onStep={() => {}} />);
+      press(document.body, 'z');
+      assert.ok(k() > 1.5, `Z zoomed (${k()})`);
+      assert.equal(z.calls(), 0, 'and the 3D camera\'s fit-all did not take the key');
+      const current = useWallZoom.getState().current;
+      assert.ok(current && inView(ui, current), 'the sheet is whole on the screen');
+    } finally {
+      z.off();
+    }
+  });
+
+  it('Z on a focused sheet zooms to that sheet, wherever the screen is', () => {
+    const z = dispatcherHoldsZ();
+    try {
+      const ui = render(<WallGrid extent={null} onStep={() => {}} />);
+      const last = ids()[SHEETS - 1];
+      const button = frame(ui, last).querySelector('button[aria-label^="A-"]')!;
+      press(button, 'Z');
+      assert.equal(useWallZoom.getState().current, last);
+      assert.ok(inView(ui, last));
+      assert.equal(z.calls(), 0);
+    } finally {
+      z.off();
+    }
+  });
+
+  it('fits an A1 sheet to a 1440 x 900 screen: it fills at least 90 % of the limiting dimension', () => {
+    Object.assign(SCREEN, { w: 1440, h: 900 });
+    const ui = render(<WallGrid extent={null} onStep={() => {}} />);
+    const id = ids()[4];
+    assert.deepEqual(paperOf(useProjectStore.getState().sheets.find((sheet) => sheet.id === id)!), { w: 841, h: 594 }, 'a sheet is A1 landscape by default');
+    press(document.body, '0');
+    click(ui.querySelector(`[data-wall-zoom-sheet="${id}"]`)!);
+    const r = frame(ui, id).getBoundingClientRect();
+    const paperH = r.height - 40;
+    const filled = Math.max(r.width / SCREEN.w, paperH / SCREEN.h);
+    assert.ok(filled >= 0.9, `the sheet fills ${Math.round(filled * 100)} % of the screen`);
+    assert.ok(inView(ui, id), 'and is whole');
+  });
+});
+
+describe('zooming with the wheel on the Wall (#188)', () => {
+  it('keeps sheets that cross the drawn width as outlines until the wheel has settled, then draws a few at a time, nearest first', async () => {
+    const ui = render(<WallGrid extent={null} onStep={() => {}} />);
+    press(document.body, '0');
+    assert.equal(useWallView.getState().drawn.length, 0, 'at fit-all every sheet is a stamp');
+    const sizes: number[] = [];
+    let last = 0;
+    const stop = useWallView.subscribe((s) => {
+      if (s.drawn.length !== last) { sizes.push(s.drawn.length - last); last = s.drawn.length; }
+    });
+    try {
+      const at = { clientX: 500, clientY: 300 };
+      wheel(scroller(ui), { deltaY: -100, ctrlKey: true, ...at });
+      wheel(scroller(ui), { deltaY: -20, ctrlKey: true, ...at });
+      const { near } = useWallView.getState();
+      assert.ok(near.length > PROMOTE_BATCH * 2, `many sheets are near and wide enough (${near.length})`);
+      assert.ok(frame(ui, near[0]).getBoundingClientRect().width >= 140);
+      assert.equal(useWallView.getState().drawn.length, 0, 'during the gesture none is drawn');
+      for (const id of near) assert.ok(outline(ui, id) && !drawn(ui, id));
+      await advance(60);
+      assert.equal(useWallView.getState().drawn.length, 0, 'still none before it has settled');
+      await waitFor(() => useWallView.getState().drawn.length === near.length, 'every near sheet is drawn in the end', 4000);
+      assert.ok(sizes.every((n) => n > 0 && n <= PROMOTE_BATCH), `never more than ${PROMOTE_BATCH} in one step (${sizes.join(',')})`);
+      assert.ok(sizes.length >= 2, 'in more than one step');
+      assert.deepEqual(useWallView.getState().drawn, near, 'in the order of nearest the middle of the screen first');
+    } finally {
+      stop();
+    }
+  });
+
+  it('lets a sheet go at once when it falls below the drawn width', async () => {
+    const ui = render(<WallGrid extent={null} onStep={() => {}} />);
+    await waitFor(() => useWallView.getState().drawn.length > 0, 'sheets are drawn at the default zoom');
+    press(document.body, '0');
+    assert.equal(useWallView.getState().drawn.length, 0);
+    for (const id of ids()) assert.ok(!drawn(ui, id));
   });
 });

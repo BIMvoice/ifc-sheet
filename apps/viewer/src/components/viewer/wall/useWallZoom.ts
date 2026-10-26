@@ -20,10 +20,11 @@ import {
   anchorAt, clampZoom, fitFactor, neighbourSheet, SHEET_PX, stepZoom, trueSizeZoom, unionOf, useWallZoom, type SheetAnchor,
 } from '@/wall/wall-zoom';
 import { keysBelongElsewhere } from './wall-key-bus';
+import { noteZoomGesture } from '@/wall/wall-promote';
 import { readWallLayout, WALL_SHEET_ATTR } from './useWallMeasure';
 
 /** Room left round what a fit shows, px. */
-const FIT_PAD = 24;
+const FIT_PAD = 12;
 const FIT_TRIES = 10;
 
 export interface WallZoomApi {
@@ -38,7 +39,10 @@ export interface WallZoomApi {
 }
 
 /** The sheet the zoom keys and the level readout speak of: the one last zoomed or stepped to, else the one nearest the middle of the screen. */
-export function referenceSheetId(): string | null {
+export function referenceSheetId(focus?: EventTarget | null): string | null {
+  // A sheet that has the keyboard focus is the one meant, whatever the pointer or the screen's middle is over.
+  const focused = focus instanceof Element ? focus.closest(`[${WALL_SHEET_ATTR}]`)?.getAttribute(WALL_SHEET_ATTR) : null;
+  if (focused) return focused;
   const { current } = useWallZoom.getState();
   const { layout, near } = useWallView.getState();
   if (current && layout?.sheets.some((s) => s.id === current)) return current;
@@ -88,7 +92,7 @@ export function useWallZoomControls(scroller: RefObject<HTMLDivElement | null>):
       const ratio = box ? fitFactor(box, screen, FIT_PAD) : 1;
       const now = useWallZoom.getState().k;
       const next = clampZoom(now * ratio);
-      if (box && (ratio < 0.999 || ratio > 1.05) && p.fit.tries < FIT_TRIES && next !== now) {
+      if (box && (ratio < 0.999 || ratio > 1.01) && p.fit.tries < FIT_TRIES && next !== now) {
         p.fit.tries += 1;
         useWallZoom.setState({ k: next });
         return;
@@ -160,6 +164,7 @@ export function useWallZoomControls(scroller: RefObject<HTMLDivElement | null>):
       // A plain wheel or a two-finger scroll keeps scrolling the Wall; only a pinch (a wheel with ctrlKey) or Ctrl/Cmd and the wheel zooms.
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
+      noteZoomGesture();
       const lines = e.deltaMode === 1 ? 33 : 1;
       const f = Math.exp(-e.deltaY * lines * (e.ctrlKey ? 0.01 : 0.004));
       live.current.zoomTo(useState().k * f, { x: e.clientX, y: e.clientY });
@@ -208,7 +213,7 @@ export function useWallZoomControls(scroller: RefObject<HTMLDivElement | null>):
       else if (e.key === '0') run = () => act?.fit();
       else if (!mod && e.key === '1') run = () => act?.trueSize();
       else if (!mod && (e.key === 'z' || e.key === 'Z')) {
-        const id = referenceSheetId();
+        const id = referenceSheetId(e.target);
         if (id) run = () => act?.zoomToSheet(id);
       } else if (!mod && e.key === 'PageDown') run = () => live.current.walk(1);
       else if (!mod && e.key === 'PageUp') run = () => live.current.walk(-1);
@@ -218,8 +223,10 @@ export function useWallZoomControls(scroller: RefObject<HTMLDivElement | null>):
       e.preventDefault();
       run();
     };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('keyup', onKey);
+    // In the capture phase, ahead of the keyboard dispatcher's bubble-phase listener: it binds a bare Z (`camera.fitAll`) and,
+    // when it was added first, took the key and the Wall never saw it. Wall keys that mean something here are the Wall's.
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('keyup', onKey, true);
 
     // Back from a sheet: the Wall as it was left.
     el.scrollLeft = useState().left;
@@ -232,8 +239,8 @@ export function useWallZoomControls(scroller: RefObject<HTMLDivElement | null>):
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('pointercancel', onUp);
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('keyup', onKey);
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keyup', onKey, true);
     };
   }, [scroller]);
 

@@ -10,7 +10,7 @@
  */
 
 import { X, ZoomIn } from 'lucide-react';
-import { memo, useEffect, useRef } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { SET_SCALES, sheetGroup, sheetScaleReason, type ModelExtent, type SetGroup } from '@/project/drawing-set';
@@ -19,6 +19,7 @@ import { removeProjectItem, useProjectStore } from '@/project/project-store';
 import type { ProjectSheet } from '@/project/types';
 import { CardMarks } from './CardMarks';
 import { startWallFill } from '@/wall/wall-fill';
+import { startWallPromotion } from '@/wall/wall-promote';
 import { useWallView } from '@/wall/wall-view';
 import { SHEET_PX, useWallZoom } from '@/wall/wall-zoom';
 import { LazyWallSheet } from './LazyWallSheet';
@@ -81,7 +82,8 @@ const SheetOnWall = memo(function SheetOnWall({ sheet, extent, width, onStep, on
   const views = useProjectStore((s) => s.views);
   const reason = extent ? sheetScaleReason(sheet, views, extent) : null;
   const name = `${sheet.number} ${sheet.name}`;
-  const near = useWallView((s) => s.near.includes(sheet.id));
+  // Near, wide enough and let in by the Wall's promotion (`wall-promote`): a few drawings at a time, not all at once.
+  const near = useWallView((s) => s.drawn.includes(sheet.id));
   const flashed = useWallView((s) => s.highlight === sheet.id);
   return (
     <figure {...{ [WALL_SHEET_ATTR]: sheet.id }} style={{ width }} data-flashed={flashed || undefined} className={cn('group relative m-0 rounded-sm transition-shadow duration-500', flashed && 'ring-4 ring-sky-300 shadow-[0_0_28px_rgba(125,211,252,0.7)]')}>
@@ -132,6 +134,8 @@ export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onSte
   const { t } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
   const scroller = useRef<HTMLDivElement>(null);
+  // Before the measuring below, so the first layout it reads is followed.
+  useLayoutEffect(() => startWallPromotion(), []);
   const zoom = useWallZoomControls(scroller);
   const width = SHEET_PX * useWallZoom((s) => s.k);
   useWallHistoryKeys();

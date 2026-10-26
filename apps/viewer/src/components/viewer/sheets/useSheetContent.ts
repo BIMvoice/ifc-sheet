@@ -60,6 +60,7 @@ interface StyledViewport { drawing: Drawing2D | null; overlays: PlanOverlay[] }
 
 const styledMemo = sharedMemo<StyledViewport>();
 const fittedMemo = sharedMemo<Drawing2D>();
+const crossRefMemo = sharedMemo<PlanCrossRefInput>();
 
 export interface SheetContent {
   content: (vp: SheetViewport) => ViewportContent;
@@ -146,22 +147,20 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
   const ground = useMemo(() => elevationMarkPlan(views), [views]);
   // One input per view and scale while nothing it reads changes, so `withCrossReferences` places a viewport's marks once,
-  // not once each for what is drawn, the fitted extent and the box (#154).
+  // not once each for what is drawn, the fitted extent and the box (#154). The input is shared between sheets mounted at
+  // different times (`crossRefMemo`): marks are in paper millimetres and do not depend on the zoom, so a sheet that
+  // the Wall hangs as an outline and then draws again, or the sheet editor opening it, finds them already placed.
   const crossRefInput = useMemo(() => {
-    const made = new Map<string, PlanCrossRefInput>();
     return (vp: SheetViewport): PlanCrossRefInput => {
-      const key = `${vp.viewId}\u0000${vp.scale}`;
-      let input = made.get(key);
-      if (!input) {
-        input = {
-          drafts: settledDrafts(vp.viewId), view: views.find((v) => v.id === vp.viewId), views, sheets, groundPlanId: ground?.id,
-          bounds: drawingOf.get(vp.viewId)?.bounds, viewportScale: vp.scale, overlays: styled.get(vp.viewId)?.overlays,
-        };
-        made.set(key, input);
-      }
-      return input;
+      const raw = drawingOf.get(vp.viewId) ?? null;
+      const view = views.find((v) => v.id === vp.viewId);
+      const overlays = styled.get(vp.viewId)?.overlays;
+      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, view, views, sheets, ground?.id, drafts, levels, raw, overlays], () => ({
+        drafts: settledDrafts(vp.viewId), view, views, sheets, groundPlanId: ground?.id,
+        bounds: raw?.bounds, viewportScale: vp.scale, overlays,
+      }));
     };
-  }, [settledDrafts, views, sheets, drawingOf, ground, styled]);
+  }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels]);
   const draftsFor = useCallback((vp: SheetViewport) => withCrossReferences(crossRefInput(vp)), [crossRefInput]);
   // What an auto-fit viewport frames: the drawing, the plot of a site plan and the drafts the sheet draws, the cross-references included (#140, #243).
   // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
