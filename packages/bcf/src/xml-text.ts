@@ -65,10 +65,21 @@ export function parseXsBoolean(raw: string, { ifUnrecognized }: { ifUnrecognized
 }
 
 /**
- * Escape XML special characters
+ * Code points XML 1.0 cannot carry, even as a character reference: the C0
+ * controls except tab, line feed and carriage return, and U+FFFE / U+FFFF. A
+ * document holding one is not well-formed and a reader refuses all of it.
+ */
+// eslint-disable-next-line no-control-regex
+const XML_ILLEGAL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g;
+
+/**
+ * Escape XML special characters, and drop the characters XML 1.0 forbids
+ * (a vertical tab pasted from a word processor would otherwise make the
+ * whole archive unreadable).
  */
 export function escapeXml(str: string): string {
   return str
+    .replace(XML_ILLEGAL_CHARS, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
