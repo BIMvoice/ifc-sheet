@@ -17,7 +17,7 @@ import { fitExtent } from '@/project/sheets';
 import { annotationFactor } from '@/project/viewport-annotation';
 import type { SheetViewport } from '@/project/types';
 import type { Pt } from './types';
-import { textBox } from './annotation';
+import { textBox, withAnnotationScreenUp } from './annotation';
 import { elevationMarkPlan } from './cross-ref-marks';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from './cross-ref-plan';
 import { draftsOfView } from './draft-store';
@@ -55,7 +55,7 @@ describe('the viewport of the ground plan of AC20-FZK-Haus holds its marks (#243
     bounds = drawing.bounds;
     factor = annotationFactor(vp.scale, ground.scale);
     const overlays = planOverlays(ground, drawing.config.plane, meshes, undefined, new Set(), drawing, vp.scale);
-    input = { drafts: draftsOfView(ground.id, drafts), view: ground, views, sheets, groundPlanId: ground.id, bounds, viewportScale: vp.scale, overlays };
+    input = { drafts: draftsOfView(ground.id, drafts), view: ground, views, sheets, groundPlanId: ground.id, bounds, viewportScale: vp.scale, overlays, screenUp: -1 };
   });
 
   /** Whether `inner` lies within `outer`, to a millimetre of drawing. */
@@ -65,7 +65,7 @@ describe('the viewport of the ground plan of AC20-FZK-Haus holds its marks (#243
   const labelExtents = (): Extent[] => withCrossReferences(input).filter((d) => d.id.includes('~xref') && d.shape.type === 'text').map((d) => {
     const sh = d.shape;
     if (sh.type !== 'text') throw new Error('unreachable');
-    const box = textBox(sh.p, sh.text, sh.height * factor, sh.rotation);
+    const box = withAnnotationScreenUp(-1, () => textBox(sh.p, sh.text, sh.height * factor, sh.rotation));
     return { min: { x: Math.min(...box.map((q) => q.x)), y: Math.min(...box.map((q) => q.y)) }, max: { x: Math.max(...box.map((q) => q.x)), y: Math.max(...box.map((q) => q.y)) } };
   });
 
