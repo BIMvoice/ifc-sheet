@@ -13,8 +13,8 @@
  */
 
 import {
-  boqSayFor, boqTable, drawingArea, roomSchedule, roomScheduleCsv, roomScheduleRows,
-  type BoqArticle, type SheetLocale,
+  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
+  type BoqArticle, type SheetLocale, type UnitsAndNumbers,
 } from '@bimvoice/ifcsheet';
 import { boqCsv, boqResult } from '@bimvoice/ifcsheet/cli-boq';
 import { listScheduleCsv, listScheduleTableOn, listTableIsEmpty, type OpenedModel, type SheetGraphic } from '@bimvoice/ifcsheet/headless';
@@ -22,8 +22,10 @@ import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import type { SetSchedule, SheetModelEntry, SheetSetEntry } from './ifcsheet-store.js';
 
 export interface ScheduleTable {
-  /** The rows, header first, every cell as text. */
+  /** The rows, header first, every cell as text. What the tool returns: a figure of a list or a bill of quantities is its plain number, for the agent that reads it back. */
   rows: string[][];
+  /** The rows as the sheet prints them, header first: the figures in the language and the document's "Units and numbers" (`sheetNumber`), as the app's sheet and `ifcsheet` write them. Absent: `rows`. */
+  printed?: string[][];
   /** Lines under the table: what was refused or only partly counted. */
   notes: string[];
   /** The same table as CSV, for the issue. */
@@ -33,26 +35,30 @@ export interface ScheduleTable {
 /** The locales the schedules are worded in. */
 export const SCHEDULE_LOCALES = ['en', 'ro'] as const;
 
-/** The table of a schedule, read from the model now. Throws UNSUPPORTED_OPERATION when the model has nothing for it. */
-export async function scheduleTable(schedule: SetSchedule, model: OpenedModel): Promise<ScheduleTable> {
+/**
+ * The table of a schedule, read from the model now. The figures are written for people on a sheet, so they follow the language and the document's
+ * "Units and numbers" (`units`), as the app's sheet does; the CSV keeps its plain numbers. Throws UNSUPPORTED_OPERATION when the model has nothing for it.
+ */
+export async function scheduleTable(schedule: SetSchedule, model: OpenedModel, units?: UnitsAndNumbers): Promise<ScheduleTable> {
+  const format = sheetFormat(schedule.locale, units);
   if (schedule.kind === 'rooms') {
     const { readRooms } = await import('@bimvoice/ifcsheet/headless');
     const read = readRooms(model.dataStore, model.meshes);
     const rooms = roomSchedule(read.levels, read.rooms);
     if (rooms.rooms === 0) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The model has no rooms (IfcSpace) to list.' });
-    return { rows: roomScheduleRows(rooms, schedule.locale as SheetLocale), notes: [], csv: roomScheduleCsv(rooms, schedule.locale as SheetLocale) };
+    return { rows: roomScheduleRows(rooms, schedule.locale as SheetLocale), printed: roomScheduleRows(rooms, format), notes: [], csv: roomScheduleCsv(rooms, schedule.locale as SheetLocale) };
   }
   if (schedule.kind === 'list') {
     if (!schedule.list) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The list schedule holds no definition.' });
     // The Lists engine's rows over the model, by the steps the app runs: the same numbers as `ifcsheet list` and the app's table.
     const table = listScheduleTableOn(model, { id: schedule.id, name: schedule.name ?? 'List', list: schedule.list }, schedule.locale, { classificationMappings: schedule.classificationMappings ?? [] });
     if (listTableIsEmpty(table)) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The list has no rows: no element of the model matches its filter.' });
-    return { rows: [table.header, ...table.rows.map((r) => r.map((c) => (c === null ? '' : String(c))))], notes: [], csv: listScheduleCsv(table, schedule.locale) };
+    return { rows: [table.header, ...table.rows.map((r) => r.map((c) => (c === null ? '' : String(c))))], printed: [table.header, ...listTableCells(table, format)], notes: [], csv: listScheduleCsv(table, schedule.locale) };
   }
   const articles: readonly BoqArticle[] = schedule.boqArticles ?? [];
   if (articles.length === 0) throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: 'The project holds no bill-of-quantities articles.' });
   const table = boqTable(boqResult(model.dataStore, articles), boqSayFor(schedule.locale), {});
-  return { rows: [table.header, ...table.rows.map((r) => r.map((c) => (c === null ? '' : String(c))))], notes: table.notes, csv: boqCsv(table, schedule.locale) };
+  return { rows: [table.header, ...table.rows.map((r) => r.map((c) => (c === null ? '' : String(c))))], printed: [table.header, ...boqTableCells(table, format)], notes: table.notes, csv: boqCsv(table, schedule.locale) };
 }
 
 const TEXT_MM = 2.5;
@@ -65,11 +71,12 @@ export const scheduleCapacity = (area: { h: number }): number => Math.max(0, Mat
 
 /** `table` set as text rows in `area` (paper mm); returns how many rows were drawn. Columns are as wide as their longest cell. */
 function setTable(sheet: SheetGraphic, area: { x: number; y: number; w: number; h: number }, title: string, table: ScheduleTable): number {
-  const widths = table.rows[0].map((_, c) => Math.max(...table.rows.map((r) => [...(r[c] ?? '')].length)) * TEXT_MM * CHAR_EM);
+  const rows = table.printed ?? table.rows;
+  const widths = rows[0].map((_, c) => Math.max(...rows.map((r) => [...(r[c] ?? '')].length)) * TEXT_MM * CHAR_EM);
   const xs = widths.map((_, c) => area.x + GAP_MM + widths.slice(0, c).reduce((a, w) => a + w + GAP_MM, 0));
   sheet.texts.push({ at: { x: area.x + GAP_MM, y: area.y + GAP_MM }, text: title, size: 4 });
   const capacity = scheduleCapacity(area);
-  const drawn = table.rows.slice(0, capacity);
+  const drawn = rows.slice(0, capacity);
   drawn.forEach((row, i) => row.forEach((cell, c) => {
     if (cell) sheet.texts.push({ at: { x: xs[c], y: area.y + 2 * GAP_MM + (i + 1) * ROW_MM }, text: cell, size: TEXT_MM });
   }));
@@ -91,7 +98,7 @@ export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry): Pro
     const sheet = entry.set.document.sheets.find((s) => s.id === schedule.sheetId);
     const graphic = sheets.find((g) => g.sheetId === schedule.sheetId);
     if (!sheet || !graphic) continue;
-    const table = await scheduleTable(schedule, model.model);
+    const table = await scheduleTable(schedule, model.model, entry.set.document.unitsAndNumbers);
     schedules.push({ schedule, table, drawn: setTable(graphic, drawingArea(sheet), sheet.name, table) });
   }
   return { sheets, schedules };
