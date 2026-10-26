@@ -32,7 +32,7 @@ const ALL = '*';
 export const canBeColoured = (view: ProjectView | undefined): view is ProjectView => view?.kind === 'plan' || view?.kind === 'section' || view?.kind === 'elevation';
 
 /** A colour picker that commits once the hand has rested on it, so one drag is one undo step, not hundreds. */
-function ColourInput({ value, label, onCommit }: { value: string; label: string; onCommit: (hex: string) => void }) {
+export function ColourInput({ value, label, onCommit }: { value: string; label: string; onCommit: (hex: string) => void }) {
   const [draft, setDraft] = useState(value);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => setDraft(value), [value]);

@@ -17,7 +17,7 @@ import type { DraftLayer } from '@/drafting/types';
 import { readCadLayerRule } from '@/project/cad-layers-file';
 import type { CadLayerRule } from '@/project/cad-layers';
 import { readBoqArticle, readClassificationMapping, type BoqArticle, type ClassificationMapping, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
-import { readMaterial } from '@/project/project-file';
+import { readMaterial } from '@bimvoice/ifcsheet/materials';
 import { readViewTemplate } from '@/project/view-templates-file';
 import { readStandards } from '@/project/standards-file';
 import { readTemplate } from '@/project/sheet-templates';

@@ -13,6 +13,7 @@ import { commentsSection } from './comments';
 import { drawingsSection } from './drawings';
 import { legendsSection } from './legends';
 import { librarySection } from './library';
+import { materialsSection } from './materials';
 import { numberingSection } from './numbering';
 import { readinessSection } from './readiness';
 import { schedulesSection } from './schedules';
@@ -30,6 +31,7 @@ export const DRAWER_SECTIONS: readonly DrawerSection[] = [
   drawingsSection,
   legendsSection,
   librarySection,
+  materialsSection,
   numberingSection,
   readinessSection,
   schedulesSection,
