@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { measuredQuantitiesRo } from '../catalogues/measured-quantities.ro';
 import { namesRo } from '../catalogues/names.ro';
 import { pacRo } from '../catalogues/pac.ro';
 import { printPreviewRo } from '../catalogues/print-preview.ro';
@@ -17,6 +18,7 @@ import { sheetContentRo } from '../catalogues/sheet-content.ro';
 import { sheetTablesRo } from '../catalogues/sheet-tables.ro';
 import { sheetTemplatesRo } from '../catalogues/sheet-templates.ro';
 import { sheetsRo } from '../catalogues/sheets.ro';
+import { sheetsPdfRo } from '../catalogues/sheets-pdf.ro';
 import { standardsPacksRo } from '../catalogues/standards-packs.ro';
 import { styleRulesRo } from '../catalogues/style-rules.ro';
 import { tagFieldsRo } from '../catalogues/tag-fields.ro';
@@ -39,6 +41,7 @@ import { whatChangedRo } from '../catalogues/whatchanged.ro';
 
 /** The catalogues whose file starts with `m` to `z` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const roMZ = {
+  ...measuredQuantitiesRo,
   ...namesRo,
   ...pacRo,
   ...printPreviewRo,
@@ -54,6 +57,7 @@ export const roMZ = {
   ...sheetTablesRo,
   ...sheetTemplatesRo,
   ...sheetsRo,
+  ...sheetsPdfRo,
   ...standardsPacksRo,
   ...styleRulesRo,
   ...tagFieldsRo,
