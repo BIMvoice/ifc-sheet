@@ -49,6 +49,7 @@ import type { ProjectDocument } from '../types';
 import { readPhaseSource } from '../view-graphics-file';
 import { readViewTemplates } from '../view-templates-file';
 import { boqArticlesField } from './boq-articles';
+import { installedStandardField } from './installed-standard';
 import { classificationMappingsField } from './classification-mappings';
 import { commentsField } from './comments';
 import { handoverPatternField } from './handover-pattern';
@@ -125,6 +126,8 @@ const DOCUMENT_FIELD_DEFS = [
   unitsAndNumbersField,
   // The office's classification mappings (#89).
   classificationMappingsField,
+  // The standards pack installed in the project and the values it replaced (#365); absent: none.
+  installedStandardField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];

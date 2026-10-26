@@ -42,11 +42,11 @@ type Step =
   | { group: Group };
 
 /**
- * Project fields a grouped step may also change, held whole (the title block's parameter list and layout, #143): undo puts
+ * Project fields a grouped step may also change, held whole (the title block's parameter list and layout, #143; the fields a standards pack sets, #365): undo puts
  * back the value from before the step only while the field is still the value the step left, the same identity rule the
  * deltas follow, so a step never overwrites what came after it, nor a project opened since.
  */
-const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources'] as const;
+const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard'] as const;
 type StepField = (typeof STEP_FIELDS)[number];
 type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; after: ProjectDocument[K] } }[StepField];
 

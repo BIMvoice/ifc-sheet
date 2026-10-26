@@ -25,6 +25,7 @@ import { sitePlanEn } from '../catalogues/site-plan.en';
 import { sourcesEn } from '../catalogues/sources.en';
 import { spaceEnvelopeEn } from '../catalogues/space-envelope.en';
 import { splitToolEn } from '../catalogues/split-tool.en';
+import { standardsPacksEn } from '../catalogues/standards-packs.en';
 import { stairRailingEn } from '../catalogues/stair-railing.en';
 import { storeyContextEn } from '../catalogues/storey-context.en';
 import { structuralPropertiesEn } from '../catalogues/structural-properties.en';
@@ -85,6 +86,7 @@ export const enSZ = {
   ...sourcesEn,
   ...spaceEnvelopeEn,
   ...splitToolEn,
+  ...standardsPacksEn,
   ...stairRailingEn,
   ...storeyContextEn,
   ...structuralPropertiesEn,
