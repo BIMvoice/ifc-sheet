@@ -11,12 +11,11 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from '@/i18n';
-import { inSetOrder, notDrawingIds, sheetScaleText } from '@/project/drawing-register';
+import { inSetOrder, notDrawingIds } from '@/project/drawing-register';
 import { useProjectStore } from '@/project/project-store';
-import { hasTrueScale } from '@/project/axonometric';
 import { titleBlockOf } from '@/project/title-block';
 import { useEffectiveTitleBlock } from '@/project/title-block-model';
-import { fieldBuiltins } from '@bimvoice/ifcsheet';
+import { fieldBuiltins, sheetScaleLine } from '@bimvoice/ifcsheet';
 import { paramLookup } from '@/project/title-block-params';
 import { currentRevisionOf } from '@/project/revisions';
 import type { ProjectSheet } from '@/project/types';
@@ -26,9 +25,7 @@ export function useSheetScaleText(sheet: ProjectSheet): string {
   const { t } = useTranslation();
   const schedules = useProjectStore((s) => s.schedules);
   const views = useProjectStore((s) => s.views);
-  const unscaled = new Set(notDrawingIds(schedules));
-  for (const v of sheet.viewports ?? []) if (!hasTrueScale(views.find((x) => x.id === v.viewId))) unscaled.add(v.viewId);
-  return sheetScaleText(sheet, unscaled, t('sheets.asIndicated')) || '\u2014';
+  return sheetScaleLine(sheet, views, new Set(notDrawingIds(schedules)), t('sheets.asIndicated'));
 }
 
 export function useSheetParamLookup(sheet: ProjectSheet, projectName: string, issueDate?: string): (name: string) => string | undefined {

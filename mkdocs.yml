@@ -42,6 +42,8 @@ not_in_nav: |
   architecture/ifcsheet-engine.md
   architecture/evidence/**
   research/**
+  # Contributor/agent reference moved out of AGENTS.md (size budget); not a user doc.
+  agents-reference.md
 
 theme:
   name: material

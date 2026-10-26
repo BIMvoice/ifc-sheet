@@ -65,6 +65,11 @@ export function projectionOf(view: ThreeDProjectView): ThreeDProjection {
   return view.projection ?? (view.viewpoint?.projectionMode === 'orthographic' ? 'axonometric' : 'perspective');
 }
 
+/** A view with a scale: every view but a perspective (an axonometric is a parallel projection). */
+export function hasTrueScale(view: ProjectView | undefined): boolean {
+  return !view || view.kind !== '3d' || projectionOf(view) === 'axonometric';
+}
+
 /** A 3D view that prints as vector lines at a scale. */
 export function isVectorAxonometric(view: ProjectView): view is ThreeDProjectView {
   return view.kind === '3d' && projectionOf(view) === 'axonometric' && !view.shaded;
