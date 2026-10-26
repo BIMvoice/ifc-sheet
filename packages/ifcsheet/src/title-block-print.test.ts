@@ -11,9 +11,10 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ProjectDocument, ProjectSheet } from './document.js';
-import { frameRect, titleBlockRect } from './sheet-frame.js';
+import { DEFAULT_FRAME, frameRect, titleBlockRect } from './sheet-frame.js';
 import { sheetGraphic } from './sheet-graphic.js';
 import { printTitleBlock } from './title-block-print.js';
+import { standardTitleBlock } from './title-block-standard.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 
 const sheet = (over: Partial<ProjectSheet> = {}): ProjectSheet => ({ id: 's1', number: 'A-101', name: 'Plan parter', createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [], ...over });
@@ -70,8 +71,42 @@ describe('a project that keeps a title block layout', () => {
   });
 });
 
+describe('the standard layout\'s placements (what the app drew before the engine took it over)', () => {
+  const items = standardTitleBlock().items;
+  const text = (t: string) => items.find((i) => i.kind === 'text' && i.text === t);
+
+  it('is 180 x 50 mm, its cells in rows of 10 mm, the sheet number and scale in the right-hand 50 mm', () => {
+    expect(items[0]).toMatchObject({ kind: 'rect', x: 0, y: 0, w: 180, h: 50, weight: 0.5 });
+    expect(items.filter((i) => i.kind === 'line').map((l) => (l.kind === 'line' ? [l.x1, l.y1, l.x2, l.y2] : []))).toEqual([
+      [0, 10, 130, 10], [0, 20, 130, 20], [0, 30, 130, 30], [0, 40, 130, 40], [65, 0, 65, 20], [65, 30, 65, 50], [130, 0, 130, 50], [130, 14, 180, 14], [130, 34, 180, 34],
+    ]);
+    expect(items.find((i) => i.kind === 'logo')).toMatchObject({ x: 132, y: 1.5, w: 46, h: 11 });
+  });
+
+  it('puts each caption 3.2 mm and each value 8 mm below its row\'s top, 2 mm in from its cell', () => {
+    expect(text('Project')).toMatchObject({ x: 2, y: 3.2, size: 2, muted: true });
+    expect(text('{Project}')).toMatchObject({ x: 2, y: 8, size: 3.5, fit: 61 });
+    expect(text('{Address}')).toMatchObject({ x: 67, y: 8, size: 3.5, fit: 61 });
+    expect(text('{SheetName}')).toMatchObject({ x: 2, y: 28, size: 3.5 });
+    expect(text('{Revision}')).toMatchObject({ x: 67, y: 48, size: 3.5, fit: 61 });
+    expect(text('{SheetNumber}')).toMatchObject({ x: 132, y: 29.5, size: 9, bold: true });
+    expect(text('{Scale}')).toMatchObject({ x: 132, y: 45.5, size: 4.5 });
+  });
+});
+
 describe('a project without a layout', () => {
-  it('prints the plain block it printed before: project, number, name, date', () => {
-    expect(texts(doc())).toEqual(['Locuință ș ț', 'A-101', 'Plan parter', '2026-10-21']);
+  it('prints the app\'s standard layout: captions, then the project, sheet name, date, sheet number and scale', () => {
+    expect(texts(doc())).toEqual([
+      'Project', 'Locuință ș ț', 'Address', 'Client', 'Organisation', 'Title', 'Plan parter', 'Drawn by', 'Checked by', 'Date', '2026-10-21', 'Revision', 'Sheet no.', 'A-101', 'Scale',
+    ]);
+  });
+
+  it('prints it where a layout of the same items would go: the standard layout is the default, not a second drawing', () => {
+    const d = doc();
+    const g = sheetGraphic(d.sheets[0], d, new Map());
+    const box = titleBlockRect(g.paper, d.sheets[0].frame ?? DEFAULT_FRAME);
+    const same = printTitleBlock(standardTitleBlock(), (n) => ({ SheetNumber: 'A-101' })[n] ?? '', box, false);
+    expect(g.frame.slice(1)).toEqual(same.frame);
+    expect(g.texts.map((t) => t.at)).toEqual(expect.arrayContaining(same.texts.filter((t) => ['Project', 'Scale', 'Sheet no.'].includes(t.text)).map((t) => t.at)));
   });
 });

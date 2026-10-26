@@ -84,6 +84,15 @@ export { sheetNumber, sheetLevel, sheetFormat, readUnitsAndNumbers, type SheetLo
 
 // The title block's layout, parameters and printing
 export { printTitleBlock, sheetFields, sheetLookup } from './title-block-print.js';
+export { LOGO_FIELD, LOGO_MAX_BYTES, TITLE_BLOCK_FIELDS, titleBlockOf, type TitleBlockField } from './title-block-fields.js';
+export {
+  DEFAULT_SOURCES, effectiveFields, isPlaceholder, MODEL_ENTITIES, OWNER_PARTS, PRESET_SOURCES, projectTitleFields, readTitleSources, resolveField, resolvedTitleBlock, resolveTitleBlock,
+  sameSource, sourcesOf, sourceText, withSources,
+  type ModelEntity, type ModelFacts as TitleBlockFacts, type OwnerPart, type ResolvedField, type TitleSource, type TitleSources,
+} from './title-block-sources.js';
+export { readStoreFacts, SILENT_FACTS, type FactOverrides } from './title-block-records.js';
+export { cloudRevisionId, currentRevisionOf, REVISION_ID_PARAM, sheetRevisions, type CurrentRevision, type ProjectRevision, type RevisionDraft, type RevisionSource } from './revisions.js';
+export { DEFAULT_SHEET_TYPE, DEFAULT_SHEET_WEIGHTS, DEFAULT_TITLE_BLOCK_METRICS, standardTitleBlock, STANDARD_CAPTIONS_EN, type StandardCaption, type TitleBlockMetrics } from './title-block-standard.js';
 export { BUILTIN_PARAMS, FIELD_PARAMS, fieldBuiltins, paramLookup, resolveParamText, SOFT_BUILTINS, TOKEN, type BuiltinParam, type TitleBlockParam } from './title-block-params.js';
 export { fitText, ITEM_KINDS, TEXT_FIT_MIN, type TemplateItem, type TemplateLine, type TemplateLogo, type TemplateRect, type TemplateText, type TitleBlockTemplate } from './title-block-template.js';
 export { textWidthEm, truncateToWidth } from './text-width.js';

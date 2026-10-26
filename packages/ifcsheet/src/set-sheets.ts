@@ -13,6 +13,8 @@ import type { OpenedModel } from './model.js';
 import { resolveScheme, planHeights, type SchemeResult } from './colour-fills.js';
 import { propertyValueReader } from './colour-scheme-read.js';
 import { sheetGraphic, type SheetGraphic } from './sheet-graphic.js';
+import { readStoreFacts } from './title-block-records.js';
+import { projectTitleFields } from './title-block-sources.js';
 import { generateViewDrawings } from './view-drawings.js';
 import { propertySetsOf } from './joinery-schedule.js';
 import { PEN_TABLE, elementProperties } from './view-style.js';
@@ -63,5 +65,7 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   const globalIdOf = entities ? (id: number) => entities.getGlobalId(id) || undefined : undefined;
   const propertiesOf = model.dataStore ? headlessPropertiesOf(model.dataStore) : undefined;
   const materialOf = model.dataStore ? headlessMaterialOf(model.dataStore) : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, PEN_TABLE, materialOf));
+  // The title block's fields as the app fills them from the model (`title-block-sources.ts`): the phase, the roles, the organisation, the address.
+  const projectFields = model.dataStore ? projectTitleFields(doc.titleBlock, doc.titleBlockSources, readStoreFacts(model.dataStore)) : undefined;
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, PEN_TABLE, materialOf, projectFields));
 }
