@@ -4,6 +4,7 @@
 
 import { manualValidationEn } from '../catalogues/manual-validation.en';
 import { materialsEn } from '../catalogues/materials.en';
+import { pacEn } from '../catalogues/pac.en';
 import { mcpPlaygroundEn } from '../catalogues/mcp-playground.en';
 import { mcpEn } from '../catalogues/mcp.en';
 import { measureEn } from '../catalogues/measure.en';
@@ -70,6 +71,7 @@ export const enMR = {
   ...multiSplitEn,
   ...mutationPermissionEn,
   ...namesEn,
+  ...pacEn,
   ...newProjectEn,
   ...panelNoModelEn,
   ...phasesEn,

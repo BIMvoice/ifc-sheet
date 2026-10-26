@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { namesRo } from '../catalogues/names.ro';
+import { pacRo } from '../catalogues/pac.ro';
 import { printPreviewRo } from '../catalogues/print-preview.ro';
 import { reviewRo } from '../catalogues/review.ro';
 import { revisionsRo } from '../catalogues/revisions.ro';
@@ -38,6 +39,7 @@ import { whatChangedRo } from '../catalogues/whatchanged.ro';
 /** The catalogues whose file starts with `m` to `z` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const roMZ = {
   ...namesRo,
+  ...pacRo,
   ...printPreviewRo,
   ...reviewRo,
   ...revisionsRo,

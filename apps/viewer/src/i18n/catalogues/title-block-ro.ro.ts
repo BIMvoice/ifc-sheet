@@ -16,5 +16,5 @@ export const titleBlockRoRo = {
   'tbro.stampVerifier': TITLE_BLOCK_CAPTIONS_RO['tbro.stampVerifier'],
   'tblayout.useRo': 'Folosește cartușul pentru România',
   'tblayout.roHint': 'Faza, numărul proiectului, rolurile care semnează și câte un chenar gol pentru ștampila proiectantului și a verificatorului. Înlocuiește macheta de acum (anularea o readuce) și rămâne modificabilă.',
-  'wall.tb.phaseHint': 'de ex. DTAC, PTh, DE',
+  'wall.tb.phaseHint': 'de ex. PAC, PTh, DE (DTAC este denumirea veche a PAC)',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

@@ -10,5 +10,5 @@ export const titleBlockRoEn = {
   ...RO_ONLY_CAPTIONS_EN,
   'tblayout.useRo': 'Use the Romanian layout',
   'tblayout.roHint': 'Phase, project number, the roles that sign and an empty box each for the designer\'s and the verifier\'s stamp. It replaces the layout shown now (undo brings it back) and stays editable.',
-  'wall.tb.phaseHint': 'e.g. DTAC, PTh, DE',
+  'wall.tb.phaseHint': 'e.g. PAC, PTh, DE (DTAC is the old name of PAC)',
 } as const satisfies Record<string, TranslationValue>;
