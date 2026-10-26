@@ -35,6 +35,16 @@
     },
     {
       "source": "/mcp",
+      "has": [{ "type": "header", "key": "content-type", "value": "application/json.*" }],
+      "destination": "/api/mcp"
+    },
+    {
+      "source": "/mcp",
+      "has": [{ "type": "header", "key": "accept", "value": ".*text/event-stream.*" }],
+      "destination": "/api/mcp"
+    },
+    {
+      "source": "/mcp",
       "destination": "/index.html"
     },
     {
@@ -46,6 +56,9 @@
       "destination": "/index.html"
     }
   ],
+  "functions": {
+    "api/mcp.ts": { "maxDuration": 60, "memory": 3009 }
+  },
   "headers": [
     {
       "source": "/oauth/(.*)",

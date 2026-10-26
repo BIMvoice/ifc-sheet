@@ -324,6 +324,15 @@ An agent can also read `ifcsheet://project/schema` before it writes a project
 file by hand, and `ifcsheet://session/project` to see the set the tools hold.
 `llms.txt` in this package is the short version of this section for agents.
 
+## Hosted endpoint (opt-in)
+
+The web app can serve the drawing-set tools over Streamable HTTP at `/mcp`. It is OFF unless the deployment sets the environment variable `IFCSHEET_HOSTED_MCP=1`; without it the endpoint answers 404 and nothing else changes.
+
+- POST only, JSON in and JSON out (a single message or a batch). No sessions, no resources, no prompts, no server-initiated stream: every request starts from nothing, and a batch shares one state, so `ifcsheet_open_model` and a tool taking its `model_id` work together only inside one batch.
+- Only the `ifcsheet_*` tools. The server has no file system for you: every file path (`file_path`, `*_path`, `directory`) is refused with PERMISSION_DENIED. Send the model as `ifc_base64`, a template or project as `template_json` or `project_json`, and read results from the response (`ifcsheet_export_pdf` without `file_path` returns `pdf_base64`). `ifcsheet_generate_set` takes `ifc_base64` directly, so one call turns a model into a set.
+- Nothing is saved: edits are returned in the response, never stored.
+- Limits: a model of at most 25 MB (larger is refused with an error result), a request body to match, and 50 seconds per request (stopped with HTTP 504 and a JSON-RPC error). The hosting platform may set a smaller body limit than 25 MB (Vercel: 4.5 MB), which then applies first.
+
 ## Programmatic embedding
 
 ```ts

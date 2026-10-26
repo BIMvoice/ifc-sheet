@@ -17,6 +17,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { describeReadiness, paperLabel, paperOf } from '@bimvoice/ifcsheet';
 import type { ProjectFacts } from '@bimvoice/ifcsheet/project';
+import type { ToolContext } from '../context.js';
 import type { Tool } from './types.js';
 import { okResult } from './util.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
@@ -30,7 +31,7 @@ import { addSheetModel, addSheetSet, getSheetModel, getSheetSet } from './ifcshe
 
 const MODEL_ID = { type: 'string', description: 'The model_id returned by ifcsheet_open_model.' } as const;
 
-async function modelBytes(input: Record<string, unknown>, ctx: Parameters<Tool['handler']>[1]): Promise<{ name: string; bytes: Uint8Array; path?: string }> {
+async function modelBytes(input: Record<string, unknown>, ctx: ToolContext): Promise<{ name: string; bytes: Uint8Array; path?: string }> {
   const { file_path: path, ifc_base64: base64 } = input;
   if ((typeof path === 'string') === (typeof base64 === 'string')) {
     throw new ToolExecutionError({
@@ -39,6 +40,15 @@ async function modelBytes(input: Record<string, unknown>, ctx: Parameters<Tool['
     });
   }
   if (typeof base64 === 'string') {
+    const cap = ctx.config.maxModelBytes;
+    // The decoded size is known from the text before anything is allocated.
+    if (cap !== undefined && Math.floor(base64.length * 3 / 4) > cap) {
+      throw new ToolExecutionError({
+        code: ToolErrorCode.INVALID_INPUT,
+        message: `The model is larger than the ${cap.toLocaleString()} byte limit of this server; it was not opened.`,
+        details: { limit_bytes: cap },
+      });
+    }
     return { name: typeof input.name === 'string' ? input.name : 'model.ifc', bytes: new Uint8Array(Buffer.from(base64, 'base64')) };
   }
   const filePath = await resolveSafePath(path, ctx, 'read');
@@ -50,6 +60,22 @@ async function modelBytes(input: Record<string, unknown>, ctx: Parameters<Tool['
       message: `Cannot read '${filePath}': ${(err as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (err as Error).message}`,
     });
   }
+}
+
+/** Opens the model a call carries (file_path or ifc_base64) and enters it in the session. */
+async function openEntry(input: Record<string, unknown>, ctx: ToolContext) {
+  const { name, bytes, path } = await modelBytes(input, ctx);
+  const { openModel } = await import('@bimvoice/ifcsheet/headless');
+  let model;
+  try {
+    model = await openModel(bytes);
+  } catch (err) {
+    throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `Failed to open '${name}': ${(err as Error).message}` });
+  }
+  if (model.dataStore.entityCount === 0) {
+    throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `'${name}' holds no IFC entities: it is not an IFC STEP file.` });
+  }
+  return addSheetModel(ctx, name, model, { bytes, path });
 }
 
 export const ifcsheetOpenModel: Tool = {
@@ -67,18 +93,8 @@ export const ifcsheetOpenModel: Tool = {
     additionalProperties: false,
   },
   async handler(input, ctx) {
-    const { name, bytes, path } = await modelBytes(input, ctx);
-    const { openModel } = await import('@bimvoice/ifcsheet/headless');
-    let model;
-    try {
-      model = await openModel(bytes);
-    } catch (err) {
-      throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `Failed to open '${name}': ${(err as Error).message}` });
-    }
-    if (model.dataStore.entityCount === 0) {
-      throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `'${name}' holds no IFC entities: it is not an IFC STEP file.` });
-    }
-    const entry = addSheetModel(ctx, name, model, { bytes, path });
+    const entry = await openEntry(input, ctx);
+    const { name, model } = entry;
     const summary = {
       model_id: entry.id,
       name,
@@ -106,14 +122,17 @@ export const ifcsheetGenerateSet: Tool = {
   inputSchema: {
     type: 'object',
     properties: {
-      model_id: MODEL_ID,
+      model_id: { type: 'string', description: 'The model_id returned by ifcsheet_open_model. Give this or ifc_base64.' },
+      ifc_base64: { type: 'string', description: 'The .ifc file\'s bytes, base64: opens the model and lays out its set in this one call (the way to use the hosted endpoint, which keeps nothing between requests). Give this or model_id.' },
       name: { type: 'string', description: 'Project name printed in the title blocks. Default: the model\'s project name.' },
     },
-    required: ['model_id'],
     additionalProperties: false,
   },
   async handler(input, ctx) {
-    const entry = getSheetModel(ctx, input.model_id as string);
+    if ((input.model_id === undefined) === (input.ifc_base64 === undefined)) {
+      throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: 'Give exactly one of model_id (from ifcsheet_open_model) or ifc_base64 (the file\'s bytes, base64).' });
+    }
+    const entry = input.ifc_base64 !== undefined ? await openEntry(input, ctx) : getSheetModel(ctx, input.model_id as string);
     const { generateDefaultSet } = await import('@bimvoice/ifcsheet');
     const set = generateDefaultSet(entry.model, typeof input.name === 'string' ? { name: input.name } : {});
     if (!set) {
