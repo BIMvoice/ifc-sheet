@@ -20,3 +20,5 @@ export { pacPages, pacTemplateFor } from '../cli-pac.js';
 export { PAC_WORDS_EN, PAC_WORDS_RO, pacWordsFor, type PacWordKey } from '../pac-words.js';
 // The starting set (pure: an opened model's facts in, a document out)
 export { SET_SECTIONS, generateDefaultSet, type DefaultSet, type DefaultSetOptions, type SetModel, type SetNote } from '../default-set.js';
+// The Norwegian permit drawings (byggesak, SAK10 § 5-4): the items with their sources and the set that draws them (#372)
+export { NORWAY_DRAWING_SCALE, NORWAY_ITEMS, NORWAY_SITE_SCALE, NORWAY_STEP_UP, norwayCoverage, norwaySetTemplate, type NorwayCoverageRow, type NorwayDrawnBy, type NorwayItem, type NorwaySheetNames, type NorwayState, type NorwayStatus } from '../norway-set.js';

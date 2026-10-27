@@ -24,7 +24,7 @@
  */
 
 import { groundPlan, sheetGroup } from './drawing-set.js';
-import type { ElevationDirection, NumberingScheme, Paper, PlanProjectView, ProjectSheet, ProjectView, SheetFrame } from './document.js';
+import type { ElevationDirection, NumberingScheme, Paper, PaperSize, PlanProjectView, ProjectSheet, ProjectView, SheetFrame } from './document.js';
 import type { ScheduleListKind } from './sub-reports.js';
 import { sameElevation } from './view-defaults.js';
 
@@ -37,6 +37,8 @@ export type ViewRule =
   | { kind: 'plan'; storey: number }
   /** A plan of EVERY storey the model has (`allPlans`), from the lowest up: a slot per storey the model offers, none to count in advance. */
   | { kind: 'allPlans' }
+  /** The project's site plan (a plan with `site`); the set makes one on the ground storey when a template asks for it (`default-set.ts`). */
+  | { kind: 'site' }
   | { kind: 'elevation'; direction: ElevationDirection }
   | { kind: 'section'; place: number };
 
@@ -52,6 +54,12 @@ export interface SheetLayoutRule {
   orientation: 'landscape' | 'portrait';
   frame?: SheetFrame;
   templateId?: string;
+  /**
+   * Larger papers, in the order to try them, for a sheet whose drawings do not fit `paper` at the scale its slots ask
+   * for. The sheet takes the first one the drawings fit at that scale and keeps the scale; only the paper changes. When
+   * none fits, the largest is used and the scale falls back as for any sheet (a `rescaled` note).
+   */
+  stepUp?: PaperSize[];
 }
 
 export interface SheetRule {
@@ -121,6 +129,7 @@ export function findAllByRule(rule: ViewRule, views: readonly ProjectView[]): Pr
 export function findByRule(rule: ViewRule, views: readonly ProjectView[]): ProjectView | null {
   const ruled = ruledViews(views);
   if (rule.kind === 'allPlans') return allPlans(views)[0] ?? null;
+  if (rule.kind === 'site') return views.find((v) => v.kind === 'plan' && v.site && !v.detail) ?? null;
   if (rule.kind === 'plan') {
     const { plans, ground } = planStoreys(views);
     return ground < 0 ? null : plans[ground + rule.storey] ?? null;

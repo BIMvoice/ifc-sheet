@@ -164,6 +164,12 @@ export function setPacIntervention(works: PacIntervention): void {
   if (next !== useProjectStore.getState().pacIntervention) useProjectStore.setState({ pacIntervention: next, dirty: true });
 }
 
+/** Whether the project is a Norwegian building application (byggesak); off is stored as absent, so a project that never chose saves as before. */
+export function setNorwayPermit(on: boolean): void {
+  const next = on ? true as const : undefined;
+  if (next !== useProjectStore.getState().norwayPermit) useProjectStore.setState({ norwayPermit: next, dirty: true });
+}
+
 /**
  * Change the project's units and number format (#88). A field set to undefined goes back to following the language and the
  * drawing's own style; a setting with nothing left is stored as absent, so a project that never needed it saves as before.
