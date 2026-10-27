@@ -18,7 +18,13 @@ import { act } from 'react';
 import { joineryCellText, scheduleOf, typeIdentityOf } from '@bimvoice/ifcsheet';
 import { joineryScheduleData, openModel, readProjectFile } from '@bimvoice/ifcsheet/headless';
 import { defaultWindowSpec } from '@ifc-lite/create';
-import { cleanup, render } from '@/test/render.js';
+import { blur, cleanup, click, render, type as typeInto } from '@/test/render.js';
+import { openSection } from '@/test/open-section.js';
+import { resetSectionChoices } from '@/components/viewer/wall/card-section-state';
+import { JoineryCellCard } from '@/components/viewer/wall/JoineryCellCard';
+import { ScheduleContentCard } from '@/components/viewer/wall/ScheduleContentCard';
+import { pickCell } from '@/joinery/list-cell-pick';
+import { scheduleById } from '@/joinery/schedules';
 import { loadUrbanModel } from '@/test/urban-fixture';
 import { useViewerStore } from '@/store';
 import { loadProjectDocument, projectDocument, resetProject, useProjectStore } from '@/project/project-store';
@@ -87,7 +93,7 @@ function windowSchedule(name = 'Windows'): string {
   return id;
 }
 
-beforeEach(async () => { resetProject(); step = readFileSync(FZK, 'utf8'); useViewerStore.setState({ models: new Map(), mutationViews: new Map(), ifcDataStore: null }); await load(); });
+beforeEach(async () => { resetProject(); resetSectionChoices(); pickCell(null); step = readFileSync(FZK, 'utf8'); useViewerStore.setState({ models: new Map(), mutationViews: new Map(), ifcDataStore: null }); await load(); });
 afterEach(() => cleanup());
 
 describe('a column taken off and a cell typed over, from the sheet (#446)', () => {
@@ -278,5 +284,37 @@ describe('a model update (#446)', () => {
     setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window');
     useViewerStore.setState({ models: new Map(), mutationViews: new Map(), ifcDataStore: null });
     assert.equal(currentFindings().filter((f) => f.kind === 'orphanedJoineryOverride').length, 0);
+  });
+});
+
+describe('the viewport card (#446)', () => {
+  it('types over the picked cell, marks it as typed, and resets it to the model\'s text', async () => {
+    const id = windowSchedule();
+    const view = render(<JoineryCellCard schedule={scheduleById(id)!} />);
+    assert.match(view.textContent ?? '', /Click a cell to type over it/, 'closed, the section says what to do');
+    await act(async () => { pickCell({ scheduleId: id, guid: W2, column: 'fire' }); });
+    // A picked cell opens the section by itself.
+    assert.match(view.textContent ?? '', /Fire rating: W2 Window/);
+    const field = view.querySelector<HTMLInputElement>('[data-joinery-cell-editor] input')!;
+    typeInto(field, 'EI 30');
+    blur(field);
+    assert.deepEqual(useProjectStore.getState().joineryOverrides, [{ type: W2, row: 'fire', value: 'EI 30', about: 'W2 Window' }]);
+    assert.match(view.textContent ?? '', /Typed over the model/);
+    const reset = [...view.querySelectorAll('button')].find((b) => b.textContent === 'Reset to model value')!;
+    click(reset);
+    assert.equal(useProjectStore.getState().joineryOverrides, undefined);
+  });
+
+  it('removes a column with its button and adds it back with the picker the list schedules use', () => {
+    const id = windowSchedule();
+    const view = render(<ScheduleContentCard schedule={scheduleById(id)!} />);
+    openSection(view, 'Content');
+    click(view.querySelector<HTMLButtonElement>('button[aria-label="Remove the column U (W/m²K)"]')!);
+    assert.deepEqual(scheduleById(id)!.content?.rows?.hidden, ['u']);
+    const picker = view.querySelector<HTMLSelectElement>('select')!;
+    assert.deepEqual([...picker.options].slice(1).map((o) => o.textContent), ['U (W/m²K)'], 'only the column that is off is offered');
+    picker.value = picker.options[1].value;
+    picker.dispatchEvent(new window.Event('change', { bubbles: true }));
+    assert.deepEqual(scheduleById(id)!.content?.rows?.hidden ?? [], [], 'the column is back');
   });
 });
