@@ -119,7 +119,7 @@ function existsOrFail(path, what) {
  *
  * "Published" is decided exactly as check-package-readmes.mjs decides it -
  * a non-dotfile directory carrying a readable package.json whose `private`
- * is not `true` - so the set of READMEs that gate REQUIRES to exist is the
+ * is not `true` (or which still carries a publishConfig, as the vendored packages do) - so the set of READMEs that gate REQUIRES to exist is the
  * set this gate TYPECHECKS. check-doc-samples.test.mjs drives both rules
  * over the real packages/ layout and asserts the two sets are equal.
  *
@@ -128,6 +128,17 @@ function existsOrFail(path, what) {
  * whose README stopped being checked. buildPaths() drops it instead, where
  * the name is what is actually needed.
  */
+/**
+ * A package is documented/versioned when it is not private, OR when it is
+ * private but still carries a `publishConfig` (the marker of a package that was
+ * published upstream; the purely internal tools never had one). #423 marks the
+ * vendored packages `private: true` only so they can never be published; their READMEs, doc samples and
+ * changesets still matter. Same rule in check-package-readmes.mjs,
+ * check-doc-samples.mjs and check-changeset-required.mjs (a parity test
+ * drives the first two over the real tree).
+ */
+const isDocumented = (pkg) => pkg.private !== true || pkg.publishConfig != null;
+
 function publishedPackages() {
   const packagesDir = join(ROOT, 'packages');
   const out = [];
@@ -139,7 +150,7 @@ function publishedPackages() {
     const pkgJson = join(packagesDir, dir, 'package.json');
     if (!existsOrFail(pkgJson, 'package manifest')) continue;
     const pkg = JSON.parse(readFileSync(pkgJson, 'utf-8'));
-    if (pkg.private === true) continue;
+    if (!isDocumented(pkg)) continue;
     out.push({ dir, pkg });
   }
   return out;
