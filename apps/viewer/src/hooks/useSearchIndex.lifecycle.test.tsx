@@ -42,7 +42,8 @@ function SwitchingToolbar() {
 }
 
 async function settle() {
-  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  // The build starts a task after the model lands (#154), so wait a task, then for its microtasks.
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); await Promise.resolve(); await Promise.resolve(); });
 }
 
 beforeEach(() => {
@@ -70,6 +71,19 @@ describe('one search-index owner across viewer lifecycle (#3993)', () => {
     const spans = tracer.latest()!.spans.filter(span => span.name === 'search.tier1');
     assert.equal(spans.length, 1);
     assert.notEqual(spans[0].end, null, 'the span ends when the build resolves');
+  });
+
+  it('starts the build a task after the model lands, and finishes it (#154)', async () => {
+    const tracer = createLoadTracer({ enabled: true, sink: null });
+    publishLoadTrace('one', tracer.startLoad('one'));
+    render(<Owner />);
+    for (let i = 0; i < 10; i++) await Promise.resolve(); // every microtask the render queued
+    assert.equal(useViewerStore.getState().searchIndexes.get('one')?.status, 'building', 'claimed at once, so nothing else starts it');
+    assert.equal(tracer.latest()!.spans.filter(span => span.name === 'search.tier1').length, 0, 'the build has not started in the task that rendered the model');
+    assert.deepEqual(completions, []);
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); await Promise.resolve(); await Promise.resolve(); });
+    assert.equal(tracer.latest()!.spans.filter(span => span.name === 'search.tier1').length, 1, 'it started in the next task');
+    assert.deepEqual(completions, ['one'], 'and completed');
   });
 
   it('both mounted search interfaces consume one build and keep immediate Tier-0 results', async () => {
