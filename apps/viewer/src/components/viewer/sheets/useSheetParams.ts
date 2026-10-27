@@ -39,6 +39,8 @@ export interface SheetParamContext {
   drafts: ReturnType<typeof useProjectStore.getState>['drafts'];
   scale: string;
   issueDate?: string;
+  /** The interface language: the title block's dates are written as it writes them (`formatTitleBlockDate`, the engine's one formatter). */
+  language?: string;
 }
 
 export function sheetParamLookup(sheet: ProjectSheet, c: SheetParamContext): (name: string) => string | undefined {
@@ -47,7 +49,7 @@ export function sheetParamLookup(sheet: ProjectSheet, c: SheetParamContext): (na
   if (c.issueDate) fields.date = c.issueDate;
   const page = inSetOrder(c.sheets, c.schedules).findIndex((s) => s.id === sheet.id) + 1;
   return paramLookup(sheet, c.params, {
-    ...fieldBuiltins(fields), // the title block fields, by the engine's one table (`FIELD_PARAMS`), so the PDF names them alike
+    ...fieldBuiltins(fields, c.language), // the title block fields, by the engine's one table (`FIELD_PARAMS`), so the PDF names them alike
     SheetNumber: sheet.number, SheetName: sheet.name, Scale: c.scale, Page: `${page}/${c.sheets.length}`,
     // The revision is never typed: it is the latest the sheet has (`revisions.ts`).
     Revision: currentRevisionOf(sheet, { revisions: c.revisions, drafts: c.drafts })?.code ?? '',
@@ -62,8 +64,9 @@ export function useSheetParamLookup(sheet: ProjectSheet, projectName: string, is
   const revisions = useProjectStore((s) => s.revisions);
   const drafts = useProjectStore((s) => s.drafts);
   const scale = useSheetScaleText(sheet);
+  const { locale } = useTranslation();
   return useMemo(
-    () => sheetParamLookup(sheet, { projectFields, projectName, params, sheets, schedules, revisions, drafts, scale, issueDate }),
-    [sheet, projectFields, projectName, params, sheets, schedules, scale, revisions, drafts, issueDate],
+    () => sheetParamLookup(sheet, { projectFields, projectName, params, sheets, schedules, revisions, drafts, scale, issueDate, language: locale }),
+    [sheet, projectFields, projectName, params, sheets, schedules, scale, revisions, drafts, issueDate, locale],
   );
 }

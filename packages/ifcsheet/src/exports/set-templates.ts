@@ -12,7 +12,7 @@ export {
 } from '../set-template.js';
 export { applySetTemplate, type TemplateSet, type TemplateSetInput } from '../set-template-apply.js';
 export { SET_TEMPLATE_FILE_FORMAT, SET_TEMPLATE_FILE_SUFFIX, SET_TEMPLATE_FILE_VERSION, parseSetTemplate, serializeSetTemplate } from '../set-template-file.js';
-export { SET_TEMPLATE_EN, describeTemplateNote, type TemplateNote, type TemplateNoteKey } from '../set-template-notes.js';
+export { SET_TEMPLATE_EN, SET_TEMPLATE_RO, describeTemplateNote, type TemplateNote, type TemplateNoteKey } from '../set-template-notes.js';
 // The Romanian permit project (PAC, Legea 169/2026 Anexa 2): the items it lists and the set that draws the architecture sheets (#364)
 export { PAC_DEFAULT_INTERVENTION, PAC_DEFAULT_MODE, PAC_INTERVENTIONS, PAC_MODES, PAC_ITEMS, pacApplies, pacCoverage, pacScaleAllowed, pacSetTemplate, type PacCoverageContext, type PacCoverageRow, type PacCoverageSheet, type PacIntervention, type PacItem, type PacKind, type PacMode, type PacSheetNames, type PacState } from '../pac-set.js';
 export { PAC_RURAL_ITEMS, PAC_RURAL_PAPER, PAC_RURAL_SCALE, PAC_RURAL_STEP_UP, pacRuralSetTemplate } from '../pac-rural-set.js';
