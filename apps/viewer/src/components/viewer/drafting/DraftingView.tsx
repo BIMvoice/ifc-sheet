@@ -79,6 +79,7 @@ import { submitTypedLine } from './typed-line';
 import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 
 import { SelectionBar } from './SelectionBar';
+import { ModifyBar } from './ModifyBar';
 
 import { gripsOf } from '@/drafting/grips';
 
@@ -369,6 +370,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}
+        {selected.length > 0 && !state.gripDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
         {bare ? null : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
       <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />

@@ -12,7 +12,8 @@
 
 import type { TranslationKey } from '@/i18n';
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
-import { echoLine, toggleOrtho, toggleSnap, useDraftingSession } from '@/drafting/session';
+import { echoLine, startDraftCommand, toggleOrtho, toggleSnap, useDraftingSession } from '@/drafting/session';
+import { clipboardEmpty } from '@/drafting/clipboard';
 import { WALL_ACTIONS, type WallActionId } from '@/lib/commands/action-registry';
 import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import type { DraftingKeyId } from '@/lib/commands/drafting-key-commands';
@@ -30,6 +31,15 @@ const DRAFTING_RUN = {
   'drafting.snap': () => {
     toggleSnap();
     sayToggle(useDraftingSession.getState().snap, 'wall.keys.autocad.snapOn', 'wall.keys.autocad.snapOff');
+  },
+  'drafting.copy': () => {
+    if (useDraftingSession.getState().selection.size > 0) startDraftCommand('copyclip');
+  },
+  'drafting.paste': () => {
+    if (!clipboardEmpty()) startDraftCommand('paste');
+  },
+  'drafting.duplicate': () => {
+    if (useDraftingSession.getState().selection.size > 0) startDraftCommand('duplicate');
   },
   'drafting.ortho': () => {
     toggleOrtho();

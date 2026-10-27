@@ -7,6 +7,7 @@
 import { draftCommandAllowed } from '@/edition-policy';
 import { DRAW_COMMANDS } from './draw';
 import { MODIFY_COMMANDS } from './modify';
+import { CLIPBOARD_COMMANDS } from './clipboard';
 import { EDIT_COMMANDS } from './edit';
 import { ANNOTATE_COMMANDS } from './annotate';
 import { pTextCommand } from './ptext';
@@ -26,7 +27,7 @@ import { whatChangedCommand } from './whatchanged';
 import { revCloudCommand } from './revcloud';
 import type { DraftCommandDef } from './types';
 
-export const DRAFT_COMMANDS: readonly DraftCommandDef[] = [...DRAW_COMMANDS, ...MODIFY_COMMANDS, ...EDIT_COMMANDS, ...ANNOTATE_COMMANDS, sectionLineCommand, detailCommand, tagCommand, reattachCommand, labelCommand, labelAllCommand, tagAllCommand, ceilTagCommand, dimAllCommand, levelAlignCommand, levelAllCommand, checkSetCommand, draftSetCommand, issueCommand, whatChangedCommand, revCloudCommand, pTextCommand, ...SYMBOL_COMMANDS];
+export const DRAFT_COMMANDS: readonly DraftCommandDef[] = [...DRAW_COMMANDS, ...MODIFY_COMMANDS, ...CLIPBOARD_COMMANDS, ...EDIT_COMMANDS, ...ANNOTATE_COMMANDS, sectionLineCommand, detailCommand, tagCommand, reattachCommand, labelCommand, labelAllCommand, tagAllCommand, ceilTagCommand, dimAllCommand, levelAlignCommand, levelAllCommand, checkSetCommand, draftSetCommand, issueCommand, whatChangedCommand, revCloudCommand, pTextCommand, ...SYMBOL_COMMANDS];
 
 const BY_ID = new Map(DRAFT_COMMANDS.map((c) => [c.id, c]));
 const BY_ALIAS = new Map(DRAFT_COMMANDS.flatMap((c) => c.aliases.map((a) => [a, c] as const)));

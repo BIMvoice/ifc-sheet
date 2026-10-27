@@ -14,6 +14,7 @@
 import { useEffect, useRef } from 'react';
 import { getCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { pressEnter, pressEscape, startDraftCommand, setOrthoHeld, useDraftingSession } from '@/drafting/session';
+import { clipboardEmpty } from '@/drafting/clipboard';
 import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
 import type { DraftingKeyId } from '@/lib/commands/drafting-key-commands';
@@ -78,6 +79,16 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
         return;
       }
       if (e.target === input) return; // the command line handles its own Enter / Escape / typing
+      // Copy, paste and duplicate leave the browser's own keys alone unless there is drawing to act on.
+      const idle = !useDraftingSession.getState().commandId;
+      const hasSelection = useDraftingSession.getState().selection.size > 0;
+      const clip = (id: DraftingKeyId, command: string, applies: boolean) => {
+        if (!idle || !applies || !isKey(id)) return false;
+        e.preventDefault();
+        startDraftCommand(command);
+        return true;
+      };
+      if (clip('drafting.copy', 'copyclip', hasSelection) || clip('drafting.duplicate', 'duplicate', hasSelection) || clip('drafting.paste', 'paste', !clipboardEmpty())) return;
       if (isKey('drafting.cancel')) {
         pressEscape();
         return;
