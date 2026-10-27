@@ -51,12 +51,13 @@ const scaleAt = (v: unknown, path: string): number | undefined => (v === undefin
 function readViewRule(v: unknown, path: string): ViewRule {
   const o = objectAt(v, path);
   if (o.kind === 'plan') return typeof o.storey === 'number' && Number.isInteger(o.storey) ? { kind: 'plan', storey: o.storey } : fail(`${path}/storey`, 'must be a whole number: the storeys above (+) or below (-) the ground storey');
+  if (o.kind === 'allPlans') return { kind: 'allPlans' };
   if (o.kind === 'elevation') {
     const direction = ELEVATION_DIRECTIONS.find((d) => d === o.direction);
     return direction ? { kind: 'elevation', direction } : fail(`${path}/direction`, 'must be north, south, east or west');
   }
   if (o.kind === 'section') return typeof o.place === 'number' && Number.isInteger(o.place) && o.place >= 0 ? { kind: 'section', place: o.place } : fail(`${path}/place`, 'must be a whole number from 0');
-  return fail(`${path}/kind`, 'must be plan, elevation or section');
+  return fail(`${path}/kind`, 'must be plan, allPlans, elevation or section');
 }
 
 function readLayout(v: unknown, path: string): SheetLayoutRule {

@@ -24,7 +24,7 @@ import type { Rect } from './sheet-frame.js';
 import { TITLE_BLOCK_MM } from './sheet-frame.js';
 import { titleBlockOf } from './title-block-fields.js';
 import { fieldBuiltins, paramLookup, resolveParamText } from './title-block-params.js';
-import { fitText, type TitleBlockTemplate } from './title-block-template.js';
+import { fitCell, type TitleBlockTemplate } from './title-block-template.js';
 
 /**
  * What the sheet's title block fields say: the project's (`projectFields`, the typed values over the model's; else the
@@ -59,9 +59,33 @@ export function printTitleBlock(template: TitleBlockTemplate, lookup: (name: str
       // The strip turns the item with the block: its width runs up the paper.
       if (logo) images.push(strip ? { src: logo, box: { x: box.x + item.y, y: box.y + TITLE_BLOCK_MM.w - item.x - item.w, w: item.h, h: item.w }, angle: 90 } : { src: logo, box: { x: box.x + item.x, y: box.y + item.y, w: item.w, h: item.h } });
     } else if (item.kind === 'text') {
-      const { size, text } = fitText(item, resolveParamText(item.text, lookup));
-      if (text) texts.push({ at: at(item.x, item.y), text, size, ...(strip ? { angle: 90 } : {}) });
+      const { size, lines } = fitCell(item, resolveParamText(item.text, lookup));
+      for (const { text, dy } of lines) if (text) texts.push({ at: at(item.x, item.y + dy), text, size, ...(strip ? { angle: 90 } : {}) });
     }
   }
   return { frame, texts, images };
+}
+
+/** A value the layout could not fit to its cell, even wrapped and at the smallest height: the cell's caption and the sheet. */
+export interface TitleBlockMisfit { sheet: string; field: string }
+
+/**
+ * The values of `sheets` that {@link fitCell} had to cut with an ellipsis, so the user is told rather than left with
+ * words that are not there. `sheet` is the label the caller gives each sheet; `field` the cell's caption (its name
+ * when the cell has none), a field once per sheet.
+ */
+export function titleBlockMisfits(template: TitleBlockTemplate, sheets: readonly { sheet: string; lookup: (name: string) => string | undefined }[]): TitleBlockMisfit[] {
+  const out: TitleBlockMisfit[] = [];
+  for (const { sheet, lookup } of sheets) {
+    let caption = '';
+    for (const item of template.items) {
+      if (item.kind !== 'text') continue;
+      const shown = resolveParamText(item.text, lookup);
+      if (item.muted) { caption = shown; continue; }
+      if (item.lines === undefined || fitCell(item, shown).fits) continue;
+      const field = caption || item.text.replace(/[{}]/g, '');
+      if (!out.some((m) => m.sheet === sheet && m.field === field)) out.push({ sheet, field });
+    }
+  }
+  return out;
 }

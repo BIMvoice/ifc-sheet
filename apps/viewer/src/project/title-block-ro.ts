@@ -3,15 +3,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The title block of Romanian practice (cartuș, #54), as a layout in the
+ * The title block of Romanian practice (cartuș, #54, #364), as a layout in the
  * block's 180 x 50 mm (`TITLE_BLOCK_MM`), so it sits in the frame at every
- * paper size and in both positions like the standard one:
- *
- *   - left: proiectant general (with the logo), project, sheet title, site
- *     address, client (beneficiar);
- *   - middle: șef proiect, proiectat, desenat, verificat, then date and revision;
- *   - right: phase and project number, sheet number and scale, and two empty
- *     boxes for the stamps and signatures of the designer and of the verifier.
+ * paper size and in both positions like the standard one. It carries the data
+ * of the informative model F_01 (Ordinul MDLPA 975/2026, Anexa 4): firm with
+ * registration number, titles, numbers, date, scale, phase, beneficiary, the
+ * authors and the project manager with professional title and signature box,
+ * and the verifier / expert with capacity, requirement, report and signature.
  *
  * Captions are in the language of `t` at the time the layout is chosen, as the
  * standard layout's are. The words are the ones `../i18n/ro-glossary.md` keeps.
@@ -22,4 +20,4 @@
  * prints the same one; this module re-exports it.
  */
 
-export { RO_COLUMNS, RO_STAMP_TOP, romanianTitleBlock } from '@bimvoice/ifcsheet';
+export { RO_COLUMNS, RO_ROWS, romanianTitleBlock } from '@bimvoice/ifcsheet';

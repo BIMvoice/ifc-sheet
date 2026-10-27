@@ -35,6 +35,11 @@
       "import": "./dist/byggesaksbim/index.js",
       "default": "./dist/byggesaksbim/index.js"
     },
+    "./pac-words": {
+      "types": "./dist/pac-words.d.ts",
+      "import": "./dist/pac-words.js",
+      "default": "./dist/pac-words.js"
+    },
     "./readiness-read": {
       "types": "./dist/readiness-read.d.ts",
       "import": "./dist/readiness-read.js",

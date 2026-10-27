@@ -56,6 +56,7 @@ import { commentsField } from './comments';
 import { handoverPatternField } from './handover-pattern';
 import { includeFarElementsField } from './include-far-elements';
 import { revisionsField } from './revisions';
+import { pacInterventionField } from './pac-intervention';
 import { siteAreaField } from './site-area';
 import { unitsAndNumbersField } from './units-and-numbers';
 import { urbanSettingsField } from './urban-settings';
@@ -131,6 +132,8 @@ const DOCUMENT_FIELD_DEFS = [
   installedStandardField,
   // The project opts in to the ByggesaksBIM (Norway) readiness check (#372); absent: off.
   byggesaksbimField,
+  // The works the permit project is for (#364); absent: a new building.
+  pacInterventionField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];

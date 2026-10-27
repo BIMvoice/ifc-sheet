@@ -60,7 +60,7 @@ export { QuantityExtractor } from './quantity-extractor.js';
 export { RelationshipExtractor } from './relationship-extractor.js';
 export { SpatialHierarchyBuilder } from './spatial-hierarchy-builder.js';
 export {
-  SI_PREFIX_MULTIPLIERS, extractLengthUnitScale,
+  SI_PREFIX_MULTIPLIERS, extractLengthUnitScale, declareLengthUnitScale,
   resolveEntityLengthUnitScale,
   resolveOwningIfcProjectId,
 } from './unit-extractor.js';
@@ -86,7 +86,7 @@ export { createSyntheticDataStore, type SyntheticDataStoreOptions, type Syntheti
 
 // IFC5 (IFCX) support - re-export from @ifc-lite/ifcx
 export {
-  parseIfcx,
+  parseIfcx, IFCX_LENGTH_UNIT_SCALE,
   parseFederatedIfcx,
   addIfcxOverlay,
   detectFormat,
