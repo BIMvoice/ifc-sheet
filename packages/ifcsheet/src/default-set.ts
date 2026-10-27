@@ -55,6 +55,8 @@ export interface DefaultSetOptions {
   scheme?: NumberingScheme;
   /** A set template (#21): the sheets are made by its rules (`applySetTemplate`) instead of the automatic grouping; the views are the same. */
   setTemplate?: SetTemplate;
+  /** The language the notes printed on the sheets are written in (`applySetTemplate`); default English. */
+  locale?: string;
 }
 
 /** Something the person should know about the set, as a catalogue key and its parameters. */
@@ -184,7 +186,7 @@ export function generateDefaultSet(model: SetModel, options: DefaultSetOptions =
   planner.sections(model);
   const chosen = options.setTemplate?.numbering ?? options.scheme;
   const scheme = chosen ?? DEFAULT_SCHEME;
-  const ruled = options.setTemplate ? applySetTemplate(options.setTemplate, { views: planner.views, extent: model.extent, now, scheme }) : null;
+  const ruled = options.setTemplate ? applySetTemplate(options.setTemplate, { views: planner.views, extent: model.extent, now, scheme, ...(options.locale ? { locale: options.locale } : {}) }) : null;
   const sheets = ruled ? ruled.sheets : buildDrawingSet({ views: planner.views, extent: model.extent, now, templates, scheme });
   // The schedules a template carries are added by the app; the engine says so rather than leave them out silently.
   const schedules = (options.setTemplate?.schedules ?? []).map((r): TemplateNote => ({ key: 'setTemplate.note.schedule', params: { kind: r.kind, name: r.name } }));
