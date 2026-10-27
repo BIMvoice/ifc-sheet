@@ -8,7 +8,7 @@
  * dropped, never fatal, and a duplicate id is dropped as the editor would have refused it.
  */
 
-import { ITEM_KINDS, MAX_TEXT, type TemplateItem, type TitleBlockTemplate } from './title-block-template.js';
+import { ITEM_KINDS, MAX_CELL_LINES, MAX_TEXT, type TemplateItem, type TitleBlockTemplate } from './title-block-template.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -40,7 +40,8 @@ function readItem(v: unknown): TemplateItem | null {
       const [x, y, size] = [num('x'), num('y'), pos('size')];
       if (x === null || y === null || size === null || !isString(v.text)) return null;
       const fit = pos('fit');
-      return { id, kind: 'text', x, y, size, text: v.text.slice(0, MAX_TEXT), ...(v.bold === true ? { bold: true } : {}), ...(v.muted === true ? { muted: true } : {}), ...(fit !== null ? { fit } : {}) };
+      const [lines, top] = [pos('lines'), num('top')];
+      return { id, kind: 'text', x, y, size, text: v.text.slice(0, MAX_TEXT), ...(v.bold === true ? { bold: true } : {}), ...(v.muted === true ? { muted: true } : {}), ...(fit !== null ? { fit } : {}), ...(lines !== null && top !== null ? { lines: Math.min(Math.floor(lines), MAX_CELL_LINES), top } : {}) };
     }
   }
 }

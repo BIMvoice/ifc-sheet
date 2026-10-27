@@ -14,7 +14,9 @@ import type { ProjectSheet } from './document.js';
  * The text fields that are typed, in the order the title block prints them. The revision is
  * not one: a sheet's title block reads its latest revision (`currentRevisionOf`).
  */
-export const TITLE_BLOCK_FIELDS = ['project', 'address', 'client', 'organisation', 'phase', 'projectNumber', 'projectManager', 'designer', 'drawnBy', 'checkedBy', 'date'] as const;
+export const TITLE_BLOCK_FIELDS = ['project', 'address', 'client', 'organisation', 'phase', 'projectNumber', 'projectManager', 'designer', 'drawnBy', 'checkedBy', 'date',
+  // F_01 (Ordinul MDLPA 975/2026, Anexa 4): the data the cartuș adds to the original fields.
+  'registrationNumber', 'projectManagerTitle', 'designerTitle', 'drawnByTitle', 'authorsCapacity', 'verifierCapacity', 'verifierRequirement', 'reportNumber', 'reportDate'] as const;
 export type TitleBlockField = (typeof TITLE_BLOCK_FIELDS)[number];
 
 /** The logo: an image data URL, project-wide only. */

@@ -1,11 +1,11 @@
 ifcsheet: drawing sets from IFC models
 
 Usage:
-  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]
+  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
   ifcsheet materials <model.ifc> [--project <file>] [--json]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
-  ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]
+  ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>] [--project <file>]
   ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]
   ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]
 
@@ -16,8 +16,10 @@ Commands:
           With --template, the sheets are made by the rules of a set template (a .bvset file
           saved from a project) instead: the same plan-per-storey, elevation and section
           rules the app applies, a rule the model cannot meet skipped and said.
-          The sheets and views are named in the language the project records, else --locale
-          (ro or en), else English.
+          With --pac, the sheets are the permit project's (PAC, Legea 169/2026 Anexa 2: plans, facades, sections) and the
+          one PDF opens with the opis page: the contents Anexa 2 lists, each with its point and whether the file holds it.
+          The sheets and views (and with --pac the opis) are in the language the project records, else --locale
+          (ro or en), else English (Romanian with --pac).
   check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain English, or JSON with --json. With --project, also what the
@@ -38,7 +40,8 @@ Commands:
   rooms   The room and area schedule: every room (IfcSpace) by level with its number, name and
           area, a total per level and for the building (the urban indicators' Au). An area is the
           model's NetFloorArea (else GrossFloorArea), else the footprint of the room's geometry;
-          the last lines say which. Text, or CSV with --csv, or JSON with --json.
+          the last lines say which. Text, or CSV with --csv, or JSON with --json. With --project the text writes
+          figures in the project's "Units and numbers" format (comma, decimals).
 
 Options:
   --out <file>     The PDF to write (required for build unless --handover is given).
@@ -48,11 +51,14 @@ Options:
   --pattern <p>    How --handover names its files, with {project} {number} {sheet} {revision} {date} {issue}
                    (default "{number} {sheet}": A-101 Ground floor.dxf). Plain ASCII, no path separators.
   --template <file> A set template (.bvset) for build: which sheets, which views on them, at which scale.
+  --pac            Build the submission PDF of the permit project (PAC): the opis page, then the PAC sheets. Not with --template.
+  --intervention <w> With --pac: the works, new (default), existing (an intervention on an existing building: Anexa 2 point 1.4.4 applies) or
+                   interior (interior only: the items 1.4.4 lifts show "Nu este cazul").
   --standard <id>  A drawing standard for build: its pens and title block (known: ro, the Romanian pack of the app's "Install standard").
                    Wins over the project's own graphic standard and title block layout; without it a --project's are used.
   --name <name>    The project name for the title blocks (default: the model's).
   --project <file> A saved project (.ifclite-project.json): for check, its schedules, joinery catalogue and symbol mapping; for build, its list
-                   schedules are printed after the build (the PDF has no schedule sheet; the app draws those).
+                   schedules are printed after the build (the PDF has no schedule sheet; the app draws those); for rooms, its number format.
   --schedule <id>  The list schedule that list runs: its id or name.
   --include-far-elements  Frame the views on everything the storeys contain, small elements far from the building too
                    (a survey point, an origin cube). By default they are left out of the framing only and named by check.

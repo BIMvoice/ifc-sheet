@@ -6,7 +6,7 @@
  * The command registry (#144) changed how `run` finds its commands, not what
  * the command line does. Two fixtures were captured from `main` before the
  * move: the help text of its seven commands (with `--standard`, as #376 wrote it), and the exit code and both
- * streams of 61 command lines that need no IFC file (#376 added five lines with `--standard`).
+ * streams of 61 command lines that need no IFC file (#376 added five lines with `--standard`; `rooms --project` changed one line and added two, #388).
  * The help text inside them is a placeholder, so adding a command never edits
  * the fixtures.
  */
@@ -26,11 +26,14 @@ const ARGV_CASES: readonly (readonly string[])[] = [
   ['materials'], ['materials', 'm.ifc'], ['materials', 'm.ifc', '--out', 'a.pdf'], ['materials', 'm.ifc', '--csv'], ['materials', 'a.ifc', 'b.ifc'], ['materials', 'm.ifc', '--json', '--project', 'p.json'],
   ['boq'], ['boq', 'm.ifc'], ['boq', 'm.ifc', '--project', 'p.json'], ['boq', 'm.ifc', '--project', 'p.json', '--csv', '--json'], ['boq', 'm.ifc', '--project', 'p.json', '--out', 'a.pdf'], ['boq', 'm.ifc', '--project', 'p.json', '--schedule', 's'],
   ['boq', 'm.ifc', '--project', 'p.json', '--detail', '--locale', 'ro'], ['boq', 'm.ifc', '--project', 'p.json', '--system', 'x'], ['boq', 'm.ifc', '--project', 'p.json', '--handover', 'h.zip'],
-  ['rooms'], ['rooms', 'm.ifc'], ['rooms', 'm.ifc', '--project', 'p.json'], ['rooms', 'm.ifc', '--csv', '--json'], ['rooms', 'm.ifc', '--detail'], ['rooms', 'm.ifc', '--system', 'x'], ['rooms', 'm.ifc', '--locale', 'ro', '--csv'], ['rooms', 'a.ifc', 'b.ifc'],
+  ['rooms'], ['rooms', 'm.ifc'], ['rooms', 'm.ifc', '--project', 'p.json'], ['rooms', 'm.ifc', '--project', 'p.json', '--csv', '--json'], ['rooms', '--project', 'p.json'], ['rooms', 'm.ifc', '--csv', '--json'], ['rooms', 'm.ifc', '--detail'], ['rooms', 'm.ifc', '--system', 'x'], ['rooms', 'm.ifc', '--locale', 'ro', '--csv'], ['rooms', 'a.ifc', 'b.ifc'],
   ['list'], ['list', 'm.ifc'], ['list', 'm.ifc', '--project', 'p.json'], ['list', 'm.ifc', '--project', 'p.json', '--schedule', 's', '--csv'], ['list', 'm.ifc', '--project', 'p.json', '--csv', '--json'], ['list', 'm.ifc', '--project', 'p.json', '--detail'], ['list', 'm.ifc', '--project', 'p.json', '--system', 'x'],
   ['classify'], ['classify', 'm.ifc'], ['classify', 'm.ifc', '--project', 'p.json'], ['classify', 'm.ifc', '--project', 'p.json', '--system', 'x', '--csv'], ['classify', 'm.ifc', '--project', 'p.json', '--locale', 'ro'], ['classify', 'm.ifc', '--project', 'p.json', '--schedule', 's'], ['classify', 'm.ifc', '--project', 'p.json', '--csv', '--json'],
   // Added with #376 (`build --standard`); the 61 lines above are unchanged from main before it.
   ['build', '--standard', 'ro'], ['build', 'm.ifc', '--out', 'a.pdf', '--standard', 'ro'], ['check', 'm.ifc', '--standard', 'ro'], ['list', 'm.ifc', '--standard', 'ro'], ['frobnicate', 'm.ifc', '--standard', 'ro'],
+  // Added with #364 (`build --pac`, `--intervention`); the 66 lines above are unchanged.
+  ['build', '--pac'], ['build', 'm.ifc', '--pac', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac', '--locale', 'ro', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac', '--template', 't.bvset', '--out', 'a.pdf'], ['build', 'm.ifc', '--out', 'a.pdf', '--intervention', 'new'],
+  ['build', 'm.ifc', '--pac', '--intervention', 'bogus', '--out', 'a.pdf'], ['build', 'm.ifc', '--pac', '--intervention', 'interior', '--out', 'a.pdf'], ['check', 'm.ifc', '--pac'], ['frobnicate', 'm.ifc', '--pac'],
 ];
 
 const fixture = (name: string) => readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url), 'utf8');

@@ -15,10 +15,9 @@
  * per element), and only when the project has CAD layer rules.
  */
 
-import { liveEntityConforms, readRelatedLists } from '@ifc-lite/create';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { useViewerStore } from '@/store';
-import { layerSetBehind, readLayerSet, type LiveModel } from '@/lib/commands/modeling/authored-kinds';
+import { layerSetBehind, liveConforms, liveRelatedLists, readLayerSet, type LiveModel } from '@/lib/commands/modeling/authored-kinds';
 import type { CadPenContext } from '@/components/viewer/sheets/viewport-pens';
 import { modelOf } from './material-resolver';
 import { ifcMaterialName } from './materials';
@@ -33,7 +32,7 @@ function tablesOf(model: LiveModel): Tables {
   const hit = cache.get(model.dataStore);
   if (hit && hit.version === version) return hit;
   const byRelated = (rel: 'IfcRelAssociatesMaterial' | 'IfcRelDefinesByType') => new Map(
-    readRelatedLists(model.dataStore, rel, model.view).flatMap((r) => (r.relatingId === undefined ? [] : r.relatedIds.map((id) => [id, r.relatingId as number] as const))),
+    liveRelatedLists(model, rel).flatMap((r) => (r.relatingId === undefined ? [] : r.relatedIds.map((id) => [id, r.relatingId as number] as const))),
   );
   const fresh: Tables = { version, assoc: byRelated('IfcRelAssociatesMaterial'), byType: byRelated('IfcRelDefinesByType'), names: new Map() };
   cache.set(model.dataStore, fresh);
@@ -45,7 +44,7 @@ function elementMaterial(model: LiveModel, expressId: number): string | null {
   const typeId = t.byType.get(expressId);
   const relating = t.assoc.get(expressId) ?? (typeId === undefined ? undefined : t.assoc.get(typeId));
   if (relating === undefined) return null;
-  if (liveEntityConforms(model.dataStore, relating, 'IfcMaterial', model.view)) return ifcMaterialName(model.dataStore, model.view, relating);
+  if (liveConforms(model, relating, 'IfcMaterial')) return ifcMaterialName(model.dataStore, model.view, relating);
   const setId = layerSetBehind(model, relating);
   const layers = setId === null ? null : readLayerSet(model, setId);
   const main = layers?.filter((l) => l.materialId !== null).reduce<{ materialId: number | null; thickness: number } | null>((best, l) => (!best || l.thickness > best.thickness ? l : best), null);

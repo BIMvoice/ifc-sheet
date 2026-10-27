@@ -56,6 +56,7 @@ import { handoverPatternField } from './handover-pattern';
 import { includeFarElementsField } from './include-far-elements';
 import { languageField } from './language';
 import { revisionsField } from './revisions';
+import { pacInterventionField } from './pac-intervention';
 import { siteAreaField } from './site-area';
 import { unitsAndNumbersField } from './units-and-numbers';
 import { urbanSettingsField } from './urban-settings';
@@ -131,6 +132,8 @@ const DOCUMENT_FIELD_DEFS = [
   installedStandardField,
   // The language the generated names were made in (set when the starting set is made); absent: not recorded.
   languageField,
+  // The works the permit project is for (#364); absent: a new building.
+  pacInterventionField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];

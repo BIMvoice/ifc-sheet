@@ -422,6 +422,29 @@
    "--project",
    "p.json"
   ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read p.json: no such file\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--csv",
+   "--json"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "--project",
+   "p.json"
+  ],
   "code": 2,
   "stdout": "",
   "stderr": "ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n"
@@ -692,6 +715,116 @@
    "m.ifc",
    "--standard",
    "ro"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet: unknown command \"frobnicate\"\n\n<USAGE>"
+ },
+ {
+  "argv": [
+   "build",
+   "--pac"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build needs one model and --out or --handover: ifcsheet build <model.ifc> --out <set.pdf>\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--locale",
+   "ro",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--template",
+   "t.bvset",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build --pac sets the sheets itself; it cannot be combined with --template.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--out",
+   "a.pdf",
+   "--intervention",
+   "new"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build has --intervention only with --pac.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--intervention",
+   "bogus",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build --intervention is one of new, existing, interior.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--intervention",
+   "interior",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc",
+   "--pac"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet check has no --pac; it is an option of build.\n"
+ },
+ {
+  "argv": [
+   "frobnicate",
+   "m.ifc",
+   "--pac"
   ],
   "code": 2,
   "stdout": "",
