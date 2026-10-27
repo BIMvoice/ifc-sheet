@@ -23,6 +23,7 @@ import { extractPropertiesOnDemand, getAttributeNamesForSchema, type IfcDataStor
 import { filterPropertyNames, predefinedTypeText, propertyValueText, type PropertyFact } from './schedule-filter.js';
 import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
 import type { ModelRow } from './joinery-model-rows.js';
+import { customValueOf } from './joinery-custom-props.js';
 import { createHeadlessListProvider } from './list-provider.js';
 import { readModelRowCells } from './joinery-model-values.js';
 import type { ListDataProvider } from '@ifc-lite/lists';
@@ -369,6 +370,11 @@ function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind
         if (Object.keys(v.numbers).length > 0) o.modelNumbers = v.numbers;
       }
     }
+  }
+  // A property typed in for a type (#448) is the value of every element of the type, for a model row chosen from `CUSTOM_PSET`.
+  for (const e of byKey.values()) for (const row of modelRows) {
+    const typed = customValueOf(e.spec, row);
+    if (typed !== undefined) for (const o of e.occurrences) (o.modelValues ??= {})[row.id] = typed;
   }
   // Catalogue types not placed yet still belong in the schedule (with no count).
   for (const spec of fromCatalogue.values()) {

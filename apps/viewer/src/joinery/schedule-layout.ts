@@ -23,7 +23,7 @@ import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { PAD, pageTitle, isOverridableRow, joineryCellText, levelRowId, modelRowLabel, modelRowNumber, modelRowText, overrideNumbers, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride, type TypeFacts, type ScheduleCell, type ScheduleLayout, type SchedulePrim } from '@bimvoice/ifcsheet';
+import { PAD, fireOf, thermalOf, pageTitle, isOverridableRow, joineryCellText, levelRowId, modelRowLabel, modelRowNumber, modelRowText, overrideNumbers, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride, type TypeFacts, type ScheduleCell, type ScheduleLayout, type SchedulePrim } from '@bimvoice/ifcsheet';
 import { typeEntryId } from '@bimvoice/ifcsheet/project';
 
 // What every schedule draws is the engine's (`schedule-prim.ts`), so the command line prints a placed schedule with the same primitives.
@@ -129,10 +129,10 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
     levels: () => data.levels.map((level) => ({ id: levelRowId(level), label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? ''), raw: (e: ScheduleEntry) => [e.counts[level] ?? null], num: true, sum: true })),
     total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true, raw: (e) => [e.total], num: true, sum: true }],
     u: () => [{
-      label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? sheetNumber(labels.locale, e.spec.props.thermalTransmittance, 3, { trim: true, group: false }) : '—'),
-      raw: (e) => [e.spec?.props.thermalTransmittance ?? null], num: true,
+      label: labels.uValue, value: (e) => { const u = thermalOf(e.spec); return u !== undefined ? sheetNumber(labels.locale, u, 3, { trim: true, group: false }) : '—'; },
+      raw: (e) => [thermalOf(e.spec) ?? null], num: true,
     }],
-    fire: () => [{ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—', raw: (e) => [e.spec?.props.fireRating ?? null] }],
+    fire: () => [{ label: labels.fire, value: (e) => fireOf(e.spec) ?? '—', raw: (e) => [fireOf(e.spec) ?? null] }],
   };
   // The properties and quantities the schedule lists (#446): a type's cell holds the value its elements share, else the word for "varies".
   for (const row of data.content?.properties ?? []) {

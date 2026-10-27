@@ -17,9 +17,10 @@
 
 import {
   defaultDoorSpec, defaultWindowSpec,
-  type JoineryKind, type JoinerySpec, type PanelOperation,
+  type JoineryCustomProp, type JoineryHead, type JoineryKind, type JoinerySpec, type PanelOperation,
 } from '@ifc-lite/create';
-import type { JoineryMapping } from './joinery-mapping.js';
+import { cleanCustomProps } from './joinery-custom-props.js';
+import { TYPE_ENTRY_PREFIX, type JoineryMapping } from './joinery-mapping.js';
 
 export const MAX_LEAVES = 3;
 
@@ -85,7 +86,7 @@ export function openingOfSpec(spec: JoinerySpec): TypeOpening | null {
 }
 
 /** The id of the entry configured for a type: the type's GlobalId, so configuring it again edits the same entry. */
-export const typeEntryId = (typeGlobalId: string): string => `type-${typeGlobalId}`;
+export const typeEntryId = (typeGlobalId: string): string => `${TYPE_ENTRY_PREFIX}${typeGlobalId}`;
 
 export interface ConfigureTypeInput {
   typeGlobalId: string;
@@ -95,6 +96,17 @@ export interface ConfigureTypeInput {
   /** The IFC's overall size, metres. */
   size: { width: number; height: number };
   opening: TypeOpening;
+  /** The head's shape. Absent: the type keeps the one it has (square for a type configured now). */
+  head?: JoineryHead;
+  /** The properties typed in for the type. Absent: the type keeps its own; an empty list removes them. */
+  custom?: readonly JoineryCustomProp[];
+}
+
+/** `head` made valid: square is no head (undefined); a rise only where the shape takes one, and a positive one. */
+export function cleanHead(head: JoineryHead | undefined): JoineryHead | undefined {
+  if (!head || head.shape === 'square') return undefined;
+  if (head.shape === 'round') return { shape: 'round' };
+  return head.rise !== undefined && Number.isFinite(head.rise) && head.rise > 0 ? { shape: head.shape, rise: head.rise } : { shape: head.shape };
 }
 
 export interface ProjectJoinery {
@@ -119,9 +131,14 @@ export function configureTypeOpening(project: ProjectJoinery, input: ConfigureTy
   const at = list.findIndex((e) => e.id === id && e.kind === input.kind);
   const previous = at >= 0 ? list[at] : null;
   const fresh = specFromOpening(input.kind, input.size, input.opening, { id, name: input.name || (input.kind === 'door' ? 'Door' : 'Window'), mark: previous?.mark ?? nextMark(input.kind, list) });
-  const entry: JoinerySpec = previous
+  const base: JoinerySpec = previous
     ? { ...previous, width: fresh.width, height: fresh.height, columns: fresh.columns, rows: fresh.rows, panels: fresh.panels }
     : fresh;
+  // Head and custom properties: what the input says, else what the entry had; none is no field at all.
+  const head = input.head !== undefined ? cleanHead(input.head) : base.head;
+  const custom = input.custom ? cleanCustomProps(input.custom) : base.custom;
+  const { head: _h, custom: _c, ...rest } = base;
+  const entry: JoinerySpec = { ...rest, ...(head ? { head } : {}), ...(custom?.length ? { custom } : {}) };
   if (at >= 0) list[at] = entry;
   else list.push(entry);
   return {

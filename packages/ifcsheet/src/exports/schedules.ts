@@ -51,7 +51,10 @@ export {
 } from '../schedule-content.js';
 export { doorOperationOf, doorSwingFlips, parseDoorOperation, type DoorOperation, type Dir2 } from '../door-operation.js';
 export {
-  DEFAULT_JOINERY_MAPPING, fitToElement, normaliseName, readJoineryMapping, resolveMapping,
+  CUSTOM_KEYS, MAX_CUSTOM_PROPS, cleanCustomProps, CUSTOM_PSET, customPropNames, customValueOf, fireOf, readCustomProps, thermalOf,
+} from '../joinery-custom-props.js';
+export {
+  DEFAULT_JOINERY_MAPPING, TYPE_ENTRY_PREFIX, fitToElement, normaliseName, readJoineryMapping, resolveMapping,
   type ElementFacts, type JoineryMapping, type MappingMatch, type MappingSource,
 } from '../joinery-mapping.js';
 export {
