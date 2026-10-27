@@ -5,6 +5,7 @@
 import { measuredQuantitiesRo } from '../catalogues/measured-quantities.ro';
 import { namesRo } from '../catalogues/names.ro';
 import { norwayRo } from '../catalogues/norway.ro';
+import { onboardingRo } from '../catalogues/onboarding.ro';
 import { pacRo } from '../catalogues/pac.ro';
 import { printPreviewRo } from '../catalogues/print-preview.ro';
 import { reviewRo } from '../catalogues/review.ro';
@@ -45,6 +46,7 @@ export const roMZ = {
   ...measuredQuantitiesRo,
   ...namesRo,
   ...norwayRo,
+  ...onboardingRo,
   ...pacRo,
   ...printPreviewRo,
   ...reviewRo,
