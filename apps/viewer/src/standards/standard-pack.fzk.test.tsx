@@ -20,10 +20,13 @@ import { parseCatalogue } from '@/catalogue/catalogue-file';
 import { FZK_HAUS, loadPlanModel, planModelMissing } from '@/test/discipline-plan-fixture';
 import { startDrawingSet } from '@/project/drawing-set-actions';
 import { modelLevels } from '@/project/model-levels';
-import { serializeProject } from '@/project/project-file';
+import { openProjectDocument, parseProjectFile, serializeProject } from '@/project/project-file';
 import { projectDocument, resetProject, setUnitsAndNumbers, syncProjectWithModels, useProjectStore } from '@/project/project-store';
 import { romanianTitleBlock } from '@/project/title-block-ro';
+import { resolve } from '@/i18n/registry';
 import { useViewerStore } from '@/store';
+import { cleanup, render } from '@/test/render.js';
+import { standardsSection } from '@/components/viewer/wall/drawer-sections/standards';
 import { romaniaPack } from './standard-pack';
 import { parseStandardPack, serializeStandardPack } from './standard-pack-file';
 import { installStandard, isApplied, resetStandard } from './standard-pack-install';
@@ -179,5 +182,26 @@ describe('the Romanian standards pack on AC20-FZK-Haus (#365)', { skip: planMode
     const doc = JSON.parse(serializeProject(projectDocument())) as { installedStandard?: unknown; graphicStandard?: string };
     assert.deepEqual(doc.installedStandard, state().installedStandard);
     assert.equal(doc.graphicStandard, 'ro-practice');
+  });
+
+  // #404: the file writes a part's keys in another order than the pack lists them (`"bold":true,"fit":36` for `"fit":36,"bold":true`),
+  // and `isApplied` compared the parts as JSON text, so a reopened project read "installed" in the line and offered "Install" in the button.
+  it('a project reopened from its file is still as the pack leaves it: the button reads Installed, not Install (#404)', () => {
+    // The pack the drawer offers: its captions are the app's own words, as the card builds it.
+    const offered = romaniaPack(resolve as never);
+    installStandard(offered);
+    const before = state().titleBlockTemplate;
+    const text = serializeProject(projectDocument());
+    // The cause, as the issue found it: the reader writes the title block's keys in another order than the pack lists them.
+    assert.notEqual(JSON.stringify(parseProjectFile(text).titleBlockTemplate), JSON.stringify(before), 'the reopened title block has its keys in another order');
+    resetProject();
+    assert.equal(isApplied(offered), false);
+    openProjectDocument(parseProjectFile(text));
+    assert.equal(isApplied(offered), true);
+    const Section = standardsSection.component;
+    const buttons = [...render(<Section go={() => {}} onClose={() => {}} extent={null} />).querySelectorAll('button')].map((b) => ({ text: b.textContent, disabled: b.disabled }));
+    cleanup();
+    assert.deepEqual(buttons.filter((b) => b.text === 'Installed'), [{ text: 'Installed', disabled: true }], JSON.stringify(buttons));
+    assert.equal(buttons.some((b) => /Install standard/i.test(b.text ?? '')), false, JSON.stringify(buttons));
   });
 });
