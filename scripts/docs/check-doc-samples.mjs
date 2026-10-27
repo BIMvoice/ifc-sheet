@@ -128,17 +128,6 @@ function existsOrFail(path, what) {
  * whose README stopped being checked. buildPaths() drops it instead, where
  * the name is what is actually needed.
  */
-/**
- * A package is documented/versioned when it is not private, OR when it is
- * private but still carries a `publishConfig` (the marker of a package that was
- * published upstream; the purely internal tools never had one). #423 marks the
- * vendored packages `private: true` only so they can never be published; their READMEs, doc samples and
- * changesets still matter. Same rule in check-package-readmes.mjs,
- * check-doc-samples.mjs and check-changeset-required.mjs (a parity test
- * drives the first two over the real tree).
- */
-const isDocumented = (pkg) => pkg.private !== true || pkg.publishConfig != null;
-
 function publishedPackages() {
   const packagesDir = join(ROOT, 'packages');
   const out = [];
@@ -150,7 +139,7 @@ function publishedPackages() {
     const pkgJson = join(packagesDir, dir, 'package.json');
     if (!existsOrFail(pkgJson, 'package manifest')) continue;
     const pkg = JSON.parse(readFileSync(pkgJson, 'utf-8'));
-    if (!isDocumented(pkg)) continue;
+    if (pkg.private === true && pkg.publishConfig == null) continue; // the rule check-package-readmes and check-changeset-required share
     out.push({ dir, pkg });
   }
   return out;
