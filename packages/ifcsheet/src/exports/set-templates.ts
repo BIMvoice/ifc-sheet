@@ -23,3 +23,5 @@ export { PAC_WORDS_EN, PAC_WORDS_RO, pacWordsFor, type PacWordKey } from '../pac
 export { SET_SECTIONS, generateDefaultSet, type DefaultSet, type DefaultSetOptions, type SetModel, type SetNote } from '../default-set.js';
 // The Norwegian permit drawings (byggesak, SAK10 § 5-4): the items with their sources and the set that draws them (#372)
 export { NORWAY_DRAWING_SCALE, NORWAY_ITEMS, NORWAY_SITE_SCALE, NORWAY_STEP_UP, norwayCoverage, norwaySetTemplate, type NorwayCoverageRow, type NorwayDrawnBy, type NorwayItem, type NorwaySheetNames, type NorwayState, type NorwayStatus } from '../norway-set.js';
+// The German Bauantrag drawings (Bauvorlagenverordnungen of Bayern, NRW and Baden-Württemberg): the items per Land with their sources and the set that draws them (#372)
+export { GERMANY_DRAWING_SCALE, GERMANY_LANDS, GERMANY_SITE_SCALE, GERMANY_STEP_UP, germanyCoverage, germanyItems, germanySetTemplate, type GermanyCoverageRow, type GermanyDrawnBy, type GermanyItem, type GermanyLand, type GermanySheetNames, type GermanyState, type GermanyStatus } from '../germany-set.js';

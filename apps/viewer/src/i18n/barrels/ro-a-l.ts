@@ -24,6 +24,7 @@ import { faceRo } from '../catalogues/face.ro';
 import { featuresRo } from '../catalogues/features.ro';
 import { feedbackRo } from '../catalogues/feedback.ro';
 import { geometryExportDialogsRo } from '../catalogues/geometry-export-dialogs.ro';
+import { germanyRo } from '../catalogues/germany.ro';
 import { handoverRo } from '../catalogues/handover.ro';
 import { ionUploadRo } from '../catalogues/ion-upload.ro';
 import { issueChangesRo } from '../catalogues/issue-changes.ro';
@@ -55,6 +56,7 @@ export const roAL = {
   ...featuresRo,
   ...feedbackRo,
   ...geometryExportDialogsRo,
+  ...germanyRo,
   ...handoverRo,
   ...ionUploadRo,
   ...issueChangesRo,

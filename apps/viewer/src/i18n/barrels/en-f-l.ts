@@ -11,6 +11,7 @@ import { flowStartupEn } from '../catalogues/flow-startup.en';
 import { ganttWorkCalendarEn } from '../catalogues/gantt-work-calendar.en';
 import { geometryExportDialogsEn } from '../catalogues/geometry-export-dialogs.en';
 import { georeferencingEn } from '../catalogues/georeferencing.en';
+import { germanyEn } from '../catalogues/germany.en';
 import { groupsEn } from '../catalogues/groups.en';
 import { handoverEn } from '../catalogues/handover.en';
 import { hierarchyEn } from '../catalogues/hierarchy.en';
@@ -39,6 +40,7 @@ export const enFL = {
   ...ganttWorkCalendarEn,
   ...geometryExportDialogsEn,
   ...georeferencingEn,
+  ...germanyEn,
   ...groupsEn,
   ...handoverEn,
   ...hierarchyEn,
