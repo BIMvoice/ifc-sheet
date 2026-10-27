@@ -45,7 +45,7 @@ function useModelReadiness() {
   // What the bill of quantities could not state (#75); nothing while the project holds no article.
   const boqResult = useBoqResult(useBoqArticles().length > 0);
   // The values the project's own (Romanian) title block cuts short on a sheet, judged on what each sheet shows.
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const template = useProjectStore((s) => s.titleBlockTemplate);
   const sheets = useProjectStore((s) => s.sheets);
   const views = useProjectStore((s) => s.views);
@@ -56,8 +56,8 @@ function useModelReadiness() {
   const projectFields = useEffectiveTitleBlock();
   const asIndicated = t('sheets.asIndicated');
   const misfits = useMemo(
-    () => sheetTitleBlockMisfits(template, sheets, { projectFields, projectName, params, sheets, schedules, revisions, drafts, views, asIndicated }),
-    [template, sheets, projectFields, projectName, params, schedules, revisions, drafts, views, asIndicated],
+    () => sheetTitleBlockMisfits(template, sheets, { projectFields, projectName, params, sheets, schedules, revisions, drafts, views, asIndicated, language: locale }),
+    [template, sheets, projectFields, projectName, params, schedules, revisions, drafts, views, asIndicated, locale],
   );
   // The model against the simplified PAC's scope, for a project in that mode only: measured from the same indicators as everywhere, and read again as they change.
   const rural = useProjectStore((s) => permitPackOf(s) === 'pacRural');

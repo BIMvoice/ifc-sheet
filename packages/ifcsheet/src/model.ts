@@ -11,8 +11,8 @@
  */
 
 import { IfcTypeEnum, iterateEffectiveEntities, type SpatialNode } from '@ifc-lite/data';
-import { GeometryProcessor, type GeometryResult, type MeshData } from '@ifc-lite/geometry';
-import { IfcParser, extractLengthUnitScale, type IfcDataStore } from '@ifc-lite/parser';
+import { GeometryProcessor, convertIfcxMeshes, type GeometryResult, type MeshData } from '@ifc-lite/geometry';
+import { IfcParser, buildIfcxDataStore, detectFormat, extractLengthUnitScale, parseIfcx, type IfcDataStore } from '@ifc-lite/parser';
 import type { ModelExtent } from './drawing-set.js';
 import type { ProjectLevel } from './document.js';
 import { createEntityBoundsLookup, type BoundingBox3D } from './entity-bounds.js';
@@ -147,25 +147,71 @@ function proposalInputOf(ds: IfcDataStore, meshes: MeshData[], extent: ModelExte
   return { building: { min: { x: extent.min.x, z: extent.min.z }, max: { x: extent.max.x, z: extent.max.z } }, rooms, stairs };
 }
 
+/** A file the engine will not read, with the one sentence that says why. The commands print `message` as it is. */
+export class ModelRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ModelRefusal';
+  }
+}
+
 /**
- * Open an IFC model from its bytes: parse it and, unless asked not to, mesh
- * it with the wasm geometry engine. In Node the engine reads its `.wasm` from
- * the `@ifc-lite/wasm` package on disk.
+ * The format of a model by its content, never by its file name: `ifcx` for an IFC5 JSON document (a JSON object,
+ * `detectFormat`'s rule; the reader then checks its `header.ifcxVersion`), `ifc` for everything else, which the STEP
+ * reader takes as it always did. A STEP file named `.ifcx` is read as STEP, an IFCX saved as `.json` as IFCX.
+ */
+export function modelFormatOf(bytes: Uint8Array): 'ifcx' | 'ifc' {
+  const head = bytes.subarray(0, Math.min(bytes.byteLength, 100));
+  const start = new TextDecoder().decode(head).replace(/^\uFEFF/, '').trim();
+  if (start.startsWith('{')) return 'ifcx';
+  return detectFormat(head.buffer.slice(head.byteOffset, head.byteOffset + head.byteLength) as ArrayBuffer) === 'ifcx' ? 'ifcx' : 'ifc';
+}
+
+/**
+ * An IFCX model through the readers the app loads it with (`parseIfcx`, `buildIfcxDataStore`, `convertIfcxMeshes`):
+ * its meshes come with the file, so there is no geometry engine to run. An IFCX without geometry of its own (an
+ * overlay on another layer) has nothing to lay a drawing set out on, and is refused as such.
+ */
+async function readIfcx(buffer: ArrayBuffer): Promise<{ ds: IfcDataStore; meshes: MeshData[] }> {
+  let parsed: Awaited<ReturnType<typeof parseIfcx>>;
+  try {
+    parsed = await parseIfcx(buffer);
+  } catch (error) {
+    throw new ModelRefusal(`this file is JSON but not an IFCX model (${(error as Error).message.replace(/^Invalid IFCX file: /, '')})`);
+  }
+  const meshes = convertIfcxMeshes(parsed.meshes);
+  if (meshes.length === 0 && (parsed.pointClouds?.length ?? 0) === 0 && parsed.entityCount > 0) {
+    throw new ModelRefusal('this IFCX file carries no geometry of its own (an overlay on another layer), so there is nothing to lay a drawing set out on');
+  }
+  return { ds: buildIfcxDataStore(parsed, buffer), meshes };
+}
+
+/**
+ * Open an IFC or IFCX model from its bytes (the format is read from the content, `modelFormatOf`): parse it and,
+ * for IFC unless asked not to, mesh it with the wasm geometry engine. An IFCX model brings its meshes. In Node the
+ * engine reads its `.wasm` from the `@ifc-lite/wasm` package on disk.
  */
 export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {}): Promise<OpenedModel> {
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  const ds = await new IfcParser().parseColumnar(buffer);
+  let ds: IfcDataStore;
   let meshes: MeshData[] = [];
   let frame: GeometryResult['coordinateInfo'] | undefined;
-  if (options.geometry !== false) {
-    const processor = new GeometryProcessor();
-    try {
-      await processor.init();
-      const result = await processor.process(new Uint8Array(buffer));
-      meshes = result.meshes;
-      frame = result.coordinateInfo;
-    } finally {
-      processor.dispose();
+  if (modelFormatOf(bytes) === 'ifcx') {
+    const ifcx = await readIfcx(buffer);
+    ds = ifcx.ds;
+    if (options.geometry !== false) meshes = ifcx.meshes;
+  } else {
+    ds = await new IfcParser().parseColumnar(buffer);
+    if (options.geometry !== false) {
+      const processor = new GeometryProcessor();
+      try {
+        await processor.init();
+        const result = await processor.process(new Uint8Array(buffer));
+        meshes = result.meshes;
+        frame = result.coordinateInfo;
+      } finally {
+        processor.dispose();
+      }
     }
   }
   const storeys = storeysOf(ds, frame);

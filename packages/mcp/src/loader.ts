@@ -64,6 +64,10 @@ export async function loadIfcModelFromBytes(bytes: Uint8Array, name: string, mod
   // Cheap signature check; full parser also bails on malformed STEP.
   const headerSnippet = buffer.subarray(0, Math.min(buffer.byteLength, 256)).toString('ascii');
   if (!headerSnippet.includes('ISO-10303-21')) {
+    // By content, not by name: an IFC5 JSON document is IFCX whatever it is called. The query and edit tools read STEP only; the drawing-set tools read IFCX.
+    if (headerSnippet.replace(/^\uFEFF/, '').trimStart().startsWith('{')) {
+      throw new Error(`'${label}' is an IFCX (IFC5, JSON) model: the query and edit tools read IFC (STEP) only; open it with ifcsheet_open_model for drawing-set work`);
+    }
     throw new Error(`'${label}' is not a valid IFC/STEP file`);
   }
 
