@@ -21,6 +21,7 @@ import { buildExportModel, type ExportModel } from './list-export-model.js';
 import { detectNumericColumns } from './list-numeric-columns.js';
 import { withListClassification, type ListClassificationContext } from './list-classification.js';
 import { listCandidates, listResultOf, type ListProviderPair } from './list-run.js';
+import { withListOverrides } from './list-overrides.js';
 import { LIST_COUNT_ID, listFigureKind, type ListCell, type ListScheduleDef, type ListTableSource } from './list-schedule.js';
 import { passesElementFilter, predefinedTypeText, propertyValueText, type OccurrenceFacts, type PropertyFact, type SubReportFilter } from './schedule-filter.js';
 
@@ -39,6 +40,8 @@ export interface ListScheduleRun {
   result: ListResult;
   /** Whether the list is grouped (the model then holds the pivot: a row per group, Count, sums). */
   grouped: boolean;
+  /** The GlobalId of each row of `result`, for a list that is a row per element (the overrides are keyed by it, #446). */
+  guids?: string[];
 }
 
 /** The IFC classes a filter names as the list engine's types; `null` when it names none (every element). A name that is no IFC class matches nothing: the lookup answers `Unknown` for it, which is a type of its own. */
@@ -119,9 +122,16 @@ export function listExportModel(list: ListDefinition, result: ListResult, modelU
 }
 
 /** The run of a definition over a result the caller computed: the export model, the annotated columns and whether the list is grouped. */
-export function listRunOf(definition: ListDefinition, result: ListResult, modelUnits: Map<string, ProjectUnits>, unitDisplayOverrides: Record<string, string>, today?: Date): ListScheduleRun {
+export function listRunOf(definition: ListDefinition, result: ListResult, modelUnits: Map<string, ProjectUnits>, unitDisplayOverrides: Record<string, string>, today?: Date, pairs?: readonly ListProviderPair[]): ListScheduleRun {
   const model = listExportModel(definition, result, modelUnits, unitDisplayOverrides, today);
-  return { model, columns: result.columns, result, grouped: model.schedule !== null };
+  const grouped = model.schedule !== null;
+  return { model, columns: result.columns, result, grouped, ...(pairs && !grouped ? { guids: rowGuids(result, pairs) } : {}) };
+}
+
+/** The GlobalId of every row of the result, read from the provider of the model the row is in. */
+export function rowGuids(result: ListResult, pairs: readonly ListProviderPair[]): string[] {
+  const providers = new Map(pairs.map((p) => [p.modelId, p.provider] as const));
+  return result.rows.map((r) => providers.get(r.modelId)?.getEntityGlobalId(r.entityId) ?? '');
 }
 
 /**
@@ -137,7 +147,7 @@ export function runListScheduleHeadless(
   const definition = listDefinitionOf(schedule, pairs);
   const scope = definition.expressIdsByModel ?? {};
   const result = listResultOf(definition, pairs, (modelId) => scope[modelId] ?? []);
-  return listRunOf(definition, result, modelUnits, options.unitDisplayOverrides ?? {}, options.today);
+  return listRunOf(definition, result, modelUnits, options.unitDisplayOverrides ?? {}, options.today, pairs);
 }
 
 /** The words a table says that the Lists engine does not. */
@@ -150,11 +160,13 @@ export interface ListSourceWords {
  * The run as the table reads it (`listScheduleTable`): the panel's pivot when the list is grouped (a row per group, Count, the sums, and the
  * totals row), else a row per element. The kind of every figure column comes from the quantity the engine annotated the column with.
  */
-export function listTableSourceOf(run: ListScheduleRun, def: Pick<ListScheduleDef, 'totals'>, words: ListSourceWords): ListTableSource {
+export function listTableSourceOf(run: ListScheduleRun, def: Pick<ListScheduleDef, 'totals'> & Partial<Pick<ListScheduleDef, 'columns' | 'groupBy' | 'overrides'>>, words: ListSourceWords): ListTableSource {
   const { model } = run;
   const kindOf = (id: string) => (id === LIST_COUNT_ID ? 'count' as const : listFigureKind(run.columns.find((c) => c.id === id)?.quantityType));
   if (!model.schedule) {
-    return { columns: model.columns.map((c) => ({ id: c.id, label: c.label, numeric: c.numeric, kind: kindOf(c.id) })), rows: model.rows, totals: null };
+    const flat: ListTableSource = { columns: model.columns.map((c) => ({ id: c.id, label: c.label, numeric: c.numeric, kind: kindOf(c.id) })), rows: model.rows, totals: null };
+    // The element rows carry their GlobalId, and the user's overrides are printed in (#446): the one place, so every surface agrees.
+    return withListOverrides(flat, { columns: def.columns ?? [], groupBy: def.groupBy, overrides: def.overrides }, run.guids);
   }
   const columns = model.schedule.columns.map((c) => ({ id: c.id, label: c.id === LIST_COUNT_ID ? words.count : c.label, numeric: c.numeric, kind: kindOf(c.id) }));
   const totals: ListCell[] = columns.map((c, i) => (i === 0 ? words.total : c.id === LIST_COUNT_ID ? model.totals.count : (model.totals.sums[c.id] ?? null)));

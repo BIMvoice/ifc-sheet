@@ -12,7 +12,7 @@
  * laid out, is what `fit` in `schedule-fit` places, clips and counts.
  */
 
-import type { ScheduleLayout, SchedulePrim } from './schedule-layout';
+import type { ScheduleCell, ScheduleLayout, SchedulePrim } from './schedule-layout';
 
 export const ROW = 6;
 export const TEXT = 2.5;
@@ -43,6 +43,8 @@ export interface TableRow {
   bold?: boolean;
   /** The pen of the rule under the row; 0 draws none. */
   rule: number;
+  /** Set when the row's cells can be picked on the sheet (#446): the layout reports their boxes. `guid` is the element, `marked` the columns whose cell is an override. */
+  pick?: { guid: string; marked: readonly number[] };
 }
 
 export interface TableBlock {
@@ -54,6 +56,8 @@ export interface TableBlock {
   numeric: (c: number) => boolean;
   /** Leave a blank cell undrawn. */
   skipEmpty?: boolean;
+  /** The id of each column, for the rows that can be picked. */
+  columnIds?: readonly string[];
 }
 
 export type TableItem =
@@ -159,6 +163,7 @@ export function layoutPagedTable(title: string, titleSize: number, items: readon
     kind: 'text', x: PAD, y: TITLE_H - 3, text: pageTitle(title, page, pages.length, options.continued), size: titleSize, anchor: 'start', bold: true,
   }];
   let y = TITLE_H;
+  const cells: ScheduleCell[] = [];
   let segment: { block: TableBlock; top: number } | null = null;
   const close = (bottom: number) => {
     if (!segment) return;
@@ -173,6 +178,10 @@ export function layoutPagedTable(title: string, titleSize: number, items: readon
       const { block, row } = line;
       if (segment?.block !== block) { close(y); segment = { block, top: y }; }
       const lefts = block.columns.map((_, c) => block.columns.slice(0, c).reduce((a, b) => a + b, 0));
+      if (row.pick && block.columnIds) {
+        const { guid, marked } = row.pick;
+        block.columns.forEach((w, col) => cells.push({ x: lefts[col], y, w, h: ROW, guid, column: block.columnIds![col], ...(marked.includes(col) ? { overridden: true as const } : {}) }));
+      }
       row.cells.forEach((text, c) => {
         if (block.skipEmpty && !text) return;
         const figure = block.numeric(c);
@@ -192,6 +201,6 @@ export function layoutPagedTable(title: string, titleSize: number, items: readon
   close(y);
   return {
     width, height: y + (lines.some((l) => l.kind === 'text') ? tail : 0), prims: prims.filter((p) => p.kind !== 'line' || p.w > 0), pages: pages.length,
-    minBox: tableMinBox(items, tail),
+    minBox: tableMinBox(items, tail), ...(cells.length ? { cells } : {}),
   };
 }

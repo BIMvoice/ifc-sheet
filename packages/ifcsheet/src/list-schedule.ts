@@ -18,6 +18,7 @@
 import { isOpenFilter, readSubReportFilter, type SubReportFilter } from './schedule-filter.js';
 import type { ExportTable } from './schedule-csv.js';
 import type { NumberKind } from './units-and-numbers.js';
+import { readListOverrides, type ListCellOverride } from './list-overrides.js';
 
 /** Where a column's value comes from (the Lists engine's sources a schedule can read from a model's elements). */
 const LIST_COLUMN_SOURCES = ['attribute', 'property', 'quantity', 'material', 'classification', 'officeClassification', 'spatial'] as const;
@@ -52,6 +53,8 @@ export interface ListScheduleDef {
   sum?: string[];
   /** The totals row under a grouped list. Printed unless `false`. */
   totals?: false;
+  /** Cells whose value the user typed over the model's (#446), keyed by the element's GlobalId and the column's property key (`list-overrides.ts`). */
+  overrides?: ListCellOverride[];
 }
 
 const text = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
@@ -102,6 +105,8 @@ export function readListScheduleDef(raw: unknown): ListScheduleDef {
   const sum = groupBy ? columnIds(o.sum, seen) : undefined;
   if (sum) out.sum = sum;
   if (o.totals === false) out.totals = false;
+  const overrides = readListOverrides(o.overrides);
+  if (overrides) out.overrides = overrides;
   return out;
 }
 
@@ -129,6 +134,10 @@ export interface ListTableSource {
   rows: readonly (readonly ListCell[])[];
   /** The totals row, aligned with `columns`; `null` for none. */
   totals: readonly ListCell[] | null;
+  /** The GlobalId of each row, when a row is an element (not a group). */
+  guids?: readonly string[];
+  /** Per row, the indexes of the columns whose cell is an override (#446). */
+  overridden?: readonly (readonly number[])[];
 }
 
 export interface ListTableWords {
@@ -144,6 +153,12 @@ export interface ListScheduleTable {
   bold: number[];
   numeric: number[];
   kinds: Record<number, ListFigureKind>;
+  /** The id of each printed column, in order (a table built by hand may omit it). */
+  columnIds?: string[];
+  /** The GlobalId of each row that is an element (the totals row has none); absent for a grouped list. */
+  guids?: string[];
+  /** Per row, the printed columns whose cell is an override (#446): the editor marks them, the print does not. */
+  overridden?: number[][];
 }
 
 /** A figure without the float noise of a long sum (`0.30000000000000004`): six decimals are far below any quantity a schedule states. */
@@ -163,9 +178,12 @@ export function listScheduleTable(source: ListTableSource, def: Pick<ListSchedul
   if (source.totals) { bold.push(rows.length); rows.push(row(source.totals)); }
   const kinds: Record<number, ListFigureKind> = {};
   keep.forEach((i, c) => { const kind = source.columns[i].kind; if (kind) kinds[c] = kind; });
+  const at = new Map(keep.map((i, c) => [i, c] as const));
   return {
     name, header: keep.map((i) => source.columns[i].label), rows, bold,
-    numeric: keep.flatMap((i, c) => (source.columns[i].numeric ? [c] : [])), kinds,
+    numeric: keep.flatMap((i, c) => (source.columns[i].numeric ? [c] : [])), kinds, columnIds: keep.map((i) => source.columns[i].id),
+    ...(source.guids ? { guids: [...source.guids] } : {}),
+    ...(source.overridden ? { overridden: source.overridden.map((cols) => cols.flatMap((i) => at.get(i) ?? [])) } : {}),
   };
 }
 
