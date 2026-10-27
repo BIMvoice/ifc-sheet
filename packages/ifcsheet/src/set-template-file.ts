@@ -52,12 +52,13 @@ function readViewRule(v: unknown, path: string): ViewRule {
   const o = objectAt(v, path);
   if (o.kind === 'plan') return typeof o.storey === 'number' && Number.isInteger(o.storey) ? { kind: 'plan', storey: o.storey } : fail(`${path}/storey`, 'must be a whole number: the storeys above (+) or below (-) the ground storey');
   if (o.kind === 'allPlans') return { kind: 'allPlans' };
+  if (o.kind === 'site') return { kind: 'site' };
   if (o.kind === 'elevation') {
     const direction = ELEVATION_DIRECTIONS.find((d) => d === o.direction);
     return direction ? { kind: 'elevation', direction } : fail(`${path}/direction`, 'must be north, south, east or west');
   }
   if (o.kind === 'section') return typeof o.place === 'number' && Number.isInteger(o.place) && o.place >= 0 ? { kind: 'section', place: o.place } : fail(`${path}/place`, 'must be a whole number from 0');
-  return fail(`${path}/kind`, 'must be plan, allPlans, elevation or section');
+  return fail(`${path}/kind`, 'must be plan, allPlans, site, elevation or section');
 }
 
 function readLayout(v: unknown, path: string): SheetLayoutRule {
@@ -85,7 +86,8 @@ function readSheetRule(v: unknown, path: string): SheetRule {
   const series = RULED_SERIES.find((s) => s === o.series) ?? fail(`${path}/series`, 'must be plans, elevations or sections');
   const slots = listAt(o.slots, `${path}/slots`, readSlot);
   if (slots.length === 0) fail(`${path}/slots`, 'must hold at least one slot');
-  return { name: textAt(o.name, `${path}/name`), series, layout: readLayout(o.layout, `${path}/layout`), slots };
+  const notes = listAt(o.notes, `${path}/notes`, (n, at) => textAt(n, at));
+  return { name: textAt(o.name, `${path}/name`), series, layout: readLayout(o.layout, `${path}/layout`), slots, ...(notes.length > 0 ? { notes } : {}) };
 }
 
 function readScheduleRule(v: unknown, path: string): ScheduleRule {

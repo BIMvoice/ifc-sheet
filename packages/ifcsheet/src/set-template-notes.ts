@@ -36,7 +36,20 @@ export const SET_TEMPLATE_EN: Record<TemplateNoteKey, string> = {
   'setTemplate.note.schedule': 'The template carries the {kind} schedule "{name}". It is added in the app, not by the command line.',
 };
 
-/** A note in English, parameters filled in. */
-export function describeTemplateNote(note: TemplateNote): string {
-  return SET_TEMPLATE_EN[note.key].replace(/\{(\w+)\}/g, (whole, name: string) => (name in note.params ? String(note.params[name]) : whole));
+/** The Romanian of every note, by catalogue key (the app's Romanian catalogue spreads it; `ifcsheet build --pac` prints it). Term choices: the app's `i18n/ro-glossary.md`. */
+export const SET_TEMPLATE_RO: Record<TemplateNoteKey, string> = {
+  'setTemplate.note.skipped.plan': 'Omis la {sheet}: șablonul are un plan pentru nivelul {storey} (0 este nivelul de la parter) și modelul acesta nu are un asemenea nivel.',
+  'setTemplate.note.skipped.section': 'Omis la {sheet}: șablonul are secțiunea {place}, iar modelul acesta oferă mai puține secțiuni.',
+  'setTemplate.note.skipped.elevation': 'Omis la {sheet}: șablonul are fațada {direction}, iar modelul acesta nu o are.',
+  'setTemplate.note.defaulted': 'Nu sunt în șablon; au fost așezate ca în setul automat, pe hârtia și la scara ultimei planșe din seria {series} a șablonului: {names}.',
+  'setTemplate.note.unplaced': 'Șablonul nu are nicio planșă din seria {series}, deci acestea au rămas în afara planșelor: {names}.',
+  'setTemplate.note.rescaled': '{sheet} este desenată la 1:{used}, nu la 1:{wanted} cât are șablonul: desenele ei nu încap pe hârtie la scara aceea.',
+  'setTemplate.note.schedule': 'Șablonul conține tabelul {kind} „{name}”. Aplicația îl adaugă; linia de comandă nu.',
+  'setTemplate.note.carried': 'Nu s-a putut citi {what} din șablon și nu a fost aplicat.',
+};
+
+/** A note in `locale` (Romanian for `ro`, else English), parameters filled in. */
+export function describeTemplateNote(note: TemplateNote, locale?: string): string {
+  const words = locale?.toLowerCase().split('-')[0] === 'ro' ? SET_TEMPLATE_RO : SET_TEMPLATE_EN;
+  return words[note.key].replace(/\{(\w+)\}/g, (whole, name: string) => (name in note.params ? String(note.params[name]) : whole));
 }
