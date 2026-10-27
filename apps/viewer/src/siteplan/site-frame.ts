@@ -29,6 +29,8 @@ import type { LiveSymbolContext } from './live-symbols';
 import { useSheetLocale } from '@/project/units-and-numbers';
 
 export interface SiteFrame {
+  /** The model's TrueNorth alone (`trueNorthOf`), no grid-north fallback: what a viewport's north arrow turns to (`viewport-marks.ts`), the engine's reading too. */
+  trueNorth: PlanDirection | null;
   /** True north in project XY: the model's TrueNorth, else grid north of its map conversion, else `null` (project north, +Y). */
   north: PlanDirection | null;
   northSource: 'trueNorth' | 'gridNorth' | null;
@@ -58,8 +60,10 @@ export function useSiteFrame(): SiteFrame {
     const model = anchorModel ?? ordered.find((m) => m.ifcDataStore);
     const store = (model?.ifcDataStore ?? legacyStore) as IfcDataStore | null;
     const info = model ? model.geometryResult?.coordinateInfo : legacyInfo;
+    const trueNorth = trueNorthOf(store);
     return {
-      ...siteNorth(trueNorthOf(store), anchor),
+      trueNorth,
+      ...siteNorth(trueNorth, anchor),
       anchor: anchor ? { eff: anchor.eff, originViewer: anchor.originViewer } : null,
       frameOffset: info ? totalYupOffset(info) : ZERO,
     };

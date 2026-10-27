@@ -20,6 +20,16 @@
       "import": "./dist/names.js",
       "default": "./dist/names.js"
     },
+    "./true-north": {
+      "types": "./dist/true-north.d.ts",
+      "import": "./dist/true-north.js",
+      "default": "./dist/true-north.js"
+    },
+    "./viewport-marks": {
+      "types": "./dist/viewport-marks.d.ts",
+      "import": "./dist/viewport-marks.js",
+      "default": "./dist/viewport-marks.js"
+    },
     "./readiness": {
       "types": "./dist/readiness.d.ts",
       "import": "./dist/readiness.js",

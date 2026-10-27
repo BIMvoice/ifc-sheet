@@ -87,7 +87,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
     return EXIT.failed;
   }
-  const sheets = await sheetGraphics(set, model, standard.pens ? { pens: standard.pens } : {});
+  const sheets = await sheetGraphics(set, model, { ...(standard.pens ? { pens: standard.pens } : {}), ...(args.locale ? { locale: args.locale } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}) });
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, args.locale ?? PAC_DEFAULT_LOCALE, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params })}\n`);

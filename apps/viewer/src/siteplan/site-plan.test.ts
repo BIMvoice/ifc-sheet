@@ -43,7 +43,7 @@ async function fixtureAnchor(): Promise<MapAnchor> {
   return { eff: selection.eff, originViewer: { x: 0, y: 0, z: 0 } };
 }
 
-const frameOf = (over: Partial<SiteFrame>): SiteFrame => ({ north: null, northSource: null, anchor: null, frameOffset: { x: 0, y: 0, z: 0 }, ...over });
+const frameOf = (over: Partial<SiteFrame>): SiteFrame => ({ trueNorth: null, north: null, northSource: null, anchor: null, frameOffset: { x: 0, y: 0, z: 0 }, ...over });
 const labels = (kind: 'map' | 'local', a: string, b: string) => (kind === 'map' ? [`E ${a}`, `N ${b}`] : [`X ${a}`, `Y ${b}`]);
 const symbol = (symbolId: string, p: Pt = { x: 0, y: 0 }, scale = 1, rotation = 0): SymbolInstanceShape => ({ type: 'symbol', symbolId, p, scale, rotation });
 
