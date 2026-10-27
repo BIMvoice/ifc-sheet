@@ -12,7 +12,7 @@ import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
 import { listSchedulesOn, listTableText } from '../cli-list.js';
-import { PAC_INTERVENTIONS, type PacIntervention } from '../pac-set.js';
+import { PAC_INTERVENTIONS, PAC_MODES, type PacIntervention, type PacMode } from '../pac-set.js';
 import { pacPages, pacTemplateFor } from '../cli-pac.js';
 import { sheetFormat } from '../units-and-numbers.js';
 import { buildStandard, unknownStandardMessage, withTitleBlock } from '../cli-standard.js';
@@ -32,6 +32,8 @@ interface BuildArgs {
   locale?: string;
   /** With --pac: the works (`PacIntervention`). */
   intervention?: PacIntervention;
+  /** With --pac: the permit project (`PacMode`); absent: the --project's, else the full one. */
+  pacMode?: PacMode;
   /** A saved project: its list schedules are printed after the build. */
   project?: string;
   includeFarElements?: boolean;
@@ -72,7 +74,9 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   // The one language of the run: the project's recorded language, else --locale, else Romanian for a PAC submission and English otherwise. It names the sheets and views, and with --pac the PAC words and the opis.
   const { language, notes } = resolveLanguage({ project, locale: args.locale, pac: args.pac });
   for (const note of notes) io.stderr(note);
-  if (args.pac) setTemplate = pacTemplateFor(language);
+  // The permit project: --pac-mode, else the project file's (the mode the app saved), else the full one.
+  const pacMode: PacMode = args.pacMode ?? project?.pacMode ?? 'full';
+  if (args.pac) setTemplate = pacTemplateFor(language, pacMode);
   const standard = buildStandard(args.standard, project);
   if (!standard) {
     io.stderr(unknownStandardMessage(args.standard ?? ''));
@@ -80,14 +84,15 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   }
   for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
-  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language });
+  // The notes a sheet prints (a paper stepped up) are in the language of the PAC words.
+  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language, ...(args.pac ? { locale: language } : {}) });
   const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
     return EXIT.failed;
   }
   const sheets = await sheetGraphics(set, model, standard.pens ? { pens: standard.pens } : {});
-  const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention) : sheets, { title: set.document.name });
+  const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params })}\n`);
   if (args.out) {
@@ -133,7 +138,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 export const buildCommand: CliCommand = {
   name: 'build',
   usageRank: 100,
-  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]`,
+  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]`,
   helpRank: 100,
   help: `  build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
@@ -144,7 +149,9 @@ export const buildCommand: CliCommand = {
           With --pac, the sheets are the permit project's (PAC, Legea 169/2026 Anexa 2: plans, facades, sections) and the
           one PDF opens with the opis page: the contents Anexa 2 lists, each with its point and whether the file holds it.
           The sheets and views (and with --pac the opis) are in the language the project records, else --locale
-          (ro or en), else English (Romanian with --pac).`,
+          (ro or en), else English (Romanian with --pac).
+          A --project saved in the app's simplified mode (or --pac-mode rural) builds Anexa 3's sheets instead (1:50 on A3, a
+          larger paper for a larger drawing, said on the sheet), without the opis, which is Anexa 2's.`,
   async run(rest, values, io) {
     if (values.csv || values.detail) {
       io.stderr('ifcsheet build has no --csv or --detail; they are options of boq and rooms.\n');
@@ -168,6 +175,11 @@ export const buildCommand: CliCommand = {
       io.stderr(values.pac ? `ifcsheet build --intervention is one of ${PAC_INTERVENTIONS.join(', ')}.\n` : 'ifcsheet build has --intervention only with --pac.\n');
       return EXIT.usage;
     }
+    const pacMode = PAC_MODES.find((m) => m === values['pac-mode']);
+    if (values['pac-mode'] !== undefined && (!values.pac || !pacMode)) {
+      io.stderr(values.pac ? `ifcsheet build --pac-mode is one of ${PAC_MODES.join(', ')}.\n` : 'ifcsheet build has --pac-mode only with --pac.\n');
+      return EXIT.usage;
+    }
     if (values.pac && values.template !== undefined) {
       io.stderr('ifcsheet build --pac sets the sheets itself; it cannot be combined with --template.\n');
       return EXIT.usage;
@@ -177,7 +189,7 @@ export const buildCommand: CliCommand = {
       return EXIT.usage;
     }
     try {
-      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(intervention ? { intervention } : {}), ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
+      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(intervention ? { intervention } : {}), ...(pacMode ? { pacMode } : {}), ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
     } catch (error) {
       io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;

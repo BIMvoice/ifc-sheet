@@ -207,7 +207,7 @@ function ensureSheets(extent: AxisBounds, report: EnsureReport, setTemplate?: Se
   let sheets = before;
   if (!before.some(isSetSheet)) {
     // No set yet: lay it all out, beside any interior elevation sheets already there.
-    const ruled = setTemplate ? applySetTemplate(setTemplate, { views: loose, extent, scheme: numberingScheme() }) : null;
+    const ruled = setTemplate ? applySetTemplate(setTemplate, { views: loose, extent, scheme: numberingScheme(), locale: getLocale() }) : null;
     report.notes.push(...(ruled?.notes ?? []));
     const set = withoutClashes(before, ruled ? ruled.sheets : buildDrawingSet({ views: loose, extent, templates: seriesTemplates(), scheme: numberingScheme() }));
     if (set.length > 0) sheets = [...before, ...set];

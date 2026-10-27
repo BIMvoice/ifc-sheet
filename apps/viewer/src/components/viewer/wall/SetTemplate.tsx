@@ -10,7 +10,7 @@
  */
 
 import { useState } from 'react';
-import { SET_TEMPLATE_FILE_SUFFIX, pacSetTemplate, parseSetTemplate, serializeSetTemplate, type SetTemplate } from '@bimvoice/ifcsheet';
+import { SET_TEMPLATE_FILE_SUFFIX, pacRuralSetTemplate, pacSetTemplate, parseSetTemplate, serializeSetTemplate, type SetTemplate } from '@bimvoice/ifcsheet';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 import { EVENT_LOAD_FILE } from '@/lib/tours/events';
@@ -113,6 +113,7 @@ export function NewFromTemplate() {
             }} />
           </label>
           <button type="button" className={libraryAction} onClick={() => armTemplate(pacSetTemplate({ name: t('pac.set.name'), plans: t('pac.set.plans'), facades: t('pac.set.facades'), sections: t('pac.set.sections') }))}>{t('pac.useSet')}</button>
+          <button type="button" className={libraryAction} onClick={() => armTemplate(pacRuralSetTemplate({ name: t('pac.rural.set.name'), plans: t('pac.set.plans'), facades: t('pac.set.facades'), sections: t('pac.set.sections') }))}>{t('pac.useRuralSet')}</button>
           {kept.length > 0 ? (
             <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label={t('wall.setTemplate.keptTitle')}>
               {kept.map(({ template }) => (

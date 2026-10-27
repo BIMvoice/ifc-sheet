@@ -11,6 +11,7 @@
       "@bimvoice/ifcsheet/names": ["../../packages/ifcsheet/src/names"],
       "@bimvoice/ifcsheet/boq-words": ["../../packages/ifcsheet/src/boq-words"],
       "@bimvoice/ifcsheet/pac-words": ["../../packages/ifcsheet/src/pac-words"],
+      "@bimvoice/ifcsheet/urban": ["../../packages/ifcsheet/src/urban"],
       "@bimvoice/ifcsheet/readiness": ["../../packages/ifcsheet/src/readiness"],
       "@bimvoice/ifcsheet/readiness-read": ["../../packages/ifcsheet/src/readiness-read"],
       "@bimvoice/ifcsheet/project": ["../../packages/ifcsheet/src/project"],
