@@ -72,7 +72,7 @@ describe.skipIf(missing !== null)('north arrows and scale bars on the FZK-Haus p
         expect(plans.viewports[i].box.w).toBeCloseTo(width, 0);
         expect(Math.abs(bar[1].x - bar[0].x), `1:${scale}`).toBeCloseTo((5 * 1000) / scale, 9);
       }
-      expect(plans.texts.filter((t) => labels.includes(t.text) && t.size === 2.5).length).toBeGreaterThanOrEqual(6);
+      expect(plans.texts.filter((t) => (labels as readonly string[]).includes(t.text) && t.size === 2.5).length).toBeGreaterThanOrEqual(6);
     }
   });
 
