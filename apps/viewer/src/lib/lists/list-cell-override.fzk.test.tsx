@@ -109,8 +109,8 @@ describe('a column taken off and a cell typed over, from the sheet (#446)', () =
     // The five doors (a blank cell is not drawn); the typed value is in the row of its own door and nowhere else.
     assert.equal(new Set(layout.cells!.map((c) => c.guid)).size, 5);
     assert.equal(cells.filter((t) => t === 'EI 30').length, 1);
-    const at = at(cells, 'Innentuer-2');
-    assert.equal(cells[at + 1], 'EI 30');
+    const door = at(cells, 'Innentuer-2');
+    assert.equal(cells[door + 1], 'EI 30');
     assert.ok(!has(before, 'EI 30'));
 
     const svg = svgOf(sheet, layout);
