@@ -14,8 +14,7 @@ import { unwrapIfcZip } from './ifczip.js';
 // magic-byte predicate `isZipBuffer` stays internal to `./ifczip.js` — no
 // external consumer needs to know WHETHER a buffer was a zip, only to get the
 // unwrapped bytes back.
-export { unwrapIfcZip, unwrapIfcZipView, unwrapIfcZipWithResources } from './ifczip.js';
-export type { IfcZipContents } from './ifczip.js';
+export { unwrapIfcZip, unwrapIfcZipView, unwrapIfcZipWithResources, type IfcZipContents } from './ifczip.js';
 export { StepTokenizer } from './tokenizer.js';
 export { EntityIndexBuilder } from './entity-index.js';
 export { EntityExtractor } from './entity-extractor.js';
@@ -80,6 +79,7 @@ export { parseSourceHeader } from './source-header.js';
 export type { ExtractedProperty } from './property-value-parser.js';
 export { attachDataStoreAccessors, type IfcStoreData } from './data-store-accessors.js';
 export { buildDropCensus, type DropCensus, type DropCensusInput, type ClassCensusEntry, type DropCategory } from './drop-census.js';
+export { buildIfcxDataStore } from './ifcx-data-store.js';
 export { createSyntheticDataStore, type SyntheticDataStoreOptions, type SyntheticEntity } from './synthetic-data-store.js';
 // WorkerParser is browser-only due to Vite worker imports
 // Import from '@ifc-lite/parser/browser' instead

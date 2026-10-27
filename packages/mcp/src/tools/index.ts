@@ -20,7 +20,7 @@ import { layerReviewTools } from './layer-review.js';
 import { costTools } from './cost.js';
 import { structuralTools } from './structural.js';
 import { flowTools } from './flow.js';
-import { ifcsheetTools } from './ifcsheet.js';
+import { ifcsheetTools } from './ifcsheet-tools.js';
 
 /** Agent draft-layer family (06-agents.md): draft lifecycle + review loop. */
 export const layerTools = [...draftLayerTools, ...layerReviewTools];

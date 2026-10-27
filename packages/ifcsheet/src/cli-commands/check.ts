@@ -6,7 +6,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { byggesaksbimReadiness, openModel, readProjectFile, readinessWithProject, type ProjectFacts } from '../headless.js';
+import { byggesaksbimReadiness, ModelRefusal, openModel, readProjectFile, readinessWithProject, type ProjectFacts } from '../headless.js';
 import { describeReadiness } from '../readiness.js';
 import { type CliIo } from '../cli-command.js';
 import { EXIT, type CliCommand } from '../cli-command.js';
@@ -42,6 +42,7 @@ async function check(file: string, json: boolean, projectFile: string | undefine
   try {
     opened = await openModel(bytes, { includeFarElements: include });
   } catch (error) {
+    if (error instanceof ModelRefusal) throw error;
     io.stderr(`ifcsheet: the geometry could not be read (${(error as Error).message}); the far-away elements are not checked\n`);
     opened = await openModel(bytes, { geometry: false });
   }
