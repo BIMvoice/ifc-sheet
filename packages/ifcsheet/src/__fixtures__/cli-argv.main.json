@@ -422,6 +422,29 @@
    "--project",
    "p.json"
   ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read p.json: no such file\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--csv",
+   "--json"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "--project",
+   "p.json"
+  ],
   "code": 2,
   "stdout": "",
   "stderr": "ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n"

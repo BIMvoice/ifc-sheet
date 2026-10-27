@@ -12,7 +12,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from '@/i18n';
 import { describeEffect, describeMissing } from '@/check/readiness-say';
-import { modelReadiness } from '@/check/readiness';
+import { modelReadiness, type ModelFacts } from '@/check/readiness';
 import { currentModelFacts } from '@/check/readiness-read';
 import { useViewerStore } from '@/store';
 import { setIncludeFarElements, useProjectStore } from '@/project/project-store';
@@ -20,10 +20,14 @@ import { subReportChecks } from '@/check/sub-report-check';
 import { boqMissing } from '@bimvoice/ifcsheet';
 import { ruralScopeOf } from '@bimvoice/ifcsheet/urban';
 import { useUrbanIndicators } from '../urban/useUrban';
+import { sheetTitleBlockMisfits } from '@/check/title-block-fit';
+import { useEffectiveTitleBlock } from '@/project/title-block-model';
 import { useBoqArticles, useBoqResult } from '../boq/useBoq';
 import type { SetSkin } from './set-skin';
 import { setReview } from '../wall/wall-nav';
 import { goToRoom } from '@/check/room-go';
+
+const EMPTY_FACTS: ModelFacts = { storeys: 0, spaces: 0, elements: 0, elementsWithoutStorey: 0, elementsWithoutMaterial: 0, elementsWithoutQuantities: 0, duplicateGlobalIds: 0, duplicatedEntities: 0 };
 
 /**
  * The findings of the models open now; null while none is open (nothing to say yet). `owners` names, for each sub-report finding in
@@ -40,6 +44,21 @@ function useModelReadiness() {
   const levels = useProjectStore((s) => s.levels);
   // What the bill of quantities could not state (#75); nothing while the project holds no article.
   const boqResult = useBoqResult(useBoqArticles().length > 0);
+  // The values the project's own (Romanian) title block cuts short on a sheet, judged on what each sheet shows.
+  const { t } = useTranslation();
+  const template = useProjectStore((s) => s.titleBlockTemplate);
+  const sheets = useProjectStore((s) => s.sheets);
+  const views = useProjectStore((s) => s.views);
+  const projectName = useProjectStore((s) => s.name);
+  const params = useProjectStore((s) => s.titleBlockParams);
+  const revisions = useProjectStore((s) => s.revisions);
+  const drafts = useProjectStore((s) => s.drafts);
+  const projectFields = useEffectiveTitleBlock();
+  const asIndicated = t('sheets.asIndicated');
+  const misfits = useMemo(
+    () => sheetTitleBlockMisfits(template, sheets, { projectFields, projectName, params, sheets, schedules, revisions, drafts, views, asIndicated }),
+    [template, sheets, projectFields, projectName, params, schedules, revisions, drafts, views, asIndicated],
+  );
   // The model against the simplified PAC's scope, for a project in that mode only: measured from the same indicators as everywhere, and read again as they change.
   const rural = useProjectStore((s) => s.pacMode === 'rural');
   const urban = useUrbanIndicators(rural);
@@ -47,11 +66,11 @@ function useModelReadiness() {
   return useMemo(() => {
     void mutationVersion; // an edit can add or remove what the facts count
     // A schedule split into parts must list every element once: the same check the card on the Wall shows.
-    if (models.size === 0) return null;
+    if (models.size === 0 && misfits.length === 0) return null;
     const checks = subReportChecks(schedules ?? []);
     const owners = checks.flatMap((c) => [...(c.duplicates.length > 0 ? [c.parent.id] : []), ...(c.gaps.length > 0 ? [c.parent.id] : [])]);
-    return { findings: modelReadiness(currentModelFacts(), checks, boqMissing(boqResult), scope), owners };
-  }, [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult, scope?.levels, scope?.sd, scope?.sdAtLeast]);
+    return { findings: modelReadiness(models.size === 0 ? EMPTY_FACTS : currentModelFacts(), checks, boqMissing(boqResult), misfits, scope), owners };
+  }, [misfits, models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult, scope?.levels, scope?.sd, scope?.sdAtLeast]);
 }
 
 /** The project setting that frames the views on everything again, the small far-away elements too (`framing.ts` in the engine). */
@@ -95,7 +114,7 @@ export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compac
     <>
     <ul className="m-0 list-none p-0">
       {findings.map((f) => (
-        <li key={`${f.kind}-${f.params.schedule ?? ''}`} className="py-0.5">
+        <li key={`${f.kind}-${f.params.schedule ?? ''}-${f.params.sheet ?? ''}-${f.params.field ?? ''}`} className="py-0.5">
           <p className={`m-0 ${compact ? skin.note : skin.heading}`}>{describeMissing(f)}</p>
           {compact ? null : <p className={`m-0 ${skin.note}`}>{describeEffect(f)}</p>}
           {f.kind === 'estimatedAreas' ? <RoomLink guid={String(f.params.first)} skin={skin} /> : null}

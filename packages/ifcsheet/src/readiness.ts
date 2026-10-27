@@ -18,6 +18,7 @@
 import type { BoqMissing } from './boq-compute.js';
 import { subReportParams, type SubReportCheck } from './sub-report-check.js';
 import type { EstimatedAreas } from './room-estimates.js';
+import type { TitleBlockMisfit } from './title-block-print.js';
 
 /** What the loaded models hold, counted once. "Elements" are the products that have geometry, rooms (IfcSpace) apart. */
 export interface ModelFacts {
@@ -42,7 +43,7 @@ export interface FarElementFact {
   distance: number;
 }
 
-export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'estimatedAreas' | 'boqMissingQuantity' | 'ruralLevels' | 'ruralArea' | 'ruralAreaAtLeast';
+export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'estimatedAreas' | 'boqMissingQuantity' | 'ruralLevels' | 'ruralArea' | 'ruralAreaAtLeast' | 'titleBlockFit';
 
 export interface ReadinessFinding {
   kind: ReadinessKind;
@@ -75,10 +76,13 @@ const finding = (kind: ReadinessKind, params: Record<string, number | string>): 
  * `subReports` are the checks of the schedules that are split into parts (`checkSubReports`): a duplicated or
  * missing element is said after the model's own findings, one pair of findings per split schedule.
  * `boq` is what the bill of quantities could not state (`boqMissing`, #75): the elements missing a quantity an article takes, said after those.
- * `rural` is what the model is measured to be against the simplified PAC (only for a project in that mode): what lies outside it, said last.
+ * `titleBlock` are the title block values that do not fit their cell on a sheet (`titleBlockMisfits`).
+ * `rural` is what the model is measured to be against the simplified PAC (only for a project in that mode): what lies outside it.
  */
-export function modelReadiness(f: ModelFacts, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing, rural?: RuralScope): ReadinessFinding[] {
-  if (f.elements === 0 && f.spaces === 0 && f.storeys === 0) return [];
+export function modelReadiness(f: ModelFacts, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing, titleBlock: readonly TitleBlockMisfit[] = [], rural?: RuralScope): ReadinessFinding[] {
+  // A value cut short on a sheet is the project's, not the model's: said even when the model is empty.
+  const cut = titleBlock.map((m) => finding('titleBlockFit', { field: m.field, sheet: m.sheet }));
+  if (f.elements === 0 && f.spaces === 0 && f.storeys === 0) return cut;
   const out: ReadinessFinding[] = [];
   if (f.storeys === 0) out.push(finding('noStoreys', {}));
   if (f.spaces === 0) out.push(finding('noSpaces', {}));
@@ -96,7 +100,7 @@ export function modelReadiness(f: ModelFacts, subReports: readonly SubReportChec
   }
   if (boq && boq.elements > 0) out.push(finding('boqMissingQuantity', { count: boq.elements, articles: boq.articles, list: boq.list }));
   if (rural) out.push(...ruralReadiness(rural));
-  return out;
+  return [...out, ...cut];
 }
 
 /** What is outside Anexa 3's scope: more than P + M above ±0.00, a built gross area over 150 m² (said "at least" when it is a lower bound). A warning, never a block. */
@@ -168,6 +172,8 @@ export const READINESS_EN = {
   'ready.ruralArea.effect': 'The model is outside what the simplified PAC covers. The set is still made, on a larger paper where the drawing needs it.',
   'ready.ruralAreaAtLeast': 'The model\'s built gross area (Sd) is at least {area} m² (some elements gave no outline); the simplified PAC (Anexa 3) covers at most {max} m².',
   'ready.ruralAreaAtLeast.effect': 'The model is outside what the simplified PAC covers. The set is still made, on a larger paper where the drawing needs it.',
+  'ready.titleBlockFit': 'Title block: {field} does not fit its cell on {sheet}; shorten it or use an abbreviation.',
+  'ready.titleBlockFit.effect': 'The printed value is cut short with an ellipsis, so part of it is missing on the sheet.',
   'ready.subReportGaps.effect': 'The parts do not add up to the schedule: those doors and windows are on no sheet.',
 } as const;
 
