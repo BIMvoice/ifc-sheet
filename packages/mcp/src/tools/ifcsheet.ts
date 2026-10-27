@@ -25,6 +25,7 @@ import { resolveSafePath } from '../safe-path.js';
 import { drawSet } from './ifcsheet-draw.js';
 import { outputPath } from './ifcsheet-shared.js';
 import { ifcsheetAddSchedule } from './ifcsheet-schedule.js';
+import { ifcsheetTakeoffTools } from './ifcsheet-takeoff.js';
 import { ifcsheetEditTools } from './ifcsheet-edit.js';
 import { ifcsheetFileTools } from './ifcsheet-files.js';
 import { ifcsheetHistoryTools } from './ifcsheet-undo.js';
@@ -262,5 +263,5 @@ export const ifcsheetCheckReadiness: Tool = {
 
 export const ifcsheetTools: Tool[] = [
   ifcsheetOpenModel, ifcsheetGenerateSet, ifcsheetExportPdf, ifcsheetCheckReadiness,
-  ...ifcsheetEditTools, ifcsheetAddSchedule, ...ifcsheetFileTools, ...ifcsheetHistoryTools,
+  ...ifcsheetEditTools, ifcsheetAddSchedule, ...ifcsheetFileTools, ...ifcsheetHistoryTools, ...ifcsheetTakeoffTools,
 ];
