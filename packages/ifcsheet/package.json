@@ -95,6 +95,26 @@
       "import": "./dist/cli-boq.js",
       "default": "./dist/cli-boq.js"
     },
+    "./cli-rooms": {
+      "types": "./dist/cli-rooms.d.ts",
+      "import": "./dist/cli-rooms.js",
+      "default": "./dist/cli-rooms.js"
+    },
+    "./cli-materials": {
+      "types": "./dist/cli-materials.d.ts",
+      "import": "./dist/cli-materials.js",
+      "default": "./dist/cli-materials.js"
+    },
+    "./cli-list": {
+      "types": "./dist/cli-list.d.ts",
+      "import": "./dist/cli-list.js",
+      "default": "./dist/cli-list.js"
+    },
+    "./cli-classify": {
+      "types": "./dist/cli-classify.d.ts",
+      "import": "./dist/cli-classify.js",
+      "default": "./dist/cli-classify.js"
+    },
     "./handover": {
       "types": "./dist/handover.d.ts",
       "import": "./dist/handover.js",
