@@ -18,6 +18,7 @@ export const namesRo = {
   'names.sheet.sectionsN': 'Secțiuni {n}',
   'names.sheet.schedules': 'Tabele',
   'names.view.plan': 'Plan',
+  'names.view.site': 'Plan de situație',
   'names.view.north': 'Fațada nord',
   'names.view.east': 'Fațada est',
   'names.view.south': 'Fațada sud',
