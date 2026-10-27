@@ -565,7 +565,7 @@
  },
  {
   "name": "ifcsheet_load_project",
-  "description": "Load a saved project file (.ifclite-project.json, written by ifcsheet_save_project or by the app) as a drawing set on an opened model, to continue editing, export or issue it. Give model_id (the model the project is for) and project_path (a file on the server) or project_json (its text). The views, sheets, title block and numbering are used as stored; the plans are cut on the model's storeys. A file with the wrong format, a newer version, or a sheet showing a view the file does not have is refused with the reason. Returns a new document_id, the sheets and the views not placed.",
+  "description": "Load a saved project file (.ifclite-project.json, written by ifcsheet_save_project or by the app) as a drawing set on an opened model, to continue editing, export or issue it. Give model_id (the model the project is for) and project_path (a file on the server) or project_json (its text). The views, sheets, title block and numbering are used as stored; the plans are cut on the model's storeys. The drafts the app drew on the views (dimensions, texts, lines) and the list schedules it placed on sheets are printed by the exports as `ifcsheet build --project` prints them. A file with the wrong format, a newer version, or a sheet showing a view the file does not have is refused with the reason. Returns a new document_id, the sheets and the views not placed.",
   "scope": "read",
   "inputSchema": {
    "type": "object",
