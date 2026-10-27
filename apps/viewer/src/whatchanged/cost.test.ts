@@ -54,8 +54,12 @@ function pass(n: number, views: number): { ms: number; changes: number; clouds: 
 describe('WHATCHANGED at a large size', () => {
   it('reads 20 000 elements and 50 views in well under a second', () => {
     pass(2000, 5); // warm the engine up
-    const { ms, changes, clouds } = pass(20_000, 50);
-    console.log(`WHATCHANGED cost: ${changes} changes, 50 views, ${clouds} clouds, ${Math.round(ms)} ms`);
+    // The fastest of three runs, as the scaling test below takes: a shared CI runner's scheduling noise can add several hundred
+    // milliseconds to a single run, and the quadratic paths this bound exists for cost seconds on every run.
+    const runs = [1, 2, 3].map(() => pass(20_000, 50));
+    const { changes, clouds } = runs[0];
+    const ms = Math.min(...runs.map((r) => r.ms));
+    console.log(`WHATCHANGED cost: ${changes} changes, 50 views, ${clouds} clouds, fastest of 3: ${Math.round(ms)} ms`);
     assert.ok(ms < 600, `took ${Math.round(ms)} ms`);
   });
   it('grows with the model, not with its square: four times the elements take less than eight times as long', () => {
