@@ -11,7 +11,7 @@
 
 import {
   freshProjectId, ownGraphicsOf, resolveViewGraphics, templateGraphicsOf, templateKindOf, templateOf, untemplatedGraphics,
-  type CategoryGraphics, type ProjectViewTemplate, type StyleRule, type TemplateGraphics,
+  DETAIL_LEVELS, type CategoryGraphics, type DetailLevel, type ProjectViewTemplate, type StyleRule, type TemplateGraphics,
 } from '@bimvoice/ifcsheet';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { toggleViewportLayer } from './drafting-standards';
@@ -158,6 +158,22 @@ export function setTemplateCategory(templateId: string, category: string, patch:
   if (!templatesOf().some((t) => t.id === templateId)) return;
   runAsOneUndoStep(() => {
     useProjectStore.setState({ viewTemplates: templatesOf().map((t) => (t.id === templateId ? { ...t, graphics: withCategory(t.graphics, category, patch) } : t)), dirty: true });
+  });
+}
+
+/** Set the detail level a template carries (every view that follows it and sets none of its own draws it); `undefined` follows the scale again. */
+export function setTemplateDetailLevel(templateId: string, level: DetailLevel | undefined): void {
+  if (!templatesOf().some((t) => t.id === templateId)) return;
+  const next = level && DETAIL_LEVELS.includes(level) ? level : undefined;
+  runAsOneUndoStep(() => {
+    useProjectStore.setState({
+      viewTemplates: templatesOf().map((t) => {
+        if (t.id !== templateId) return t;
+        const { detailLevel: _was, ...rest } = t.graphics;
+        return { ...t, graphics: next ? { ...rest, detailLevel: next } : rest };
+      }),
+      dirty: true,
+    });
   });
 }
 
