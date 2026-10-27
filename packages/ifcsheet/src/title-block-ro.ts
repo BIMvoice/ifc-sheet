@@ -3,16 +3,22 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The title block of Romanian practice (cartuș, #54), as a layout in the
- * block's 180 x 50 mm (`TITLE_BLOCK_MM`), so it sits in the frame at every
- * paper size and in both positions like the standard one:
+ * The title block of Romanian practice (cartuș), as a layout in the block's
+ * 180 x 50 mm (`TITLE_BLOCK_MM`), so it sits in the frame at every paper size
+ * and in both positions like the standard one. It carries the data of the
+ * informative model F_01 of Ordinul MDLPA 975/2026, Anexa 4 (the layout of the
+ * model is "informativ"; the data are required), in six rows:
  *
- *   - left: proiectant general (with the logo), project, sheet title, site
- *     address, client (beneficiar);
- *   - middle: șef proiect, proiectat, desenat, verificat, then date and revision;
- *   - right: phase and project number, sheet number and scale, and two empty
- *     boxes for the stamps and signatures of the designer and of the verifier.
+ *   - left: proiectant general (with the logo), registration or authorisation
+ *     number, beneficiar, project title, site address;
+ *   - middle: șef proiect, proiectat and desenat, each with name, professional
+ *     title and an empty "Semnătura" box; the capacity of the authors (for
+ *     firms); the verifier / expert with name, capacity and signature box, and
+ *     the requirement (cerința) verified with the report's number and date;
+ *   - right: phase and project number, date and revision, sheet number and
+ *     scale, sheet title.
  *
+ * F_01 names no stamp, so there is none: the empty boxes are for signatures.
  * Captions are in the language of `t` at the time the layout is chosen, as the
  * standard layout's are. The words are the ones the app's `i18n/ro-glossary.md` keeps. The
  * layout is built here, in the engine package, so the app and `ifcsheet build --standard ro` print the same one.
@@ -23,31 +29,49 @@
 import { DEFAULT_GRAPHIC_STANDARD, type GraphicStandard } from './graphic-standard.js';
 import { TITLE_BLOCK_MM } from './sheet-frame.js';
 import type { StandardCaption } from './title-block-standard.js';
-import type { TemplateItem, TitleBlockTemplate } from './title-block-template.js';
+import { MAX_CELL_LINES, type TemplateItem, type TitleBlockTemplate } from './title-block-template.js';
 
 /** The captions only the Romanian layout uses, with their keys in the app's catalogue, and their English. */
 export const RO_ONLY_CAPTIONS_EN = {
   'tbro.generalDesigner': 'General designer',
+  'tbro.registration': 'Registration / authorisation no.',
+  'tbro.projectTitle': 'Project title',
   'tbro.projectManager': 'Project manager',
   'tbro.designer': 'Designed by',
+  'tbro.professionalTitle': 'Professional title',
+  'tbro.signature': 'Signature',
+  'tbro.capacity': 'Capacity of the authors',
+  'tbro.verifier': 'Verifier / expert',
+  'tbro.verifierCapacity': 'Capacity',
+  'tbro.requirement': 'Requirement',
+  'tbro.report': 'Report / expertise no.',
+  'tbro.reportDate': 'Report date',
   'tbro.phase': 'Phase',
   'tbro.projectNumber': 'Project no.',
-  'tbro.stampDesigner': 'Designer stamp',
-  'tbro.stampVerifier': 'Verifier stamp',
+  'tbro.sheetNumber': 'Sheet no.',
 } as const;
 export type RoOnlyCaption = keyof typeof RO_ONLY_CAPTIONS_EN;
 /** Every caption the Romanian layout prints. */
 export type RoCaption = RoOnlyCaption | StandardCaption;
 
-/** The Romanian layout's captions in Romanian (the words of the app's glossary, `i18n/ro-glossary.md`), for the layout in the app's Romanian and for the command line. */
+/** The Romanian layout's captions in Romanian (F_01's words where it has them; the app's glossary, `i18n/ro-glossary.md`, for the rest), for the layout in the app's Romanian and for the command line. */
 export const TITLE_BLOCK_CAPTIONS_RO: Record<RoCaption, string> = {
   'tbro.generalDesigner': 'Proiectant general',
+  'tbro.registration': 'Nr. înmatriculare / autorizație',
+  'tbro.projectTitle': 'Titlu proiect',
   'tbro.projectManager': 'Șef proiect',
   'tbro.designer': 'Proiectat',
+  'tbro.professionalTitle': 'Titlu profesional',
+  'tbro.signature': 'Semnătura',
+  'tbro.capacity': 'Calitatea elaboratorilor',
+  'tbro.verifier': 'Verificator / expert',
+  'tbro.verifierCapacity': 'Calitatea',
+  'tbro.requirement': 'Cerința',
+  'tbro.report': 'Referat / expertiză nr.',
+  'tbro.reportDate': 'Data',
   'tbro.phase': 'Faza',
   'tbro.projectNumber': 'Proiect nr.',
-  'tbro.stampDesigner': 'Ștampilă proiectant',
-  'tbro.stampVerifier': 'Ștampilă verificator',
+  'tbro.sheetNumber': 'Planșa nr.',
   'sheets.tb.project': 'Proiect',
   'sheets.tb.address': 'Adresă',
   'sheets.tb.client': 'Beneficiar',
@@ -61,63 +85,85 @@ export const TITLE_BLOCK_CAPTIONS_RO: Record<RoCaption, string> = {
   'sheets.tb.scale': 'Scara',
 };
 
-/** The columns' left edges and the right edge, mm. */
-export const RO_COLUMNS = { a: 0, b: 64, c: 118, end: TITLE_BLOCK_MM.w } as const;
-/** Where the stamp boxes start, down the right column, mm; each is half the column wide. */
-export const RO_STAMP_TOP = 24;
+/** The columns' left edges and the right edge, mm: left (firm, project), middle (who signs, who verifies), right (numbers, sheet). */
+export const RO_COLUMNS = { a: 0, b: 62, c: 138, end: TITLE_BLOCK_MM.w } as const;
+/** Under the caption of a cell, mm from the cell's top: the value's letters reach no higher, so a wrapped value does not touch it. */
+const CAPTION_BOTTOM = 3.4;
+/** The block has six rows. */
+export const RO_ROWS = 6;
 
 export function romanianTitleBlock(t: (key: RoCaption) => string, standard: GraphicStandard = DEFAULT_GRAPHIC_STANDARD): TitleBlockTemplate {
   const { titleOuter, titleDivider, titleRule } = standard.sheet;
   const type = standard.type;
   const { w, h } = TITLE_BLOCK_MM;
   const { a, b, c } = RO_COLUMNS;
-  const row = 10;
-  const mid = (c + w) / 2;
+  const row = h / RO_ROWS;
   let n = 0;
   const id = (): string => `tbro${++n}`;
   const items: TemplateItem[] = [{ id: id(), kind: 'rect', x: 0, y: 0, w, h, weight: titleOuter }];
   const line = (x1: number, y1: number, x2: number, y2: number, weight = titleRule): void => { items.push({ id: id(), kind: 'line', x1, y1, x2, y2, weight }); };
-  /** A caption over its `{Param}`, in the cell whose top-left is (x, y) and which is `cw` wide. `size` is the value's letter height, `dy` where its baseline sits below the cell's top. */
-  const cell = (caption: RoCaption, param: string, x: number, y: number, cw: number, o: { size?: number; dy?: number; bold?: boolean; fit?: number } = {}): void => {
-    items.push({ id: id(), kind: 'text', x: x + 2, y: y + 3.2, size: type.caption, text: t(caption), muted: true, fit: cw - 4 });
-    items.push({ id: id(), kind: 'text', x: x + 2, y: y + (o.dy ?? 8), size: o.size ?? type.value, text: `{${param}}`, fit: o.fit ?? cw - 4, ...(o.bold ? { bold: true } : {}) });
+  const hline = (y: number, x1: number, x2: number): void => line(x1, y, x2, y);
+  const vline = (x: number, r1: number, r2: number): void => line(x, row * r1, x, row * r2);
+  /** A caption, and over `{Param}` below it when there is one, in the cell whose top-left is (x, y) and which is `cw` wide; a cell without a param is a box left empty. `size` is the value's letter height, `dy` where its baseline sits below the cell's top. */
+  const cell = (caption: RoCaption, param: string | null, x: number, y: number, cw: number, o: { size?: number; dy?: number; bold?: boolean; fit?: number; rows?: number } = {}): void => {
+    items.push({ id: id(), kind: 'text', x: x + 2, y: y + 2.9, size: type.caption, text: t(caption), muted: true, fit: cw - 4 });
+    if (param === null) return;
+    items.push({ id: id(), kind: 'text', x: x + 2, y: y + (o.dy ?? row - 1.4), size: o.size ?? type.value, text: `{${param}}`, fit: o.fit ?? cw - 4, lines: MAX_CELL_LINES, top: y + CAPTION_BOTTOM, ...(o.bold ? { bold: true } : {}) });
   };
 
-  // Column dividers, and the rules between rows.
+  // Column dividers.
   line(b, 0, b, h, titleDivider);
   line(c, 0, c, h, titleDivider);
-  for (const i of [1, 2, 3, 4]) line(a, row * i, b, row * i);
-  for (const i of [1, 2, 3, 4]) line(b, row * i, c, row * i);
-  line(b + (c - b) / 2, row * 4, b + (c - b) / 2, h);
-  line(c, row, w, row);
-  line(c, RO_STAMP_TOP, w, RO_STAMP_TOP);
-  line(mid, RO_STAMP_TOP, mid, h);
-  line(c + 25, 0, c + 25, row);
-  line(c + 40, row, c + 40, RO_STAMP_TOP);
 
-  // Left: who designs, what, where, for whom. The logo sits at the right of the first cell.
-  cell('tbro.generalDesigner', 'Organisation', a, 0, b - a - 16);
-  items.push({ id: id(), kind: 'logo', x: b - 15, y: 1, w: 14, h: 8 });
-  cell('sheets.tb.project', 'Project', a, row, b - a);
-  cell('sheets.tb.title', 'SheetName', a, row * 2, b - a);
-  cell('sheets.tb.address', 'Address', a, row * 3, b - a);
-  cell('sheets.tb.client', 'Client', a, row * 4, b - a);
+  // Left: who designs (with the logo at the right of the firm's two rows), their registration, for whom, what, where.
+  for (const r of [2, 3, 4, 5]) hline(row * r, a, b);
+  cell('tbro.generalDesigner', 'Organisation', a, 0, b - a, { dy: row * 2 - 2, fit: b - a - 4 - 17 });
+  items.push({ id: id(), kind: 'logo', x: b - 17, y: 1.5, w: 15, h: row * 2 - 3 });
+  cell('tbro.registration', 'RegistrationNumber', a, row * 2, b - a);
+  cell('sheets.tb.client', 'Client', a, row * 3, b - a);
+  cell('tbro.projectTitle', 'Project', a, row * 4, b - a);
+  cell('sheets.tb.address', 'Address', a, row * 5, b - a);
 
-  // Middle: the people who sign.
-  cell('tbro.projectManager', 'ProjectManager', b, 0, c - b);
-  cell('tbro.designer', 'DesignedBy', b, row, c - b);
-  cell('sheets.tb.drawnBy', 'DrawnBy', b, row * 2, c - b);
-  cell('sheets.tb.checkedBy', 'CheckedBy', b, row * 3, c - b);
-  cell('sheets.tb.date', 'Date', b, row * 4, (c - b) / 2);
-  cell('sheets.tb.revision', 'Revision', b + (c - b) / 2, row * 4, (c - b) / 2);
+  // Middle: șef proiect, proiectat, desenat (name, professional title, signature); the authors' capacity; the verifier.
+  // The name and the professional title are the long values: the signature box, which stays empty, is the narrow one.
+  const m1 = b + 32;
+  const m2 = m1 + 24;
+  // The verifier's row gives its capacity more than the other rows give a title; the report row ends where the date's cell starts.
+  const v1 = b + 26;
+  const d = c - 24;
+  for (const r of [1, 2, 3, 4, 5]) hline(row * r, b, c);
+  for (const x of [m1, m2]) vline(x, 0, 3);
+  for (const x of [v1, m2]) vline(x, 4, 5);
+  vline(b + 17, 5, 6);
+  vline(d, 5, 6);
+  const people: [RoCaption, string, string][] = [
+    ['tbro.projectManager', 'ProjectManager', 'ProjectManagerTitle'], ['tbro.designer', 'DesignedBy', 'DesignedByTitle'], ['sheets.tb.drawnBy', 'DrawnBy', 'DrawnByTitle'],
+  ];
+  people.forEach(([role, name, title], i) => {
+    cell(role, name, b, row * i, m1 - b);
+    cell('tbro.professionalTitle', title, m1, row * i, m2 - m1);
+    cell('tbro.signature', null, m2, row * i, c - m2);
+  });
+  cell('tbro.capacity', 'AuthorsCapacity', b, row * 3, c - b);
+  cell('tbro.verifier', 'CheckedBy', b, row * 4, v1 - b);
+  cell('tbro.verifierCapacity', 'VerifierCapacity', v1, row * 4, m2 - v1);
+  cell('tbro.signature', null, m2, row * 4, c - m2);
+  cell('tbro.requirement', 'VerifierRequirement', b, row * 5, 17);
+  cell('tbro.report', 'ReportNumber', b + 17, row * 5, d - b - 17);
+  cell('tbro.reportDate', 'ReportDate', d, row * 5, c - d);
 
-  // Right: phase and project number, sheet number and scale, the stamps.
-  cell('tbro.phase', 'ProjectPhase', c, 0, 25);
-  cell('tbro.projectNumber', 'ProjectNumber', c + 25, 0, w - c - 25);
-  cell('sheets.tb.number', 'SheetNumber', c, row, 40, { size: type.number, dy: 12.6, bold: true });
-  cell('sheets.tb.scale', 'Scale', c + 40, row, w - c - 40, { size: type.scale, dy: 12.6 });
-  // The stamp boxes: a caption, and the rest of the box left empty.
-  items.push({ id: id(), kind: 'text', x: c + 2, y: RO_STAMP_TOP + 3.2, size: type.caption, text: t('tbro.stampDesigner'), muted: true, fit: mid - c - 4 });
-  items.push({ id: id(), kind: 'text', x: mid + 2, y: RO_STAMP_TOP + 3.2, size: type.caption, text: t('tbro.stampVerifier'), muted: true, fit: w - mid - 4 });
+  // Right: phase and project number, date and revision, sheet number and scale, the sheet's title.
+  const big = row * 2 - 2.2;
+  hline(row, c, w); hline(row * 2, c, w); hline(row * 4, c, w);
+  vline(c + 16, 0, 1);
+  vline(c + 24, 1, 2);
+  vline(c + 20, 2, 4);
+  cell('tbro.phase', 'ProjectPhase', c, 0, 16);
+  cell('tbro.projectNumber', 'ProjectNumber', c + 16, 0, w - c - 16);
+  cell('sheets.tb.date', 'Date', c, row, 24);
+  cell('sheets.tb.revision', 'Revision', c + 24, row, w - c - 24);
+  cell('tbro.sheetNumber', 'SheetNumber', c, row * 2, 20, { size: type.number, dy: big, bold: true });
+  cell('sheets.tb.scale', 'Scale', c + 20, row * 2, w - c - 20, { size: type.scale, dy: big });
+  cell('sheets.tb.title', 'SheetName', c, row * 4, w - c, { size: type.scale, dy: big, bold: true });
   return { items };
 }
