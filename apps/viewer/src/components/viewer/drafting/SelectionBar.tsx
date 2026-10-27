@@ -24,6 +24,7 @@ import { overriddenFields, resolveDim, resolveText, type ArrowKind, type TextPla
 import { isGeometry, type AnnotationShape, type DraftEntity, type Pt } from '@/drafting/types';
 import { resetElementOverrides, setElementOverride, setElementStyle } from '@/project/drafting-standards';
 import { openStandards } from '@/project/standards-dialog-store';
+import { flipDimensionSide } from '@/drafting/dimension-flip';
 import { isDimensional, useStyleBook } from './AnnotationStyleFields';
 
 const BTN = 'h-7 whitespace-nowrap rounded-sm px-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800';
@@ -100,6 +101,9 @@ export function SelectionBar({ entity, transform, axis, editing, onEditingChange
                 {label(p)}
               </button>
             ))}
+            {shape.type === 'dimension' ? (
+              <button type="button" className={BTN} onClick={() => editDrafts({ update: new Map([[entity.id, flipDimensionSide(shape)]]) })}>{t('standards.dim.flipSide')}</button>
+            ) : null}
             <select aria-label={t('standards.dim.arrow')} className={SELECT} value={dim.arrow} onChange={(e) => setElementOverride(ids, 'arrow', e.target.value as ArrowKind)}>
               {(['tick', 'arrow', 'dot', 'none'] as const).map((a) => <option key={a} value={a}>{t(`standards.dim.arrow.${a}` as TranslationKey)}</option>)}
             </select>
