@@ -1,0 +1,130 @@
+AxonometricPreset: type (type-only)
+CLASSIFICATION_BY: value
+CameraViewpoint: type (type-only)
+CategoryGraphics: type (type-only)
+CategoryLineWeight: type (type-only)
+ClassificationBy: type (type-only)
+ClassificationImport: type (type-only)
+ClassificationMapping: type (type-only)
+ClassificationModel: type (type-only)
+ClassificationProblem: type (type-only)
+ClassificationProblemKind: type (type-only)
+ClassificationResult: type (type-only)
+ClassificationRule: type (type-only)
+ClassificationSystem: type (type-only)
+ClassifiedElement: type (type-only)
+ClassifiedType: type (type-only)
+CustomPaper: type (type-only)
+DASH_MM: value
+DEFAULT_FACE_FILL: value
+DEFAULT_INK: value
+DEFAULT_VIEW_PRESET: value
+DisciplineId: type (type-only)
+DraftingProjectView: type (type-only)
+ElementGraphics: type (type-only)
+ElementLineStyle: type (type-only)
+ElementStyle: type (type-only)
+ElevationDirection: type (type-only)
+ElevationProjectView: type (type-only)
+ElongatedPaper: type (type-only)
+GlobalId: type (type-only)
+GridEnds: type (type-only)
+GroupPattern: type (type-only)
+HIDDEN_DASH_MM: value
+InteriorElevation: type (type-only)
+ItemRules: type (type-only)
+ItemStyle: type (type-only)
+ModelClassificationRef: type (type-only)
+NumberGroup: type (type-only)
+NumberingScheme: type (type-only)
+OrphanElement: type (type-only)
+PEN_TABLE: value
+Paper: type (type-only)
+PaperSize: type (type-only)
+PenGroup: type (type-only)
+PenKind: type (type-only)
+PenLayer: type (type-only)
+PenTable: type (type-only)
+PhaseId: type (type-only)
+PhaseStyle: type (type-only)
+PlanProjectView: type (type-only)
+ProjectDocument: type (type-only)
+ProjectLevel: type (type-only)
+ProjectModelRef: type (type-only)
+ProjectSheet: type (type-only)
+ProjectView: type (type-only)
+ProjectViewBase: type (type-only)
+ProjectViewKind: type (type-only)
+ProjectViewTemplate: type (type-only)
+ProjectionMode: type (type-only)
+ResolvedViewGraphics: type (type-only)
+SectionCustomPlane: type (type-only)
+SectionPlaneAxis: type (type-only)
+SectionProjectPlane: type (type-only)
+SectionProjectView: type (type-only)
+SheetFrame: type (type-only)
+SheetTemplate: type (type-only)
+SheetViewport: type (type-only)
+StyleItem: type (type-only)
+StyleRule: type (type-only)
+StyleRuleStyle: type (type-only)
+TemplateGraphics: type (type-only)
+TemplateSeries: type (type-only)
+ThreeDProjectView: type (type-only)
+ThreeDProjection: type (type-only)
+TitleBlockPosition: type (type-only)
+VIEW_CATEGORY_CLASSES: value
+VIEW_TEMPLATE_KINDS: value
+ViewDetail: type (type-only)
+ViewGraphics: type (type-only)
+ViewGridGraphics: type (type-only)
+ViewPhases: type (type-only)
+ViewRaster: type (type-only)
+ViewStyleInputs: type (type-only)
+ViewStyler: type (type-only)
+ViewTemplateKind: type (type-only)
+WeightPair: type (type-only)
+assignDefaultTemplates: value
+categoryIdOf: value
+classKey: value
+classificationOf: value
+classificationRuleOf: value
+classifiedTypes: value
+defaultViewTemplates: value
+elementProperties: value
+elementShown: value
+hasElementGraphics: value
+hiddenClassesOf: value
+hiddenElementIds: value
+hiddenLineElement: value
+hiddenLineEntry: value
+itemRules: value
+lineHidden: value
+lineKey: value
+mappingsFor: value
+matchKey: value
+materialKey: value
+orphanElements: value
+ownGraphicsOf: value
+parseClassificationRows: value
+penGroups: value
+penOrder: value
+presetRules: value
+readClassificationMapping: value
+readClassificationMappings: value
+readClassificationRule: value
+resolveElementGraphics: value
+resolveViewGraphics: value
+resolveViewport: value
+ruleStyleFor: value
+rulesReadProperties: value
+systemLabel: value
+templateGraphicsOf: value
+templateKindOf: value
+templateOf: value
+untemplatedGraphics: value
+viewOverrideRules: value
+viewStyler: value
+viewportHiddenLayers: value
+withRule: value
+withoutElements: value

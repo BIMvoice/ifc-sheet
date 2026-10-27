@@ -1,0 +1,222 @@
+AreaSource: type (type-only)
+BOQ_QUANTITIES: value
+BOQ_UNITS: value
+BOQ_UNIT_TEXT: value
+BOQ_WORDS_EN: value
+BOQ_WORDS_RO: value
+BoqArticle: type (type-only)
+BoqCell: type (type-only)
+BoqDimension: type (type-only)
+BoqElement: type (type-only)
+BoqElementRef: type (type-only)
+BoqLine: type (type-only)
+BoqMissing: type (type-only)
+BoqProblem: type (type-only)
+BoqProblemKind: type (type-only)
+BoqQuantity: type (type-only)
+BoqResult: type (type-only)
+BoqSay: type (type-only)
+BoqTable: type (type-only)
+BoqTypeLine: type (type-only)
+BoqUnit: type (type-only)
+BoqWordKey: type (type-only)
+COUNT_QUANTITY: value
+CheckEntry: type (type-only)
+CheckOccurrence: type (type-only)
+CheckPart: type (type-only)
+ClassifiableListProvider: type (type-only)
+ContentEntry: type (type-only)
+DEFAULT_JOINERY_MAPPING: value
+DuplicateType: type (type-only)
+EXTERIOR: value
+ElementFacts: type (type-only)
+ElementRef: type (type-only)
+EstimatedAreas: type (type-only)
+ExportCell: type (type-only)
+ExportTable: type (type-only)
+FootprintMesh: type (type-only)
+GapType: type (type-only)
+INTERIOR: value
+JoineryMapping: type (type-only)
+LIST_COUNT_ID: value
+LIST_WORDS_EN: value
+LIST_WORDS_RO: value
+ListCell: type (type-only)
+ListClassificationContext: type (type-only)
+ListFigureKind: type (type-only)
+ListScheduleColumn: type (type-only)
+ListScheduleDef: type (type-only)
+ListScheduleTable: type (type-only)
+ListTableSource: type (type-only)
+MARK_SCHEMES: value
+MAX_KEPT_APART: value
+MAX_LABEL_LENGTH: value
+MAX_START: value
+MAX_TEXT_LENGTH: value
+MAX_TEXT_ROWS: value
+MAX_WASTE: value
+MappingMatch: type (type-only)
+MappingSource: type (type-only)
+MarkOf: type (type-only)
+ModelFacts: type (type-only)
+OccurrenceFacts: type (type-only)
+OfficeClassificationAccessor: type (type-only)
+OrphanCell: type (type-only)
+PROPERTY_OPS: value
+PartRef: type (type-only)
+ProjectSchedule: type (type-only)
+PropertyFact: type (type-only)
+PropertyOp: type (type-only)
+PropertyTest: type (type-only)
+READINESS_EN: value
+ROOM_AREA_NAMES: value
+ROOM_AREA_QTO: value
+ROOM_SCHEDULE_EN: value
+ROOM_SCHEDULE_RO: value
+ROW_IDS: value
+RURAL_MAX_LEVELS: value
+RURAL_MAX_SD: value
+ReadinessFinding: type (type-only)
+ReadinessKind: type (type-only)
+ReviewEdit: type (type-only)
+ReviewElement: type (type-only)
+ReviewFilter: type (type-only)
+ReviewStatus: type (type-only)
+ReviewType: type (type-only)
+RoomArea: type (type-only)
+RoomRecord: type (type-only)
+RoomSchedule: type (type-only)
+RoomScheduleLevel: type (type-only)
+RoomScheduleLine: type (type-only)
+RoomScheduleWords: type (type-only)
+RowId: type (type-only)
+RuralScope: type (type-only)
+SORTS: value
+ScheduleClassification: type (type-only)
+ScheduleContent: type (type-only)
+ScheduleExport: type (type-only)
+ScheduleLevelInfo: type (type-only)
+ScheduleListKind: type (type-only)
+ScheduleNumbering: type (type-only)
+ScheduleRows: type (type-only)
+ScheduleSort: type (type-only)
+ScheduleSymbols: type (type-only)
+ScheduleTextCell: type (type-only)
+ScheduleTextRow: type (type-only)
+SortBy: type (type-only)
+SpaceRole: type (type-only)
+SplitData: type (type-only)
+SplitEntry: type (type-only)
+SubReport: type (type-only)
+SubReportCheck: type (type-only)
+SubReportFilter: type (type-only)
+SubReportFix: type (type-only)
+TagWrite: type (type-only)
+TaggedEntry: type (type-only)
+TextHolder: type (type-only)
+addTextRow: value
+applyContent: value
+boqLineText: value
+boqMissing: value
+boqNotes: value
+boqProblem: value
+boqPropertyNames: value
+boqSayFor: value
+boqTable: value
+boqTableCells: value
+boqTypeLabel: value
+canSplit: value
+checkSubReports: value
+cleanText: value
+computeBoq: value
+contentOf: value
+csvDelimiter: value
+declared: value
+describeBoqProblem: value
+describeReadiness: value
+elementCount: value
+estimatedAreas: value
+exportCsv: value
+fillTemplate: value
+filterPropertyNames: value
+filterReview: value
+fitToElement: value
+followedTags: value
+hasSelector: value
+isClean: value
+isOpenFilter: value
+keepApart: value
+keepId: value
+listExportTable: value
+listFigure: value
+listFigureKind: value
+listScheduleTable: value
+listTableCells: value
+listTableText: value
+listWordsFor: value
+meshFootprintArea: value
+meshFootprintPerimeter: value
+modelReadiness: value
+newArticle: value
+normaliseName: value
+occurrenceMarkOf: value
+orderedRows: value
+orphanCells: value
+partsOf: value
+passesElementFilter: value
+passesPropertyTest: value
+pickArea: value
+picks: value
+placeTypes: value
+placeTypesOf: value
+predefinedTypeText: value
+propertyValueText: value
+quantityDimension: value
+readBoqArticle: value
+readBoqArticles: value
+readJoineryMapping: value
+readKeptApart: value
+readListScheduleDef: value
+readPropertyTest: value
+readSchedule: value
+readScheduleClassification: value
+readScheduleContent: value
+readScheduleTextRows: value
+readSubReport: value
+readSubReportFilter: value
+readUrbanSettings: value
+removeTextRow: value
+renameTextRow: value
+resolveMapping: value
+resumeChecking: value
+reviewCounts: value
+reviewTypes: value
+roomArea: value
+roomSchedule: value
+roomScheduleCsv: value
+roomScheduleLines: value
+roomScheduleRows: value
+roomScheduleTable: value
+roomScheduleText: value
+roomScheduleWords: value
+ruralReadiness: value
+scheduleFilterProperties: value
+scheduleOf: value
+setTextCell: value
+shownRows: value
+spaceRole: value
+subReportCheckOf: value
+subReportChecksOf: value
+subReportData: value
+subReportParams: value
+subReportsOf: value
+symbolsShown: value
+textCellText: value
+textOwner: value
+textRowId: value
+textRowsOf: value
+tidy: value
+typeLabel: value
+unitDimension: value
+withListClassification: value
+withOfficeClassification: value

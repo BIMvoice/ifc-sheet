@@ -1,0 +1,14 @@
+ENGINE_NAMES_EN: value
+EngineNameKey: type (type-only)
+NameParams: type (type-only)
+NameResolver: type (type-only)
+SheetFormat: type (type-only)
+SheetLocale: type (type-only)
+UnitsAndNumbers: type (type-only)
+englishName: value
+nameOf: value
+readUnitsAndNumbers: value
+setNameResolver: value
+sheetFormat: value
+sheetLevel: value
+sheetNumber: value
