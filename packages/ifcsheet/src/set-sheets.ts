@@ -17,7 +17,9 @@ import { readStoreFacts } from './title-block-records.js';
 import { projectTitleFields } from './title-block-sources.js';
 import { generateViewDrawings } from './view-drawings.js';
 import { propertySetsOf } from './joinery-schedule.js';
-import { PEN_TABLE, elementProperties, type PenTable } from './view-style.js';
+import { PEN_TABLE, elementProperties, viewStyler, type PenTable } from './view-style.js';
+import { surfaceFills, type SurfaceFill } from './surface-fills.js';
+import { resolveViewGraphics } from './view-templates.js';
 
 export interface SheetGraphicsOptions {
   /** Cut each view's drawing from the meshes (default true); without it the sheets carry their frames and titles only. */
@@ -69,7 +71,16 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   const globalIdOf = entities ? (id: number) => entities.getGlobalId(id) || undefined : undefined;
   const propertiesOf = model.dataStore ? headlessPropertiesOf(model.dataStore) : undefined;
   const materialOf = model.dataStore ? headlessMaterialOf(model.dataStore) : undefined;
+  // The elevations and sections in the coloured style (#499): the surfaces the building's meshes show, minus what the view hides.
+  const surfaces = new Map<string, SurfaceFill[]>();
+  for (const view of doc.views) {
+    const drawing = drawings.get(view.id);
+    const graphics = resolveViewGraphics(view, doc.viewTemplates);
+    if (!drawing || !graphics?.colouredSurfaces || (view.kind !== 'elevation' && view.kind !== 'section')) continue;
+    const styler = viewStyler({ graphics, pens: options.pens ?? PEN_TABLE, globalIdOf, propertiesOf, materialOf });
+    surfaces.set(view.id, surfaceFills(model.buildingMeshes, drawing.config, (entityId, ifcType) => styler.face({ entityId, ifcType }).visible));
+  }
   // The title block's fields as the app fills them from the model (`title-block-sources.ts`): the phase, the roles, the organisation, the address.
   const projectFields = model.dataStore ? projectTitleFields(doc.titleBlock, doc.titleBlockSources, readStoreFacts(model.dataStore)) : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language));
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language, surfaces));
 }

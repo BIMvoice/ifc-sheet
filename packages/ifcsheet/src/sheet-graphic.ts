@@ -23,7 +23,8 @@ import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
 import { sheetScaleLine } from './sheet-scale.js';
 import { clipPolygon, clipPolyline } from './clip.js';
 import type { SchemeResult } from './colour-fills.js';
-import { schemeLegend, viewportFills, type SheetFill } from './sheet-colours.js';
+import { schemeLegend, viewportFills, viewportSurfaceFills, type SheetFill } from './sheet-colours.js';
+import type { SurfaceFill } from './surface-fills.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
@@ -163,6 +164,8 @@ export function sheetGraphic(
   projectFields?: Record<string, string>,
   /** The language the title block's dates are written in (`formatTitleBlockDate`); absent: as stored. */
   language?: string,
+  /** The coloured surfaces of the elevations and sections that ask for them (#499), by view id: `sheetGraphics` makes them from the meshes. */
+  surfaces: ReadonlyMap<string, readonly SurfaceFill[]> = new Map(),
 ): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], images: [], viewports: [] };
@@ -178,6 +181,8 @@ export function sheetGraphic(
     if (drawing && box && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
       const scheme = schemes.get(vp.viewId);
+      const surface = surfaces.get(vp.viewId);
+      if (surface) out.fills.push(...viewportSurfaceFills(surface, at, box));
       if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box));
       // How the view draws (its template's graphics, then its own, `resolveViewGraphics`; its single elements and lines, `element-graphics.ts`; its preset's
       // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by

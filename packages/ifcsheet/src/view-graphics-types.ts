@@ -112,6 +112,8 @@ export interface ViewGraphics {
   categories?: Record<string, CategoryGraphics>;
   /** The view coloured by a property (`colour-scheme.ts`, #92). Absent: not coloured. */
   colourScheme?: ColourScheme;
+  /** An elevation or section that fills its visible surfaces with the colours of the model's materials (#499), under the linework. Absent or false: the line and hatch styles alone. A view template carries it. */
+  colouredSurfaces?: boolean;
   /** Elements hidden in this view, by GlobalId (#33). The 3D view's hide / isolate state is not followed. */
   hiddenElements?: GlobalId[];
   /** Per-element overrides, by GlobalId (#32): the most specific layer, over the category's. */

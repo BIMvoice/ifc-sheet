@@ -37,6 +37,11 @@ export interface Pen {
   layer: string;
   /** A colour scheme's fill (#92): the DXF carries it as a solid hatch, which a plain cut-face fill is not. */
   solid?: boolean;
+  /**
+   * A coloured surface (#499): a visible face in its material's colour, under every line. Painted in the order given (far to near), filled
+   * non-zero with a hairline of its own colour closing the seams between triangles; the DXF keeps lines only and leaves it out.
+   */
+  surface?: true;
   /** With a CAD layer standard: the element class and material the pen is split by (`dxf-tags.ts`). */
   ifcType?: string;
   material?: string;
@@ -47,6 +52,9 @@ export interface CadPenContext {
   /** The IfcMaterial name of an element (or of one of its layers when `materialId` is given), or null. */
   materialOf(entityId: number, materialId?: number): string | null;
 }
+
+/** The hairline a coloured surface is stroked with, in its own colour, paper millimetres: it closes the seams between its triangles. */
+const SURFACE_SEAM = 0.1;
 
 /** Default pens, paper millimetres (the default graphic standard's; the overlays that do not take a standard yet draw with these). */
 export const PEN = DEFAULT_GRAPHIC_STANDARD.pens;
@@ -72,6 +80,16 @@ export function viewportPens(
     return { key: `|${ifcType ?? ''}|${material ?? ''}`, tags: { ...(ifcType ? { ifcType } : {}), ...(material ? { material } : {}) } };
   };
   const out: Pen[] = [];
+  // The coloured surfaces come first, in their own order: pens grouped by colour would paint a far face over a near one.
+  if ('surfaceFills' in drawing && drawing.surfaceFills) {
+    for (const f of drawing.surfaceFills) {
+      if (!styler.face(f).visible) continue;
+      const last = out[out.length - 1];
+      const d = [f.polygon.outer].map(loop).join('');
+      if (last?.surface && last.fill === f.surfaceColour) last.d += d;
+      else out.push({ d, stroke: f.surfaceColour, width: SURFACE_SEAM, fill: f.surfaceColour, layer: 'SURFACE', surface: true });
+    }
+  }
   for (const g of penGroups(fillOrder(drawing), drawing.lines, styler, cad ? (l) => subject(l.ifcType, l.entityId).key : undefined)) {
     if (g.fill !== null) {
       out.push({ d: g.faces.map((p) => [p.polygon.outer, ...p.polygon.holes].map(loop).join('')).join(''), stroke: null, width: 0, fill: g.fill, layer: g.layer, ...(g.layer === 'COLOUR' ? { solid: true } : {}) });

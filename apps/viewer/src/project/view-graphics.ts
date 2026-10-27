@@ -19,6 +19,7 @@ import type { CategoryLineWeight, PhaseId, ResolvedViewGraphics, ViewGraphics } 
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
 import type { SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
 import { VIEW_CATEGORY_CLASSES, elementShown, itemRules, hasElementGraphics, hiddenClassesOf, lineHidden, resolveElementGraphics, type ElementStyle } from '@bimvoice/ifcsheet';
+import type { SurfaceFill } from '@bimvoice/ifcsheet/surface-fills';
 import { withScheme } from './view-scheme-style';
 import type { DraftShape } from '@/drafting/types';
 
@@ -33,6 +34,8 @@ export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
   cutPolygons: (DrawingPolygon & { phase?: PhaseId; schemeColour?: string; elementStyle?: ElementStyle; materialFill?: string | null })[];
   /** The rooms a colour scheme fills (#92), drawn under everything else. */
   schemeFills?: (DrawingPolygon & { schemeColour: string })[];
+  /** The coloured style of an elevation or section (#499): the visible surfaces in the colours of the materials, painted far to near under everything else (`view-surface-fills.ts`). */
+  surfaceFills?: SurfaceFill[];
   materialHatches?: (MaterialHatch & HatchSource)[];
   membranes?: DraftShape[];
 };
