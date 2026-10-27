@@ -47,7 +47,7 @@ const run = (pts: readonly { x: number; y: number }[]): string => pts.map((p, i)
 export function ViewportMarks({ shapes }: { shapes: ViewportMarkShapes }) {
   return (
     <g data-viewport-marks="true" {...penTags('SITE-SYMBOLS', STROKE_MM)}>
-      {shapes.solids.map((pts, i) => <path key={`s${i}`} d={`${run(pts)} Z`} fill="#000" stroke="none" />)}
+      {shapes.solids.map((pts, i) => <path key={`s${i}`} data-dxf-fill="solid" d={`${run(pts)} Z`} fill="#000" stroke="none" />)}
       {shapes.strokes.map((pts, i) => <path key={`l${i}`} d={run(pts)} fill="none" stroke="#000" strokeWidth={STROKE_MM} strokeLinejoin="round" />)}
       {shapes.texts.map((t, i) => (
         <text key={`t${i}`} x={t.at.x} y={t.at.y} fontSize={t.size} textAnchor={t.align === 'center' ? 'middle' : 'start'} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">{t.text}</text>

@@ -23,7 +23,9 @@ import { useViewerStore } from '@/store';
 import { parseSiteFixture, SITE_FIXTURE } from '@/test/site-fixture';
 import { northArrowRotation } from '@/siteplan/true-north';
 import { northDegrees } from '@bimvoice/ifcsheet/viewport-marks';
+import { exportDxf } from '@bimvoice/ifcsheet/headless';
 import { SheetPaper } from './SheetPaper';
+import { sheetDxf } from './sheet-dxf';
 
 const drawing = {
   bounds: { min: { x: 0, y: 0 }, max: { x: 30, y: 20 } },
@@ -43,16 +45,42 @@ const same = (a: number[], b: number[], what: string): void => {
 };
 
 /** The screen and the layout for the same project; `north` is what the project's model states. */
-async function bothSides(vp: SheetViewport) {
+async function bothSides(vp: SheetViewport, v: ProjectView = view, site?: object) {
   const store = await parseSiteFixture();
   useViewerStore.setState({ ifcDataStore: store } as never);
   const sheet = sheetOf(vp);
-  const ui = render(<SheetPaper sheet={sheet} projectName="House" content={() => ({ view, drawing, drafts: [] })} layers={[]} extraPatterns={[]} selectedViewportId={null} pxPerMm={1} />);
+  const ui = render(<SheetPaper sheet={sheet} projectName="House" content={() => ({ view: v, drawing, drafts: [], ...(site ? { site: site as never } : {}) })} layers={[]} extraPatterns={[]} selectedViewportId={null} pxPerMm={1} />);
   const marks = ui.querySelector('[data-viewport-marks]');
   const units = useProjectStore.getState().unitsAndNumbers;
-  const doc = { name: 'House', models: [], views: [view], sheets: [sheet] } as unknown as ProjectDocument;
+  const doc = { name: 'House', models: [], views: [v], sheets: [sheet] } as unknown as ProjectDocument;
   const layout = sheetGraphic(sheet, doc, new Map([['v', drawing]]), undefined, undefined, undefined, undefined, undefined, undefined, undefined, { north: trueNorthOf(store), locale: sheetFormat('en', units) });
-  return { marks, layout };
+  const svg = ui.querySelector('svg') as unknown as SVGSVGElement;
+  return { marks, layout, screenDxf: new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet)), engineDxf: exportDxf(layout) };
+}
+
+/** The points of every line entity on `layer` of a DXF text, rounded to a micron (a vertex is group codes 10 and 20). */
+function layerPoints(dxf: string, layer: string): string[] {
+  const lines = dxf.split(/\r?\n/).map((l) => l.trim());
+  const out = new Set<string>();
+  const entities = lines.indexOf('ENTITIES');
+  let on = false;
+  let header = false;
+  let text = false;
+  let x: number | null = null;
+  for (let i = entities + 1; i + 1 < lines.length; i += 2) {
+    const code = lines[i];
+    const value = lines[i + 1];
+    if (code === '0') { on = false; x = null; text = value === 'TEXT'; }
+    // A POLYLINE's and a HATCH's own 10/20 is a zero placeholder, not a point.
+    if (code === '0') header = value === 'POLYLINE' || value === 'HATCH';
+    if (code === '8') on = value === layer;
+    if (!on) continue;
+    if (header || text) continue; // the engine's DXF is linework only; the figures' places are compared in the layout
+    // A vertex is groups 10 and 20; a LINE's far end is 11 and 21.
+    if (code === '10' || code === '11') x = Number(value);
+    if ((code === '20' || code === '21') && x !== null) out.add(`${x.toFixed(3)},${Number(value).toFixed(3)}`);
+  }
+  return [...out].sort();
 }
 
 describe('a viewport\'s north arrow and scale bar: the screen and the layout agree', () => {
@@ -100,6 +128,49 @@ describe('a viewport\'s north arrow and scale bar: the screen and the layout agr
     const { marks, layout } = await bothSides(viewport({}));
     assert.equal(marks, null);
     assert.deepEqual(layout.symbols, { strokes: [], solids: [] });
+  });
+});
+
+describe('a site plan viewport: one placement on the screen, in the PDF layout and in both DXFs', () => {
+  // happy-dom has no layout and does not map presentation attributes to computed style: the DXF walker needs a screen CTM and the stroke, so give both (as view-dxf.test does for the CTM).
+  const proto = SVGElement.prototype as unknown as { getScreenCTM?: () => DOMMatrix };
+  const ownCtm = Object.getOwnPropertyDescriptor(proto, 'getScreenCTM');
+  const realStyle = window.getComputedStyle.bind(window);
+  beforeEach(() => {
+    resetProject();
+    proto.getScreenCTM = () => new DOMMatrix();
+    window.getComputedStyle = ((el: Element, pseudo?: string | null) => {
+      const style = realStyle(el, pseudo);
+      return new Proxy(style, { get: (target, key) => (key === 'stroke' || key === 'fill' ? target[key] || el.getAttribute(key) || '' : Reflect.get(target, key) instanceof Function ? Reflect.get(target, key).bind(target) : Reflect.get(target, key)) });
+    }) as typeof window.getComputedStyle;
+  });
+  afterEach(() => {
+    cleanup(); useViewerStore.setState({ ifcDataStore: null } as never);
+    window.getComputedStyle = realStyle;
+    if (ownCtm) Object.defineProperty(proto, 'getScreenCTM', ownCtm); else delete proto.getScreenCTM;
+  });
+  const SITE_VIEW = { id: 'v', kind: 'plan', name: 'Site plan', site: true, createdAt: 0 } as unknown as ProjectView;
+  // A site plan with a plot, a footprint and a setback in the way of the old free-spot placement.
+  const site = { boundary: [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 }, { x: 0, y: 20 }], footprint: [[{ x: 10, y: 5 }, { x: 25, y: 5 }, { x: 25, y: 15 }, { x: 10, y: 15 }]], setbacks: [] };
+
+  it('draws the default marks of a site plan at the same points on the screen and in the layout, with no choice made on the viewport', async () => {
+    const { marks, layout } = await bothSides(viewport({}), SITE_VIEW, site);
+    assert.ok(marks, 'the site plan shows its marks by default');
+    assert.equal(marks.parentElement?.querySelectorAll('[data-site-symbol]').length, 0, 'no second set of symbols');
+    const paths = [...marks.querySelectorAll('path')].filter((p) => p.getAttribute('fill') === 'none');
+    assert.equal(paths.length, layout.symbols.strokes.length);
+    paths.forEach((p, i) => same(numbers(p.getAttribute('d') ?? ''), flat(layout.symbols.strokes[i]), `stroke ${i}`));
+    const texts = [...marks.querySelectorAll('text')];
+    assert.deepEqual(texts.map((t) => t.textContent), ['N', '0', '2.5', '5 m']);
+    for (const t of texts) assert.ok(layout.texts.some((l) => l.text === t.textContent && Math.abs(l.at.x - Number(t.getAttribute('x'))) < 1e-9 && Math.abs(l.at.y - Number(t.getAttribute('y'))) < 1e-9), `${t.textContent} at the same point`);
+  });
+
+  it('writes the same SITE-SYMBOLS points in the app\'s DXF and the engine\'s', async () => {
+    const { screenDxf, engineDxf } = await bothSides(viewport({}), SITE_VIEW, site);
+    const onScreen = layerPoints(screenDxf, 'SITE-SYMBOLS');
+    const inEngine = layerPoints(engineDxf, 'SITE-SYMBOLS');
+    assert.ok(inEngine.length > 10, 'the engine\'s DXF carries the marks');
+    assert.deepEqual(onScreen, inEngine);
   });
 });
 
