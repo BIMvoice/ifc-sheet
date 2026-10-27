@@ -1,14 +1,14 @@
 [
  {
   "name": "ifcsheet_open_model",
-  "description": "Open an IFC model for drawing-set work: parses it and meshes its geometry. Returns a model_id handle for ifcsheet_generate_set, plus a summary (project name, storeys with elevations, element and mesh counts). This is a separate handle from model_load; it does not register the model for the query tools. Next step: ifcsheet_generate_set.",
+  "description": "Open an IFC or IFCX model for drawing-set work (the format is read from the content): parses it and meshes its geometry. Returns a model_id handle for ifcsheet_generate_set, plus a summary (project name, storeys with elevations, element and mesh counts). This is a separate handle from model_load; it does not register the model for the query tools. Next step: ifcsheet_generate_set.",
   "scope": "read",
   "inputSchema": {
    "type": "object",
    "properties": {
     "file_path": {
      "type": "string",
-     "description": "Path to an .ifc file on the server (must be inside the allowed paths). Give this or ifc_base64."
+     "description": "Path to an .ifc or .ifcx file on the server (must be inside the allowed paths). Give this or ifc_base64."
     },
     "ifc_base64": {
      "type": "string",
