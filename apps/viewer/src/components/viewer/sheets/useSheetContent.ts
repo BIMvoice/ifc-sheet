@@ -28,6 +28,7 @@ import { isRasterView } from '@/project/axonometric';
 import { isAutosaveRasterRef } from '@/project/autosave-rasters';
 import { drawingNumbers } from '@/drafting/cross-ref';
 import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
+import { viewScreenUp } from '@/project/view-screen-up';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
@@ -155,9 +156,10 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
       const raw = drawingOf.get(vp.viewId) ?? null;
       const view = views.find((v) => v.id === vp.viewId);
       const overlays = styled.get(vp.viewId)?.overlays;
-      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, view, views, sheets, ground?.id, drafts, levels, raw, overlays], () => ({
+      const screenUp = viewScreenUp(vp.viewId);
+      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays], () => ({
         drafts: settledDrafts(vp.viewId), view, views, sheets, groundPlanId: ground?.id,
-        bounds: raw?.bounds, viewportScale: vp.scale, overlays,
+        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp,
       }));
     };
   }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels]);

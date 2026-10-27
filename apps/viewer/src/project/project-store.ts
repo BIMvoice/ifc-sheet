@@ -30,7 +30,7 @@ import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
-import { assignDefaultTemplates, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
+import { assignDefaultTemplates, type PacIntervention, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 import type { UrbanSettings } from '@/urban/indicators';
@@ -156,6 +156,12 @@ export function setIncludeFarElements(on: boolean): void {
 export function setHandoverPattern(pattern: string): void {
   const next = readHandoverPattern(pattern);
   if (next !== useProjectStore.getState().handoverPattern) useProjectStore.setState({ handoverPattern: next, dirty: true });
+}
+
+/** The works the permit project (PAC) is for; a new building is the default and is stored as absent, so a project that never chose saves as before. */
+export function setPacIntervention(works: PacIntervention): void {
+  const next = works === 'new' ? undefined : works;
+  if (next !== useProjectStore.getState().pacIntervention) useProjectStore.setState({ pacIntervention: next, dirty: true });
 }
 
 /**

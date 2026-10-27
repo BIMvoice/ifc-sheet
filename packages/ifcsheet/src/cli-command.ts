@@ -35,6 +35,8 @@ export interface CliValues {
   detail?: boolean;
   locale?: string;
   'include-far-elements'?: boolean;
+  pac?: boolean;
+  intervention?: string;
   help?: boolean;
   version?: boolean;
 }

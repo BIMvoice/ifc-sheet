@@ -20,6 +20,8 @@ export interface BuildStandard {
   pens?: PenTable;
   /** The layout of every sheet's title block; absent: the standard layout. */
   titleBlockTemplate?: ProjectFacts['titleBlockTemplate'];
+  /** The project's "Units and numbers" with the pack's fields over it (the app's install changes only the fields the pack sets); absent: neither sets any. The figures the build prints are written with it. */
+  unitsAndNumbers?: ProjectFacts['unitsAndNumbers'];
   /** What the build says about the choice (a project from a newer app). */
   notes: string[];
 }
@@ -40,7 +42,8 @@ export function buildStandard(standardId: string | undefined, project: ProjectFa
   if (standardId !== undefined && !pack) return null;
   const graphic = pack?.graphicStandard !== undefined ? graphicStandardOf(pack.graphicStandard) : project?.graphicStandard;
   const titleBlockTemplate = pack?.titleBlockTemplate ?? project?.titleBlockTemplate;
-  return { ...(graphic ? { pens: pensOf(graphic) } : {}), ...(titleBlockTemplate ? { titleBlockTemplate } : {}), notes };
+  const units = pack?.unitsAndNumbers ? { ...project?.unitsAndNumbers, ...pack.unitsAndNumbers } : project?.unitsAndNumbers;
+  return { ...(graphic ? { pens: pensOf(graphic) } : {}), ...(titleBlockTemplate ? { titleBlockTemplate } : {}), ...(units ? { unitsAndNumbers: units } : {}), notes };
 }
 
 /** `set` with the standard's title block layout on its document. */

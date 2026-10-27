@@ -14,8 +14,8 @@ import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { fitExtent } from '@/project/sheets';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
+import { withAnnotationScreenUp } from './annotation';
 import { elevationMarkDrafts, MARK_MARGIN_MM, obstacleBoxes, overlayObstacleBoxes, sectionReferenceDrafts } from './cross-ref-marks';
-import { annotationScreenUp } from './annotation';
 import type { DraftEntity, Pt } from './types';
 
 export interface PlanCrossRefInput {
@@ -32,24 +32,26 @@ export interface PlanCrossRefInput {
   viewportScale: number;
   /** What the plan draws over its cut: its door and window symbols are kept clear of. */
   overlays?: readonly PlanOverlay[];
+  /**
+   * Which way is up on screen in the plan's drawing y (`viewScreenUp`: -1 on a plan). Every text box the marks are placed
+   * against is measured with it, so the marks are a function of this input and not of the drafting session's current view.
+   */
+  screenUp: 1 | -1;
 }
 
 /**
- * What {@link withCrossReferences} returned for each input object, per screen-up direction: a mark is
- * placed by its text box, and a text box is measured with the session's screen-up (`annotationScreenUp`).
+ * What {@link withCrossReferences} returned for each input object: a mark is placed by its text box, and a
+ * text box is measured with the input's own `screenUp`, so the input alone is the key.
  * A sheet asks for a viewport's marks three times a render (what it draws, the extent it fits and the
  * box it frames) and on every render after, so it hands the same input each time and the marks are
  * placed once (#154). An input is never changed after it is made.
  */
-const placed = new WeakMap<PlanCrossRefInput, Map<1 | -1, DraftEntity[]>>();
+const placed = new WeakMap<PlanCrossRefInput, DraftEntity[]>();
 
 /** `drafts` with the section references and elevation marks of a plan added; any other view's drafts unchanged. */
 export function withCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
-  const up = annotationScreenUp();
-  let byUp = placed.get(input);
-  if (!byUp) placed.set(input, byUp = new Map());
-  let out = byUp.get(up);
-  if (!out) byUp.set(up, out = placeCrossReferences(input));
+  let out = placed.get(input);
+  if (!out) placed.set(input, out = withAnnotationScreenUp(input.screenUp, () => placeCrossReferences(input)));
   return out;
 }
 
@@ -79,5 +81,6 @@ function placeCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
  * a site plan's plot.
  */
 export function fitWithCrossReferences(vp: Pick<SheetViewport, 'width' | 'height' | 'scale'>, fitBounds: { min: Pt; max: Pt }, input: PlanCrossRefInput): { min: Pt; max: Pt } {
-  return fitExtent(vp, fitBounds, withCrossReferences(input), input.view?.scale);
+  // The extent measures the marks' text boxes too, so it is taken with the same screen-up they were placed with.
+  return withAnnotationScreenUp(input.screenUp, () => fitExtent(vp, fitBounds, withCrossReferences(input), input.view?.scale));
 }
