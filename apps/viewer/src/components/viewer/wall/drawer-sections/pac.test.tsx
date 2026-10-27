@@ -5,9 +5,9 @@ import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { act } from 'react';
-import { PAC_ITEMS, generateDefaultSet, pacSetTemplate, type DefaultSet } from '@bimvoice/ifcsheet';
+import { PAC_ITEMS, PAC_RURAL_ITEMS, generateDefaultSet, pacRuralSetTemplate, pacSetTemplate, type DefaultSet } from '@bimvoice/ifcsheet';
 import { cleanup, render } from '@/test/render.js';
-import { projectDocument, resetProject, setPacIntervention, useProjectStore } from '@/project/project-store';
+import { loadProjectDocument, projectDocument, resetProject, setPacIntervention, setPacMode, useProjectStore } from '@/project/project-store';
 import { parseProjectFile, serializeProject } from '@/project/project-file';
 import { registerLocale, setLocale } from '@/i18n/registry';
 import { checkCatalogue } from '@/i18n/catalogue-problems';
@@ -117,6 +117,31 @@ describe('the PAC checklist', () => {
     assert.equal(parseProjectFile(saved.replace('"interior"', '"demolition"')).pacIntervention, undefined);
   });
 
+  it('keeps the permit project mode in the project file: the switch writes it, a saved project reopens in it, the full one is saved as absent', () => {
+    const ui = mount();
+    const pressed = (mode: string) => ui.querySelector(`[data-pac-mode="${mode}"]`)?.getAttribute('aria-pressed');
+    assert.deepEqual([pressed('standard'), pressed('rural')], ['true', 'false']);
+    act(() => { ui.querySelector<HTMLButtonElement>('[data-pac-mode="rural"]')!.click(); });
+    assert.equal(useProjectStore.getState().pacMode, 'rural', 'the switch writes the project');
+    const saved = serializeProject(projectDocument());
+    assert.equal(JSON.parse(saved).pacMode, 'rural');
+    // Reopen: a fresh project loads the saved file, and a fresh drawer shows the mode it was left in.
+    cleanup();
+    resetProject();
+    assert.equal(useProjectStore.getState().pacMode, undefined);
+    act(() => loadProjectDocument(parseProjectFile(saved)));
+    assert.equal(useProjectStore.getState().pacMode, 'rural');
+    const reopened = mount();
+    assert.equal(reopened.querySelector('[data-pac-mode="rural"]')?.getAttribute('aria-pressed'), 'true');
+    assert.ok(reopened.querySelector('[data-pac-item="rural.plans"]'), 'the Anexa 3 list is shown');
+    // Back to the full one: stored as absent; a value the file should not hold loads as absent.
+    act(() => { reopened.querySelector<HTMLButtonElement>('[data-pac-mode="standard"]')!.click(); });
+    assert.equal('pacMode' in JSON.parse(serializeProject(projectDocument())), false);
+    assert.equal(parseProjectFile(saved.replace('"rural"', '"urban"')).pacMode, undefined);
+    setPacMode('rural');
+    assert.equal(useProjectStore.getState().dirty, true);
+  });
+
   it('says beside the button that it records an issue of the set and downloads the PDF and the list, in English and in Romanian', () => {
     const ui = mount();
     assert.match(ui.querySelector('[data-pac-submit]')?.nextElementSibling?.textContent ?? '', /^Records an issue of the set .* the submission PDF and the drawing list as CSV/);
@@ -140,5 +165,33 @@ describe('the PAC set template', () => {
     const template = pacSetTemplate({ name: 'PAC', plans: 'P', facades: 'F', sections: 'S' });
     assert.deepEqual(template.sheets.map((s) => s.series), ['plans', 'elevations', 'sections']);
     assert.ok(template.sheets.flatMap((s) => s.slots).every((slot) => slot.scale === undefined));
+  });
+});
+
+describe('the simplified PAC checklist (Anexa 3)', () => {
+  it('has a label in both languages for every item', () => {
+    for (const item of PAC_RURAL_ITEMS) {
+      assert.ok((pacEn as Record<string, string>)[`pac.item.${item.id}`], item.id);
+      assert.ok((pacRo as Record<string, string>)[`pac.item.${item.id}`], item.id);
+    }
+  });
+
+  it('switches from Anexa 2 to Anexa 3 and shows the point numbers and the 1:50 of the text', () => {
+    const Section = pacSection.component;
+    const ui = render(<Section go={() => undefined} onClose={() => undefined} extent={null} />);
+    assert.equal(ui.querySelectorAll('[data-pac-item]').length, PAC_ITEMS.length);
+    const toggle = ui.querySelector('[data-pac-mode="rural"]') as HTMLElement;
+    act(() => toggle.click());
+    const row = (id: string) => ui.querySelector(`[data-pac-item="${id}"]`);
+    assert.equal(ui.querySelectorAll('[data-pac-item]').length, PAC_RURAL_ITEMS.length);
+    assert.match(row('rural.fencePlans')?.textContent ?? '', /Anexa 3, 1 f\), 8 c\)/);
+    assert.match(row('rural.plans')?.textContent ?? '', /Anexa 3, 1 e\), 8 a\).*Scale 1:50/);
+    assert.match(row('rural.situationExisting')?.textContent ?? '', /Anexa 3, 1 b\), 2.*Scale 1:1,000, 1:500/);
+  });
+
+  it('asks the set for 1:50 on every drawing slot', () => {
+    const template = pacRuralSetTemplate({ name: 'PAC', plans: 'P', facades: 'F', sections: 'S' });
+    assert.ok(template.sheets.flatMap((s) => s.slots).every((slot) => slot.scale === 50));
+    assert.ok(template.sheets.every((s) => s.slots.length === 1 && s.layout.paper === 'A3' && s.layout.stepUp?.join() === 'A2,A1'));
   });
 });
