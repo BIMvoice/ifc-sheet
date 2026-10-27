@@ -33,6 +33,15 @@ const LABELS: Record<TitleBlockField, TranslationKey> = {
   drawnBy: 'sheets.tb.drawnBy',
   checkedBy: 'sheets.tb.checkedBy',
   date: 'sheets.tb.date',
+  registrationNumber: 'tbro.registration',
+  projectManagerTitle: 'wall.tb.projectManagerTitle',
+  designerTitle: 'wall.tb.designerTitle',
+  drawnByTitle: 'wall.tb.drawnByTitle',
+  authorsCapacity: 'tbro.capacity',
+  verifierCapacity: 'wall.tb.verifierCapacity',
+  verifierRequirement: 'tbro.requirement',
+  reportNumber: 'tbro.report',
+  reportDate: 'tbro.reportDate',
 };
 
 const field = WALL_FIELD;

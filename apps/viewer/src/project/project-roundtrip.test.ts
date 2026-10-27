@@ -244,6 +244,12 @@ async function fieldSamples(): Promise<Partial<ProjectDocument>> {
 }
 const SAMPLES = await fieldSamples();
 
+/** The title block fields the cartuș F_01 of Ordinul 975/2026 adds (#364): typed, kept with the project. */
+const F01_TITLE_FIELDS: Record<string, string> = {
+  registrationNumber: 'J40/1234/2020', projectManagerTitle: 'arh. Ion Ionescu', designerTitle: 'arhitect', drawnByTitle: 'desenator', authorsCapacity: 'proiectant arhitectură',
+  verifierCapacity: 'verificator atestat', verifierRequirement: 'A1', reportNumber: 'RV-77', reportDate: '2026-10-20',
+};
+
 /** Every field of the project document set to something that is not its default: the fields below, and the ones that bring a sample. */
 const FULL = {
   ...SAMPLES,
@@ -251,7 +257,7 @@ const FULL = {
   models: [{ key: 'hash-arch', name: 'arch.ifc' }],
   views: Object.values(VIEWS),
   sheets: [sheet],
-  titleBlock: { project: 'Full house', client: 'Owner', checkedBy: 'PC', logo: 'data:image/png;base64,iVBORw0KGgo=' },
+  titleBlock: { project: 'Full house', client: 'Owner', checkedBy: 'PC', logo: 'data:image/png;base64,iVBORw0KGgo=', ...F01_TITLE_FIELDS },
   titleBlockParams: [{ name: 'Phase', value: 'DTAC' }, { name: 'ProjectNumber', value: '2026-014' }],
   titleBlockTemplate: { items: [
     { id: 'tb1', kind: 'rect', x: 0, y: 0, w: 180, h: 50, weight: 0.5 },
@@ -343,6 +349,14 @@ describe('project round trip, one of everything', () => {
 
   it('survives the .ifclite-project.json sidecar', () => {
     same(parseProjectFile(serializeProject(FULL)));
+  });
+
+  it('keeps the F_01 title block fields (#364) through save and reopen, in the sidecar and in the store', () => {
+    const reread = parseProjectFile(serializeProject(FULL));
+    for (const [k, v] of Object.entries(F01_TITLE_FIELDS)) assert.equal(reread.titleBlock?.[k], v, k);
+    resetProject();
+    loadProjectDocument(reread);
+    for (const [k, v] of Object.entries(F01_TITLE_FIELDS)) assert.equal(useProjectStore.getState().titleBlock?.[k], v, k);
   });
 
   it('survives the .bvproj package', async () => {

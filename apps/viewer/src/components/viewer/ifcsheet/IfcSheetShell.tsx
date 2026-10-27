@@ -12,6 +12,7 @@
 
 import { useEffect } from 'react';
 import { useTranslation } from '@/i18n';
+import { IFCLITE_URL } from '@/lib/credits';
 import { exportProjectFile } from '@/project/project-file';
 import { projectDocument, useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
@@ -89,6 +90,18 @@ export function IfcSheetShell() {
       <div className="min-h-0 flex-1">
         <WallView />
       </div>
+      {/* The status bar's credit sits under this face, so the face says it itself. Screen chrome only: no sheet, print or export reads it. */}
+      <footer data-ifcsheet-credit className="flex h-6 shrink-0 items-center justify-end border-t border-sky-300/10 px-4">
+        <a
+          href={IFCLITE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={t('shellChrome.statusBar.ifcliteAriaLabel')}
+          className="text-xs text-sky-200/60 hover:text-sky-100 focus-visible:text-sky-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-sky-300"
+        >
+          {t('shellChrome.statusBar.ifcliteLinkLabel')}
+        </a>
+      </footer>
     </div>
   );
 }
