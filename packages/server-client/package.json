@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/server-client",
+  "private": true,
   "version": "4.0.0",
   "description": "TypeScript client SDK for IFC-Lite Server",
   "type": "module",
