@@ -45,7 +45,7 @@ describe('the scope findings of the simplified PAC', () => {
   });
 
   it('come last in the model\'s readiness, and only when the scope was measured', () => {
-    expect(modelReadiness({ ...COMPLETE, elementsWithoutMaterial: 4 }, [], undefined, { levels: 3, sd: 200, sdAtLeast: false }).map((f) => f.kind)).toEqual(['noMaterials', 'ruralLevels', 'ruralArea']);
+    expect(modelReadiness({ ...COMPLETE, elementsWithoutMaterial: 4 }, [], undefined, [], { levels: 3, sd: 200, sdAtLeast: false }).map((f) => f.kind)).toEqual(['noMaterials', 'ruralLevels', 'ruralArea']);
     expect(modelReadiness({ ...COMPLETE, elementsWithoutMaterial: 4 }).map((f) => f.kind)).toEqual(['noMaterials']);
     for (const kind of ['ruralLevels', 'ruralArea', 'ruralAreaAtLeast'] as const) {
       expect(READINESS_EN[`ready.${kind}`]).toBeTruthy();

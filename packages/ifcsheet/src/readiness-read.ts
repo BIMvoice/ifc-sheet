@@ -81,5 +81,5 @@ export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: read
   const far = (model.farElements ?? []).map(({ label, distance }) => ({ label, distance }));
   // The rooms measured from geometry, through the same helper the app asks (`room-estimates.ts`).
   const estimated = estimatedAreas(readRooms(model.dataStore, model.meshes ?? []).rooms);
-  return modelReadiness({ ...facts, ...(far.length > 0 ? { farElements: far } : {}), ...(estimated ? { estimatedAreas: estimated } : {}) }, subReports, boq, rural);
+  return modelReadiness({ ...facts, ...(far.length > 0 ? { farElements: far } : {}), ...(estimated ? { estimatedAreas: estimated } : {}) }, subReports, boq, [], rural);
 }
