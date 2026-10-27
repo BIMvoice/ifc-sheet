@@ -10,8 +10,8 @@
 
 import { roomScheduleTable, type RoomSchedule } from '@bimvoice/ifcsheet';
 import type { ScheduleExport } from './schedule-export';
-import { summaryTable } from './room-summary-layout';
-import type { RoomScheduleLabels } from './room-schedule-layout';
+import { summaryTable } from '@bimvoice/ifcsheet';
+import type { RoomScheduleLabels } from '@bimvoice/ifcsheet';
 
 export function roomScheduleExport(schedule: RoomSchedule, labels: RoomScheduleLabels): ScheduleExport {
   return { title: labels.title, tables: [roomScheduleTable(schedule, labels, labels.notes), ...(labels.summary ? [summaryTable(labels.summary)] : [])] };

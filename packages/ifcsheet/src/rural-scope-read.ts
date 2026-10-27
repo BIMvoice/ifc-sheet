@@ -15,8 +15,9 @@ import type { MeshData } from '@ifc-lite/geometry';
 import type { RuralScope } from './readiness.js';
 import { ruralScopeOf } from './rural-scope.js';
 import { levelsFromStoreys, type StoreyInput } from './view-defaults.js';
+import type { ProjectLevel } from './document.js';
 import { buildingRefElevationOf, measureStoreys, meshesById, URBAN_FOOTPRINT_CLASSES } from './urban-measure.js';
-import { urbanIndicators, type UrbanSettings } from './urban-indicators.js';
+import { urbanIndicators, type StoreyInput as StoreyMeasure, type UrbanSettings } from './urban-indicators.js';
 
 /** What `ruralScopeOfModel` reads of an opened model. */
 export interface RuralScopeModel {
@@ -25,7 +26,8 @@ export interface RuralScopeModel {
   meshes?: readonly MeshData[];
 }
 
-export function ruralScopeOfModel(model: RuralScopeModel, settings?: UrbanSettings): RuralScope {
+/** The merged levels of a model's storeys and what stands on each, outlined by the app's own measure (`measureStoreys`). */
+export function measuredStoreysOf(model: RuralScopeModel): { levels: ProjectLevel[]; levelOfStorey: ReadonlyMap<number, number>; storeys: StoreyMeasure[] } {
   const store = model.dataStore;
   const levels = levelsFromStoreys(model.storeys);
   const levelOfStorey = new Map<number, number>();
@@ -44,5 +46,10 @@ export function ruralScopeOfModel(model: RuralScopeModel, settings?: UrbanSettin
     isRoofSlab: (id) => store.source.length > 0 && extractAllEntityAttributes(store, id).find((a) => a.name === 'PredefinedType')?.value?.toString().replace(/\./g, '').toUpperCase() === 'ROOF',
     meshesOf: (id) => meshes.get(id),
   }]);
-  return ruralScopeOf(urbanIndicators({ storeys, spaces: [], siteArea: null, buildingRefElevation: buildingRefElevationOf(store), ...(settings ? { settings } : {}) }));
+  return { levels, levelOfStorey, storeys };
+}
+
+export function ruralScopeOfModel(model: RuralScopeModel, settings?: UrbanSettings): RuralScope {
+  const { storeys } = measuredStoreysOf(model);
+  return ruralScopeOf(urbanIndicators({ storeys, spaces: [], siteArea: null, buildingRefElevation: buildingRefElevationOf(model.dataStore), ...(settings ? { settings } : {}) }));
 }

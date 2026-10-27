@@ -27,7 +27,7 @@ import { readDraft, readDraftLayer } from '@bimvoice/ifcsheet';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { resolve } from '@/i18n/registry';
-import { readIssues } from './issues-read';
+import { readIssues } from '@bimvoice/ifcsheet';
 import { readJoineryList } from '@/joinery/spec-file';
 import { DEFAULT_JOINERY_MAPPING, readJoineryMapping } from '@/joinery/symbol-mapping';
 import { upgradeTagAllTypes } from '@/tagall/types';

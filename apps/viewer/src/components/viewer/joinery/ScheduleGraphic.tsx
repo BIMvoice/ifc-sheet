@@ -23,9 +23,9 @@ import { takeoffRows, type TakeoffRow } from '@/joinery/material-takeoff';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
 import { layoutMaterialTakeoff, type TakeoffLabels } from '@/joinery/material-takeoff-layout';
 import { layoutUrban } from '@/urban/urban-layout';
-import { layoutRoomSchedule } from '@/joinery/room-schedule-layout';
+import { layoutRoomSchedule } from '@bimvoice/ifcsheet';
 import { registerFitOn, registerPaper, sharedRegisterRows, type RegisterRow } from '@/project/drawing-register';
-import { layoutRegisterPage, type RegisterLabels } from '@/joinery/register-layout';
+import { layoutRegisterPage, registerLabelsOf, type RegisterLabels } from '@bimvoice/ifcsheet';
 import { roomFinishes, type RoomFinishes } from '@/joinery/room-finishes';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
 import { layoutRoomFinishes, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
@@ -82,9 +82,8 @@ export function useTakeoffRows(): TakeoffRow[] {
 
 export function useRegisterLabels(title: string): RegisterLabels {
   const { t } = useTranslation();
-  return useMemo(() => ({
-    title, number: t('issue.list.sheet'), sheetTitle: t('issue.list.sheetTitle'), scale: t('issue.list.scale'), revision: t('issue.list.revision'), date: t('issue.list.date'),
-  }), [t, title]);
+  // The headings are the engine's (`registerLabelsOf`), the same `ifcsheet build` prints.
+  return useMemo(() => registerLabelsOf((key, params) => t(key, params), title), [t, title]);
 }
 
 const NO_ROWS: RegisterRow[] = [];

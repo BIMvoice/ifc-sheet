@@ -159,7 +159,8 @@ export const buildCommand: CliCommand = {
           A --project saved in the app's simplified mode (or --pac-mode rural) builds Anexa 3's sheets instead (1:50 on A3, a
           larger paper for a larger drawing, said on the sheet), without the opis, which is Anexa 2's.
           With --project, the sheets are the project's own when it holds any (its views, its sheets with the
-          viewports where they were put, the dimensions and texts drawn on the views, the list schedules placed);
+          viewports where they were put, the dimensions and texts drawn on the views, the schedules placed: lists, rooms, bill of
+          quantities, drawing register);
           a project with no sheet gets the starting set. Which one is printed is said on stderr.`,
   async run(rest, values, io) {
     if (values.csv || values.detail || (values.locale !== undefined && !values.pac)) {

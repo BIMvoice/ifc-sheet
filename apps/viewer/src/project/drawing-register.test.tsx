@@ -18,7 +18,7 @@ import { drawingRegisterRows, holdsRegister, inSetOrder, registerRowCache, regis
 import { DEFAULT_SCHEME, SEQUENTIAL_SCHEME } from './numbering.js';
 import { renumberAll } from './sheet-renumber.js';
 import { buildDrawingSet, drawingArea, type ModelExtent } from './drawing-set.js';
-import { layoutRegisterPage, registerFit, REGISTER_MIN_TEXT_MM } from '@/joinery/register-layout.js';
+import { layoutRegisterPage, registerFit, REGISTER_MIN_TEXT_MM } from '@bimvoice/ifcsheet';
 import { useSheetSchedules } from '@/components/viewer/joinery/ScheduleGraphic';
 import { cleanup, render } from '@/test/render.js';
 import { addSchedule } from '@/joinery/schedules.js';
