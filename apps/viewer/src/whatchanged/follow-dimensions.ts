@@ -46,8 +46,9 @@ export function followDimensions(drafts: readonly DraftEntity[], changes: readon
   let any = false;
   const next = drafts.map((d) => {
     const shape = d.shape;
+    if (shape.type !== 'dimension') return d;
     const plane = bandOf(d.viewId)?.plane;
-    if (shape.type !== 'dimension' || !plane) return d;
+    if (!plane) return d;
     const anchored = anchorsOf(d);
     if (anchored.length === 0) return d;
     const end: Record<AnchorParam, Pt> = { anchorA: shape.a, anchorB: shape.b };
