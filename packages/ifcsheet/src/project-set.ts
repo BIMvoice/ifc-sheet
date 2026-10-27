@@ -19,6 +19,7 @@ import type { CustomLineType, LayerGroup } from './draft-look.js';
 import { readLineType } from './line-types-read.js';
 import { readDraft, readDraftLayer } from './draft-read.js';
 import type { DraftEntity, DraftLayer } from './draft-types.js';
+import { parsePat, type HatchPattern } from './hatch-pattern.js';
 import { nameOf } from './names.js';
 import { readIssues } from './issues-read.js';
 import { readRevisions } from './revision-read.js';
@@ -46,6 +47,8 @@ export interface ProjectSet {
   issues: ProjectIssue[];
   revisions: ProjectRevision[];
   viewTemplates: ProjectViewTemplate[];
+  /** The hatch patterns the project imported (`hatchPatterns`, PAT text); a hatch may name one. */
+  hatchPatterns: HatchPattern[];
   sheetNumbering?: NumberingScheme;
 }
 
@@ -62,6 +65,7 @@ export function readProjectSet(raw: Json): ProjectSet {
     textStyles: readTextStyles(raw), dimStyles: readDimStyles(raw), layerGroups: readLayerGroups(raw),
     issues: readIssues(raw.issues), revisions: readRevisions(raw.revisions),
     viewTemplates: readViewTemplates(raw.viewTemplates),
+    hatchPatterns: typeof raw.hatchPatterns === 'string' ? parsePat(raw.hatchPatterns).patterns : [],
     ...(sheetNumbering ? { sheetNumbering } : {}),
   };
 }

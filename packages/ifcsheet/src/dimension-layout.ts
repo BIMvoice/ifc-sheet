@@ -10,13 +10,14 @@
 
 import type { ArrowKind } from './draft-styles.js';
 import { naturalDecimals, unitFactor } from './draft-look.js';
-import type { Pt } from './draft-types.js';
+import type { AnnotationShape, AxisShape, Pt } from './draft-types.js';
 import { decimalsOf, lengthUnitOf, type SheetLocale } from './units-and-numbers.js';
-import { sheetNumber } from './sheet-number.js';
+import { sheetLevel, sheetNumber } from './sheet-number.js';
 
 const add = (a: Pt, b: Pt): Pt => ({ x: a.x + b.x, y: a.y + b.y });
 const sub = (a: Pt, b: Pt): Pt => ({ x: a.x - b.x, y: a.y - b.y });
 const scale = (a: Pt, k: number): Pt => ({ x: a.x * k, y: a.y * k });
+const dist = (a: Pt, b: Pt): number => Math.hypot(a.x - b.x, a.y - b.y);
 
 export interface DimensionLayout {
   /** Extension and dimension lines. */
@@ -108,4 +109,91 @@ export function arrowMark(kind: ArrowKind, p: Pt, dir: Pt, size: number): ArrowM
       return { kind: 'run', pts: [{ x: p.x - c, y: p.y - s }, { x: p.x + c, y: p.y + s }], fill: false };
     }
   }
+}
+
+/** A radius or diameter dimension: the line from the centre (or across the circle) through `at`, the figure at `at`. */
+export function radialLayout(c: Pt, r: number, at: Pt, diameter: boolean, o: LayoutOptions): DimensionLayout {
+  const format = o.format ?? ((m: number) => formatLength(o.locale ?? 'en', m));
+  const dir = unitVector(sub(at, c));
+  const rim = add(c, scale(dir, r));
+  const from = diameter ? add(c, scale(dir, -r)) : c;
+  return {
+    lines: [{ a: from, b: dist(at, c) > r ? at : rim }],
+    ticks: diameter ? [{ at: rim, dir }, { at: from, dir: scale(dir, -1) }] : [{ at: rim, dir }],
+    textAt: at,
+    textAngle: Math.atan2(dir.y, dir.x),
+    label: `${diameter ? 'Ø' : 'R'} ${format(diameter ? r * 2 : r)}`,
+  };
+}
+
+/** An angular dimension: the arc about `c` through `at` from the ray to `a` to the ray to `b`, the figure on its middle. */
+export function angularLayout(c: Pt, a: Pt, b: Pt, at: Pt, o: LayoutOptions): DimensionLayout {
+  const r = Math.max(dist(at, c), 1e-6);
+  const a0 = Math.atan2(a.y - c.y, a.x - c.x);
+  const a1 = Math.atan2(b.y - c.y, b.x - c.x);
+  let sweep = a1 - a0;
+  while (sweep <= -Math.PI) sweep += Math.PI * 2;
+  while (sweep > Math.PI) sweep -= Math.PI * 2;
+  const steps = 24;
+  const lines: { a: Pt; b: Pt }[] = [];
+  for (let i = 0; i < steps; i++) {
+    const t0 = a0 + (sweep * i) / steps;
+    const t1 = a0 + (sweep * (i + 1)) / steps;
+    lines.push({ a: { x: c.x + r * Math.cos(t0), y: c.y + r * Math.sin(t0) }, b: { x: c.x + r * Math.cos(t1), y: c.y + r * Math.sin(t1) } });
+  }
+  const mid = a0 + sweep / 2;
+  return {
+    lines,
+    ticks: [],
+    textAt: { x: c.x + r * Math.cos(mid), y: c.y + r * Math.sin(mid) },
+    textAngle: mid + Math.PI / 2,
+    label: `${sheetNumber(o.locale ?? 'en', (Math.abs(sweep) * 180) / Math.PI, 1, { group: false })}°`,
+  };
+}
+
+/** Where an axis's bubbles sit: centres just past its ends (along the line), and their radius / half side. */
+export function axisLayout(shape: AxisShape): { bubbles: Pt[]; r: number } {
+  // The bubble holds the label: at least `size`, wider for a long label.
+  const textHalf = (Math.max(1, shape.label.length) * shape.height * 0.62) / 2;
+  const r = Math.max(shape.size / 2, textHalf + shape.height * 0.45, shape.height * 0.9);
+  const dir = unitVector(sub(shape.b, shape.a));
+  const bubbles: Pt[] = [];
+  if (shape.ends === 'both' || shape.ends === 'start') bubbles.push(add(shape.a, scale(dir, -r)));
+  if (shape.ends === 'both' || shape.ends === 'end') bubbles.push(add(shape.b, scale(dir, r)));
+  return { bubbles, r };
+}
+
+/** The thin line from a level mark's measured point to its symbol, while they are apart; none for a mark without a reference. */
+export function levelWitness(shape: Extract<AnnotationShape, { type: 'level' }>): { a: Pt; b: Pt } | null {
+  if (!shape.ref || dist(shape.ref.at, shape.p) < 1e-6) return null;
+  return { a: shape.ref.at, b: shape.p };
+}
+
+/**
+ * Whether a leader's text reads to the right of its end on screen: it sits beyond the end of the last segment, so a segment
+ * running leftward puts it on the left and the line never runs through the words. `screenRight` is +1 when drawing x grows
+ * rightward on screen, -1 when the view is mirrored.
+ */
+export function leaderTextRight(pts: readonly Pt[], screenRight: 1 | -1 = 1): boolean {
+  if (pts.length < 2) return true;
+  const dx = (pts[pts.length - 1].x - pts[pts.length - 2].x) * screenRight;
+  return dx >= -1e-6;
+}
+
+/** A level mark: +2,70, −1,50 (the true minus), ±0,00. */
+export function formatLevel(locale: SheetLocale, m: number): string {
+  return sheetLevel(locale, m, { minus: '−' });
+}
+
+const ARC_STEP = Math.PI / 48;
+
+/** An arc (or, over a full turn, a circle) as the points a drawing strokes it by, counter-clockwise from `start` to `end`. */
+export function arcPoints(c: Pt, r: number, start: number, end: number): Pt[] {
+  let sweep = end - start;
+  while (sweep <= 0) sweep += Math.PI * 2;
+  const steps = Math.max(2, Math.ceil(sweep / ARC_STEP));
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const a = start + (sweep * i) / steps;
+    return { x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) };
+  });
 }

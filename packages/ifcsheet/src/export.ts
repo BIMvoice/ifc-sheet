@@ -69,6 +69,12 @@ const binary = (bytes: Uint8Array): string => {
   return out;
 };
 
+/** Draws what follows at `value` opacity, fills and lines alike (jsPDF builds its graphics state with `new`, which its typings leave out). */
+function opacity(doc: import('jspdf').jsPDF, value: number): void {
+  const State = doc.GState as unknown as new (parameters: Record<string, number>) => Parameters<import('jspdf').jsPDF['setGState']>[0];
+  doc.setGState(new State({ opacity: value, 'stroke-opacity': value }));
+}
+
 export interface PdfOptions {
   title?: string;
   /**
@@ -156,14 +162,20 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
     stroke(sheet.marks, PEN.mark);
     // What the project drew with its own pens (#479): the drafts' layer pens, the dimensions' lines and ticks, the schedules' rules.
     for (const s of sheet.strokes ?? []) {
+      if (s.opacity !== undefined) opacity(doc, s.opacity);
       if (s.fill) {
         doc.setFillColor(s.colour);
-        for (const run of s.runs) if (run.length > 2) doc.path([{ op: 'm', c: [run[0].x, run[0].y] }, ...run.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]).fill();
-        continue;
+        const closed = s.runs.filter((run) => run.length > 2).map((run) => [{ op: 'm', c: [run[0].x, run[0].y] }, ...run.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]);
+        // A region is one even-odd path, so an island stays open; any other fill is a path to itself.
+        if (s.region) { if (closed.length) doc.path(closed.flat()).fillEvenOdd(); } else for (const ops of closed) doc.path(ops).fill();
+      } else {
+        doc.setDrawColor(s.colour);
+        doc.setLineDashPattern(s.dash ? [...s.dash] : [], 0);
+        if (s.round) doc.setLineCap('round');
+        stroke(s.runs, s.width);
+        if (s.round) doc.setLineCap('butt');
       }
-      doc.setDrawColor(s.colour);
-      doc.setLineDashPattern(s.dash ? [...s.dash] : [], 0);
-      stroke(s.runs, s.width);
+      if (s.opacity !== undefined) opacity(doc, 1);
     }
     doc.setLineDashPattern([], 0);
     doc.setDrawColor('#000000');

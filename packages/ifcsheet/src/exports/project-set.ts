@@ -26,7 +26,7 @@ export {
   DEFAULT_TEXT_STYLE, DIM_OVERRIDES, PEN_OVERRIDES, TABLES_STYLE_ID, tablesFace, TEXT_OVERRIDES, dashFor, dashOf, dimStyleOf, entityPen, formatDimension, layerLocked, layerPen, layerPrints, layerShows, lookOf, naturalDecimals, overrideKey,
   readableDeg, resolveDim, resolveText, textStyleOf, unitFactor, type CustomLineType, type LayerGroup, type LayerVisibilityScope, type LineType, type StyleBook,
 } from '../draft-look.js';
-export { arrowMark, formatLength, linearLayout, unitVector, type ArrowMark, type DimensionLayout, type LayoutOptions } from '../dimension-layout.js';
+export { angularLayout, arcPoints, arrowMark, axisLayout, formatLength, formatLevel, leaderTextRight, levelWitness, linearLayout, radialLayout, unitVector, type ArrowMark, type DimensionLayout, type LayoutOptions } from '../dimension-layout.js';
 export { DEFAULT_VIEW_SCALE, annotationAtFactor, annotationFactor, viewportPaperUnit } from '../viewport-annotation.js';
 // A schedule on paper, and where it sits on a sheet
 export type { ScheduleCell, ScheduleLayout, SchedulePrim } from '../schedule-prim.js';
@@ -36,3 +36,7 @@ export {
 } from '../paged-table.js';
 export { layoutListSchedule, type ListSheetLabels } from '../list-schedule-layout.js';
 export { layoutOnSheet, layoutTableOnSheet, registerHolders, scheduleBox, scheduleHomeBox, sheetDrawingArea } from '../schedule-place.js';
+// Hatches: the pattern format, the built-in library and the strokes a pattern makes inside a region
+export { parsePat, serializePat, type HatchLineFamily, type HatchPattern } from '../hatch-pattern.js';
+export { hatchSegments, type HatchOptions, type HatchResult, type HatchSegment } from '../hatch-fill.js';
+export { HATCH_UNIT_M, builtInPatterns, findPattern } from '../hatch-library.js';
