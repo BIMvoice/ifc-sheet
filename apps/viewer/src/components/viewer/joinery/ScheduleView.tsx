@@ -25,6 +25,8 @@ import { svgToDxf } from '../sheets/sheet-dxf';
 import { ScheduleExportButtons } from '../wall/ScheduleExportButtons';
 import { TAB_EXPORT } from '../wall/wall-type';
 import { ScheduleGraphic, useScheduleLayout } from './ScheduleGraphic';
+import { ViewDetailControls } from './ViewDetailControls';
+import { hideViewLine } from '@/joinery/view-choice-actions';
 import { RegisterView } from './RegisterView';
 import { RoomFinishesView } from './RoomFinishesView';
 import { RoomScheduleView } from './RoomScheduleView';
@@ -54,6 +56,8 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   const result = useScheduleLayout(schedule);
   const svgRef = useRef<SVGSVGElement>(null);
   const [zoom, setZoom] = useState(3);
+  const [typeId, setTypeId] = useState<string>();
+  const [hiding, setHiding] = useState(false);
   if (!result) return null;
   const { data, layout } = result;
   const w = layout.width + 2 * MARGIN, h = layout.height + 2 * MARGIN;
@@ -88,6 +92,7 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
         <select aria-label={t('schedule.scale')} className={SELECT} value={schedule.scale ?? 50} onChange={(e) => updateSchedule(schedule.id, { scale: Number(e.target.value) })}>
           {SCALES.map((s) => <option key={s} value={s}>1:{s}</option>)}
         </select>
+        <ViewDetailControls data={data} typeId={typeId} onType={setTypeId} hiding={hiding} onHiding={setHiding} />
         <span className="text-zinc-500">{t('schedule.count', { types: data.entries.length, elements: data.entries.reduce((s, e) => s + e.total, 0) })}</span>
         <span className="flex-1" />
         <IconButton label={t('schedule.zoomOut')} className="size-7" onClick={() => setZoom((z) => Math.max(1, z / 1.25))}><Minus className="size-3.5" /></IconButton>
@@ -102,7 +107,7 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
         {data.entries.length === 0 ? <p className="p-4 text-sm text-zinc-500">{t('schedule.empty')}</p> : (
           <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" width={w * zoom} height={h * zoom} viewBox={`${-MARGIN} ${-MARGIN} ${w} ${h}`} className="block bg-white shadow-lg" data-schedule-paper>
             <rect data-export-ignore-dxf="true" x={-MARGIN} y={-MARGIN} width={w} height={h} fill="#fff" />
-            <ScheduleGraphic layout={layout} />
+            <ScheduleGraphic layout={layout} onPick={hiding ? (type, line) => { if (type === typeId) hideViewLine(type, line); } : undefined} />
           </svg>
         )}
       </div>

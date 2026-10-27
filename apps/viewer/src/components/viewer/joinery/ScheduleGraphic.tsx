@@ -279,13 +279,25 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   return useMemo(() => (tables.size > 0 ? new Map([...layouts, ...tables]) : layouts), [layouts, tables]);
 }
 
-function Prim({ p }: { p: SchedulePrim }) {
+/** Picks a line of a type's view to hide (#449): the catalogue type's id and the line's id. */
+export type PickLine = (type: string, line: string) => void;
+
+function Prim({ p, onPick }: { p: SchedulePrim; onPick?: PickLine }) {
   if (p.kind === 'line') {
     return <line {...penTags('SCHEDULE', p.w)} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke="#000" strokeWidth={p.w} />;
   }
   if (p.kind === 'path') {
     const d = p.pts.map((q, i) => `${i ? 'L' : 'M'}${q.x.toFixed(2)},${q.y.toFixed(2)}`).join('') + (p.closed ? 'Z' : '');
-    return <path {...penTags('SCHEDULE-SYMBOLS', p.w, !!p.dashed)} d={d} fill="none" stroke="#000" strokeWidth={p.w} strokeDasharray={p.dashed ? '1.2 0.8' : undefined} strokeLinejoin="round" />;
+    const path = <path {...penTags('SCHEDULE-SYMBOLS', p.w, !!p.dashed)} d={d} fill="none" stroke="#000" strokeWidth={p.w} strokeDasharray={p.dashed ? '1.2 0.8' : undefined} strokeLinejoin="round" />;
+    const pick = p.pick;
+    if (!onPick || !pick) return path;
+    // A wide invisible stroke to hit; left out of exports (the SVG and DXF read the drawn paths).
+    return (
+      <g>
+        {path}
+        <path data-export-ignore-dxf="true" data-pick-line={pick.line} d={d} fill="none" stroke="transparent" strokeWidth={Math.max(1.2, p.w * 4)} style={{ cursor: 'pointer', pointerEvents: 'stroke' }} onClick={() => onPick(pick.type, pick.line)} />
+      </g>
+    );
   }
   return (
     <text
@@ -298,10 +310,10 @@ function Prim({ p }: { p: SchedulePrim }) {
 }
 
 /** The schedule at (x, y) on the paper (its top-left corner). */
-export const ScheduleGraphic = memo(function ScheduleGraphic({ layout, x = 0, y = 0 }: { layout: ScheduleLayout; x?: number; y?: number }) {
+export const ScheduleGraphic = memo(function ScheduleGraphic({ layout, x = 0, y = 0, onPick }: { layout: ScheduleLayout; x?: number; y?: number; onPick?: PickLine }) {
   return (
     <g transform={x || y ? `translate(${x} ${y})` : undefined}>
-      {layout.prims.map((p, i) => <Prim key={i} p={p} />)}
+      {layout.prims.map((p, i) => <Prim key={i} p={p} onPick={onPick} />)}
     </g>
   );
 });
