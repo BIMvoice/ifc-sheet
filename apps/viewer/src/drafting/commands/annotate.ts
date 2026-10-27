@@ -14,10 +14,11 @@ import { styledParams } from '@/project/drafting-standards';
 import { dimensionLayout, entitySkeleton, nextAxisLabel } from '../annotation';
 import { continueDimension, type DimensionShape } from '../dimension-chain';
 import { alignDimensionLine } from '../dimension-align';
+import { anchorOf, encodeAnchor, type AnchorParam } from '../dimension-anchor';
 import { orthoGuides, snapLeaderEnd } from '../leader-segments';
 import { findPattern } from '../hatch/library';
 import { regionAt } from '../hatch/region';
-import type { AnnotationShape, AxisShape, DraftShape, Pt } from '../types';
+import type { AnnotationShape, AxisShape, DraftParamValue, DraftShape, Pt } from '../types';
 import type { DraftCommandDef, DraftContext, StepResult } from './types';
 
 /** The drafting command that draws a shape. */
@@ -30,9 +31,9 @@ export function toolOfShape(shape: AnnotationShape): string {
   }
 }
 
-function add(ctx: DraftContext, shape: AnnotationShape): void {
+function add(ctx: DraftContext, shape: AnnotationShape, extra: Record<string, string> = {}): void {
   // The current style, and an override when the height was typed differently.
-  const params = styledParams(ctx.viewId, shape, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle });
+  const params: Record<string, DraftParamValue> = { ...styledParams(ctx.viewId, shape, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }), ...extra };
   const type = ctx.settings.annotationType;
   if (type && type.tool === toolOfShape(shape)) params.atype = type.id;
   editDrafts({ add: [newDraft(ctx.viewId, ctx.layerId, shape, params)] });
@@ -127,6 +128,17 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
       const pts: Pt[] = [];
       /** The last dimension placed: the chain continues from its end. */
       let last: DimensionShape | null = null;
+      /** What each point of the dimension being drawn is attached to (a model element's corner it was snapped to), if anything. */
+      const anchors: (string | undefined)[] = [];
+      let lastAnchorB: string | undefined;
+      const anchorAt = (p: Pt): string | undefined => {
+        for (const element of ctx.elementBoxesAt?.(p) ?? []) {
+          const anchor = anchorOf(p, element);
+          if (anchor) return encodeAnchor(anchor);
+        }
+        return undefined;
+      };
+      const anchorParams = (a: string | undefined, b: string | undefined): Partial<Record<AnchorParam, string>> => ({ ...(a ? { anchorA: a } : {}), ...(b ? { anchorB: b } : {}) });
       const shape = (at: Pt): DimensionShape => ({ type: 'dimension', variant, a: pts[0], b: pts[1], at, height: ctx.settings.textHeight });
       /** The dimension line's place for a cursor: aligned to a close existing dimension line (within two text heights). */
       const place = (cursor: Pt) => {
@@ -146,17 +158,21 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
           if (last) {
             const next = continueDimension(last, p);
             if (next) {
-              add(ctx, next);
+              const anchorB = anchorAt(p);
+              add(ctx, next, anchorParams(lastAnchorB, anchorB));
               last = next;
+              lastAnchorB = anchorB;
             }
             return 'continue';
           }
           if (pts.length < 2) {
             pts.push(p);
+            anchors.push(anchorAt(p));
             return 'continue';
           }
           last = shape(place(p).at);
-          add(ctx, last);
+          lastAnchorB = anchors[1];
+          add(ctx, last, anchorParams(anchors[0], anchors[1]));
           return ctx.settings.dimContinuous ? 'continue' : 'done';
         },
         onEnter: () => 'done',
