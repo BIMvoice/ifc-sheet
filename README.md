@@ -100,6 +100,8 @@ pnpm build              # builds all packages
 pnpm dev                # builds, then runs the app at http://localhost:3000
 ```
 
+Drawing sets without the app: [from the command line](docs/guide/ifcsheet-cli.md), or by an AI assistant through [the MCP server](docs/guide/ifcsheet-mcp.md).
+
 Tests and type checks: `pnpm test` and `pnpm typecheck`. Details are in [AGENTS.md](AGENTS.md).
 
 ## Built on ifc-lite

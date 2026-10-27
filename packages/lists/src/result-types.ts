@@ -32,7 +32,7 @@ export interface ListGroup {
   /** Number of rows in the group (the Count aggregate, issue #1790). */
   count: number;
   /** columnId → summed numeric value, for the configured sum columns. */
-  sums: Record<string, number>;
+  sums: Record<string, number | null>;
   /** 0-based nesting depth (0 = outermost grouping column). Always emitted by
    *  `summariseListRows`; optional for backward type compatibility. */
   level?: number;
@@ -43,7 +43,7 @@ export interface ListGroup {
 /** Whole-result aggregates. */
 export interface ListSummary {
   count: number;
-  sums: Record<string, number>;
+  sums: Record<string, number | null>;
 }
 
 /**
@@ -62,7 +62,7 @@ export interface ListScheduleRow {
   /** Count aggregate: number of matched elements in this group combination. */
   count: number;
   /** columnId -> summed numeric value, for the configured sum columns. */
-  sums: Record<string, number>;
+  sums: Record<string, number | null>;
 }
 
 export interface ListRow {
