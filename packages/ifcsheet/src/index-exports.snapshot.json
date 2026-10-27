@@ -186,6 +186,7 @@
   "OWNER_PARTS: value",
   "OccurrenceFacts: type (type-only)",
   "OfficeClassificationAccessor: type (type-only)",
+  "OpeningLineDirection: type (type-only)",
   "OrphanCell: type (type-only)",
   "OrphanElement: type (type-only)",
   "OverrideMode: type (type-only)",
