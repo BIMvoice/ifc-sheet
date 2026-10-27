@@ -10,10 +10,12 @@
 
 import { paperOf } from '@/project/sheets';
 import type { ProjectSheet } from '@/project/types';
+import { MIN_DRAWN_PX } from '@/wall/wall-zoom';
 import { WallSheet } from './WallSheet';
 
 export function LazyWallSheet({ sheet, width, near }: { sheet: ProjectSheet; width: number; near: boolean }) {
-  if (near) return <WallSheet sheet={sheet} width={width} deferDrawings />;
+  // Near the screen and big enough to read; a sheet zoomed out to a stamp hangs as an outline however many are in view.
+  if (near && width >= MIN_DRAWN_PX) return <WallSheet sheet={sheet} width={width} deferDrawings />;
   const paper = paperOf(sheet);
   return (
     <div

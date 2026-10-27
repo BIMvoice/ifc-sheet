@@ -16,7 +16,7 @@
 import { ELEVATION_DIRECTIONS } from './view-defaults.js';
 import { readFrame } from './sheet-frame.js';
 import { readNumberingScheme } from './numbering.js';
-import { readPaper } from './paper.js';
+import { ISO_PAPERS, readPaper } from './paper.js';
 import { ANNOTATION_COMMANDS, RULED_SERIES, type Annotations, type AnnotationCommand, type RuledSeries, type ScheduleRule, type SetTemplate, type SheetLayoutRule, type SheetRule, type SlotRule, type ViewRule } from './set-template.js';
 import type { ScheduleListKind } from './sub-reports.js';
 
@@ -64,10 +64,12 @@ function readLayout(v: unknown, path: string): SheetLayoutRule {
   const o = objectAt(v, path);
   const paper = readPaper(o.paper) ?? fail(`${path}/paper`, 'must be a paper size');
   const frame = o.frame === undefined ? undefined : readFrame(o.frame) ?? fail(`${path}/frame`, 'must be frame margins and a title block position');
+  const stepUp = o.stepUp === undefined ? undefined : listAt(o.stepUp, `${path}/stepUp`, (p, at) => ISO_PAPERS.find((size) => size === p) ?? fail(at, 'must be A0, A1, A2, A3 or A4'));
   return {
     paper,
     orientation: o.orientation === 'portrait' ? 'portrait' : 'landscape',
     ...(frame ? { frame } : {}),
+    ...(stepUp && stepUp.length > 0 ? { stepUp } : {}),
     ...(typeof o.templateId === 'string' && o.templateId.startsWith('builtin:') ? { templateId: o.templateId } : {}),
   };
 }

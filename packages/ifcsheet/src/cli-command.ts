@@ -38,6 +38,7 @@ export interface CliValues {
   'include-far-elements'?: boolean;
   pac?: boolean;
   intervention?: string;
+  'pac-mode'?: string;
   help?: boolean;
   version?: boolean;
 }

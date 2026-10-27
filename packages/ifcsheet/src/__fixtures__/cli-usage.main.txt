@@ -1,7 +1,7 @@
 ifcsheet: drawing sets from IFC models
 
 Usage:
-  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--locale <ro|en>]] [--project <file>] [--standard <id>] [--include-far-elements]
+  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--locale <ro|en>] [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]
   ifcsheet materials <model.ifc> [--project <file>] [--json]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
@@ -18,6 +18,8 @@ Commands:
           rules the app applies, a rule the model cannot meet skipped and said.
           With --pac, the sheets are the permit project's (PAC, Legea 169/2026 Anexa 2: plans, facades, sections) and the
           one PDF opens with the opis page: the contents Anexa 2 lists, each with its point and whether the file holds it.
+          A --project saved in the app's simplified mode (or --pac-mode rural) builds Anexa 3's sheets instead (1:50 on A3, a
+          larger paper for a larger drawing, said on the sheet), without the opis, which is Anexa 2's.
   check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain English, or JSON with --json. With --project, also what the
@@ -53,6 +55,7 @@ Options:
   --pac            Build the submission PDF of the permit project (PAC): the opis page, then the PAC sheets. Not with --template.
   --intervention <w> With --pac: the works, new (default), existing (an intervention on an existing building: Anexa 2 point 1.4.4 applies) or
                    interior (interior only: the items 1.4.4 lifts show "Nu este cazul").
+  --pac-mode <m>   With --pac: the permit project, full (Anexa 2, default) or rural (Anexa 3, the simplified one for a rural house). Wins over the --project's.
   --standard <id>  A drawing standard for build: its pens and title block (known: ro, the Romanian pack of the app's "Install standard").
                    Wins over the project's own graphic standard and title block layout; without it a --project's are used.
   --name <name>    The project name for the title blocks (default: the model's).

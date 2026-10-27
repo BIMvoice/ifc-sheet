@@ -34,6 +34,7 @@ import { resolveViewGraphics } from './view-templates.js';
 import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
+import { sheetNoteLines } from './sheet-notes.js';
 
 export type Polyline = readonly Point2D[];
 
@@ -215,6 +216,7 @@ export function sheetGraphic(
   const block = titleBlock(sheet, doc, paper, sheetScaleLine(sheet, doc.views), projectFields);
   out.frame.push(...block.frame);
   out.texts.push(...block.texts);
+  out.texts.push(...sheetNoteLines(sheet).map(({ at, text, size }): SheetText => ({ at, text, size })));
   out.images.push(...block.images);
   return out;
 }

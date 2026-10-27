@@ -57,6 +57,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         'include-far-elements': { type: 'boolean' },
         pac: { type: 'boolean' },
         intervention: { type: 'string' },
+        'pac-mode': { type: 'string' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
       },
