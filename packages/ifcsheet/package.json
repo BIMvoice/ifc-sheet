@@ -125,6 +125,11 @@
       "import": "./dist/list-projection.js",
       "default": "./dist/list-projection.js"
     },
+    "./urban": {
+      "types": "./dist/urban.d.ts",
+      "import": "./dist/urban.js",
+      "default": "./dist/urban.js"
+    },
     "./list-words": {
       "types": "./dist/list-words.d.ts",
       "import": "./dist/list-words.js",
@@ -149,6 +154,7 @@
     "@ifc-lite/mutations": "workspace:^",
     "@ifc-lite/parser": "workspace:^",
     "@ifc-lite/rules": "workspace:^",
+    "@ifc-lite/wasm": "workspace:^",
     "fflate": "^0.8.3",
     "jspdf": "^4.2.1"
   },
