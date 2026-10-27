@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { handleHostedMcp, type HostedOptions } from './hosted.js';
 import { issueToken, MAX_SESSION_MODELS, TOKEN_TTL_MS, verifyToken, withSessions, type SessionState } from './hosted-session.js';
 import { ModelCache, hostedModelCache } from '../tools/hosted-model-cache.js';
-import { ifcsheetTools } from '../tools/ifcsheet.js';
+import { ifcsheetTools } from '../tools/ifcsheet-tools.js';
 
 const FZK = fileURLToPath(new URL('../../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
