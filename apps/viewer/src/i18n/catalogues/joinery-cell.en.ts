@@ -19,4 +19,6 @@ export const joineryCellEn = {
   'joineryCell.done': 'Done',
   'joineryCell.addColumn': 'Add a column',
   'joineryCell.removeColumn': 'Remove the column {name}',
+  'joineryCell.tooManyRows': 'Too many properties and quantities on this schedule: take one off first.',
+  'joineryRow.varies': 'varies',
 } satisfies Record<string, TranslationValue>;

@@ -312,8 +312,10 @@ describe('the viewport card (#446)', () => {
     click(view.querySelector<HTMLButtonElement>('button[aria-label="Remove the column U (W/m²K)"]')!);
     assert.deepEqual(scheduleById(id)!.content?.rows?.hidden, ['u']);
     const picker = view.querySelector<HTMLSelectElement>('select')!;
-    assert.deepEqual([...picker.options].slice(1).map((o) => o.textContent), ['U (W/m²K)'], 'only the column that is off is offered');
-    picker.value = picker.options[1].value;
+    // Besides the model's properties and quantities (`joinery-model-rows.fzk.test.tsx`), the rows of the table that are off.
+    const off = [...picker.options].filter((o) => o.value.startsWith('["attribute"'));
+    assert.deepEqual(off.map((o) => o.textContent), ['U (W/m²K)'], 'only the column that is off is offered among the rows');
+    picker.value = off[0].value;
     picker.dispatchEvent(new window.Event('change', { bubbles: true }));
     assert.deepEqual(scheduleById(id)!.content?.rows?.hidden ?? [], [], 'the column is back');
   });

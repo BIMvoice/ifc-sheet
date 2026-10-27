@@ -49,7 +49,7 @@ export function useScheduleLabels(title: string): ScheduleLabels {
   return useMemo(() => ({
     locale, title,
     mark: t('schedule.row.mark'), name: t('schedule.row.name'), size: t('schedule.row.size'), operation: t('schedule.row.operation'),
-    sill: t('schedule.row.sill'), total: t('schedule.row.total'), uValue: t('schedule.row.uValue'), fire: t('schedule.row.fire'),
+    sill: t('schedule.row.sill'), total: t('schedule.row.total'), uValue: t('schedule.row.uValue'), fire: t('schedule.row.fire'), varies: t('joineryRow.varies'),
     op: (op: PanelOperation) => t(`joinery.op.${op}` as TranslationKey),
   }), [t, locale, title]);
 }

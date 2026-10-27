@@ -25,7 +25,7 @@ import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { isOverridableRow, joineryCellText, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
+import { isOverridableRow, joineryCellText, modelRowLabel, modelRowText, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
@@ -65,6 +65,8 @@ export interface ScheduleLabels {
   total: string;
   uValue: string;
   fire: string;
+  /** What a row read from the model prints for a type whose elements differ in it (#446). Default: `varies`. */
+  varies?: string;
   /** A panel operation's short name. */
   op: (op: PanelOperation) => string;
 }
@@ -144,6 +146,10 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
     }],
     fire: () => [{ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—', raw: (e) => [e.spec?.props.fireRating ?? null] }],
   };
+  // The properties and quantities the schedule lists (#446): a type's cell holds the value its elements share, else the word for "varies".
+  for (const row of data.content?.properties ?? []) {
+    model[row.id] = () => [{ label: modelRowLabel(row, data.content?.properties ?? []), value: (e) => modelRowText(e, row.id, labels.varies), raw: (e) => { const t = modelRowText(e, row.id, labels.varies); return [t === '—' ? null : t]; } }];
+  }
   const ids = shownRows(data.content, { windows: data.entries.some((e) => e.kind === 'window'), textIds: typed.map((r) => r.id) });
   // The user's own rows: each type's text by the type's key, so a column that moves takes its text with it.
   const own = new Map(typed.map((row) => [textRowId(row.id), row]));

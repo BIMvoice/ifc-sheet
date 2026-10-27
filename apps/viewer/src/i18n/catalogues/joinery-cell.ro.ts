@@ -20,4 +20,6 @@ export const joineryCellRo: Record<keyof typeof joineryCellEn, TranslationValue>
   'joineryCell.done': 'Gata',
   'joineryCell.addColumn': 'Adăugați o coloană',
   'joineryCell.removeColumn': 'Scoateți coloana {name}',
+  'joineryCell.tooManyRows': 'Prea multe proprietăți și cantități în tabel: eliminați mai întâi una.',
+  'joineryRow.varies': 'diferă',
 };

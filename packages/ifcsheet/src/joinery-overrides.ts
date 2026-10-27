@@ -17,17 +17,21 @@
  * the saved project print the same text.
  */
 
+import { isModelRowId } from './joinery-model-rows.js';
 import { cleanText } from './schedule-text.js';
 
 /** The most overrides a project keeps; a damaged file cannot grow the project without bound. */
 export const MAX_JOINERY_OVERRIDES = 2000;
 const MAX_VALUE = 200;
 const MAX_ABOUT = 120;
+/** A model row's id (`source:set:name`) is the longest row id: `property:` or `quantity:` and a set name and a property name of up to 120 characters each. */
+const MAX_ROW_ID = 260;
 
-/** The rows whose text can be typed over: the ones read from the model per type. The counts and the sizes are measured, not typed. */
+/** The built-in rows whose text can be typed over: the ones read from the model per type. The counts and the sizes are measured, not typed. */
 export const OVERRIDABLE_ROWS = ['name', 'operation', 'sill', 'u', 'fire'] as const;
 export type OverridableRow = (typeof OVERRIDABLE_ROWS)[number];
-export const isOverridableRow = (row: string): row is OverridableRow => (OVERRIDABLE_ROWS as readonly string[]).includes(row);
+/** Whether the text of the row can be typed over: the rows read from the model per type, and the properties and quantities the schedule lists (`ModelRow`). */
+export const isOverridableRow = (row: string): boolean => (OVERRIDABLE_ROWS as readonly string[]).includes(row) || isModelRowId(row);
 
 export interface JoineryCellOverride {
   /** The type's identity (`typeIdentityOf`): the GlobalId of its IfcTypeObject, else its entry key. */
@@ -55,7 +59,7 @@ export function readJoineryOverrides(raw: unknown): JoineryCellOverride[] | unde
   for (const r of raw) {
     if (typeof r !== 'object' || r === null) continue;
     const o = r as Record<string, unknown>;
-    const type = cleanText(o.type, 200), row = cleanText(o.row, 40);
+    const type = cleanText(o.type, 200), row = cleanText(o.row, MAX_ROW_ID);
     if (!type || !isOverridableRow(row) || typeof o.value !== 'string') continue;
     const cell = `${type}\u0000${row}`;
     if (!byCell.has(cell) && byCell.size >= MAX_JOINERY_OVERRIDES) continue;

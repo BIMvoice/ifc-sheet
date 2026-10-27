@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { joineryOverrideOf, typeIdentityOf } from '@bimvoice/ifcsheet';
+import { joineryOverrideOf, modelRowLabel, typeIdentityOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
@@ -49,7 +49,9 @@ export function JoineryCellCard({ schedule }: { schedule: ProjectSchedule }) {
   }, [mine, schedule, whole, schedules, overrides, labels]);
   const [draft, setDraft] = useState<{ key: string; text: string } | null>(null);
   if (!joinery) return null;
-  const rowName = mine ? (ROW_LABELS[mine.column] ? t(ROW_LABELS[mine.column]) : mine.column) : '';
+  const properties = (schedules.find((s) => s.id === schedule.id) ?? schedule).content?.properties ?? [];
+  const own = mine ? properties.find((r) => r.id === mine.column) : undefined;
+  const rowName = mine ? (ROW_LABELS[mine.column] ? t(ROW_LABELS[mine.column]) : own ? modelRowLabel(own, properties) : mine.column) : '';
   const current = mine && found ? joineryOverrideOf(overrides, found.entry, mine.column) : undefined;
   const summary = mine && found ? t('joineryCell.summaryPicked', { row: rowName, type: found.about }) : t('joineryCell.summary');
   const key = mine ? `${mine.guid}:${mine.column}:${current?.value ?? ''}` : '';

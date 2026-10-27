@@ -12,6 +12,7 @@ export {
   attributes, drawnJoineryOf, elementFacts, joineryOfElement, joineryScheduleData, occurrenceMark, storedName, typeIndex,
   type DrawnJoinery, type JoineryElement, type JoineryProject, type Live, type ScheduleData, type ScheduleEntry, type ScheduleKind, type ScheduleModel, type ScheduleOccurrence,
 } from './joinery-schedule.js';
+export { discoverModelRows, mergeFound, readModelRowValues, type FoundModelRows, type ModelRowSource } from './joinery-model-values.js';
 export { projectSubReportChecks, readProjectFile, readinessWithProject, type ProjectFacts } from './project-read.js';
 export { boqScales, boqQuantities, materialNamesOf, readBoqElements, storeSource, type BoqScales, type BoqSource } from './boq-read.js';
 export { storeClassifications } from './classification-read.js';
