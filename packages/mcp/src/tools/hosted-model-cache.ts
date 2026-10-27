@@ -22,6 +22,28 @@ export const CACHE_MAX_BYTES = 200 * 1024 * 1024;
 
 export const sha256Hex = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
+/** Fields of a cached model that stay mutable: the wasm-backed data store is a live handle, not data to freeze. */
+const LIVE_FIELDS = new Set(['dataStore']);
+
+const isPlain = (v: object): boolean => {
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === Array.prototype || proto === null;
+};
+
+/**
+ * Freezes plain objects and arrays, recursively. Typed arrays (the mesh
+ * buffers) cannot be frozen in JavaScript, so they are left as they are, and so
+ * are class instances (Map, Set, ...) and functions: the guard covers what the
+ * tools read as plain data, not the buffers. The mesh buffers are covered by
+ * the interleaving test, which hashes them.
+ */
+export function deepFreeze<T>(value: T, skip: ReadonlySet<string> = new Set()): T {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value) || !isPlain(value)) return value;
+  Object.freeze(value);
+  for (const [key, child] of Object.entries(value)) if (!skip.has(key)) deepFreeze(child);
+  return value;
+}
+
 export class ModelCache<T> {
   private readonly entries = new Map<string, { value: T; cost: number }>();
   constructor(private readonly maxEntries = CACHE_MAX_MODELS, private readonly maxCost = CACHE_MAX_BYTES) {}
@@ -40,6 +62,11 @@ export class ModelCache<T> {
   set(hash: string, value: T, cost: number): void {
     this.entries.delete(hash);
     if (cost > this.maxCost) return; // never worth evicting everything for
+    // Every session shares this object: freeze what the tools read (projectName, storeys, meshes
+    // and buildingMeshes as arrays and mesh records, extent, farElements, includeFarElements, the
+    // model object itself) so a tool that writes to it throws instead of leaking between sessions.
+    // The data store (wasm-backed) and typed arrays are not frozen; see deepFreeze.
+    deepFreeze(value, LIVE_FIELDS);
     this.entries.set(hash, { value, cost });
     let total = 0;
     for (const e of this.entries.values()) total += e.cost;
