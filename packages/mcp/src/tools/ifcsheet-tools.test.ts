@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** The `ifcsheet_*` tool list is assembled from the groups the tool files register (#144) and is exactly the list `main` had before: same tools, same order, same descriptions and schemas. */
+/** The `ifcsheet_*` tool list is assembled from the groups the tool files register (#144) and is the list `main` had before (17 tools: same order, descriptions and schemas) followed by the five takeoff tools (order 60). */
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ const shape = (tools: readonly Tool[]) => tools.map((t) => ({ name: t.name, desc
 describe('ifcsheetTools', () => {
   it('is identical to the list captured from main: names, order, descriptions, scopes, schemas', () => {
     const captured = JSON.parse(readFileSync(fileURLToPath(new URL('./__fixtures__/ifcsheet-tools.main.json', import.meta.url)), 'utf8'));
-    expect(captured).toHaveLength(17);
+    expect(captured).toHaveLength(22);
     expect(JSON.parse(JSON.stringify(shape(ifcsheetTools)))).toEqual(captured);
   });
 
