@@ -15,7 +15,7 @@ import { openingSymbols, type OpeningSymbol } from '@/drafting/opening-symbols';
 import { drawnJoineryOfRenderId } from '@/joinery/mapped-joinery';
 import { renderIdGlobalId } from './element-guid';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { typedElevationSymbol } from '@/joinery/elevation-placement';
+import { statedDoorElevationSymbol, typedElevationSymbol } from '@/joinery/elevation-placement';
 import { doorOperationOfRenderId } from '@/joinery/door-operation-read';
 import { openingConvention } from '@/joinery/opening-convention';
 
@@ -53,10 +53,12 @@ export function visibleEntities(drawing: Pick<Drawing2D, 'lines'> | null | undef
  * An elevation's or section's door and window symbols: every door / window
  * the drawing shows (`visible`) whose face the view looks at and that has a
  * joinery type (configured, or mapped by the project) — frame, panels and
- * opening marks over the projected mesh.
+ * opening marks over the projected mesh — and every door without one that
+ * states its operation, with the opening lines of that operation.
  */
 export function viewElevationSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, visible: ReadonlySet<number>, hidden: ReadonlySet<string>,
+  flips?: Record<string, number>,
 ): OpeningSymbol[] {
   if (plane.axis === 'y' || plane.customPlane) return [];
   const byId = new Map<number, { kind: 'door' | 'window'; world: number[]; l2w?: number[] }>();
@@ -77,7 +79,12 @@ export function viewElevationSymbols(
   for (const [id, entry] of byId) {
     const drawn = entry.l2w ? drawnJoineryOfRenderId(id) : null;
     const placed = drawn && entry.l2w ? typedElevationSymbol(drawn.spec, entry.world, entry.l2w, plane, drawn.flips, { convention }) : null;
-    if (placed) out.push({ id, kind: entry.kind, shapes: placed.thin, dashed: placed.dashed });
+    if (placed) { out.push({ id, kind: entry.kind, shapes: placed.thin, dashed: placed.dashed }); continue; }
+    // No configured type: a door's stated operation, turned by the drawing's own flips as its plan symbol is (a configured type wins, above).
+    const stated = entry.kind === 'door' && entry.l2w && !drawn ? doorOperationOfRenderId(id) : null;
+    const guid = stated && flips && Object.keys(flips).length > 0 ? renderIdGlobalId(id) : null;
+    const own = stated && entry.l2w ? statedDoorElevationSymbol(stated, entry.world, entry.l2w, plane, guid ? flips?.[guid] ?? 0 : 0, { convention }) : null;
+    if (own) out.push({ id, kind: 'door', shapes: own.thin, dashed: own.dashed });
   }
   return out;
 }

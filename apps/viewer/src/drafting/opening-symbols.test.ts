@@ -110,7 +110,7 @@ describe('openingSymbols', () => {
 /** #486: the swing follows the door's stated operation, read against its placement (IFC4.3 IfcDoorTypeOperationEnum: LEFT = hinges on local -X seen along +Y, the leaf opens to +Y). */
 describe('openingSymbols with a stated operation', () => {
   const plan = { axis: 'y' as const, position: 1.2, flipped: false };
-  const left: DoorOperation = { hinge: 'left', leaves: 1, doubleActing: false };
+  const left: DoorOperation = { motion: 'swing', hinge: 'left', towards: null, leaves: 1, doubleActing: false };
   const right: DoorOperation = { ...left, hinge: 'right' };
   /** Row-major localToWorld (renderer frame): IFC local X = column 0, IFC local Y = minus column 2. `mx`: X mirrored; `my`: Y mirrored. */
   const placed = (mx = false, my = false): MeshData => ({
@@ -147,7 +147,7 @@ describe('openingSymbols with a stated operation', () => {
   });
 
   it('draws the pair a DOUBLE_DOOR states even in a narrow opening', () => {
-    const [door] = openingSymbols([placed()], plan, () => 0, () => null, () => ({ hinge: null, leaves: 2, doubleActing: false }));
+    const [door] = openingSymbols([placed()], plan, () => 0, () => null, () => ({ motion: 'swing', hinge: null, towards: null, leaves: 2, doubleActing: false }));
     assert.equal(door.heavy?.length, 2);
   });
 });

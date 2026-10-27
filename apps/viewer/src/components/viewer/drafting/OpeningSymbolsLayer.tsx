@@ -50,7 +50,7 @@ export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, dr
       if (!plane || !geometryResult?.meshes) return [];
       const meshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult.meshes, phases ?? null), graphics, renderIdGlobalId) ?? geometryResult.meshes;
       if (plane.axis === 'y') return viewOpeningSymbols(meshes, plane, flips, hidden);
-      return drawing ? viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden) : [];
+      return drawing ? viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, flips) : [];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogue / mapping are read through the project store
     [plane, drawing, geometryResult, flips, hidden, phases, graphics, catalogue, mapping],
