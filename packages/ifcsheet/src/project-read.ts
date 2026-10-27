@@ -40,6 +40,8 @@ import { PAC_MODES, type PacMode } from './pac-set.js';
 import { readUrbanSettings } from './urban-settings-read.js';
 import type { UrbanSettings } from './urban-indicators.js';
 import type { StoreyInput } from './view-defaults.js';
+import { readUnderlays } from './underlay-read.js';
+import type { ViewUnderlay } from './underlay.js';
 import { ruralScopeOfModel, type RuralScopeModel } from './rural-scope-read.js';
 
 /** What the checks read of a project file. */
@@ -75,6 +77,8 @@ export interface ProjectFacts extends JoineryProject {
   pacMode?: PacMode;
   /** The urban indicators' terrain level, ±0.00 and storeys left out of Ad for CUT; absent: the defaults. */
   urbanSettings?: UrbanSettings;
+  /** The pictures laid under views (#457); absent when the file has none. A build prints each on the sheets it names, when the generated set has that view and sheet. */
+  underlays?: ViewUnderlay[];
 }
 
 type Json = Record<string, unknown>;
@@ -99,6 +103,7 @@ export function readProjectFile(text: string): ProjectFacts {
   const titleBlockSources = readTitleSources(parsed.titleBlockSources);
   const titleBlockParams = readTitleBlockParams(parsed.titleBlockParams);
   const urbanSettings = readUrbanSettings(parsed.urbanSettings);
+  const underlays = readUnderlays(parsed);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
   return {
     name: typeof parsed.name === 'string' ? parsed.name.trim() : '',
@@ -118,6 +123,7 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(titleBlockParams?.length ? { titleBlockParams } : {}),
     ...(PAC_MODES.find((m) => m === parsed.pacMode) ? { pacMode: PAC_MODES.find((m) => m === parsed.pacMode) } : {}),
     ...(urbanSettings ? { urbanSettings } : {}),
+    ...(underlays.length > 0 ? { underlays } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }
