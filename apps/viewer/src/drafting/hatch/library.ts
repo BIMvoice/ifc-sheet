@@ -2,6 +2,5 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** The hatch library moved to the engine (`@bimvoice/ifcsheet/hatch`, #493) so the headless sheets lay patterns out as the app does; this is its old path. */
-
+// The built-in hatch library is the engine's (`packages/ifcsheet/src/hatch-library.ts`), so the headless sheets hatch as the app does (#493).
 export * from '@bimvoice/ifcsheet/hatch';

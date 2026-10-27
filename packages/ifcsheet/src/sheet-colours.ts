@@ -12,7 +12,7 @@ import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
 import { clipPolygon } from './clip.js';
 import { orderedFills, type SchemeResult } from './colour-fills.js';
 import { schemeTitle, type SchemeEntry } from './colour-scheme.js';
-import { findPattern, hatchSegments, type HatchPattern } from './hatch/index.js';
+import { findPattern, hatchSegments, type HatchPattern } from './hatch.js';
 import type { Polyline, SheetText } from './sheet-graphic.js';
 import type { Rect } from './sheet-frame.js';
 

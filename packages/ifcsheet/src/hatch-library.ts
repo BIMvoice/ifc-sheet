@@ -8,7 +8,7 @@
  * them to drawing units (e.g. × sheet scale / 1000 for metre drawings).
  */
 
-import { parsePat, type HatchPattern } from './pattern.js';
+import { parsePat, type HatchPattern } from './hatch-pattern.js';
 
 const BUILT_IN_PAT = `
 ;; ifc-lite built-in hatch patterns (millimetre units)

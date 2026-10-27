@@ -15,8 +15,8 @@
  * flips. Edges are swept in h order with an active list.
  */
 
-import type { Pt } from './pt.js';
-import type { HatchLineFamily, HatchPattern } from './pattern.js';
+import type { Pt } from './hatch-pt.js';
+import type { HatchLineFamily, HatchPattern } from './hatch-pattern.js';
 
 /** One hatch stroke; a dot has `a` equal to `b`. */
 export interface HatchSegment {

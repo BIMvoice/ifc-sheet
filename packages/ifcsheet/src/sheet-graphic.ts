@@ -23,7 +23,7 @@ import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
 import { sheetScaleLine } from './sheet-scale.js';
 import { clipPolygon, clipPolyline } from './clip.js';
 import { activeColourScheme, type SchemeResult } from './colour-fills.js';
-import { parsePat } from './hatch/index.js';
+import { parsePat } from './hatch.js';
 import { schemeLegend, viewportFills, type SheetFill } from './sheet-colours.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';

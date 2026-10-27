@@ -7,7 +7,7 @@
  * engine owns them so the app (screen, sheet, DXF) and the headless sheets (PDF, DXF) lay one pattern out the same way (#493).
  */
 
-export { parsePat, serializePat, type HatchLineFamily, type HatchPattern } from './pattern.js';
-export { hatchSegments, type HatchOptions, type HatchResult, type HatchSegment } from './fill.js';
-export { builtInPatterns, findPattern } from './library.js';
-export type { Pt } from './pt.js';
+export { parsePat, serializePat, type HatchLineFamily, type HatchPattern } from './hatch-pattern.js';
+export { hatchSegments, type HatchOptions, type HatchResult, type HatchSegment } from './hatch-fill.js';
+export { builtInPatterns, findPattern } from './hatch-library.js';
+export type { Pt } from './hatch-pt.js';

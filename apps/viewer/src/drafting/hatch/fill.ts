@@ -2,6 +2,5 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** The hatch fill moved to the engine (`@bimvoice/ifcsheet/hatch`, #493) so the headless sheets lay patterns out as the app does; this is its old path. */
-
+// Hatch geometry generation is the engine's (`packages/ifcsheet/src/hatch-fill.ts`), so the headless sheets hatch as the app does (#493).
 export * from '@bimvoice/ifcsheet/hatch';

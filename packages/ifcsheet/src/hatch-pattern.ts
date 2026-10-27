@@ -17,7 +17,7 @@
  * (`solid: true`), which is also how solid patterns are serialized.
  */
 
-import type { Pt } from './pt.js';
+import type { Pt } from './hatch-pt.js';
 
 export interface HatchLineFamily {
   angleDeg: number;
