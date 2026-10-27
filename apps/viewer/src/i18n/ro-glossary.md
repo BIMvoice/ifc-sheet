@@ -111,6 +111,12 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 | Share (the collaboration session) / invite link | Partajare / link de invitație | Roles: Vizualizare, Comentariu, Editare |
 | Panel group (Author, Check, Coordinate, Quantify, Site, Automate) | Autor, Verificare, Coordonare, Cantități, Amplasament, Automatizare | `shellChrome.panelGroups.*` |
 | Validation verdict: pass / fail / not checked | Admis / Respins / Neverificat | Manual validation checklists; an IDS result is "Reușite / Eșuate" |
+| Model workspace | Spațiul de modelare | Named in the `commands.*` rows that say where a key works; the docs edition never mounts it |
+| Walk mode / fly mode | Modul Plimbare / zbor | "Mergeți", "Săriți", "Ghemuiți-vă" for the keys held in walk mode; "Zboară" for flying |
+| Collection (the basket of the presentation dock) | Colecție | "Adaugă contextul curent la colecție"; the dock is "bara de prezentare" |
+| Reposition (panel) | Repoziționare | "panoul Repoziționare" |
+| Mouse wheel / right mouse | Rotița mausului / clic dreapta | Gesture labels in the keyboard reference |
+| Axis bubble shape / ends / line type | Cerc, Pătrat / La ambele capete, La început, La sfârșit, Fără / Continuă, Întreruptă, Punctată, Linie-punct | `drafting.props.axisBubble.*`, `axisEnds.*`, `lineType.*` |
 
 ## Not translated yet
 

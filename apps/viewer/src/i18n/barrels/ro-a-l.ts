@@ -14,6 +14,7 @@ import { checkRo } from '../catalogues/check.ro';
 import { classificationRo } from '../catalogues/classification.ro';
 import { colourSchemeRo } from '../catalogues/colour-scheme.ro';
 import { commandPaletteRo } from '../catalogues/command-palette.ro';
+import { commandsRo } from '../catalogues/commands.ro';
 import { creditsRo } from '../catalogues/credits.ro';
 import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
 import { documentRo } from '../catalogues/document.ro';
@@ -50,6 +51,7 @@ export const roAL = {
   ...classificationRo,
   ...colourSchemeRo,
   ...commandPaletteRo,
+  ...commandsRo,
   ...creditsRo,
   ...cutawayAxoRo,
   ...documentRo,

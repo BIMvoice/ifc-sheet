@@ -80,8 +80,12 @@ while (queue.length) {
 
 // A prefix counts only when it is at least a dotted segment long and matches keys.
 const viaPrefix = new Map<string, Set<string>>();
+const builders = new Map<string, { files: string[]; keys: string[] }>();
 const unresolved: string[] = [];
 for (const [prefix, files] of prefixes) {
+  // A key head ends at a dot (`wall.${x}`). A bare word before `+` (`'model' + x` in the renderer's scene code) is not a key head:
+  // counted as one it claimed every `model*` catalogue (242 keys of the Model workspace, which the docs edition never mounts).
+  if (!prefix.endsWith('.')) continue;
   const hits = allKeys.filter((k) => k.startsWith(prefix));
   if (hits.length === 0) {
     if (/^[a-z][A-Za-z0-9]*\.[A-Za-z0-9.]*$/.test(prefix)) unresolved.push(`${prefix} (${[...files][0]})`);
@@ -89,6 +93,7 @@ for (const [prefix, files] of prefixes) {
   }
   if (prefix.length < 4) continue;
   for (const k of hits) add(viaPrefix, k, prefix);
+  builders.set(prefix, { files: [...files].sort(), keys: hits });
 }
 
 const catalogueOf = (key: string): string => key.split('.')[0];
@@ -115,6 +120,10 @@ const result = {
   missingExactByPrefix: group(missingExact),
   missingExactFirstFile: Object.fromEntries(missingExact.map((k) => [k, fileOf(k)])),
   missingViaPrefix: group(missingPrefix),
+  // For each template head that still has a Romanian-less key under it: the files that build the key and those keys.
+  missingViaPrefixBuilders: Object.fromEntries(
+    [...builders].map(([prefix, b]) => [prefix, { files: b.files, keys: b.keys.filter((k) => !roKeys.has(k) && !exact.has(k)) }] as const).filter(([, b]) => b.keys.length > 0).sort(([a], [b]) => a.localeCompare(b)),
+  ),
 };
 writeFileSync(join(REPO, 'scripts', 'ro-reachable-missing.json'), `${JSON.stringify(result, null, 2)}\n`);
 console.log(JSON.stringify({ ...result, missingExactByPrefix: undefined, missingExactFirstFile: undefined, missingViaPrefix: undefined, byPrefixCounts: Object.fromEntries(Object.entries(result.missingExactByPrefix).map(([k, v]) => [k, v.length])), viaPrefixCounts: Object.fromEntries(Object.entries(result.missingViaPrefix).map(([k, v]) => [k, v.length])) }, null, 1));
