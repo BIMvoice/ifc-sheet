@@ -19,6 +19,7 @@ import { oauthCallbackRoutes } from './vite-plugins/oauth-callback';
 import { daluxRelayRoute } from './vite-plugins/dalux-relay';
 import { docsModuleSideEffects, editionBundle } from './vite-plugins/edition-bundle';
 import { editionBranding } from './vite-plugins/edition-branding';
+import { offlineSw } from './vite-plugins/offline-sw';
 import { deploymentAssetsDir } from '../../scripts/lib/deployment-assets-dir.mjs';
 
 // --- Build-time changelog parser ---
@@ -250,6 +251,8 @@ export default defineConfig({
     editionBundle('docs'),
     // The product name in the page title and the web app manifest.
     editionBranding('docs', path.resolve(__dirname, 'public')),
+    // The offline service worker (#456): sw.js, written after the bundle.
+    offlineSw(path.resolve(__dirname, 'vite-plugins/offline-sw.template.js')),
   ],
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),

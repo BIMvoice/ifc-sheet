@@ -47,6 +47,12 @@ export const keyboardShortcutsEn = {
   'keyboardShortcuts.about.homepageLink': 'ifclite.dev',
   'keyboardShortcuts.about.docsLink': 'Docs',
   'keyboardShortcuts.about.githubLink': 'IfcSheet on GitHub',
+  // Install as an app, works offline (#456)
+  'offline.install': 'Install IfcSheet',
+  'offline.installHint': 'Opens in its own window and works without a connection. Models still open from your disk.',
+  'offline.installed': 'Installed. IfcSheet works without a connection.',
+  'offline.updateAvailable': 'Update available. Reload to use the new version.',
+  'offline.updateReload': 'Reload',
   'keyboardShortcuts.about.reportIssueLink': 'Report an IfcSheet issue',
   'keyboardShortcuts.about.license': 'MPL-2.0',
   'keyboardShortcuts.about.packagesCount': { one: '{count} package', other: '{count} packages' },

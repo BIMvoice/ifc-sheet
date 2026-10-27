@@ -43,6 +43,7 @@ import './i18n/locales.boot';
 import { installWasmVersionSkewRecovery } from './lib/wasm-version-skew';
 import { installChunkVersionSkewRecovery } from './lib/chunk-version-skew';
 import { scheduleWasmPrewarm } from './lib/wasm-prewarm';
+import { registerOfflineApp } from './offline/register-sw';
 import { initializeUserContent } from './lib/storage/content-boot';
 import type { FileSourceProviderFactory } from './services/sources/source-host';
 
@@ -95,4 +96,5 @@ export function mountViewer(container: HTMLElement, options: ViewerBootstrapOpti
   // Pull the geometry engine binary down while the user is still deciding which
   // file to open, instead of on the click that opens it. See wasm-prewarm.ts.
   scheduleWasmPrewarm();
+  registerOfflineApp();
 }

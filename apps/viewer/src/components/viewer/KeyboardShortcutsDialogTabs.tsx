@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { IFCLITE_URL } from '@/lib/credits';
 import { ChevronDown, ChevronRight, Package, ShieldCheck, ExternalLink } from 'lucide-react';
 import { useTranslation } from '@/i18n';
+import { InstallAppEntry } from '@/offline/InstallAppEntry';
 
 /** IfcSheet's own repository: the GitHub and issue links go here, so IfcSheet reports reach IfcSheet. */
 const GITHUB_URL = 'https://github.com/BIMvoice/ifcsheet';
@@ -97,6 +98,8 @@ export function AboutTab() {
         <p className="text-xs text-muted-foreground mt-0.5">{t('keyboardShortcuts.about.versionLabel', { version: __APP_VERSION__ })} &middot; {formatBuildDate(__BUILD_DATE__)}</p>
         <p className="text-xs mt-2" data-testid="about-built-on">{t('credits.about.builtOn')}</p>
       </div>
+
+      <InstallAppEntry />
 
       {/* Links */}
       <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-1.5 text-xs">
