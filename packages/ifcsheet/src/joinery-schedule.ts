@@ -23,6 +23,7 @@ import { extractPropertiesOnDemand, getAttributeNamesForSchema, type IfcDataStor
 import { filterPropertyNames, predefinedTypeText, propertyValueText, type PropertyFact } from './schedule-filter.js';
 import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
 import type { ScheduleTextRow } from './schedule-text.js';
+import type { JoineryCellOverride } from './joinery-overrides.js';
 import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 
 export type ScheduleKind = 'door' | 'window' | 'all';
@@ -46,6 +47,8 @@ export interface ScheduleOccurrence {
 
 export interface ScheduleEntry {
   key: string;
+  /** The GlobalId of the model's IfcTypeObject this type is, when it has one (a configured type); the first model's when several carry it. A typed cell is kept under it (`typeIdentityOf`). */
+  typeGlobalId?: string;
   kind: 'door' | 'window';
   /** The configured type; null for elements without one. */
   spec: JoinerySpec | null;
@@ -68,6 +71,8 @@ export interface ScheduleData {
   textRows?: ScheduleTextRow[];
   /** The schedule's content choice, for the layout's row choice (#186): not read from the model, attached by `scheduleOf`. */
   content?: ScheduleContent;
+  /** The cells typed over the model's text (#446), by type and row: the project's, attached by `scheduleOf` so every reader prints the same text. */
+  overrides?: JoineryCellOverride[];
 }
 
 /** An occurrence's mark: its type's mark and its number (`W1.3`); the type's name and the number for an untyped element. */
@@ -280,6 +285,7 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
       const spec = (type.spec.id && fromCatalogue.get(type.spec.id)) || type.spec;
       const key = spec.id ?? `${modelId}:${type.typeId}`;
       const entry = byKey.get(key) ?? { key, kind: spec.kind, spec, mark: spec.mark, name: spec.name, width: spec.width, height: spec.height, counts: {}, total: 0, occurrences: [] };
+      if (!entry.typeGlobalId && type.globalId) entry.typeGlobalId = type.globalId;
       byKey.set(key, entry);
       for (const id of occurrencesOfTypeInStore(dataStore, type.typeId, view)) {
         if (view?.isDeleted(id)) continue;

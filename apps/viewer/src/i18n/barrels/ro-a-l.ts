@@ -29,6 +29,7 @@ import { ionUploadRo } from '../catalogues/ion-upload.ro';
 import { issueChangesRo } from '../catalogues/issue-changes.ro';
 import { issueRo } from '../catalogues/issue.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
+import { joineryCellRo } from '../catalogues/joinery-cell.ro';
 import { listScheduleRo } from '../catalogues/list-schedule.ro';
 
 /** The catalogues whose file starts with `a` to `l` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
@@ -60,5 +61,6 @@ export const roAL = {
   ...issueChangesRo,
   ...issueRo,
   ...keyboardShortcutsRo,
+  ...joineryCellRo,
   ...listScheduleRo,
 } as const;

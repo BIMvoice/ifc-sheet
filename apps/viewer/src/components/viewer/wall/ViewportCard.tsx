@@ -26,6 +26,7 @@ import { ScheduleContentCard } from './ScheduleContentCard';
 import { ScheduleExportCard } from './ScheduleExportCard';
 import { ScheduleFilterSection } from './ScheduleFilterCard';
 import { ScheduleTextCard } from './ScheduleTextCard';
+import { JoineryCellCard } from './JoineryCellCard';
 import { SubReportCard } from './SubReportCard';
 import { TypeClassificationCard } from './TypeClassificationCard';
 import { BoqCard } from '../boq/BoqCard';
@@ -109,6 +110,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
           {schedule ? <ScheduleContentCard key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <ScheduleFilterSection key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <ScheduleTextCard key={schedule.id} schedule={schedule} /> : null}
+          {schedule ? <JoineryCellCard key={`${schedule.id}:cell`} schedule={schedule} /> : null}
           {schedule ? <ScheduleExportCard key={`${schedule.id}:export`} schedule={schedule} /> : null}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}

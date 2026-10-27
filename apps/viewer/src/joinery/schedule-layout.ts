@@ -25,7 +25,7 @@ import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { shownRows, symbolsShown, textCellText, textRowId } from '@bimvoice/ifcsheet';
+import { isOverridableRow, joineryCellText, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
@@ -33,7 +33,7 @@ export type SchedulePrim =
   | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol' }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number };
 
-/** A cell of a column table that can be picked on the sheet (#446): its box in the layout's millimetres, the element (GlobalId) and the column (id) it is. */
+/** A cell of a table that can be picked on the sheet (#446): its box in the layout's millimetres, the element (GlobalId) or, in a joinery schedule, the type (`typeIdentityOf`), and the column (a list's column id, a joinery schedule's row id) it is. */
 export interface ScheduleCell { x: number; y: number; w: number; h: number; guid: string; column: string; /** The cell holds a value typed over the model's: the editor marks it, the print does not. */ overridden?: true }
 
 export interface ScheduleLayout {
@@ -42,7 +42,7 @@ export interface ScheduleLayout {
   prims: SchedulePrim[];
   /** How many pages the table runs over (a schedule given a `maxHeight` it does not fit continues on further sheets); absent: one. */
   pages?: number;
-  /** The cells of this page a person can pick (a list schedule's element rows), by the table's row and column. */
+  /** The cells of this page a person can pick (a list schedule's element rows, a joinery schedule's typed rows), by the table's row and column. */
   cells?: ScheduleCell[];
   /** A column table's smallest page box (its width; title, header and one row): the box a resize stops at. A joinery schedule has `scheduleMinBox`. */
   minBox?: { width: number; height: number };
@@ -104,6 +104,8 @@ export function operationText(entry: ScheduleEntry, labels: ScheduleLabels): str
 }
 
 interface TableRowSpec {
+  /** The row's id when it is one of the model's (`ROW_IDS`): a text row has none. */
+  id?: string;
   label: string;
   value: (e: ScheduleEntry) => string;
   strong?: boolean;
@@ -147,8 +149,26 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
   const own = new Map(typed.map((row) => [textRowId(row.id), row]));
   return ids.flatMap((id): TableRowSpec[] => {
     const row = own.get(id);
-    return row ? [{ label: row.label, value: (e) => textCellText(row, e.key), text: true, raw: (e) => [textCellText(row, e.key) || null] }] : model[id]?.() ?? [];
+    return row ? [{ label: row.label, value: (e) => textCellText(row, e.key), text: true, raw: (e) => [textCellText(row, e.key) || null] }] : (model[id]?.() ?? []).map((spec) => withTypedCell(spec, id, data.overrides));
   });
+}
+
+/**
+ * The row with the cells the user typed over the model's text (#446, `data.overrides`): the cell prints the typed text, in the sheet and in the
+ * CSV and the XLSX alike (`joineryCellText`, the engine's). A row the model measures (counts, sizes) is not typed over, and is returned as it is.
+ */
+function withTypedCell(spec: TableRowSpec, id: string, overrides: readonly JoineryCellOverride[] | undefined): TableRowSpec {
+  if (!isOverridableRow(id) || !overrides?.length) return { ...spec, id };
+  return {
+    ...spec, id,
+    value: (e) => joineryCellText(overrides, e, id, spec.value(e)),
+    ...(spec.raw ? { raw: (e: ScheduleEntry) => { const o = joineryOverrideOf(overrides, e, id); return o ? [o.value || null] : spec.raw!(e); } } : {}),
+  };
+}
+
+/** The text the cell of `entry` in the row `id` prints under `data`'s typed cells (#446); pass the data without `overrides` for the model's own text. Empty when the schedule has no such row. */
+export function cellTextOf(data: ScheduleData, labels: ScheduleLabels, entry: ScheduleEntry, id: string): string {
+  return rows(data, labels).find((r) => r.id === id)?.value(entry) ?? '';
 }
 
 /** A dimension line between `a` and `b` (paper mm), its value written above (or left of) the line. */
@@ -205,6 +225,7 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
   const page = Math.max(0, options.page ?? 0);
   const bands = all.slice(page * perPage, (page + 1) * perPage);
   const prims: SchedulePrim[] = [];
+  const cells: ScheduleCell[] = [];
   const tableRows = rows(data, labels);
 
   // Inset like the paged tables' titles: the viewport's frame is drawn on x = 0 and would cover the first letter.
@@ -259,6 +280,8 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
       }
       tableRows.forEach((row, i) => {
         const value = row.value(e);
+        // A cell the model states about the type can be picked on the sheet to type another text over it (#446).
+        if (row.id && isOverridableRow(row.id)) cells.push({ x, y: yRows + i * ROW, w: cw, h: ROW, guid: typeIdentityOf(e), column: row.id, ...(joineryOverrideOf(data.overrides, e, row.id) ? { overridden: true as const } : {}) });
         if (row.text) {
           // Typed text: shrunk to fit its card down to the smallest caption height, cut with an ellipsis only beyond that; never wider than the card.
           if (value) { const fitted = fitText({ size: TEXT, fit: cw - 3 }, value); prims.push({ kind: 'text', x: cx, y: yRows + i * ROW + 4.2, text: fitted.text, size: fitted.size, anchor: 'middle' }); }
@@ -271,7 +294,7 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
     }
     top += bandH + BAND_GAP;
   }
-  return { width, height: top - BAND_GAP, prims, pages };
+  return { width, height: top - BAND_GAP, prims, pages, cells };
 }
 
 export interface JoineryExportLabels extends ScheduleLabels {

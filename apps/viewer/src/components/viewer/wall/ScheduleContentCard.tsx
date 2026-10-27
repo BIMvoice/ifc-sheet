@@ -19,9 +19,10 @@ import type { ProjectSchedule } from '@/project/types';
 import { toast } from '@/components/ui/toast';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
 import { CardSection } from './CardSection';
+import { AddColumnPicker } from '../lists/ListScheduleColumns';
 import { contentSummary } from './card-section-summary';
 
-const ROW_LABELS: Record<string, TranslationKey> = {
+export const ROW_LABELS: Record<string, TranslationKey> = {
   name: 'schedule.row.name', size: 'schedule.row.size', operation: 'schedule.row.operation', sill: 'schedule.row.sill',
   levels: 'wall.content.row.levels', total: 'schedule.row.total', u: 'schedule.row.uValue', fire: 'schedule.row.fire',
 };
@@ -78,9 +79,16 @@ export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule })
               </label>
               <button type="button" className={WALL_PILL} aria-label={t('wall.content.up', { row: label(r.id) })} disabled={i === 0} onClick={() => moveRow(schedule.id, r.id, -1)}>↑</button>
               <button type="button" className={WALL_PILL} aria-label={t('wall.content.down', { row: label(r.id) })} disabled={i === rows.length - 1} onClick={() => moveRow(schedule.id, r.id, 1)}>↓</button>
+              <button type="button" className={WALL_PILL} disabled={!r.shown} aria-label={t('joineryCell.removeColumn', { name: label(r.id) })} onClick={() => setRowShown(schedule.id, r.id, false)}>×</button>
             </li>
           ))}
         </ul>
+        {/* The same choice the list schedules offer (#446): the columns the table does not print, to add back. */}
+        <AddColumnPicker
+          facts={{ classes: new Map(), storeys: [], properties: new Map(), quantities: new Map(), attributes: rows.filter((r) => !r.shown).map((r) => r.id) }}
+          taken={new Set()} attributesOnly label={t('joineryCell.addColumn')} labelOf={label}
+          onAdd={(column) => setRowShown(schedule.id, column.propertyName, true)}
+        />
       </fieldset>
 
       <fieldset className="m-0 mt-3 border-0 p-0">

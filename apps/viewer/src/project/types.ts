@@ -8,6 +8,7 @@ import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
 import type { ProjectSchedule } from '@bimvoice/ifcsheet';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
+import type { JoineryCellOverride } from '@bimvoice/ifcsheet';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
@@ -89,6 +90,8 @@ export interface ProjectDocument extends EngineDocument, ProjectFieldTypes {
   currentJoinery?: { door?: string; window?: string };
   /** Which catalogue entry draws the doors and windows a model does not type itself (`joinery/symbol-mapping.ts`). */
   joineryMapping?: JoineryMapping;
+  /** The cells of the joinery schedules typed over the model's text from the sheet (#446), by type and row; they apply to that type's cell in every joinery schedule. Absent: none. */
+  joineryOverrides?: JoineryCellOverride[];
   /** The project's wall, slab, column, beam, roof and opening types; each is one IFC type per model it is used in. */
   elementTypes?: ElementTypeSpec[];
   /** The entry each Design tool builds with, per kind. */

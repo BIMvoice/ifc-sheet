@@ -33,7 +33,7 @@ import { DEFAULT_JOINERY_MAPPING, readJoineryMapping } from '@/joinery/symbol-ma
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
-import { readSchedule } from '@bimvoice/ifcsheet';
+import { readJoineryOverrides, readSchedule } from '@bimvoice/ifcsheet';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readCadLayerRule } from '../cad-layers-file';
 import { readNumberingScheme } from '../numbering';
@@ -137,6 +137,8 @@ const DOCUMENT_FIELD_DEFS = [
   norwayPermitField,
   // Which permit project: the full one or the simplified one for a rural house (#364); absent: the full one.
   pacModeField,
+  // Typed cells of the joinery schedules (#446): absent unless the user typed one, so a project without any is saved as it always was.
+  optionalField('joineryOverrides', whenUsable('joineryOverrides', readJoineryOverrides)),
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];

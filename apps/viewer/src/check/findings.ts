@@ -13,7 +13,7 @@ import { sectionLink } from '@/drafting/section-symbol';
 import type { DraftEntity } from '@/drafting/types';
 import { titleBlockOf } from '@/project/title-block';
 import type { ProjectSheet } from '@/project/types';
-import { orphanedCellOverrides } from './override-findings';
+import { orphanedCellOverrides, orphanedJoineryCells } from './override-findings';
 import type { CheckInput, Finding } from './types';
 
 type View = CheckInput['views'][number];
@@ -123,7 +123,7 @@ export function checkSet(input: CheckInput): Finding[] {
   const all = [
     ...emptyTitleBlocks(input), ...duplicateNumbers(input), ...emptySheets(input),
     ...untaggedElements(input), ...plansWithoutDimensions(input), ...viewsWithoutLevelMarks(input),
-    ...viewsOnNoSheet(input), ...sectionsMarkedOnNoSheetPlan(input), ...detailsOnNoSheet(input), ...danglingAnnotations(input), ...orphanedCellOverrides(input),
+    ...viewsOnNoSheet(input), ...sectionsMarkedOnNoSheetPlan(input), ...detailsOnNoSheet(input), ...danglingAnnotations(input), ...orphanedCellOverrides(input), ...orphanedJoineryCells(input),
   ];
   // Sheet by sheet in the order of the set, then what belongs to no sheet; the order of the checks within.
   return all.map((f, i) => ({ f, i })).sort((a, b) => sheetRank(input, a.f) - sheetRank(input, b.f) || a.i - b.i).map((x) => x.f);
