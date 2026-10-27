@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/lists",
+  "private": true,
   "version": "3.0.1",
   "description": "Configurable property tables and schedules from IFC data for IFC-Lite",
   "type": "module",
