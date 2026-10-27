@@ -72,7 +72,7 @@ export const listsAdapter: EvidenceAdapter = {
     const columns = columnEvidence(result.columns, units);
     const mixed = new Set(columns.filter(column => column.mixedSourceUnits).map(column => column.id));
     // Native sums are raw source values; a sum over models declaring different units is withheld, never reported.
-    const sums = (raw: Record<string, number>) => Object.fromEntries(Object.entries(raw).map(([id, value]) => [id, mixed.has(id) ? null : value]));
+    const sums = (raw: Record<string, number | null>) => Object.fromEntries(Object.entries(raw).map(([id, value]) => [id, mixed.has(id) ? null : value]));
     const groups = result.groups ?? null;
     return {
       summary: {
@@ -86,7 +86,7 @@ export const listsAdapter: EvidenceAdapter = {
         nativeGroups: groups ? groups.slice(0, GROUP_LIMIT).map(group => ({ label: bounded(group.label), path: group.path ?? null, level: group.level ?? 0, count: group.count, sums: sums(group.sums) })) : null,
         groupCount: groups?.length ?? 0, groupsTruncated: (groups?.length ?? 0) > GROUP_LIMIT,
         sumsWithheldForMixedUnits: [...mixed].filter(id => result.summary && id in result.summary.sums),
-        limitations: 'Values are as the source files declare them (columns[].unit / unitsByModel), not converted to display-unit overrides. Native sums cover only the configured sum columns; a sum over models with different declared units is withheld (null). Rows are the list as executed at its run stamp; they do not establish anything outside the list scope, filters, or columns.',
+        limitations: 'Values are as the source files declare them (columns[].unit / unitsByModel), not converted to display-unit overrides. Native sums cover only the configured sum columns; a sum over models with different declared units is withheld (null), and so is one that no row states (a missing quantity is null, never 0). Rows are the list as executed at its run stamp; they do not establish anything outside the list scope, filters, or columns.',
       },
       totalRows: result.rows.length,
       availability: 'available',

@@ -16,6 +16,7 @@ import { addViewport, removeViewport, updateSheet, updateViewport } from '@/proj
 import { patchViewDrawing } from '@/project/view-drawings';
 import type { SectionProposal } from '@/project/section-proposals';
 import type { ProjectSheet } from '@/project/types';
+import { SHEET_PX } from '@/wall/wall-zoom';
 import { WallGrid } from './WallGrid.js';
 
 /**
@@ -54,7 +55,21 @@ function viewNamed(name: string) {
 
 let sectionB = '';
 
+/**
+ * jsdom lays nothing out, so every sheet would measure 0 px wide and hang as an outline (the Wall draws only sheets of at least
+ * `MIN_DRAWN_PX`). Report each sheet at its real width on the Wall, as a browser does at the default zoom.
+ */
+const proto = HTMLElement.prototype;
+const realRect = proto.getBoundingClientRect;
+function sheetsAtDefaultWidth(): void {
+  proto.getBoundingClientRect = function (this: HTMLElement) {
+    const w = this.hasAttribute('data-wall-sheet') ? SHEET_PX : 0;
+    return { left: 0, top: 0, width: w, height: w, right: w, bottom: w, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+  };
+}
+
 beforeEach(() => {
+  sheetsAtDefaultWidth();
   resetProject();
   clearDraftHistory();
   syncProjectWithModels([{ key: 'm', name: 'm' }], STOREYS);
@@ -70,7 +85,10 @@ beforeEach(() => {
     drawing: { lines: [], cutPolygons: [], projectionPolygons: [], bounds: FOOTPRINT, config: { plane: { axis: 'y', position: 1.2, flipped: false } } } as unknown as Drawing2D,
   });
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  proto.getBoundingClientRect = realRect;
+});
 
 describe('section marks on the Wall', () => {
   it('reads "1 / A-301" on the plan for section A, and "2 / A-301" for B', () => {

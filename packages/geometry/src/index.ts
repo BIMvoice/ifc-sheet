@@ -89,6 +89,7 @@ export {
 } from './packed-instanced-decoder.js';
 
 export * from './types.js';
+export { convertIfcxMeshes, type RawIfcxMesh } from './ifcx-meshes.js';
 export * from './spatial-reference.js';
 import { IfcLiteBridge } from './ifc-lite-bridge.js';
 import type { ExtrusionDefinitions, SweptDiskDescriptions } from './analytic-descriptions.js';
