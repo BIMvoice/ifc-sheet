@@ -23,7 +23,7 @@ import { PromptRegistry } from '../prompts/index.js';
 import { ResourceRegistry } from '../resources/index.js';
 import { MCPServer } from '../server.js';
 import { ToolRegistry } from '../tools/types.js';
-import { ifcsheetTools } from '../tools/ifcsheet.js';
+import { ifcsheetTools } from '../tools/ifcsheet-tools.js';
 import { fullScope } from '../auth/scope.js';
 import { MAX_TOKEN_CHARS, SECRET_ENV, withSessions } from './hosted-session.js';
 
