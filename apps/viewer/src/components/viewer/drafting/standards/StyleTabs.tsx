@@ -174,6 +174,7 @@ export function DimStylesTab() {
         <Row label={t('standards.dim.arrowSize')}><NumberField label={t('standards.dim.arrowSize')} value={style.arrowSize} onCommit={(arrowSize) => set({ arrowSize })} /></Row>
         <Row label={t('standards.dim.extGap')}><NumberField label={t('standards.dim.extGap')} value={style.extGap} onCommit={(extGap) => set({ extGap })} /></Row>
         <Row label={t('standards.dim.extOver')}><NumberField label={t('standards.dim.extOver')} value={style.extOver} onCommit={(extOver) => set({ extOver })} /></Row>
+        <Row label={t('standards.dim.allOffset')}><NumberField label={t('standards.dim.allOffset')} value={style.allOffset ?? DEFAULT_DIM_STYLE.allOffset ?? 0} onCommit={(allOffset) => set({ allOffset: Math.max(0, allOffset) })} /></Row>
         <Row label={t('standards.dim.unit')}>
           <SegmentedControl size="sm" label={t('standards.dim.unit')} value={style.unit} onValueChange={(unit: LengthUnit) => set({ unit })}
             options={(['m', 'cm', 'mm'] as const).map((u) => ({ value: u, label: u }))} />

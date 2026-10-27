@@ -55,6 +55,7 @@ export const draftingStandardsEn = {
   'standards.dim.arrowSize': 'End size (mm)',
   'standards.dim.extGap': 'Extension gap (mm)',
   'standards.dim.extOver': 'Extension beyond (mm)',
+  'standards.dim.allOffset': 'DIMALL first string from wall (mm)',
   'standards.dim.placement': 'Value',
   'standards.dim.placement.above': 'Above',
   'standards.dim.placement.centered': 'In line',

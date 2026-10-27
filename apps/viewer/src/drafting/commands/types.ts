@@ -96,6 +96,8 @@ export interface DraftSettings {
   axisLineType: 'continuous' | 'dashed' | 'dotted' | 'dashdot';
   /** DIMALIGNED / DIMLINEAR chain further dimensions from the last end (the default) rather than stopping after one. */
   dimContinuous: boolean;
+  /** Dimension lines snap onto a close, parallel dimension line while placed or dragged (the ALIGN keyword toggles it). */
+  dimAlign: boolean;
   /** The styles new annotations take. */
   currentTextStyle: string;
   currentDimStyle: string;
