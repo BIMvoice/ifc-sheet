@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { captureSetTemplate, generateDefaultSet, parseSetTemplate, serializeSetTemplate, type SetModel, type SetTemplate } from './index.js';
+import { captureSetTemplate, findAllByRule, findByRule, generateDefaultSet, parseSetTemplate, serializeSetTemplate, type SetModel, type SetTemplate } from './index.js';
 
 const EXTENT = { min: { x: 0, y: 0, z: 0 }, max: { x: 12, y: 9, z: 8 } };
 const model = (...storeys: [string, number][]): SetModel => ({
@@ -71,5 +71,33 @@ describe('the file', () => {
   it('is refused with the place of the problem, and a file from a newer version says so', () => {
     expect(() => parseSetTemplate(JSON.stringify({ format: 'bvset', version: 1, name: 'x', sheets: [{ name: 'P', series: 'details', layout: { paper: 'A1' }, slots: [] }] }))).toThrow('/sheets/0/series');
     expect(() => parseSetTemplate(JSON.stringify({ format: 'bvset', version: 9, name: 'x' }))).toThrow('made by a newer version');
+  });
+});
+
+describe('the site rule finds the site plan, never a detail of it', () => {
+  const level = { name: 'Ground', elevation: 0, storeyGlobalIds: ['g0'] };
+  const site = { id: 'site-1', name: 'Site', kind: 'plan' as const, createdAt: 0, level, cutHeight: 1.2, site: true as const };
+  const detailOfSite = { ...site, id: 'site-detail', name: 'Site detail', detail: { number: 1, sourceViewId: 'site-1', area: { min: { x: 0, y: 0 }, max: { x: 2, y: 2 } } } } as unknown as typeof site;
+
+  it('skips a detail even when it comes first, and finds none when only a detail exists', () => {
+    expect(findByRule({ kind: 'site' }, [detailOfSite, site])?.id).toBe('site-1');
+    expect(findAllByRule({ kind: 'site' }, [detailOfSite, site]).map((v) => v.id)).toEqual(['site-1']);
+    expect(findByRule({ kind: 'site' }, [detailOfSite])).toBeNull();
+    expect(findByRule({ kind: 'site' }, [])).toBeNull();
+  });
+});
+
+describe('a sheet rule\'s notes', () => {
+  const rule = (notes?: string[]): SetTemplate => ({
+    name: 'Notes', schedules: [], annotations: {},
+    sheets: [{ name: 'Site', series: 'plans', layout: { paper: 'A1', orientation: 'landscape' }, slots: [{ view: { kind: 'allPlans' }, scale: 200 }], ...(notes ? { notes } : {}) }],
+  });
+
+  it('are printed on the sheet, survive the .bvset file, and are absent when the rule has none', () => {
+    const made = generateDefaultSet(model(['Ground', 0]), { setTemplate: rule(['First line', 'Second line']), now: 0 })!;
+    expect(made.document.sheets.map((s) => [s.name, s.notes])).toEqual([['Site', ['First line', 'Second line']]]);
+    expect(parseSetTemplate(serializeSetTemplate(rule(['First line', 'Second line']))).sheets[0].notes).toEqual(['First line', 'Second line']);
+    expect(generateDefaultSet(model(['Ground', 0]), { setTemplate: rule(), now: 0 })!.document.sheets[0].notes).toBeUndefined();
+    expect('notes' in parseSetTemplate(serializeSetTemplate(rule())).sheets[0]).toBe(false);
   });
 });

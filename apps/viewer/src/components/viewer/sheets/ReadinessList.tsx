@@ -15,7 +15,7 @@ import { describeEffect, describeMissing } from '@/check/readiness-say';
 import { modelReadiness, type ModelFacts } from '@/check/readiness';
 import { currentModelFacts } from '@/check/readiness-read';
 import { useViewerStore } from '@/store';
-import { setIncludeFarElements, useProjectStore } from '@/project/project-store';
+import { permitPackOf, setIncludeFarElements, useProjectStore } from '@/project/project-store';
 import { subReportChecks } from '@/check/sub-report-check';
 import { boqMissing } from '@bimvoice/ifcsheet';
 import { ruralScopeOf } from '@bimvoice/ifcsheet/urban';
@@ -60,7 +60,7 @@ function useModelReadiness() {
     [template, sheets, projectFields, projectName, params, schedules, revisions, drafts, views, asIndicated],
   );
   // The model against the simplified PAC's scope, for a project in that mode only: measured from the same indicators as everywhere, and read again as they change.
-  const rural = useProjectStore((s) => s.pacMode === 'rural');
+  const rural = useProjectStore((s) => permitPackOf(s) === 'pacRural');
   const urban = useUrbanIndicators(rural);
   const scope = rural && urban ? ruralScopeOf(urban.result) : undefined;
   return useMemo(() => {

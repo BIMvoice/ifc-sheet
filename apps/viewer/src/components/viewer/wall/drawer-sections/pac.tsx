@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { PAC_INTERVENTIONS, PAC_RURAL_ITEMS, pacCoverage, type PacKind } from '@bimvoice/ifcsheet';
 import { deliver, runIssue } from '@/issue/run';
 import { useTranslation, type TranslationKey } from '@/i18n';
-import { setPacIntervention, setPacMode, useProjectStore } from '@/project/project-store';
+import { permitPackOf, setPacIntervention, setPacMode, useProjectStore } from '@/project/project-store';
 import { ruralScopeFindings } from '@/check/rural-scope';
 import { describeMissing } from '@/check/readiness-say';
 import { useUrbanIndicators } from '../../urban/useUrban';
@@ -21,7 +21,8 @@ const scaleList = (scales: readonly number[], locale: string): string => scales.
 function Pac() {
   const { t, locale } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
-  const rural = useProjectStore((s) => s.pacMode) === 'rural';
+  const pack = useProjectStore((s) => permitPackOf(s));
+  const rural = pack === 'pacRural';
   const views = useProjectStore((s) => s.views);
   const intervention = useProjectStore((s) => s.pacIntervention) ?? 'new';
   const rows = rural ? pacCoverage(sheets, { views, intervention }, PAC_RURAL_ITEMS) : pacCoverage(sheets, { views, intervention });
@@ -41,7 +42,7 @@ function Pac() {
       <h3 className="m-0 mb-1.5 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('pac.title')}</h3>
       <fieldset aria-label={t('pac.mode.label')} className="m-0 mb-2 flex min-w-0 flex-wrap gap-1 border-0 p-0">
         {([false, true] as const).map((mode) => (
-          <button key={String(mode)} type="button" aria-pressed={rural === mode} data-pac-mode={mode ? 'rural' : 'standard'} onClick={() => setPacMode(mode ? 'rural' : 'full')} className={`rounded-full border px-2 py-0.5 text-2xs ${rural === mode ? 'border-cyan-400/60 text-cyan-300' : 'border-sky-300/20 text-sky-100/80'}`}>{t(mode ? 'pac.mode.rural' : 'pac.mode.standard')}</button>
+          <button key={String(mode)} type="button" aria-pressed={pack === (mode ? 'pacRural' : 'pacFull')} data-pac-mode={mode ? 'rural' : 'standard'} onClick={() => setPacMode(mode ? 'rural' : 'full')} className={`rounded-full border px-2 py-0.5 text-2xs ${pack === (mode ? 'pacRural' : 'pacFull') ? 'border-cyan-400/60 text-cyan-300' : 'border-sky-300/20 text-sky-100/80'}`}>{t(mode ? 'pac.mode.rural' : 'pac.mode.standard')}</button>
         ))}
       </fieldset>
       {outside.length > 0 ? (
