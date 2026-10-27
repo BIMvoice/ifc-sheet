@@ -28,7 +28,7 @@ describe.skipIf(missing !== null)('hello-wall.ifcx through the MCP tools', () =>
   it('ifcsheet_open_model opens it with its storey and meshes', async () => {
     const ctx = { registry: new InMemoryModelRegistry(), config: {} } as never;
     const result = await ifcsheetOpenModel.handler({ ifc_base64: readFileSync(IFCX).toString('base64'), name: 'hello-wall.json' }, ctx);
-    const summary = (result as { structuredContent: { storeyCount: number; meshCount: number; hasGeometry: boolean } }).structuredContent;
+    const summary = result.structuredContent as { storeyCount: number; meshCount: number; hasGeometry: boolean };
     expect(summary.storeyCount).toBe(1);
     expect(summary.meshCount).toBeGreaterThan(0);
     expect(summary.hasGeometry).toBe(true);
