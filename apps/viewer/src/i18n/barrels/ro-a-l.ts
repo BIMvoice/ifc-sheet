@@ -28,6 +28,7 @@ import { handoverRo } from '../catalogues/handover.ro';
 import { ionUploadRo } from '../catalogues/ion-upload.ro';
 import { issueChangesRo } from '../catalogues/issue-changes.ro';
 import { issueRo } from '../catalogues/issue.ro';
+import { joineryRo } from '../catalogues/joinery.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
 import { listScheduleRo } from '../catalogues/list-schedule.ro';
 
@@ -59,6 +60,7 @@ export const roAL = {
   ...ionUploadRo,
   ...issueChangesRo,
   ...issueRo,
+  ...joineryRo,
   ...keyboardShortcutsRo,
   ...listScheduleRo,
 } as const;
