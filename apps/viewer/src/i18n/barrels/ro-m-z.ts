@@ -4,6 +4,7 @@
 
 import { measuredQuantitiesRo } from '../catalogues/measured-quantities.ro';
 import { namesRo } from '../catalogues/names.ro';
+import { norwayRo } from '../catalogues/norway.ro';
 import { pacRo } from '../catalogues/pac.ro';
 import { printPreviewRo } from '../catalogues/print-preview.ro';
 import { reviewRo } from '../catalogues/review.ro';
@@ -35,6 +36,7 @@ import { wallKeysRo } from '../catalogues/wall-keys.ro';
 import { wallMaterialsRo } from '../catalogues/wall-materials.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
 import { wallSectionsRo } from '../catalogues/wall-sections.ro';
+import { wallZoomRo } from '../catalogues/wall-zoom.ro';
 import { wallRo } from '../catalogues/wall.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
 
@@ -42,6 +44,7 @@ import { whatChangedRo } from '../catalogues/whatchanged.ro';
 export const roMZ = {
   ...measuredQuantitiesRo,
   ...namesRo,
+  ...norwayRo,
   ...pacRo,
   ...printPreviewRo,
   ...reviewRo,
@@ -73,6 +76,7 @@ export const roMZ = {
   ...wallMaterialsRo,
   ...wallReviewRo,
   ...wallSectionsRo,
+  ...wallZoomRo,
   ...wallRo,
   ...whatChangedRo,
 } as const;

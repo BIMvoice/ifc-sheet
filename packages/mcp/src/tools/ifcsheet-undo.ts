@@ -8,6 +8,7 @@ import { MAX_HISTORY, redoEdit, undoEdit } from './ifcsheet-history.js';
 import { DOCUMENT_ID, sheetsOf, text } from './ifcsheet-shared.js';
 import { getSheetSet } from './ifcsheet-store.js';
 import type { Tool } from './types.js';
+import type { ToolGroup } from './ifcsheet-tool-group.js';
 import { okResult } from './util.js';
 
 const KEPT = `The last ${MAX_HISTORY} edits of a set are kept.`;
@@ -47,3 +48,5 @@ export const ifcsheetRedo: Tool = {
 };
 
 export const ifcsheetHistoryTools: Tool[] = [ifcsheetUndo, ifcsheetRedo];
+
+export const toolGroup: ToolGroup = { order: 50, tools: ifcsheetHistoryTools };

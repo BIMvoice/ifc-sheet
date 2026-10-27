@@ -37,6 +37,8 @@ export type ViewRule =
   | { kind: 'plan'; storey: number }
   /** A plan of EVERY storey the model has (`allPlans`), from the lowest up: a slot per storey the model offers, none to count in advance. */
   | { kind: 'allPlans' }
+  /** The project's site plan (a plan with `site`); the set makes one on the ground storey when a template asks for it (`default-set.ts`). */
+  | { kind: 'site' }
   | { kind: 'elevation'; direction: ElevationDirection }
   | { kind: 'section'; place: number };
 
@@ -65,6 +67,8 @@ export interface SheetRule {
   series: RuledSeries;
   layout: SheetLayoutRule;
   slots: SlotRule[];
+  /** Lines the sheet prints on itself (`ProjectSheet.notes`), fixed text in the language of whoever laid the set out; they come before the paper and scale notes. */
+  notes?: string[];
 }
 
 /** A schedule the set carries, by kind, on a sheet of the schedules series. */
@@ -127,6 +131,7 @@ export function findAllByRule(rule: ViewRule, views: readonly ProjectView[]): Pr
 export function findByRule(rule: ViewRule, views: readonly ProjectView[]): ProjectView | null {
   const ruled = ruledViews(views);
   if (rule.kind === 'allPlans') return allPlans(views)[0] ?? null;
+  if (rule.kind === 'site') return views.find((v) => v.kind === 'plan' && v.site && !v.detail) ?? null;
   if (rule.kind === 'plan') {
     const { plans, ground } = planStoreys(views);
     return ground < 0 ? null : plans[ground + rule.storey] ?? null;

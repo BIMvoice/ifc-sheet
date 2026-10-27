@@ -117,20 +117,20 @@ describe('a schedule of the walls by type, placed on a sheet, holds the Lists pa
     const expected = [
       'Walls by type',
       'Type', 'Count', 'NetSideArea (m²)',
-      ...groups.flatMap((g) => [g.label, String(g.count), fmt(g.sums.area)]),
-      'Total', String(panel.summary!.count), fmt(panel.summary!.sums.area),
+      ...groups.flatMap((g) => [g.label, String(g.count), fmt(g.sums.area!)]),
+      'Total', String(panel.summary!.count), fmt(panel.summary!.sums.area!),
     ];
     assert.deepEqual(drawn, expected);
 
     // And the Lists engine is not the only witness: the hand sum of the model's own quantities.
     const hand = handSums();
     assert.equal(hand.walls, 13);
-    assert.ok(Math.abs(hand.area - panel.summary!.sums.area) < 1e-6, `${hand.area} vs ${panel.summary!.sums.area}`);
+    assert.ok(Math.abs(hand.area - panel.summary!.sums.area!) < 1e-6, `${hand.area} vs ${panel.summary!.sums.area}`);
     for (const g of groups) {
       const h = hand.byType.get(g.label);
       assert.ok(h, `a type named ${g.label}`);
       assert.equal(h.count, g.count);
-      assert.ok(Math.abs(h.area - g.sums.area) < 1e-6);
+      assert.ok(Math.abs(h.area - g.sums.area!) < 1e-6);
     }
     void modelUnits;
   });
