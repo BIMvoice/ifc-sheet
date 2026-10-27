@@ -53,7 +53,7 @@ async function bothSides(vp: SheetViewport, v: ProjectView = view, site?: object
   const marks = ui.querySelector('[data-viewport-marks]');
   const units = useProjectStore.getState().unitsAndNumbers;
   const doc = { name: 'House', models: [], views: [v], sheets: [sheet] } as unknown as ProjectDocument;
-  const layout = sheetGraphic(sheet, doc, new Map([['v', drawing]]), undefined, undefined, undefined, undefined, undefined, undefined, undefined, { north: trueNorthOf(store), locale: sheetFormat('en', units) });
+  const layout = sheetGraphic(sheet, doc, new Map([['v', drawing]]), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { north: trueNorthOf(store), locale: sheetFormat('en', units) });
   const svg = ui.querySelector('svg') as unknown as SVGSVGElement;
   return { marks, layout, screenDxf: new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet)), engineDxf: exportDxf(layout) };
 }

@@ -32,6 +32,8 @@ export interface SheetGraphicsOptions {
   locale?: string;
   /** The project's "Units and numbers" setting; default: the set document's. */
   units?: UnitsAndNumbers;
+  /** The language the title blocks' dates are written in (`formatTitleBlockDate`); absent: as stored (ISO). */
+  language?: string;
 }
 
 /** An element's properties as a preset's property rules read them (`view-style.ts`), from a model opened here: each element's sets read once, only when a view's rules ask. */
@@ -75,5 +77,5 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   const materialOf = model.dataStore ? headlessMaterialOf(model.dataStore) : undefined;
   // The title block's fields as the app fills them from the model (`title-block-sources.ts`): the phase, the roles, the organisation, the address.
   const projectFields = model.dataStore ? projectTitleFields(doc.titleBlock, doc.titleBlockSources, readStoreFacts(model.dataStore)) : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, { north: model.dataStore ? trueNorthOf(model.dataStore) : null, locale: sheetFormat(options.locale ?? 'en', options.units ?? doc.unitsAndNumbers) }));
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language, { north: model.dataStore ? trueNorthOf(model.dataStore) : null, locale: sheetFormat(options.locale ?? 'en', options.units ?? doc.unitsAndNumbers) }));
 }

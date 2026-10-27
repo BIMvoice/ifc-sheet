@@ -118,10 +118,10 @@ export function printableLogo(src: string | undefined): string | undefined {
  * else the standard one, as the app does (`title-block-standard.ts`). `projectFields` are the project's fields
  * resolved from the model (`title-block-sources.ts`); without them the document's typed values are all there is.
  */
-function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scale: string, projectFields?: Record<string, string>): { frame: Polyline[]; texts: SheetText[]; images: SheetImage[] } {
+function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scale: string, projectFields?: Record<string, string>, language?: string): { frame: Polyline[]; texts: SheetText[]; images: SheetImage[] } {
   const tb = titleBlockRect(paper, frameOf(sheet));
   const template = doc.titleBlockTemplate ?? standardTitleBlock();
-  return printTitleBlock(template, sheetLookup(sheet, doc, scale, projectFields), tb, frameOf(sheet).titleBlock === 'right', printableLogo((projectFields ?? doc.titleBlock)?.[LOGO_FIELD]));
+  return printTitleBlock(template, sheetLookup(sheet, doc, scale, projectFields, language), tb, frameOf(sheet).titleBlock === 'right', printableLogo((projectFields ?? doc.titleBlock)?.[LOGO_FIELD]));
 }
 
 /**
@@ -169,6 +169,8 @@ export function sheetGraphic(
   materialOf?: ViewStyleInputs['materialOf'],
   /** The project's title block fields as the model fills them (`projectTitleFields`); absent: the document's typed values. */
   projectFields?: Record<string, string>,
+  /** The language the title block's dates are written in (`formatTitleBlockDate`); absent: as stored. */
+  language?: string,
   /** The model's true north (`trueNorthOf`) and the language and number setting the scale bar's figures are written in. */
   marks: { north: PlanDirection | null; locale: SheetLocale } = { north: null, locale: 'en' },
 ): SheetGraphic {
@@ -232,7 +234,7 @@ export function sheetGraphic(
     out.texts.push(...legend.texts);
   }
   out.pens.sort((a, b) => penOrder(a, pens.pens.cut) - penOrder(b, pens.pens.cut));
-  const block = titleBlock(sheet, doc, paper, sheetScaleLine(sheet, doc.views), projectFields);
+  const block = titleBlock(sheet, doc, paper, sheetScaleLine(sheet, doc.views), projectFields, language);
   out.frame.push(...block.frame);
   out.texts.push(...block.texts);
   out.texts.push(...sheetNoteLines(sheet).map(({ at, text, size }): SheetText => ({ at, text, size })));

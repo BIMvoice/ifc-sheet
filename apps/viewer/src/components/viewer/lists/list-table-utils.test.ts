@@ -5,7 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { groupPathKey, type ColumnDefinition, type ListRow } from '@ifc-lite/lists';
-import { buildGroupedView, buildScheduleRows, blankRepeatedPathValues, rebuildGrouping, compareCells, type GroupSort } from './list-table-utils';
+import { buildGroupedView, buildScheduleRows, flatTotals, formatSumValue, blankRepeatedPathValues, rebuildGrouping, compareCells, type GroupSort } from './list-table-utils';
 
 const columns: ColumnDefinition[] = [
   { id: 'cat', source: 'attribute', propertyName: 'Category' },
@@ -175,13 +175,13 @@ describe('buildGroupedView multi-criteria grouping (#1790)', () => {
     assert.strictEqual(new Set(view.groupKeys).size, view.groupKeys.length);
   });
 
-  it('an empty row set yields no groups and zero totals', () => {
+  it('an empty row set yields no groups and a count of 0 and a missing sum (nothing states a quantity, #411)', () => {
     const view = buildGroupedView([], cols, grouping, new Set(), null);
     assert.deepStrictEqual(view.items, []);
     assert.strictEqual(view.groupCount, 0);
     assert.deepStrictEqual(view.groupKeys, []);
     assert.strictEqual(view.totals.count, 0);
-    assert.strictEqual(view.totals.sums.qty, 0);
+    assert.strictEqual(view.totals.sums.qty, null);
   });
 
   it('legacy single-columnId grouping is unchanged (level 0 only)', () => {
@@ -333,5 +333,38 @@ describe('compareCells', () => {
     assert.ok(compareCells(2, 10) < 0);
     assert.ok(compareCells(null, 0) < 0);
     assert.strictEqual(compareCells(null, null), 0);
+  });
+});
+
+describe('a missing quantity on screen (#411)', () => {
+  const sample: ListRow[] = [
+    { entityId: 1, modelId: 'm', values: ['A', null] },
+    { entityId: 2, modelId: 'm', values: ['A', null] },
+    { entityId: 3, modelId: 'm', values: ['B', 0] },
+    { entityId: 4, modelId: 'm', values: ['C', 2.5] },
+    { entityId: 5, modelId: 'm', values: ['C', null] },
+  ];
+  const sumOf = (view: ReturnType<typeof buildGroupedView>, label: string) =>
+    view.items.flatMap((i) => (i.kind === 'group' && i.label === label ? [i.sums.qty] : []))[0];
+
+  it('sums a group none of whose rows states the quantity as missing, a declared 0 as 0', () => {
+    const view = buildGroupedView(sample, columns, GROUP_BY_CAT, NO_EXPAND, null);
+    assert.strictEqual(sumOf(view, 'A'), null);
+    assert.strictEqual(sumOf(view, 'B'), 0);
+    assert.strictEqual(sumOf(view, 'C'), 2.5);
+    assert.strictEqual(view.totals.sums.qty, 2.5);
+  });
+
+  it('writes the missing sum as a dash and the declared 0 as 0', () => {
+    assert.strictEqual(formatSumValue(null), '–');
+    assert.strictEqual(formatSumValue(undefined), '–');
+    assert.strictEqual(formatSumValue(0), '0');
+  });
+
+  it('totals the flat view and the schedule rows by the same rule', () => {
+    assert.strictEqual(flatTotals(sample.slice(0, 2), columns, ['qty']).sums.qty, null);
+    assert.strictEqual(flatTotals(sample.slice(2, 3), columns, ['qty']).sums.qty, 0);
+    const none = buildScheduleRows(sample.slice(0, 2), columns, GROUP_BY_CAT, null);
+    assert.strictEqual(none[0].sums.qty, null);
   });
 });

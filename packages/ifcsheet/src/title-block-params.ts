@@ -11,6 +11,7 @@
  */
 
 import type { ProjectSheet } from './document.js';
+import { formatTitleBlockDate } from './title-block-date.js';
 
 export interface TitleBlockParam {
   name: string;
@@ -53,10 +54,12 @@ export const FIELD_PARAMS = {
   authorsCapacity: 'AuthorsCapacity', verifierCapacity: 'VerifierCapacity', verifierRequirement: 'VerifierRequirement', reportNumber: 'ReportNumber', reportDate: 'ReportDate',
 } as const satisfies Record<string, BuiltinParam>;
 
-/** The built-ins a set of title block fields gives (`''` for a field not set). */
-export function fieldBuiltins(fields: Readonly<Record<string, string>>): Partial<Record<BuiltinParam, string>> {
+/** The built-ins a set of title block fields gives (`''` for a field not set), the dates written in `language`. */
+export function fieldBuiltins(fields: Readonly<Record<string, string>>, language?: string): Partial<Record<BuiltinParam, string>> {
   const out: Partial<Record<BuiltinParam, string>> = {};
   for (const [field, param] of Object.entries(FIELD_PARAMS)) out[param] = fields[field] ?? '';
+  // The dates are written as the project's language writes them (`formatTitleBlockDate`).
+  for (const param of [FIELD_PARAMS.date, FIELD_PARAMS.reportDate]) out[param] = formatTitleBlockDate(out[param] ?? '', language);
   return out;
 }
 
