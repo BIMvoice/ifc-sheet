@@ -8,7 +8,7 @@
  * `ifcsheet check --project` and `ifcsheet_check_readiness` build the same findings from it as the app does.
  *
  * Reads only what the checks and the build use. The graphic standard and the title block layout are read for `ifcsheet build`
- * (`graphicStandard`, `titleBlockTemplate`); the views and the sheets are not read: no readiness finding
+ * (`graphicStandard`, `titleBlockTemplate`, and the title block's typed values, mapping and parameters); the views and the sheets are not read: no readiness finding
  * depends on them yet (the set-side checks of the app's Check panel do, and are not in the engine). Everything read
  * is read as the app reads it (`readSchedule`, `readJoinerySpec`, `readJoineryMapping` are the app's own readers),
  * and what is malformed is dropped, so an old file, or one with a damaged section, loads with that section empty.
@@ -34,6 +34,9 @@ import { knownGraphicStandard, graphicStandardOf, type GraphicStandard } from '.
 import { readTitleBlockTemplate } from './title-block-template-read.js';
 import { readProjectLanguage, type NameLanguage } from './names.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
+import { readTitleBlock, readTitleBlockParams } from './title-block-file-read.js';
+import { readTitleSources, type TitleSources } from './title-block-sources.js';
+import type { TitleBlockParam } from './title-block-params.js';
 import { PAC_MODES, type PacMode } from './pac-set.js';
 import { readUrbanSettings } from './urban-settings-read.js';
 import type { UrbanSettings } from './urban-indicators.js';
@@ -67,6 +70,12 @@ export interface ProjectFacts extends JoineryProject {
   language?: NameLanguage;
   /** A `language` the file records that is not `ro` or `en` (`readProjectLanguage`); ignored, and the build says so. */
   unknownLanguage?: string;
+  /** The title block values typed in the app (project number, designer, the F_01 fields, ...), by field id; absent when the file has none. A typed value beats the model's (`title-block-sources.ts`). */
+  titleBlock?: Record<string, string>;
+  /** The office's mapping of title block fields to model sources; absent: the defaults. */
+  titleBlockSources?: TitleSources;
+  /** The project's own title block parameters (`{Name}` in a layout); absent when the file has none. */
+  titleBlockParams?: TitleBlockParam[];
   /** The permit project the project makes (`PacMode`); absent: the full one. Only `rural` changes what is checked and built. */
   pacMode?: PacMode;
   /** The urban indicators' terrain level, ±0.00 and storeys left out of Ad for CUT; absent: the defaults. */
@@ -92,6 +101,9 @@ export function readProjectFile(text: string): ProjectFacts {
   const standard = knownGraphicStandard(parsed.graphicStandard);
   const titleBlockTemplate = readTitleBlockTemplate(parsed.titleBlockTemplate);
   const language = readProjectLanguage(parsed.language);
+  const titleBlock = readTitleBlock(parsed.titleBlock);
+  const titleBlockSources = readTitleSources(parsed.titleBlockSources);
+  const titleBlockParams = readTitleBlockParams(parsed.titleBlockParams);
   const urbanSettings = readUrbanSettings(parsed.urbanSettings);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
   return {
@@ -109,6 +121,9 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(titleBlockTemplate ? { titleBlockTemplate } : {}),
     ...(language.language !== undefined ? { language: language.language } : {}),
     ...(language.unknown !== undefined ? { unknownLanguage: language.unknown } : {}),
+    ...(titleBlock ? { titleBlock } : {}),
+    ...(titleBlockSources ? { titleBlockSources } : {}),
+    ...(titleBlockParams?.length ? { titleBlockParams } : {}),
     ...(PAC_MODES.find((m) => m === parsed.pacMode) ? { pacMode: PAC_MODES.find((m) => m === parsed.pacMode) } : {}),
     ...(urbanSettings ? { urbanSettings } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),

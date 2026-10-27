@@ -44,14 +44,15 @@ afterEach(() => {
 });
 
 describe('the Wall while the geometry is still streaming in', () => {
-  it('waits for the stream to finish, then lays out the starting set once', () => {
+  it('waits for the stream to finish, then lays out the starting set once', async () => {
     useViewerStore.setState({ geometryStreamingActive: true });
     publish([block()]);
     render(<WallView />);
     assert.equal(hasSet(), false, 'the first batch is not the model');
     publish([block(), block()]);
     assert.equal(hasSet(), false, 'later batches do not start it either');
-    act(() => useViewerStore.setState({ geometryStreamingActive: false }));
+    // The set is laid out in the task after the stream finishes (#154).
+    await act(async () => { useViewerStore.setState({ geometryStreamingActive: false }); await new Promise((resolve) => setTimeout(resolve, 0)); });
     assert.equal(hasSet(), true);
   });
 

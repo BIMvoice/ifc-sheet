@@ -7,6 +7,7 @@
 
 // The title block's layout, parameters and printing
 export { printTitleBlock, sheetFields, sheetLookup, titleBlockMisfits, type TitleBlockMisfit } from '../title-block-print.js';
+export { formatTitleBlockDate } from '../title-block-date.js';
 export { sheetScaleLine, sheetScaleText } from '../sheet-scale.js';
 export { LOGO_FIELD, LOGO_MAX_BYTES, TITLE_BLOCK_FIELDS, titleBlockOf, type TitleBlockField } from '../title-block-fields.js';
 export {
@@ -21,4 +22,5 @@ export { BUILTIN_PARAMS, FIELD_PARAMS, fieldBuiltins, paramLookup, resolveParamT
 export { fitCell, fitText, ITEM_KINDS, MAX_CELL_LINES, MAX_TEXT, TEXT_FIT_MIN, type CellLine, type FittedCell, type TemplateItem, type TemplateLine, type TemplateLogo, type TemplateRect, type TemplateText, type TitleBlockTemplate } from '../title-block-template.js';
 export { textWidthEm, truncateToWidth } from '../text-width.js';
 export { readTitleBlockTemplate } from '../title-block-template-read.js';
+export { checkParamName, PARAM_NAME, readSheetParams, readTitleBlock, readTitleBlockParams, type ParamNameProblem } from '../title-block-file-read.js';
 export { RO_COLUMNS, RO_ONLY_CAPTIONS_EN, RO_ROWS, TITLE_BLOCK_CAPTIONS_RO, romanianTitleBlock, type RoCaption, type RoOnlyCaption } from '../title-block-ro.js';
