@@ -33,4 +33,10 @@ Status: prepared, not published (#422). Nothing here publishes; the owner decide
 
 ## The remaining step
 
-After decisions 1 to 3: set `"private": false` in `packages/ifcsheet/package.json` (a bundled build also changes `dependencies`), add the `NPM_TOKEN` secret, then run the "Release npm (manual)" workflow (`workflow_dispatch`, `confirm` = `publish`, `dry_run` first).
+After decisions 1 to 3: set `"private": false` in `packages/ifcsheet/package.json` (a bundled build also changes `dependencies`), add the `NPM_TOKEN` secret (as an environment secret, see below), then run the "Release npm (manual)" workflow (`workflow_dispatch`, `confirm` = `publish`, `dry_run` first).
+
+## Release hardening
+
+`release-npm.yml` pins every action by full commit SHA (version in a trailing comment), grants only `contents: read` and `id-token: write` (the latter for `--provenance`), and runs the publish job in the `npm-release` GitHub environment.
+
+Repo owner to-do: create the `npm-release` environment (Settings, Environments) with required reviewers, and store `NPM_TOKEN` there as an environment secret, not a repository secret, so a publish waits for approval. Until the environment is configured, GitHub auto-creates an unprotected one on first use, so the other guards stay in place as belt-and-braces: the `confirm` = `publish` input and `"private": true` in `packages/ifcsheet/package.json`.
