@@ -69,7 +69,7 @@ const wantedScale = (scales: readonly (number | undefined)[]): number | undefine
 };
 
 function skippedNote(sheet: string, rule: ViewRule): TemplateNote {
-  if (rule.kind === 'allPlans') return { key: 'setTemplate.note.skipped.plan', params: { sheet, storey: '*' } };
+  if (rule.kind === 'allPlans' || rule.kind === 'site') return { key: 'setTemplate.note.skipped.plan', params: { sheet, storey: '*' } };
   if (rule.kind === 'plan') return { key: 'setTemplate.note.skipped.plan', params: { sheet, storey: rule.storey > 0 ? `+${rule.storey}` : rule.storey } };
   if (rule.kind === 'section') return { key: 'setTemplate.note.skipped.section', params: { sheet, place: rule.place + 1 } };
   return { key: 'setTemplate.note.skipped.elevation', params: { sheet, direction: rule.direction } };
@@ -81,8 +81,9 @@ function sheetOf(rule: SheetRule, views: readonly ProjectView[], claimed: Set<st
   const scales: (number | undefined)[] = [];
   for (const slot of rule.slots) {
     const found = findAllByRule(slot.view, views);
-    // A rule for every storey finding none says nothing: it asked for no particular one.
-    if (found.length === 0 && slot.view.kind !== 'allPlans') notes.push(skippedNote(rule.name, slot.view));
+    // A rule for every storey, or for the site plan, finding none says nothing: the first asked for no particular one, and the
+    // second finds none only when the model has no storey to cut it on, which the missing plans already say.
+    if (found.length === 0 && slot.view.kind !== 'allPlans' && slot.view.kind !== 'site') notes.push(skippedNote(rule.name, slot.view));
     for (const view of found) {
       if (claimed.has(view.id)) continue;
       claimed.add(view.id);
@@ -98,7 +99,7 @@ function sheetOf(rule: SheetRule, views: readonly ProjectView[], claimed: Set<st
   if (wanted !== undefined && scale !== wanted) notes.push({ key: 'setTemplate.note.rescaled', params: { sheet: rule.name, wanted, used: scale } });
   const viewports: SheetViewport[] = placeViewports(members, sizes, scale, start, input.extent);
   // Said on the sheet itself as well: a person holding the paper cannot see the report.
-  const printed: string[] = [];
+  const printed: string[] = [...(rule.notes ?? [])];
   if (wanted !== undefined && typeof start.paper === 'string' && typeof rule.layout.paper === 'string' && start.paper !== rule.layout.paper) printed.push(steppedUpNote(input.locale, rule.layout.paper, start.paper, wanted));
   if (wanted !== undefined && scale !== wanted && typeof start.paper === 'string') printed.push(rescaledNote(input.locale, start.paper, wanted, scale));
   return { id: freshProjectId('sheet'), number: '', series: rule.series, name: rule.name, createdAt: input.now ?? Date.now(), ...start, viewports, ...(printed.length > 0 ? { notes: printed } : {}) };

@@ -28,6 +28,7 @@ import { SCHEDULES_KEY, VIEW_KINDS, projectFileBody } from './ifcsheet-project-f
 import { DOCUMENT_ID, DRY_RUN, dryPrefix, findSheet, invalid, optBoolean, optText, outputPath, pathOrInline, sheetsOf, text, unplacedViews } from './ifcsheet-shared.js';
 import { addSheetSet, getSheetModel, getSheetSet, type SetSchedule } from './ifcsheet-store.js';
 import type { Tool } from './types.js';
+import type { ToolGroup } from './ifcsheet-tool-group.js';
 import { okResult } from './util.js';
 
 const MODEL_ID = { type: 'string', description: 'The model_id returned by ifcsheet_open_model.' } as const;
@@ -304,3 +305,5 @@ export const ifcsheetLoadProject: Tool = {
 };
 
 export const ifcsheetFileTools: Tool[] = [ifcsheetApplyTemplate, ifcsheetExportDxf, ifcsheetIssueSet, ifcsheetSaveProject, ifcsheetLoadProject];
+
+export const toolGroup: ToolGroup = { order: 40, tools: ifcsheetFileTools };

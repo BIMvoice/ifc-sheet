@@ -73,7 +73,8 @@ describe('what the model lacks', () => {
     const root = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
     openReadiness(root);
     assert.doesNotMatch(root.textContent ?? '', /elements are on no storey/);
-    await act(async () => { await openSample(); });
+    // The list reads the facts in the task after the model arrives (#154).
+    await act(async () => { await openSample(); await new Promise((resolve) => setTimeout(resolve, 0)); });
     assert.match(root.textContent ?? '', /5 of 11 elements are on no storey\./);
   });
 
