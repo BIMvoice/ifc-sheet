@@ -10,6 +10,7 @@ import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import type { ThemeMode } from '@/store/slices/uiSlice';
 import { Switch } from '@/components/ui/switch';
+import { useHintsEnabled, setHintsEnabled } from '@/onboarding/hints';
 import { SettingsChoice, SettingsGroup, SettingsRow } from './SettingsGroup';
 
 export function GeneralSection() {
@@ -18,6 +19,7 @@ export function GeneralSection() {
   const setTheme = useViewerStore((s) => s.setTheme);
   const hoverTooltipsEnabled = useViewerStore((s) => s.hoverTooltipsEnabled);
   const toggleHoverTooltips = useViewerStore((s) => s.toggleHoverTooltips);
+  const hintsOn = useHintsEnabled();
 
   return (
     <div className="space-y-4">
@@ -46,6 +48,13 @@ export function GeneralSection() {
             checked={hoverTooltipsEnabled}
             onCheckedChange={() => toggleHoverTooltips()}
           />
+        </SettingsRow>
+        <SettingsRow
+          label={t('onboarding.settings.show')}
+          hint={t('onboarding.settings.showHint')}
+          htmlFor="settings-hints"
+        >
+          <Switch id="settings-hints" checked={hintsOn} onCheckedChange={setHintsEnabled} />
         </SettingsRow>
       </SettingsGroup>
     </div>
