@@ -28,6 +28,7 @@ import { printSheet } from '../sheets/sheet-export';
 import { useSheetContent } from '../sheets/useSheetContent';
 import { AddDrawing } from './AddDrawing';
 import { InfoCard } from './InfoCard';
+import { SelectedHatchCard, useSelectedHatches } from './SelectedHatchCard';
 import { PrintPreview } from './PrintPreview';
 import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
@@ -232,6 +233,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     }
   }, [choose]);
   const cardHost = useRef<HTMLDivElement>(null);
+  const hatches = useSelectedHatches();
   useEffect(() => {
     if (settingsKey === 0) return;
     const name = cardHost.current?.querySelector<HTMLInputElement>('aside input');
@@ -316,6 +318,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
           )}
           <div ref={cardHost} className={WALL_CARD_HOST}>
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} onDone={stopTool} />
+              : hatches.length > 0 && !papering && !titling && !revising ? <SelectedHatchCard hatches={hatches} drawingOn={focusView?.name ?? null} />
               : focusView ? null
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
