@@ -10,7 +10,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { PROTOCOL_VERSION } from '../protocol/index.js';
 import { handleHostedMcp, type HostedOptions } from './hosted.js';
 import { issueToken, MAX_SESSION_MODELS, TOKEN_TTL_MS, verifyToken, withSessions, type SessionState } from './hosted-session.js';
 import { ModelCache, hostedModelCache } from '../tools/hosted-model-cache.js';
