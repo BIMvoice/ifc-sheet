@@ -2,8 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** The hatches a viewport prints (#479): a pattern the project imported, one it lacks, and the kinds still reported as left out. */
+/** The hatches a viewport prints (#479): a pattern the project imported, one it lacks, symbols, and the kinds still reported as left out. */
 
+import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { describe, expect, it } from 'vitest';
 import type { SheetViewport } from './document.js';
 import type { DraftEntity } from './draft-types.js';
@@ -16,7 +17,7 @@ const draft = (shape: DraftEntity['shape']): DraftEntity => ({ id: 'd', viewId: 
 const base = (drafts: DraftEntity[], more: Partial<SheetAnnotations> = {}): SheetAnnotations => ({
   drafts, layers: [], groups: [], book: { textStyles: [], dimStyles: [] }, locale: 'en', ...more,
 });
-const print = (a: SheetAnnotations) => viewportAnnotations({ view: undefined, vp, at: (p) => ({ x: p.x * 10, y: p.y * 10 }), frame: { kx: 1, ky: 1 }, box: null }, a);
+const print = (a: SheetAnnotations, plane?: SectionPlaneConfig) => viewportAnnotations({ view: undefined, vp, at: (p) => ({ x: p.x * 10, y: p.y * 10 }), frame: { kx: 1, ky: 1 }, box: null, ...(plane ? { plane } : {}) }, a);
 
 describe('hatches on a viewport', () => {
   const hatch = (pattern: string) => draft({ type: 'hatch', loops: [square], pattern, scale: 1, angle: 0 });
@@ -38,14 +39,53 @@ describe('hatches on a viewport', () => {
   });
 });
 
-describe('what is still left out', () => {
-  it('a symbol is reported, not drawn', () => {
+describe('symbols on a viewport', () => {
+  const symbol = (symbolId: string, extra: Record<string, unknown> = {}) => draft({ type: 'symbol', symbolId, p: { x: 0, y: 0 }, scale: 1, rotation: 0, ...extra } as DraftEntity['shape']);
+  const site = (more: Partial<NonNullable<SheetAnnotations['site']>> = {}): NonNullable<SheetAnnotations['site']> => ({ frame: { north: null, frameOffset: { x: 0, y: 0, z: 0 } }, georeferenced: false, ...more });
+
+  it('a built-in symbol is drawn, not reported', () => {
     const skipped: string[] = [];
-    const out = print(base([draft({ type: 'symbol', symbolId: 'builtin:north-arrow', p: { x: 0, y: 0 }, scale: 1, rotation: 0 })], { onSkipped: (kind) => skipped.push(kind) }));
+    const out = print(base([symbol('builtin:north-arrow')], { onSkipped: (kind) => skipped.push(kind) }));
+    expect(skipped).toEqual([]);
+    expect(out.strokes[0].runs).toHaveLength(3);
+    expect(out.texts.map((t) => t.text)).toEqual(['N']);
+  });
+
+  it("a project's own symbol is drawn from its definition", () => {
+    const own = [{ id: 'mine', name: 'Mine', unit: 'paper' as const, shapes: [{ type: 'line' as const, a: { x: 0, y: 0 }, b: { x: 5, y: 0 } }] }];
+    const [stroke] = print(base([symbol('mine')], { symbols: own })).strokes;
+    expect(stroke.runs).toEqual([[{ x: 0, y: 0 }, { x: 50, y: 0 }]]);
+  });
+
+  it('a symbol nobody holds stands as the dashed cross', () => {
+    const [stroke] = print(base([symbol('gone')])).strokes;
+    expect(stroke.dash).toBeDefined();
+    expect(stroke.runs).toHaveLength(2);
+  });
+
+  it('a north arrow that follows north turns to the model\'s north on a plan', () => {
+    const plane = { axis: 'y', position: 1, flipped: false } as never;
+    const north = (x: number, y: number) => print(base([symbol('builtin:north-arrow', { followsNorth: true })], { site: site({ frame: { north: { x, y }, frameOffset: { x: 0, y: 0, z: 0 } } }) }), plane);
+    const up = north(0, 1).texts[0].at;
+    const east = north(1, 0).texts[0].at;
+    expect(Math.hypot(east.x - up.x, east.y - up.y)).toBeGreaterThan(1);
+  });
+
+  it('a coordinate point prints the local coordinates of a model with no map conversion', () => {
+    const plane = { axis: 'y', position: 0, flipped: false } as never;
+    const out = print(base([symbol('builtin:coordinate-point', { p: { x: 2, y: 3 } })], { site: site({ frame: { north: null, frameOffset: { x: 10, y: 0, z: 20 } } }) }), plane);
+    expect(out.texts.map((t) => t.text)).toEqual(['X 12.00 (local)', 'Y -23.00 (local)']);
+  });
+
+  it('a coordinate point on a georeferenced model is reported, not printed differently', () => {
+    const skipped: string[] = [];
+    const out = print(base([symbol('builtin:coordinate-point')], { site: site({ georeferenced: true }), onSkipped: (kind) => skipped.push(kind) }));
     expect(skipped).toEqual(['symbol']);
     expect(out.strokes).toEqual([]);
   });
+});
 
+describe('what is still left out', () => {
   it('a level mark, a circle and an arc are drawn, not reported', () => {
     const skipped: string[] = [];
     const out = print(base([

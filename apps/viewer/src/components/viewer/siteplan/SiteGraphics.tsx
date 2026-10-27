@@ -15,6 +15,8 @@ import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
 import type { AnnotationShape } from '@/drafting/types';
 import type { Rect } from '@/siteplan/key-plan';
 import { PLOT_BOUNDARY_LAYER } from '@/siteplan/plot';
+import { COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID, type LiveSymbolContext } from '@bimvoice/ifcsheet';
+import { coordinateLabelBox, SITE_ARROW_SCALE, siteSymbolPlaces } from '@/siteplan/site-symbols';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
 import { shapePath } from '../drafting/DraftOverlay';
 import { penTags } from '../sheets/dxf-tags';

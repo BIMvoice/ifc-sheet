@@ -11,7 +11,8 @@
  * materials that already exist there.
  */
 
-import type { AxisShape, DraftShape, AnnotationShape, DraftEntity, DraftLayer } from '@/drafting/types';
+import type { DraftSymbol } from '@bimvoice/ifcsheet';
+import type { AxisShape, DraftEntity, DraftLayer } from '@/drafting/types';
 import type { TextFrame } from '@/drafting/text-block';
 import type { LeaderMode } from '@/labels/label-leader';
 import type { MissingMode } from '@/labels/label-resolve';
@@ -60,21 +61,7 @@ export interface AnnotationType {
   label?: LabelSpec;
 }
 
-/** What a symbol is drawn from: geometry and plain text. */
-export type SymbolShape = DraftShape | Extract<AnnotationShape, { type: 'text' }>;
-
-/**
- * A block of shapes drawn around the origin, which is its insertion point.
- * `paper` symbols are drawn in paper millimetres and keep that size at any
- * view scale (a north arrow, a tag bubble); `model` symbols are in metres
- * and keep their real size (a scale bar, a piece of furniture).
- */
-export interface DraftSymbol {
-  id: string;
-  name: string;
-  unit: 'paper' | 'model';
-  shapes: SymbolShape[];
-}
+export type { DraftSymbol, SymbolShape } from '@bimvoice/ifcsheet';
 
 /** `colours` lists the values of the views a colour scheme paints (#92); it is not on a legend until the legend is made for them. */
 export const LEGEND_CATEGORIES = ['materials', 'layers', 'hatches', 'symbols', 'annotations', 'colours'] as const;

@@ -20,7 +20,7 @@ import {
 } from '@/drafting/styles';
 import type { CustomLineType } from '@/drafting/line-types';
 import type { DraftEntity, DraftLayer, DraftParamValue, EntityShape } from '@/drafting/types';
-import { findSymbol, symbolDrawingScale } from '@/drafting/symbols';
+import { findSymbol, symbolDrawingScale } from '@bimvoice/ifcsheet';
 import { useProjectStore } from './project-store';
 import { freshProjectId } from './view-defaults';
 

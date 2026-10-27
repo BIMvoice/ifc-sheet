@@ -35,7 +35,7 @@ import { AnnotationGraphics } from './AnnotationGraphics';
 import { entityPen, layerShows, lookOf, overrideKey } from '@/drafting/styles';
 import { graphicStandardOf } from '@/drafting/graphic-standard';
 import { useProjectStore } from '@/project/project-store';
-import type { LiveSymbolContext } from '@/siteplan/live-symbols';
+import type { LiveSymbolContext } from '@bimvoice/ifcsheet';
 import { currentEntityStyles } from '@/project/model-styles';
 import { liveGraphics } from '@/project/view-graphics-live';
 

@@ -53,12 +53,4 @@ export function drawingPointToMap(plane: SectionPlaneConfig, p: Pt, anchor: MapA
   };
 }
 
-/**
- * A drawing point in IFC project coordinates (metres): the viewer point with
- * the render frame's shift (`totalYupOffset`) added back, axes back to IFC's
- * (x, −z) — for a model without georeference.
- */
-export function drawingPointToLocal(plane: SectionPlaneConfig, p: Pt, frameOffset: Vec3): { x: number; y: number } {
-  const w = drawingToWorld(plane, p);
-  return { x: w.x + frameOffset.x, y: -(w.z + frameOffset.z) };
-}
+export { drawingPointToLocal } from '@bimvoice/ifcsheet';

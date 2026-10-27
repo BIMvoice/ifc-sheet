@@ -13,7 +13,7 @@
  */
 
 import { resolve, setProjectNameLanguageSource } from '@/i18n/registry';
-import { setSymbolLibrary } from '@/drafting/symbols';
+import { setSymbolLibrary } from '@bimvoice/ifcsheet';
 import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';

@@ -12,7 +12,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { entityBounds, entitySkeleton, setAnnotationScreenUp } from '@/drafting/annotation';
-import { allSymbols, BUILT_IN_SYMBOLS, findSymbol, flattenShape, placeSymbol, setSymbolLibrary, symbolDrawingScale } from '@/drafting/symbols';
+import { allSymbols, BUILT_IN_SYMBOLS, findSymbol, flattenShape, placeSymbol, setSymbolLibrary, symbolDrawingScale } from '@bimvoice/ifcsheet';
 import type { DraftShape, EntityShape, Pt } from '@/drafting/types';
 import { buildSymbolShapes } from './symbol-build.js';
 import type { DraftSymbol } from './types.js';

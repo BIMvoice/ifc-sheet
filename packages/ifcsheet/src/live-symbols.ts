@@ -11,10 +11,9 @@
  * symbol, on a sheet's viewport and on a drawing tab alike).
  */
 
-import type { DraftSymbol, SymbolShape } from '@/catalogue/types';
-import { findSymbol } from '@/drafting/symbols';
-import type { Pt, SymbolInstanceShape } from '@/drafting/types';
-import { scaleBarShapes } from './scale-bar';
+import type { Pt, SymbolInstanceShape } from './draft-types.js';
+import { scaleBarShapes } from './scale-bar.js';
+import { findSymbol, type DraftSymbol, type SymbolShape } from './symbols.js';
 
 export const SCALE_BAR_ID = 'builtin:scale-bar';
 export const NORTH_ARROW_ID = 'builtin:north-arrow';
@@ -43,8 +42,9 @@ const LABEL_AT = { x: 3, y: 1, step: 3 } as const;
 export function liveSymbol(
   shape: SymbolInstanceShape,
   ctx: LiveSymbolContext | null | undefined,
+  own?: readonly DraftSymbol[],
 ): { def: DraftSymbol | undefined; at: Pick<SymbolInstanceShape, 'p' | 'scale' | 'rotation'> } {
-  const def = findSymbol(shape.symbolId);
+  const def = findSymbol(shape.symbolId, own);
   if (!ctx || !def) return { def, at: shape };
   switch (shape.symbolId) {
     case SCALE_BAR_ID:

@@ -12,12 +12,11 @@
 import { nearestOnShape, shapeBounds } from './curves';
 import { placeSymbol as placeLevelMark } from './level-mark';
 import { mirrorShape, rotateShape, translateShape } from './transform';
-import { findSymbol, missingSymbolMark, placeSymbol } from './symbols';
+import { findSymbol, missingSymbolMark, placeSymbol, angularLayout, axisLayout as engineAxisLayout, formatLength, formatLevel, linearLayout, radialLayout, type DimensionLayout, type LayoutOptions } from '@bimvoice/ifcsheet';
 import { add, mirrorPt, rotatePt, scale, sub } from './vec';
 import { figureUp, leaderOf } from './figure-layout';
 import { leaderTextRight } from './leader-segments';
 import { leaderStart } from '@/labels/label-leader';
-import { angularLayout, axisLayout as engineAxisLayout, formatLength, formatLevel, linearLayout, radialLayout, type DimensionLayout, type LayoutOptions } from '@bimvoice/ifcsheet';
 import { textBlock, type TextFrame } from './text-block';
 // A linear dimension's layout and the length format are the engine's (`dimension-layout.ts`), so the PDF of `ifcsheet build` prints the same figure (#479).
 export { formatLength, type DimensionLayout, type LayoutOptions };

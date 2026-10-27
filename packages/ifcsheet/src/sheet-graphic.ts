@@ -278,7 +278,7 @@ export function sheetGraphic(
     // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
     if (drawing && project?.annotations && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
-      const drafted = viewportAnnotations({ view, vp, at, frame: paperSigns(drawing.config.plane.axis), box }, project.annotations);
+      const drafted = viewportAnnotations({ view, vp, at, frame: paperSigns(drawing.config.plane.axis), box, plane: drawing.config.plane }, project.annotations);
       strokes.push(...drafted.strokes);
       out.texts.push(...drafted.texts);
     }

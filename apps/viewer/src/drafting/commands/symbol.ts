@@ -15,7 +15,7 @@ import { explodeSymbols, makeSymbolFromEntities, projectSymbols, symbolInstance 
 import { resolve } from '@/i18n/registry';
 import { annotationScreenUp, entitySkeleton } from '../annotation';
 import { editDrafts } from '../draft-store';
-import { allSymbols, findSymbol } from '../symbols';
+import { allSymbols, findSymbol } from '@bimvoice/ifcsheet';
 import type { DraftCommandDef, DraftContext } from './types';
 
 const selectedEntities = (ctx: DraftContext) => ctx.entities().filter((e) => ctx.selection().has(e.id));

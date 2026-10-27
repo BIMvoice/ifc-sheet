@@ -25,6 +25,8 @@ import { readIssues } from './issues-read.js';
 import { readRevisions } from './revision-read.js';
 import type { ProjectIssue } from './issue-types.js';
 import type { ProjectRevision } from './revisions.js';
+import { readSymbol } from './symbol-read.js';
+import type { DraftSymbol } from './symbols.js';
 import { readNumberingScheme } from './numbering.js';
 import { listAt, readSheet, readView, type Json } from './set-read.js';
 import { readDimStyles, readLayerGroups, readTextStyles } from './standards-read.js';
@@ -49,6 +51,8 @@ export interface ProjectSet {
   viewTemplates: ProjectViewTemplate[];
   /** The hatch patterns the project imported (`hatchPatterns`, PAT text); a hatch may name one. */
   hatchPatterns: HatchPattern[];
+  /** The symbols the project holds (`symbols`); a symbol instance names one, or a built-in (`symbols.ts`). */
+  symbols: DraftSymbol[];
   sheetNumbering?: NumberingScheme;
 }
 
@@ -66,6 +70,7 @@ export function readProjectSet(raw: Json): ProjectSet {
     issues: readIssues(raw.issues), revisions: readRevisions(raw.revisions),
     viewTemplates: readViewTemplates(raw.viewTemplates),
     hatchPatterns: typeof raw.hatchPatterns === 'string' ? parsePat(raw.hatchPatterns).patterns : [],
+    symbols: at('symbols', readSymbol),
     ...(sheetNumbering ? { sheetNumbering } : {}),
   };
 }
