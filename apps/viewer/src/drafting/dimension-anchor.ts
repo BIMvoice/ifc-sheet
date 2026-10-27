@@ -97,3 +97,15 @@ export function anchorsOf(d: DraftEntity): { param: AnchorParam; anchor: Dimensi
     return anchor ? [{ param, anchor }] : [];
   });
 }
+
+/** The first of `elements` a point snapped to `p` is attached to, encoded for a dimension's params; undefined when none. */
+export function encodedAnchorAt(p: Pt, elements: readonly ElementBox[]): string | undefined {
+  for (const element of elements) {
+    const anchor = anchorOf(p, element);
+    if (anchor) return encodeAnchor(anchor);
+  }
+  return undefined;
+}
+
+/** A dimension's anchor params for its two ends, leaving out an end that is not attached. */
+export const anchorParams = (a: string | undefined, b: string | undefined): Partial<Record<AnchorParam, string>> => ({ ...(a ? { anchorA: a } : {}), ...(b ? { anchorB: b } : {}) });

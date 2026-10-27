@@ -14,7 +14,7 @@ import { styledParams } from '@/project/drafting-standards';
 import { dimensionLayout, entitySkeleton, nextAxisLabel } from '../annotation';
 import { continueDimension, type DimensionShape } from '../dimension-chain';
 import { alignDimensionLine } from '../dimension-align';
-import { anchorOf, encodeAnchor, type AnchorParam } from '../dimension-anchor';
+import { anchorParams, encodedAnchorAt } from '../dimension-anchor';
 import { orthoGuides, snapLeaderEnd } from '../leader-segments';
 import { findPattern } from '../hatch/library';
 import { regionAt } from '../hatch/region';
@@ -131,14 +131,7 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
       /** What each point of the dimension being drawn is attached to (a model element's corner it was snapped to), if anything. */
       const anchors: (string | undefined)[] = [];
       let lastAnchorB: string | undefined;
-      const anchorAt = (p: Pt): string | undefined => {
-        for (const element of ctx.elementBoxesAt?.(p) ?? []) {
-          const anchor = anchorOf(p, element);
-          if (anchor) return encodeAnchor(anchor);
-        }
-        return undefined;
-      };
-      const anchorParams = (a: string | undefined, b: string | undefined): Partial<Record<AnchorParam, string>> => ({ ...(a ? { anchorA: a } : {}), ...(b ? { anchorB: b } : {}) });
+      const anchorAt = (p: Pt): string | undefined => encodedAnchorAt(p, ctx.elementBoxesAt?.(p) ?? []);
       const shape = (at: Pt): DimensionShape => ({ type: 'dimension', variant, a: pts[0], b: pts[1], at, height: ctx.settings.textHeight });
       /** The dimension line's place for a cursor: aligned to a close existing dimension line (within two text heights). */
       const place = (cursor: Pt) => {
