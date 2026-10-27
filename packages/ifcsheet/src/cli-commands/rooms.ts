@@ -11,19 +11,20 @@ import { EXIT, type CliCommand } from '../cli-command.js';
 export const roomsCommand: CliCommand = {
   name: 'rooms',
   usageRank: 500,
-  usage: `  ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]`,
+  usage: `  ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>] [--project <file>]`,
   helpRank: 700,
   help: `  rooms   The room and area schedule: every room (IfcSpace) by level with its number, name and
           area, a total per level and for the building (the urban indicators' Au). An area is the
           model's NetFloorArea (else GrossFloorArea), else the footprint of the room's geometry;
-          the last lines say which. Text, or CSV with --csv, or JSON with --json.`,
+          the last lines say which. Text, or CSV with --csv, or JSON with --json. With --project the text writes
+          figures in the project's "Units and numbers" format (comma, decimals).`,
   async run(rest, values, io) {
-    if (rest.length !== 1 || values.out || values.dxf || values.name || values.project || values.handover || values.pattern || values.template !== undefined || values.detail || values.schedule !== undefined || values['include-far-elements'] || (values.csv && values.json)) {
+    if (rest.length !== 1 || values.out || values.dxf || values.name || values.handover || values.pattern || values.template !== undefined || values.detail || values.schedule !== undefined || values['include-far-elements'] || (values.csv && values.json)) {
       io.stderr('ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n');
       return EXIT.usage;
     }
     try {
-      return await rooms({ model: rest[0], csv: values.csv === true, json: values.json === true, locale: values.locale ?? 'en' }, io);
+      return await rooms({ model: rest[0], csv: values.csv === true, json: values.json === true, locale: values.locale ?? 'en', ...(values.project ? { project: values.project } : {}) }, io);
     } catch (error) {
       io.stderr(`ifcsheet: rooms of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;

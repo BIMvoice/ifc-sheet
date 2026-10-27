@@ -21,7 +21,7 @@ import { groupOfView, placeViewports, scaleOn, setRows, viewExtent, type ModelEx
 import type { NumberingScheme, ProjectSheet, ProjectView, SheetViewport } from './document.js';
 import { freshProjectId } from './ids.js';
 import { DEFAULT_SCHEME, numberSheets } from './numbering.js';
-import { findByRule, ruledViews, RULED_SERIES, type RuledSeries, type SetTemplate, type SheetLayoutRule, type SheetRule, type ViewRule } from './set-template.js';
+import { findAllByRule, ruledViews, RULED_SERIES, type RuledSeries, type SetTemplate, type SheetLayoutRule, type SheetRule, type ViewRule } from './set-template.js';
 import type { TemplateNote } from './set-template-notes.js';
 
 export interface TemplateSetInput {
@@ -52,6 +52,7 @@ const wantedScale = (scales: readonly (number | undefined)[]): number | undefine
 };
 
 function skippedNote(sheet: string, rule: ViewRule): TemplateNote {
+  if (rule.kind === 'allPlans') return { key: 'setTemplate.note.skipped.plan', params: { sheet, storey: '*' } };
   if (rule.kind === 'plan') return { key: 'setTemplate.note.skipped.plan', params: { sheet, storey: rule.storey > 0 ? `+${rule.storey}` : rule.storey } };
   if (rule.kind === 'section') return { key: 'setTemplate.note.skipped.section', params: { sheet, place: rule.place + 1 } };
   return { key: 'setTemplate.note.skipped.elevation', params: { sheet, direction: rule.direction } };
@@ -62,9 +63,11 @@ function sheetOf(rule: SheetRule, views: readonly ProjectView[], claimed: Set<st
   const members: ProjectView[] = [];
   const scales: (number | undefined)[] = [];
   for (const slot of rule.slots) {
-    const view = findByRule(slot.view, views);
-    if (!view) notes.push(skippedNote(rule.name, slot.view));
-    else if (!claimed.has(view.id)) {
+    const found = findAllByRule(slot.view, views);
+    // A rule for every storey finding none says nothing: it asked for no particular one.
+    if (found.length === 0 && slot.view.kind !== 'allPlans') notes.push(skippedNote(rule.name, slot.view));
+    for (const view of found) {
+      if (claimed.has(view.id)) continue;
       claimed.add(view.id);
       members.push(view);
       scales.push(slot.scale);

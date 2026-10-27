@@ -20,6 +20,7 @@ import { effectiveTitleBlock } from '@/project/title-block-model';
 import { romanianTitleBlock } from '@/project/title-block-ro';
 import { titleBlockRoRo } from '@/i18n/catalogues/title-block-ro.ro';
 import type { ProjectLevel, ProjectSheet } from '@/project/types';
+import { sheetTitleBlockMisfits } from '@/check/title-block-fit';
 import { SheetPaper } from '../sheets/SheetPaper';
 import { ProjectDrawer } from './ProjectDrawer.js';
 import { useWallNav } from './wall-nav.js';
@@ -79,6 +80,12 @@ function printed(sheet: ProjectSheet): string[] {
   return out;
 }
 
+/** The F_01 datums (Ordinul 975/2026, Anexa 4) beyond the original fields, by title block field. */
+const F01_VALUES: Record<string, string> = {
+  registrationNumber: 'J40/1234/2020', projectManagerTitle: 'arh. Ionescu', designerTitle: 'arhitect', drawnByTitle: 'desenator', authorsCapacity: 'proiectant de arhitectură',
+  verifierCapacity: 'verificator atestat', verifierRequirement: 'A1', reportNumber: 'RV-77', reportDate: '2026-10-20',
+};
+
 const chooseRomanian = (): void => applyRomanianTitleBlock(romanianTitleBlock(ro as never));
 
 describe('the fields read the model\'s IfcProject and its actors', () => {
@@ -106,7 +113,7 @@ describe('the Romanian layout on every sheet', () => {
     assert.ok(sheets.length >= 2);
     for (const s of sheets) {
       const texts = printed(s);
-      for (const want of ['Proiectant general', 'Birou de arhitectură Alfa', 'Faza', 'DTAC', 'Șef proiect', 'Ion Ionescu', 'Proiectat', 'Ana Popescu', 'Ștampilă proiectant', 'Ștampilă verificator', s.number]) {
+      for (const want of ['Proiectant general', 'Birou de arhitectură Alfa', 'Faza', 'DTAC', 'Șef proiect', 'Ion Ionescu', 'Proiectat', 'Ana Popescu', 'Semnătura', 'Titlu proiect', 'Planșa nr.', s.number]) {
         assert.ok(texts.includes(want), `${s.number} prints "${want}": ${texts.join(' | ')}`);
       }
     }
@@ -130,6 +137,7 @@ describe('the Romanian layout on every sheet', () => {
     await loadModel();
     setProjectTitleBlockField('projectNumber', 'P-2026-014');
     setProjectTitleBlockField('drawnBy', 'D. Marin');
+    for (const [k, v] of Object.entries(F01_VALUES)) setProjectTitleBlockField(k, v);
     chooseRomanian();
     const s = useProjectStore.getState();
     const doc: EngineDocument = { name: s.name, models: [], views: [], sheets: s.sheets, titleBlock: effectiveTitleBlock(), titleBlockTemplate: s.titleBlockTemplate, titleBlockParams: s.titleBlockParams };
@@ -139,7 +147,59 @@ describe('the Romanian layout on every sheet', () => {
       const app = printed(sheet).filter((t) => t !== '');
       assert.deepEqual(app, engine, `${sheet.number}`);
       assert.ok(engine.includes('—'), `${sheet.number} states a dash for the scale it does not have`);
+      for (const v of Object.values(F01_VALUES)) assert.ok(engine.includes(v) && app.includes(v), `${sheet.number} F_01 "${v}" engine=${engine.includes(v)} app=${app.includes(v)}: ${engine.join('|')} // ${app.join('|')}`);
     }
+  });
+});
+
+/** The values of the F_01 review (long.json): each longer than its cell. */
+const LONG_VALUES: Record<string, string> = {
+  client: 'S.C. Societatea Comercială de Construcții și Investiții Imobiliare Reunite S.R.L.',
+  project: 'Construire locuință unifamilială P+1E cu garaj și împrejmuire, str. Principală nr. 12',
+  organisation: 'S.C. Birou de Arhitectură și Proiectare Integrată Dumitrescu & Asociații S.R.L.',
+  address: 'București, Sector 1, Strada Gheorghe Gheorghiu-Dej nr. 123, bl. 4, sc. A',
+  projectManager: 'arh. Alexandru Constantinescu-Vasilescu', projectManagerTitle: 'arhitect cu drept de semnătură',
+  drawnBy: 'Ing. Maria-Magdalena Ionescu-Popescu', checkedBy: 'Ing. Gheorghe Popescu-Tăriceanu',
+  verifierCapacity: 'verificator atestat Af, B2, C, D, Ie, Is', verifierRequirement: 'A1, B2, C, D, E, F',
+  reportNumber: 'Referat de verificare nr. 123456/2026-10-20', reportDate: '2026-10-20 / 2026-11-30',
+};
+const letters = (s: string): string => s.replace(/\s+/g, '');
+
+describe('values longer than their cell (F_01 review)', () => {
+  it('print in full, wrapped or smaller, on screen and in the engine alike', async () => {
+    await loadModel();
+    for (const [k, v] of Object.entries(LONG_VALUES)) setProjectTitleBlockField(k, v);
+    chooseRomanian();
+    const s = useProjectStore.getState();
+    const doc: EngineDocument = { name: s.name, models: [], views: [], sheets: s.sheets, titleBlock: effectiveTitleBlock(), titleBlockTemplate: s.titleBlockTemplate, titleBlockParams: s.titleBlockParams };
+    for (const sheet of s.sheets) {
+      const engine = sheetGraphic({ ...sheet, viewports: [] }, doc, new Map()).texts.map((t) => t.text);
+      const app = printed(sheet).filter((t) => t !== '');
+      assert.deepEqual(app, engine, `${sheet.number}: the same lines in the same order`);
+      for (const [name, text] of [['engine', engine], ['app', app]] as const) {
+        const all = letters(text.join(''));
+        for (const [k, v] of Object.entries(LONG_VALUES)) assert.ok(all.includes(letters(v)), `${sheet.number} ${name} prints ${k} in full: ${text.join('|')}`);
+      }
+      // Wrapped: more lines than values, none of them cut.
+      assert.ok(engine.length > 40);
+    }
+    assert.deepEqual(sheetTitleBlockMisfits(s.titleBlockTemplate, s.sheets, { projectFields: effectiveTitleBlock(), projectName: s.name, params: s.titleBlockParams, sheets: s.sheets, schedules: s.schedules, revisions: s.revisions, drafts: s.drafts, views: s.views, asIndicated: 'as indicated' }), [], 'nothing to report');
+  });
+
+  it('a value too long even at the smallest size is cut alike on screen and in the engine, and the sheet is reported', async () => {
+    await loadModel();
+    const absurd = Array.from({ length: 10 }, () => LONG_VALUES.client).join(' ');
+    setProjectTitleBlockField('client', absurd);
+    chooseRomanian();
+    const s = useProjectStore.getState();
+    const doc: EngineDocument = { name: s.name, models: [], views: [], sheets: s.sheets, titleBlock: effectiveTitleBlock(), titleBlockTemplate: s.titleBlockTemplate, titleBlockParams: s.titleBlockParams };
+    const [sheet] = s.sheets;
+    const engine = sheetGraphic({ ...sheet, viewports: [] }, doc, new Map()).texts.map((t) => t.text);
+    const app = printed(sheet).filter((t) => t !== '');
+    assert.deepEqual(app, engine);
+    assert.ok(engine.some((t) => t.endsWith('…')), 'cut with an ellipsis');
+    const misfits = sheetTitleBlockMisfits(s.titleBlockTemplate, s.sheets, { projectFields: effectiveTitleBlock(), projectName: s.name, params: s.titleBlockParams, sheets: s.sheets, schedules: s.schedules, revisions: s.revisions, drafts: s.drafts, views: s.views, asIndicated: 'as indicated' });
+    assert.deepEqual(misfits.map((m) => m.field), s.sheets.map(() => ro('sheets.tb.client')), 'one finding per sheet, naming the cell by its caption');
   });
 });
 

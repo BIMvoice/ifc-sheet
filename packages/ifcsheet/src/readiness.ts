@@ -18,6 +18,7 @@
 import type { BoqMissing } from './boq-compute.js';
 import { subReportParams, type SubReportCheck } from './sub-report-check.js';
 import type { EstimatedAreas } from './room-estimates.js';
+import type { TitleBlockMisfit } from './title-block-print.js';
 
 /** What the loaded models hold, counted once. "Elements" are the products that have geometry, rooms (IfcSpace) apart. */
 export interface ModelFacts {
@@ -42,7 +43,7 @@ export interface FarElementFact {
   distance: number;
 }
 
-export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'estimatedAreas' | 'boqMissingQuantity';
+export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'estimatedAreas' | 'boqMissingQuantity' | 'titleBlockFit';
 
 export interface ReadinessFinding {
   kind: ReadinessKind;
@@ -59,10 +60,13 @@ const finding = (kind: ReadinessKind, params: Record<string, number | string>): 
  * then rooms, then what the schedules read. An empty model (no element, no room) has nothing to report.
  * `subReports` are the checks of the schedules that are split into parts (`checkSubReports`): a duplicated or
  * missing element is said after the model's own findings, one pair of findings per split schedule.
- * `boq` is what the bill of quantities could not state (`boqMissing`, #75): the elements missing a quantity an article takes, said last.
+ * `boq` is what the bill of quantities could not state (`boqMissing`, #75): the elements missing a quantity an article takes.
+ * `titleBlock` are the title block values that do not fit their cell on a sheet (`titleBlockMisfits`), said last.
  */
-export function modelReadiness(f: ModelFacts, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing): ReadinessFinding[] {
-  if (f.elements === 0 && f.spaces === 0 && f.storeys === 0) return [];
+export function modelReadiness(f: ModelFacts, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing, titleBlock: readonly TitleBlockMisfit[] = []): ReadinessFinding[] {
+  // A value cut short on a sheet is the project's, not the model's: said even when the model is empty.
+  const cut = titleBlock.map((m) => finding('titleBlockFit', { field: m.field, sheet: m.sheet }));
+  if (f.elements === 0 && f.spaces === 0 && f.storeys === 0) return cut;
   const out: ReadinessFinding[] = [];
   if (f.storeys === 0) out.push(finding('noStoreys', {}));
   if (f.spaces === 0) out.push(finding('noSpaces', {}));
@@ -79,7 +83,7 @@ export function modelReadiness(f: ModelFacts, subReports: readonly SubReportChec
     if (c.gaps.length > 0) out.push(finding('subReportGaps', subReportParams(c.gaps, c.parent.name)));
   }
   if (boq && boq.elements > 0) out.push(finding('boqMissingQuantity', { count: boq.elements, articles: boq.articles, list: boq.list }));
-  return out;
+  return [...out, ...cut];
 }
 
 /** How many far elements the sentence names; the rest are counted. */
@@ -137,6 +141,8 @@ export const READINESS_EN = {
   'ready.boqMissingQuantity.effect': 'The bill of quantities leaves them out of those articles\' totals. They are not counted as zero: the articles\' quantities are short by what these elements hold.',
   'ready.estimatedAreas': 'Au includes {count} rooms whose area the model doesn\'t state; they are measured from geometry (≈ {area} m², {share} % of Au) and may be wrong under sloped ceilings: {list}.',
   'ready.estimatedAreas.effect': 'The room and area schedule and the urban sheet count them and mark them. State NetFloorArea (Qto_SpaceBaseQuantities) on these rooms and Au is exact.',
+  'ready.titleBlockFit': 'Title block: {field} does not fit its cell on {sheet}; shorten it or use an abbreviation.',
+  'ready.titleBlockFit.effect': 'The printed value is cut short with an ellipsis, so part of it is missing on the sheet.',
   'ready.subReportGaps.effect': 'The parts do not add up to the schedule: those doors and windows are on no sheet.',
 } as const;
 
