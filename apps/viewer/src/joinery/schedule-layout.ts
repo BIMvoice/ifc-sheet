@@ -93,7 +93,7 @@ const BAND_GAP = 8;
 const DEFAULT_MAX_WIDTH = 380;
 
 export function operationText(entry: ScheduleEntry, labels: ScheduleLabels): string {
-  if (!entry.spec) return '—';
+  if (!entry.spec) return entry.operations?.length ? entry.operations.map(labels.op).join(' + ') : '—';
   const ops = [...new Set(normalisedPanels(entry.spec).map((p) => p.operation))];
   return ops.map(labels.op).join(' + ');
 }
@@ -127,7 +127,7 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
       label: labels.size, value: (e) => `${mm(e.width)} × ${mm(e.height)}`,
       heads: [labels.widthMm ?? 'Width (mm)', labels.heightMm ?? 'Height (mm)'], raw: (e) => [mm(e.width), mm(e.height)], num: true,
     }],
-    operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec ? operationText(e, labels) : null] }],
+    operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec || e.operations?.length ? operationText(e, labels) : null] }],
     sill: () => [{ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(mm(e.spec.sillHeight)) : '—'), raw: (e) => [e.kind === 'window' && e.spec ? mm(e.spec.sillHeight) : null], num: true }],
     levels: () => data.levels.map((level) => ({ label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? ''), raw: (e: ScheduleEntry) => [e.counts[level] ?? null], num: true, sum: true })),
     total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true, raw: (e) => [e.total], num: true, sum: true }],
