@@ -8,6 +8,7 @@
  * reader without importing the file reader, which imports the store, which imports the registry (#144).
  */
 
+import { readUrbanSettings as readEngineUrbanSettings } from '@bimvoice/ifcsheet';
 import { isDisciplineId } from './discipline-views';
 import { readSheetLayout } from './sheet-file';
 import { read3dPrint } from './view-3d-file';
@@ -119,16 +120,8 @@ export function readModel(v: unknown, path: string): ProjectModelRef {
 
 /** The urban settings; a field that is not what it should be is dropped (its default applies). */
 export function readUrbanSettings(raw: unknown): Pick<ProjectDocument, 'urbanSettings'> {
-  if (!isObject(raw)) return {};
-  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-  const out: NonNullable<ProjectDocument['urbanSettings']> = {};
-  if (finite(raw.terrainLevel)) out.terrainLevel = raw.terrainLevel;
-  if (finite(raw.zeroElevation)) out.zeroElevation = raw.zeroElevation;
-  if (isObject(raw.cutExcluded)) {
-    const chosen = Object.entries(raw.cutExcluded).filter((e): e is [string, boolean] => typeof e[1] === 'boolean');
-    if (chosen.length) out.cutExcluded = Object.fromEntries(chosen);
-  }
-  return Object.keys(out).length ? { urbanSettings: out } : {};
+  const settings = readEngineUrbanSettings(raw);
+  return settings ? { urbanSettings: settings } : {};
 }
 
 
