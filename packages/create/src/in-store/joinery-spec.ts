@@ -109,7 +109,26 @@ export interface JoineryViewChoice {
   /** Absent: everything modelled. */
   detail?: JoineryViewDetail;
   hidden?: string[];
+  /** What the user drew on the type's views (#492), in each view's own frame (metres, the type's frame of `symbols.ts`). */
+  drafts?: JoineryViewDrafts;
 }
+
+/** The shapes of a type's drafted views: lines, polylines, circles, arcs, text and hatches. A shape keeps the fields the drafting commands wrote. */
+export type JoineryDraftShape = { type: 'line' | 'polyline' | 'circle' | 'arc' | 'text' | 'hatch'; [field: string]: unknown };
+
+/** One drafted entity of a type's view: its shape and the pen the layer gave it when it was drawn (paper millimetres; a dashed or dotted layer prints dashed). */
+export interface JoineryViewDraft {
+  id: string;
+  shape: JoineryDraftShape;
+  /** The drafting layer it was drawn on (kept so the drafting view can put it back on its layer). */
+  layerId?: string;
+  weight?: number;
+  lineType?: 'dashed' | 'dotted' | 'dashdot';
+  /** The entity's drafting parameters (text style and the like), kept so the drafting view draws it as it was. */
+  params?: Record<string, string | number | boolean>;
+}
+
+export type JoineryViewDrafts = { front?: JoineryViewDraft[]; plan?: JoineryViewDraft[]; section?: JoineryViewDraft[] };
 
 export interface JoinerySpec {
   /** The project catalogue entry this type is (one type object per entry per model). */

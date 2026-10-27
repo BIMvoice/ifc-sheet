@@ -195,4 +195,11 @@ export const joineryEn = {
   'typeQty.sheet': 'Quantities',
   'typeQty.empty': 'No element of the loaded models has a quantity set or a type.',
   'typeQty.noQtoNote': '{count} element(s) have no quantity set; their cells stay empty.',
+  'joinery.draft.view.front': 'Front view',
+  'joinery.draft.view.plan': 'Plan',
+  'joinery.draft.view.section': 'Section',
+  'joinery.draft.title': 'Drawing on the {view} of {mark} {name}',
+  'joinery.draft.done': 'Back to the schedule',
+  'joinery.draft.hint': 'Everything drawn here belongs to the type and prints on every schedule that shows it. Lines, arcs, circles, text and hatches are kept.',
+  'joinery.draft.enter': 'Double-click a view of a type to draw on it',
 } as const satisfies Record<string, TranslationValue>;

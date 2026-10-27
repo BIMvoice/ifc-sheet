@@ -8,10 +8,10 @@
  * drafted entities and command previews over it, and the command line.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { isGeometry } from '@/drafting/types';
-import { AXIS_NAME, type SectionAxisName } from '@/drafting/frame';
+import { isGeometry, type Pt } from '@/drafting/types';
+import { AXIS_NAME, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { parsePat } from '@/drafting/hatch/pattern';
 
 import { viewPlaneConfig, viewWorkPlane } from '@/project/view-plane-config';
@@ -88,7 +88,7 @@ import { cropClipPath, isDetailMark, selectedDetailGrips } from '@/drafting/deta
 
 import { selectedSectionBand } from '@/drafting/section-depth';
 
-import { screenToDrawing } from '@/drafting/frame';
+import { screenSigns, screenToDrawing } from '@/drafting/frame';
 
 import { useModelCommandBridge } from './ModelCommandLayer';
 
@@ -142,10 +142,21 @@ import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
 const NO_SHEET_TRANSFORM = { current: null };
 
 /**
+ * A drafting target that is not a model view (a joinery type's front, plan or section, #492): the axis its coordinates run on, the box to
+ * fit on opening, and what is drawn under the drafted shapes (the type's own lines). The view has no generated drawing, no model and no
+ * plane; everything else, the commands, snaps, selection, undo and the command line, is this view's.
+ */
+export interface DraftingTarget {
+  axis: SectionAxisName;
+  fit: { min: Pt; max: Pt };
+  underlay: (transform: ViewTransform) => ReactNode;
+}
+
+/**
  * `bare`: the drawing alone, as IfcSheet shows it inside a sheet: no toolbar,
  * no property grid; only the prompt line stays, it carries the tools' choices.
  */
-export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView, { kind: '3d' }>; bare?: boolean }) {
+export function DraftingView({ view, bare = false, target }: { view: Exclude<ProjectView, { kind: '3d' }>; bare?: boolean; target?: DraftingTarget }) {
   const { t } = useTranslation();
   const entry = useViewDrawings((s) => s.byView[view.id]) ?? EMPTY_VIEW_DRAWING;
   const { drawing, status } = entry;
@@ -168,7 +179,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const modelBounds = useMemo(() => mergedSectionBounds(models, legacyGeometry), [models, legacyGeometry]);
   const fallbackPlane = useMemo(() => viewPlaneConfig(view, levels, mergedSectionBounds(models, legacyGeometry)), [view, levels, models, legacyGeometry]);
   const plane = drawing?.config.plane ?? fallbackPlane ?? undefined;
-  const axis: SectionAxisName = plane ? AXIS_NAME[plane.axis] : 'down';
+  const axis: SectionAxisName = target?.axis ?? (plane ? AXIS_NAME[plane.axis] : 'down');
   const liveSymbols = useLiveSymbolContext(plane, axis, view.scale ?? DEFAULT_VIEW_SCALE);
   const sectionPlane = useMemo(() => ({ axis, position: plane?.position ?? 0, flipped: plane?.flipped ?? false }), [axis, plane]);
   // Pinned: a regenerated drawing (an element added, edited) keeps the user's framing. No
@@ -189,8 +200,17 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   useEffect(() => {
     if (drawing || !containerRef.current) return;
     const { width, height } = containerRef.current.getBoundingClientRect();
+    if (target) {
+      // A target's own box, filling most of the area (screen y runs down; a front frame is y up, so the box's middle sits at t.y - cy * scale).
+      const { min, max } = target.fit;
+      const scale = Math.max(1, Math.min((width * 0.8) / Math.max(max.x - min.x, 1e-6), (height * 0.8) / Math.max(max.y - min.y, 1e-6)));
+      const cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2;
+      const { kx, ky } = screenSigns(target.axis);
+      setViewTransform((t) => (t.scale === 1 && t.x === 0 && t.y === 0 ? { scale, x: width / 2 - cx * kx * scale, y: height / 2 - cy * ky * scale } : t));
+      return;
+    }
     setViewTransform((t) => (t.scale === 1 && t.x === 0 && t.y === 0 ? { scale: 40, x: width / 2, y: height / 2 } : t));
-  }, [drawing, setViewTransform]);
+  }, [drawing, setViewTransform, target]);
 
   const entities = useMemo(() => draftsOfView(view.id, allDrafts), [allDrafts, view.id]);
   const entityShapes = useMemo(() => entities.flatMap((e) => (isGeometry(e.shape) ? [e.shape] : [])), [entities]);
@@ -327,6 +347,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
       >
         {/* A detail shows only its area of the drawing and of the symbols derived from the model. */}
         <div className="absolute inset-0" style={view.detail ? { clipPath: cropClipPath({ min: view.detail.min, max: view.detail.max }, viewTransform, axis) } : undefined}>
+        {target?.underlay(viewTransform)}
         {shown ? (
           <Drawing2DCanvas
             drawing={shown}
@@ -365,7 +386,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           crop={view.detail}
           symbols={liveSymbols}
         />
-        <ElementGraphicsBar viewId={view.id} graphics={graphics} extraPatterns={extraPatterns} showHidden={showHidden} onShowHidden={setShowHidden} pickingLine={pickingLine} onPickLine={setPickingLine} />
+        {target ? null : <ElementGraphicsBar viewId={view.id} graphics={graphics} extraPatterns={extraPatterns} showHidden={showHidden} onShowHidden={setShowHidden} pickingLine={pickingLine} onPickLine={setPickingLine} />}
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}

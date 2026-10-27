@@ -21,6 +21,7 @@
  */
 
 import type { JoineryViewChoice, JoineryViewDetail, JoinerySpec } from '@ifc-lite/create';
+import { readJoineryViewDrafts } from './joinery-view-drafts.js';
 
 export type JoineryViewName = 'front' | 'plan' | 'section';
 
@@ -92,7 +93,8 @@ const clean = (c: JoineryViewChoice): JoineryViewChoice | undefined => {
   const out: JoineryViewChoice = {};
   if (c.detail && c.detail !== 'all') out.detail = c.detail;
   if (c.hidden?.length) out.hidden = [...new Set(c.hidden)].sort();
-  return out.detail || out.hidden ? out : undefined;
+  if (c.drafts && Object.keys(c.drafts).length) out.drafts = c.drafts;
+  return out.detail || out.hidden || out.drafts ? out : undefined;
 };
 
 function withChoice(spec: JoinerySpec, choice: JoineryViewChoice): JoinerySpec {
@@ -114,5 +116,5 @@ export function readJoineryViewChoice(raw: unknown): JoineryViewChoice | undefin
   const r = raw as Record<string, unknown>;
   const detail = JOINERY_VIEW_DETAILS.includes(r.detail as JoineryViewDetail) ? (r.detail as JoineryViewDetail) : undefined;
   const hidden = Array.isArray(r.hidden) ? r.hidden.filter((h): h is string => typeof h === 'string' && JOINERY_LINE_ID.test(h)).slice(0, 2000) : [];
-  return clean({ detail, hidden });
+  return clean({ detail, hidden, drafts: readJoineryViewDrafts(r.drafts) });
 }

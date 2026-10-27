@@ -21,7 +21,7 @@ import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
 import { occurrenceMark, type ScheduleData, type ScheduleEntry } from './schedule-data';
 import type { ElementViews } from './element-views';
-import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
+import { planRoom, sectionRoom, viewPrims, viewRegions, type ViewRegion } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
@@ -33,12 +33,16 @@ export type SchedulePrim =
   | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol';
       /** A line of a type's real view that can be hidden (#449): the catalogue type's id and the line's id. */
       pick?: { type: string; line: string } }
-  | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number };
+  | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number;
+      /** Text the user drew on a type's view (#492): which view it belongs to, so a schedule that shows only the plan or only the elevation leaves it out with the lines. */
+      view?: 'front' | 'plan' | 'section' };
 
 export interface ScheduleLayout {
   width: number;
   height: number;
   prims: SchedulePrim[];
+  /** The box of each type's views (paper mm), so a double-click can enter one as a drafting view (#492). */
+  regions?: ViewRegion[];
   /** How many pages the table runs over (a schedule given a `maxHeight` it does not fit continues on further sheets); absent: one. */
   pages?: number;
   /** A column table's smallest page box (its width; title, header and one row): the box a resize stops at. A joinery schedule has `scheduleMinBox`. */
@@ -202,6 +206,7 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
   const page = Math.max(0, options.page ?? 0);
   const bands = all.slice(page * perPage, (page + 1) * perPage);
   const prims: SchedulePrim[] = [];
+  const regions: ViewRegion[] = [];
   const tableRows = rows(data, labels);
 
   // Inset like the paged tables' titles: the viewport's frame is drawn on x = 0 and would cover the first letter.
@@ -238,7 +243,8 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
       const x0 = fx - (w * k) / 2, x1 = fx + (w * k) / 2;
       if (v) {
         // The plan is the plan view; the front, the section beside it and the opening symbol are the elevation.
-        prims.push(...viewPrims(v, e.spec, { fx, base }, k, openingConvention()).filter((p) => p.kind !== 'path' || (p.view === 'plan' ? shown.plan : shown.elevation)));
+        prims.push(...viewPrims(v, e.spec, { fx, base }, k, openingConvention()).filter((p) => (p.kind !== 'path' && p.kind !== 'text') || (p.view === undefined && p.kind === 'text') || (p.view === 'plan' ? shown.plan : shown.elevation)));
+        regions.push(...viewRegions(v, e.spec, { fx, base }, k).filter((r) => (r.view === 'plan' ? shown.plan : shown.elevation)));
       } else if (shown.elevation && e.spec) {
         const strokes = elevationSymbol(e.spec, { hardware: true, convention: openingConvention() });
         const b = strokeBounds(strokes);
@@ -268,7 +274,7 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
     }
     top += bandH + BAND_GAP;
   }
-  return { width, height: top - BAND_GAP, prims, pages };
+  return { width, height: top - BAND_GAP, prims, ...(regions.length ? { regions } : {}), pages };
 }
 
 export interface JoineryExportLabels extends ScheduleLabels {
