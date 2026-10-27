@@ -29,7 +29,7 @@ Status: prepared, not published (#422). Nothing here publishes; the owner decide
 1. How the vendored `@ifc-lite/*` code reaches users (the blocker). Options: publish the 18 closure packages under our own scope (rename, new versions); bundle them into `@bimvoice/ifcsheet` (esbuild, copy the wasm next to it); upstream the fork's changes and depend on their releases; or keep the CLI private and distribute a bundled binary or Docker image instead.
 2. The MCP server name. `@ifc-lite/mcp` is ifc-lite's and we do not own that scope. Options: a new package `@bimvoice/ifcsheet-mcp` (own name, `author`, `repository`, `engines`; same dependency question as 1); fold the MCP bin into `@bimvoice/ifcsheet`; or leave it unpublished.
 3. The `@bimvoice` npm scope and the `NPM_TOKEN` secret (the scope must exist and the token be an automation token with publish rights).
-4. Guard against `changeset publish` / `pnpm -r publish` trying the `@ifc-lite/*` names (inherited `release:npm`, `publish:npm`, `RELEASE.md`): mark them `private` or remove those scripts once 1 is decided.
+4. Guard against `changeset publish` / `pnpm -r publish` trying the `@ifc-lite/*` names: done (#422). Every vendored package is `"private": true` and `scripts/check-publish-allowlist.mjs` (allowlist: `@bimvoice/ifcsheet`) runs first in `release:npm`, `publish:npm`, `publish:dry`, the release workflow and CI. It refuses any non-private package off the allowlist and never accepts an `@ifc-lite/*` name. Side effect: `check-changeset-required` no longer asks for changesets on the vendored packages, since it skips private ones.
 
 ## The remaining step
 
