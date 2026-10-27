@@ -9,6 +9,7 @@ import { SCHEDULE_LOCALES, scheduleCapacity, scheduleTable } from './ifcsheet-dr
 import { DOCUMENT_ID, DRY_RUN, dryPrefix, invalid, optBoolean, optChoice, optText, pathOrInline, text, workingEntry } from './ifcsheet-shared.js';
 import { getSheetSet, replaceSheetDocument, type SetSchedule } from './ifcsheet-store.js';
 import type { Tool } from './types.js';
+import type { ToolGroup } from './ifcsheet-tool-group.js';
 import { okResult } from './util.js';
 
 const KINDS = ['rooms', 'boq', 'list'] as const;
@@ -112,3 +113,5 @@ export const ifcsheetAddSchedule: Tool = {
     );
   },
 };
+
+export const toolGroup: ToolGroup = { order: 30, tools: [ifcsheetAddSchedule] };

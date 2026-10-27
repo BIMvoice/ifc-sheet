@@ -11,6 +11,7 @@
  * NOT counted as zero: it is left out of the sum and reported (`BoqLine.missing`), so a total never hides a gap.
  */
 
+import { emptyTally, tallyTotal, tallyValue, type SumTally } from '@ifc-lite/lists';
 import { COUNT_QUANTITY, boqProblem, quantityDimension, type BoqArticle, type BoqDimension, type BoqProblem } from './boq.js';
 import { passesElementFilter, type PropertyFact } from './schedule-filter.js';
 
@@ -105,14 +106,16 @@ function lineOf(article: BoqArticle, elements: readonly BoqElement[]): BoqLine {
   if (problem) return line;
   // The factor and the waste apply to the sum, once: a type's part and the total are the same rule.
   const scale = article.factor * (1 + (article.waste ?? 0) / 100);
-  const types = new Map<string, BoqTypeLine & { sum: number }>();
-  let sum = 0;
+  const types = new Map<string, BoqTypeLine>();
+  const total = emptyTally();
+  const typeTallies = new Map<string, SumTally>();
   for (const e of elements) {
     if (!picks(article, e)) continue;
     const typed = e.typeName !== null && e.typeClass !== null;
     const key = typed ? `T|${e.typeClass}|${e.typeName}` : `C|${e.ifcClass}`;
     let t = types.get(key);
-    if (!t) types.set(key, (t = { typeName: typed ? e.typeName : null, className: typed ? e.typeClass! : e.ifcClass, matched: 0, counted: 0, missing: 0, total: null, sum: 0 }));
+    if (!t) types.set(key, (t = { typeName: typed ? e.typeName : null, className: typed ? e.typeClass! : e.ifcClass, matched: 0, counted: 0, missing: 0, total: null }));
+    if (!typeTallies.has(key)) typeTallies.set(key, emptyTally());
     line.matched++;
     t.matched++;
     if (article.material?.trim() && e.materials.some((m) => norm(m) !== norm(article.material!))) line.sharedMaterial++;
@@ -124,12 +127,14 @@ function lineOf(article: BoqArticle, elements: readonly BoqElement[]): BoqLine {
     }
     line.counted++;
     t.counted++;
-    sum += value;
-    t.sum += value;
+    tallyValue(total, value);
+    tallyValue(typeTallies.get(key)!, value);
   }
-  line.total = line.counted > 0 ? sum * scale : null;
-  line.byType = [...types.values()]
-    .map(({ sum: s, ...t }) => ({ ...t, total: t.counted > 0 ? s * scale : null }))
+  // The one "quantity or missing" rule the Lists engine sums by (#411): nothing stated is a dash, never 0.
+  const scaled = (t: SumTally) => { const v = tallyTotal(t); return v === null ? null : v * scale; };
+  line.total = scaled(total);
+  line.byType = [...types.entries()]
+    .map(([key, t]) => ({ ...t, total: scaled(typeTallies.get(key)!) }))
     .sort((a, b) => Number(a.typeName === null) - Number(b.typeName === null) || a.className.localeCompare(b.className) || (a.typeName ?? '').localeCompare(b.typeName ?? ''));
   return line;
 }
