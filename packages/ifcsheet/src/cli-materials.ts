@@ -11,6 +11,8 @@ import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { openModel } from './headless.js';
 import { materialReport, materialReportText, readProjectMaterials } from './materials-report.js';
+import { materialsUnder, unknownStandardMessage } from './cli-standard.js';
+import { packForCommandLine } from './standard-pack.js';
 import type { CliIo } from './cli.js';
 
 /** What the command line gave `materials`: the model, and the options it does not take, to refuse. */
@@ -18,6 +20,8 @@ export interface MaterialsArgs {
   rest: readonly string[];
   json: boolean;
   project: string | undefined;
+  /** `--standard <id>`: the standard's hatch rows laid over the table. */
+  standard?: string | undefined;
   /** True when an option `materials` does not take (--out, --dxf, --name, --include-far-elements) was given. */
   foreignOption: boolean;
 }
@@ -28,7 +32,7 @@ const FAILED = 1;
 const USAGE = 2;
 
 /** `ifcsheet materials`: the model's materials and how each draws, with the project's table applied. */
-async function materials(file: string, json: boolean, projectFile: string | undefined, io: CliIo): Promise<number> {
+async function materials(file: string, json: boolean, projectFile: string | undefined, standardId: string | undefined, io: CliIo): Promise<number> {
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await readFile(file));
@@ -46,20 +50,25 @@ async function materials(file: string, json: boolean, projectFile: string | unde
       return FAILED;
     }
   }
+  if (standardId !== undefined && !packForCommandLine(standardId)) {
+    io.stderr(unknownStandardMessage(standardId));
+    return USAGE;
+  }
+  table = [...materialsUnder(standardId, table)];
   const opened = await openModel(bytes, { geometry: false });
   const rows = materialReport(opened.dataStore, table);
-  io.stdout(json ? `${JSON.stringify({ file, ...(projectFile !== undefined ? { project: projectFile } : {}), materials: rows }, null, 2)}\n` : materialReportText(rows));
+  io.stdout(json ? `${JSON.stringify({ file, ...(projectFile !== undefined ? { project: projectFile } : {}), ...(standardId !== undefined ? { standard: standardId } : {}), materials: rows }, null, 2)}\n` : materialReportText(rows));
   return OK;
 }
 
 /** `ifcsheet materials`: refuses a wrong command line (2), else runs; 1 when the file cannot be read or the run fails. */
 export async function materialsCommand(args: MaterialsArgs, io: CliIo): Promise<number> {
   if (args.rest.length !== 1 || args.foreignOption) {
-    io.stderr('ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n');
+    io.stderr('ifcsheet materials takes one model, --project, --standard and --json only: ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json]\n');
     return USAGE;
   }
   try {
-    return await materials(args.rest[0], args.json, args.project, io);
+    return await materials(args.rest[0], args.json, args.project, args.standard, io);
   } catch (error) {
     io.stderr(`ifcsheet: materials of ${basename(args.rest[0])} failed: ${(error as Error).message}\n`);
     return FAILED;

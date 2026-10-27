@@ -84,8 +84,8 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
     io.stderr(`ifcsheet ${command} has no --pac; it is an option of build.\n`);
     return EXIT.usage;
   }
-  if (values.standard !== undefined && command !== 'build') {
-    io.stderr(`ifcsheet ${command} has no --standard; it is an option of build (known: ${COMMAND_LINE_STANDARD_IDS.join(', ')}).\n`);
+  if (values.standard !== undefined && command !== 'build' && command !== 'materials') {
+    io.stderr(`ifcsheet ${command} has no --standard; it is an option of build and materials (known: ${COMMAND_LINE_STANDARD_IDS.join(', ')}).\n`);
     return EXIT.usage;
   }
   return await found.run(rest, values, io);

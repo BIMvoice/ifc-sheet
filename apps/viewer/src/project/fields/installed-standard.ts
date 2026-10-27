@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { readNumberingScheme, readUnitsAndNumbers, type NumberingScheme, type UnitsAndNumbers } from '@bimvoice/ifcsheet';
+import { readMaterials, type ProjectMaterial } from '@bimvoice/ifcsheet/materials';
 import { readTitleBlockTemplate } from '../title-block-file';
 import type { TitleBlockTemplate } from '../title-block-template';
 import { optionalField, type FieldReader } from './define';
@@ -18,6 +19,8 @@ export interface StandardPreviousValues {
   titleBlockTemplate?: TitleBlockTemplate | null;
   unitsAndNumbers?: UnitsAndNumbers | null;
   sheetNumbering?: NumberingScheme | null;
+  /** The project's whole material table (#90) as it was; null: it had none. */
+  materials?: ProjectMaterial[] | null;
 }
 
 /** The standards pack installed in the project: which one, its version, and the values it replaced. */
@@ -47,6 +50,7 @@ function readPrevious(raw: unknown): StandardPreviousValues {
   take('titleBlockTemplate', readTitleBlockTemplate);
   take('unitsAndNumbers', readUnitsAndNumbers);
   take('sheetNumbering', readNumberingScheme);
+  take('materials', (v) => (Array.isArray(v) ? readMaterials(v) : undefined));
   return out;
 }
 

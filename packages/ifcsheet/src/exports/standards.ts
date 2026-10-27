@@ -15,3 +15,4 @@ export {
   COMMAND_LINE_STANDARDS, COMMAND_LINE_STANDARD_IDS, PACK_NOT_SET, GERMANY_PACK_ID, PACK_PARTS, ROMANIA_PACK_ID, STANDARD_PACK_VERSION, TITLE_BLOCK_CAPTIONS_DE, builtInPacks, germanyPack, packForCommandLine, packPartsOf, romaniaPack,
   type PackNotSet, type PackPart, type StandardPack,
 } from '../standard-pack.js';
+export { hasPackMaterials, withPackMaterials } from '../standard-pack-materials.js';

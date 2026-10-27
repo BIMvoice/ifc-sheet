@@ -81,7 +81,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
   // The notes a sheet prints (a paper stepped up) are in the language of the PAC words.
-  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), ...(args.pac ? { locale: args.locale ?? PAC_DEFAULT_LOCALE } : {}) });
+  const generated = generateDefaultSet(model, { ...(standard.sheetNumbering ? { scheme: standard.sheetNumbering } : {}), ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), ...(args.pac ? { locale: args.locale ?? PAC_DEFAULT_LOCALE } : {}) });
   const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
