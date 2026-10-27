@@ -13,7 +13,7 @@
  */
 import type { CellValue } from '@ifc-lite/lists';
 import type { GroupOrder } from '../lists/group-sort';
-import { displayCell, groupHeaderLabel, totalsRowCells, orderExportModelGroups, type ExportModel } from '../lists/export/model.js';
+import { displayCell, displaySum, groupHeaderLabel, totalsRowText, orderExportModelGroups, type ExportModel } from '../lists/export/model.js';
 
 export type TableRowRole = 'row' | 'group' | 'total' | 'more';
 
@@ -127,7 +127,7 @@ export function flattenExportModel(input: ExportModel, maxRows: number, labels: 
     for (const g of model.groups) {
       if (printed >= cap) break;
       rows.push({
-        cells: model.columns.map((c, i) => (i === 0 ? oneLine(groupHeaderLabel(g, '  ')) : c.summed ? displayCell(g.sums[c.id]) : '')),
+        cells: model.columns.map((c, i) => (i === 0 ? oneLine(groupHeaderLabel(g, '  ')) : c.summed ? displaySum(g.sums[c.id]) : '')),
         role: 'group',
       });
       for (const r of g.rows) {
@@ -150,7 +150,7 @@ export function flattenExportModel(input: ExportModel, maxRows: number, labels: 
 
   // Same rule as the list PDF's foot: a totals row only when something is summed.
   if (model.sumColumnIds.length > 0) {
-    rows.push({ cells: totalsRowCells(model, cols, labels.total(model.totals.count)).map(displayCell), role: 'total' });
+    rows.push({ cells: totalsRowText(model, cols, labels.total(model.totals.count)), role: 'total' });
   }
 
   return { columns, rows, more, totalRows };

@@ -10,7 +10,7 @@
  */
 
 import { guardSpreadsheetFormula } from '@ifc-lite/export';
-import { groupingColumnIds, type CellValue, type ColumnDefinition, type ListRow, type ListGrouping } from '@ifc-lite/lists';
+import { groupingColumnIds, quantityText, tallies, tallyTotals, tallyValue, type CellValue, type ColumnDefinition, type ListRow, type ListGrouping } from '@ifc-lite/lists';
 import type { ProjectUnits } from '@ifc-lite/parser';
 import type { GroupSort, GroupOrder } from './list-group-sort.js';
 import { buildGroupedExport, sumColumnIndices } from './list-grouping.js';
@@ -36,7 +36,7 @@ export interface ExportGroup {
   label: string;
   /** Member-row count of this group (the Count aggregate, issue #1790). */
   count: number;
-  sums: Record<string, number>;
+  sums: Record<string, number | null>;
   /** Member rows. With multi-criteria grouping only LEAF groups carry rows
    *  (parents would duplicate them); parent groups export with `rows: []`. */
   rows: CellValue[][];
@@ -59,7 +59,7 @@ export interface ExportModel {
   /** Ordered group-by column ids, outermost first (multi-criteria #1790). */
   groupColumnIds: string[];
   sumColumnIds: string[];
-  totals: { count: number; sums: Record<string, number> };
+  totals: { count: number; sums: Record<string, number | null> };
   /**
    * Present when the grouping's presentation is `schedule` (issue #1790
    * round 2): a Bonsai-style pivot table — one row per group-value tuple
@@ -119,6 +119,16 @@ export function totalsRowCells(model: ExportModel, cols: ExportColumn[], label: 
     if (model.schedule && c.id === '__count') return model.totals.count;
     return c.summed ? model.totals.sums[c.id] : null;
   });
+}
+
+/** A summed cell for text-based exports (CSV/PDF): a dash when no row states the quantity, never 0 (#411). */
+export function displaySum(value: number | null | undefined): string {
+  return quantityText(value, displayCell);
+}
+
+/** The grand-total row as text, a summed column that nothing states written as a dash. */
+export function totalsRowText(model: ExportModel, cols: ExportColumn[], label: string): string[] {
+  return totalsRowCells(model, cols, label).map((v, i) => (i > 0 && cols[i].summed ? displaySum(v as number | null) : displayCell(v)));
 }
 
 /** Format a cell for text-based exports (CSV/PDF). Excel keeps raw numbers. */
@@ -202,17 +212,14 @@ export function buildExportModel(input: BuildModelInput): ExportModel {
     : rows;
 
   const sumIdx = sumColumnIndices(columns, sumColumnIds);
-  const zeroSums = (): Record<string, number> => Object.fromEntries(sumIdx.map((s) => [s.id, 0]));
-  const addSums = (acc: Record<string, number>, values: CellValue[]) => {
-    for (const s of sumIdx) {
-      const v = values[s.idx];
-      if (typeof v === 'number' && Number.isFinite(v)) acc[s.id] += v;
-    }
-  };
-
-  const totals = { count: convertedRows.length, sums: zeroSums() };
+  const totalTallies = tallies(sumIdx.map((s) => s.id));
   const flatRows: CellValue[][] = [];
-  for (const r of convertedRows) { flatRows.push(r.values); addSums(totals.sums, r.values); }
+  for (const r of convertedRows) {
+    flatRows.push(r.values);
+    for (const s of sumIdx) tallyValue(totalTallies[s.id], r.values[s.idx]);
+  }
+  // A total over rows that never state the quantity is missing (null), not 0 (#411).
+  const totals = { count: convertedRows.length, sums: tallyTotals(totalTallies) };
 
   const groupColumnIds = groupingColumnIds(grouping).filter((id) => columns.some((c) => c.id === id));
   const groupColumnId = groupColumnIds[0] ?? null;

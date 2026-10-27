@@ -4,6 +4,7 @@
 
 import { manualValidationEn } from '../catalogues/manual-validation.en';
 import { materialsEn } from '../catalogues/materials.en';
+import { norwayEn } from '../catalogues/norway.en';
 import { pacEn } from '../catalogues/pac.en';
 import { mcpPlaygroundEn } from '../catalogues/mcp-playground.en';
 import { mcpEn } from '../catalogues/mcp.en';
@@ -73,6 +74,7 @@ export const enMR = {
   ...multiSplitEn,
   ...mutationPermissionEn,
   ...namesEn,
+  ...norwayEn,
   ...pacEn,
   ...newProjectEn,
   ...panelNoModelEn,

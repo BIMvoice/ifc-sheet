@@ -741,9 +741,9 @@ describe('grouping & summary', () => {
       ['IfcWall', 2],
       ['IfcSlab', 1],
     ]);
-    // Wall lengths 5.0 + 3.5 = 8.5; slab has no Qto_WallBaseQuantities → 0.
+    // Wall lengths 5.0 + 3.5 = 8.5; slab has no Qto_WallBaseQuantities → missing (null), not 0 (#411).
     expect(result.groups?.find(g => g.label === 'IfcWall')?.sums.len).toBeCloseTo(8.5);
-    expect(result.groups?.find(g => g.label === 'IfcSlab')?.sums.len).toBe(0);
+    expect(result.groups?.find(g => g.label === 'IfcSlab')?.sums.len).toBeNull();
     // Whole-result summary.
     expect(result.summary?.count).toBe(3);
     expect(result.summary?.sums.len).toBeCloseTo(8.5);
@@ -925,7 +925,7 @@ describe('grouping & summary', () => {
     };
     const { groups, summary } = summariseListRows(def, []);
     expect(groups).toEqual([]);
-    expect(summary).toEqual({ count: 0, sums: { n: 0 } });
+    expect(summary).toEqual({ count: 0, sums: { n: null } });
   });
 
   it('a group column id that matches no column still yields a single "(none)" level', () => {
@@ -987,7 +987,7 @@ describe('toScheduleRows', () => {
     const rows = toScheduleRows(result.groups, 1);
     expect(rows).toEqual([
       { key: groupPathKey(['IfcWall']), path: ['IfcWall'], count: 2, sums: { len: expect.closeTo(8.5) } },
-      { key: groupPathKey(['IfcSlab']), path: ['IfcSlab'], count: 1, sums: { len: 0 } },
+      { key: groupPathKey(['IfcSlab']), path: ['IfcSlab'], count: 1, sums: { len: null } },
     ]);
   });
 
