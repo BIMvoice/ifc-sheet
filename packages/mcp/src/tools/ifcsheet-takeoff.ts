@@ -13,8 +13,8 @@ import type { ProjectFacts } from '@bimvoice/ifcsheet/headless';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import { DOCUMENT_ID, invalid, optBoolean, optChoice, optText, pathOrInline, text } from './ifcsheet-shared.js';
 import { getSheetModel, getSheetSet, type SheetModelEntry } from './ifcsheet-store.js';
-import type { Tool } from './types.js';
 import type { ToolGroup } from './ifcsheet-tool-group.js';
+import type { Tool } from './types.js';
 import { okResult } from './util.js';
 
 const LOCALES = ['en', 'ro'] as const;
@@ -158,4 +158,5 @@ export const ifcsheetClassify: Tool = {
 
 export const ifcsheetTakeoffTools: Tool[] = [ifcsheetRooms, ifcsheetMaterials, ifcsheetBoq, ifcsheetList, ifcsheetClassify];
 
+/** Registered last (order 60), where the takeoff tools sat before the groups existed. */
 export const toolGroup: ToolGroup = { order: 60, tools: ifcsheetTakeoffTools };
