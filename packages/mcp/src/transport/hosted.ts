@@ -10,7 +10,9 @@
  * POST builds a fresh server, answers the JSON-RPC message (or batch) in the
  * body as plain JSON, and drops the server, so nothing outlives the request
  * (a batch shares one server, so `ifcsheet_open_model` then a tool taking its
- * `model_id` work inside one batch). Only the `ifcsheet_*` tools are served,
+ * `model_id` work inside one batch). Across requests, a project is carried by
+ * the client in a signed `session_token` when `IFCSHEET_HOSTED_MCP_SECRET` is
+ * set (`hosted-session.ts`); the server still keeps nothing. Only the `ifcsheet_*` tools are served,
  * with no resources or prompts (both are session state), and with file paths
  * refused (`ServerConfig.hosted`): the model comes in the request.
  */
@@ -23,6 +25,7 @@ import { MCPServer } from '../server.js';
 import { ToolRegistry } from '../tools/types.js';
 import { ifcsheetTools } from '../tools/ifcsheet.js';
 import { fullScope } from '../auth/scope.js';
+import { MAX_TOKEN_CHARS, SECRET_ENV, withSessions } from './hosted-session.js';
 
 export const HOSTED_ENV = 'IFCSHEET_HOSTED_MCP';
 /** Largest model a call may carry, bytes (decoded). */
@@ -37,15 +40,17 @@ export interface HostedOptions {
   version?: string;
   maxModelBytes?: number;
   maxMs?: number;
+  /** The clock of session tokens, ms (tests). */
+  now?: () => number;
 }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
 const reply = (status: number, body: unknown, extra: Record<string, string> = {}): Response =>
   new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { ...JSON_HEADERS, ...extra } });
 
-function buildServer(opts: Required<Pick<HostedOptions, 'maxModelBytes'>> & { version: string }): MCPServer {
+function buildServer(opts: Required<Pick<HostedOptions, 'maxModelBytes'>> & { version: string; secret?: string; now?: () => number }): MCPServer {
   const tools = new ToolRegistry();
-  tools.registerAll(ifcsheetTools);
+  tools.registerAll(withSessions(ifcsheetTools, { secret: opts.secret, now: opts.now }));
   return new MCPServer({
     name: 'ifcsheet-hosted',
     version: opts.version,
@@ -90,7 +95,8 @@ export async function handleHostedMcp(req: Request, options: HostedOptions = {})
   const maxModelBytes = options.maxModelBytes ?? DEFAULT_MAX_MODEL_BYTES;
   const maxMs = options.maxMs ?? DEFAULT_MAX_MS;
   // base64 grows a model by a third; the rest is the JSON around it.
-  const bodyCap = Math.ceil(maxModelBytes * 4 / 3) + 64 * 1024;
+  // A session token travels in the same body.
+  const bodyCap = Math.ceil(maxModelBytes * 4 / 3) + 64 * 1024 + MAX_TOKEN_CHARS;
 
   const raw = await readBody(req, bodyCap);
   if (raw === 'too-large') {
@@ -116,7 +122,7 @@ export async function handleHostedMcp(req: Request, options: HostedOptions = {})
   const invalid = items.length - messages.length;
   const invalidResponses = Array.from({ length: invalid }, () => errorResponse(null, JsonRpcErrorCode.InvalidRequest, 'Invalid Request: not a JSON-RPC 2.0 request or notification.'));
 
-  const server = buildServer({ maxModelBytes, version: options.version ?? '0.0.0' });
+  const server = buildServer({ maxModelBytes, version: options.version ?? '0.0.0', secret: env[SECRET_ENV], now: options.now });
   const timeoutMessage = `The request took longer than ${Math.round(maxMs / 1000)} s and was stopped.`;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
