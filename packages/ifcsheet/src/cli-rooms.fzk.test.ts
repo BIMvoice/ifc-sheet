@@ -70,6 +70,34 @@ describe.skipIf(missing !== null)('ifcsheet rooms, on AC20-FZK-Haus', () => {
     for (const room of rooms) expect(room.perimeter, room.name).toBeCloseTo(BY_HAND[room.name], 2);
   });
 
+  it('--project writes the text in the project\'s number format; without it, nothing changes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ifcsheet-rooms-'));
+    dirs.push(dir);
+    const projectOf = (units: unknown): string => {
+      const file = join(dir, `${JSON.stringify(units).length}.ifclite-project.json`);
+      writeFileSync(file, JSON.stringify({ format: 'ifclite-project', version: 1, name: 'Haus', unitsAndNumbers: units }));
+      return file;
+    };
+    const comma = capture();
+    expect(await run(['rooms', FZK, '--project', projectOf({ separator: 'comma' })], comma.io)).toBe(EXIT.ok);
+    expect(comma.out()).toMatch(/Schlafzimmer\s+Erdgeschoss\s+21,41/);
+    expect(comma.out()).toMatch(/Total building \(Au\)\s+173,34/);
+    expect(comma.out()).not.toMatch(/\d\.\d\d\b/);
+    const plain = capture();
+    expect(await run(['rooms', FZK], plain.io)).toBe(EXIT.ok);
+    expect(plain.out()).toMatch(/Total building \(Au\)\s+173\.34/);
+    // The project's point wins over a Romanian interface; the CSV stays plain numbers.
+    const point = capture();
+    expect(await run(['rooms', FZK, '--locale', 'ro', '--project', projectOf({ separator: 'point' })], point.io)).toBe(EXIT.ok);
+    expect(point.out()).toMatch(/Total clădire \(Au\)\s+173\.34/);
+    const csv = capture();
+    expect(await run(['rooms', FZK, '--csv', '--project', projectOf({ separator: 'comma' })], csv.io)).toBe(EXIT.ok);
+    expect(csv.out()).toContain('21.410325');
+    const missingProject = capture();
+    expect(await run(['rooms', FZK, '--project', join(dir, 'absent.json')], missingProject.io)).toBe(EXIT.failed);
+    expect(missingProject.err()).toContain('no such file');
+  }, 120_000);
+
   it('fails plainly: no file, a model with no room, a wrong command line', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ifcsheet-rooms-'));
     dirs.push(dir);

@@ -54,6 +54,8 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         detail: { type: 'boolean' },
         locale: { type: 'string' },
         'include-far-elements': { type: 'boolean' },
+        pac: { type: 'boolean' },
+        intervention: { type: 'string' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
       },
@@ -75,6 +77,10 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
   const found = CLI_COMMANDS.find((c) => c.name === command);
   if (!found) {
     io.stderr(`ifcsheet: unknown command "${command}"\n\n${USAGE}`);
+    return EXIT.usage;
+  }
+  if (values.pac && command !== 'build') {
+    io.stderr(`ifcsheet ${command} has no --pac; it is an option of build.\n`);
     return EXIT.usage;
   }
   if (values.standard !== undefined && command !== 'build') {

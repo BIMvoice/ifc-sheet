@@ -15,8 +15,14 @@ import { openModel, type OpenedModel } from './headless.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
-const missing = !existsSync(FZK) ? 'AC20-FZK-Haus.ifc not found' : !existsSync(WASM) ? 'wasm bundle not built: run `pnpm build:wasm:fetch`' : null;
+// The FZK model is committed (apps/viewer/src/test/__fixtures__): its absence is a broken checkout and fails below, it is not skipped.
+// The wasm bundle is a build artefact: its absence skips, saying how to get it, as the other model tests do.
+const missing = !existsSync(WASM) ? 'wasm bundle not built: run `pnpm build:wasm:fetch`' : null;
 if (missing) console.warn(`[ifcsheet] skipping the PAC set test: ${missing}`);
+
+it('has the committed AC20-FZK-Haus fixture', () => {
+  expect(existsSync(FZK), `${FZK} is committed; a missing file is a broken checkout`).toBe(true);
+});
 
 const NAMES = { name: 'PAC', plans: 'Planuri de nivel', facades: 'Fațade', sections: 'Secțiuni principale' };
 
@@ -63,9 +69,18 @@ describe.skipIf(missing !== null)('the PAC set of AC20-FZK-Haus (#364)', () => {
     expect(pacScaleAllowed(situation, 100)).toBe(false);
   });
 
-  it('marks plans, facades and sections drawn and every other item to be supplied', () => {
-    const rows = pacCoverage(pac.document.sheets);
-    expect(rows.filter((r) => r.drawn).map((r) => r.item.id)).toEqual(['plans', 'facades', 'sections']);
-    expect(pacCoverage([]).some((r) => r.drawn)).toBe(false);
+  it('puts a plan of every storey of the model on the plans sheet (FZK has two: the ground floor and the attic)', () => {
+    const placed = new Set(pac.document.sheets.flatMap((s) => (s.viewports ?? []).map((vp) => vp.viewId)));
+    const planLevels = pac.document.views.filter((v) => v.kind === 'plan' && !v.site && placed.has(v.id)).map((v) => (v.kind === 'plan' ? v.level.name : ''));
+    expect(pac.levels.length).toBe(2);
+    expect(planLevels.length).toBe(pac.levels.length);
+    expect(new Set(planLevels).size).toBe(2);
+  });
+
+  it('marks plans, facades and sections drawn for a new building, the other items to be supplied and point 1.4.4 not applicable', () => {
+    const rows = pacCoverage(pac.document.sheets, { views: pac.document.views });
+    expect(rows.filter((r) => r.state === 'yes').map((r) => r.item.id)).toEqual(['plans', 'facades', 'sections']);
+    expect(rows.filter((r) => r.state === 'na').map((r) => r.item.id)).toEqual(['diagnosis', 'structuralExpertise', 'survey']);
+    expect(pacCoverage([], { views: pac.document.views }).some((r) => r.drawn)).toBe(false);
   });
 });

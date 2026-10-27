@@ -13,9 +13,11 @@ import type { EntityRef } from './types.js';
 import { EntityExtractor } from './entity-extractor.js';
 import type { IfcSourceBytes } from './source-bytes.js';
 import { resolveOwningIfcProjectId, type RelatedLookup } from './owning-project.js';
+import { declaredLengthUnitScale } from './declared-length-unit.js';
 import { extractProjectUnits } from './project-units.js';
 
 export { resolveOwningIfcProjectId, type RelatedLookup } from './owning-project.js';
+export { declareLengthUnitScale } from './declared-length-unit.js';
 
 /**
  * SI Prefix multipliers, keyed by the members of the `IfcSIPrefix` EXPRESS
@@ -125,6 +127,9 @@ export function extractLengthUnitScale(
   entityIndex: { byId: { get(expressId: number): EntityRef | undefined }; byType: Map<string, number[]> },
   projectId?: number
 ): number {
+  const declared = declaredLengthUnitScale(entityIndex);
+  if (declared !== undefined) return declared;
+
   // Find IFCPROJECT
   // @raw-entity-enumeration-ok source parser selects the file's IfcProject to establish its declared units
   const projectIds = entityIndex.byType.get('IFCPROJECT') || [];

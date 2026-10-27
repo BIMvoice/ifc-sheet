@@ -20,7 +20,8 @@ import ro from './ro';
  * outside the Wall (`IfcSheetShell` covers the engine's interface, and keeps these): the command palette, the Settings
  * dialog, the feedback dialog, a drawing's annotation bar and the export dialogs the palette opens (including the anonymized subset, the modified-IFC review and the Cesium ion upload), and the toasts of the exports the palette starts and of opening a file.
  */
-const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'settings.privacy.toast', 'viewerShell.toast.dismiss',
+// `ready.` is the model-readiness list (#403): its keys are built at render, so the face check below cannot see them.
+const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'ready.', 'settings.privacy.toast', 'viewerShell.toast.dismiss',
   // The palette (Ctrl/Cmd+K) the face keeps, the Settings dialog its privacy notice opens, and the feedback dialog of its top bar.
   'commandPalette.', 'settings.', 'feedback.',
   // The export dialogs the palette's export rows open: IFC, GLB, KMZ, USD, energy model and the to-scale PDF. Not the Properties panel's edit card (`geometryExport.editCard.`) nor the sheet-setup and title-block editors (`sheetsPdf.sheetSetup.`, `sheetsPdf.titleBlock.`), which the face hides.

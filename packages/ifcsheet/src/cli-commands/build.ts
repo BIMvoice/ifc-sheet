@@ -11,6 +11,8 @@ import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
 import { listSchedulesOn, listTableText } from '../cli-list.js';
+import { PAC_INTERVENTIONS, type PacIntervention } from '../pac-set.js';
+import { PAC_DEFAULT_LOCALE, pacPages, pacTemplateFor } from '../cli-pac.js';
 import { sheetFormat } from '../units-and-numbers.js';
 import { buildStandard, unknownStandardMessage, withTitleBlock } from '../cli-standard.js';
 import { type CliIo } from '../cli-command.js';
@@ -24,6 +26,11 @@ interface BuildArgs {
   dxf?: string;
   name?: string;
   template?: string;
+  /** The permit project (PAC): its set template, and the opis page first in the PDF. */
+  pac?: boolean;
+  locale?: string;
+  /** With --pac: the works (`PacIntervention`). */
+  intervention?: PacIntervention;
   /** A saved project: its list schedules are printed after the build. */
   project?: string;
   includeFarElements?: boolean;
@@ -39,7 +46,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: cannot read ${args.model}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
     return EXIT.failed;
   }
-  let setTemplate: SetTemplate | undefined;
+  let setTemplate: SetTemplate | undefined = args.pac ? pacTemplateFor(args.locale ?? PAC_DEFAULT_LOCALE) : undefined;
   if (args.template !== undefined) {
     try {
       setTemplate = parseSetTemplate(await readFile(args.template, 'utf8'));
@@ -75,7 +82,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     return EXIT.failed;
   }
   const sheets = await sheetGraphics(set, model, standard.pens ? { pens: standard.pens } : {});
-  const pdf = await exportPdf(sheets, { title: set.document.name });
+  const pdf = await exportPdf(args.pac ? pacPages(sheets, set, args.locale ?? PAC_DEFAULT_LOCALE, args.intervention) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params })}\n`);
   if (args.out) {
@@ -121,17 +128,19 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 export const buildCommand: CliCommand = {
   name: 'build',
   usageRank: 100,
-  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset>] [--project <file>] [--standard <id>] [--include-far-elements]`,
+  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--locale <ro|en>]] [--project <file>] [--standard <id>] [--include-far-elements]`,
   helpRank: 100,
   help: `  build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
           sheet. With --dxf, also write one DXF per sheet into that directory.
           With --template, the sheets are made by the rules of a set template (a .bvset file
           saved from a project) instead: the same plan-per-storey, elevation and section
-          rules the app applies, a rule the model cannot meet skipped and said.`,
+          rules the app applies, a rule the model cannot meet skipped and said.
+          With --pac, the sheets are the permit project's (PAC, Legea 169/2026 Anexa 2: plans, facades, sections) and the
+          one PDF opens with the opis page: the contents Anexa 2 lists, each with its point and whether the file holds it.`,
   async run(rest, values, io) {
-    if (values.csv || values.detail || values.locale !== undefined) {
-      io.stderr('ifcsheet build has no --csv, --detail or --locale; they are options of boq and rooms.\n');
+    if (values.csv || values.detail || (values.locale !== undefined && !values.pac)) {
+      io.stderr('ifcsheet build has no --csv or --detail, and --locale only with --pac; they are options of boq and rooms.\n');
       return EXIT.usage;
     }
     if (values.json) {
@@ -142,12 +151,21 @@ export const buildCommand: CliCommand = {
       io.stderr('ifcsheet build has no --schedule; it is an option of list.\n');
       return EXIT.usage;
     }
+    const intervention = PAC_INTERVENTIONS.find((i) => i === values.intervention);
+    if (values.intervention !== undefined && (!values.pac || !intervention)) {
+      io.stderr(values.pac ? `ifcsheet build --intervention is one of ${PAC_INTERVENTIONS.join(', ')}.\n` : 'ifcsheet build has --intervention only with --pac.\n');
+      return EXIT.usage;
+    }
+    if (values.pac && values.template !== undefined) {
+      io.stderr('ifcsheet build --pac sets the sheets itself; it cannot be combined with --template.\n');
+      return EXIT.usage;
+    }
     if (rest.length !== 1 || (!values.out && !values.handover)) {
       io.stderr(`ifcsheet build needs one model and --out or --handover: ifcsheet build <model.ifc> --out <set.pdf>\n`);
       return EXIT.usage;
     }
     try {
-      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
+      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(intervention ? { intervention } : {}), ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
     } catch (error) {
       io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;
