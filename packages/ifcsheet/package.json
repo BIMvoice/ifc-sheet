@@ -2,7 +2,7 @@
   "name": "@bimvoice/ifcsheet",
   "version": "0.1.0",
   "private": true,
-  "description": "The IfcSheet drawing-set engine: the project document, the starting set of views and sheets, and headless PDF and DXF export, in Node or the browser",
+  "description": "IfcSheet: drawing sets (PDF and DXF) from IFC models. The ifcsheet command line and the drawing-set engine, in Node or the browser",
   "type": "module",
   "bin": {
     "ifcsheet": "./dist/bin.js"
@@ -122,7 +122,9 @@
     "dev": "pnpm exec tsc --watch",
     "test": "vitest run",
     "benchmark": "vitest run src/golden-sheets.models.test.ts",
-    "benchmark:update": "IFCSHEET_BENCHMARK_UPDATE=1 vitest run src/golden-sheets.models.test.ts"
+    "benchmark:update": "IFCSHEET_BENCHMARK_UPDATE=1 vitest run src/golden-sheets.models.test.ts",
+    "prepack": "node ../../scripts/copy-package-legal.mjs",
+    "postpack": "node ../../scripts/copy-package-legal.mjs --clean"
   },
   "dependencies": {
     "@ifc-lite/create": "workspace:^",
@@ -145,6 +147,9 @@
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
   },
+  "engines": {
+    "node": ">=22.13"
+  },
   "license": "MPL-2.0",
   "author": "BIMvoice",
   "repository": {
@@ -152,17 +157,29 @@
     "url": "https://github.com/BIMvoice/ifcsheet.git",
     "directory": "packages/ifcsheet"
   },
+  "homepage": "https://github.com/BIMvoice/ifcsheet#readme",
+  "bugs": "https://github.com/BIMvoice/ifcsheet/issues",
   "keywords": [
     "ifc",
     "bim",
+    "openbim",
     "drawings",
     "sheets",
     "pdf",
-    "dxf"
+    "dxf",
+    "cli",
+    "architecture",
+    "aec"
   ],
   "files": [
     "dist",
+    "!dist/**/*.map",
     "fonts",
-    "README.md"
-  ]
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }
