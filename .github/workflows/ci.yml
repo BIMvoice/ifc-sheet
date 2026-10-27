@@ -278,7 +278,7 @@ jobs:
           key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
   # `pnpm lint`: changesets, test-glob coverage, unused locals, i18n literals,
-  # jsx-a11y, type scale, and a check that the linter linted something. It is
+  # Romanian coverage, jsx-a11y, type scale, and a check that the linter linted something. It is
   # part of "CI passed" through its `needs`. The unused-locals gate runs tsc in
   # every package, so it needs the same wasm types and built packages as
   # Typecheck.
@@ -623,6 +623,7 @@ jobs:
           q --test scripts/check-loader-hook-specifier-match.test.mjs
           q --test scripts/check-module-size.test.mjs
           q --test scripts/check-overlay-palette.test.mjs
+          q --test scripts/check-ro-coverage.test.mjs
           q --test scripts/check-partial-close-admission.test.mjs
           q --test scripts/check-path-case-collisions.test.mjs
           q --test scripts/check-perf-flags.test.mjs
