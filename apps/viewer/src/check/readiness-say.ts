@@ -11,6 +11,7 @@ import type { ReadinessFinding } from './readiness';
 
 /** The finding's numbers written in the language of the sheet ("123,4 m²", "12 %"); the finding itself keeps them as numbers. */
 function written(f: ReadinessFinding): ReadinessFinding['params'] {
+  if (f.kind === 'ruralArea' || f.kind === 'ruralAreaAtLeast') return { ...f.params, area: sheetNumber(getLocale(), Number(f.params.area), 1), max: sheetNumber(getLocale(), Number(f.params.max), 0) };
   if (f.kind !== 'estimatedAreas') return f.params;
   return { ...f.params, area: sheetNumber(getLocale(), Number(f.params.area), 1), share: sheetNumber(getLocale(), Number(f.params.share), 0) };
 }

@@ -101,7 +101,7 @@ const sheet: Schema = {
   properties: {
     id: str, number: { type: 'string', minLength: 1 }, autoNumber: bool, numberOverride: bool, series: { enum: [...NUMBER_GROUPS] }, name: str, createdAt: num, paper,
     orientation: { enum: ['landscape', 'portrait'] }, frame: obj, templateId: str, viewports: { type: 'array', items: viewport },
-    titleBlock: { type: 'object', additionalProperties: str }, revisionIds: strings, titleBlockParams: { type: 'object', additionalProperties: str },
+    titleBlock: { type: 'object', additionalProperties: str }, revisionIds: strings, titleBlockParams: { type: 'object', additionalProperties: str }, notes: strings,
   },
 };
 

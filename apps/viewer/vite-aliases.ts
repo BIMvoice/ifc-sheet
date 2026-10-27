@@ -11,6 +11,7 @@ export const viewerAliases = {
       '@bimvoice/ifcsheet/names': path.resolve(__dirname, '../../packages/ifcsheet/src/names.ts'),
       '@bimvoice/ifcsheet/boq-words': path.resolve(__dirname, '../../packages/ifcsheet/src/boq-words.ts'),
       '@bimvoice/ifcsheet/pac-words': path.resolve(__dirname, '../../packages/ifcsheet/src/pac-words.ts'),
+      '@bimvoice/ifcsheet/urban': path.resolve(__dirname, '../../packages/ifcsheet/src/urban.ts'),
       '@bimvoice/ifcsheet/readiness': path.resolve(__dirname, '../../packages/ifcsheet/src/readiness.ts'),
       '@bimvoice/ifcsheet/readiness-read': path.resolve(__dirname, '../../packages/ifcsheet/src/readiness-read.ts'),
       '@bimvoice/ifcsheet/project': path.resolve(__dirname, '../../packages/ifcsheet/src/project.ts'),
