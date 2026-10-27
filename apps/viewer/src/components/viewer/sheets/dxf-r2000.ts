@@ -74,12 +74,15 @@ const LINE_TYPE_NAME: Record<LineType, string> = { continuous: 'Continuous', das
 
 export interface PenSpec {
   color: string;
-  lineType?: LineType;
+  /** A built-in line type or the id of a project line type defined on the writer (`defineLineType`); anything else is continuous. */
+  lineType?: string;
+  /** False: the layer does not plot. */
+  print?: boolean;
   /** Millimetres. */
   lineWeight?: number;
 }
 
-interface Layer { color: string; lineType: LineType; lineWeight: number }
+interface Layer { color: string; lineType: string; lineWeight: number; print: boolean }
 
 export class DxfR2000 {
   private readonly layers = new Map<string, Layer>();
@@ -89,6 +92,21 @@ export class DxfR2000 {
   /** `patternScale` multiplies line-type dash lengths (paper mm): the view's scale for a 1:1 model export. */
   constructor(private readonly patternScale = 1) {}
 
+  private readonly custom = new Map<string, { name: string; dash: number[] }>();
+
+  /** Add a line type of the project, its dash pattern in paper mm (as `dashOf` gives for the built-in ones). */
+  defineLineType(id: string, name: string, dash: readonly number[]): void {
+    const taken = new Set([...Object.values(LINE_TYPE_NAME), ...[...this.custom.values()].map((c) => c.name)].map((n) => n.toUpperCase()));
+    let unique = safeName(name).replace(/\s+/g, '_');
+    while (taken.has(unique.toUpperCase())) unique += '_';
+    this.custom.set(id, { name: unique, dash: [...dash] });
+  }
+
+  /** The DXF name of a line type; an unknown one is continuous. */
+  private ltName(type: string): string {
+    return (LINE_TYPE_NAME as Record<string, string>)[type] ?? this.custom.get(type)?.name ?? LINE_TYPE_NAME.continuous;
+  }
+
   private next(): string {
     return (this.handle++).toString(16).toUpperCase();
   }
@@ -96,7 +114,7 @@ export class DxfR2000 {
   /** Register a layer (its first pen defines it) and return its DXF name. */
   layer(raw: string, pen: PenSpec): string {
     const name = safeName(raw);
-    if (!this.layers.has(name)) this.layers.set(name, { color: pen.color, lineType: pen.lineType ?? 'continuous', lineWeight: dxfLineWeight(pen.lineWeight ?? 0.25) });
+    if (!this.layers.has(name)) this.layers.set(name, { color: pen.color, lineType: pen.lineType ?? 'continuous', lineWeight: dxfLineWeight(pen.lineWeight ?? 0.25), print: pen.print !== false });
     return name;
   }
 
@@ -106,7 +124,7 @@ export class DxfR2000 {
     if (!pen || !l) return [];
     const out: string[] = [];
     if (aciOf(pen.color) !== aciOf(l.color) || trueColor(pen.color) !== trueColor(l.color)) out.push('62', String(aciOf(pen.color)), '420', String(trueColor(pen.color)));
-    if (pen.lineType && pen.lineType !== l.lineType) out.push('6', LINE_TYPE_NAME[pen.lineType]);
+    if (pen.lineType && pen.lineType !== l.lineType) out.push('6', this.ltName(pen.lineType));
     if (pen.lineWeight !== undefined && dxfLineWeight(pen.lineWeight) !== l.lineWeight) out.push('370', String(dxfLineWeight(pen.lineWeight)));
     return out;
   }
@@ -161,6 +179,12 @@ export class DxfR2000 {
         '2', LINE_TYPE_NAME[type], '70', '0', '3', type, '72', '65', '73', String(dashes.length), '40', fmt(dashes.reduce((s, d) => s + Math.abs(d), 0)));
       for (const d of dashes) out.push('49', fmt(d), '74', '0');
     }
+    for (const [id, { name, dash }] of this.custom) {
+      const dashes = dash.map((d, i) => (i % 2 === 0 ? d : -d) * this.patternScale);
+      out.push('0', 'LTYPE', '5', this.next(), '330', LTYPE_TABLE, '100', 'AcDbSymbolTableRecord', '100', 'AcDbLinetypeTableRecord',
+        '2', name, '70', '0', '3', id, '72', '65', '73', String(dashes.length), '40', fmt(dashes.reduce((s, d) => s + Math.abs(d), 0)));
+      for (const d of dashes) out.push('49', fmt(d), '74', '0');
+    }
     return out;
   }
 
@@ -169,7 +193,7 @@ export class DxfR2000 {
     for (const [name, l] of this.layers) {
       if (name === '0') continue;
       out.push('0', 'LAYER', '5', this.next(), '330', LAYER_TABLE, '100', 'AcDbSymbolTableRecord', '100', 'AcDbLayerTableRecord',
-        '2', name, '70', '0', '62', String(aciOf(l.color)), '420', String(trueColor(l.color)), '6', LINE_TYPE_NAME[l.lineType], '370', String(l.lineWeight), '390', PLOT_STYLE);
+        '2', name, '70', '0', '62', String(aciOf(l.color)), '420', String(trueColor(l.color)), '6', this.ltName(l.lineType), '370', String(l.lineWeight), '390', PLOT_STYLE, ...(l.print ? [] : ['290', '0']));
     }
     return out;
   }

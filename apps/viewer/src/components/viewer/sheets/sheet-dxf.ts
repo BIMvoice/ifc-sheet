@@ -171,6 +171,7 @@ export function sheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): Uint8Array {
 export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, patternScale = 1, cad: readonly CadLayerRule[] = useProjectStore.getState().cadLayers ?? []): Uint8Array {
   const root = svg.getScreenCTM()?.inverse();
   const writer = new DxfR2000(patternScale);
+  for (const l of useProjectStore.getState().lineTypes ?? []) writer.defineLineType(l.id, l.name, l.dash);
   if (!root) return writer.bytes(comment);
   // Element-local → paper millimetres, Y up.
   const mapper = (el: SVGGraphicsElement) => {

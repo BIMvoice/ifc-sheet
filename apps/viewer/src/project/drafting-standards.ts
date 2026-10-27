@@ -18,6 +18,7 @@ import {
   DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, overrideKey, resolveText, STANDARD,
   type DimStyle, type LayerGroup, type StyleBook, type TextStyle,
 } from '@/drafting/styles';
+import type { CustomLineType } from '@/drafting/line-types';
 import type { DraftEntity, DraftLayer, DraftParamValue, EntityShape } from '@/drafting/types';
 import { findSymbol, symbolDrawingScale } from '@/drafting/symbols';
 import { useProjectStore } from './project-store';
@@ -112,6 +113,31 @@ export function removeLayer(id: string): void {
   useProjectStore.setState({
     draftLayers: s.draftLayers.filter((l) => l.id !== id),
     drafts: s.drafts.map((d) => (d.layerId === id ? { ...d, layerId: '0' } : d)),
+    dirty: true,
+  });
+}
+
+/** A new line type of the project, a dash pattern in paper mm (`parseDashPattern` makes one from what a user types). */
+export function addLineType(name: string, dash: number[]): string {
+  const id = freshProjectId('linetype');
+  const s = useProjectStore.getState();
+  useProjectStore.setState({ lineTypes: [...(s.lineTypes ?? []), { id, name, dash }], dirty: true });
+  return id;
+}
+
+export function updateLineType(id: string, patch: Partial<Omit<CustomLineType, 'id'>>): void {
+  const s = useProjectStore.getState();
+  useProjectStore.setState({ lineTypes: (s.lineTypes ?? []).map((l) => (l.id === id ? { ...l, ...patch } : l)), dirty: true });
+}
+
+/** Remove a line type; the layers and drafted lines that used it draw continuous again. */
+export function removeLineType(id: string): void {
+  const s = useProjectStore.getState();
+  const key = overrideKey('lineType');
+  useProjectStore.setState({
+    lineTypes: (s.lineTypes ?? []).filter((l) => l.id !== id),
+    draftLayers: s.draftLayers.map((l) => (l.lineType === id ? (Object.fromEntries(Object.entries(l).filter(([k]) => k !== 'lineType')) as DraftLayer) : l)),
+    drafts: s.drafts.map((d) => (d.params[key] === id ? { ...d, params: Object.fromEntries(Object.entries(d.params).filter(([k]) => k !== key)) } : d)),
     dirty: true,
   });
 }

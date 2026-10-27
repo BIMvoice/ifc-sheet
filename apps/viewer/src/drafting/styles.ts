@@ -23,6 +23,7 @@
 
 import type { DraftLayer, DraftParamValue } from './types';
 import { fontFamilyOf } from './text-width';
+import type { CustomLineType } from './line-types';
 import { DEFAULT_DIM_STYLE as ENGINE_DEFAULT_DIM_STYLE, STANDARD_STYLE_ID, type DimStyle, type DraftLengthUnit, type FontKind, type TextStyle } from '@bimvoice/ifcsheet';
 import { decimalsOf, lengthUnitOf, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
@@ -136,6 +137,12 @@ export function dashOf(type: LineType | undefined): number[] {
   }
 }
 
+/** Dash pattern of a built-in line type or of one of the project's own by id (an unknown id draws continuous). */
+export function dashFor(type: string | undefined, custom: readonly CustomLineType[] = []): number[] {
+  const own = custom.find((c) => c.id === type);
+  return own ? [...own.dash] : dashOf(type as LineType | undefined);
+}
+
 export interface LayerVisibilityScope {
   /** Layers the view in front hides (`ProjectView.hiddenLayers`). */
   view?: readonly string[];
@@ -149,9 +156,38 @@ export function lookOf(book: StyleBook, params: Params): { text: TextStyle; dim:
 }
 
 /** A layer's pen: width and dash in paper millimetres. */
-export function layerPen(layer: DraftLayer | undefined): { width: number; dash: number[] } {
-  return { width: layer?.lineWeight ?? 0.25, dash: dashOf(layer?.lineType) };
+export function layerPen(layer: DraftLayer | undefined, custom: readonly CustomLineType[] = []): { width: number; dash: number[] } {
+  return { width: layer?.lineWeight ?? 0.25, dash: dashFor(layer?.lineType, custom) };
 }
+
+/** The fields a drafted line may override of its layer's pen, in `params['o.<field>']`. */
+export const PEN_OVERRIDES = ['color', 'lineWeight', 'lineType'] as const;
+
+/**
+ * The pen a drafted line is drawn with: its layer's colour, weight and line type, and over them the element's own
+ * (`o.color`, `o.lineWeight`, `o.lineType`). `own` says which of the three the element overrides, for the DXF.
+ */
+export function entityPen(layer: DraftLayer | undefined, params: Params, custom: readonly CustomLineType[] = []): {
+  color: string; width: number; dash: number[]; lineType: string; own: { lineWeight?: number; lineType?: string };
+} {
+  const color = params[overrideKey('color')];
+  const weight = params[overrideKey('lineWeight')];
+  const type = params[overrideKey('lineType')];
+  const lineWeight = typeof weight === 'number' && weight > 0 ? weight : undefined;
+  const lineType = typeof type === 'string' && type !== '' ? type : undefined;
+  const base = layerPen(layer, custom);
+  const resolved = lineType ?? layer?.lineType ?? 'continuous';
+  return {
+    color: typeof color === 'string' && color !== '' ? color : layer?.color ?? '#18181b',
+    width: lineWeight ?? base.width,
+    dash: lineType !== undefined ? dashFor(lineType, custom) : base.dash,
+    lineType: resolved,
+    own: { ...(lineWeight !== undefined ? { lineWeight } : {}), ...(lineType !== undefined ? { lineType } : {}) },
+  };
+}
+
+/** Whether `layer` prints (its own switch; a group, view or viewport that hides it hides it on screen too, so those already leave it out). */
+export const layerPrints = (layer: DraftLayer | undefined): boolean => layer?.print !== false;
 
 /** Whether `layer` shows: its own switch, its group's, then the view's and the viewport's overrides. */
 export function layerShows(layer: DraftLayer, groups: readonly LayerGroup[], scope: LayerVisibilityScope = {}): boolean {
