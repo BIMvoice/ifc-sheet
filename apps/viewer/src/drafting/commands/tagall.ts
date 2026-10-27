@@ -17,7 +17,7 @@ import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
 import { planTagAll } from '@/tagall/plan';
 import { getLocale } from '@/i18n';
-import { MARK_TYPE_ID, ROOM_TYPE_ID, TAGALL_TYPES } from '@/tagall/types';
+import { MARK_TYPE_ID, ROOM_TYPE_ID, TAGALL_TYPES, type TagParts } from '@/tagall/types';
 import { editDrafts } from '../draft-store';
 import type { DraftCommandDef, DraftContext } from './types';
 import { currentSheetLocale } from '@/project/units-and-numbers';
@@ -31,8 +31,8 @@ function tagAllTypes() {
   return { mark: all.find((t) => t.id === MARK_TYPE_ID), room: all.find((t) => t.id === ROOM_TYPE_ID) };
 }
 
-/** TAGALL on the plan `ctx` is on, labels read through `read`. */
-export function tagAll(ctx: DraftContext, read: ElementReader): void {
+/** TAGALL on the plan `ctx` is on, labels read through `read`; `parts` limits it to some kinds (an annotation preset, #497). */
+export function tagAll(ctx: DraftContext, read: ElementReader, parts?: TagParts): void {
   if (ctx.viewKind() !== 'plan') {
     ctx.say('drafting.msg.tagAllPlanOnly');
     return;
@@ -51,6 +51,7 @@ export function tagAll(ctx: DraftContext, read: ElementReader): void {
     placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId), locale: currentSheetLocale(getLocale()) },
     types: { mark: types.mark, room: types.room },
     read,
+    parts,
     crop: ctx.view()?.detail,
     obstacles: ctx.planObstacles(),
   });
