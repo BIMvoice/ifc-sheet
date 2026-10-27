@@ -13,6 +13,7 @@ export const LIST_WORDS_EN = {
   'listSched.total': 'Total',
   'listSched.yes': 'Yes',
   'listSched.no': 'No',
+  'listSched.missing': 'The total of {column} leaves out {missing} of {rows} rows with no value',
 } as const;
 
 export const LIST_WORDS_RO: Record<keyof typeof LIST_WORDS_EN, string> = {
@@ -20,10 +21,11 @@ export const LIST_WORDS_RO: Record<keyof typeof LIST_WORDS_EN, string> = {
   'listSched.total': 'Total',
   'listSched.yes': 'Da',
   'listSched.no': 'Nu',
+  'listSched.missing': 'Totalul {column} nu include {missing} din {rows} rânduri fără valoare',
 };
 
 /** The words in the shape the table builders take. Any language but Romanian is English, like the other command-line tables. */
-export function listWordsFor(locale: string): { count: string; total: string; yes: string; no: string } {
+export function listWordsFor(locale: string): { count: string; total: string; yes: string; no: string; missing: string } {
   const w = /^ro\b/i.test(locale) ? LIST_WORDS_RO : LIST_WORDS_EN;
-  return { count: w['listSched.count'], total: w['listSched.total'], yes: w['listSched.yes'], no: w['listSched.no'] };
+  return { count: w['listSched.count'], total: w['listSched.total'], yes: w['listSched.yes'], no: w['listSched.no'], missing: w['listSched.missing'] };
 }
