@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { cleanup, render } from '@/test/render.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
-import { typeOpeningOf } from '@/joinery/type-config-actions';
+import { typeOpeningOf, typeEntryOf } from '@/joinery/type-config-actions';
 import type { ElementFacts } from '@/joinery/symbol-mapping';
 import { TypeOpeningForm } from './TypeOpeningForm';
 
@@ -44,5 +44,28 @@ describe('TypeOpeningForm', () => {
     cleanup();
     const again = render(<TypeOpeningForm facts={facts} />);
     assert.equal(again.querySelectorAll('[data-type-leaf]').length, 3);
+  });
+
+  it('a segmental head with a rise, a suggested U value and a free property are written to the type', () => {
+    const root = render(<TypeOpeningForm facts={facts} />);
+    const type = (input: HTMLInputElement, value: string) => act(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    const segmental = [...root.querySelectorAll<HTMLInputElement>('input[type="radio"]')].find((i) => i.value === 'segmental');
+    assert.ok(segmental, 'a segmental head is offered');
+    act(() => { segmental.click(); });
+    type(root.querySelector<HTMLInputElement>('[data-type-head-rise]')!, '250');
+    act(() => { root.querySelector<HTMLButtonElement>('[data-type-prop-suggest="thermalTransmittance"]')!.click(); });
+    act(() => { root.querySelector<HTMLButtonElement>('[data-type-prop-add]')!.click(); });
+    const rows = root.querySelectorAll<HTMLElement>('[data-type-prop]');
+    assert.equal(rows.length, 2);
+    type(rows[0].querySelectorAll('input')[1], '1,1');
+    type(rows[1].querySelectorAll('input')[0], 'Sound reduction');
+    type(rows[1].querySelectorAll('input')[1], '32 dB');
+    act(() => { root.querySelector<HTMLButtonElement>('[data-type-opening-apply]')!.click(); });
+    const entry = typeEntryOf(facts);
+    assert.deepEqual(entry?.head, { shape: 'segmental', rise: 0.25 });
+    assert.deepEqual(entry?.custom, [{ name: 'U (W/m²K)', value: '1,1', key: 'thermalTransmittance' }, { name: 'Sound reduction', value: '32 dB' }]);
   });
 });

@@ -12,7 +12,7 @@
  * in one undo step per model. A Tag nobody wrote from the schedule is not touched.
  */
 
-import { applyContent, followedTags, orderedRows, readScheduleContent, textOwner, type ScheduleContent, type ScheduleNumbering, type ScheduleSort, type SubReportFilter } from '@bimvoice/ifcsheet';
+import { applyContent, customPropNames, followedTags, orderedRows, readScheduleContent, textOwner, type ScheduleContent, type ScheduleNumbering, type ScheduleSort, type SubReportFilter } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { isJoinerySchedule } from '@/project/schedule-fit';
 import type { ProjectSchedule } from '@/project/types';
@@ -29,6 +29,10 @@ export function contentHolder(scheduleId: string): ProjectSchedule | undefined {
 
 /** The ids of the text rows of `holder`, in order. */
 const textIds = (holder: ProjectSchedule): string[] => (holder.textRows ?? []).map((r) => r.id);
+
+/** The names of the properties typed in for the types the holder lists (#448): rows of the schedule like the text rows. */
+const propNamesOf = (holder: ProjectSchedule): string[] =>
+  customPropNames((useProjectStore.getState().joineryTypes ?? []).filter((s) => holder.kind === 'all' || s.kind === holder.kind));
 
 /** Replace the choice of the holder of `scheduleId` with `change`'s result (an empty choice is no choice), and move the plan tags with the marks. */
 export function changeContent(scheduleId: string, change: (content: ScheduleContent) => ScheduleContent): { written: number; errors: string[] } {
@@ -56,7 +60,7 @@ export function setRowShown(scheduleId: string, rowId: string, shown: boolean): 
 export function moveRow(scheduleId: string, rowId: string, by: -1 | 1): void {
   const holder = contentHolder(scheduleId);
   if (!holder) return;
-  const ids = orderedRows(holder.content, textIds(holder)).map((r) => r.id);
+  const ids = orderedRows(holder.content, textIds(holder), propNamesOf(holder)).map((r) => r.id);
   const at = ids.indexOf(rowId), to = at + by;
   if (at < 0 || to < 0 || to >= ids.length) return;
   [ids[at], ids[to]] = [ids[to], ids[at]];

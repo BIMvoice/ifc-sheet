@@ -24,10 +24,10 @@ export const say = (t: PropertyTest, op: string): string => `${t.pset ? `${t.pse
 export const filterActive = (filter: SubReportFilter | undefined): boolean => !!(filter?.classes || filter?.predefined || filter?.properties?.length);
 
 /** The rows, sort, numbering and symbols chosen for the table. */
-export function contentSummary(content: ScheduleContent | undefined, textIds: readonly string[], t: T): Summary {
-  const rows = orderedRows(content, textIds);
+export function contentSummary(content: ScheduleContent | undefined, textIds: readonly string[], t: T, propNames: readonly string[] = []): Summary {
+  const rows = orderedRows(content, textIds, propNames);
   const hidden = rows.filter((r) => !r.shown).length;
-  const natural = orderedRows(undefined, textIds);
+  const natural = orderedRows(undefined, textIds, propNames);
   const parts: string[] = [];
   if (hidden > 0) parts.push(t('wall.section.content.hidden', { count: hidden }));
   if (rows.some((r, i) => r.id !== natural[i].id)) parts.push(t('wall.section.content.reordered'));

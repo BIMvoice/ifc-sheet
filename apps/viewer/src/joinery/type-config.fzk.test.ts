@@ -23,7 +23,7 @@ import { openingSymbols } from '@/drafting/opening-symbols';
 import { drawnJoinery, elementFacts } from './mapped-joinery';
 import { invalidateJoineryReads } from './element-spec';
 import { layoutSchedule, type ScheduleLabels, type SchedulePrim } from './schedule-layout';
-import { scheduleData } from './schedule-data';
+import { scheduleData, type ScheduleEntry } from './schedule-data';
 import { configureElementType, typeOpeningOf } from './type-config-actions';
 import { setOpeningConvention } from './opening-convention';
 import type { ElementFacts } from './symbol-mapping';
@@ -77,20 +77,21 @@ describe('configuring a window type of FZK-Haus as a double tilt-turn', () => {
     assert.equal(drawnJoinery(MODEL, scheduleData('window').entries[0].occurrences[0].expressId), null);
   });
 
-  it('the type has a row of its own with its windows, and every window of the type is drawn with the leaves; other windows are not', () => {
+  it('the type has a row of its own with exactly its windows: a window of another type that shares its name is not pulled in', () => {
     const { biggest, others } = windowsByType();
+    assert.ok(others.length > 0, 'FZK has windows of another type');
+    // The premise of the rule: before the configuration the other type's windows are the same name as the type's.
+    const name = (f: ElementFacts) => f.names[0];
+    assert.ok(others.some((o) => o.names.includes(name(biggest[0]))), 'FZK has a second window type with the same name');
     const before = scheduleData('window').entries.reduce((n, e) => n + e.total, 0);
     configure(biggest[0]);
     invalidateJoineryReads();
     const data = scheduleData('window');
     const row = data.entries.find((e) => e.spec);
     assert.ok(row?.spec);
-    // The project's automatic rules still apply: FZK's two window types share one name, so the other type's windows join by name.
     const ids = new Set(biggest.map((f) => f.globalId));
-    const extra = row.occurrences.filter((o) => !ids.has(o.globalId));
-    assert.equal(row.total, biggest.length + extra.length);
-    assert.ok(biggest.every((f) => row.occurrences.some((o) => o.globalId === f.globalId)), 'every window of the type is in the type row');
-    for (const o of extra) assert.ok(['name', 'dimensions'].includes(drawnJoinery(o.modelId, o.expressId)?.source ?? ''), 'the rest join by the automatic rules');
+    assert.deepEqual(new Set(row.occurrences.map((o) => o.globalId)), ids, 'the row holds the windows of the configured type and no others');
+    assert.equal(row.total, biggest.length);
     assert.equal(data.entries.reduce((n, e) => n + e.total, 0), before, 'no window is lost or counted twice');
     assert.deepEqual(row.spec.panels.map((p) => p.operation), ['tilt-turn-left', 'tilt-turn-right']);
     for (const f of biggest) {
@@ -100,8 +101,9 @@ describe('configuring a window type of FZK-Haus as a double tilt-turn', () => {
       assert.deepEqual([drawn.spec.width, drawn.spec.height], [f.width, f.height], 'the size is the IFC\'s');
     }
     for (const f of others) {
-      if (extra.some((o) => o.globalId === f.globalId)) continue;
-      assert.notEqual(drawn(f)?.entry?.id, row.spec.id, 'a window of another type is not drawn with it');
+      assert.equal(drawn(f)?.entry?.id ?? null, null, 'a window of another type is not drawn with the configured entry');
+      const own: ScheduleEntry | undefined = data.entries.find((e) => e !== row && e.occurrences.some((o) => o.globalId === f.globalId));
+      assert.ok(own && !own.spec, 'it stays in a row of its own, unconfigured');
     }
   });
 

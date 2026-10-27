@@ -32,6 +32,7 @@ import {
   isDoorLeaf, joineryBoxes, normalisedPanels, panelRect, swingsInPlan,
   type CellRect, type JoineryBox, type JoineryPanel, type JoinerySpec, type PanelOperation,
 } from '@ifc-lite/create';
+import { archPoints, headArch, type HeadArch } from './head-shape';
 
 export interface P2 { x: number; y: number }
 
@@ -239,15 +240,29 @@ function hardware(spec: JoinerySpec, p: JoineryPanel, r: CellRect): JoineryStrok
   return out;
 }
 
+/** A rectangle whose top edge follows the arch `inset` metres inside the head (a rectangle that reaches the top of the opening, in a type with an arched head). */
+function archedRect(arch: HeadArch, r: CellRect, inset: number, weight: StrokeWeight): JoineryStroke {
+  const top = archPoints(arch, r.x0, r.x1, inset).map((q) => ({ x: q.x, y: Math.max(q.y, r.z0 + 0.01) }));
+  return { pts: [{ x: r.x0, y: r.z0 }, { x: r.x1, y: r.z0 }, ...top], closed: true, weight };
+}
+
 export function elevationSymbol(spec: JoinerySpec, options: ElevationOptions = {}): JoineryStroke[] {
-  const out: JoineryStroke[] = [rect(-spec.width / 2, 0, spec.width / 2, spec.height, 'outline')];
+  const arch = headArch(spec);
+  const f = spec.frame.width;
+  const outer = arch
+    ? { pts: [{ x: -spec.width / 2, y: 0 }, { x: spec.width / 2, y: 0 }, ...archPoints(arch, -spec.width / 2, spec.width / 2, 0, 48)], closed: true, weight: 'outline' as const }
+    : rect(-spec.width / 2, 0, spec.width / 2, spec.height, 'outline');
+  const out: JoineryStroke[] = [outer];
   for (const p of normalisedPanels(spec)) {
     const r = panelRect(spec, p);
-    out.push(rect(r.x0, r.z0, r.x1, r.z1, 'outline'));
+    // A panel in the top row of an arched head follows the arch: its top edge, and the corners of its opening symbol.
+    const arched = arch !== null && r.z1 >= spec.height - f - 1e-9;
+    out.push(arched ? archedRect(arch, r, f, 'outline') : rect(r.x0, r.z0, r.x1, r.z1, 'outline'));
     const sash = p.operation !== 'fixed' && (!isDoorLeaf(p.operation) || p.glazed);
     const inner = sash ? { x0: r.x0 + spec.sash.width, x1: r.x1 - spec.sash.width, z0: r.z0 + spec.sash.width, z1: r.z1 - spec.sash.width } : r;
-    if (sash) out.push(rect(inner.x0, inner.z0, inner.x1, inner.z1, 'thin'));
-    out.push(...openingMarks(p.operation, r, options.side === 'exterior', options.convention));
+    if (sash) out.push(arched ? archedRect(arch, inner, f + spec.sash.width, 'thin') : rect(inner.x0, inner.z0, inner.x1, inner.z1, 'thin'));
+    const marks = openingMarks(p.operation, r, options.side === 'exterior', options.convention);
+    out.push(...(arched ? marks.map((m) => ({ ...m, pts: m.pts.map((q) => (Math.abs(q.y - r.z1) < 1e-9 ? { x: q.x, y: Math.max(arch.z(q.x, f), r.z0 + 0.01) } : q)) })) : marks));
     if (options.hardware) out.push(...hardware(spec, p, r));
   }
   if (spec.kind === 'window' && spec.board.exterior > 0 && options.side === 'exterior') {

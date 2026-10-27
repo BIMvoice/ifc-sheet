@@ -98,6 +98,26 @@ export interface JoineryCommonProps {
   reference?: string;
 }
 
+/** The shape of a type's head (its top edge) in elevation: square, a semicircle, a segmental arch (circular, flatter than a semicircle) or a pointed (Gothic) arch of two arcs. */
+export type JoineryHeadShape = 'square' | 'round' | 'segmental' | 'pointed';
+
+/** The head of a type (#448). The overall width and height stay the opening's; the arch rises inside that height, so its crown is at the top. */
+export interface JoineryHead {
+  shape: JoineryHeadShape;
+  /** Segmental and pointed: how far the crown rises above the springing line, metres. Absent: a default (a fifth of the width; an equilateral arch). */
+  rise?: number;
+}
+
+/**
+ * A property the user typed in for a type, shown in the schedule like a model's (#448); kept in the project, never written to the IFC.
+ * `key` marks a suggested one the schedule's own U value and fire rating rows read.
+ */
+export interface JoineryCustomProp {
+  name: string;
+  value: string;
+  key?: 'thermalTransmittance' | 'fireRating';
+}
+
 export interface JoinerySpec {
   /** The project catalogue entry this type is (one type object per entry per model). */
   id?: string;
@@ -121,6 +141,10 @@ export interface JoinerySpec {
   threshold: number;
   colors: { frame: string; glass: string; leaf: string };
   props: JoineryCommonProps;
+  /** The shape of the head in elevation. Absent: square. */
+  head?: JoineryHead;
+  /** Properties typed in by hand for this type. Absent: none. */
+  custom?: JoineryCustomProp[];
 }
 
 export function defaultWindowSpec(name = 'Window'): JoinerySpec {

@@ -12,8 +12,9 @@
 
 import {
   DOOR_OPERATIONS, WINDOW_OPERATIONS, defaultDoorSpec, defaultWindowSpec,
-  type JoineryPanel, type JoinerySpec, type PanelOperation,
+  type JoineryHead, type JoineryPanel, type JoinerySpec, type PanelOperation,
 } from '@ifc-lite/create';
+import { readCustomProps } from './joinery-custom-props.js';
 
 type Raw = Record<string, unknown>;
 const isObject = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -36,6 +37,16 @@ function panel(v: unknown): JoineryPanel | null {
   if (typeof v.rowSpan === 'number') out.rowSpan = Math.max(1, Math.round(v.rowSpan));
   if (v.glazed === true) out.glazed = true;
   return out;
+}
+
+const HEAD_SHAPES = new Set<string>(['round', 'segmental', 'pointed']);
+
+/** A head as saved: a shape other than square, and a rise only where the shape takes one. Anything else is the square head (absent). */
+function head(v: unknown): JoineryHead | null {
+  if (!isObject(v) || !HEAD_SHAPES.has(String(v.shape))) return null;
+  const shape = v.shape as JoineryHead['shape'];
+  const rise = typeof v.rise === 'number' && Number.isFinite(v.rise) && v.rise > 0 ? v.rise : undefined;
+  return shape === 'segmental' || shape === 'pointed' ? (rise === undefined ? { shape } : { shape, rise }) : { shape };
 }
 
 export function readJoinerySpec(raw: unknown): JoinerySpec | null {
@@ -75,6 +86,11 @@ export function readJoinerySpec(raw: unknown): JoinerySpec | null {
     },
   };
   if (typeof raw.id === 'string' && raw.id) spec.id = raw.id;
+  const h = head(raw.head);
+  if (h) spec.head = h;
+  const custom = readCustomProps(raw.custom);
+  if (custom.length) spec.custom = custom;
+  
   return spec;
 }
 

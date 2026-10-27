@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { MAX_START, orderedRows, SORTS, symbolsShown, textOwner, type SortBy } from '@bimvoice/ifcsheet';
+import { customPropNames, MAX_START, orderedRows, propRowId, SORTS, symbolsShown, textOwner, type SortBy } from '@bimvoice/ifcsheet';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { isJoinerySchedule } from '@/project/schedule-fit';
@@ -48,21 +48,23 @@ function NumberField({ value, label, fallback, disabled, onCommit }: { value: nu
 export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule }) {
   const { t } = useTranslation();
   const schedules = useProjectStore((s) => s.schedules ?? []);
+  const joineries = useProjectStore((s) => s.joineryTypes);
   if (!isJoinerySchedule(schedule)) return null;
   const owner = textOwner(schedules, schedule);
   if (!owner) return null;
   const inherited = owner.id !== schedule.id ? owner : null;
   const content = owner.content;
   const typed = owner.textRows ?? [];
-  const rows = orderedRows(content, typed.map((r) => r.id));
+  const propNames = customPropNames((joineries ?? []).filter((s) => schedule.kind === 'all' || s.kind === schedule.kind));
+  const rows = orderedRows(content, typed.map((r) => r.id), propNames);
   const label = (id: string): string => {
     const key = ROW_LABELS[id];
-    return key ? t(key) : typed.find((r) => `text:${r.id}` === id)?.label ?? id;
+    return key ? t(key) : typed.find((r) => `text:${r.id}` === id)?.label ?? propNames.find((n) => propRowId(n) === id) ?? id;
   };
   const sequence = content?.numbering?.marks === 'sequence';
   // The tags of elements the schedule had numbered follow a change of marks; where they cannot (Edit mode is off), say so.
   const report = (out: { errors: string[] }) => { if (out.errors.length > 0) toast.error(t('wall.content.tagsFailed', { reason: out.errors.join('; ') })); };
-  const summary = contentSummary(content, typed.map((r) => r.id), t);
+  const summary = contentSummary(content, typed.map((r) => r.id), t, propNames);
   return (
     <CardSection id="content" title={t('wall.content.title')} summary={summary.text} defaultOpen={summary.changed}>
       <p className="m-0 mt-1 text-xs text-sky-200">{inherited ? t('wall.content.inherited', { name: inherited.name }) : t('wall.content.hint')}</p>

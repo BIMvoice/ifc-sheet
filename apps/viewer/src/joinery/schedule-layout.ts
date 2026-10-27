@@ -25,7 +25,7 @@ import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { shownRows, symbolsShown, textCellText, textRowId } from '@bimvoice/ifcsheet';
+import { customPropNames, customValue, fireOf, propRowId, shownRows, symbolsShown, textCellText, textRowId, thermalOf } from '@bimvoice/ifcsheet';
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
@@ -132,12 +132,15 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
     levels: () => data.levels.map((level) => ({ label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? ''), raw: (e: ScheduleEntry) => [e.counts[level] ?? null], num: true, sum: true })),
     total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true, raw: (e) => [e.total], num: true, sum: true }],
     u: () => [{
-      label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? sheetNumber(labels.locale, e.spec.props.thermalTransmittance, 3, { trim: true, group: false }) : '—'),
-      raw: (e) => [e.spec?.props.thermalTransmittance ?? null], num: true,
+      label: labels.uValue, value: (e) => { const u = thermalOf(e.spec); return u !== undefined ? sheetNumber(labels.locale, u, 3, { trim: true, group: false }) : '—'; },
+      raw: (e) => [thermalOf(e.spec) ?? null], num: true,
     }],
-    fire: () => [{ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—', raw: (e) => [e.spec?.props.fireRating ?? null] }],
+    fire: () => [{ label: labels.fire, value: (e) => fireOf(e.spec) ?? '—', raw: (e) => [fireOf(e.spec) ?? null] }],
   };
-  const ids = shownRows(data.content, { windows: data.entries.some((e) => e.kind === 'window'), textIds: typed.map((r) => r.id) });
+  // A row for each property typed in for a type (#448), named as the user named it; a type without it shows a dash.
+  const propNames = customPropNames(data.entries.map((e) => e.spec));
+  for (const name of propNames) model[propRowId(name)] = () => [{ label: name, value: (e) => customValue(e.spec, name) ?? '—', raw: (e) => [customValue(e.spec, name) ?? null] }];
+  const ids = shownRows(data.content, { windows: data.entries.some((e) => e.kind === 'window'), textIds: typed.map((r) => r.id), propNames });
   // The user's own rows: each type's text by the type's key, so a column that moves takes its text with it.
   const own = new Map(typed.map((row) => [textRowId(row.id), row]));
   return ids.flatMap((id): TableRowSpec[] => {

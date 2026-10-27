@@ -16,6 +16,7 @@
  */
 
 import type { ProjectSchedule, SplitData, SplitEntry } from './sub-reports.js';
+import { propRowId } from './joinery-custom-props.js';
 import { textOwner } from './schedule-text.js';
 import { isOpenFilter, readSubReportFilter, subReportData, type SubReportFilter } from './schedule-filter.js';
 
@@ -127,8 +128,9 @@ export function readScheduleContent(raw: unknown): ScheduleContent | undefined {
 }
 
 /** Every row, in the order the content puts them, and whether it is shown: what the card lists. `textIds` are the ids of the text rows. */
-export function orderedRows(content: ScheduleContent | undefined, textIds: readonly string[]): { id: string; shown: boolean }[] {
-  const known = [...ROW_IDS as readonly string[], ...textIds.map(textRowId)];
+export function orderedRows(content: ScheduleContent | undefined, textIds: readonly string[], propNames: readonly string[] = []): { id: string; shown: boolean }[] {
+  // The model's rows, then the user's text rows, then a row for each property typed in for a type (#448).
+  const known = [...ROW_IDS as readonly string[], ...textIds.map(textRowId), ...propNames.map(propRowId)];
   const set = new Set(known);
   const chosen = [...new Set(content?.rows?.order ?? [])].filter((id) => set.has(id));
   const ordered = [...chosen, ...known.filter((id) => !chosen.includes(id))];
@@ -137,8 +139,8 @@ export function orderedRows(content: ScheduleContent | undefined, textIds: reado
 }
 
 /** The rows a table prints, in order. The sill row is for windows: without one it is not printed, whatever the choice. */
-export function shownRows(content: ScheduleContent | undefined, context: { windows: boolean; textIds: readonly string[] }): string[] {
-  return orderedRows(content, context.textIds).filter((r) => r.shown && (r.id !== 'sill' || context.windows)).map((r) => r.id);
+export function shownRows(content: ScheduleContent | undefined, context: { windows: boolean; textIds: readonly string[]; propNames?: readonly string[] }): string[] {
+  return orderedRows(content, context.textIds, context.propNames).filter((r) => r.shown && (r.id !== 'sill' || context.windows)).map((r) => r.id);
 }
 
 /** The shape of a type column the content reads and writes. */
