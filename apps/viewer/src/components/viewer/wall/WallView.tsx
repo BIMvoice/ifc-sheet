@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '@/i18n';
+import { useNextTaskValue } from '@/hooks/useNextTaskValue';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { isSetSheet } from '@/project/drawing-set';
@@ -41,19 +42,24 @@ export function WallView() {
   const sheets = useProjectStore((s) => s.sheets);
   const views = useProjectStore((s) => s.views);
   const levels = useProjectStore((s) => s.levels);
+  // Measured in a task of its own (#154): framing the building reads every element's box (about 40 ms on a large model),
+  // and the model's arrival lands in the same render that finishes the 3D, which made one long task of it. The set is laid
+  // out from the same settled meshes as the extent, so it always starts from a matching pair.
+  const settled = useNextTaskValue(useMemo(() => ({ levels, meshes, models, legacy }), [levels, meshes, models, legacy]));
   // Measured on the building, not on the site around it; the main body of the model when no storey holds geometry.
-  const extent = useMemo(() => setExtent(levels, meshes, mergedSectionBounds(models, legacy)).extent, [levels, meshes, models, legacy]);
+  const extent = useMemo(() => setExtent(settled.levels, settled.meshes, mergedSectionBounds(settled.models, settled.legacy)).extent, [settled]);
+  const settledMeshes = settled.meshes;
   const [intro, setIntro] = useState(false);
   const { stepped, focus, visit, panel, review } = useWallNav();
 
   // A model on a project with no set sheets (interior elevations alone do not count): lay the set out as soon as the geometry is in.
   const hasSet = sheets.some(isSetSheet);
   useEffect(() => {
-    if (!hasSet && meshes && meshes.length > 0 && startSet(meshes, extent)) setIntro(true);
-  }, [hasSet, meshes, extent]);
+    if (!hasSet && settledMeshes && settledMeshes.length > 0 && startSet(settledMeshes, extent)) setIntro(true);
+  }, [hasSet, settledMeshes, extent]);
 
   // The proposals read the lowest plan's rooms; they change only with the model or the plans.
-  const proposals = useMemo(() => sectionProposals(meshes, extent), [meshes, extent, views]);
+  const proposals = useMemo(() => sectionProposals(settledMeshes, extent), [settledMeshes, extent, views]);
   const back = useCallback(() => stepInto(null), []);
   // Hanging goes by the event, so the tour can hang the set too (its steps skip the intro the same way).
   const hang = useCallback(() => emitWallHung(), []);

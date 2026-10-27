@@ -73,24 +73,28 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   // The permit project: --pac-mode, else the project file's (the mode the app saved), else the full one.
   const pacMode: PacMode = args.pacMode ?? project?.pacMode ?? 'full';
   if (args.pac) setTemplate = pacTemplateFor(args.locale ?? PAC_DEFAULT_LOCALE, pacMode);
-  const standard = buildStandard(args.standard, project);
+  // A permit project is a Romanian one: Ordinul 975/2026 asks for the cartuș F_01, so --pac draws the Romanian standard's
+  // title block unless --standard names one (that wins) or the project has a title block of its own.
+  const language = args.pac ? args.locale ?? PAC_DEFAULT_LOCALE : undefined;
+  const standardId = args.standard ?? (args.pac && language === 'ro' && !project?.titleBlockTemplate ? 'ro' : undefined);
+  const standard = buildStandard(standardId, project);
   if (!standard) {
-    io.stderr(unknownStandardMessage(args.standard ?? ''));
+    io.stderr(unknownStandardMessage(standardId ?? ''));
     return EXIT.usage;
   }
   for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
   // The notes a sheet prints (a paper stepped up) are in the language of the PAC words.
-  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), ...(args.pac ? { locale: args.locale ?? PAC_DEFAULT_LOCALE } : {}) });
+  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), ...(language ? { locale: language } : {}) });
   const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
     return EXIT.failed;
   }
-  const sheets = await sheetGraphics(set, model, { ...(standard.pens ? { pens: standard.pens } : {}), ...(args.locale ? { locale: args.locale } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}) });
+  const sheets = await sheetGraphics(set, model, { ...(standard.pens ? { pens: standard.pens } : {}), ...(args.locale ? { locale: args.locale } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), ...(language ? { language } : {}) });
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, args.locale ?? PAC_DEFAULT_LOCALE, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
-  for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params })}\n`);
+  for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);
   if (args.out) {
     await mkdir(resolve(args.out, '..'), { recursive: true });
     await writeFile(args.out, pdf);
