@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { joineryOverrideOf, typeIdentityOf } from '@bimvoice/ifcsheet';
+import { joineryOverrideOf, levelRowId, typeIdentityOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
@@ -49,7 +49,7 @@ export function JoineryCellCard({ schedule }: { schedule: ProjectSchedule }) {
   }, [mine, schedule, whole, schedules, overrides, labels]);
   const [draft, setDraft] = useState<{ key: string; text: string } | null>(null);
   if (!joinery) return null;
-  const rowName = mine ? (ROW_LABELS[mine.column] ? t(ROW_LABELS[mine.column]) : mine.column) : '';
+  const rowName = mine ? (ROW_LABELS[mine.column] ? t(ROW_LABELS[mine.column]) : mine.column === levelRowId(mine.column.slice(7)) ? mine.column.slice(7) : mine.column) : '';
   const current = mine && found ? joineryOverrideOf(overrides, found.entry, mine.column) : undefined;
   const summary = mine && found ? t('joineryCell.summaryPicked', { row: rowName, type: found.about }) : t('joineryCell.summary');
   const key = mine ? `${mine.guid}:${mine.column}:${current?.value ?? ''}` : '';
@@ -63,6 +63,7 @@ export function JoineryCellCard({ schedule }: { schedule: ProjectSchedule }) {
         <div data-joinery-cell-editor="">
           <p className="m-0 mt-1 text-xs font-medium text-white">{t('joineryCell.heading', { row: rowName, type: found.about })}</p>
           <p className="m-0 mt-1 text-xs text-sky-200">{t('joineryCell.model', { value: found.model })}</p>
+          {mine.column === 'size' && found.entry.measured ? <p className="m-0 mt-1 text-xs text-sky-200">{t('joineryCell.measured')}</p> : null}
           <label className={`${WALL_LABEL} mt-2`}>
             {t('joineryCell.value')}
             <input className={WALL_FIELD} value={text} onChange={(e) => setDraft({ key, text: e.target.value })} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') commit(); }} />

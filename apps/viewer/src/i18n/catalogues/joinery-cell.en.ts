@@ -13,6 +13,7 @@ export const joineryCellEn = {
   'joineryCell.gone': 'The picked cell is no longer in the table. Pick another.',
   'joineryCell.heading': '{row}: {type}',
   'joineryCell.model': 'Model: {value}',
+  'joineryCell.measured': 'Measured from the element\'s geometry: the model states no size (≈).',
   'joineryCell.value': 'Text on the sheet',
   'joineryCell.overridden': 'Typed over the model\'s text, in every door and window schedule. Marked on the sheet here only; the print carries no mark.',
   'joineryCell.reset': 'Reset to model value',

@@ -18,6 +18,7 @@
 
 import { Drawing2DGenerator, HatchGenerator, createSectionConfig, type Drawing2D, type DrawingLine, type SectionConfig } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
+import { fitFootprint, placedMeshes } from '@bimvoice/ifcsheet';
 
 export interface V2 { x: number; y: number }
 
@@ -56,71 +57,21 @@ export interface ElementViewOptions {
 
 interface Frame { ox: number; oy: number; oz: number; ux: number; uz: number; nx: number; nz: number; width: number; depth: number; height: number }
 
-/**
- * The element's meshes with their per-element `origin` folded into the positions
- * (world = origin + position) and the instancing templates (`geometryClass` 2)
- * left out; the cutter and the projector read `positions` as world coordinates.
- */
-export function placedMeshes(meshes: readonly MeshData[]): MeshData[] {
-  return meshes.filter((m) => (m.geometryClass ?? 0) !== 2).map((m) => {
-    const [ox, oy, oz] = m.origin ?? [0, 0, 0];
-    if (!ox && !oy && !oz) return m;
-    const positions = new Float32Array(m.positions.length);
-    for (let i = 0; i + 2 < positions.length; i += 3) {
-      positions[i] = m.positions[i] + ox; positions[i + 1] = m.positions[i + 1] + oy; positions[i + 2] = m.positions[i + 2] + oz;
-    }
-    return { ...m, positions, origin: [0, 0, 0] };
-  });
-}
+/** The element's meshes placed in world coordinates (the engine's `placedMeshes`, the one frame the schedule's measured size is read in). */
+export { placedMeshes };
 
 /** The element's frame from its vertices (viewer world, y up). Null when there are none. */
 export function elementFrame(meshes: readonly MeshData[], awayFrom?: { x: number; z: number }): Frame | null {
-  meshes = placedMeshes(meshes);
-  let n = 0, minY = Infinity, maxY = -Infinity;
-  for (const m of meshes) {
-    for (let i = 0; i + 2 < m.positions.length; i += 3) {
-      n++;
-      minY = Math.min(minY, m.positions[i + 1]);
-      maxY = Math.max(maxY, m.positions[i + 1]);
-    }
-  }
-  if (n === 0) return null;
-  interface Fit { area: number; deg: number; u0: number; u1: number; v0: number; v1: number }
-  const fit = (deg: number): Fit => {
-    const c = Math.cos((deg * Math.PI) / 180), s = Math.sin((deg * Math.PI) / 180);
-    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
-    for (const m of meshes) {
-      for (let i = 0; i + 2 < m.positions.length; i += 3) {
-        const x = m.positions[i], z = m.positions[i + 2];
-        const u = x * c + z * s, v = -x * s + z * c;
-        if (u < u0) u0 = u; if (u > u1) u1 = u;
-        if (v < v0) v0 = v; if (v > v1) v1 = v;
-      }
-    }
-    return { area: (u1 - u0) * (v1 - v0), deg, u0, u1, v0, v1 };
-  };
-  const tightest = (degs: Iterable<number>, from: Fit | null): Fit | null => {
-    let best = from;
-    for (const deg of degs) { const f = fit(deg); if (!best || f.area < best.area - 1e-12) best = f; }
-    return best;
-  };
-  // A degree at a time, then a twentieth of one around the best.
-  const coarse = tightest(Array.from({ length: 90 }, (_, d) => d), null);
-  const best = coarse && tightest(Array.from({ length: 41 }, (_, d) => coarse.deg + (d - 20) / 20), coarse);
-  if (!best) return null;
-  const c = Math.cos((best.deg * Math.PI) / 180), s = Math.sin((best.deg * Math.PI) / 180);
+  const fit = fitFootprint(placedMeshes(meshes));
+  if (!fit) return null;
+  const { c, s, wide, width, depth, ox, oz } = fit;
   // The long side of the footprint is the width.
-  const wide = best.u1 - best.u0 >= best.v1 - best.v0;
   let nx = wide ? -s : c, nz = wide ? c : s; // across it
-  const width = wide ? best.u1 - best.u0 : best.v1 - best.v0;
-  const depth = wide ? best.v1 - best.v0 : best.u1 - best.u0;
-  const cu = (best.u0 + best.u1) / 2, cv = (best.v0 + best.v1) / 2;
-  const ox = cu * c - cv * s, oz = cu * s + cv * c;
   // Exterior = +n. Facing away from `awayFrom`; without it, the sign the search gave.
   const flip = awayFrom ? (ox - awayFrom.x) * nx + (oz - awayFrom.z) * nz < 0 : false;
   if (flip) { nx = -nx; nz = -nz; }
   // Right-handed type frame: u = n x up, so that (u, n, up) reads x, y, z.
-  return { ox, oy: minY, oz, ux: -nz, uz: nx, nx, nz, width, depth, height: maxY - minY };
+  return { ox, oy: fit.minY, oz, ux: -nz, uz: nx, nx, nz, width, depth, height: fit.height };
 }
 
 type Vec3 = { x: number; y: number; z: number };

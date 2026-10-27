@@ -21,6 +21,7 @@ import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion } from './pr
 import { readSchedule, scheduleFilterProperties, type ProjectSchedule } from './sub-reports.js';
 import type { JoinerySpec } from '@ifc-lite/create';
 import { readJoineryOverrides, type JoineryCellOverride } from './joinery-overrides.js';
+import { meshesByExpressId } from './element-size.js';
 import { joineryScheduleData, type JoineryProject, type ScheduleModel } from './joinery-schedule.js';
 import { subReportChecksOf, type SubReportCheck } from './sub-report-check.js';
 import { readBoqArticles, boqPropertyNames, type BoqArticle } from './boq.js';
@@ -139,7 +140,7 @@ export function projectSubReportChecks(project: ProjectFacts, models: readonly S
  * whose parts overlap or leave elements out. Without a project, `readinessOfModel` alone.
  */
 export function readinessWithProject(model: Omit<RuralScopeModel, 'storeys'> & { storeys: readonly unknown[]; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
-  const checks = project ? projectSubReportChecks(project, [{ modelId, dataStore: model.dataStore, view: null }]) : [];
+  const checks = project ? projectSubReportChecks(project, [{ modelId, dataStore: model.dataStore, view: null, ...(model.meshes ? { meshesOf: meshesByExpressId(model.meshes) } : {}) }]) : [];
   // What the project's articles take and the model does not state (#75); nothing when the project has no articles.
   const articles = project?.boqArticles ?? [];
   const boq = articles.length > 0 ? boqMissing(computeBoq(readBoqElements(storeSource(modelId, model.dataStore), new Set(boqPropertyNames(articles))), articles)) : undefined;

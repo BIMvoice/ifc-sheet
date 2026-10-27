@@ -24,6 +24,8 @@ import { filterPropertyNames, predefinedTypeText, propertyValueText, type Proper
 import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
 import type { ScheduleTextRow } from './schedule-text.js';
 import type { JoineryCellOverride } from './joinery-overrides.js';
+import { measureElementSize } from './element-size.js';
+import type { MeshData } from '@ifc-lite/geometry';
 import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 
 export type ScheduleKind = 'door' | 'window' | 'all';
@@ -43,6 +45,8 @@ export interface ScheduleOccurrence {
   predefinedType?: string | null;
   /** The properties the schedule was asked to read (`IsExternal`, and those the project's filters name), for the property filter. */
   properties?: PropertyFact[];
+  /** The element's size was measured from its geometry: the IFC states none (#485). */
+  measured?: boolean;
 }
 
 export interface ScheduleEntry {
@@ -57,6 +61,8 @@ export interface ScheduleEntry {
   /** Metres. */
   width: number;
   height: number;
+  /** Width and height were measured from the elements' geometry in their own frame, not stated by the IFC (#485): every element of this group lacked OverallWidth / OverallHeight. */
+  measured?: boolean;
   /** Count per level name. */
   counts: Record<string, number>;
   total: number;
@@ -85,6 +91,8 @@ export interface ScheduleModel extends Live {
   modelId: string;
   /** An entity's Name. Default: the one the store holds (`storedName`); the app passes its overlay-aware read. */
   nameOf?: (id: number) => string;
+  /** An element's meshes (viewer frame, metres), for measuring the size of a door or window whose IFC states none (#485); without it such an element has no size. */
+  meshesOf?: (expressId: number) => readonly MeshData[] | undefined;
 }
 
 /** What the project contributes to a joinery schedule. */
@@ -312,7 +320,13 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
         count(entry, id);
         continue;
       }
-      const height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
+      let height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
+      // No OverallWidth / OverallHeight (a non-parametric window): the size of its body, measured in its own frame (#485).
+      let wasMeasured = false;
+      if (!(width > 0 && height > 0)) {
+        const measured = measureElementSize(model.meshesOf?.(id));
+        if (measured) { width = measured.width; height = measured.height; wasMeasured = true; }
+      }
       const size = Number.isFinite(width) && Number.isFinite(height) ? `${Math.round(width * 1000)}×${Math.round(height * 1000)}` : '?';
       const key = `untyped:${k}:${size}`;
       const entry = byKey.get(key) ?? {
@@ -321,6 +335,7 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
       };
       byKey.set(key, entry);
       count(entry, id);
+      if (wasMeasured) entry.occurrences[entry.occurrences.length - 1].measured = true;
     }
   }
   // Catalogue types not placed yet still belong in the schedule (with no count).
@@ -333,6 +348,7 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
     .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'window' ? -1 : 1) || (a.spec ? 0 : 1) - (b.spec ? 0 : 1)
       || a.mark.localeCompare(b.mark, undefined, { numeric: true }) || a.width - b.width);
   markUntyped(entries);
+  for (const e of entries) if (!e.spec && e.occurrences.length > 0 && e.occurrences.every((o) => o.measured)) e.measured = true;
   const levels = [...levelElevation.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name);
   if (entries.some((e) => e.counts['—'])) levels.push('—');
   // Number each type's occurrences: lowest level first, then by model and id, so the numbering is stable.
