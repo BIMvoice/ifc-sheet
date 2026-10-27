@@ -23,6 +23,10 @@ export interface BuildStandard {
   pens?: PenTable;
   /** The layout of every sheet's title block; absent: the standard layout. */
   titleBlockTemplate?: ProjectFacts['titleBlockTemplate'];
+  /** The title block values typed in the project, the model-source mapping and the project's parameters: what the app prints on every sheet over the model's values. Not set by a pack. */
+  titleBlock?: ProjectFacts['titleBlock'];
+  titleBlockSources?: ProjectFacts['titleBlockSources'];
+  titleBlockParams?: ProjectFacts['titleBlockParams'];
   /** The project's "Units and numbers" with the pack's fields over it (the app's install changes only the fields the pack sets); absent: neither sets any. The figures the build prints are written with it. */
   unitsAndNumbers?: ProjectFacts['unitsAndNumbers'];
   /** The numbering scheme of the sheets: the pack's (`--standard`); absent: the default one. */
@@ -48,7 +52,11 @@ export function buildStandard(standardId: string | undefined, project: ProjectFa
   const graphic = pack?.graphicStandard !== undefined ? graphicStandardOf(pack.graphicStandard) : project?.graphicStandard;
   const titleBlockTemplate = pack?.titleBlockTemplate ?? project?.titleBlockTemplate;
   const units = pack?.unitsAndNumbers ? { ...project?.unitsAndNumbers, ...pack.unitsAndNumbers } : project?.unitsAndNumbers;
-  return { ...(graphic ? { pens: pensOf(graphic) } : {}), ...(pack?.sheetNumbering ? { sheetNumbering: pack.sheetNumbering } : {}), ...(titleBlockTemplate ? { titleBlockTemplate } : {}), ...(units ? { unitsAndNumbers: units } : {}), notes };
+  return {
+    ...(graphic ? { pens: pensOf(graphic) } : {}), ...(pack?.sheetNumbering ? { sheetNumbering: pack.sheetNumbering } : {}), ...(titleBlockTemplate ? { titleBlockTemplate } : {}), ...(units ? { unitsAndNumbers: units } : {}),
+    ...(project?.titleBlock ? { titleBlock: project.titleBlock } : {}), ...(project?.titleBlockSources ? { titleBlockSources: project.titleBlockSources } : {}), ...(project?.titleBlockParams ? { titleBlockParams: project.titleBlockParams } : {}),
+    notes,
+  };
 }
 
 /**
@@ -61,7 +69,17 @@ export function materialsUnder(standardId: string | undefined, table: readonly P
   return pack?.materials ? withPackMaterials(table, pack.materials) : table;
 }
 
-/** `set` with the standard's title block layout on its document. */
+/**
+ * `set` with the standard's title block layout and the project's typed values, mapping and parameters on its document.
+ * The project's values replace the set's starting ones (its date), as loading the project file in the app does.
+ */
 export function withTitleBlock(set: DefaultSet, standard: BuildStandard): DefaultSet {
-  return standard.titleBlockTemplate ? { ...set, document: { ...set.document, titleBlockTemplate: standard.titleBlockTemplate } } : set;
+  const document = {
+    ...set.document,
+    ...(standard.titleBlockTemplate ? { titleBlockTemplate: standard.titleBlockTemplate } : {}),
+    ...(standard.titleBlock ? { titleBlock: standard.titleBlock } : {}),
+    ...(standard.titleBlockSources ? { titleBlockSources: standard.titleBlockSources } : {}),
+    ...(standard.titleBlockParams ? { titleBlockParams: standard.titleBlockParams } : {}),
+  };
+  return { ...set, document };
 }
