@@ -17,6 +17,7 @@ import { pressEnter, pressEscape, startDraftCommand, setOrthoHeld, useDraftingSe
 import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
 import type { DraftingKeyId } from '@/lib/commands/drafting-key-commands';
+import { removeMarkedWitnessPoint } from '@/drafting/witness-point';
 import { claimWallKey } from '../wall/wall-key-bus';
 import { isDraftingKey } from './drafting-key-match';
 import { runDraftingAction, type DraftingRunId } from './run-action';
@@ -85,6 +86,8 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
       if (isKey('drafting.erase')) {
         if (useDraftingSession.getState().selection.size > 0 && !useDraftingSession.getState().commandId) {
           e.preventDefault();
+          // A picked witness point of a dimension chain goes alone (as DIMREMOVEPOINT does); anything else is erased.
+          if (removeMarkedWitnessPoint(useDraftingSession.getState().selection)) return;
           startDraftCommand('erase');
           pressEnter();
         }

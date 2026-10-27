@@ -92,6 +92,7 @@ export const draftingRo = {
   'drafting.prompt.dimNext': 'Specificați originea următoarei linii de ajutor (Enter pentru a termina, SINGLE pentru una câte una):',
   'drafting.prompt.dimLine': 'Specificați poziția liniei de cotă:',
   'drafting.prompt.dimLineAlign': 'Specificați poziția liniei de cotă (ALIGN pornește sau oprește alinierea la alte linii de cotă):',
+  'drafting.dimAlign': 'Aliniază cotele',
   'drafting.msg.dimAlignOn': 'Liniile de cotă se aliniază la alte linii de cotă.',
   'drafting.msg.dimAlignOff': 'Liniile de cotă nu se mai aliniază la alte linii de cotă.',
   'drafting.cmd.dimAddPoint': 'DIMADDPOINT',

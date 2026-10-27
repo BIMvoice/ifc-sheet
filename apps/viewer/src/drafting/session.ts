@@ -25,6 +25,7 @@ import type { SectionAxisName } from './frame';
 import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
+import { markWitnessPoint } from './witness-point';
 import { hasModelPicker, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
 import { annotationFrameOf, makeContext } from './view-context';
 import type { DraftEntity, DraftShape, Pt } from './types';
@@ -271,6 +272,7 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
       }
     }
     set({ selection: next });
+    markWitnessPoint(next, additive || selecting ? null : hit, p, tolerance);
     refresh();
     return;
   }

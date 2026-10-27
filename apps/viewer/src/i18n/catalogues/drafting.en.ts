@@ -6,6 +6,7 @@ export const draftingEn = {
   'drafting.commandLine': 'Command line',
   'drafting.snap': 'Snap',
   'drafting.ortho': 'Ortho',
+  'drafting.dimAlign': 'Align dimensions',
   'drafting.in3d': 'Drafting in 3D',
   'drafting.layer': 'Current layer',
   'drafting.undo': 'Undo drafting',

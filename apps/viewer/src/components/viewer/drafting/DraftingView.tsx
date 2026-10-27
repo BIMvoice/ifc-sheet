@@ -54,6 +54,8 @@ import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
   attachDraftingView,
   currentLayerId,
+  baseDraftSettings,
+  patchDraftSettings,
   pressEscape,
   runningCommand,
   setCurrentLayer,
@@ -157,6 +159,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
   const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
+  const dimAlign = baseDraftSettings().dimAlign;
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
@@ -290,6 +293,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         <span className="flex-1" />
         <Toggle active={snap} label={t('drafting.snap')} onClick={toggleSnap} />
         <Toggle active={ortho} label={t('drafting.ortho')} onClick={toggleOrtho} />
+        <Toggle active={dimAlign} label={t('drafting.dimAlign')} onClick={() => patchDraftSettings({ dimAlign: !dimAlign })} />
         <select
           aria-label={t('drafting.layer')}
           className="h-6 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1"
