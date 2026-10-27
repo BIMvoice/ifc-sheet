@@ -73,7 +73,7 @@ describe('a missing quantity in the list', () => {
 describe('the list and the bill of quantities agree', () => {
   const wall = (volume: number | undefined, n: number): BoqElement => ({
     modelId: 'm', expressId: n, globalId: `G${n}`, name: `W${n}`, ifcClass: 'IfcWall', predefinedType: null, typeClass: null, typeName: null,
-    level: null, materials: [], properties: [],
+    level: '', materials: [], properties: [],
     quantities: volume === undefined ? [] : [{ name: 'NetVolume', dimension: 'volume', value: volume }],
   });
   const article = { ...newArticle('a', 'm3'), code: 'EXAMPLE-01', quantity: 'NetVolume', filter: { classes: ['IfcWall'] } };
