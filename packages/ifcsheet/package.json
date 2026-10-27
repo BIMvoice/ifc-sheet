@@ -35,6 +35,11 @@
       "import": "./dist/pac-words.js",
       "default": "./dist/pac-words.js"
     },
+    "./plan-symbols": {
+      "types": "./dist/plan-symbols.d.ts",
+      "import": "./dist/plan-symbols.js",
+      "default": "./dist/plan-symbols.js"
+    },
     "./readiness-read": {
       "types": "./dist/readiness-read.d.ts",
       "import": "./dist/readiness-read.js",

@@ -78,6 +78,8 @@ const graphics: Required<ViewGraphics> = {
     },
   },
   hiddenLines: ['2O2Fr$t4X7Zf8NOew3FLOH|0,0,1500,0'],
+  // A plan's switch for the model's own plan symbols (#489): only `false` is a setting, on is the default.
+  usePlanSymbols: false,
   // A template's class and material mapping, kept on a view that was detached from it (#31).
   styleRules: [{ id: 'sr-w', by: 'class', match: ['IfcWall'], style: { lineColor: '#112233', fillColor: '#445566', lineWeight: 'heavy', cutHatch: 'ANSI31', hatchScale: 2 } }],
 };

@@ -112,6 +112,7 @@ import { exportViewDxf } from './view-dxf';
 import { viewOmits } from '@/project/discipline-facts';
 
 import { planOverlays } from '@/project/plan-overlays';
+import { withViewPlanSymbols } from '@/project/plan-symbols';
 import { graphicStandardOf } from '@/drafting/graphic-standard';
 
 import { viewMaterials } from '@/project/material-resolver';
@@ -197,7 +198,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   // The view's graphics (its template's, then its own preset and category overrides over them, #44), applied to its drawing.
   const viewTemplates = useProjectStore((st) => st.viewTemplates);
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
-  const viewDrawing = useMemo(() => (drawing ? withoutHiddenElements(drawing, graphics, renderIdGlobalId) : null), [drawing, graphics, models]);
+  const viewDrawing = useMemo(() => (drawing ? withViewPlanSymbols(withoutHiddenElements(drawing, graphics, renderIdGlobalId), view, graphics) : null), [drawing, graphics, models, view.kind]);
   const references = useMemo(() => (viewDrawing ? referenceSet(viewDrawing, false) : null), [viewDrawing]);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);

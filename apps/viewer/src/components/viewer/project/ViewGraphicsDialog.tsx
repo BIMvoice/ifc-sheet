@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { updateProjectView, useProjectStore } from '@/project/project-store';
 import { DEFAULT_VIEW_PRESET, VIEW_CATEGORIES } from '@/project/view-graphics';
 import { gridSettings } from '@/project/grid-overlay';
+import { planSymbolsOn } from '@bimvoice/ifcsheet/plan-symbols';
 import { builtInPatterns } from '@/drafting/hatch/library';
 import { parsePat } from '@/drafting/hatch/pattern';
 import { PhaseGraphics } from './PhaseGraphics';
@@ -83,6 +84,13 @@ export function ViewGraphicsDialog({ view, open, onOpenChange }: Props) {
             {GRID_ENDS.map((e) => <option key={e} value={e}>{t(`viewGraphics.gridEnds.${e}` as TranslationKey)}</option>)}
           </select>
         </div>
+        {view.kind === 'plan' ? (
+          <label className="flex items-center gap-1.5 text-xs font-medium">
+            <input type="checkbox" checked={planSymbolsOn(graphics)}
+              onChange={(e) => updateProjectView(view.id, { graphics: { ...graphics, usePlanSymbols: e.target.checked ? undefined : false } })} />
+            {t('viewGraphics.planSymbols')}
+          </label>
+        ) : null}
         <p className="text-xs text-zinc-500">{t('viewGraphics.hint')}</p>
         <table className="w-full text-xs">
           <thead>
