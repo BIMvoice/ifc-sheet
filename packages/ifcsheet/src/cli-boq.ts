@@ -18,10 +18,11 @@ import { readBoqElements, storeSource } from './boq-read.js';
 import { openModel, type OpenedModel } from './model.js';
 import { sheetNumber } from './sheet-number.js';
 import { sheetFormat } from './units-and-numbers.js';
-import { readProjectFile } from './project-read.js';
+import { readProjectFile, type ProjectFacts } from './project-read.js';
 import type { CliIo } from './cli.js';
 import { commandLanguage } from './cli-language.js';
 import { cliSayFor } from './cli-words.js';
+import { nameLanguageOf } from './names.js';
 
 export interface BoqArgs {
   model: string;
@@ -56,9 +57,10 @@ export function boqResult(dataStore: OpenedModel['dataStore'], articles: readonl
   return computeBoq(readBoqElements(storeSource('model', dataStore), new Set(boqPropertyNames(articles))), articles);
 }
 
-function resultJson(file: string, project: string, result: BoqResult, locale: string): string {
+/** The sums as a JSON value: a figure is its plain number, a total nothing counted is null (never 0). */
+function resultJson(file: string, project: string, result: BoqResult, locale: string) {
   const say = boqSayFor(locale);
-  return JSON.stringify({
+  return {
     file, project,
     articles: result.lines.map((l) => ({
       code: l.article.code, description: l.article.description, unit: BOQ_UNIT_TEXT[l.article.unit], quantity: l.article.quantity,
@@ -67,7 +69,43 @@ function resultJson(file: string, project: string, result: BoqResult, locale: st
       refused: l.problem ? describeBoqProblem(l.problem, say) : null,
       byType: l.byType.map((t) => ({ type: t.typeName, class: t.className, matched: t.matched, counted: t.counted, missing: t.missing, total: t.total === null ? null : tidy(t.total) })),
     })),
-  }, null, 2);
+  };
+}
+
+/** Everything `ifcsheet boq` prints for a model, as values: the one computation of the command and of the MCP tool `ifcsheet_boq`. */
+export interface BoqOutput {
+  result: BoqResult;
+  /** What `--json` prints (before it is written as text). */
+  json: ReturnType<typeof resultJson>;
+  /** What `--csv` prints. */
+  csv: string;
+  /** What the plain run prints: the articles in the project's "Units and numbers" format, the notes, and the count of elements lacking a quantity. */
+  text: string;
+  /** True when an article was refused: the command exits 1. */
+  refused: boolean;
+}
+
+/** The bill of quantities of `project`'s articles over an opened model. */
+export function boqOutput(file: string, projectName: string, model: OpenedModel, project: Pick<ProjectFacts, 'boqArticles' | 'unitsAndNumbers'>, locale: string, detail: boolean): BoqOutput {
+  const result = boqResult(model.dataStore, project.boqArticles);
+  const say = boqSayFor(locale);
+  // The figures people read are written as the sheet writes them: the language with the project's "Units and numbers" (#88).
+  const format = sheetFormat(locale, project.unitsAndNumbers);
+  let text = `${say('boq.title')}: ${file}\n\n`;
+  result.lines.forEach((l, i) => {
+    text += `${i + 1}. ${boqLineText(l, format)}\n`;
+    if (detail) for (const t of l.byType) text += `     ${t.typeName ?? t.className}: ${t.total === null ? '–' : sheetNumber(format, tidy(t.total))}\n`;
+  });
+  const notes = result.lines.flatMap((l) => boqNotes(l, say));
+  if (notes.length > 0) text += `\n${notes.join('\n')}\n`;
+  const missing = boqMissing(result);
+  if (missing.elements > 0) text += `\n${cliSayFor(nameLanguageOf(locale) ?? 'en')('boq.missing', { count: missing.elements, list: missing.list })}\n`;
+  return {
+    result, text,
+    json: resultJson(file, projectName, result, locale),
+    csv: boqCsv(boqTable(result, say, { detail }), locale),
+    refused: result.lines.some((l) => l.problem),
+  };
 }
 
 /** `ifcsheet boq`: exit 0 with the sums, 1 when a file cannot be read, the project holds no article or an article was refused. */
@@ -84,23 +122,10 @@ export async function boq(args: BoqArgs, io: CliIo): Promise<number> {
   }
   // The quantities are read from the entity tables: no geometry is needed or measured.
   const model = await openModel(bytes, { geometry: false });
-  const result = boqResult(model.dataStore, project.boqArticles);
   const language = commandLanguage({ project, ...(args.locale !== undefined ? { locale: args.locale } : {}) }, io);
-  const say = boqSayFor(language);
-  // The figures people read are written as the sheet writes them: the language with the project's "Units and numbers" (#88).
-  const format = sheetFormat(language, project.unitsAndNumbers);
-  if (args.json) io.stdout(`${resultJson(args.model, args.project, result, language)}\n`);
-  else if (args.csv) io.stdout(boqCsv(boqTable(result, say, { detail: args.detail }), language));
-  else {
-    io.stdout(`${say('boq.title')}: ${args.model}\n\n`);
-    result.lines.forEach((l, i) => {
-      io.stdout(`${i + 1}. ${boqLineText(l, format)}\n`);
-      if (args.detail) for (const t of l.byType) io.stdout(`     ${t.typeName ?? t.className}: ${t.total === null ? '–' : sheetNumber(format, tidy(t.total))}\n`);
-    });
-    const notes = result.lines.flatMap((l) => boqNotes(l, say));
-    if (notes.length > 0) io.stdout(`\n${notes.join('\n')}\n`);
-    const missing = boqMissing(result);
-    if (missing.elements > 0) io.stdout(`\n${cliSayFor(language)('boq.missing', { count: missing.elements, list: missing.list })}\n`);
-  }
-  return result.lines.some((l) => l.problem) ? 1 : 0;
+  const out = boqOutput(args.model, args.project, model, project, language, args.detail);
+  if (args.json) io.stdout(`${JSON.stringify(out.json, null, 2)}\n`);
+  else if (args.csv) io.stdout(out.csv);
+  else io.stdout(out.text);
+  return out.refused ? 1 : 0;
 }

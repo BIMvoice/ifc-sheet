@@ -123,7 +123,7 @@ export function resetViewOverrides(viewId: string): void {
 /** How many categories the view overrides of its template (for the card's "Reset overrides"); 0 without a template. */
 export function overrideCount(view: ProjectView | undefined, templates: readonly ProjectViewTemplate[]): number {
   if (!view || !templateOf(view, templates)) return 0;
-  return Object.keys(view.graphics?.categories ?? {}).length + (view.graphics?.presetId !== undefined ? 1 : 0) + (view.graphics?.grid ? 1 : 0);
+  return Object.keys(view.graphics?.categories ?? {}).length + (view.graphics?.presetId !== undefined ? 1 : 0) + (view.graphics?.grid ? 1 : 0) + (view.graphics?.detailLevel ? 1 : 0);
 }
 
 // ---- Editing graphics ----

@@ -121,7 +121,7 @@ import { membraneOverlays } from '@/project/membrane-overlays';
 import { partHostType } from '@/project/part-host';
 
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
-import { resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { atDetailLevel, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { cutHatches, hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { materialOf } from '@/project/view-styler';
 import { useViewCanvasStyler } from './useViewCanvasStyler';
@@ -197,7 +197,9 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   // The view's graphics (its template's, then its own preset and category overrides over them, #44), applied to its drawing.
   const viewTemplates = useProjectStore((st) => st.viewTemplates);
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
-  const viewDrawing = useMemo(() => (drawing ? withoutHiddenElements(drawing, graphics, renderIdGlobalId) : null), [drawing, graphics, models]);
+  // The detail level (#444): the view's own, its template's, else the one its scale gives; the sheets resolve it the same way (at the viewport's scale).
+  const detail = useMemo(() => resolveDetailLevel(graphics, view.scale), [graphics, view.scale]);
+  const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withoutHiddenElements(drawing, graphics, renderIdGlobalId), detail) : null), [drawing, graphics, models, detail]);
   const references = useMemo(() => (viewDrawing ? referenceSet(viewDrawing, false) : null), [viewDrawing]);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
@@ -212,7 +214,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
     return viewDrawing ? styledDrawing(viewDrawing, graphics, partHostType, viewOmits(view), viewMaterials(viewDrawing), phases, schemeResultOf(view, viewDrawing, runtimeGeometry?.meshes), renderIdGlobalId) : null;
-  }, [viewDrawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases, runtimeGeometry]);
+  }, [viewDrawing, graphics, detail, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases, runtimeGeometry]);
   // Each face's and line's style: the view's one styler, its sheets' too (#34).
   const canvasStyler = useViewCanvasStyler(graphics, shown);
   const hidden = useMemo(() => hiddenClasses(graphics), [graphics]);
@@ -277,7 +279,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
 
   const exportDxf = () => exportViewDxf({
     view, drawing: shown, axis, drafts: entities, layers, extraPatterns, symbols: liveSymbols,
-    overlays: [...(plane ? planOverlays(view, plane, withoutHiddenElementMeshes(phaseMeshes(runtimeGeometry?.meshes, phases), graphics, renderIdGlobalId), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens) : []), ...membraneOverlays(shown)],
+    overlays: [...(plane ? planOverlays(view, plane, withoutHiddenElementMeshes(phaseMeshes(runtimeGeometry?.meshes, phases), graphics, renderIdGlobalId), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens, detail) : []), ...membraneOverlays(shown)],
   });
 
   const command = runningCommand();
@@ -340,7 +342,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
         {ghosts ? <HiddenGhostLayer ghosts={ghosts} transform={viewTransform} axis={axis} onShowElement={showElement} onShowLine={showLineEntry} /> : null}
         <ViewportState state={viewportState(entry, view.kind)} />
-        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} graphics={graphics} transform={viewTransform} axis={axis} />
+        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} graphics={graphics} detail={detail} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
         <GridLayer view={view} plane={plane ?? null} drawing={shown} transform={viewTransform} axis={axis} />
         </div>
