@@ -37,6 +37,7 @@ import type { MeasuredWords } from '@/joinery/measured-marks';
 import { penTags } from '../sheets/dxf-tags';
 import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 import { useElementViews, type ViewRequest } from './useElementViews';
+import type { ElementViews } from '@/joinery/element-views';
 import { useTableSheetLayouts } from './useTableSheetLayouts';
 import { fontFamily, tablesFace } from '@/drafting/styles';
 import { useSheetLocale } from '@/project/units-and-numbers';
@@ -149,7 +150,7 @@ export function useTypeQuantities(choice?: ScheduleClassification): TypeQuantiti
 }
 
 /** The schedule's data and layout, recomputed when the models or the catalogue change; the cards get their views once cut. */
-export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data: ScheduleData; layout: ScheduleLayout } | null {
+export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data: ScheduleData; layout: ScheduleLayout; views: ReadonlyMap<string, ElementViews> | undefined } | null {
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
   const catalogue = useProjectStore((s) => s.joineryTypes);
@@ -166,7 +167,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const scale = schedule?.scale ?? 50;
   const requests = useMemo<ViewRequest[]>(() => (data ? [{ id: 'self', data, scale }] : []), [data, scale]);
   const views = useElementViews(requests).get('self');
-  return useMemo(() => (data ? { data, layout: layoutSchedule(data, labels, { scale, views }) } : null), [data, labels, scale, views]);
+  return useMemo(() => (data ? { data, layout: layoutSchedule(data, labels, { scale, views }), views } : null), [data, labels, scale, views]);
 }
 
 /** The layouts of the schedules placed on `sheet`, by schedule id. */

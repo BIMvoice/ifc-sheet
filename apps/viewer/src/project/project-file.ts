@@ -17,6 +17,7 @@ import { loadProjectDocument, projectDocument } from './project-store';
 import { fail, isObject } from '@bimvoice/ifcsheet';
 import { readDocumentFields } from './fields';
 import type { ProjectDocument } from './types';
+import { isJoineryDraftViewId } from '@/joinery/view-draft-id';
 
 export const PROJECT_FILE_SUFFIX = '.ifclite-project.json';
 export const PROJECT_FILE_FORMAT = 'ifclite-project';
@@ -30,7 +31,9 @@ export interface ProjectFile extends ProjectDocument {
 }
 
 export function serializeProject(doc: ProjectDocument, now = new Date()): string {
-  const file: ProjectFile = { format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, savedAt: now.toISOString(), ...doc };
+  // The working copy of a joinery type's drafted view (#492) is not saved: the type holds the shapes.
+  const drafts = doc.drafts?.some((d) => isJoineryDraftViewId(d.viewId)) ? doc.drafts.filter((d) => !isJoineryDraftViewId(d.viewId)) : doc.drafts;
+  const file: ProjectFile = { format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, savedAt: now.toISOString(), ...doc, drafts };
   return JSON.stringify(file, null, 2);
 }
 

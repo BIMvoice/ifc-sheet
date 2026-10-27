@@ -17,6 +17,9 @@ export {
   type JoineryViewLineLike, type JoineryViewName,
 } from './joinery-view-detail.js';
 export {
+  isJoineryDraftType, joineryViewDraftPrims, joineryViewDrafts, readJoineryViewDrafts, withViewDrafts, type JoineryDraftPrim,
+} from './joinery-view-drafts.js';
+export {
   attributes, drawnJoineryOf, elementFacts, joineryOfElement, joineryScheduleData, occurrenceMark, storedName, typeIndex,
   type DrawnJoinery, type JoineryElement, type JoineryProject, type Live, type ScheduleData, type ScheduleEntry, type ScheduleKind, type ScheduleModel, type ScheduleOccurrence,
 } from './joinery-schedule.js';

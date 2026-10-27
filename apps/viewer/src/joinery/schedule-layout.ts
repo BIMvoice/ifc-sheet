@@ -20,7 +20,7 @@ import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
 import { occurrenceMark, type ScheduleData, type ScheduleEntry } from './schedule-data';
 import type { ElementViews } from './element-views';
-import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
+import { planRoom, sectionRoom, viewPrims, viewRegions, type ViewRegion } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import type { ExportCell, ExportTable } from './schedule-export';
 import { PAD, fireOf, thermalOf, pageTitle, isOverridableRow, joineryCellText, levelRowId, modelRowLabel, modelRowNumber, modelRowText, overrideNumbers, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride, type TypeFacts, type ScheduleCell, type ScheduleLayout, type SchedulePrim } from '@bimvoice/ifcsheet';
@@ -231,6 +231,7 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
   const bands = all.slice(page * perPage, (page + 1) * perPage);
   const prims: SchedulePrim[] = [];
   const cells: ScheduleCell[] = [];
+  const regions: ViewRegion[] = [];
   const tableRows = rows(data, labels);
 
   // Inset like the paged tables' titles: the viewport's frame is drawn on x = 0 and would cover the first letter.
@@ -267,7 +268,8 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
       const x0 = fx - (w * k) / 2, x1 = fx + (w * k) / 2;
       if (v) {
         // The plan is the plan view; the front, the section beside it and the opening symbol are the elevation.
-        prims.push(...viewPrims(v, e.spec, { fx, base }, k, openingConvention()).filter((p) => p.kind !== 'path' || (p.view === 'plan' ? shown.plan : shown.elevation)));
+        prims.push(...viewPrims(v, e.spec, { fx, base }, k, openingConvention()).filter((p) => (p.kind !== 'path' && p.kind !== 'text') || (p.view === undefined && p.kind === 'text') || (p.view === 'plan' ? shown.plan : shown.elevation)));
+        regions.push(...viewRegions(v, e.spec, { fx, base }, k).filter((r) => (r.view === 'plan' ? shown.plan : shown.elevation)));
       } else if (shown.elevation && e.spec) {
         const strokes = elevationSymbol(e.spec, { hardware: true, convention: openingConvention() });
         const b = strokeBounds(strokes);
@@ -299,7 +301,7 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
     }
     top += bandH + BAND_GAP;
   }
-  return { width, height: top - BAND_GAP, prims, pages, cells };
+  return { width, height: top - BAND_GAP, prims, pages, cells, ...(regions.length ? { regions } : {}) };
 }
 
 export interface JoineryExportLabels extends ScheduleLabels {
