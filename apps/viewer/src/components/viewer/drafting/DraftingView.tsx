@@ -336,7 +336,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
             sectionAxis={axis}
           />
         ) : null}
-        <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
+        <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} schemeUnit={(view.scale ?? 100) / 1000} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
         {ghosts ? <HiddenGhostLayer ghosts={ghosts} transform={viewTransform} axis={axis} onShowElement={showElement} onShowLine={showLineEntry} /> : null}
         <ViewportState state={viewportState(entry, view.kind)} />

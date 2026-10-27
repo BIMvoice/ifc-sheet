@@ -14,7 +14,7 @@
  * generated drawing on CUT / SEEN / HIDDEN / HATCH / SYMBOLS with its pens,
  * the sheet on FRAME / TITLEBLOCK / VIEWPORT-LABELS. Fills are left out, but a
  * colour scheme's (#92: its rooms, elements and legend swatches, tagged
- * `data-dxf-fill="solid"`), which go out as solid hatches; so are raster images (a 3D view captured as one): `exportSheetDxf` and
+ * `data-dxf-fill="solid"`), which go out as solid hatches, and the pattern hatch over a room (`data-dxf-pattern`, #493), a HATCH with the pattern's definition; so are raster images (a 3D view captured as one): `exportSheetDxf` and
  * the issue say which.
  */
 
@@ -29,6 +29,8 @@ import type { ProjectSheet } from '@/project/types';
 import type { CadLayerRule } from '@/project/cad-layers';
 import { layerAndPens } from './dxf-cad-layers';
 import { clipLoop } from './dxf-hatch';
+import { findPattern } from '@/drafting/hatch/library';
+import { parsePat } from '@/drafting/hatch/pattern';
 
 type P = { x: number; y: number };
 type Rect = { x0: number; y0: number; x1: number; y1: number };
@@ -225,8 +227,26 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
     writer.hatch(loops, writer.layer(pens.name, pens.layer), pens.own);
   };
 
+  // A colour scheme's hatch over its rooms (#493): the rooms as one HATCH of the pattern, over the solid one of their colour.
+  const patterns = parsePat(useProjectStore.getState().hatchPatterns ?? '').patterns;
+  const patternHatch = (el: SVGPathElement) => {
+    const pattern = findPattern(el.getAttribute('data-dxf-pattern') ?? '', patterns);
+    const unit = Number(el.getAttribute('data-dxf-pattern-unit'));
+    if (!pattern || !(unit > 0)) return;
+    const d = el.getAttribute('d') ?? '';
+    const map = mapper(el);
+    const clip = clipOf(el);
+    const subpaths = (STRAIGHT.test(d) ? straightSubpaths(d) : sampledSubpaths(el, d)).filter((s) => s.pts.length > 2);
+    const pens = layerAndPens(cad, (n) => tag(el, n), layerOf(el), el.getAttribute('data-dxf-color') ?? '#000000');
+    writer.patternHatch(subpaths.map((s) => (clip ? clipLoop(s.pts.map(map), clip) : s.pts.map(map))), pattern, unit, writer.layer(pens.name, pens.layer), pens.own);
+  };
+
   for (const el of Array.from(svg.querySelectorAll<SVGGraphicsElement>('path, line, rect, circle, ellipse, polyline, polygon, text'))) {
     if (skip(el)) continue;
+    if (el instanceof SVGPathElement && el.hasAttribute('data-dxf-pattern')) {
+      patternHatch(el);
+      continue;
+    }
     if (el.getAttribute('data-dxf-fill') === 'solid') {
       const d = el instanceof SVGPathElement ? el.getAttribute('d') ?? '' : '';
       if (el instanceof SVGPathElement) {

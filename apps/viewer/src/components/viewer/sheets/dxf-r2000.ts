@@ -16,6 +16,7 @@
 
 import { encodeDxfCp1252 } from '@ifc-lite/drawing-2d';
 import { dashOf, type LineType } from '@/drafting/styles';
+import type { HatchPattern } from '@/drafting/hatch/pattern';
 import skeleton from './dxf-r2000-skeleton.dxf?raw';
 
 type P = { x: number; y: number };
@@ -140,6 +141,30 @@ export class DxfR2000 {
       this.out.push('97', '0');
     });
     this.out.push('75', '0', '76', '1', '98', '0');
+  }
+
+  /**
+   * The same loops hatched with `pattern` (#493), a HATCH that carries the pattern's own definition lines (so a program without the
+   * pattern file draws it too), `unit` DXF units per pattern millimetre. `mirrored`: the loops are in a frame whose y runs the other way
+   * from the pattern's (the sheet's y is flipped into DXF), so the pattern's angles and its perpendicular offsets turn with it.
+   */
+  patternHatch(loops: readonly (readonly P[])[], pattern: HatchPattern, unit: number, layer: string, pen?: PenSpec, mirrored = true): void {
+    const paths = loops.filter((l) => l.length >= 3);
+    if (paths.length === 0 || pattern.solid || pattern.families.length === 0) return;
+    const sign = mirrored ? -1 : 1;
+    this.out.push(...this.head('HATCH', layer, pen), '100', 'AcDbHatch', '10', '0', '20', '0', '30', '0', '210', '0', '220', '0', '230', '1', '2', safeName(pattern.name).toUpperCase().replace(/\s+/g, '_'), '70', '0', '71', '0', '91', String(paths.length));
+    paths.forEach((path, i) => {
+      this.out.push('92', i === 0 ? '3' : '2', '72', '0', '73', '1', '93', String(path.length));
+      for (const p of path) this.out.push('10', fmt(p.x), '20', fmt(p.y));
+      this.out.push('97', '0');
+    });
+    // Style normal, pattern type predefined; the definition lines follow, each scaled by `unit` (dashes: positive on, negative off).
+    this.out.push('75', '0', '76', '1', '52', '0', '41', '1', '77', '0', '78', String(pattern.families.length));
+    for (const f of pattern.families) {
+      this.out.push('53', fmt(sign * f.angleDeg), '43', fmt(f.origin.x * unit), '44', fmt(sign * f.origin.y * unit), '45', fmt(f.deltaX * unit), '46', fmt(sign * f.deltaY * unit), '79', String(f.dashes.length));
+      for (const d of f.dashes) this.out.push('49', fmt(d * unit));
+    }
+    this.out.push('98', '0');
   }
 
   text(at: P, value: string, height: number, layer: string, options: { rotationDeg?: number; align?: 'left' | 'center' | 'right'; pen?: PenSpec } = {}): void {

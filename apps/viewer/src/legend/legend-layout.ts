@@ -164,6 +164,11 @@ function hatchSwatch(out: LegendPrim[], b: Box, patternName: string, scale: numb
   const pattern = findPattern(patternName, ctx.patterns);
   out.push({ kind: 'path', pts: rect(b), closed: true, w: 0.25, color: INK, ...(fill ? { fill } : pattern?.solid ? { fill: INK } : {}) });
   if (!pattern || pattern.solid) return;
+  hatchLines(out, b, pattern, scale);
+}
+
+/** The strokes of `pattern` inside `b` (a dot a speck). */
+function hatchLines(out: LegendPrim[], b: Box, pattern: HatchPattern, scale: number): void {
   const { segments } = hatchSegments([rect(b)], pattern, { scale, angleDeg: 0, maxSegments: 4000 });
   for (const s of segments) {
     out.push(s.a.x === s.b.x && s.a.y === s.b.y
@@ -195,6 +200,11 @@ function swatch(out: LegendPrim[], e: LegendEntry, b: Box, ctx: LegendLayoutCont
       break;
     case 'colours':
       out.push({ kind: 'path', pts: rect(b), closed: true, w: 0.25, color: INK, fill: e.colour, solid: true });
+      // A value's hatch over its colour (#493), as the plan draws it: the pattern at its printed size.
+      if (e.hatch) {
+        const pattern = findPattern(e.hatch, ctx.patterns);
+        if (pattern && !pattern.solid) hatchLines(out, b, pattern, 1);
+      }
       break;
   }
 }

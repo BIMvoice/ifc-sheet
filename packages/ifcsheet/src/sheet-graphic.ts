@@ -22,7 +22,8 @@
 import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
 import { sheetScaleLine } from './sheet-scale.js';
 import { clipPolygon, clipPolyline } from './clip.js';
-import type { SchemeResult } from './colour-fills.js';
+import { activeColourScheme, type SchemeResult } from './colour-fills.js';
+import { parsePat } from './hatch/index.js';
 import { schemeLegend, viewportFills, type SheetFill } from './sheet-colours.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
@@ -167,6 +168,8 @@ export function sheetGraphic(
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], images: [], viewports: [] };
   const vps = sheet.viewports ?? [];
+  // The project's own hatch patterns (`.pat` text) beside the built-in ones, for a colour scheme's hatches (#493).
+  const patterns = parsePat(doc.hatchPatterns ?? '').patterns;
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
     const drawing = drawings.get(vp.viewId);
@@ -178,7 +181,7 @@ export function sheetGraphic(
     if (drawing && box && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
       const scheme = schemes.get(vp.viewId);
-      if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box));
+      if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box, patterns, pens.materialHatch.hairline));
       // How the view draws (its template's graphics, then its own, `resolveViewGraphics`; its single elements and lines, `element-graphics.ts`; its preset's
       // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by
       // GlobalId (`globalIdOf`), never by the express id the drawing carries.
@@ -206,8 +209,8 @@ export function sheetGraphic(
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
     const entries = schemes.get(vp.viewId)?.entries;
-    const scheme = view?.graphics?.colourScheme;
-    const legend = entries && scheme ? schemeLegend(entries, scheme.property, drawingAreaIn(paper, frameOf(sheet)), taken, scheme.title) : null;
+    const scheme = activeColourScheme(view, doc.viewTemplates);
+    const legend = entries && scheme ? schemeLegend(entries, scheme.property, drawingAreaIn(paper, frameOf(sheet)), taken, scheme.title, patterns, pens.materialHatch.hairline) : null;
     if (!legend) continue;
     taken.push(legend.box);
     out.fills.push(...legend.fills);

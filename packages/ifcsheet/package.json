@@ -50,6 +50,11 @@
       "import": "./dist/colour-scheme.js",
       "default": "./dist/colour-scheme.js"
     },
+    "./hatch": {
+      "types": "./dist/hatch/index.d.ts",
+      "import": "./dist/hatch/index.js",
+      "default": "./dist/hatch/index.js"
+    },
     "./colour-fills": {
       "types": "./dist/colour-fills.d.ts",
       "import": "./dist/colour-fills.js",

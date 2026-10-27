@@ -13,6 +13,7 @@
  * exports is what a sheet shows of it.
  */
 
+import { Fragment } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
@@ -22,6 +23,7 @@ import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types'
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import type { ProjectView } from '@/project/types';
 import { viewportPens } from '../sheets/viewport-pens';
+import { dxfIgnore, SchemeHatchDxf } from '../sheets/SchemeHatchDxf';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from '../sheets/OverlayPaths';
 import type { PlanOverlay } from '@/project/plan-overlays';
@@ -55,7 +57,7 @@ interface ViewDxfInput {
 /** The off-screen SVG `viewDxf` walks; exported for tests (the DXF walker needs a browser's path geometry). */
 export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays, symbols }: ViewDxfInput) {
   const s = useProjectStore.getState();
-  const pens = drawing ? viewportPens(drawing, liveGraphics(view), MM, axis, extraPatterns, cadPenContext(s.cadLayers), currentEntityStyles(), graphicStandardOf(s.graphicStandard)) : [];
+  const pens = drawing ? viewportPens(drawing, liveGraphics(view), MM, axis, extraPatterns, cadPenContext(s.cadLayers), currentEntityStyles(), graphicStandardOf(s.graphicStandard), undefined, (view.scale ?? 100) / 1000) : [];
   const book = { textStyles: s.textStyles ?? [], dimStyles: s.dimStyles ?? [] };
   const colour = new Map(layers.map((l) => [l.id, layerShows(l, s.layerGroups ?? [], { view: view.hiddenLayers }) ? l.color : null]));
   const layerById = new Map(layers.map((l) => [l.id, l]));
@@ -63,7 +65,10 @@ export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, ov
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={1} height={1} overflow="visible">
       {pens.map((p, i) => (
-        <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} d={p.d} fill="none" stroke={p.stroke ?? 'none'} strokeWidth={p.width} />
+        <Fragment key={i}>
+          <path {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} {...dxfIgnore(p)} d={p.d} fill="none" stroke={p.stroke ?? 'none'} strokeWidth={p.width} />
+          <SchemeHatchDxf pen={p} />
+        </Fragment>
       ))}
       <OverlayPaths overlays={overlays} transform={MM} axis={axis} />
       {drafts.map((e) => {
