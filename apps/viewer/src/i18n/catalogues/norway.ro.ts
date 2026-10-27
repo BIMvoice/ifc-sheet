@@ -15,7 +15,7 @@ export const norwayRo = {
   'norway.set.facades': 'Fațade (fasadetegninger)',
   'norway.set.site': 'Plan de situație (situasjonsplan)',
   'norway.set.siteScale': 'Scara 1:500 este uzuală; regulamentul nu fixează una.',
-  'norway.set.siteToAdd': 'Parcela, distanțele și terenul trebuie desenate (tomt, avstander og terreng), cu o săgeată de nord și o scară grafică.',
+  'norway.set.siteToAdd': 'Parcela, distanțele și terenul trebuie desenate (tomt, avstander og terreng).',
   'norway.item.plans': 'Planurile tuturor nivelurilor, la 1:100',
   'norway.item.roomUse': 'Suprafețele și destinația fiecărei încăperi pe planuri',
   'norway.item.sections': 'Secțiuni longitudinale și transversale, la 1:100',

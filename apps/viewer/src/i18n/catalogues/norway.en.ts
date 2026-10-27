@@ -17,7 +17,7 @@ export const norwayEn = {
   'norway.set.facades': 'Facades (fasadetegninger)',
   'norway.set.site': 'Site plan (situasjonsplan)',
   'norway.set.siteScale': 'Scale 1:500 is usual; the regulation sets none.',
-  'norway.set.siteToAdd': 'Plot, distances and terrain must be drawn in (tomt, avstander og terreng), with a north arrow and a scale bar.',
+  'norway.set.siteToAdd': 'Plot, distances and terrain must be drawn in (tomt, avstander og terreng).',
   'norway.item.plans': 'Floor plans of all floors, at 1:100',
   'norway.item.roomUse': 'Room sizes and the intended use of each room on the plans',
   'norway.item.sections': 'Lengthwise and crosswise sections, at 1:100',
