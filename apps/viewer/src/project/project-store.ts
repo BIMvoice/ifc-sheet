@@ -30,7 +30,7 @@ import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
-import { assignDefaultTemplates, type PacIntervention, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
+import { assignDefaultTemplates, type PacIntervention, type PacMode, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 import type { UrbanSettings } from '@/urban/indicators';
@@ -165,6 +165,12 @@ export function setHandoverPattern(pattern: string): void {
 export function setPacIntervention(works: PacIntervention): void {
   const next = works === 'new' ? undefined : works;
   if (next !== useProjectStore.getState().pacIntervention) useProjectStore.setState({ pacIntervention: next, dirty: true });
+}
+
+/** Which permit project the project makes; the full one is the default and is stored as absent, so a project that never chose saves as before. */
+export function setPacMode(mode: PacMode): void {
+  const next = mode === 'full' ? undefined : mode;
+  if (next !== useProjectStore.getState().pacMode) useProjectStore.setState({ pacMode: next, dirty: true });
 }
 
 /**

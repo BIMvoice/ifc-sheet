@@ -10,6 +10,7 @@
  */
 
 import { nameLanguageOf, unknownLanguageMessage, unknownLocaleMessage, type NameLanguage } from './names.js';
+import { PAC_DEFAULT_LOCALE } from './cli-pac.js';
 import type { ProjectFacts } from './project-read.js';
 
 /** The message for a `--locale` that is not `ro` or `en`, or undefined when it is one (or absent). */
@@ -41,5 +42,5 @@ export function resolveLanguage({ project, locale, pac = false }: LanguageInputs
     if (asked !== undefined && asked !== project.language) notes.push(`ifcsheet: --locale ${asked} differs from the project's language ${project.language}; using ${project.language}.\n`);
     return { language: project.language, notes };
   }
-  return { language: asked ?? (pac ? 'ro' : 'en'), notes };
+  return { language: asked ?? (pac ? PAC_DEFAULT_LOCALE : 'en'), notes };
 }

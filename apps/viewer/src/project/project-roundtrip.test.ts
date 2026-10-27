@@ -162,7 +162,7 @@ const sheet: Required<ProjectSheet> = {
   id: 'sh1', number: 'A-201', autoNumber: true, numberOverride: true, series: 'elevations', name: 'Plans', createdAt: 9, paper: { kind: 'elongated', base: 'A2', factor: 3 }, orientation: 'portrait', viewports: [viewport],
   frame: { margins: { top: 8, right: 9, bottom: 11, left: 20 }, titleBlock: 'right' }, templateId: 'tpl1',
   titleBlock: { project: 'House', drawnBy: 'PC', date: '2026-10-12' }, revisionIds: ['rev-b'],
-  titleBlockParams: { Phase: 'PAC' },
+  titleBlockParams: { Phase: 'PAC' }, notes: ['Format A2: the drawing does not fit A3 at 1:50.'],
 };
 /** One schedule of every kind: a kind added to `ProjectSchedule['kind']` does not compile until it is listed here. */
 const SCHEDULES: { [K in ProjectSchedule['kind']]: Required<Omit<ProjectSchedule, 'sub' | 'textRows' | 'content' | 'keptApart' | 'detail' | 'classification' | 'list'>> & { kind: K; list?: ListScheduleDef } } = {
