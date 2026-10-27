@@ -20,6 +20,10 @@ import { readLineType } from './line-types-read.js';
 import { readDraft, readDraftLayer } from './draft-read.js';
 import type { DraftEntity, DraftLayer } from './draft-types.js';
 import { nameOf } from './names.js';
+import { readIssues } from './issues-read.js';
+import { readRevisions } from './revision-read.js';
+import type { ProjectIssue } from './issue-types.js';
+import type { ProjectRevision } from './revisions.js';
 import { readNumberingScheme } from './numbering.js';
 import { listAt, readSheet, readView, type Json } from './set-read.js';
 import { readDimStyles, readLayerGroups, readTextStyles } from './standards-read.js';
@@ -38,6 +42,9 @@ export interface ProjectSet {
   layerGroups: LayerGroup[];
   /** The project's own line types (#496); empty when it has none. */
   lineTypes: CustomLineType[];
+  /** The sets sent out and the revisions of the set: what the drawing register's date and revision columns read. */
+  issues: ProjectIssue[];
+  revisions: ProjectRevision[];
   viewTemplates: ProjectViewTemplate[];
   sheetNumbering?: NumberingScheme;
 }
@@ -53,6 +60,7 @@ export function readProjectSet(raw: Json): ProjectSet {
   return {
     views, sheets, drafts, draftLayers, lineTypes: at('lineTypes', readLineType),
     textStyles: readTextStyles(raw), dimStyles: readDimStyles(raw), layerGroups: readLayerGroups(raw),
+    issues: readIssues(raw.issues), revisions: readRevisions(raw.revisions),
     viewTemplates: readViewTemplates(raw.viewTemplates),
     ...(sheetNumbering ? { sheetNumbering } : {}),
   };
@@ -84,6 +92,7 @@ export function projectSetOf(project: ProjectSetFacts & { set: ProjectSet }, mod
       viewTemplates: set.viewTemplates,
       // The drafts carry the revision clouds the title block reads (`revisions.ts`).
       drafts: set.drafts,
+      revisions: set.revisions,
       titleBlock: project.titleBlock ?? {},
       ...(set.sheetNumbering ? { sheetNumbering: set.sheetNumbering } : {}),
       ...(project.includeFarElements ? { includeFarElements: true } : {}),

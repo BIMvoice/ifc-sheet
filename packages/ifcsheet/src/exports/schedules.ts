@@ -68,3 +68,17 @@ export { estimatedAreas, type EstimatedAreas } from '../room-estimates.js';
 // The urban settings of a project file, read by the app and the command line alike (the indicators themselves are `@bimvoice/ifcsheet/urban`, which loads the wasm)
 export { readUrbanSettings } from '../urban-settings-read.js';
 export { RURAL_MAX_LEVELS, RURAL_MAX_SD, ruralReadiness, type RuralScope } from '../readiness.js';
+// The schedules a sheet prints beyond the lists, laid out for paper (#479): the drawing register, the room and area schedule, the bill of quantities.
+export { REGISTER_MIN_TEXT_MM, layoutRegister, layoutRegisterPage, registerFit, registerTable, type RegisterFit, type RegisterLabels } from '../register-layout.js';
+export {
+  SET_ORDER, drawingRegisterRows, holdsRegister, inSetOrder, notDrawingIds, registerFitOn, registerPaper, registerRow, registerRowCache, registerRowsBuilt, registerSheetFit, sharedRegisterRows,
+  type RegisterInput, type RegisterRow,
+} from '../drawing-register.js';
+export { layoutBoq, type BoqSheetLabels } from '../boq-layout.js';
+export { layoutRoomSchedule, roomScheduleCells, type RoomScheduleLabels } from '../room-schedule-layout.js';
+export { summaryItems, summaryTable, type RoomSummaryBlock, type RoomSummaryWords } from '../room-summary-layout.js';
+export { wrapNote } from '../wrap-note.js';
+export { readIssues } from '../issues-read.js';
+export { readRevisions } from '../revision-read.js';
+export type { ChangeReason, ChangedSheet, IssueChangeRecord, IssuedModel, IssuedSheet, ProjectIssue } from '../issue-types.js';
+export { SHEET_WORDS_EN, SHEET_WORDS_RO, registerLabelsOf, roomScheduleLabelsOf, sheetSayFor, type RoomScheduleData, type SheetSay, type SheetWordKey } from '../sheet-words.js';

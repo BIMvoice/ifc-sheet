@@ -11,22 +11,17 @@
  */
 
 import { useMemo } from 'react';
-import { sheetLevel, type SheetLocale } from '@bimvoice/ifcsheet/names';
-import { roomSchedule, type RoomSchedule } from '@bimvoice/ifcsheet';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
+import { roomSchedule, roomScheduleLabelsOf as roomScheduleLabelsFrom, type RoomScheduleData, type RoomScheduleLabels } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { useSheetLocale } from '@/project/units-and-numbers';
 import { collectRoomRecords } from '@/urban/urban-models';
 import { areaSummary, type AreaSummary } from '@/urban/area-summary';
-import type { RoomSummaryWords } from '@/joinery/room-summary-layout';
 import { useUrbanIndicators } from '../urban/useUrban';
-import type { RoomScheduleLabels } from '@/joinery/room-schedule-layout';
 
-export interface RoomScheduleData {
-  schedule: RoomSchedule;
-  leftOut: { external: number; gfa: number; parents: number };
-}
+export type { RoomScheduleData };
 
 /** The schedule of the loaded models' rooms, by project level; null while no model has a room. `enabled` false reads nothing. */
 export function useRoomScheduleData(enabled = true): RoomScheduleData | null {
@@ -49,27 +44,17 @@ export function useRoomSummary(enabled = true): AreaSummary | null {
 
 type T = ReturnType<typeof useTranslation>['t'];
 
-/** The schedule's labels, in the user's language and the project's number style. Pure: the Wall's export builds them too. */
+/** The schedule's labels, in the user's language and the project's number style. Pure: the Wall's export builds them too. The notes and the summary's words are the engine's (`roomScheduleLabelsOf`), the same as `ifcsheet build` prints. */
 export function roomScheduleLabelsOf(t: T, locale: SheetLocale, title: string, data: RoomScheduleData | null, summary: AreaSummary | null = null): RoomScheduleLabels {
-  // The legend of the `*` comes first, directly under the table it marks.
-  const notes = data && data.schedule.fromGeometry > 0 ? [t('roomSched.note.geometry', { count: data.schedule.fromGeometry })] : [];
-  notes.push(t('roomSched.note.source'), t('roomSum.note.perimeter'));
-  if (data) {
-    if (data.schedule.withoutArea > 0) notes.push(t('roomSched.note.none', { count: data.schedule.withoutArea }));
-    notes.push(t('roomSched.note.leftOut', data.leftOut));
-  }
-  const lowerBound = summary !== null && (summary.building.scAtLeast || summary.building.sdAtLeast || summary.levels.some((l) => l.atLeast));
-  const words: RoomSummaryWords = {
-    heading: t('roomSum.heading'), level: t('roomSum.level'), su: t('roomSum.su'), sc: t('roomSum.sc'), sd: t('roomSum.sd'),
-    building: t('roomSum.building'), noLevel: t('roomSched.noLevel'), atLeast: (value) => t('urban.atLeast', { value }),
-    notes: [t('roomSum.note.defs', { mark: sheetLevel(locale, 0) }), ...(lowerBound ? [t('roomSum.note.atLeast')] : [])],
-  };
-  return {
-    locale, title, notes, summary: summary ? { summary, words } : null,
-    number: t('roomSched.number'), room: t('roomSched.room'), level: t('roomSched.noLevel'), area: t('roomSched.area'), perimeter: t('roomSum.perimeter'),
-    levelTotal: (level: string) => t('roomSched.levelTotal', { level }), total: t('roomSched.total'),
-    source: '', quantity: '', geometry: '', noLevel: t('roomSched.noLevel'),
-  };
+  return roomScheduleLabelsFrom(
+    (key, params) => t(key, params),
+    {
+      number: t('roomSched.number'), room: t('roomSched.room'), level: t('roomSched.noLevel'), area: t('roomSched.area'), perimeter: t('roomSum.perimeter'),
+      levelTotal: (level: string) => t('roomSched.levelTotal', { level }), total: t('roomSched.total'),
+      source: '', quantity: '', geometry: '', noLevel: t('roomSched.noLevel'),
+    },
+    locale, title, data, summary,
+  );
 }
 
 export function useRoomScheduleLabels(title: string, data: RoomScheduleData | null, summary: AreaSummary | null = null): RoomScheduleLabels {

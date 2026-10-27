@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { computeBoq, newArticle, boqSayFor } from '@bimvoice/ifcsheet';
 import { cleanup, render } from '@/test/render.js';
 import { addSchedule } from '@/joinery/schedules.js';
-import { layoutBoq } from '@/joinery/boq-layout.js';
+import { layoutBoq } from '@bimvoice/ifcsheet';
 import { SheetPaper } from '@/components/viewer/sheets/SheetPaper';
 import { hangSchedule } from './drawing-set-actions.js';
 import { resetProject, useProjectStore } from './project-store.js';

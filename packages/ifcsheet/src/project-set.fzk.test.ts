@@ -109,6 +109,31 @@ describe.skipIf(missing !== null)('ifcsheet build --project prints the project\'
     expect(pages[1]).toEqual(expect.arrayContaining(['X-902', 'Walls by type', 'Type', 'Count', 'NetSideArea (m²)', 'Total', '13']));
   }, 240_000);
 
+  it('prints the rooms schedule, the bill of quantities and the drawing register where they were placed, and names the kinds it still leaves out', async () => {
+    const onSheet = (id: string, number: string, scheduleId: string) => ({ id, number, name: number, createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: `vp-${id}`, viewId: scheduleId, x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] });
+    const base = arranged();
+    const project = {
+      ...base,
+      sheets: [...(base.sheets as unknown[]), onSheet('s-rooms', 'X-903', 'rooms'), onSheet('s-boq', 'X-904', 'boq'), onSheet('s-reg', 'X-000', 'reg'), onSheet('s-door', 'X-905', 'doors')],
+      schedules: [
+        ...(base.schedules as unknown[]),
+        { id: 'rooms', name: 'Room schedule', kind: 'rooms', createdAt: 0 },
+        { id: 'boq', name: 'Bill of quantities', kind: 'boq', createdAt: 0 },
+        { id: 'reg', name: 'Drawing register', kind: 'register', createdAt: 0 },
+        { id: 'doors', name: 'Doors', kind: 'door', createdAt: 0 },
+      ],
+      boqArticles: [{ id: 'a1', code: 'EXAMPLE-001', description: 'EXAMPLE: wall faces', unit: 'm2', filter: { classes: ['IfcWallStandardCase'] }, quantity: 'NetSideArea', factor: 1 }],
+    };
+    const { code, err, pages } = await build(writeProject(project));
+    expect(code).toBe(EXIT.ok);
+    expect(pages).toHaveLength(6);
+    expect(pages[2]).toEqual(expect.arrayContaining(['Room schedule', 'Total building (Au)', 'Area summary (Su, Sc, Sd)']));
+    expect(pages[3]).toEqual(expect.arrayContaining(['Bill of quantities', 'Article code', 'EXAMPLE-001']));
+    expect(pages[4]).toEqual(expect.arrayContaining(['Drawing register', 'Sheet', 'Revision', 'X-901', 'X-905']));
+    for (const printed of ['rooms schedule', 'boq schedule', 'register schedule']) expect(err).not.toContain(printed);
+    expect(err).toContain('X-905 X-905: the door schedule "Doors" not printed yet');
+  }, 240_000);
+
   it('a project with no sheet gets the starting set, and says so', async () => {
     const { code, err, pages } = await build(writeProject({}));
     expect(code).toBe(EXIT.ok);
