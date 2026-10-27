@@ -86,7 +86,7 @@ Leichtbeton 102890359 240      5             54,19
 Total                         13            190,47
 ```
 
-`--standard` wins over the project's own pens and title block. An unknown id stops with the list of known ones (today only `ro`). When you give `--project`, the schedules saved in it are printed after the build. If the project holds sheets, the PDF is the project's own set: its sheets with the views where you put them, the dimensions and texts you drew on the views, and the list schedules you placed. A project without sheets gets the starting set. The build says on stderr which one it printed, and names per sheet what it does not print yet (level marks, symbols, hatches, leaders, the other kinds of schedule).
+`--standard` wins over the project's own pens and title block. An unknown id stops with the list of known ones (today only `ro`). When you give `--project`, the schedules saved in it are printed after the build. If the project holds sheets, the PDF is the project's own set: its sheets with the views where you put them, the dimensions (linear, aligned, radial and angular), texts, leaders, level marks, grid axes, hatches, lines, circles and arcs you drew on the views, and the list schedules you placed. A project without sheets gets the starting set. The build says on stderr which one it printed, and names per sheet what it does not print yet (symbols, a text's frame or leader, a dimension figure moved off its line, the other kinds of schedule).
 
 ### Permit project (PAC)
 

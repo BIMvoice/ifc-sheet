@@ -13,21 +13,18 @@ import { nearestOnShape, shapeBounds } from './curves';
 import { placeSymbol as placeLevelMark } from './level-mark';
 import { mirrorShape, rotateShape, translateShape } from './transform';
 import { findSymbol, missingSymbolMark, placeSymbol } from './symbols';
-import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
+import { add, mirrorPt, rotatePt, scale, sub } from './vec';
 import { figureUp, leaderOf } from './figure-layout';
 import { leaderTextRight } from './leader-segments';
 import { leaderStart } from '@/labels/label-leader';
-import { sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
-import { formatLength, linearLayout, unitVector as unit, type DimensionLayout, type LayoutOptions } from '@bimvoice/ifcsheet';
+import { angularLayout, axisLayout as engineAxisLayout, formatLength, formatLevel, linearLayout, radialLayout, type DimensionLayout, type LayoutOptions } from '@bimvoice/ifcsheet';
 import { textBlock, type TextFrame } from './text-block';
 // A linear dimension's layout and the length format are the engine's (`dimension-layout.ts`), so the PDF of `ifcsheet build` prints the same figure (#479).
 export { formatLength, type DimensionLayout, type LayoutOptions };
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
 
-/** A level mark: +2,70, −1,50 (the true minus), ±0,00. */
-export function formatLevel(locale: SheetLocale, m: number): string {
-  return sheetLevel(locale, m, { minus: '−' });
-}
+// The level figure, the radial and angular layouts and the axis bubbles are the engine's too (`dimension-layout.ts`).
+export { formatLevel };
 
 /**
  * The short leader a figure carries when it was moved off its dimension line (above, below, or past the end of
@@ -41,44 +38,12 @@ function figureLeader(layout: DimensionLayout, textAt: Pt, height: number): { a:
 }
 
 export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimension' | 'radial' | 'angular' }>, o: LayoutOptions = {}): DimensionLayout {
-  const format = o.format ?? ((m: number) => formatLength(o.locale ?? 'en', m));
   if (shape.type === 'dimension') {
     const layout = linearLayout(shape.a, shape.b, shape.at, shape.variant, shape.text, o);
     return shape.textAt ? { ...layout, lines: [...layout.lines, ...figureLeader(layout, shape.textAt, shape.height)], textAt: shape.textAt } : layout;
   }
-  if (shape.type === 'radial') {
-    const dir = unit(sub(shape.at, shape.c));
-    const rim = add(shape.c, scale(dir, shape.r));
-    const from = shape.diameter ? add(shape.c, scale(dir, -shape.r)) : shape.c;
-    return {
-      lines: [{ a: from, b: dist(shape.at, shape.c) > shape.r ? shape.at : rim }],
-      ticks: shape.diameter ? [{ at: rim, dir }, { at: from, dir: scale(dir, -1) }] : [{ at: rim, dir }],
-      textAt: shape.at,
-      textAngle: Math.atan2(dir.y, dir.x),
-      label: `${shape.diameter ? 'Ø' : 'R'} ${format(shape.diameter ? shape.r * 2 : shape.r)}`,
-    };
-  }
-  const r = Math.max(dist(shape.at, shape.c), 1e-6);
-  const a0 = Math.atan2(shape.a.y - shape.c.y, shape.a.x - shape.c.x);
-  const a1 = Math.atan2(shape.b.y - shape.c.y, shape.b.x - shape.c.x);
-  let sweep = a1 - a0;
-  while (sweep <= -Math.PI) sweep += Math.PI * 2;
-  while (sweep > Math.PI) sweep -= Math.PI * 2;
-  const steps = 24;
-  const lines: { a: Pt; b: Pt }[] = [];
-  for (let i = 0; i < steps; i++) {
-    const t0 = a0 + (sweep * i) / steps;
-    const t1 = a0 + (sweep * (i + 1)) / steps;
-    lines.push({ a: { x: shape.c.x + r * Math.cos(t0), y: shape.c.y + r * Math.sin(t0) }, b: { x: shape.c.x + r * Math.cos(t1), y: shape.c.y + r * Math.sin(t1) } });
-  }
-  const mid = a0 + sweep / 2;
-  return {
-    lines,
-    ticks: [],
-    textAt: { x: shape.c.x + r * Math.cos(mid), y: shape.c.y + r * Math.sin(mid) },
-    textAngle: mid + Math.PI / 2,
-    label: `${sheetNumber(o.locale ?? 'en', (Math.abs(sweep) * 180) / Math.PI, 1, { group: false })}°`,
-  };
+  if (shape.type === 'radial') return radialLayout(shape.c, shape.r, shape.at, shape.diameter, o);
+  return angularLayout(shape.c, shape.a, shape.b, shape.at, o);
 }
 
 /**
@@ -126,8 +91,7 @@ export function withAnnotationFrame<T>(up: 1 | -1, right: 1 | -1, fn: () => T): 
   }
 }
 
-/** Model metres per hatch-pattern unit at scale 1: patterns are drawn in paper millimetres, views default to 1:100. */
-export const HATCH_UNIT_M = 0.1;
+export { HATCH_UNIT_M } from '@bimvoice/ifcsheet';
 
 /** The leader a text carries, drawing coordinates: from the edge of its frame to the tip on the element. */
 export function textLeader(shape: Extract<AnnotationShape, { type: 'text' }>): { from: Pt; tip: Pt } | null {
@@ -145,17 +109,7 @@ export function textBox(p: Pt, text: string, height: number, rotation: number, f
   return [at(outer.x0, outer.y1), at(outer.x1, outer.y1), at(outer.x1, outer.y0), at(outer.x0, outer.y0)].map((c) => rotatePt(c, p, rotation));
 }
 
-/** Where an axis's bubbles sit: centres just past its ends (along the line), and their radius / half side. */
-export function axisLayout(shape: AxisShape): { bubbles: Pt[]; r: number } {
-  // The bubble holds the label: at least `size`, wider for a long label.
-  const textHalf = (Math.max(1, shape.label.length) * shape.height * 0.62) / 2;
-  const r = Math.max(shape.size / 2, textHalf + shape.height * 0.45, shape.height * 0.9);
-  const dir = unit(sub(shape.b, shape.a));
-  const bubbles: Pt[] = [];
-  if (shape.ends === 'both' || shape.ends === 'start') bubbles.push(add(shape.a, scale(dir, -r)));
-  if (shape.ends === 'both' || shape.ends === 'end') bubbles.push(add(shape.b, scale(dir, r)));
-  return { bubbles, r };
-}
+export const axisLayout: (shape: AxisShape) => { bubbles: Pt[]; r: number } = engineAxisLayout;
 
 /** The next label in a series: 1 → 2, A → B, Z → AA, A1 → A2, B' → C'. */
 export function nextAxisLabel(label: string): string {
