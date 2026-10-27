@@ -9,6 +9,7 @@
  * XLSX and JSON keep the plain numbers (a machine reads them back).
  */
 
+import { MISSING_QUANTITY } from '@ifc-lite/lists';
 import type { ListFigureKind, ListScheduleTable } from './list-schedule.js';
 import { sheetNumber } from './sheet-number.js';
 import type { SheetLocale } from './units-and-numbers.js';
@@ -22,7 +23,7 @@ export function listFigure(locale: SheetLocale, value: number, kind: ListFigureK
 
 /** The cells of a list table as text: figures in the sheet's language and format, a missing value as a dash. */
 export function listTableCells(table: ListScheduleTable, locale: SheetLocale): string[][] {
-  return table.rows.map((row) => row.map((v, c) => (v === null ? '–' : typeof v === 'number' ? listFigure(locale, v, table.kinds[c]) : String(v))));
+  return table.rows.map((row) => row.map((v, c) => (v === null ? MISSING_QUANTITY : typeof v === 'number' ? listFigure(locale, v, table.kinds[c]) : String(v))));
 }
 
 /** A table as aligned text: the heading, a rule, the rows (the totals row last). Figures are written as the sheet writes them (`listTableCells`): the language with the project's "Units and numbers". */

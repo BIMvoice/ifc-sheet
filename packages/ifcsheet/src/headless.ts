@@ -11,7 +11,7 @@
  * parser, the geometry engine or the writers.
  */
 
-export { openModel, type FarElementInfo, type OpenedModel, type OpenModelOptions } from './model.js';
+export { ModelRefusal, modelFormatOf, openModel, type FarElementInfo, type OpenedModel, type OpenModelOptions } from './model.js';
 export { generateViewDrawings, sectionConfigFor } from './view-drawings.js';
 export { sheetGraphic, type Polyline, type SheetGraphic, type SheetImage, type SheetPen, type SheetText } from './sheet-graphic.js';
 export { headlessMaterialOf, headlessPropertiesOf, sheetGraphics, type SheetGraphicsOptions } from './set-sheets.js';
