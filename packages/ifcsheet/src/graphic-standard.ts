@@ -38,6 +38,15 @@ export const ISO_3098_HEIGHTS: readonly number[] = [1.8, 2.5, 3.5, 5, 7, 10, 14,
 
 export type { WeightPair };
 
+/**
+ * How a section mark and an elevation mark are headed (#447):
+ *  - "arrow":  the plain view arrow, two barbs closing the stem (what IfcSheet drew before this choice existed);
+ *  - "circle": a circle holding the letter, with a filled triangle on its far side pointing the way the view looks;
+ *  - "flag":   a flag-shaped box holding the letter, its far edge drawn to a point the way the view looks.
+ */
+export const MARK_STYLES = ['arrow', 'circle', 'flag'] as const;
+export type MarkStyle = (typeof MARK_STYLES)[number];
+
 /** A standard's pens (`pens`, `weights`, `materialHatch`) are a pen table of the engine's (`view-style.ts`): the drafting view, the sheets and every export read them through one styler (#34). */
 export interface GraphicStandard extends PenTable {
   id: string;
@@ -49,6 +58,8 @@ export interface GraphicStandard extends PenTable {
   /** Text and dimension styles the standard adds to the project, under ids of its own (never `STANDARD`). */
   textStyles: readonly TextStyle[];
   dimStyles: readonly DimStyle[];
+  /** How section and elevation marks are headed. Absent means "arrow" (read it through {@link markStyleOf}). */
+  markStyle?: MarkStyle;
   /** The text and dimension style new annotations take under this standard. */
   current: { textStyle: string; dimStyle: string };
 }
@@ -67,6 +78,7 @@ export const DEFAULT_GRAPHIC_STANDARD: GraphicStandard = {
   // The default brings no styles: the project's own Standard styles are what it draws with.
   textStyles: [],
   dimStyles: [],
+  markStyle: 'arrow',
   current: { textStyle: STANDARD_STYLE_ID, dimStyle: STANDARD_STYLE_ID },
 };
 
@@ -104,10 +116,17 @@ export const ROMANIAN_PRACTICE: GraphicStandard = {
   textStyles: RO_TEXT_STYLES,
   // practice: oblique stroke terminators, extension line gap 1 and overshoot 2, value 1 above the line.
   dimStyles: [{ ...DEFAULT_DIM_STYLE, id: 'ro-dim', name: 'Dimensions 2.5', textStyle: 'ro-text-25', arrow: 'tick', arrowSize: 2.5, extGap: 1, extOver: 2, textGap: 1 }],
+  // convention: no Romanian text consulted states a section-head form (Legea 169/2026 and Ordinul 975/2026 say "secțiuni
+  // principale" without a symbol; STAS was not checked), so the circle head with a direction triangle is the common
+  // drawing-office form, not a cited rule.
+  markStyle: 'circle',
   current: { textStyle: 'ro-text-25', dimStyle: 'ro-dim' },
 };
 
 export const GRAPHIC_STANDARDS: readonly GraphicStandard[] = [DEFAULT_GRAPHIC_STANDARD, ROMANIAN_PRACTICE];
+
+/** The mark style of a standard: its own, or the arrow. */
+export const markStyleOf = (s: Pick<GraphicStandard, 'markStyle'>): MarkStyle => s.markStyle ?? 'arrow';
 
 /** The standard a project names; an unknown or absent id is the default. */
 export function graphicStandardOf(id: string | undefined): GraphicStandard {

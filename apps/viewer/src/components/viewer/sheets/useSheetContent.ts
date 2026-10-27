@@ -15,7 +15,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { markStyleOf, resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
@@ -147,6 +147,8 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
   const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
   const ground = useMemo(() => elevationMarkPlan(views), [views]);
+  // Section and elevation marks are headed as the project's graphic standard says (#447).
+  const markStyle = markStyleOf(standard);
   // One input per view and scale while nothing it reads changes, so `withCrossReferences` places a viewport's marks once,
   // not once each for what is drawn, the fitted extent and the box (#154). The input is shared between sheets mounted at
   // different times (`crossRefMemo`): marks are in paper millimetres and do not depend on the zoom, so a sheet that
@@ -157,12 +159,12 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
       const view = views.find((v) => v.id === vp.viewId);
       const overlays = styled.get(vp.viewId)?.overlays;
       const screenUp = viewScreenUp(vp.viewId);
-      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays], () => ({
+      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays, markStyle], () => ({
         drafts: settledDrafts(vp.viewId), view, views, sheets, groundPlanId: ground?.id,
-        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp,
+        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp, markStyle,
       }));
     };
-  }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels]);
+  }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels, markStyle]);
   const draftsFor = useCallback((vp: SheetViewport) => withCrossReferences(crossRefInput(vp)), [crossRefInput]);
   // What an auto-fit viewport frames: the drawing, the plot of a site plan and the drafts the sheet draws, the cross-references included (#140, #243).
   // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.

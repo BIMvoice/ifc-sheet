@@ -12,14 +12,15 @@
  * Pure.
  */
 
+import type { MarkStyle } from '@bimvoice/ifcsheet';
 import type { ElevationDirection, ProjectView } from '@/project/types';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import { groundPlan } from '@/project/drawing-set';
 import { axisLayout, textBox } from './annotation';
 import { referenceLabel, viewReference } from './cross-ref';
 import { placementOf, symbolParts } from './section-link';
-import { sectionLink, sectionNormal, withoutSectionLink } from './section-symbol';
-import type { DraftEntity, DraftShape, Pt } from './types';
+import { markHeadReach, sectionLink, sectionNormal, withoutSectionLink } from './section-symbol';
+import type { AnnotationShape, DraftEntity, DraftShape, Pt } from './types';
 
 /** Text of a reference, as a share of the letter it stands beside. */
 const REF_TEXT_SHARE = 0.8;
@@ -31,6 +32,8 @@ const ARROW_MM = 3.5;
 const GAP_MM = 1;
 /** Paper millimetres between an arrow's base and its label: text prints a little above its box, so a smaller gap lets the arrow strike the label on a south facade. */
 const LABEL_GAP_MM = 2.5;
+/** Paper millimetres of padding between a flag-headed elevation mark's border and its label. */
+const FLAG_PAD_MM = 1;
 
 const centreOf = (box: Pt[]): Pt => ({ x: (box[0].x + box[2].x) / 2, y: (box[0].y + box[2].y) / 2 });
 
@@ -91,6 +94,8 @@ export interface SectionReferenceOptions {
   /** Model metres per paper millimetre in the viewport, and the viewport's scale over the plan's own: the text prints at `height * factor`. */
   paperUnit?: number;
   factor?: number;
+  /** How the section symbols are headed (the project's graphic standard); absent: the arrow. */
+  markStyle?: MarkStyle;
 }
 
 /**
@@ -126,7 +131,8 @@ export function sectionReferenceDrafts(
     const height = letter.height * REF_TEXT_SHARE;
     const letterBox = textBox(letter.p, letter.text, letter.height, letter.rotation);
     const c0 = centreOf(letterBox);
-    const reach = halfAlong(letterBox, n) + halfAlong(textBox({ x: 0, y: 0 }, label, height, 0), n) + height * 0.3;
+    // The reference starts past the letter and past the head round it: a circle and its triangle, a flag and its point (#447).
+    const reach = Math.max(halfAlong(letterBox, n), markHeadReach(options.markStyle ?? 'arrow', letter.height, halfAlong(letterBox, n))) + halfAlong(textBox({ x: 0, y: 0 }, label, height, 0), n) + height * 0.3;
     const home = anchorFor({ x: c0.x + n.x * reach, y: c0.y + n.y * reach }, label, height, 0);
     // The box it prints in: the text is drawn at `height * factor` about its anchor.
     const boxAt = (p: Pt): Box => boxOf(textBox(p, label, height * factor, 0));
@@ -191,6 +197,11 @@ export function obstacleBoxes(drafts: readonly DraftEntity[]): Box[] {
     else if (sh.type === 'axis') {
       const { bubbles, r } = axisLayout(sh);
       out.push(boxOf([sh.a, sh.b, ...bubbles.flatMap((c) => [{ x: c.x - r, y: c.y - r }, { x: c.x + r, y: c.y + r }])]));
+    } else if (sectionLink(d)) {
+      // The head of a section symbol (a circle, a flag, a triangle): its pole and letter are lines and text, the rest is here.
+      if (sh.type === 'circle') out.push({ x0: sh.c.x - sh.r, y0: sh.c.y - sh.r, x1: sh.c.x + sh.r, y1: sh.c.y + sh.r });
+      else if (sh.type === 'polyline') out.push(boxOf(sh.pts));
+      else if (sh.type === 'hatch') out.push(boxOf(sh.loops.flat()));
     }
   }
   return out;
@@ -246,6 +257,8 @@ export interface ElevationMarkInput {
   factor: number;
   /** What is already on the plan (`obstacleBoxes`): a mark slides along its side until it is clear of these. */
   obstacles?: readonly Box[];
+  /** How the mark is headed (the project's graphic standard); absent: the arrow. */
+  markStyle?: MarkStyle;
 }
 
 /** Clear space kept round an elevation mark, paper millimetres. */
@@ -269,6 +282,7 @@ export function elevationMarkDrafts(input: ElevationMarkInput): DraftEntity[] {
   const margin = MARK_MARGIN_MM * paperUnit;
   const taken: Box[] = [...(input.obstacles ?? [])];
   const out: DraftEntity[] = [];
+  const style = input.markStyle ?? 'arrow';
   for (const view of views) {
     if (!markedElevation(view)) continue;
     const ref = viewReference(view.id, viewIds, sheets);
@@ -286,16 +300,40 @@ export function elevationMarkDrafts(input: ElevationMarkInput): DraftEntity[] {
     const centre = horizontal ? mid.x : mid.y;
     // `lift` moves the whole mark further out from the building, drawing metres.
     const build = (shift: number, lift: number): { drafts: DraftEntity[]; box: Box } => {
-      const tip = edge + (o.x + o.y) * (GAP_MM * paperUnit + lift);
-      const base = tip + (o.x + o.y) * ARROW_MM * paperUnit;
-      const labelMid = base + (o.x + o.y) * (LABEL_GAP_MM * paperUnit + halfAlong(labelBox, o));
+      const sign = o.x + o.y;
+      const tip = edge + sign * (GAP_MM * paperUnit + lift);
+      const base = tip + sign * ARROW_MM * paperUnit;
       const c = centre + shift;
-      const lines: [Pt, Pt][] = [[at(tip, c), at(base, c - half)], [at(tip, c), at(base, c + half)], [at(base, c - half), at(base, c + half)]];
-      const p = anchorFor(at(labelMid, c), label, textH, rotation);
+      // The head: the shapes that point at the building, the points they occupy, and where the label's middle goes along the outward axis.
+      const head = ((): { shapes: (DraftShape | AnnotationShape)[]; pts: Pt[]; labelMid: number } => {
+        if (style === 'circle') {
+          // A filled triangle pointing at the building, and a circle behind it; the label stands beyond the circle.
+          const r = (ARROW_MM / 2) * paperUnit;
+          const centreAt = at(base + sign * r, c);
+          const triangle = [at(tip, c), at(base, c - half), at(base, c + half)];
+          return {
+            shapes: [{ type: 'hatch', loops: [triangle], pattern: 'SOLID', scale: 1, angle: 0 }, { type: 'circle', c: centreAt, r }],
+            pts: [...triangle, { x: centreAt.x - r, y: centreAt.y - r }, { x: centreAt.x + r, y: centreAt.y + r }],
+            labelMid: base + sign * (2 * r + LABEL_GAP_MM * paperUnit + halfAlong(labelBox, o)),
+          };
+        }
+        if (style === 'flag') {
+          // A flag whose point is at the building and whose body holds the label.
+          const pad = FLAG_PAD_MM * paperUnit;
+          const depth = 2 * halfAlong(labelBox, o) + 2 * pad;
+          const across = { x: Math.abs(o.y), y: Math.abs(o.x) };
+          const w = Math.max(half, halfAlong(labelBox, across) + pad);
+          const pts = [at(tip, c), at(base, c - w), at(base + sign * depth, c - w), at(base + sign * depth, c + w), at(base, c + w)];
+          return { shapes: [{ type: 'polyline', pts, closed: true }], pts, labelMid: base + sign * (depth / 2) };
+        }
+        const lines: [Pt, Pt][] = [[at(tip, c), at(base, c - half)], [at(tip, c), at(base, c + half)], [at(base, c - half), at(base, c + half)]];
+        return { shapes: lines.map(([a, b]): DraftShape => ({ type: 'line', a, b })), pts: lines.flat(), labelMid: base + sign * (LABEL_GAP_MM * paperUnit + halfAlong(labelBox, o)) };
+      })();
+      const p = anchorFor(at(head.labelMid, c), label, textH, rotation);
       const id = `${planViewId}:elevation:${view.id}${XREF}`;
-      const drafts: DraftEntity[] = lines.map(([a, b], i) => ({ id: `${id}:${i}`, viewId: planViewId, layerId, shape: { type: 'line', a, b }, params: {} }));
+      const drafts: DraftEntity[] = head.shapes.map((shape, i) => ({ id: `${id}:${i}`, viewId: planViewId, layerId, shape, params: {} }));
       drafts.push({ id: `${id}:label`, viewId: planViewId, layerId, shape: { type: 'text', p, text: label, height: textH / factor, rotation }, params: {} });
-      const box = boxOf([...lines.flat(), ...textBox(p, label, textH, rotation)]);
+      const box = boxOf([...head.pts, ...textBox(p, label, textH, rotation)]);
       return { drafts, box };
     };
     // The nearest place along the side that is clear; if the whole side is taken, one step further out, up to LIFT_STEPS times.
