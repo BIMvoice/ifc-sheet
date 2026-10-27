@@ -8,17 +8,17 @@
  * needs more than a line); a field added to `ProjectDocument` and not listed here, or listed without a reader, does
  * not compile (`MissingField` below, `read` in `./define.ts`).
  *
- * A NEW FIELD is three files and one pair of lines (#144):
+ * A NEW FIELD is three files and one pair of lines, in `./registered.ts` (#144; the list below is frozen, nothing is appended to it):
  *   - `fields/<key>.ts`: the field (`listField`, `optionalField`, ...), its reader, and its type, declared with
  *     `declare module '../types' { interface ProjectFieldTypes { <key>?: ... } }` (see `./site-area.ts`);
  *   - `fields/<key>.sample.ts`: `export const sample = { <key>: <a value that is not the default> }`, which
  *     `project-roundtrip.test.ts` puts in its full project (see `./site-area.sample.ts`);
- *   - its import and its entry at the END of the list below. That pair is the one shared edit left: two PRs that both
- *     append here still meet at the last line. The fields not yet moved to a file of their own keep their type in
- *     `../types.ts` and their sample in `project-roundtrip.test.ts`; move one when you next touch it.
+ *   - its import and its entry in `./registered.ts`, sorted, not appended here. The fields not yet moved to a file of
+ *     their own keep their type in `../types.ts` and their sample in `project-roundtrip.test.ts`; move one when you
+ *     next touch it.
  *
- * ORDER IS THE FILE'S KEY ORDER: `serializeProject` writes the document's keys in this order, so a new
- * field goes at the end and an existing one does not move (`fields.test.ts` pins the order of the ones
+ * ORDER IS THE FILE'S KEY ORDER: `serializeProject` writes the document's keys in this order, so the list below does not
+ * change and a registered field comes after it (by key, `./registered.ts`) (`fields.test.ts` pins the order of the ones
  * listed when the registry was made).
  */
 import { readLibraryDetail } from '@/catalogue/detail-reader';
@@ -63,6 +63,7 @@ import { unitsAndNumbersField } from './units-and-numbers';
 import { urbanSettingsField } from './urban-settings';
 import { defineField, listField, optionalField, recordField, whenPresent, whenUsable, type DocumentField, type FieldKey } from './define';
 import { READ_ORDER } from './read-order';
+import { assembleFields, REGISTERED_FIELD_DEFS } from './registered';
 
 export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visible: true, locked: false } as const;
 
@@ -139,14 +140,14 @@ const DOCUMENT_FIELD_DEFS = [
   pacModeField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
-type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];
+type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'] | (typeof REGISTERED_FIELD_DEFS)[number]['key'];
 /** A `ProjectDocument` field with no entry above; must stay `never`. */
 type MissingField = Exclude<FieldKey, ListedField>;
 const complete: [MissingField] extends [never] ? true : MissingField = true;
 void complete;
 
 /** Every field of `ProjectDocument`, in file order. */
-export const DOCUMENT_FIELDS: readonly DocumentField<FieldKey>[] = DOCUMENT_FIELD_DEFS;
+export const DOCUMENT_FIELDS: readonly DocumentField<FieldKey>[] = assembleFields(DOCUMENT_FIELD_DEFS, REGISTERED_FIELD_DEFS);
 
 /** A new project: every field that has an `empty` value, in file order. */
 export function emptyDocument(): ProjectDocument {

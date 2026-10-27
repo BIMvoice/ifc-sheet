@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { DOCUMENT_FIELDS, FIELDS_IN_READ_ORDER, emptyDocument, loadedFields, readDocumentFields } from './index';
 import { defineField, listField, optionalField, recordField } from './define';
 import { READ_ORDER } from './read-order';
+import { assembleFields } from './registered';
 import { EMPTY_PROJECT, PROJECT_DOCUMENT_KEYS } from '../project-store';
 import type { ProjectDocument } from '../types';
 
@@ -28,9 +29,32 @@ const KEYS_AT_REGISTRY = [
   'urbanSettings', 'includeFarElements',
 ];
 
+/** Every field's key, in file order, when the list was made a registry (#144): what `serializeProject` writes, which a registry must not change. */
+const KEYS_BEFORE_REGISTERED = [
+  ...KEYS_AT_REGISTRY,
+  'handoverPattern', 'viewTemplates', 'boqArticles', 'unitsAndNumbers', 'classificationMappings', 'installedStandard', 'pacIntervention',
+  'norwayPermit', 'pacMode',
+];
+
 const base = { name: 'p', models: [], views: [], sheets: [], drafts: [], draftLayers: [] } as unknown as ProjectDocument;
 
 describe('the document field registry', () => {
+  it('assembles the same fields in the same order as the hard-coded list it replaced', () => {
+    assert.deepEqual(DOCUMENT_FIELDS.map((f) => f.key), KEYS_BEFORE_REGISTERED);
+  });
+
+  it('puts registered fields after the frozen list, sorted by key whatever the order they are listed in', () => {
+    const legacy = [listField('comments', () => []), listField('revisions', () => [])];
+    const z = listField('issues', () => []);
+    const a = listField('details', () => []);
+    assert.deepEqual(assembleFields(legacy, [z, a]).map((f) => f.key), ['comments', 'revisions', 'details', 'issues']);
+    assert.deepEqual(assembleFields(legacy, [a, z]).map((f) => f.key), ['comments', 'revisions', 'details', 'issues']);
+  });
+
+  it('refuses a registered field whose key is already listed', () => {
+    assert.throws(() => assembleFields([listField('comments', () => [])], [listField('comments', () => [])]), /share the key "comments"/);
+  });
+
   it('lists each field once', () => {
     const keys = DOCUMENT_FIELDS.map((f) => f.key);
     assert.deepEqual(keys.filter((k, i) => keys.indexOf(k) !== i), []);
