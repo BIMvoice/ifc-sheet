@@ -159,6 +159,7 @@ export function projectSchema(): Schema {
       includeFarElements: bool,
       handoverPattern: str,
       unitsAndNumbers: obj,
+      underlays: { type: 'array', description: 'Raster underlays (a scanned PDF page or an image) placed under views to trace: view, picture (PNG/JPEG data URL), centre, metres per pixel, rotation, opacity, lock, and the sheets they print on.', items: obj },
       [SCHEDULES_KEY]: { type: 'array', items: schedule, description: 'The schedule sheets of the set (room schedule, bill of quantities, list from the Lists engine).' },
     },
     additionalProperties: true,
